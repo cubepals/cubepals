@@ -190,7 +190,7 @@ What FleetRuntime owns, beside the port's methods:
 
 = blocklyd <s-blocklyd>
 
-One static Rust binary per node (version 0.2.0, about 11,400 lines; `apps/blocklyd`), running as
+One static Rust binary per node (about 11,400 lines; `cubepals/blocklyd`, under FSL-1.1-ALv2), running as
 root beside Docker. It owns what exists on its host and decides almost nothing.
 #implemented
 
@@ -210,7 +210,7 @@ root beside Docker. It owns what exists on its host and decides almost nothing.
   edge(<mgr>, <fleet>, "-|>"),
   edge(<mgr>, <store>, "-|>", lbl[record first,\ then memory], label-side: left),
   edge(<mgr>, <ops>, "-"),
-), caption: [blocklyd's parts. #src("apps/blocklyd/src/manager.rs") (3,296 lines) is the core; #src("apps/blocklyd/src/api/mod.rs:460") the routes; #src("apps/blocklyd/src/fleet/heartbeat.rs").], name: "fig-blocklyd")
+), caption: [blocklyd's parts. #src("blocklyd/src/manager.rs") (3,296 lines) is the core; #src("blocklyd/src/api/mod.rs:460") the routes; #src("blocklyd/src/fleet/heartbeat.rs").], name: "fig-blocklyd")
 
 #figure(
   table(
@@ -224,7 +224,7 @@ root beside Docker. It owns what exists on its host and decides almost nothing.
     [Its identity: its own key; certificates from the control plane's CA.], [Issuing certificates; DNS and routes (the edge); billing; provisioning machines; the firewall.],
     [Enforcing host policy on every spec: image allowlist, non-root user, limits.], [Anything Minecraft: quiescing (`save-off`), RCON, what to exclude from a move are the caller's.],
   ),
-  caption: [What blocklyd owns. #src("apps/blocklyd/README.md:15"), #src("apps/blocklyd/src/manager.rs:4").],
+  caption: [What blocklyd owns. #src("blocklyd/README.md:15"), #src("blocklyd/src/manager.rs:4").],
   kind: table,
 )
 

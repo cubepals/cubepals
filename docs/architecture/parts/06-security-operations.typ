@@ -35,19 +35,19 @@ Who can do what, at each boundary, and how far isolation really goes. #implement
     [Boat], [A VM per server.], [The game port is public over IPv6, bypassing the edge (@s-boat).],
     [Docker (local)], [Containers on a network only the edge joins.], [Development only.],
   ),
-  caption: [Isolation per runtime. #src("apps/blocklyd/src/runtime/docker.rs:138"), #src("apps/control/src/infra/fly/fly-runtime.ts:930").],
+  caption: [Isolation per runtime. #src("blocklyd/src/runtime/docker.rs:138"), #src("apps/control/src/infra/fly/fly-runtime.ts:930").],
   kind: table,
 )
 
 - *Reading worlds safely.* blocklyd reads a world as root, so every walk opens each directory
   relative to its parent with `O_NOFOLLOW`, never follows a link, skips entries swapped mid-walk,
   never opens a FIFO or device, and cuts a file that changes to the size its header states; a race
-  test swaps continuously while walking (#src("apps/blocklyd/src/tree.rs:92")).
+  test swaps continuously while walking (#src("blocklyd/src/tree.rs:92")).
 - *A node's own surfaces.* Its API asks every caller for a certificate under the fleet CA. Its ops
   listener (health, metrics naming every workload) asks for none, so blocklyd refuses to start
   with it bound anywhere but loopback or a private address
-  (#src("apps/blocklyd/src/config.rs:513")). An enrollment answer must name the CA the node was
-  provisioned with, or the node writes no identity (#src("apps/blocklyd/src/fleet/enroll.rs:94")).
+  (#src("blocklyd/src/config.rs:513")). An enrollment answer must name the CA the node was
+  provisioned with, or the node writes no identity (#src("blocklyd/src/fleet/enroll.rs:94")).
 - *Secrets.* Per-server secrets (RCON passwords, artifact tokens) are derived from a versioned key,
   never stored. On Fly they are app secrets, never in a machine's config. On a node they exist only
   in Docker's container config, never in records, logs or answers.

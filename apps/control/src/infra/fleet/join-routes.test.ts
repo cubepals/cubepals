@@ -24,10 +24,7 @@ describe('the join routes', () => {
 
   test('join.sh carries daemon.json and is a script sh reads', async () => {
     const script = await (await get('', 'join.sh')).text()
-    const daemonJson = readFileSync(
-      new URL('../../../../blocklyd/deploy/daemon.json', import.meta.url),
-      'utf8',
-    )
+    const daemonJson = readFileSync(new URL('daemon.json', import.meta.url), 'utf8')
     expect(script).toContain(daemonJson.trimEnd())
     expect(script).not.toContain('@DAEMON_JSON@')
     writeFileSync(join(dir, 'join.sh'), script)

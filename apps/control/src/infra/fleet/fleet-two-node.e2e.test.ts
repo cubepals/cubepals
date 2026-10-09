@@ -33,8 +33,8 @@ import { FleetStore } from './store.ts'
  * policy (alpine, a small host) is added to what it writes. fleet-runtime.e2e.test.ts keeps a
  * hand-written configuration, so both ways stay covered.
  *
- *   cargo build --release --target x86_64-unknown-linux-musl --manifest-path apps/blocklyd/Cargo.toml
- *   BLOCKLYD_STATIC_BIN=…/x86_64-unknown-linux-musl/release/blocklyd DATABASE_URL=… \
+ *   gh release download v$(bun scripts/blocklyd.ts version) -R cubepals/blocklyd -p blocklyd   # static
+ *   BLOCKLYD_STATIC_BIN=$PWD/blocklyd DATABASE_URL=… \
  *     S3_TEST_ENDPOINT=… bun test fleet-two-node.e2e
  *
  * Runs as root, with docker:29-dind and alpine:3.22 present on the host's Docker.

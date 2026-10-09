@@ -12,7 +12,7 @@ import { endpointSeen, enroll, heartbeat, Refused, type RegistryOptions, renew }
 import type { EnrollRequest, HeartbeatRequest, RenewRequest, UpgradeOffer } from './wire.ts'
 
 /**
- * Where nodes reach the control plane (apps/blocklyd/docs/protocol.md, "The control plane's
+ * Where nodes reach the control plane (blocklyd's docs/protocol.md, "The control plane's
  * endpoint"): HTTPS with the fleet CA's certificate, on the deployment's private network.
  *
  * - `POST /fleet/v1/enroll`: a one-time token and a CSR, with no client certificate yet.

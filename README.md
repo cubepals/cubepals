@@ -29,7 +29,8 @@ Minecraft server hosting that feels simple: create a server, pick a version, opt
 mods, copy the address and play. It runs at [cubepals.com](https://cubepals.com).
 
 Inside this repository the project goes by its codename, **Blockly**: the packages, the
-`blocklyd` daemon, the infrastructure and the code all use it. Cubepals is the name players see.
+`blocklyd` daemon ([its own repository](https://github.com/cubepals/blocklyd)), the infrastructure
+and the code all use it. Cubepals is the name players see.
 
 The design lives in [`docs/architecture.md`](docs/architecture.md). Read it before changing a
 boundary. To work on it, start with [CONTRIBUTING.md](CONTRIBUTING.md); running it locally is
@@ -42,5 +43,7 @@ Cubepals as a network service, you must offer its users the source of that versi
 
 The **code** is AGPL. The **brand and the site** are not: the Cubepals name, mark and wordmark,
 the landing page, the site's pictures and the guides' words are all rights reserved.
+blocklyd, the node daemon, is in its own repository,
+[cubepals/blocklyd](https://github.com/cubepals/blocklyd), under FSL-1.1-ALv2.
 [LICENSING.md](LICENSING.md) says exactly what is under what, and what to replace if you run your
 own.

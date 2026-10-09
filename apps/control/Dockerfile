@@ -4,20 +4,10 @@
 # Node runs the TypeScript sources directly (type stripping, Node >= 22.18), as in development.
 # Debian trixie, not bookworm: the WebTransport module's prebuilt binary needs glibc 2.38.
 
-# blocklyd, which the node endpoint hands to hosts as they join (FLEET_BLOCKLYD_BIN): built here
-# from this commit, so the control plane serves the blocklyd it was built with, with the Rust
-# release and Cargo.lock blocklyd.yml builds with. Alpine's Rust targets musl, so the binary is
-# static and runs on any Linux host. The layer is reused until apps/blocklyd changes.
-FROM rust:1.94.1-alpine3.22 AS blocklyd
-RUN apk add --no-cache musl-dev file
-WORKDIR /src
-COPY apps/blocklyd/Cargo.toml apps/blocklyd/Cargo.lock ./
-COPY apps/blocklyd/src src
-# The unit `blocklyd join` installs is compiled in.
-COPY apps/blocklyd/deploy deploy
-RUN cargo build --locked --release \
- && ./target/release/blocklyd --version \
- && file target/release/blocklyd | grep -q 'static' || { file target/release/blocklyd; exit 1; }
+# blocklyd, which the node endpoint hands to hosts as they join (FLEET_BLOCKLYD_BIN): one release
+# of cubepals/blocklyd, static (musl), pinned by digest. `bun scripts/blocklyd.ts bump <version>`
+# moves this line and the copies of the release's files beside the fleet adapter together.
+FROM ghcr.io/cubepals/blocklyd:0.3.0@sha256:3bb63d8aa7f7d56d0d7b99d3821c78a15ff4f265554fd1375c9635243e6ec326 AS blocklyd
 
 FROM node:22.23.2-trixie-slim AS deps
 COPY --from=oven/bun:1.3.11 /usr/local/bin/bun /usr/local/bin/bun
@@ -49,9 +39,10 @@ COPY apps/control/package.json apps/control/
 COPY apps/control/src apps/control/src
 # The server icons game runtimes download as they start: without them every server fails to boot.
 COPY apps/control/assets apps/control/assets
-# What the node endpoint serves joining hosts: join.sh and daemon.json, and blocklyd itself.
-COPY apps/blocklyd/deploy apps/blocklyd/deploy
-COPY --from=blocklyd /src/target/release/blocklyd /usr/local/lib/blocklyd/blocklyd
+# What the node endpoint serves joining hosts: join.sh and daemon.json are in src/infra/fleet, and
+# blocklyd itself is the pinned release's. Its licence (FSL-1.1-ALv2) goes with it.
+COPY --from=blocklyd /blocklyd /usr/local/lib/blocklyd/blocklyd
+COPY --from=blocklyd /LICENSE.md /usr/local/lib/blocklyd/LICENSE.md
 USER node
 WORKDIR /app/apps/control
 # The api listener; the internal (edge) and realtime listeners are configured per deployment.

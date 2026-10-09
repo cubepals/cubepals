@@ -46,7 +46,7 @@ export function Fleet({ bare }: { bare?: boolean } = {}) {
             value: (
               <>
                 blocklyd-x86_64-linux-musl, 8.3 MB
-                {/* apps/blocklyd/README.md; docs/fleet-operations.md; docs/fleet.md */}
+                {/* cubepals/blocklyd README.md; docs/fleet-operations.md; docs/fleet.md */}
                 <Why>
                   Built as one static binary. It runs each world in a locked-down container, which shares the
                   machine’s kernel, and it never chooses where anything runs.
@@ -59,7 +59,7 @@ export function Fleet({ bare }: { bare?: boolean } = {}) {
             value: (
               <>
                 FLEET_HEARTBEAT_SECONDS=5
-                {/* apps/control/src/config/load.ts; apps/blocklyd/docs/protocol.md; docs/fleet.md */}
+                {/* apps/control/src/config/load.ts; cubepals/blocklyd docs/protocol.md; docs/fleet.md */}
                 <Why>
                   Each one carries every copy the machine holds, so a machine that was cut off is back in step
                   on its first beat. Machines never talk to each other.
@@ -72,7 +72,7 @@ export function Fleet({ bare }: { bare?: boolean } = {}) {
             value: (
               <>
                 POST /fleet/v1/enroll
-                {/* apps/blocklyd/docs/protocol.md; docs/fleet.md; apps/control/src/infra/fleet/registry.ts */}
+                {/* cubepals/blocklyd docs/protocol.md; docs/fleet.md; apps/control/src/infra/fleet/registry.ts */}
                 <Why>
                   With a token that works once, for one machine, for an hour unless set otherwise. The machine
                   makes its own key, and from then on both sides prove who they are on every call: TLS 1.3,

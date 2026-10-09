@@ -20,7 +20,7 @@ Players know this product as **Cubepals**, at `cubepals.com`. **Blockly** is its
 
 - **What a person can see says Cubepals.** That covers page copy, titles, emails, error messages, in-game text such as the MOTD, the brand files, the films and the ads. Write "Cubepals" in sentences and **cubepals**, lowercase, in the wordmark. The possessive takes an apostrophe only: "Cubepals’ own machines".
 - **The domain is `cubepals.com`, and nothing else.** The site is `cubepals.com`, realtime is `rt.cubepals.com`, and players join `<slug>.play.cubepals.com` (`PLAY_DOMAIN=play.cubepals.com`). Staging is `staging.cubepals.com`, with `rt.` and `play.` under it.
-- **The repository is `cubepals/cubepals`.** Links to it, and anything that names it (Terraform's `repository`, CI), use that.
+- **The repository is `cubepals/cubepals`.** Links to it, and anything that names it (Terraform's `repository`, CI), use that. blocklyd, the node daemon, is `cubepals/blocklyd`, under FSL-1.1-ALv2; this repository pins one of its releases (`bun scripts/blocklyd.ts`) and never copies its code.
 - **Everything else stays Blockly.** That covers packages and workspaces (`@blockly/*`), `blocklyd` and other binaries, directories, env var names, database objects, Fly apps and orgs, Terraform resources, internal identifiers, code comments, docs under `docs/` and test names. Don't rename them to match the public name.
 - **When it isn't clear whether a string is seen,** ask a maintainer rather than guess.
 
@@ -31,7 +31,7 @@ A source file past about 800 lines, or one `impl` block, class or function past 
 `bun run check:structure` holds the tree to what a machine can judge:
 
 - **Size:** a file at most 800 lines; an `impl` block, class, function or method at most 600.
-- **Complexity:** Biome's cognitive complexity and lines per function. With `--rust`, clippy's `too_many_lines`, `cognitive_complexity` and `too_many_arguments`, which `blocklyd.yml` runs.
+- **Complexity:** Biome's cognitive complexity and lines per function. blocklyd's repository runs the same script with `--rust`, for clippy's `too_many_lines`, `cognitive_complexity` and `too_many_arguments`.
 - **Names:** no file or directory called `utils`, `helpers`, `misc`, `common` or `shared`.
 - **Headers:** a file over 50 lines opens with a doc comment.
 - **Indexes:** the file named after a split's directory lists every file in it under ``Parts (`dir/`):``, each with what it is for.

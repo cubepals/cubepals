@@ -30,5 +30,10 @@
     change: [Everything described is on `main`, so the branch labels are gone. Choosing a runtime is
       explained by its technical reasons, and every citation points into the repository.],
   ),
+  (
+    number: "6", date: "2026-10-09", commits: none,
+    change: [blocklyd moved to its own repository, `cubepals/blocklyd`, and the control plane pins
+      a release of it. Its citations start `blocklyd/`.],
+  ),
 )
 #let revision = revisions.last()

@@ -7,7 +7,7 @@ import type { LogRecord } from './wire.ts'
 
 /**
  * A fleet server's output, from blocklyd on its node: NDJSON, one `LogRecord` per line, and a
- * follow that continues across the workload's restarts (apps/blocklyd/docs/protocol.md, logs).
+ * follow that continues across the workload's restarts (blocklyd's docs/protocol.md, logs).
  */
 export class FleetLogSource implements LogSource {
   readonly #runtime: FleetRuntime

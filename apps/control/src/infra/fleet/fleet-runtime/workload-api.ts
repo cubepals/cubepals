@@ -1,5 +1,5 @@
 /**
- * The calls the fleet runtime makes to a node's workload API (apps/blocklyd/docs/protocol.md): each
+ * The calls the fleet runtime makes to a node's workload API (blocklyd's docs/protocol.md): each
  * one's method, path, epoch, headers and timeout, and nothing else. A node's refusal or silence
  * comes back as `NodeRefused` or `NodeUnreachable`, untouched.
  *

@@ -1,7 +1,7 @@
 /**
  * blocklyd's wire types, as the control plane writes and reads them. They are generated from the
- * node's own Rust types (apps/blocklyd/src/protocol/schema.rs writes infra/fleet/*.openapi.json,
- * `bun run openapi:generate` makes generated/ from them), so a field the node renames, retypes or
+ * node's own Rust types (each cubepals/blocklyd release carries them as *.openapi.json, which
+ * `bun scripts/blocklyd.ts bump` pins here and `bun run openapi:generate` makes generated/ from), so a field the node renames, retypes or
  * makes nullable fails to compile here instead of on the wire. `Reads` is what the node reads: its
  * API's requests and the answers to its own; `Writes` is what it writes.
  *

@@ -67,7 +67,7 @@ const NO_ROOM = 'There was no room for it where it runs just then. Try again in 
 /** What a start of a displaced world is answered with. apps/control/src/infra/fleet/fleet-runtime.ts */
 const HOST_LOST =
   "This server's host was lost. It is rebuilt from its newest backup where there is room; nothing runs it meanwhile."
-/** blocklyd's journal, when its heartbeats stop being answered and when they are again. apps/blocklyd/src/fleet/heartbeat.rs */
+/** blocklyd's journal, when its heartbeats stop being answered and when they are again. cubepals/blocklyd src/fleet/heartbeat.rs */
 const JOURNAL_SILENT = "heartbeat: the control plane doesn't answer; workloads carry on"
 const JOURNAL_BACK = 'heartbeat: the control plane answers again'
 const JOURNAL_FENCED = 'heartbeat: fenced a superseded copy'
@@ -79,7 +79,7 @@ const LOST_REASON = 'disk failure'
 
 type NodeId = 'a' | 'b'
 const NODES: readonly NodeId[] = ['a', 'b']
-/** Example names, in the shape of the node id in the protocol's own example. apps/blocklyd/docs/protocol.md */
+/** Example names, in the shape of the node id in the protocol's own example. cubepals/blocklyd docs/protocol.md */
 const NODE_NAME: Record<NodeId, string> = { a: 'fra-box-1', b: 'fra-box-2' }
 /** The machine whose cable can be cut. */
 const CABLED: NodeId = 'a'
@@ -748,7 +748,7 @@ function plug(state: State): Op | null {
     ],
     lines,
     notes: [
-      // The heartbeat's answer, apps/blocklyd/docs/protocol.md.
+      // The heartbeat's answer, cubepals/blocklyd docs/protocol.md.
       { label: 'In the answer to its first beat', mono: '"lifecycle": "lost", "leaseSeconds": 0' },
       ...(forked.length > 0 ? [{ label: `blocklyd’s journal on ${name}`, mono: JOURNAL_FENCED }] : []),
     ],
@@ -1123,7 +1123,7 @@ function Machine({
                   <span className={styles.tname}>{world?.name ?? copy.world}</span>
                   {world && <span className={`bl-num ${styles.tsize}`}>{world.memoryMb / 1024} GB</span>}
                 </span>
-                {/* `fenced` is blocklyd's state for a superseded copy (apps/blocklyd/docs/protocol.md). */}
+                {/* `fenced` is blocklyd's state for a superseded copy (cubepals/blocklyd docs/protocol.md). */}
                 <span className={`bl-mono bl-num ${styles.tline} ${styles.tmeta}`}>
                   <span>{copy.fenced ? 'fenced' : 'stopped'}</span>
                   <span>epoch {copy.epoch}</span>

@@ -42,7 +42,7 @@ happens. #implemented
     [`presence` rows],
     [A server that doesn't answer is asked again; empty presence just after a restart means "not read yet" (5 min grace).],
   ),
-  caption: [Who owns what. Sources: #src("docs/fleet.md:152"), #src("apps/control/src/infra/fleet/registry.ts"), #src("apps/blocklyd/src/store.rs:1"), #src("apps/control/src/app/operations/schedules.ts:598").],
+  caption: [Who owns what. Sources: #src("docs/fleet.md:152"), #src("apps/control/src/infra/fleet/registry.ts"), #src("blocklyd/src/store.rs:1"), #src("apps/control/src/app/operations/schedules.ts:598").],
   kind: table,
 )
 
@@ -73,7 +73,7 @@ clock. #implemented
   edge(<dk>, <bd>, "--|>", lbl[events; resync], shift: -4pt, label-side: right),
   edge(<app>, <pg>, "-|>"),
   edge(<bd>, <disk>, "-|>"),
-), caption: [Three owners, three loops; FleetRuntime keeps its tables in the same Postgres. Solid: calls; dashed: reports. Sweeps: #src("apps/control/src/infra/pg/jobs.ts:266"); blocklyd intervals: #src("apps/blocklyd/src/config.rs:346").], name: "fig-loops", float: true)
+), caption: [Three owners, three loops; FleetRuntime keeps its tables in the same Postgres. Solid: calls; dashed: reports. Sweeps: #src("apps/control/src/infra/pg/jobs.ts:266"); blocklyd intervals: #src("blocklyd/src/config.rs:346").], name: "fig-loops", float: true)
 
 - *Application* (worker role, pg-boss singletons, #src("apps/control/src/infra/pg/jobs.ts:266")):
   `reconcile` each minute reads what changed at the provider since the last pass (a full read
@@ -86,7 +86,7 @@ clock. #implemented
   copies, trimming local copies, and pruning events older than 90 days. Each failure is logged and the next task runs. No loop pushes desired specs
   to nodes: a node is only ever told something by a call the application made through the port.
 - *blocklyd*: a Docker event stream plus a full resync every 30 s; disk usage every 300 s; stats
-  every 15 s (#src("apps/blocklyd/src/config.rs:354")). Its records are written to disk before
+  every 15 s (#src("blocklyd/src/config.rs:354")). Its records are written to disk before
   memory, so a restart rebuilds it in about a second.
 
 #why[Level-triggered loops forgive lost messages: a missed heartbeat or a dropped event is
@@ -114,7 +114,7 @@ How a host becomes a node. #implemented
   _note("right", [writes its identity, deletes the token file], pos: "bd")
   _seq("bd", "cp", comment: [`POST /fleet/v1/nodes/:id/heartbeat` every 5 s (client cert, pinned)])
   _seq("cp", "bd", comment: [workload API as `control-plane.<deployment>.fleet`])
-}), caption: [Enrollment. #src("apps/control/src/infra/fleet/node-endpoint.ts:17"), #src("apps/control/src/infra/fleet/registry.ts:168"), #src("apps/blocklyd/src/fleet/enroll.rs:30").], name: "fig-enroll", float: true)
+}), caption: [Enrollment. #src("apps/control/src/infra/fleet/node-endpoint.ts:17"), #src("apps/control/src/infra/fleet/registry.ts:168"), #src("blocklyd/src/fleet/enroll.rs:30").], name: "fig-enroll", float: true)
 
 - The control plane names the node (`<node-id>.nodes.<deployment>.fleet`); the CSR's subject is
   ignored. The identity is the certificate, never an address. TLS 1.3 only, both ways.
@@ -129,7 +129,7 @@ How a host becomes a node. #implemented
 - An answer lost on the way (a network drop, or a disk that refused the identity) is asked for
   again: until it is enrolled the node keeps one key on disk, across restarts too, and the control
   plane answers a spent token again, before its expiry, for the key that spent it
-  (`node.enrollment_repeated`, #src("apps/blocklyd/src/fleet/enroll.rs:8"),
+  (`node.enrollment_repeated`, #src("blocklyd/src/fleet/enroll.rs:8"),
   #src("apps/control/src/infra/fleet/registry.ts:284")). Any other use of a spent token is refused.
 
 #caveat[A node that lost that key before its answer arrived (its state directory wiped) cannot
@@ -138,7 +138,7 @@ retired by hand. Nothing is compromised.]
 
 = Heartbeats and node health <s-health>
 
-Every 5 seconds (`heartbeat_seconds`, #src("apps/blocklyd/src/config.rs:119")) a node sends
+Every 5 seconds (`heartbeat_seconds`, #src("blocklyd/src/config.rs:119")) a node sends
 everything it holds: capacity, every workload's state and epoch, issues, addresses. The answer
 carries its lifecycle, fences, the lease, and `renew` when due (#src("apps/control/src/infra/fleet/wire.ts:234")).
 A node that was cut off, restarted or rebooted resynchronises on its first beat. #implemented
@@ -251,7 +251,7 @@ epochs can't do is reach a node that can't be reached, hence the operator's phys
 = Execution leases <s-lease>
 
 blocklyd is the restart authority on its host; Docker's restart policy is always `no`
-(#src("apps/blocklyd/src/manager.rs:762")). It restarts a workload that failed, per the spec's
+(#src("blocklyd/src/manager.rs:762")). It restarts a workload that failed, per the spec's
 policy (`on-failure`, 3 tries with backoff), and resumes after a host reboot what was running,
 *only while it holds an execution lease*. #implemented
 
@@ -269,7 +269,7 @@ policy (`on-failure`, 3 tries with backoff), and resumes after a host reboot wha
   lane([resume after reboot], ((62%, runtime-fill, [allowed, fences applied first]), (38%, surface, [withheld])))
   lane([running servers], ((100%, runtime-fill, [keep running throughout: the lease never stops anything]),))
   lane([commands], ((100%, control-fill, [carry their own authority (the epoch); need no lease]),))
-}, caption: [A partition starts after the fourth answer. Lease measured on `CLOCK_BOOTTIME` from when the beat was *sent*, so a paused VM or a slow answer can't stretch it. #src("apps/blocklyd/src/manager.rs:2513"), #src("apps/control/src/config/load.ts:91").], name: "fig-lease")
+}, caption: [A partition starts after the fourth answer. Lease measured on `CLOCK_BOOTTIME` from when the beat was *sent*, so a paused VM or a slow answer can't stretch it. #src("blocklyd/src/manager.rs:2513"), #src("apps/control/src/config/load.ts:91").], name: "fig-lease")
 
 - The answer grants `FLEET_LEASE_SECONDS` (120); a node held `lost` gets 0. Without an answer
   naming one, `restart_requires_contact_seconds` (120) applies.
@@ -338,8 +338,8 @@ blocklyd's is the host's (what the container is doing). #implemented
   edge(<r>, <f>, "-|>", lbl[fence], label-side: left, label-pos: 0.62),
   edge(<sd>, <rt>, "-|>", lbl[delete,\ data kept], label-side: left),
   edge(<sd>, <r>, "-|>", bend: -40deg, lbl[start], label-side: right),
-), caption: [A workload on a node (`WorkloadState`, #src("apps/blocklyd/src/protocol.rs:495")), derived
-  from blocklyd's record and Docker's view (#src("apps/blocklyd/src/manager.rs:3217")). A superseded
+), caption: [A workload on a node (`WorkloadState`, #src("blocklyd/src/protocol.rs:495")), derived
+  from blocklyd's record and Docker's view (#src("blocklyd/src/manager.rs:3217")). A superseded
   copy at rest reads `fenced`; a stopped or crashed copy waiting to resume after a reboot reads
   `restarting`; `missing`: the container vanished; `unknown`: Docker doesn't answer.], name: "fig-workload-lifecycle")
 
