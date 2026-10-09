@@ -145,7 +145,7 @@ function apply(): void {
       env,
     )
   // The control app first: its release runs the migrations. One machine a role, as
-  // FLY_PLATFORM_MACHINES counts them (owner, 2026-10-10: a second each once a blip matters).
+  // FLY_PLATFORM_MACHINES counts them. A second machine each comes once a blip matters.
   deploy('control', 'apps/control/Dockerfile', '--ha=false')
   deploy('realtime', 'apps/control/Dockerfile', '--ha=false')
   deploy('edge', 'apps/edge/Dockerfile', '--ha=false')
