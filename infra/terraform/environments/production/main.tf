@@ -50,7 +50,19 @@ variable "web" {
     production_branch = string
     previews          = bool
     redirects         = list(string)
+    indexable         = optional(bool, false)
   })
+}
+
+variable "web_secrets" {
+  type      = map(string)
+  sensitive = true
+  default   = {}
+}
+
+variable "web_secret_versions" {
+  type    = map(string)
+  default = {}
 }
 
 variable "operator_settings" {
@@ -111,6 +123,8 @@ module "environment" {
   cloudflare_account_id = var.cloudflare_account_id
   cloudflare_zone_id    = var.cloudflare_zone_id
   web                   = var.web
+  web_secrets           = var.web_secrets
+  web_secret_versions   = var.web_secret_versions
   fleet_nodes           = var.fleet_nodes
   fleet_join_lines      = var.fleet_join_lines
   fleet_hetzner         = var.fleet_hetzner

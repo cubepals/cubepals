@@ -71,6 +71,7 @@ export const RestoreBackupInput = z.object({
 
 // ─── Worlds ─────────────────────────────────────────────────────────────────────────────────
 
+/** The world types a person picks from when creating a world. */
 export const LEVEL_TYPES = [
   'minecraft:normal',
   'minecraft:flat',
@@ -78,10 +79,16 @@ export const LEVEL_TYPES = [
   'minecraft:amplified',
 ] as const
 
+/**
+ * Every type a world can have: those, and the void, which only a template makes, as the base for
+ * islands and arenas.
+ */
+export type LevelType = (typeof LEVEL_TYPES)[number] | 'blockly:void'
+
 export interface WorldView {
   id: string
   name: string
-  levelType: (typeof LEVEL_TYPES)[number]
+  levelType: LevelType
   seed: string | null
   hardcore: boolean
   generatedOnVersion: string

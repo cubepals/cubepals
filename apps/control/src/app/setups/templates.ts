@@ -18,7 +18,13 @@ export interface Template {
   icon: PlayIcon | null
   /** Shown under "more ways to play", for people who came looking for a server type. */
   advanced?: boolean
-  /** No template is a modpack: a pack is chosen by name, not offered as a way to play. */
+  /** Played in an evening: a server of it starts out as one that lasts a day, which its owner can undo. */
+  forADay?: boolean
+  /**
+   * No template is a modpack: a pack is chosen by name. One that stands for a way to play, as
+   * SkyBlock Plus does for Skyblock, says so in its review (`curation/packs.ts`), and its card
+   * shows only while the pack is offered.
+   */
   setup: Omit<ServerSetup, 'gameVersion' | 'loaderVersion' | 'party' | 'modpack'>
 }
 
@@ -81,6 +87,33 @@ export const TEMPLATES: readonly Template[] = [
     setup: {
       loader: 'neoforge',
       mods: [{ catalog: 'modrinth', projectId: 'create' }],
+      settings: { defaultGameMode: 'survival', difficulty: 'normal', pvp: true },
+      world: WORLD,
+    },
+  },
+  {
+    key: 'lifesteal',
+    title: 'Lifesteal',
+    blurb: 'Win a heart from everyone you beat. Lose them all and you’re out.',
+    icon: 'lifesteal',
+    setup: {
+      loader: 'paper',
+      // LifeStealZ (GPL-3.0). Its own defaults play well, so nothing is configured.
+      mods: [{ catalog: 'modrinth', projectId: 'l8Uv7FzS' }],
+      settings: { defaultGameMode: 'survival', difficulty: 'normal', pvp: true },
+      world: WORLD,
+    },
+  },
+  {
+    key: 'manhunt',
+    title: 'Manhunt',
+    blurb: 'One runs for the dragon. Everyone else hunts them down.',
+    icon: 'manhunt',
+    forADay: true,
+    setup: {
+      loader: 'paper',
+      // Manhunt+ (MIT), whose hunters' compasses point at the runner.
+      mods: [{ catalog: 'modrinth', projectId: 'V67rIXws' }],
       settings: { defaultGameMode: 'survival', difficulty: 'normal', pvp: true },
       world: WORLD,
     },

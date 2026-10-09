@@ -21,8 +21,11 @@ export interface ResolveRequest {
   current: readonly PinnedMod[]
   /** Projects to move to their newest fitting version. */
   upgrade: ReadonlySet<string> | 'all'
-  /** Whether a declared environment runs on a server, and whether players need it too. */
-  environment: (declared: string) => 'server' | 'optional' | 'both' | null
+  /**
+   * Whether a version runs on a server, and whether players need it too, from the environment it
+   * declares and the loaders it is published for.
+   */
+  environment: (declared: string, loaders: readonly string[]) => 'server' | 'optional' | 'both' | null
 }
 
 export interface CatalogData {
@@ -127,7 +130,7 @@ export function resolve(request: ResolveRequest, data: CatalogData): Resolution 
       refuse(want, { kind: 'no_fitting_version', mod: project.name, projectId: want.projectId })
       continue
     }
-    const environment = request.environment(version.environment)
+    const environment = request.environment(version.environment, version.loaders)
     if (environment === null) {
       refuse(want, { kind: 'client_only', mod: project.name, projectId: want.projectId })
       continue

@@ -149,6 +149,8 @@ export interface EntitlementsView {
   allowedLoaders: Loader[]
   /** Whether a server may run mods, plugins or a modpack. */
   mayUseMods: boolean
+  /** Whether a server may run datapacks, plain Minecraft included. */
+  mayUseDatapacks: boolean
   /** Upper bounds a revision is checked against; null: only the settings' own. */
   settingCaps: { maxPlayers: number; viewDistance: number; simulationDistance: number } | null
   /**

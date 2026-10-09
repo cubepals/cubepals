@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { isPackKey, isReleaseVersion, licenceKind } from '../../domain/mods/curation.ts'
+import { TEMPLATES } from '../setups/templates.ts'
 import { CURATED_PACKS } from './packs.ts'
 
 // The review itself (docs/modpack-templates.md): what it pins must be exact, and what it says to
@@ -50,5 +51,17 @@ describe('the review of packs Blockly offers by name', () => {
       for (const word of ['loader', 'fabric', 'forge', 'modrinth', 'curseforge'])
         expect(pack.blurb.toLowerCase()).not.toContain(word)
     }
+  })
+
+  test('a pack that stands for a way to play wears a picture of its own', () => {
+    // Its card sits among the templates', so it shares neither their picture nor their name.
+    const ways = CURATED_PACKS.flatMap((pack) => (pack.way === undefined ? [] : [pack.way]))
+    expect(ways.map((way) => way.title)).toContain('Skyblock')
+    const taken = TEMPLATES.flatMap((template) => [template.icon, template.title])
+    for (const way of ways) {
+      expect(taken).not.toContain(way.icon)
+      expect(taken).not.toContain(way.title)
+    }
+    expect(new Set(ways.map((way) => way.icon)).size).toBe(ways.length)
   })
 })

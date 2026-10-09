@@ -37,7 +37,7 @@
       "reason": "The tests of one class on one shared setup."
     },
     "apps/web/src/app/(app)/servers/new/page.tsx › function CreateServer": {
-      "n": 687,
+      "n": 685,
       "reason": "Its parts were moved out; what is left is one form whose state every field shares."
     },
     "scripts/smoke.ts": {
@@ -290,10 +290,6 @@
       "n": 19,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
-    "apps/control/src/app/revisions/caps.ts › function planProblems": {
-      "n": 16,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    },
     "apps/control/src/app/revisions/service.ts › class RevisionService › return this.#db.transaction(async (tx) => {": {
       "n": 40,
       "reason": "Over the threshold when the check began, and not yet looked at."
@@ -355,7 +351,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/domain/policy/policy.ts › function evaluate": {
-      "n": 83,
+      "n": 80,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/domain/server/lifecycle.ts › function decide": {
@@ -1329,7 +1325,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/(app)/servers/new/page.tsx › function CreateServer": {
-      "n": 439,
+      "n": 438,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/design/page.tsx › function DesignGallery": {

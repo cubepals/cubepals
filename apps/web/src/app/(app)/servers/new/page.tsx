@@ -94,8 +94,9 @@ function CreateServer() {
   const [partySize, setPartySize] = useState<PartySize | null>(kept.partySize)
   const region = useRegion(options.data?.regions, kept.region)
   const [name, setName] = useState('')
-  // How long they want it is the one thing only they know; everything else Blockly decides.
-  const [temporary, setTemporary] = useState(false)
+  // How long they want it is the one thing only they know; a game played in an evening starts out
+  // as lasting a day until they say otherwise. Null: they haven't said.
+  const [temporary, setTemporary] = useState<boolean | null>(null)
   // Why the last thing they picked can't be made, said where they picked it.
   const [refused, setRefused] = useState<{ key: string; message: string } | null>(null)
   // What is being checked before it counts as picked: a template's key or a pack's id.
@@ -254,6 +255,7 @@ function CreateServer() {
   }
 
   const template = from?.kind === 'template' ? templates.find((one) => one.key === from.key) : undefined
+  const forADay = temporary ?? template?.forADay === true
   const curatedPick = from?.kind === 'curated' ? curated.find((one) => one.key === from.key) : undefined
   const picked = from?.kind === 'modpack' ? pack : null
   const copying = from?.kind === 'server' ? (preview.data?.copying ?? null) : null
@@ -296,6 +298,7 @@ function CreateServer() {
       ? ['Pick what to play']
       : [
           template?.title ??
+            curatedPick?.way?.title ??
             curatedPick?.name ??
             picked?.name ??
             (from.kind === 'import' ? ownPack?.pack.name : undefined) ??
@@ -303,11 +306,10 @@ function CreateServer() {
           release,
           region.said,
           chosenSize !== null && players !== undefined && `Up to ${players} players`,
-          temporary && 'For a day',
+          forADay && 'For a day',
         ].filter(Boolean)
   // A template's own line already says what it comes with; a pack or a copy says it here.
-  const said =
-    from !== null && from.kind !== 'template' && preview.data !== undefined ? explain(preview.data) : null
+  const said = from === null || preview.data === undefined ? null : explain(preview.data, from, gameVersions)
   // Where the choice was made: the pack search, the drop, or the list of ways.
   const madeIn = from?.kind === 'modpack' ? 'packs' : from?.kind === 'import' ? 'upload' : 'ways'
 
@@ -355,7 +357,7 @@ function CreateServer() {
       from,
       partySize: chosenSize,
       regionKey: region.key,
-      ...(temporary ? { temporary } : {}),
+      ...(forADay ? { temporary: true } : {}),
       ...(replace !== null
         ? { replaces: replace }
         : suggestion.data?.available
@@ -519,7 +521,7 @@ function CreateServer() {
                     <Way
                       key={one.key}
                       picture={curatedPicture(one)}
-                      title={one.name}
+                      title={one.way?.title ?? one.name}
                       blurb={one.blurb}
                       meta={curatedMeta(one)}
                       why={why}
@@ -676,18 +678,14 @@ function CreateServer() {
         />
         <div className={styles.temporary}>
           <Toggle
-            checked={temporary}
+            checked={forADay}
             onChange={(next) => {
               moveOn()
               setTemporary(next)
             }}
             label="Just for a day"
           />
-          <p className={`type-body-sm ${styles.quiet}`}>
-            {temporary
-              ? 'Cubepals deletes it 24 hours from now. Its world goes to the trash, and one press keeps it instead.'
-              : 'For an evening with friends or a modpack you want to try. Cubepals clears it up afterwards.'}
-          </p>
+          <p className={`type-body-sm ${styles.quiet}`}>{lasting(temporary, template)}</p>
         </div>
       </Part>
 
@@ -748,10 +746,31 @@ function reveal(part: HTMLElement | null) {
 }
 
 /**
- * What Blockly makes of a choice, in a sentence, where there is something to say that its name
- * doesn't: that a pack comes whole, whether friends need it too, and the mods that come along.
+ * What "Just for a day" means as it stands: what they chose, or else what their way to play
+ * suggests, and then Blockly says it chose it, with the toggle as the way back.
  */
-function explain(preview: SetupPreview): string | null {
+function lasting(chosen: boolean | null, template: TemplateView | undefined): string {
+  if (!(chosen ?? template?.forADay))
+    return 'For an evening with friends or a modpack you want to try. Cubepals clears it up afterwards.'
+  const why = chosen === null ? `${template?.title} is played in an evening, so this one lasts a day. ` : ''
+  return `${why}Cubepals deletes it 24 hours from now. Its world goes to the trash, and one press keeps it instead.`
+}
+
+/**
+ * What Blockly makes of a choice, in a sentence, where there is something to say that its name
+ * doesn't. For a template, the Minecraft it picked when that isn't the newest, and why; a
+ * template's own line says what it comes with. For a pack or a copy: that a pack comes whole,
+ * whether friends need it too, and the mods that come along.
+ */
+function explain(
+  preview: SetupPreview,
+  from: SetupSourceInput,
+  offered: readonly { value: string }[],
+): string | null {
+  if (from.kind === 'template')
+    return from.gameVersion !== undefined || preview.gameVersion === offered[0]?.value
+      ? null
+      : `Cubepals picked Minecraft ${preview.gameVersion}, the newest that everything in ${preview.from} runs on.`
   const pack = preview.modpack
   const installs =
     pack === null

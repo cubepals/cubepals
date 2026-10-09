@@ -211,7 +211,7 @@ function NewWorld({ view }: { view: ServerView }) {
   const [seed, setSeed] = useState('')
   const checkedName = useChecked(rules.worldName, name)
   const checkedSeed = useChecked(rules.seed, seed)
-  const [levelType, setLevelType] = useState<WorldView['levelType']>('minecraft:normal')
+  const [levelType, setLevelType] = useState<(typeof LEVEL_TYPES)[number]>('minecraft:normal')
   const [hardcore, setHardcore] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const outcome = useOutcome(view)
@@ -263,7 +263,7 @@ function NewWorld({ view }: { view: ServerView }) {
             label="Type"
             value={levelType}
             options={LEVEL_TYPES.map((value) => ({ value, label: levelTypeLabel(value) }))}
-            onChange={(e) => setLevelType(e.target.value as WorldView['levelType'])}
+            onChange={(e) => setLevelType(e.target.value as (typeof LEVEL_TYPES)[number])}
           />
         </div>
         <TextField

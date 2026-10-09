@@ -1,4 +1,4 @@
-import type { PinnedMod } from '../mods/artifact.ts'
+import { isDatapack, type PinnedMod } from '../mods/artifact.ts'
 import { type PinnedModpack, samePack } from '../mods/modpack.ts'
 
 export type Loader = 'vanilla' | 'paper' | 'fabric' | 'quilt' | 'neoforge' | 'forge'
@@ -201,8 +201,9 @@ export function rewritesWorld(from: Booted, to: Booted): boolean {
  * Whether plain Minecraft runs on Paper: the same game, with ticks about ten times quicker while
  * a world is being explored (mean 2 to 5 ms against vanilla's 19 to 57, measured 2026-10-04). Cubepals decides it for a new plain server where Paper has
  * a stable build for its release, and the owner can go back to Mojang's own server in its
- * settings. Only a plain revision, with no mods and no pack, does; its Paper build is its
- * `loaderVersion`, which plain Minecraft otherwise leaves empty.
+ * settings. Only a plain revision does: no pack, and no mods but datapacks, which Paper loads
+ * from the world as Minecraft does. Its Paper build is its `loaderVersion`, which plain Minecraft
+ * otherwise leaves empty.
  */
 export function runsOnPaper(
   revision: Pick<RevisionDraft, 'loader'> &
@@ -211,7 +212,7 @@ export function runsOnPaper(
   return (
     revision.loader === 'vanilla' &&
     (revision.modpack ?? null) === null &&
-    (revision.mods ?? []).length === 0 &&
+    (revision.mods ?? []).every((mod) => isDatapack(mod)) &&
     (revision.loaderVersion ?? null) !== null
   )
 }

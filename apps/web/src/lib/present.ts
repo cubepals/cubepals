@@ -584,6 +584,12 @@ export function presentConflict(
   }
 }
 
+/** Where datapacks a plan adds go, said once, or nothing when it adds none. */
+export const datapacksSaid = (added: readonly ModView[]): string =>
+  added.some((mod) => mod.datapack)
+    ? 'Datapacks go into the world that’s playing, and into any world you switch to. '
+    : ''
+
 /** A plan's changes, one line each: "+ Sodium 0.7.0", "− Lithium", "Fabric API 0.160 → 0.161". */
 export function presentPlan(plan: Extract<ModPlanView, { kind: 'ok' }>): string[] {
   const needed = (mod: ModView) =>
@@ -652,6 +658,7 @@ const LEVEL_TYPE_LABELS: Record<WorldView['levelType'], string> = {
   'minecraft:flat': 'Superflat',
   'minecraft:large_biomes': 'Large biomes',
   'minecraft:amplified': 'Amplified',
+  'blockly:void': 'Void',
 }
 
 export const levelTypeLabel = (type: WorldView['levelType']): string => LEVEL_TYPE_LABELS[type]

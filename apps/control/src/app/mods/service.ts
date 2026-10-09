@@ -21,7 +21,12 @@ import {
   type ServerRevision,
 } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
-import { catalogLoadersFor, projectTypesFor, serverEnvironment } from '../../minecraft/mods.ts'
+import {
+  catalogLoadersFor,
+  installsAsDatapack,
+  projectTypesFor,
+  serverEnvironment,
+} from '../../minecraft/mods.ts'
 import {
   fits,
   JAR_MANIFEST,
@@ -82,6 +87,8 @@ export type ModPlan =
       kind: 'ok'
       /** The revision the plan starts from; applying it from any other is refused. */
       basedOn: string
+      /** The server type it runs on: a vanilla world's own while it adds only datapacks. */
+      loader: Loader
       mods: PinnedMod[]
       added: PinnedMod[]
       removed: PinnedMod[]
@@ -380,11 +387,23 @@ export class ModService {
     const { desired } = await this.#load(actor, serverId)
     // Refused here too, not only when applied: a plan the change would refuse is a promise broken.
     playsNoPack(desired)
-    const loader = runningLoader(desired)
-    const plan = await this.#plan(desired, change.moveTo ?? desired.gameVersion, loader, change)
+    const plan = await this.#planOn(desired, change.moveTo ?? desired.gameVersion, change)
     if (plan.kind !== 'conflicts') return plan
-    const fits = await this.#fitsNewer(desired, loader, change)
+    const fits = await this.#fitsNewer(desired, runningLoader(desired), change)
     return fits === null ? plan : { ...plan, movesTo: { gameVersion: fits } }
+  }
+
+  /**
+   * The change planned on the server type it needs. A vanilla world stays vanilla while all it
+   * adds are datapacks; anything else moves it to the type Blockly runs mods on (`runningLoader`).
+   */
+  async #planOn(desired: ServerRevision, gameVersion: string, change: ModChange): Promise<ModPlan> {
+    const loader = runningLoader(desired)
+    if (loader !== desired.loader) {
+      const plain = await this.#plan(desired, gameVersion, desired.loader, change)
+      if (plain.kind === 'ok') return plain
+    }
+    return this.#plan(desired, gameVersion, loader, change)
   }
 
   /**
@@ -401,7 +420,7 @@ export class ModService {
       .sort(compareVersions)
       .slice(0, NEWER_RELEASES_TRIED)
     for (const gameVersion of newer) {
-      const plan = await this.#plan(desired, gameVersion, loader, change)
+      const plan = await this.#planOn(desired, gameVersion, change)
       if (plan.kind === 'ok') return gameVersion
     }
     return null
@@ -420,9 +439,9 @@ export class ModService {
     options: ChangeOptions = {},
   ): Promise<MinecraftServer> {
     const { desired } = await this.#load(actor, serverId)
-    const loader = runningLoader(desired)
     const gameVersion = change.moveTo ?? desired.gameVersion
-    const plan = await this.#decided(desired, gameVersion, loader, change, expected)
+    const plan = shown(await this.#planOn(desired, gameVersion, change), expected)
+    const { loader } = plan
     const resolved = { basedOn: plan.basedOn, mods: plan.mods }
     // A vanilla world keeps its version and its world; the server type comes with the mod, in
     // the same change, so nobody is asked to choose a loader to install something. A release the
@@ -466,7 +485,7 @@ export class ModService {
     const { gameVersion, loader } = target
     if (!supports(gameVersion, loader))
       throw new AppError('invalid_choice', `Cubepals does not offer ${loader} on ${gameVersion}.`)
-    const plan = await this.#decided(desired, gameVersion, loader, {}, expected)
+    const plan = shown(await this.#plan(desired, gameVersion, loader, {}), expected)
     const onPaper = target.onPaper ?? runsOnPaper(desired)
     const loaderVersion = await this.#pin(loader, gameVersion, onPaper)
     return this.#revisions.changeVersion(
@@ -485,28 +504,6 @@ export class ModService {
   #pin(loader: Loader, gameVersion: string, onPaper: boolean): Promise<string | null> {
     if (loader !== 'vanilla') return loaderPin(this.#builds, loader, gameVersion)
     return onPaper ? paperPin(this.#builds, gameVersion, 'refuse') : Promise.resolve(null)
-  }
-
-  async #decided(
-    desired: ServerRevision,
-    gameVersion: string,
-    loader: Loader,
-    change: ModChange,
-    expected: readonly string[],
-  ): Promise<Extract<ModPlan, { kind: 'ok' }>> {
-    const plan = await this.#plan(desired, gameVersion, loader, change)
-    if (plan.kind === 'conflicts')
-      throw new AppError(
-        'mods_conflict',
-        `These mods can't run together: ${plan.conflicts.map((c) => c.mod).join(', ')}.`,
-      )
-    const jars = plan.mods.map((m) => m.artifact.sha512).sort()
-    if (jars.join() !== [...expected].sort().join())
-      throw new AppError(
-        'changed_meanwhile',
-        'The mod catalog changed since you looked. Look at the mods again, then try once more.',
-      )
-    return plan
   }
 
   async #plan(
@@ -534,7 +531,9 @@ export class ModService {
       wanted: [...wanted.values()],
       current,
       upgrade: change.upgrade === 'all' ? 'all' : new Set(change.upgrade ?? []),
-      environment: serverEnvironment,
+      // A datapack asks nothing of players, whatever environment its project declares.
+      environment: (declared, loaders) =>
+        installsAsDatapack({ loaders }, loader) ? 'server' : serverEnvironment(declared),
     }
     const { result, data } = await this.#resolve(request)
     if (result.kind === 'conflicts') return result
@@ -551,6 +550,7 @@ export class ModService {
     return {
       kind: 'ok',
       basedOn: desired.id,
+      loader,
       mods: result.mods,
       added: result.mods.filter((m) => !before.has(identity(m))),
       removed: desired.mods.filter((m) => !after.has(identity(m))),
@@ -731,6 +731,25 @@ function observedStates(mods: readonly PinnedMod[], data: CatalogData) {
     if (version) versions.set(versionId, { projectId, state: version.state })
   }
   return { projects, versions }
+}
+
+/**
+ * A plan, held to the jars the owner was shown (`expected`): refused when it conflicts, or when the
+ * catalog moved in between, so the owner looks again rather than getting something they didn't see.
+ */
+function shown(plan: ModPlan, expected: readonly string[]): Extract<ModPlan, { kind: 'ok' }> {
+  if (plan.kind === 'conflicts')
+    throw new AppError(
+      'mods_conflict',
+      `These mods can't run together: ${plan.conflicts.map((c) => c.mod).join(', ')}.`,
+    )
+  const jars = plan.mods.map((m) => m.artifact.sha512).sort()
+  if (jars.join() !== [...expected].sort().join())
+    throw new AppError(
+      'changed_meanwhile',
+      'The mod catalog changed since you looked. Look at the mods again, then try once more.',
+    )
+  return plan
 }
 
 /**

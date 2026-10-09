@@ -18,6 +18,7 @@ import type {
 } from '@blockly/contracts'
 import type { Db } from '@blockly/db'
 import {
+  addedLabel,
   comesWith,
   type Entitlements,
   entitlementsFor,
@@ -58,7 +59,7 @@ import { activeOperation, latestOfKind, type OperationRecord } from '../operatio
 import type { PackService } from '../packs/service.ts'
 import type { CatalogHit, ModCatalog } from '../ports/catalog.ts'
 import type { PlayAddressing, RegionCatalog } from '../ports/platform.ts'
-import { isModded } from '../revisions/caps.ts'
+import { hasDatapacks, isModded } from '../revisions/caps.ts'
 import { loadPackChecks } from '../setups/persistence.ts'
 import type { SetupService, SetupSource } from '../setups/service.ts'
 import { sizeOf } from '../setups/service.ts'
@@ -281,6 +282,7 @@ export class ServerQueries {
         blurb: template.blurb,
         icon: template.icon,
         advanced: template.advanced === true,
+        forADay: template.forADay === true,
         // What it runs is the template's own; its size, once known, the preview's.
         fits: planFit(entitlements, size?.from ?? template.title, {
           tier: size === undefined ? PARTY['5'].tier : sizeOf('5', size.tier),
@@ -301,6 +303,7 @@ export class ServerQueries {
         version: release.version,
         gameVersion: release.facts.gameVersion,
         playersNeedIt: release.facts.playersNeedIt,
+        way: 'way' in pack ? (pack.way ?? null) : null,
         fits: planFit(entitlements, pack.name, {
           tier: sizeOf('5', release.facts.tier as MemoryTier),
           loader: release.facts.loader as Loader,
@@ -490,6 +493,7 @@ export class ServerQueries {
       tier: size,
       loader: resolved.loader,
       modded: isModded(resolved),
+      datapacks: hasDatapacks(resolved),
       modpack: resolved.modpack !== null,
     })
     return {
@@ -684,11 +688,12 @@ function planFit(plan: Entitlements, what: string, runs: Runs & { modpack?: bool
   const gap = planGap(plan, runs, 'offered')
   if (gap === null) return { allowed: true }
   const paid = planThatRuns(runs)
+  const comes = paid === null ? 'need a paid plan' : `come with ${planName(paid)}`
   const reason =
-    gap === 'mods'
-      ? comesWith(runs.modpack ? 'Modpacks' : 'Mods and plugins', paid)
+    gap === 'mods' || gap === 'datapacks'
+      ? comesWith(addedLabel(gap, runs.modpack === true), paid)
       : gap === 'server_type'
-        ? `${LOADER_LABELS[runs.loader]} servers ${paid === null ? 'need a paid plan' : `come with ${planName(paid)}`}.`
+        ? `${LOADER_LABELS[runs.loader]} servers ${comes}.`
         : `${what} needs a bigger server${paid === null ? '' : `, which comes with ${planName(paid)}`}.`
   return { allowed: false, reason, plan: paid }
 }

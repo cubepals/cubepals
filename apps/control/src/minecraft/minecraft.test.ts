@@ -52,7 +52,13 @@ describe('versions and images', () => {
       )
     const pack = { ...plain, loader: 'fabric' as const, modpack: {} as never }
     expect(imageFor(pack)).toBe('itzg/minecraft-server:2026.9.1-java25')
-    expect(imageFor({ ...plain, mods: [{}] as never })).toBe('itzg/minecraft-server:2026.9.1-java25')
+    expect(imageFor({ ...plain, mods: [{ loaders: ['fabric'] }] as never })).toBe(
+      'itzg/minecraft-server:2026.9.1-java25',
+    )
+    // A datapack is data the game reads: plain Minecraft with one keeps the Alpine build.
+    expect(imageFor({ ...plain, mods: [{ loaders: ['datapack'] }] as never })).toBe(
+      'itzg/minecraft-server:2026.9.1-java25-alpine',
+    )
   })
 
   test('plain Minecraft run on Paper keeps the Ubuntu build, as Paper does', () => {
@@ -568,13 +574,14 @@ describe('installed jars', () => {
 
 describe('what a server type runs', () => {
   test('catalog loaders and project types per server type', () => {
-    expect(catalogLoadersFor('fabric')).toEqual(['fabric'])
-    expect(catalogLoadersFor('quilt')).toEqual(['quilt', 'fabric'])
-    expect(catalogLoadersFor('paper')).toEqual(['paper', 'spigot', 'bukkit'])
-    expect(catalogLoadersFor('vanilla')).toEqual([])
-    expect(projectTypesFor('paper')).toEqual(['plugin'])
-    expect(projectTypesFor('neoforge')).toEqual(['mod'])
-    expect(projectTypesFor('vanilla')).toEqual([])
+    // Every server type reads datapacks from its world, plain Minecraft included.
+    expect(catalogLoadersFor('fabric')).toEqual(['fabric', 'datapack'])
+    expect(catalogLoadersFor('quilt')).toEqual(['quilt', 'fabric', 'datapack'])
+    expect(catalogLoadersFor('paper')).toEqual(['paper', 'spigot', 'bukkit', 'datapack'])
+    expect(catalogLoadersFor('vanilla')).toEqual(['datapack'])
+    expect(projectTypesFor('paper')).toEqual(['plugin', 'datapack'])
+    expect(projectTypesFor('neoforge')).toEqual(['mod', 'datapack'])
+    expect(projectTypesFor('vanilla')).toEqual(['datapack'])
   })
 
   test("declared environments: the server's alone, players' too, players' if they like, or players' only", () => {
