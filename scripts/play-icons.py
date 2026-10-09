@@ -215,6 +215,34 @@ ICONS: dict[str, tuple[str, dict[str, str], list[str]]] = {
             "......ooo.......",
         ],
     ),
+    # Duels: two swords crossed, iron over gold, one for each side.
+    "duels": (
+        "Duels",
+        {
+            "o": "#2b3136",
+            "w": "#f1f4f6", "b": "#b9c1c7",
+            "y": "#f3d36b", "Y": "#c9962e",
+            "k": "#7a5134", "h": "#a06d3f", "H": "#6f4a28",
+        },
+        [
+            ".oo..........oo.",
+            "oyYo........owbo",
+            "oyYYo......owwbo",
+            ".oyYYo....owwbo.",
+            "..oyYYo..owwbo..",
+            "...oyYYoowwbo...",
+            "...ooyYYwwboo...",
+            "..okooywwbooko..",
+            "...okowwbYoko...",
+            "....okooooko....",
+            "...ohokookoho...",
+            "..oho.okko.oho..",
+            ".oHo...oo...oHo.",
+            "oko..........oko",
+            ".o............o.",
+            "................",
+        ],
+    ),
     # A modpack: a bundle, many things carried as one.
     "modpack": (
         "A modpack",

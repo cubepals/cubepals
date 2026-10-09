@@ -1,5 +1,7 @@
 import type { PlayIcon } from '@blockly/contracts'
 import type { ServerSetup } from '../../domain/setup/setup.ts'
+import { DUELS_FILES } from '../../minecraft/duels.ts'
+import { VOID_LEVEL } from '../../minecraft/worlds.ts'
 
 /**
  * What Blockly offers when it asks "what do you want to play?" (§15.6). Each one is a setup with
@@ -116,6 +118,25 @@ export const TEMPLATES: readonly Template[] = [
       mods: [{ catalog: 'modrinth', projectId: 'V67rIXws' }],
       settings: { defaultGameMode: 'survival', difficulty: 'normal', pvp: true },
       world: WORLD,
+    },
+  },
+  {
+    key: 'duels',
+    title: 'Duels',
+    blurb: 'One on one in an arena that’s already built. Type /duel join to fight.',
+    icon: 'duels',
+    setup: {
+      loader: 'paper',
+      mods: [
+        // Duels by Dartanman (MIT), whose arena and kit Cubepals writes. It stops at 1.21.11.
+        { catalog: 'modrinth', projectId: 'pZyHIvCK' },
+        // PVPOneDotEight (GPL-3.0): the fast, cooldown-free combat of Minecraft 1.8, in every world.
+        { catalog: 'modrinth', projectId: 'Tz6dxwG9' },
+      ],
+      files: DUELS_FILES,
+      // Adventure, so nobody breaks the platform; Easy, since there is nothing to eat between fights.
+      settings: { defaultGameMode: 'adventure', difficulty: 'easy', pvp: true },
+      world: { levelType: VOID_LEVEL, hardcore: false },
     },
   },
   {

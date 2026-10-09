@@ -77,6 +77,7 @@ export const PLAY_ICONS = [
   'lifesteal',
   'manhunt',
   'skyblock',
+  'duels',
   'modpack',
   'ownpack',
 ] as const
