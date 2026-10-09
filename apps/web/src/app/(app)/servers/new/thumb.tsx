@@ -25,15 +25,22 @@ export const wayPicture = (icon: PlayIcon | null): Picture =>
 export const packPicture = (hit: ModpackHit): Picture =>
   hit.iconUrl === null ? wayPicture('modpack') : { src: hit.iconUrl, photo: true }
 
+/** A pack that stands for a way to play wears that way's item; any other, its own picture. */
 export const curatedPicture = (pack: CuratedPackView): Picture =>
-  pack.icon === null ? wayPicture('modpack') : { src: pack.icon, photo: true }
+  pack.way !== null
+    ? wayPicture(pack.way.icon)
+    : pack.icon === null
+      ? wayPicture('modpack')
+      : { src: pack.icon, photo: true }
 
 /**
  * Under a pack Blockly offers, quietly: the Minecraft it is, whether friends need anything, and
- * whose it is. Its authors' credit goes wherever their pack does.
+ * whose it is. Its authors' credit goes wherever their pack does, with its own name where the
+ * card carries the way to play's.
  */
 export const curatedMeta = (pack: CuratedPackView): string =>
   [
+    ...(pack.way === null ? [] : [pack.name]),
     `Minecraft ${pack.gameVersion}`,
     pack.playersNeedIt ? 'Friends install the pack' : 'Friends join with plain Minecraft',
     `By ${pack.authors}`,

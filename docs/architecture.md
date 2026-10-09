@@ -2099,9 +2099,15 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   needs: no mods or a handful take the smallest, a light set the middle, anything heavier the
   large one (`tierFor`). A pack's is below.
 - Templates (`app/setups/templates.ts`) are named for what is played: Survival, Creative,
-  Hardcore, Smoother survival (Paper), and Create (NeoForge with the Create mod), with the bare
-  server types under "more ways to play". Their words never mention a loader, a build or a mod
-  list, and none names a Minecraft version: that is picked when the server is made.
+  Hardcore, Smoother survival (Paper), Create (NeoForge with the Create mod), Lifesteal (Paper with
+  LifeStealZ) and Manhunt (Paper with Manhunt+), with the bare server types under "more ways to
+  play". Their words never mention a loader, a build or a mod list, and none names a Minecraft
+  version: that is picked when the server is made, and the create page says which and why when it
+  isn't the newest. Manhunt is played in an evening, so a server of it starts out as one that lasts
+  a day (`forADay`); its owner can turn that off before making it.
+- A curated pack can stand for a way to play (`CuratedPack.way`): SkyBlock Plus is the Skyblock
+  card, with its own name and authors under it. The card is the pack's, so it shows only while a
+  release is published, and picking it is picking the pack.
 - How each server was made is kept in `minecraft_servers.created_from`.
 
 **Copies.** "Make one like this" copies a setup, and only what the server last booted. Nothing its

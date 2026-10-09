@@ -74,6 +74,9 @@ export const PLAY_ICONS = [
   'hardcore',
   'smooth',
   'create',
+  'lifesteal',
+  'manhunt',
+  'skyblock',
   'modpack',
   'ownpack',
 ] as const
@@ -163,6 +166,8 @@ export interface TemplateView {
   icon: PlayIcon | null
   /** Shown under "more ways to play": for people who came looking for a server type. */
   advanced: boolean
+  /** Played in an evening, so a server of it starts out as one that lasts a day. */
+  forADay: boolean
   /**
    * Whether the viewer's plan runs it, and if not, why, in the words choosing it would be refused
    * with. Templates come usable first; one a plan can't run is shown dimmed, never hidden.
@@ -189,6 +194,12 @@ export interface CuratedPackView {
   gameVersion: string
   /** Whether everyone playing installs the pack too; otherwise plain Minecraft joins. */
   playersNeedIt: boolean
+  /**
+   * The way to play it is, where it stands for one under "What to play": the card then carries
+   * that name and picture, and the pack's own name goes beside its authors'. Null for a pack
+   * offered by its own name.
+   */
+  way: { title: string; icon: PlayIcon } | null
   fits: PlanFit
 }
 

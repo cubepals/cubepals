@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Draws the icons for the ways to play, as the create page shows them: Survival, Creative, Hardcore,
-Smoother survival, Create, a modpack and a pack you have.
+Smoother survival, Create, Lifesteal, Manhunt, Skyblock, a modpack and a pack you have.
 
 The same art as scripts/server-icons.py draws for servers: sixteen-by-sixteen pixels in Blockly's
 palette, our own rather than Minecraft's, whose textures belong to Mojang. These are items, as the
@@ -137,6 +137,82 @@ ICONS: dict[str, tuple[str, dict[str, str], list[str]]] = {
             "......oooo......",
             "................",
             "................",
+        ],
+    ),
+    # Lifesteal: a heart cracked in two, one half taken; brighter than Hardcore's whole heart, so
+    # the two don't read as one.
+    "lifesteal": (
+        "Lifesteal",
+        {"o": "#2b3136", "r": "#f05a66", "l": "#ffa3ab", "w": "#ffffff", "R": "#a82838", "D": "#7d1c2a"},
+        [
+            "................",
+            "................",
+            "...ooo....ooo...",
+            "..orrro..oRRRo..",
+            ".orllrrooRRRRDo.",
+            ".olrwrroRRRRRDo.",
+            ".olrrrrroRRRRDo.",
+            ".orrrrroRRRRRDo.",
+            "..orrrrroRRRDo..",
+            "...orrroRRRDo...",
+            "....orrroRDo....",
+            ".....oroRRo.....",
+            "......orDo......",
+            ".......oo.......",
+            "................",
+            "................",
+        ],
+    ),
+    # Manhunt: a compass, the hunters' own, its needle turned toward whoever runs.
+    "manhunt": (
+        "Manhunt",
+        {"o": "#2b3136", "s": "#b9c1c7", "S": "#7f868c", "t": "#e3e7ea", "w": "#f6f1e4", "r": "#e0404f", "R": "#a82838", "n": "#7f868c"},
+        [
+            "................",
+            "................",
+            ".....oooooo.....",
+            "...oottttssoo...",
+            "..otswwwwwwsSo..",
+            "..otwwwwwwrrSo..",
+            ".otwwwwwwrRwwSo.",
+            ".otwwwwwrRwwwSo.",
+            ".oswwwwooowwwSo.",
+            ".oswwwnnowwwwSo.",
+            ".oswwnnwwwwwwSo.",
+            "..oswnwwwwwwSo..",
+            "..osswwwwwwSSo..",
+            "...ooSSSSSSoo...",
+            ".....oooooo.....",
+            "................",
+        ],
+    ),
+    # Skyblock: a small island over nothing, a tree on its grass and stone tapering below.
+    "skyblock": (
+        "Skyblock",
+        {
+            "o": "#2b3136",
+            "L": "#8fd460", "l": "#6cc24a", "G": "#4f9c35",
+            "k": "#a06d3f", "K": "#6f4a28",
+            "g": "#6cc24a", "d": "#9a6a44", "D": "#7a5134",
+            "s": "#9aa0a6", "S": "#7f868c",
+        },
+        [
+            "................",
+            ".....oooo.......",
+            "....oLLllo......",
+            "...oLllllGo.....",
+            "...olllllGo.....",
+            "....oGlGGo......",
+            ".....okKo.......",
+            ".....okKo.......",
+            "ooooooooooooooo.",
+            "oglgggglgggglgo.",
+            "oddDddddDdddddo.",
+            ".odddDdddddDdo..",
+            "..osSsssSssso...",
+            "...osssSssoo....",
+            ".....ossSo......",
+            "......ooo.......",
         ],
     ),
     # A modpack: a bundle, many things carried as one.
