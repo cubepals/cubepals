@@ -39,6 +39,7 @@ const revision: ServerRevision = {
   settings: defaultSettings({ name: 'Sunset Valley', gameMode: 'survival', maxPlayers: 10 }),
   mods: [],
   modpack: null,
+  files: [],
   acknowledgedRevoked: [],
   reason: 'created',
   basedOnRevisionId: null,

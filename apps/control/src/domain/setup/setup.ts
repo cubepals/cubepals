@@ -1,5 +1,6 @@
 import type { PinnedMod } from '../mods/artifact.ts'
 import type { ReleaseRef } from '../mods/curation.ts'
+import type { CarriedFile } from '../revision/carried.ts'
 import type { Loader, ServerRevision, ServerSettings } from '../revision/revision.ts'
 import type { PartySize } from '../server/size.ts'
 import type { World } from '../world/world.ts'
@@ -14,6 +15,7 @@ import type { World } from '../world/world.ts'
  * - the mods their owner chose, by catalog project and version; what those mods need is resolved
  *   again rather than copied, since dependencies change
  * - or, instead of those, the modpack it plays, which brings its own mods and configuration
+ * - the files Cubepals wrote for what it plays, such as a plugin's settings, carried as they are
  * - the settings that decide how it plays: difficulty, game mode, PvP, spawn protection, and how
  *   far the world is seen and simulated
  * - how the world is made: its type, and whether it is hardcore
@@ -36,6 +38,8 @@ export interface ServerSetup {
   mods: SetupMod[]
   /** The modpack it plays, in place of a mod list of its own. */
   modpack: SetupModpack | null
+  /** Files Cubepals wrote for it, by their path under the server's directory; absent: none. */
+  files?: readonly CarriedFile[]
   settings: SetupSettings
   world: { levelType: string; hardcore: boolean }
   party: PartySize
@@ -47,6 +51,8 @@ interface SetupMod {
   projectId: string
   /** The exact version, when copying something that runs; absent takes the newest that fits. */
   versionId?: string
+  /** Where its jar goes, when not the loader's own folder: `plugins/BentoBox/addons`. */
+  dir?: string
 }
 
 /** A modpack by where it lives; without a version, the newest one Blockly can run. */
@@ -73,7 +79,7 @@ type SetupSettings = Partial<
 export function setupOf(
   revision: Pick<
     ServerRevision,
-    'gameVersion' | 'loader' | 'loaderVersion' | 'settings' | 'mods' | 'modpack'
+    'gameVersion' | 'loader' | 'loaderVersion' | 'settings' | 'mods' | 'modpack' | 'files'
   >,
   world: Pick<World, 'levelType' | 'hardcore'>,
   party: PartySize,
@@ -86,6 +92,7 @@ export function setupOf(
       catalog: (mod.source as { catalog: string }).catalog,
       projectId: (mod.source as { projectId: string }).projectId,
       versionId: (mod.source as { versionId: string }).versionId,
+      ...(mod.dir === undefined ? {} : { dir: mod.dir }),
     })),
     // A pack is copied at the exact version the server runs, so both play the same game.
     modpack:
@@ -97,6 +104,7 @@ export function setupOf(
             versionId: revision.modpack.versionId,
             ...(revision.modpack.curated === undefined ? {} : { curated: revision.modpack.curated }),
           },
+    ...(revision.files.length === 0 ? {} : { files: revision.files }),
     settings: {
       difficulty: revision.settings.difficulty,
       defaultGameMode: revision.settings.defaultGameMode,

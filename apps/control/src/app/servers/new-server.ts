@@ -98,6 +98,7 @@ export async function draftNewServer(
     settings,
     mods: chosen?.mods ?? [],
     modpack: chosen?.modpack ?? null,
+    files: [...(chosen?.setup.files ?? [])],
     acknowledgedRevoked: [],
     reason: 'created',
     basedOnRevisionId: null,

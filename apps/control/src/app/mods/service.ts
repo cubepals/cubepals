@@ -63,7 +63,10 @@ import {
 
 /** A change to a server's mods, as the owner asks for it. */
 export interface ModChange {
-  add?: ReadonlyArray<{ projectId: string; versionId?: string | undefined }> | undefined
+  /** `dir` is where a template puts a plugin's jar, when not the loader's own folder (`PinnedMod.dir`). */
+  add?:
+    | ReadonlyArray<{ projectId: string; versionId?: string | undefined; dir?: string | undefined }>
+    | undefined
   /** The owner's own uploads, by upload id. */
   addUploads?: readonly string[] | undefined
   /** Projects, or uploads by their upload id. */
@@ -356,7 +359,7 @@ export class ModService {
    */
   async resolveNew(
     target: { gameVersion: string; loader: Loader },
-    wanted: ReadonlyArray<{ projectId: string; versionId?: string | undefined }>,
+    wanted: ReadonlyArray<{ projectId: string; versionId?: string | undefined; dir?: string | undefined }>,
   ): Promise<ModPlan> {
     const empty: ServerRevision = {
       id: '',
@@ -368,6 +371,7 @@ export class ModService {
       settings: defaultSettings({ name: 'new', gameMode: 'survival', maxPlayers: 5 }),
       mods: [],
       modpack: null,
+      files: [],
       acknowledgedRevoked: [],
       reason: 'created',
       basedOnRevisionId: null,
@@ -527,7 +531,13 @@ export class ModService {
     for (const mod of current)
       if (mod.origin === 'user' && 'projectId' in mod.source)
         wanted.set(mod.source.projectId, { projectId: mod.source.projectId })
-    for (const added of [...uploaded.catalog, ...(change.add ?? [])]) wanted.set(added.projectId, added)
+    for (const added of [...uploaded.catalog, ...(change.add ?? [])])
+      wanted.set(added.projectId, { projectId: added.projectId, versionId: added.versionId })
+    // A plugin placed in a folder of its own stays there through every change, as its template put it.
+    const dirs = new Map<string, string>()
+    for (const mod of current)
+      if (mod.dir !== undefined && 'projectId' in mod.source) dirs.set(mod.source.projectId, mod.dir)
+    for (const added of change.add ?? []) if (added.dir !== undefined) dirs.set(added.projectId, added.dir)
     const request: ResolveRequest = {
       catalog: this.#catalog.id,
       target: { gameVersion, loaders: catalogLoadersFor(loader) },
@@ -540,21 +550,25 @@ export class ModService {
     if (result.kind === 'conflicts') return result
     if (result.kind !== 'resolved') throw new Error('Resolving mods did not settle')
 
+    const mods = result.mods.map((mod) => {
+      const dir = 'projectId' in mod.source ? dirs.get(mod.source.projectId) : undefined
+      return dir === undefined ? mod : { ...mod, dir }
+    })
     // A revocation seen here is one the hourly refresh would otherwise only find unchanged.
     const moved = await this.#sync.recordObserved(observedStates(result.mods, data))
     if (moved.length > 0) await this.#catalogMoved(moved)
     const before = new Map(desired.mods.map((m) => [identity(m), m]))
-    const after = new Map(result.mods.map((m) => [identity(m), m]))
-    const revoked = (await revokedIn(this.#db, result.mods)).filter(
+    const after = new Map(mods.map((m) => [identity(m), m]))
+    const revoked = (await revokedIn(this.#db, mods)).filter(
       (m) => !desired.acknowledgedRevoked.includes(m.artifact.sha512),
     )
     return {
       kind: 'ok',
       basedOn: desired.id,
-      mods: result.mods,
-      added: result.mods.filter((m) => !before.has(identity(m))),
+      mods,
+      added: mods.filter((m) => !before.has(identity(m))),
       removed: desired.mods.filter((m) => !after.has(identity(m))),
-      updated: result.mods.flatMap((to) => {
+      updated: mods.flatMap((to) => {
         const from = before.get(identity(to))
         return from !== undefined && from.artifact.sha512 !== to.artifact.sha512 ? [{ from, to }] : []
       }),

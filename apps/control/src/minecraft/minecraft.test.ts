@@ -101,6 +101,7 @@ describe('toRuntimeSpec', () => {
     },
     mods: [],
     modpack: null,
+    files: [],
     acknowledgedRevoked: [],
     reason: 'created' as const,
     basedOnRevisionId: null,

@@ -317,6 +317,7 @@ export class SetupService {
     for (const gameVersion of versions) {
       const wanted = setup.mods.map((mod) => ({
         projectId: mod.projectId,
+        ...(mod.dir === undefined ? {} : { dir: mod.dir }),
         // A copy's mods keep the builds it ran; a template's name none, and resolve for the version.
         ...(setup.gameVersion === '' || mod.versionId === undefined ? {} : { versionId: mod.versionId }),
       }))

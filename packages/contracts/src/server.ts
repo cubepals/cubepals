@@ -485,6 +485,8 @@ export type RevisionChangeView =
   | { field: 'mods'; added: string[]; removed: string[]; changed: string[] }
   /** A move between modpacks, or onto or off one; null is "no pack". */
   | { field: 'modpack'; from: string | null; to: string | null }
+  /** Files Cubepals wrote for the server, named by what they set up: "LifeStealZ settings". */
+  | { field: 'files'; added: string[]; removed: string[]; changed: string[] }
 
 export interface RevisionView {
   id: string

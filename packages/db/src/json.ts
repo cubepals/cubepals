@@ -38,6 +38,14 @@ export interface PinnedModJson {
   gameVersions: string[]
   origin: 'user' | 'dependency'
   requiredBy: string[]
+  /** The folder its jar goes in where that isn't the loader's own; absent for every other mod. */
+  dir?: string
+}
+
+/** A file Cubepals wrote for a server, by its path under the server's directory. */
+export interface CarriedFileJson {
+  path: string
+  content: string
 }
 
 /** A whole published experience a server plays, in place of a list of mods. */

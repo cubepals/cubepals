@@ -136,6 +136,8 @@ export function downloadOf(changes: readonly RevisionChangeView[]): string | nul
   for (const change of changes) {
     if (change.field === 'modpack' && 'to' in change && typeof change.to === 'string')
       return `Downloading ${change.to}`
+    // Files Cubepals wrote come with the change itself; nothing downloads for them.
+    if (change.field === 'files') continue
     if ('added' in change) mods = [...change.added, ...change.changed]
     else if (change.field === 'gameVersion') version = String(change.to)
     else if (change.field === 'loader') loader = loaderLabel(change.to as Loader)
@@ -529,7 +531,7 @@ export function presentChange(change: RevisionChangeView): string {
       change.removed.length > 0 && `removed ${change.removed.join(', ')}`,
       change.changed.length > 0 && `updated ${change.changed.join(', ')}`,
     ].filter(Boolean)
-    return `Mods: ${parts.join('; ')}`
+    return `${change.field === 'files' ? 'Set by Cubepals' : 'Mods'}: ${parts.join('; ')}`
   }
   if (isPackChange(change)) {
     if (change.to === null) return `Stopped playing ${change.from}`
