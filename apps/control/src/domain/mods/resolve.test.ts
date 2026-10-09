@@ -505,3 +505,28 @@ describe('versions Cubepals tested', () => {
     expect(resolve(tested, data)).toEqual(resolve(request(wanted), data))
   })
 })
+
+describe('resolve across catalogs', () => {
+  test('pins each plugin to the catalog its id names, Modrinth and Hangar in one set', () => {
+    const paper = { gameVersion: '26.2', loaders: ['paper', 'spigot', 'bukkit'] }
+    const lifesteal = project('l8Uv7FzS', 'LifeStealZ')
+    const ocm = project('hangar:2087', 'OldCombatMechanics')
+    const data = catalog(
+      [lifesteal, ocm],
+      [
+        version('l8Uv7FzS', 'LS1', { loaders: ['paper'], gameVersions: ['26.2'] }),
+        version('hangar:2087', 'hangar:31271', { loaders: ['paper'], gameVersions: ['26.2'] }),
+      ],
+    )
+    const mods = resolved(
+      resolve(
+        request({ target: paper, wanted: [{ projectId: 'l8Uv7FzS' }, { projectId: 'hangar:2087' }] }),
+        data,
+      ),
+    )
+    expect(mods.map((m) => m.source)).toEqual([
+      { catalog: 'modrinth', projectId: 'l8Uv7FzS', versionId: 'LS1' },
+      { catalog: 'hangar', projectId: 'hangar:2087', versionId: 'hangar:31271' },
+    ])
+  })
+})

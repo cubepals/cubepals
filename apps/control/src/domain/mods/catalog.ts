@@ -3,6 +3,16 @@
  * (docs/architecture.md §15.5). Resolution works on these; the catalog port returns them.
  */
 
+/**
+ * Which catalog an id belongs to. Modrinth's ids are bare; a second catalog's carry its name
+ * before them (`hangar:2087`), so one set of mods can hold both and every id still says where it
+ * came from. Modrinth's ids and slugs never hold a colon.
+ */
+export function catalogOfId(id: string, primary: string): string {
+  const at = id.indexOf(':')
+  return at > 0 ? id.slice(0, at) : primary
+}
+
 export type ProjectState = 'approved' | 'archived' | 'unlisted' | 'withheld' | 'absent'
 export type VersionState = 'listed' | 'archived' | 'unlisted' | 'absent'
 
