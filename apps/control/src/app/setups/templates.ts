@@ -144,6 +144,19 @@ export const TEMPLATES: readonly Template[] = [
     },
   },
   {
+    key: 'rpg',
+    title: 'RPG survival',
+    blurb: 'Every skill levels up as you play: mining, fighting, farming and more.',
+    icon: 'rpg',
+    setup: {
+      loader: 'paper',
+      // AuraSkills (GPL-3.0). Its own defaults play well, so nothing is configured.
+      mods: [{ catalog: 'modrinth', projectId: 'uDdZAVls' }],
+      settings: { defaultGameMode: 'survival', difficulty: 'normal', pvp: true },
+      world: WORLD,
+    },
+  },
+  {
     key: 'fabric',
     title: 'Fabric',
     blurb: 'An empty world ready for the mods you pick.',

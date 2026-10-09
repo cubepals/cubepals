@@ -78,6 +78,7 @@ export const PLAY_ICONS = [
   'manhunt',
   'skyblock',
   'oneblock',
+  'rpg',
   'modpack',
   'ownpack',
 ] as const

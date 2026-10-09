@@ -113,4 +113,26 @@ describe.skipIf(!hasDatabase)('game modes', () => {
         plan: 'plus',
       })
   }, 30_000)
+
+  test('RPG survival brings AuraSkills on the newest Paper it runs on, with Plus', async () => {
+    // As Modrinth listed AuraSkills 2.4.0 (`9rSJ3THD`) on 2026-10-09: 26.1 to 26.3.
+    plugin('uDdZAVls', 'AuraSkills', ['26.1.2', '26.2', '26.3'])
+    const owner = await h.user('Ari', 'plus')
+    const preview = await h.app.queries.setupPreview(owner, { kind: 'template', key: 'rpg' })
+    // The create page names it: "the newest that everything in RPG survival runs on".
+    expect(preview).toMatchObject({
+      from: 'RPG survival',
+      loader: 'paper',
+      gameVersion: '26.2',
+      mods: ['AuraSkills'],
+      modpack: null,
+    })
+    const { templates } = await h.app.queries.createOptions(await h.user('Noor'))
+    expect(templates.find((template) => template.key === 'rpg')).toMatchObject({
+      title: 'RPG survival',
+      icon: 'rpg',
+      forADay: false,
+      fits: { allowed: false, reason: 'Mods and plugins come with Plus.', plan: 'plus' },
+    })
+  }, 30_000)
 })
