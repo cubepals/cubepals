@@ -131,6 +131,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Mirrors refuse bursts when parallel jobs pull at once, so each pull retries.
+      - name: Pull the test images
+        run: |
+          for image in public.ecr.aws/docker/library/nats:2.15.0 ghcr.io/rustfs/rustfs:1.0.0 ghcr.io/letsencrypt/pebble-challtestsrv:2.10.1 ghcr.io/letsencrypt/pebble:2.10.1; do
+            for wait in 2 5 10 20 40 0; do
+              docker pull -q "$image" && break
+              [ "$wait" = 0 ] && exit 1
+              sleep "$wait"
+            done
+          done
       - name: Start NATS
         run: docker run -d --name nats -p 4222:4222 public.ecr.aws/docker/library/nats:2.15.0 --user blockly-test --pass fm2_blockly_test
       - name: Start an S3 store
