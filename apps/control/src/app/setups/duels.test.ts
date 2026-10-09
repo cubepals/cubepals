@@ -1,6 +1,6 @@
 /**
- * The Duels template: Paper 1.21.11 with Duels and PVPOneDotEight, offered with Plus, and a server of
- * it starting on a void world with the arena, the kit and the permissions Cubepals writes.
+ * The Duels template: Paper 1.21.11 with Duels from Modrinth and OldCombatMechanics from Hangar,
+ * offered with Plus, and a server of it starting on a void world with the arena, the kit and the permissions Cubepals writes.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
@@ -26,7 +26,7 @@ describe.skipIf(!hasDatabase)('duels', () => {
   })
 
   /** A Paper plugin on the catalog, under its real project id, at one version for these releases. */
-  const plugin = (projectId: string, name: string, gameVersions: string[]) =>
+  const plugin = (projectId: string, name: string, gameVersions: string[], versionId = `${projectId}-1`) =>
     h.catalog.publish(
       {
         projectId,
@@ -39,7 +39,7 @@ describe.skipIf(!hasDatabase)('duels', () => {
       },
       [
         {
-          versionId: `${projectId}-1`,
+          versionId,
           projectId,
           versionLabel: '1.0',
           channel: 'release',
@@ -48,21 +48,22 @@ describe.skipIf(!hasDatabase)('duels', () => {
           loaders: ['paper', 'spigot'],
           gameVersions,
           publishedAt: new Date(Date.UTC(2026, 0, 1)),
-          file: cdn.file(`${projectId}-1`),
+          file: cdn.file(versionId.replace(':', '-')),
           dependencies: [],
         },
       ],
     )
 
   test('Duels runs on Paper 1.21.11, and its server starts with the arena, the kit and a void world', async () => {
-    // As Modrinth listed them on 2026-10-09: Duels 4.0.6 and PVPOneDotEight 2.5.1 stop at 1.21.11.
+    // As the catalogs listed them on 2026-10-09: Duels 4.0.6 stops at 1.21.11, and
+    // OldCombatMechanics 2.7.0 (Hangar's version 31271) runs from 1.9 to 26.3.
     plugin('pZyHIvCK', 'Duels', ['1.21.10', '1.21.11'])
-    plugin('Tz6dxwG9', 'PVPOneDotEight', ['1.21.10', '1.21.11'])
+    plugin('hangar:2087', 'OldCombatMechanics', ['1.21.10', '1.21.11', '26.2', '26.3'], 'hangar:31271')
     const owner = await h.user('Ana', 'plus')
     expect(await h.app.queries.setupPreview(owner, { kind: 'template', key: 'duels' })).toMatchObject({
       loader: 'paper',
       gameVersion: '1.21.11',
-      mods: ['Duels', 'PVPOneDotEight'],
+      mods: ['Duels', 'OldCombatMechanics'],
     })
     const { templates } = await h.app.queries.createOptions(await h.user('Lee'))
     expect(templates.find((template) => template.key === 'duels')?.fits).toEqual({
@@ -75,6 +76,11 @@ describe.skipIf(!hasDatabase)('duels', () => {
     await h.until(server.id, 'running')
     await h.settled(server.id)
     const revision = await loadRevision(h.db, server.desiredRevisionId)
+    expect(revision.mods.map((m) => m.source)).toEqual([
+      { catalog: 'modrinth', projectId: 'pZyHIvCK', versionId: 'pZyHIvCK-1' },
+      { catalog: 'hangar', projectId: 'hangar:2087', versionId: 'hangar:31271' },
+    ])
+    // OldCombatMechanics starts everyone on 1.8 combat by its own defaults, so it brings no file.
     expect(revision.files).toEqual([...DUELS_FILES])
     expect(revision.settings).toMatchObject({ defaultGameMode: 'adventure', difficulty: 'easy', pvp: true })
     // The arena file names the world by its level name, so it has to be the first one Blockly makes.

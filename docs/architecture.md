@@ -2160,10 +2160,11 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   addons list). OneBlock carries AOneBlock's settings with an island made for each player on first
   join, so nobody has to know a command to start. Manhunt is played in an evening, so a server of
   it starts out as one that lasts a day (`forADay`); its owner can turn that off before making it.
-- Duels (Paper with Duels by Dartanman and PVPOneDotEight, on 1.21.11, where Duels stops) is
-  playable on first join: it is made on a void world, and carries the plugin's arena and kit file
-  with both fighters on the world's stone platform, plus a `permissions.yml` that lets everyone
-  `/duel join` (`minecraft/duels.ts`).
+- Duels (Paper with Duels by Dartanman from Modrinth and OldCombatMechanics from Hangar, on
+  1.21.11, where Duels stops) is playable on first join: it is made on a void world, and carries
+  the plugin's arena and kit file with both fighters on the world's stone platform, plus a
+  `permissions.yml` that lets everyone `/duel join` (`minecraft/duels.ts`). OldCombatMechanics
+  starts everyone on 1.8 combat by its own defaults, so it carries nothing.
 - A curated pack can stand for a way to play (`CuratedPack.way`): SkyBlock Plus is the Skyblock
   card, with its own name and authors under it. The card is the pack's, so it shows only while a
   release is published, and picking it is picking the pack.
