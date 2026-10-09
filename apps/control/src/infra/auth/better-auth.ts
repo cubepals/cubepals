@@ -8,9 +8,22 @@ import type { Authenticator } from '../../app/ports/auth.ts'
 import type { Mailer } from '../../app/ports/platform.ts'
 import { agreementOf, refuseWithoutAgreement } from './agreement.ts'
 
+/** An email as the application writes it: the subject and both parts. */
+type Email = { subject: string; text: string; html: string }
+
 export interface AuthOptions {
   db: Db
   mailer: Mailer
+  /**
+   * The emails sign-in sends, written by the application (app/emails/account.ts): each for its
+   * link, and for the web origin its pictures load from.
+   */
+  emails: {
+    verifyEmail(url: string, origin: string): Email
+    resetPassword(url: string, origin: string): Email
+    passwordChanged(origin: string): Email
+    welcome(origin: string): Email
+  }
   /** Where people reach the web app; auth is served under it at /api/auth through the proxy. */
   canonicalOrigin: string
   trustedOrigins: readonly string[]
@@ -67,6 +80,19 @@ export function createAuth(options: AuthOptions) {
   // record of it after: the two hooks see the same request.
   const agreements = new WeakMap<object, SignUpAgreement>()
   const secure = new URL(options.canonicalOrigin).protocol === 'https:'
+  const origin = options.canonicalOrigin
+  const send = (to: string, email: Email) =>
+    options.mailer.send({ to, subject: email.subject, text: email.text, html: email.html })
+  // Once an account is ready: its email confirmed, or made already confirmed by Google or GitHub.
+  // A welcome that fails is logged and the request goes on, as Better Auth does with a
+  // confirmation email that fails: nobody's sign-up or confirmation should fail over a welcome.
+  const welcome = async (user: { id: string; email: string }) => {
+    try {
+      await send(user.email, options.emails.welcome(origin))
+    } catch (error) {
+      console.error(`welcome email to account ${user.id} failed`, error)
+    }
+  }
   return betterAuth({
     baseURL: options.canonicalOrigin,
     basePath: '/api/auth',
@@ -88,33 +114,25 @@ export function createAuth(options: AuthOptions) {
       // web app's /reset-password with the token (or with `?error=INVALID_TOKEN`).
       resetPasswordTokenExpiresIn: RESET_LINK_SECONDS,
       async sendResetPassword({ user, url }) {
-        await options.mailer.send({
-          to: user.email,
-          subject: 'Reset your Cubepals password',
-          text: `Someone asked to reset the password for your Cubepals account. Choose a new one here:\n\n${url}\n\nThe link works for an hour, once. If it was not you, ignore this email: your password stays as it is.`,
-        })
+        await send(user.email, options.emails.resetPassword(url, origin))
       },
       // Whoever knew the old password is signed out everywhere, and the owner is told.
       revokeSessionsOnPasswordReset: true,
       async onPasswordReset({ user }) {
         await options.onPasswordReset?.(user.id)
-        await options.mailer.send({
-          to: user.email,
-          subject: 'Your Cubepals password was changed',
-          text: `The password for your Cubepals account was just changed, and every device was signed out.\n\nIf that was not you, reset it again now:\n\n${options.canonicalOrigin}/forgot-password`,
-        })
+        await send(user.email, options.emails.passwordChanged(origin))
       },
     },
     emailVerification: {
       sendOnSignUp: true,
       autoSignInAfterVerification: true,
       async sendVerificationEmail({ user, url }) {
-        await options.mailer.send({
-          to: user.email,
-          subject: 'Confirm your email for Cubepals',
-          text: `Confirm your email to start creating servers:\n\n${url}\n\nIf you did not sign up, ignore this email.`,
-        })
+        await send(user.email, options.emails.verifyEmail(url, origin))
       },
+      // Better Auth calls this only when the address goes from unconfirmed to confirmed, so a link
+      // followed twice welcomes once. (It would call it for a changed email too; changing one is
+      // off.)
+      afterEmailVerification: welcome,
     },
     socialProviders: {
       ...(options.github ? { github: options.github } : {}),
@@ -173,6 +191,9 @@ export function createAuth(options: AuthOptions) {
           async after(user, context) {
             await options.onAccountCreated(user.id, (context && agreements.get(context)) ?? null)
             await options.onAccount?.(user)
+            // Google or GitHub vouched for the address, so the account is ready now. An email
+            // sign-up, or a provider that didn't vouch, is welcomed once it confirms.
+            if (user.emailVerified) await welcome(user)
           },
         },
         // Confirming an email is an update; a listed admin becomes one only once it is confirmed.

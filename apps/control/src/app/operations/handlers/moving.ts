@@ -11,6 +11,7 @@ import type { AccessReconciler } from '../../access/reconciler.ts'
 import { emailOf } from '../../accounts/persistence.ts'
 import { type BackupRecord, expireSnapshotsOf, listBackups, setExpiry } from '../../backups/persistence.ts'
 import type { BackupService } from '../../backups/service.ts'
+import { serverRebuilt } from '../../emails/servers.ts'
 import { aside, inFull, PermanentFailure } from '../../errors.ts'
 import type { ArchiveStore } from '../../ports/optional.ts'
 import type { Mailer } from '../../ports/platform.ts'
@@ -370,14 +371,7 @@ export function moving(deps: {
     if (to === null) return
     await deps.mailer.send({
       to,
-      subject: `“${server.name}” was moved after the computer it ran on failed`,
-      text: [
-        `The computer your server ${server.name} ran on stopped answering, so Cubepals moved it to another one in the same place.`,
-        '',
-        `It came back from its backup of ${from.createdAt.toUTCString()}. Anything built or changed in the world after that is gone. Who can join is as you set it.`,
-        '',
-        `${deps.webOrigin}/servers/${server.id}`,
-      ].join('\n'),
+      ...serverRebuilt({ server, backupAt: from.createdAt.toUTCString(), origin: deps.webOrigin }),
     })
   }
 

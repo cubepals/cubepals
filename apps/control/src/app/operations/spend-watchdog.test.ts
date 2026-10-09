@@ -107,6 +107,7 @@ describe.skipIf(!hasDatabase)('spend watchdog: the day’s figure, and the trip 
     ])
     expect(mailed()).toHaveLength(1)
     expect(mailed()[0]?.text).toContain('/admin/platform')
+    expect(mailed()[0]?.html).toContain('<img src="http://localhost:3000/email/lockup.png"')
 
     // Another pass the same day: no second trip, audit or email.
     expect((await h.app.schedules.spendCheck(noon(2))).tripped).toBe(false)

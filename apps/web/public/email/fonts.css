@@ -1,0 +1,4 @@
+/* The emails' typefaces, which their HTML links from the web origin (apps/control/src/app/emails.ts):
+   Geologica for the words, IBM Plex Mono for addresses and figures. Mail apps that load linked
+   stylesheets (Apple Mail, Thunderbird) show them; the rest fall back to the system's sans. */
+@import url("https://fonts.googleapis.com/css2?family=Geologica:wght@400;700;800&family=IBM+Plex+Mono:wght@400;700&display=swap");

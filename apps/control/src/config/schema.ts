@@ -220,7 +220,12 @@ export const DeploymentConfig = z.object({
     /** A client-address header the host's proxy sets and overwrites: `fly-client-ip` on Fly. */
     hostAddressHeader: z.string().nullable(),
   }),
-  mail: z.object({ smtpUrl: z.string().min(1), from: z.string().min(3) }),
+  mail: z.object({
+    smtpUrl: z.string().min(1),
+    from: z.string().min(3),
+    /** What every subject starts with: `[Staging] ` on staging, so its mail never passes for production's. */
+    subjectPrefix: z.string(),
+  }),
   edge: z.object({ token: Secret }),
   /** The runtime keyring: the current key and version, and earlier ones still accepted. */
   runtimeSecrets: z

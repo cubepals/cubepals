@@ -42,5 +42,6 @@ export interface LogSource {
 }
 
 export interface Mailer {
-  send(message: { to: string; subject: string; text: string }): Promise<void>
+  /** One email: with `html`, both parts, and the text is what a mail app without HTML shows. */
+  send(message: { to: string; subject: string; text: string; html?: string }): Promise<void>
 }

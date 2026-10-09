@@ -62,6 +62,7 @@ describe.skipIf(!hasDatabase)('retention', () => {
     expect(first?.text).toContain('Free worlds are kept for a year after they were last played')
     expect(first?.text).toContain('Keep it')
     expect(first?.text).toContain(`/servers/${id}/backups`)
+    expect(first?.html).toContain('<img src="http://localhost:3000/email/kai-hanging.png"')
     // The owner's page says when, with the way to keep it.
     const view = await h.app.queries.get(owner, id)
     expect(view.deletesAt).not.toBeNull()

@@ -130,6 +130,7 @@ describe.skipIf(!hasDatabase)('metered play', () => {
     const last = h.mail.sent.at(-1)
     expect(last?.subject).toContain('asleep until the 1st')
     expect(last?.text).toContain('Cubepals only spends what you allow')
+    expect(last?.html).toContain('<img src="http://localhost:3000/email/lockup.png"')
   }, 40_000)
 
   test('on Plus play stops at the block, and nothing past it can be allowed before billing meters it', async () => {

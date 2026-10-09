@@ -17,6 +17,7 @@ import {
 } from '../../app/accounts/persistence.ts'
 import { AccountService } from '../../app/accounts/service.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { authMail } from '../../testing/outbox.ts'
 import { authHandler, createAuth } from './better-auth.ts'
 
 const ORIGIN = 'https://blockly.test'
@@ -47,7 +48,7 @@ beforeAll(async () => {
     createAuth({
       clientAddressHeader: 'x-blockly-client-address',
       db: h.db,
-      mailer: { send: async () => {} },
+      ...authMail(),
       canonicalOrigin: ORIGIN,
       trustedOrigins: [],
       secret: 'a-test-secret-that-is-long-enough-for-better-auth',
@@ -235,7 +236,7 @@ describe.skipIf(!hasDatabase)('sign-up in local development', () => {
       createAuth({
         clientAddressHeader: 'x-blockly-client-address',
         db: h.db,
-        mailer: { send: async () => {} },
+        ...authMail(),
         canonicalOrigin: ORIGIN,
         trustedOrigins: [],
         secret: 'a-test-secret-that-is-long-enough-for-better-auth',

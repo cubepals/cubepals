@@ -5,6 +5,7 @@ import { catalogOfId } from '../../domain/mods/catalog.ts'
 import { emailOf, loadStanding } from '../accounts/persistence.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
 import type { CatalogSync, CatalogTransition } from '../catalog/sync.ts'
+import { listingRemoved } from '../emails/servers.ts'
 import { AppError, NotFound } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import { CatalogUnavailable, type ModCatalog } from '../ports/catalog.ts'
@@ -266,33 +267,21 @@ export class ListingService {
       // A listing the owner wants shown just left the directory over its mods (§15.3): say so.
       const shown = listing.visibility === 'published' && listing.moderation === 'clear' && listing.eligible
       const mods = result.reasons.filter((r) => r.code === 'untrusted_mods')
-      if (shown && !result.eligible && mods.length > 0) await this.#tellOwner(server, server.name, mods)
+      if (shown && !result.eligible && mods.length > 0) await this.#tellOwner(server, mods)
     }
   }
 
   async #tellOwner(
     server: { id: string; name: string; ownerId: string },
-    title: string,
     reasons: readonly { detail?: string }[],
   ): Promise<void> {
     const to = await emailOf(this.#db, server.ownerId)
     if (to === null) return
-    const lines = reasons.map((r) => {
+    const mods = reasons.map((r) => {
       const [name, why] = (r.detail ?? '').split(/: (?=[a-z_]+$)/)
-      return `- ${name}: ${UNTRUSTED_COPY[why ?? ''] ?? 'no longer one Cubepals can vouch for'}`
+      return { name: name ?? '', why: UNTRUSTED_COPY[why ?? ''] ?? 'no longer one Cubepals can vouch for' }
     })
-    await this.#mailer.send({
-      to,
-      subject: `“${title}” left the Cubepals directory`,
-      text: [
-        `Your server ${server.name} is no longer shown in the Cubepals directory, because of a mod it runs:`,
-        '',
-        ...lines,
-        '',
-        'Your server keeps running as it is. Update or remove the mod, and the listing comes back on its own:',
-        `${this.#webOrigin}/servers/${server.id}/mods`,
-      ].join('\n'),
-    })
+    await this.#mailer.send({ to, ...listingRemoved({ server, mods, origin: this.#webOrigin }) })
   }
 
   async #changed(tx: Tx, serverId: string, ownerId: string): Promise<void> {

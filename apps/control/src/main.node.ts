@@ -11,6 +11,7 @@ import type { BillingService } from './app/billing/service.ts'
 import { archivesMissing, type DeploymentCapabilities, supportOf } from './app/capabilities.ts'
 import { RoutedCatalog } from './app/catalog/routed.ts'
 import { type ControlPlane, composeControlPlane } from './app/control-plane.ts'
+import { passwordChanged, resetPassword, verifyEmail, welcome } from './app/emails/account.ts'
 import { ItemIcons } from './app/items/icons.ts'
 import { CLIENT_ADDRESS_HEADER } from './app/ports/auth.ts'
 import type { ScheduledJob } from './app/ports/jobs.ts'
@@ -338,6 +339,7 @@ function authOptions(config: DeploymentConfig, db: Db, mailer: SmtpMailer, app: 
   return {
     db,
     mailer,
+    emails: { verifyEmail, resetPassword, passwordChanged, welcome },
     canonicalOrigin: config.web.canonicalOrigin,
     trustedOrigins: config.web.trustedOrigins,
     secret: config.auth.secret,
@@ -660,7 +662,7 @@ async function main(): Promise<void> {
   const stranded = await archivesMissing(db, capabilities)
   if (stranded !== null) console.warn(stranded)
 
-  const mailer = new SmtpMailer(config.mail.smtpUrl, config.mail.from)
+  const mailer = new SmtpMailer(config.mail)
   const app = composeControlPlane(
     {
       db,
