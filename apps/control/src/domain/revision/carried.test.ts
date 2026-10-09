@@ -1,10 +1,11 @@
 /**
- * The rules for what a revision places itself: how carried files are named and diffed, and which
- * changes to them are undone with the snapshot from before (docs/modpack-system.md § Carried files).
+ * The rules for what a revision places itself: how carried files name the running world, how they
+ * are named and diffed, and which changes to them are undone with the snapshot from before
+ * (docs/modpack-system.md § Carried files).
  */
 import { describe, expect, test } from 'bun:test'
 import type { PinnedMod } from '../mods/artifact.ts'
-import { fileLabel, movesCarried } from './carried.ts'
+import { fileLabel, movesCarried, onLevel, RUNNING_LEVEL } from './carried.ts'
 import { defaultSettings, describeChanges, type RevisionDraft, rewritesWorld } from './revision.ts'
 
 const draft = (patch: Partial<RevisionDraft> = {}): RevisionDraft => ({
@@ -40,6 +41,17 @@ const addon = (sha512: string, dir?: string): PinnedMod => ({
 })
 
 describe('files Cubepals carries', () => {
+  test('a file names the world the server runs wherever it says so, and is otherwise as written', () => {
+    const arena = {
+      path: 'plugins/Duels/config.yml',
+      content: `A: ${RUNNING_LEVEL}\nB: ${RUNNING_LEVEL}_nether\n`,
+    }
+    expect(onLevel(arena, 'world')).toEqual({ path: arena.path, content: 'A: world\nB: world_nether\n' })
+    expect(onLevel(arena, 'world-2').content).toBe('A: world-2\nB: world-2_nether\n')
+    const plain = { path: 'plugins/LifeStealZ/config.yml', content: 'world: {{level}}\n' }
+    expect(onLevel(plain, 'world-2')).toEqual(plain)
+  })
+
   test('a file is named by the plugin it sets up, not by its path', () => {
     expect(fileLabel('plugins/LifeStealZ/config.yml')).toBe('LifeStealZ settings')
     expect(fileLabel('plugins/OldCombatMechanics/config.yml')).toBe('OldCombatMechanics settings')
