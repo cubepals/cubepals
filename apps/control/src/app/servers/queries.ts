@@ -18,6 +18,7 @@ import type {
 } from '@blockly/contracts'
 import type { Db } from '@blockly/db'
 import {
+  addedLabel,
   comesWith,
   type Entitlements,
   entitlementsFor,
@@ -58,7 +59,7 @@ import { activeOperation, latestOfKind, type OperationRecord } from '../operatio
 import type { PackService } from '../packs/service.ts'
 import type { CatalogHit, ModCatalog } from '../ports/catalog.ts'
 import type { PlayAddressing, RegionCatalog } from '../ports/platform.ts'
-import { isModded } from '../revisions/caps.ts'
+import { hasDatapacks, isModded } from '../revisions/caps.ts'
 import { loadPackChecks } from '../setups/persistence.ts'
 import type { SetupService, SetupSource } from '../setups/service.ts'
 import { sizeOf } from '../setups/service.ts'
@@ -492,6 +493,7 @@ export class ServerQueries {
       tier: size,
       loader: resolved.loader,
       modded: isModded(resolved),
+      datapacks: hasDatapacks(resolved),
       modpack: resolved.modpack !== null,
     })
     return {
@@ -686,11 +688,12 @@ function planFit(plan: Entitlements, what: string, runs: Runs & { modpack?: bool
   const gap = planGap(plan, runs, 'offered')
   if (gap === null) return { allowed: true }
   const paid = planThatRuns(runs)
+  const comes = paid === null ? 'need a paid plan' : `come with ${planName(paid)}`
   const reason =
-    gap === 'mods'
-      ? comesWith(runs.modpack ? 'Modpacks' : 'Mods and plugins', paid)
+    gap === 'mods' || gap === 'datapacks'
+      ? comesWith(addedLabel(gap, runs.modpack === true), paid)
       : gap === 'server_type'
-        ? `${LOADER_LABELS[runs.loader]} servers ${paid === null ? 'need a paid plan' : `come with ${planName(paid)}`}.`
+        ? `${LOADER_LABELS[runs.loader]} servers ${comes}.`
         : `${what} needs a bigger server${paid === null ? '' : `, which comes with ${planName(paid)}`}.`
   return { allowed: false, reason, plan: paid }
 }

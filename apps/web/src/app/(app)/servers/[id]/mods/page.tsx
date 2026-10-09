@@ -7,7 +7,7 @@ import Image from 'next/image'
 import { useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
 import { useDebounced } from '../../../../../lib/hooks'
-import { bytes, loaderLabel, presentConflict, presentPlan } from '../../../../../lib/present'
+import { bytes, datapacksSaid, loaderLabel, presentConflict, presentPlan } from '../../../../../lib/present'
 import { putFile, sha512Of } from '../../../../../lib/upload'
 import {
   Badge,
@@ -219,7 +219,7 @@ export default function ModsPage() {
   if (mods.isError) return <LoadFailed error={messageOf(mods.error)} onRetry={() => mods.refetch()} />
   const view = server.data
   const list = mods.data
-  const noun = list.kind === 'plugins' ? 'Plugins' : 'Mods'
+  const noun = list.kind === 'plugins' ? 'Plugins' : list.kind === 'datapacks' ? 'Datapacks' : 'Mods'
 
   return (
     <>
@@ -243,7 +243,8 @@ export default function ModsPage() {
           <ChangeState view={view} />
           <Installed view={view} list={list} onChange={setPending} />
           <Search view={view} list={list} onChange={setPending} />
-          <Uploads view={view} list={list} onChange={setPending} />
+          {/* Uploads are jars; a server that takes only datapacks has nowhere to run one. */}
+          {list.kind !== 'datapacks' && <Uploads view={view} list={list} onChange={setPending} />}
           {pending && (
             <PlanChange
               view={view}
@@ -268,14 +269,14 @@ function Installed({
   list: ModsView
   onChange: (pending: { title: string; change: Change }) => void
 }) {
-  const noun = list.kind === 'plugins' ? 'plugins' : 'mods'
+  const noun = list.kind === 'plugins' ? 'plugins' : list.kind === 'datapacks' ? 'datapacks' : 'mods'
   const allowed = changeable(view)
   return (
     <FormSection
       title="On this server"
       description={
         list.switchesTo
-          ? `Minecraft ${list.gameVersion}, plain for now. The first ${noun.slice(0, -1)} moves it to ${list.switchesTo.label}, world and all.`
+          ? `Minecraft ${list.gameVersion}, plain for now. The first mod moves it to ${list.switchesTo.label}, world and all; datapacks keep it plain.`
           : `${loaderLabel(list.loader)} ${list.gameVersion}. Players need the ones marked for players too.`
       }
       actions={
@@ -306,6 +307,7 @@ function Installed({
                 <span className="type-mono-sm" style={{ color: 'var(--ink-muted)' }}>
                   {mod.versionLabel}
                 </span>
+                {mod.datapack && <Badge tone="neutral">Datapack</Badge>}
                 {mod.environment === 'both' && <Badge tone="info">For players too</Badge>}
                 {mod.revoked && <Badge tone="danger">Taken down</Badge>}
               </span>
@@ -366,29 +368,42 @@ function Search({
     placeholderData: (previous) => previous,
   })
   const allowed = changeable(view)
-  const noun = list.kind === 'plugins' ? 'plugins' : 'mods'
+  const noun = list.kind === 'plugins' ? 'plugins' : list.kind === 'datapacks' ? 'datapacks' : 'mods'
   // On a plan that plays Minecraft as it comes, searching still works; adding one is where the
   // plan that runs them is offered, instead of a change that would only be refused.
   const overview = useQuery(trpc.account.overview.queryOptions())
-  const plain = overview.data?.entitlements.mayUseMods === false
+  const entitlements = overview.data?.entitlements
+  const plain =
+    (list.kind === 'datapacks' ? entitlements?.mayUseDatapacks : entitlements?.mayUseMods) === false
   const [reached, setReached] = useState(false)
   return (
     <FormSection
       title={`Find ${noun}`}
       description={
         list.switchesTo
-          ? `From Modrinth, for Minecraft ${list.gameVersion}. Adding one moves this server to ${list.switchesTo.label} and keeps your world.`
+          ? `From Modrinth, for Minecraft ${list.gameVersion}. A mod moves this server to ${list.switchesTo.label} and keeps your world; a datapack keeps it plain.`
           : `From Modrinth, only ones with a version for ${loaderLabel(list.loader)} ${list.gameVersion}.`
       }
     >
       <TextField
         label="Search"
-        placeholder={list.kind === 'plugins' ? 'EssentialsX, LuckPerms…' : 'Sodium, Lithium, Create…'}
+        placeholder={
+          list.kind === 'plugins'
+            ? 'EssentialsX, LuckPerms…'
+            : list.kind === 'datapacks'
+              ? 'Manhunt, Day Counter…'
+              : 'Sodium, Lithium, Create…'
+        }
         value={text}
         onChange={(event) => setText(event.target.value)}
         autoComplete="off"
       />
-      {reached && <PlusOffer why="Mods and plugins come with Plus." reason="mods" />}
+      {reached && (
+        <PlusOffer
+          why={list.kind === 'datapacks' ? 'Datapacks come with Plus.' : 'Mods and plugins come with Plus.'}
+          reason="mods"
+        />
+      )}
       {results.isError && <Note tone="danger">{messageOf(results.error)}</Note>}
       {results.isPending ? (
         <Skeleton width="100%" height={120} />
@@ -711,12 +726,13 @@ function PlanChange({
           {moveTo !== null && (
             <>This world moves to Minecraft {moveTo}, which is where these run. It doesn’t move back. </>
           )}
-          {list.switchesTo && planned.added.length > 0 && (
+          {planned.loader !== list.loader && planned.added.length > 0 && (
             <>
-              This server moves from Vanilla to {list.switchesTo.label} to run{' '}
+              This server moves from Vanilla to {loaderLabel(planned.loader)} to run{' '}
               {planned.added.length === 1 ? 'it' : 'them'}. Your world comes along.{' '}
             </>
           )}
+          {datapacksSaid(planned.added)}
           {planned.added.some((m) => m.environment === 'both') &&
             'Players need the ones marked for players too in their own game. '}
           {whatHappens(view)}
