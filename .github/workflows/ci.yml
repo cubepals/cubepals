@@ -132,11 +132,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Start NATS
-        run: docker run -d --name nats -p 4222:4222 nats:2.15.0 --user blockly-test --pass fm2_blockly_test
+        run: docker run -d --name nats -p 4222:4222 public.ecr.aws/docker/library/nats:2.15.0 --user blockly-test --pass fm2_blockly_test
       - name: Start an S3 store
         run: >-
           docker run -d --name s3 -p 9000:9000 -e RUSTFS_ACCESS_KEY=blockly-test
-          -e RUSTFS_SECRET_KEY=blockly-test-secret rustfs/rustfs:1.0.0
+          -e RUSTFS_SECRET_KEY=blockly-test-secret ghcr.io/rustfs/rustfs:1.0.0
       # Let's Encrypt's test CA, validating DNS-01 against its own DNS test server.
       - name: Start Pebble and its DNS test server
         run: |
