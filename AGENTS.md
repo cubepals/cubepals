@@ -45,6 +45,14 @@ The checks stop things getting worse. They can't tell whether a seam is in the r
 
 **The care.** A person who has never seen Blockly should be able to find where a thing lives, trust that the file holds one job, and change it without reading ten other files or breaking a neighbor. Split by what changes together, not by what is easy to cut. One job per file, nameable without "and", and named for the job, not a category. Don't split too far: ten tiny files that must all be opened to follow one flow are worse than one honest file. Dependencies point one way. The surface stays narrow and the same: what was private stays private, and what outsiders import keeps its old path. The header and the directory index say what each file is for and what it is deliberately not for, short and true, for someone who hasn't read the rest. Discipline over cleverness: if you are unsure where something belongs, leave it where it was and report it.
 
+## CI
+
+A change isn't done when its PR is green. It is done when the runs it starts on `main` are green too.
+
+- **Workflows are code.** A change to `.github/workflows/` passes `actionlint` before it is pushed, and CI runs it again. A workflow GitHub can't parse never runs and shows only a red run named by its path.
+- **After a merge, look at the Actions page,** not only the PR's checks: `gh run list -R cubepals/<repo> -L 30`. Scheduled runs (the nightly, the weekly fleet run) fail without a PR to show it.
+- **A failure outside the code is still a failure.** A registry's rate limit or an outage gets a fix (a mirror, a retry), not a rerun until it passes.
+
 ## Staging
 
 Staging runs on Fly in the `blockly-staging` org, and it stays. When nobody is testing, its machines are stopped, not destroyed.

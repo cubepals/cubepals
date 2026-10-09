@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   nightly:
-    name: Nightly: deploy staging, check and tag
+    name: "Nightly: deploy staging, check and tag"
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 75

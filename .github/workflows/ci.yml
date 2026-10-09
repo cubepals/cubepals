@@ -69,6 +69,11 @@ jobs:
       - run: bun run check:boundaries
       - run: bun run check:structure
       - run: bun run check:deprecated
+      # A workflow GitHub can't parse fails without running and is easy to miss.
+      - name: Workflows parse and their scripts pass shellcheck
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: 1.15.3
@@ -166,7 +171,7 @@ jobs:
       - run: bun run openapi:install
       - name: Create the test bucket
         run: |
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             curl -sf -o /dev/null --aws-sigv4 aws:amz:auto:s3 --user blockly-test:blockly-test-secret \
               -X PUT http://127.0.0.1:9000/blockly-test && exit 0
             sleep 1
@@ -177,7 +182,9 @@ jobs:
         env:
           PATHS: ${{ matrix.paths }}
         # Pathspecs, unquoted on purpose so each is its own argument; the :! ones exclude.
-        run: git ls-files -- $PATHS | grep -E '\.test\.tsx?$' | sed 's|^|./|' | xargs bun test
+        run: |
+          # shellcheck disable=SC2086
+          git ls-files -- $PATHS | grep -E '\.test\.tsx?$' | sed 's|^|./|' | xargs bun test
 
   # The one check branch protection requires. It passes when every part passed or was skipped.
   check:
