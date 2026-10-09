@@ -2142,7 +2142,9 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
 - Duels (Paper with Duels by Dartanman and PVPOneDotEight, on 1.21.11, where Duels stops) is
   playable on first join: it is made on a void world, and carries the plugin's arena and kit file
   with both fighters on the world's stone platform, plus a `permissions.yml` that lets everyone
-  `/duel join` (`minecraft/duels.ts`).
+  `/duel join` (`minecraft/duels.ts`). The arena names the world the server runs, so it follows a
+  fresh world, which is void with the same platform. A world of another kind, made with "Make your
+  own world", gets a room of stone built in the platform's place as the server starts.
 - A curated pack can stand for a way to play (`CuratedPack.way`): SkyBlock Plus is the Skyblock
   card, with its own name and authors under it. The card is the pack's, so it shows only while a
   release is published, and picking it is picking the pack.

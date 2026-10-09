@@ -10,16 +10,18 @@
  *
  * The arena sits on the stone platform a void world is made with (`worlds.ts`): vanilla's
  * `void_start_platform`, 33 by 33 blocks of stone (x -8 to 24, z -8 to 24) whose top is y -61, three
- * above the bottom of the world, with cobblestone at x 8, z 8. Falling off it is losing.
+ * above the bottom of the world, with cobblestone at x 8, z 8. Falling off it is losing. A world
+ * of another kind gets a room of stone in the same place as it starts (`ARENA_COMMANDS`).
  */
 
-import type { CarriedFile } from '../domain/revision/carried.ts'
+import type { PinnedMod } from '../domain/mods/artifact.ts'
+import { type CarriedFile, RUNNING_LEVEL } from '../domain/revision/carried.ts'
 
 /**
  * The arena and the kit, in the plugin's own shape (its `ArenaManager` and `KitManager`). Each
  * fighter starts eight blocks from an edge, sixteen apart, facing the other; the lobby, where both
- * wait out the countdown, is between them. The world named is the level a template's first world
- * gets (`nextLevelName`).
+ * wait out the countdown, is between them. The world named is the one the server runs, so the
+ * arena moves with a fresh world, which is void like the one it leaves and has the same platform.
  *
  * The kit is iron, a bow and food: a fair fight that lasts a while. Its items are in the item format
  * of 1.20.5 and later, which the plugin reads on the 1.21.11 it runs on; the plugin's own default
@@ -43,9 +45,9 @@ Arenas:
   '1':
     Name: Platform
     Countdown-Seconds: 10
-    Spawn-One: { World: world, X: 0.5, Y: -60.0, Z: 8.5, Yaw: -90.0, Pitch: 0.0 }
-    Spawn-Two: { World: world, X: 16.5, Y: -60.0, Z: 8.5, Yaw: 90.0, Pitch: 0.0 }
-    Lobby: { World: world, X: 8.5, Y: -60.0, Z: 8.5, Yaw: 0.0, Pitch: 0.0 }
+    Spawn-One: { World: ${RUNNING_LEVEL}, X: 0.5, Y: -60.0, Z: 8.5, Yaw: -90.0, Pitch: 0.0 }
+    Spawn-Two: { World: ${RUNNING_LEVEL}, X: 16.5, Y: -60.0, Z: 8.5, Yaw: 90.0, Pitch: 0.0 }
+    Lobby: { World: ${RUNNING_LEVEL}, X: 8.5, Y: -60.0, Z: 8.5, Yaw: 0.0, Pitch: 0.0 }
 `
 
 /**
@@ -61,4 +63,29 @@ ${['join', 'leave', 'help', 'listarenas', 'stats', 'top', 'kits.list', 'kits.sel
 export const DUELS_FILES: readonly CarriedFile[] = [
   { path: 'plugins/Duels/config.yml', content: ARENA_AND_KIT },
   { path: 'permissions.yml', content: PERMISSIONS },
+]
+
+/** Duels' project on Modrinth, as a pinned plugin records it. */
+const DUELS = 'pZyHIvCK'
+
+/** Whether a server's plugins include Duels, whose arena Cubepals builds where a world lacks it. */
+export const runsDuels = (mods: readonly PinnedMod[]): boolean =>
+  mods.some((m) => m.source.catalog === 'modrinth' && 'projectId' in m.source && m.source.projectId === DUELS)
+
+/** Only where the void world's platform isn't: its cobblestone, at the middle, marks it. */
+const UNLESS_PLATFORM = 'execute unless block 8 -61 8 minecraft:cobblestone run'
+
+/**
+ * The arena on a world that isn't void, which an owner can make for a Duels server: in its place
+ * there is ground or rock, not the platform. So, as the server starts, a room of stone is built
+ * around the arena's place: the platform's floor, walls to keep out lava and caves, and a ceiling
+ * of glowstone, bright enough that no monster spawns inside. Its middle is then cobblestone like
+ * the platform's, so the next start finds it built. A void world finds its platform and is left
+ * alone. Its chunks stay loaded, as they must be to build, and are ready when a duel teleports in.
+ */
+export const ARENA_COMMANDS: readonly string[] = [
+  'forceload add -9 -9 25 25',
+  `${UNLESS_PLATFORM} fill -9 -61 -9 25 -48 25 minecraft:stone hollow`,
+  `${UNLESS_PLATFORM} fill -8 -48 -8 24 -48 24 minecraft:glowstone`,
+  `${UNLESS_PLATFORM} setblock 8 -61 8 minecraft:cobblestone`,
 ]
