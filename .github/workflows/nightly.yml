@@ -66,6 +66,7 @@ jobs:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
           AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.AUTH_GOOGLE_CLIENT_SECRET }}
           STAGING_DEVELOPERS: ${{ secrets.STAGING_DEVELOPERS }}
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
       - name: Staging check
         if: steps.new.outputs.run == 'true'
         run: bun scripts/staging-check.ts

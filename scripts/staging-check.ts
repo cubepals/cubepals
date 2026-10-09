@@ -36,7 +36,8 @@ if (!existsSync(STATE_FILE) && !process.env.STAGING_STATE) {
 const state = JSON.parse(
   existsSync(STATE_FILE) ? readFileSync(STATE_FILE, 'utf8') : (process.env.STAGING_STATE ?? '{}'),
 ) as {
-  dbPassword: string
+  /** Supabase's session pooler, as `up` kept it. */
+  databaseUrl: string
   authSecret: string
   bucket: { name: string; endpoint: string; region: string; accessKeyId: string; secretAccessKey: string }
 }
@@ -84,7 +85,7 @@ function fly(args: string[]): string {
   return result.stdout.toString()
 }
 
-const database = new SQL(`postgres://blockly:${state.dbPassword}@127.0.0.1:15432/blockly`)
+const database = new SQL(state.databaseUrl)
 /** One statement against staging's database; what it answers is the first column of its first row. */
 async function sql(statement: string): Promise<string> {
   const [row] = (await database.unsafe(statement).values()) as unknown[][]
@@ -115,7 +116,6 @@ const volumesOf = (serverId: string) =>
 
 // ─── The run ─────────────────────────────────────────────────────────────────────────────────
 
-proxy(15432, 5432, 'bly-staging-db')
 proxy(18025, 8025, 'bly-staging-mail')
 const edgeV4 = (
   JSON.parse(fly(['ips', 'list', '-a', 'bly-staging-edge', '--json'])) as { Address: string; Type: string }[]

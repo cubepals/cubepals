@@ -636,13 +636,22 @@ function billingRoutes(billing: BillingService, provider: BillingProvider | null
   return routes
 }
 
+/** What a process holds open to Postgres: the query pool, the live-update listener, the job queue. */
+async function connect(config: DeploymentConfig) {
+  const { url, directUrl, poolMax } = config.database
+  const pool = createPool(url, poolMax)
+  return {
+    pool,
+    db: createDb(pool),
+    events: new PgNotifyEventBus(directUrl),
+    boss: await startBoss(url, { maintains: config.roles.includes('worker'), poolMax }),
+  }
+}
+
 async function main(): Promise<void> {
   const config = loadConfig()
   for (const note of config.local?.notes ?? []) console.warn(`local: ${note}`)
-  const pool = createPool(config.database.url)
-  const db = createDb(pool)
-  const events = new PgNotifyEventBus(config.database.directUrl)
-  const boss = await startBoss(config.database.url, { maintains: config.roles.includes('worker') })
+  const { pool, db, events, boss } = await connect(config)
   const profiles = new MojangProfiles()
   const provider = await runtimesFor(config, pool, db, profiles)
 

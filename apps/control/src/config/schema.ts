@@ -145,6 +145,12 @@ export const DeploymentConfig = z.object({
      * closes a client idle for ten minutes; this is its direct one. Defaults to `url`.
      */
     directUrl: z.string().min(1),
+    /**
+     * Connections each of a process's two pools (queries, and the job queue's) may hold. A
+     * session-mode pooler, as Supabase's, gives each its own server connection, and every process
+     * of the deployment shares its limit.
+     */
+    poolMax: z.number().int().positive(),
   }),
   web: z.object({
     /** Where people reach the web app; auth's base URL is this plus /api/auth. */

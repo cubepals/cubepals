@@ -12,8 +12,12 @@ export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 /** Either the root handle or a transaction, for reads that may run inside one. */
 export type Queryable = Db | Tx
 
-export function createPool(connectionString: string): pg.Pool {
-  const pool = new pg.Pool({ connectionString, max: 10 })
+/**
+ * `max` is how many connections the pool may hold at once. Behind a session-mode pooler each one
+ * holds a server connection for as long as it is open, so a deployment sizes it (DATABASE_POOL_MAX).
+ */
+export function createPool(connectionString: string, max = 10): pg.Pool {
+  const pool = new pg.Pool({ connectionString, max })
   // A connection resting in the pool can be cut (a restart, a failover, a pooler going down), and
   // node-postgres reports it as the pool's `error`, which Node turns into the end of the process
   // when nobody listens. The pool has already let that client go; the next query opens another.

@@ -20,7 +20,7 @@
  * the next one was. It polls twice a second, so a step shorter than that can go unseen.
  */
 import { spawn } from 'node:child_process'
-import { randomInt, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { SQL } from 'bun'
 import { type Api, people } from './lib/people.ts'
@@ -52,22 +52,17 @@ const { api, password }: { api: Api; password: string } = await people(WEB, 'htt
   email,
 )
 say(`waits on ${WEB} as ${email}`)
-/** Staging's database, over `fly proxy`, as the staging check reaches it. */
-async function database(): Promise<SQL> {
+/** Staging's database, Supabase's session pooler, as the staging check reaches it. */
+function database(): SQL {
   const state = JSON.parse(
     existsSync('local/staging/state.json')
       ? readFileSync('local/staging/state.json', 'utf8')
       : (process.env.STAGING_STATE ?? '{}'),
-  ) as { dbPassword: string }
-  // Its own port, so runs side by side don't share one tunnel.
-  const port = 15433 + randomInt(500)
-  const db = spawn('fly', ['proxy', `${port}:5432`, '-a', 'bly-staging-db'], { stdio: 'ignore' })
-  process.on('exit', () => db.kill())
-  await Bun.sleep(3000)
-  return new SQL(`postgres://blockly:${state.dbPassword}@127.0.0.1:${port}/blockly`)
+  ) as { databaseUrl: string }
+  return new SQL(state.databaseUrl)
 }
 if (PACK) {
-  const sql = await database()
+  const sql = database()
   await sql`update account_standing set plan = 'plus' where user_id = (select id from users where email = ${email})`
   await sql.close()
 }
@@ -163,7 +158,7 @@ if (PACK) {
     running(),
   )
 } else if (REST) {
-  const sql = await database()
+  const sql = database()
   await timed(
     'create (vanilla)',
     async () => {

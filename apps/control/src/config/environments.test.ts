@@ -104,6 +104,7 @@ describe.each(['staging', 'production'])('the %s environment', (name) => {
     expect(loadConfig({ ...shared, ...flyEnv('realtime') }).database).toEqual({
       url: 'postgres://blockly:secret@pgbouncer.db.internal:5432/blockly',
       directUrl: 'postgres://blockly:secret@direct.db.internal:5432/blockly',
+      poolMax: 10,
     })
   })
 
