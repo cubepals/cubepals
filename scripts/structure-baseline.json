@@ -179,7 +179,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/boot.ts › run": {
-      "n": 31,
+      "n": 30,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/boot.ts › #upLearning": {
@@ -1030,10 +1030,6 @@
     },
     "apps/control/src/app/curation/own-check.ts › function checkOwnRelease": {
       "n": 118,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    },
-    "apps/control/src/app/curation/own.test.ts › describe.skipIf Blockly’s own packs": {
-      "n": 139,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/edge/edge.test.ts › describe.skipIf edge": {

@@ -48,7 +48,12 @@ export default async function Guide() {
         <ol>
           <li>
             <strong>What to play.</strong> Survival, Creative, Hardcore, Smoother survival, or a modpack. Pick
-            one and the Minecraft version, the server software and its settings are chosen to match.
+            one and the Minecraft version, the server software and its settings are chosen to match. There are
+            games too:{' '}
+            <GuideLink to="lifesteal-manhunt-skyblock-with-friends">
+              Lifesteal, Manhunt and Skyblock
+            </GuideLink>
+            .
           </li>
           <li>
             <strong>Who’s playing.</strong> How many friends play at once. Bigger groups get a bigger server.

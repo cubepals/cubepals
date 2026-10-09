@@ -30,7 +30,7 @@ export async function reviewView(
       // Blockly's own packs copy nothing: every server fetches each mod from its authors.
       distribution: 'distribution' in pack ? pack.distribution : 'upstream',
       review: pack.review,
-      held: ('held' in pack ? pack.held : undefined) ?? null,
+      held: pack.held ?? null,
       releases: orderOf(pack, theirs).flatMap((version) =>
         theirs.filter((record) => record.version === version).map(releaseAdminView),
       ),

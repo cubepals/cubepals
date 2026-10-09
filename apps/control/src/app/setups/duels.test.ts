@@ -1,9 +1,12 @@
 /**
  * The Duels template: Paper 1.21.11 with Duels from Modrinth and OldCombatMechanics from Hangar,
- * offered with Plus, and a server of it starting on a void world with the arena, the kit and the permissions Cubepals writes.
+ * offered with Plus, and a server of it starting on a void world with the arena, the kit and the
+ * permissions Cubepals writes, and the arena following it onto a fresh world.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { onLevel } from '../../domain/revision/carried.ts'
 import { DUELS_FILES } from '../../minecraft/duels.ts'
 import { VOID_LEVEL } from '../../minecraft/worlds.ts'
 import { Cdn } from '../../testing/cdn.ts'
@@ -88,6 +91,33 @@ describe.skipIf(!hasDatabase)('duels', () => {
       ['world', VOID_LEVEL],
     ])
     const volume = h.runtime.machine(server.id)?.dir ?? ''
-    for (const file of DUELS_FILES) expect(readFileSync(`${volume}/${file.path}`, 'utf8')).toBe(file.content)
+    for (const file of DUELS_FILES)
+      expect(readFileSync(`${volume}/${file.path}`, 'utf8')).toBe(onLevel(file, 'world').content)
+  }, 30_000)
+
+  test('after a fresh world, the arena is on the new world', async () => {
+    const owner = await h.user('Kai', 'plus')
+    const server = await h.create(owner, { from: { kind: 'template', key: 'duels' } })
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+    await h.app.worlds.freshStart(owner, server.id, randomUUID())
+    await h.until(
+      server.id,
+      (s) => s.lifecycle.status === 'running' && s.activeWorldId !== server.activeWorldId,
+    )
+    await h.settled(server.id)
+
+    // A void world like the one it left, so the new one has the same platform.
+    expect((await listWorlds(h.db, server.id)).map((w) => [w.levelName, w.levelType])).toEqual([
+      ['world', VOID_LEVEL],
+      ['world-2', VOID_LEVEL],
+    ])
+    const arena = readFileSync(`${h.runtime.machine(server.id)?.dir ?? ''}/plugins/Duels/config.yml`, 'utf8')
+    const { Arenas } = Bun.YAML.parse(arena) as { Arenas: Record<string, Record<string, { World: string }>> }
+    expect(Object.values(Arenas['1'] ?? {}).flatMap((place) => place.World ?? [])).toEqual([
+      'world-2',
+      'world-2',
+      'world-2',
+    ])
   }, 30_000)
 })

@@ -1,6 +1,7 @@
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { type Diagnosis, diagnose } from '../../minecraft/diagnosis.ts'
+import { ARENA_COMMANDS, runsDuels } from '../../minecraft/duels.ts'
 import {
   type InstallCheck,
   installCheck,
@@ -81,6 +82,14 @@ const stoppedAnswering = (error: unknown) =>
 
 /** How many of its mods one start of a pack server may learn about before it gives up. */
 const LEARNED_PER_START = 3
+
+/** What the game is told as it starts: the settings it keeps in its world, and an arena it lacks. */
+const startCommands = (
+  revision: Pick<ServerRevision, 'mods' | 'gameVersion'> & Partial<Pick<ServerRevision, 'settings'>>,
+): string[] => [
+  ...(revision.settings ? bootCommands(revision.settings, revision.gameVersion) : []),
+  ...(runsDuels(revision.mods) ? ARENA_COMMANDS : []),
+]
 
 /**
  * What every operation that ends in "running" does after the provider says the workload is up.
@@ -238,8 +247,8 @@ export class BootSequence {
 
     // A setting the game keeps in its world rather than its properties is set as it starts, so a
     // change made while it was off, a new world, or one brought back from a backup plays as the
-    // settings say. Best effort: the next start sets it again.
-    const commands = revision.settings ? bootCommands(revision.settings, revision.gameVersion) : []
+    // settings say; so is a Duels arena a world lacks. Best effort: the next start sets it again.
+    const commands = startCommands(revision)
     if (commands.length > 0) {
       const target = {
         endpoint: this.#runtime.endpoint(handle, PORT_NAMES.rcon, 'control'),

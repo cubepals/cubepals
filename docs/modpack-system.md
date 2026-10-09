@@ -86,6 +86,12 @@ advanced feature.
   don't: they fill a gap with defaults of their own that differ from the file they ship (no Nether
   islands, unprotected visitors), so OneBlock carries AOneBlock's whole file with one value
   changed (`app/setups/aoneblock-config.yml`).
+- **The running world.** A carried file names the world the server runs as `{{blockly.level}}`
+  (`RUNNING_LEVEL`). It is written with the level's name in its place (`world`, `world-2`, …), so
+  the file follows the server when the owner switches worlds or starts a fresh one: Duels' arena
+  stays on the world everyone plays. The revision keeps the placeholder, so a switch changes no
+  carried file and makes no diff; the switch itself restarts the server, which writes the file
+  again. Double braces around a name of Blockly's own: no plugin's settings hold anything like it.
 - **Paths.** Relative, letters, digits and `.`, `_`, `+`, `-` only, and never a file Blockly keeps
   itself (`server.properties`, the access lists, `.blockly-` marks). A wrong one fails building the
   spec: it is a mistake in a template, never skipped.
