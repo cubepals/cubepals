@@ -462,9 +462,11 @@ async function up(): Promise<void> {
   )
   // Its word about each browser's address, which the control plane believes only with this.
   fly(['secrets', 'import', '-a', APP.web, '--stage'], { input: `WEB_PROXY_SECRET=${webProxySecret}\n` })
+  // A deploy leaves a stopped machine stopped, as `stop` left them. The web build reads the plans
+  // from the API, so the API runs before it.
+  startStopped(APP.control)
   deploy(APP.web, webToml, 'apps/web/Dockerfile', [`API_UPSTREAM=${origin(APP.control)}`])
-  // A deploy leaves a stopped machine stopped, as `stop` left them.
-  for (const app of [APP.control, APP.realtime, APP.edge, APP.web]) startStopped(app)
+  for (const app of [APP.realtime, APP.edge, APP.web]) startStopped(app)
 
   await until('the web app and the API answer', 300, webAnswers)
   say('')

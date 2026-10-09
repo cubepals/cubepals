@@ -1,18 +1,22 @@
 import type { PublicPlan, PublicSize } from '@blockly/contracts'
 import { apiUpstream } from './upstream'
 
+const READ_MS = 10_000
+
 /**
  * The plans, read server-side from the control plane's public endpoint: the same table it
  * enforces. Empty when it can't be reached, so a page shows its words without the cards rather
  * than failing. Read afresh each time, unless a page says how many seconds a reading may be kept:
  * the landing page does, since it is the page most people load and the table seldom changes.
+ * A control plane that doesn't answer within READ_MS counts as unreachable: a build that renders
+ * these pages never waits on a stopped one.
  */
 export async function publicPlans(keptSeconds?: number): Promise<PublicPlan[]> {
   try {
-    const response = await fetch(
-      `${apiUpstream()}/api/public/plans`,
-      keptSeconds === undefined ? { cache: 'no-store' } : { next: { revalidate: keptSeconds } },
-    )
+    const response = await fetch(`${apiUpstream()}/api/public/plans`, {
+      signal: AbortSignal.timeout(READ_MS),
+      ...(keptSeconds === undefined ? { cache: 'no-store' } : { next: { revalidate: keptSeconds } }),
+    })
     return response.ok ? ((await response.json()) as PublicPlan[]) : []
   } catch {
     return []
@@ -25,7 +29,10 @@ export async function publicPlans(keptSeconds?: number): Promise<PublicPlan[]> {
  */
 export async function publicSizes(keptSeconds: number): Promise<PublicSize[]> {
   try {
-    const response = await fetch(`${apiUpstream()}/api/public/sizes`, { next: { revalidate: keptSeconds } })
+    const response = await fetch(`${apiUpstream()}/api/public/sizes`, {
+      signal: AbortSignal.timeout(READ_MS),
+      next: { revalidate: keptSeconds },
+    })
     return response.ok ? ((await response.json()) as PublicSize[]) : []
   } catch {
     return []
