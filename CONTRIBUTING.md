@@ -1,7 +1,7 @@
 # Contributing
 
 Cubepals is developed under the codename Blockly, so the code, packages and binaries all say
-Blockly. [CLAUDE.md](CLAUDE.md) holds the rules every change follows, for people and agents alike;
+Blockly. [AGENTS.md](AGENTS.md) holds the rules every change follows, for people and agents alike;
 this page is how to work on it.
 
 ## The core rule
@@ -9,7 +9,7 @@ this page is how to work on it.
 Blockly absorbs complexity so the player doesn't have to. A new capability is first designed as
 something Blockly can infer, automate, default or hide; a new control appears only when the player
 genuinely needs to make that decision. The guardrails, and where that line is, are in
-[CLAUDE.md](CLAUDE.md#the-core-rule-of-blocklys-development).
+[AGENTS.md](AGENTS.md#the-core-rule-of-blocklys-development).
 
 ## Setup
 
@@ -48,7 +48,7 @@ the fleet runtime against that release.
 complexity, banned names (`utils`, `helpers` and the like), file headers, directory indexes, import
 cycles, unused code and duplicates. It is a ratchet: what broke a rule
 before the rule existed is listed in `scripts/structure-baseline.json` with why, and that list only
-shrinks. A change that makes anything worse fails. [CLAUDE.md](CLAUDE.md#structure) has the full
+shrinks. A change that makes anything worse fails. [AGENTS.md](AGENTS.md#structure) has the full
 rules and the care the checks can't judge.
 
 **Splits are their own change.** A source file past about 800 lines, or a function, class or
@@ -75,7 +75,7 @@ from there.
 ## Staging
 
 Changes that touch providers are checked on staging (`bun scripts/staging.ts`, rules in
-[CLAUDE.md](CLAUDE.md#staging)). It needs a maintainer's access; ask in your pull request.
+[AGENTS.md](AGENTS.md#staging)). It needs a maintainer's access; ask in your pull request.
 
 Every night, the Nightly workflow deploys main to staging, runs `scripts/staging-check.ts` and stops
 staging again. A commit that passes is tagged `v<next>-nightly.<date>.<run>`. Production deploys only
@@ -83,9 +83,10 @@ such a commit, as the next `vX.Y.Z` (`scripts/versions.ts`).
 
 ## Conduct and security
 
-Everyone here follows the [code of conduct](CODE_OF_CONDUCT.md). Security problems are reported
-privately, as [SECURITY.md](SECURITY.md) says, never in an issue. Help with an account on
-cubepals.com is in [SUPPORT.md](SUPPORT.md).
+Everyone here follows the
+[code of conduct](https://github.com/cubepals/.github/blob/main/CODE_OF_CONDUCT.md), which every
+Cubepals repository shares. Security problems are reported privately, as [SECURITY.md](SECURITY.md)
+says, never in an issue. Help with an account on cubepals.com is in [SUPPORT.md](SUPPORT.md).
 
 ## Brand
 

@@ -120,7 +120,7 @@ one, named by its binding. #implemented. *Configured nowhere yet:* production an
 #why[Decide once, record why, never move a server because a rule changed: turning a canary off
 strands nothing, and where a server runs is explained in one place
 (#src("apps/control/src/app/runtimes/service.ts:42")). Owners are never asked: where a server runs
-is Blockly's decision (CLAUDE.md's core rule), and it is visible to operators in
+is Blockly's decision (AGENTS.md's core rule), and it is visible to operators in
 `runtime_decisions`.]
 
 = FleetRuntime <s-fleet-runtime>

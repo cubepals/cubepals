@@ -2,13 +2,17 @@
 # updates and one for majors, which break more often and are reviewed apart. New releases wait a
 # week (a month for majors) before they are offered, so a broken or hijacked release has time to be
 # pulled. Security fixes skip all of that: they arrive when published, one pull request per
-# ecosystem.
+# ecosystem. Bun has no Dependabot security updates, so its fixes come with the monthly ones.
+# Each pull request is labelled `dependencies` only, never a label per ecosystem. Minor and patch
+# updates merge themselves once `check` passes (workflows/dependabot.yml); majors and actions wait
+# for a person.
 version: 2
 updates:
   - package-ecosystem: bun
     directory: /
     schedule:
       interval: monthly
+    labels: [dependencies]
     open-pull-requests-limit: 2
     cooldown:
       default-days: 7
@@ -33,6 +37,7 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    labels: [dependencies]
     open-pull-requests-limit: 1
     cooldown:
       default-days: 7

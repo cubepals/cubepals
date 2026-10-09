@@ -18,8 +18,10 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code == 'true' || steps.tested-doc.outputs.doc == 'true' }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           predicate-quantifier: every
@@ -34,7 +36,7 @@ jobs:
               - '!.github/pull_request_template.md'
               - '!.github/dependabot.yml'
       # own.test.ts reads this one doc, and a negated filter can't add a path back.
-      - uses: dorny/paths-filter@v4
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: tested-doc
         with:
           filters: |
@@ -46,12 +48,14 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.3.11
       # The control plane runs on Node in its image; a few checks run there too.
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22.23.2
       - run: bun install --frozen-lockfile
@@ -63,7 +67,7 @@ jobs:
       - run: bun run check:boundaries
       - run: bun run check:structure
       - run: bun run check:deprecated
-      - uses: hashicorp/setup-terraform@v4
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: 1.15.3
           terraform_wrapper: false
@@ -106,8 +110,9 @@ jobs:
       PEBBLE_TEST_URL: https://127.0.0.1:14000/dir
       CHALLTESTSRV_TEST_URL: http://127.0.0.1:8055
     steps:
-      - uses: actions/checkout@v7
-      # Stand-ins for Fly's log stream and for R2. Service containers can't take arguments.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Start NATS
         run: docker run -d --name nats -p 4222:4222 nats:2.15.0 --user blockly-test --pass fm2_blockly_test
       - name: Start an S3 store
@@ -123,10 +128,10 @@ jobs:
             -management :8055 -dnsserver :8053 -http01 "" -https01 "" -tlsalpn01 ""
           docker run -d --name pebble --network acme -p 14000:14000 -e PEBBLE_VA_NOSLEEP=1 \
             ghcr.io/letsencrypt/pebble:2.10.1 -dnsserver challtestsrv:8053
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.3.11
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22.23.2
       - run: bun install --frozen-lockfile
@@ -150,5 +155,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Every part passed or was skipped
-        run: |
-          echo '${{ toJSON(needs) }}' | jq -e 'all(.[]; .result == "success" or .result == "skipped")'
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: echo "$NEEDS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")'
