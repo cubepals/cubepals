@@ -19,7 +19,7 @@ export interface Operator {
   country: string | null
   /** The law the Terms are under, and where disputes go. */
   law: string | null
-  /** The company that sends {brand}'s email, and where it handles it: not chosen yet. */
+  /** The company that sends {brand}'s email, and where it handles it. */
   emailProvider: string | null
   emailProviderWhere: string | null
   /** Where each kind of message goes. Each mailbox must exist before the pages go live. */
@@ -33,8 +33,8 @@ export const OPERATOR: Operator = {
   name: 'The Cubepals Authors',
   country: 'Saudi Arabia',
   law: null,
-  emailProvider: null,
-  emailProviderWhere: null,
+  emailProvider: 'Resend',
+  emailProviderWhere: 'Ireland, on Amazon Web Services. Resend is a US company.',
   emails: {
     support: 'support@cubepals.com',
     privacy: 'privacy@cubepals.com',
