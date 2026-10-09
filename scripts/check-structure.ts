@@ -30,6 +30,11 @@
  * adds an entry), on an entry that no longer violates (remove it), and on an entry without a
  * reason. A new entry is written by hand, with its reason.
  *
+ * A repository that is one Rust crate at its root, as blocklyd's is, gets the same checks on its
+ * src/, tests/, examples/ and benches/: size, names, headers, indexes and cycles, and clippy's with
+ * --rust. Its baseline is structure-baseline.json beside Cargo.toml, and Biome, knip and jscpd,
+ * which read TypeScript, don't run. blocklyd's CI fetches this file to run it.
+ *
  * The clippy checks need cargo, so they run only with --rust, in blocklyd.yml's check job, and
  * nothing else does then; the rest run in ci.yml. Layering is check-boundaries.ts's, and proving a
  * move is check-move-only.ts's.
@@ -93,7 +98,9 @@ const args = process.argv.slice(2)
 const rust = args.includes('--rust')
 const update = args.includes('--update')
 const root = Bun.spawnSync(['git', 'rev-parse', '--show-toplevel']).stdout.toString().trim() || '.'
-const BASELINE = join(root, 'scripts/structure-baseline.json')
+const crateRepo = existsSync(join(root, 'Cargo.toml'))
+const BASELINE = join(root, crateRepo ? 'structure-baseline.json' : 'scripts/structure-baseline.json')
+const SCOPE = crateRepo ? /^(src|tests|examples|benches)\// : /^(apps|packages|scripts)\//
 
 const all = Bun.spawnSync(
   ['git', '-c', 'core.quotepath=off', 'ls-files', '--cached', '--others', '--exclude-standard', '-z'],
@@ -101,7 +108,7 @@ const all = Bun.spawnSync(
 )
   .stdout.toString()
   .split('\0')
-  .filter((path) => /^(apps|packages|scripts)\//.test(path) && !SKIPPED.test(path))
+  .filter((path) => SCOPE.test(path) && !SKIPPED.test(path))
   .filter((path) => existsSync(join(root, path)))
   .sort()
 const langOf = (path: string): Lang | undefined => SOURCE[path.split('.').pop() ?? '']
@@ -251,7 +258,7 @@ function checkBiome() {
 }
 
 function checkClippy() {
-  const crate = join(root, 'apps/blocklyd')
+  const crate = crateRepo ? root : join(root, 'apps/blocklyd')
   const lints = RUST_LINTS.flatMap((lint) => ['-W', `clippy::${lint}`])
   const run = Bun.spawnSync(
     ['cargo', 'clippy', '--locked', '--all-targets', '--message-format=json', '--', ...lints],
@@ -453,8 +460,8 @@ function useTargets(crate: string, here: string[], used: string, group: string |
  */
 function rustImports(): Map<string, string[]> {
   const graph = new Map<string, string[]>()
-  for (const path of sources.filter((p) => /\/src\/.*\.rs$/.test(p) && !/\/src\/bin\//.test(p))) {
-    const [crate = '', rel = ''] = path.split(/(?<=\/src)\//)
+  for (const path of sources.filter((p) => /(^|\/)src\/.*\.rs$/.test(p) && !/(^|\/)src\/bin\//.test(p))) {
+    const [crate = '', rel = ''] = path.split(/(?<=(?:^|\/)src)\//)
     const here = ['crate', ...rel.replace(/(^|\/)(lib|main|mod)\.rs$|\.rs$/, '').split('/')].filter(Boolean)
     // An inline `mod tests` reaches its parent through `use super::*`, which is no edge.
     const source = (text.get(path) ?? '')
@@ -619,19 +626,21 @@ function judge(check: string, entries: Record<string, Entry>) {
 if (rust) checkClippy()
 else {
   checkSize()
-  checkBiome()
+  if (!crateRepo) checkBiome()
   checkNames()
   checkHeaders()
   checkIndexes()
   checkCycles(new Map([...tsImports(), ...rustImports()]))
-  checkUnused()
-  checkDuplicates()
+  if (!crateRepo) checkUnused()
+  if (!crateRepo) checkDuplicates()
 }
 
 const baseline = JSON.parse(readFileSync(BASELINE, 'utf8'))
 const checks = rust
   ? RUST_LINTS.map((lint) => `clippy::${lint}`)
-  : ['size', ...BIOME_RULES, 'names', 'indexes', 'cycles', 'unused', 'duplicates']
+  : crateRepo
+    ? ['size', 'names', 'indexes', 'cycles']
+    : ['size', ...BIOME_RULES, 'names', 'indexes', 'cycles', 'unused', 'duplicates']
 for (const check of checks) judge(check, baseline[check] ?? {})
 // Files without a header are one list, with one reason.
 if (!rust) {

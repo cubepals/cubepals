@@ -2,7 +2,8 @@
  * check-structure.ts against small trees: for each check, a new violation fails, a baselined one
  * passes, one that grew fails, an entry that no longer violates fails, and an entry without a
  * reason fails; --update only ever lowers a number. Clippy's part (--rust) needs a crate and cargo,
- * so it is checked by running it on apps/blocklyd, not here.
+ * so it is checked by running it on apps/blocklyd, not here. A repository that is one crate is
+ * checked here without it.
  */
 import { afterAll, describe, expect, test } from 'bun:test'
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -364,5 +365,28 @@ describe('duplicates', () => {
     )
     const folded = { 'apps/a.ts': sum(14), 'apps/b.ts': "export { sum } from './a.ts'\n" }
     expect(check(tree(folded, entry(15))).out).toContain(`duplicates  ${key}: stale baseline entry`)
+  })
+})
+
+describe('a repository that is one crate', () => {
+  test('its src/ is checked against the baseline beside Cargo.toml, without the TypeScript tools', () => {
+    const files = {
+      'Cargo.toml': '[package]\nname = "k"\n',
+      'src/main.rs': '//! The binary.\nmod a;\nmod b;\nmod utils;\nfn main() {}\n',
+      'src/a.rs': '//! A.\nuse crate::b;\n',
+      'src/b.rs': '//! B.\nuse crate::a;\n',
+      'src/utils.rs': '//! Named for a category.\n',
+    }
+    const dir = tree(files)
+    writeFileSync(join(dir, 'structure-baseline.json'), '{}')
+    const { code, out } = check(dir)
+    expect(code).toBe(1)
+    expect(out).toContain('cycles  src/a.rs ↔ src/b.rs: 2 files that import each other')
+    expect(out).toContain('names  src/utils.rs: is named for a category')
+    expect(out).not.toContain('unused')
+    const held = { cycles: { 'src/a.rs ↔ src/b.rs': { n: 2, reason: 'one protocol' } } }
+    writeFileSync(join(dir, 'structure-baseline.json'), JSON.stringify(held))
+    rmSync(join(dir, 'src/utils.rs'))
+    expect(check(dir).code).toBe(0)
   })
 })
