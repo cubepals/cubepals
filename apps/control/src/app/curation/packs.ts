@@ -106,7 +106,6 @@ export const CURATED_PACKS: readonly CuratedPack[] = [
     // loading screen tips."), carried for Open Loader.
     authored: ['overrides/config/openloader/resources/Cobblemon-Tips-3.0.zip'],
     review: 'docs/modpack-templates.md#cobblemon',
-    held: 'Xaero’s Minimap and World Map run on its servers, and Xaero allows a pack to be monetized only through CurseForge or Modrinth without his written permission. Ask him, and Cobbled Studios, first.',
     releases: [
       {
         version: '1.8.1',
