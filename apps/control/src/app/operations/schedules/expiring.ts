@@ -10,6 +10,7 @@ import { entitlementsFor, PLAN_KEYS } from '../../../domain/account/entitlements
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { emailOf, loadControls, loadStanding } from '../../accounts/persistence.ts'
 import type { Actor } from '../../actor.ts'
+import { keepingWorld } from '../../emails/servers.ts'
 import type { Mailer } from '../../ports/platform.ts'
 import { deletionWarned, findServer, saveDeletionWarned, unplayedSince } from '../../servers/persistence.ts'
 import type { MinecraftServerService } from '../../servers/service.ts'
@@ -86,22 +87,16 @@ export function expiring(deps: {
     if (to === null) return false
     const day = (at: Date) =>
       at.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
-    const page = `${webOrigin}/servers/${server.id}`
-    return mailer
-      .send({
-        to,
-        subject: `We’re keeping ${server.name} until ${day(goes)}`,
-        text: [
-          `Nobody has played ${server.name} since ${day(server.lastActiveAt)}. Free worlds are kept for a year after they were last played, so on ${day(goes)} it will be deleted.`,
-          '',
-          `To keep it, play on it, or press Keep it on its page: ${page}`,
-          `You can download it there too: ${page}/backups`,
-        ].join('\n'),
-      })
-      .then(
-        () => true,
-        () => false,
-      )
+    const email = keepingWorld({
+      server,
+      lastPlayed: day(server.lastActiveAt),
+      goes: day(goes),
+      origin: webOrigin,
+    })
+    return mailer.send({ to, ...email }).then(
+      () => true,
+      () => false,
+    )
   }
 
   /**

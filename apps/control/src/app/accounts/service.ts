@@ -9,6 +9,7 @@ import {
 } from '../../domain/account/entitlements.ts'
 import type { Restrictions } from '../../domain/account/standing.ts'
 import { type Actor, requestedBy } from '../actor.ts'
+import { playWarning } from '../emails/play.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { forgetAccount } from '../guestbook/persistence.ts'
 import { FUNNEL, noteOnce } from '../insight/record.ts'
@@ -54,52 +55,6 @@ const NO_TAGS: CampaignTags = { medium: null, campaign: null, content: null, ter
 
 /** Waitlist addresses taken a minute before it waits: people type one address, scripts many. */
 const WAITLIST_PER_MINUTE = 30
-
-const playSubject = (mark: number): string =>
-  mark >= 100
-    ? 'Your Cubepals servers are asleep until the 1st'
-    : `You have used ${mark}% of this month’s play`
-
-/**
- * What an owner reads. Hours here are hours on the smallest server, which is what a unit is, and
- * the message says so rather than teaching anyone the word "unit".
- */
-function playMessage(input: {
-  mark: number
-  included: number
-  used: number
-  extraAllowed: number
-  mayBuyMore: boolean
-  account: string
-}): string {
-  const left = Math.max(0, input.included - input.used)
-  const lines: string[] = []
-  if (input.mark >= 100) {
-    lines.push(
-      `Your plan includes ${input.included} hours of play a month, on a 3 GB server, and this month’s are used up.`,
-    )
-    lines.push(
-      input.extraAllowed > 0
-        ? `You allowed up to ${input.extraAllowed} hours past them, so your servers keep running until those are used too.`
-        : 'Your servers are asleep until the 1st. Nothing was charged: Cubepals only spends what you allow.',
-    )
-    if (input.mayBuyMore && input.extraAllowed === 0)
-      lines.push('If you want them back before then, allow some extra play on your account.')
-  } else {
-    lines.push(
-      `You have used ${input.used} of the ${input.included} hours your plan includes this month, on a 3 GB server — bigger ones use them faster.`,
-    )
-    lines.push(
-      input.mark >= 80
-        ? `About ${Math.round(left)} hours are left. When they run out your servers sleep until the 1st${
-            input.mayBuyMore ? ', unless you allow some extra play' : ''
-          }.`
-        : 'Nothing to do; this is just so the end of the month is never a surprise.',
-    )
-  }
-  lines.push('', input.account)
-  return lines.join('\n')
-}
 
 /**
  * The most extra play an owner may allow in a month, in meter units. It is a stop on a runaway
@@ -525,14 +480,13 @@ export class AccountService {
     if (to !== null)
       await this.#mailer.send({
         to,
-        subject: playSubject(reached),
-        text: playMessage({
+        ...playWarning({
           mark: reached,
           included: plan.includedUnits,
           used: Math.round(units * 10) / 10,
           extraAllowed: standing.extraUnitsAllowed,
           mayBuyMore: plan.mayBuyMore,
-          account: `${this.#webOrigin}/account`,
+          origin: this.#webOrigin,
         }),
       })
     await this.#db.transaction(async (tx) => {

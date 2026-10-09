@@ -4,6 +4,7 @@ import { entitlementsFor, PLAN_KEYS } from '../../domain/account/entitlements.ts
 import { listAdmins, loadStanding } from '../accounts/persistence.ts'
 import type { Actor } from '../actor.ts'
 import type { CatalogSync } from '../catalog/sync.ts'
+import { adminAlert } from '../emails/admins.ts'
 import { NotFound } from '../errors.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { Mailer } from '../ports/platform.ts'
@@ -140,8 +141,7 @@ export class PlatformAlerts {
       try {
         await this.#mailer.send({
           to: admin.email,
-          subject: `Cubepals needs an admin: ${condition.summary}`,
-          text: `${condition.summary}\n\nDeal with it here: ${this.#webOrigin}${WHERE[condition.key]}\n\nThis is the only email about it. The alert clears itself once the condition passes, and a new email goes out if it comes back.`,
+          ...adminAlert({ summary: condition.summary, path: WHERE[condition.key], origin: this.#webOrigin }),
         })
       } catch (error) {
         told = false

@@ -7,9 +7,10 @@
  */
 import { type Db, schema } from '@blockly/db'
 import { entitlementsFor } from '../../../domain/account/entitlements.ts'
-import { type DaySpend, daySpend, dollars, overLimit, utcDay } from '../../../domain/policy/spend.ts'
+import { type DaySpend, daySpend, overLimit, utcDay } from '../../../domain/policy/spend.ts'
 import { countServers, listAdmins, loadControls, lockCapacity } from '../../accounts/persistence.ts'
 import { type Actor, requestedBy } from '../../actor.ts'
+import { spendLimit } from '../../emails/admins.ts'
 import { pickControls } from '../../platform/controls.ts'
 import {
   disksHeld,
@@ -122,20 +123,20 @@ export class SpendWatchdog {
   async #tell(day: string, limitCents: number, now: Date): Promise<void> {
     const record = await loadSpendDay(this.#db, day)
     if (record === null || record.trippedAt === null || record.notifiedAt !== null) return
-    const summary = `Cubepals spent ${dollars(record.cents)} today (${day}, UTC), past its ${dollars(limitCents)} daily limit.`
-    const text = [
-      summary,
-      '',
-      'Starting and creating servers are now off. Servers already running keep running until they idle out.',
-      `Compute ${dollars(record.computeCents)}, compute no server accounts for ${dollars(record.strayCents)} (${record.strayMachines} machines), disks ${dollars(record.storageCents)}.`,
-      '',
-      `Turn them back on, or raise the limit, here: ${this.#webOrigin}/admin/platform`,
-      "Check Fly's own figure on the organization's billing page before you do (docs/money-guards.md).",
-    ].join('\n')
+    const email = spendLimit({
+      cents: record.cents,
+      limitCents,
+      day,
+      computeCents: record.computeCents,
+      strayCents: record.strayCents,
+      strayMachines: record.strayMachines,
+      storageCents: record.storageCents,
+      origin: this.#webOrigin,
+    })
     let told = true
     for (const admin of await listAdmins(this.#db)) {
       try {
-        await this.#mailer.send({ to: admin.email, subject: summary, text })
+        await this.#mailer.send({ to: admin.email, ...email })
       } catch (error) {
         told = false
         console.error(`spend watchdog email to ${admin.email} failed`, error)

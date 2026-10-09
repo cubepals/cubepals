@@ -1425,7 +1425,14 @@ Replacing mc-router means rewriting `apps/edge` against the same protocol. Nothi
   people sign in with an email and a password, or a configured OAuth provider. The emails are a
   verification link on sign-up, a password reset link that works for an hour, and, once a reset
   has signed out every session, a notice that the password changed (`infra/auth/better-auth.ts`).
-  The mail transport is config too (`mail.smtpUrl`; a Mailpit container locally).
+  A welcome goes once an account is ready: when an email sign-up confirms its address
+  (`afterEmailVerification`), or when Google or GitHub made it already confirmed (the user
+  `create.after` hook); a welcome that fails is logged and fails nothing. Every email is HTML with
+  its plain text beside it, written in `app/emails.ts` and `app/emails/`; its pictures and font
+  stylesheet load from the web origin under `/email/` (`apps/web/public/email/`), so each
+  environment's mail shows its own site's files. The mail transport is config too
+  (`mail.smtpUrl`; a Mailpit container locally and on staging), and staging's subjects start with
+  `[Staging] ` (`mail.subjectPrefix`, from `DEPLOYMENT_ID`).
 - **OAuth apps are per environment.** Each has its callback on that environment's canonical
   origin: `<canonicalOrigin>/api/auth/callback/<provider>`. Google is the primary way in;
   a provider is offered only where its client is configured, and the web pages learn which

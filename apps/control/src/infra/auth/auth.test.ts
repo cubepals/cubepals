@@ -6,7 +6,7 @@ import { and, eq } from 'drizzle-orm'
 import { SignJWT } from 'jose'
 import { ensureStanding } from '../../app/accounts/persistence.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
-import { Outbox } from '../../testing/outbox.ts'
+import { authMail, Outbox } from '../../testing/outbox.ts'
 import { type Auth, createAuth } from './better-auth.ts'
 
 const ORIGIN = 'http://localhost:3000'
@@ -27,7 +27,7 @@ describe.skipIf(!hasDatabase)('email flows', () => {
     auth = createAuth({
       clientAddressHeader: 'x-blockly-client-address',
       db: h.db,
-      mailer: outbox,
+      ...authMail(outbox),
       canonicalOrigin: ORIGIN,
       trustedOrigins: [],
       secret: SECRET,

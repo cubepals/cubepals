@@ -34,6 +34,7 @@ visibly dominates. The circle-to-square ratio is √(4/π) ≈ 1.1284.
 | `favicon.svg` | mark, ink |
 | `png/` | raster versions, 1024–2000px |
 | `wordmark.py` | outlines the word and draws the lockups, their PNGs and the link preview |
+| `figures/` | the landing's people as the emails show them: `bun brand/figures/figures.ts` writes them to `apps/web/public/email/` |
 
 SVGs carry no font dependency — the wordmark is outlined.
 
@@ -45,6 +46,8 @@ SVGs carry no font dependency — the wordmark is outlined.
 | `apps/web/src/app/icon.svg` | the favicon, copied from `favicon.svg` |
 | `apps/web/src/app/apple-icon.png` | the home-screen tile, copied from `png/app-icon.png` |
 | `apps/web/src/app/opengraph-image.png` | the link preview: the horizontal lockup on paper, 1200×630, written by `wordmark.py` |
+| `apps/web/public/email/lockup.png` | the emails' lockup: `lockup-horizontal-reversed.svg` on an Ink tile with 14 units of clear space, 320×88, shown at 160×44. It brings its own Ink, so a mail app that inverts the email can't lose it |
+| `apps/web/public/email/` figures | Moss waving, the worker with a clipboard and Kai hanging from the card's edge, written by `figures/figures.ts` in one-bit dither, drawn at twice the size each email shows them |
 
 The product's lockup sets the word as live Figtree 700 at the spec's tracking, lowercase, as it is
 drawn here, whatever the page around it is set in. The name is still **Cubepals** wherever the

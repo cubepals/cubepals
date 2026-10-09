@@ -9,6 +9,7 @@ import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { ensureStanding } from '../../app/accounts/persistence.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { authMail } from '../../testing/outbox.ts'
 import { authHandler, createAuth, listed } from './better-auth.ts'
 
 const ORIGIN = 'https://blockly.test'
@@ -23,7 +24,7 @@ beforeAll(async () => {
     createAuth({
       clientAddressHeader: 'x-blockly-client-address',
       db: h.db,
-      mailer: { send: async () => {} },
+      ...authMail(),
       canonicalOrigin: ORIGIN,
       trustedOrigins: [],
       secret: 'a-test-secret-that-is-long-enough-for-better-auth',

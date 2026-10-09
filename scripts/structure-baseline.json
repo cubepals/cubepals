@@ -1061,7 +1061,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/handlers/moving.ts › function moving": {
-      "n": 227,
+      "n": 220,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/handlers/restoring.ts › function restoring": {

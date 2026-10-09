@@ -96,7 +96,7 @@ Terraform stack.
 | `SIGNUP_ALLOWLIST` | — | set | — | `staging.ts` | Comma-separated emails and `@domain`s; when set, only they (and `ADMIN_EMAILS`) can make an account, by email or a provider. Staging sets it to its developers (`STAGING_DEVELOPERS`) and the staging check's private domain |
 | `ADMIN_EMAILS` | optional | op | op | op | Comma-separated; an account with one of these, once its email is confirmed, is an admin, and stops being one when taken off the list |
 | `SMTP_URL` | Mailpit | secret | secret | secret | Holds the mail provider's credentials |
-| `MAIL_FROM` | `Cubepals <hello@blockly.localhost>` | `Cubepals Staging <hello@staging.cubepals.com>` | `Cubepals <hello@cubepals.com>` | tf | |
+| `MAIL_FROM` | `Cubepals <hello@blockly.localhost>` | `Cubepals Staging <hello@staging.cubepals.com>` | `Cubepals <hello@cubepals.com>` | tf | Every email is HTML with its plain text beside it; its pictures load from `WEB_CANONICAL_ORIGIN` under `/email/`. Staging's subjects also start with `[Staging] `, from `DEPLOYMENT_ID`, with no variable of their own |
 
 ### Realtime
 

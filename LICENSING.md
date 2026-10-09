@@ -8,7 +8,7 @@ License.
 | --- | --- | --- |
 | The code: the control plane, the web app, the edge, the packages, the scripts and the infrastructure | everything not listed below | [AGPL-3.0-only](LICENSE) |
 | The brand: the Cubepals name, mark and wordmark | [`brand/`](brand/) | All rights reserved, [`brand/LICENSE.md`](brand/LICENSE.md) |
-| The site: the landing page, the site's pictures and the guides' words | `apps/web/src/landing/` (except `type/` and `fonts.ts`), `apps/web/public/imagery/`, `apps/web/public/guides/`, and the words in each guide's `page.tsx` | All rights reserved, [`brand/LICENSE.md`](brand/LICENSE.md) |
+| The site: the landing page, the site's pictures and the guides' words | `apps/web/src/landing/` (except `type/` and `fonts.ts`), `apps/web/public/imagery/`, `apps/web/public/guides/`, `apps/web/public/email/`, and the words in each guide's `page.tsx` | All rights reserved, [`brand/LICENSE.md`](brand/LICENSE.md) |
 | blocklyd, the daemon that runs servers on a fleet's own hosts | [cubepals/blocklyd](https://github.com/cubepals/blocklyd) | [FSL-1.1-ALv2](https://github.com/cubepals/blocklyd/blob/main/LICENSE.md) from 0.3.0; each version becomes Apache-2.0 two years after it is published |
 
 `LICENSE` is the AGPL's own text, unchanged. The brand and the site are not offered under it,
@@ -27,8 +27,8 @@ replace what is kept back:
 
 - the brand: the name, the mark and the files in `brand/`;
 - the landing page: `apps/web/src/app/page.tsx` and `apps/web/src/landing/`;
-- the pictures in `apps/web/public/imagery/` and `apps/web/public/guides/`, some of which the app
-  itself shows (server covers, the sign-in page);
+- the pictures in `apps/web/public/imagery/`, `apps/web/public/guides/` and `apps/web/public/email/`,
+  some of which the app itself shows (server covers, the sign-in page, every email);
 - the guides under `apps/web/src/app/(public)/guides/`.
 
 The rest of the app does not depend on them.

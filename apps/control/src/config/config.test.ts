@@ -381,3 +381,11 @@ describe('PostHog', () => {
     expect(() => loadConfig({ ...env, POSTHOG_TOKEN: 'phx_personal' })).toThrow(/POSTHOG_TOKEN/)
   })
 })
+
+describe('mail', () => {
+  test("staging's subjects say so, by the deployment's own id; nobody else's carry anything", () => {
+    expect(loadConfig({ ...deployed, DEPLOYMENT_ID: 'staging' }).mail.subjectPrefix).toBe('[Staging] ')
+    expect(loadConfig({ ...deployed, DEPLOYMENT_ID: 'prod' }).mail.subjectPrefix).toBe('')
+    expect(loadConfig(env).mail.subjectPrefix).toBe('')
+  })
+})

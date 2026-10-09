@@ -58,6 +58,13 @@ const POSTHOG_EU = 'https://eu.i.posthog.com'
 const environmentOf = (deploymentId: string | undefined) =>
   deploymentId === 'prod' ? 'production' : deploymentId === 'staging' ? 'staging' : 'development'
 
+/** The SMTP server and sender; staging's subjects say they are staging's, by the deployment's own id. */
+const mailFrom = (env: NodeJS.ProcessEnv) => ({
+  smtpUrl: env.SMTP_URL,
+  from: env.MAIL_FROM,
+  subjectPrefix: environmentOf(env.DEPLOYMENT_ID) === 'staging' ? '[Staging] ' : '',
+})
+
 /** Postgres: one URL, or a pooled one and a direct one past it, and what each pool may hold. */
 const databaseFrom = (env: NodeJS.ProcessEnv) => ({
   url: env.DATABASE_URL,
@@ -233,7 +240,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
       // Fly names the app on every machine it runs, and its proxy sets this header on every request.
       hostAddressHeader: env.FLY_APP_NAME ? 'fly-client-ip' : null,
     },
-    mail: { smtpUrl: env.SMTP_URL, from: env.MAIL_FROM },
+    mail: mailFrom(env),
     edge: { token: env.EDGE_TOKEN },
     // `version:key`, or a bare key as version 1; earlier keys a rotation still accepts, comma-separated.
     runtimeSecrets: {

@@ -4,6 +4,7 @@ import { TERMS_VERSION } from '@blockly/contracts'
 import { UnsecuredJWT } from 'jose'
 import { ensureStanding } from '../../app/accounts/persistence.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { authMail } from '../../testing/outbox.ts'
 import { type Auth, authHandler, createAuth } from './better-auth.ts'
 
 /** The "Continue with Google" button, as the sign-in page sends it, with the Terms agreed to. */
@@ -39,7 +40,7 @@ describe.skipIf(!hasDatabase)('OAuth from preview deployments', () => {
     auth = createAuth({
       clientAddressHeader: 'x-blockly-client-address',
       db: h.db,
-      mailer: { send: async () => {} },
+      ...authMail(),
       canonicalOrigin: CANONICAL,
       trustedOrigins: ['https://blockly-*-team.vercel.app'],
       secret: 'a-test-secret-that-is-long-enough-for-better-auth',
