@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   move-only:
+    name: Move-only diff
     if: startsWith(github.event.pull_request.title, 'Move:')
     runs-on: ubuntu-latest
     steps:
