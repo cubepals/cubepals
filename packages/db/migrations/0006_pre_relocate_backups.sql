@@ -1,0 +1,1 @@
+ALTER TYPE "public"."backup_trigger" ADD VALUE 'pre_relocate' BEFORE 'manual';

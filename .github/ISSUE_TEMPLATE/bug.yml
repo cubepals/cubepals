@@ -1,0 +1,32 @@
+name: Bug
+description: Something in the code doesn't work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: And what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      placeholder: |
+        1. Run `bun run dev`
+        2. Create a server
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: '`git rev-parse --short HEAD`, if you are running it yourself.'
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Anything printed. Leave out keys, tokens and anyone's personal data.
+      render: text

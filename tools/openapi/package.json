@@ -1,0 +1,11 @@
+{
+  "name": "openapi-tools",
+  "private": true,
+  "type": "module",
+  "description": "Generates the typed API contracts under apps/control/src/infra/*/generated from pinned OpenAPI specs. Outside the workspaces: openapi-typescript needs TypeScript 5's compiler API, and the repository is on TypeScript 7.",
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3",
+    "yaml": "2.9.1"
+  }
+}

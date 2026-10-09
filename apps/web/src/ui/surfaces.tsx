@@ -1,0 +1,147 @@
+import Link from 'next/link'
+import type { ReactNode } from 'react'
+
+export function Card({
+  title,
+  description,
+  footer,
+  href,
+  tone,
+  flat,
+  size,
+  children,
+  className,
+}: {
+  title?: ReactNode
+  description?: ReactNode
+  footer?: ReactNode
+  /** The whole card is the link; no separate "View" button. */
+  href?: string
+  /** `sand` at most once per page. */
+  tone?: 'surface' | 'forest' | 'sand'
+  /** Border instead of shadow. Never both. */
+  flat?: boolean
+  size?: 'md' | 'lg'
+  children?: ReactNode
+  className?: string
+}) {
+  const classes = [
+    'bk-card',
+    tone && tone !== 'surface' && `bk-card--${tone}`,
+    flat && 'bk-card--flat',
+    size === 'lg' && 'bk-card--lg',
+    href && 'bk-card--link',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ')
+  const content = (
+    <>
+      {title && <h3 className="bk-card__title">{title}</h3>}
+      {description && <p className="bk-card__desc">{description}</p>}
+      {children}
+      {footer && <div className="bk-card__foot">{footer}</div>}
+    </>
+  )
+  return href ? (
+    <Link href={href} className={classes}>
+      {content}
+    </Link>
+  ) : (
+    <div className={classes}>{content}</div>
+  )
+}
+
+export function EmptyState({
+  art,
+  title,
+  description,
+  action,
+  danger,
+}: {
+  art?: ReactNode
+  title: string
+  description?: ReactNode
+  /** One action. Empty states invite; they do not report. */
+  action?: ReactNode
+  danger?: boolean
+}) {
+  return (
+    <div className={['bk-empty', danger && 'bk-empty--danger'].filter(Boolean).join(' ')}>
+      {art && <div className="bk-empty__art">{art}</div>}
+      <h2 className="bk-empty__title">{title}</h2>
+      {description && <p className="bk-empty__copy">{description}</p>}
+      {action}
+    </div>
+  )
+}
+
+export function Badge({
+  tone = 'neutral',
+  mono,
+  children,
+}: {
+  tone?: 'neutral' | 'grass' | 'info' | 'danger' | 'outline' | 'inverse'
+  mono?: boolean
+  children: ReactNode
+}) {
+  return (
+    <span
+      className={['bk-badge', tone !== 'neutral' && `bk-badge--${tone}`, mono && 'bk-badge--mono']
+        .filter(Boolean)
+        .join(' ')}
+    >
+      {children}
+    </span>
+  )
+}
+
+/**
+ * A page that couldn't load. Every failure leads somewhere: the sentence the API wrote, and the
+ * one action that might fix it, which for a read is asking again.
+ */
+export function LoadFailed({ error, onRetry }: { error: ReactNode; onRetry: () => void }) {
+  return (
+    <Note tone="danger">
+      <span className="bk-row bk-wrap" style={{ gap: 'var(--space-12)', alignItems: 'center' }}>
+        <span>{error}</span>
+        <button type="button" className="bk-btn bk-btn--ghost bk-btn--sm" onClick={onRetry}>
+          Try again
+        </button>
+      </span>
+    </Note>
+  )
+}
+
+export function Note({ tone, children }: { tone: 'info' | 'danger' | 'success'; children: ReactNode }) {
+  return (
+    <div className={`bk-note bk-note--${tone}`} role={tone === 'danger' ? 'alert' : 'status'}>
+      {children}
+    </div>
+  )
+}
+
+export function DangerZone({
+  items,
+}: {
+  items: Array<{ label: string; description: string; action: ReactNode }>
+}) {
+  return (
+    <section className="bk-danger" aria-label="Danger zone">
+      <h2 className="bk-danger__title">Danger zone</h2>
+      {items.map((item) => (
+        <div key={item.label} className="bk-danger__row">
+          <div>
+            <div className="bk-danger__label">{item.label}</div>
+            <p className="bk-danger__desc">{item.description}</p>
+          </div>
+          {item.action}
+        </div>
+      ))}
+    </section>
+  )
+}
+
+export function Skeleton({ width, height = 12 }: { width: string | number; height?: number }) {
+  return <div className="bk-skeleton" style={{ width, height }} aria-hidden />
+}

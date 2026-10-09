@@ -1,0 +1,208 @@
+/*
+ * A server's stars and notes: two quiet counts at the end of a row, on its card in the directory
+ * and on its own page. They sit above a card's stretched link, so pressing one never opens the
+ * server instead.
+ */
+.reactions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-inline-start: auto;
+}
+
+/* A count and its icon: a button where there is something to press, plain where there isn't. */
+.button,
+.count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 32px;
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--ink-subtle);
+  font: inherit;
+}
+.button {
+  cursor: pointer;
+  transition-property: background-color, color, scale;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+/* Nothing to press in an owner's own count: a press goes through to the card's link. */
+.count {
+  pointer-events: none;
+}
+/* Starred: the star fills, in the colour a link has. */
+.button[aria-pressed="true"] {
+  color: var(--forest-ink);
+}
+/* While its popover is open the button stays as a hover leaves it, so the two read as one. */
+.button[data-open] {
+  background: var(--surface-sunken);
+}
+@media (hover: hover) and (pointer: fine) {
+  .button:hover {
+    background: var(--surface-sunken);
+    color: var(--ink);
+  }
+  .button[aria-pressed="true"]:hover {
+    color: var(--forest-ink);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .button:active {
+    scale: 0.96;
+  }
+}
+
+/* The notes: as wide as a short line, the latest few, and the composer at the foot. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  width: min(288px, calc(100vw - 50px));
+}
+
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  max-height: 280px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.note {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-8);
+  align-items: start;
+}
+
+.body {
+  grid-column: 1;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  grid-column: 1;
+  color: var(--ink-subtle);
+}
+
+.remove {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--ink-subtle);
+  cursor: pointer;
+  transition-property: background-color, color;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .remove:hover {
+    background: var(--surface-sunken);
+    color: var(--ink);
+  }
+}
+/* Inside the scrolling list, a ring drawn outside the button would be cut off. */
+.remove:focus-visible {
+  outline-offset: -2px;
+}
+
+.quiet {
+  color: var(--ink-subtle);
+}
+
+/* One line and a send button in a pill: the pill is what reads as the field, so it takes the ring. */
+.composer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-12);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+}
+.composer:has(.input:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-4) 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+}
+.input:focus-visible {
+  outline: none;
+}
+.input::placeholder {
+  color: var(--ink-subtle);
+}
+
+.left {
+  flex: none;
+  color: var(--ink-subtle);
+}
+
+.send {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--forest-ink);
+  cursor: pointer;
+  transition: background-color var(--quick) var(--ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .send:hover {
+    background: var(--surface-sunken);
+  }
+}
+
+/* Waiting on the API: dimmed, and a press does nothing. */
+.remove[aria-disabled="true"],
+.send[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.error {
+  color: var(--status-danger);
+  font-weight: 500;
+}
+
+/* What someone signed out is told, and the one way on. */
+.ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8) var(--space-12);
+}

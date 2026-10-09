@@ -1,0 +1,1 @@
+ALTER TABLE "catalog_refreshes" ADD COLUMN "failed_at" timestamp with time zone;

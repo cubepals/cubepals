@@ -1,0 +1,16 @@
+name: Idea
+description: Something Cubepals could do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What a player or an operator is trying to do, and what gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: Cubepals prefers what it can infer, default or do for the player over a new setting.

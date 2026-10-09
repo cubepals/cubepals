@@ -1,0 +1,385 @@
+/* The film: one beat to a screen, the picture the whole of it, and one line in a caption. */
+
+/* Doubled so it outranks the kit's own section padding, whichever stylesheet loads last. */
+.beat.beat {
+  min-height: 100svh;
+  padding: 0;
+}
+
+/* The same box as the chunk's canvas, held for as long as the beat is on. */
+.beat .held {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  overflow: clip;
+}
+@media (min-width: 1024px) {
+  .beat .held {
+    z-index: 4;
+  }
+}
+
+.beat .stars {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 62%;
+  color: var(--paper);
+  pointer-events: none;
+}
+
+/* The caption: one sentence, as large as the screen lets it be, set straight on the picture in
+   the ground's own ink. Nothing is put behind it. What keeps it readable over a busy part of the
+   drawing is a hard edge in the colour of the ground it stands on, a few pixels wide, the way
+   the game outlines its own lettering. */
+.caption {
+  --edge: calc(var(--px) * 1.5);
+  position: absolute;
+  inset-block-end: clamp(48px, 11vh, 120px);
+  inset-inline-start: calc(var(--gutter) + var(--rail));
+  z-index: 4;
+  max-width: min(60vw, 9.5em);
+  margin: 0;
+  color: var(--fg);
+  font-family: var(--display);
+  font-variation-settings: "SHRP" 100;
+  font-weight: 800;
+  font-size: clamp(2.5rem, 5.8vw, 6.25rem);
+  line-height: 0.9;
+  letter-spacing: -0.055em;
+  text-wrap: balance;
+  text-shadow:
+    var(--edge) 0 0 var(--field),
+    calc(var(--edge) * -1) 0 0 var(--field),
+    0 var(--edge) 0 var(--field),
+    0 calc(var(--edge) * -1) 0 var(--field),
+    var(--edge) var(--edge) 0 var(--field),
+    calc(var(--edge) * -1) var(--edge) 0 var(--field),
+    var(--edge) calc(var(--edge) * -1) 0 var(--field),
+    calc(var(--edge) * -1) calc(var(--edge) * -1) 0 var(--field);
+  /* A new line is printed on: it arrives from the left in a few steps. */
+  animation: stamp 260ms steps(5, end) both;
+}
+.caption[data-place="top"] {
+  inset-block-end: auto;
+  inset-block-start: clamp(88px, 14vh, 150px);
+}
+@keyframes stamp {
+  from {
+    clip-path: inset(-12px 100% -12px -12px);
+  }
+  to {
+    clip-path: inset(-12px);
+  }
+}
+
+/* How far the beat has played: a hairline along the foot of the screen, in the one colour that
+   means something is running. Scrolling makes it run faster; when it is gone, the page goes on. */
+.through {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: 6;
+  height: calc(var(--px) * 2);
+  background: var(--torch);
+  transform-origin: 0 50%;
+  scale: 0 1;
+  pointer-events: none;
+}
+
+/* The way to the proof: small, under the picture, for whoever wants it. */
+.how {
+  position: absolute;
+  inset-block-end: clamp(20px, 5vh, 56px);
+  inset-inline-start: calc(var(--gutter) + var(--rail));
+  z-index: 6;
+  padding: 4px 10px 5px;
+  border: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+.how:hover,
+.how:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+.how:focus-visible {
+  outline: calc(var(--px) * 1.5) solid var(--paper);
+  outline-offset: var(--px);
+}
+
+/* The proof itself: the section from the long page, on a slab that slides in from the side the
+   picture can spare and scrolls by itself. */
+.proof {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: 5;
+  width: min(56vw, 58rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-inline-start: calc(var(--px) * 2) solid var(--ink);
+  background: var(--paper);
+  animation: slide 240ms steps(6, end) both;
+}
+.proof:focus-visible {
+  outline: none;
+}
+@keyframes slide {
+  from {
+    translate: 100% 0;
+  }
+  to {
+    translate: 0 0;
+  }
+}
+/* With the proof open the sentence has been read: it gets out of the picture's way. */
+.beat[data-open] .caption {
+  display: none;
+}
+@media (max-width: 1023px) {
+  .proof {
+    position: fixed;
+    inset-block-start: var(--band);
+    width: 100%;
+    border: 0;
+    border-block-start: calc(var(--px) * 2) solid var(--ink);
+  }
+}
+
+/* ─── The first screen ──────────────────────────────────────────────────────────────────────── */
+
+.first .words {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: calc(var(--gutter) + var(--rail)) var(--gutter);
+  z-index: 4;
+}
+.first .nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 72px;
+}
+.first .wordmark {
+  display: inline-flex;
+  color: var(--ink);
+  font-family: var(--font-figtree), system-ui, sans-serif;
+  font-variation-settings: normal;
+  font-size: 26px;
+  line-height: 1;
+  text-decoration: none;
+}
+.first .links {
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 2vw, 28px);
+}
+.first .link {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 1rem;
+  text-decoration: none;
+  text-underline-offset: 0.3em;
+}
+.first .link:hover {
+  text-decoration: underline;
+  text-decoration-thickness: var(--px);
+}
+.first .headline {
+  margin-top: clamp(4px, 1.5vh, 24px);
+  max-width: 11em;
+}
+.first .go {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  margin-top: clamp(24px, 3.5vh, 44px);
+}
+.first .go p {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.35;
+}
+
+/* ─── The address, typed ────────────────────────────────────────────────────────────────────── */
+
+/* The game's own field for an address, as large as the sky: ink, with the letters in the game's
+   face, and a block of a caret that blinks a step at a time. */
+.address {
+  position: absolute;
+  /* Under its beat's sentence, which stands in the sky above it. */
+  inset-block-start: calc(clamp(88px, 14vh, 150px) + clamp(7rem, 14.5vw, 15rem));
+  inset-inline-start: calc(var(--gutter) + var(--rail));
+  z-index: 4;
+  display: grid;
+  gap: 10px;
+}
+.address .label {
+  color: var(--ink);
+  font-family: var(--game);
+  font-size: clamp(1rem, 1.5vw, 1.375rem);
+}
+.address .field {
+  display: flex;
+  align-items: center;
+  min-width: min(84vw, 23ch);
+  min-height: 1.9em;
+  padding: 0.24em 0.5em 0.3em;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--game);
+  font-size: clamp(1.25rem, 2.6vw, 2.5rem);
+  line-height: 1.1;
+  white-space: nowrap;
+  outline: calc(var(--px) * 2) solid var(--paper);
+}
+.address .caret {
+  width: 0.5em;
+  height: 0.12em;
+  margin-inline-start: 0.08em;
+  align-self: flex-end;
+  margin-block-end: 0.22em;
+  background: var(--paper);
+  animation: caret 800ms steps(1, end) infinite;
+}
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ─── What it asks ──────────────────────────────────────────────────────────────────────────── */
+
+/* The product's two questions, set straight on the picture under the caption. */
+.asks .form {
+  position: absolute;
+  inset-block-start: calc(clamp(88px, 14vh, 150px) + clamp(7rem, 14.5vw, 15rem));
+  inset-inline-start: calc(var(--gutter) + var(--rail));
+  z-index: 4;
+  display: grid;
+  gap: clamp(14px, 2.2vh, 24px);
+  max-width: min(84vw, 36rem);
+}
+.asks .ways {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: clamp(1.0625rem, 1.5vw, 1.375rem);
+}
+/* On the picture and not on a panel, a chip needs a ground of its own. */
+.asks .way {
+  min-height: 2.4em;
+  padding-inline: 0.8em;
+  font-size: inherit;
+  font-weight: 600;
+  background: var(--paper);
+}
+.asks .way[aria-checked="true"] {
+  background: var(--ink);
+}
+.asks .named {
+  display: grid;
+  gap: 8px;
+  color: var(--ink);
+}
+.asks .name {
+  width: min(84vw, 22rem);
+  padding: 10px 14px 11px;
+  border: var(--px) solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  font-size: clamp(1.25rem, 1.9vw, 1.75rem);
+}
+.asks .name:focus-visible {
+  outline: calc(var(--px) * 1.5) solid var(--ink);
+  outline-offset: var(--px);
+}
+.asks .named span {
+  justify-self: start;
+  padding: 2px 8px 3px;
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* ─── The last screen ───────────────────────────────────────────────────────────────────────── */
+
+.last .words {
+  position: absolute;
+  inset-block-start: clamp(80px, 13vh, 150px);
+  inset-inline-start: calc(var(--gutter) + var(--rail));
+  z-index: 4;
+  display: grid;
+  gap: clamp(20px, 3vh, 36px);
+  max-width: min(84vw, 44rem);
+}
+
+/* ─── A narrow screen ───────────────────────────────────────────────────────────────────────── */
+
+/* The picture is a band pinned to the top and the film scrolls under it: each beat a screen of
+   its own, its sentence under the band, and whatever else it has under that. */
+@media (max-width: 1023px) {
+  .beat .held {
+    position: static;
+    display: grid;
+    align-content: start;
+    justify-items: start;
+    gap: 18px;
+    height: auto;
+    min-height: 100svh;
+    padding: calc(var(--band) + 22px) var(--gutter) 40px;
+    overflow: visible;
+  }
+  /* The first beat begins under the band, where the page begins; the rest are met with the
+     band already over their first screen. */
+  .first .held {
+    min-height: calc(100svh - var(--band));
+    padding-block-start: 22px;
+  }
+  .beat .stars {
+    height: 100%;
+  }
+  /* A phone scrolls as a phone does: nothing holds it, so there is nothing to measure. */
+  .through {
+    display: none;
+  }
+  .caption,
+  .how,
+  .address,
+  .asks .form,
+  .first .words,
+  .last .words {
+    position: static;
+    max-width: none;
+  }
+  .caption {
+    font-size: clamp(2rem, 9.4vw, 3.25rem);
+  }
+  /* A sentence that stood over its controls on a wide screen stands over them here too. */
+  .caption[data-place="top"] {
+    order: -1;
+  }
+  .address .field {
+    min-width: 0;
+    font-size: clamp(1rem, 5.2vw, 1.75rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caption,
+  .proof {
+    animation: none;
+  }
+  .address .caret {
+    animation: none;
+  }
+}

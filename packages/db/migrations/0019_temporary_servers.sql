@@ -1,0 +1,1 @@
+ALTER TABLE "minecraft_servers" ADD COLUMN "expires_at" timestamp with time zone;

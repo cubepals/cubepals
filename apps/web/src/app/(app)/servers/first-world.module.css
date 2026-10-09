@@ -1,0 +1,93 @@
+/*
+ * "Your servers" before there are any. The page is one invitation, so it uses the page's width
+ * the way the landing page's panels do — the words on one side, the island on the other — and
+ * fills the space by scale and composition, never by more things.
+ *
+ * The whole block sits in the middle of the height the page has (`.bk-shell__content` fills the
+ * shell), and the art is held to what that height allows, so a short laptop screen still shows
+ * the button without scrolling: about 312px of the screen is the page around it (the shell's and
+ * content's padding, the heading and the gap under it).
+ */
+
+.firstWorld {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  align-items: center;
+  column-gap: var(--space-64);
+}
+
+.words {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  container-type: inline-size;
+}
+
+/*
+ * As large as its column allows: "your first world" runs about 6.8 times the font size, so 13%
+ * of the column fills most of it — about 60px beside the sidebar on a laptop, never past 64px
+ * (the display scale's largest step), never under 36px (the page heading's own size).
+ */
+.words .title {
+  color: var(--ink);
+  font-size: clamp(36px, 13cqi, 64px);
+  line-height: 1.02;
+}
+
+/* Two lines, as written: "Let's make" / "your first world". */
+.title > span {
+  display: block;
+}
+
+/* `--grass` is 2:1 on the canvas, too faint to read; this is 3:1, enough at this size. */
+.accent {
+  color: var(--grass-press);
+}
+
+.copy {
+  margin-top: var(--space-24);
+  margin-bottom: var(--space-32);
+  max-width: 440px;
+  color: var(--ink-muted);
+  text-wrap: pretty;
+}
+
+.note {
+  margin-top: var(--space-16);
+  max-width: 440px;
+  color: var(--ink-subtle);
+  text-wrap: pretty;
+}
+
+.art {
+  justify-self: center;
+  width: 100%;
+  max-width: min(620px, calc((100dvh - 312px) * 1211 / 1024));
+  aspect-ratio: 1211 / 1024;
+}
+
+.art img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/*
+ * Without the sidebar there is no room for two columns: the island first, the words under it.
+ * Stacked, everything else is about 580px of the screen's height (the heading, the words, the
+ * button and the bar along the bottom), so on a phone the note clears the bar without scrolling;
+ * the island never draws under 200px.
+ */
+@media (max-width: 1023px) {
+  .firstWorld {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: center;
+    row-gap: var(--space-32);
+  }
+  .art {
+    order: -1;
+    justify-self: start;
+    max-width: clamp(200px, calc((100dvh - 580px) * 1211 / 1024), 440px);
+  }
+}

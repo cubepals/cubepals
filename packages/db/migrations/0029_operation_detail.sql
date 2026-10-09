@@ -1,0 +1,1 @@
+ALTER TABLE "server_operations" ADD COLUMN "detail" text;

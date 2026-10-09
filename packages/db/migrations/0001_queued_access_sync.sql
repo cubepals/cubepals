@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "operations_one_queued_access_sync" ON "server_operations" USING btree ("server_id") WHERE "server_operations"."kind" = 'access_sync' and "server_operations"."status" = 'queued';

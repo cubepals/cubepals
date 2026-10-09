@@ -1,0 +1,1 @@
+ALTER TABLE "public_listings" ADD COLUMN "copyable" boolean DEFAULT true NOT NULL;

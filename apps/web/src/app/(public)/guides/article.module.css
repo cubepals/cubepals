@@ -1,0 +1,150 @@
+/*
+ * A guide: ink on paper, set for reading like the policies. One column at the width of prose,
+ * pictures framed as the app frames its cards, and the one button at the end.
+ */
+
+.article {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-32);
+  max-width: var(--width-prose);
+  color: var(--ink);
+}
+
+/* The /guides index: one card a guide. */
+.index {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: var(--space-16);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.index a {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  height: 100%;
+  padding: var(--space-20);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  text-decoration: none;
+}
+.index a:hover {
+  box-shadow: var(--shadow-float);
+}
+
+.article p a,
+.article li a {
+  color: var(--ink);
+  text-underline-offset: 0.2em;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.header h1 {
+  margin: 0;
+}
+
+.crumbs {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.meta {
+  margin: 0;
+  color: var(--ink-subtle);
+}
+
+/* An unapproved guide says so before anything else is read. */
+.draft {
+  margin: 0;
+  padding: var(--space-12) var(--space-16);
+  background: var(--status-online-soft);
+  box-shadow: 0 0 0 2px var(--border-strong);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+.section h2,
+.section h3,
+.section p,
+.section ul,
+.section ol {
+  margin: 0;
+}
+.section ul,
+.section ol {
+  padding-left: 1.25em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+/* A picture from the app, cropped to what the step shows, on its own card. */
+.shot {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+/* Never wider than it was taken, so the app's text stays sharp. */
+.shot img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  background: var(--surface);
+  box-shadow: 0 0 0 2px var(--border-strong);
+}
+.shot figcaption {
+  color: var(--ink-muted);
+}
+
+/* Numbers a guide shows as a table: a row a card on a phone, as the policies do. */
+.table {
+  overflow-x: auto;
+}
+.table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.table th,
+.table td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--space-12);
+  border: 2px solid var(--border-strong);
+}
+.table th {
+  background: var(--surface-sunken);
+}
+.table td {
+  background: var(--surface);
+}
+
+.questions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-20);
+}
+
+.end {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-16);
+  padding: var(--space-24);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.end h2,
+.end p {
+  margin: 0;
+}

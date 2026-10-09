@@ -1,0 +1,109 @@
+/*
+ * Sign in and sign up: a 6 + 6 split on desktop, the form on canvas and a world render in a
+ * radius-2xl block beside it. Fields sit space-24 apart, as in every Blockly form.
+ */
+
+.split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-24);
+  min-height: calc(100dvh - var(--nav-height));
+  padding-bottom: var(--gutter-lg);
+}
+
+/* Top-aligned, not centred: opening the email form grows the column downwards and leaves the
+   heading and the Google button where they were. */
+.column {
+  align-self: start;
+  justify-self: center;
+  width: 100%;
+  max-width: var(--width-copy);
+  padding-block: var(--space-96) var(--space-48);
+}
+
+/* The landing page's print: night field behind it, and its dots kept square. */
+.art {
+  min-height: 520px;
+  background: #8c86f2;
+  box-shadow: 0 0 0 2px var(--border-strong);
+}
+/* Doubled so it outranks the kit's own rule for a picture: this one is a print already. */
+.art.art img {
+  filter: none;
+  object-fit: cover;
+  object-position: 50% 60%;
+  image-rendering: pixelated;
+}
+
+.entry {
+  display: flex;
+  flex-direction: column;
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.muted {
+  color: var(--ink-muted);
+}
+
+.failure {
+  margin-top: var(--space-24);
+}
+
+.fineprint {
+  margin-top: var(--space-24);
+  color: var(--ink-subtle);
+}
+
+.fineprint a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.methods {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin-top: var(--space-32);
+}
+
+/* Inside the revealed region, so it takes no room while closed. */
+.email {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+  padding-top: var(--space-16);
+}
+/* Tucked under the password field it belongs to, closer than the next field would sit. */
+.forgot {
+  align-self: flex-end;
+  margin-top: calc(var(--space-16) * -1);
+}
+
+/* With no Google above it, the form follows the heading directly. */
+.alone .email {
+  padding-top: var(--space-32);
+}
+
+.footer {
+  margin-top: var(--space-32);
+  color: var(--ink-muted);
+}
+
+@media (max-width: 1023px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    padding-bottom: var(--space-64);
+  }
+  .art {
+    display: none;
+  }
+  .column {
+    padding-block: var(--space-32) 0;
+  }
+}

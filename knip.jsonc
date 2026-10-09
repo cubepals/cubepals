@@ -1,0 +1,51 @@
+// What knip, run by `bun run check:structure`, holds to be the way in to each workspace. A file
+// none of these reach, an export nothing imports and a dependency nothing uses are its findings.
+// Next's routes, bun's tests, Biome's and Drizzle's configs and the CI workflows are found by its
+// plugins; what is listed here is what they can't know: what a person, a Dockerfile or a path
+// string runs.
+{
+  "$schema": "https://unpkg.com/knip@6.40.0/schema.json",
+  // Rust, whose dead code clippy already fails; tools/openapi installs on its own lockfile; and
+  // the API types openapi-typescript writes whole from a spec.
+  "ignoreWorkspaces": ["apps/blocklyd"],
+  "ignore": ["tools/**", "**/generated/**"],
+  // A program on the machine, not a package: the Fly CLI.
+  "ignoreBinaries": ["fly"],
+  "workspaces": {
+    ".": {
+      // Every script at the top is run by hand, by package.json or by CI.
+      "entry": ["scripts/*.ts"],
+      "project": ["scripts/**/*.ts"],
+      // check-structure.ts runs it by its binary's path.
+      "ignoreDependencies": ["jscpd"]
+    },
+    "apps/control": {
+      // Two files tests start by path.
+      "entry": ["src/infra/fleet/endpoint.e2e.ts", "src/testing/silent-store.ts"],
+      "project": ["src/**/*.ts"],
+      // The native QUIC addon @fails-components/webtransport loads by name at runtime.
+      "ignoreDependencies": ["@fails-components/webtransport-transport-http3-quiche"]
+    },
+    "apps/devtools": {
+      // server.ts serves index.html, whose script tag loads app.tsx.
+      "entry": ["server.ts", "app.tsx"],
+      "project": ["**/*.{ts,tsx}"]
+    },
+    "apps/edge": {
+      // The binary edge/Dockerfile compiles.
+      "entry": ["agent.ts"],
+      "project": ["**/*.ts"]
+    },
+    "apps/web": {
+      // The design tokens' generator, run by hand.
+      "entry": ["scripts/tokens.ts"],
+      "project": ["src/**/*.{ts,tsx}", "scripts/**/*.ts"]
+    },
+    "packages/db": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/contracts": {
+      "project": ["src/**/*.ts"]
+    }
+  }
+}

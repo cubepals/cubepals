@@ -1,0 +1,208 @@
+/*
+ * Inventory slots and the items in them, drawn from a release's own textures (items.tsx). Nine
+ * slots fit a phone's width; the textures stay pixel-crisp at any size.
+ */
+.bk-inventory {
+  --slot: 40px;
+}
+@media (max-width: 479px) {
+  .bk-inventory {
+    --slot: 34px;
+  }
+}
+.bk-slots {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, var(--slot)));
+  gap: 2px;
+}
+.bk-slot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  /* As wide as its column, at most --slot: nine fit a phone's card. The cube sizes from it. */
+  width: 100%;
+  aspect-ratio: 1;
+  container-type: inline-size;
+  border-radius: var(--radius-xs);
+  background: var(--surface-sunken);
+  box-shadow: inset 0 0 0 1px var(--border);
+  overflow: hidden;
+}
+.bk-slot:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+/* No picture: the item's name, as small as it has to be. */
+.bk-slot__name {
+  padding: 2px;
+  font-size: 9px;
+  line-height: 10px;
+  text-align: center;
+  color: var(--ink-muted);
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.bk-slot__count {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 1px 1px 0 #3f3f3f;
+  pointer-events: none;
+}
+/* How worn: the game's bar, green to red. */
+.bk-slot__wear {
+  position: absolute;
+  left: 15%;
+  right: 15%;
+  bottom: 3px;
+  height: 2px;
+  background: #000;
+}
+.bk-slot__wear > span {
+  display: block;
+  height: 100%;
+}
+.bk-slot__tip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bk-slot__tip > span {
+  color: var(--ink-inverse);
+  opacity: 0.85;
+}
+
+.bk-item {
+  position: relative;
+  width: 80%;
+  height: 80%;
+}
+.bk-paint {
+  position: absolute;
+  inset: 0;
+  background-size: 100% auto;
+  background-position: top;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+.bk-paint__tint {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: multiply;
+  mask-size: 100% auto;
+  mask-position: top;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% auto;
+  -webkit-mask-position: top;
+  -webkit-mask-repeat: no-repeat;
+}
+.bk-item__glint {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(176, 108, 255, 0.6) 48%, transparent 66%);
+  background-size: 300% 100%;
+  mix-blend-mode: screen;
+  mask-size: 100% auto;
+  mask-position: top;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% auto;
+  -webkit-mask-position: top;
+  -webkit-mask-repeat: no-repeat;
+  animation: bk-glint 3s linear infinite;
+}
+@keyframes bk-glint {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bk-item__glint {
+    animation: none;
+    background-position: 50% 0;
+  }
+}
+
+/*
+ * A block: a cube seen from above and to the left, as an inventory shows it, at the size the
+ * game draws it (five eighths of the slot). Lit from above: the left face a little darker, the
+ * right darker still.
+ */
+.bk-item--block {
+  display: grid;
+  place-items: center;
+}
+.bk-cube {
+  --cube: 50cqw;
+  position: relative;
+  width: var(--cube);
+  height: var(--cube);
+  transform-style: preserve-3d;
+  transform: rotateX(-30deg) rotateY(45deg);
+}
+.bk-cube > .bk-paint {
+  backface-visibility: hidden;
+}
+.bk-cube__top {
+  transform: rotateX(90deg) translateZ(calc(var(--cube) / 2));
+}
+/* Turned 45° to the right, the cube shows its west face on the left and its front on the right. */
+.bk-cube__left {
+  transform: rotateY(-90deg) translateZ(calc(var(--cube) / 2));
+  filter: brightness(0.8);
+}
+.bk-cube__right {
+  transform: translateZ(calc(var(--cube) / 2));
+  filter: brightness(0.6);
+}
+
+/* The armor and offhand column beside the inventory, and the inventory's three parts. */
+.bk-inventory__all {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-16);
+  align-items: flex-start;
+}
+.bk-inventory__worn {
+  display: grid;
+  grid-template-columns: var(--slot);
+  gap: 2px;
+}
+/* On a phone, what they wear goes in a row above the rest. */
+@media (max-width: 479px) {
+  .bk-inventory__worn {
+    grid-template-columns: repeat(5, minmax(0, var(--slot)));
+  }
+}
+.bk-inventory__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: calc(9 * var(--slot) + 16px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+/* The way back from a player's page to the Players tab. */
+.bk-backlink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  align-self: flex-start;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+.bk-backlink:hover {
+  color: var(--ink);
+}

@@ -1,0 +1,1870 @@
+{
+  "size": {
+    "apps/control/src/app/operations/lifecycle.test.ts › describe.skipIf server lifecycle": {
+      "n": 736,
+      "reason": "The tests of one class on one shared setup."
+    },
+    "apps/control/src/infra/boat/boat-runtime.test.ts": {
+      "n": 1036,
+      "reason": "The tests of one class with the in-memory Boat they run on; the fake couldn't move out because check:boundaries keeps port 25565 in minecraft/."
+    },
+    "apps/control/src/infra/fake/fake-runtime.ts": {
+      "n": 844,
+      "reason": "Decomposed into five parts in fake-runtime/; what is left is the port's verbs over one in-memory machine table, one job."
+    },
+    "apps/control/src/infra/fake/fake-runtime.ts › class FakeRuntime": {
+      "n": 722,
+      "reason": "Decomposed into five parts in fake-runtime/; what is left is the port's verbs over one in-memory machine table, one job."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime.flows.test.ts": {
+      "n": 879,
+      "reason": "Characterization tests of one class on one fake node, whose shared home testing/fleet.ts infra may not import."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime.flows.test.ts › describe.skipIf FleetRuntime flows, with blocklyd in memory": {
+      "n": 643,
+      "reason": "Characterization tests of one class on one fake node, whose shared home testing/fleet.ts infra may not import."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime.ts": {
+      "n": 876,
+      "reason": "Decomposed into eight parts in fleet-runtime/; what is left is the port's verbs on one placement, observation, tidy and one-line delegates, and a further split would only spread single verbs over more files."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime.ts › class FleetRuntime": {
+      "n": 774,
+      "reason": "Decomposed into eight parts in fleet-runtime/; what is left is the port's verbs on one placement, observation, tidy and one-line delegates, and a further split would only spread single verbs over more files."
+    },
+    "apps/control/src/infra/fly/fly-runtime.test.ts": {
+      "n": 856,
+      "reason": "The tests of one class on one shared setup."
+    },
+    "apps/web/src/app/(app)/servers/new/page.tsx › function CreateServer": {
+      "n": 687,
+      "reason": "Its parts were moved out; what is left is one form whose state every field shares."
+    },
+    "scripts/smoke.ts": {
+      "n": 847,
+      "reason": "One linear run whose steps share state."
+    },
+    "apps/web/src/landing/Chunk.tsx": {
+      "n": 1422,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Chunk.tsx › function Chunk": {
+      "n": 1243,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect": {
+      "n": 1227,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/cast.ts": {
+      "n": 1373,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/cast.ts › class Cast": {
+      "n": 1038,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/gl.ts": {
+      "n": 879,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/backups.ts": {
+      "n": 1326,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/backups.ts › class BackupsScene": {
+      "n": 1035,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/backups.ts › class BackupsScene › step": {
+      "n": 616,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/fleet.ts": {
+      "n": 1442,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/fleet.ts › class FleetScene": {
+      "n": 995,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/runtimes.ts": {
+      "n": 889,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/runtimes.ts › class RuntimesScene": {
+      "n": 606,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/sleep.ts": {
+      "n": 834,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/sleep.ts › class SleepScene": {
+      "n": 635,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/BackupsDemo.tsx": {
+      "n": 1084,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/FleetDemo.tsx": {
+      "n": 1534,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/MachineDemo.tsx": {
+      "n": 1019,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/PacksDemo.tsx": {
+      "n": 1003,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/RuntimesDemo.tsx": {
+      "n": 1157,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/SleepDemo.tsx": {
+      "n": 1089,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    }
+  },
+  "noExcessiveCognitiveComplexity": {
+    "apps/control/src/app/access/reconciler.ts › #keyedFor": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/access/reconciler.ts › reconcile": {
+      "n": 27,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/artifacts/service.ts › preflight": {
+      "n": 24,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/backups/service.ts › class BackupService › restoreBackup › return this.#db.transaction(async (tx) => {": {
+      "n": 19,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/backups/service.ts › scheduleArchives": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/curation/catalog-check.ts › function checkCatalogRelease": {
+      "n": 22,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/curation/queue.ts › function queueDue": {
+      "n": 19,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/edge/service.ts › routes": {
+      "n": 18,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/edge/service.ts › wake": {
+      "n": 36,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/guestbook/service.ts › class GuestbookService › return this.#db.transaction(async (tx) => {": {
+      "n": 17,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/listings/service.ts › reevaluate": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/boot.ts › #waitReady": {
+      "n": 23,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/boot.ts › run": {
+      "n": 31,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/boot.ts › #upLearning": {
+      "n": 41,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/handlers/bringing-up.ts › run": {
+      "n": 19,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/handlers/moving.ts › run": {
+      "n": 37,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/handlers/moving.ts › ): Promise<OperationResult> => {": {
+      "n": 29,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/handlers/restoring.ts › run": {
+      "n": 28,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/handlers/restoring.ts › await db.transaction(async (tx) => {": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/handlers/stored-worlds.ts › run": {
+      "n": 17,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/handlers/updating.ts › run": {
+      "n": 32,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/runner.ts › run": {
+      "n": 20,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/schedules/disk-growth.ts › diskCheck": {
+      "n": 17,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/schedules/drift.ts › drift": {
+      "n": 20,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/schedules/expiring.ts › retentionSweep": {
+      "n": 22,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/schedules/orphans.ts › orphans": {
+      "n": 21,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/schedules/presence.ts › presenceSync": {
+      "n": 28,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/schedules/purge-sweep.ts › function purging › purgeSweep › await db.transaction(async (tx) => {": {
+      "n": 23,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/schedules/reconcile.ts › reconcile": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/schedules/reconcile.ts › ): Promise<boolean> => {": {
+      "n": 22,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/schedules/relocations.ts › relocations": {
+      "n": 66,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/schedules/scheduled-backups.ts › backups": {
+      "n": 18,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/schedules/scheduled-backups.ts › expireBackups": {
+      "n": 18,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/schedules/store-sweep.ts › storeSweep": {
+      "n": 20,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/packs/build.ts › #plan": {
+      "n": 29,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/packs/build.ts › #finish": {
+      "n": 28,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/packs/build.ts › #identity": {
+      "n": 24,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/packs/contents.ts › #read": {
+      "n": 19,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/platform/alerts.ts › #conditions": {
+      "n": 25,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/platform/fleet.ts › class Fleet › servers: found.map(({ server, user, plan, runtime }): FleetS…": {
+      "n": 19,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/revisions/caps.ts › function planProblems": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/revisions/service.ts › class RevisionService › return this.#db.transaction(async (tx) => {": {
+      "n": 40,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/runtimes/economics.ts › report": {
+      "n": 101,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/runtimes/placement.ts › function decidePlacement": {
+      "n": 30,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/servers/new-server.ts › function draftNewServer": {
+      "n": 27,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/servers/queries.ts › #view": {
+      "n": 23,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/servers/service.ts › class MinecraftServerService › saved": {
+      "n": 19,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/servers/service.ts › class MinecraftServerService › return this.#db.transaction(async (tx) => {": {
+      "n": 26,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/setups/service.ts › setupFrom": {
+      "n": 30,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/setups/service.ts › #pack": {
+      "n": 33,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/config/load.ts › function runtimeFrom": {
+      "n": 26,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/config/load.ts › function configFromEnv": {
+      "n": 24,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/config/schema.ts › function inconsistencies": {
+      "n": 72,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/domain/access/reconcile.ts › function settle": {
+      "n": 35,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/domain/mods/resolve.ts › function resolve": {
+      "n": 76,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/domain/mods/resolve.ts › function resolve › function choose": {
+      "n": 39,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/domain/policy/policy.ts › function evaluate": {
+      "n": 83,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/domain/server/lifecycle.ts › function decide": {
+      "n": 47,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/auth/github-sign-in.test.ts › describe.skipIf GitHub sign-in › beforeAll › globalThis.fetch = (async (input: string | URL | Request, in…": {
+      "n": 17,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/boat/boat-runtime-waits.test.ts › class ScriptedBoat › fetch": {
+      "n": 53,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/boat/boat-runtime.test.ts › function words": {
+      "n": 17,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/boat/boat-runtime.test.ts › class FakeBoat › fetch": {
+      "n": 60,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/boat/boat-runtime.test.ts › #command": {
+      "n": 51,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/boat/boat-runtime.ts › goneSnapshots": {
+      "n": 21,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/boat/starts.ts › class BoatStarts › make": {
+      "n": 24,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/docker/docker-runtime/engine.test.ts › function answer": {
+      "n": 48,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/docker/docker-runtime/host-ports.ts › #allocatePorts": {
+      "n": 23,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fake/fake-minecraft/image.ts › function installPack": {
+      "n": 26,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime.flows.test.ts › #answer": {
+      "n": 31,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime.test.ts › #answer": {
+      "n": 32,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime.ts › class FleetRuntime › chosen": {
+      "n": 18,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime.ts › #observation": {
+      "n": 19,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime/rehoming.ts › class Rehoming › plan": {
+      "n": 20,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime/rehoming.ts › finish": {
+      "n": 21,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime/transfers.ts › #sendArchive": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime/transfers.ts › upload": {
+      "n": 19,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime/transfers.ts › exportSnapshot": {
+      "n": 38,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/fleet-two-node.e2e.test.ts › describe.skipIf FleetRuntime across two nodes › beforeAll": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/node-client.ts › class NodeClient › return new Promise<T>((resolve, reject) => { › (response) => { › response.on('end', () => {": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/operator-api.ts › function nodeView": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/placement.ts › function refusal": {
+      "n": 18,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/registry/heartbeat.ts › function heartbeat › async (t): Promise<{ response: HeartbeatResponse } | { refus…": {
+      "n": 22,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/registry/heartbeat.ts › function observe": {
+      "n": 23,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/store.ts › copyTo": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fly/fake-fly.ts › class FakeFly › fetch": {
+      "n": 161,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fly/fly-runtime/discovery.ts › function* changedSince": {
+      "n": 23,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fly/fly-runtime/tags.ts › function tagMachines": {
+      "n": 24,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/formats/pack-archives.test.ts › function rawZip": {
+      "n": 24,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/formats/pack-archives.ts › function checkedFiles": {
+      "n": 43,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/formats/pack-archives.ts › function checkedName": {
+      "n": 18,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/mc-protocol/rcon.test.ts › function vanillaRcon › server › socket.on('data', (chunk) => {": {
+      "n": 17,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/mc-protocol/slp.ts › class SlpProbe › ping › return new Promise((resolve, reject) => { › socket.on('data', (chunk) => {": {
+      "n": 24,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/modrinth/modrinth-catalog.ts › class ModrinthCatalog › linkOf": {
+      "n": 17,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/interfaces/http/card.ts › class Canvas › text": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/interfaces/runtime/artifacts.ts › function createRuntimeApp › app.get('/runtime/v1/artifacts/:serverId/:sha512/:name', asy…": {
+      "n": 19,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/minecraft/diagnosis.ts › function blamed": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/minecraft/logs.ts › function bootedWith": {
+      "n": 40,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/minecraft/logs.ts › function bootMismatch": {
+      "n": 28,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/minecraft/pack-layout.ts › function detect": {
+      "n": 20,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/minecraft/server-pack.ts › function fromNames": {
+      "n": 20,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/minecraft/skin.ts › function faceOf": {
+      "n": 18,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/minecraft/uploads.ts › function quiltRange": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/minecraft/uploads.ts › function mavenRange": {
+      "n": 17,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/testing/cdn.ts › class Cdn › this.#server = createServer((request, response) => {": {
+      "n": 20,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/testing/harness.ts › function startHarness": {
+      "n": 19,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/testing/memory-store.ts › class MemoryStore › this.#server = createServer((request, response) => {": {
+      "n": 18,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/edge/notice.ts › class Notice › receive": {
+      "n": 33,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/account/page.tsx › function Plan": {
+      "n": 19,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/account/page.tsx › function Play": {
+      "n": 26,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/admin/accounts/[userId]/page.tsx › function Account": {
+      "n": 18,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/admin/packs/page.tsx › function Release": {
+      "n": 21,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/admin/platform/page.tsx › function PlayDomains › {view.playDomains.map((d) => {": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/admin/platform/page.tsx › function RuntimeKeys": {
+      "n": 20,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/servers/[id]/backups/page.tsx › list.backups.map((backup) => (": {
+      "n": 41,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/servers/[id]/backups/page.tsx › function Backups": {
+      "n": 17,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/servers/[id]/mods/page.tsx › {results.data?.hits.map((hit) => (": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/servers/[id]/mods/page.tsx › function PlanChange": {
+      "n": 19,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/servers/[id]/page.tsx › function Actions": {
+      "n": 24,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/servers/[id]/page.tsx › function Failed": {
+      "n": 21,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/servers/[id]/settings/version.tsx › function VersionForm": {
+      "n": 17,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/servers/new/modpacks.tsx › function Modpacks": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/servers/new/modpacks.tsx › function Pack": {
+      "n": 21,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/servers/new/page.tsx › function CreateServer": {
+      "n": 163,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(public)/browse/directory.tsx › function Directory": {
+      "n": 18,
+      "reason": "Over the threshold when the check began, and not yet looked at. Was browse/page.tsx's BrowsePage, moved unchanged so the page could export its metadata."
+    },
+    "apps/web/src/app/(public)/reactions.tsx › function Notes": {
+      "n": 17,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/ui/Button.tsx › function Button": {
+      "n": 34,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/ui/action-button.tsx › function ActionButton": {
+      "n": 20,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/ui/pack.tsx › function GetPack": {
+      "n": 20,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/ui/share.tsx › function ShareSheet": {
+      "n": 21,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "scripts/check-move-only.ts › function rulesOf › lines.forEach((line, i) => {": {
+      "n": 28,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "scripts/lib/people.ts › function people › function call": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "scripts/staging.ts › function up": {
+      "n": 16,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect › actors": {
+      "n": 44,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect": {
+      "n": 20,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect › measure": {
+      "n": 22,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect › measure › .map((element): Shot => {": {
+      "n": 72,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect › wanted": {
+      "n": 45,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect › aim": {
+      "n": 34,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect › strike": {
+      "n": 30,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect › frame": {
+      "n": 255,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Cursor.tsx › function Cursor › useEffect › place": {
+      "n": 35,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Scroll.tsx › function Scroll › useEffect › measure": {
+      "n": 20,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Scroll.tsx › function Scroll › useEffect › say": {
+      "n": 30,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Scroll.tsx › function Scroll › useEffect › steer": {
+      "n": 71,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Scroll.tsx › function Scroll › useEffect › settle": {
+      "n": 28,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Scroll.tsx › function Scroll › useEffect › keyed": {
+      "n": 40,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Scroll.tsx › function Scroll › useEffect › linked": {
+      "n": 18,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/camera.ts › function pick": {
+      "n": 33,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/cast.test.ts › function run": {
+      "n": 46,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/cast.test.ts › describe the people on the grass › test the first screen, round and round: two friends join a little apart, stay a while, and leave › holds › run": {
+      "n": 18,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/cast.ts › class Cast › cellar": {
+      "n": 24,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/cast.ts › SHAPES": {
+      "n": 28,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/cast.ts › class Cast › friendsStep": {
+      "n": 146,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/cast.ts › vigil": {
+      "n": 38,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/cast.ts › class Cast › scene.mobs.forEach((mob, index) => {": {
+      "n": 27,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/cast.ts › class Cast › scene.strollers.forEach((one, index) => {": {
+      "n": 17,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/cast.ts › creative": {
+      "n": 24,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/cast.ts › class Cast › callerStep": {
+      "n": 21,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/cast.ts › class Cast › cellar › rig.cores.forEach((slot, n) => {": {
+      "n": 22,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/chunk.ts › function strata": {
+      "n": 48,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/chunk.ts › function tree": {
+      "n": 21,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/fleet.ts › function island": {
+      "n": 60,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/fleet.ts › function buildFleet": {
+      "n": 34,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/fleet.ts › function buildFleet › placed.forEach(({ faces, ox, oy, oz, cohort }, index) => {": {
+      "n": 20,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/gl.ts › class Renderer › draw": {
+      "n": 23,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/models.ts › function figure": {
+      "n": 38,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/backups.ts › class BackupsScene › step": {
+      "n": 255,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/backups.ts › tend": {
+      "n": 26,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/backups.ts › shelve": {
+      "n": 42,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/backups.ts › crate": {
+      "n": 18,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/backups.ts › settle": {
+      "n": 23,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/backups.ts › told": {
+      "n": 46,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/edge.ts › class EdgeScene › step": {
+      "n": 255,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/edge.ts › told": {
+      "n": 28,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/fleet.ts › wake": {
+      "n": 25,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/fleet.ts › play": {
+      "n": 27,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/fleet.ts › follow": {
+      "n": 21,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/fleet.ts › act": {
+      "n": 16,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/fleet.ts › move": {
+      "n": 47,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/fleet.ts › sleep": {
+      "n": 16,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/fleet.ts › tend": {
+      "n": 62,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/fleet.ts › draw": {
+      "n": 111,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/machine.ts › class MachineScene › step": {
+      "n": 154,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/machine.ts › told": {
+      "n": 18,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/machine.ts › follow": {
+      "n": 89,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/machine.ts › class MachineScene › step › this.cores.forEach((core, n) => {": {
+      "n": 16,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/machine.ts › settle": {
+      "n": 16,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/packs.ts › class PacksScene › step": {
+      "n": 138,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/packs.ts › class PacksScene › step › this.stack.forEach((place, n) => {": {
+      "n": 33,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/packs.ts › told": {
+      "n": 22,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/runtimes.ts › draw": {
+      "n": 39,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/runtimes.ts › follow": {
+      "n": 17,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/runtimes.ts › play": {
+      "n": 111,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/runtimes.ts › class RuntimesScene › this.carts.forEach((cart, n) => {": {
+      "n": 51,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/sleep.ts › class SleepScene › step": {
+      "n": 255,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/sleep.ts › settle": {
+      "n": 16,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/server.ts › class Rack › draw": {
+      "n": 43,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/server.ts › lamp": {
+      "n": 16,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/film/Beat.tsx › function useBeat › useEffect › tick": {
+      "n": 21,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/AddressDemo.tsx › function AddressDemo": {
+      "n": 26,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/BackupsDemo.tsx › function play": {
+      "n": 20,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/BackupsDemo.tsx › function BackupsDemo": {
+      "n": 34,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/FleetDemo.tsx › function reduce": {
+      "n": 27,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/FleetDemo.tsx › function lose": {
+      "n": 30,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/FleetDemo.tsx › function plug": {
+      "n": 19,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/FleetDemo.tsx › function FleetDemo": {
+      "n": 48,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/LedgerDemo.tsx › function LedgerDemo": {
+      "n": 19,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/MachineDemo.tsx › function MachineDemo": {
+      "n": 56,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/PacksDemo.tsx › function PacksDemo": {
+      "n": 102,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/PacksDemo.tsx › function PacksDemo › {ROWS.slice(0, beat.row + 1).map((name, row) => {": {
+      "n": 18,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/RuntimesDemo.tsx › function decide": {
+      "n": 28,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/RuntimesDemo.tsx › function reduce": {
+      "n": 19,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/RuntimesDemo.tsx › function RuntimesDemo": {
+      "n": 67,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/SleepDemo.tsx › function reduce": {
+      "n": 26,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/SleepDemo.tsx › function SleepDemo": {
+      "n": 45,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    }
+  },
+  "noExcessiveLinesPerFunction": {
+    "apps/control/src/app/access/online-mode.test.ts › describe.skipIf a server that does not check accounts": {
+      "n": 132,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/accounts/accounts.test.ts › describe.skipIf accounts": {
+      "n": 190,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/artifacts/artifacts.test.ts › describe.skipIf artifacts": {
+      "n": 167,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/backups/archives.test.ts › describe.skipIf archives": {
+      "n": 236,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/backups/backups.test.ts › describe.skipIf backups and worlds": {
+      "n": 383,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/billing/billing.test.ts › describe.skipIf billing": {
+      "n": 304,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/control-plane.ts › function composeControlPlane": {
+      "n": 253,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/curation/catalog-check.ts › function checkCatalogRelease": {
+      "n": 139,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/curation/curation-records.test.ts › describe.skipIf what curation records": {
+      "n": 307,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/curation/curation.test.ts › describe.skipIf curated packs": {
+      "n": 319,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/curation/own-check.ts › function checkOwnRelease": {
+      "n": 118,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/curation/own.test.ts › describe.skipIf Blockly’s own packs": {
+      "n": 139,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/edge/edge.test.ts › describe.skipIf edge": {
+      "n": 228,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/guestbook/guestbook.test.ts › describe.skipIf guestbook": {
+      "n": 244,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/listings/listings.test.ts › describe.skipIf listings": {
+      "n": 309,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/mods/mods.test.ts › describe.skipIf mods": {
+      "n": 268,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/handlers.test.ts › describe.skipIf operation steps and power intervals": {
+      "n": 152,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/handlers.ts › function createHandlers": {
+      "n": 151,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/handlers/bringing-up.ts › function bringingUp": {
+      "n": 210,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/handlers/moving.ts › function moving": {
+      "n": 227,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/handlers/restoring.ts › function restoring": {
+      "n": 111,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/handlers/stored-worlds.ts › function storedWorlds": {
+      "n": 162,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/lifecycle.test.ts › describe.skipIf server lifecycle": {
+      "n": 576,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/relocations.test.ts › describe.skipIf relocation triggers": {
+      "n": 220,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/operations/storing.test.ts › describe.skipIf stored worlds": {
+      "n": 318,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/packs/build.ts › #plan": {
+      "n": 105,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/packs/build.ts › #finish": {
+      "n": 121,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/packs/changes.test.ts › describe.skipIf pack changes": {
+      "n": 349,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/packs/packs.test.ts › describe.skipIf packs people bring": {
+      "n": 328,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/platform/platform.test.ts › describe.skipIf platform administration": {
+      "n": 273,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/revisions/plan-caps.test.ts › describe.skipIf plan limits on configurations": {
+      "n": 200,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/revisions/revisions.test.ts › describe.skipIf revisions": {
+      "n": 392,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/runtimes/economics.ts › report": {
+      "n": 302,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/runtimes/hybrid.test.ts › describe.skipIf several runtimes in one deployment": {
+      "n": 314,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/runtimes/router.test.ts › describe the runtime router": {
+      "n": 104,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/servers/players.test.ts › describe.skipIf who has played": {
+      "n": 106,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/setups/service.ts › setupFrom": {
+      "n": 106,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/setups/setups.test.ts › describe.skipIf setups": {
+      "n": 313,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/sharing/sharing.test.ts › describe.skipIf sharing": {
+      "n": 121,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/uploads/uploads.test.ts › describe.skipIf uploads": {
+      "n": 417,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/uploads/uploads.test.ts › describe.skipIf uploads › describe mods and plugins": {
+      "n": 152,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/app/uploads/uploads.test.ts › describe.skipIf uploads › describe worlds": {
+      "n": 147,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/config/config.test.ts › describe configuration": {
+      "n": 230,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/config/schema.ts › function inconsistencies": {
+      "n": 102,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/domain/account/entitlements.test.ts › describe entitlements": {
+      "n": 101,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/domain/mods/resolve.test.ts › describe resolve": {
+      "n": 269,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/domain/mods/resolve.ts › function resolve": {
+      "n": 149,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/domain/policy/policy.test.ts › describe evaluate": {
+      "n": 157,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/domain/policy/policy.ts › function evaluate": {
+      "n": 120,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/auth/auth.test.ts › describe.skipIf email flows": {
+      "n": 144,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/auth/github-sign-in.test.ts › describe.skipIf GitHub sign-in": {
+      "n": 142,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/auth/oauth-proxy.test.ts › describe.skipIf OAuth from preview deployments": {
+      "n": 107,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/boat/boat-runtime-waits.test.ts › describe BoatRuntime waits and retries": {
+      "n": 135,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/docker/docker-runtime.test.ts › describe.skipIf(!existsSync(SOCKET) || !s3.endpoint || !s3.b…": {
+      "n": 309,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/docker/docker-runtime/engine.test.ts › test a first provision with an install seed makes the server, copies nothing yet, and makes the install once": {
+      "n": 117,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fake/fake-minecraft.test.ts › describe a start": {
+      "n": 186,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fake/fake-minecraft.test.ts › describe the console": {
+      "n": 207,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fake/fake-runtime.test.ts › describe archives": {
+      "n": 113,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime.e2e.test.ts › describe.skipIf FleetRuntime against a real blocklyd": {
+      "n": 334,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime.flows.test.ts › describe.skipIf FleetRuntime flows, with blocklyd in memory": {
+      "n": 533,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/fleet-runtime.test.ts › describe.skipIf FleetRuntime, with blocklyd in memory": {
+      "n": 398,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/fleet-two-node.e2e.test.ts › describe.skipIf FleetRuntime across two nodes": {
+      "n": 272,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/fleet-two-node.e2e.test.ts › describe.skipIf FleetRuntime across two nodes › beforeAll": {
+      "n": 105,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/operator-api.ts › function createOperatorApi": {
+      "n": 165,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/placement.test.ts › describe selectNode": {
+      "n": 143,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fleet/registry.test.ts › describe.skipIf the node registry, against Postgres": {
+      "n": 384,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fly/fake-fly.ts › class FakeFly › fetch": {
+      "n": 220,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fly/fly-runtime-calls.test.ts › describe FlyRuntime calls, in order": {
+      "n": 167,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fly/fly-runtime.test.ts › describe FlyRuntime power": {
+      "n": 127,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/fly/fly-runtime.test.ts › describe FlyRuntime storage": {
+      "n": 209,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/formats/file-formats.test.ts › describe file formats": {
+      "n": 138,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/formats/pack-archives.test.ts › describe pack archives": {
+      "n": 307,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/modrinth/modrinth-catalog.test.ts › describe ModrinthCatalog": {
+      "n": 221,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/polar/polar-billing.test.ts › describe PolarBilling": {
+      "n": 219,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/infra/s3/s3-archive-store.test.ts › describe.skipIf S3ArchiveStore": {
+      "n": 132,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/main.node.ts › function providerFor": {
+      "n": 101,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/main.node.ts › function main": {
+      "n": 102,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/minecraft/diagnosis.test.ts › describe mods that need other mods": {
+      "n": 153,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/minecraft/logs.test.ts › describe what started": {
+      "n": 102,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/minecraft/minecraft.test.ts › describe toRuntimeSpec": {
+      "n": 168,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/minecraft/uploads.test.ts › describe mod and plugin jars": {
+      "n": 103,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/control/src/testing/harness.ts › function startHarness": {
+      "n": 171,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/servers/[id]/backups/page.tsx › function Backups": {
+      "n": 168,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/servers/[id]/settings/game.tsx › function GameForm": {
+      "n": 127,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/(app)/servers/new/page.tsx › function CreateServer": {
+      "n": 439,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/app/design/page.tsx › function DesignGallery": {
+      "n": 174,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "scripts/staging.ts › function up": {
+      "n": 214,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/web/src/landing/Chunk.tsx › function Chunk": {
+      "n": 894,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect": {
+      "n": 888,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect › frame": {
+      "n": 407,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Scroll.tsx › function Scroll": {
+      "n": 296,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/Scroll.tsx › function Scroll › useEffect": {
+      "n": 282,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/cast.ts › class Cast › friendsStep": {
+      "n": 172,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/cast.ts › class Cast › cellar": {
+      "n": 137,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/models.ts › function figure": {
+      "n": 161,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/backups.ts › class BackupsScene › step": {
+      "n": 447,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/edge.ts › class EdgeScene › step": {
+      "n": 322,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/fleet.ts › draw": {
+      "n": 178,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/machine.ts › class MachineScene › step": {
+      "n": 219,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/packs.ts › class PacksScene › step": {
+      "n": 217,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/runtimes.ts › play": {
+      "n": 141,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/scenes/sleep.ts › class SleepScene › step": {
+      "n": 349,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/engine/server.test.ts › describe a server": {
+      "n": 103,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/AddressDemo.tsx › function AddressDemo": {
+      "n": 155,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/BackupsDemo.tsx › function play": {
+      "n": 139,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/BackupsDemo.tsx › function BackupsDemo": {
+      "n": 116,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/FleetDemo.tsx › function wake": {
+      "n": 116,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/FleetDemo.tsx › function FleetDemo": {
+      "n": 157,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/MachineDemo.tsx › function MachineDemo": {
+      "n": 200,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/PacksDemo.tsx › function PacksDemo": {
+      "n": 213,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/RuntimesDemo.tsx › function RuntimesDemo": {
+      "n": 229,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    },
+    "apps/web/src/landing/sections/SleepDemo.tsx › function SleepDemo": {
+      "n": 247,
+      "reason": "The landing page, written before the check reached its branch; not yet split up."
+    }
+  },
+  "clippy::too_many_lines": {
+    "apps/blocklyd/src/manager/reconcile.rs › impl Manager › fn reconcile_inner": {
+      "n": 181,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/blocklyd/src/protocol/spec/validate.rs › impl WorkloadSpec › fn validate": {
+      "n": 114,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    }
+  },
+  "clippy::cognitive_complexity": {
+    "apps/blocklyd/src/manager/reconcile.rs › impl Manager › fn reconcile_inner": {
+      "n": 27,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    },
+    "apps/blocklyd/src/protocol/spec/validate.rs › impl WorkloadSpec › fn validate": {
+      "n": 36,
+      "reason": "Over the threshold when the check began, and not yet looked at."
+    }
+  },
+  "clippy::too_many_arguments": {},
+  "names": {
+    "apps/web/src/app/(app)/servers/[id]/settings/shared.tsx": {
+      "reason": "What the settings sections share: whether a change can be made now, the confirm and revoked dialogs, a change's state. Its job needs naming before it can be renamed."
+    }
+  },
+  "indexes": {},
+  "cycles": {
+    "apps/control/src/app/curation/own-check.ts ↔ apps/control/src/app/curation/service.ts ↔ apps/control/src/app/setups/service.ts": {
+      "n": 3,
+      "reason": "own-check.ts takes tierFor from setups/service.ts, which takes the PackCuration type from curation/service.ts, which calls own-check.ts. tierFor has no home of its own yet."
+    },
+    "apps/web/src/lib/present.ts ↔ apps/web/src/ui/action-button.tsx ↔ apps/web/src/ui/index.ts ↔ apps/web/src/ui/pack.tsx ↔ apps/web/src/ui/share.tsx": {
+      "n": 5,
+      "reason": "ui/index.ts re-exports the components, and action-button, pack and share import ICON back from it; share imports lib/present.ts, which takes two types from ui/."
+    },
+    "apps/blocklyd/src/protocol.rs ↔ apps/blocklyd/src/protocol/exec.rs ↔ apps/blocklyd/src/protocol/lifecycle.rs ↔ apps/blocklyd/src/protocol/node.rs ↔ apps/blocklyd/src/protocol/spec.rs ↔ apps/blocklyd/src/protocol/spec/validate.rs ↔ apps/blocklyd/src/protocol/transfer.rs ↔ apps/blocklyd/src/protocol/workload.rs": {
+      "n": 8,
+      "reason": "The split re-exports every part from protocol.rs so outsiders keep their paths, and the parts take shared types (FieldError, Proto, Resources) from protocol.rs."
+    },
+    "apps/blocklyd/src/manager.rs ↔ apps/blocklyd/src/manager/logs.rs ↔ apps/blocklyd/src/manager/node.rs ↔ apps/blocklyd/src/metrics.rs": {
+      "n": 4,
+      "reason": "manager.rs re-exports lines_of and WorkloadSample from its parts, which use super::*; and metrics.rs reads the Manager that holds its Metrics."
+    }
+  },
+  "headers": {
+    "reason": "Files that had no doc comment at the top when the check began, most of them opening on their imports.",
+    "files": [
+      "apps/control/src/app/access/faces.test.ts",
+      "apps/control/src/app/access/faces.ts",
+      "apps/control/src/app/access/locks.test.ts",
+      "apps/control/src/app/access/online-mode.test.ts",
+      "apps/control/src/app/access/persistence.ts",
+      "apps/control/src/app/access/reconciler.ts",
+      "apps/control/src/app/access/service.ts",
+      "apps/control/src/app/accounts/accounts.test.ts",
+      "apps/control/src/app/accounts/metered.test.ts",
+      "apps/control/src/app/accounts/persistence.ts",
+      "apps/control/src/app/accounts/queries.ts",
+      "apps/control/src/app/accounts/service.ts",
+      "apps/control/src/app/artifacts/artifacts.test.ts",
+      "apps/control/src/app/artifacts/persistence.ts",
+      "apps/control/src/app/artifacts/service.ts",
+      "apps/control/src/app/backups/archives.test.ts",
+      "apps/control/src/app/backups/backups.test.ts",
+      "apps/control/src/app/backups/persistence.ts",
+      "apps/control/src/app/backups/queries.ts",
+      "apps/control/src/app/backups/service.ts",
+      "apps/control/src/app/billing/billing.test.ts",
+      "apps/control/src/app/billing/persistence.ts",
+      "apps/control/src/app/billing/service.ts",
+      "apps/control/src/app/capabilities.ts",
+      "apps/control/src/app/catalog/persistence.ts",
+      "apps/control/src/app/catalog/sync.ts",
+      "apps/control/src/app/console/feed.test.ts",
+      "apps/control/src/app/console/feed.ts",
+      "apps/control/src/app/console/service.ts",
+      "apps/control/src/app/control-plane.ts",
+      "apps/control/src/app/curation/curation-records.test.ts",
+      "apps/control/src/app/curation/curation.test.ts",
+      "apps/control/src/app/curation/own.test.ts",
+      "apps/control/src/app/curation/own.ts",
+      "apps/control/src/app/curation/packs.test.ts",
+      "apps/control/src/app/curation/packs.ts",
+      "apps/control/src/app/curation/persistence.ts",
+      "apps/control/src/app/curation/service.ts",
+      "apps/control/src/app/edge/edge.test.ts",
+      "apps/control/src/app/edge/service.ts",
+      "apps/control/src/app/errors.ts",
+      "apps/control/src/app/guestbook/guestbook.test.ts",
+      "apps/control/src/app/guestbook/persistence.ts",
+      "apps/control/src/app/guestbook/service.ts",
+      "apps/control/src/app/listings/listings.test.ts",
+      "apps/control/src/app/listings/persistence.ts",
+      "apps/control/src/app/listings/queries.ts",
+      "apps/control/src/app/listings/service.ts",
+      "apps/control/src/app/mods/mods.test.ts",
+      "apps/control/src/app/mods/queries.ts",
+      "apps/control/src/app/mods/service.ts",
+      "apps/control/src/app/mods/uploads.ts",
+      "apps/control/src/app/operations/boot.test.ts",
+      "apps/control/src/app/operations/boot.ts",
+      "apps/control/src/app/operations/handlers.test.ts",
+      "apps/control/src/app/operations/lifecycle.test.ts",
+      "apps/control/src/app/operations/live-settings.ts",
+      "apps/control/src/app/operations/persistence.ts",
+      "apps/control/src/app/operations/relocations.test.ts",
+      "apps/control/src/app/operations/retention.test.ts",
+      "apps/control/src/app/operations/rotation.test.ts",
+      "apps/control/src/app/operations/runner.ts",
+      "apps/control/src/app/operations/schedule-limits.test.ts",
+      "apps/control/src/app/operations/session-cap.test.ts",
+      "apps/control/src/app/operations/storing.test.ts",
+      "apps/control/src/app/packs/build.ts",
+      "apps/control/src/app/packs/changes.test.ts",
+      "apps/control/src/app/packs/changes.ts",
+      "apps/control/src/app/packs/contents.ts",
+      "apps/control/src/app/packs/packs.test.ts",
+      "apps/control/src/app/packs/persistence.ts",
+      "apps/control/src/app/packs/service.ts",
+      "apps/control/src/app/platform/alerts.ts",
+      "apps/control/src/app/platform/audit.ts",
+      "apps/control/src/app/platform/controls.ts",
+      "apps/control/src/app/platform/fleet.test.ts",
+      "apps/control/src/app/platform/fleet.ts",
+      "apps/control/src/app/platform/persistence.ts",
+      "apps/control/src/app/platform/platform.test.ts",
+      "apps/control/src/app/platform/stuck.ts",
+      "apps/control/src/app/policy/access-policy.ts",
+      "apps/control/src/app/policy/rate-limits.test.ts",
+      "apps/control/src/app/ports/jobs.ts",
+      "apps/control/src/app/ports/optional.ts",
+      "apps/control/src/app/realtime/certificate.ts",
+      "apps/control/src/app/revisions/caps.ts",
+      "apps/control/src/app/revisions/plan-caps.test.ts",
+      "apps/control/src/app/revisions/revisions.test.ts",
+      "apps/control/src/app/revisions/service.ts",
+      "apps/control/src/app/runtimes/economics.ts",
+      "apps/control/src/app/runtimes/hybrid.test.ts",
+      "apps/control/src/app/runtimes/persistence.ts",
+      "apps/control/src/app/runtimes/placement.test.ts",
+      "apps/control/src/app/runtimes/placement.ts",
+      "apps/control/src/app/runtimes/router.test.ts",
+      "apps/control/src/app/runtimes/router.ts",
+      "apps/control/src/app/runtimes/service.ts",
+      "apps/control/src/app/secrets.ts",
+      "apps/control/src/app/servers/creating.test.ts",
+      "apps/control/src/app/servers/persistence.ts",
+      "apps/control/src/app/servers/players.test.ts",
+      "apps/control/src/app/servers/queries.ts",
+      "apps/control/src/app/servers/service.ts",
+      "apps/control/src/app/servers/specs.ts",
+      "apps/control/src/app/servers/temporary.test.ts",
+      "apps/control/src/app/servers/transitions.ts",
+      "apps/control/src/app/servers/usage.test.ts",
+      "apps/control/src/app/servers/usage.ts",
+      "apps/control/src/app/servers/waiter.ts",
+      "apps/control/src/app/setups/service.ts",
+      "apps/control/src/app/setups/setups.test.ts",
+      "apps/control/src/app/setups/templates.ts",
+      "apps/control/src/app/sharing/queries.ts",
+      "apps/control/src/app/sharing/service.ts",
+      "apps/control/src/app/sharing/sharing.test.ts",
+      "apps/control/src/app/uploads/persistence.ts",
+      "apps/control/src/app/uploads/uploads.test.ts",
+      "apps/control/src/app/worlds/persistence.ts",
+      "apps/control/src/app/worlds/service.ts",
+      "apps/control/src/config/config.test.ts",
+      "apps/control/src/config/environments.test.ts",
+      "apps/control/src/config/load.ts",
+      "apps/control/src/config/play-addressing.ts",
+      "apps/control/src/config/schema.ts",
+      "apps/control/src/domain/access/reconcile.test.ts",
+      "apps/control/src/domain/access/reconcile.ts",
+      "apps/control/src/domain/account/entitlements.test.ts",
+      "apps/control/src/domain/account/entitlements.ts",
+      "apps/control/src/domain/listing/note.test.ts",
+      "apps/control/src/domain/listing/trust.test.ts",
+      "apps/control/src/domain/listing/trust.ts",
+      "apps/control/src/domain/mods/curation.test.ts",
+      "apps/control/src/domain/mods/modpack.ts",
+      "apps/control/src/domain/mods/resolve.test.ts",
+      "apps/control/src/domain/mods/resolve.ts",
+      "apps/control/src/domain/policy/policy.test.ts",
+      "apps/control/src/domain/policy/policy.ts",
+      "apps/control/src/domain/revision/revision.test.ts",
+      "apps/control/src/domain/revision/revision.ts",
+      "apps/control/src/domain/server/lifecycle.test.ts",
+      "apps/control/src/domain/setup/setup.ts",
+      "apps/control/src/infra/acme/acme-issuer.test.ts",
+      "apps/control/src/infra/acme/acme-issuer.ts",
+      "apps/control/src/infra/auth/auth.test.ts",
+      "apps/control/src/infra/auth/better-auth.ts",
+      "apps/control/src/infra/auth/github-sign-in.test.ts",
+      "apps/control/src/infra/auth/oauth-proxy.test.ts",
+      "apps/control/src/infra/boat/boat-minecraft.ts",
+      "apps/control/src/infra/boat/boat-runtime-waits.test.ts",
+      "apps/control/src/infra/boat/boat-runtime.test.ts",
+      "apps/control/src/infra/boat/client.ts",
+      "apps/control/src/infra/boat/handle.ts",
+      "apps/control/src/infra/boat/sandbox-scripts.test.ts",
+      "apps/control/src/infra/boat/sandbox-scripts.ts",
+      "apps/control/src/infra/boat/starts.ts",
+      "apps/control/src/infra/docker/docker-logs.test.ts",
+      "apps/control/src/infra/docker/docker-logs.ts",
+      "apps/control/src/infra/docker/docker-runtime.test.ts",
+      "apps/control/src/infra/docker/docker-runtime/engine.test.ts",
+      "apps/control/src/infra/fake/fake-catalog.ts",
+      "apps/control/src/infra/fake/fake-minecraft.test.ts",
+      "apps/control/src/infra/fake/fake-profiles.ts",
+      "apps/control/src/infra/fake/fake-runtime.test.ts",
+      "apps/control/src/infra/fleet/ca.test.ts",
+      "apps/control/src/infra/fleet/ca.ts",
+      "apps/control/src/infra/fleet/fleet-logs.ts",
+      "apps/control/src/infra/fleet/fleet-runtime.e2e.test.ts",
+      "apps/control/src/infra/fleet/fleet-runtime.flows.test.ts",
+      "apps/control/src/infra/fleet/fleet-runtime.test.ts",
+      "apps/control/src/infra/fleet/fleet-two-node.e2e.test.ts",
+      "apps/control/src/infra/fleet/handle.ts",
+      "apps/control/src/infra/fleet/node-client.ts",
+      "apps/control/src/infra/fleet/node-endpoint.ts",
+      "apps/control/src/infra/fleet/operator-api.test.ts",
+      "apps/control/src/infra/fleet/operator-api.ts",
+      "apps/control/src/infra/fleet/placement.test.ts",
+      "apps/control/src/infra/fleet/registry.test.ts",
+      "apps/control/src/infra/fleet/sql.ts",
+      "apps/control/src/infra/fleet/store.test.ts",
+      "apps/control/src/infra/fleet/store.ts",
+      "apps/control/src/infra/fly/client.ts",
+      "apps/control/src/infra/fly/fly-logs.test.ts",
+      "apps/control/src/infra/fly/fly-logs.ts",
+      "apps/control/src/infra/fly/fly-runtime-calls.test.ts",
+      "apps/control/src/infra/fly/fly-runtime.test.ts",
+      "apps/control/src/infra/fly/handle.ts",
+      "apps/control/src/infra/fly/helper-jobs.test.ts",
+      "apps/control/src/infra/fly/machine-config.ts",
+      "apps/control/src/infra/formats/file-formats.test.ts",
+      "apps/control/src/infra/formats/file-formats.ts",
+      "apps/control/src/infra/formats/pack-archives.test.ts",
+      "apps/control/src/infra/formats/pack-archives.ts",
+      "apps/control/src/infra/loaders/loader-builds.test.ts",
+      "apps/control/src/infra/loaders/loader-builds.ts",
+      "apps/control/src/infra/mc-protocol/rcon.test.ts",
+      "apps/control/src/infra/mc-protocol/rcon.ts",
+      "apps/control/src/infra/mc-protocol/slp.test.ts",
+      "apps/control/src/infra/mc-protocol/slp.ts",
+      "apps/control/src/infra/modrinth/client.ts",
+      "apps/control/src/infra/modrinth/modrinth-catalog.test.ts",
+      "apps/control/src/infra/modrinth/modrinth-catalog.ts",
+      "apps/control/src/infra/mojang/profiles.test.ts",
+      "apps/control/src/infra/mojang/profiles.ts",
+      "apps/control/src/infra/pg/events.ts",
+      "apps/control/src/infra/pg/jobs.ts",
+      "apps/control/src/infra/polar/polar-billing.test.ts",
+      "apps/control/src/infra/polar/polar-billing.ts",
+      "apps/control/src/infra/realtime/jose-tickets.test.ts",
+      "apps/control/src/infra/s3/s3-archive-store.test.ts",
+      "apps/control/src/infra/s3/s3-archive-store.ts",
+      "apps/control/src/interfaces/edge/internal.ts",
+      "apps/control/src/interfaces/http/api.ts",
+      "apps/control/src/interfaces/http/card.ts",
+      "apps/control/src/interfaces/http/client-address.test.ts",
+      "apps/control/src/interfaces/http/origins.test.ts",
+      "apps/control/src/interfaces/http/public.test.ts",
+      "apps/control/src/interfaces/http/public.ts",
+      "apps/control/src/interfaces/operator/runtimes.ts",
+      "apps/control/src/interfaces/realtime/server.node.ts",
+      "apps/control/src/interfaces/runtime/artifacts.ts",
+      "apps/control/src/interfaces/trpc/router.test.ts",
+      "apps/control/src/interfaces/trpc/router.ts",
+      "apps/control/src/interfaces/trpc/trpc.ts",
+      "apps/control/src/main.node.ts",
+      "apps/control/src/minecraft/access.ts",
+      "apps/control/src/minecraft/diagnosis.test.ts",
+      "apps/control/src/minecraft/install-check.ts",
+      "apps/control/src/minecraft/logs.test.ts",
+      "apps/control/src/minecraft/minecraft.test.ts",
+      "apps/control/src/minecraft/mods.ts",
+      "apps/control/src/minecraft/mrpack.test.ts",
+      "apps/control/src/minecraft/mrpack.ts",
+      "apps/control/src/minecraft/pack-build.test.ts",
+      "apps/control/src/minecraft/pack-build.ts",
+      "apps/control/src/minecraft/pack-layout.test.ts",
+      "apps/control/src/minecraft/pack-layout.ts",
+      "apps/control/src/minecraft/pack-manifests.ts",
+      "apps/control/src/minecraft/packs.test.ts",
+      "apps/control/src/minecraft/packs.ts",
+      "apps/control/src/minecraft/runtime-spec.ts",
+      "apps/control/src/minecraft/server-pack.test.ts",
+      "apps/control/src/minecraft/server-pack.ts",
+      "apps/control/src/minecraft/settings.ts",
+      "apps/control/src/minecraft/skin.test.ts",
+      "apps/control/src/minecraft/uploads.test.ts",
+      "apps/control/src/minecraft/uploads.ts",
+      "apps/control/src/minecraft/versions.ts",
+      "apps/control/src/testing/cdn.ts",
+      "apps/control/src/testing/fleet.ts",
+      "apps/control/src/testing/harness.ts",
+      "apps/control/src/testing/memory-store.ts",
+      "apps/control/src/testing/polar.ts",
+      "apps/control/src/testing/uploads.ts",
+      "apps/devtools/app.tsx",
+      "apps/edge/agent.ts",
+      "apps/edge/notice.test.ts",
+      "apps/web/scripts/tokens.ts",
+      "apps/web/src/app/(app)/account/page.tsx",
+      "apps/web/src/app/(app)/admin/accounts/[userId]/page.tsx",
+      "apps/web/src/app/(app)/admin/allowlist/page.tsx",
+      "apps/web/src/app/(app)/admin/audit/page.tsx",
+      "apps/web/src/app/(app)/admin/operations/page.tsx",
+      "apps/web/src/app/(app)/admin/packs/page.tsx",
+      "apps/web/src/app/(app)/admin/page.tsx",
+      "apps/web/src/app/(app)/admin/platform/page.tsx",
+      "apps/web/src/app/(app)/admin/reports/page.tsx",
+      "apps/web/src/app/(app)/admin/servers/page.tsx",
+      "apps/web/src/app/(app)/admin/tabs.tsx",
+      "apps/web/src/app/(app)/frame.tsx",
+      "apps/web/src/app/(app)/pack-drop.tsx",
+      "apps/web/src/app/(app)/plus-offer.tsx",
+      "apps/web/src/app/(app)/servers/[id]/backups/page.tsx",
+      "apps/web/src/app/(app)/servers/[id]/boot-line.tsx",
+      "apps/web/src/app/(app)/servers/[id]/console/page.tsx",
+      "apps/web/src/app/(app)/servers/[id]/mods/page.tsx",
+      "apps/web/src/app/(app)/servers/[id]/page.tsx",
+      "apps/web/src/app/(app)/servers/[id]/players/page.tsx",
+      "apps/web/src/app/(app)/servers/[id]/settings/advanced.tsx",
+      "apps/web/src/app/(app)/servers/[id]/settings/game.tsx",
+      "apps/web/src/app/(app)/servers/[id]/settings/history.tsx",
+      "apps/web/src/app/(app)/servers/[id]/settings/identity.tsx",
+      "apps/web/src/app/(app)/servers/[id]/settings/location.tsx",
+      "apps/web/src/app/(app)/servers/[id]/settings/page.tsx",
+      "apps/web/src/app/(app)/servers/[id]/settings/shared.tsx",
+      "apps/web/src/app/(app)/servers/[id]/settings/version.tsx",
+      "apps/web/src/app/(app)/servers/[id]/world/page.tsx",
+      "apps/web/src/app/(app)/servers/new/page.tsx",
+      "apps/web/src/app/(app)/servers/page.tsx",
+      "apps/web/src/app/(app)/servers/trash/page.tsx",
+      "apps/web/src/app/(auth)/auth-entry.tsx",
+      "apps/web/src/app/(auth)/forgot-password/forgot-password-form.tsx",
+      "apps/web/src/app/(auth)/reset-password/page.tsx",
+      "apps/web/src/app/(auth)/reset-password/reset-password-form.tsx",
+      "apps/web/src/app/(auth)/sign-in/sign-in-form.tsx",
+      "apps/web/src/app/(auth)/sign-up/sign-up-form.tsx",
+      "apps/web/src/app/(public)/pricing/page.tsx",
+      "apps/web/src/app/(public)/reactions.tsx",
+      "apps/web/src/app/(public)/report.test.ts",
+      "apps/web/src/app/(public)/report.tsx",
+      "apps/web/src/app/(public)/server-page.tsx",
+      "apps/web/src/app/(public)/status.test.ts",
+      "apps/web/src/app/design/page.tsx",
+      "apps/web/src/app/page.tsx",
+      "apps/web/src/lib/api.tsx",
+      "apps/web/src/lib/outcome.test.ts",
+      "apps/web/src/lib/outcome.ts",
+      "apps/web/src/lib/plans.test.ts",
+      "apps/web/src/lib/present.test.ts",
+      "apps/web/src/lib/present.ts",
+      "apps/web/src/lib/reactions.test.ts",
+      "apps/web/src/lib/realtime.tsx",
+      "apps/web/src/lib/rules.test.ts",
+      "apps/web/src/ui/Button.tsx",
+      "apps/web/src/ui/Console.tsx",
+      "apps/web/src/ui/action-button.tsx",
+      "apps/web/src/ui/face.tsx",
+      "apps/web/src/ui/fields.tsx",
+      "apps/web/src/ui/interactive.tsx",
+      "apps/web/src/ui/pack.tsx",
+      "apps/web/src/ui/plans.tsx",
+      "apps/web/src/ui/popover.tsx",
+      "apps/web/src/ui/product.tsx",
+      "apps/web/src/ui/share.tsx",
+      "apps/web/src/ui/status.tsx",
+      "apps/web/src/ui/suggest.tsx",
+      "apps/web/src/ui/surfaces.tsx",
+      "apps/web/src/ui/tip.tsx",
+      "packages/contracts/src/accounts.ts",
+      "packages/contracts/src/guestbook.ts",
+      "packages/contracts/src/listings.ts",
+      "packages/contracts/src/mods.ts",
+      "packages/contracts/src/packs.ts",
+      "packages/contracts/src/platform.ts",
+      "packages/contracts/src/realtime.ts",
+      "packages/contracts/src/server.ts",
+      "packages/contracts/src/sharing.ts",
+      "packages/contracts/src/worlds.ts",
+      "packages/db/src/json.ts",
+      "scripts/check-boundaries.ts",
+      "scripts/check-move-only.test.ts",
+      "scripts/check-move-only.ts"
+    ]
+  },
+  "unused": {
+    "apps/control/src/config/schema.ts › isLoopback": {
+      "reason": "Kept for a change in progress that uses it; remove the export if that change doesn't."
+    },
+    "apps/control/src/interfaces/trpc/trpc.ts › Context": {
+      "reason": "Kept for a change in progress that uses it; remove the export if that change doesn't."
+    },
+    "apps/control/src/minecraft/diagnosis.ts › Remedy": {
+      "reason": "Kept for a change in progress that uses it; remove the export if that change doesn't."
+    },
+    "apps/control/src/domain/access/access.ts › EntryState": {
+      "reason": "Kept for the access rework in progress; remove the export if the rework doesn't use it."
+    },
+    "apps/control/src/domain/access/reconcile.ts › targetOf": {
+      "reason": "Kept for the access rework in progress; remove the export if the rework doesn't use it."
+    },
+    "apps/control/src/minecraft/access.ts › AccessFilesUnreadable": {
+      "reason": "Kept for the access rework in progress; remove the export if the rework doesn't use it."
+    },
+    "apps/web/src/app/(public)/status.ts › runsLine": {
+      "reason": "Kept for the public pages' rework in progress; remove the export if it doesn't use it."
+    },
+    "apps/web/src/lib/api.tsx › TRPCProvider": {
+      "reason": "Kept for the root layout's providers rework in progress; remove the export if it doesn't use it."
+    },
+    "apps/web/src/app/(app)/servers/new/region.tsx › Region": {
+      "reason": "Kept for the server create rework in progress; remove the export if it doesn't use it."
+    }
+  },
+  "duplicates": {
+    "apps/control/src/infra/boat/boat-runtime.ts ↔ apps/control/src/infra/docker/docker-runtime.ts": {
+      "n": 29,
+      "reason": "Two adapters of one port, each with one place to run: their relocate and isPlaced say the same today, and Fly's and the fleet's don't. Folding them would tie two runtimes that change for their own reasons."
+    }
+  }
+}

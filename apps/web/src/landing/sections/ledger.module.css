@@ -1,0 +1,193 @@
+/*
+ * The ledger: a long, tight list of names and values, the way a clerk would keep it. Its length is
+ * the point, so nothing here makes it shorter than it is: one column on a narrow screen, two where
+ * the column it sits in has the room (the column's width, not the window's, decides).
+ */
+
+.ledger .sheet {
+  container-type: inline-size;
+  display: grid;
+  gap: clamp(18px, 3vh, 28px);
+}
+
+/* The bar that says when the next choice comes: the sheet's own gap is its space. */
+.ledger .tour {
+  margin: 0;
+}
+
+/* ─── The three answers that were the visitor's, a numbered row each ────────────────────────── */
+
+.ledger .choices {
+  display: grid;
+  gap: calc(var(--px) * 5);
+}
+/* The two halves of the sheet are named: this is yours, the rest is Blockly's. */
+.ledger .yours,
+.ledger .theirs {
+  margin: 0;
+  color: var(--fg);
+  font-weight: 700;
+}
+.ledger .theirs {
+  padding-top: clamp(14px, 2.4vh, 22px);
+  border-top: var(--px) solid var(--line);
+}
+/* A row: its number, what was asked, and the answer. On a narrow sheet the answer goes under. */
+.ledger .choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: calc(var(--px) * 2) calc(var(--px) * 5);
+  align-items: center;
+}
+.ledger .nth {
+  display: grid;
+  place-items: center;
+  width: calc(var(--px) * 11);
+  height: calc(var(--px) * 11);
+  background: var(--fg);
+  color: var(--field);
+  font-family: var(--pixel);
+  font-size: 0.875rem;
+  line-height: 1;
+}
+.ledger .asked {
+  margin: 0;
+}
+.ledger .chips,
+.ledger .named {
+  grid-column: 2;
+}
+.ledger .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 3);
+}
+.ledger .named {
+  margin: 0;
+}
+.ledger .name {
+  font-weight: 700;
+}
+.ledger .runs {
+  margin: 0;
+}
+@container (min-width: 620px) {
+  .ledger .choice {
+    grid-template-columns: auto 8.5rem 1fr;
+  }
+  .ledger .chips,
+  .ledger .named {
+    grid-column: 3;
+  }
+}
+
+/* ─── The lines ─────────────────────────────────────────────────────────────────────────────── */
+
+.ledger .columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: calc(var(--px) * 10) calc(var(--px) * 12);
+}
+@container (min-width: 32rem) {
+  .ledger .columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.ledger .column {
+  display: grid;
+  align-content: start;
+  gap: calc(var(--px) * 10);
+}
+
+/* A group's name sits on the one line the ledger rules. */
+.ledger .groupTitle {
+  margin: 0;
+  padding-bottom: calc(var(--px) * 3);
+  border-bottom: var(--px) solid var(--line);
+  font-variation-settings: "SHRP" 100;
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.ledger .lines {
+  margin: calc(var(--px) * 2) 0 0;
+}
+
+/* A decision: its name takes the room the value leaves, and the value is never broken. */
+.ledger .line {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 0 calc(var(--px) * 6);
+  padding: 3px 0 3px calc(var(--px) * 5);
+}
+.ledger .line dt {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+.ledger .line dd {
+  flex: 0 0 auto;
+  margin: 0;
+  color: var(--fg);
+  text-align: right;
+  white-space: nowrap;
+}
+/* A value too long for that goes under its name, and breaks where it must. */
+.ledger .line[data-long] {
+  flex-direction: column;
+  align-items: stretch;
+}
+.ledger .line[data-long] dd {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* A value said in words rather than quoted from the code. */
+.ledger .said {
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+/* A square marks a line the last choice changed. */
+.ledger .line[data-changed]::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 0;
+  width: calc(var(--px) * 3);
+  height: calc(var(--px) * 3);
+  background: var(--fg);
+}
+/* The line being written right now is set in ink. */
+.ledger .value {
+  padding: 0 3px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.ledger .line[data-now] .value {
+  background: var(--fg);
+  color: var(--on-fg);
+}
+
+/* ─── The count ─────────────────────────────────────────────────────────────────────────────── */
+
+/* The total, under the last column and under a rule, where a ledger keeps it. */
+.ledger .count {
+  padding-top: calc(var(--px) * 6);
+  border-top: var(--px) solid var(--line);
+}
+/* The count as it is said aloud: which choice it is for, and where it ends, for someone who hears
+   the page instead of seeing the chips and the number tick. */
+.ledger .aside {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "server_runtimes" ADD COLUMN "artifacts_refreshed_at" timestamp with time zone;

@@ -1,0 +1,188 @@
+/* The two moments the camera stands back: the whole chunk, with the rooms' names on it. */
+
+/* Doubled so it outranks the kit's own section padding, whichever stylesheet loads last. */
+.overview.overview {
+  min-height: 260svh;
+  padding: 0;
+}
+/* In the film it is one screen, like every other beat. (After `.worlds`, which it overrules.) */
+/* What it is given under its words keeps to its own width. */
+.overview .words > a {
+  justify-self: start;
+}
+
+/* Held in view while the section scrolls past, and the same box as the chunk's canvas, so a name
+   pinned to a room lands on the room. */
+.overview .held {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  overflow: clip;
+}
+/* Above the chunk's canvas, so what is written here is never drawn over. */
+@media (min-width: 1024px) {
+  .overview .held {
+    z-index: 4;
+  }
+}
+.overview .stars {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--paper);
+  pointer-events: none;
+}
+
+.overview .words {
+  position: absolute;
+  z-index: 4;
+  inset-block-start: 50%;
+  inset-inline-start: calc(var(--gutter) + var(--rail));
+  translate: 0 -50%;
+  display: grid;
+  gap: clamp(20px, 3vh, 32px);
+  width: min(38vw, 40rem);
+}
+.overview .words h2 {
+  font-size: clamp(3rem, 6.4vw, 7.25rem);
+}
+
+/* All the worlds: the camera stands low, so the worlds run away to a horizon half-way up the
+   screen and everything above it is night sky. The words are set in that sky, with nothing behind
+   them but the stars: the picture is composed to leave them the room. */
+.overview.worlds {
+  min-height: 230svh;
+}
+.overview.brief {
+  min-height: 100svh;
+}
+.overview.worlds .words {
+  inset-block-start: clamp(64px, 11vh, 120px);
+  translate: none;
+  width: min(62vw, 58rem);
+  gap: clamp(12px, 2vh, 20px);
+}
+/* Sized by the screen's height as well as its width: the sky it has to fit in is half the height. */
+.overview.worlds .words h2 {
+  font-size: clamp(2.5rem, min(5.6vw, 11vh), 6.25rem);
+}
+/* Over all the worlds the stars keep to the sky: the lowest stops at the horizon. */
+.overview.worlds .stars {
+  height: 48%;
+}
+.overview.worlds .words p:last-child {
+  color: var(--ink);
+}
+/* The same moon the hero has, a little lower, and it stays up: this sky is always night. */
+.overview .moon {
+  inset-block-start: 16%;
+  inset-inline-end: 9%;
+}
+
+.overview .rooms {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.overview .rooms li {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  left: 0;
+}
+.overview .rooms a {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+  padding-block: calc(var(--px) * 3);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1.1;
+  text-decoration: none;
+  white-space: nowrap;
+  translate: calc(var(--px) * 8) -50%;
+}
+/* A room that opens to the left carries its name on the left, reading up to the room. */
+.overview .rooms li[data-faces="left"] a {
+  flex-direction: row-reverse;
+  translate: calc(-100% - var(--px) * 8) -50%;
+}
+.overview .rooms a::before {
+  content: "";
+  width: calc(var(--px) * 10);
+  height: var(--px);
+  background: currentColor;
+}
+.overview .rooms a span {
+  padding: var(--px) calc(var(--px) * 3);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.9375rem;
+}
+.overview .rooms a:hover,
+.overview .rooms a:focus-visible {
+  text-decoration: underline;
+  text-decoration-thickness: var(--px);
+  text-underline-offset: 0.25em;
+}
+
+/* A name waits, faint, until its room's lamps are on. */
+@media (min-width: 1024px) {
+  .overview .rooms li {
+    opacity: 0.28;
+    transition: opacity 160ms steps(3);
+  }
+  /* A name whose room is off the picture is not shown until the keyboard reaches it. */
+  .overview .rooms li[data-away]:not(:focus-within) {
+    opacity: 0;
+  }
+  .overview .rooms li[data-lit],
+  .overview .rooms li:focus-within {
+    opacity: 1;
+  }
+}
+
+/* On a narrow screen nothing is pinned: the words, then the rooms as a list. */
+@media (max-width: 1023px) {
+  .overview.overview {
+    min-height: 0;
+    padding: clamp(72px, 12vh, 120px) var(--gutter);
+  }
+  .overview .held {
+    position: static;
+    height: auto;
+    overflow: visible;
+  }
+  .overview .words,
+  .overview.worlds .words {
+    position: static;
+    z-index: 1;
+    translate: none;
+    width: auto;
+  }
+  .overview .moon {
+    display: none;
+  }
+  .overview .rooms {
+    display: grid;
+    margin-top: 32px;
+    border-top: var(--px) solid var(--ink);
+  }
+  .overview .rooms li {
+    position: static;
+    z-index: 1;
+    border-bottom: var(--px) solid color-mix(in srgb, var(--ink) 25%, transparent);
+  }
+  .overview .rooms a,
+  .overview .rooms li[data-faces="left"] a {
+    flex-direction: row-reverse;
+    justify-content: flex-end;
+    min-height: 48px;
+    translate: none;
+  }
+  .overview .rooms a::before {
+    display: none;
+  }
+}

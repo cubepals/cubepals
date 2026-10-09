@@ -1,0 +1,1 @@
+ALTER TABLE "minecraft_servers" ADD COLUMN "created_from" text;

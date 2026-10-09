@@ -1,0 +1,1 @@
+ALTER TABLE "server_revisions" ADD COLUMN "modpack" jsonb;

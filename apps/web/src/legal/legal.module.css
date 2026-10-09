@@ -1,0 +1,198 @@
+/*
+ * The policies: ink on paper, set for reading. One column at the width of prose, the summary in
+ * a framed box, the contents beside the text on a wide screen, and nothing that moves.
+ */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, var(--width-prose)) minmax(0, 240px);
+  justify-content: space-between;
+  gap: var(--space-48);
+  align-items: start;
+}
+
+.document {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-32);
+  min-width: 0;
+  color: var(--ink);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.meta {
+  color: var(--ink-subtle);
+}
+
+/* A draft says so before anything else is read. */
+.draft {
+  padding: var(--space-12) var(--space-16);
+  background: var(--status-online-soft);
+  box-shadow: 0 0 0 2px var(--border-strong);
+}
+
+.summary {
+  padding: var(--space-24);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.summary h2 {
+  margin: 0 0 var(--space-12);
+}
+.summary ul {
+  margin: 0;
+  padding-left: 1.25em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  scroll-margin-top: var(--space-24);
+}
+.section h2 {
+  margin: 0;
+}
+.section p,
+.section ul,
+.section ol {
+  margin: 0;
+}
+.section ul,
+.section ol {
+  padding-left: 1.25em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.document a {
+  color: var(--ink);
+  text-underline-offset: 0.2em;
+}
+
+/* A table scrolls inside itself on a phone, never the page. */
+.table {
+  overflow-x: auto;
+}
+.table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+  line-height: 22px;
+}
+.table th,
+.table td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--space-12);
+  border: 2px solid var(--border-strong);
+}
+.table th {
+  background: var(--surface-sunken);
+}
+.table td {
+  background: var(--surface);
+}
+
+/* On a phone a row is a card, each cell under its column's name, rather than three thin columns. */
+@media (max-width: 639px) {
+  .table thead {
+    display: none;
+  }
+  .table tr {
+    display: block;
+    margin-bottom: var(--space-12);
+    box-shadow: 0 0 0 2px var(--border-strong);
+  }
+  .table td {
+    display: block;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .table td:last-child {
+    border-bottom: 0;
+  }
+  .table td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: var(--space-4);
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--ink-subtle);
+  }
+}
+
+/* A detail not given yet: it can't be read as given. */
+.placeholder {
+  padding: 0 0.2em;
+  background: var(--status-online-soft);
+  color: var(--ink);
+  outline: 1px dashed var(--status-online);
+}
+
+.contents {
+  position: sticky;
+  top: var(--space-24);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.contents ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.contents a {
+  display: block;
+  padding-block: 4px;
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+.contents a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+/* The index of every policy, and who runs the service. */
+.index {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: var(--space-16);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.index a {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  height: 100%;
+  padding: var(--space-20);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  text-decoration: none;
+}
+.index a:hover {
+  box-shadow: var(--shadow-float);
+}
+
+@media (max-width: 1023px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .contents {
+    display: none;
+  }
+}

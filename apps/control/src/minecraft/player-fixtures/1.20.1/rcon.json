@@ -1,0 +1,33 @@
+{
+  "version": "1.20.1",
+  "uuid": "a3ed28af-f8c4-3716-8747-f0cacbac5ba1",
+  "answers": {
+    "list uuids": "There are 1 of a max of 20 players online: Kai (a3ed28af-f8c4-3716-8747-f0cacbac5ba1)",
+    "data get entity Kai LastDeathLocation": "Kai has the following entity data: {pos: [I; 12, -60, 34], dimension: \"minecraft:overworld\"}",
+    "data get entity Nobody Pos": "No entity was found",
+    "tp Kai 12 -60 34": "Teleported Kai to 12.500000, -60.000000, 34.500000",
+    "kill Kai": "Killed Kai",
+    "give Kai minecraft:diamond_sword{Damage:5,Enchantments:[{id:\"minecraft:sharpness\",lvl:3s}],display:{Name:'{\"text\":\"Ow\"}'}} 1": "Gave 1 [Ow] to Kai",
+    "give Kai minecraft:potion{Potion:\"minecraft:swiftness\"} 1": "Gave 1 [Potion of Swiftness] to Kai",
+    "give Kai minecraft:oak_log 32": "Gave 32 [Oak Log] to Kai",
+    "item replace entity Kai hotbar.8 with minecraft:stone 64": "Replaced a slot on Kai with [Stone]",
+    "item replace entity Kai inventory.4 with minecraft:torch 10": "Replaced a slot on Kai with [Torch]",
+    "item replace entity Kai armor.head with minecraft:iron_helmet": "Replaced a slot on Kai with [Iron Helmet]",
+    "item replace entity Kai weapon.offhand with minecraft:shield": "Replaced a slot on Kai with [Shield]",
+    "item replace entity Kai enderchest.0 with minecraft:diamond 12": "Replaced a slot on Kai with [Diamond]",
+    "item replace entity Kai enderchest.26 with minecraft:oak_planks 3": "Replaced a slot on Kai with [Oak Planks]",
+    "execute in minecraft:the_nether run tp Kai 5.5 70 -7.5": "Teleported Kai to 5.500000, 70.000000, -7.500000",
+    "gamemode creative Kai": "",
+    "data get entity Kai Pos": "Kai has the following entity data: [5.5d, 70.0d, -7.5d]",
+    "data get entity Kai Dimension": "Kai has the following entity data: \"minecraft:the_nether\"",
+    "data get entity Kai playerGameType": "Kai has the following entity data: 1",
+    "data get entity Kai Inventory": "Kai has the following entity data: [{Slot: 0b, id: \"minecraft:diamond_sword\", Count: 1b, tag: {Damage: 5, Enchantments: [{lvl: 3s, id: \"minecraft:sharpness\"}], display: {Name: '{\"text\":\"Ow\"}'}}}, {Slot: 1b, id: \"minecraft:potion\", Count: 1b, tag: {Potion: \"minecraft:swiftness\"}}, {Slot: 2b, id: \"minecraft:oak_log\", Count: 32b}, {Slot: 8b, id: \"minecraft:stone\", Count: 64b}, {Slot: 13b, id: \"minecraft:torch\", Count: 10b}, {Slot: 103b, id: \"minecraft:iron_helmet\", Count: 1b, tag: {Damage: 0}}, {Slot: -106b, id: \"minecraft:shield\", Count: 1b, tag: {Damage: 0}}]",
+    "data get entity Kai EnderItems": "Kai has the following entity data: [{Slot: 0b, id: \"minecraft:diamond\", Count: 12b}, {Slot: 26b, id: \"minecraft:oak_planks\", Count: 3b}]",
+    "data get entity Kai equipment": "Found no elements matching equipment",
+    "execute in minecraft:overworld run spreadplayers 0 0 0 1 false Kai": "Spread 1 player(s) around 0.5, 0.5 with an average distance of 0.00 blocks apart",
+    "execute in minecraft:overworld run tp Kai 0.5 -60 0.5": "Teleported Kai to 0.500000, -60.000000, 0.500000",
+    "gamemode survival Nobody": "No player was found",
+    "execute in minecraft:overworld run tp Nobody 0.5 -60 0.5": "No entity was found",
+    "save-all flush": "Saving the game (this may take a moment!)Saved the game"
+  }
+}

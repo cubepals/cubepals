@@ -1,0 +1,6173 @@
+{
+  "components": {
+    "parameters": {
+      "AlgorithmIdentifier": {
+        "description": "The algorithm of the hash",
+        "in": "query",
+        "name": "algorithm",
+        "required": true,
+        "schema": {
+          "default": "sha1",
+          "enum": [
+            "sha1",
+            "sha512"
+          ],
+          "example": "sha512",
+          "type": "string"
+        }
+      },
+      "FileHashIdentifier": {
+        "description": "The hash of the file, considering its byte content, and encoded in hexadecimal",
+        "in": "path",
+        "name": "hash",
+        "required": true,
+        "schema": {
+          "example": "619e250c133106bacc3e3b560839bd4b324dfda8",
+          "type": "string"
+        }
+      },
+      "MultipleHashQueryIdentifier": {
+        "description": "Whether to return multiple results when looking for this hash",
+        "in": "query",
+        "name": "multiple",
+        "required": false,
+        "schema": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "MultipleProjectIdentifier": {
+        "description": "The IDs and/or slugs of the projects",
+        "in": "query",
+        "name": "ids",
+        "required": true,
+        "schema": {
+          "example": "[\"AABBCCDD\", \"EEFFGGHH\"]",
+          "type": "string"
+        }
+      },
+      "NotificationIdentifier": {
+        "description": "The ID of the notification",
+        "in": "path",
+        "name": "id",
+        "required": true,
+        "schema": {
+          "example": [
+            "NNOOPPQQ"
+          ],
+          "type": "string"
+        }
+      },
+      "ProjectIdentifier": {
+        "description": "The ID or slug of the project",
+        "in": "path",
+        "name": "id|slug",
+        "required": true,
+        "schema": {
+          "example": [
+            "AABBCCDD",
+            "my_project"
+          ],
+          "type": "string"
+        }
+      },
+      "ReportIdentifier": {
+        "description": "The ID of the report",
+        "in": "path",
+        "name": "id",
+        "required": true,
+        "schema": {
+          "example": [
+            "RRSSTTUU"
+          ],
+          "type": "string"
+        }
+      },
+      "TeamIdentifier": {
+        "description": "The ID of the team",
+        "in": "path",
+        "name": "id",
+        "required": true,
+        "schema": {
+          "example": [
+            "MMNNOOPP"
+          ],
+          "type": "string"
+        }
+      },
+      "ThreadIdentifier": {
+        "description": "The ID of the thread",
+        "in": "path",
+        "name": "id",
+        "required": true,
+        "schema": {
+          "example": [
+            "QQRRSSTT"
+          ],
+          "type": "string"
+        }
+      },
+      "UserIdentifier": {
+        "description": "The ID or username of the user",
+        "in": "path",
+        "name": "id|username",
+        "required": true,
+        "schema": {
+          "example": [
+            "EEFFGGHH",
+            "my_user"
+          ],
+          "type": "string"
+        }
+      },
+      "VersionIdentifier": {
+        "description": "The ID of the version",
+        "in": "path",
+        "name": "id",
+        "required": true,
+        "schema": {
+          "example": [
+            "IIJJKKLL"
+          ],
+          "type": "string"
+        }
+      }
+    },
+    "requestBodies": {
+      "Image": {
+        "content": {
+          "image/bmp": {
+            "schema": {
+              "format": "binary",
+              "type": "string"
+            }
+          },
+          "image/gif": {
+            "schema": {
+              "format": "binary",
+              "type": "string"
+            }
+          },
+          "image/jpeg": {
+            "schema": {
+              "format": "binary",
+              "type": "string"
+            }
+          },
+          "image/png": {
+            "schema": {
+              "format": "binary",
+              "type": "string"
+            }
+          },
+          "image/rgb": {
+            "schema": {
+              "format": "binary",
+              "type": "string"
+            }
+          },
+          "image/svg": {
+            "schema": {
+              "format": "binary",
+              "type": "string"
+            }
+          },
+          "image/svgz": {
+            "schema": {
+              "format": "binary",
+              "type": "string"
+            }
+          },
+          "image/webp": {
+            "schema": {
+              "format": "binary",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "AuthError": {
+        "properties": {
+          "description": {
+            "description": "The contents of the error",
+            "example": "Authentication Error: Invalid Authentication Credentials",
+            "type": "string"
+          },
+          "error": {
+            "description": "The name of the error",
+            "example": "unauthorized",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "description"
+        ],
+        "type": "object"
+      },
+      "BaseVersion": {
+        "properties": {
+          "changelog": {
+            "description": "The changelog for this version",
+            "example": "List of changes in this version: ...",
+            "nullable": true,
+            "type": "string"
+          },
+          "dependencies": {
+            "description": "A list of specific versions of projects that this version depends on",
+            "items": {
+              "$ref": "#/components/schemas/VersionDependency"
+            },
+            "type": "array"
+          },
+          "featured": {
+            "description": "Whether the version is featured or not",
+            "example": true,
+            "type": "boolean"
+          },
+          "game_versions": {
+            "description": "A list of versions of Minecraft that this version supports",
+            "example": [
+              "1.16.5",
+              "1.17.1"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "loaders": {
+            "description": "The mod loaders that this version supports. In case of resource packs, use \"minecraft\"",
+            "example": [
+              "fabric",
+              "forge",
+              "minecraft"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "The name of this version",
+            "example": "Version 1.0.0",
+            "type": "string"
+          },
+          "requested_status": {
+            "enum": [
+              "listed",
+              "archived",
+              "draft",
+              "unlisted"
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "listed",
+              "archived",
+              "draft",
+              "unlisted",
+              "scheduled",
+              "unknown"
+            ],
+            "example": "listed",
+            "type": "string"
+          },
+          "version_number": {
+            "description": "The version number. Ideally will follow semantic versioning",
+            "example": "1.0.0",
+            "type": "string"
+          },
+          "version_type": {
+            "description": "The release channel for this version",
+            "enum": [
+              "release",
+              "beta",
+              "alpha"
+            ],
+            "example": "release",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CategoryTag": {
+        "properties": {
+          "header": {
+            "description": "The header under which the category should go",
+            "example": "resolutions",
+            "type": "string"
+          },
+          "icon": {
+            "description": "The SVG icon of a category",
+            "example": "<svg></svg>",
+            "type": "string"
+          },
+          "name": {
+            "description": "The name of the category",
+            "example": "adventure",
+            "type": "string"
+          },
+          "project_type": {
+            "description": "The project type this category is applicable to",
+            "example": "mod",
+            "type": "string"
+          }
+        },
+        "required": [
+          "icon",
+          "name",
+          "project_type",
+          "header"
+        ],
+        "type": "object"
+      },
+      "CreatableProject": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableProject"
+          },
+          {
+            "properties": {
+              "gallery_items": {
+                "deprecated": true,
+                "description": "Gallery images to be uploaded with the created project. Deprecated - please upload gallery images after initial upload.",
+                "items": {
+                  "$ref": "#/components/schemas/CreatableProjectGalleryItem"
+                },
+                "type": "array"
+              },
+              "initial_versions": {
+                "deprecated": true,
+                "description": "A list of initial versions to upload with the created project. Deprecated - please upload version files after initial upload.",
+                "items": {
+                  "$ref": "#/components/schemas/EditableVersion"
+                },
+                "type": "array"
+              },
+              "is_draft": {
+                "deprecated": true,
+                "description": "Whether the project should be saved as a draft instead of being sent to moderation for review. Deprecated - please always mark this as true.",
+                "example": true,
+                "type": "boolean"
+              },
+              "project_type": {
+                "description": "The project type of the project",
+                "enum": [
+                  "mod",
+                  "modpack"
+                ],
+                "example": "modpack",
+                "type": "string"
+              }
+            },
+            "required": [
+              "project_type",
+              "slug",
+              "title",
+              "description",
+              "body",
+              "categories",
+              "client_side",
+              "server_side",
+              "license_id"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "CreatableProjectGalleryItem": {
+        "nullable": true,
+        "properties": {
+          "description": {
+            "description": "The description of the gallery image",
+            "example": "This awesome screenshot shows all of the blocks in my mod!",
+            "nullable": true,
+            "type": "string"
+          },
+          "featured": {
+            "description": "Whether the image is featured in the gallery",
+            "example": true,
+            "type": "boolean"
+          },
+          "item": {
+            "description": "The name of the multipart item where the gallery media is located",
+            "type": "string"
+          },
+          "ordering": {
+            "description": "The order of the gallery image. Gallery images are sorted by this field and then alphabetically by title.",
+            "example": 0,
+            "type": "integer"
+          },
+          "title": {
+            "description": "The title of the gallery image",
+            "example": "My awesome screenshot!",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CreatableReport": {
+        "properties": {
+          "body": {
+            "description": "The extended explanation of the report",
+            "example": "This is a reupload of my mod, AABBCCDD!",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "The ID of the item (project, version, or user) being reported",
+            "example": "EEFFGGHH",
+            "type": "string"
+          },
+          "item_type": {
+            "description": "The type of the item being reported",
+            "enum": [
+              "project",
+              "user",
+              "version"
+            ],
+            "example": "project",
+            "type": "string"
+          },
+          "report_type": {
+            "description": "The type of the report being sent",
+            "example": "copyright",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_type",
+          "item_id",
+          "item_type",
+          "body"
+        ],
+        "type": "object"
+      },
+      "CreatableVersion": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseVersion"
+          },
+          {
+            "properties": {
+              "environment": {
+                "$ref": "#/components/schemas/EnvironmentInputEnum"
+              },
+              "file_parts": {
+                "description": "An array of the multipart field names of each file that goes with this version",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "file_types": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/FileTypeEnum"
+                },
+                "description": "A map of file parts to their associated file type, a file type is used for additional files such as sources jars.",
+                "type": "object"
+              },
+              "primary_file": {
+                "description": "The multipart field name of the primary file",
+                "type": "string"
+              },
+              "project_id": {
+                "description": "The ID of the project this version is for",
+                "example": "AABBCCDD",
+                "type": "string"
+              }
+            },
+            "required": [
+              "file_parts",
+              "project_id",
+              "name",
+              "version_number",
+              "game_versions",
+              "version_type",
+              "loaders",
+              "featured",
+              "dependencies"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "CreateProjectBody": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CreatableProject"
+          },
+          "icon": {
+            "description": "Project icon file",
+            "enum": [
+              "*.png",
+              "*.jpg",
+              "*.jpeg",
+              "*.bmp",
+              "*.gif",
+              "*.webp",
+              "*.svg",
+              "*.svgz",
+              "*.rgb"
+            ],
+            "format": "binary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "CreateVersionBody": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CreatableVersion"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "DisclosureTypeEnum": {
+        "enum": [
+          "ai_content",
+          "ai_content_code",
+          "ai_content_assets",
+          "ai_content_text",
+          "ai_functionality",
+          "advertisements",
+          "epilepsy_triggers",
+          "system_interactions",
+          "telemetry",
+          "telemetry_opt_in",
+          "telemetry_opt_out",
+          "telemetry_always_active",
+          "derivative_work",
+          "paid_features",
+          "archived"
+        ],
+        "example": "ai_content_code",
+        "type": "string"
+      },
+      "DonationPlatformTag": {
+        "properties": {
+          "name": {
+            "description": "The full name of the donation platform",
+            "example": "Buy Me a Coffee",
+            "type": "string"
+          },
+          "short": {
+            "description": "The short identifier of the donation platform",
+            "example": "bmac",
+            "type": "string"
+          }
+        },
+        "required": [
+          "short",
+          "name"
+        ],
+        "type": "object"
+      },
+      "EditableFileType": {
+        "properties": {
+          "algorithm": {
+            "description": "The hash algorithm of the hash specified in the hash field",
+            "example": "sha1",
+            "type": "string"
+          },
+          "file_type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FileTypeEnum"
+              },
+              {
+                "description": "The hash algorithm of the file you're editing",
+                "nullable": true
+              }
+            ]
+          },
+          "hash": {
+            "description": "The hash of the file you're editing",
+            "example": "aaaabbbbccccddddeeeeffffgggghhhhiiiijjjj",
+            "type": "string"
+          }
+        },
+        "required": [
+          "algorithm",
+          "hash",
+          "file_type"
+        ],
+        "type": "object"
+      },
+      "EditableProject": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableProject"
+          },
+          {
+            "properties": {
+              "moderation_message": {
+                "description": "The title of the moderators' message for the project",
+                "nullable": true,
+                "type": "string"
+              },
+              "moderation_message_body": {
+                "description": "The body of the moderators' message for the project",
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "EditableUser": {
+        "properties": {
+          "bio": {
+            "description": "A description of the user",
+            "example": "My short biography",
+            "type": "string"
+          },
+          "email": {
+            "description": "The user's email (only displayed if requesting your own account). Requires `USER_READ_EMAIL` PAT scope.",
+            "format": "email",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "description": "The user's display name",
+            "example": "My User",
+            "nullable": true,
+            "type": "string"
+          },
+          "payout_data": {
+            "$ref": "#/components/schemas/UserPayoutData"
+          },
+          "username": {
+            "description": "The user's username",
+            "example": "my_user",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
+        ],
+        "type": "object"
+      },
+      "EditableVersion": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseVersion"
+          },
+          {
+            "properties": {
+              "file_types": {
+                "description": "A list of file_types to edit",
+                "items": {
+                  "$ref": "#/components/schemas/EditableFileType"
+                },
+                "type": "array"
+              },
+              "primary_file": {
+                "description": "The hash format and the hash of the new primary file",
+                "example": [
+                  "sha1",
+                  "aaaabbbbccccddddeeeeffffgggghhhhiiiijjjj"
+                ],
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "EnvironmentEnum": {
+        "description": "The environment a project or version supports. For an explanation of each environment, see the blog post here: https://modrinth.com/news/article/new-environments/#new-system",
+        "enum": [
+          "client_and_server",
+          "client_only",
+          "client_only_server_optional",
+          "singleplayer_only",
+          "server_only",
+          "server_only_client_optional",
+          "dedicated_server_only",
+          "client_or_server",
+          "client_or_server_prefers_both",
+          "unknown"
+        ],
+        "example": "client_and_server",
+        "type": "string"
+      },
+      "EnvironmentInputEnum": {
+        "description": "The environment a version supports. For an explanation of each environment, see the blog post here: https://modrinth.com/news/article/new-environments/#new-system",
+        "enum": [
+          "client_and_server",
+          "client_only",
+          "client_only_server_optional",
+          "singleplayer_only",
+          "server_only",
+          "server_only_client_optional",
+          "dedicated_server_only",
+          "client_or_server",
+          "client_or_server_prefers_both"
+        ],
+        "example": "client_and_server",
+        "type": "string"
+      },
+      "FileTypeEnum": {
+        "enum": [
+          "required-resource-pack",
+          "optional-resource-pack",
+          "sources-jar",
+          "dev-jar",
+          "javadoc-jar",
+          "unknown",
+          "signature"
+        ],
+        "example": "required-resource-pack",
+        "type": "string"
+      },
+      "ForgeUpdateCheckerPromos": {
+        "description": "A list of the recommended and latest versions for each Minecraft release",
+        "properties": {
+          "{version}-latest": {
+            "description": "The latest mod version for `{version}`. Shows versions with the `alpha` and `beta` version types.",
+            "type": "string"
+          },
+          "{version}-recommended": {
+            "description": "The mod version that is recommended for `{version}`. Excludes versions with the `alpha` and `beta` version types.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ForgeUpdates": {
+        "description": "Mod version information that can be consumed by Forge's update checker",
+        "properties": {
+          "homepage": {
+            "description": "A link to the mod page",
+            "example": "https://modrinth.com",
+            "type": "string"
+          },
+          "promos": {
+            "$ref": "#/components/schemas/ForgeUpdateCheckerPromos"
+          }
+        },
+        "type": "object"
+      },
+      "GalleryImage": {
+        "nullable": true,
+        "properties": {
+          "created": {
+            "description": "The date and time the gallery image was created",
+            "format": "ISO-8601",
+            "type": "string"
+          },
+          "description": {
+            "description": "The description of the gallery image",
+            "example": "This awesome screenshot shows all of the blocks in my mod!",
+            "nullable": true,
+            "type": "string"
+          },
+          "featured": {
+            "description": "Whether the image is featured in the gallery",
+            "example": true,
+            "type": "boolean"
+          },
+          "ordering": {
+            "description": "The order of the gallery image. Gallery images are sorted by this field and then alphabetically by title.",
+            "example": 0,
+            "type": "integer"
+          },
+          "title": {
+            "description": "The title of the gallery image",
+            "example": "My awesome screenshot!",
+            "nullable": true,
+            "type": "string"
+          },
+          "url": {
+            "description": "The URL of the gallery image",
+            "example": "https://cdn.modrinth.com/data/AABBCCDD/images/009b7d8d6e8bf04968a29421117c59b3efe2351a.png",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "featured",
+          "created"
+        ],
+        "type": "object"
+      },
+      "GameVersionTag": {
+        "properties": {
+          "date": {
+            "description": "The date of the game version release",
+            "format": "ISO-8601",
+            "type": "string"
+          },
+          "major": {
+            "description": "Whether or not this is a major version, used for Featured Versions",
+            "example": true,
+            "type": "boolean"
+          },
+          "version": {
+            "description": "The name/number of the game version",
+            "example": "1.18.1",
+            "type": "string"
+          },
+          "version_type": {
+            "description": "The type of the game version",
+            "enum": [
+              "release",
+              "snapshot",
+              "alpha",
+              "beta"
+            ],
+            "example": "release",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "version_type",
+          "date",
+          "major"
+        ],
+        "type": "object"
+      },
+      "GetLatestVersionFromHashBody": {
+        "properties": {
+          "game_versions": {
+            "example": [
+              "1.18",
+              "1.18.1"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "loaders": {
+            "example": [
+              "fabric"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version_types": {
+            "enum": [
+              "release",
+              "alpha",
+              "beta"
+            ],
+            "example": [
+              "release"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "loaders",
+          "game_versions"
+        ],
+        "type": "object"
+      },
+      "GetLatestVersionsFromHashesBody": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/HashList"
+          },
+          {
+            "properties": {
+              "game_versions": {
+                "example": [
+                  "1.18",
+                  "1.18.1"
+                ],
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "loaders": {
+                "example": [
+                  "fabric"
+                ],
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "version_types": {
+                "enum": [
+                  "release",
+                  "alpha",
+                  "beta"
+                ],
+                "example": [
+                  "release"
+                ],
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "loaders",
+              "game_versions"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "HashList": {
+        "description": "A list of hashes and the algorithm used to create them",
+        "properties": {
+          "algorithm": {
+            "enum": [
+              "sha1",
+              "sha512"
+            ],
+            "example": "sha512",
+            "type": "string"
+          },
+          "hashes": {
+            "example": [
+              "ea0f38408102e4d2efd53c2cc11b88b711996b48d8922f76ea6abf731219c5bd1efe39ddf9cce77c54d49a62ff10fb685c00d2e4c524ab99d20f6296677ab2c4",
+              "925a5c4899affa4098d997dfa4a4cb52c636d539e94bc489d1fa034218cb96819a70eb8b01647a39316a59fcfe223c1a8c05ed2e2ae5f4c1e75fa48f6af1c960"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "hashes",
+          "algorithm"
+        ],
+        "type": "object"
+      },
+      "HashVersionMap": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/Version"
+        },
+        "description": "A map from hashes to versions",
+        "type": "object"
+      },
+      "InvalidInputError": {
+        "properties": {
+          "description": {
+            "description": "The contents of the error",
+            "example": "Error while parsing multipart payload",
+            "type": "string"
+          },
+          "error": {
+            "description": "The name of the error",
+            "example": "invalid_input",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "description"
+        ],
+        "type": "object"
+      },
+      "License": {
+        "description": "A full license",
+        "properties": {
+          "body": {
+            "example": "Insert the entire text of the LGPL-3.0 here...",
+            "type": "string"
+          },
+          "title": {
+            "example": "GNU Lesser General Public License v3.0 or later",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "LicenseTag": {
+        "description": "A short overview of a license",
+        "properties": {
+          "name": {
+            "description": "The full name of the license",
+            "example": "GNU Lesser General Public License v3",
+            "type": "string"
+          },
+          "short": {
+            "description": "The short identifier of the license",
+            "example": "lgpl-3",
+            "type": "string"
+          }
+        },
+        "required": [
+          "short",
+          "name"
+        ],
+        "type": "object"
+      },
+      "LoaderTag": {
+        "properties": {
+          "icon": {
+            "description": "The SVG icon of a loader",
+            "example": "<svg></svg>",
+            "type": "string"
+          },
+          "name": {
+            "description": "The name of the loader",
+            "example": "fabric",
+            "type": "string"
+          },
+          "supported_project_types": {
+            "description": "The project types that this loader is applicable to",
+            "example": [
+              "mod",
+              "modpack"
+            ],
+            "items": {
+              "description": "The project type",
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "icon",
+          "name",
+          "supported_project_types"
+        ],
+        "type": "object"
+      },
+      "ModeratorMessage": {
+        "deprecated": true,
+        "description": "Deprecated - A message that a moderator sent regarding the project",
+        "example": null,
+        "nullable": true,
+        "properties": {
+          "body": {
+            "description": "The longer body of the message that a moderator has left for the project",
+            "nullable": true,
+            "type": "string"
+          },
+          "message": {
+            "description": "The message that a moderator has left for the project",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ModifiableProject": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/NonSearchProject"
+          },
+          {
+            "properties": {
+              "license_id": {
+                "description": "The SPDX license ID of a project",
+                "example": "LGPL-3.0-or-later",
+                "type": "string"
+              },
+              "license_url": {
+                "description": "The URL to this license",
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "ModifyTeamMemberBody": {
+        "properties": {
+          "ordering": {
+            "description": "The order of the team member.",
+            "example": 0,
+            "type": "integer"
+          },
+          "payouts_split": {
+            "description": "The split of payouts going to this user. The proportion of payouts they get is their split divided by the sum of the splits of all members.",
+            "example": 100,
+            "type": "integer"
+          },
+          "permissions": {
+            "description": "The user's permissions in bitfield format\n\nIn order from first to tenth bit, the bits are:\n- UPLOAD_VERSION\n- DELETE_VERSION\n- EDIT_DETAILS\n- EDIT_BODY\n- MANAGE_INVITES\n- REMOVE_MEMBER\n- EDIT_MEMBER\n- DELETE_PROJECT\n- VIEW_ANALYTICS\n- VIEW_PAYOUTS\n",
+            "example": 127,
+            "format": "bitfield",
+            "type": "integer"
+          },
+          "role": {
+            "example": "Contributor",
+            "type": "string"
+          }
+        }
+      },
+      "NonSearchProject": {
+        "properties": {
+          "additional_categories": {
+            "description": "A list of additional categories that the project also has. These are supplementary to the featured categories, and does not include them again.",
+            "example": [
+              "technology",
+              "adventure",
+              "fabric"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "body": {
+            "description": "A long form description of the project",
+            "example": "A long body describing my project in detail",
+            "type": "string"
+          },
+          "categories": {
+            "description": "A list of the featured categories that the project has.",
+            "example": [
+              "technology",
+              "adventure",
+              "fabric"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "client_side": {
+            "deprecated": true,
+            "description": "Deprecated - use `environment` instead.",
+            "enum": [
+              "required",
+              "optional",
+              "unsupported"
+            ],
+            "example": "required",
+            "type": "string"
+          },
+          "description": {
+            "description": "A short sentence summarizing the project, no more than a sentence or two.",
+            "type": "string"
+          },
+          "discord_url": {
+            "description": "An optional invite link to the project's discord.",
+            "example": "https://discord.gg/modrinth",
+            "nullable": true,
+            "type": "string"
+          },
+          "donation_urls": {
+            "description": "A list of donation links for the project",
+            "items": {
+              "$ref": "#/components/schemas/ProjectDonationURL"
+            },
+            "type": "array"
+          },
+          "issues_url": {
+            "description": "An optional link to where to submit bugs or issues with the project",
+            "example": "https://github.com/modrinth/code/issues",
+            "nullable": true,
+            "type": "string"
+          },
+          "requested_status": {
+            "description": "The requested status when submitting for review or scheduling the project for release. Approved status refers to \"Public\" visibility.",
+            "enum": [
+              "approved",
+              "archived",
+              "unlisted",
+              "private",
+              "draft"
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "server_side": {
+            "deprecated": true,
+            "description": "Deprecated - use `environment` instead.",
+            "enum": [
+              "required",
+              "optional",
+              "unsupported"
+            ],
+            "example": "optional",
+            "type": "string"
+          },
+          "slug": {
+            "description": "The slug of a project, used for vanity URLs. Regex: ```^[\\w!@$()`.+,\"\\-']{3,64}$```",
+            "example": "my_project",
+            "type": "string"
+          },
+          "source_url": {
+            "description": "An optional link to the source code of the project",
+            "example": "https://github.com/modrinth/code",
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "description": "The status of the project",
+            "enum": [
+              "approved",
+              "archived",
+              "rejected",
+              "draft",
+              "unlisted",
+              "processing",
+              "withheld",
+              "scheduled",
+              "private",
+              "unknown"
+            ],
+            "example": "approved",
+            "type": "string"
+          },
+          "title": {
+            "description": "The title or name of the project",
+            "type": "string"
+          },
+          "wiki_url": {
+            "description": "An optional link to the project's wiki page or other relevant information",
+            "example": "https://github.com/modrinth/code/wiki",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Notification": {
+        "properties": {
+          "actions": {
+            "description": "A list of actions that can be performed",
+            "items": {
+              "$ref": "#/components/schemas/NotificationAction"
+            },
+            "type": "array"
+          },
+          "created": {
+            "description": "The time at which the notification was created",
+            "format": "ISO-8601",
+            "type": "string"
+          },
+          "id": {
+            "description": "The id of the notification",
+            "example": "UUVVWWXX",
+            "type": "string"
+          },
+          "link": {
+            "description": "A link to the related project or version",
+            "example": "mod/AABBCCDD/version/IIJJKKLL",
+            "type": "string"
+          },
+          "read": {
+            "description": "Whether the notification has been read or not",
+            "example": false,
+            "type": "boolean"
+          },
+          "text": {
+            "description": "The body text of the notification",
+            "example": "The project, My Project, has released a new version: 1.0.0",
+            "type": "string"
+          },
+          "title": {
+            "description": "The title of the notification",
+            "example": "**My Project** has been updated!",
+            "type": "string"
+          },
+          "type": {
+            "description": "The type of notification",
+            "enum": [
+              "project_update",
+              "team_invite",
+              "status_change",
+              "moderator_message"
+            ],
+            "example": "project_update",
+            "nullable": true,
+            "type": "string"
+          },
+          "user_id": {
+            "description": "The id of the user who received the notification",
+            "example": "EEFFGGHH",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "title",
+          "text",
+          "link",
+          "read",
+          "created",
+          "actions"
+        ],
+        "type": "object"
+      },
+      "NotificationAction": {
+        "description": "An action that can be performed on a notification",
+        "properties": {
+          "action_route": {
+            "description": "The HTTP code and path to request in order to perform this action.",
+            "example": [
+              "POST",
+              "team/{id}/join"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "description": "The friendly name for this action",
+            "example": "Accept",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PatchProjectsBody": {
+        "properties": {
+          "add_additional_categories": {
+            "description": "Add all of the additional categories specified here",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "add_categories": {
+            "description": "Add all of the categories specified here",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "add_donation_urls": {
+            "description": "Add all of the donation links specified here",
+            "items": {
+              "$ref": "#/components/schemas/ProjectDonationURL"
+            },
+            "type": "array"
+          },
+          "additional_categories": {
+            "description": "Set all of the additional categories to the categories specified here",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "categories": {
+            "description": "Set all of the categories to the categories specified here",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "discord_url": {
+            "description": "An optional invite link to the projects' discord",
+            "example": "https://discord.gg/AaBbCcDd",
+            "nullable": true,
+            "type": "string"
+          },
+          "donation_urls": {
+            "description": "Set all of the donation links to the donation links specified here",
+            "items": {
+              "$ref": "#/components/schemas/ProjectDonationURL"
+            },
+            "type": "array"
+          },
+          "issues_url": {
+            "description": "An optional link to where to submit bugs or issues with the projects",
+            "example": "https://github.com/my_user/my_project/issues",
+            "nullable": true,
+            "type": "string"
+          },
+          "remove_additional_categories": {
+            "description": "Remove all of the additional categories specified here",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "remove_categories": {
+            "description": "Remove all of the categories specified here",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "remove_donation_urls": {
+            "description": "Remove all of the donation links specified here",
+            "items": {
+              "$ref": "#/components/schemas/ProjectDonationURL"
+            },
+            "type": "array"
+          },
+          "source_url": {
+            "description": "An optional link to the source code of the projects",
+            "example": "https://github.com/my_user/my_project",
+            "nullable": true,
+            "type": "string"
+          },
+          "wiki_url": {
+            "description": "An optional link to the projects' wiki page or other relevant information",
+            "example": "https://github.com/my_user/my_project/wiki",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Project": {
+        "properties": {
+          "additional_categories": {
+            "description": "A list of additional categories that the project also has. These are supplementary to the featured categories, and does not include them again.",
+            "example": [
+              "technology",
+              "adventure",
+              "fabric"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "approved": {
+            "description": "The date the project was first published",
+            "format": "ISO-8601",
+            "nullable": true,
+            "type": "string"
+          },
+          "body": {
+            "description": "A long form description of the project",
+            "example": "A long body describing my project in detail",
+            "type": "string"
+          },
+          "body_url": {
+            "default": null,
+            "deprecated": true,
+            "description": "Deprecated - The link to the long description of the project. Always null, only kept for legacy compatibility.",
+            "example": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "categories": {
+            "description": "A list of the featured categories that the project has.",
+            "example": [
+              "technology",
+              "adventure",
+              "fabric"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "client_side": {
+            "deprecated": true,
+            "description": "Deprecated - use `environment` instead.",
+            "enum": [
+              "required",
+              "optional",
+              "unsupported",
+              "unknown"
+            ],
+            "example": "required",
+            "type": "string"
+          },
+          "color": {
+            "description": "The RGB color of the project, automatically generated from the project icon",
+            "example": 8703084,
+            "nullable": true,
+            "type": "integer"
+          },
+          "description": {
+            "description": "A short sentence summarizing the project, no more than a sentence or two.",
+            "type": "string"
+          },
+          "discord_url": {
+            "description": "An optional invite link to the project's discord.",
+            "example": "https://discord.gg/modrinth",
+            "nullable": true,
+            "type": "string"
+          },
+          "donation_urls": {
+            "description": "A list of donation links for the project",
+            "items": {
+              "$ref": "#/components/schemas/ProjectDonationURL"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "downloads": {
+            "description": "The total number of downloads of the project",
+            "type": "integer"
+          },
+          "environment": {
+            "description": "All the environments that versions of this project support. Not in any particular order, we recommend using the environment information on a version instead. For an explanation of each environment, see the blog post here: https://modrinth.com/news/article/new-environments/#new-system",
+            "example": [
+              "client_and_server"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EnvironmentEnum"
+            },
+            "type": "array"
+          },
+          "followers": {
+            "description": "The total number of users following the project",
+            "type": "integer"
+          },
+          "gallery": {
+            "description": "A list of images that have been uploaded to the project's gallery",
+            "items": {
+              "$ref": "#/components/schemas/GalleryImage"
+            },
+            "type": "array"
+          },
+          "game_versions": {
+            "description": "A list of all of the game versions supported by the project",
+            "example": [
+              "1.19",
+              "1.19.1",
+              "1.19.2",
+              "1.19.3"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "icon_url": {
+            "description": "The URL of the project's icon",
+            "example": "https://cdn.modrinth.com/data/AABBCCDD/b46513nd83hb4792a9a0e1fn28fgi6090c1842639.png",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "description": "The ID of the project, encoded as a base62 string",
+            "example": "AABBCCDD",
+            "type": "string"
+          },
+          "issues_url": {
+            "description": "An optional link to where to submit bugs or issues with the project",
+            "example": "https://github.com/modrinth/code/issues",
+            "nullable": true,
+            "type": "string"
+          },
+          "license": {
+            "$ref": "#/components/schemas/ProjectLicense"
+          },
+          "loaders": {
+            "description": "A list of all of the loaders supported by the project. These vary based on project type.",
+            "example": [
+              "neoforge",
+              "fabric"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "moderator_message": {
+            "$ref": "#/components/schemas/ModeratorMessage"
+          },
+          "monetization_status": {
+            "enum": [
+              "monetized",
+              "demonetized",
+              "force-demonetized"
+            ],
+            "type": "string"
+          },
+          "organization": {
+            "description": "The ID of the organization that owns this project",
+            "example": "AABBCCDD",
+            "nullable": true,
+            "type": "string"
+          },
+          "project_type": {
+            "description": "The project type of the project",
+            "enum": [
+              "mod",
+              "modpack",
+              "resourcepack",
+              "shader"
+            ],
+            "example": "mod",
+            "type": "string"
+          },
+          "published": {
+            "description": "The date the project was created",
+            "format": "ISO-8601",
+            "type": "string"
+          },
+          "queued": {
+            "description": "The date the project's status was submitted to moderators for review",
+            "format": "ISO-8601",
+            "nullable": true,
+            "type": "string"
+          },
+          "raw_icon_url": {
+            "description": "The URL of the project's icon without CDN transforms applied",
+            "example": "https://cdn.modrinth.com/data/AABBCCDD/b46513nd83hb4792a9a0e1fn28fgi6090c1842639-raw.png",
+            "nullable": true,
+            "type": "string"
+          },
+          "requested_status": {
+            "description": "The requested status when submitting for review or scheduling the project for release. Approved status refers to \"Public\" visibility.",
+            "enum": [
+              "approved",
+              "archived",
+              "unlisted",
+              "private",
+              "draft"
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "server_side": {
+            "deprecated": true,
+            "description": "Deprecated - use `environment` instead.",
+            "enum": [
+              "required",
+              "optional",
+              "unsupported",
+              "unknown"
+            ],
+            "example": "optional",
+            "type": "string"
+          },
+          "slug": {
+            "description": "The slug of a project, used for vanity URLs. Regex: ```^[\\w!@$()`.+,\"\\-']{3,64}$```",
+            "example": "my_project",
+            "nullable": true,
+            "type": "string"
+          },
+          "source_url": {
+            "description": "An optional link to the source code of the project",
+            "example": "https://github.com/modrinth/code",
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "description": "The status of the project",
+            "enum": [
+              "approved",
+              "archived",
+              "rejected",
+              "draft",
+              "unlisted",
+              "processing",
+              "withheld",
+              "scheduled",
+              "private",
+              "unknown"
+            ],
+            "example": "approved",
+            "type": "string"
+          },
+          "team": {
+            "description": "The ID of the team that has ownership of this project",
+            "example": "MMNNOOPP",
+            "type": "string"
+          },
+          "thread_id": {
+            "description": "The ID of the moderation thread associated with this project",
+            "example": "TTUUVVWW",
+            "type": "string"
+          },
+          "title": {
+            "description": "The title or name of the project",
+            "type": "string"
+          },
+          "updated": {
+            "description": "The date the latest version of the project was created",
+            "format": "ISO-8601",
+            "type": "string"
+          },
+          "versions": {
+            "description": "A list of the version IDs of the project",
+            "example": [
+              "IIJJKKLL",
+              "QQRRSSTT"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "wiki_url": {
+            "description": "An optional link to the project's wiki page or other relevant information",
+            "example": "https://github.com/modrinth/code/wiki",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "team",
+          "title",
+          "description",
+          "body",
+          "status",
+          "project_type",
+          "categories",
+          "additional_categories",
+          "environment",
+          "game_versions",
+          "loaders",
+          "versions",
+          "license",
+          "published",
+          "updated",
+          "downloads",
+          "followers",
+          "gallery",
+          "thread_id",
+          "monetization_status",
+          "client_side",
+          "server_side"
+        ],
+        "type": "object"
+      },
+      "ProjectDependencyList": {
+        "properties": {
+          "projects": {
+            "description": "Projects that the project depends upon",
+            "items": {
+              "$ref": "#/components/schemas/Project"
+            },
+            "type": "array"
+          },
+          "versions": {
+            "description": "Versions that the project depends upon",
+            "items": {
+              "$ref": "#/components/schemas/Version"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ProjectDonationURL": {
+        "properties": {
+          "id": {
+            "description": "The ID of the donation platform",
+            "example": "patreon",
+            "type": "string"
+          },
+          "platform": {
+            "description": "The donation platform this link is to",
+            "example": "Patreon",
+            "type": "string"
+          },
+          "url": {
+            "description": "The URL of the donation platform and user",
+            "example": "https://www.patreon.com/my_user",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ProjectIdentifier": {
+        "properties": {
+          "id": {
+            "example": "AABBCCDD",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ProjectLicense": {
+        "description": "The license of the project",
+        "properties": {
+          "id": {
+            "description": "The SPDX license ID of a project",
+            "example": "LGPL-3.0-or-later",
+            "type": "string"
+          },
+          "name": {
+            "description": "The long name of a license",
+            "example": "GNU Lesser General Public License v3 or later",
+            "type": "string"
+          },
+          "url": {
+            "description": "The URL to this license",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ProjectResult": {
+        "properties": {
+          "all_project_types": {
+            "description": "All project types across every version of the project, unlike `project_type` which only reflects a version-specific type",
+            "example": [
+              "mod",
+              "plugin",
+              "datapack"
+            ],
+            "items": {
+              "enum": [
+                "mod",
+                "resourcepack",
+                "datapack",
+                "shader",
+                "modpack",
+                "plugin"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "author": {
+            "description": "The username of the project's author",
+            "example": "my_user",
+            "type": "string"
+          },
+          "author_id": {
+            "description": "The ID of the project's author",
+            "example": "EEFFGGHH",
+            "nullable": true,
+            "type": "string"
+          },
+          "categories": {
+            "description": "A list of the featured categories that the project has.",
+            "example": [
+              "technology",
+              "adventure",
+              "fabric"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "client_side": {
+            "deprecated": true,
+            "description": "Deprecated - use `environment` instead. The client side support of the project",
+            "enum": [
+              "required",
+              "optional",
+              "unsupported",
+              "unknown"
+            ],
+            "example": "required",
+            "type": "string"
+          },
+          "color": {
+            "description": "The RGB color of the project, automatically generated from the project icon",
+            "example": 8703084,
+            "nullable": true,
+            "type": "integer"
+          },
+          "date_created": {
+            "description": "The date the project was created",
+            "format": "ISO-8601",
+            "type": "string"
+          },
+          "date_modified": {
+            "description": "The date the latest version of the project was created",
+            "format": "ISO-8601",
+            "type": "string"
+          },
+          "description": {
+            "description": "A short sentence summarizing the project, no more than a sentence or two.",
+            "type": "string"
+          },
+          "disclosure_types": {
+            "description": "Disclosures listed on the project.",
+            "example": [
+              "ai_content",
+              "ai_content_code",
+              "advertisements"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/DisclosureTypeEnum"
+            },
+            "type": "array"
+          },
+          "display_categories": {
+            "description": "A list of the featured categories that the project has. Equivalent to `categories` on the project itself.",
+            "example": [
+              "technology",
+              "fabric"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "downloads": {
+            "description": "The total number of downloads of the project",
+            "type": "integer"
+          },
+          "environment": {
+            "description": "All the environments that versions of this project support. Not in any particular order, we recommend using the environment information on a version instead. For an explanation of each environment, see the blog post here: https://modrinth.com/news/article/new-environments/#new-system",
+            "example": [
+              "client_and_server"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EnvironmentEnum"
+            },
+            "type": "array"
+          },
+          "featured_gallery": {
+            "description": "The featured gallery image of the project",
+            "nullable": true,
+            "type": "string"
+          },
+          "follows": {
+            "description": "The total number of users following the project",
+            "type": "integer"
+          },
+          "gallery": {
+            "description": "A list of images that have been uploaded to the project's gallery",
+            "example": [
+              "https://cdn.modrinth.com/data/AABBCCDD/images/009b7d8d6e8bf04968a29421117c59b3efe2351a.png",
+              "https://cdn.modrinth.com/data/AABBCCDD/images/c21776867afb6046fdc3c21dbcf5cc50ae27a236.png"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "icon_url": {
+            "description": "The URL of the project's icon",
+            "example": "https://cdn.modrinth.com/data/AABBCCDD/b46513nd83hb4792a9a0e1fn28fgi6090c1842639.png",
+            "type": "string"
+          },
+          "latest_version": {
+            "description": "The ID of the latest version of the project",
+            "example": "IIJJKKLL",
+            "type": "string"
+          },
+          "license": {
+            "description": "The SPDX license ID of a project",
+            "example": "MIT",
+            "type": "string"
+          },
+          "organization": {
+            "description": "The name of the organization that owns this project",
+            "example": "my_org",
+            "nullable": true,
+            "type": "string"
+          },
+          "organization_id": {
+            "description": "The ID of the organization that owns this project",
+            "example": "AABBCCDD",
+            "nullable": true,
+            "type": "string"
+          },
+          "project_id": {
+            "description": "The ID of the project, encoded as a base62 string",
+            "example": "AABBCCDD",
+            "type": "string"
+          },
+          "project_type": {
+            "description": "The project type of the project",
+            "enum": [
+              "mod",
+              "modpack",
+              "resourcepack",
+              "shader"
+            ],
+            "example": "mod",
+            "type": "string"
+          },
+          "server_side": {
+            "deprecated": true,
+            "description": "Deprecated - use `environment` instead. The server side support of the project",
+            "enum": [
+              "required",
+              "optional",
+              "unsupported",
+              "unknown"
+            ],
+            "example": "optional",
+            "type": "string"
+          },
+          "slug": {
+            "description": "The slug of a project, used for vanity URLs. Regex: ```^[\\w!@$()`.+,\"\\-']{3,64}$```",
+            "example": "my_project",
+            "nullable": true,
+            "type": "string"
+          },
+          "title": {
+            "description": "The title or name of the project",
+            "type": "string"
+          },
+          "versions": {
+            "description": "A list of the minecraft versions supported by the project",
+            "example": [
+              "1.8",
+              "1.8.9"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_type",
+          "all_project_types",
+          "title",
+          "description",
+          "author",
+          "categories",
+          "display_categories",
+          "versions",
+          "downloads",
+          "follows",
+          "icon_url",
+          "date_created",
+          "date_modified",
+          "latest_version",
+          "license",
+          "environment",
+          "disclosure_types",
+          "gallery",
+          "client_side",
+          "server_side"
+        ],
+        "type": "object"
+      },
+      "Report": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CreatableReport"
+          },
+          {
+            "properties": {
+              "closed": {
+                "description": "Whether the report is resolved",
+                "type": "boolean"
+              },
+              "created": {
+                "description": "The time at which the report was created",
+                "format": "ISO-8601",
+                "type": "string"
+              },
+              "id": {
+                "description": "The ID of the report",
+                "example": "VVWWXXYY",
+                "type": "string"
+              },
+              "reporter": {
+                "description": "The ID of the user who reported the item",
+                "example": "UUVVWWXX",
+                "type": "string"
+              },
+              "thread_id": {
+                "description": "The ID of the moderation thread associated with this report",
+                "example": "TTUUVVWW",
+                "type": "string"
+              }
+            },
+            "required": [
+              "reporter",
+              "created",
+              "closed",
+              "thread_id"
+            ],
+            "type": "object"
+          }
+        ],
+        "type": "object"
+      },
+      "Schedule": {
+        "properties": {
+          "requested_status": {
+            "description": "The requested status when scheduling the project for release",
+            "enum": [
+              "approved",
+              "archived",
+              "unlisted",
+              "private",
+              "draft"
+            ],
+            "type": "string"
+          },
+          "time": {
+            "example": "2023-02-05T19:39:55.551839Z",
+            "format": "ISO-8601",
+            "type": "string"
+          }
+        },
+        "required": [
+          "time",
+          "requested_status"
+        ],
+        "type": "object"
+      },
+      "SearchResults": {
+        "properties": {
+          "hits": {
+            "description": "The list of results",
+            "items": {
+              "$ref": "#/components/schemas/ProjectResult"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "description": "The number of results that were returned by the query",
+            "example": 10,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "The number of results that were skipped by the query",
+            "example": 0,
+            "type": "integer"
+          },
+          "total_hits": {
+            "description": "The total number of results that match the query",
+            "example": 10,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "hits",
+          "offset",
+          "limit",
+          "total_hits"
+        ],
+        "type": "object"
+      },
+      "Statistics": {
+        "properties": {
+          "authors": {
+            "description": "Number of authors (users with projects) on Modrinth",
+            "type": "integer"
+          },
+          "files": {
+            "description": "Number of version files on Modrinth",
+            "type": "integer"
+          },
+          "projects": {
+            "description": "Number of projects on Modrinth",
+            "type": "integer"
+          },
+          "versions": {
+            "description": "Number of versions on Modrinth",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "TeamMember": {
+        "properties": {
+          "accepted": {
+            "description": "Whether or not the user has accepted to be on the team (requires authorization to view)",
+            "example": true,
+            "type": "boolean"
+          },
+          "ordering": {
+            "description": "The order of the team member.",
+            "example": 0,
+            "type": "integer"
+          },
+          "payouts_split": {
+            "description": "The split of payouts going to this user. The proportion of payouts they get is their split divided by the sum of the splits of all members.",
+            "example": 100,
+            "type": "integer"
+          },
+          "permissions": {
+            "description": "The user's permissions in bitfield format (requires authorization to view)\n\nIn order from first to tenth bit, the bits are:\n- UPLOAD_VERSION\n- DELETE_VERSION\n- EDIT_DETAILS\n- EDIT_BODY\n- MANAGE_INVITES\n- REMOVE_MEMBER\n- EDIT_MEMBER\n- DELETE_PROJECT\n- VIEW_ANALYTICS\n- VIEW_PAYOUTS\n",
+            "example": 127,
+            "format": "bitfield",
+            "type": "integer"
+          },
+          "role": {
+            "description": "The user's role on the team",
+            "example": "Member",
+            "type": "string"
+          },
+          "team_id": {
+            "description": "The ID of the team this team member is a member of",
+            "example": "MMNNOOPP",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        },
+        "required": [
+          "team_id",
+          "user",
+          "role",
+          "accepted"
+        ],
+        "type": "object"
+      },
+      "Thread": {
+        "properties": {
+          "id": {
+            "description": "The ID of the thread",
+            "example": "WWXXYYZZ",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/User"
+            },
+            "type": "array"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadMessage"
+            },
+            "type": "array"
+          },
+          "project_id": {
+            "description": "The ID of the associated project if a project thread",
+            "nullable": true,
+            "type": "string"
+          },
+          "report_id": {
+            "description": "The ID of the associated report if a report thread",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "project",
+              "report",
+              "direct_message"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "messages",
+          "members"
+        ],
+        "type": "object"
+      },
+      "ThreadMessage": {
+        "properties": {
+          "author_id": {
+            "description": "The ID of the author",
+            "example": "QQRRSSTT",
+            "nullable": true,
+            "type": "string"
+          },
+          "body": {
+            "$ref": "#/components/schemas/ThreadMessageBody"
+          },
+          "created": {
+            "description": "The time at which the message was created",
+            "format": "ISO-8601",
+            "type": "string"
+          },
+          "id": {
+            "description": "The ID of the message itself",
+            "example": "MMNNOOPP",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "body",
+          "created"
+        ],
+        "type": "object"
+      },
+      "ThreadMessageBody": {
+        "description": "The contents of the message. **Fields will vary depending on message type.**",
+        "properties": {
+          "body": {
+            "description": "The actual message text. **Only present for `text` message type**",
+            "example": "This is the text of the message.",
+            "type": "string"
+          },
+          "new_status": {
+            "description": "The new status of the project. **Only present for `status_change` message type**",
+            "enum": [
+              "approved",
+              "archived",
+              "rejected",
+              "draft",
+              "unlisted",
+              "processing",
+              "withheld",
+              "scheduled",
+              "private",
+              "unknown"
+            ],
+            "example": "approved",
+            "type": "string"
+          },
+          "old_status": {
+            "description": "The old status of the project. **Only present for `status_change` message type**",
+            "enum": [
+              "approved",
+              "archived",
+              "rejected",
+              "draft",
+              "unlisted",
+              "processing",
+              "withheld",
+              "scheduled",
+              "private",
+              "unknown"
+            ],
+            "example": "processing",
+            "type": "string"
+          },
+          "private": {
+            "description": "Whether the message is only visible to moderators. **Only present for `text` message type**",
+            "example": false,
+            "type": "boolean"
+          },
+          "replying_to": {
+            "description": "The ID of the message being replied to by this message. **Only present for `text` message type**",
+            "example": "SSTTUUVV",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "description": "The type of message",
+            "enum": [
+              "status_change",
+              "text",
+              "thread_closure",
+              "deleted"
+            ],
+            "example": "status_change",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "User": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EditableUser"
+          },
+          {
+            "properties": {
+              "auth_providers": {
+                "description": "A list of authentication providers you have signed up for (only displayed if requesting your own account)",
+                "example": [
+                  "github",
+                  "gitlab",
+                  "steam",
+                  "microsoft",
+                  "google",
+                  "discord"
+                ],
+                "items": {
+                  "type": "string"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "avatar_url": {
+                "description": "The user's avatar url",
+                "example": "https://avatars.githubusercontent.com/u/11223344?v=1",
+                "type": "string"
+              },
+              "badges": {
+                "description": "Any badges applicable to this user. These are currently unused and undisplayed, and as such are subject to change\n\nIn order from first to seventh bit, the current bits are:\n- (unused)\n- EARLY_MODPACK_ADOPTER\n- EARLY_RESPACK_ADOPTER\n- EARLY_PLUGIN_ADOPTER\n- ALPHA_TESTER\n- CONTRIBUTOR\n- TRANSLATOR\n",
+                "example": 63,
+                "format": "bitfield",
+                "type": "integer"
+              },
+              "created": {
+                "description": "The time at which the user was created",
+                "format": "ISO-8601",
+                "type": "string"
+              },
+              "email_verified": {
+                "description": "Whether your email is verified (only displayed if requesting your own account)",
+                "nullable": true,
+                "type": "boolean"
+              },
+              "github_id": {
+                "deprecated": true,
+                "description": "Deprecated - this is no longer public for security reasons and is always null",
+                "example": null,
+                "nullable": true,
+                "type": "integer"
+              },
+              "has_password": {
+                "description": "Whether you have a password associated with your account (only displayed if requesting your own account)",
+                "nullable": true,
+                "type": "boolean"
+              },
+              "has_totp": {
+                "description": "Whether you have TOTP two-factor authentication connected to your account (only displayed if requesting your own account)",
+                "nullable": true,
+                "type": "boolean"
+              },
+              "id": {
+                "description": "The user's ID",
+                "example": "EEFFGGHH",
+                "type": "string"
+              },
+              "role": {
+                "description": "The user's role",
+                "enum": [
+                  "admin",
+                  "moderator",
+                  "developer"
+                ],
+                "example": "developer",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "avatar_url",
+              "created",
+              "role"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "UserIdentifier": {
+        "properties": {
+          "user_id": {
+            "example": "EEFFGGHH",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ]
+      },
+      "UserPayoutData": {
+        "description": "Various data relating to the user's payouts status (you can only see your own)",
+        "nullable": true,
+        "properties": {
+          "balance": {
+            "description": "The payout balance available for the user to withdraw (note, you cannot modify this in a PATCH request)",
+            "example": 10.11223344556678,
+            "type": "integer"
+          },
+          "payout_address": {
+            "description": "The user's payout address",
+            "example": "support@modrinth.com",
+            "type": "string"
+          },
+          "payout_wallet": {
+            "description": "The wallet that the user has selected",
+            "enum": [
+              "paypal",
+              "venmo"
+            ],
+            "example": "paypal",
+            "type": "string"
+          },
+          "payout_wallet_type": {
+            "description": "The type of the user's wallet",
+            "enum": [
+              "email",
+              "phone",
+              "user_handle"
+            ],
+            "example": "email",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "UserPayoutHistory": {
+        "properties": {
+          "all_time": {
+            "description": "The all-time balance accrued by this user in USD",
+            "example": 10.11223344556678,
+            "type": "string"
+          },
+          "last_month": {
+            "description": "The amount in USD made by the user in the previous 30 days",
+            "example": 2.2244668800224465,
+            "type": "string"
+          },
+          "payouts": {
+            "description": "A history of all of the user's past transactions",
+            "items": {
+              "$ref": "#/components/schemas/UserPayoutHistoryEntry"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "UserPayoutHistoryEntry": {
+        "properties": {
+          "amount": {
+            "description": "The amount of this transaction in USD",
+            "example": 10,
+            "type": "integer"
+          },
+          "created": {
+            "description": "The date of this transaction",
+            "format": "ISO-8601",
+            "type": "string"
+          },
+          "status": {
+            "description": "The status of this transaction",
+            "example": "success",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Version": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseVersion"
+          },
+          {
+            "properties": {
+              "author_id": {
+                "description": "The ID of the author who published this version",
+                "example": "EEFFGGHH",
+                "type": "string"
+              },
+              "changelog_url": {
+                "deprecated": true,
+                "description": "A link to the changelog for this version. Always null, only kept for legacy compatibility.",
+                "example": null,
+                "nullable": true,
+                "type": "string"
+              },
+              "date_published": {
+                "format": "ISO-8601",
+                "type": "string"
+              },
+              "downloads": {
+                "description": "The number of times this version has been downloaded",
+                "type": "integer"
+              },
+              "environment": {
+                "$ref": "#/components/schemas/EnvironmentEnum"
+              },
+              "files": {
+                "description": "A list of files available for download for this version",
+                "items": {
+                  "$ref": "#/components/schemas/VersionFile"
+                },
+                "type": "array"
+              },
+              "id": {
+                "description": "The ID of the version, encoded as a base62 string",
+                "example": "IIJJKKLL",
+                "type": "string"
+              },
+              "project_id": {
+                "description": "The ID of the project this version is for",
+                "example": "AABBCCDD",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "project_id",
+              "author_id",
+              "date_published",
+              "downloads",
+              "files",
+              "name",
+              "version_number",
+              "game_versions",
+              "version_type",
+              "loaders",
+              "featured",
+              "environment"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "VersionDependency": {
+        "properties": {
+          "dependency_type": {
+            "description": "The type of dependency that this version has",
+            "enum": [
+              "required",
+              "optional",
+              "incompatible",
+              "embedded"
+            ],
+            "example": "required",
+            "type": "string"
+          },
+          "file_name": {
+            "description": "The file name of the dependency, mostly used for showing external dependencies on modpacks",
+            "example": "sodium-fabric-mc1.19-0.4.2+build.16.jar",
+            "nullable": true,
+            "type": "string"
+          },
+          "project_id": {
+            "description": "The ID of the project that this version depends on",
+            "example": "QQRRSSTT",
+            "nullable": true,
+            "type": "string"
+          },
+          "version_id": {
+            "description": "The ID of the version that this version depends on",
+            "example": "IIJJKKLL",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "dependency_type"
+        ],
+        "type": "object"
+      },
+      "VersionFile": {
+        "properties": {
+          "file_type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FileTypeEnum"
+              },
+              {
+                "description": "The type of the additional file, used mainly for adding resource packs to datapacks",
+                "nullable": true
+              }
+            ]
+          },
+          "filename": {
+            "description": "The name of the file",
+            "example": "my_file.jar",
+            "type": "string"
+          },
+          "hashes": {
+            "$ref": "#/components/schemas/VersionFileHashes"
+          },
+          "primary": {
+            "description": "Whether this file is the primary one for its version. Only a maximum of one file per version will have this set to true. If there are not any primary files, it can be inferred that the first file is the primary one.",
+            "example": false,
+            "type": "boolean"
+          },
+          "size": {
+            "description": "The size of the file in bytes",
+            "example": 1097270,
+            "type": "integer"
+          },
+          "url": {
+            "description": "A direct link to the file",
+            "example": "https://cdn.modrinth.com/data/AABBCCDD/versions/1.0.0/my_file.jar",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hashes",
+          "url",
+          "filename",
+          "primary",
+          "size"
+        ],
+        "type": "object"
+      },
+      "VersionFileHashes": {
+        "description": "A map of hashes of the file. The key is the hashing algorithm and the value is the string version of the hash.",
+        "properties": {
+          "sha1": {
+            "example": "c84dd4b3580c02b79958a0590afd5783d80ef504",
+            "type": "string"
+          },
+          "sha512": {
+            "example": "93ecf5fe02914fb53d94aa3d28c1fb562e23985f8e4d48b9038422798618761fe208a31ca9b723667a4e05de0d91a3f86bcd8d018f6a686c39550e21b198d96f",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "TokenAuth": {
+        "in": "header",
+        "name": "Authorization",
+        "type": "apiKey"
+      }
+    }
+  },
+  "info": {
+    "contact": {
+      "email": "support@modrinth.com",
+      "name": "Modrinth Support",
+      "url": "https://support.modrinth.com"
+    },
+    "description": "This documentation doesn't provide a way to test our API. In order to facilitate testing, we recommend the following tools:\n\n- [cURL](https://curl.se/) (recommended, command-line)\n- [ReqBIN](https://reqbin.com/) (recommended, online)\n- [Postman](https://www.postman.com/downloads/)\n- [Insomnia](https://insomnia.rest/)\n- Your web browser, if you don't need to send headers or a request body\n\nOnce you have a working client, you can test that it works by making a `GET` request to `https://staging-api.modrinth.com/`:\n\n```json\n{\n  \"about\": \"Welcome traveler!\",\n  \"documentation\": \"https://docs.modrinth.com\",\n  \"name\": \"modrinth-labrinth\",\n  \"version\": \"2.7.0\"\n}\n```\n\nIf you got a response similar to the one above, you can use the Modrinth API!\nWhen you want to go live using the production API, use `api.modrinth.com` instead of `staging-api.modrinth.com`.\n\n## Authentication\nThis API has two options for authentication: personal access tokens and [OAuth2](https://en.wikipedia.org/wiki/OAuth).\nAll tokens are tied to a Modrinth user and use the `Authorization` header of the request.\n\nExample:\n```\nAuthorization: mrp_RNtLRSPmGj2pd1v1ubi52nX7TJJM9sznrmwhAuj511oe4t1jAqAQ3D6Wc8Ic\n```\n\nYou do not need a token for most requests. Generally speaking, only the following types of requests require a token:\n- those which create data (such as version creation)\n- those which modify data (such as editing a project)\n- those which access private data (such as draft projects, notifications, emails, and payout data)\n\nEach request requiring authentication has a certain scope. For example, to view the email of the user being requested, the token must have the `USER_READ_EMAIL` scope.\nYou can find the list of available scopes [on GitHub](https://github.com/modrinth/labrinth/blob/master/src/models/pats.rs#L15). Making a request with an invalid scope will return a 401 error.\n\nPlease note that certain scopes and requests cannot be completed with a personal access token or using OAuth.\nFor example, deleting a user account can only be done through Modrinth's frontend.\n\nA detailed guide on OAuth has been published in [Modrinth's technical documentation](https://docs.modrinth.com/guide/oauth).\n\n### Personal access tokens\nPersonal access tokens (PATs) can be generated in from [the user settings](https://modrinth.com/settings/account).\n\n### GitHub tokens\nFor backwards compatibility purposes, some types of GitHub tokens also work for authenticating a user with Modrinth's API, granting all scopes.\n**We urge any application still using GitHub tokens to start using personal access tokens for security and reliability purposes.**\nGitHub tokens will cease to function to authenticate with Modrinth's API as soon as version 3 of the API is made generally available.\n\n## Cross-Origin Resource Sharing\nThis API features Cross-Origin Resource Sharing (CORS) implemented in compliance with the [W3C spec](https://www.w3.org/TR/cors/).\nThis allows for cross-domain communication from the browser.\nAll responses have a wildcard same-origin which makes them completely public and accessible to everyone, including any code on any site.\n\n## Identifiers\nThe majority of items you can interact with in the API have a unique eight-digit base62 ID.\nProjects, versions, users, threads, teams, and reports all use this same way of identifying themselves.\nVersion files use the sha1 or sha512 file hashes as identifiers.\n\nEach project and user has a friendlier way of identifying them; slugs and usernames, respectively.\nWhile unique IDs are constant, slugs and usernames can change at any moment.\nIf you want to store something in the long term, it is recommended to use the unique ID.\n\n## Ratelimits\nThe API has a ratelimit defined per IP. Limits and remaining amounts are given in the response headers.\n- `X-Ratelimit-Limit`: the maximum number of requests that can be made in a minute\n- `X-Ratelimit-Remaining`: the number of requests remaining in the current ratelimit window\n- `X-Ratelimit-Reset`: the time in seconds until the ratelimit window resets\n\nRatelimits are the same no matter whether you use a token or not.\nThe ratelimit is currently 300 requests per minute. If you have a use case requiring a higher limit, please [contact us](mailto:support@modrinth.com).\n\n## User Agents\nTo access the Modrinth API, you **must** use provide a uniquely-identifying `User-Agent` header.\nProviding a user agent that only identifies your HTTP client library (such as \"okhttp/4.9.3\") increases the likelihood that we will block your traffic.\nIt is recommended, but not required, to include contact information in your user agent.\nThis allows us to contact you if we would like a change in your application's behavior without having to block your traffic.\n- Bad: `User-Agent: okhttp/4.9.3`\n- Good: `User-Agent: project_name`\n- Better: `User-Agent: github_username/project_name/1.56.0`\n- Best: `User-Agent: github_username/project_name/1.56.0 (launcher.com)` or `User-Agent: github_username/project_name/1.56.0 (contact@launcher.com)`\n\n## Versioning\nModrinth follows a simple pattern for its API versioning.\nIn the event of a breaking API change, the API version in the URL path is bumped, and migration steps will be published below.\n\nWhen an API is no longer the current one, it will immediately be considered deprecated.\nNo more support will be provided for API versions older than the current one.\nIt will be kept for some time, but this amount of time is not certain.\n\nWe will exercise various tactics to get people to update their implementation of our API.\nOne example is by adding something like `STOP USING THIS API` to various data returned by the API.\n\nOnce an API version is completely deprecated, it will permanently return a 410 error.\nPlease ensure your application handles these 410 errors.\n\n### Migrations\nInside the following spoiler, you will be able to find all changes between versions of the Modrinth API, accompanied by tips and a guide to migrate applications to newer versions.\n\nHere, you can also find changes for [Minotaur](https://github.com/modrinth/minotaur), Modrinth's official Gradle plugin. Major versions of Minotaur directly correspond to major versions of the Modrinth API.\n\n<details><summary>API v1 to API v2</summary>\n\nThese bullet points cover most changes in the v2 API, but please note that fields containing `mod` in most contexts have been shifted to `project`.  For example, in the search route, the field `mod_id` was renamed to `project_id`.\n\n- The search route has been moved from `/api/v1/mod` to `/v2/search`\n- New project fields: `project_type` (may be `mod` or `modpack`), `moderation_message` (which has a `message` and `body`), `gallery`\n- New search facet: `project_type`\n- Alphabetical sort removed (it didn't work and is not possible due to limits in MeiliSearch)\n- New search fields: `project_type`, `gallery`\n  - The gallery field is an array of URLs to images that are part of the project's gallery\n- The gallery is a new feature which allows the user to upload images showcasing their mod to the CDN which will be displayed on their mod page\n- Internal change: Any project file uploaded to Modrinth is now validated to make sure it's a valid Minecraft mod, Modpack, etc.\n  - For example, a Forge 1.17 mod with a JAR not containing a mods.toml will not be allowed to be uploaded to Modrinth\n- In project creation, projects may not upload a mod with no versions to review, however they can be saved as a draft\n  - Similarly, for version creation, a version may not be uploaded without any files\n- Donation URLs have been enabled\n- New project status: `archived`. Projects with this status do not appear in search\n- Tags (such as categories, loaders) now have icons (SVGs) and specific project types attached\n- Dependencies have been wiped and replaced with a new system\n- Notifications now have a `type` field, such as `project_update`\n\nAlong with this, project subroutes (such as `/v2/project/{id}/version`) now allow the slug to be used as the ID. This is also the case with user routes.\n\n</details><details><summary>Minotaur v1 to Minotaur v2</summary>\n\nMinotaur 2.x introduced a few breaking changes to how your buildscript is formatted.\n\nFirst, instead of registering your own `publishModrinth` task, Minotaur now automatically creates a `modrinth` task. As such, you can replace the `task publishModrinth(type: TaskModrinthUpload) {` line with just `modrinth {`.\n\nTo declare supported Minecraft versions and mod loaders, the `gameVersions` and `loaders` arrays must now be used. The syntax for these are pretty self-explanatory.\n\nInstead of using `releaseType`, you must now use `versionType`. This was actually changed in v1.2.0, but very few buildscripts have moved on from v1.1.0.\n\nDependencies have been changed to a special DSL. Create a `dependencies` block within the `modrinth` block, and then use `scope.type(\"project/version\")`. For example, `required.project(\"fabric-api\")` adds a required project dependency on Fabric API.\n\nYou may now use the slug anywhere that a project ID was previously required.\n\n</details>\n",
+    "termsOfService": "https://modrinth.com/legal/terms",
+    "title": "Labrinth",
+    "version": "v2.7.0/366f528"
+  },
+  "openapi": "3.0.0",
+  "paths": {
+    "/message/{id}": {
+      "delete": {
+        "operationId": "deleteThreadMessage",
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "THREAD_WRITE"
+            ]
+          }
+        ],
+        "summary": "Delete a thread message",
+        "tags": [
+          "threads"
+        ]
+      },
+      "parameters": [
+        {
+          "description": "The ID of the message",
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "schema": {
+            "example": [
+              "IIJJKKLL"
+            ],
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/notification/{id}": {
+      "delete": {
+        "operationId": "deleteNotification",
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "NOTIFICATION_WRITE"
+            ]
+          }
+        ],
+        "summary": "Delete notification",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "get": {
+        "operationId": "getNotification",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Notification"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "NOTIFICATION_READ"
+            ]
+          }
+        ],
+        "summary": "Get notification from ID",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/NotificationIdentifier"
+        }
+      ],
+      "patch": {
+        "operationId": "readNotification",
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "NOTIFICATION_WRITE"
+            ]
+          }
+        ],
+        "summary": "Mark notification as read",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/notifications": {
+      "delete": {
+        "operationId": "deleteNotifications",
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "NOTIFICATION_WRITE"
+            ]
+          }
+        ],
+        "summary": "Delete multiple notifications",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "get": {
+        "operationId": "getNotifications",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Notification"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "NOTIFICATION_READ"
+            ]
+          }
+        ],
+        "summary": "Get multiple notifications",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "parameters": [
+        {
+          "description": "The IDs of the notifications",
+          "in": "query",
+          "name": "ids",
+          "required": true,
+          "schema": {
+            "example": "[\"AABBCCDD\", \"EEFFGGHH\"]",
+            "type": "string"
+          }
+        }
+      ],
+      "patch": {
+        "operationId": "readNotifications",
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "NOTIFICATION_WRITE"
+            ]
+          }
+        ],
+        "summary": "Mark multiple notifications as read",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/project": {
+      "post": {
+        "operationId": "createProject",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectBody"
+              }
+            }
+          },
+          "description": "New project"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_CREATE"
+            ]
+          }
+        ],
+        "summary": "Create a project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/project/{id|slug}": {
+      "delete": {
+        "operationId": "deleteProject",
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_DELETE"
+            ]
+          }
+        ],
+        "summary": "Delete a project",
+        "tags": [
+          "projects"
+        ]
+      },
+      "get": {
+        "operationId": "getProject",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "summary": "Get a project",
+        "tags": [
+          "projects"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectIdentifier"
+        }
+      ],
+      "patch": {
+        "operationId": "modifyProject",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditableProject"
+              }
+            }
+          },
+          "description": "Modified project fields"
+        },
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_WRITE"
+            ]
+          }
+        ],
+        "summary": "Modify a project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/project/{id|slug}/check": {
+      "get": {
+        "operationId": "checkProjectValidity",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectIdentifier"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "summary": "Check project slug/ID validity",
+        "tags": [
+          "projects"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectIdentifier"
+        }
+      ]
+    },
+    "/project/{id|slug}/dependencies": {
+      "get": {
+        "operationId": "getDependencies",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDependencyList"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "summary": "Get all of a project's dependencies",
+        "tags": [
+          "projects"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectIdentifier"
+        }
+      ]
+    },
+    "/project/{id|slug}/follow": {
+      "delete": {
+        "operationId": "unfollowProject",
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "USER_WRITE"
+            ]
+          }
+        ],
+        "summary": "Unfollow a project",
+        "tags": [
+          "projects"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectIdentifier"
+        }
+      ],
+      "post": {
+        "operationId": "followProject",
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "USER_WRITE"
+            ]
+          }
+        ],
+        "summary": "Follow a project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/project/{id|slug}/gallery": {
+      "delete": {
+        "operationId": "deleteGalleryImage",
+        "parameters": [
+          {
+            "description": "URL link of the image to delete",
+            "in": "query",
+            "name": "url",
+            "required": true,
+            "schema": {
+              "format": "uri",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_WRITE"
+            ]
+          }
+        ],
+        "summary": "Delete a gallery image",
+        "tags": [
+          "projects"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectIdentifier"
+        }
+      ],
+      "patch": {
+        "operationId": "modifyGalleryImage",
+        "parameters": [
+          {
+            "description": "URL link of the image to modify",
+            "in": "query",
+            "name": "url",
+            "required": true,
+            "schema": {
+              "format": "uri",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Whether the image is featured",
+            "in": "query",
+            "name": "featured",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "New title of the image",
+            "in": "query",
+            "name": "title",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "New description of the image",
+            "in": "query",
+            "name": "description",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "New ordering of the image",
+            "in": "query",
+            "name": "ordering",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_WRITE"
+            ]
+          }
+        ],
+        "summary": "Modify a gallery image",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "description": "Modrinth allows you to upload files of up to 5MiB to a project's gallery.",
+        "operationId": "addGalleryImage",
+        "parameters": [
+          {
+            "description": "Image extension",
+            "in": "query",
+            "name": "ext",
+            "required": true,
+            "schema": {
+              "enum": [
+                "png",
+                "jpg",
+                "jpeg",
+                "bmp",
+                "gif",
+                "webp",
+                "svg",
+                "svgz",
+                "rgb"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Whether an image is featured",
+            "in": "query",
+            "name": "featured",
+            "required": true,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Title of the image",
+            "in": "query",
+            "name": "title",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Description of the image",
+            "in": "query",
+            "name": "description",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ordering of the image",
+            "in": "query",
+            "name": "ordering",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/Image"
+        },
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_WRITE"
+            ]
+          }
+        ],
+        "summary": "Add a gallery image",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/project/{id|slug}/icon": {
+      "delete": {
+        "operationId": "deleteProjectIcon",
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_WRITE"
+            ]
+          }
+        ],
+        "summary": "Delete project's icon",
+        "tags": [
+          "projects"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectIdentifier"
+        }
+      ],
+      "patch": {
+        "description": "The new icon may be up to 256KiB in size.",
+        "operationId": "changeProjectIcon",
+        "parameters": [
+          {
+            "description": "Image extension",
+            "in": "query",
+            "name": "ext",
+            "required": true,
+            "schema": {
+              "enum": [
+                "png",
+                "jpg",
+                "jpeg",
+                "bmp",
+                "gif",
+                "webp",
+                "svg",
+                "svgz",
+                "rgb"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/Image"
+        },
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_WRITE"
+            ]
+          }
+        ],
+        "summary": "Change project's icon",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/project/{id|slug}/members": {
+      "get": {
+        "operationId": "getProjectTeamMembers",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An array of team members",
+                  "items": {
+                    "$ref": "#/components/schemas/TeamMember"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "summary": "Get a project's team members",
+        "tags": [
+          "teams"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectIdentifier"
+        }
+      ]
+    },
+    "/project/{id|slug}/schedule": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectIdentifier"
+        }
+      ],
+      "post": {
+        "operationId": "scheduleProject",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Schedule"
+              }
+            }
+          },
+          "description": "Information about date and requested status"
+        },
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_WRITE"
+            ]
+          }
+        ],
+        "summary": "Schedule a project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/project/{id|slug}/version": {
+      "get": {
+        "operationId": "getProjectVersions",
+        "parameters": [
+          {
+            "description": "The types of loaders to filter for",
+            "in": "query",
+            "name": "loaders",
+            "required": false,
+            "schema": {
+              "example": "[\"fabric\"]",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The game versions to filter for",
+            "in": "query",
+            "name": "game_versions",
+            "required": false,
+            "schema": {
+              "example": "[\"1.18.1\"]",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Allows to filter for featured or non-featured versions only",
+            "in": "query",
+            "name": "featured",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Allows you to toggle the inclusion of the changelog field in the response. It is highly recommended to use include_changelog=false in most cases unless you specifically need the changelog for all versions.",
+            "in": "query",
+            "name": "include_changelog",
+            "required": false,
+            "schema": {
+              "default": true,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Version"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "summary": "List project's versions",
+        "tags": [
+          "versions"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectIdentifier"
+        }
+      ]
+    },
+    "/project/{id|slug}/version/{id|number}": {
+      "get": {
+        "description": "Please note that, if the version number provided matches multiple versions, only the **oldest matching version** will be returned.",
+        "operationId": "getVersionFromIdOrNumber",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Version"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "summary": "Get a version given a version number or ID",
+        "tags": [
+          "versions"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectIdentifier"
+        },
+        {
+          "description": "The version ID or version number",
+          "in": "path",
+          "name": "id|number",
+          "required": true,
+          "schema": {
+            "example": [
+              "IIJJKKLL"
+            ],
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/projects": {
+      "get": {
+        "operationId": "getProjects",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Project"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          }
+        },
+        "summary": "Get multiple projects",
+        "tags": [
+          "projects"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/MultipleProjectIdentifier"
+        }
+      ],
+      "patch": {
+        "operationId": "patchProjects",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchProjectsBody"
+              }
+            }
+          },
+          "description": "Fields to edit on all projects specified"
+        },
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_WRITE"
+            ]
+          }
+        ],
+        "summary": "Bulk-edit multiple projects",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/projects_random": {
+      "get": {
+        "operationId": "randomProjects",
+        "parameters": [
+          {
+            "description": "The number of random projects to return",
+            "in": "query",
+            "name": "count",
+            "required": true,
+            "schema": {
+              "example": 70,
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Project"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          }
+        },
+        "summary": "Get a list of random projects",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/report": {
+      "get": {
+        "operationId": "getOpenReports",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "count",
+            "schema": {
+              "example": 100,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Report"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "REPORT_READ"
+            ]
+          }
+        ],
+        "summary": "Get your open reports",
+        "tags": [
+          "threads"
+        ]
+      },
+      "post": {
+        "description": "Bring a project, user, or version to the attention of the moderators by reporting it.",
+        "operationId": "submitReport",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatableReport"
+              }
+            }
+          },
+          "description": "The report to be sent"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "REPORT_CREATE"
+            ]
+          }
+        ],
+        "summary": "Report a project, user, or version",
+        "tags": [
+          "threads"
+        ]
+      }
+    },
+    "/report/{id}": {
+      "get": {
+        "operationId": "getReport",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "REPORT_READ"
+            ]
+          }
+        ],
+        "summary": "Get report from ID",
+        "tags": [
+          "threads"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ReportIdentifier"
+        }
+      ],
+      "patch": {
+        "operationId": "modifyReport",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "body": {
+                    "description": "The contents of the report",
+                    "example": "This is the meat and potatoes of the report!",
+                    "type": "string"
+                  },
+                  "closed": {
+                    "description": "Whether the thread should be closed",
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "description": "What to modify about the report"
+        },
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "REPORT_WRITE"
+            ]
+          }
+        ],
+        "summary": "Modify a report",
+        "tags": [
+          "threads"
+        ]
+      }
+    },
+    "/reports": {
+      "get": {
+        "operationId": "getReports",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Report"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "REPORT_READ"
+            ]
+          }
+        ],
+        "summary": "Get multiple reports",
+        "tags": [
+          "threads"
+        ]
+      },
+      "parameters": [
+        {
+          "description": "The IDs of the reports",
+          "in": "query",
+          "name": "ids",
+          "required": true,
+          "schema": {
+            "example": "[\"AABBCCDD\", \"EEFFGGHH\"]",
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/search": {
+      "get": {
+        "operationId": "searchProjects",
+        "parameters": [
+          {
+            "description": "The query to search for",
+            "in": "query",
+            "name": "query",
+            "schema": {
+              "example": "gravestones",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Facets are an essential concept for understanding how to filter out results.\n\nThese are the most commonly used facet types:\n- `project_type`\n- `all_project_types` (matches against every project type across all of the project's versions, not just the primary/version-specific type)\n- `categories` (loaders are lumped in with categories in search)\n- `versions`\n- `open_source`\n- `environment` (one of the following values)\n  - `client_and_server`\n  - `client_only`\n  - `client_only_server_optional`\n  - `singleplayer_only`\n  - `server_only`\n  - `server_only_client_optional`\n  - `dedicated_server_only`\n  - `client_or_server`\n  - `client_or_server_prefers_both`\n  - `unknown`\n- `disclosure_types` (list of any of the following values)\n  - `ai_content`\n  - `ai_content_code`\n  - `ai_content_assets`\n  - `ai_content_text`\n  - `ai_functionality`\n  - `advertisements`\n  - `epilepsy_triggers`\n  - `system_interactions`\n  - `telemetry`\n  - `telemetry_opt_in`\n  - `telemetry_opt_out`\n  - `telemetry_always_active`\n  - `derivative_work`\n  - `paid_features`\n  - `archived`\n- `client_side` (deprecated - use `environment` instead)\n- `server_side` (deprecated - use `environment` instead)\n\nSeveral others are also available for use, though these should not be used outside very specific use cases.\n- `title`\n- `author`\n- `follows`\n- `project_id`\n- `license`\n- `downloads`\n- `created_timestamp` (uses Unix timestamp)\n- `modified_timestamp` (uses Unix timestamp)\n\nIn order to then use these facets, you need a value to filter by, as well as an operation to perform on this value.\nThe most common operation is `:` (same as `=`), though you can also use `!=`, `>=`, `>`, `<=`, and `<`.\nJoin together the type, operation, and value, and you've got your string.\n```\n{type} {operation} {value}\n```\n\nExamples:\n```\ncategories = adventure\nversions != 1.20.1\ndownloads <= 100\n```\n\nYou then join these strings together in arrays to signal `AND` and `OR` operators.\n\n##### OR\nAll elements in a single array are considered to be joined by OR statements.\nFor example, the search `[[\"versions:1.16.5\", \"versions:1.17.1\"]]` translates to `Projects that support 1.16.5 OR 1.17.1`.\n\n##### AND\nSeparate arrays are considered to be joined by AND statements.\nFor example, the search `[[\"versions:1.16.5\"], [\"project_type:modpack\"]]` translates to `Projects that support 1.16.5 AND are modpacks`.\n",
+            "example": "[[\"categories:forge\"],[\"versions:1.17.1\"],[\"project_type:mod\"],[\"license:mit\"]]",
+            "in": "query",
+            "name": "facets",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The sorting method used for sorting search results",
+            "in": "query",
+            "name": "index",
+            "schema": {
+              "default": "relevance",
+              "enum": [
+                "relevance",
+                "downloads",
+                "follows",
+                "newest",
+                "updated"
+              ],
+              "example": "downloads",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The offset into the search. Skips this number of results",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "example": 20,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The number of results returned by the search",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 10,
+              "example": 20,
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResults"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          }
+        },
+        "summary": "Search projects",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/statistics": {
+      "get": {
+        "operationId": "statistics",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Statistics"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          }
+        },
+        "summary": "Various statistics about this Modrinth instance",
+        "tags": [
+          "misc"
+        ]
+      }
+    },
+    "/tag/category": {
+      "get": {
+        "description": "Gets an array of categories, their icons, and applicable project types",
+        "operationId": "categoryList",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryTag"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          }
+        },
+        "summary": "Get a list of categories",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/tag/donation_platform": {
+      "get": {
+        "description": "Gets an array of donation platforms and information about them",
+        "operationId": "donationPlatformList",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DonationPlatformTag"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          }
+        },
+        "summary": "Get a list of donation platforms",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/tag/game_version": {
+      "get": {
+        "description": "Gets an array of game versions and information about them",
+        "operationId": "versionList",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GameVersionTag"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          }
+        },
+        "summary": "Get a list of game versions",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/tag/license": {
+      "get": {
+        "deprecated": true,
+        "description": "Deprecated - simply use SPDX IDs.",
+        "operationId": "licenseList",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LicenseTag"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          }
+        },
+        "summary": "Get a list of licenses",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/tag/license/{id}": {
+      "get": {
+        "operationId": "licenseText",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/License"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          }
+        },
+        "summary": "Get the text and title of a license",
+        "tags": [
+          "tags"
+        ]
+      },
+      "parameters": [
+        {
+          "description": "The license ID to get the text of",
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "schema": {
+            "example": [
+              "LGPL-3.0-or-later"
+            ],
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/tag/loader": {
+      "get": {
+        "description": "Gets an array of loaders, their icons, and supported project types",
+        "operationId": "loaderList",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LoaderTag"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          }
+        },
+        "summary": "Get a list of loaders",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/tag/project_type": {
+      "get": {
+        "description": "Gets an array of valid project types",
+        "operationId": "projectTypeList",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": [
+                    "mod",
+                    "modpack",
+                    "resourcepack",
+                    "shader"
+                  ],
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          }
+        },
+        "summary": "Get a list of project types",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/tag/report_type": {
+      "get": {
+        "description": "Gets an array of valid report types",
+        "operationId": "reportTypeList",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": [
+                    "spam",
+                    "copyright",
+                    "inappropriate",
+                    "malicious",
+                    "name-squatting",
+                    "other"
+                  ],
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          }
+        },
+        "summary": "Get a list of report types",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/tag/side_type": {
+      "get": {
+        "description": "Gets an array of valid side types",
+        "operationId": "sideTypeList",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": [
+                    "required",
+                    "optional",
+                    "unsupported",
+                    "unknown"
+                  ],
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          }
+        },
+        "summary": "Get a list of side types",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/team/{id}/join": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TeamIdentifier"
+        }
+      ],
+      "post": {
+        "operationId": "joinTeam",
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_WRITE"
+            ]
+          }
+        ],
+        "summary": "Join a team",
+        "tags": [
+          "teams"
+        ]
+      }
+    },
+    "/team/{id}/members": {
+      "get": {
+        "operationId": "getTeamMembers",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An array of team members",
+                  "items": {
+                    "$ref": "#/components/schemas/TeamMember"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_READ"
+            ]
+          }
+        ],
+        "summary": "Get a team's members",
+        "tags": [
+          "teams"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TeamIdentifier"
+        }
+      ],
+      "post": {
+        "operationId": "addTeamMember",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserIdentifier"
+              }
+            }
+          },
+          "description": "User to be added (must be the ID, usernames cannot be used here)"
+        },
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_WRITE"
+            ]
+          }
+        ],
+        "summary": "Add a user to a team",
+        "tags": [
+          "teams"
+        ]
+      }
+    },
+    "/team/{id}/members/{id|username}": {
+      "delete": {
+        "operationId": "deleteTeamMember",
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_WRITE"
+            ]
+          }
+        ],
+        "summary": "Remove a member from a team",
+        "tags": [
+          "teams"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TeamIdentifier"
+        },
+        {
+          "$ref": "#/components/parameters/UserIdentifier"
+        }
+      ],
+      "patch": {
+        "operationId": "modifyTeamMember",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModifyTeamMemberBody"
+              }
+            }
+          },
+          "description": "Contents to be modified"
+        },
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_WRITE"
+            ]
+          }
+        ],
+        "summary": "Modify a team member's information",
+        "tags": [
+          "teams"
+        ]
+      }
+    },
+    "/team/{id}/owner": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TeamIdentifier"
+        }
+      ],
+      "patch": {
+        "operationId": "transferTeamOwnership",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserIdentifier"
+              }
+            }
+          },
+          "description": "New owner's ID"
+        },
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PROJECT_WRITE"
+            ]
+          }
+        ],
+        "summary": "Transfer team's ownership to another user",
+        "tags": [
+          "teams"
+        ]
+      }
+    },
+    "/teams": {
+      "get": {
+        "operationId": "getTeams",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "items": {
+                      "$ref": "#/components/schemas/TeamMember"
+                    },
+                    "type": "array"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          }
+        },
+        "summary": "Get the members of multiple teams",
+        "tags": [
+          "teams"
+        ]
+      },
+      "parameters": [
+        {
+          "description": "The IDs of the teams",
+          "in": "query",
+          "name": "ids",
+          "required": true,
+          "schema": {
+            "example": "[\"AABBCCDD\", \"EEFFGGHH\"]",
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/thread/{id}": {
+      "get": {
+        "operationId": "getThread",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Thread"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "THREAD_READ"
+            ]
+          }
+        ],
+        "summary": "Get a thread",
+        "tags": [
+          "threads"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ThreadIdentifier"
+        }
+      ],
+      "post": {
+        "operationId": "sendThreadMessage",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadMessageBody"
+              }
+            }
+          },
+          "description": "The message to be sent. Note that you only need the fields applicable for the `text` type."
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Thread"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "THREAD_WRITE"
+            ]
+          }
+        ],
+        "summary": "Send a text message to a thread",
+        "tags": [
+          "threads"
+        ]
+      }
+    },
+    "/threads": {
+      "get": {
+        "operationId": "getThreads",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Thread"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "THREAD_READ"
+            ]
+          }
+        ],
+        "summary": "Get multiple threads",
+        "tags": [
+          "threads"
+        ]
+      },
+      "parameters": [
+        {
+          "description": "The IDs of the threads",
+          "in": "query",
+          "name": "ids",
+          "required": true,
+          "schema": {
+            "example": "[\"AABBCCDD\", \"EEFFGGHH\"]",
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/updates/{id|slug}/forge_updates.json": {
+      "get": {
+        "description": "If you're a Forge mod developer, your Modrinth mods have an automatically generated `updates.json` using the\n[Forge Update Checker](https://docs.minecraftforge.net/en/latest/misc/updatechecker/).\n\nThe only setup is to insert the URL into the `[[mods]]` section of your `mods.toml` file as such:\n\n```toml\n[[mods]]\n# the other stuff here - ID, version, display name, etc.\nupdateJSONURL = \"https://api.modrinth.com/updates/{slug|ID}/forge_updates.json\"\n```\n\nReplace `{slug|id}` with the slug or ID of your project.\n\nModrinth will handle the rest! When you update your mod, Forge will notify your users that their copy of your mod is out of date.\n\nMake sure that the version format you use for your Modrinth releases is the same as the version format you use in your `mods.toml`.\nIf you use a format such as `1.2.3-forge` or `1.2.3+1.19` with your Modrinth releases but your `mods.toml` only has `1.2.3`,\nthe update checker may not function properly.\n\nIf you're using NeoForge, NeoForge versions will, by default, not appear in the default URL.\nYou will need to add `?neoforge=only` to show your NeoForge-only versions, or `?neoforge=include` for both.\n\n```toml\n[[mods]]\n# the other stuff here - ID, version, display name, etc.\nupdateJSONURL = \"https://api.modrinth.com/updates/{slug|ID}/forge_updates.json?neoforge=only\"\n```\n",
+        "operationId": "forgeUpdates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgeUpdates"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "summary": "Forge Updates JSON file",
+        "tags": [
+          "misc"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectIdentifier"
+        },
+        {
+          "description": "Whether to include NeoForge versions. Can be `only` (NeoForge-only versions), `include` (both Forge and NeoForge versions), or omitted (Forge-only versions).",
+          "in": "query",
+          "name": "neoforge",
+          "schema": {
+            "enum": [
+              "only",
+              "include"
+            ],
+            "example": "include",
+            "type": "string"
+          }
+        }
+      ],
+      "servers": [
+        {
+          "description": "Production server",
+          "url": "https://api.modrinth.com"
+        },
+        {
+          "description": "Staging server",
+          "url": "https://staging-api.modrinth.com"
+        }
+      ]
+    },
+    "/user": {
+      "get": {
+        "operationId": "getUserFromAuth",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "USER_READ"
+            ]
+          }
+        ],
+        "summary": "Get user from authorization header",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/user/{id|username}": {
+      "get": {
+        "operationId": "getUser",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "summary": "Get a user",
+        "tags": [
+          "users"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserIdentifier"
+        }
+      ],
+      "patch": {
+        "operationId": "modifyUser",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditableUser"
+              }
+            }
+          },
+          "description": "Modified user fields"
+        },
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "USER_WRITE"
+            ]
+          }
+        ],
+        "summary": "Modify a user",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/user/{id|username}/follows": {
+      "get": {
+        "operationId": "getFollowedProjects",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Project"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "USER_READ"
+            ]
+          }
+        ],
+        "summary": "Get user's followed projects",
+        "tags": [
+          "users"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserIdentifier"
+        }
+      ]
+    },
+    "/user/{id|username}/icon": {
+      "delete": {
+        "operationId": "deleteUserIcon",
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "USER_WRITE"
+            ]
+          }
+        ],
+        "summary": "Remove user's avatar",
+        "tags": [
+          "users"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserIdentifier"
+        }
+      ],
+      "patch": {
+        "description": "The new avatar may be up to 2MiB in size.",
+        "operationId": "changeUserIcon",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/Image"
+        },
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "USER_WRITE"
+            ]
+          }
+        ],
+        "summary": "Change user's avatar",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/user/{id|username}/notifications": {
+      "get": {
+        "operationId": "getUserNotifications",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Notification"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "NOTIFICATION_READ"
+            ]
+          }
+        ],
+        "summary": "Get user's notifications",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserIdentifier"
+        }
+      ]
+    },
+    "/user/{id|username}/payouts": {
+      "get": {
+        "operationId": "getPayoutHistory",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPayoutHistory"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PAYOUTS_READ"
+            ]
+          }
+        ],
+        "summary": "Get user's payout history",
+        "tags": [
+          "users"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserIdentifier"
+        }
+      ],
+      "post": {
+        "description": "Warning: certain amounts get withheld for fees. Please do not call this API endpoint without first acknowledging the warnings on the corresponding frontend page.",
+        "operationId": "withdrawPayout",
+        "parameters": [
+          {
+            "description": "Amount to withdraw",
+            "in": "query",
+            "name": "amount",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "PAYOUTS_WRITE"
+            ]
+          }
+        ],
+        "summary": "Withdraw payout balance to PayPal or Venmo",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/user/{id|username}/projects": {
+      "get": {
+        "operationId": "getUserProjects",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Project"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "summary": "Get user's projects",
+        "tags": [
+          "users"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserIdentifier"
+        }
+      ]
+    },
+    "/users": {
+      "get": {
+        "operationId": "getUsers",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/User"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          }
+        },
+        "summary": "Get multiple users",
+        "tags": [
+          "users"
+        ]
+      },
+      "parameters": [
+        {
+          "description": "The IDs of the users",
+          "in": "query",
+          "name": "ids",
+          "required": true,
+          "schema": {
+            "example": "[\"AABBCCDD\", \"EEFFGGHH\"]",
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/version": {
+      "post": {
+        "description": "This route creates a version on an existing project. There must be at least one file attached to each new version, unless the new version's status is `draft`. `.mrpack`, `.jar`, `.zip`, and `.litemod` files are accepted.\n\nThe request is a [multipart request](https://www.ietf.org/rfc/rfc2388.txt) with at least two form fields: one is `data`, which includes a JSON body with the version metadata as shown below, and at least one field containing an upload file.\n\nYou can name the file parts anything you would like, but you must list each of the parts' names in `file_parts`, and optionally, provide one to use as the primary file in `primary_file`.\n",
+        "operationId": "createVersion",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVersionBody"
+              }
+            }
+          },
+          "description": "New version"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Version"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "VERSION_CREATE"
+            ]
+          }
+        ],
+        "summary": "Create a version",
+        "tags": [
+          "versions"
+        ]
+      }
+    },
+    "/version/{id}": {
+      "delete": {
+        "operationId": "deleteVersion",
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "VERSION_DELETE"
+            ]
+          }
+        ],
+        "summary": "Delete a version",
+        "tags": [
+          "versions"
+        ]
+      },
+      "get": {
+        "operationId": "getVersion",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Version"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "summary": "Get a version",
+        "tags": [
+          "versions"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/VersionIdentifier"
+        }
+      ],
+      "patch": {
+        "operationId": "modifyVersion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditableVersion"
+              }
+            }
+          },
+          "description": "Modified version fields"
+        },
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "VERSION_WRITE"
+            ]
+          }
+        ],
+        "summary": "Modify a version",
+        "tags": [
+          "versions"
+        ]
+      }
+    },
+    "/version/{id}/file": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/VersionIdentifier"
+        }
+      ],
+      "post": {
+        "description": "Project files are attached. `.mrpack` and `.jar` files are accepted.",
+        "operationId": "addFilesToVersion",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "data": {
+                    "enum": [
+                      {}
+                    ],
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "description": "New version files"
+        },
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "VERSION_WRITE"
+            ]
+          }
+        ],
+        "summary": "Add files to version",
+        "tags": [
+          "versions"
+        ]
+      }
+    },
+    "/version/{id}/schedule": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/VersionIdentifier"
+        }
+      ],
+      "post": {
+        "operationId": "scheduleVersion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Schedule"
+              }
+            }
+          },
+          "description": "Information about date and requested status"
+        },
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            },
+            "description": "Request was invalid, see given error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "VERSION_WRITE"
+            ]
+          }
+        ],
+        "summary": "Schedule a version",
+        "tags": [
+          "versions"
+        ]
+      }
+    },
+    "/version_file/{hash}": {
+      "delete": {
+        "operationId": "deleteFileFromHash",
+        "parameters": [
+          {
+            "description": "Version ID to delete the version from, if multiple files of the same hash exist",
+            "in": "query",
+            "name": "version_id",
+            "required": false,
+            "schema": {
+              "example": [
+                "IIJJKKLL"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Expected response to a valid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            },
+            "description": "Incorrect token scopes or no authorization to access the requested item(s)"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "security": [
+          {
+            "TokenAuth": [
+              "VERSION_WRITE"
+            ]
+          }
+        ],
+        "summary": "Delete a file from its hash",
+        "tags": [
+          "version-files"
+        ]
+      },
+      "get": {
+        "operationId": "versionFromHash",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MultipleHashQueryIdentifier"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Version"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "summary": "Get version from hash",
+        "tags": [
+          "version-files"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/FileHashIdentifier"
+        },
+        {
+          "$ref": "#/components/parameters/AlgorithmIdentifier"
+        }
+      ]
+    },
+    "/version_file/{hash}/update": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/FileHashIdentifier"
+        },
+        {
+          "$ref": "#/components/parameters/AlgorithmIdentifier"
+        }
+      ],
+      "post": {
+        "operationId": "getLatestVersionFromHash",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetLatestVersionFromHashBody"
+              }
+            }
+          },
+          "description": "Parameters of the updated version requested"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Version"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "description": "Request was invalid, see given error"
+          },
+          "404": {
+            "description": "The requested item(s) were not found or no authorization to access the requested item(s)"
+          }
+        },
+        "summary": "Latest version of a project from a hash, loader(s), and game version(s)",
+        "tags": [
+          "version-files"
+        ]
+      }
+    },
+    "/version_files": {
+      "post": {
+        "description": "This is the same as [`/version_file/{hash}`](#operation/versionFromHash) except it accepts multiple hashes.",
+        "operationId": "versionsFromHashes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HashList"
+              }
+            }
+          },
+          "description": "Hashes and algorithm of the versions requested"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HashVersionMap"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "description": "Request was invalid, see given error"
+          }
+        },
+        "summary": "Get versions from hashes",
+        "tags": [
+          "version-files"
+        ]
+      }
+    },
+    "/version_files/update": {
+      "post": {
+        "description": "This is the same as [`/version_file/{hash}/update`](#operation/getLatestVersionFromHash) except it accepts multiple hashes.",
+        "operationId": "getLatestVersionsFromHashes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetLatestVersionsFromHashesBody"
+              }
+            }
+          },
+          "description": "Parameters of the updated version requested"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HashVersionMap"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          },
+          "400": {
+            "description": "Request was invalid, see given error"
+          }
+        },
+        "summary": "Latest versions of multiple projects from hashes, loader(s), and game version(s)",
+        "tags": [
+          "version-files"
+        ]
+      }
+    },
+    "/versions": {
+      "get": {
+        "operationId": "getVersions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Version"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Expected response to a valid request"
+          }
+        },
+        "summary": "Get multiple versions",
+        "tags": [
+          "versions"
+        ]
+      },
+      "parameters": [
+        {
+          "description": "The IDs of the versions",
+          "in": "query",
+          "name": "ids",
+          "required": true,
+          "schema": {
+            "example": "[\"AABBCCDD\", \"EEFFGGHH\"]",
+            "type": "string"
+          }
+        }
+      ]
+    }
+  },
+  "servers": [
+    {
+      "description": "Production server",
+      "url": "https://api.modrinth.com/v2"
+    },
+    {
+      "description": "Staging server",
+      "url": "https://staging-api.modrinth.com/v2"
+    }
+  ],
+  "tags": [
+    {
+      "description": "Projects are what Modrinth is centered around, be it mods, modpacks, resource packs, etc.",
+      "name": "projects",
+      "x-displayName": "Projects"
+    },
+    {
+      "description": "Versions contain download links to files with additional metadata.",
+      "name": "versions",
+      "x-displayName": "Versions"
+    },
+    {
+      "description": "Versions can contain multiple files, and these routes help manage those files.",
+      "name": "version-files",
+      "x-displayName": "Version Files"
+    },
+    {
+      "description": "Users can create projects, join teams, access notifications, manage settings, and follow projects. Admins and moderators have more advanced permissions such as reviewing new projects.",
+      "name": "users",
+      "x-displayName": "Users"
+    },
+    {
+      "description": "Notifications are sent to users for various reasons, including for project updates, team invites, and moderation purposes.",
+      "name": "notifications",
+      "x-displayName": "Notifications"
+    },
+    {
+      "description": "Threads are a way of communicating between users and moderators, for the purposes of project reviews and reports.",
+      "name": "threads",
+      "x-displayName": "Threads"
+    },
+    {
+      "description": "Through teams, user permissions limit how team members can modify projects.",
+      "name": "teams",
+      "x-displayName": "Teams"
+    },
+    {
+      "description": "Tags are common and reusable lists of metadata types such as categories or versions. Some can be applied to projects and/or versions.",
+      "name": "tags",
+      "x-displayName": "Tags"
+    },
+    {
+      "name": "misc",
+      "x-displayName": "Miscellaneous"
+    },
+    {
+      "description": "<SchemaDefinition schemaRef=\"#/components/schemas/Project\" />\n",
+      "name": "project_model",
+      "x-displayName": "Project Model"
+    },
+    {
+      "description": "<SchemaDefinition schemaRef=\"#/components/schemas/ProjectResult\" />\n",
+      "name": "project_result_model",
+      "x-displayName": "Search Result Model"
+    },
+    {
+      "description": "<SchemaDefinition schemaRef=\"#/components/schemas/Version\" />\n",
+      "name": "version_model",
+      "x-displayName": "Version Model"
+    },
+    {
+      "description": "<SchemaDefinition schemaRef=\"#/components/schemas/User\" />\n",
+      "name": "user_model",
+      "x-displayName": "User Model"
+    },
+    {
+      "description": "<SchemaDefinition schemaRef=\"#/components/schemas/TeamMember\" />\n",
+      "name": "team_member_model",
+      "x-displayName": "Team Member Model"
+    }
+  ],
+  "x-tagGroups": [
+    {
+      "name": "Routes",
+      "tags": [
+        "projects",
+        "versions",
+        "version-files",
+        "users",
+        "notifications",
+        "threads",
+        "teams",
+        "tags",
+        "misc"
+      ]
+    },
+    {
+      "name": "Models",
+      "tags": [
+        "project_model",
+        "project_result_model",
+        "version_model",
+        "user_model",
+        "team_member_model"
+      ]
+    }
+  ]
+}

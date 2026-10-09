@@ -1,0 +1,2524 @@
+/*
+ * Blockly components. Every value comes from tokens.css; the refinements on top of it are
+ * press feedback, hover only on real pointers, compositor-friendly motion and image outlines.
+ *
+ * The product is drawn the way the landing page is (landing/README.md): ink on paper, the night
+ * field for what is asleep, the torch for what is on, and nothing else warm. Nothing is rounded.
+ * A frame is a two-pixel ink line. A button is a block: it stands proud of its edge and goes
+ * down when pressed. Headings are Geologica with its corners cut square.
+ */
+
+:root {
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --quick: 150ms;
+  --panel: 220ms;
+  /* A state a person should watch change, rather than find already changed. */
+  --morph: 320ms;
+  --image-outline: oklch(0 0 0 / 0.1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --image-outline: oklch(1 0 0 / 0.1);
+  }
+}
+:root[data-theme="dark"] {
+  --image-outline: oklch(1 0 0 / 0.1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink-muted);
+  font-family: var(--font-sans);
+  /* Geologica's sharpness: a little for text, all of it for headings and buttons. */
+  font-variation-settings: "SHRP" 30;
+  font-size: 16px;
+  line-height: 24px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+h1,
+h2,
+h3,
+[class*="type-display"],
+[class*="type-heading"] {
+  font-variation-settings: "SHRP" 100;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--forest-ink);
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.bk-on-dark :focus-visible,
+.bk-on-image :focus-visible {
+  outline-color: var(--focus-ring-inverse);
+}
+
+.bk-mono {
+  font-family: var(--font-mono);
+}
+.bk-num {
+  font-variant-numeric: tabular-nums;
+}
+.bk-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ─── Buttons ───────────────────────────────────────────────────────────────────────────── */
+
+.bk-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  border: 2px solid transparent;
+  border-radius: var(--radius-full);
+  /* A block that stands proud of its own edge, and goes down onto it when pressed. */
+  box-shadow: 0 3px 0 0 color-mix(in srgb, var(--ink) 38%, var(--canvas));
+  font-family: var(--font-sans);
+  font-variation-settings: "SHRP" 100;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition-property: background-color, border-color, color, translate, box-shadow;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+/* Press feedback: the interface heard you. The block goes down onto its edge. */
+.bk-btn:not(.bk-btn--static):active:not([disabled]) {
+  translate: 0 3px;
+  box-shadow: 0 0 0 0 transparent;
+}
+.bk-btn--sm {
+  height: 36px;
+  padding: 0 var(--space-16);
+  font-size: 14px;
+  line-height: 18px;
+}
+.bk-btn--md {
+  height: 44px;
+  padding: 0 var(--space-20);
+  font-size: 15px;
+  line-height: 20px;
+}
+.bk-btn--lg {
+  height: 56px;
+  padding: 0 var(--space-32);
+  font-size: 17px;
+  line-height: 22px;
+}
+/* An icon beside a label reads heavier: the icon side gets 2px less padding. */
+.bk-btn--lg.bk-btn--lead {
+  padding-inline-start: 30px;
+}
+.bk-btn--md.bk-btn--lead {
+  padding-inline-start: 18px;
+}
+.bk-btn--sm.bk-btn--lead {
+  padding-inline-start: 14px;
+}
+.bk-btn--lg.bk-btn--trail {
+  padding-inline-end: 30px;
+}
+.bk-btn--md.bk-btn--trail {
+  padding-inline-end: 18px;
+}
+.bk-btn--sm.bk-btn--trail {
+  padding-inline-end: 14px;
+}
+
+/* Every button reads as an object on the page rather than a flat patch of colour. The primary
+   carries a near-black edge, since a darker green blends into the fill; other fills carry an edge
+   a shade deeper than themselves, and the outline button sits on paper. */
+.bk-btn--primary {
+  background: var(--grass);
+  color: var(--ink-on-grass);
+  border-color: var(--ink-on-grass);
+}
+.bk-btn--primary:active {
+  background: var(--grass-press);
+}
+/* A light ring cannot clear 3:1 on grass, so a grass fill rings in its own label colour. */
+.bk-btn--primary:focus-visible {
+  outline-color: var(--ink-on-grass);
+}
+.bk-btn--secondary {
+  background: var(--forest);
+  color: var(--ink-inverse);
+  border-color: color-mix(in oklab, var(--forest) 55%, var(--ink));
+}
+.bk-btn--outline {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--border-strong);
+}
+/* With no fill of its own it is not a block, and has no edge to stand on. */
+.bk-btn--ghost {
+  background: transparent;
+  color: var(--ink-muted);
+  box-shadow: none;
+}
+.bk-btn--danger {
+  background: var(--danger);
+  color: var(--ink-inverse);
+  border-color: color-mix(in oklab, var(--danger) 60%, var(--ink));
+}
+/* A state's button wears that state's colour, so no two states look alike: dusk wakes a sleeping
+   world, amber is the work in flight, danger is what failed, and the one grass fill stays for
+   making a server. */
+.bk-btn--sleeping {
+  background: var(--dusk);
+  color: var(--ink-inverse);
+  border-color: color-mix(in oklab, var(--dusk) 60%, var(--ink));
+}
+.bk-btn--working {
+  background: var(--amber);
+  color: var(--ink-inverse);
+  border-color: color-mix(in oklab, var(--amber) 60%, var(--ink));
+}
+/* Done: what it started finished well, in a running server's own colour, the way the status says
+   "Online". Soft rather than a fill, so it never reads as a button to press again. */
+.bk-btn--done {
+  background: var(--status-online-soft);
+  color: var(--status-online);
+  border-color: color-mix(in oklab, var(--status-online) 45%, transparent);
+}
+/* The check or the warning arrives the way every swapped icon does: from small and blurred. */
+.bk-btn__said {
+  animation: bk-said-icon 300ms var(--ease) both;
+}
+@keyframes bk-said-icon {
+  from {
+    opacity: 0;
+    scale: 0.25;
+    filter: blur(4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bk-btn__said {
+    animation-name: bk-fade-in;
+  }
+}
+/* A button that changes state under the hand takes its time about it: the colour moves as slowly
+   as the icon morphs, so the press is something you watch, not something you missed. Hovers stay
+   quick — those happen dozens of times a minute. */
+.bk-btn--morphing {
+  transition-duration: var(--morph);
+}
+/* Busy, not disabled: it keeps its colour and its weight while the work runs. */
+.bk-btn--busy {
+  pointer-events: none;
+}
+.bk-btn--inverse {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .bk-btn--primary:hover {
+    background: var(--grass-hover);
+  }
+  .bk-btn--secondary:hover {
+    background: var(--forest-hover);
+  }
+  .bk-btn--outline:hover {
+    background: var(--surface-sunken);
+  }
+  .bk-btn--ghost:hover {
+    background: var(--surface-sunken);
+    color: var(--ink);
+  }
+  .bk-btn--danger:hover {
+    background: var(--danger-hover);
+  }
+  .bk-btn--sleeping:hover {
+    background: var(--dusk-hover);
+  }
+  .bk-btn--inverse:hover {
+    background: var(--surface-sunken);
+  }
+}
+
+/* Dimmed when it can't be pressed — but not while it's busy or saying how its work went: that
+   takes no press either, and is meant to be read. */
+.bk-btn[disabled],
+.bk-btn[aria-disabled="true"]:not(.bk-btn--busy) {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.bk-btn--block {
+  display: flex;
+  width: 100%;
+}
+.bk-btn__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+/* Two icons in one place, cross-faded: the copy → copied swap. */
+.bk-swap {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+.bk-swap > * {
+  grid-area: 1 / 1;
+  transition-property: opacity, scale, filter;
+  transition-duration: 300ms;
+  transition-timing-function: var(--ease);
+}
+.bk-swap > [data-shown="false"] {
+  opacity: 0;
+  scale: 0.25;
+  filter: blur(4px);
+}
+/* A button that morphs takes the icon as slowly as its colour (see .bk-btn--morphing). */
+.bk-btn--morphing .bk-swap > * {
+  transition-duration: var(--morph);
+}
+
+/* ─── Forms ─────────────────────────────────────────────────────────────────────────────── */
+
+.bk-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.bk-field__label {
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.bk-field__optional {
+  font-weight: 400;
+  color: var(--ink-subtle);
+}
+.bk-input,
+.bk-selectctl {
+  width: 100%;
+  min-height: 48px;
+  padding: var(--space-12) var(--space-16);
+  background: var(--surface);
+  color: var(--ink);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 24px;
+  transition: border-color var(--quick) var(--ease);
+}
+.bk-selectctl {
+  appearance: none;
+  padding-right: var(--space-40);
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 22px) 22px,
+    calc(100% - 16px) 22px;
+  background-size:
+    6px 6px,
+    6px 6px;
+  background-repeat: no-repeat;
+}
+.bk-input::placeholder {
+  color: var(--ink-subtle);
+}
+/* A multi-line input grows downwards only, and keeps the field's type. */
+textarea.bk-input {
+  resize: vertical;
+}
+@media (hover: hover) and (pointer: fine) {
+  .bk-input:hover,
+  .bk-selectctl:hover {
+    border-color: var(--ink-subtle);
+  }
+}
+.bk-input--mono {
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+.bk-field--invalid .bk-input,
+.bk-field--invalid .bk-selectctl {
+  border-color: var(--status-danger);
+}
+.bk-field__help {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-subtle);
+}
+.bk-field__error {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--status-danger);
+  font-weight: 500;
+}
+.bk-affixed {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-8);
+}
+
+/* An icon inside the field rather than beside it: a search that looks like one. */
+.bk-affixed--leading {
+  position: relative;
+}
+.bk-affixed--leading .bk-input {
+  padding-inline-start: 44px;
+}
+.bk-affixed__lead {
+  position: absolute;
+  inset-inline-start: var(--space-16);
+  inset-block: 0;
+  display: flex;
+  align-items: center;
+  color: var(--ink-subtle);
+  pointer-events: none;
+}
+
+.bk-getpack__steps {
+  display: grid;
+  gap: var(--space-8);
+  margin-block-start: var(--space-8);
+  padding-inline-start: var(--space-16);
+  color: var(--ink-muted);
+}
+/* Its copy button on its own line, under the step it belongs to. */
+.bk-getpack__copy {
+  margin-block-start: var(--space-4);
+}
+
+.bk-copyfield {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-8) var(--space-8) var(--space-8) var(--space-16);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  min-width: 0;
+  /* As wide as where it sits, never as wide as its value: a long link is cut with an ellipsis
+     rather than stretching its card past the page. */
+  contain: inline-size;
+}
+/* Only its button: nothing to read, so no well around it. */
+.bk-copyfield--concealed {
+  display: inline-flex;
+  padding: 0;
+  background: none;
+  contain: none;
+}
+.bk-copyfield__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink);
+}
+
+.bk-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-12);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+}
+.bk-toggle__track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-strong);
+  transition-property: background-color, border-color;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+.bk-toggle__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  transition: translate var(--quick) var(--ease);
+}
+.bk-toggle[aria-checked="true"] .bk-toggle__track {
+  background: var(--grass);
+  border-color: var(--grass-press);
+}
+.bk-toggle[aria-checked="true"] .bk-toggle__knob {
+  translate: 20px 0;
+}
+.bk-toggle[aria-checked="true"]:focus-visible {
+  outline-color: var(--ink-on-grass);
+}
+.bk-toggle__label {
+  font-size: 15px;
+  line-height: 20px;
+  color: var(--ink);
+}
+.bk-toggle[aria-disabled="true"] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* A box someone ticks to agree: square, ink, and the label beside it wraps under itself. */
+.bk-check {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: var(--space-4) var(--space-12);
+  align-items: start;
+}
+.bk-check__box {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  border: 2px solid var(--border-strong);
+  background: var(--surface);
+  cursor: pointer;
+  display: grid;
+  place-content: center;
+}
+.bk-check__box::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  background: var(--ink-inverse);
+  transform: scale(0);
+}
+.bk-check__box:checked {
+  background: var(--grass);
+  border-color: var(--grass-press);
+}
+.bk-check__box:checked::before {
+  transform: scale(1);
+}
+.bk-check__box:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.bk-check--invalid .bk-check__box {
+  border-color: var(--danger);
+}
+.bk-check__label {
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.bk-check__label a {
+  color: var(--ink);
+  text-underline-offset: 0.2em;
+}
+.bk-check__error {
+  grid-column: 2;
+  margin: 0;
+}
+
+.bk-formsection {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-32);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+  max-width: var(--width-form);
+  box-shadow: var(--shadow-card);
+}
+.bk-formsection__title {
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.bk-formsection__desc {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-subtle);
+  margin-top: var(--space-4);
+}
+.bk-formsection__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+}
+.bk-formsection__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-12);
+  padding-top: var(--space-16);
+  border-top: 1px solid var(--border);
+}
+.bk-formrow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-24);
+}
+.bk-formrow__label {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.bk-formrow__desc {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-subtle);
+  margin-top: var(--space-4);
+}
+/* Like a pack the plan doesn't run: the row is dimmed, the line saying why is not. */
+.bk-formrow--dimmed :is(.bk-formrow__label, .bk-formrow__desc) {
+  opacity: 0.5;
+}
+.bk-formrow__why {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-muted);
+  margin-top: var(--space-4);
+}
+
+/* ─── Cards ─────────────────────────────────────────────────────────────────────────────── */
+
+.bk-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-24);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  color: var(--ink-muted);
+}
+.bk-card--flat {
+  box-shadow: none;
+  border: 1px solid var(--border);
+}
+.bk-card--lg {
+  padding: var(--space-32);
+  border-radius: var(--radius-xl);
+}
+.bk-card--forest {
+  background: var(--surface-forest);
+  color: var(--ink-inverse);
+}
+.bk-card--sand {
+  background: var(--surface-sand);
+}
+.bk-card--link {
+  cursor: pointer;
+  text-decoration: none;
+  transition-property: box-shadow, translate;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .bk-card--link:hover {
+    box-shadow: var(--shadow-float);
+  }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .bk-card--link:hover {
+    translate: 0 -2px;
+  }
+}
+.bk-card__title {
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.bk-card--forest .bk-card__title {
+  color: var(--ink-inverse);
+}
+.bk-card__desc {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-subtle);
+}
+.bk-card--forest .bk-card__desc {
+  color: var(--ink-inverse-muted);
+}
+.bk-card__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  margin-top: var(--space-4);
+}
+
+/* ─── Status and badges ─────────────────────────────────────────────────────────────────── */
+
+.bk-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: 5px var(--space-12) 5px var(--space-8);
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.bk-status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+  flex: 0 0 auto;
+}
+.bk-status--online {
+  background: var(--status-online-soft);
+  color: var(--status-online);
+}
+.bk-status--starting {
+  background: var(--status-starting-soft);
+  color: var(--status-starting);
+}
+.bk-status--offline {
+  background: var(--status-offline-soft);
+  color: var(--status-offline);
+}
+/* A sleeping world is not a stopped one: it wakes when a player knocks, and dusk says so. */
+.bk-status--sleeping {
+  background: var(--status-sleeping-soft);
+  color: var(--status-sleeping);
+}
+.bk-status--danger {
+  background: var(--status-danger-soft);
+  color: var(--status-danger);
+}
+.bk-status--info {
+  background: var(--status-info-soft);
+  color: var(--status-info);
+}
+.bk-status--pulse .bk-status__dot {
+  animation: bk-pulse 1600ms ease-in-out infinite;
+}
+@keyframes bk-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.bk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px var(--space-8);
+  border-radius: var(--radius-xs);
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.bk-badge--mono {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+/* A pack a server plays, and the way into a player's launcher (ui/pack.tsx). */
+.bk-getpack {
+  display: grid;
+  gap: var(--space-16);
+  padding: var(--space-16);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+/* Inside a section, a card or the build panel, each a surface already, it needs no second one. */
+:is(.bk-formsection, .bk-card, .bk-prov) .bk-getpack {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.bk-getpack__pack {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}
+.bk-getpack__icon {
+  flex: 0 0 auto;
+  inline-size: 44px;
+  block-size: 44px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--surface-sunken);
+}
+.bk-getpack__name {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.bk-getpack__meta {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-muted);
+}
+.bk-getpack__launch {
+  display: grid;
+  gap: var(--space-12);
+}
+/* Java Edition runs on a computer: a phone is told to open the page there instead. */
+.bk-getpack__elsewhere {
+  display: none;
+}
+@media (hover: none) and (max-width: 767px) {
+  .bk-getpack__launch {
+    display: none;
+  }
+  .bk-getpack__elsewhere {
+    display: block;
+  }
+}
+.bk-badge__icon {
+  flex: 0 0 auto;
+  margin-inline-start: -2px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+.bk-badge--grass {
+  background: var(--grass-soft);
+  color: var(--forest-ink);
+}
+.bk-badge--info {
+  background: var(--status-info-soft);
+  color: var(--status-info);
+}
+.bk-badge--danger {
+  background: var(--status-danger-soft);
+  color: var(--status-danger);
+}
+.bk-badge--outline {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--ink-muted);
+}
+.bk-badge--inverse {
+  background: rgba(244, 248, 245, 0.16);
+  color: var(--ink-inverse);
+}
+
+.bk-note {
+  display: flex;
+  gap: var(--space-12);
+  align-items: flex-start;
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  line-height: 20px;
+}
+.bk-note--info {
+  background: var(--status-info-soft);
+  color: var(--status-info);
+}
+.bk-note--danger {
+  background: var(--status-danger-soft);
+  color: var(--status-danger);
+}
+.bk-note--success {
+  background: var(--grass-soft);
+  color: var(--forest-ink);
+}
+
+/* ─── Tabs ──────────────────────────────────────────────────────────────────────────────── */
+
+.bk-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-full);
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.bk-tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-full);
+  padding: var(--space-8) var(--space-16);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition-property: background-color, color;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .bk-tab:hover {
+    color: var(--ink);
+  }
+}
+.bk-tab[aria-selected="true"],
+.bk-tab[aria-current="page"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-card);
+}
+.bk-tab__count {
+  color: var(--ink-subtle);
+  font-weight: 500;
+  margin-left: 6px;
+}
+.bk-tabs--underline {
+  background: transparent;
+  padding: 0;
+  gap: var(--space-24);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+.bk-tabs--underline .bk-tab {
+  border-radius: 0;
+  padding: var(--space-12) 0;
+  box-shadow: none;
+  background: transparent;
+}
+.bk-tabs--underline .bk-tab[aria-selected="true"],
+.bk-tabs--underline .bk-tab[aria-current="page"] {
+  background: transparent;
+  box-shadow: inset 0 -2px 0 0 var(--ink);
+}
+
+/* ─── Empty, loading, provisioning ──────────────────────────────────────────────────────── */
+
+.bk-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-16);
+  padding: var(--space-64) var(--space-24);
+}
+.bk-empty__art {
+  width: 132px;
+  height: 132px;
+  border-radius: var(--radius-lg);
+  background: var(--grass-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.bk-empty__art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
+  border-radius: inherit;
+}
+.bk-empty__title {
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.bk-empty--danger .bk-empty__title {
+  color: var(--status-danger);
+}
+.bk-empty__copy {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-subtle);
+  max-width: var(--width-copy);
+}
+
+.bk-skeleton {
+  background: var(--surface-skeleton);
+  border-radius: var(--radius-xs);
+  height: 12px;
+}
+
+.bk-prov {
+  background: var(--surface);
+  border-radius: var(--radius-xl);
+  padding: var(--space-40);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+  box-shadow: var(--shadow-card);
+}
+.bk-prov__title {
+  font-size: 36px;
+  line-height: 40px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.bk-prov__eta {
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--ink-muted);
+  margin-top: var(--space-8);
+}
+.bk-prov__bar {
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--progress-track);
+  box-shadow: 0 0 0 1px var(--border-strong);
+  overflow: hidden;
+}
+/* On a light card the dark track reads as a full bar, which is the opposite of what it means. */
+.bk-prov__bar--paper {
+  background: var(--surface-sunken);
+  box-shadow: inset 0 0 0 1px var(--border-soft, rgb(0 0 0 / 0.08));
+}
+/* The fill moves rather than grows: a transform, so it never triggers layout. */
+.bk-prov__fill {
+  height: 100%;
+  width: 100%;
+  border-radius: var(--radius-full);
+  background: var(--grass);
+  translate: calc(var(--progress, 0) * 1% - 100%) 0;
+  transition: translate 400ms var(--ease);
+}
+.bk-prov__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bk-prov__step {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-12);
+  font-size: 15px;
+  line-height: 20px;
+  color: var(--ink-subtle);
+}
+/* The label, and under the step it is on, the line that shows it is alive. */
+.bk-prov__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  padding-top: 1px;
+}
+.bk-prov__step--active {
+  color: var(--ink);
+  font-weight: 600;
+}
+.bk-prov__step--done {
+  color: var(--ink-muted);
+}
+.bk-prov__mark {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition-property: background-color, border-color;
+  transition-duration: var(--panel);
+  transition-timing-function: var(--ease);
+}
+.bk-prov__step--done .bk-prov__mark {
+  background: var(--grass);
+  border-color: var(--grass-press);
+  color: var(--ink-on-grass);
+}
+.bk-prov__step--active .bk-prov__mark {
+  border-color: var(--status-starting);
+}
+/* The step it is on breathes, as a starting server's status does. */
+.bk-prov__step--active .bk-prov__mark {
+  position: relative;
+}
+.bk-prov__step--active .bk-prov__mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--status-starting);
+  animation: bk-pulse 1600ms ease-in-out infinite;
+}
+/*
+ * What the server last said, or what it is doing in words. It never follows the server's pace:
+ * each line holds, then fades into the next, the old one lifting away as the new one settles.
+ */
+.bk-prov__live {
+  display: grid;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  color: var(--ink-subtle);
+}
+.bk-prov__said {
+  grid-area: 1 / 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bk-prov__said--in {
+  animation: bk-said-in 600ms var(--ease) both;
+}
+.bk-prov__said--out {
+  animation: bk-said-out 600ms var(--ease) both;
+}
+@keyframes bk-said-in {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+    filter: blur(2px);
+  }
+}
+@keyframes bk-said-out {
+  to {
+    opacity: 0;
+    translate: 0 -6px;
+    filter: blur(2px);
+  }
+}
+@keyframes bk-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes bk-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bk-prov__step--active .bk-prov__mark::after {
+    animation: none;
+  }
+  /* Still a crossfade, without the movement. */
+  .bk-prov__said--in {
+    animation-name: bk-fade-in;
+  }
+  .bk-prov__said--out {
+    animation-name: bk-fade-out;
+  }
+}
+.bk-prov__check {
+  transition-property: opacity, scale, filter;
+  transition-duration: 300ms;
+  transition-timing-function: var(--ease);
+}
+.bk-prov__step:not(.bk-prov__step--done) .bk-prov__check {
+  opacity: 0;
+  scale: 0.25;
+  filter: blur(4px);
+}
+
+/* ─── Danger zone and modal ─────────────────────────────────────────────────────────────── */
+
+.bk-danger {
+  background: var(--status-danger-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-24);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  max-width: var(--width-form);
+}
+.bk-danger__title {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--status-danger);
+}
+.bk-danger__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-24);
+}
+.bk-danger__label {
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.bk-danger__desc {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-muted);
+  margin-top: var(--space-4);
+}
+
+/* Closed is the resting state, so closing fades out instead of holding for the length of the
+   discrete display transition and then vanishing. The exit is quicker than the entrance. */
+.bk-dialog {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  max-width: calc(100vw - 2 * var(--space-24));
+  width: 480px;
+  overflow: visible;
+  opacity: 0;
+  scale: 0.96;
+  transition-property: opacity, scale, overlay, display;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+  transition-behavior: allow-discrete;
+}
+.bk-dialog[open] {
+  opacity: 1;
+  scale: 1;
+  transition-duration: var(--panel);
+}
+.bk-dialog::backdrop {
+  background: var(--backdrop);
+  opacity: 0;
+  transition-property: opacity, overlay, display;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+  transition-behavior: allow-discrete;
+}
+.bk-dialog[open]::backdrop {
+  opacity: 1;
+  transition-duration: var(--panel);
+}
+@starting-style {
+  .bk-dialog[open] {
+    opacity: 0;
+    scale: 0.96;
+  }
+  .bk-dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+.bk-modal {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+  padding: var(--space-32);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+.bk-modal__title {
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.bk-modal__body {
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--ink-muted);
+}
+.bk-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-12);
+  margin-top: var(--space-8);
+}
+
+/* ─── Product surfaces ──────────────────────────────────────────────────────────────────── */
+
+.bk-server {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  transition-property: box-shadow, translate;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  a.bk-server:hover {
+    box-shadow: var(--shadow-float);
+  }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  a.bk-server:hover {
+    translate: 0 -2px;
+  }
+}
+.bk-server__media {
+  position: relative;
+  aspect-ratio: 3 / 2;
+  background: var(--surface-sunken);
+}
+.bk-server__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
+  /* A world's cover is printed in ink, like every picture here. */
+  filter: grayscale(1) contrast(1.2);
+}
+.bk-server__status {
+  position: absolute;
+  top: var(--space-12);
+  left: var(--space-12);
+}
+.bk-server__body {
+  padding: var(--space-20);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.bk-server__name {
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.bk-server__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+.bk-server__detail {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-muted);
+}
+.bk-server__addr {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bk-player {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+/* A player's face: eight pixels square, drawn large and crisp, with the corner of a block. */
+.bk-face {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+  border-radius: var(--radius-xs);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+.bk-face > svg,
+.bk-face > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.bk-face > img {
+  image-rendering: pixelated;
+  opacity: 0;
+  transition: opacity var(--quick) var(--ease);
+}
+.bk-face > img[data-loaded] {
+  opacity: 1;
+}
+.bk-face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--image-outline);
+  pointer-events: none;
+}
+.bk-player__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.bk-player__name {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.bk-player__link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+.bk-player__name {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.bk-player__meta {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-subtle);
+}
+.bk-player__meta--danger {
+  color: var(--status-danger);
+}
+/* A row that opens the player's page: the face and the name are the link, the action stays apart. */
+.bk-player__link {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-16);
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+.bk-player__link:hover .bk-player--offline .bk-face {
+  opacity: 0.55;
+}
+.bk-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.bk-avatars {
+  display: flex;
+}
+/* biome-ignore lint/style/noDescendingSpecificity: these children are never the ones .bk-swap styles */
+.bk-avatars > * {
+  margin-left: -10px;
+  border: 2px solid var(--surface);
+}
+.bk-avatars > *:first-child {
+  margin-left: 0;
+}
+
+.bk-console {
+  background: var(--surface-forest-deep);
+  border-radius: var(--radius-xl);
+  padding: var(--space-20) 0 var(--space-12);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  overflow: hidden;
+}
+.bk-console__lines {
+  margin: 0;
+  padding: 0 var(--space-24);
+  list-style: none;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 20px;
+  scrollbar-color: var(--border-inverse) transparent;
+}
+.bk-console__line {
+  display: flex;
+  gap: var(--space-12);
+  padding: 3px 0;
+  color: var(--ink-console);
+}
+.bk-console__bar {
+  width: 3px;
+  border-radius: var(--radius-full);
+  flex: 0 0 auto;
+  background: transparent;
+}
+.bk-console__line--warn .bk-console__bar {
+  background: var(--status-starting);
+}
+.bk-console__line--error .bk-console__bar {
+  background: var(--status-danger);
+}
+.bk-console__line--chat .bk-console__bar {
+  background: var(--grass);
+}
+.bk-console__time {
+  color: var(--ink-console-muted);
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+.bk-console__text {
+  color: var(--ink-console);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bk-console__line--chat .bk-console__text {
+  color: var(--ink-inverse);
+}
+/* Blockly's own lines while a server is getting ready: named, and quieter than the game's. */
+.bk-console__who {
+  flex: 0 0 auto;
+  color: var(--ink-console-muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.bk-console__line--setup .bk-console__text {
+  color: var(--ink-console-muted);
+}
+.bk-console__empty {
+  padding: var(--space-24);
+  color: var(--ink-console-muted);
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+.bk-console__form {
+  display: flex;
+  gap: var(--space-12);
+  padding: var(--space-12) var(--space-16) 0;
+  margin: 0 var(--space-8);
+  border-top: 1px solid var(--border-inverse);
+}
+.bk-console__input {
+  flex: 1 1 auto;
+  background: transparent;
+  border: 0;
+  color: var(--ink-console);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 20px;
+  padding: var(--space-8) 0;
+}
+.bk-console__input::placeholder {
+  color: var(--ink-console-muted);
+}
+.bk-console__input:focus-visible {
+  outline-color: var(--focus-ring-inverse);
+  outline-offset: 4px;
+}
+
+/* ─── Create flow ───────────────────────────────────────────────────────────────────────── */
+
+.bk-dots {
+  display: flex;
+  gap: var(--space-8);
+}
+.bk-dots__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--border-strong);
+  transition: background-color var(--panel) var(--ease);
+}
+.bk-dots__dot[data-state="done"],
+.bk-dots__dot[data-state="current"] {
+  background: var(--forest-ink);
+}
+
+.bk-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-16);
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+.bk-choice {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-8);
+  text-align: left;
+  padding: var(--space-24);
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink-muted);
+  font: inherit;
+  cursor: pointer;
+  transition-property: background-color, border-color, box-shadow, scale;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bk-choice:active {
+    scale: 0.98;
+  }
+}
+@media (hover: hover) and (pointer: fine) {
+  .bk-choice:hover {
+    box-shadow: var(--shadow-float);
+  }
+}
+.bk-choice[aria-pressed="true"] {
+  background: var(--grass-soft);
+  border-color: var(--grass-press);
+  box-shadow: none;
+}
+.bk-choice__icon {
+  color: var(--forest-ink);
+}
+.bk-choice__title {
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.bk-choice__desc {
+  font-size: 14px;
+  line-height: 20px;
+}
+/*
+ * A choice the plan doesn't include: still there, so somebody sees everything Blockly offers,
+ * but quieter, flat and not pressable, and saying why. The choice is dimmed, not the reason:
+ * that stays readable.
+ */
+.bk-choice:disabled {
+  cursor: default;
+  box-shadow: none;
+}
+.bk-choice:disabled > :not(.bk-choice__why) {
+  opacity: 0.5;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bk-choice:disabled:active {
+    scale: 1;
+  }
+}
+@media (hover: hover) and (pointer: fine) {
+  .bk-choice:disabled:hover {
+    box-shadow: none;
+  }
+}
+.bk-choice__why {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-muted);
+}
+
+.bk-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+.bk-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  height: 56px;
+  padding: 0 var(--space-24);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  transition-property: background-color, border-color, color, scale;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+/* The radio covers the chip, so it takes the click, the focus and the arrow keys. */
+.bk-chip input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+.bk-chip:has(input:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bk-chip:active:not(:has(input:disabled)) {
+    scale: 0.96;
+  }
+}
+.bk-chip:has(input:checked) {
+  background: var(--grass-soft);
+  border-color: var(--grass-press);
+  color: var(--forest-ink);
+}
+.bk-chip:has(input:disabled) {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* A small toggle for filters: pressed, it takes the chip's selected colours. */
+.bk-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 var(--space-12);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition-property: background-color, border-color, color, scale;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+.bk-tag:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.bk-tag[aria-pressed="true"] {
+  background: var(--grass-soft);
+  border-color: var(--grass-press);
+  color: var(--forest-ink);
+}
+.bk-tag:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bk-tag:active {
+    scale: 0.96;
+  }
+}
+
+/* ─── Disclosure ────────────────────────────────────────────────────────────────────────── */
+
+/* Progressive disclosure: the region grows open from nothing and its content fades in with it.
+   Closed, it is inert as well, so nothing inside takes focus or reaches a screen reader. The inner
+   box clips while the height moves, with 4px of room around it so focus rings are not cut. */
+.bk-reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-inline: -4px;
+}
+.bk-reveal[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.bk-reveal__inner {
+  min-height: 0;
+  overflow: hidden;
+  padding-inline: 4px;
+  opacity: 0;
+  transition: opacity var(--panel) var(--ease);
+}
+.bk-reveal[data-open="true"] > .bk-reveal__inner {
+  padding-bottom: 4px;
+  opacity: 1;
+}
+/* The control that opens it turns its chevron to match. */
+.bk-reveal-toggle[aria-expanded="true"] > .bk-btn__icon:last-child {
+  rotate: 180deg;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bk-reveal {
+    transition: grid-template-rows var(--panel) var(--ease);
+  }
+  .bk-reveal__inner {
+    translate: 0 -8px;
+    transition-property: opacity, translate;
+  }
+  .bk-reveal[data-open="true"] > .bk-reveal__inner {
+    translate: none;
+  }
+  .bk-reveal-toggle > .bk-btn__icon:last-child {
+    transition: rotate var(--panel) var(--ease);
+  }
+}
+
+/* ─── Navigation and shells ─────────────────────────────────────────────────────────────── */
+
+.bk-topnav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-32);
+  height: var(--nav-height);
+}
+.bk-wordmark {
+  font-size: 24px;
+  line-height: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+/* The mark inside a lockup: 56 to the word's 66, nudged a pixel down at that size so the square
+   and the letterforms sit level (brand/README.md). It takes its colour from the text. */
+.bk-mark {
+  height: 0.848em;
+  width: 0.848em;
+  flex: none;
+  transform: translateY(0.015em);
+}
+.bk-topnav__links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-24);
+  flex: 1 1 auto;
+}
+.bk-topnav__link {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--ink-muted);
+  text-decoration: none;
+  transition: color var(--quick) var(--ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .bk-topnav__link:hover {
+    color: var(--ink);
+  }
+}
+/* A link the header has room for only on a wider screen; the footer carries it on a phone. */
+@media (max-width: 639px) {
+  .bk-topnav__link--wide {
+    display: none;
+  }
+}
+.bk-topnav__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.bk-page {
+  max-width: var(--width-page);
+  margin: 0 auto;
+  padding: 0 var(--gutter-sm);
+}
+@media (min-width: 640px) {
+  .bk-page {
+    padding: 0 var(--gutter-md);
+  }
+}
+@media (min-width: 1024px) {
+  .bk-page {
+    padding: 0 var(--gutter-lg);
+  }
+}
+
+.bk-shell {
+  display: grid;
+  grid-template-columns: var(--app-sidebar) minmax(0, 1fr);
+  gap: var(--gutter-lg);
+  max-width: var(--width-page);
+  margin: 0 auto;
+  padding: var(--gutter-lg);
+  min-height: 100dvh;
+}
+.bk-shell__main {
+  min-width: 0;
+  max-width: var(--width-content);
+  display: flex;
+  flex-direction: column;
+}
+.bk-shell__topbar {
+  height: var(--app-topbar);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+}
+.bk-shell__content {
+  flex: 1;
+  padding-top: var(--space-40);
+  padding-bottom: var(--space-96);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-40);
+}
+
+.bk-appnav {
+  position: sticky;
+  top: var(--gutter-lg);
+  align-self: start;
+  height: calc(100dvh - 2 * var(--gutter-lg));
+  background: var(--surface-forest);
+  border-radius: var(--radius-xl);
+  padding: var(--space-24) var(--space-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+  color: var(--ink-inverse);
+}
+.bk-appnav__brand {
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  padding: 0 var(--space-8);
+  color: var(--ink-inverse);
+  text-decoration: none;
+}
+.bk-appnav__group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bk-appnav__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--ink-inverse-muted);
+  padding: var(--space-8);
+  min-width: 0;
+}
+.bk-appnav__heading span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bk-appnav__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--ink-inverse-muted);
+  text-decoration: none;
+  cursor: pointer;
+  transition-property: background-color, color;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+.bk-appnav__item :focus-visible,
+.bk-appnav :focus-visible {
+  outline-color: var(--focus-ring-inverse);
+}
+@media (hover: hover) and (pointer: fine) {
+  .bk-appnav__item:hover {
+    background: rgba(244, 248, 245, 0.08);
+    color: var(--ink-inverse);
+  }
+}
+.bk-appnav__item[aria-current="page"] {
+  background: var(--grass);
+  color: var(--ink-on-grass);
+  font-weight: 600;
+}
+.bk-appnav__item[aria-current="page"]:focus-visible {
+  outline-color: var(--ink-on-grass);
+}
+.bk-appnav__trailing {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.bk-appnav__spacer {
+  flex: 1 1 auto;
+}
+.bk-appnav__foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-8);
+  border-top: 1px solid var(--border-inverse);
+  padding-top: var(--space-16);
+}
+.bk-appnav__account {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-inverse-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bk-bottombar {
+  display: none;
+}
+@media (max-width: 1023px) {
+  .bk-shell {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--gutter-md) var(--gutter-md) calc(var(--space-96) + env(safe-area-inset-bottom));
+  }
+  .bk-appnav {
+    display: none;
+  }
+  .bk-bottombar {
+    position: fixed;
+    left: var(--space-12);
+    right: var(--space-12);
+    bottom: calc(var(--space-12) + env(safe-area-inset-bottom));
+    display: flex;
+    justify-content: space-around;
+    gap: var(--space-4);
+    padding: var(--space-8);
+    border-radius: var(--radius-xl);
+    background: var(--surface-forest);
+    box-shadow: var(--shadow-float);
+    z-index: 10;
+  }
+  .bk-bottombar .bk-appnav__item {
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+    line-height: 16px;
+    padding: var(--space-8);
+    flex: 1 1 0;
+    align-items: center;
+  }
+}
+@media (max-width: 639px) {
+  .bk-shell {
+    padding: var(--gutter-sm) var(--gutter-sm) calc(var(--space-96) + env(safe-area-inset-bottom));
+  }
+}
+
+.bk-grid {
+  display: grid;
+  gap: var(--space-20);
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 768px) {
+  .bk-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1280px) {
+  .bk-grid--three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.bk-stack {
+  display: flex;
+  flex-direction: column;
+}
+.bk-row {
+  display: flex;
+  align-items: center;
+}
+.bk-wrap {
+  flex-wrap: wrap;
+}
+
+/* ─── Imagery ───────────────────────────────────────────────────────────────────────────── */
+
+.bk-imageblock {
+  position: relative;
+  border-radius: var(--radius-2xl);
+  overflow: hidden;
+  background: var(--surface-forest);
+}
+.bk-imageblock > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* A photograph is printed the way everything else here is: in ink, with its contrast up. */
+  filter: grayscale(1) contrast(1.2);
+}
+.bk-scrim-left {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--scrim) 0%, var(--scrim) 34%, rgba(14, 35, 28, 0) 72%);
+}
+.bk-scrim-bottom {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(0deg, var(--scrim) 0%, rgba(14, 35, 28, 0) 62%);
+}
+/* Film grain over photography: a tile of grey noise, overlaid so it only moves the picture's own
+   tones. It goes after the scrim and before the words, so copy and cards stay sharp. */
+.bk-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 240px 240px;
+  mix-blend-mode: overlay;
+  opacity: 0.5;
+}
+
+/* Staged entrances, for a page's first paint only. */
+.bk-enter {
+  animation: bk-enter 400ms var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 100ms);
+}
+@keyframes bk-enter {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+    filter: blur(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bk-status--pulse .bk-status__dot,
+  .bk-spin,
+  .bk-enter {
+    animation: none;
+  }
+  /* The dialog still fades; it just does not grow. */
+  .bk-dialog,
+  .bk-dialog[open] {
+    scale: none;
+  }
+}
+
+/* ─── Logs: dense records such as the audit log ──────────────────────────────────────────── */
+
+.bk-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.bk-log__entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-block: var(--space-12);
+  border-bottom: 1px solid var(--border);
+}
+.bk-log__entry:first-child {
+  padding-top: 0;
+}
+.bk-log__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-8);
+  font-size: 15px;
+  line-height: 20px;
+  color: var(--ink);
+}
+.bk-log__meta {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-muted);
+}
+/* Details wrap anywhere: a long id never widens the page. */
+.bk-log__data {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
+
+/* A button that reads as a link, for in-place actions like filtering by a row's subject. */
+.bk-linkbutton {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--forest-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* The one spinner: the icon a button morphs into while its work runs. */
+.bk-spin {
+  animation: bk-spin 900ms linear infinite;
+}
+@keyframes bk-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+/* ─── Picking one of Blockly's icons ───────────────────────────────────────────────────────── */
+.bk-icon-pick {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-12);
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    scale 150ms ease;
+}
+.bk-icon-pick img {
+  image-rendering: pixelated;
+}
+.bk-icon-pick:active:not(:disabled) {
+  scale: 0.96;
+}
+.bk-icon-pick[aria-pressed="true"] {
+  border-color: var(--grass);
+  background: var(--grass-soft);
+}
+@media (hover: hover) {
+  .bk-icon-pick:hover {
+    border-color: var(--ink-subtle);
+  }
+}
+
+/* A way in for people who came looking for a server type, kept out of everyone else's way. */
+.bk-disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  inline-size: fit-content;
+  color: var(--ink-muted);
+  cursor: pointer;
+  list-style: none;
+}
+.bk-disclosure::-webkit-details-marker {
+  display: none;
+}
+.bk-disclosure::before {
+  content: "";
+  inline-size: 6px;
+  block-size: 6px;
+  border-inline-end: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  rotate: -45deg;
+  transition: rotate 150ms ease;
+}
+details[open] > .bk-disclosure::before {
+  rotate: 45deg;
+}
+@media (hover: hover) {
+  .bk-disclosure:hover {
+    color: var(--ink);
+  }
+}
+.bk-choice__icon img {
+  image-rendering: pixelated;
+}
+
+/* A row someone picks out of a list of results: the whole row is the button. */
+.bk-pick {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  inline-size: 100%;
+  text-align: left;
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    scale 150ms ease;
+}
+.bk-pick:active {
+  scale: 0.99;
+}
+@media (hover: hover) {
+  .bk-pick:hover {
+    border-color: var(--ink-subtle);
+  }
+}
+.bk-pick__title {
+  font-weight: 600;
+  color: var(--ink);
+}
+.bk-pick__desc {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* A result with a picture: the image, then the words, then the quiet line people choose on. */
+.bk-pick__row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-12);
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+.bk-pick__icon {
+  flex: 0 0 auto;
+  inline-size: 44px;
+  block-size: 44px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--surface-sunken);
+}
+.bk-pick__meta {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-subtle);
+}
+/* Like a choice the plan doesn't include: the pack is dimmed, the line saying why is not. */
+.bk-pick:disabled {
+  cursor: default;
+}
+.bk-pick:disabled :is(.bk-pick__icon, .bk-pick__title, .bk-pick__desc) {
+  opacity: 0.5;
+}
+@media (hover: hover) {
+  .bk-pick:disabled:hover {
+    border-color: var(--rule);
+  }
+}
+
+/*
+ * A line that explains itself (`Tip`): a dashed underline says there is more to it, and the
+ * words it opens sit on the forest surface, above the page, never wider than a short sentence.
+ */
+.bk-tip {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 1px;
+  text-decoration-color: currentColor;
+  text-underline-offset: 3px;
+  cursor: help;
+  border-radius: var(--radius-xs);
+}
+.bk-tip:focus-visible {
+  outline: 2px solid var(--grass-press);
+  outline-offset: 2px;
+}
+.bk-tip__float {
+  z-index: 50;
+}
+.bk-tip__bubble {
+  max-width: 280px;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-sm);
+  background: var(--surface-forest);
+  color: var(--ink-inverse);
+  box-shadow: var(--shadow-float);
+  font-size: 13px;
+  line-height: 18px;
+  text-wrap: pretty;
+}
+/* A tip with more than a sentence: its paragraphs and a short list, a little apart. */
+.bk-tip__bubble > :not(:first-child) {
+  margin-block-start: var(--space-8);
+}
+.bk-tip__list {
+  display: grid;
+  gap: 2px;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * What a field offers (`SuggestField`): a short list under it, as wide as the input, above the
+ * page. The row reached with the keyboard or the pointer is the one on the sunken surface.
+ */
+.bk-suggest {
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-float);
+}
+.bk-suggest__option {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-12);
+  min-height: 40px;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  user-select: none;
+}
+.bk-suggest__option[aria-selected="true"] {
+  background: var(--surface-sunken);
+}
+.bk-suggest__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.bk-suggest__note {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-subtle);
+}
+
+/* ─── Plans ─────────────────────────────────────────────────────────────────────────────── */
+/* Side by side where the page has room for both, one above the other where it doesn't. */
+.bk-plans {
+  display: grid;
+  gap: var(--space-20);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+.bk-plan {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-24);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  color: var(--ink-muted);
+}
+.bk-plan[data-paid] {
+  background: var(--surface-forest);
+  border-color: var(--surface-forest);
+  color: var(--ink-inverse-muted);
+}
+.bk-plan .type-eyebrow {
+  color: var(--ink-subtle);
+}
+.bk-plan[data-paid] .type-eyebrow {
+  color: var(--ink-inverse-muted);
+}
+.bk-plan__price {
+  color: var(--ink);
+}
+.bk-plan__price .type-body-sm {
+  color: var(--ink-muted);
+}
+.bk-plan[data-paid] .bk-plan__price .type-body-sm {
+  color: var(--ink-inverse-muted);
+}
+.bk-plan[data-paid] .bk-plan__price,
+.bk-plan[data-paid] .bk-plan__pitch {
+  color: var(--ink-inverse);
+}
+.bk-plan__points {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.bk-plan__points li {
+  display: flex;
+  gap: var(--space-8);
+  align-items: flex-start;
+}
+.bk-plan__points svg {
+  flex: none;
+  margin-block-start: 2px;
+  color: var(--grass);
+}
+.bk-plan__action {
+  margin-block-start: auto;
+  padding-block-start: var(--space-8);
+}
+
+/* Where a pack's file is dropped: the whole area takes the drop, the button inside picks one. */
+.bk-drop {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-12);
+  padding: var(--space-16);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  transition:
+    border-color var(--quick) var(--ease),
+    background-color var(--quick) var(--ease);
+}
+.bk-drop[data-over] {
+  border-color: var(--grass);
+  background: var(--grass-soft);
+}
+
+/*
+ * A few lines that open from what was pressed (`Popover`). The page stays in view and in reach
+ * around it, so it has no backdrop: only the surface, its edge and the floating shadow.
+ */
+.bk-popover {
+  z-index: 50;
+}
+.bk-popover:focus-visible {
+  outline: none;
+}
+.bk-popover__panel {
+  max-width: min(320px, calc(100vw - 24px));
+  padding: var(--space-12);
+  background: var(--surface);
+  color: var(--ink-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-float);
+}

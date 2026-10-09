@@ -1,0 +1,59 @@
+# Monthly and grouped: at most two pull requests per ecosystem a month, one for minor and patch
+# updates and one for majors, which break more often and are reviewed apart. New releases wait a
+# week (a month for majors) before they are offered, so a broken or hijacked release has time to be
+# pulled. Security fixes skip all of that: they arrive when published, one pull request per
+# ecosystem.
+version: 2
+updates:
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    # Node's types follow the Node the control plane runs (22, set in its Dockerfile and in CI),
+    # not the newest Node. They move when it does.
+    ignore:
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+    groups:
+      bun-security:
+        applies-to: security-updates
+        patterns: ['*']
+      bun:
+        patterns: ['*']
+        update-types: [minor, patch]
+      bun-major:
+        patterns: ['*']
+        update-types: [major]
+  - package-ecosystem: cargo
+    directory: /apps/blocklyd
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    groups:
+      cargo-security:
+        applies-to: security-updates
+        patterns: ['*']
+      cargo:
+        patterns: ['*']
+        update-types: [minor, patch]
+      cargo-major:
+        patterns: ['*']
+        update-types: [major]
+  # Actions have no semver levels to split by, so they come as one pull request.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 1
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']

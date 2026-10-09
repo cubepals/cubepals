@@ -1,0 +1,1 @@
+ALTER TABLE "power_intervals" ADD COLUMN "woken" boolean DEFAULT false NOT NULL;

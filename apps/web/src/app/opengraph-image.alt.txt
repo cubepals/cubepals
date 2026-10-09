@@ -1,0 +1,1 @@
+Cubepals: a Minecraft server that starts when your friends join

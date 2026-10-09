@@ -1,0 +1,486 @@
+/*
+ * Making a server, on one page: three questions, each opening as the one before is answered, and
+ * a bar that stays in view with what is being made and the button that makes it.
+ *
+ * Motion here answers something a person did, and stays small: under a pointer a row lifts its
+ * item the way a dropped item floats in the game, a pick gets its check, the picture of an answer
+ * lands in the bar, and a question that opens comes up to full colour. With less motion asked
+ * for, all of it appears without moving.
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+  max-inline-size: var(--width-prose);
+}
+
+.title {
+  color: var(--ink);
+}
+
+/* Whatever is brought into view, a question that opens or a field that takes focus, clears the
+   bar along the bottom of the screen: this page's, or on phones the app's own, about as tall. */
+.part,
+.page :is(a, button, input, summary) {
+  scroll-margin-block: var(--space-24) 112px;
+}
+
+.quiet {
+  color: var(--ink-subtle);
+}
+
+/* ─── A question ─────────────────────────────────────────────────────────────────────────── */
+
+.part {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding: var(--space-24);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.part > * {
+  transition: opacity var(--morph) var(--ease);
+}
+/* Not reached yet: there to see, but quiet, and its body is inert. */
+.part[data-closed] > * {
+  opacity: 0.45;
+}
+.partTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  color: var(--ink);
+}
+.partBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  min-inline-size: 0;
+}
+
+/* The packs in place of the ways to play, and back again. */
+.swap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  transition-property: opacity, translate;
+  transition-duration: var(--panel);
+  transition-timing-function: var(--ease);
+}
+
+/* What Blockly makes of the choice. */
+.said {
+  color: var(--ink-muted);
+  text-wrap: pretty;
+  transition-property: opacity, translate;
+  transition-duration: var(--panel);
+  transition-timing-function: var(--ease);
+}
+
+/* The check on an answered question. */
+.mark {
+  flex: none;
+  color: var(--grass-press);
+  transition-property: opacity, scale, filter;
+  transition-duration: var(--panel);
+  transition-timing-function: var(--ease);
+}
+
+/* ─── Choices ────────────────────────────────────────────────────────────────────────────── */
+
+.ways {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 256px), 1fr));
+  gap: var(--space-8);
+}
+.packs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+/* A choice, as a row: the whole row is the button. */
+.row {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  inline-size: 100%;
+  padding: var(--space-12);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink-muted);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition-property: background-color, border-color, scale;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+.row[aria-pressed="true"],
+.row[data-picked] {
+  background: var(--grass-soft);
+  border-color: var(--grass-press);
+}
+.row:disabled {
+  cursor: default;
+}
+/* Out of reach, a row goes quiet; the reason in it stays readable. */
+.row:disabled :is(.thumb, .rowTitle, .rowBlurb, .rowMeta) {
+  opacity: 0.5;
+}
+@media (hover: hover) and (pointer: fine) {
+  .row:enabled:hover {
+    border-color: color-mix(in oklab, var(--border) 55%, var(--border-strong));
+  }
+  .row[aria-pressed="true"]:enabled:hover {
+    border-color: var(--grass-press);
+  }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  /* The item lifts, the way a dropped one floats in the game. */
+  .row:enabled:hover .thumb[data-icon] img {
+    translate: 0 -2px;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .row:enabled:active {
+    scale: 0.98;
+  }
+}
+
+.rowText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-inline-size: 0;
+}
+.rowTitle {
+  font-weight: 600;
+  color: var(--ink);
+}
+.rowBlurb {
+  font-size: 14px;
+  line-height: 20px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.rowMeta {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-subtle);
+}
+.rowWhy {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-muted);
+}
+/* Why a pack they picked can't be made, under that pack. */
+.refused {
+  margin-block-start: var(--space-8);
+  padding-inline: var(--space-12);
+  color: var(--status-danger);
+}
+
+/* A choice's picture: the item on its own colour, or a pack's image filling the square. */
+.thumb {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: 48px;
+  block-size: 48px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.thumb img {
+  display: block;
+  transition: translate var(--quick) var(--ease);
+}
+.thumb[data-photo] img {
+  inline-size: 100%;
+  block-size: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
+}
+
+/* On the picture's corner: checked once picked, the wait while it's checked. Its ring is the
+   row's own colour, so it reads as set on the picture rather than stuck over it. */
+.badge {
+  position: absolute;
+  inset-block-start: -6px;
+  inset-inline-end: -6px;
+  display: grid;
+  place-items: center;
+  inline-size: 22px;
+  block-size: 22px;
+  border-radius: var(--radius-full);
+  background: var(--grass-press);
+  color: var(--surface);
+  box-shadow: 0 0 0 2px var(--grass-soft);
+  transition-property: opacity, scale, filter;
+  transition-duration: var(--panel);
+  transition-timing-function: var(--ease);
+}
+.badge[data-state="busy"] {
+  background: var(--surface);
+  color: var(--amber);
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 3px var(--border);
+}
+.thumb[data-icon="survival"] {
+  background: var(--grass-soft);
+}
+.thumb[data-icon="creative"] {
+  background: var(--status-info-soft);
+}
+.thumb[data-icon="hardcore"] {
+  background: var(--status-danger-soft);
+}
+.thumb[data-icon="smooth"] {
+  background: var(--status-sleeping-soft);
+}
+.thumb[data-icon="create"] {
+  background: var(--status-starting-soft);
+}
+.thumb[data-icon="modpack"] {
+  background: var(--surface-sand);
+}
+.thumb[data-icon="ownpack"] {
+  background: var(--surface-sand);
+}
+
+.temporary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ─── The bar ────────────────────────────────────────────────────────────────────────────── */
+
+.bar {
+  position: sticky;
+  inset-block-end: var(--space-16);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-12);
+  border-radius: var(--radius-lg);
+  background: var(--surface-forest);
+  color: var(--ink-inverse);
+  box-shadow: var(--shadow-float);
+  transition-property: background-color, color;
+  transition-duration: var(--panel);
+  transition-timing-function: var(--ease);
+}
+.bar[data-failed] {
+  background: var(--status-danger-soft);
+  color: var(--status-danger);
+}
+/* On the bar every picture sits on the same glass; a new one lands as the answer changes. */
+.bar .thumb:not([data-photo]) {
+  background: color-mix(in oklab, var(--surface) 12%, transparent);
+}
+.bar .thumb {
+  transition-property: opacity, scale;
+  transition-duration: var(--panel);
+  transition-timing-function: var(--ease);
+}
+.barText {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-inline-size: 0;
+}
+.barName {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.barName[data-empty] {
+  color: var(--ink-inverse-muted);
+}
+.bar[data-failed] .barName {
+  color: var(--ink);
+}
+.barMeta {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-inverse-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The release, where someone may pick another: the bar's own words, underlined to say so. */
+.barVersion {
+  font: inherit;
+  color: var(--ink-inverse);
+  background: transparent;
+  border: 0;
+  border-block-end: 1px dashed currentColor;
+  border-radius: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.barVersion:focus-visible {
+  outline: 2px solid var(--grass-press);
+  outline-offset: 2px;
+}
+.barVersion option {
+  color: var(--ink);
+}
+/* Where it runs, in the same words-underlined way as the release, with its globe at the bar's size. */
+.barRegion {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font: inherit;
+  color: var(--ink-inverse);
+  background: transparent;
+  border: 0;
+  border-block-end: 1px dashed currentColor;
+  border-radius: 0;
+  padding: 0;
+  vertical-align: bottom;
+  cursor: pointer;
+}
+.barRegion:focus-visible {
+  outline: 2px solid var(--grass-press);
+  outline-offset: 2px;
+}
+.barRegion svg {
+  flex: none;
+}
+.barNearest {
+  margin-inline-start: calc(-1 * var(--space-4));
+  color: var(--ink-inverse-muted);
+}
+
+/* The regions, opened from the bar. Each radio covers its row, as a chip's does. */
+.regions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  inline-size: min(288px, calc(100vw - 50px));
+}
+.regionsTitle {
+  font-weight: 600;
+  color: var(--ink);
+}
+.regionList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-block: var(--space-4);
+}
+.regionOption {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition-property: background-color, border-color;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+.regionOption input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+.regionOption:has(input:checked) {
+  background: var(--grass-soft);
+  border-color: var(--grass-press);
+}
+.regionOption:has(input:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.regionName {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-weight: 600;
+  color: var(--ink);
+}
+.barFailure {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  font-size: 14px;
+  line-height: 20px;
+}
+.barFailure svg {
+  flex: none;
+  margin-block-start: 2px;
+}
+
+/* ─── Entrances ──────────────────────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: no-preference) {
+  @starting-style {
+    .swap,
+    .said {
+      opacity: 0;
+      translate: 0 4px;
+    }
+    .mark,
+    .badge {
+      opacity: 0;
+      scale: 0.25;
+      filter: blur(4px);
+    }
+    .bar .thumb {
+      opacity: 0;
+      scale: 0.85;
+    }
+  }
+}
+
+/* ─── Smaller screens ────────────────────────────────────────────────────────────────────── */
+
+/* The app's own bar runs along the bottom here, so this one keeps its place after the name. */
+@media (max-width: 1023px) {
+  .bar {
+    position: static;
+  }
+}
+@media (max-width: 479px) {
+  .part {
+    padding: var(--space-16);
+    border-radius: var(--radius-lg);
+  }
+  .bar {
+    flex-wrap: wrap;
+  }
+  .bar > button {
+    flex: 1 1 100%;
+  }
+  /* The button has a line of its own here, so what is being made gets the room to say it all. */
+  .barMeta {
+    white-space: normal;
+  }
+}
+
+/* A picked pack's version, under its row: the newest unless friends play an older one. */
+.version {
+  margin-block-start: var(--space-8);
+  max-inline-size: 28rem;
+}

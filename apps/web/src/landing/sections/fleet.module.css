@@ -1,0 +1,582 @@
+/*
+ * The fleet stratum: two machines, the ledger they answer to, and one cable.
+ *
+ * A machine is one narrow drawing, two columns wide all the way down: blocks on the left, words on
+ * the right. On top is its memory, sixteen rows of four blocks, a row to the GB. Under it is its
+ * disk, a shelf with one flat slab for each world placed there, as wide as the column above it. A
+ * world that wakes stays on the shelf and stands in the column as well, as many rows as it has GB.
+ *
+ * Every size is fixed: a block is `--cell`, the column is four of them, and each row of memory is
+ * placed by number, so nothing depends on how long a name is. Torch is only ever a world that is
+ * running. This is dark ground: every other colour is one of the tone's variables.
+ */
+
+.fleet .built {
+  margin: clamp(14px, 2vh, 20px) 0 0;
+}
+.fleet .words {
+  margin-top: clamp(14px, 2vh, 20px);
+}
+
+.fleet .demo {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 9);
+  /* Inside the frame the ground is the panel, so a quiet button and a bare frame are cut from it. */
+  --field: var(--panel);
+  /* A line that is there but not in use: an empty slot, a frame nothing answers from. */
+  --dim: color-mix(in srgb, var(--line) 42%, var(--panel));
+  /* One block of memory, and the column of four that every machine draws in. */
+  --cell: 12px;
+  --col: calc(var(--cell) * 4 + var(--px) * 3);
+}
+
+/* Read by a screen reader, drawn nowhere. */
+.fleet .sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A dither that fills whatever it is in, in that thing's colour. */
+.fleet .dots {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* A real string inside a sentence. */
+.fleet .v {
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+/* A sentence of the demonstration's own, the full width of where it sits. */
+.fleet .says {
+  margin: 0;
+  max-width: none;
+}
+
+/* The name of a part: the ledger, the cable. */
+.fleet .name {
+  margin: 0;
+  font-variation-settings: "SHRP" 100;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 20px;
+  letter-spacing: -0.02em;
+}
+
+/* ─── What to do, and what the marks mean ───────────────────────────────────────────────────── */
+
+.fleet .top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--px) * 5) calc(var(--px) * 8);
+}
+.fleet .top .says {
+  flex: 1 1 16rem;
+}
+
+.fleet .legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 2) calc(var(--px) * 8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+.fleet .legend li {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+}
+.fleet .sw {
+  display: block;
+  flex: none;
+  width: var(--cell);
+  height: var(--cell);
+  color: var(--fg);
+}
+.fleet .sw[data-kind="asleep"] {
+  width: calc(var(--cell) * 2);
+  height: calc(var(--px) * 4);
+  color: var(--line);
+}
+.fleet .sw[data-kind="running"] {
+  background: var(--torch);
+}
+.fleet .sw[data-kind="unknown"] {
+  border: var(--px) solid var(--fg);
+}
+
+/* ─── A machine ─────────────────────────────────────────────────────────────────────────────── */
+
+.fleet .machines {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: calc(var(--px) * 8);
+}
+
+.fleet .machine {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 6);
+}
+.fleet .machine[data-lost] {
+  --frame-line: var(--dim);
+}
+
+.fleet .mhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 calc(var(--px) * 4);
+}
+.fleet .mname {
+  margin: 0;
+  color: var(--fg);
+  font-size: 0.9375rem;
+}
+.fleet .mstate {
+  display: flex;
+  gap: calc(var(--px) * 3);
+  margin: 0;
+  color: var(--muted);
+}
+/* A lifecycle or a health that isn't the ordinary one, set on a block of the tone's own white. */
+.fleet .mstate [data-alarm] {
+  padding: 0 calc(var(--px) * 2);
+  background: var(--fg);
+  color: var(--on-fg);
+}
+
+/* The head of each half of a machine: what it is, and how full. */
+.fleet .zone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 calc(var(--px) * 4);
+  padding-top: calc(var(--px) * 3);
+  border-top: var(--px) solid var(--dim);
+}
+.fleet .zname {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.55;
+}
+.fleet .zvalue {
+  margin: 0;
+  color: var(--fg);
+}
+
+/* Memory: sixteen rows, the bottom one first. Blocks in the first column, whose they are beside. */
+.fleet .memory {
+  display: grid;
+  grid-template-columns: var(--col) minmax(0, 1fr);
+  grid-template-rows: repeat(16, var(--cell));
+  gap: var(--px) calc(var(--px) * 5);
+}
+.fleet .gb {
+  grid-column: 1;
+  display: grid;
+  grid-template-columns: repeat(4, var(--cell));
+  column-gap: var(--px);
+}
+.fleet .gb i {
+  display: block;
+  height: var(--cell);
+}
+/* A GB nobody holds: a small mark where a block would be. */
+.fleet .slot i {
+  border: calc(var(--px) * 2) solid transparent;
+  background: var(--dim);
+  background-clip: padding-box;
+}
+/* A GB a world holds. Claimed in the ledger, it is a dither; running, it is lit; on a machine that
+   isn't answering, it is an outline, since nobody can say. */
+.fleet .lit {
+  color: var(--fg);
+}
+.fleet .lit i {
+  background: var(--panel);
+}
+.fleet .lit[data-state="running"] i {
+  background: var(--torch);
+}
+.fleet .lit[data-state="unknown"] i {
+  border: var(--px) solid var(--fg);
+}
+
+/* Whose rows they are: a name beside them, as tall as they are. */
+.fleet .label {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding-left: calc(var(--px) * 4);
+  border-left: var(--px) solid var(--fg);
+  overflow: hidden;
+}
+.fleet .label[data-state="claimed"] {
+  border-left-color: var(--dim);
+}
+.fleet .lname {
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fleet .lsize {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* A world stands up a row at a time, bottom row first. */
+.fleet .lit,
+.fleet .label {
+  animation: stand 1ms step-end both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+@keyframes stand {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Disk: one flat slab for each world placed here, under the column it stands in when it runs. */
+.fleet .shelf {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fleet .tile,
+.fleet .copy {
+  display: grid;
+  grid-template-columns: var(--col) minmax(0, 1fr);
+  align-items: center;
+  column-gap: calc(var(--px) * 5);
+  width: 100%;
+  min-height: 40px;
+  padding: 3px 0;
+}
+.fleet .tile {
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fleet .tile:hover {
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+}
+.fleet .tile[aria-disabled="true"] {
+  cursor: default;
+}
+.fleet .tile[aria-disabled="true"]:hover {
+  background: none;
+}
+/* A world on a machine that can't be asked anything, and a copy that is nobody's home. */
+.fleet .tile[data-off],
+.fleet .copy {
+  color: var(--muted);
+}
+
+.fleet .slab {
+  display: block;
+  height: calc(var(--px) * 4);
+  color: var(--line);
+}
+/* A copy that is nobody's home, and a world whose machine was declared lost: a line where a slab was. */
+.fleet .copy .slab {
+  height: var(--px);
+  background: var(--dim);
+}
+.fleet .tile[data-word="displaced"] .slab {
+  height: var(--px);
+  background: var(--dim);
+}
+.fleet .tile[data-word="running"] .slab {
+  background: var(--torch);
+}
+.fleet .tile[data-word="unknown"] .slab {
+  border: var(--px) solid var(--line);
+}
+
+.fleet .ttext {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+.fleet .tline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(var(--px) * 4);
+  min-width: 0;
+}
+.fleet .tname {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 18px;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fleet .tsize {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 18px;
+}
+.fleet .tmeta {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.fleet .tile[data-word="running"] .tmeta span:first-child,
+.fleet .tile[data-word="displaced"] .tmeta span:first-child {
+  color: var(--fg);
+}
+.fleet .tnote {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 16px;
+}
+.fleet .none {
+  padding: calc(var(--px) * 3) 0;
+}
+
+/* ─── What just happened, and what it wrote ─────────────────────────────────────────────────── */
+
+/* Room is kept for a few lines, so the ledger under it doesn't jump at every press. */
+.fleet .told {
+  min-height: 4.5rem;
+}
+.fleet .tell {
+  margin: 0;
+  color: var(--fg);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+.fleet .notes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 3);
+  margin: 0;
+}
+.fleet .notes dt {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+.fleet .notes dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.fleet .tell + .notes {
+  margin-top: calc(var(--px) * 4);
+}
+/* What an owner reads: a person is told it, so it isn't in the machine's voice. */
+.fleet .quote {
+  color: var(--fg);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.fleet .ledger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: calc(var(--px) * 5);
+  min-height: 9rem;
+  padding: calc(var(--px) * 7);
+  --frame-line: var(--dim);
+}
+.fleet .lhead {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+}
+.fleet .lines {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* One thing written: whose it is, the table or the event, then each field. */
+.fleet .line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 calc(var(--px) * 5);
+  padding-left: calc(var(--px) * 5);
+  border-left: var(--px) solid var(--dim);
+  color: var(--fg);
+}
+.fleet .who {
+  flex: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.55;
+}
+.fleet .kind {
+  flex: none;
+}
+.fleet .pair {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.fleet .key {
+  color: var(--muted);
+}
+
+/* ─── The cable ─────────────────────────────────────────────────────────────────────────────── */
+
+.fleet .cable {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 6);
+  padding-top: calc(var(--px) * 8);
+  border-top: var(--px) solid var(--line);
+}
+.fleet .chead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--px) * 4) calc(var(--px) * 8);
+}
+.fleet .cbuttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 4) calc(var(--px) * 5);
+  /* The buttons stand a little proud of where they are set. */
+  padding-top: calc(var(--px) * 2);
+}
+
+/* Twenty-four heartbeats, five seconds apart, from the cut to the lease running out. One that
+   didn't arrive is filled. Under them, where each threshold falls: columns counted from 1. */
+.fleet .beats {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  gap: calc(var(--px) * 2) var(--px);
+}
+.fleet .beat {
+  display: block;
+  height: calc(var(--px) * 5);
+  color: var(--dim);
+}
+.fleet .beat.missed {
+  background: var(--fg);
+}
+.fleet .due {
+  grid-row: 2;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+/* After the third beat, and after the ninth: the mark stands on the line between two beats. */
+.fleet .due[data-at="suspect"] {
+  grid-column: 4 / 10;
+  padding-left: calc(var(--px) * 2);
+  border-left: var(--px) solid var(--line);
+}
+.fleet .due[data-at="unavailable"] {
+  grid-column: 10 / 16;
+  padding-left: calc(var(--px) * 2);
+  border-left: var(--px) solid var(--line);
+}
+/* After the last. */
+.fleet .due[data-at="lease"] {
+  grid-column: 16 / 25;
+  padding-right: calc(var(--px) * 2);
+  border-right: var(--px) solid var(--line);
+  text-align: right;
+}
+
+/* What each threshold means. Dim until the silence has lasted that long. */
+.fleet .marks {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+.fleet .marks li {
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: calc(var(--px) * 3);
+  color: var(--muted);
+}
+.fleet .marks li[data-on] {
+  color: var(--fg);
+}
+
+/* ─── The facts' second line: why, in plain words ───────────────────────────────────────────── */
+
+.fleet .why {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-family: var(--display);
+  font-variation-settings: "SHRP" 30;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+/* ─── With the width for it: the two machines side by side ──────────────────────────────────── */
+
+@container (min-width: 30rem) {
+  .fleet .machines {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fleet .lit,
+  .fleet .label {
+    animation: none;
+  }
+}

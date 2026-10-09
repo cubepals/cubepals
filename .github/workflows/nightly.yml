@@ -1,0 +1,88 @@
+name: Nightly
+
+# Main's newest commit deployed to staging and taken through the staging check, then staging is
+# stopped again. A commit that passes is tagged v<next>-nightly.<date>.<run> (scripts/versions.ts)
+# and made a prerelease; production.ts deploys only such a commit.
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run on staging at a time; a second waits rather than deploying under the first.
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 75
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # The schedule skips a commit that already has its nightly; by hand, it always runs.
+      - name: Anything new since the last nightly
+        id: new
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = schedule ] && git tag --points-at HEAD | grep -q -- '-nightly\.'; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "HEAD already has its nightly."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.new.outputs.run == 'true'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+      - if: steps.new.outputs.run == 'true'
+        uses: superfly/flyctl-actions/setup-flyctl@master
+        with:
+          version: 0.4.111
+      # The release ships only `flyctl`; the scripts call it `fly`, as its installer names it.
+      - if: steps.new.outputs.run == 'true'
+        run: ln -s flyctl "$(dirname "$(command -v flyctl)")/fly" && fly version
+      - if: steps.new.outputs.run == 'true'
+        run: bun install --frozen-lockfile
+      - name: Deploy this commit to staging
+        if: steps.new.outputs.run == 'true'
+        run: bun scripts/staging.ts up
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          STAGING_STATE: ${{ secrets.STAGING_STATE }}
+          POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
+          POLAR_PRODUCTS: ${{ secrets.POLAR_PRODUCTS }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
+          AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.AUTH_GOOGLE_CLIENT_SECRET }}
+          STAGING_DEVELOPERS: ${{ secrets.STAGING_DEVELOPERS }}
+      - name: Staging check
+        if: steps.new.outputs.run == 'true'
+        run: bun scripts/staging-check.ts
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          STAGING_STATE: ${{ secrets.STAGING_STATE }}
+      # Whatever happened above, nothing is left running or holding an address. A second try
+      # covers a blip reaching Fly, which once left staging running (2026-10-08).
+      - name: Stop staging
+        if: always() && steps.new.outputs.run == 'true'
+        run: bun scripts/staging.ts stop || (sleep 60 && bun scripts/staging.ts stop)
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          STAGING_STATE: ${{ secrets.STAGING_STATE }}
+      - name: Tag and release the nightly
+        if: steps.new.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.run_number }}
+        run: |
+          tag=$(bun scripts/versions.ts nightly "$RUN")
+          gh release create "$tag" --target "$GITHUB_SHA" --prerelease --generate-notes --title "$tag"

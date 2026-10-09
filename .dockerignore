@@ -1,0 +1,20 @@
+# Images build from the repository root; only what a Dockerfile copies matters, and nothing
+# local or secret ever reaches the build context.
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/target
+.git
+.github
+.claude
+.env
+.env.*
+!.env.example
+# Operator files: state, secrets, reports. Git ignores them; so must the build.
+local
+**/.DS_Store
+*.pdf
+docs
+tools
+infra

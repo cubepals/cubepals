@@ -1,0 +1,8 @@
+{
+  "name": "minecraft-capacity-bots",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "mineflayer": "4.39.0"
+  }
+}

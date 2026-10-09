@@ -1,0 +1,39 @@
+# The edge (§12): mc-router supervised by the edge agent, bly-<deployment>-edge. Players join
+# <slug>.<play domain>:25565, whose wildcard A/AAAA records point at this app's addresses.
+# Deploy from the repository root:
+#   fly deploy . --config infra/fly/edge.toml --dockerfile apps/edge/Dockerfile --app bly-<deployment>-edge
+#   fly scale count 2 --app bly-<deployment>-edge   (production)
+# CONTROL_URL (the control app's internal listener, http://api.process.bly-<deployment>-control.internal:4001)
+# and EDGE_TOKEN are Fly secrets set by Terraform (infra/terraform/modules/edge).
+
+app = "bly-staging-edge"
+primary_region = "fra"
+
+[build]
+  dockerfile = "../../apps/edge/Dockerfile"
+
+[deploy]
+  strategy = "rolling"
+
+[env]
+  MINECRAFT_PORT = "25565"
+  IDLE_HINT_AFTER = "10m"
+
+# Raw TCP: the Minecraft handshake names the server, so nothing in front may touch the stream.
+[[services]]
+  protocol = "tcp"
+  internal_port = 25565
+  auto_stop_machines = "off"
+  auto_start_machines = false
+
+  [[services.ports]]
+    port = 25565
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "15s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

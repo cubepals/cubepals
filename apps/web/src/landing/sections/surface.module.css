@@ -1,0 +1,105 @@
+/* The two plain parts of the surface that aren't the hero: the plans, and the closing. */
+
+.plans .cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14.5rem), 1fr));
+  gap: calc(var(--px) * 8);
+  margin-top: clamp(28px, 5vh, 48px);
+}
+.plans .card {
+  display: grid;
+  align-content: start;
+  gap: calc(var(--px) * 4);
+  padding: clamp(20px, 2.6vw, 32px);
+}
+.plans .name {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.plans .price {
+  margin: 0;
+  font-variation-settings: "SHRP" 100;
+  font-weight: 800;
+  font-size: clamp(3rem, 5vw, 4.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.055em;
+}
+.plans .price small {
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.plans .pitch {
+  margin: 0 0 calc(var(--px) * 4);
+}
+.plans .points {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 1rem;
+}
+.plans .points li {
+  padding: calc(var(--px) * 4) 0;
+  border-top: var(--px) solid color-mix(in srgb, currentColor 22%, transparent);
+}
+.plans .action {
+  justify-self: start;
+  margin-top: calc(var(--px) * 8);
+}
+/* On the solid card the button's own block is paper, so it still reads as a block on ink. */
+.plans .paid .action {
+  --btn-shadow: color-mix(in srgb, var(--paper) 45%, var(--ink));
+}
+.plans .hours {
+  margin-top: calc(var(--px) * 10);
+}
+.plans .more {
+  color: inherit;
+  font-weight: 600;
+  text-underline-offset: 0.25em;
+  text-decoration-thickness: var(--px);
+}
+
+/* Doubled so it outranks the kit's own section padding, whichever stylesheet loads last. */
+.footer.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 32px;
+  padding-block: 28px 44px;
+  border-top: var(--px) solid var(--ink);
+  font-size: 0.875rem;
+}
+.footer .mark {
+  font-family: var(--font-figtree), system-ui, sans-serif;
+  font-variation-settings: normal;
+  font-size: 20px;
+  line-height: 1;
+}
+.footer .footerLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 20px;
+}
+.footer .footerLinks a {
+  /* Room to hit: a link in a row of its own is a target, not a word in a sentence. */
+  padding-block: 4px;
+  color: inherit;
+  text-underline-offset: 0.25em;
+}
+.footer .legal a {
+  color: inherit;
+  text-underline-offset: 0.25em;
+}
+.footer .legal {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+}

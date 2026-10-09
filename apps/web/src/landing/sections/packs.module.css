@@ -1,0 +1,582 @@
+/*
+ * The packs stratum: one example pack followed down four steps. What kind of file it is, what it
+ * needs, which of its jars a server runs, and the start that finds what reading couldn't.
+ *
+ * The column this sits in is narrow on a small laptop as well as on a phone (the chunk takes the
+ * rest), so the wider arrangement is asked of the demonstration's own width, not the screen's.
+ * Narrow is the default. Every grid names its column as minmax(0, 1fr), so a long file name wraps
+ * inside its box instead of widening it.
+ */
+
+.packs .demo {
+  container-type: inline-size;
+}
+
+/* Read by a screen reader, drawn nowhere. */
+.packs .sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A real string inside a sentence: a file, a key, a number with its unit. */
+.packs .v {
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+/* ─── The four steps ────────────────────────────────────────────────────────────────────────── */
+
+.packs .steps {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  /* How much of the top of the screen the chunk's band covers (nothing, on a wide screen). Nothing
+     scrolls to this list; the tour reads the length off it, to know what of it is on screen. */
+  scroll-margin-top: var(--band);
+}
+.packs .step {
+  min-width: 0;
+  padding: calc(var(--px) * 10) 0;
+  border-top: var(--px) solid color-mix(in srgb, var(--line) 30%, transparent);
+}
+.packs .step:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.packs .step:last-child {
+  padding-bottom: 0;
+}
+
+.packs .head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 5);
+}
+/* The step's number, on a block: solid once the pack has got there. */
+.packs .no {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(var(--px) * 13);
+  height: calc(var(--px) * 13);
+  background: var(--fg);
+  color: var(--on-fg);
+  font-size: 0.9375rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.packs .title {
+  margin: 0;
+  font-variation-settings: "SHRP" 100;
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+}
+.packs .step[data-state="todo"] .no,
+.packs .step[data-state="next"] .no {
+  background: none;
+  color: var(--fg);
+  outline: var(--px) solid var(--line);
+  outline-offset: calc(var(--px) * -1);
+}
+
+.packs .body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 7);
+  margin-top: calc(var(--px) * 7);
+}
+
+/*
+ * Where the one button sits: at the head of the step it starts. The row is as tall as the button
+ * whatever it holds, so a step that finishes doesn't pull what is under it upward.
+ */
+.packs .ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--px) * 5) calc(var(--px) * 9);
+  min-height: 48px;
+  /* Inside the frame the ground is the panel, so the quiet button is cut from the same paper. */
+  --field: var(--panel);
+}
+.packs .what {
+  flex: 1 1 14em;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+/* A step the pack hasn't reached is grey. */
+.packs .step[data-state="todo"] .no,
+.packs .step[data-state="todo"] .title,
+.packs .step[data-state="todo"] .what {
+  color: var(--muted);
+}
+
+/* ─── 1. What it is ─────────────────────────────────────────────────────────────────────────── */
+
+/* A fieldset, left a plain block: its legend is for a screen reader. */
+.packs .kinds {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.packs .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 3);
+}
+
+/* The file, opened: the names inside it, and the ones that give it away set on ink. */
+.packs .file {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 5);
+  padding: calc(var(--px) * 7);
+}
+.packs .names {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: start;
+  gap: var(--px);
+  margin: calc(var(--px) * 2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.packs .names li {
+  padding: 0 calc(var(--px) * 3);
+  overflow-wrap: anywhere;
+}
+.packs .names li[data-tell] {
+  background: var(--fg);
+  color: var(--on-fg);
+}
+.packs .how {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+/* ─── 2. What it needs ──────────────────────────────────────────────────────────────────────── */
+
+.packs .from {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.packs .sums {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--px) * 5) calc(var(--px) * 8);
+  margin: 0;
+}
+.packs .sums div {
+  min-width: 0;
+}
+.packs .sums dt,
+.packs .sums dd {
+  margin: 0;
+}
+.packs .sum {
+  display: block;
+  font-size: 1.25rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.packs .sub {
+  display: block;
+}
+
+/* Which Java each Minecraft runs on; this pack's is the cell set on ink. */
+.packs .javas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--px) * 2);
+  margin: calc(var(--px) * 3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.packs .java {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1px;
+  padding: calc(var(--px) * 3) calc(var(--px) * 4);
+  border: var(--px) solid var(--line);
+}
+.packs .java[data-on] {
+  border-color: var(--fg);
+  background: var(--fg);
+  color: var(--on-fg);
+}
+.packs .java[data-on] .range {
+  color: var(--on-fg);
+}
+
+/* ─── 3. What a server runs: the belt, the gate and the two bins ────────────────────────────── */
+
+/* Jars wait in a line and step toward the post at its end; the one at the post is being read. */
+.packs .belt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) calc(var(--px) * 3);
+}
+.packs .track {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: calc(var(--px) * 2);
+  height: calc(var(--px) * 11);
+  padding-inline-end: calc(var(--px) * 2);
+  overflow: hidden;
+}
+.packs .jar {
+  flex: none;
+  width: calc(var(--px) * 8);
+  height: calc(var(--px) * 8);
+  background: var(--fg);
+}
+.packs .jar[data-at] {
+  background: var(--torch);
+  outline: var(--px) solid var(--ink);
+  outline-offset: calc(var(--px) * -1);
+}
+.packs .floor {
+  grid-column: 1;
+  grid-row: 2;
+  height: calc(var(--px) * 3);
+  color: var(--fg);
+}
+.packs .post {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  background: var(--fg);
+}
+
+/* What the gate makes of the jar in front of it. Tall enough for its longest reading. */
+.packs .gate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--px);
+  min-height: 10rem;
+  padding: calc(var(--px) * 6) calc(var(--px) * 7);
+}
+.packs .at {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--px) * 6);
+  margin: 0;
+  color: color-mix(in srgb, var(--on-fg) 70%, var(--fg));
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+.packs .mod {
+  margin: 0;
+  font-variation-settings: "SHRP" 100;
+  font-size: 1.375rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+}
+.packs .does,
+.packs .verdict {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+.packs .verdict {
+  margin-top: calc(var(--px) * 2);
+}
+/* Where it goes, cut out of the ink. */
+.packs .to {
+  margin-inline-end: calc(var(--px) * 3);
+  padding: 0 calc(var(--px) * 3);
+  background: var(--on-fg);
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.packs .bins {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--px) * 4);
+}
+.packs .bin {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: calc(var(--px) * 1);
+  padding: calc(var(--px) * 5);
+}
+.packs .binName {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(var(--px) * 4);
+  margin: 0;
+  font-variation-settings: "SHRP" 100;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.03em;
+}
+/* Room for every jar that can land here, so the bins keep their height as they fill. */
+.packs .list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--px);
+  min-height: 9.25rem;
+  margin: calc(var(--px) * 3) 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+.packs .kept {
+  display: grid;
+  grid-template-columns: calc(var(--px) * 5) minmax(0, 1fr);
+  column-gap: calc(var(--px) * 3);
+  overflow-wrap: anywhere;
+}
+.packs .left {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.packs .left small {
+  display: block;
+  font-size: 0.8125rem;
+}
+/* The stamp: an empty square beside a jar, filled once its hash is the pack's. */
+.packs .stamp {
+  display: block;
+  flex: none;
+  width: calc(var(--px) * 5);
+  height: calc(var(--px) * 5);
+  margin-top: 0.38em;
+  border: var(--px) solid var(--line);
+}
+.packs .stamp[data-on] {
+  border-color: var(--fg);
+  background: var(--fg);
+}
+.packs .key {
+  display: flex;
+  gap: calc(var(--px) * 3);
+  margin: 0;
+}
+.packs .key .stamp {
+  margin-top: 0.3em;
+}
+
+/* ─── 4. The start that learns ──────────────────────────────────────────────────────────────── */
+
+.packs .starts,
+.packs .order {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* One line of the telling: a mark for how it stands, then what it is and what is said of it. */
+.packs .row {
+  display: grid;
+  grid-template-columns: calc(var(--px) * 6) minmax(0, 1fr);
+  column-gap: calc(var(--px) * 5);
+  row-gap: calc(var(--px) * 5);
+}
+.packs .mark {
+  display: block;
+  width: calc(var(--px) * 6);
+  height: calc(var(--px) * 6);
+  margin-top: 0.3em;
+  background: var(--fg);
+}
+.packs .mark i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  color: var(--fg);
+}
+.packs .row[data-state="active"] .mark,
+.packs .row[data-state="lit"] .mark {
+  background: var(--torch);
+  outline: var(--px) solid var(--ink);
+}
+.packs .row[data-state="active"] .mark {
+  animation: working 0.7s steps(2, jump-none) infinite;
+}
+.packs .row[data-state="stopped"] .mark,
+.packs .row[data-state="silent"] .mark {
+  background: var(--panel);
+  outline: var(--px) solid var(--fg);
+  outline-offset: calc(var(--px) * -1);
+}
+.packs .row[data-state="unasked"] .mark {
+  background: none;
+}
+.packs .row[data-state="unasked"],
+.packs .row[data-state="unasked"] .v {
+  color: var(--muted);
+}
+@keyframes working {
+  from {
+    background: var(--torch);
+  }
+  to {
+    background: var(--panel);
+  }
+}
+.packs .rowName {
+  margin: 0;
+  font-variation-settings: "SHRP" 100;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.03em;
+}
+.packs .rowLine {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+.packs .row[data-state="lit"] .says {
+  padding: 0 calc(var(--px) * 3);
+  background: var(--torch);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* What was found where the first start stopped. */
+.packs .found {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 3);
+  padding: calc(var(--px) * 7);
+}
+.packs .log {
+  margin: 0 0 calc(var(--px) * 3);
+  padding: calc(var(--px) * 5) calc(var(--px) * 6);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.packs .reading {
+  margin: 0 0 calc(var(--px) * 3);
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  text-wrap: pretty;
+}
+.packs .then {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+/* How many times this start has learnt, of the times it may. */
+.packs .meter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--px) * 2) calc(var(--px) * 5);
+  margin: calc(var(--px) * 3) 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+.packs .cells {
+  display: flex;
+  gap: calc(var(--px) * 2);
+}
+.packs .cell {
+  display: block;
+  width: calc(var(--px) * 6);
+  height: calc(var(--px) * 6);
+  border: var(--px) solid var(--line);
+}
+.packs .cell[data-on] {
+  border-color: var(--fg);
+  background: var(--fg);
+}
+
+/* The size it starts on, and which of the three things asked decided it. */
+.packs .size {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 6);
+  padding: calc(var(--px) * 7);
+}
+.packs .sizeName {
+  margin: 0;
+  font-variation-settings: "SHRP" 100;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.03em;
+}
+.packs .result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: calc(var(--px) * 1) calc(var(--px) * 7);
+  margin: 0;
+  padding-top: calc(var(--px) * 5);
+  border-top: var(--px) solid color-mix(in srgb, var(--line) 30%, transparent);
+}
+.packs .big {
+  font-size: 1.75rem;
+  line-height: 1.1;
+}
+
+/* ─── The facts' second line: why, in plain words ───────────────────────────────────────────── */
+
+.packs .why {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-family: var(--display);
+  font-variation-settings: "SHRP" 30;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+/* ─── Wide enough to set things side by side ────────────────────────────────────────────────── */
+
+@container (min-width: 540px) {
+  .packs .file {
+    grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
+    column-gap: calc(var(--px) * 12);
+    align-items: start;
+  }
+  .packs .sums,
+  .packs .javas {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .packs .gate {
+    min-height: 7.75rem;
+  }
+  .packs .bin {
+    padding: calc(var(--px) * 7);
+  }
+  .packs .list {
+    font-size: 0.9375rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .packs .row[data-state="active"] .mark {
+    animation: none;
+  }
+}

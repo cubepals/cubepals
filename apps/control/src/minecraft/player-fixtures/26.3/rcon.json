@@ -1,0 +1,31 @@
+{
+  "version": "26.3",
+  "uuid": "aea17254-290a-3ab4-b288-4dedb1264ede",
+  "answers": {
+    "list uuids": "There are 1 of a max of 20 players online: Fern (aea17254-290a-3ab4-b288-4dedb1264ede)",
+    "data get entity Fern LastDeathLocation": "Fern has the following entity data: {pos: [I; 12, 70, 34], dimension: \"minecraft:the_nether\"}",
+    "give Fern minecraft:diamond_sword[damage=5,enchantments={\"minecraft:sharpness\":3},custom_name=\"Ow\"] 1": "Gave 1 [Ow] to Fern",
+    "give Fern minecraft:potion[potion_contents={potion:\"minecraft:swiftness\"}] 1": "Gave 1 [Potion of Swiftness] to Fern",
+    "give Fern minecraft:oak_log 32": "Gave 32 [Oak Log] to Fern",
+    "item replace entity Fern hotbar.8 with minecraft:stone 64": "Replaced 1 slot(s) on Fern with [Stone]",
+    "item replace entity Fern inventory.4 with minecraft:torch 10": "Replaced 1 slot(s) on Fern with [Torch]",
+    "item replace entity Fern armor.head with minecraft:iron_helmet": "Replaced 1 slot(s) on Fern with [Iron Helmet]",
+    "item replace entity Fern weapon.offhand with minecraft:shield": "Replaced 1 slot(s) on Fern with [Shield]",
+    "item replace entity Fern enderchest.0 with minecraft:diamond 12": "Replaced 1 slot(s) on Fern with [Diamond]",
+    "item replace entity Fern enderchest.26 with minecraft:oak_planks 3": "Replaced 1 slot(s) on Fern with [Oak Planks]",
+    "execute in minecraft:the_nether run tp Fern 12.5 70 34.5": "Teleported Fern to 12.500000, 70.000000, 34.500000",
+    "kill Fern": "Killed Fern",
+    "execute in minecraft:the_nether run tp Fern 3.5 80 -4.5": "Teleported Fern to 3.500000, 80.000000, -4.500000",
+    "gamemode adventure Fern": "",
+    "data get entity Fern Pos": "Fern has the following entity data: [3.5d, 80.0d, -4.5d]",
+    "data get entity Fern Dimension": "Fern has the following entity data: \"minecraft:the_nether\"",
+    "data get entity Fern playerGameType": "Fern has the following entity data: 2",
+    "data get entity Fern Inventory": "Fern has the following entity data: [{components: {\"minecraft:enchantments\": {\"minecraft:sharpness\": 3}, \"minecraft:damage\": 5, \"minecraft:custom_name\": \"Ow\"}, count: 1, Slot: 0b, id: \"minecraft:diamond_sword\"}, {components: {\"minecraft:potion_contents\": {potion: \"minecraft:swiftness\"}}, count: 1, Slot: 1b, id: \"minecraft:potion\"}, {count: 32, Slot: 2b, id: \"minecraft:oak_log\"}, {count: 64, Slot: 8b, id: \"minecraft:stone\"}, {count: 10, Slot: 13b, id: \"minecraft:torch\"}]",
+    "data get entity Fern EnderItems": "Fern has the following entity data: [{count: 12, Slot: 0b, id: \"minecraft:diamond\"}, {count: 3, Slot: 26b, id: \"minecraft:oak_planks\"}]",
+    "data get entity Fern equipment": "Fern has the following entity data: {head: {count: 1, id: \"minecraft:iron_helmet\"}, offhand: {count: 1, id: \"minecraft:shield\"}}",
+    "gamemode survival Nobody": "No player was found",
+    "execute in minecraft:overworld run tp Nobody 0.5 -60 0.5": "No entity was found",
+    "data get entity Nobody Pos": "No entity was found",
+    "save-all flush": "Saving the game (this may take a moment!)Saved the game"
+  }
+}

@@ -1,0 +1,491 @@
+/*
+ * The edge: the one address every player arrives at. A server-list row, the wire a ping or a join
+ * travels, and the handshake the edge reads.
+ *
+ * It is sized by the panel's own width (a container query), not the window's: the column is as
+ * narrow beside the chunk on a small laptop as it is on a phone. The wire is laid out in fixed
+ * pixels and percentages, so the block that travels it can be placed by name from the script.
+ */
+
+.address .panel {
+  container-type: inline-size;
+  /* Inside the frame the ground is the panel, so the quiet button is cut from the same paper. */
+  --field: var(--panel);
+}
+
+.address .stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+
+/* The tour's bar stands off the row below it by the stack's own gap. */
+.address .tour {
+  margin-bottom: 20px;
+}
+
+/* Read by a screen reader, not drawn. */
+.address .sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ─── The server list row: the hero's, drawn the same way ───────────────────────────────────── */
+
+.address .list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.address .states {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.address .statesLabel {
+  margin-inline-end: 4px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.address .listing {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* Narrow: the message runs the full width under the icon, so it never needs a third line. */
+  grid-template-areas:
+    "icon name count"
+    "motd motd motd";
+  column-gap: 10px;
+  row-gap: 6px;
+  align-items: center;
+  padding: 10px 12px 10px 10px;
+  --frame-fill: var(--ink);
+  --frame-line: var(--ink);
+  --dim: color-mix(in srgb, var(--paper) 70%, var(--ink));
+  color: var(--paper);
+}
+.address .icon {
+  grid-area: icon;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: var(--px) solid var(--paper);
+  color: var(--paper);
+}
+.address .icon svg {
+  width: 24px;
+  height: 24px;
+}
+.address .name {
+  grid-area: name;
+  font-size: 1.0625rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.address .count {
+  grid-area: count;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 8px;
+  font-size: 1rem;
+  color: var(--dim);
+}
+.address .bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+}
+.address .bars i {
+  display: block;
+  width: 3px;
+  background: color-mix(in srgb, var(--paper) 30%, var(--ink));
+}
+/* Lit only when the running server itself answered. */
+.address .bars i[data-on] {
+  background: var(--torch);
+}
+/* Room for two lines, as Minecraft gives a message, so the wire below never moves. */
+.address .motd {
+  grid-area: motd;
+  align-self: start;
+  min-height: 2.5em;
+  font-size: 1rem;
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+.address .listing[data-by="server"] .motd,
+.address .listing[data-by="server"] .count {
+  color: var(--paper);
+}
+
+.address .under {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+.address .host {
+  min-width: 0;
+  font-size: 1.0625rem;
+  overflow-wrap: anywhere;
+}
+.address .actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ─── The wire ──────────────────────────────────────────────────────────────────────────────── */
+
+/* Narrow: top to bottom, the two ends hanging off one rail at x = 16. */
+.address .wire {
+  position: relative;
+  height: 292px;
+}
+.address .lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--line);
+}
+.address .linesWide {
+  display: none;
+}
+
+.address .station {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 10px;
+}
+.address .mc {
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 44px;
+}
+.address .edge {
+  left: 0;
+  top: 80px;
+  width: 100%;
+  height: 60px;
+}
+.address .server {
+  left: 40px;
+  top: 160px;
+  width: calc(100% - 40px);
+  height: 60px;
+}
+.address .notice {
+  left: 40px;
+  top: 232px;
+  width: calc(100% - 40px);
+  height: 60px;
+}
+
+.address .title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.address .sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+/* The end the route does not lead to: a block of dither, its words on slips of paper. */
+.address .station[data-ghost] {
+  --frame-line: transparent;
+  --frame-fill: transparent;
+  color: var(--muted);
+}
+.address .tint {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  color: var(--fg);
+  clip-path: polygon(
+    0 var(--step),
+    var(--step) var(--step),
+    var(--step) 0,
+    calc(100% - var(--step)) 0,
+    calc(100% - var(--step)) var(--step),
+    100% var(--step),
+    100% calc(100% - var(--step)),
+    calc(100% - var(--step)) calc(100% - var(--step)),
+    calc(100% - var(--step)) 100%,
+    var(--step) 100%,
+    var(--step) calc(100% - var(--step)),
+    0 calc(100% - var(--step))
+  );
+}
+.address .station[data-ghost] .title,
+.address .station[data-ghost] .sub {
+  width: fit-content;
+  margin-inline-start: -4px;
+  padding: 0 4px;
+  background: var(--panel);
+}
+
+/* The torch: this is running. */
+.address .lamp {
+  display: block;
+  width: 8px;
+  height: 8px;
+  background: var(--torch);
+}
+
+/* What is on the wire: one block, moved from place to place by name, in steps. */
+.address .block {
+  position: absolute;
+  left: 16px;
+  top: 53px;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border: var(--px) solid var(--fg);
+  background: var(--fg);
+  transition:
+    left 240ms steps(4, end),
+    top 240ms steps(4, end);
+}
+.address .block[data-at="mc"] {
+  left: 16px;
+  top: 53px;
+}
+.address .block[data-at="edge"] {
+  left: 16px;
+  top: 71px;
+}
+.address .block[data-at="fork"] {
+  left: 16px;
+  top: 152px;
+}
+.address .block[data-at="turnServer"] {
+  left: 16px;
+  top: 190px;
+}
+.address .block[data-at="server"] {
+  left: 30px;
+  top: 190px;
+}
+.address .block[data-at="turnNotice"] {
+  left: 16px;
+  top: 262px;
+}
+.address .block[data-at="notice"] {
+  left: 30px;
+  top: 262px;
+}
+/* Held at the edge: it stays where it is, hollow and solid by turns. */
+.address .block[data-held] {
+  animation: held 800ms steps(1, end) infinite;
+}
+@keyframes held {
+  0% {
+    background: var(--fg);
+  }
+  50% {
+    background: transparent;
+  }
+  100% {
+    background: var(--fg);
+  }
+}
+
+/* What just happened, in words. Its room is kept, so nothing under it jumps. */
+.address .said {
+  min-height: 6em;
+  max-width: 40rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+.address .quote {
+  padding: 1px 6px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.9375rem;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* ─── The handshake ─────────────────────────────────────────────────────────────────────────── */
+
+.address .shake {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.address .packet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  margin: 0;
+}
+/* The bytes above, their name under them. */
+.address .field {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+  min-width: 0;
+}
+.address .field dt {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.address .field dd {
+  margin: 0;
+}
+/* The address: the one field the edge routes by, set on a block of ink, a row to itself. */
+.address .wanted {
+  flex: 1 0 100%;
+  gap: 8px;
+  padding: 10px;
+}
+.address .wanted dt {
+  color: inherit;
+}
+/* A byte to a cell, the letter it spells under it. The row breaks before a dot where it can, so
+   a label of the name stays whole: at 360px wide the first row is exactly the first label. */
+.address .cells,
+.address .label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 3px;
+}
+.address .cell {
+  display: grid;
+  justify-items: center;
+  width: 16px;
+}
+.address .glyph {
+  font-size: 0.9375rem;
+  line-height: 1.2;
+}
+.address .size {
+  color: color-mix(in srgb, var(--on-fg) 70%, var(--fg));
+}
+
+/* ─── Wide: left to right, with the hero's own sizes for the row ────────────────────────────── */
+
+@container (min-width: 520px) {
+  .address .listing {
+    grid-template-areas:
+      "icon name count"
+      "icon motd motd";
+    column-gap: 14px;
+    row-gap: 2px;
+    padding: 12px 16px 12px 12px;
+  }
+  .address .icon {
+    width: 52px;
+    height: 52px;
+  }
+  .address .icon svg {
+    width: 30px;
+    height: 30px;
+  }
+  .address .name {
+    font-size: 1.25rem;
+  }
+  .address .count {
+    font-size: 1.125rem;
+  }
+  .address .motd {
+    min-height: 1.25em;
+    font-size: 1.0625rem;
+  }
+
+  .address .wire {
+    height: 136px;
+  }
+  .address .linesTall {
+    display: none;
+  }
+  .address .linesWide {
+    display: block;
+  }
+  .address .mc {
+    left: 0;
+    top: 38px;
+    width: 19%;
+    height: 60px;
+  }
+  .address .edge {
+    left: 27%;
+    top: 38px;
+    width: 24%;
+    height: 60px;
+  }
+  .address .server {
+    left: 60%;
+    top: 0;
+    width: 40%;
+    height: 60px;
+  }
+  .address .notice {
+    left: 60%;
+    top: 76px;
+    width: 40%;
+    height: 60px;
+  }
+
+  .address .block[data-at="mc"] {
+    left: calc(19% + 9px);
+    top: 68px;
+  }
+  .address .block[data-at="edge"] {
+    left: calc(27% - 9px);
+    top: 68px;
+  }
+  .address .block[data-at="fork"] {
+    left: 55.5%;
+    top: 68px;
+  }
+  .address .block[data-at="turnServer"] {
+    left: 55.5%;
+    top: 30px;
+  }
+  .address .block[data-at="server"] {
+    left: calc(60% - 9px);
+    top: 30px;
+  }
+  .address .block[data-at="turnNotice"] {
+    left: 55.5%;
+    top: 106px;
+  }
+  .address .block[data-at="notice"] {
+    left: calc(60% - 9px);
+    top: 106px;
+  }
+
+  .address .said {
+    min-height: 3em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .address .block {
+    transition: none;
+  }
+  .address .block[data-held] {
+    animation: none;
+  }
+}

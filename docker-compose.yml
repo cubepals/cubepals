@@ -1,0 +1,103 @@
+# Local development. `docker compose up -d` starts everything the control plane talks to;
+# the control plane and the web app run on the host: `bun run dev` starts both (or
+# `bun run dev:control` and `bun run dev:web` one at a time).
+name: blockly
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: blockly
+      POSTGRES_PASSWORD: blockly
+      POSTGRES_DB: blockly
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blockly"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Catches verification and sign-in emails: http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "${DEV_BIND:-127.0.0.1}:8025:8025"
+
+  # Object storage (S3) for archives, uploads and mirrored mods: http://127.0.0.1:9000.
+  # RustFS is S3-compatible and maintained; MinIO's community edition is archived.
+  objects:
+    image: rustfs/rustfs:1.0.0
+    environment:
+      RUSTFS_ACCESS_KEY: ${ARCHIVE_S3_ACCESS_KEY_ID:-blockly}
+      RUSTFS_SECRET_KEY: ${ARCHIVE_S3_SECRET_ACCESS_KEY:-blockly-local-secret}
+    ports:
+      - "${DEV_BIND:-127.0.0.1}:9000:9000"
+    volumes:
+      - objects:/data
+
+  # Creates the control plane's bucket once the store answers, and lets the web app's pages put
+  # uploads straight into it (CORS). curl signs S3 requests itself.
+  objects-bucket:
+    image: curlimages/curl:8.22.0
+    depends_on:
+      - objects
+    environment:
+      KEY: ${ARCHIVE_S3_ACCESS_KEY_ID:-blockly}
+      SECRET: ${ARCHIVE_S3_SECRET_ACCESS_KEY:-blockly-local-secret}
+      BUCKET: ${ARCHIVE_S3_BUCKET:-blockly-local}
+      # Every origin the pages are opened from, space-separated: localhost, and the network address
+      # when `bun run dev:lan` serves the stack to other devices.
+      WEB_ORIGINS: ${DEV_WEB_ORIGINS:-http://localhost:3000}
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        for try in $$(seq 60); do
+          if curl -sf -o /dev/null --aws-sigv4 aws:amz:auto:s3 --user "$$KEY:$$SECRET" -X PUT "http://objects:9000/$$BUCKET"; then
+            break
+          fi
+          sleep 1
+        done
+        allowed=""
+        for origin in $$WEB_ORIGINS; do allowed="$$allowed<AllowedOrigin>$$origin</AllowedOrigin>"; done
+        cors="<CORSConfiguration><CORSRule>$$allowed<AllowedMethod>PUT</AllowedMethod><AllowedHeader>*</AllowedHeader><MaxAgeSeconds>3600</MaxAgeSeconds></CORSRule></CORSConfiguration>"
+        md5=$$(printf '%s' "$$cors" | md5sum | cut -d' ' -f1 | xxd -r -p | base64)
+        if curl -sf -o /dev/null --aws-sigv4 aws:amz:auto:s3 --user "$$KEY:$$SECRET" -X PUT -H "Content-MD5: $$md5" --data-binary "$$cors" "http://objects:9000/$$BUCKET?cors"; then
+          echo "bucket $$BUCKET is ready, open to uploads from $$WEB_ORIGINS"; exit 0
+        fi
+        echo "the store never accepted bucket $$BUCKET and its CORS rule"; exit 1
+    restart: "no"
+
+  # Where players join: <slug>.<PLAY_DOMAIN>:25565. It reaches game servers on the games network,
+  # and the control plane on the host.
+  edge:
+    build:
+      context: .
+      dockerfile: apps/edge/Dockerfile
+    environment:
+      CONTROL_URL: http://host.docker.internal:4001
+      EDGE_TOKEN: ${EDGE_TOKEN}
+      EDGE_ID: local-edge
+      # How long without connections before the edge hints that a server is idle; the plan's
+      # idle time still decides. Shorten it to watch the hint arrive.
+      IDLE_HINT_AFTER: ${IDLE_HINT_AFTER:-10m}
+    ports:
+      - "${DEV_BIND:-127.0.0.1}:25565:25565"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - games
+    restart: unless-stopped
+
+networks:
+  # Game servers live here, and only the edge joins them (docs/architecture.md §19a).
+  games:
+    name: blockly-games
+
+volumes:
+  postgres:
+  objects:

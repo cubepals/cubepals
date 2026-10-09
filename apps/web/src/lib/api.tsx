@@ -1,0 +1,60 @@
+'use client'
+
+import type { AppErrorCode } from '@blockly/contracts'
+import type { AppRouter } from '@blockly/control/router'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { createTRPCClient, httpBatchLink, TRPCClientError } from '@trpc/client'
+import { createTRPCContext } from '@trpc/tanstack-react-query'
+import { type ReactNode, useState } from 'react'
+
+export const { TRPCProvider, useTRPC, useTRPCClient } = createTRPCContext<AppRouter>()
+
+/**
+ * The browser only ever talks to its own origin: /api is rewritten to the control plane, so
+ * cookies stay host-only and no API address is ever baked into the bundle.
+ */
+export function ApiProvider({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: { staleTime: 5_000, retry: 1, refetchOnWindowFocus: true },
+        },
+      }),
+  )
+  const [trpcClient] = useState(() =>
+    createTRPCClient<AppRouter>({ links: [httpBatchLink({ url: '/api/trpc' })] }),
+  )
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
+        {children}
+      </TRPCProvider>
+    </QueryClientProvider>
+  )
+}
+
+/** The sentence to show for a failed request: the API already words its refusals for people. */
+export function messageOf(error: unknown): string {
+  // Without an answer in the API's own shape the request never reached it: a dropped connection,
+  // or something in between answering instead. The browser's words for that ("Failed to fetch")
+  // are its own, not a person's.
+  if (error instanceof TRPCClientError)
+    return error.shape === undefined
+      ? 'Cubepals couldn’t be reached. Check your connection and try again.'
+      : error.message
+  return 'Something went wrong on our side. Try again in a moment.'
+}
+
+/** Which refusal it was, for the few places that act on one rather than only show it. */
+/** The API said there is nothing there, or nothing this person may see. */
+export function isNotFound(error: unknown): boolean {
+  return (
+    error instanceof TRPCClientError && (error.data as { code?: string } | undefined)?.code === 'NOT_FOUND'
+  )
+}
+
+export function codeOf(error: unknown): AppErrorCode | null {
+  if (!(error instanceof TRPCClientError)) return null
+  return (error.data as { appCode?: AppErrorCode | null } | undefined)?.appCode ?? null
+}

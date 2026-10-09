@@ -1,0 +1,49 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": [
+      "**",
+      "!**/migrations",
+      "!**/next-env.d.ts",
+      "!**/infra/*/generated",
+      "!**/infra/*/*.openapi.json",
+      "!apps/blocklyd/tests/fixtures",
+      "!**/*.svg"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 110
+  },
+  "javascript": {
+    "formatter": { "quoteStyle": "single", "semicolons": "asNeeded", "trailingCommas": "all" }
+  },
+  "css": {
+    "formatter": { "enabled": true },
+    "parser": { "cssModules": false }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        "noNonNullAssertion": "error",
+        "useImportType": "error"
+      },
+      "suspicious": {
+        "noConsole": { "level": "warn", "options": { "allow": ["warn", "error"] } }
+      },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": { "level": "off", "options": { "maxAllowedComplexity": 15 } },
+        "noExcessiveLinesPerFunction": {
+          "level": "off",
+          "options": { "maxLines": 100, "skipBlankLines": true }
+        }
+      }
+    }
+  },
+  "assist": { "actions": { "source": { "organizeImports": "on" } } }
+}

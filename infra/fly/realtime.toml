@@ -1,0 +1,67 @@
+# The realtime role (§13): a singleton, bly-<deployment>-realtime, from the control plane's image.
+# Deploy from the repository root, then keep exactly one machine:
+#   fly deploy . --config infra/fly/realtime.toml --dockerfile apps/control/Dockerfile --app bly-<deployment>-realtime
+#   fly scale count 1 --app bly-<deployment>-realtime
+# Its own app, not a process group of the control app: public ports belong to an app, and both
+# the api (HTTPS) and the WebSocket fallback need TCP 443. WebTransport arrives over UDP 443 on the
+# app's dedicated IPv4, which Fly delivers only to sockets bound to fly-global-services; the
+# process terminates that TLS itself (pinned or ACME certificate, REALTIME_TLS_*). The hostname
+# browsers dial has an A record and no AAAA (§19.6). Values come from Fly secrets set by Terraform.
+
+app = "bly-staging-realtime"
+primary_region = "fra"
+
+[build]
+  dockerfile = "../../apps/control/Dockerfile"
+
+[deploy]
+  # One process holds every room; the old one stops before the new one starts, and clients
+  # reconnect as new sessions (§13).
+  strategy = "immediate"
+
+# The process exits cleanly when its certificate is due and comes back on a fresh one (§13): a
+# clean exit must restart too, which the default on-failure policy wouldn't do.
+[[restart]]
+  policy = "always"
+
+[env]
+  NODE_ENV = "production"
+  ROLES = "realtime"
+  # Fly rewrites a UDP packet's address and never its port: the listener is on the port browsers
+  # dial (the config refuses anything else).
+  REALTIME_LISTEN = "fly-global-services:443"
+  REALTIME_FALLBACK_LISTEN = "0.0.0.0:7444"
+
+# WebTransport: HTTP/3 over UDP, TLS terminated by the process.
+[[services]]
+  protocol = "udp"
+  internal_port = 443
+  auto_stop_machines = "off"
+  auto_start_machines = false
+
+  [[services.ports]]
+    port = 443
+
+# The WebSocket fallback (Safari, networks without UDP): TLS at Fly's proxy.
+[[services]]
+  protocol = "tcp"
+  internal_port = 7444
+  auto_stop_machines = "off"
+  auto_start_machines = false
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "20s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  # The image runs as `node`, and the kernel lets a process that isn't root bind a port only from
+  # ip_unprivileged_port_start up (1024 by default). Fly applies sysctl.* boot arguments before
+  # init, on this app's machine alone; the api and worker keep the default.
+  kernel_args = ["sysctl.net.ipv4.ip_unprivileged_port_start=443"]

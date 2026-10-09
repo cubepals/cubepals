@@ -1,0 +1,505 @@
+/*
+ * The backups stratum: one server, its two shelves of backups, what a running server is told
+ * around a copy, the things that can happen to it, and what each one did.
+ *
+ * It is sized by the panel's own width (a container query), not the window's: beside the chunk the
+ * column is as narrow on a small laptop as it is on a phone. A shelf is a grid of equal slots, four
+ * to a row when narrow, then six, then eight. Neither plan's shelf fills a row exactly at any of
+ * those, so the one backup too many that a shelf holds for a moment never starts a row of its own
+ * and nothing under it moves.
+ */
+
+.backups .demo {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 10);
+}
+
+/* The bar that says when the next press comes: the panel's own gap is its space. */
+.backups .tour {
+  margin: 0;
+}
+
+/* Read by a screen reader, drawn nowhere. */
+.backups .sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ─── A question and its choices ────────────────────────────────────────────────────────────── */
+
+/* A fieldset, left a plain block so its legend sits where a legend does: on top. */
+.backups .ask {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.backups .q {
+  padding: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.backups .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 3);
+  margin-top: calc(var(--px) * 3);
+}
+/* While something is happening the plan stays as it is. */
+.backups .chips button[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* ─── The server ────────────────────────────────────────────────────────────────────────────── */
+
+.backups .server {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 5);
+  padding: calc(var(--px) * 6) calc(var(--px) * 7);
+}
+.backups .head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 4) calc(var(--px) * 8);
+}
+.backups .who {
+  min-width: 0;
+}
+.backups .name {
+  margin: 0;
+  font-variation-settings: "SHRP" 100;
+  font-size: 1.125rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+}
+.backups .address {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  overflow-wrap: anywhere;
+}
+/* In the trash its address stops working. */
+.backups .address[data-off] {
+  text-decoration: line-through;
+  text-decoration-thickness: var(--px);
+}
+
+/* What its owner's page says of it, and under that the control plane's own name for the same. The
+   two keep a line each, so the longest of them never pushes anything about. */
+.backups .status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: calc(var(--px) * 4);
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.backups .code {
+  grid-column: 2;
+  color: var(--muted);
+  font-weight: 400;
+}
+/* The torch: this is running. */
+.backups .lamp {
+  display: block;
+  width: calc(var(--px) * 5);
+  height: calc(var(--px) * 5);
+  border: var(--px) solid var(--line);
+}
+.backups .lamp[data-on] {
+  border-color: var(--ink);
+  background: var(--torch);
+}
+
+/* Two to a row when narrow, so what joins them in the trash takes the place already there. */
+.backups .stats {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: calc(var(--px) * 4) calc(var(--px) * 14);
+  align-items: start;
+  margin: 0;
+}
+.backups .stats div {
+  min-width: 0;
+}
+.backups .stats dt {
+  margin: 0;
+}
+.backups .stats dd {
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.backups .stats .version {
+  font-size: 0.9375rem;
+  font-weight: 400;
+  line-height: 1.6;
+}
+.backups .stats .world {
+  display: grid;
+  gap: calc(var(--px) * 2);
+}
+/* The world, a square for each day of play in it, twelve to a row. Room for both rows is kept, so
+   a world that goes back doesn't move what is under it. */
+.backups .pile {
+  display: grid;
+  grid-template-columns: repeat(12, calc(var(--px) * 4));
+  grid-auto-rows: calc(var(--px) * 4);
+  gap: var(--px);
+  min-height: calc(var(--px) * 9);
+}
+.backups .pile i {
+  display: block;
+  background: var(--fg);
+}
+
+/* ─── The shelves ───────────────────────────────────────────────────────────────────────────── */
+
+.backups .racks {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 8);
+}
+.backups .rackLabel {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px calc(var(--px) * 8);
+  margin-bottom: calc(var(--px) * 3);
+  color: var(--fg);
+  font-weight: 600;
+}
+.backups .rackLabel span:last-child {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.backups .shelf {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  row-gap: calc(var(--px) * 4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* A slot stands on its piece of the board; side by side the pieces make one plank as long as the
+   shelf has room. */
+.backups .slot {
+  display: flex;
+  min-width: 0;
+  padding: 0 calc(var(--px) * 1.5) calc(var(--px) * 2);
+  border-bottom: var(--px) solid var(--line);
+}
+.backups .cell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  min-height: 68px;
+  padding: 6px 7px;
+}
+.backups .day {
+  font-variation-settings: "SHRP" 100;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+.backups .reason {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+/* Room the plan has and nothing in it yet, and a backup on its way off the left end: both are
+   dither, the first a few dots, the second half gone. */
+.backups .cell[data-kind="empty"],
+.backups .cell[data-kind="over"] {
+  --frame-line: transparent;
+  --frame-fill: transparent;
+}
+.backups .tint {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  color: var(--fg);
+  clip-path: polygon(
+    0 var(--step),
+    var(--step) var(--step),
+    var(--step) 0,
+    calc(100% - var(--step)) 0,
+    calc(100% - var(--step)) var(--step),
+    100% var(--step),
+    100% calc(100% - var(--step)),
+    calc(100% - var(--step)) calc(100% - var(--step)),
+    calc(100% - var(--step)) 100%,
+    var(--step) 100%,
+    var(--step) calc(100% - var(--step)),
+    0 calc(100% - var(--step))
+  );
+}
+/* Its words stay readable on slips of the panel's paper. */
+.backups .cell[data-kind="over"] .day,
+.backups .cell[data-kind="over"] .reason {
+  width: fit-content;
+  max-width: 100%;
+  margin-inline-start: -3px;
+  padding: 0 3px;
+  background: var(--panel);
+  color: var(--fg);
+}
+
+/* A backup just taken is set down on the shelf, a pixel at a time. */
+.backups .cell[data-fresh] {
+  animation: land 240ms steps(3, end);
+}
+@keyframes land {
+  from {
+    translate: 0 calc(var(--px) * -3);
+  }
+  to {
+    translate: 0 0;
+  }
+}
+
+/* ─── What a running server is told ─────────────────────────────────────────────────────────── */
+
+.backups .told {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 3);
+}
+.backups .cmds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.backups .cmd {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 calc(var(--px) * 4);
+  border: var(--px) solid color-mix(in srgb, var(--line) 30%, transparent);
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+/* Being said now is the torch; already said is ink. */
+.backups .cmd[data-state="now"] {
+  border-color: var(--ink);
+  background: var(--torch);
+  color: var(--ink);
+}
+.backups .cmd[data-state="done"] {
+  border-color: var(--fg);
+  background: var(--fg);
+  color: var(--on-fg);
+}
+
+/* ─── What can happen to it ─────────────────────────────────────────────────────────────────── */
+
+.backups .acts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 7);
+  /* Inside the frame the ground is the panel, so the quiet buttons are cut from the same paper. */
+  --field: var(--panel);
+}
+.backups .btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 5) calc(var(--px) * 4);
+  margin-top: calc(var(--px) * 6);
+}
+.backups .hint {
+  max-width: 38rem;
+  margin-top: calc(var(--px) * 4);
+}
+
+/* ─── What it did ───────────────────────────────────────────────────────────────────────────── */
+
+/* While a run is going, the moment showing lies over the run's last moment, which is drawn nowhere
+   and only holds the room the run will come to need. The panel is as tall at the first sentence as
+   at the last, so nothing under it moves until the next press. */
+.backups .outcome {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+.backups .after {
+  display: grid;
+  grid-area: 1 / 1;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 7);
+  align-items: start;
+}
+.backups .after[data-room] {
+  visibility: hidden;
+}
+.backups .said {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 2);
+  min-width: 0;
+}
+/* The sentence just added is ink; the ones before it step back. */
+.backups .said p {
+  max-width: 38rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+.backups .said p:last-child {
+  color: var(--fg);
+}
+
+/* The owner's steps for the work, lit in the order they are passed. */
+.backups .journey {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 4);
+  min-width: 0;
+  padding: calc(var(--px) * 6) calc(var(--px) * 7);
+}
+.backups .title {
+  margin: 0;
+  font-variation-settings: "SHRP" 100;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+.backups .steps {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.backups .step {
+  display: grid;
+  grid-template-columns: calc(var(--px) * 6) minmax(0, 1fr);
+  column-gap: calc(var(--px) * 3);
+  align-items: start;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+.backups .mark {
+  width: calc(var(--px) * 6);
+  height: calc(var(--px) * 6);
+  margin-top: 5px;
+}
+.backups .mark i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  color: var(--fg);
+}
+.backups .words {
+  width: fit-content;
+  padding: 0 calc(var(--px) * 2);
+}
+/* A step not reached yet is grey; one already passed is ink; the one running now is the torch. */
+.backups .step[data-state="todo"] {
+  color: var(--muted);
+}
+.backups .step[data-state="done"] .mark {
+  background: var(--fg);
+}
+.backups .step[data-state="now"] .mark {
+  background: var(--torch);
+  outline: var(--px) solid var(--ink);
+  animation: working 0.7s steps(2, jump-none) infinite;
+}
+.backups .step[data-state="now"] .words {
+  background: var(--torch);
+  color: var(--ink);
+}
+@keyframes working {
+  from {
+    background: var(--torch);
+  }
+  to {
+    background: var(--field);
+  }
+}
+.backups .result {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+
+/* ─── The facts' second line: what it means, in plain words ─────────────────────────────────── */
+
+.backups .aside {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-family: var(--display);
+  font-variation-settings: "SHRP" 30;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+/* ─── Wider: more slots to a row, and the steps beside what was said ────────────────────────── */
+
+@container (min-width: 440px) {
+  .backups .shelf {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 540px) {
+  .backups .head {
+    grid-template-columns: minmax(0, 1fr) 13rem;
+  }
+  .backups .stats {
+    grid-template-columns: auto auto auto minmax(0, 1fr);
+  }
+}
+
+@container (min-width: 620px) {
+  .backups .shelf {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+  .backups .reason {
+    font-size: 0.75rem;
+  }
+  .backups .after[data-two] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 17rem);
+    column-gap: calc(var(--px) * 12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backups .cell[data-fresh] {
+    animation: none;
+  }
+  .backups .step[data-state="now"] .mark {
+    animation: none;
+  }
+}

@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # A change to nothing but prose skips the rest. `check` still reports, so it can stay required.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code == 'true' || steps.tested-doc.outputs.doc == 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          predicate-quantifier: every
+          filters: |
+            code:
+              - '**'
+              - '!*.md'
+              - '!docs/**'
+              - '!brand/**'
+              - '!.github/ISSUE_TEMPLATE/**'
+              - '!.github/CODEOWNERS'
+              - '!.github/pull_request_template.md'
+              - '!.github/dependabot.yml'
+      # own.test.ts reads this one doc, and a negated filter can't add a path back.
+      - uses: dorny/paths-filter@v3
+        id: tested-doc
+        with:
+          filters: |
+            doc:
+              - 'docs/modpack-templates.md'
+
+  static:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+      # The control plane runs on Node in its image; a few checks run there too.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+      - run: bun install --frozen-lockfile
+      - run: bun run openapi:install
+      - name: API types match their pinned specs
+        run: bun run openapi:check
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run check:boundaries
+      # Clippy's part runs in blocklyd.yml, which has cargo.
+      - run: bun run check:structure
+      - run: bun run check:deprecated
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.15.3
+          terraform_wrapper: false
+      - name: Terraform is formatted and valid against its providers
+        run: |
+          terraform fmt -check -recursive infra/terraform
+          for env in staging production; do
+            terraform -chdir=infra/terraform/environments/$env init -backend=false -input=false
+            terraform -chdir=infra/terraform/environments/$env validate
+          done
+
+  # The suite spends most of its time waiting on the job queue's half-second poll, test after test,
+  # so it is split across machines: every fourth file to each, each with its own services.
+  test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: blockly
+          POSTGRES_PASSWORD: blockly
+          POSTGRES_DB: blockly
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U blockly"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://blockly:blockly@127.0.0.1:5432/blockly
+      NATS_TEST_URL: nats://127.0.0.1:4222
+      S3_TEST_ENDPOINT: http://127.0.0.1:9000
+      S3_TEST_BUCKET: blockly-test
+      PEBBLE_TEST_URL: https://127.0.0.1:14000/dir
+      CHALLTESTSRV_TEST_URL: http://127.0.0.1:8055
+    steps:
+      - uses: actions/checkout@v7
+      # Stand-ins for Fly's log stream and for R2. Service containers can't take arguments.
+      - name: Start NATS
+        run: docker run -d --name nats -p 4222:4222 nats:2.15.0 --user blockly-test --pass fm2_blockly_test
+      - name: Start an S3 store
+        run: >-
+          docker run -d --name s3 -p 9000:9000 -e RUSTFS_ACCESS_KEY=blockly-test
+          -e RUSTFS_SECRET_KEY=blockly-test-secret rustfs/rustfs:1.0.0
+      # Let's Encrypt's test CA, validating DNS-01 against its own DNS test server.
+      - name: Start Pebble and its DNS test server
+        run: |
+          docker network create acme
+          docker run -d --name challtestsrv --network acme -p 8055:8055 \
+            ghcr.io/letsencrypt/pebble-challtestsrv:2.10.1 \
+            -management :8055 -dnsserver :8053 -http01 "" -https01 "" -tlsalpn01 ""
+          docker run -d --name pebble --network acme -p 14000:14000 -e PEBBLE_VA_NOSLEEP=1 \
+            ghcr.io/letsencrypt/pebble:2.10.1 -dnsserver challtestsrv:8053
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+      - run: bun install --frozen-lockfile
+      - run: bun run openapi:install
+      - name: Create the test bucket
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null --aws-sigv4 aws:amz:auto:s3 --user blockly-test:blockly-test-secret \
+              -X PUT http://127.0.0.1:9000/blockly-test && exit 0
+            sleep 1
+          done
+          exit 1
+      # The same files `bun test` finds on its own, dealt out by position.
+      - name: Test, part ${{ matrix.shard }} of 4
+        run: git ls-files '*.test.ts' '*.test.tsx' | awk -v n=4 -v i=${{ matrix.shard }} 'NR % n == i - 1 { print "./" $0 }' | xargs bun test
+
+  # The one check branch protection requires. It passes when every part passed or was skipped.
+  check:
+    needs: [changes, static, test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every part passed or was skipped
+        run: |
+          echo '${{ toJSON(needs) }}' | jq -e 'all(.[]; .result == "success" or .result == "skipped")'

@@ -1,0 +1,438 @@
+/*
+ * The machine stratum: the two answers that size a server, one start told twice over a single
+ * timeline, and what Blockly reads when the start breaks.
+ *
+ * The column this sits in is narrow on a small laptop as well as on a phone (the chunk takes the
+ * rest), so the two columns are asked of the demonstration's own width, not the screen's. Narrow
+ * is the default: each step's two tellings stacked beside the rail. From 540px the rail goes
+ * between them, the owner's words on its left and the machine's on its right.
+ */
+
+.machine .demo {
+  container-type: inline-size;
+  display: grid;
+  gap: calc(var(--px) * 12);
+}
+
+/* The tour's bar is one more row of the demonstration: the gap between rows is all its space. */
+.machine .tour {
+  margin: 0;
+}
+
+/* Read by a screen reader, drawn nowhere. */
+.machine .sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A real string inside a sentence: an identifier, a file, a number with its unit. */
+.machine .v {
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+/* ─── The questions: what to play, who's playing, and how to break it ───────────────────────── */
+
+.machine .asks {
+  display: grid;
+  gap: calc(var(--px) * 7);
+}
+/* A fieldset, left a plain block so its legend sits where a legend does: on top. */
+.machine .ask {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.machine .q {
+  padding: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.machine .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 3);
+  margin-top: calc(var(--px) * 3);
+}
+.machine .chips button {
+  text-align: start;
+}
+
+/* ─── The machine those answers make ────────────────────────────────────────────────────────── */
+
+.machine .sizing {
+  display: grid;
+  gap: calc(var(--px) * 5);
+}
+.machine .rule {
+  margin: 0;
+  max-width: none;
+}
+
+/* Memory as a bar against the biggest size sold: the heap solid, what is kept outside it dithered. */
+.machine .bar {
+  display: flex;
+  height: calc(var(--px) * 9);
+  border: var(--px) solid var(--line);
+}
+.machine .bar i {
+  display: block;
+  flex: none;
+  transition: width 160ms steps(4, end);
+}
+.machine .heap {
+  background: var(--fg);
+}
+.machine .spare {
+  color: var(--fg);
+}
+.machine .key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 2) calc(var(--px) * 9);
+  margin: 0;
+}
+.machine .key span {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+}
+.machine .key i {
+  display: block;
+  flex: none;
+  width: calc(var(--px) * 6);
+  height: calc(var(--px) * 6);
+}
+.machine .key .room {
+  outline: var(--px) solid var(--line);
+  outline-offset: calc(var(--px) * -1);
+}
+
+.machine .sums {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--px) * 5) calc(var(--px) * 8);
+  margin: 0;
+}
+.machine .sums div {
+  min-width: 0;
+}
+.machine .sums dt,
+.machine .sums dd {
+  margin: 0;
+}
+.machine .sum {
+  display: block;
+  font-size: 1.25rem;
+  line-height: 1.3;
+}
+.machine .sub {
+  display: block;
+}
+
+/* ─── The start ─────────────────────────────────────────────────────────────────────────────── */
+
+/* The button that starts it sits on the timeline it runs. */
+.machine .run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--px) * 5) calc(var(--px) * 9);
+  margin-bottom: calc(var(--px) * 9);
+}
+.machine .status {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.machine .status[data-quiet] {
+  color: var(--muted);
+  font-weight: 500;
+}
+.machine .says {
+  padding: 0 calc(var(--px) * 3);
+}
+.machine .status[data-on] .says {
+  background: var(--torch);
+  color: var(--ink);
+}
+
+.machine .steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One step: the rail and its node, what the owner reads, what is happening. */
+.machine .heads,
+.machine .row {
+  display: grid;
+  grid-template-columns: calc(var(--px) * 10) minmax(0, 1fr);
+  column-gap: calc(var(--px) * 4);
+}
+.machine .heads {
+  grid-template-areas:
+    "node reads"
+    "node does";
+  padding-bottom: calc(var(--px) * 3);
+  border-bottom: var(--px) solid var(--line);
+}
+.machine .row {
+  grid-template-areas:
+    "node reads"
+    "node does"
+    "found found";
+}
+/* A step that begins one of the owner's four is ruled off from the one before. */
+.machine .row[data-first]:not(:first-child) {
+  border-top: var(--px) solid color-mix(in srgb, var(--line) 30%, transparent);
+}
+
+.machine .headReads {
+  grid-area: reads;
+  margin: 0;
+  padding-inline: calc(var(--px) * 3);
+  color: var(--fg);
+  font-weight: 700;
+}
+.machine .headDoes {
+  grid-area: does;
+  margin: 0;
+  padding-inline: calc(var(--px) * 3);
+}
+
+.machine .reads {
+  grid-area: reads;
+  min-width: 0;
+  padding: calc(var(--px) * 4.5) 0 0;
+}
+.machine .does {
+  grid-area: does;
+  min-width: 0;
+  padding: calc(var(--px) * 1) 0 calc(var(--px) * 4.5);
+}
+
+/* The rail runs through every step; a node sits on it beside the step's first line. */
+.machine .node {
+  grid-area: node;
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+.machine .node::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: calc(50% - var(--px) / 2);
+  width: var(--px);
+  background: color-mix(in srgb, var(--line) 30%, transparent);
+}
+.machine .row:last-child .node::before {
+  bottom: auto;
+  height: calc(var(--px) * 9.5);
+}
+.machine .mark {
+  position: relative;
+  width: calc(var(--px) * 6);
+  height: calc(var(--px) * 6);
+  margin-top: calc(var(--px) * 6.5);
+  background: var(--panel);
+}
+.machine .mark i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  color: var(--fg);
+}
+
+.machine .title {
+  margin: 0 0 1px;
+  padding-inline: calc(var(--px) * 3);
+  font-variation-settings: "SHRP" 100;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.03em;
+}
+.machine .line {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+.machine .words,
+.machine .id {
+  padding: 0 calc(var(--px) * 3);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.machine .name {
+  margin: 0;
+}
+.machine .halt {
+  padding-inline-start: calc(var(--px) * 3);
+  color: var(--fg);
+  font-weight: 700;
+}
+.machine .detail {
+  margin: 1px 0 0;
+  max-width: none;
+  padding-inline: calc(var(--px) * 3);
+}
+
+/* A step not reached yet is grey; one already passed is ink; the one running now is the torch. */
+.machine .row[data-state="todo"],
+.machine .row[data-state="todo"] .v {
+  color: var(--muted);
+}
+.machine .row[data-state="done"] .mark {
+  background: var(--fg);
+}
+.machine .row[data-state="active"] .mark,
+.machine .row[data-state="lit"] .mark {
+  background: var(--torch);
+  outline: var(--px) solid var(--ink);
+}
+.machine .row[data-state="active"] .mark {
+  animation: working 0.7s steps(2, jump-none) infinite;
+}
+.machine .row[data-state="active"] .words,
+.machine .row[data-state="active"] .id,
+.machine .row[data-state="lit"] .words,
+.machine .row[data-state="lit"] .id {
+  background: var(--torch);
+  color: var(--ink);
+}
+.machine .row[data-state="stopped"] .mark {
+  outline: var(--px) solid var(--fg);
+}
+.machine .row[data-state="stopped"] .id {
+  background: var(--fg);
+  color: var(--on-fg);
+}
+@keyframes working {
+  from {
+    background: var(--torch);
+  }
+  to {
+    background: var(--panel);
+  }
+}
+
+/* ─── What was found where it stopped ───────────────────────────────────────────────────────── */
+
+.machine .found {
+  grid-area: found;
+  display: grid;
+  gap: calc(var(--px) * 3);
+  min-width: 0;
+  margin: calc(var(--px) * 1) 0 calc(var(--px) * 7);
+  padding: calc(var(--px) * 7);
+  /* The step it hangs under may be grey again; what was found there stays ink. */
+  color: var(--fg);
+}
+.machine .log {
+  margin: 0 0 calc(var(--px) * 3);
+  padding: calc(var(--px) * 5) calc(var(--px) * 6);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+.machine .said {
+  display: block;
+  color: color-mix(in srgb, var(--on-fg) 55%, var(--fg));
+}
+.machine .said[data-tell] {
+  color: var(--on-fg);
+}
+.machine .reading {
+  margin: 0 0 calc(var(--px) * 3);
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  text-wrap: pretty;
+}
+.machine .next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--px) * 4) calc(var(--px) * 7);
+}
+.machine .next p {
+  flex: 1 1 15em;
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+/* A button the owner is offered that leads somewhere else in the app: shown, not pressed here. */
+.machine .offer {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 calc(var(--px) * 7);
+  border: var(--px) solid var(--fg);
+  font-variation-settings: "SHRP" 100;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* ─── The facts' second line: why, in plain words ───────────────────────────────────────────── */
+
+.machine .why {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-family: var(--display);
+  font-variation-settings: "SHRP" 30;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+/* ─── Wide enough for two columns: the rail goes between them ───────────────────────────────── */
+
+@container (min-width: 540px) {
+  .machine .asks {
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: calc(var(--px) * 16);
+  }
+  .machine .sums {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .machine .heads,
+  .machine .row {
+    grid-template-columns: minmax(0, 2fr) calc(var(--px) * 10) minmax(0, 3fr);
+    column-gap: calc(var(--px) * 5);
+  }
+  .machine .heads {
+    grid-template-areas: "reads node does";
+  }
+  .machine .row {
+    grid-template-areas:
+      "reads node does"
+      "found found found";
+  }
+  .machine .headReads,
+  .machine .reads {
+    text-align: end;
+  }
+  .machine .reads,
+  .machine .does {
+    padding: calc(var(--px) * 4.5) 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .machine .bar i {
+    transition: none;
+  }
+  .machine .row[data-state="active"] .mark {
+    animation: none;
+  }
+}

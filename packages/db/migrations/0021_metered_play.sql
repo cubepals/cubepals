@@ -1,0 +1,1 @@
+ALTER TABLE "account_standing" ADD COLUMN "extra_units_allowed" integer DEFAULT 0 NOT NULL;

@@ -1,0 +1,1 @@
+ALTER TABLE "account_standing" ADD COLUMN "play_warned" text;

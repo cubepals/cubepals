@@ -1,0 +1,585 @@
+/*
+ * The runtimes stratum: the rule ladder, drawn as rails.
+ *
+ * The ladder is a list of rows with no gap between them. Each row is two columns: a gutter of fixed
+ * width holding its share of the rails, and whatever the row says. The rails are plain blocks placed
+ * from the gutter's own top-left corner, so they join from row to row whatever height the words
+ * beside them take. Two tracks run down the gutter: the one to Blockly's own machines on the left,
+ * the main one beside the words. Every row's junction sits the same distance down, level with the
+ * middle of the row's first line.
+ *
+ * This is dark ground: every colour is one of the tone's variables.
+ */
+
+.runtimes .built {
+  margin: clamp(14px, 2vh, 20px) 0 0;
+}
+.runtimes .words {
+  margin-top: clamp(14px, 2vh, 20px);
+}
+
+.runtimes .demo {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 10);
+  /* Inside the frame the ground is the panel, so a quiet button and a bare frame are cut from it. */
+  --field: var(--panel);
+  /* A line that is there but not in use: track nobody is on, a frame nothing is in. */
+  --dim: color-mix(in srgb, var(--line) 42%, var(--panel));
+}
+
+/* Read by a screen reader, drawn nowhere. */
+.runtimes .sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A real string inside a sentence. */
+.runtimes .v {
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+/* A sentence of the demonstration's own, the full width of where it sits. */
+.runtimes .says {
+  margin: 0;
+  max-width: none;
+}
+/* A sentence that is only there because of what the visitor just did. */
+.runtimes .told {
+  margin: calc(var(--px) * 3) 0 0;
+  max-width: none;
+  color: var(--fg);
+}
+
+/* ─── Sending servers ───────────────────────────────────────────────────────────────────────── */
+
+.runtimes .send {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--px) * 5) calc(var(--px) * 6);
+  /* The buttons stand a little proud of where they are set. */
+  padding-top: calc(var(--px) * 2);
+}
+.runtimes .over {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--fg);
+}
+
+/* ─── The ladder ────────────────────────────────────────────────────────────────────────────── */
+
+.runtimes .ladder {
+  /* One track's lane, the middle of each track, the gutter both run in, and how far down a row its
+     junction sits. */
+  --lane: calc(var(--px) * 9);
+  --f: calc(var(--lane) * 0.5);
+  --m: calc(var(--lane) * 1.5);
+  --gut: calc(var(--lane) * 2 + var(--px) * 5);
+  --y: 18px;
+  /* The share's marker: how wide the slider's thumb is, and how tall the slider. */
+  --thumb: 28px;
+  --tall: 44px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.runtimes .row {
+  display: grid;
+  grid-template-columns: var(--gut) minmax(0, 1fr);
+}
+.runtimes .cell {
+  min-width: 0;
+  padding-bottom: calc(var(--px) * 12);
+}
+.runtimes .cell[data-end] {
+  padding-bottom: calc(var(--px) * 5);
+}
+.runtimes .row:last-child .cell {
+  padding-bottom: 0;
+}
+
+/* The rails: dim where nothing has passed, the tone's own white along the way the server took. */
+.runtimes .rails {
+  position: relative;
+  display: block;
+  color: var(--dim);
+}
+.runtimes .rails i {
+  position: absolute;
+  display: block;
+  background: currentColor;
+}
+.runtimes .rails i[data-on] {
+  z-index: 1;
+  color: var(--fg);
+}
+.runtimes .mUp,
+.runtimes .mDown {
+  left: calc(var(--m) - var(--px) / 2);
+  width: var(--px);
+}
+.runtimes .fUp,
+.runtimes .fDown {
+  left: calc(var(--f) - var(--px) / 2);
+  width: var(--px);
+}
+.runtimes .mUp,
+.runtimes .fUp {
+  top: 0;
+  height: var(--y);
+}
+.runtimes .mDown,
+.runtimes .fDown {
+  top: var(--y);
+  bottom: 0;
+}
+/* A switch: from the main track across to the other. */
+.runtimes .toF {
+  top: calc(var(--y) - var(--px) / 2);
+  left: calc(var(--f) - var(--px) / 2);
+  width: calc(var(--m) - var(--f) + var(--px) / 2);
+  height: var(--px);
+}
+/* A track leaving the gutter for what the row holds. */
+.runtimes .outM,
+.runtimes .outF {
+  top: calc(var(--y) - var(--px) / 2);
+  right: 0;
+  height: var(--px);
+}
+.runtimes .outM {
+  left: calc(var(--m) - var(--px) / 2);
+}
+.runtimes .outF {
+  left: calc(var(--f) - var(--px) / 2);
+}
+
+/* A junction on the main track: hollow until a server has been through it. */
+.runtimes .rails .node {
+  z-index: 2;
+  top: calc(var(--y) - var(--px) * 2.5);
+  left: calc(var(--m) - var(--px) * 2.5);
+  width: calc(var(--px) * 5);
+  height: calc(var(--px) * 5);
+  background: var(--panel);
+  outline: var(--px) solid var(--dim);
+  outline-offset: calc(var(--px) * -1);
+}
+.runtimes .rails .node[data-state="passed"] {
+  background: var(--fg);
+  outline-color: var(--fg);
+}
+/* The server itself, standing on the rung that is reading it right now. */
+.runtimes .rails .node[data-state="cart"] {
+  top: calc(var(--y) - var(--px) * 3.5);
+  left: calc(var(--m) - var(--px) * 3.5);
+  width: calc(var(--px) * 7);
+  height: calc(var(--px) * 7);
+  background: var(--torch);
+  outline: 0;
+  animation: reading 0.65s steps(2, jump-none) infinite;
+}
+@keyframes reading {
+  from {
+    background: var(--torch);
+  }
+  to {
+    background: var(--panel);
+  }
+}
+
+/* ─── A rung: its name, what it sends where, and what it printed ────────────────────────────── */
+
+.runtimes .head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0 calc(var(--px) * 8);
+}
+.runtimes .head + .says {
+  margin-top: calc(var(--px) * 2);
+}
+/* As tall as a chip, so the name's middle is level with the junction with or without one. */
+.runtimes .title {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  margin: 0;
+  color: var(--fg);
+  font-size: 0.9375rem;
+  overflow-wrap: anywhere;
+}
+
+/* A fieldset left a plain block; the two chips sit in a row inside it. */
+.runtimes .either {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.runtimes .chips {
+  display: flex;
+  gap: calc(var(--px) * 3);
+}
+
+/* What the rung printed: a slip ruled down its left, kept open while there is nothing on it. */
+.runtimes .verdicts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  min-height: 1.3rem;
+  margin: calc(var(--px) * 4) 0 0;
+  padding: 0 0 0 calc(var(--px) * 5);
+  border-left: var(--px) solid var(--dim);
+  list-style: none;
+}
+.runtimes .verdict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 calc(var(--px) * 4);
+  color: var(--fg);
+}
+.runtimes .verdict[data-hidden] {
+  visibility: hidden;
+}
+.runtimes .who,
+.runtimes .outcome {
+  flex: none;
+}
+.runtimes .outcome {
+  color: var(--muted);
+}
+.runtimes [data-outcome="chosen"] .outcome {
+  padding: 0 calc(var(--px) * 2);
+  background: var(--fg);
+  color: var(--on-fg);
+}
+.runtimes .detail {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ─── The canary's share: a line from 0 to 100, a marker, and a bar for each server it read ──── */
+
+.runtimes .share {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(var(--px) * 6);
+  margin-top: calc(var(--px) * 8);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.runtimes .share output {
+  font-weight: 400;
+  color: var(--fg);
+}
+
+/* The marker is the slider's own thumb. A thumb stays inside its slider, so its middle travels from
+   half its width in to half its width short of the end: the line is drawn between those two. */
+.runtimes .bucket {
+  position: relative;
+  height: var(--tall);
+}
+.runtimes .scale {
+  position: absolute;
+  inset: calc(var(--px) * 4) calc(var(--thumb) / 2);
+  outline: var(--px) solid var(--line);
+}
+.runtimes .scale i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: block;
+}
+/* What is in at this share. */
+.runtimes .zone {
+  left: 0;
+  color: var(--fg);
+}
+/* A server the rule read: hollow where it passed it by, solid where it placed it. */
+.runtimes .scale .mark {
+  width: calc(var(--px) * 3);
+  margin-left: calc(var(--px) * -1.5);
+  background: var(--panel);
+  outline: var(--px) solid var(--line);
+  outline-offset: calc(var(--px) * -1);
+}
+.runtimes .scale .mark[data-in] {
+  z-index: 1;
+  background: var(--fg);
+  outline-color: var(--fg);
+}
+/* The server on show carries a flag above the line. */
+.runtimes .scale .mark[data-sel]::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--px) * -1);
+  bottom: calc(100% + var(--px));
+  width: calc(var(--px) * 5);
+  height: calc(var(--px) * 2);
+  background: var(--fg);
+}
+
+.runtimes .range {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: var(--tall);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: ew-resize;
+}
+.runtimes .range::-webkit-slider-runnable-track {
+  height: var(--tall);
+  border: 0;
+  background: transparent;
+}
+.runtimes .range::-moz-range-track {
+  height: var(--tall);
+  border: 0;
+  background: transparent;
+}
+/* The marker: a post the height of the slider with a foot at each end, drawn in three plain fills. */
+.runtimes .range::-webkit-slider-thumb {
+  box-sizing: border-box;
+  width: var(--thumb);
+  height: var(--tall);
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(var(--fg), var(--fg)) center top / calc(var(--px) * 7) var(--px) no-repeat,
+    linear-gradient(var(--fg), var(--fg)) center bottom / calc(var(--px) * 7) var(--px) no-repeat,
+    linear-gradient(var(--fg), var(--fg)) center / var(--px) 100% no-repeat;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.runtimes .range::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--thumb);
+  height: var(--tall);
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(var(--fg), var(--fg)) center top / calc(var(--px) * 7) var(--px) no-repeat,
+    linear-gradient(var(--fg), var(--fg)) center bottom / calc(var(--px) * 7) var(--px) no-repeat,
+    linear-gradient(var(--fg), var(--fg)) center / var(--px) 100% no-repeat;
+}
+
+.runtimes .axis {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: calc(var(--px) * 2);
+  padding-inline: calc(var(--thumb) / 2);
+  color: var(--muted);
+}
+
+/* ─── A box on the rails: the server at the top, a runtime at the end of each track ─────────── */
+
+.runtimes .box {
+  padding: 8px calc(var(--px) * 7) calc(var(--px) * 5);
+  --frame-line: var(--dim);
+}
+.runtimes .box[data-here] {
+  --frame-line: var(--fg);
+}
+/* A box's name: one line whose middle is level with the junction. */
+.runtimes .name {
+  margin: 0;
+  font-variation-settings: "SHRP" 100;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 20px;
+  letter-spacing: -0.02em;
+}
+
+/* The new server, as placement is told of it: each field's name and its value. */
+.runtimes .attrs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 calc(var(--px) * 9);
+  margin: 2px 0 0;
+}
+.runtimes .attrs div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 calc(var(--px) * 4);
+  min-width: 0;
+}
+.runtimes .attrs dt {
+  margin: 0;
+  color: var(--muted);
+}
+.runtimes .attrs dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.runtimes .endHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 calc(var(--px) * 8);
+}
+.runtimes .held {
+  color: var(--fg);
+  line-height: 20px;
+  white-space: nowrap;
+}
+/* One block for each server placed here; the one on show is ringed. Room is kept for the first. */
+.runtimes .pile {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: calc(var(--px) * 3);
+  min-height: calc(var(--px) * 9);
+  margin-top: calc(var(--px) * 2);
+  padding: calc(var(--px) * 2) var(--px);
+}
+.runtimes .pile i {
+  display: block;
+  width: calc(var(--px) * 5);
+  height: calc(var(--px) * 5);
+  background: var(--fg);
+}
+.runtimes .pile i[data-sel] {
+  outline: var(--px) solid var(--fg);
+  outline-offset: var(--px);
+}
+
+/* ─── The row that was written ──────────────────────────────────────────────────────────────── */
+
+.runtimes .record {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 6);
+  padding: calc(var(--px) * 7);
+}
+.runtimes .recordHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--px) * 4) calc(var(--px) * 8);
+}
+.runtimes .recordTitle {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+}
+.runtimes .recordTitle .v {
+  font-size: 0.9375rem;
+}
+.runtimes .pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+}
+/* Nothing earlier, or nothing later: the chip stays in reach of the keyboard and does nothing. */
+.runtimes .pager button[aria-disabled="true"] {
+  border-color: var(--dim);
+  color: var(--muted);
+  cursor: default;
+}
+.runtimes .pager button[aria-disabled="true"]:hover {
+  background: transparent;
+}
+.runtimes .pager span {
+  margin-inline-start: calc(var(--px) * 2);
+}
+
+/* Each field's name over its value; beside it once there is the width. */
+.runtimes .fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+}
+.runtimes .fields dt {
+  margin: calc(var(--px) * 2) 0 0;
+  color: var(--muted);
+}
+.runtimes .fields dt:first-child {
+  margin-top: 0;
+}
+.runtimes .fields dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+.runtimes .fields [data-hidden] {
+  visibility: hidden;
+}
+.runtimes .considered {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.runtimes .considered li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 calc(var(--px) * 7);
+  padding-left: calc(var(--px) * 5);
+  border-left: var(--px) solid var(--dim);
+}
+.runtimes .pair {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.runtimes .key {
+  color: var(--muted);
+}
+
+/* ─── The facts' second line: why, in plain words ───────────────────────────────────────────── */
+
+.runtimes .why {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-family: var(--display);
+  font-variation-settings: "SHRP" 30;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+/* ─── With the width for it ─────────────────────────────────────────────────────────────────── */
+
+@container (min-width: 34rem) {
+  .runtimes .fields {
+    grid-template-columns: 7.5rem minmax(0, 1fr);
+    column-gap: calc(var(--px) * 6);
+    row-gap: 1px;
+  }
+  .runtimes .fields dt {
+    margin-top: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runtimes .rails .node[data-state="cart"] {
+    animation: none;
+  }
+}
