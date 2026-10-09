@@ -166,6 +166,24 @@ describe('what Terraform gets', () => {
     expect(env.VERCEL_API_TOKEN).toBe(complete.VERCEL_API_TOKEN)
   })
 
+  test("the web app's own values reach only its production builds, with a version each", () => {
+    const env = terraformEnv({
+      ...complete,
+      POSTHOG_PERSONAL_API_KEY: 'phx_example',
+      POSTHOG_PROJECT_ID: '1234',
+    })
+    expect(JSON.parse(env.TF_VAR_web_secrets ?? '{}')).toEqual({
+      POSTHOG_PERSONAL_API_KEY: 'phx_example',
+      POSTHOG_PROJECT_ID: '1234',
+    })
+    expect(Object.keys(JSON.parse(env.TF_VAR_web_secret_versions ?? '{}')).sort()).toEqual([
+      'POSTHOG_PERSONAL_API_KEY',
+      'POSTHOG_PROJECT_ID',
+    ])
+    expect(env.TF_VAR_secrets).not.toContain('phx_example')
+    expect(JSON.parse(terraformEnv(complete).TF_VAR_web_secrets ?? '')).toEqual({})
+  })
+
   test('a version changes with its value and holds none of it', () => {
     const versions = (values: Record<string, string>) =>
       JSON.parse(terraformEnv(values).TF_VAR_secret_versions ?? '{}') as Record<string, string>

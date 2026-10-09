@@ -66,6 +66,36 @@ variable "previews" {
   type        = bool
 }
 
+variable "canonical_origin" {
+  description = "WEB_CANONICAL_ORIGIN: the site's one address, which links, sitemaps and sign-in are built on."
+  type        = string
+}
+
+variable "indexable" {
+  description = "Whether search engines may index production (production's alone; everything else says noindex)."
+  type        = bool
+}
+
+variable "posthog_personal_api_key" {
+  description = "POSTHOG_PERSONAL_API_KEY: lets a production build upload its source maps; empty uploads none."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "posthog_personal_api_key_version" {
+  description = "POSTHOG_PERSONAL_API_KEY's marker in web_secret_versions; empty when there is no key."
+  type        = string
+  default     = ""
+}
+
+variable "posthog_project_id" {
+  description = "POSTHOG_PROJECT_ID: the project the source maps go to, with the key."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 resource "vercel_project" "web" {
   name           = var.project
   framework      = "nextjs"
@@ -144,5 +174,46 @@ resource "vercel_project_environment_variable" "posthog_token" {
   key        = "NEXT_PUBLIC_POSTHOG_TOKEN"
   value      = var.posthog_token
   target     = var.previews ? ["production", "preview"] : ["production"]
+  sensitive  = false
+}
+
+# The site's own address, for links, the sitemap and sign-in's base URL. Previews use it too: they
+# sign in through the canonical origin's callback.
+resource "vercel_project_environment_variable" "canonical_origin" {
+  project_id = vercel_project.web.id
+  key        = "WEB_CANONICAL_ORIGIN"
+  value      = var.canonical_origin
+  target     = var.previews ? ["production", "preview"] : ["production"]
+  sensitive  = false
+}
+
+# Only production is indexed; without this every page says noindex.
+resource "vercel_project_environment_variable" "indexable" {
+  count      = var.indexable ? 1 : 0
+  project_id = vercel_project.web.id
+  key        = "WEB_INDEXABLE"
+  value      = "1"
+  target     = ["production"]
+  sensitive  = false
+}
+
+# The build uploads its source maps to PostHog with these, so production's errors read as source.
+# Production builds only, and only when the operator gave both.
+resource "vercel_project_environment_variable" "posthog_personal_api_key" {
+  count            = var.posthog_personal_api_key_version == "" ? 0 : 1
+  project_id       = vercel_project.web.id
+  key              = "POSTHOG_PERSONAL_API_KEY"
+  value_wo         = var.posthog_personal_api_key
+  value_wo_version = parseint(substr(sha256(var.posthog_personal_api_key_version), 0, 12), 16)
+  target           = ["production"]
+  sensitive        = true
+}
+
+resource "vercel_project_environment_variable" "posthog_project_id" {
+  count      = var.posthog_personal_api_key_version == "" ? 0 : 1
+  project_id = vercel_project.web.id
+  key        = "POSTHOG_PROJECT_ID"
+  value      = var.posthog_project_id
+  target     = ["production"]
   sensitive  = false
 }
