@@ -12,8 +12,22 @@ import type { PinnedMod } from '../mods/artifact.ts'
 export interface CarriedFile {
   /** Relative to the server's directory: `plugins/LifeStealZ/config.yml`. */
   path: string
+  /** May name the world the server runs as `RUNNING_LEVEL`. */
   content: string
 }
+
+/**
+ * Where a carried file names the world the server runs. The file is written with the running
+ * level's name in its place (`world`, `world-2`, …), so it follows the server onto a fresh world.
+ * Double braces around a name of Blockly's own: nothing a plugin's settings hold looks like it.
+ */
+export const RUNNING_LEVEL = '{{blockly.level}}'
+
+/** A carried file as it is written to a server running `levelName`. */
+export const onLevel = (file: CarriedFile, levelName: string): CarriedFile => ({
+  path: file.path,
+  content: file.content.replaceAll(RUNNING_LEVEL, levelName),
+})
 
 /**
  * The plugins of a revision whose jar goes elsewhere than the plugins folder, by where each goes.

@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
+import { RUNNING_LEVEL } from '../../domain/revision/carried.ts'
 import { defaultSettings, type ServerRevision } from '../../domain/revision/revision.ts'
 import { placeablePath } from '../../minecraft/carried.ts'
 import { installCheck } from '../../minecraft/install-check.ts'
@@ -100,11 +101,11 @@ beforeAll(() => {
 afterAll(() => links.stop(true))
 
 /**
- * Starts a server of this revision on `data` as far as the image's own start, which it skips. Not
- * `spawnSync`: the links are served from this same thread.
+ * Starts a server of this revision on `data`, running `levelName`, as far as the image's own start,
+ * which it skips. Not `spawnSync`: the links are served from this same thread.
  */
-async function start(data: string, of: ServerRevision): Promise<number> {
-  const spec = toRuntimeSpec({ ...input, revision: of })
+async function start(data: string, of: ServerRevision, levelName = input.world.levelName): Promise<number> {
+  const spec = toRuntimeSpec({ ...input, world: { ...input.world, levelName }, revision: of })
   const step = (spec.entrypoint?.[2] ?? '')
     .replaceAll('/data', data)
     .replace('exec /image/scripts/start "$@"', 'true')
@@ -237,5 +238,24 @@ describe('what a revision places itself', () => {
     const placed = `plugins/BentoBox/addons/${sha512(AONEBLOCK).slice(0, 12)}-AOneBlock.jar`
     expect(check.expected.map((jar) => jar.name)).toContain(placed)
     expect(check.command.join(' ')).toContain('cd /data && for f in plugins/BentoBox/addons/*.jar')
+  })
+})
+
+describe('the world a carried file names', () => {
+  test('a file naming the running world names the one the server starts on, before and after a switch', async () => {
+    const data = mkdtempSync(join(tmpdir(), 'carried-'))
+    const arena = `${data}/plugins/Arena/config.yml`
+    const naming = {
+      ...revision,
+      files: [{ path: 'plugins/Arena/config.yml', content: `Spawn: { World: ${RUNNING_LEVEL}, Y: -60 }\n` }],
+    }
+    expect(await start(data, naming)).toBe(0)
+    expect(readFileSync(arena, 'utf8')).toBe('Spawn: { World: world, Y: -60 }\n')
+    expect(await start(data, naming, 'world-2')).toBe(0)
+    expect(readFileSync(arena, 'utf8')).toBe('Spawn: { World: world-2, Y: -60 }\n')
+    // Switching back puts the first world's name back.
+    expect(await start(data, naming)).toBe(0)
+    expect(readFileSync(arena, 'utf8')).toBe('Spawn: { World: world, Y: -60 }\n')
+    rmSync(data, { recursive: true })
   })
 })

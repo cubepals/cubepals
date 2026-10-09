@@ -13,7 +13,7 @@
  */
 
 import type { ModArtifact } from '../domain/mods/artifact.ts'
-import { placedMods } from '../domain/revision/carried.ts'
+import { onLevel, placedMods } from '../domain/revision/carried.ts'
 import type { ServerRevision } from '../domain/revision/revision.ts'
 import { DATA_DIR, diskName } from './jars.ts'
 
@@ -74,11 +74,13 @@ export function placesFiles(revision: Pick<ServerRevision, 'files' | 'mods' | 'm
 }
 
 /**
- * The variables the step reads. Throws on a path Cubepals may not write: every carried file and
- * folder is Cubepals' own, so one is a mistake in a template, never something to skip quietly.
+ * The variables the step reads, each file as it reads on `levelName`, the world the server runs.
+ * Throws on a path Cubepals may not write: every carried file and folder is Cubepals' own, so one
+ * is a mistake in a template, never something to skip quietly.
  */
 export function carriedEnv(
   revision: Pick<ServerRevision, 'files' | 'mods' | 'modpack'>,
+  levelName: string,
   artifactUrl: (artifact: ModArtifact) => string,
 ): Record<string, string> {
   if (!placesFiles(revision)) return {}
@@ -94,6 +96,7 @@ export function carriedEnv(
   return {
     [JARS_VARIABLE]: jars.map((jar) => `${jar.path} ${jar.sha512} ${jar.url}`).join('\n'),
     [FILES_VARIABLE]: revision.files
+      .map((file) => onLevel(file, levelName))
       .map((file) => `${file.path} ${Buffer.from(file.content, 'utf8').toString('base64')}`)
       .join('\n'),
   }
