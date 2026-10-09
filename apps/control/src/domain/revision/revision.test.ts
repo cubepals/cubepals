@@ -13,6 +13,7 @@ import {
 
 const draft = (patch: Partial<RevisionDraft> = {}): RevisionDraft => ({
   acknowledgedRevoked: [],
+  files: [],
   gameVersion: '26.3',
   loader: 'vanilla',
   loaderVersion: null,

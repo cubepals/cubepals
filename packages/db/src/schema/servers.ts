@@ -19,6 +19,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import type {
   AppliedConfigJson,
+  CarriedFileJson,
   FailureJson,
   ObservedJson,
   OperationProgressJson,
@@ -150,6 +151,8 @@ export const serverRevisions = pgTable(
     mods: jsonb('mods').$type<PinnedModJson[]>().notNull().default([]),
     /** The modpack it plays instead of a mod list of its own (§15.6). */
     modpack: jsonb('modpack').$type<PinnedModpackJson>(),
+    /** Files Cubepals wrote for what it plays, written where they go before every start. */
+    files: jsonb('files').$type<CarriedFileJson[]>().notNull().default([]),
     /** sha512s of taken-down jars the owner chose to run anyway (§15.3). */
     acknowledgedRevoked: jsonb('acknowledged_revoked').$type<string[]>().notNull().default([]),
     reason: text('reason').notNull(),

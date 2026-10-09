@@ -8,6 +8,7 @@ import {
 } from '../domain/revision/revision.ts'
 import { type MemoryTier, memoryMb } from '../domain/server/size.ts'
 import type { World } from '../domain/world/world.ts'
+import { CARRIED_STEP, carriedEnv, placesFiles } from './carried.ts'
 import { DATAPACKS_STEP, datapacksEnv, datapacksOf } from './datapacks.ts'
 import { DATA_DIR, jarsOf } from './jars.ts'
 import { javaFor } from './versions.ts'
@@ -194,7 +195,8 @@ function jarModsOf(revision: Pick<ServerRevision, 'loader' | 'mods'>): ServerRev
  * Mods are always listed for loaders that have a mods or plugins directory, even when empty:
  * an empty list makes the image remove every jar it installed, an absent one skips the cleanup.
  * A server playing a modpack lists none: the pack installs its own, and an empty list would have
- * the image delete them. Datapacks go into the world instead (`datapacks.ts`).
+ * the image delete them. Datapacks go into the world instead (`datapacks.ts`), and a plugin whose
+ * jar goes in a folder of its own is placed by Blockly's step (`carried.ts`).
  */
 function modsEnv(input: RuntimeSpecInput): Record<string, string> {
   if (input.revision.modpack !== null) return {}
@@ -202,6 +204,7 @@ function modsEnv(input: RuntimeSpecInput): Record<string, string> {
   if (jars === null) return {}
   return {
     [jars.env]: jarModsOf(input.revision)
+      .filter((m) => m.dir === undefined)
       .map((m) => input.artifactUrl(m.artifact))
       .join(','),
   }
@@ -324,16 +327,22 @@ const EXEC_IMAGE = `exec ${IMAGE_ENTRYPOINT} "$@"`
 /**
  * The image's own entrypoint, after Blockly's steps. The first puts the volume's files as the
  * server type reads them (`PAPER_JAR_STEP` on Paper, `DIMENSIONS_STEP` on any other), and the
- * second the world's datapacks (`DATAPACKS_STEP`); the icon and the pack follow where a server has
- * them.
+ * second the world's datapacks (`DATAPACKS_STEP`); the icon, the pack and the files Cubepals
+ * places itself follow where a server has them.
  */
-function entrypointFor(steps: { paper: boolean; icon: boolean; pack: boolean }): readonly string[] {
+function entrypointFor(steps: {
+  paper: boolean
+  icon: boolean
+  pack: boolean
+  carried: boolean
+}): readonly string[] {
   // The files steps lead, so `withoutFilesStep` leaves the rest as it was before them.
   const script = [
     steps.paper ? PAPER_JAR_STEP : DIMENSIONS_STEP,
     DATAPACKS_STEP,
     ...(steps.icon ? ICON_STEP : []),
     ...(steps.pack ? PACK_STEP : []),
+    ...(steps.carried ? [CARRIED_STEP] : []),
     EXEC_IMAGE,
   ].join(' ')
   return ['/bin/sh', '-c', script, 'start']
@@ -368,6 +377,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
     paper: type === TYPES.paper,
     icon: input.iconUrl !== null,
     pack: pack !== null,
+    carried: placesFiles(revision),
   })
   const reconstructible = reconstructibleOf(revision)
 
@@ -387,6 +397,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       ...settingsEnv(revision.settings),
       ...modsEnv(input),
       ...datapacksEnv(revision, input.artifactUrl),
+      ...carriedEnv(revision, input.artifactUrl),
       ...limitsEnv(input.limits),
       // OVERRIDE_ICON, or the image keeps the first icon a world ever had.
       ...(input.iconUrl === null ? {} : { ICON: input.iconUrl, OVERRIDE_ICON: 'TRUE' }),
