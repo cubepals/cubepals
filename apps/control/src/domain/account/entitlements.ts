@@ -138,8 +138,7 @@ const PLANS: Record<string, Entitlements> = {
     // can support for free, so they come with a paid plan.
     allowedLoaders: ['vanilla', 'paper'],
     mayUseMods: false,
-    // Open: whether plain Minecraft with a datapack stays Free is the owner's to decide. Until
-    // then a datapack counts as a mod.
+    // A datapack comes with Plus, as a mod does: the owner's decision, 2026-10-09.
     mayUseDatapacks: false,
     // A 2,500-block radius keeps a fully explored world near 1 GB, at about 10.4 KB a chunk.
     settingCaps: { maxPlayers: 5, viewDistance: 8, simulationDistance: 6 },
