@@ -35,7 +35,7 @@ the formats' own specifications and the installers' source code, each linked whe
   page. The review holds two real packs:
   - **SkyBlock Plus 1.0.9**, licence-clean for a mirror.
   - **Cobblemon 1.8.1**, verified from upstream and offered as Cobbled Studios publish it. A pack
-    is held over its authors' terms only when they say no in writing (owner, 2026-10-10).
+    is held over its authors' terms only when they say no in writing.
 - **Blockly's own packs** go through the same checks and the same admin page: short lists of mods
   Blockly chose, put together per Minecraft release (§ Blockly's own packs).
   Modrinth's API terms speak of non-commercial use, which applies to the existing modpack search
@@ -439,7 +439,7 @@ upper bounds, since pack side flags over-include. The class says what Blockly ma
 | Pack (authors) | Latest · Minecraft · loader | Server distribution | Pack licence | What decides it | Class |
 |---|---|---|---|---|---|
 | <a id="skyblock-plus"></a>**SkyBlock Plus** (BPR02) | 1.0.9 · 26.2 · Fabric | Modrinth `.mrpack`, server-side only (vanilla players join) | Apache-2.0 | All 6 server jars MIT, Apache-2.0 or GPL-3.0 (No Command Confirm). Mirror owes notices and a GPL source offer | **MIRROR** (in the review) |
-| <a id="cobblemon"></a>**Cobblemon Official Modpack** (Cobbled Studios) | 1.8.1 · 1.21.1 · Fabric | Modrinth `.mrpack`, links only; the 96 MiB is a client tutorial world | MPL-2.0 (assets under the Fair Use Policy) | 6 reserved works run on its servers: Xaero's Minimap and World Map, Balm, Crafting Tweaks, NetherPortalFix, FancyMenu (DSMSL, read above). The loading-tips archive it carries is its authors' own | **UPSTREAM**, offered as its authors publish it (owner, 2026-10-10: a pack is held only on its authors' written no) |
+| <a id="cobblemon"></a>**Cobblemon Official Modpack** (Cobbled Studios) | 1.8.1 · 1.21.1 · Fabric | Modrinth `.mrpack`, links only; the 96 MiB is a client tutorial world | MPL-2.0 (assets under the Fair Use Policy) | 6 reserved works run on its servers: Xaero's Minimap and World Map, Balm, Crafting Tweaks, NetherPortalFix, FancyMenu (DSMSL, read above). The loading-tips archive it carries is its authors' own | **UPSTREAM**, offered as its authors publish it; a pack is held only on its authors' written no |
 | Adrenaserver (SkywardMC) | 1.7.0 · 1.21.1 · Fabric | `.mrpack`, 11 links | MIT | All 11 mods MIT, LGPL-3.0 or Apache-2.0; merged into Adrenaline, discontinued | MIRROR, but obsolete |
 | Adrenaline (SkywardMC) | 26.5.0 · 1.20.1–26.3 · Fabric | `.mrpack`, links only | MIT | Fzzy Config (TDL-M: manifest-only, no paywalls) | UPSTREAM, after the TDL-M paywall question |
 | Monifactory | 0.13.8 · 1.20.1 · Forge | GitHub server zip (211 jars) | LGPL-3.0 | JourneyMap, Balm (no rehost), FTB Library (ARR), Quark and Jade (NC) | UPSTREAM, once NC mods are settled |
