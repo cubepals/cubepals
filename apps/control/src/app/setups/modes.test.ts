@@ -4,7 +4,7 @@
  * for a day. OneBlock's game mode and its addons go where BentoBox reads them.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { readdirSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { loadRevision } from '../servers/persistence.ts'
@@ -97,6 +97,11 @@ describe.skipIf(!hasDatabase)('game modes', () => {
     expect(
       readdirSync(`${volume}/plugins/BentoBox/addons`).filter((name) => name.endsWith('.jar')),
     ).toHaveLength(3)
+    // AOneBlock's own settings, whole, but for a block made for each friend as they first join.
+    expect(revision.files.map((file) => file.path)).toEqual(['plugins/BentoBox/addons/AOneBlock/config.yml'])
+    const config = readFileSync(`${volume}/plugins/BentoBox/addons/AOneBlock/config.yml`, 'utf8')
+    expect(config).toMatch(/create-island-on-first-login:\n(\s+#.*\n)+\s+enable: true\n/)
+    expect(config).toContain('  world-name: oneblock_world\n')
   }, 30_000)
 
   test('a game mode is Paper with a plugin, so it comes with Plus as Create does', async () => {
