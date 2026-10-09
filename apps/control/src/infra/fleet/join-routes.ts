@@ -43,8 +43,8 @@ export function joinRoutes(options: { caPem: string; blocklydBin: string }): Hon
   const app = new Hono()
   // Read once, from beside this file: join.sh is the control plane's, and daemon.json is the pinned
   // blocklyd release's (scripts/blocklyd.ts).
-  const daemonJson = readFileSync(new URL('daemon.json', import.meta.url), 'utf8')
-  const script = readFileSync(new URL('join.sh', import.meta.url), 'utf8').replace(
+  const daemonJson = readFileSync(new URL('./daemon.json', import.meta.url), 'utf8')
+  const script = readFileSync(new URL('./join.sh', import.meta.url), 'utf8').replace(
     '@DAEMON_JSON@',
     daemonJson.trimEnd(),
   )
