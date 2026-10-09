@@ -101,6 +101,15 @@ export const GUIDES: readonly Guide[] = [
     modified: '2026-10-07',
     approved: false,
   },
+  {
+    slug: 'lifesteal-manhunt-skyblock-with-friends',
+    title: 'How to play Lifesteal, Manhunt and Skyblock with friends',
+    description:
+      'What Lifesteal, Manhunt and Skyblock are, and how to start a server for each one with your friends, who join with plain Minecraft. For Java Edition.',
+    published: '2026-10-09',
+    modified: '2026-10-09',
+    approved: false,
+  },
 ]
 
 /** The guides the footers link to: the first how-to guides, never a comparison. */
