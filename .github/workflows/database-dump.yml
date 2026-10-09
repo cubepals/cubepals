@@ -1,0 +1,58 @@
+name: Database dump
+
+# Production's database, dumped every night to a private R2 bucket that keeps each dump 30 days
+# (scripts/database-dump.ts; restoring one: docs/production.md § Database dumps). The run fails, and
+# GitHub emails, when a step fails or the database nears Supabase Free's 500 MB.
+# The repository is public, and so are these logs: the script prints sizes, the dump's key and
+# whether each step passed, never a row or an address. Its values are secrets of the `production`
+# environment, which production.ts sets; until they are, the run says so and passes.
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-dump
+  cancel-in-progress: false
+
+jobs:
+  dump:
+    name: Dump production's database
+    if: github.repository == 'cubepals/cubepals'
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.11
+      # Postgres' own apt repository, for a client of production's major version: pg_dump refuses a
+      # newer server, and the runner's own client is older. A mirror's blip gets two more tries.
+      - name: Install the Postgres 17 client
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL --retry 3 -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" |
+            sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          for wait in 10 30 0; do
+            sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends postgresql-client-17 && break
+            [ "$wait" = 0 ] && exit 1
+            sleep "$wait"
+          done
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+      # Bun alone runs it: nothing is installed in the job that holds production's database.
+      - name: Dump, check and upload
+        run: bun scripts/database-dump.ts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DUMP_S3_ENDPOINT: ${{ secrets.DUMP_S3_ENDPOINT }}
+          DUMP_S3_BUCKET: ${{ secrets.DUMP_S3_BUCKET }}
+          DUMP_S3_ACCESS_KEY_ID: ${{ secrets.DUMP_S3_ACCESS_KEY_ID }}
+          DUMP_S3_SECRET_ACCESS_KEY: ${{ secrets.DUMP_S3_SECRET_ACCESS_KEY }}

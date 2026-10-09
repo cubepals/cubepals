@@ -7,6 +7,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   backendConfig,
+  DUMPS_BUCKET,
+  dumpSecrets,
   ENVIRONMENT_EXAMPLE,
   environment,
   parseValues,
@@ -40,6 +42,8 @@ const complete: Record<string, string> = {
   CLOUDFLARE_DNS_API_TOKEN: 'stand-in-cloudflare-dns-token',
   ARCHIVE_S3_ACCESS_KEY_ID: 'stand-in-archive-key-id',
   ARCHIVE_S3_SECRET_ACCESS_KEY: 'stand-in-archive-secret',
+  DUMP_S3_ACCESS_KEY_ID: 'stand-in-dumps-key-id',
+  DUMP_S3_SECRET_ACCESS_KEY: 'stand-in-dumps-secret',
   ADMIN_EMAILS: 'owner@example.test',
   ACME_EMAIL: 'owner@example.test',
   ACME_AGREE_TOS: 'true',
@@ -108,14 +112,18 @@ describe('the check', () => {
     expect(problemsOf(complete, example)).toEqual({ missing: [], wrong: [], bucketFirst: false })
   })
 
-  test("only the archive bucket's token missing lets the first apply make the bucket", () => {
-    const { missing, wrong, bucketFirst } = problemsOf(
-      without('ARCHIVE_S3_ACCESS_KEY_ID', 'ARCHIVE_S3_SECRET_ACCESS_KEY'),
-      example,
-    )
-    expect(missing.map((v) => v.name)).toEqual(['ARCHIVE_S3_ACCESS_KEY_ID', 'ARCHIVE_S3_SECRET_ACCESS_KEY'])
+  test("only the buckets' tokens missing lets the first apply make the buckets", () => {
+    const tokens = [
+      'ARCHIVE_S3_ACCESS_KEY_ID',
+      'ARCHIVE_S3_SECRET_ACCESS_KEY',
+      'DUMP_S3_ACCESS_KEY_ID',
+      'DUMP_S3_SECRET_ACCESS_KEY',
+    ]
+    const { missing, wrong, bucketFirst } = problemsOf(without(...tokens), example)
+    expect(missing.map((v) => v.name)).toEqual(tokens)
     expect(wrong).toEqual([])
     expect(bucketFirst).toBe(true)
+    expect(problemsOf(without('DUMP_S3_SECRET_ACCESS_KEY'), example).bucketFirst).toBe(true)
   })
 
   test('billing comes whole or not at all', () => {
@@ -201,6 +209,22 @@ describe('what Terraform gets', () => {
       expect.arrayContaining(['POLAR_ACCESS_TOKEN', 'POLAR_WEBHOOK_SECRET']),
     )
     expect(JSON.parse(env.TF_VAR_operator_settings ?? '{}').POLAR_PRODUCTS).toBe('plus:product-id')
+  })
+
+  test('the dumps bucket is named once, and its token never reaches Terraform or the apps', () => {
+    const env = terraformEnv(complete)
+    expect(env.TF_VAR_database_dumps_bucket).toBe(DUMPS_BUCKET)
+    expect(Object.values(env).join('\n')).not.toContain('stand-in-dumps-secret')
+  })
+
+  test("the Database dump workflow's secrets: the direct URL, the account's endpoint, the bucket and its token", () => {
+    expect(dumpSecrets(complete)).toEqual({
+      DATABASE_URL: 'postgres://blockly:secret@direct.cluster.flympg.net/blockly',
+      DUMP_S3_ENDPOINT: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com',
+      DUMP_S3_BUCKET: DUMPS_BUCKET,
+      DUMP_S3_ACCESS_KEY_ID: 'stand-in-dumps-key-id',
+      DUMP_S3_SECRET_ACCESS_KEY: 'stand-in-dumps-secret',
+    })
   })
 
   test("the state lives in the operator's R2 bucket, under the account's endpoint", () => {

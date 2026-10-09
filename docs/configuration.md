@@ -322,8 +322,8 @@ still on it (§19.16), and their consoles over the private network.
 Production does all of this with `bun scripts/production.ts apply`, from one file of values
 ([production.md](production.md)); what follows is what it runs.
 
-Terraform owns the apps, their addresses and secrets, DNS, the archive bucket and the Vercel
-project; `fly deploy` owns machines and releases. Fly's Terraform provider (`ampbase-io/fly`)
+Terraform owns the apps, their addresses and secrets, DNS, the archive bucket, production's
+database dumps bucket ([production.md](production.md#database-dumps)) and the Vercel project; `fly deploy` owns machines and releases. Fly's Terraform provider (`ampbase-io/fly`)
 has no Managed Postgres resource, so the database is made once with `fly mpg create`; its pooled
 URL (`pgbouncer.<cluster>.flympg.net`) becomes the `DATABASE_URL` secret and its direct one
 (`direct.<cluster>.flympg.net`) `DATABASE_DIRECT_URL`.

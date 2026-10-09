@@ -11,7 +11,9 @@ values are added ([below](#billing-later)).
 What Terraform makes: the Fly apps `bly-prod-control`, `bly-prod-realtime` and `bly-prod-edge`
 with their addresses, certificate and secrets; the DNS records for `cubepals.com`,
 `www.cubepals.com` (a redirect), `rt.cubepals.com` and `*.play.cubepals.com`; the R2 bucket
-named by `ARCHIVE_S3_BUCKET`; and the Vercel project `blockly`, which builds the `production` branch.
+named by `ARCHIVE_S3_BUCKET`; the private R2 bucket `blockly-prod-database-dumps`, where the
+database is dumped every night ([below](#database-dumps)); and the Vercel project `blockly`, which
+builds the `production` branch.
 
 ## 1. Accounts (once)
 
@@ -59,6 +61,7 @@ the random secrets (`AUTH_SECRET`, `WEB_PROXY_SECRET`, `REALTIME_TICKET_SECRET`,
 | `SMTP_URL` | The mail provider, as `smtps://user:password@host:465` | Control plane |
 | `CLOUDFLARE_DNS_API_TOKEN` | Cloudflare → My Profile → API Tokens → Create Token → "Edit zone DNS" template, zone cubepals.com | Realtime role: it proves `rt.cubepals.com` to Let's Encrypt |
 | `ARCHIVE_S3_ACCESS_KEY_ID`, `ARCHIVE_S3_SECRET_ACCESS_KEY` | **After the first apply** makes the bucket: Cloudflare → R2 → Manage API tokens → Create Account API token: Object Read & Write, the archive bucket only | Control plane: backups, downloads, rested worlds |
+| `DUMP_S3_ACCESS_KEY_ID`, `DUMP_S3_SECRET_ACCESS_KEY` | **After the first apply**, the same way: Object Read & Write, `blockly-prod-database-dumps` only | The Database dump workflow only, as secrets of the repository's `production` environment |
 | `ADMIN_EMAILS` | Your own address; sign in with it and you are an admin | Control plane |
 | `ACME_EMAIL`, `ACME_AGREE_TOS` | An address for Let's Encrypt, and `true` once you accept its Subscriber Agreement (letsencrypt.org/repository) | Realtime role |
 
@@ -72,7 +75,7 @@ bun scripts/production.ts check
 
 names what is missing or wrongly shaped, and runs the control plane's own configuration check on
 the values, as each production machine will at its first start. It never prints a value. Until
-the archive bucket exists, its two keys are the only ones allowed to be missing.
+the buckets exist, their tokens' keys are the only ones allowed to be missing.
 
 ## 3. Apply
 
@@ -83,9 +86,10 @@ and `flyctl` installed:
 bun scripts/production.ts apply
 ```
 
-1. The first time, it makes only the archive bucket and stops. Make its R2 token (the table
-   above), put its two keys in the file, and run `apply` again.
+1. The first time, it makes only the two buckets and stops. Make their R2 tokens (the table
+   above), put their keys in the file, and run `apply` again.
 2. Terraform shows the plan and asks before it changes anything. Answer `yes`.
+   Then it gives the Database dump workflow its secrets ([below](#database-dumps)).
 3. It deploys `bly-prod-control` (its release runs the migrations), then `bly-prod-realtime` (one
    machine, always), then `bly-prod-edge`, all from this checkout.
 4. It pushes the commit as the `production` branch. Vercel builds `cubepals.com` from it.
@@ -109,6 +113,47 @@ later: edit the file, run `apply`. Never run `terraform destroy` here.
 8. **A backup:** on the server's Backups page, make one; it's listed, and downloads.
 9. **A wake:** leave the server empty until it sleeps. Minecraft's server list says
    "Sleeping · join to wake it up". Join, and it wakes.
+
+## Database dumps
+
+Every night at 03:30 UTC, the Database dump workflow (`.github/workflows/database-dump.yml`, running
+`scripts/database-dump.ts`) dumps the database with `pg_dump --format=custom`, has `pg_restore`
+read the dump back, and uploads it to `blockly-prod-database-dumps` as
+`blockly-<UTC time>.dump`. The bucket is private, and deletes each dump after 30 days. The run
+fails, and GitHub emails, when any step does, and when the database is past 400 MB of Supabase
+Free's 500: the dump is still taken, and it's time to make room or move to a bigger plan.
+
+Its values are secrets of the repository's `production` environment, which `apply` sets from the
+file: `DATABASE_URL` (the file's `DATABASE_DIRECT_URL`: pg_dump needs a session of its own),
+`DUMP_S3_ENDPOINT`, `DUMP_S3_BUCKET`, `DUMP_S3_ACCESS_KEY_ID` and `DUMP_S3_SECRET_ACCESS_KEY`. Only
+`main`'s workflows, and `production`'s, can read them. Until they're set, the run says so and
+passes. After the first full apply, run it once by hand: `gh workflow run database-dump.yml`, then
+check the bucket lists the dump. The repository is public, and so are the run's logs: they show
+sizes, the key and whether each step passed, nothing else.
+
+### Restoring one
+
+1. Download the dump: Cloudflare → R2 → `blockly-prod-database-dumps` → the dump → Download.
+   Check it reads: `pg_restore --list <file> | head`.
+2. Stop what writes to the database, so nothing changes under the restore:
+   `fly machine stop $(fly machine list -a bly-prod-control -q) -a bly-prod-control`, and the same
+   for `bly-prod-realtime`.
+3. Turn the dump into SQL, then empty the schemas it puts back and run it, all in one
+   transaction: if anything fails, the database is left as it was.
+
+   ```sh
+   pg_restore --no-owner --no-privileges --file=restore.sql <file>
+   psql "$DATABASE_DIRECT_URL" --single-transaction -v ON_ERROR_STOP=1 \
+     -c 'drop schema if exists drizzle, pgboss cascade' -c 'drop schema public cascade' \
+     -c 'create schema public' -f restore.sql
+   ```
+
+   The same works into a new, empty database (another Supabase project, say); then point
+   `DATABASE_URL` and `DATABASE_DIRECT_URL` at it and `apply`. `pg_restore --clean` would drop
+   each object in turn instead, and fails on the job queue's partitioned tables.
+4. Start the machines again (`fly machine start`, as in step 2), and delete `restore.sql` and the
+   dump: they hold everyone's data. Everything after the dump's time is gone. Servers' worlds are
+   not in it: they live in their own backups.
 
 ## Billing, later
 

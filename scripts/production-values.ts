@@ -20,14 +20,19 @@ export const ENVIRONMENT_FILE = `${ENVIRONMENT_DIR}/config.auto.tfvars.json`
 export const ENVIRONMENT_EXAMPLE = `${ENVIRONMENT_DIR}/config.auto.tfvars.example.json`
 export const VALUES_FILE = 'local/production/production.env'
 export const STATE_BUCKET = 'blockly-terraform-state'
+/** Where the Database dump workflow puts production's database every night: Terraform makes it. */
+export const DUMPS_BUCKET = 'blockly-prod-database-dumps'
+/** The repository's GitHub environment whose secrets that workflow reads. */
+export const DUMPS_ENVIRONMENT = 'production'
 
 /**
  * Where a value goes. `secret` and `operator` reach the control plane (TF_VAR_secrets,
  * TF_VAR_operator_settings); `web` reaches only the Vercel project's production builds
  * (TF_VAR_web_secrets); `account` is a TF_VAR of its own; `apply` is only for the tools that
- * apply, and FLY_API_TOKEN is both that and a secret.
+ * apply, and FLY_API_TOKEN is both that and a secret. `dump` reaches only the Database dump
+ * workflow, as a secret of the repository's `production` environment (dumpSecrets).
  */
-export type Destination = 'secret' | 'operator' | 'web' | 'account' | 'apply'
+export type Destination = 'secret' | 'operator' | 'web' | 'account' | 'apply' | 'dump'
 
 export interface Value {
   name: string
@@ -38,7 +43,7 @@ export interface Value {
   optional?: string
   /** Made by `init`: random, never typed. */
   generate?: () => string
-  /** Made only once the first apply has made the archive bucket. */
+  /** Made only once the first apply has made the archive and dumps buckets. */
   afterBucket?: boolean
   /** What's wrong with a value, if its shape shows it. */
   shape?: (value: string) => string | null
@@ -138,6 +143,18 @@ export const VALUES: Value[] = [
   {
     name: 'ARCHIVE_S3_SECRET_ACCESS_KEY',
     goes: ['secret'],
+    where: 'the same R2 token: Secret Access Key',
+    afterBucket: true,
+  },
+  {
+    name: 'DUMP_S3_ACCESS_KEY_ID',
+    goes: ['dump'],
+    where: `after the first apply makes the bucket: Cloudflare → ${R2_TOKEN}, ${DUMPS_BUCKET} only: Access Key ID`,
+    afterBucket: true,
+  },
+  {
+    name: 'DUMP_S3_SECRET_ACCESS_KEY',
+    goes: ['dump'],
     where: 'the same R2 token: Secret Access Key',
     afterBucket: true,
   },
@@ -242,7 +259,7 @@ export interface Problems {
   missing: Value[]
   /** Values filled in, but not in a shape that works. */
   wrong: string[]
-  /** Only the archive bucket's token is left: the first apply makes the bucket for it. */
+  /** Only the buckets' tokens are left: the first apply makes the buckets for them. */
   bucketFirst: boolean
 }
 
@@ -251,7 +268,7 @@ export function problemsOf(values: Record<string, string>, env?: Environment): P
   const missing = VALUES.filter((v) => !v.optional && !v.afterBucket && !values[v.name])
   const waiting = VALUES.filter((v) => v.afterBucket && !values[v.name])
   const wrong = wrongValues(values)
-  // The bucket's token can't exist before the bucket does: the check stands in for it until then.
+  // A bucket's token can't exist before the bucket does: the check stands in for it until then.
   const standIns = Object.fromEntries(waiting.map((v) => [v.name, 'stand-in-until-the-bucket-exists']))
   if (missing.length === 0 && wrong.length === 0)
     wrong.push(...configProblems({ ...values, ...standIns }, env))
@@ -284,6 +301,7 @@ export interface Environment {
   fly_org: string
   fly_machine_limit: number
   settings: Record<string, string>
+  web: { repository: string }
 }
 
 export function environment(file = ENVIRONMENT_FILE): Environment {
@@ -361,12 +379,28 @@ export function terraformEnv(values: Record<string, string>): Record<string, str
     ),
     TF_VAR_cloudflare_account_id: values.CLOUDFLARE_ACCOUNT_ID ?? '',
     TF_VAR_cloudflare_zone_id: values.CLOUDFLARE_ZONE_ID ?? '',
+    TF_VAR_database_dumps_bucket: DUMPS_BUCKET,
     FLY_API_TOKEN: values.FLY_API_TOKEN ?? '',
     CLOUDFLARE_API_TOKEN: values.CLOUDFLARE_API_TOKEN ?? '',
     VERCEL_API_TOKEN: values.VERCEL_API_TOKEN ?? '',
     // The S3 backend's credentials, for the state bucket alone.
     AWS_ACCESS_KEY_ID: values.TF_STATE_ACCESS_KEY_ID ?? '',
     AWS_SECRET_ACCESS_KEY: values.TF_STATE_SECRET_ACCESS_KEY ?? '',
+  }
+}
+
+/**
+ * The Database dump workflow's values (scripts/database-dump.ts), as secrets of the repository's
+ * `production` environment. Its database URL is the direct one: pg_dump needs a session of its own,
+ * which a transaction pooler can't give it.
+ */
+export function dumpSecrets(values: Record<string, string>): Record<string, string> {
+  return {
+    DATABASE_URL: values.DATABASE_DIRECT_URL ?? '',
+    DUMP_S3_ENDPOINT: `https://${values.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    DUMP_S3_BUCKET: DUMPS_BUCKET,
+    DUMP_S3_ACCESS_KEY_ID: values.DUMP_S3_ACCESS_KEY_ID ?? '',
+    DUMP_S3_SECRET_ACCESS_KEY: values.DUMP_S3_SECRET_ACCESS_KEY ?? '',
   }
 }
 
