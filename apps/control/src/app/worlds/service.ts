@@ -6,7 +6,8 @@ import { type Actor, authorize, requestedBy } from '../actor.ts'
 import { AppError, NotFound } from '../errors.ts'
 import type { EventBus } from '../ports/events.ts'
 import { loadRevision, loadRuntime, lockServer, setDesired } from '../servers/persistence.ts'
-import type { ServerTransitions } from '../servers/transitions.ts'
+import { notNow, type ServerTransitions } from '../servers/transitions.ts'
+import { freshStartOf } from './fresh-start.ts'
 import { awaitingPrune, insertWorld, listWorlds, markWorldDeleted } from './persistence.ts'
 
 export interface NewWorld {
@@ -63,6 +64,36 @@ export class WorldService {
     })
   }
 
+  /**
+   * Starting over in one step, as `freshStartOf` reads it for this server: a fresh world from a
+   * random seed, switched to, with the one it leaves kept to switch back to. A new season also
+   * resets everyone's hearts, which takes the server running: the update forgets them after its
+   * snapshot, so that snapshot holds the season that ended.
+   */
+  freshStart(actor: Actor, serverId: string, requestId: string): Promise<MinecraftServer> {
+    return this.#switch(actor, serverId, requestId, 'server.fresh_start', async (tx, server) => {
+      const start = await freshStartOf(tx, server)
+      if (start.kind === 'season' && server.lifecycle.status !== 'running')
+        throw new AppError(
+          'invalid_transition',
+          server.lifecycle.status === 'stopped'
+            ? 'Start the server first, so Cubepals can reset everyone’s hearts.'
+            : notNow(server.lifecycle.status),
+        )
+      const desired = await loadRevision(tx, server.desiredRevisionId)
+      const world = await insertWorld(tx, {
+        serverId: server.id,
+        levelName: nextLevelName((await listWorlds(tx, server.id)).map((w) => w.levelName)),
+        name: start.name,
+        seed: null,
+        levelType: start.from?.levelType ?? 'minecraft:normal',
+        hardcore: start.from?.hardcore ?? false,
+        generatedOnVersion: desired.gameVersion,
+      })
+      return { ...world, input: start.kind === 'season' ? { resetHearts: true } : {} }
+    })
+  }
+
   switchWorld(actor: Actor, serverId: string, worldId: string, requestId: string): Promise<MinecraftServer> {
     return this.#switch(actor, serverId, requestId, 'server.world_switched', async (tx, server) => {
       const world = (await listWorlds(tx, server.id)).find((w) => w.id === worldId)
@@ -91,7 +122,11 @@ export class WorldService {
     serverId: string,
     requestId: string,
     action: string,
-    pick: (tx: Tx, server: MinecraftServer) => Promise<{ id: string; name: string }>,
+    /** The world to run, and anything the update that moves to it does besides. */
+    pick: (
+      tx: Tx,
+      server: MinecraftServer,
+    ) => Promise<{ id: string; name: string; input?: Record<string, unknown> }>,
   ): Promise<MinecraftServer> {
     return this.#db.transaction(async (tx) => {
       const server = authorize(actor, await lockServer(tx, serverId))
@@ -105,7 +140,7 @@ export class WorldService {
         {
           requestedBy: requestedBy(actor),
           idempotencyKey: `apply:${requestId}`,
-          input: { worldId: world.id },
+          input: { ...world.input, worldId: world.id },
         },
       )
       // A stopped server keeps the switch for its next start; nothing else told its pages.

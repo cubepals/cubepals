@@ -69,6 +69,7 @@ function Invalidation() {
     void queries.invalidateQueries({ queryKey: trpc.servers.settingsOptions.queryKey({ serverId }) })
     void queries.invalidateQueries({ queryKey: trpc.mods.list.queryKey({ serverId }) })
     void queries.invalidateQueries({ queryKey: trpc.worlds.list.queryKey({ serverId }) })
+    void queries.invalidateQueries({ queryKey: trpc.worlds.freshStart.queryKey({ serverId }) })
   }
   realtime.useEvent('serverChanged', ({ serverId, version }) => {
     // Versions order what a server went through (§4): a hint the page already has, because its
