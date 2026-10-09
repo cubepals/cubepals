@@ -1,6 +1,6 @@
 'use client'
 
-import { LEVEL_TYPES, type ServerView, type WorldView } from '@blockly/contracts'
+import { type FreshStartView, LEVEL_TYPES, type ServerView, type WorldView } from '@blockly/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type SubmitEvent, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
@@ -43,6 +43,7 @@ export default function WorldPage() {
       </h1>
       <ChangeState view={view} />
       {active && <Active world={active} />}
+      <FreshStart view={view} />
       <NewWorld view={view} />
       {others.length > 0 && <Others view={view} worlds={others} />}
     </>
@@ -90,6 +91,118 @@ function Active({ world }: { world: WorldView }) {
   )
 }
 
+/** What a fresh start is called, what it asks, and what it says once it has happened. */
+function freshWords(start: FreshStartView) {
+  const back = `Cubepals keeps ${start.leaving} under Other worlds, so you can switch back to it.`
+  switch (start.kind) {
+    case 'season':
+      return {
+        title: 'New season',
+        description: `Everyone starts again with ${start.hearts} hearts on a fresh world.`,
+        action: 'Start a new season',
+        ask: 'Start a new season?',
+        consequence: `Everyone goes back to ${start.hearts} hearts on a fresh world. Cubepals keeps this season’s world, and you can bring it back from Backups.`,
+        done: `${start.name} has begun, and everyone has ${start.hearts} hearts again. Last season is in Backups.`,
+      }
+    case 'round':
+      return {
+        title: 'Another round',
+        description: 'A fresh world from a new seed, for the next game.',
+        action: 'Start another round',
+        ask: 'Start another round?',
+        consequence: `Everyone starts over on a fresh world. ${back}`,
+        done: `${start.name} is the server’s world now. ${start.leaving} is under Other worlds.`,
+      }
+    case 'world':
+      return {
+        title: 'Fresh world',
+        description: 'A new world from a random seed, in one step.',
+        action: 'Start a fresh world',
+        ask: 'Start a fresh world?',
+        consequence: `The server moves to a new world from a random seed. ${back}`,
+        done: `${start.name} is the server’s world now. ${start.leaving} is under Other worlds.`,
+      }
+  }
+}
+
+/**
+ * Starting over in one step, named for what the server plays. A new season resets everyone's
+ * hearts, which takes the server running; the others wait for its next start like any switch.
+ */
+function FreshStart({ view }: { view: ServerView }) {
+  const trpc = useTRPC()
+  const queries = useQueryClient()
+  const changed = useChanged(view.id)
+  const start = useQuery(trpc.worlds.freshStart.queryOptions({ serverId: view.id }))
+  const [confirming, setConfirming] = useState(false)
+  const [done, setDone] = useState<string | null>(null)
+  const outcome = useOutcome(view)
+  const begin = useMutation(
+    trpc.worlds.startOver.mutationOptions({
+      onSuccess: (next) => {
+        changed(next)
+        void queries.invalidateQueries({ queryKey: trpc.worlds.list.queryKey({ serverId: view.id }) })
+        void queries.invalidateQueries({ queryKey: trpc.worlds.freshStart.queryKey({ serverId: view.id }) })
+        setConfirming(false)
+        outcome.settled(next)
+      },
+    }),
+  )
+  if (!start.data) return null
+  const words = freshWords(start.data)
+  const allowed = changeable(view)
+  const needsRunning = start.data.kind === 'season' && view.status !== 'running'
+  const settled = allowed.ok && view.status !== 'failed' && view.lastChange?.status !== 'failed'
+  return (
+    <FormSection
+      title={words.title}
+      description={
+        needsRunning && allowed.ok
+          ? `${words.description} Start the server first, so Cubepals can reset everyone’s hearts.`
+          : words.description
+      }
+      actions={
+        <Button
+          variant="outline"
+          busy={allowed.busy}
+          {...said(outcome, { done: 'Started', failed: 'Didn’t start' })}
+          disabled={!allowed.ok || needsRunning}
+          onClick={() => {
+            setDone(null)
+            setConfirming(true)
+          }}
+        >
+          {words.action}
+        </Button>
+      }
+    >
+      {done !== null && settled && <Note tone="success">{done}</Note>}
+      <ConfirmChange
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        title={words.ask}
+        confirmLabel={view.status === 'running' ? `${words.action} and restart` : words.action}
+        working="Making the world"
+        error={begin.error}
+        onConfirm={async (requestId) => {
+          const sentence = words.done
+          await begin.mutateAsync({ serverId: view.id, requestId })
+          setDone(sentence)
+        }}
+      >
+        <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
+          {words.consequence}
+        </p>
+        {view.status === 'running' && (
+          <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
+            The server restarts into {start.data.name}. Anyone online can join again once it’s up.
+          </p>
+        )}
+      </ConfirmChange>
+    </FormSection>
+  )
+}
+
 function NewWorld({ view }: { view: ServerView }) {
   const trpc = useTRPC()
   const queries = useQueryClient()
@@ -122,8 +235,8 @@ function NewWorld({ view }: { view: ServerView }) {
   return (
     <form onSubmit={submit}>
       <FormSection
-        title="Start a new world"
-        description="The server moves to it. Your current world stays, and you can switch back to it."
+        title="Make your own world"
+        description="Choose its name, type and seed. The server moves to it. Your current world stays, and you can switch back to it."
         actions={
           <Button
             type="submit"

@@ -1,8 +1,9 @@
-import type { WorldView } from '@blockly/contracts'
+import type { FreshStartView, WorldView } from '@blockly/contracts'
 import type { Db } from '@blockly/db'
 import { type Actor, authorize } from '../actor.ts'
 import { listBackups } from '../backups/persistence.ts'
 import { findServer, loadRuntime } from '../servers/persistence.ts'
+import { freshStartOf } from './fresh-start.ts'
 import { listWorlds } from './persistence.ts'
 
 export class WorldQueries {
@@ -33,5 +34,12 @@ export class WorldQueries {
         running: world.id === applied?.worldId,
         backups: backups.filter((b) => b.worldId === world.id).length,
       }))
+  }
+
+  /** What starting over is on this server, and what the world it makes is called. */
+  async freshStart(actor: Actor, serverId: string): Promise<FreshStartView> {
+    const server = authorize(actor, await findServer(this.#db, serverId))
+    const { kind, name, leaving, hearts } = await freshStartOf(this.#db, server)
+    return { kind, name, leaving, hearts }
   }
 }
