@@ -207,4 +207,4 @@ and **Creating servers** back on. If the day was busy rather than abused, raise 
 instead (see "Raising the caps").
 
 Staging runs in its own org (`blockly-staging`) with its own limit. Stop it with
-`bun scripts/staging.ts stop` when nobody is testing (CLAUDE.md).
+`bun scripts/staging.ts stop` when nobody is testing (AGENTS.md).

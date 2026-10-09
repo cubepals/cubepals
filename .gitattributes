@@ -1,0 +1,17 @@
+# Text is stored with LF line endings, whatever the checkout.
+* text=auto eol=lf
+
+# Written by tools, never by hand: collapsed in pull request diffs and left out of the language
+# statistics. Each says how it is regenerated.
+apps/control/src/infra/*/generated/** linguist-generated
+apps/control/src/infra/*/*.openapi.json linguist-generated
+packages/db/migrations/meta/** linguist-generated
+bun.lock linguist-generated
+tools/openapi/bun.lock linguist-generated
+
+# Binary, and rendered from docs/architecture's sources.
+*.pdf binary
+docs/architecture/Blockly-Architecture.pdf linguist-generated
+
+# A vendored licence, kept byte for byte as its authors wrote it.
+docs/architecture/fonts/OFL.txt -text

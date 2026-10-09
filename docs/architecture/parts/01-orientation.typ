@@ -8,7 +8,7 @@ Blockly is Minecraft server hosting that feels simple. A player names a server, 
 invites friends, and plays; everything else is Blockly's to decide. That rule shapes the
 architecture: Blockly absorbs complexity so the player doesn't have to, and asks only about what
 the player alone knows, what is destructive or one-way, money, and who can reach the server
-(#src("CLAUDE.md")).
+(#src("AGENTS.md")).
 
 *The system in seven sentences.*
 
