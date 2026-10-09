@@ -3,7 +3,7 @@
 # repository are in config.auto.tfvars.json; the rest arrive at apply time (docs/configuration.md):
 #   terraform init -backend-config=backend.hcl
 #   TF_VAR_secrets='{…}' TF_VAR_secret_versions='{…}' TF_VAR_operator_settings='{…}' \
-#   TF_VAR_cloudflare_account_id=… TF_VAR_cloudflare_zone_id=… terraform apply
+#   TF_VAR_cloudflare_account_id=… TF_VAR_cloudflare_zone_id=… TF_VAR_database_dumps_bucket=… terraform apply
 # with FLY_API_TOKEN (an org token for the production org), CLOUDFLARE_API_TOKEN and VERCEL_API_TOKEN.
 # Servers run on Fly alone: the fleet's Hetzner nodes are optional, and none is listed. Once
 # fleet-nodes.auto.tfvars.json lists one (`bun scripts/fleet.ts add`), its join line comes in
@@ -79,6 +79,11 @@ variable "secret_versions" { type = map(string) }
 variable "cloudflare_account_id" { type = string }
 variable "cloudflare_zone_id" { type = string }
 
+variable "database_dumps_bucket" {
+  description = "The private bucket the Database dump workflow writes to: DUMPS_BUCKET in scripts/production-values.ts."
+  type        = string
+}
+
 variable "fleet_nodes" {
   type = map(object({ location = string, type = string }))
 }
@@ -128,6 +133,13 @@ module "environment" {
   fleet_nodes           = var.fleet_nodes
   fleet_join_lines      = var.fleet_join_lines
   fleet_hetzner         = var.fleet_hetzner
+}
+
+# Production alone: staging's database is a throwaway, and nothing dumps it.
+module "database_dumps" {
+  source     = "../../modules/database-dumps"
+  account_id = var.cloudflare_account_id
+  bucket     = var.database_dumps_bucket
 }
 
 output "apps" {

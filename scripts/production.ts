@@ -13,7 +13,9 @@
  *                                     Vercel builds, and released as the next vX.Y.Z (versions.ts).
  *                                     Only a commit a nightly passed on staging goes, unless
  *                                     --without-staging says otherwise. The first time, it stops
- *                                     after making the archive bucket, so its token can be made for it
+ *                                     after making the archive and dumps buckets, so their tokens can
+ *                                     be made for them. After Terraform, it gives the Database dump
+ *                                     workflow its secrets, in the repository's `production` environment
  *
  * Needs terraform, flyctl and gh. Nothing here prints a value, only names.
  */
@@ -22,6 +24,9 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'n
 import { dirname, resolve } from 'node:path'
 import {
   backendConfig,
+  DUMPS_BUCKET,
+  DUMPS_ENVIRONMENT,
+  dumpSecrets,
   ENVIRONMENT_DIR,
   ENVIRONMENT_EXAMPLE,
   ENVIRONMENT_FILE,
@@ -56,7 +61,7 @@ function init(): void {
   say(`Wrote ${VALUES_FILE}, with the random values made. Fill in the empty ones, then run check.`)
 }
 
-/** True when an apply may go on: with every value, or with all but the archive bucket's token. */
+/** True when an apply may go on: with every value, or with all but the buckets' tokens. */
 function check(values: Record<string, string>): boolean {
   const { missing, wrong, bucketFirst } = problemsOf(values)
   if (missing.length === 0 && wrong.length === 0) {
@@ -68,14 +73,19 @@ function check(values: Record<string, string>): boolean {
     for (const line of wrong) say(`  ${line}`)
   }
   if (missing.length > 0) {
-    say(bucketFirst ? 'Only the archive bucket’s token is left, which apply makes room for:' : 'To fill in:')
+    say(bucketFirst ? 'Only the buckets’ tokens are left, which apply makes room for:' : 'To fill in:')
     for (const value of missing) say(`  ${value.name}: ${value.where}`)
   }
   return wrong.length === 0 && bucketFirst
 }
 
-function run(command: string, args: string[], env: NodeJS.ProcessEnv): void {
-  const result = spawnSync(command, args, { stdio: 'inherit', env })
+/** Runs a tool, stopping the apply if it fails. `input`, a secret's value, goes to its standard input. */
+function run(command: string, args: string[], env: NodeJS.ProcessEnv, input?: string): void {
+  const result = spawnSync(command, args, {
+    stdio: [input === undefined ? 'inherit' : 'pipe', 'inherit', 'inherit'],
+    input,
+    env,
+  })
   if (result.error) throw new Error(`${command}: ${result.error.message}. Is it installed?`)
   if (result.status !== 0) {
     say(`${command} ${args[0]} stopped (exit ${result.status}). Fix what it says, then run apply again.`)
@@ -84,6 +94,27 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv): void {
 }
 
 const git = (...args: string[]) => spawnSync('git', args, { encoding: 'utf8' }).stdout.trim()
+
+/**
+ * The Database dump workflow's secrets, in the repository's `production` environment. Only `main`'s
+ * workflows reach them, and `production`'s, which Vercel's deployments name; a branch's never do.
+ */
+function setDumpSecrets(values: Record<string, string>, env: NodeJS.ProcessEnv): void {
+  const repository = environment().web.repository
+  const api = `repos/${repository}/environments/${DUMPS_ENVIRONMENT}`
+  const policy = { deployment_branch_policy: { protected_branches: false, custom_branch_policies: true } }
+  run('gh', ['api', '--silent', '-X', 'PUT', api, '--input', '-'], env, JSON.stringify(policy))
+  const policies = `${api}/deployment-branch-policies`
+  const listed = spawnSync('gh', ['api', policies, '--jq', '.branch_policies[].name'], {
+    encoding: 'utf8',
+    env,
+  })
+  for (const branch of ['main', 'production'].filter((name) => !listed.stdout.split('\n').includes(name)))
+    run('gh', ['api', '--silent', '-X', 'POST', policies, '-f', `name=${branch}`], env)
+  for (const [name, value] of Object.entries(dumpSecrets(values)))
+    run('gh', ['secret', 'set', name, '--env', DUMPS_ENVIRONMENT, '--repo', repository], env, value)
+  say(`The Database dump workflow has its secrets, and dumps into ${DUMPS_BUCKET} every night.`)
+}
 
 /** The nightly that ran this commit on staging and passed, if one did (nightly.yml tags them). */
 function stagingPass(): string | undefined {
@@ -115,10 +146,15 @@ function apply(): void {
   terraform('init', '-input=false', `-backend-config=${backend}`)
 
   if (bucketFirst) {
-    terraform('apply', '-input=false', '-target=module.environment.module.archive')
+    terraform(
+      'apply',
+      '-input=false',
+      '-target=module.environment.module.archive',
+      '-target=module.database_dumps',
+    )
     say('')
     say(
-      `The archive bucket, ${environment().settings.ARCHIVE_S3_BUCKET}, is made. Now make its token and put it in the file:`,
+      `The buckets, ${environment().settings.ARCHIVE_S3_BUCKET} and ${DUMPS_BUCKET}, are made. Now make their tokens and put them in the file:`,
     )
     for (const value of missing) say(`  ${value.name}: ${value.where}`)
     say('Then run apply again.')
@@ -126,6 +162,7 @@ function apply(): void {
   }
 
   terraform('apply', '-input=false')
+  setDumpSecrets(values, env)
   const deploy = (app: string, dockerfile: string, ...extra: string[]) =>
     run(
       'fly',
