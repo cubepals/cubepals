@@ -168,8 +168,9 @@ export const TEMPLATES: readonly Template[] = [
       mods: [
         // Duels by Dartanman (MIT), whose arena and kit Cubepals writes. It stops at 1.21.11.
         { catalog: 'modrinth', projectId: 'pZyHIvCK' },
-        // PVPOneDotEight (GPL-3.0): the fast, cooldown-free combat of Minecraft 1.8, in every world.
-        { catalog: 'modrinth', projectId: 'Tz6dxwG9' },
+        // OldCombatMechanics from Hangar (MPL-2.0): the fast, cooldown-free combat of Minecraft 1.8.
+        // Its own defaults put everyone on its "old" modeset in every world, so nothing is configured.
+        { catalog: 'hangar', projectId: 'hangar:2087' },
       ],
       files: DUELS_FILES,
       // Adventure, so nobody breaks the platform; Easy, since there is nothing to eat between fights.
