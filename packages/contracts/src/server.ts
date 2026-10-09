@@ -79,6 +79,7 @@ export const PLAY_ICONS = [
   'skyblock',
   'oneblock',
   'rpg',
+  'duels',
   'modpack',
   'ownpack',
 ] as const
