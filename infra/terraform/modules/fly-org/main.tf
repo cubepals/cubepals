@@ -27,9 +27,9 @@ variable "machine_limit" {
 
 
 variable "platform_machines" {
-  description = "Machines the platform itself runs: api, worker, realtime and edge."
+  description = "Machines the platform itself runs: one each of api, worker, realtime and edge."
   type        = number
-  default     = 7
+  default     = 4
 }
 
 locals {

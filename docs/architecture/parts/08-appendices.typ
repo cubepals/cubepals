@@ -225,7 +225,7 @@ offers parts only to nodes with `multipart-upload`.
   table(
     columns: (1.7fr, 1fr, 0.8fr),
     table.header[Variable][Default][Runtime],
-    [`FLY_ORG`, `FLY_API_TOKEN`, `FLY_NATS_URL`, `FLY_MACHINE_LIMIT`, `FLY_PLATFORM_MACHINES`], [—, —, `nats://[fdaa::3]:4223`, 50, 7], [Fly (limit − platform ≥ 2).],
+    [`FLY_ORG`, `FLY_API_TOKEN`, `FLY_NATS_URL`, `FLY_MACHINE_LIMIT`, `FLY_PLATFORM_MACHINES`], [—, —, `nats://[fdaa::3]:4223`, 50, 4], [Fly (limit − platform ≥ 2).],
     [`BOAT_API_TOKEN`, `BOAT_API_URL`, `BOAT_RUN_TTL_SECONDS`, `BOAT_START_RESERVE`], [—, `https://boat.dev/api/v1`, none, 0.1], [Boat.],
     [`DOCKER_SOCKET`, `DOCKER_GAME_NETWORK`], [`/var/run/docker.sock`, `blockly-games`], [Docker (one region).],
     [`FLEET_CA_CERT`, `FLEET_CA_KEY`, `FLEET_NODE_LISTEN`, `FLEET_ENDPOINT_HOSTS`], [—, —, `[::]:8443`, —], [Fleet trust and endpoint, IPv6 and IPv4.],
