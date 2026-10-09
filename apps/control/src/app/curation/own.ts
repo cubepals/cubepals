@@ -70,36 +70,6 @@ export const OWN_PACKS: readonly OwnPack[] = [
     ],
     review: 'docs/modpack-templates.md#adventure',
   },
-  {
-    key: 'cubepals-cobblemon',
-    name: 'Cubepals Cobblemon',
-    blurb: 'Catch, raise and battle creatures across a world full of them.',
-    authors: 'Cubepals',
-    loader: 'fabric',
-    mods: [
-      // Cobblemon, then the official pack's open-licensed companions that run on a server.
-      { catalog: 'modrinth', projectId: 'MdwFAVRL' },
-      // Lithium, FerriteCore, Krypton, Clumps, Let Me Despawn: the same game, on less of the server.
-      { catalog: 'modrinth', projectId: 'gvQqBUqZ' },
-      { catalog: 'modrinth', projectId: 'uXXizFIs' },
-      { catalog: 'modrinth', projectId: 'fQEb0iXm' },
-      { catalog: 'modrinth', projectId: 'Wnxd13zP' },
-      { catalog: 'modrinth', projectId: 'vE2FN5qn' },
-      // Monsters in the Closet, AppleSkin, Shulker Box Tooltip, Enchantment Descriptions.
-      { catalog: 'modrinth', projectId: 'GMA8jFBD' },
-      { catalog: 'modrinth', projectId: 'EsAfCjCV' },
-      { catalog: 'modrinth', projectId: '2M01OLQq' },
-      { catalog: 'modrinth', projectId: 'UVtY3ZAC' },
-      // EMI, EMI Ores, JEI, Advanced Loot Info: recipes, ores and loot, looked up in game.
-      { catalog: 'modrinth', projectId: 'fRiHVvU7' },
-      { catalog: 'modrinth', projectId: 'sG4TqDb8' },
-      { catalog: 'modrinth', projectId: 'u6dRKJwZ' },
-      { catalog: 'modrinth', projectId: 'PEPVViac' },
-    ],
-    review: 'docs/modpack-templates.md#cubepals-cobblemon',
-    playersInstall: true,
-    held: 'Players install this pack, and nothing publishes it where they can download it yet. Where it is published, a Modrinth project under Cubepals say, is the owner’s decision.',
-  },
 ]
 
 export const ownPack = (key: string, packs: readonly OwnPack[] = OWN_PACKS): OwnPack | null =>
