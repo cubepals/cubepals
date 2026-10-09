@@ -1032,10 +1032,6 @@
       "n": 118,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
-    "apps/control/src/app/curation/own.test.ts › describe.skipIf Blockly’s own packs": {
-      "n": 139,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    },
     "apps/control/src/app/edge/edge.test.ts › describe.skipIf edge": {
       "n": 228,
       "reason": "Over the threshold when the check began, and not yet looked at."
