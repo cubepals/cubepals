@@ -15,14 +15,15 @@
  * The web app is at staging.cubepals.com (a DNS-only CNAME in Cloudflare, so Fly issues its
  * certificate), with Google sign-in. Only STAGING_DEVELOPERS, the admin and the staging check's
  * own domain can make an account there (SIGNUP_ALLOWLIST). The API and realtime stay on fly.dev,
- * and players join `<server>.<edge address>.nip.io`. Postgres is one small machine and mail goes to a Mailpit that
- * only the org's private network reaches (`fly proxy 8025 -a bly-staging-mail`). Archives go to a
+ * and players join `<server>.<edge address>.nip.io`. Postgres is Supabase's staging project, through
+ * its session pooler (STAGING_DATABASE_URL), and mail goes to a Mailpit that only the org's private network reaches (`fly proxy 8025 -a bly-staging-mail`). Archives go to a
  * Tigris bucket. Payments are Polar's sandbox: POLAR_ACCESS_TOKEN and POLAR_PRODUCTS come from
  * .env, and `up` adds the webhook that `down` removes. What `up` generates (passwords, keys, the
  * bucket's credentials) stays in local/staging/state.json, or comes from STAGING_STATE where there
  * is no such file: a cloud environment carries it there (`env`). CLOUDFLARE_API_TOKEN,
- * AUTH_GOOGLE_CLIENT_ID, AUTH_GOOGLE_CLIENT_SECRET and STAGING_DEVELOPERS come from the environment
- * or local/secrets/staging.env.
+ * AUTH_GOOGLE_CLIENT_ID, AUTH_GOOGLE_CLIENT_SECRET, STAGING_DEVELOPERS and STAGING_DATABASE_URL come
+ * from the environment or local/secrets/staging.env; `up` keeps the last into the state too, for the
+ * staging check.
  *
  * Needs flyctl signed in to an account in the org, and a card on the org.
  */
@@ -46,7 +47,6 @@ const APP = {
   realtime: 'bly-staging-realtime',
   edge: 'bly-staging-edge',
   web: 'bly-staging-web',
-  db: 'bly-staging-db',
   mail: 'bly-staging-mail',
 } as const
 const PLATFORM = Object.values(APP)
@@ -66,6 +66,11 @@ const STATE_FILE = 'local/staging/state.json'
 const ADMIN_EMAIL = 'admin@staging.blockly.test'
 /** Staging's own secrets on a maintainer's machine; a cloud environment has them in its settings. */
 const SECRETS_FILE = 'local/secrets/staging.env'
+/**
+ * Supabase's root, which its pooler's certificate chains to, as the control image carries it.
+ * node-postgres verifies the server against it (`sslmode=verify-full`).
+ */
+const DATABASE_CA = '/app/packages/db/certs/supabase-root-2021.crt'
 
 interface Bucket {
   name: string
@@ -76,7 +81,8 @@ interface Bucket {
 }
 
 interface State {
-  dbPassword: string
+  /** Supabase's session pooler, `sslmode=require`: from STAGING_DATABASE_URL, which replaces it. */
+  databaseUrl?: string
   authSecret: string
   ticketSecret: string
   edgeToken: string
@@ -176,7 +182,6 @@ function loadState(): State {
   // A cloud environment has no local file: its settings carry what `up` made (`env`).
   if (process.env.STAGING_STATE) return JSON.parse(process.env.STAGING_STATE) as State
   return {
-    dbPassword: secret(),
     authSecret: secret(),
     ticketSecret: secret(),
     edgeToken: secret(),
@@ -249,43 +254,13 @@ async function up(): Promise<void> {
     }
 
   say('database')
-  fly(['secrets', 'import', '-a', APP.db, '--stage'], { input: `POSTGRES_PASSWORD=${state.dbPassword}\n` })
-  if (volumesOf(APP.db).length === 0)
-    fly(['volumes', 'create', 'pgdata', '-a', APP.db, '--region', REGION, '--size', '1', '-y'])
-  if (machinesOf(APP.db).length === 0)
-    fly([
-      'machine',
-      'run',
-      'postgres:17-alpine',
-      '-a',
-      APP.db,
-      '--name',
-      'postgres',
-      '--region',
-      REGION,
-      // A CPU of its own: on a shared one, the queues' steady polling spends its quota within
-      // minutes, and every query after that waits its turn behind the throttle.
-      '--vm-size',
-      'performance-1x',
-      '--vm-memory',
-      '2048',
-      '--volume',
-      'pgdata:/var/lib/postgresql/data',
-      '--env',
-      'PGDATA=/var/lib/postgresql/data/pgdata',
-      '--env',
-      'POSTGRES_USER=blockly',
-      '--env',
-      'POSTGRES_DB=blockly',
-      '--restart',
-      'always',
-    ])
-  startStopped(APP.db)
-  await until('Postgres answers', 180, () =>
-    fly(['ssh', 'console', '-a', APP.db, '-C', 'pg_isready -U blockly -d blockly'], {
-      allowFail: true,
-    }).includes('accepting connections'),
-  )
+  state.databaseUrl = process.env.STAGING_DATABASE_URL ?? state.databaseUrl
+  if (!state.databaseUrl)
+    throw new Error(`STAGING_DATABASE_URL (Supabase staging, session pooler) is not in ${SECRETS_FILE}`)
+  saveState(state)
+  const database = new URL(state.databaseUrl)
+  database.searchParams.set('sslmode', 'verify-full')
+  database.searchParams.set('sslrootcert', DATABASE_CA)
 
   say('mail')
   if (machinesOf(APP.mail).length === 0)
@@ -406,7 +381,10 @@ async function up(): Promise<void> {
   // Everything the control plane reads (docs/configuration.md), for both apps that run it.
   const config: Record<string, string> = {
     DEPLOYMENT_ID: 'staging',
-    DATABASE_URL: `postgres://blockly:${state.dbPassword}@${APP.db}.internal:5432/blockly`,
+    DATABASE_URL: database.toString(),
+    // Three processes (api, worker, realtime), each with two pools and a listener, share the
+    // pooler's limit with a deploy's migrations and the machines a rolling deploy overlaps.
+    DATABASE_POOL_MAX: '5',
     WEB_CANONICAL_ORIGIN: WEB,
     ...signIn(state),
     REALTIME_PUBLIC_URL: `${origin(APP.realtime)}/`,
@@ -641,7 +619,7 @@ async function empty(bucket: Bucket): Promise<void> {
 
 /** Stopped first, what could start a server again; then the servers; then what they all need. */
 const STOP_FIRST: readonly string[] = [APP.control, APP.realtime, APP.edge, APP.web]
-const STOP_LAST: readonly string[] = [APP.mail, APP.db]
+const STOP_LAST: readonly string[] = [APP.mail]
 const stopOrder = (app: string): number =>
   STOP_FIRST.includes(app)
     ? STOP_FIRST.indexOf(app)
@@ -680,7 +658,7 @@ function startStopped(app: string): void {
   }
 }
 
-/** The platform started again, its database first. Servers start when someone plays, as ever. */
+/** The platform started again, the mail catcher first. Servers start when someone plays, as ever. */
 async function start(): Promise<void> {
   const apps = new Set(appsInOrg())
   const missing = PLATFORM.filter((app) => !apps.has(app))
@@ -697,15 +675,7 @@ async function start(): Promise<void> {
     await up()
     return
   }
-  for (const app of [APP.db, APP.mail, APP.control, APP.realtime, APP.edge, APP.web]) {
-    startStopped(app)
-    if (app === APP.db)
-      await until('Postgres answers', 180, () =>
-        fly(['ssh', 'console', '-a', APP.db, '-C', 'pg_isready -U blockly -d blockly'], {
-          allowFail: true,
-        }).includes('accepting connections'),
-      )
-  }
+  for (const app of [APP.mail, APP.control, APP.realtime, APP.edge, APP.web]) startStopped(app)
   await until('the web app and the API answer', 300, webAnswers)
   say(`Staging is up: ${WEB}`)
 }

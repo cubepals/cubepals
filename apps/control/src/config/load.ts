@@ -58,6 +58,13 @@ const POSTHOG_EU = 'https://eu.i.posthog.com'
 const environmentOf = (deploymentId: string | undefined) =>
   deploymentId === 'prod' ? 'production' : deploymentId === 'staging' ? 'staging' : 'development'
 
+/** Postgres: one URL, or a pooled one and a direct one past it, and what each pool may hold. */
+const databaseFrom = (env: NodeJS.ProcessEnv) => ({
+  url: env.DATABASE_URL,
+  directUrl: env.DATABASE_DIRECT_URL ?? env.DATABASE_URL,
+  poolMax: Number(env.DATABASE_POOL_MAX ?? 10),
+})
+
 /** PostHog with its token, and the environment every event says it came from; none without one. */
 const insightFrom = (env: NodeJS.ProcessEnv) =>
   env.POSTHOG_TOKEN
@@ -197,7 +204,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
   return {
     deploymentId: env.DEPLOYMENT_ID,
     roles: list(env.ROLES ?? 'api,worker,realtime'),
-    database: { url: env.DATABASE_URL, directUrl: env.DATABASE_DIRECT_URL ?? env.DATABASE_URL },
+    database: databaseFrom(env),
     web: { canonicalOrigin: env.WEB_CANONICAL_ORIGIN, trustedOrigins: list(env.WEB_TRUSTED_ORIGINS) },
     listen: { api: env.API_LISTEN ?? '127.0.0.1:4000', internal: env.INTERNAL_LISTEN ?? '127.0.0.1:4001' },
     realtime: {

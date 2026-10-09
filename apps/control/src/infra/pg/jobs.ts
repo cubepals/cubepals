@@ -31,11 +31,18 @@ const CURATION_INGEST = 'curation-ingest'
  */
 export async function startBoss(
   connectionString: string,
-  options: { retryDelaySeconds?: number; operationDeadlineSeconds?: number; maintains?: boolean } = {},
+  options: {
+    retryDelaySeconds?: number
+    operationDeadlineSeconds?: number
+    maintains?: boolean
+    /** Connections its own pool may hold, as createPool's `max`. */
+    poolMax?: number
+  } = {},
 ): Promise<PgBoss> {
   const maintains = options.maintains ?? true
   const boss = new PgBoss({
     connectionString,
+    max: options.poolMax ?? 10,
     schema: 'pgboss',
     application_name: 'blockly-jobs',
     supervise: maintains,

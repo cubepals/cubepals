@@ -222,7 +222,7 @@ describe('configuration', () => {
   })
 
   test('with no pooler in front of Postgres, the one URL serves the listener and migrations too', () => {
-    expect(loadConfig(env).database).toEqual({ url: env.DATABASE_URL, directUrl: env.DATABASE_URL })
+    expect(loadConfig(env).database).toMatchObject({ url: env.DATABASE_URL, directUrl: env.DATABASE_URL })
     const direct = 'postgres://blockly:blockly@127.0.0.1:5433/blockly'
     expect(loadConfig({ ...env, DATABASE_DIRECT_URL: direct }).database.directUrl).toBe(direct)
   })

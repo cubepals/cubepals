@@ -41,15 +41,16 @@ and `scripts/staging-check.ts` checks it:
 - `bun scripts/staging-check.ts` takes one Free server through its life on Fly (made, joined
   through the edge, asleep, woken, rested in the archive store with its machine and volume let
   go, woken from the archive, the same world, killed and started again) and times each wait.
-- `bun scripts/staging.ts down` destroys staging, its database and worlds included: every app in
+- `bun scripts/staging.ts down` destroys staging, its worlds included: every app in
   the org, the ones the control plane made for servers included, the buckets, staging's org
   tokens and the webhook, then lists what's left. It is only for when staging itself is to go,
   and is never run as cleanup. Fly keeps a destroyed volume's
   snapshots until their retention ends; there is no call to delete them sooner.
 
 This staging differs from the design the tables' Staging column describes, which Terraform makes:
-Postgres is a machine of its own, not Managed Postgres, so there is no pooler and no
-`DATABASE_DIRECT_URL`; archives go to Tigris, not R2; the web app runs on Fly, not Vercel;
+Postgres is Supabase's staging project (Free, eu-central-1), not Managed Postgres, reached
+through its session pooler, which carries `LISTEN` too, so there is no `DATABASE_DIRECT_URL`;
+`STAGING_DATABASE_URL` names it, and `down` leaves it be; archives go to Tigris, not R2; the web app runs on Fly, not Vercel;
 addresses are on `fly.dev` and `nip.io`, not staging's own domain; mail goes to the Mailpit; and
 there is no OAuth sign-in, only email.
 
@@ -70,6 +71,7 @@ Terraform stack.
 | `ROLES` | `api,worker,realtime` | per process group | per process group | toml | `api`, `worker`, `realtime`, comma-separated. Staging and production run `api` and `worker` as process groups of the control app and `realtime` as its own app |
 | `DATABASE_URL` | compose Postgres | Fly Managed Postgres, pooled | Fly Managed Postgres, pooled | secret | Queries go through it (Managed Postgres's PgBouncer URL) |
 | `DATABASE_DIRECT_URL` | — (`DATABASE_URL`) | Fly Managed Postgres, direct | Fly Managed Postgres, direct | secret | Past the pooler: the live-update listener's `LISTEN` and the release command's migrations. The pooler closes a client idle for ten minutes and breaks `LISTEN` in transaction mode (docs.fly.io/postgres) |
+| `DATABASE_POOL_MAX` | `10` | `10` | `10` | toml | Connections each of a process's two pools (queries, the job queue's) may hold. A session-mode pooler such as Supabase's gives each one a server connection, and every process shares its limit, so a deployment on one sizes it down. The pooler must be session mode: advisory locks hold a connection's session for the length of the work |
 
 ### Listeners
 
