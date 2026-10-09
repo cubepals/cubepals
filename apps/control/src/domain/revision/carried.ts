@@ -1,5 +1,3 @@
-import type { PinnedMod } from '../mods/artifact.ts'
-
 /**
  * What a revision puts on the server's disk itself, beside what the image installs: files Cubepals
  * wrote, carried the way a pack carries its `overrides/` (docs/modpack-system.md § Carried files),
@@ -8,37 +6,14 @@ import type { PinnedMod } from '../mods/artifact.ts'
  * Only Cubepals writes these. Nothing here comes from an owner, and nothing here is a secret.
  */
 
+import type { PinnedMod } from '../mods/artifact.ts'
+
 /** A file Cubepals wrote, at its path under the server's directory, as UTF-8 text. */
 export interface CarriedFile {
   /** Relative to the server's directory: `plugins/LifeStealZ/config.yml`. */
   path: string
   content: string
 }
-
-/**
- * Whether a path is one Cubepals may write: relative, plain, and none of the files Blockly
- * already keeps itself (`server.properties`, the access lists, its own `.blockly-` marks). Its
- * names hold letters, digits, `.`, `_`, `+` and `-` only, so a start step can say it without quoting.
- */
-export function placeablePath(path: string): boolean {
-  const parts = path.split('/')
-  return (
-    parts.every((part) => /^[A-Za-z0-9._+-]+$/.test(part) && part !== '.' && part !== '..') &&
-    !KEPT_BY_BLOCKLY.has(path) &&
-    !path.startsWith('.blockly')
-  )
-}
-
-/** Files at the server's root that Blockly writes or reads on its own account. */
-const KEPT_BY_BLOCKLY: ReadonlySet<string> = new Set([
-  'server.properties',
-  'eula.txt',
-  'whitelist.json',
-  'ops.json',
-  'banned-players.json',
-  'banned-ips.json',
-  'server-icon.png',
-])
 
 /**
  * The plugins of a revision whose jar goes elsewhere than the plugins folder, by where each goes.

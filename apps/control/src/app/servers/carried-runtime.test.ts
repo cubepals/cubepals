@@ -9,10 +9,11 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { PinnedMod } from '../domain/mods/artifact.ts'
-import { defaultSettings, type ServerRevision } from '../domain/revision/revision.ts'
-import { installCheck } from './install-check.ts'
-import { toRuntimeSpec } from './runtime-spec.ts'
+import type { PinnedMod } from '../../domain/mods/artifact.ts'
+import { defaultSettings, type ServerRevision } from '../../domain/revision/revision.ts'
+import { placeablePath } from '../../minecraft/carried.ts'
+import { installCheck } from '../../minecraft/install-check.ts'
+import { toRuntimeSpec } from '../../minecraft/runtime-spec.ts'
 
 const BENTOBOX = Buffer.from('bentobox jar')
 const AONEBLOCK = Buffer.from('aoneblock jar')
@@ -138,6 +139,25 @@ describe('what a revision places itself', () => {
     expect(spec.entrypoint?.[2]).not.toContain('BLOCKLY_FILES')
     expect(spec.env.BLOCKLY_FILES).toBeUndefined()
     expect(spec.env.BLOCKLY_JARS).toBeUndefined()
+  })
+
+  test('only plain relative paths, and none Blockly keeps itself', () => {
+    expect(placeablePath('plugins/LifeStealZ/config.yml')).toBe(true)
+    expect(placeablePath('plugins/BentoBox/addons/abc-AOneBlock-1.0+26.1.jar')).toBe(true)
+    expect(placeablePath('bukkit.yml')).toBe(true)
+    for (const path of [
+      '',
+      '/data/x',
+      '../x',
+      'plugins/../x',
+      'a//b',
+      'a b',
+      'a"b',
+      'server.properties',
+      'ops.json',
+      '.blockly-files',
+    ])
+      expect(placeablePath(path)).toBe(false)
   })
 
   test('a path Cubepals may not write is a mistake, never skipped', () => {

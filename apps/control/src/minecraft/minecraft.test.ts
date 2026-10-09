@@ -62,52 +62,53 @@ describe('versions and images', () => {
   })
 })
 
-describe('toRuntimeSpec', () => {
-  const input = {
+/** The server every toRuntimeSpec test starts from. */
+const input = {
+  serverId: 's-1',
+  world: {
+    id: 'w',
     serverId: 's-1',
-    world: {
-      id: 'w',
-      serverId: 's-1',
-      levelName: 'world',
-      name: 'World',
-      seed: null,
-      levelType: 'minecraft:normal',
-      hardcore: false,
-      generatedOnVersion: '26.3',
-    },
-    memoryTier: '4g' as const,
-    rconPassword: 'secret',
-    artifactUrl: () => 'https://example.test/a.jar',
-    limits: { playerIdleKickMinutes: null, worldRadius: null, storageGb: 5 },
-    iconUrl: null,
-  }
-  const revision = {
-    id: 'r',
-    serverId: 's-1',
-    number: 1,
-    gameVersion: '26.3',
-    loader: 'vanilla' as const,
-    loaderVersion: null,
-    settings: {
-      difficulty: 'normal' as const,
-      defaultGameMode: 'survival' as const,
-      pvp: true,
-      viewDistance: 10,
-      simulationDistance: 10,
-      maxPlayers: 10,
-      motd: 'Sunset Valley',
-      spawnProtection: 0,
-      onlineMode: true,
-    },
-    mods: [],
-    modpack: null,
-    files: [],
-    acknowledgedRevoked: [],
-    reason: 'created' as const,
-    basedOnRevisionId: null,
-    createdBy: 'u',
-  }
+    levelName: 'world',
+    name: 'World',
+    seed: null,
+    levelType: 'minecraft:normal',
+    hardcore: false,
+    generatedOnVersion: '26.3',
+  },
+  memoryTier: '4g' as const,
+  rconPassword: 'secret',
+  artifactUrl: () => 'https://example.test/a.jar',
+  limits: { playerIdleKickMinutes: null, worldRadius: null, storageGb: 5 },
+  iconUrl: null,
+}
+const revision = {
+  id: 'r',
+  serverId: 's-1',
+  number: 1,
+  gameVersion: '26.3',
+  loader: 'vanilla' as const,
+  loaderVersion: null,
+  settings: {
+    difficulty: 'normal' as const,
+    defaultGameMode: 'survival' as const,
+    pvp: true,
+    viewDistance: 10,
+    simulationDistance: 10,
+    maxPlayers: 10,
+    motd: 'Sunset Valley',
+    spawnProtection: 0,
+    onlineMode: true,
+  },
+  mods: [],
+  modpack: null,
+  files: [],
+  acknowledgedRevoked: [],
+  reason: 'created' as const,
+  basedOnRevisionId: null,
+  createdBy: 'u',
+}
 
+describe('toRuntimeSpec', () => {
   test("the picture the owner picked is the server's icon in the multiplayer list", () => {
     const plain = toRuntimeSpec({ ...input, revision })
     expect(plain.env.ICON).toBeUndefined()

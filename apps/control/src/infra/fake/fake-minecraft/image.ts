@@ -127,7 +127,7 @@ export async function installPack(volume: string, env: Env, say: (text: string) 
  * Blockly's start step for what a revision places itself (`minecraft/carried.ts`), as its
  * variables say it: what the last start placed and this one doesn't is removed, each placed jar is
  * fetched unless it holds its bytes and refused when it arrives with others, and each carried file
- * is written over what is there. The step itself runs in a real shell in `carried.test.ts`.
+ * is written over what is there. The step itself runs in a real shell in `app/servers/carried-runtime.test.ts`.
  */
 export async function placeCarried(volume: string, env: Env, say: (text: string) => void): Promise<void> {
   if (env.BLOCKLY_JARS === undefined && env.BLOCKLY_FILES === undefined) return

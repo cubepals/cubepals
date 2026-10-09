@@ -1,8 +1,3 @@
-import type { ModArtifact } from '../domain/mods/artifact.ts'
-import { placeablePath, placedMods } from '../domain/revision/carried.ts'
-import type { ServerRevision } from '../domain/revision/revision.ts'
-import { DATA_DIR, diskName } from './jars.ts'
-
 /**
  * What a revision puts on the volume itself, before the image starts: the files Cubepals carries
  * for it, and the plugins whose jar goes in a folder of their own. The image has a place for
@@ -16,6 +11,36 @@ import { DATA_DIR, diskName } from './jars.ts'
  * fills in what a file leaves out (Bukkit's `copyDefaults`, as LifeStealZ does) lets a carried file
  * hold only what Cubepals changes.
  */
+
+import type { ModArtifact } from '../domain/mods/artifact.ts'
+import { placedMods } from '../domain/revision/carried.ts'
+import type { ServerRevision } from '../domain/revision/revision.ts'
+import { DATA_DIR, diskName } from './jars.ts'
+
+/**
+ * Whether a path is one Cubepals may write: relative, plain, and none of the files Blockly keeps
+ * itself (`server.properties`, the access lists, its own `.blockly-` marks). Its names hold
+ * letters, digits, `.`, `_`, `+` and `-` only, so the step says it without quoting.
+ */
+export function placeablePath(path: string): boolean {
+  const parts = path.split('/')
+  return (
+    parts.every((part) => /^[A-Za-z0-9._+-]+$/.test(part) && part !== '.' && part !== '..') &&
+    !KEPT_BY_BLOCKLY.has(path) &&
+    !path.startsWith('.blockly')
+  )
+}
+
+/** Files at the server's root that Blockly writes or reads on its own account. */
+const KEPT_BY_BLOCKLY: ReadonlySet<string> = new Set([
+  'server.properties',
+  'eula.txt',
+  'whitelist.json',
+  'ops.json',
+  'banned-players.json',
+  'banned-ips.json',
+  'server-icon.png',
+])
 
 /** Where the volume remembers what this step wrote, so what a later revision drops goes too. */
 const PLACED_MARK = `${DATA_DIR}/.blockly-files`

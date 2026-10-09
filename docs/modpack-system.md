@@ -57,6 +57,52 @@ the runtime never knows where a pack came from.
   download (found by hash through `POST /v2/version_files`); any other jar is carried inside
   `overrides/mods`.
 
+### Carried files
+
+A server without a pack, Paper ones above all, gets the same two layers from its setup: jars
+listed by link and hash, and files carried by their path under the server's directory, as
+`overrides/` holds them. Only Cubepals writes them. An owner uploading or editing one is a later,
+advanced feature.
+
+| Layer | Pack | Setup (`domain/revision/carried.ts`) |
+|---|---|---|
+| Jars by link and hash | `modrinth.index.json` `files[].path` | A mod's `dir`: `{ projectId: 'aoneblock', dir: 'plugins/BentoBox/addons' }` |
+| Files carried inside | `overrides/<path>` | `files: [{ path: 'plugins/LifeStealZ/config.yml', content }]` |
+
+- **Where they live.** A setup and a revision carry `files`, and a mod may carry `dir`. A
+  template names them, a copy keeps them, and every later change keeps them: a mod change
+  resolves again and puts each plugin back in its folder.
+- **How they reach the server.** The image has no place for either on Paper: `PLUGINS` all go
+  in `plugins/`, and `overrides/` only install with a pack. So a step of the entrypoint
+  (`minecraft/carried.ts`) reads `BLOCKLY_JARS` (path, sha512, link) and `BLOCKLY_FILES` (path,
+  base64) before the image starts. It removes what the last start placed and this revision doesn't
+  (`/data/.blockly-files`), fetches each placed jar unless it already holds its bytes, refuses one
+  whose sha512 is wrong, then writes every carried file. A server that places nothing has no step.
+- **Replaced, at every start.** A carried file replaces the one on disk before every start, the
+  first included. The plugin finds its file already there and keeps it rather than writing its
+  defaults. What the server reads is always what its revision says, and going back to a revision
+  puts its file back. A plugin that fills in what a file leaves out (Bukkit's `copyDefaults`, as
+  LifeStealZ does) lets a carried file hold only the values Cubepals changes.
+- **Paths.** Relative, letters, digits and `.`, `_`, `+`, `-` only, and never a file Blockly keeps
+  itself (`server.properties`, the access lists, `.blockly-` marks). A wrong one fails building the
+  spec: it is a mistake in a template, never skipped.
+- **The diff and the undo.** The diff before apply and the history list files the way they list
+  mods, named by the plugin they set up: "Set by Cubepals: updated LifeStealZ settings". A change
+  to a carried file or a placed jar counts as rewriting the world (`rewritesWorld`), so it gets a
+  snapshot first, and the snapshot back if it doesn't start, like a new pack. The check after a
+  start hashes placed jars where they were placed.
+
+Checked on staging (2026-10-09, itzg `2026.9.1`, in a temporary app running this spec):
+
+- **LifeStealZ 2.21.1 on Paper 26.2.** A carried `config.yml` with only `startHearts: 7` and
+  `maxHearts: 13` stayed as written after the first start. `lifestealz debug generate`, the
+  plugin's dump of what it loaded, showed those two values merged with its own defaults. The file
+  was then overwritten on the volume and a revision carrying 4 and 9 applied. After the restart,
+  the file and the plugin both said 4 and 9.
+- **BentoBox 3.23.3 and AOneBlock 1.28.0 on Paper 26.1.2,** with AOneBlock's `dir` set to
+  `plugins/BentoBox/addons`. The jar landed there and not in `plugins/`, and `bentobox version`
+  listed `AOneBlock 1.28.0 (ENABLED)` with its `oneblock_world`.
+
 ### Detect
 
 `detect(names)` in `minecraft/pack-layout.ts` decides the format from the file names alone:
@@ -323,6 +369,8 @@ Nothing past the build changes: the runtime already installs the result.
 - Readers and rules: `minecraft/mrpack.test.ts`, `pack-layout.test.ts`, `server-pack.test.ts`,
   `pack-build.test.ts`, `diagnosis.test.ts`, `logs.test.ts`, `minecraft.test.ts`.
 - Hostile input: `infra/formats/pack-archives.test.ts`, `file-formats.test.ts`.
+- Carried files and placed jars: `domain/revision/carried.test.ts`, `app/servers/carried-runtime.test.ts`
+  (the step in a real shell) and `app/setups/carried.test.ts` (a template-shaped setup end to end).
 - End to end on the stand-in runtime: `app/packs/packs.test.ts` (upload, build, create, links)
   and `app/packs/changes.test.ts` (update, rollback running and stopped, guarded changes). These
   need the `S3_TEST_*` variables, as CI sets them (`.github/workflows/ci.yml`).

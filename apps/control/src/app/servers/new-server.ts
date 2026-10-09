@@ -8,6 +8,7 @@
  */
 import type { Db } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import type { CarriedFile } from '../../domain/revision/carried.ts'
 import { defaultSettings, type Loader, type RevisionDraft } from '../../domain/revision/revision.ts'
 import { type MemoryTier, PARTY, type PartySize } from '../../domain/server/size.ts'
 import { nextLevelName, type World } from '../../domain/world/world.ts'
@@ -98,7 +99,7 @@ export async function draftNewServer(
     settings,
     mods: chosen?.mods ?? [],
     modpack: chosen?.modpack ?? null,
-    files: [...(chosen?.setup.files ?? [])],
+    files: carriedBy(chosen),
     acknowledgedRevoked: [],
     reason: 'created',
     basedOnRevisionId: null,
@@ -157,3 +158,6 @@ async function firstPin(
     return paperPin(builds, gameVersion, 'plain')
   return loaderPin(builds, loader, gameVersion)
 }
+
+/** The files a new server's setup carries; one made without a setup carries none. */
+const carriedBy = (chosen: ResolvedSetup | null): CarriedFile[] => [...(chosen?.setup.files ?? [])]

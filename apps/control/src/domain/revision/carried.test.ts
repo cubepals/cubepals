@@ -1,6 +1,10 @@
+/**
+ * The rules for what a revision places itself: how carried files are named and diffed, and which
+ * changes to them are undone with the snapshot from before (docs/modpack-system.md § Carried files).
+ */
 import { describe, expect, test } from 'bun:test'
 import type { PinnedMod } from '../mods/artifact.ts'
-import { fileLabel, movesCarried, placeablePath } from './carried.ts'
+import { fileLabel, movesCarried } from './carried.ts'
 import { defaultSettings, describeChanges, type RevisionDraft, rewritesWorld } from './revision.ts'
 
 const draft = (patch: Partial<RevisionDraft> = {}): RevisionDraft => ({
@@ -36,25 +40,6 @@ const addon = (sha512: string, dir?: string): PinnedMod => ({
 })
 
 describe('files Cubepals carries', () => {
-  test('only plain relative paths, and none Blockly keeps itself', () => {
-    expect(placeablePath('plugins/LifeStealZ/config.yml')).toBe(true)
-    expect(placeablePath('plugins/BentoBox/addons/abc-AOneBlock-1.0+26.1.jar')).toBe(true)
-    expect(placeablePath('bukkit.yml')).toBe(true)
-    for (const path of [
-      '',
-      '/data/x',
-      '../x',
-      'plugins/../x',
-      'a//b',
-      'a b',
-      'a"b',
-      'server.properties',
-      'ops.json',
-      '.blockly-files',
-    ])
-      expect(placeablePath(path)).toBe(false)
-  })
-
   test('a file is named by the plugin it sets up, not by its path', () => {
     expect(fileLabel('plugins/LifeStealZ/config.yml')).toBe('LifeStealZ settings')
     expect(fileLabel('plugins/OldCombatMechanics/config.yml')).toBe('OldCombatMechanics settings')

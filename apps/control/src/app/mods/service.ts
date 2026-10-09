@@ -533,11 +533,6 @@ export class ModService {
         wanted.set(mod.source.projectId, { projectId: mod.source.projectId })
     for (const added of [...uploaded.catalog, ...(change.add ?? [])])
       wanted.set(added.projectId, { projectId: added.projectId, versionId: added.versionId })
-    // A plugin placed in a folder of its own stays there through every change, as its template put it.
-    const dirs = new Map<string, string>()
-    for (const mod of current)
-      if (mod.dir !== undefined && 'projectId' in mod.source) dirs.set(mod.source.projectId, mod.dir)
-    for (const added of change.add ?? []) if (added.dir !== undefined) dirs.set(added.projectId, added.dir)
     const request: ResolveRequest = {
       catalog: this.#catalog.id,
       target: { gameVersion, loaders: catalogLoadersFor(loader) },
@@ -550,10 +545,7 @@ export class ModService {
     if (result.kind === 'conflicts') return result
     if (result.kind !== 'resolved') throw new Error('Resolving mods did not settle')
 
-    const mods = result.mods.map((mod) => {
-      const dir = 'projectId' in mod.source ? dirs.get(mod.source.projectId) : undefined
-      return dir === undefined ? mod : { ...mod, dir }
-    })
+    const mods = keepingFolders(result.mods, current, change.add)
     // A revocation seen here is one the hourly refresh would otherwise only find unchanged.
     const moved = await this.#sync.recordObserved(observedStates(result.mods, data))
     if (moved.length > 0) await this.#catalogMoved(moved)
@@ -755,4 +747,23 @@ function observedStates(mods: readonly PinnedMod[], data: CatalogData) {
 function runningLoader(desired: ServerRevision): Loader {
   if (desired.loader !== 'vanilla') return desired.loader
   return loaderForMods(desired.gameVersion) ?? 'vanilla'
+}
+
+/**
+ * A plugin placed in a folder of its own stays there through every change, as its template put
+ * it: each resolved mod takes the folder its project had, or the one it is being added with.
+ */
+function keepingFolders(
+  resolved: readonly PinnedMod[],
+  current: readonly PinnedMod[],
+  added: ModChange['add'],
+): PinnedMod[] {
+  const dirs = new Map<string, string>()
+  for (const mod of current)
+    if (mod.dir !== undefined && 'projectId' in mod.source) dirs.set(mod.source.projectId, mod.dir)
+  for (const add of added ?? []) if (add.dir !== undefined) dirs.set(add.projectId, add.dir)
+  return resolved.map((mod) => {
+    const dir = 'projectId' in mod.source ? dirs.get(mod.source.projectId) : undefined
+    return dir === undefined ? mod : { ...mod, dir }
+  })
 }
