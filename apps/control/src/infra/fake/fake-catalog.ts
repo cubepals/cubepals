@@ -21,6 +21,8 @@ import {
  */
 export class FakeCatalog implements ModCatalog {
   readonly id = 'modrinth'
+  /** It answers for whatever is published to it, Hangar's `hangar:` ids included (`catalogOfId`). */
+  readonly ids = ['modrinth', 'hangar']
 
   projectPage(projectId: string): string {
     return `https://catalog.test/project/${projectId}`

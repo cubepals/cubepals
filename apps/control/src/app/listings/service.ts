@@ -1,6 +1,7 @@
 import { type Db, schema, type Tx } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { copying, eligibility, trust } from '../../domain/listing/trust.ts'
+import { catalogOfId } from '../../domain/mods/catalog.ts'
 import { emailOf, loadStanding } from '../accounts/persistence.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
 import type { CatalogSync, CatalogTransition } from '../catalog/sync.ts'
@@ -184,7 +185,7 @@ export class ListingService {
       if (error instanceof CatalogUnavailable)
         throw new AppError(
           'catalog_unavailable',
-          "Modrinth isn't answering right now. Try again in a minute.",
+          `${error.catalog} isn't answering right now. Try again in a minute.`,
         )
       throw error
     }
@@ -194,7 +195,7 @@ export class ListingService {
       versions: new Map(),
     })
     const entry = {
-      catalog: this.#catalog.id,
+      catalog: catalogOfId(project.projectId, this.#catalog.id),
       projectId: project.projectId,
       displayName: project.name,
       note: note?.trim() || null,

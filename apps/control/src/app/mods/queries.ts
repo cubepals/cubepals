@@ -51,7 +51,7 @@ export class ModQueries {
 
   /** Where people read about a mod: its catalog's page, when it came from this catalog. */
   #page = (mod: PinnedMod): string | null =>
-    'projectId' in mod.source && mod.source.catalog === this.#catalog.id
+    'projectId' in mod.source && (this.#catalog.ids ?? [this.#catalog.id]).includes(mod.source.catalog)
       ? this.#catalog.projectPage(mod.source.projectId)
       : null
 

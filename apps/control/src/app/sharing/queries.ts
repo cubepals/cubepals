@@ -247,7 +247,7 @@ export class SharingQueries {
   }
 
   #page_(mod: PinnedMod): string | null {
-    return 'projectId' in mod.source && mod.source.catalog === this.#catalog.id
+    return 'projectId' in mod.source && (this.#catalog.ids ?? [this.#catalog.id]).includes(mod.source.catalog)
       ? this.#catalog.projectPage(mod.source.projectId)
       : null
   }
