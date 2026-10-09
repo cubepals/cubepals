@@ -50,6 +50,11 @@ export interface Entitlements {
    */
   mayUseMods: boolean
   /**
+   * Whether a server may run datapacks: on plain Minecraft too, which stays plain with them, and
+   * players install nothing.
+   */
+  mayUseDatapacks: boolean
+  /**
    * Upper bounds on settings, checked when a revision is made: a value above one is refused,
    * never lowered. Null: only the settings' own bounds.
    */
@@ -133,6 +138,9 @@ const PLANS: Record<string, Entitlements> = {
     // can support for free, so they come with a paid plan.
     allowedLoaders: ['vanilla', 'paper'],
     mayUseMods: false,
+    // Open: whether plain Minecraft with a datapack stays Free is the owner's to decide. Until
+    // then a datapack counts as a mod.
+    mayUseDatapacks: false,
     // A 2,500-block radius keeps a fully explored world near 1 GB, at about 10.4 KB a chunk.
     settingCaps: { maxPlayers: 5, viewDistance: 8, simulationDistance: 6 },
     worldRadius: 2500,
@@ -170,6 +178,7 @@ const PLANS: Record<string, Entitlements> = {
     maxSessionMinutes: null,
     allowedLoaders: EVERY_LOADER,
     mayUseMods: true,
+    mayUseDatapacks: true,
     settingCaps: null,
     // Far past where people play, and it keeps a world within the disk Plus grows it to.
     worldRadius: 10_000,
@@ -227,10 +236,12 @@ export interface Runs {
   loader: Loader
   /** Mods, plugins or a modpack. */
   modded: boolean
+  /** Datapacks, which a plan judges apart from mods. */
+  datapacks?: boolean
 }
 
 /** Why a plan can't run something. */
-export type PlanGap = 'size' | 'server_type' | 'mods'
+export type PlanGap = 'size' | 'server_type' | 'mods' | 'datapacks'
 
 /**
  * Whether a plan runs something, and what stands in the way when it doesn't: the one rule the
@@ -239,6 +250,7 @@ export type PlanGap = 'size' | 'server_type' | 'mods'
  */
 export function planGap(plan: Entitlements, runs: Runs, sizes: 'offered' | 'startable'): PlanGap | null {
   if (runs.modded && !plan.mayUseMods) return 'mods'
+  if (runs.datapacks === true && !plan.mayUseDatapacks) return 'datapacks'
   if (!plan.allowedLoaders.includes(runs.loader)) return 'server_type'
   const fits = sizes === 'offered' ? plan.allowedMemoryTiers.includes(runs.tier) : runsOn(plan, runs.tier)
   return fits ? null : 'size'
@@ -258,6 +270,12 @@ export const planName = (key: string): string => `${key.charAt(0).toUpperCase()}
  */
 export function comesWith(what: string, paidPlan: string | null): string {
   return `${what} ${paidPlan === null ? 'need a paid plan' : `come with ${planName(paidPlan)}`}.`
+}
+
+/** What a plan gap for something added to Minecraft names, as `comesWith` words it. */
+export function addedLabel(gap: 'mods' | 'datapacks', modpack: boolean): string {
+  if (gap === 'datapacks') return 'Datapacks'
+  return modpack ? 'Modpacks' : 'Mods and plugins'
 }
 
 /**

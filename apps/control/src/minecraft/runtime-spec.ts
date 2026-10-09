@@ -8,8 +8,10 @@ import {
 } from '../domain/revision/revision.ts'
 import { type MemoryTier, memoryMb } from '../domain/server/size.ts'
 import type { World } from '../domain/world/world.ts'
+import { DATAPACKS_STEP, datapacksEnv, datapacksOf } from './datapacks.ts'
 import { DATA_DIR, jarsOf } from './jars.ts'
 import { javaFor } from './versions.ts'
+import { levelTypeEnv } from './worlds.ts'
 
 /**
  * Minecraft → container. The only place that knows the itzg image's variables, Minecraft's
@@ -100,7 +102,8 @@ const LOADER_VERSION_VARS: Partial<Record<Loader, string>> = {
  * 2 GB size keeps its share: nobody measured it, and a gigabyte of heap may be too little.
  */
 function heapMb(input: Pick<RuntimeSpecInput, 'revision' | 'memoryTier'>): number {
-  const modded = input.revision.modpack !== null || input.revision.mods.length > 0
+  // Datapacks are data the game reads, not classes it loads.
+  const modded = input.revision.modpack !== null || jarModsOf(input.revision).length > 0
   const memory = memoryMb(input.memoryTier)
   const share = Math.floor(memory * (modded ? 0.65 : 0.75))
   return memory >= 3072 ? Math.min(share, memory - 1024) : share
@@ -117,7 +120,7 @@ const ALPINE_JAVA: ReadonlySet<number> = new Set([21, 25])
  * compressed against 350, and its wake on Boat came back faster. Everything that loads mods or
  * plugins, Paper included, keeps the Ubuntu build: Alpine's musl runs glibc's native libraries only
  * through gcompat, mods and plugins ship such libraries, and the image's own docs
- * say some installers fail there. A server moving between the two is a changed spec, which drift
+ * say some installers fail there; datapacks ship none. A server moving between the two is a changed spec, which drift
  * applies at a moment nobody is playing.
  */
 export function imageFor(
@@ -128,7 +131,7 @@ export function imageFor(
   const plain =
     revision.loader === 'vanilla' &&
     revision.modpack === null &&
-    (revision.mods ?? []).length === 0 &&
+    jarModsOf({ loader: revision.loader, mods: revision.mods ?? [] }).length === 0 &&
     !runsOnPaper(revision)
   return `${IMAGE}:${IMAGE_RELEASE}-java${java}${plain && ALPINE_JAVA.has(java) ? '-alpine' : ''}`
 }
@@ -175,23 +178,33 @@ function limitsEnv(limits: PlanLimits): Record<string, string> {
 function worldEnv(world: World): Record<string, string> {
   return {
     LEVEL: world.levelName,
-    LEVEL_TYPE: world.levelType,
+    ...levelTypeEnv(world.levelType),
     HARDCORE: String(world.hardcore),
     ...(world.seed === null ? {} : { SEED: world.seed }),
   }
+}
+
+/** The mods a revision installs as jars: all of them but its datapacks. */
+function jarModsOf(revision: Pick<ServerRevision, 'loader' | 'mods'>): ServerRevision['mods'] {
+  const datapacks = datapacksOf(revision)
+  return revision.mods.filter((mod) => !datapacks.includes(mod))
 }
 
 /**
  * Mods are always listed for loaders that have a mods or plugins directory, even when empty:
  * an empty list makes the image remove every jar it installed, an absent one skips the cleanup.
  * A server playing a modpack lists none: the pack installs its own, and an empty list would have
- * the image delete them.
+ * the image delete them. Datapacks go into the world instead (`datapacks.ts`).
  */
 function modsEnv(input: RuntimeSpecInput): Record<string, string> {
   if (input.revision.modpack !== null) return {}
   const jars = jarsOf(input.revision.loader)
   if (jars === null) return {}
-  return { [jars.env]: input.revision.mods.map((m) => input.artifactUrl(m.artifact)).join(',') }
+  return {
+    [jars.env]: jarModsOf(input.revision)
+      .map((m) => input.artifactUrl(m.artifact))
+      .join(','),
+  }
 }
 
 /**
@@ -310,13 +323,15 @@ const EXEC_IMAGE = `exec ${IMAGE_ENTRYPOINT} "$@"`
 
 /**
  * The image's own entrypoint, after Blockly's steps. The first puts the volume's files as the
- * server type reads them (`PAPER_JAR_STEP` on Paper, `DIMENSIONS_STEP` on any other); the icon and
- * the pack follow where a server has them.
+ * server type reads them (`PAPER_JAR_STEP` on Paper, `DIMENSIONS_STEP` on any other), and the
+ * second the world's datapacks (`DATAPACKS_STEP`); the icon and the pack follow where a server has
+ * them.
  */
 function entrypointFor(steps: { paper: boolean; icon: boolean; pack: boolean }): readonly string[] {
-  // The first step leads, so `withoutFilesStep` leaves the rest as it was before it.
+  // The files steps lead, so `withoutFilesStep` leaves the rest as it was before them.
   const script = [
     steps.paper ? PAPER_JAR_STEP : DIMENSIONS_STEP,
+    DATAPACKS_STEP,
     ...(steps.icon ? ICON_STEP : []),
     ...(steps.pack ? PACK_STEP : []),
     EXEC_IMAGE,
@@ -325,15 +340,19 @@ function entrypointFor(steps: { paper: boolean; icon: boolean; pack: boolean }):
 }
 
 /**
- * The entrypoint without its first step, as it was before that step existed: what drift compares,
- * so the step, which changes nothing a running server does, restarts none. It arrives at the next
- * start.
+ * The entrypoint without its files steps, as it was before those steps existed: what drift
+ * compares, so a step, which changes nothing a running server does, restarts none. It arrives at
+ * the next start. What the datapacks step installs is in the environment, which drift compares.
  */
 export function withoutFilesStep(entrypoint: readonly string[] | undefined): readonly string[] | undefined {
   const script = entrypoint?.[2]
-  const step = [PAPER_JAR_STEP, DIMENSIONS_STEP].find((s) => script?.startsWith(`${s} `))
-  if (entrypoint === undefined || script === undefined || step === undefined) return entrypoint
-  const rest = script.slice(step.length + 1)
+  if (entrypoint === undefined || script === undefined) return entrypoint
+  let rest = script
+  for (const steps of [[PAPER_JAR_STEP, DIMENSIONS_STEP], [DATAPACKS_STEP]]) {
+    const step = steps.find((s) => rest.startsWith(`${s} `))
+    if (step !== undefined) rest = rest.slice(step.length + 1)
+  }
+  if (rest === script) return entrypoint
   return rest === EXEC_IMAGE ? undefined : [...entrypoint.slice(0, 2), rest, ...entrypoint.slice(3)]
 }
 
@@ -367,6 +386,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       ...worldEnv(world),
       ...settingsEnv(revision.settings),
       ...modsEnv(input),
+      ...datapacksEnv(revision, input.artifactUrl),
       ...limitsEnv(input.limits),
       // OVERRIDE_ICON, or the image keeps the first icon a world ever had.
       ...(input.iconUrl === null ? {} : { ICON: input.iconUrl, OVERRIDE_ICON: 'TRUE' }),

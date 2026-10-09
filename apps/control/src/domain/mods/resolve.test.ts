@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { PinnedMod } from './artifact.ts'
+import { isDatapack, type PinnedMod } from './artifact.ts'
 import type { CatalogDependency, CatalogProject, CatalogVersion } from './catalog.ts'
 import { type CatalogData, type ResolveRequest, resolve } from './resolve.ts'
 
@@ -406,5 +406,53 @@ describe('resolve', () => {
       wanted: [{ projectId: 'sodium' }],
     })
     expect(resolved(resolve(quilt, data))).toHaveLength(1)
+  })
+})
+
+describe('datapacks', () => {
+  test('datapacks resolve by game version like mods, and say what they are by their loaders', () => {
+    const manhunt = project('manhunt', 'Manhunt')
+    const data = catalog(
+      [manhunt],
+      [
+        version('manhunt', 'm2', { loaders: ['datapack'], gameVersions: ['26.4'] }),
+        version('manhunt', 'm1', { loaders: ['datapack'], environment: 'unknown' }),
+      ],
+    )
+    const seen: Array<readonly string[]> = []
+    const plain = request({
+      target: { gameVersion: '26.3', loaders: ['datapack'] },
+      wanted: [{ projectId: 'manhunt' }],
+      environment: (_declared, loaders) => {
+        seen.push(loaders)
+        return 'server'
+      },
+    })
+    const [pin] = resolved(resolve(plain, data))
+    expect(summary(pin === undefined ? [] : [pin])).toEqual([['Manhunt', 'm1', 'user', []]])
+    expect(pin?.environment).toBe('server')
+    expect(seen).toEqual([['datapack']])
+    expect(pin !== undefined && isDatapack(pin)).toBe(true)
+    // A mod server takes it too, and it still goes into the world.
+    const fabric = request({
+      target: { gameVersion: '26.3', loaders: ['fabric', 'datapack'] },
+      wanted: [{ projectId: 'manhunt' }],
+    })
+    expect(resolved(resolve(fabric, data)).map((m) => isDatapack(m, ['fabric']))).toEqual([true])
+    // A mod made for a loader is no datapack, and plain Minecraft has nothing to run it.
+    expect(
+      resolve({ ...plain, wanted: [{ projectId: 'sodium' }] }, catalog([sodium], [version('sodium', 's1')])),
+    ).toEqual({
+      kind: 'conflicts',
+      conflicts: [{ kind: 'no_fitting_version', mod: 'Sodium', projectId: 'sodium' }],
+    })
+  })
+
+  test('a version published as both a mod and a datapack is the mod where the server loads it', () => {
+    const both = { loaders: ['datapack', 'fabric'] }
+    expect(isDatapack(both, ['fabric'])).toBe(false)
+    expect(isDatapack(both, ['paper', 'spigot', 'bukkit'])).toBe(true)
+    expect(isDatapack(both)).toBe(true)
+    expect(isDatapack({ loaders: ['fabric'] })).toBe(false)
   })
 })

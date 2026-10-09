@@ -9,7 +9,7 @@ import type {
 import type { Db } from '@blockly/db'
 import { forPlayers, type PinnedMod } from '../../domain/mods/artifact.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
-import { catalogLoadersFor, projectTypesFor } from '../../minecraft/mods.ts'
+import { catalogLoadersFor, installsAsDatapack, projectTypesFor } from '../../minecraft/mods.ts'
 import { modName } from '../../minecraft/pack-build.ts'
 import { fits } from '../../minecraft/uploads.ts'
 import { compareVersions, LOADER_LABELS, loaderForMods } from '../../minecraft/versions.ts'
@@ -60,9 +60,10 @@ export class ModQueries {
     if (plan.kind === 'conflicts') return { ...plan, movesTo: plan.movesTo ?? null }
     const revoked = new Set(plan.revoked.map(identity))
     const players = new Set(forPlayers(plan.mods).map(identity))
-    const view = (mod: PinnedMod) => modView(mod, revoked, this.#page(mod), players)
+    const view = (mod: PinnedMod) => modView(mod, plan.loader, revoked, this.#page(mod), players)
     return {
       kind: 'ok',
+      loader: plan.loader,
       added: plan.added.map(view),
       removed: plan.removed.map(view),
       updated: plan.updated.map(({ from, to }) => ({ from: view(from), to: view(to) })),
@@ -81,12 +82,13 @@ export class ModQueries {
     // so the page offers what that type takes rather than an empty page and a decision.
     const switchesTo = revision.loader === 'vanilla' ? loaderForMods(revision.gameVersion) : null
     const [type] = projectTypesFor(switchesTo ?? revision.loader)
+    const kinds = { mod: 'mods', plugin: 'plugins', datapack: 'datapacks' } as const
     return {
-      kind: type === undefined ? null : type === 'plugin' ? 'plugins' : 'mods',
+      kind: type === undefined ? null : kinds[type],
       gameVersion: revision.gameVersion,
       loader: revision.loader,
       switchesTo: switchesTo === null ? null : { loader: switchesTo, label: LOADER_LABELS[switchesTo] },
-      mods: revision.mods.map((mod) => modView(mod, revoked, this.#page(mod), players)),
+      mods: revision.mods.map((mod) => modView(mod, revision.loader, revoked, this.#page(mod), players)),
       modpack: packView(this.#catalog, revision),
       // A catalog that can't be asked now just shows no update; the pack runs as it is.
       packUpdate: await this.#packUpdate(revision).catch(() => null),
@@ -174,6 +176,7 @@ function uploadView(upload: ModUploadRecord, facts: { inUse: boolean; fits: bool
 /** `players`: the server's mods that players install, which is what the page marks for them. */
 function modView(
   mod: PinnedMod,
+  loader: ServerRevision['loader'],
   revoked: ReadonlySet<string>,
   page: string | null,
   players: ReadonlySet<string>,
@@ -188,5 +191,6 @@ function modView(
     source: 'projectId' in mod.source ? 'catalog' : 'upload',
     url: page,
     revoked: revoked.has(identity(mod)),
+    datapack: installsAsDatapack(mod, loader),
   }
 }

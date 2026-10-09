@@ -170,3 +170,13 @@ describe('meter', () => {
     expect(centsFor(unitsFor('8g', 1))).toBe(2 * centsFor(unitsFor('4g', 1)))
   })
 })
+
+describe('datapacks', () => {
+  test('a datapack counts as a mod, Plus, until the owner decides whether plain Minecraft with one is Free', () => {
+    const datapack = { tier: '3g' as const, loader: 'vanilla' as const, modded: false, datapacks: true }
+    expect(entitlementsFor('free').mayUseDatapacks).toBe(false)
+    expect(planGap(entitlementsFor('free'), datapack, 'offered')).toBe('datapacks')
+    expect(planGap(entitlementsFor('plus'), datapack, 'offered')).toBeNull()
+    expect(planThatRuns(datapack)).toBe('plus')
+  })
+})

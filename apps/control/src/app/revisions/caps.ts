@@ -1,20 +1,27 @@
 import {
+  addedLabel,
   comesWith,
   type Entitlements,
+  planGap,
   planName,
   planThatRuns,
   type Runs,
 } from '../../domain/account/entitlements.ts'
 import type { RevisionDraft, ServerSettings } from '../../domain/revision/revision.ts'
 import type { MemoryTier } from '../../domain/server/size.ts'
+import { installsAsDatapack } from '../../minecraft/mods.ts'
 import { LOADER_LABELS } from '../../minecraft/versions.ts'
 import { AppError } from '../errors.ts'
 
 type Checked = Pick<RevisionDraft, 'loader' | 'settings' | 'mods' | 'modpack'>
 
-/** Whether a configuration adds anything to plain Minecraft: mods, plugins or a modpack. */
-export const isModded = (draft: Pick<RevisionDraft, 'mods' | 'modpack'>): boolean =>
-  draft.mods.length > 0 || draft.modpack !== null
+/** Whether a configuration adds a loader's worth to Minecraft: mods, plugins or a modpack. */
+export const isModded = (draft: Pick<RevisionDraft, 'loader' | 'mods' | 'modpack'>): boolean =>
+  draft.mods.some((mod) => !installsAsDatapack(mod, draft.loader)) || draft.modpack !== null
+
+/** Whether a configuration puts datapacks into its world. */
+export const hasDatapacks = (draft: Pick<RevisionDraft, 'loader' | 'mods'>): boolean =>
+  draft.mods.some((mod) => installsAsDatapack(mod, draft.loader))
 
 /** What a server of this size runs with this configuration, as plans judge it. */
 export const runsOf = (
@@ -24,6 +31,7 @@ export const runsOf = (
   tier,
   loader: draft.loader,
   modded: isModded(draft),
+  datapacks: hasDatapacks(draft),
 })
 
 /**
@@ -40,19 +48,16 @@ export function requireWithinPlan(plan: Entitlements, draft: Checked): void {
 function planProblems(plan: Entitlements, draft: Checked): string[] {
   const name = planName(plan.plan)
   const problems: string[] = []
-  const modded = isModded(draft)
-  if (modded && !plan.mayUseMods)
-    problems.push(
-      comesWith(
-        draft.modpack !== null ? 'Modpacks' : 'Mods and plugins',
-        planThatRuns({ tier: '3g', loader: draft.loader, modded }),
-      ),
-    )
-  else if (!plan.allowedLoaders.includes(draft.loader)) {
+  // Every plan offers the smallest size, so only what the server runs can stand in the way.
+  const runs = runsOf('3g', draft)
+  const gap = planGap(plan, runs, 'offered')
+  const paid = planThatRuns(runs)
+  if (gap === 'mods' || gap === 'datapacks')
+    problems.push(comesWith(addedLabel(gap, draft.modpack !== null), paid))
+  else if (gap === 'server_type') {
     const offered = plan.allowedLoaders.map((loader) => LOADER_LABELS[loader])
     const listed =
       offered.length > 1 ? `${offered.slice(0, -1).join(', ')} and ${offered.at(-1)}` : offered[0]
-    const paid = planThatRuns({ tier: '3g', loader: draft.loader, modded })
     problems.push(
       `${name} servers run ${listed}. ${LOADER_LABELS[draft.loader]} ${paid === null ? 'needs a paid plan' : `comes with ${planName(paid)}`}.`,
     )

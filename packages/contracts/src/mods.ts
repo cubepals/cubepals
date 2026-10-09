@@ -62,11 +62,16 @@ export interface ModView {
   url: string | null
   /** Taken down where it was published. */
   revoked: boolean
+  /** It goes into the world as a datapack, and leaves plain Minecraft plain. */
+  datapack: boolean
 }
 
 export interface ModsView {
-  /** What can be installed here: for a vanilla world, what it would take once it has a mod. */
-  kind: 'mods' | 'plugins' | null
+  /**
+   * What can be installed here: for a vanilla world, what it would take once it has a mod, or
+   * datapacks alone where its release runs no mods.
+   */
+  kind: 'mods' | 'plugins' | 'datapacks' | null
   gameVersion: string
   loader: Loader
   /**
@@ -117,6 +122,8 @@ export type ModConflictView =
 export type ModPlanView =
   | {
       kind: 'ok'
+      /** The server type it runs on: a vanilla world stays vanilla while it adds only datapacks. */
+      loader: Loader
       added: ModView[]
       removed: ModView[]
       updated: Array<{ from: ModView; to: ModView }>
