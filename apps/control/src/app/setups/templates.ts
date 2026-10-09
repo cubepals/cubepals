@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import type { PlayIcon } from '@blockly/contracts'
 import type { ServerSetup } from '../../domain/setup/setup.ts'
 import { DUELS_FILES } from '../../minecraft/duels.ts'
@@ -31,6 +32,8 @@ export interface Template {
 }
 
 const WORLD = { levelType: 'minecraft:normal', hardcore: false }
+const BENTOBOX_ADDONS = 'plugins/BentoBox/addons'
+const AONEBLOCK_CONFIG = readFileSync(new URL('./aoneblock-config.yml', import.meta.url), 'utf8')
 
 export const TEMPLATES: readonly Template[] = [
   {
@@ -116,6 +119,41 @@ export const TEMPLATES: readonly Template[] = [
       loader: 'paper',
       // Manhunt+ (MIT), whose hunters' compasses point at the runner.
       mods: [{ catalog: 'modrinth', projectId: 'V67rIXws' }],
+      settings: { defaultGameMode: 'survival', difficulty: 'normal', pvp: true },
+      world: WORLD,
+    },
+  },
+  {
+    key: 'oneblock',
+    title: 'OneBlock',
+    blurb: 'One block under your feet. Break it and it comes back as something new.',
+    icon: 'oneblock',
+    setup: {
+      loader: 'paper',
+      // BentoBox with AOneBlock, Level and Warps (all EPL-2.0).
+      // BentoBox loads its addons only from its own folder, never from plugins/.
+      mods: [
+        { catalog: 'modrinth', projectId: 'aBVLHiAW' },
+        { catalog: 'modrinth', projectId: 'qq7CK8U4', dir: BENTOBOX_ADDONS },
+        { catalog: 'modrinth', projectId: 'OWzL9XSJ', dir: BENTOBOX_ADDONS },
+        { catalog: 'modrinth', projectId: 'P08aFayx', dir: BENTOBOX_ADDONS },
+      ],
+      // AOneBlock's own settings with a block made for each player as they first join; without
+      // it, a friend lands in a plain world and has to know to type /ob.
+      files: [{ path: `${BENTOBOX_ADDONS}/AOneBlock/config.yml`, content: AONEBLOCK_CONFIG }],
+      settings: { defaultGameMode: 'survival', difficulty: 'normal', pvp: false },
+      world: WORLD,
+    },
+  },
+  {
+    key: 'rpg',
+    title: 'RPG survival',
+    blurb: 'Every skill levels up as you play: mining, fighting, farming and more.',
+    icon: 'rpg',
+    setup: {
+      loader: 'paper',
+      // AuraSkills (GPL-3.0). Its own defaults play well, so nothing is configured.
+      mods: [{ catalog: 'modrinth', projectId: 'uDdZAVls' }],
       settings: { defaultGameMode: 'survival', difficulty: 'normal', pvp: true },
       world: WORLD,
     },

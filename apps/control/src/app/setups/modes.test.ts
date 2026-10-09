@@ -1,10 +1,11 @@
 /**
  * The templates that are game modes: Paper and plugins from the catalog, on the newest release
  * where all of them run, offered with Plus as any plugin is, Manhunt starting out as a server for a
- * day, and Duels starting with its arena built.
+ * day, and Duels starting with its arena built. OneBlock's game mode and its addons go where
+ * BentoBox reads them.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { DUELS_FILES } from '../../minecraft/duels.ts'
 import { VOID_LEVEL } from '../../minecraft/worlds.ts'
 import { Cdn } from '../../testing/cdn.ts'
@@ -74,14 +75,69 @@ describe.skipIf(!hasDatabase)('game modes', () => {
     ])
   }, 30_000)
 
+  test('OneBlock runs on the newest Paper its addons list, with them where BentoBox reads them', async () => {
+    // As Modrinth listed them on 2026-10-09: BentoBox to 26.3; AOneBlock, Level and Warps to 26.1.2.
+    plugin('aBVLHiAW', 'BentoBox', ['26.1.2', '26.2', '26.3'])
+    plugin('qq7CK8U4', 'AOneBlock', ['26.1', '26.1.1', '26.1.2'])
+    plugin('OWzL9XSJ', 'Level', ['26.1', '26.1.1', '26.1.2'])
+    plugin('P08aFayx', 'Warps', ['26.1', '26.1.1', '26.1.2'])
+    const owner = await h.user('Ren', 'plus')
+    const preview = await h.app.queries.setupPreview(owner, { kind: 'template', key: 'oneblock' })
+    expect(preview).toMatchObject({ loader: 'paper', gameVersion: '26.1.2', modpack: null })
+    expect([...preview.mods].sort()).toEqual(['AOneBlock', 'BentoBox', 'Level', 'Warps'])
+
+    const server = await h.create(owner, { from: { kind: 'template', key: 'oneblock' } })
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+    const revision = await loadRevision(h.db, server.desiredRevisionId)
+    expect(revision.settings).toMatchObject({ defaultGameMode: 'survival', difficulty: 'normal', pvp: false })
+    expect(revision.mods.map((m) => [m.name, m.dir])).toEqual([
+      ['AOneBlock', 'plugins/BentoBox/addons'],
+      ['BentoBox', undefined],
+      ['Level', 'plugins/BentoBox/addons'],
+      ['Warps', 'plugins/BentoBox/addons'],
+    ])
+    const volume = h.runtime.machine(server.id)?.dir ?? ''
+    expect(
+      readdirSync(`${volume}/plugins/BentoBox/addons`).filter((name) => name.endsWith('.jar')),
+    ).toHaveLength(3)
+    // AOneBlock's own settings, whole, but for a block made for each friend as they first join.
+    expect(revision.files.map((file) => file.path)).toEqual(['plugins/BentoBox/addons/AOneBlock/config.yml'])
+    const config = readFileSync(`${volume}/plugins/BentoBox/addons/AOneBlock/config.yml`, 'utf8')
+    expect(config).toMatch(/create-island-on-first-login:\n(\s+#.*\n)+\s+enable: true\n/)
+    expect(config).toContain('  world-name: oneblock_world\n')
+  }, 30_000)
+
   test('a game mode is Paper with a plugin, so it comes with Plus as Create does', async () => {
     const { templates } = await h.app.queries.createOptions(await h.user('Sam'))
-    for (const key of ['create', 'lifesteal', 'manhunt'])
+    for (const key of ['create', 'lifesteal', 'manhunt', 'oneblock'])
       expect(templates.find((template) => template.key === key)?.fits).toEqual({
         allowed: false,
         reason: 'Mods and plugins come with Plus.',
         plan: 'plus',
       })
+  }, 30_000)
+
+  test('RPG survival brings AuraSkills on the newest Paper it runs on, with Plus', async () => {
+    // As Modrinth listed AuraSkills 2.4.0 (`9rSJ3THD`) on 2026-10-09: 26.1 to 26.3.
+    plugin('uDdZAVls', 'AuraSkills', ['26.1.2', '26.2', '26.3'])
+    const owner = await h.user('Ari', 'plus')
+    const preview = await h.app.queries.setupPreview(owner, { kind: 'template', key: 'rpg' })
+    // The create page names it: "the newest that everything in RPG survival runs on".
+    expect(preview).toMatchObject({
+      from: 'RPG survival',
+      loader: 'paper',
+      gameVersion: '26.2',
+      mods: ['AuraSkills'],
+      modpack: null,
+    })
+    const { templates } = await h.app.queries.createOptions(await h.user('Noor'))
+    expect(templates.find((template) => template.key === 'rpg')).toMatchObject({
+      title: 'RPG survival',
+      icon: 'rpg',
+      forADay: false,
+      fits: { allowed: false, reason: 'Mods and plugins come with Plus.', plan: 'plus' },
+    })
   }, 30_000)
 
   test('Duels runs on Paper 1.21.11, and its server starts with the arena, the kit and a void world', async () => {

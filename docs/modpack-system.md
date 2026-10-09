@@ -82,7 +82,10 @@ advanced feature.
   first included. The plugin finds its file already there and keeps it rather than writing its
   defaults. What the server reads is always what its revision says, and going back to a revision
   puts its file back. A plugin that fills in what a file leaves out (Bukkit's `copyDefaults`, as
-  LifeStealZ does) lets a carried file hold only the values Cubepals changes.
+  LifeStealZ does) lets a carried file hold only the values Cubepals changes. BentoBox's addons
+  don't: they fill a gap with defaults of their own that differ from the file they ship (no Nether
+  islands, unprotected visitors), so OneBlock carries AOneBlock's whole file with one value
+  changed (`app/setups/aoneblock-config.yml`).
 - **Paths.** Relative, letters, digits and `.`, `_`, `+`, `-` only, and never a file Blockly keeps
   itself (`server.properties`, the access lists, `.blockly-` marks). A wrong one fails building the
   spec: it is a mistake in a template, never skipped.
