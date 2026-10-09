@@ -1,7 +1,7 @@
 /**
  * Checking one release of one of Blockly's own packs (docs/modpack-templates.md § Blockly's own
- * packs): its list resolved on the Minecraft it is named for, held to what players need and to
- * open licences, every file fetched and matched, and written as a pack of Blockly's own.
+ * packs): its list resolved on the Minecraft it is named for, held to what it says of players and
+ * to open licences, every file fetched and matched, and written as a pack of Blockly's own.
  *
  * It doesn't decide when a release is put together (`queue.ts`), and it doesn't record what it
  * found: it returns it, or throws a refusal, and `ingest.ts` keeps either.
@@ -26,11 +26,13 @@ import { neededByPlayers, type OwnPack } from './own.ts'
  * Everything checking a release of one of Blockly's own packs does (docs/modpack-templates.md
  * § Blockly's own packs), in the order that fails soonest:
  *  1. its list resolves on its Minecraft as creating a server with it would, with what each needs;
- *  2. nothing in it has to be in players' games, so plain Minecraft joins;
+ *  2. nothing in it has to be in players' games, so plain Minecraft joins, unless its review says
+ *     players install it;
  *  3. every work it installs is judged by its licence as any pack's are, and only open ones pass;
  *  4. every file is fetched from where the catalog publishes it, and matched to the catalog's hash;
  *  5. it is written as a pack of Blockly's own that names each file where its authors publish it,
- *     so servers fetch every mod from there, and Blockly keeps nothing of anyone else's.
+ *     so servers fetch every mod from there, and Blockly keeps nothing of anyone else's. The same
+ *     file is the pack players install, where they do: each file says which side needs it.
  */
 export async function checkOwnRelease(
   deps: {
@@ -63,9 +65,9 @@ export async function checkOwnRelease(
     )
   const { mods } = plan
 
-  // 2. Plain Minecraft joins.
+  // 2. Plain Minecraft joins, unless players install it.
   const theirs = neededByPlayers(mods)
-  if (theirs.length > 0)
+  if (theirs.length > 0 && pack.playersInstall !== true)
     throw new Refused(
       `Players would need ${theirs.map((mod) => mod.name).join(', ')} in their own games to join.`,
       `${ref}: ${theirs.map((mod) => `${mod.name} (${mod.environment})`).join(', ')}`,
@@ -90,7 +92,7 @@ export async function checkOwnRelease(
       `${ref}: ${JSON.stringify(verdict.mirror.blockers)}`,
     )
 
-  // 4. Every file, from where the catalog publishes it, byte for byte.
+  // 4. Every file, from where the catalog publishes it, byte for byte, saying what players need.
   const published = await deps.catalog.filesByHash(mods.map((mod) => mod.artifact.sha512))
   const files: PackFile[] = mods.map((mod) => {
     const match = published.get(mod.artifact.sha512)
@@ -103,7 +105,7 @@ export async function checkOwnRelease(
       sha512: match.file.sha512,
       sizeBytes: match.file.sizeBytes,
       downloads: [match.file.url],
-      env: { client: mod.environment === 'server' ? 'unsupported' : 'optional', server: 'required' },
+      env: { client: theirs.includes(mod) ? 'required' : CLIENT[mod.environment], server: 'required' },
     }
   })
   const { bytes, hosts } = await fetchEach(deps, ref, files, work, false)
@@ -151,7 +153,7 @@ export async function checkOwnRelease(
         fileName: `${pack.key}-${version}.mrpack`,
       },
       page: null,
-      environment: 'server',
+      environment: theirs.length > 0 ? 'both' : 'server',
       icon: null,
       curated: { key: pack.key, version },
     },
@@ -161,7 +163,7 @@ export async function checkOwnRelease(
       loaderVersion,
       // Sized as the same mods would be on a server of one of the templates.
       tier: tierFor(mods),
-      playersNeedIt: false,
+      playersNeedIt: theirs.length > 0,
       mods: mods.length,
       jarBytes: jars.reduce((total, jar) => total + jar.sizeBytes, 0),
       notes: [],
@@ -186,7 +188,7 @@ export async function checkOwnRelease(
       gameVersion,
       loader: pack.loader,
       loaderVersion,
-      playersNeedIt: false,
+      playersNeedIt: theirs.length > 0,
       jars,
       leftOut: [],
       memoryMb: null,
@@ -194,3 +196,6 @@ export async function checkOwnRelease(
     forPlayers: [],
   }
 }
+
+/** What a mod players can do without asks of their games, as the index tells their launchers. */
+const CLIENT = { server: 'unsupported', optional: 'optional', both: 'optional' } as const

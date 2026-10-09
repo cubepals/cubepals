@@ -76,12 +76,17 @@ describe('the review of Blockly’s own packs', () => {
   })
 })
 
-describe.skipIf(!hasDatabase)('Blockly’s own packs', () => {
-  let h: Harness
+const admin: Actor = { kind: 'admin', userId: 'curator' }
+
+/**
+ * A harness with a CDN and an archive store, whose review of Blockly's own packs each test adds to,
+ * and the ways those tests publish mods, list packs and check them.
+ */
+function ownPacks() {
+  let h: Harness | undefined
   const cdn = new Cdn()
   const store = new MemoryStore()
   const own: OwnPack[] = []
-  const admin: Actor = { kind: 'admin', userId: 'curator' }
 
   beforeAll(async () => {
     await cdn.start()
@@ -90,7 +95,7 @@ describe.skipIf(!hasDatabase)('Blockly’s own packs', () => {
   }, 30_000)
 
   afterAll(async () => {
-    await h.close()
+    await h?.close()
     store.close()
     cdn.close()
   })
@@ -104,7 +109,7 @@ describe.skipIf(!hasDatabase)('Blockly’s own packs', () => {
   ): CatalogFile => {
     const file = cdn.file(`${id}-${gameVersion}`, fabricJar(id, { depends: { minecraft: gameVersion } }))
     const side = options.side ?? 'server_only'
-    h.catalog.publish(
+    harness().catalog.publish(
       {
         projectId: `${id}-project`,
         slug: id,
@@ -138,7 +143,11 @@ describe.skipIf(!hasDatabase)('Blockly’s own packs', () => {
     return file
   }
 
-  const ownList = (key: string, ids: string[]): OwnPack => {
+  const ownList = (
+    key: string,
+    ids: string[],
+    review: Pick<OwnPack, 'playersInstall' | 'held'> = {},
+  ): OwnPack => {
     const pack: OwnPack = {
       key,
       name: `Own ${key}`,
@@ -147,6 +156,7 @@ describe.skipIf(!hasDatabase)('Blockly’s own packs', () => {
       loader: 'fabric',
       mods: ids.map((id) => ({ catalog: 'modrinth', projectId: `${id}-project` })),
       review: `docs/modpack-templates.md#${key}`,
+      ...review,
     }
     own.push(pack)
     return pack
@@ -154,11 +164,22 @@ describe.skipIf(!hasDatabase)('Blockly’s own packs', () => {
 
   /** Puts together what is due, checks every release of the pack that is pending, and returns them. */
   const checked = async (key: string) => {
-    await h.app.curation.queueDue()
-    for (const release of await loadReleases(h.db, [key]))
-      if (release.state === 'pending') await h.app.curation.ingest(release)
-    return loadReleases(h.db, [key])
+    await harness().app.curation.queueDue()
+    for (const release of await loadReleases(harness().db, [key]))
+      if (release.state === 'pending') await harness().app.curation.ingest(release)
+    return loadReleases(harness().db, [key])
   }
+
+  const harness = (): Harness => {
+    if (h === undefined) throw new Error('the harness hasn’t started')
+    return h
+  }
+
+  return { harness, cdn, store, publishMod, ownList, checked }
+}
+
+describe.skipIf(!hasDatabase)('Blockly’s own packs', () => {
+  const { harness, cdn, store, publishMod, ownList, checked } = ownPacks()
 
   test('a list becomes a release on the newest Minecraft all of it runs on, checked, offered, and installed from its authors', async () => {
     publishMod('lib', 'MIT', '1.21.1', { side: 'client_and_server' })
@@ -188,29 +209,29 @@ describe.skipIf(!hasDatabase)('Blockly’s own packs', () => {
     expect(store.objects.size).toBe(1)
 
     // Nothing new to put together while the same Minecraft is the newest it runs on.
-    await h.app.curation.queueDue()
-    expect((await loadReleases(h.db, ['easy'])).length).toBe(1)
+    await harness().app.curation.queueDue()
+    expect((await loadReleases(harness().db, ['easy'])).length).toBe(1)
 
     // Verified is not offered: an admin says so first.
-    expect(await h.app.curation.offered()).toEqual([])
-    await h.app.curation.publish(admin, { key: 'easy', version: release.version })
-    const owner = await h.user('Pat', 'plus')
-    const options = await h.app.queries.createOptions(owner)
+    expect(await harness().app.curation.offered()).toEqual([])
+    await harness().app.curation.publish(admin, { key: 'easy', version: release.version })
+    const owner = await harness().user('Pat', 'plus')
+    const options = await harness().app.queries.createOptions(owner)
     expect(options.packs.map((p) => [p.key, p.name, p.gameVersion, p.playersNeedIt, p.authors])).toEqual([
       ['easy', 'Own easy', '1.21.1', false, 'Cubepals'],
     ])
 
     // A server of it fetches every mod from where its authors publish it, and plain Minecraft joins.
     const before = cdn.downloads
-    const server = await h.create(owner, { from: { kind: 'curated', key: 'easy' } })
-    await h.until(server.id, 'running')
-    await h.settled(server.id)
+    const server = await harness().create(owner, { from: { kind: 'curated', key: 'easy' } })
+    await harness().until(server.id, 'running')
+    await harness().settled(server.id)
     expect(cdn.downloads - before).toBe(3)
-    expect(await h.minecraft.file(server.id, `mods/${graves.fileName}`)).not.toBeNull()
-    expect(await h.minecraft.file(server.id, `mods/${perf.fileName}`)).not.toBeNull()
-    const page = await h.app.sharingQueries.page(server.slug, owner)
+    expect(await harness().minecraft.file(server.id, `mods/${graves.fileName}`)).not.toBeNull()
+    expect(await harness().minecraft.file(server.id, `mods/${perf.fileName}`)).not.toBeNull()
+    const page = await harness().app.sharingQueries.page(server.slug, owner)
     expect(page?.needs).toEqual({ gameVersion: '1.21.1', modpack: null, loader: null, mods: [] })
-    const list = await h.app.modQueries.list(owner, server.id)
+    const list = await harness().app.modQueries.list(owner, server.id)
     expect(list.packUploaded).toBe(false)
     expect(list.packUpdate).toBeNull()
 
@@ -223,16 +244,19 @@ describe.skipIf(!hasDatabase)('Blockly’s own packs', () => {
     const newer = releases.find((r) => r.version === ownRelease(new Date(), '26.3'))
     if (newer === undefined) throw new Error('no newer release was put together')
     expect(newer.state).toBe('verified')
-    await h.app.curation.publish(admin, { key: 'easy', version: newer.version })
-    expect((await h.app.modQueries.list(owner, server.id)).packUpdate).toMatchObject({
+    await harness().app.curation.publish(admin, { key: 'easy', version: newer.version })
+    expect((await harness().app.modQueries.list(owner, server.id)).packUpdate).toMatchObject({
       gameVersion: '26.3',
       movesWorld: true,
       release: newer.version,
     })
-    const pinned = (await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)).modpack
+    const pinned = (await loadRevision(harness().db, (await harness().server(server.id)).desiredRevisionId))
+      .modpack
     expect(pinned?.curated).toEqual({ key: 'easy', version: release.version })
-    expect((await h.app.queries.createOptions(owner)).packs.map((p) => p.gameVersion)).toEqual(['26.3'])
-    const view = await h.app.curation.review(admin)
+    expect((await harness().app.queries.createOptions(owner)).packs.map((p) => p.gameVersion)).toEqual([
+      '26.3',
+    ])
+    const view = await harness().app.curation.review(admin)
     expect(view.find((p) => p.key === 'easy')?.releases.map((r) => r.version)).toEqual([
       newer.version,
       release.version,
@@ -251,7 +275,41 @@ describe.skipIf(!hasDatabase)('Blockly’s own packs', () => {
     expect((await checked('closed'))[0]?.refusal).toContain('all rights reserved: Mod closed')
 
     // A refused release waits for an admin: nothing is put together again under it by itself.
-    await h.app.curation.queueDue()
-    expect((await loadReleases(h.db, ['closed'])).map((r) => r.state)).toEqual(['refused'])
+    await harness().app.curation.queueDue()
+    expect((await loadReleases(harness().db, ['closed'])).map((r) => r.state)).toEqual(['refused'])
+  })
+})
+
+describe.skipIf(!hasDatabase)('Blockly’s own packs players install', () => {
+  const { harness, publishMod, ownList, checked } = ownPacks()
+
+  test('a pack players install is checked as one, and an invite names the release they need', async () => {
+    publishMod('creatures', 'MPL-2.0', '1.21.1', { side: 'client_and_server' })
+    publishMod('tidy', 'MIT', '1.21.1')
+    ownList('creatures', ['creatures', 'tidy'], { playersInstall: true })
+
+    const [release] = await checked('creatures')
+    if (release === undefined) throw new Error('no release was put together')
+    expect(release.state).toBe('verified')
+    expect(release.pack?.environment).toBe('both')
+    expect(release.facts?.playersNeedIt).toBe(true)
+
+    await harness().app.curation.publish(admin, { key: 'creatures', version: release.version })
+    const owner = await harness().user('Robin', 'plus')
+    const server = await harness().create(owner, { from: { kind: 'curated', key: 'creatures' } })
+    await harness().until(server.id, 'running')
+    await harness().settled(server.id)
+    const page = await harness().app.sharingQueries.page(server.slug, owner)
+    expect(page?.needs.modpack).toMatchObject({ name: 'Own creatures', version: release.version })
+  }, 90_000)
+
+  test('a held pack is checked, and no admin can offer it', async () => {
+    publishMod('held', 'MIT', '1.21.1')
+    ownList('held', ['held'], { held: 'Not yet.' })
+    const [release] = await checked('held')
+    expect(release?.state).toBe('verified')
+    await expect(
+      harness().app.curation.publish(admin, { key: 'held', version: release?.version ?? '' }),
+    ).rejects.toThrow('Not yet.')
   })
 })

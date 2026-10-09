@@ -10,8 +10,9 @@ import { compareVersions } from '../../minecraft/versions.ts'
  * written here: the newest release every mod in it runs on, with the exact files the catalog
  * publishes for it then, pinned as one release of the pack.
  *
- * For now they ask nothing of players, so plain Minecraft joins, and every mod and library they
- * bring is under an open licence. Checking refuses a release that stops being either.
+ * Every mod and library they bring is under an open licence, and most ask nothing of players, so
+ * plain Minecraft joins. One that players install says so (`playersInstall`), and its release is
+ * then the pack players install too. Checking refuses a release that stops being what it says.
  */
 export interface OwnPack {
   /** Its name in every reference (`key@version`): never renamed, never reused for another pack. */
@@ -26,6 +27,13 @@ export interface OwnPack {
   mods: ReadonlyArray<{ catalog: string; projectId: string }>
   /** Where the review is written up. */
   review: string
+  /**
+   * Players install it to join, as its review decided: what it is played for has to be in their
+   * games too. Absent, checking refuses a release that would need anything of players.
+   */
+  playersInstall?: true
+  /** Why no admin may offer it yet, as for a curated pack (`packs.ts`). */
+  held?: string
 }
 
 export const OWN_PACKS: readonly OwnPack[] = [
@@ -61,6 +69,36 @@ export const OWN_PACKS: readonly OwnPack[] = [
       { catalog: 'modrinth', projectId: 'HjmxVlSr' },
     ],
     review: 'docs/modpack-templates.md#adventure',
+  },
+  {
+    key: 'cubepals-cobblemon',
+    name: 'Cubepals Cobblemon',
+    blurb: 'Catch, raise and battle creatures across a world full of them.',
+    authors: 'Cubepals',
+    loader: 'fabric',
+    mods: [
+      // Cobblemon, then the official pack's open-licensed companions that run on a server.
+      { catalog: 'modrinth', projectId: 'MdwFAVRL' },
+      // Lithium, FerriteCore, Krypton, Clumps, Let Me Despawn: the same game, on less of the server.
+      { catalog: 'modrinth', projectId: 'gvQqBUqZ' },
+      { catalog: 'modrinth', projectId: 'uXXizFIs' },
+      { catalog: 'modrinth', projectId: 'fQEb0iXm' },
+      { catalog: 'modrinth', projectId: 'Wnxd13zP' },
+      { catalog: 'modrinth', projectId: 'vE2FN5qn' },
+      // Monsters in the Closet, AppleSkin, Shulker Box Tooltip, Enchantment Descriptions.
+      { catalog: 'modrinth', projectId: 'GMA8jFBD' },
+      { catalog: 'modrinth', projectId: 'EsAfCjCV' },
+      { catalog: 'modrinth', projectId: '2M01OLQq' },
+      { catalog: 'modrinth', projectId: 'UVtY3ZAC' },
+      // EMI, EMI Ores, JEI, Advanced Loot Info: recipes, ores and loot, looked up in game.
+      { catalog: 'modrinth', projectId: 'fRiHVvU7' },
+      { catalog: 'modrinth', projectId: 'sG4TqDb8' },
+      { catalog: 'modrinth', projectId: 'u6dRKJwZ' },
+      { catalog: 'modrinth', projectId: 'PEPVViac' },
+    ],
+    review: 'docs/modpack-templates.md#cubepals-cobblemon',
+    playersInstall: true,
+    held: 'Players install this pack, and nothing publishes it where they can download it yet. Where it is published, a Modrinth project under Cubepals say, is the owner’s decision.',
   },
 ]
 

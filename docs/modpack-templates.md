@@ -488,8 +488,9 @@ nothing else. The lists are the review, in `apps/control/src/app/curation/own.ts
 
 The current policy. Every pack:
 
-- **asks nothing of players.** Checking refuses a release that would need anything in players'
-  games, since there is no pack for players to download yet;
+- **asks nothing of players,** unless its review says players install it (`playersInstall`, as
+  for [Cubepals Cobblemon](#cubepals-cobblemon)). Checking refuses a release of any other that
+  would need anything in players' games;
 - **is open-licensed all the way down.** Every mod and every library it pulls in is under a licence
   that allows commercial copies (open or copyleft, § Licences). Nothing all-rights-reserved,
   noncommercial or custom, even where fetching it from upstream would be allowed;
@@ -579,6 +580,63 @@ Left out:
   servers, but also forbids using the work to "configure, test, debug, or augment" any AI system.
   Out until someone reads that clause for Blockly.
 - **Dungeons and Taverns** (all rights reserved) and **Towns and Towers** (CC-BY-NC-SA-4.0): not open.
+
+### <a id="cubepals-cobblemon"></a>Cubepals Cobblemon
+
+"Catch, raise and battle creatures across a world full of them." Cobblemon without Xaero's: the
+[official pack](#cobblemon) is held for Xaero's written permission, so this is Cobblemon with only
+the official pack's open-licensed companions that run on a server. Fabric, on 1.21.1, the official
+pack's Minecraft and the newest Cobblemon publishes for. Licences as Modrinth declares them,
+checked 2026-10-09.
+
+Unlike the other packs here, **players install it** (`playersInstall`): Cobblemon has to be in
+their games too. Its release is the pack players install as well as the one servers do: each file
+in the index Cubepals writes says whether players need it (`client: required`) or their launcher
+skips it (`unsupported`). Invites and the server's page name it and its release ("You need Cubepals
+Cobblemon 2026.10.09+1.21.1 in your own game").
+
+| Mod | Project | Licence |
+|---|---|---|
+| Cobblemon | `MdwFAVRL` | MPL-2.0 (assets under its Fair Use Policy, § Mod licences that decide it) |
+| ↳ Fabric API | `P7dR8mSH` | Apache-2.0 |
+| Lithium | `gvQqBUqZ` | LGPL-3.0-only |
+| FerriteCore | `uXXizFIs` | MIT |
+| Krypton | `fQEb0iXm` | LGPL-3.0-only |
+| Clumps | `Wnxd13zP` | MIT |
+| Let Me Despawn | `vE2FN5qn` | LGPL-3.0-only |
+| Monsters in the Closet | `GMA8jFBD` | MIT |
+| AppleSkin | `EsAfCjCV` | Unlicense |
+| Shulker Box Tooltip | `2M01OLQq` | MIT |
+| Enchantment Descriptions | `UVtY3ZAC` | LGPL-2.1-only |
+| ↳ Bookshelf, Prickle | `uy4Cnpcm`, `aaRl8GiW` | LGPL-2.1-only |
+| EMI, EMI Ores | `fRiHVvU7`, `sG4TqDb8` | MIT, LGPL-3.0-only |
+| JEI | `u6dRKJwZ` | MIT |
+| Advanced Loot Info | `PEPVViac` | MIT |
+| ↳ Advanced Core Info, Almanac | `BaR4ijFC`, `Gi02250Z` | MIT, LGPL-3.0-only |
+
+Checked live on 2026-10-09: `cubepals-cobblemon@2026.10.09+1.21.1` verified, 19 files, 148 MB, all
+from `cdn.modrinth.com` and matched; 9 open and 10 copyleft, nothing else. Cobblemon's Fair Use
+Policy allows commercial servers and forbids distributing its assets; Cubepals copies nothing, and
+every file comes from Modrinth.
+
+Left out of the official pack:
+
+- **Xaero's Minimap and World Map** (all rights reserved; monetizing needs Xaero's written
+  permission), **Balm, Crafting Tweaks and NetherPortalFix** (all rights reserved, no rehosting),
+  and **FancyMenu** (DSMSL) with its libraries Konkrete and Melody.
+- **A map in their place.** None open-licensed runs here: Map Atlases (LGPL-3.0) needs Moonlight
+  Lib, whose licence is its own (`LicenseRef-LGPL-with-additional-dependency-clause`) and unread;
+  Antique Atlas 4 (LGPL-3.0) runs only in players' games, so no server can bring it; JourneyMap and
+  VoxelMap are all rights reserved.
+- **Tips and Open Loader**: they show the official pack's own loading tips, which it carries as a
+  file of its own. Cubepals' packs carry no files.
+- **Mods that run only in players' games** (Sodium, Iris, Mod Menu and the rest of the official
+  pack's 41): a server can't resolve them, and several aren't open (Sodium is PolyForm Shield).
+  Players can add their own.
+
+**Held:** nothing publishes the pack where players can download it yet, so no admin can offer it.
+Where it is published (a Modrinth project under Cubepals, or Cubepals itself) is the owner's
+decision. Until then the server's page and invite name the release but can't link it.
 
 ## Adding a pack
 

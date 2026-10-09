@@ -32,7 +32,8 @@ export async function move(
       : own !== null && ownGameVersion(release.version) !== null
   if (!reviewed) throw new NotFound('Release')
   // A hold is the review's to lift, never an admin's: publishing waits for the change that does.
-  if (event === 'publish' && pack?.held !== undefined) throw new AppError('invalid_choice', pack.held)
+  const held = (pack ?? own)?.held
+  if (event === 'publish' && held !== undefined) throw new AppError('invalid_choice', held)
   await deps.db.transaction(async (tx) => {
     const record = await loadRelease(tx, release.key, release.version)
     if (record === null) throw new NotFound('Release')
