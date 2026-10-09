@@ -107,7 +107,6 @@ function TokenOf({ token }: { token: Token }): ReactNode {
       return <a href={`mailto:${address}`}>{address}</a>
     }
     case 'name':
-    case 'address':
     case 'country':
     case 'law':
     case 'emailProvider':

@@ -21,7 +21,7 @@ export const PRIVACY: Policy = {
       id: 'controller',
       heading: '1. Who is responsible for your data',
       blocks: [
-        '{brand} is run by {name}, an individual based in {country} (“we”, “us”). We are the controller of the personal data described here. Our postal address is {address}.',
+        '{brand} is run by {name}, based in {country} (“we”, “us”). We are the controller of the personal data described here. We take notices by email, at {legal}.',
         'We have no office or company in the UK or the EU. Because we offer {brand} to people there, the UK GDPR and the EU GDPR apply to us all the same.',
         'For anything about your personal data, email {privacy}. We don’t have a data protection officer; the person who runs {brand} answers these emails.',
       ],

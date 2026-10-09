@@ -11,7 +11,6 @@ export const TOKENS = [
   'domain',
   'playDomain',
   'name',
-  'address',
   'country',
   'law',
   'emailProvider',
