@@ -97,7 +97,7 @@ function runtimeFrom(provider: string, env: NodeJS.ProcessEnv, isDefault: boolea
         regionMap,
         // Fly's default for an organization is about 50 (docs/research); Terraform sets both.
         machineLimit: Number(env.FLY_MACHINE_LIMIT ?? 50),
-        platformMachines: Number(env.FLY_PLATFORM_MACHINES ?? 7),
+        platformMachines: Number(env.FLY_PLATFORM_MACHINES ?? 4),
       }
     case 'boat':
       return {

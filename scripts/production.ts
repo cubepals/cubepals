@@ -144,11 +144,11 @@ function apply(): void {
       ],
       env,
     )
-  // The control app first: its release runs the migrations. Two machines a role, as
-  // FLY_PLATFORM_MACHINES counts them, and the realtime role only ever once.
-  deploy('control', 'apps/control/Dockerfile')
+  // The control app first: its release runs the migrations. One machine a role, as
+  // FLY_PLATFORM_MACHINES counts them. A second machine each comes once a blip matters.
+  deploy('control', 'apps/control/Dockerfile', '--ha=false')
   deploy('realtime', 'apps/control/Dockerfile', '--ha=false')
-  deploy('edge', 'apps/edge/Dockerfile')
+  deploy('edge', 'apps/edge/Dockerfile', '--ha=false')
   run('git', ['push', 'origin', 'HEAD:production'], env)
   const version = `v${nextVersion(repositoryTags())}`
   const notes = passed ? `Ran on staging as ${passed}.` : 'Deployed without a staging run.'

@@ -2,7 +2,6 @@
 # <slug>.<play domain>:25565, whose wildcard A/AAAA records point at this app's addresses.
 # Deploy from the repository root:
 #   fly deploy . --config infra/fly/edge.toml --dockerfile apps/edge/Dockerfile --app bly-<deployment>-edge
-#   fly scale count 2 --app bly-<deployment>-edge   (production)
 # CONTROL_URL (the control app's internal listener, http://api.process.bly-<deployment>-control.internal:4001)
 # and EDGE_TOKEN are Fly secrets set by Terraform (infra/terraform/modules/edge).
 

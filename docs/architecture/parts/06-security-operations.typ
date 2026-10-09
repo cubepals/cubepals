@@ -128,7 +128,7 @@ configuration; production's application status unknown.
   spacing: (8mm, 9mm),
   who((0, 0.5), [Internet], name: <net>),
   cp((1.4, 0), [Web\ #text(size: 6.4pt)[Vercel]], name: <web>),
-  cp((2.8, 0), [`control` app\ #text(size: 6.4pt)[api ×2 · worker]], name: <ctl>),
+  cp((2.8, 0), [`control` app\ #text(size: 6.4pt)[api · worker]], name: <ctl>),
   cp((4.2, 0), [`realtime` app\ #text(size: 6.4pt)[UDP/TCP 443]], name: <rt>),
   rt((1.4, 1.2), [`edge` app\ #text(size: 6.4pt)[TCP 25565, v4 + v6]], name: <edge>),
   rt((2.8, 1.2), [One app per server\ #text(size: 6.4pt)[own network, Flycast only]], name: <games>),

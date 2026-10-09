@@ -2259,7 +2259,7 @@ answers 429 with `Retry-After`. Player faces count under a key of their own (§1
 | Concern | Local | Staging | Production |
 |---|---|---|---|
 | Web | `next dev` on `http://localhost:3000`, rewrites `/api/*` → `http://localhost:4000` | Vercel preview + staging branch domain; rewrites → staging control | Vercel production; rewrites → prod control |
-| Control plane | host process, all roles in one: `:4000` api, `127.0.0.1:4001` internal, `127.0.0.1:7443` realtime (`:7444` WebSocket fallback) | Fly org `…-staging`: a control app with process groups api/worker, and a realtime app from the same image (`infra/fly/`) | Fly org `…-prod`, same shape; api ×2 (`min_machines_running = 2` in `infra/fly/control.toml`), realtime ×1; no file sets a worker count |
+| Control plane | host process, all roles in one: `:4000` api, `127.0.0.1:4001` internal, `127.0.0.1:7443` realtime (`:7444` WebSocket fallback) | Fly org `…-staging`: a control app with process groups api/worker, and a realtime app from the same image (`infra/fly/`) | Fly org `…-prod`, same shape; one machine a role (api, worker, realtime, edge; `scripts/production.ts` deploys with `--ha=false`) |
 | Postgres | compose service | Fly Managed Postgres (staging) | Fly Managed Postgres (prod) |
 | Runtime | `docker` (`DockerRuntime` via the Docker socket; game containers on their own network `blockly-games`, which only the edge also joins) | `fly` (a private network per game app) | `fly` (same) |
 | Artifact links (`runtimeFacingUrl`) | `http://host.docker.internal:4000` | staging control plane's public origin | prod control plane's public origin (game networks have no route to the default 6PN) |

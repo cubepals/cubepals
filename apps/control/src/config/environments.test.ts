@@ -68,7 +68,7 @@ const COMPUTED = {
   ARTIFACTS_RUNTIME_FACING_URL: 'https://control.example.test',
   ARCHIVE_S3_ENDPOINT: 'https://account.r2.cloudflarestorage.com',
   // The fly-org module's default for the platform's own machines.
-  FLY_PLATFORM_MACHINES: '7',
+  FLY_PLATFORM_MACHINES: '4',
   // TF_VAR_cloudflare_zone_id, where the realtime role's DNS-01 challenges go.
   CLOUDFLARE_ZONE_ID: 'zone-id',
 }
@@ -95,7 +95,7 @@ describe.each(['staging', 'production'])('the %s environment', (name) => {
     // Fly runtime counts them from what this environment configures (docs/money-guards.md).
     const [runtime] = loadConfig({ ...shared, ...flyEnv('control', 'api') }).runtimes
     if (runtime?.provider !== 'fly') throw new Error('not fly')
-    expect([runtime.machineLimit, runtime.platformMachines]).toEqual([env.fly_machine_limit, 7])
+    expect([runtime.machineLimit, runtime.platformMachines]).toEqual([env.fly_machine_limit, 4])
     expect(serverCeilingOf(runtime.machineLimit, runtime.platformMachines)).toBeGreaterThan(0)
     expect(loadConfig({ ...shared, ...flyEnv('realtime') }).roles).toEqual(['realtime'])
     // The live-update listener and the migrations skip Managed Postgres's pooler, which closes a
