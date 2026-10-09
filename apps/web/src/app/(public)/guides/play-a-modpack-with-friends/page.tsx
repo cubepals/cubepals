@@ -60,7 +60,12 @@ export default async function Guide() {
           For machines and contraptions, there’s a ready setup: <strong>Create</strong>, “Machines, gears and
           contraptions, with the Create mod ready to go.” The{' '}
           <a href="https://modrinth.com/mod/create">Create mod</a> calls itself “a mod offering a variety of
-          tools and blocks for Building, Decoration and Aesthetic Automation.”
+          tools and blocks for Building, Decoration and Aesthetic Automation.” Skyblock has a card of its own,
+          and friends join it with plain Minecraft:{' '}
+          <GuideLink to="lifesteal-manhunt-skyblock-with-friends">
+            how to play Skyblock with friends
+          </GuideLink>
+          .
         </p>
         <Shot
           src={`${PICTURES}/create.png`}
