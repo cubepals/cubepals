@@ -29,6 +29,7 @@ export interface Template {
 }
 
 const WORLD = { levelType: 'minecraft:normal', hardcore: false }
+const BENTOBOX_ADDONS = 'plugins/BentoBox/addons'
 
 export const TEMPLATES: readonly Template[] = [
   {
@@ -115,6 +116,25 @@ export const TEMPLATES: readonly Template[] = [
       // Manhunt+ (MIT), whose hunters' compasses point at the runner.
       mods: [{ catalog: 'modrinth', projectId: 'V67rIXws' }],
       settings: { defaultGameMode: 'survival', difficulty: 'normal', pvp: true },
+      world: WORLD,
+    },
+  },
+  {
+    key: 'oneblock',
+    title: 'OneBlock',
+    blurb: 'One block under your feet. Break it and it comes back as something new.',
+    icon: 'oneblock',
+    setup: {
+      loader: 'paper',
+      // BentoBox with AOneBlock, Level and Warps (all EPL-2.0), on AOneBlock's own defaults.
+      // BentoBox loads its addons only from its own folder, never from plugins/.
+      mods: [
+        { catalog: 'modrinth', projectId: 'aBVLHiAW' },
+        { catalog: 'modrinth', projectId: 'qq7CK8U4', dir: BENTOBOX_ADDONS },
+        { catalog: 'modrinth', projectId: 'OWzL9XSJ', dir: BENTOBOX_ADDONS },
+        { catalog: 'modrinth', projectId: 'P08aFayx', dir: BENTOBOX_ADDONS },
+      ],
+      settings: { defaultGameMode: 'survival', difficulty: 'normal', pvp: false },
       world: WORLD,
     },
   },
