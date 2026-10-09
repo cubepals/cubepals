@@ -262,6 +262,9 @@
 .thumb[data-icon="skyblock"] {
   background: var(--status-sleeping-soft);
 }
+.thumb[data-icon="rpg"] {
+  background: var(--status-sleeping-soft);
+}
 .thumb[data-icon="modpack"] {
   background: var(--surface-sand);
 }
