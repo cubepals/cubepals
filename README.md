@@ -40,9 +40,7 @@ boundary. To work on it, start with [CONTRIBUTING.md](CONTRIBUTING.md); running 
 [GNU Affero General Public License v3.0 only](LICENSE). If you run a modified version of
 Cubepals as a network service, you must offer its users the source of that version.
 
-The **code** is AGPL. The **brand and the site** are not. The Cubepals name, mark, wordmark
-and the files in [`brand/`](brand/) are all rights reserved, and so are the landing page
-(`apps/web/src/landing/`), the site's pictures and the guides' words — see
-[`brand/LICENSE.md`](brand/LICENSE.md). This takes nothing away from your rights in the rest
-of the source. If you fork Cubepals, replace the branding, the landing page, the pictures and
-the guides before you ship or operate it.
+The **code** is AGPL. The **brand and the site** are not: the Cubepals name, mark and wordmark,
+the landing page, the site's pictures and the guides' words are all rights reserved.
+[LICENSING.md](LICENSING.md) says exactly what is under what, and what to replace if you run your
+own.

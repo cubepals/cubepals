@@ -96,3 +96,4 @@ The code is AGPL-3.0. The Cubepals name, the files in `brand/`, the landing page
 (`apps/web/src/landing/`), the pictures in `apps/web/public/imagery/` and
 `apps/web/public/guides/`, and the guides' words are not:
 [brand/LICENSE.md](brand/LICENSE.md). A change to them is contributed under those terms.
+[LICENSING.md](LICENSING.md) lists what is under what.

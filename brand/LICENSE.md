@@ -15,7 +15,8 @@ Cubepals wordmark, the lockups combining them, and every file in `brand/`.
 **The Site Assets:** the landing page and the words and pictures of cubepals.com:
 
 - everything in [`apps/web/src/landing/`](../apps/web/src/landing/): its code, styles,
-  scenes, animations, film, layout and words, except the typeface in `type/` (see section 4);
+  scenes, animations, film, layout and words, except the typeface in `type/` (see section 4)
+  and `fonts.ts`, which only names the typefaces the app's layout also loads;
 - every picture in [`apps/web/public/imagery/`](../apps/web/public/imagery/) and
   [`apps/web/public/guides/`](../apps/web/public/guides/);
 - the words of each guide, in the `page.tsx` of each guide's directory under
