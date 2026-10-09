@@ -255,6 +255,21 @@ describe('indexes', () => {
     expect(out).toContain('indexes  apps/split.ts › c.ts: is in the index but not in apps/split/')
   })
 
+  test("a Rust dir/mod.rs is its directory's index, and it lists its directory's other files", () => {
+    const mod = (...items: string[]) =>
+      `//! The fleet.\n//!\n//! Parts (\`fleet/\`):\n${items.map((item) => `//! ${item}\n`).join('')}\npub mod wire;\n`
+    const files = { 'apps/k/src/fleet/wire.rs': '//! Wire.\n', 'apps/k/src/fleet/token.rs': '//! Token.\n' }
+    const listed = mod('- `token.rs`: tokens.', '- `wire.rs`: the wire.')
+    expect(check(tree({ ...files, 'apps/k/src/fleet/mod.rs': listed })).code).toBe(0)
+    const short = check(tree({ ...files, 'apps/k/src/fleet/mod.rs': mod('- `wire.rs`: the wire.') }))
+    expect(short.out).toContain(
+      'indexes  apps/k/src/fleet/mod.rs › token.rs: is in apps/k/src/fleet/ but not',
+    )
+    const none = check(tree({ ...files, 'apps/k/src/fleet/mod.rs': '//! The fleet.\npub mod wire;\n' }))
+    expect(none.out).toContain('indexes  apps/k/src/fleet/mod.rs: has no `Parts (`fleet/`):` index')
+    expect(check(tree({ 'apps/k/src/alone/mod.rs': '//! Alone.\n' })).code).toBe(0)
+  })
+
   test('a directory beside the file of its name without an index fails unless baselined', () => {
     const files = { 'apps/split.ts': '/** Splits a thing. */\nexport const a = 1\n', ...parts }
     expect(check(tree(files)).out).toContain('indexes  apps/split.ts: has no `Parts (`split/`):` index')
@@ -306,9 +321,33 @@ describe('cycles', () => {
     }
     const { code, out } = check(tree(crate))
     expect(code).toBe(1)
-    expect(out).toContain('cycles  apps/k/src/a.rs ↔ apps/k/src/a/part.rs ↔ apps/k/src/b.rs: 3 files')
+    // a/part.rs using b is a using b: the cycle is between the modules, each its file and what is under it.
+    expect(out).toContain('cycles  apps/k/src/a.rs ↔ apps/k/src/b.rs: 2 modules that use each other')
     const apart = { ...crate, 'apps/k/src/b.rs': '//! B.\nuse std::fmt;\npub struct Other;\n' }
     expect(check(tree(apart)).code).toBe(0)
+  })
+
+  test('a path written in code, a nested group and a mod.rs make edges too', () => {
+    const crate = {
+      'apps/k/src/lib.rs': '//! A crate.\nmod a;\nmod b;\nmod c;\n',
+      'apps/k/src/a/mod.rs': '//! A.\n//!\n//! Parts (`a/`):\n//! - `part.rs`: the thing.\n\npub mod part;\n',
+      'apps/k/src/a/part.rs': '//! A part.\npub fn f() -> u8 {\n    crate::b::g()\n}\n',
+      'apps/k/src/b.rs': '//! B.\nuse crate::{c::{self, h}};\npub fn g() -> u8 { h() }\n',
+      'apps/k/src/c.rs': '//! C.\npub fn h() -> u8 {\n    super::a::part::f()\n}\n',
+    }
+    const { code, out } = check(tree(crate))
+    expect(code).toBe(1)
+    expect(out).toContain('cycles  apps/k/src/a/mod.rs ↔ apps/k/src/b.rs ↔ apps/k/src/c.rs: 3 modules')
+    // A part using its parent, and the parent re-exporting it, is a cycle between the two.
+    const parent = {
+      'apps/k/src/lib.rs': '//! A crate.\nmod a;\n',
+      'apps/k/src/a/mod.rs': crate['apps/k/src/a/mod.rs'].replace(
+        'pub mod part;',
+        'mod part;\npub use part::f;',
+      ),
+      'apps/k/src/a/part.rs': '//! A part.\nuse super::Shared;\npub fn f() {}\n',
+    }
+    expect(check(tree(parent)).out).toContain('cycles  apps/k/src/a/mod.rs ↔ apps/k/src/a/part.rs: 2 modules')
   })
 })
 
@@ -381,7 +420,7 @@ describe('a repository that is one crate', () => {
     writeFileSync(join(dir, 'structure-baseline.json'), '{}')
     const { code, out } = check(dir)
     expect(code).toBe(1)
-    expect(out).toContain('cycles  src/a.rs ↔ src/b.rs: 2 files that import each other')
+    expect(out).toContain('cycles  src/a.rs ↔ src/b.rs: 2 modules that use each other')
     expect(out).toContain('names  src/utils.rs: is named for a category')
     expect(out).not.toContain('unused')
     const held = { cycles: { 'src/a.rs ↔ src/b.rs': { n: 2, reason: 'one protocol' } } }
