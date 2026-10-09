@@ -1,4 +1,4 @@
-name: fleet
+name: Fleet
 
 # The fleet runtime against the blocklyd this control plane pins (apps/control/Dockerfile,
 # scripts/blocklyd.ts). blocklyd itself is cubepals/blocklyd, whose own CI runs this same e2e from
@@ -44,6 +44,7 @@ env:
 
 jobs:
   pin:
+    name: blocklyd pin matches its release
     # The image's digest and the copies beside the fleet adapter are the pinned release's.
     runs-on: ubuntu-24.04
     steps:
@@ -56,6 +57,7 @@ jobs:
       - run: bun scripts/blocklyd.ts check
 
   fleet-e2e:
+    name: Fleet end to end against blocklyd
     # The control plane's fleet runtime against the pinned blocklyd, for real: enrollment over
     # mutual TLS, placement, snapshots, restores, a daemon killed and back, a node held lost, a
     # self-upgrade (apps/control/src/infra/fleet/fleet-runtime.e2e.test.ts). Built from its tag in

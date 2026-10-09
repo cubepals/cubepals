@@ -269,6 +269,11 @@ It is Blockly's durable record of the server's administration state. The algorit
 - A server has one *active* world.
 - "New world" creates a World with a fresh `levelName` and switches `activeWorldId`, which
   applies with a restart.
+- A fresh start (`WorldService.freshStart`) is that in one step, from a random seed, named for what
+  the server plays as read from its setup: a new season where LifeStealZ runs, another round on a
+  temporary server, a fresh world otherwise. A season also removes LifeStealZ's `userData.db`
+  inside the update, after its snapshot, so it needs the server running; if the season doesn't
+  start, the rollback restores that snapshot.
 - Old world directories are removed by a `prune_worlds` maintenance operation unless a backup
   or the user keeps them.
 
@@ -593,7 +598,7 @@ tRPC procedure (parse input, get actor, call ONE method, return)
 | `ModService` | `search`, `versions`, `plan` / `apply` (a mod change, resolved as one set by `domain/mods/resolve.ts`, the catalog states it saw written through to the cache), `planVersion` / `changeVersion`, `resolveNew` (for a server not made yet); `beginUpload` / `finishUpload` (presigned PUT → verify sha512 and jar → `StoredArtifact` + `ModUpload`), `deleteUpload` |
 | `PackService` | packs people bring (docs/modpack-system.md): `beginUpload` / `finishUpload`, `runImport` / `importGaveUp` (the `pack-import` job), `view`, `pinnedFrom`, `linkOf`, `versions`, `updateFor`, `server` |
 | `RevisionService` | `changeSettings`, `changeAuthentication`, `changeVersion`, `changeMods`, `changePack`, `resize`, `rollback` (each refuses taken-down artifacts without an explicit acknowledgement, §15.3) |
-| `WorldService` | `createWorld`, `switchWorld`, `deleteWorld` (its directories go by `prune_worlds`) |
+| `WorldService` | `createWorld`, `switchWorld`, `freshStart`, `deleteWorld` (its directories go by `prune_worlds`) |
 | `AccessService` | `add`, `remove` (a whitelist, operator or ban entry), `setWhitelistEnabled`, `refresh` (persist pending + enqueue `access_sync`; never a revision, never a restart) |
 | `BackupService` | `createBackup`, `restoreBackup`, `archiveBackup`, `downloadArchive`, `deleteBackup`, `beginWorldUpload` / `finishWorldUpload` (a download brought back, §15.5) (archive methods need the archives capability) |
 | `ConsoleService` | `run` (synchronous, audited, via `ServerConsole`; refuses `ban-ip`/`pardon-ip`, §15.1) |

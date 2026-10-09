@@ -78,6 +78,7 @@ const revision: ServerRevision = {
     onlineMode: true,
   },
   mods: [],
+  files: [],
   modpack: null,
   acknowledgedRevoked: [],
   reason: 'created',

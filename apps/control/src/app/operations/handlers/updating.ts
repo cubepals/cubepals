@@ -6,11 +6,13 @@
  */
 import type { Db } from '@blockly/db'
 import { describeChanges } from '../../../domain/revision/revision.ts'
+import { resetHeartsCommand } from '../../../minecraft/lifesteal.ts'
 import { type ArtifactService, ArtifactUnavailable } from '../../artifacts/service.ts'
 import type { BackupRecord } from '../../backups/persistence.ts'
 import type { BackupService } from '../../backups/service.ts'
 import { aside, inFull, PermanentFailure } from '../../errors.ts'
 import type { ServerConsole } from '../../ports/minecraft.ts'
+import type { RuntimeHandle } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import { loadRevision, lockServer, saveHandle } from '../../servers/persistence.ts'
 import type { RuntimeSpecs } from '../../servers/specs.ts'
@@ -26,9 +28,27 @@ import type { GoingBack } from './going-back.ts'
 import type { Rechecks } from './rechecks.ts'
 import type { WorldCopies } from './world-copies.ts'
 
+interface UpdateInput {
+  /** Bringing a failed server back onto a change. */
+  fromFailure?: boolean
+  /** A new season (`WorldService.freshStart`): everyone's hearts go with the world it leaves. */
+  resetHearts?: boolean
+}
+
+/**
+ * A new season's hearts, forgotten after the snapshot that keeps them and before the restart that
+ * ends the season. If it fails, the update goes back as one that doesn't start does, snapshot and
+ * all, so the season carries on as it was.
+ */
+async function forgetHearts(runtime: Pick<Runtimes, 'exec'>, handle: RuntimeHandle, input: UpdateInput) {
+  if (input.resetHearts !== true) return
+  const reset = await runtime.exec(handle, resetHeartsCommand(), 60)
+  if (reset.exitCode !== 0) throw new Error(`Resetting the hearts failed: ${reset.stderr.trim()}`)
+}
+
 export function updating(deps: {
   db: Db
-  runtime: Pick<Runtimes, 'apply' | 'stop'>
+  runtime: Pick<Runtimes, 'apply' | 'stop' | 'exec'>
   /** This and `console` whole, as `takeLive` takes them. */
   specs: RuntimeSpecs
   console: ServerConsole
@@ -77,7 +97,8 @@ export function updating(deps: {
     abandon: stopWhatFailed(['updating']),
     async run(ctx) {
       const server = ctx.server
-      const fromFailure = (ctx.op.input as { fromFailure?: boolean }).fromFailure === true
+      const input = ctx.op.input as UpdateInput
+      const fromFailure = input.fromFailure === true
       const binding = await bindingOf(server.id)
       const previous = binding.applied
       if (binding.handle === null || previous === null)
@@ -124,6 +145,7 @@ export function updating(deps: {
       }
       await ctx.step('compute')
       try {
+        await forgetHearts(runtime, binding.handle, input)
         const changed = await runtime.apply(binding.handle, desired.spec)
         if (changed !== binding.handle) await saveHandle(db, server.id, changed)
         // A failed server's workload may be down; apply restarts only one that runs.
@@ -147,7 +169,7 @@ export function updating(deps: {
         if (error instanceof NoLongerApplies) throw error
         await ctx.step('rolling_back')
         try {
-          await rollBack(ctx, server, previous, desired, snapshot)
+          await rollBack(ctx, server, previous, desired, snapshot, 'updating', input.resetHearts === true)
         } catch (again) {
           if (again instanceof NoLongerApplies) throw again
           throw new PermanentFailure(

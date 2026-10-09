@@ -1,0 +1,1 @@
+ALTER TABLE "server_revisions" ADD COLUMN "files" jsonb DEFAULT '[]'::jsonb NOT NULL;

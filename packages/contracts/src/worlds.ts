@@ -110,6 +110,23 @@ export const CreateWorldInput = z.object({
 export const SwitchWorldInput = z.object({ ...change, worldId: z.uuid() })
 export const WorldRef = z.object({ serverId: ServerId, worldId: z.uuid() })
 
+/**
+ * Starting over in one step: a fresh world from a random seed, with the one it leaves kept. What it
+ * is called follows what the server plays: a new season where it plays Lifesteal, another round
+ * where it is made for a day, and a fresh world anywhere else.
+ */
+export interface FreshStartView {
+  kind: 'world' | 'round' | 'season'
+  /** What the new world is called. */
+  name: string
+  /** The world it leaves. */
+  leaving: string
+  /** What everyone starts a new season with; null for anything but a season. */
+  hearts: number | null
+}
+
+export const FreshStartInput = z.object(change)
+
 // ─── Location ───────────────────────────────────────────────────────────────────────────────
 
 export const RelocateInput = z.object({ ...change, regionKey: z.string().trim().min(1).max(40) })

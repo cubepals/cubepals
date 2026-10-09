@@ -29,6 +29,7 @@ import {
   FinishPackUploadInput,
   FinishWorldUploadInput,
   FleetSearchInput,
+  FreshStartInput,
   GameModeInput,
   InviteRef,
   ItemIconsInput,
@@ -291,6 +292,13 @@ const worlds = router({
       { name: input.name, seed: input.seed, levelType: input.levelType, hardcore: input.hardcore },
       input.requestId,
     )
+    return ctx.services.queries.get(ctx.actor, input.serverId)
+  }),
+  freshStart: authedProcedure
+    .input(ServerRef)
+    .query(({ ctx, input }) => ctx.services.worldQueries.freshStart(ctx.actor, input.serverId)),
+  startOver: authedProcedure.input(FreshStartInput).mutation(async ({ ctx, input }) => {
+    await ctx.services.worlds.freshStart(ctx.actor, input.serverId, input.requestId)
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
   switch: authedProcedure.input(SwitchWorldInput).mutation(async ({ ctx, input }) => {

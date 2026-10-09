@@ -431,6 +431,7 @@ export const draftOf = (revision: ServerRevision): RevisionDraft => ({
   settings: revision.settings,
   mods: revision.mods,
   modpack: revision.modpack,
+  files: revision.files,
   acknowledgedRevoked: revision.acknowledgedRevoked,
   reason: revision.reason,
   basedOnRevisionId: revision.basedOnRevisionId,

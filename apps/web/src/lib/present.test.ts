@@ -93,6 +93,19 @@ describe('presentStatus', () => {
       'Build 0.19.5 → 0.19.6',
     )
   })
+
+  test('files Cubepals wrote are listed like mods, by what they set up, and download nothing', () => {
+    const files = {
+      field: 'files' as const,
+      added: ['OldCombatMechanics settings'],
+      removed: [],
+      changed: ['LifeStealZ settings'],
+    }
+    expect(presentChange(files)).toBe(
+      'Set by Cubepals: added OldCombatMechanics settings; updated LifeStealZ settings',
+    )
+    expect(downloadOf([files])).toBeNull()
+  })
 })
 
 describe('building a world', () => {

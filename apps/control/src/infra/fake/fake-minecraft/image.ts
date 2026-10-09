@@ -1,12 +1,14 @@
 /**
  * Prepares a fake server's volume the way the itzg image does before the game starts, as
- * mc-image-helper 1.68.0 does it: the jars its environment lists, then the Modrinth pack it names.
+ * mc-image-helper 1.68.0 does it: the jars its environment lists, then the Modrinth pack it names;
+ * and, before either, what Blockly's own start step places (`placeCarried`).
  * It does not load the jars or write the server's properties: the game's loader and the server do
  * (`fake-minecraft.ts`, `properties.ts`).
  */
 
+import { createHash } from 'node:crypto'
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { strFromU8, strToU8, unzipSync } from 'fflate'
 
 type Env = Readonly<Record<string, string>>
@@ -119,6 +121,46 @@ export async function installPack(volume: string, env: Env, say: (text: string) 
   for (const gone of before.filter((path) => !installed.includes(path)))
     await rm(join(volume, gone), { force: true })
   await writeFile(manifest, JSON.stringify({ files: installed }))
+}
+
+/**
+ * Blockly's start step for what a revision places itself (`minecraft/carried.ts`), as its
+ * variables say it: what the last start placed and this one doesn't is removed, each placed jar is
+ * fetched unless it holds its bytes and refused when it arrives with others, and each carried file
+ * is written over what is there. The step itself runs in a real shell in `app/servers/carried-runtime.test.ts`.
+ */
+export async function placeCarried(volume: string, env: Env, say: (text: string) => void): Promise<void> {
+  if (env.BLOCKLY_JARS === undefined && env.BLOCKLY_FILES === undefined) return
+  const lines = (text: string | undefined) =>
+    (text ?? '')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => line.split(' '))
+  const jars = lines(env.BLOCKLY_JARS)
+  const files = lines(env.BLOCKLY_FILES)
+  const placed = [...jars, ...files].map(([path]) => path ?? '')
+  const mark = join(volume, '.blockly-files')
+  const before = (await readFile(mark, 'utf8').catch(() => '')).split('\n').filter(Boolean)
+  for (const gone of before.filter((path) => !placed.includes(path)))
+    await rm(join(volume, gone), { force: true })
+  const sha512 = (bytes: Uint8Array) => createHash('sha512').update(bytes).digest('hex')
+  for (const [path = '', hash = '', url = ''] of jars) {
+    const target = join(volume, path)
+    const there = await readFile(target).catch(() => null)
+    if (there !== null && sha512(there) === hash) continue
+    const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer())
+    if (sha512(bytes) !== hash) {
+      say(`Cubepals could not fetch ${path}`)
+      throw new Error(`${path} arrived with other bytes`)
+    }
+    await mkdir(dirname(target), { recursive: true })
+    await writeFile(target, bytes)
+  }
+  for (const [path = '', data = ''] of files) {
+    await mkdir(dirname(join(volume, path)), { recursive: true })
+    await writeFile(join(volume, path), Buffer.from(data, 'base64'))
+  }
+  await writeFile(mark, `${placed.join('\n')}\n`)
 }
 
 /** Where the image puts jars: plugins for plugin servers, mods for the rest. */

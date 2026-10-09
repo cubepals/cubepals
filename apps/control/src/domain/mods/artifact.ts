@@ -36,6 +36,11 @@ export interface PinnedMod {
   gameVersions: string[]
   origin: 'user' | 'dependency'
   requiredBy: string[]
+  /**
+   * The folder its jar goes in, under the server's directory, where that isn't the loader's own:
+   * `plugins/BentoBox/addons` for a BentoBox game mode. Absent for every other mod.
+   */
+  dir?: string
 }
 
 /**

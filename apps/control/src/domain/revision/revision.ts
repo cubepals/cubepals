@@ -1,5 +1,6 @@
 import { isDatapack, type PinnedMod } from '../mods/artifact.ts'
 import { type PinnedModpack, samePack } from '../mods/modpack.ts'
+import { type CarriedFile, filesChanged, movesCarried } from './carried.ts'
 
 export type Loader = 'vanilla' | 'paper' | 'fabric' | 'quilt' | 'neoforge' | 'forge'
 type Difficulty = 'peaceful' | 'easy' | 'normal' | 'hard'
@@ -57,6 +58,11 @@ export interface ServerRevision {
    * configuration, so a revision has either a pack or a mod list, never both.
    */
   modpack: PinnedModpack | null
+  /**
+   * Files Cubepals wrote for what the server plays, such as a plugin's settings, written where they
+   * go before every start (docs/modpack-system.md § Carried files). Empty for most servers.
+   */
+  files: CarriedFile[]
   /** sha512s of jars taken down where they were published that the owner chose to run anyway. */
   acknowledgedRevoked: string[]
   reason: RevisionReason
@@ -141,6 +147,8 @@ export type RevisionChange =
   | { field: 'onPaper'; from: boolean; to: boolean }
   | { field: 'mods'; added: string[]; removed: string[]; changed: string[] }
   | { field: 'modpack'; from: string | null; to: string | null }
+  /** Files Cubepals wrote for the server, by what they set up: "LifeStealZ settings". */
+  | { field: 'files'; added: string[]; removed: string[]; changed: string[] }
 
 /** What differs from one revision to the next, in the order a person would read it. */
 export function describeChanges(from: RevisionDraft, to: RevisionDraft): RevisionChange[] {
@@ -173,6 +181,9 @@ export function describeChanges(from: RevisionDraft, to: RevisionDraft): Revisio
     changes.push({ field: 'mods', added, removed, changed })
   if (!samePack(from.modpack, to.modpack))
     changes.push({ field: 'modpack', from: packLabel(from.modpack), to: packLabel(to.modpack) })
+  const files = filesChanged(from.files, to.files)
+  if (files.added.length + files.removed.length + files.changed.length > 0)
+    changes.push({ field: 'files', ...files })
   return changes
 }
 
@@ -180,20 +191,22 @@ const packLabel = (pack: PinnedModpack | null): string | null =>
   pack === null ? null : `${pack.name} ${pack.versionLabel}`
 
 type Booted = Pick<RevisionDraft, 'gameVersion' | 'loader'> &
-  Partial<Pick<RevisionDraft, 'modpack' | 'loaderVersion'>>
+  Partial<Pick<RevisionDraft, 'modpack' | 'loaderVersion' | 'files' | 'mods'>>
 
 /**
  * Whether booting `to` on a world `from` last ran rewrites the world: a new game version
  * migrates it, and a different server type lays it out differently. Plain Minecraft moving onto
- * Paper or off it counts too: Paper keeps the Nether and the End in folders of their own. Rolling
- * such a change back needs the world from before it.
+ * Paper or off it counts too: Paper keeps the Nether and the End in folders of their own. So do
+ * other files Cubepals carries, or plugins it places outside the plugins folder: what a plugin made
+ * of the old ones is on the disk. Rolling such a change back needs the world from before it.
  */
 export function rewritesWorld(from: Booted, to: Booted): boolean {
   return (
     from.gameVersion !== to.gameVersion ||
     from.loader !== to.loader ||
     runsOnPaper(from) !== runsOnPaper(to) ||
-    movesPack(from, to)
+    movesPack(from, to) ||
+    movesCarried(from, to)
   )
 }
 

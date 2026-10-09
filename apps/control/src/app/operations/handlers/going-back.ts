@@ -1,8 +1,8 @@
 /**
  * A server put back on the configuration it last ran, after a change to it didn't come up: with
- * the world from before the change where the change rewrote it. It runs only once something else
- * has failed, and says nothing to the owner as it goes; deciding to go back, and what the owner
- * reads afterwards, is the handler's.
+ * the world from before the change where the change rewrote it, or removed files beside it. It
+ * runs only once something else has failed, and says nothing to the owner as it goes; deciding to
+ * go back, and what the owner reads afterwards, is the handler's.
  */
 import type { AppliedConfigJson, Db } from '@blockly/db'
 import { rewritesWorld } from '../../../domain/revision/revision.ts'
@@ -46,6 +46,8 @@ export function goingBack(deps: {
     snapshot: BackupRecord | null,
     /** The operation going back: an update of a running server, or a start onto a change. */
     from: 'updating' | 'starting' = 'updating',
+    /** The change removed files beside the world, as a new season does everyone's hearts. */
+    removedFiles = false,
   ) => {
     const back = await specs.forConfig(db, server, {
       revisionId: previous.revisionId,
@@ -58,7 +60,7 @@ export function goingBack(deps: {
     // still being applied.
     const quiet: OperationContext = { ...ctx, step: async () => {} }
     if (
-      rewritesWorld(back.revision, desired.revision) &&
+      (rewritesWorld(back.revision, desired.revision) || removedFiles) &&
       snapshot !== null &&
       snapshot.snapshotHandle !== null
     ) {
