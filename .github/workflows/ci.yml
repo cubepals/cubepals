@@ -109,7 +109,7 @@ jobs:
             paths: . :!apps/control/src/app/operations :!apps/control/src/infra/fly :!apps/control/src/infra/docker :!apps/control/src/infra/boat :!apps/control/src/infra/fleet :!apps/control/src/infra/s3 :!apps/control/src/app/runtimes :!apps/control/src/app/backups :!apps/control/src/app/revisions :!apps/control/src/app/worlds :!apps/control/src/app/servers :!apps/control/src/app/setups :!apps/control/src/app/console :!apps/control/src/app/players :!apps/control/src/app/uploads :!apps/control/src/app/artifacts :!apps/control/src/app/mods :!apps/control/src/app/packs :!apps/control/src/app/curation :!apps/control/src/app/listings :!apps/web :!apps/edge :!scripts
     services:
       postgres:
-        image: postgres:17-alpine
+        image: public.ecr.aws/docker/library/postgres:17-alpine
         env:
           POSTGRES_USER: blockly
           POSTGRES_PASSWORD: blockly
@@ -132,11 +132,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Start NATS
-        run: docker run -d --name nats -p 4222:4222 nats:2.15.0 --user blockly-test --pass fm2_blockly_test
+        run: docker run -d --name nats -p 4222:4222 public.ecr.aws/docker/library/nats:2.15.0 --user blockly-test --pass fm2_blockly_test
       - name: Start an S3 store
         run: >-
           docker run -d --name s3 -p 9000:9000 -e RUSTFS_ACCESS_KEY=blockly-test
-          -e RUSTFS_SECRET_KEY=blockly-test-secret rustfs/rustfs:1.0.0
+          -e RUSTFS_SECRET_KEY=blockly-test-secret ghcr.io/rustfs/rustfs:1.0.0
       # Let's Encrypt's test CA, validating DNS-01 against its own DNS test server.
       - name: Start Pebble and its DNS test server
         run: |
