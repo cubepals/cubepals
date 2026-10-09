@@ -665,7 +665,7 @@ export class ModService {
       if (error instanceof CatalogUnavailable)
         throw new AppError(
           'catalog_unavailable',
-          "Modrinth isn't answering right now. Nothing changed; try again in a minute.",
+          `${error.catalog} isn't answering right now. Nothing changed; try again in a minute.`,
         )
       throw error
     }

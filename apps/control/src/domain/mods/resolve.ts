@@ -1,5 +1,5 @@
 import type { PinnedMod } from './artifact.ts'
-import type { CatalogProject, CatalogVersion } from './catalog.ts'
+import { type CatalogProject, type CatalogVersion, catalogOfId } from './catalog.ts'
 
 /**
  * Which versions a server runs for the mods its owner wants, with everything they require
@@ -9,7 +9,10 @@ import type { CatalogProject, CatalogVersion } from './catalog.ts'
  */
 
 export interface ResolveRequest {
-  /** The catalog every wanted mod comes from; pinned as each mod's source. */
+  /**
+   * The catalog a wanted mod comes from, pinned as its source, unless its id names another
+   * (`catalogOfId`): a Paper server's plugins can come from Modrinth and Hangar at once.
+   */
   catalog: string
   target: { gameVersion: string; loaders: readonly string[] }
   /** Every catalog mod the owner wants, by project, and a version where they chose one. */
@@ -336,7 +339,11 @@ function pinOf(request: ResolveRequest, pick: Pick, nameOf: (projectId: string) 
   if (pinned !== undefined) return { ...pinned, origin: pick.origin, requiredBy }
   const { version, project } = pick
   return {
-    source: { catalog: request.catalog, projectId: version.projectId, versionId: version.versionId },
+    source: {
+      catalog: catalogOfId(version.projectId, request.catalog),
+      projectId: version.projectId,
+      versionId: version.versionId,
+    },
     name: project.name,
     versionLabel: version.versionLabel,
     artifact: {

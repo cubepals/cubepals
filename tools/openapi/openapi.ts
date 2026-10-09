@@ -63,6 +63,12 @@ const APIS: Record<string, Api> = {
     spec: 'modrinth/labrinth.openapi.json',
     types: 'modrinth/generated/labrinth.ts',
   },
+  hangar: {
+    source: 'https://hangar.papermc.io/v3/api-docs',
+    spec: 'hangar/hangar.openapi.json',
+    types: 'hangar/generated/hangar.ts',
+    mend: publicRoutesOnly,
+  },
 }
 
 const INFRA = new URL('../../apps/control/src/infra/', import.meta.url)
@@ -97,6 +103,20 @@ function uniqueOperationIds(spec: { paths: Paths }) {
       if (seen.has(operation.operationId)) operation.operationId = `${operation.operationId}_${method}`
       seen.add(operation.operationId)
     }
+}
+
+/**
+ * Hangar's spec also lists its site's own routes, which it says "should be considered internal,
+ * and can change at a moment's notice. Do not use them". Only `/api/v1` is typed, without the
+ * deprecated `{author}/` copies of its routes, which repeat the current ones' operationIds.
+ */
+function publicRoutesOnly(spec: { paths: Paths }) {
+  for (const [path, item] of Object.entries(spec.paths)) {
+    const deprecated = Object.values(item).every(
+      (operation) => (operation as { deprecated?: boolean }).deprecated,
+    )
+    if (!path.startsWith('/api/v1/') || deprecated) delete spec.paths[path]
+  }
 }
 
 async function render(name: string, api: Api, specText: string): Promise<string> {

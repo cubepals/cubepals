@@ -241,7 +241,7 @@ export const DeploymentConfig = z.object({
     mirrorCatalogArtifacts: z.boolean(),
   }),
   catalog: z.object({
-    /** Modrinth refuses traffic that doesn't name its application; this names the deployment. */
+    /** Modrinth refuses traffic that doesn't name its application, and Hangar asks for it; this names the deployment. */
     userAgent: z.string().min(1),
   }),
   /** Absent means this deployment has no archives capability (§15.4). */

@@ -9,6 +9,7 @@ import type { Pool } from 'pg'
 import type { PgBoss } from 'pg-boss'
 import type { BillingService } from './app/billing/service.ts'
 import { archivesMissing, type DeploymentCapabilities, supportOf } from './app/capabilities.ts'
+import { RoutedCatalog } from './app/catalog/routed.ts'
 import { type ControlPlane, composeControlPlane } from './app/control-plane.ts'
 import { ItemIcons } from './app/items/icons.ts'
 import { CLIENT_ADDRESS_HEADER } from './app/ports/auth.ts'
@@ -52,6 +53,8 @@ import { FlyLogSource } from './infra/fly/fly-logs.ts'
 import { FlyRuntime } from './infra/fly/fly-runtime.ts'
 import { LibraryFileFormats } from './infra/formats/file-formats.ts'
 import { LibraryPackArchives } from './infra/formats/pack-archives.ts'
+import { hangarClient } from './infra/hangar/client.ts'
+import { HangarCatalog } from './infra/hangar/hangar-catalog.ts'
 import { MemoryLimits } from './infra/limits/memory-limits.ts'
 import { UpstreamLoaderBuilds } from './infra/loaders/loader-builds.ts'
 import { localCheckoutPages } from './infra/local-billing/checkout-pages.ts'
@@ -586,6 +589,14 @@ async function serveFleet(
 }
 
 /** Optional capabilities: absent adapters are the capability being off (§15.4). */
+/** Modrinth, and Hangar's Paper plugins beside it by the ids that name them (`catalog/routed.ts`). */
+function catalogs(userAgent: string): RoutedCatalog {
+  const hangar = new HangarCatalog(hangarClient(userAgent), (url) =>
+    fetch(url, { headers: { 'User-Agent': userAgent } }),
+  )
+  return new RoutedCatalog(new ModrinthCatalog(modrinthClient(userAgent)), [hangar])
+}
+
 function capabilitiesFor(config: DeploymentConfig, db: Db): DeploymentCapabilities {
   const billing = config.billing
   return {
@@ -653,7 +664,7 @@ async function main(): Promise<void> {
       probe: provider.probe,
       logs: provider.logs,
       profiles,
-      catalog: new ModrinthCatalog(modrinthClient(config.catalog.userAgent)),
+      catalog: catalogs(config.catalog.userAgent),
       loaderBuilds: new UpstreamLoaderBuilds(),
       formats: new LibraryFileFormats(),
       archives: new LibraryPackArchives(),

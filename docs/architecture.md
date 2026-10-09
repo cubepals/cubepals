@@ -632,7 +632,7 @@ from presence.
 | `ServerConsole` | `RconConsole` (infra/mc-protocol), `BoatConsole` (through Boat's command endpoint), fake | RCON is a network protocol; tests |
 | `ReadinessProbe` | `SlpProbe` (Server List Ping), `BoatProbe` (through Boat's command endpoint), fake | "ready" is a Minecraft-protocol fact |
 | `LogSource` | `FlyLogSource` (NATS live + HTTP history), `DockerLogSource`, `BoatLogSource`, `FleetLogSource`, fake | provider-specific log plumbing |
-| `ModCatalog` | `ModrinthCatalog` | Modrinth API isolation; offline tests. Adds `states(projects, versions)`, a bulk state lookup where omitted ids map to `absent` |
+| `ModCatalog` | `ModrinthCatalog`; `HangarCatalog` beside it, through `RoutedCatalog` (§15.2) | Modrinth API isolation; offline tests. Adds `states(projects, versions)`, a bulk state lookup where omitted ids map to `absent` |
 | `ArchiveStore` | `S3ArchiveStore` (R2; RustFS locally); **optional** (§15.4) | Durable archives, uploads, mirror. Only generic primitives: `newKey(kind, scope)`, `presignPut(key, ttl, audience, sizeBytes?)`, `presignGet(key, ttl, audience, downloadName)`, `ingestFromUrl(url, sha512) → key`, `ingestFile(path, sha512) → key`, `head`, `delete`. The audience (`runtime` or `browser`) picks the name a link is signed for: one in production, two locally, where containers reach the host's store as `host.docker.internal` |
 | `PlayerProfiles` | `MojangProfiles` | Name → UUID validation when adding players (even while stopped), UUID → current name before delivering commands, and UUID → skin for the faces player rows show |
 | `EventBus` | `PgNotifyEventBus` | cross-process fan-out without Redis |
@@ -1696,6 +1696,27 @@ directory.
     That's observed in its source, not promised.
   - A mirror makes it guaranteed.
   - Installed jars also live on the volume and in every snapshot.
+
+**A second catalog: Hangar.** Some Paper plugins are published on Hangar (hangar.papermc.io),
+PaperMC's catalog, and not on Modrinth: OldCombatMechanics and VaultUnlocked among them.
+- `HangarCatalog` (`infra/hangar/`) answers the same port from Hangar's public `/api/v1`, on a
+  client generated from Hangar's spec. `RoutedCatalog` (`app/catalog/routed.ts`) puts it beside
+  Modrinth, so every service still asks one `ModCatalog`.
+- **Ids name their catalog.** Hangar's numeric ids are written `hangar:<id>` (`catalogOfId`);
+  Modrinth's stay bare. Questions about an id go to its catalog, a pin's `source.catalog` is
+  `hangar`, and the trust cache keeps Hangar's states under `hangar` and refreshes them in turn.
+  A template can mix both (`{ catalog: 'hangar', projectId: 'hangar:OldCombatMechanics' }`).
+- **Paper only.** Every question is asked for Hangar's PAPER platform; a version whose file
+  Hangar only links to elsewhere is left out.
+- **Identity stays SHA-512.** Hangar publishes a file's SHA-256 alone. Its SHA-512 is learned
+  once, from the bytes Hangar's CDN serves, after they match the published size and SHA-256;
+  the start step's check then holds the installed jar to it like any other. So `versions()`
+  returns the newest version of each channel only: each one costs a download the first time.
+- **Rules followed.** Anonymous reads, a named User-Agent, and Hangar's limit of 20 requests every
+  5 seconds (a 429 waits and is tried again). Hangar's terms grant Hangar the right to
+  distribute what is uploaded; each plugin's own licence governs its use, and Blockly fetches
+  jars from Hangar's own CDN at install, as it does from Modrinth's.
+- Search, modpacks and lookups by hash stay Modrinth's.
 
 **Custom uploads.**
 1. `beginUpload` returns a presigned PUT, signed for the size the browser declared, with the

@@ -1,4 +1,5 @@
-import type { Db } from '@blockly/db'
+import type { Db, Tx } from '@blockly/db'
+import { catalogOfId } from '../../domain/mods/catalog.ts'
 import type { ModCatalog, ProjectState, VersionState } from '../ports/catalog.ts'
 import {
   type CachedState,
@@ -34,16 +35,20 @@ const MISSED_REFRESH_MS = 60 * 60 * 1000
 export class CatalogSync {
   readonly #db: Db
   readonly #catalog: ModCatalog
+  /** The catalogs a refresh asks, one after another. */
+  readonly #ids: readonly string[]
 
   constructor(deps: { db: Db; catalog: ModCatalog }) {
     this.#db = deps.db
     this.#catalog = deps.catalog
+    this.#ids = deps.catalog.ids ?? [deps.catalog.id]
   }
 
   /**
    * Write-through: the states resolution saw, recorded before the revision that pins them
    * exists, so every pinned project and version has a cache row. A state that moved is a
    * transition like any refresh finds (§15.3), returned so listings that pin it follow at once.
+   * Each state is kept under the catalog its id names (`catalogOfId`), as the pin names it.
    */
   async recordObserved(
     observed: {
@@ -52,24 +57,14 @@ export class CatalogSync {
     },
     at = new Date(),
   ): Promise<CatalogTransition[]> {
-    const catalog = this.#catalog.id
     const transitions: CatalogTransition[] = []
+    const named = [...observed.projects.keys(), ...[...observed.versions.values()].map((v) => v.projectId)]
     await this.#db.transaction(async (tx) => {
-      const known = await cachedProjects(tx, catalog, [...observed.projects.keys()])
-      for (const [projectId, state] of observed.projects) {
-        const from = known.get(projectId)?.state ?? null
-        const changed = from !== state
-        if (changed && from !== null)
-          transitions.push({ catalog, kind: 'project', id: projectId, from, to: state })
-        await saveProjectState(tx, catalog, { projectId, state, absentStreak: 0, changed }, at)
-      }
-      const knownVersions = await cachedVersions(tx, catalog, [...observed.versions.keys()])
-      for (const [versionId, { projectId, state }] of observed.versions) {
-        const from = knownVersions.get(versionId)?.state ?? null
-        const changed = from !== state
-        if (changed && from !== null)
-          transitions.push({ catalog, kind: 'version', id: versionId, from, to: state })
-        await saveVersionState(tx, catalog, { versionId, projectId, state, absentStreak: 0, changed }, at)
+      for (const catalog of new Set(named.map((id) => catalogOfId(id, this.#catalog.id)))) {
+        const ours = (id: string) => catalogOfId(id, this.#catalog.id) === catalog
+        const projects = [...observed.projects].filter(([projectId]) => ours(projectId))
+        const versions = [...observed.versions].filter(([, { projectId }]) => ours(projectId))
+        transitions.push(...(await recordStates(tx, catalog, projects, versions, at)))
       }
     })
     return transitions
@@ -77,10 +72,16 @@ export class CatalogSync {
 
   /**
    * `catalog-refresh`: every tracked state read again, since a project's `updated` date doesn't
-   * move when its status does. A catalog that can't be reached throws, and nothing changes.
+   * move when its status does, one catalog after another. A catalog that can't be reached throws,
+   * and nothing of its changes; the ones before it keep what they found.
    */
   async refresh(at = new Date()): Promise<CatalogTransition[]> {
-    const catalog = this.#catalog.id
+    const transitions: CatalogTransition[] = []
+    for (const catalog of this.#ids) transitions.push(...(await this.#refresh(catalog, at)))
+    return transitions
+  }
+
+  async #refresh(catalog: string, at: Date): Promise<CatalogTransition[]> {
     const tracked = await trackedSet(this.#db, catalog)
     if (tracked.projects.length === 0 && tracked.versions.length === 0) {
       await recordRefresh(this.#db, catalog, at)
@@ -154,6 +155,42 @@ export class CatalogSync {
     const at = await this.lastHeard()
     return at !== null && now.getTime() - at.getTime() > MISSED_REFRESH_MS
   }
+}
+
+/** One catalog's observed states written through, and the ones that moved. */
+async function recordStates(
+  tx: Tx,
+  catalog: string,
+  projects: ReadonlyArray<[string, ProjectState]>,
+  versions: ReadonlyArray<[string, { projectId: string; state: VersionState }]>,
+  at: Date,
+): Promise<CatalogTransition[]> {
+  const transitions: CatalogTransition[] = []
+  const known = await cachedProjects(
+    tx,
+    catalog,
+    projects.map(([projectId]) => projectId),
+  )
+  for (const [projectId, state] of projects) {
+    const from = known.get(projectId)?.state ?? null
+    const changed = from !== state
+    if (changed && from !== null)
+      transitions.push({ catalog, kind: 'project', id: projectId, from, to: state })
+    await saveProjectState(tx, catalog, { projectId, state, absentStreak: 0, changed }, at)
+  }
+  const knownVersions = await cachedVersions(
+    tx,
+    catalog,
+    versions.map(([versionId]) => versionId),
+  )
+  for (const [versionId, { projectId, state }] of versions) {
+    const from = knownVersions.get(versionId)?.state ?? null
+    const changed = from !== state
+    if (changed && from !== null)
+      transitions.push({ catalog, kind: 'version', id: versionId, from, to: state })
+    await saveVersionState(tx, catalog, { versionId, projectId, state, absentStreak: 0, changed }, at)
+  }
+  return transitions
 }
 
 /**

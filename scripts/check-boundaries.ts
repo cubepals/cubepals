@@ -26,6 +26,7 @@ const PROVIDER_HOSTS: Record<string, RegExp> = {
   boat: /(^|\.)boat\.dev$/,
   // A Modrinth pack may download from the hosts its format allows, which the adapter holds packs to.
   modrinth: /(^|\.)(modrinth\.com|github\.com|raw\.githubusercontent\.com|gitlab\.com)$/,
+  hangar: /^(hangar|hangarcdn)\.papermc\.io$/,
   curseforge: /(^|\.)(curseforge\.com|forgecdn\.net)$/,
   mojang: /(^|\.)(minecraftservices\.com|mojang\.com|minecraft\.net)$/,
   loaders: /(^|\.)(fabricmc\.net|quiltmc\.org|papermc\.io|minecraftforge\.net|neoforged\.net)$/,

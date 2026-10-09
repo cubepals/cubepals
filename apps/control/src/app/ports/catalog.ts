@@ -1,5 +1,5 @@
 /**
- * A mod catalog (Modrinth), seen only as far as Blockly uses one: search while authoring, exact
+ * A mod catalog (Modrinth, and Hangar beside it through `catalog/routed.ts`), seen only as far as Blockly uses one: search while authoring, exact
  * versions for resolution, and bulk states for the trust cache (docs/architecture.md §15.3).
  * Which loaders and kinds of project a server accepts is Minecraft knowledge; it arrives here as
  * plain strings. The data it returns is the domain's (`domain/mods/catalog.ts`), which resolution
@@ -51,6 +51,11 @@ export interface PackLinks {
 export interface ModCatalog {
   /** Stored as a mod source's catalog. */
   readonly id: string
+  /**
+   * Every catalog it answers for, its own first, where it answers for others too by the name
+   * their ids carry (`catalogOfId`).
+   */
+  readonly ids?: readonly string[]
   /** Where people read about a project, on the catalog's own site. */
   projectPage(projectId: string): string
   /**
@@ -105,8 +110,12 @@ export interface ModCatalog {
 
 /** The catalog couldn't answer. Authoring stops with nothing written; refreshes keep what they know. */
 export class CatalogUnavailable extends Error {
-  constructor(detail: string) {
+  /** The catalog's name, as players know it. */
+  readonly catalog: string
+
+  constructor(detail: string, catalog = 'Modrinth') {
     super(`The mod catalog is unavailable: ${detail}`)
+    this.catalog = catalog
     this.name = 'CatalogUnavailable'
   }
 }

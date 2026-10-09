@@ -1,0 +1,6 @@
+{
+  "message": "Unknown value '999999999' for path variable 'slugOrId'",
+  "messageArgs": [],
+  "isHangarApiException": true,
+  "httpError": { "statusCode": 404 }
+}
