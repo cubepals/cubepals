@@ -23,10 +23,11 @@ export const STATE_BUCKET = 'blockly-terraform-state'
 
 /**
  * Where a value goes. `secret` and `operator` reach the control plane (TF_VAR_secrets,
- * TF_VAR_operator_settings); `account` is a TF_VAR of its own; `apply` is only for the tools
- * that apply, and FLY_API_TOKEN is both that and a secret.
+ * TF_VAR_operator_settings); `web` reaches only the Vercel project's production builds
+ * (TF_VAR_web_secrets); `account` is a TF_VAR of its own; `apply` is only for the tools that
+ * apply, and FLY_API_TOKEN is both that and a secret.
  */
-export type Destination = 'secret' | 'operator' | 'account' | 'apply'
+export type Destination = 'secret' | 'operator' | 'web' | 'account' | 'apply'
 
 export interface Value {
   name: string
@@ -188,6 +189,21 @@ export const VALUES: Value[] = [
     optional: 'github',
   },
   { name: 'AUTH_GITHUB_CLIENT_SECRET', goes: ['secret'], where: 'the same OAuth app', optional: 'github' },
+  {
+    name: 'POSTHOG_PERSONAL_API_KEY',
+    goes: ['web'],
+    where:
+      'only for readable errors: PostHog → Settings → Personal API keys → Create, error tracking write and organization read',
+    optional: 'sourcemaps',
+    shape: startsWith(['phx_'], 'starts with phx_'),
+  },
+  {
+    name: 'POSTHOG_PROJECT_ID',
+    goes: ['web'],
+    where: 'the same PostHog project: Settings → Project → Project ID',
+    optional: 'sourcemaps',
+    shape: (value) => (/^\d+$/.test(value) ? null : 'is a number'),
+  },
 ]
 
 /** NAME=value lines; `#` starts a comment, and quotes around a value are dropped. */
@@ -332,12 +348,17 @@ export function terraformEnv(values: Record<string, string>): Record<string, str
       ]),
     )
   const secrets = pick('secret')
+  const web = pick('web')
   return {
     TF_VAR_secrets: JSON.stringify(secrets),
     TF_VAR_secret_versions: JSON.stringify(
       Object.fromEntries(Object.entries(secrets).map(([name, value]) => [name, versionOf(value)])),
     ),
     TF_VAR_operator_settings: JSON.stringify(pick('operator')),
+    TF_VAR_web_secrets: JSON.stringify(web),
+    TF_VAR_web_secret_versions: JSON.stringify(
+      Object.fromEntries(Object.entries(web).map(([name, value]) => [name, versionOf(value)])),
+    ),
     TF_VAR_cloudflare_account_id: values.CLOUDFLARE_ACCOUNT_ID ?? '',
     TF_VAR_cloudflare_zone_id: values.CLOUDFLARE_ZONE_ID ?? '',
     FLY_API_TOKEN: values.FLY_API_TOKEN ?? '',

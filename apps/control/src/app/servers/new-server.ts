@@ -8,6 +8,7 @@
  */
 import type { Db } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { isDatapack } from '../../domain/mods/artifact.ts'
 import type { CarriedFile } from '../../domain/revision/carried.ts'
 import { defaultSettings, type Loader, type RevisionDraft } from '../../domain/revision/revision.ts'
 import { type MemoryTier, PARTY, type PartySize } from '../../domain/server/size.ts'
@@ -143,7 +144,8 @@ export async function draftNewServer(
 /**
  * The build a new server's first revision pins: the one the setup it copies pinned, else its server
  * type's current one. Plain Minecraft made from nothing or from a template runs on Paper where
- * Paper has a build for its release (`runsOnPaper`), which its owner can turn off in its settings.
+ * Paper has a build for its release (`runsOnPaper`), datapacks and all, which its owner can turn off
+ * in its settings.
  */
 async function firstPin(
   builds: LoaderBuilds,
@@ -154,7 +156,7 @@ async function firstPin(
 ): Promise<string | null> {
   if (chosen !== null && chosen.setup.loaderVersion !== null) return chosen.setup.loaderVersion
   const fresh = request.from === undefined || request.from.kind === 'template'
-  if (loader === 'vanilla' && fresh && (chosen?.mods ?? []).length === 0)
+  if (loader === 'vanilla' && fresh && (chosen?.mods ?? []).every((mod) => isDatapack(mod)))
     return paperPin(builds, gameVersion, 'plain')
   return loaderPin(builds, loader, gameVersion)
 }

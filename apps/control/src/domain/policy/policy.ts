@@ -1,4 +1,11 @@
-import { type Entitlements, planGap, planName, planThatRuns, type Runs } from '../account/entitlements.ts'
+import {
+  type Entitlements,
+  type PlanGap,
+  planGap,
+  planName,
+  planThatRuns,
+  type Runs,
+} from '../account/entitlements.ts'
 import type { AccountStanding } from '../account/standing.ts'
 import type { MemoryTier } from '../server/size.ts'
 
@@ -117,6 +124,13 @@ const NEEDS_ARCHIVES: ReadonlySet<Capability['kind']> = new Set([
   'upload_pack',
 ])
 
+/** What a server waits for when its plan doesn't run it, as a refused start says it. */
+const WAITS_FOR: Record<Exclude<PlanGap, 'size'>, string> = {
+  mods: 'Mods, plugins and modpacks come',
+  datapacks: 'Datapacks come',
+  server_type: 'This server’s type comes',
+}
+
 export function evaluate(facts: PolicyFacts, capability: Capability): Decision {
   const { deployment, controls, standing, entitlements } = facts
 
@@ -177,7 +191,7 @@ export function evaluate(facts: PolicyFacts, capability: Capability): Decision {
       if (gap === 'size') return deny('not_entitled', 'Your plan does not include servers this size.')
       if (gap !== null) {
         const paid = planThatRuns(capability.runs)
-        const what = gap === 'mods' ? 'Mods, plugins and modpacks come' : 'This server’s type comes'
+        const what = WAITS_FOR[gap]
         const where = paid === null ? 'with a paid plan' : `with ${planName(paid)}`
         return deny('not_entitled', `${what} ${where}. Its world is safe, and it starts again ${where}.`)
       }

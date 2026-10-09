@@ -63,14 +63,28 @@ variable "cloudflare_account_id" { type = string }
 variable "cloudflare_zone_id" { type = string }
 
 variable "web" {
-  description = "The Vercel project, its repository, production branch, whether it builds previews, and hosts that redirect to its domain."
+  description = "The Vercel project, its repository, production branch, whether it builds previews, hosts that redirect to its domain, and whether search engines may index it."
   type = object({
     project           = string
     repository        = string
     production_branch = string
     previews          = bool
     redirects         = optional(list(string), [])
+    indexable         = optional(bool, false)
   })
+}
+
+variable "web_secrets" {
+  description = "Values only the web app's production builds get, by name: POSTHOG_PERSONAL_API_KEY and POSTHOG_PROJECT_ID upload its source maps."
+  type        = map(string)
+  sensitive   = true
+  default     = {}
+}
+
+variable "web_secret_versions" {
+  description = "A non-secret marker per web secret that changes when its value does."
+  type        = map(string)
+  default     = {}
 }
 
 variable "fleet_nodes" {
@@ -201,6 +215,12 @@ module "web" {
   redirects            = var.web.redirects
   deployment_id        = var.settings["DEPLOYMENT_ID"]
   posthog_token        = lookup(var.settings, "POSTHOG_TOKEN", "")
+  canonical_origin     = var.settings["WEB_CANONICAL_ORIGIN"]
+  indexable            = var.web.indexable
+  # Source maps go up only with both values; the versions say whether they were given.
+  posthog_personal_api_key         = lookup(var.web_secrets, "POSTHOG_PERSONAL_API_KEY", "")
+  posthog_personal_api_key_version = lookup(var.web_secret_versions, "POSTHOG_PERSONAL_API_KEY", "")
+  posthog_project_id               = lookup(var.web_secrets, "POSTHOG_PROJECT_ID", "")
 }
 
 locals {

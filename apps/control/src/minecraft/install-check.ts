@@ -2,6 +2,7 @@ import type { PinnedMod } from '../domain/mods/artifact.ts'
 import { placedMods } from '../domain/revision/carried.ts'
 import type { Loader } from '../domain/revision/revision.ts'
 import { DATA_DIR, diskName, jarsOf } from './jars.ts'
+import { installsAsDatapack } from './mods.ts'
 
 /**
  * What a revision's jars should look like on disk, and one command that reports what is
@@ -17,14 +18,17 @@ export interface InstallCheck {
 /**
  * Null when the revision installs no jars: vanilla, or a loader with none chosen. A jar in the
  * loader's folder is named by its file name; one placed in a folder of its own (`PinnedMod.dir`)
- * by its path under the server's directory.
+ * by its path under the server's directory. Datapacks are not jars: the step that puts them into
+ * the world checks each one's SHA-512 as it starts, and stops the start on one that isn't as
+ * pinned (`datapacks.ts`).
  */
 export function installCheck(revision: { loader: Loader; mods: readonly PinnedMod[] }): InstallCheck | null {
   const jars = jarsOf(revision.loader)
-  if (jars === null || revision.mods.length === 0) return null
-  const dirs = [...new Set(placedMods(revision.mods).map((m) => m.dir))]
+  const mods = revision.mods.filter((m) => !installsAsDatapack(m, revision.loader))
+  if (jars === null || mods.length === 0) return null
+  const dirs = [...new Set(placedMods(mods).map((m) => m.dir))]
   return {
-    expected: revision.mods.map((m) => ({
+    expected: mods.map((m) => ({
       name: m.dir === undefined ? diskName(m.artifact) : `${m.dir}/${diskName(m.artifact)}`,
       sha512: m.artifact.sha512,
       mod: m.name,

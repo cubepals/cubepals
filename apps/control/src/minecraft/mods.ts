@@ -1,3 +1,4 @@
+import { DATAPACK, isDatapack } from '../domain/mods/artifact.ts'
 import type { Loader } from '../domain/revision/revision.ts'
 
 /**
@@ -6,10 +7,10 @@ import type { Loader } from '../domain/revision/revision.ts'
  */
 
 /**
- * The catalog loader tags a server type runs. Quilt loads Fabric mods, not the other way round;
- * Paper runs plugins written for Bukkit and Spigot.
+ * The catalog loader tags a server type loads jars for. Quilt loads Fabric mods, not the other way
+ * round; Paper runs plugins written for Bukkit and Spigot.
  */
-const LOADERS: Record<Loader, readonly string[]> = {
+const JAR_LOADERS: Record<Loader, readonly string[]> = {
   vanilla: [],
   fabric: ['fabric'],
   quilt: ['quilt', 'fabric'],
@@ -18,7 +19,12 @@ const LOADERS: Record<Loader, readonly string[]> = {
   paper: ['paper', 'spigot', 'bukkit'],
 }
 
-export const catalogLoadersFor = (loader: Loader): readonly string[] => LOADERS[loader]
+/** The catalog loader tags a server type runs: its jars', and datapacks, which every one reads. */
+export const catalogLoadersFor = (loader: Loader): readonly string[] => [...JAR_LOADERS[loader], DATAPACK]
+
+/** Whether a pin goes into the world's `datapacks` folder on this server type, not among its jars. */
+export const installsAsDatapack = (mod: { loaders: readonly string[] }, loader: Loader): boolean =>
+  isDatapack(mod, JAR_LOADERS[loader])
 
 /**
  * The server type a modpack needs, from the loader it declares. A pack names exactly one, and
@@ -29,10 +35,13 @@ export function loaderOfPack(tags: readonly string[]): Loader | null {
   return packLoaders.find((loader) => tags.includes(loader)) ?? null
 }
 
-/** Mods for a mod loader, plugins for Paper, nothing for vanilla. */
-export function projectTypesFor(loader: Loader): readonly ('mod' | 'plugin')[] {
-  if (loader === 'vanilla') return []
-  return loader === 'paper' ? ['plugin'] : ['mod']
+/**
+ * Mods for a mod loader, plugins for Paper, then datapacks for every server type: plain Minecraft
+ * runs only those.
+ */
+export function projectTypesFor(loader: Loader): readonly ('mod' | 'plugin' | 'datapack')[] {
+  if (loader === 'vanilla') return [DATAPACK]
+  return [loader === 'paper' ? 'plugin' : 'mod', DATAPACK]
 }
 
 /**
