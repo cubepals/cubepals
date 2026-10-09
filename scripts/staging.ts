@@ -1,6 +1,7 @@
 /**
  * Staging on Fly. It stays: when nobody is testing, its machines are stopped, which keeps its
- * database, worlds, bucket and secrets and costs only their storage.
+ * database, worlds, bucket, secrets and two addresses, and costs only their storage and about $4
+ * a month for the addresses.
  *
  *   bun scripts/staging.ts up       every part, in the `blockly-staging` org, deployed from this checkout
  *   bun scripts/staging.ts stop     every machine in the org stopped, the servers' included
@@ -649,9 +650,10 @@ const stopOrder = (app: string): number =>
       : STOP_FIRST.length
 
 /**
- * Every machine in the org stopped, the platform's and every server's, and the dedicated IPv4s
- * released, since they bill $2 a month each while nothing answers on them. Volumes, the bucket
- * and secrets stay; `start` brings the platform back.
+ * Every machine in the org stopped, the platform's and every server's. Volumes, the bucket,
+ * secrets and the edge's and realtime's dedicated IPv4s stay, so `start` brings the platform back
+ * as it was: the play domain and rt.staging's record are named after those addresses, and a cloud
+ * session can't rewrite DNS. Keeping both costs about $4 a month (owner, 2026-10-09).
  */
 function stop(): void {
   for (const app of appsInOrg().sort((a, b) => stopOrder(a) - stopOrder(b)))
@@ -667,11 +669,6 @@ function stop(): void {
   )
   say(running.length === 0 ? `Every machine in ${ORG} is stopped.` : `Still running: ${running.join(', ')}`)
   if (running.length > 0) process.exitCode = 1
-  for (const app of [APP.edge, APP.realtime])
-    for (const ip of ipsOf(app).filter((ip) => ip.Type === 'v4')) {
-      fly(['ips', 'release', ip.Address, '-a', app])
-      say(`  released ${app} ${ip.Address}`)
-    }
 }
 
 /** Every machine of an app that isn't running started. */
@@ -692,10 +689,11 @@ async function start(): Promise<void> {
     process.exitCode = 1
     return
   }
-  // `stop` gave the dedicated IPv4s back, and the play domain is named after the edge's, so
-  // taking new ones means setting the platform up again: `up`, which deploys this checkout.
+  // Without its dedicated IPv4s (an older `stop` gave them back) the play domain, named after the
+  // edge's, is gone too, so taking new ones means setting the platform up again: `up`, which
+  // deploys this checkout and needs CLOUDFLARE_API_TOKEN for the DNS.
   if (![APP.edge, APP.realtime].every((app) => ipsOf(app).some((ip) => ip.Type === 'v4'))) {
-    say('The addresses were released while stopped; running up to take new ones.')
+    say('The addresses are gone; running up to take new ones.')
     await up()
     return
   }
