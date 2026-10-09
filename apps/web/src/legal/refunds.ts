@@ -14,7 +14,7 @@ export const REFUNDS: Policy = {
   title: 'Refunds and cancellation',
   description: 'How to cancel a paid plan, refunds in the first 14 days, and how refunds work.',
   summary: [
-    `You can cancel ${PLUS.name} any time from your account. You keep it until the end of the month you paid for, and you aren’t charged again.`,
+    `You can cancel ${PLUS.name} any time from your account. You keep it until the end of the month you paid for, and you aren’t charged again, except for any extra hours you allowed and played.`,
     `Cancel within 14 days of buying ${PLUS.name} having played less than ${FULL_REFUND_UNDER_HOURS} hours, and you get everything back.`,
     `Played ${FULL_REFUND_UNDER_HOURS} hours or more? You pay for the hours you played, and get back only the part you didn’t use.`,
     'Payments and refunds go through Polar, our merchant of record.',
@@ -25,7 +25,7 @@ export const REFUNDS: Policy = {
       heading: '1. Cancelling your plan',
       blocks: [
         `You can cancel ${PLUS.name} at any time, with no notice period. Go to your [account](/account), choose **Manage billing**, and cancel there. You can also email {support} from the address on your account and we’ll do it for you.`,
-        `When you cancel, you keep ${PLUS.name} until the end of the month you have already paid for, and you won’t be charged again. You can change your mind and keep the subscription going any time before that date.`,
+        `When you cancel, you keep ${PLUS.name} until the end of the month you have already paid for, and you won’t be charged again, except once at the end of it for any extra hours you allowed and played. You can change your mind and keep the subscription going any time before that date.`,
         'Cancelling doesn’t delete your account or your worlds. To delete those as well, see our [Terms](/legal/terms#suspension).',
       ],
     },

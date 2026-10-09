@@ -1,3 +1,8 @@
+/**
+ * An account's standing as admins and its owner set it: active, suspended or closed, its plan and
+ * restrictions, an admin's limits, and the owner's own choices (extra play, the AFK kick), with
+ * which warnings about the month's play were sent.
+ */
 type AccountStatus = 'active' | 'suspended' | 'terminated'
 
 export interface Restrictions {
@@ -33,6 +38,8 @@ export interface AccountStanding {
   afkKickMinutes: number | null
   /** The last play warning sent, as `YYYY-MM:percent`; null before any. */
   playWarned: string | null
+  /** The last extra-play email sent, as `YYYY-MM:mark` (0, 80 or 100); null before any. */
+  extraWarned: string | null
 }
 
 export function newStanding(userId: string): AccountStanding {
@@ -46,5 +53,6 @@ export function newStanding(userId: string): AccountStanding {
     extraUnitsAllowed: 0,
     afkKickMinutes: null,
     playWarned: null,
+    extraWarned: null,
   }
 }

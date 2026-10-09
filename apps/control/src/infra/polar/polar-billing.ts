@@ -1,5 +1,5 @@
 import { PolarClientError, PolarError, PolarRateLimitError } from '@polar-sh/sdk'
-import { createPolar, webhooks } from '@polar-sh/sdk/2026-04'
+import { createPolar, webhooks } from '@polar-sh/sdk/2026-10'
 import { z } from 'zod'
 import {
   type BillingEvent,
@@ -7,14 +7,20 @@ import {
   type BillingProvider,
   type BillingState,
   BillingUnavailable,
+  type UsageEvent,
   WebhookRejected,
 } from '../../app/ports/optional.ts'
 
 /**
- * Polar through its official TypeScript SDK, pinned to API version 2026-04 for requests and for
+ * Polar through its official TypeScript SDK, pinned to API version 2026-10 for requests and for
  * webhook payloads (docs/dependency-audit.md). Customers carry our user id as their external id,
  * so nothing maps Polar's own ids back to users. A plan is a product; configuration says which.
+ * Extra play is sent as `play.extra` events, which the "Extra play" meter sums and the plan's
+ * metered price bills on its next payment; no id of either is configured.
  */
+
+/** The event name the "Extra play" meter counts (docs/configuration.md, Polar). */
+const EXTRA_PLAY_EVENT = 'play.extra'
 
 export interface PolarBillingOptions {
   accessToken: string
@@ -42,6 +48,12 @@ const CustomerState = z.object({
   ),
 })
 
+// A subscription event carries the subscription, and its customer the external id.
+const SubscriptionEvent = z.object({ customer: z.object({ external_id: z.string().nullish() }) })
+
+// The prices of a plan's product, to tell the metered line of an order from the plan's own.
+const Product = z.object({ prices: z.array(z.object({ id: z.string(), amount_type: z.string().nullish() })) })
+
 // A customer state lists only subscriptions that pay now, `active` or `trialing` (Polar's
 // `SubscriptionStatus.active_statuses`, read 2026-09-26); one whose renewal failed is `past_due`
 // on the subscription itself while Polar retries the charge.
@@ -51,9 +63,13 @@ const Subscription = z.object({
   past_due_at: z.string().nullish(),
 })
 
-// The fields of Polar's `Order` (SDK 2026-04 `models`, read 2026-09-26) that revenue needs: every
-// amount is in cents, and the customer carries the external id Blockly gave it.
+// The fields of Polar's `Order` (SDK 2026-10 `models`, read 2026-10-10) that revenue and extra play
+// need: every amount is in cents, the customer carries the external id Blockly gave it, and each
+// line names the price it charged, which says whether it is the metered one.
 const Order = z.object({
+  status: z.string(),
+  subscription_id: z.string().nullish(),
+  items: z.array(z.object({ amount: z.number().int(), product_price_id: z.string().nullish() })).default([]),
   id: z.string(),
   created_at: z.string(),
   subtotal_amount: z.number().int(),
@@ -75,6 +91,8 @@ export class PolarBilling implements BillingProvider {
   readonly #products: Readonly<Record<string, string>>
   /** Product → plan. */
   readonly #plans: ReadonlyMap<string, string>
+  /** Product → its prices, by id, with whether each is metered; read from Polar once each. */
+  readonly #prices = new Map<string, Map<string, boolean>>()
 
   constructor(options: PolarBillingOptions) {
     this.#polar = createPolar({
@@ -140,8 +158,15 @@ export class PolarBilling implements BillingProvider {
       if (error instanceof webhooks.PolarWebhookError) throw new WebhookRejected(error.message)
       throw error
     }
-    if (event.type === 'order.paid' || event.type === 'order.refunded')
-      return { kind: 'order', order: this.#order(event.data) }
+    if (ORDER_EVENTS.has(event.type)) return { kind: 'order', order: await this.#order(event.data) }
+    if (SUBSCRIPTION_EVENTS.has(event.type)) {
+      const userId = SubscriptionEvent.parse(event.data).customer.external_id
+      if (!userId) return null
+      return {
+        kind: 'standing',
+        state: (await this.stateOf(userId)) ?? { userId, externalCustomerId: '', subscription: null },
+      }
+    }
     if (event.type !== 'customer.state_changed') return null
     const sent = this.#standing(event.data)
     if (sent === null) return null
@@ -149,8 +174,16 @@ export class PolarBilling implements BillingProvider {
     return { kind: 'standing', state: (await this.stateOf(sent.userId)) ?? { ...sent, subscription: null } }
   }
 
-  #order(data: unknown): BillingOrder {
+  async #order(data: unknown): Promise<BillingOrder> {
     const order = Order.parse(data)
+    let extraCents = 0
+    for (const item of order.items)
+      if (
+        item.product_price_id &&
+        order.product_id &&
+        (await this.#metered(order.product_id, item.product_price_id))
+      )
+        extraCents += item.amount
     return {
       externalOrderId: order.id,
       userId: order.customer.external_id ?? null,
@@ -163,8 +196,50 @@ export class PolarBilling implements BillingProvider {
       taxCents: order.tax_amount,
       totalCents: order.total_amount,
       refundedCents: order.refunded_amount,
+      status: order.status,
+      extraCents,
+      externalSubscriptionId: order.subscription_id ?? null,
       orderedAt: new Date(order.created_at),
     }
+  }
+
+  /**
+   * Whether a price of a plan's product is metered. A product no plan names has nothing metered
+   * Blockly reports; a price it doesn't know yet (one added since) has the product read again.
+   */
+  async #metered(productId: string, priceId: string): Promise<boolean> {
+    if (!this.#plans.has(productId)) return false
+    let prices = this.#prices.get(productId)
+    if (prices === undefined || !prices.has(priceId)) {
+      const product = Product.parse(
+        await call('reading a product', () => this.#polar.products.get(productId)),
+      )
+      prices = new Map(
+        product.prices.map((price) => [price.id, price.amount_type?.startsWith('metered') ?? false]),
+      )
+      this.#prices.set(productId, prices)
+    }
+    return prices.get(priceId) ?? false
+  }
+
+  /**
+   * Extra play as `play.extra` events, `hours` in their metadata, each under its own id: Polar
+   * keeps an id for good and counts one sent again as a duplicate, never twice. It bills an event
+   * on the payment after it *receives* it, so these go as soon as they are counted.
+   */
+  async reportUsage(events: readonly UsageEvent[]): Promise<void> {
+    if (events.length === 0) return
+    await call('reporting extra play', () =>
+      this.#polar.events.ingest({
+        events: events.map((event) => ({
+          name: EXTRA_PLAY_EVENT,
+          external_customer_id: event.userId,
+          external_id: event.externalId,
+          timestamp: event.at.toISOString(),
+          metadata: { hours: event.hours },
+        })),
+      }),
+    )
   }
 
   async stateOf(userId: string): Promise<BillingState | null> {
@@ -217,6 +292,30 @@ export class PolarBilling implements BillingProvider {
     }
   }
 }
+
+/**
+ * Deliveries that carry a whole order: one made (a renewal is made `pending`, then paid or not),
+ * changed, paid or refunded. Each says the order as it is, so the newest word wins.
+ */
+const ORDER_EVENTS: ReadonlySet<string> = new Set([
+  'order.created',
+  'order.updated',
+  'order.paid',
+  'order.refunded',
+])
+
+/**
+ * Deliveries that say a subscription changed in a way extra play turns on: past due, cancelled,
+ * cancelled no more, ended, or active again. Like a customer's state, each only says whose
+ * standing to read from Polar now.
+ */
+const SUBSCRIPTION_EVENTS: ReadonlySet<string> = new Set([
+  'subscription.past_due',
+  'subscription.canceled',
+  'subscription.uncanceled',
+  'subscription.revoked',
+  'subscription.active',
+])
 
 /**
  * Polar refused the request for the customer's email address. It checks a checkout against each

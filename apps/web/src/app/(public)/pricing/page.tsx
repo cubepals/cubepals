@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { dollars, EXTRA_HOUR_CENTS } from '../../../legal/figures'
 import { daysSaid, publicPlans } from '../../../lib/plans'
 import { canonicalOrigin, pageMetadata } from '../../../lib/site'
 import { appSchema, JsonLd } from '../../../lib/structured-data'
@@ -76,8 +77,11 @@ export default async function PricingPage() {
           , and a start that fails never uses your hours.
         </Question>
         <Question title="What if we run out?">
-          Your server sleeps until the 1st, when the hours start again. Nothing is ever charged past your
-          plan.
+          Your server sleeps until the 1st, when the hours start again.
+          {paid
+            ? ` On ${paid.name} you can allow extra hours instead, at ${dollars(EXTRA_HOUR_CENTS)} each, up to a limit you set, added to your next payment.`
+            : ''}{' '}
+          Nothing is charged past your plan unless you allow it.
         </Question>
         <Question title="What happens to a world nobody plays?">
           It sleeps as soon as everyone leaves. After {daysSaid(free?.restsAfterDays ?? 14)} without play

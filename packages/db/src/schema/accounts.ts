@@ -45,6 +45,11 @@ export const accountStanding = pgTable('account_standing', {
    */
   playWarned: text('play_warned'),
   /**
+   * The last email about extra play sent, as `YYYY-MM:mark`: `0` when it started being used, then
+   * 80 and 100 of what the owner allowed. Kept the way `playWarned` is.
+   */
+  extraWarned: text('extra_warned'),
+  /**
    * Where the account came from, as the link that brought it said (`?ref=` or `utm_source=`),
    * kept once in the week after sign-up; null when no link said. No cookie carries it.
    */

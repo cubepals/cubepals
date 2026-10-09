@@ -94,7 +94,25 @@ export interface BillingOrder {
   taxCents: number
   totalCents: number
   refundedCents: number
+  /** `paid`; `pending` while its charge hasn't gone through; `refunded`, `void`… as the provider says. */
+  status: string
+  /** What of it is extra play (the metered line), before discounts and tax. */
+  extraCents: number
+  /** The subscription it charged for; null for none. */
+  externalSubscriptionId: string | null
   orderedAt: Date
+}
+
+/**
+ * Extra play to bill, one event of it: `hours` as the meter counts them (a large server two an
+ * hour), counted up to `at`, which is never ahead of the clock. `externalId` is the provider's
+ * permanent key for the event: sent twice, it is billed once.
+ */
+export interface UsageEvent {
+  externalId: string
+  userId: string
+  hours: number
+  at: Date
 }
 
 /** What one webhook delivery reports: a customer's standing, or an order paid or refunded. */
@@ -107,7 +125,17 @@ export type BillingEvent = { kind: 'standing'; state: BillingState } | { kind: '
 export interface BillingProvider {
   /** The provider's name, as `billing_subscriptions` records it. */
   readonly provider: string
-  checkoutUrl(input: { userId: string; email: string; planKey: string; returnUrl: string }): Promise<string>
+  /**
+   * `priceCents`: what Blockly says the plan costs, for a provider with no product of its own to
+   * charge it (the local checkout); Polar's product sets its own price.
+   */
+  checkoutUrl(input: {
+    userId: string
+    email: string
+    planKey: string
+    priceCents?: number
+    returnUrl: string
+  }): Promise<string>
   portalUrl(input: { userId: string; returnUrl: string }): Promise<string>
   /**
    * One webhook delivery, from the raw body: the standing or the order it reports, or null for a
@@ -122,6 +150,11 @@ export interface BillingProvider {
    * standing lists only subscriptions that pay now, so it can't tell the two apart on its own.
    */
   pastDueSince(externalSubscriptionId: string): Promise<Date | null>
+  /**
+   * Extra play for the provider to add to each account's next payment. All or nothing: it throws
+   * when the provider didn't take them, and they are sent again, under the same ids, later.
+   */
+  reportUsage(events: readonly UsageEvent[]): Promise<void>
 }
 
 /** A webhook that didn't come from the provider, or was altered, or replayed. */

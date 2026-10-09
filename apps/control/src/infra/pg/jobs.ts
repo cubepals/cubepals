@@ -336,6 +336,8 @@ const CRON: Record<ScheduledJob, string> = {
   'backup-schedule': '23 * * * *',
   'artifact-gc': '37 4 * * *',
   'standing-sweep': '* * * * *',
+  // Extra play counted and sent to be billed (app/billing/extra-usage.ts).
+  'extra-play-report': '* * * * *',
   'listing-eligibility-sweep': '51 3 * * *',
   'admin-alerts': '*/5 * * * *',
   // A day's spend against its limit (docs/money-guards.md). At the most the platform runs at

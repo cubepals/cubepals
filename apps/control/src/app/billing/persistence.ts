@@ -1,8 +1,17 @@
 import { type Queryable, schema, type Tx } from '@blockly/db'
-import { and, desc, eq, gt, inArray, isNull, ne, notInArray, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gt, inArray, isNull, lt, ne, notInArray, or, sql } from 'drizzle-orm'
+import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { type BillingFacts, type ExtraPlay, extraPlay } from '../../domain/account/extra-play.ts'
+import type { AccountStanding } from '../../domain/account/standing.ts'
 import type { BillingOrder } from '../ports/optional.ts'
 
 const subscriptions = schema.billingSubscriptions
+
+/** Statuses of an order that was paid: refunded ones too, for what was refunded is kept apart. */
+export const PAID_ORDER = ['paid', 'partially_refunded', 'refunded']
+
+/** Statuses of an order whose charge hasn't gone through, or never will: nothing was paid. */
+const UNPAID_ORDER = ['draft', 'pending', 'void']
 
 /** Statuses a provider reports for a subscription that pays for its plan. */
 export const PAYING = ['active', 'trialing']
@@ -154,7 +163,7 @@ export async function settleOtherSubscriptions(
 
 /**
  * An order as the provider reports it, kept by its id: a redelivered or later event about the same
- * order (paid, then refunded) updates it. A refund only ever grows, so a paid delivery the
+ * order (made, then paid, then refunded) updates it. A refund only ever grows, so a paid delivery the
  * provider sends again after the refund never takes it back. An order for someone this deployment
  * never made isn't its revenue; false then, and nothing is kept.
  */
@@ -176,6 +185,9 @@ export async function recordOrder(q: Queryable, provider: string, order: Billing
     taxCents: order.taxCents,
     totalCents: order.totalCents,
     refundedCents: order.refundedCents,
+    status: order.status,
+    extraCents: order.extraCents,
+    externalSubscriptionId: order.externalSubscriptionId,
     orderedAt: order.orderedAt,
   }
   await q
@@ -186,8 +198,148 @@ export async function recordOrder(q: Queryable, provider: string, order: Billing
       set: {
         ...row,
         refundedCents: sql`greatest(${schema.billingOrders.refundedCents}, ${order.refundedCents})`,
+        // Word that an order is waiting for its charge, arriving after word that it was paid, is
+        // older word: a paid order stays paid.
+        status: sql`case when ${schema.billingOrders.status} in ('paid', 'partially_refunded', 'refunded') and ${order.status} in ('draft', 'pending') then ${schema.billingOrders.status} else ${order.status} end`,
         updatedAt: new Date(),
       },
     })
   return true
+}
+
+const orders = schema.billingOrders
+
+/**
+ * Charges carrying extra play that didn't go through and won't now: their subscription ended, or
+ * they have waited past the grace a failed renewal gets (`PAST_DUE_GRACE_MS`), while the provider
+ * retries the card. What the account owes is all of each, the plan's own price with the extra.
+ */
+function owing(userId: string, now: Date) {
+  const ended = sql`exists (select 1 from ${subscriptions} where ${subscriptions.externalSubscriptionId} = ${orders.externalSubscriptionId} and ${subscriptions.status} = 'ended')`
+  return and(
+    eq(orders.userId, userId),
+    gt(orders.extraCents, 0),
+    inArray(orders.status, UNPAID_ORDER),
+    or(ended, lt(orders.orderedAt, new Date(now.getTime() - PAST_DUE_GRACE_MS))),
+  )
+}
+
+/** What the billing provider has said about an account, as extra play's guards read it. */
+export async function billingFacts(q: Queryable, userId: string, now = new Date()): Promise<BillingFacts> {
+  const latest = await latestSubscription(q, userId)
+  const paid = and(
+    eq(orders.userId, userId),
+    sql`${orders.planKey} is not null`,
+    inArray(orders.status, PAID_ORDER),
+    gt(orders.netCents, 0),
+    lt(orders.refundedCents, orders.totalCents),
+  )
+  const [all] = await q.select({ n: count() }).from(orders).where(paid)
+  const [renewals] = await q
+    .select({ n: count() })
+    .from(orders)
+    .where(and(paid, eq(orders.billingReason, 'subscription_cycle')))
+  const [owed] = await q
+    .select({ cents: sql<string>`coalesce(sum(${orders.totalCents}), 0)` })
+    .from(orders)
+    .where(owing(userId, now))
+  return {
+    subscription:
+      latest === null ? null : { status: latest.status, cancelAtPeriodEnd: latest.cancelAtPeriodEnd },
+    paidOrders: all?.n ?? 0,
+    paidRenewals: renewals?.n ?? 0,
+    owedCents: Number(owed?.cents ?? 0),
+  }
+}
+
+/** An order the account is told about: what it charged, and what of it was extra play. */
+export interface OrderNotice {
+  provider: string
+  externalOrderId: string
+  totalCents: number
+  extraCents: number
+  orderedAt: Date
+}
+
+/** Accounts with a charge carrying extra play that failed, which they may not have heard about. */
+export async function untoldAbout(q: Queryable): Promise<string[]> {
+  const rows = await q
+    .selectDistinct({ userId: orders.userId })
+    .from(orders)
+    .where(
+      and(
+        gt(orders.extraCents, 0),
+        inArray(orders.status, UNPAID_ORDER),
+        or(isNull(orders.failureToldAt), isNull(orders.owingToldAt)),
+      ),
+    )
+  return rows.map((row) => row.userId)
+}
+
+/**
+ * Charges carrying extra play that failed while the provider still retries them (their
+ * subscription past due), that the owner hasn't been told about yet.
+ */
+export async function failingUntold(q: Queryable, userId: string): Promise<OrderNotice[]> {
+  return q
+    .select({
+      provider: orders.provider,
+      externalOrderId: orders.externalOrderId,
+      totalCents: orders.totalCents,
+      extraCents: orders.extraCents,
+      orderedAt: orders.orderedAt,
+    })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.userId, userId),
+        gt(orders.extraCents, 0),
+        inArray(orders.status, ['pending']),
+        isNull(orders.failureToldAt),
+        sql`exists (select 1 from ${subscriptions} where ${subscriptions.externalSubscriptionId} = ${orders.externalSubscriptionId} and ${subscriptions.status} = 'past_due')`,
+      ),
+    )
+}
+
+/** Charges the account now owes for (`owing`) that the owner hasn't been told about yet. */
+export async function owingUntold(q: Queryable, userId: string, now: Date): Promise<OrderNotice[]> {
+  return q
+    .select({
+      provider: orders.provider,
+      externalOrderId: orders.externalOrderId,
+      totalCents: orders.totalCents,
+      extraCents: orders.extraCents,
+      orderedAt: orders.orderedAt,
+    })
+    .from(orders)
+    .where(and(owing(userId, now), isNull(orders.owingToldAt)))
+}
+
+/** The owner was told about these charges: that they failed, or that they are owed. */
+export async function markTold(
+  q: Queryable,
+  told: readonly OrderNotice[],
+  what: 'failure' | 'owing',
+  now: Date,
+): Promise<void> {
+  for (const order of told)
+    await q
+      .update(orders)
+      .set(what === 'failure' ? { failureToldAt: now } : { owingToldAt: now })
+      .where(and(eq(orders.provider, order.provider), eq(orders.externalOrderId, order.externalOrderId)))
+}
+
+/**
+ * Whether the account may play past its included hours now, and how far, with what it owes:
+ * every place that counts extra play (the policy, the sweep that stops servers, the account page,
+ * the reporter) reads it from here.
+ */
+export async function extraPlayNow(
+  q: Queryable,
+  standing: AccountStanding,
+  now = new Date(),
+): Promise<{ decision: ExtraPlay; owedCents: number }> {
+  const facts = await billingFacts(q, standing.userId, now)
+  const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+  return { decision: extraPlay(plan, standing.extraUnitsAllowed, facts), owedCents: facts.owedCents }
 }

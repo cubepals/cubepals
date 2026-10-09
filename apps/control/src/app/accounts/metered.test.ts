@@ -97,7 +97,7 @@ describe.skipIf(!hasDatabase)('metered play', () => {
       () => null,
       (error: { message?: string }) => error.message ?? '',
     )
-    expect(asked).toBe('Extra hours aren’t available yet. This month’s hours reset on the 1st.')
+    expect(asked).toBe('Extra hours come with Plus.')
   }, 40_000)
 
   test('the month says something at half, at four fifths and when it runs out, once each', async () => {
@@ -133,7 +133,7 @@ describe.skipIf(!hasDatabase)('metered play', () => {
     expect(last?.html).toContain('<img src="http://localhost:3000/email/lockup.png"')
   }, 40_000)
 
-  test('on Plus play stops at the block, and nothing past it can be allowed before billing meters it', async () => {
+  test('Plus with no subscription to bill stops at the block, and allows no extra', async () => {
     const owner = await h.user('Robin', 'plus')
     const server = await h.create(owner)
     await h.until(server.id, 'running')
@@ -145,9 +145,11 @@ describe.skipIf(!hasDatabase)('metered play', () => {
     // Plus includes 60 hours; 60 spent.
     await ran(server.id, '3g', 60, 1)
     const refused = await start(owner, server.id)
-    expect(refused).toBe('You have used this month’s play time. It resets on the 1st.')
-    // Extra hours aren't sold until billing meters them: allowing some is refused, and nothing
-    // runs that nobody would be billed for, nor anything anybody would be surprised by.
+    // A plan an admin gave has no payment to add extra hours to, so the refusal says why.
+    expect(refused).toBe(
+      'You have used this month’s play time, and it resets on the 1st. Extra hours are billed on a Plus subscription, and this account doesn’t have one.',
+    )
+    // Allowing some is refused, and nothing runs that nobody would be billed for.
     const asked = await h.app.accounts.allowExtraPlay(owner, 20).then(
       () => null,
       (error: { message?: string }) => error.message ?? '',

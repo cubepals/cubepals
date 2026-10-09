@@ -66,13 +66,52 @@ can't both see 9 running and both start.
 | `createsPerHour` | **3** | **10** | Bounded by `maxServers` per plan anyway | `policy.test.ts` "a free account makes three servers an hour at most" (no test existed before) |
 | `maxServers` | **1** | **3** | Falls to the platform caps | `policy.test.ts`, `accounts.test.ts`, `lifecycle.test.ts` |
 | `maxRunning` | **1** | **2** | One account can fill the platform's running cap | `policy.test.ts`, `billing.test.ts` |
-| Paid hours past the block (`mayBuyMore`) | no | no (until billing meters them) | — | `metered.test.ts` |
+| Paid hours past the block (`mayBuyMore`) | no | yes, under the guards in [Extra play](#extra-play) | — | `extra-play.test.ts`, `extra-usage.test.ts` |
 
 The AFK kick is vanilla's own (`player-idle-timeout`), and its timer starts again on anything the
 player's client does, including what it didn't choose: being knocked back, or respawning. A
 standing player that mobs reach at night is kicked that much later. A client that respawns by
 itself, as a bot does, starts it again at each death. A real player who dies stays on the death screen, so
 the delay is the time until the mobs got to them. The hours still bound it.
+
+### Extra play
+
+Plus players can play past their 60 hours, at 25¢ an hour (a large server two), billed after it
+is played, on their next Plus payment. Money lost here is play Polar never collects, so every
+guard is about who may run up hours they then don't pay for. Blockly is the only judge of hours:
+it counts them, holds them to the owner's limit and stops servers; Polar only bills what Blockly
+sends it, and never stops anything itself.
+
+| Guard | Where | If it breaks | Tested |
+|---|---|---|---|
+| Only Plus with an `active` subscription (not trialing, past due or set to end), at least one paid Plus order, and nothing owed may allow extra | `domain/account/extra-play.ts` | Someone allows hours on a card that was never charged, or that they are leaving | `extra-play.test.ts` |
+| A ceiling: **20** extra hours a month ($5) until a renewal (`order.paid`, `subscription_cycle`) is paid, then **100** ($25) | `EXTRA_CEILING`, `entitlements.ts` | A new card's first failure costs more | `extra-play.test.ts`, `extra-usage.test.ts` |
+| The owner's own limit, from what fits under the ceiling; servers stop with `stopReason = hours` at it | `AccountService.enforceLimits`, `standing-sweep` | Play past what they said | `extra-usage.test.ts` |
+| A cancel, a failed renewal or an ending stops extra play at once: servers sleep at the included block; what was played stays owed | `extraPlayNow` read by the policy, the sweep and the reporter | Play that the final invoice may not collect | `extra-usage.test.ts` |
+| A charge carrying extra play still unpaid when its subscription ended, or 7 days after it was made, blocks starts and new servers (`payment_due`, `stopReason = unpaid`) and a new checkout until it is paid; downloads stay | `billing/persistence.ts` `owing`, `policy.ts` | Someone plays on after not paying | `extra-usage.test.ts`, `policy.test.ts` |
+| Polar's own backstop: the metered price's `cap_amount`, $50 a period (twice the top ceiling, since a calendar month's extra can straddle two billing periods) | Polar | Only a bug in all of the above | — |
+
+**Counting.** Every minute (`extra-play-report`), for each account that played in the last
+quarter of an hour and may play extra now, Blockly takes the month's units past the included
+block, held to what it may use, in thousandths of an hour rounded down, and raises the month's
+row in `extra_play_months` to it. The row only grows, and nothing is counted while extra play is
+off, so lowering a limit never un-bills hours already played, and a cancel stops the count. The
+month is the UTC calendar month ("resets on the 1st"); in a month's first hour the month before
+is counted to its last moment too.
+
+**Reporting.** What was counted and not yet reported becomes an event in `extra_play_reports`
+once a quarter of an hour waits, once anything has waited ten minutes, or once its month is over.
+Each event is written before it is sent, with the id `extra:<account>:<YYYY-MM>:<n>`, which Polar
+keeps for good: sent again it counts as a duplicate, never twice. Unsent events go oldest first,
+25 to a request, at most four requests a pass; a batch Polar refuses is sent one at a time so one
+bad event never holds back the rest; whatever fails is sent again next minute. Events are dated a
+minute behind the clock, because Polar refuses one from the future. Polar bills an event on the
+payment after it *receives* it, so a late one lands on the next payment, never on none.
+
+**Being paid.** A renewal's metered line is kept on its order (`billing_orders.extra_cents`). A
+failed one is emailed once while Polar retries the card; once it is owed, once more, and servers
+stop until it is paid. Paying it (a retry Polar makes after the card is fixed in its portal)
+arrives as `order.paid` and clears the block on its own.
 
 ### Session cap (`apps/control/src/app/operations/schedules/session-cap.ts`)
 

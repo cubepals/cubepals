@@ -260,14 +260,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     webOrigin: settings.webOrigin,
     configured: { admins: settings.adminEmails ?? [], signupCap: settings.signupCap ?? true },
   })
-  const billing = new BillingService({
-    db,
-    policy,
-    capabilities: ports.capabilities,
-    accounts,
-    jobs: ports.jobs,
-    webOrigin: settings.webOrigin,
-  })
+  const billing = new BillingService({ ...ports, db, policy, accounts, webOrigin: settings.webOrigin })
   const backups = new BackupService({
     db,
     transitions,

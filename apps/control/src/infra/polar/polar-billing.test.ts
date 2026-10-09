@@ -8,6 +8,7 @@ import {
   order,
   orderEvent,
   PLUS_PRODUCT,
+  PolarStandIn,
   signed as sign,
   customerState as state,
   stateChanged,
@@ -61,7 +62,7 @@ describe('PolarBilling', () => {
     polar.close()
   })
 
-  test("a checkout sells the plan's product to the user, pinned to API 2026-04", async () => {
+  test("a checkout sells the plan's product to the user, pinned to API 2026-10", async () => {
     reply = () => ({ status: 201, body: { id: 'co_1', url: 'https://sandbox.polar.sh/checkout/polar_c_1' } })
     const url = await billing.checkoutUrl({
       userId: 'user_123',
@@ -72,7 +73,7 @@ describe('PolarBilling', () => {
     expect(url).toBe('https://sandbox.polar.sh/checkout/polar_c_1')
     const sent = requests.at(-1)
     expect(`${sent?.method} ${sent?.path}`).toBe('POST /v1/checkouts/')
-    expect(sent?.headers['polar-version']).toBe('2026-04')
+    expect(sent?.headers['polar-version']).toBe('2026-10')
     expect(sent?.headers.authorization).toBe('Bearer polar_oat_test')
     expect(JSON.parse(sent?.body ?? '')).toEqual({
       products: [PLUS],
@@ -201,7 +202,7 @@ describe('PolarBilling', () => {
 
   test('an order webhook reports what was paid, in cents, and the plan its product sells', async () => {
     const paid = signed(orderEvent(order('user_123', { tax_amount: 300, total_amount: 1800 })))
-    expect(await billing.receive(paid.body, paid.headers)).toEqual({
+    expect(await billing.receive(paid.body, paid.headers)).toMatchObject({
       kind: 'order',
       order: {
         externalOrderId: 'b1c4e2f0-6f1d-4a57-9e57-7c1f0f4d2a11',
@@ -253,7 +254,7 @@ describe('PolarBilling', () => {
     const product = signed({
       type: 'product.updated',
       timestamp: new Date().toISOString(),
-      api_version: '2026-04',
+      api_version: '2026-10',
       data: {},
     })
     expect(await billing.receive(product.body, product.headers)).toBeNull()
@@ -314,5 +315,112 @@ describe('PolarBilling', () => {
     expect(await billing.pastDueSince('sub_gone')).toBeNull()
     reply = () => ({ status: 503, body: { detail: 'maintenance' } })
     expect(await billing.pastDueSince('sub_1').catch((error) => error)).toBeInstanceOf(BillingUnavailable)
+  })
+})
+
+describe('PolarBilling and extra play', () => {
+  const polar = new PolarStandIn()
+  let billing: PolarBilling
+
+  beforeAll(async () => {
+    await polar.start()
+    billing = new PolarBilling({
+      accessToken: 'polar_oat_test',
+      webhookSecret: SECRET,
+      server: 'sandbox',
+      products: { plus: PLUS },
+      baseUrl: polar.url,
+    })
+  })
+
+  afterAll(() => polar.close())
+
+  test("an order's metered line is extra play, told apart by the product's prices", async () => {
+    polar.reply = () => ({
+      status: 200,
+      body: {
+        id: PLUS,
+        prices: [
+          { id: 'price_fixed', amount_type: 'fixed' },
+          { id: 'price_metered', amount_type: 'metered_unit' },
+        ],
+      },
+    })
+    const renewal = order('user_123', {
+      status: 'pending',
+      billing_reason: 'subscription_cycle',
+      items: [
+        { amount: 1500, product_price_id: 'price_fixed' },
+        { amount: 325, product_price_id: 'price_metered' },
+      ],
+    })
+    const made = signed(orderEvent(renewal, 'order.created'))
+    expect(await billing.receive(made.body, made.headers)).toMatchObject({
+      kind: 'order',
+      order: {
+        status: 'pending',
+        extraCents: 325,
+        billingReason: 'subscription_cycle',
+        externalSubscriptionId: 'e5149aae-e521-42b9-b24c-abb3d71eea2e',
+      },
+    })
+    expect(polar.requests.at(-1)?.path).toBe(`/v1/products/${PLUS}`)
+    // The prices are read once; the next order is told apart from what was read.
+    const seen = polar.requests.length
+    const again = signed(orderEvent({ ...renewal, status: 'paid' }, 'order.updated'))
+    expect(await billing.receive(again.body, again.headers)).toMatchObject({ order: { extraCents: 325 } })
+    expect(polar.requests.length).toBe(seen)
+  })
+
+  test('a subscription that went past due, was cancelled or ended says whose standing to read', async () => {
+    for (const type of ['subscription.past_due', 'subscription.canceled', 'subscription.revoked']) {
+      polar.states.set('user_123', customerState({ active_subscriptions: [] }))
+      const delivery = signed({
+        type,
+        timestamp: new Date().toISOString(),
+        api_version: '2026-10',
+        data: { ...subscription('sub_1'), customer: { external_id: 'user_123' } },
+      })
+      const event = await billing.receive(delivery.body, delivery.headers)
+      expect(event).toMatchObject({ kind: 'standing', state: { userId: 'user_123', subscription: null } })
+      expect(polar.requests.at(-1)?.path).toBe('/v1/customers/external/user_123/state')
+    }
+  })
+
+  test('extra play goes to Polar as play.extra events, hours in their metadata, each with its id', async () => {
+    polar.reply = () => ({ status: 200, body: { inserted: 2, duplicates: 0 } })
+    await billing.reportUsage([
+      { externalId: 'extra:u1:2026-10:1', userId: 'u1', hours: 1.25, at: new Date('2026-10-09T12:00:00Z') },
+      { externalId: 'extra:u2:2026-10:4', userId: 'u2', hours: 0.1, at: new Date('2026-10-09T12:01:00Z') },
+    ])
+    const sent = polar.requests.at(-1)
+    expect(`${sent?.method} ${sent?.path}`).toBe('POST /v1/events/ingest')
+    expect(sent?.headers['polar-version']).toBe('2026-10')
+    expect(JSON.parse(sent?.body ?? '{}')).toEqual({
+      events: [
+        {
+          name: 'play.extra',
+          external_customer_id: 'u1',
+          external_id: 'extra:u1:2026-10:1',
+          timestamp: '2026-10-09T12:00:00.000Z',
+          metadata: { hours: 1.25 },
+        },
+        {
+          name: 'play.extra',
+          external_customer_id: 'u2',
+          external_id: 'extra:u2:2026-10:4',
+          timestamp: '2026-10-09T12:01:00.000Z',
+          metadata: { hours: 0.1 },
+        },
+      ],
+    })
+    // Nothing to send is no request; Polar down is BillingUnavailable, to be sent again.
+    const before = polar.requests.length
+    await billing.reportUsage([])
+    expect(polar.requests.length).toBe(before)
+    polar.reply = () => ({ status: 503, body: { detail: 'maintenance' } })
+    await expect(
+      billing.reportUsage([{ externalId: 'x', userId: 'u1', hours: 1, at: new Date() }]),
+    ).rejects.toBeInstanceOf(BillingUnavailable)
   })
 })

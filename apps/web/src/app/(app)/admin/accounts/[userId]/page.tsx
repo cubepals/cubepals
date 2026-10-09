@@ -306,6 +306,7 @@ function Limits({ account }: { account: AccountDetailView }) {
   const queries = useQueryClient()
   const [servers, setServers] = useState(account.limits.maxServers?.toString() ?? '')
   const [running, setRunning] = useState(account.limits.maxRunning?.toString() ?? '')
+  const [hours, setHours] = useState(account.limits.includedUnits?.toString() ?? '')
   const saved = useOutcome(undefined)
   const save = useMutation(
     trpc.admin.setLimits.mutationOptions({
@@ -319,7 +320,12 @@ function Limits({ account }: { account: AccountDetailView }) {
   const number = (value: string) => (value.trim() === '' ? null : Number.parseInt(value, 10))
   const submit = (event: SubmitEvent) => {
     event.preventDefault()
-    save.mutate({ userId: account.userId, maxServers: number(servers), maxRunning: number(running) })
+    save.mutate({
+      userId: account.userId,
+      maxServers: number(servers),
+      maxRunning: number(running),
+      includedUnits: number(hours),
+    })
   }
   return (
     <form onSubmit={submit} className="bk-stack" style={{ gap: 'var(--space-12)' }}>
@@ -339,6 +345,14 @@ function Limits({ account }: { account: AccountDetailView }) {
           value={running}
           error={rules.wholeNumber(running)}
           onChange={(event) => setRunning(event.target.value)}
+        />
+        <TextField
+          label="Hours of play a month, instead of the plan's"
+          optional
+          inputMode="numeric"
+          value={hours}
+          error={rules.wholeNumber(hours)}
+          onChange={(event) => setHours(event.target.value)}
         />
       </div>
       <div className="bk-row" style={{ gap: 'var(--space-8)' }}>

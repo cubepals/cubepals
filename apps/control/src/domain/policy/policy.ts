@@ -8,6 +8,7 @@ import {
 } from '../account/entitlements.ts'
 import type { AccountStanding } from '../account/standing.ts'
 import type { MemoryTier } from '../server/size.ts'
+import { dollars } from './spend.ts'
 
 /**
  * The decision half of AccessPolicy: pure, over facts gathered under a lock by the application
@@ -23,6 +24,7 @@ export type DenialCode =
   | 'not_entitled'
   | 'limit_reached'
   | 'rate_limited'
+  | 'payment_due'
 
 export type Capability =
   | { kind: 'create_server'; memoryTier: MemoryTier }
@@ -96,8 +98,15 @@ export interface PolicyFacts {
   createsInLastHour: number
   /** Play this month in meter units (`domain/account/meter.ts`), open runs counted up to now. */
   unitsThisMonth: number
-  /** Units past the included block the owner has allowed themselves to be charged for. */
+  /**
+   * Units past the included block the account may play now: what the owner allowed, held to its
+   * ceiling, and zero whenever extra play is off (`domain/account/extra-play.ts`).
+   */
   extraUnitsAllowed: number
+  /** Why extra play is off when it is, for the refusal at the end of the included hours. */
+  extraOffBecause: string | null
+  /** What the account owes from a payment that didn't go through; anything owed blocks starts. */
+  owedCents: number
   /** What the account itself did of the capability's rate-limited kind in the last minute. */
   actionsInLastMinute: number
 }
@@ -170,6 +179,14 @@ export function evaluate(facts: PolicyFacts, capability: Capability): Decision {
     return deny('restricted', 'Public listing is turned off for this account.')
   if (capability.kind === 'console_command' && r.consoleCommands)
     return deny('restricted', 'The console is read-only for this account.')
+
+  // Money owed from a charge that failed: nothing new runs until it is paid. Looking, managing
+  // access and downloading a world stay open, and so does the billing portal, where it is paid.
+  if ((provisions || starts) && capability.kind !== 'restore_archive' && facts.owedCents > 0)
+    return deny(
+      'payment_due',
+      `You owe ${dollars(facts.owedCents)} from a payment that didn’t go through. Pay it in Manage billing on your account, and your servers can start again.`,
+    )
 
   // Writing where strangers read it takes an address someone confirmed, as making a server does.
   if ((capability.kind === 'create_server' || capability.kind === 'leave_note') && !facts.emailVerified)
@@ -259,14 +276,7 @@ export function evaluate(facts: PolicyFacts, capability: Capability): Decision {
     entitlements.includedUnits !== null &&
     facts.unitsThisMonth >= entitlements.includedUnits + facts.extraUnitsAllowed
   )
-    return deny(
-      'limit_reached',
-      entitlements.mayBuyMore && facts.extraUnitsAllowed === 0
-        ? 'You have used this month’s play time. Allow more in your account, or wait for the 1st.'
-        : facts.extraUnitsAllowed > 0
-          ? 'You have used the play time you allowed this month. Raise it in your account, or wait for the 1st.'
-          : 'You have used this month’s play time. It resets on the 1st.',
-    )
+    return deny('limit_reached', usedUp(entitlements, facts))
 
   // 6. Global caps: the platform's own guard against runaway provisioning. A cap, so
   // `limit_reached` (§15.5: each step its own code); the kill switches are `platform_paused`.
@@ -285,3 +295,13 @@ export function evaluate(facts: PolicyFacts, capability: Capability): Decision {
 }
 
 const plural = (n: number) => (n === 1 ? '' : 's')
+
+/** What a start at the end of the month's play is told: what ran out, and what would help. */
+function usedUp(entitlements: Entitlements, facts: PolicyFacts): string {
+  if (facts.extraUnitsAllowed > 0)
+    return 'You have used the extra play you allowed this month. Raise it in your account, or wait for the 1st.'
+  if (!entitlements.mayBuyMore) return 'You have used this month’s play time. It resets on the 1st.'
+  if (facts.extraOffBecause === null)
+    return 'You have used this month’s play time. Allow extra play in your account, or wait for the 1st.'
+  return `You have used this month’s play time, and it resets on the 1st. ${facts.extraOffBecause}`
+}

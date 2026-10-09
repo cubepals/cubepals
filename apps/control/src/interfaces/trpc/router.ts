@@ -565,6 +565,7 @@ const accountDetailView = (detail: AccountDetail): AccountDetailView => ({
   limits: {
     maxServers: detail.standing.limitOverrides.maxServers ?? null,
     maxRunning: detail.standing.limitOverrides.maxRunning ?? null,
+    includedUnits: detail.standing.limitOverrides.includedUnits ?? null,
   },
   serverList: detail.serverList,
   history: detail.history.map((h) => ({ ...h, at: h.at.toISOString() })),

@@ -54,6 +54,8 @@ describe.skipIf(!hasDatabase)('the local checkout', () => {
     expect(paid.status).toBe(303)
     expect(paid.headers.get('location')).toBe('http://localhost:3000/account?from=billing')
     expect((await loadStanding(h.db, actor.userId)).plan).toBe('plus')
+    // The checkout's paid order is on record too, so extra hours can be allowed, as after a payment.
+    expect(await h.app.accounts.allowExtraPlay(actor, 20)).toBe(20)
     // Back on the account page, which asks the provider again before its webhook could arrive.
     await h.app.billing.refresh(actor)
     expect((await loadStanding(h.db, actor.userId)).plan).toBe('plus')
@@ -66,6 +68,13 @@ describe.skipIf(!hasDatabase)('the local checkout', () => {
     expect((await loadStanding(h.db, actor.userId)).plan).toBe('free')
     await h.app.billing.refresh(actor)
     expect((await loadStanding(h.db, actor.userId)).plan).toBe('free')
+  })
+
+  test('extra play is kept here, once per id, instead of being sent anywhere', async () => {
+    const event = { externalId: 'extra:u:2026-10:1', userId: 'u', hours: 0.5, at: new Date() }
+    await billing.reportUsage([event])
+    await billing.reportUsage([event])
+    expect(billing.reported.filter((kept) => kept.externalId === event.externalId)).toEqual([event])
   })
 
   test('a link signed elsewhere, or for the other page, opens nothing', async () => {

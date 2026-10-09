@@ -351,7 +351,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/domain/policy/policy.ts › function evaluate": {
-      "n": 80,
+      "n": 77,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/domain/server/lifecycle.ts › function decide": {
@@ -559,7 +559,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/(app)/account/page.tsx › function Play": {
-      "n": 26,
+      "n": 18,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/(app)/admin/accounts/[userId]/page.tsx › function Account": {
@@ -647,10 +647,6 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "scripts/lib/people.ts › function people › function call": {
-      "n": 16,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    },
-    "scripts/staging.ts › function up": {
       "n": 16,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
@@ -1013,7 +1009,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/control-plane.ts › function composeControlPlane": {
-      "n": 253,
+      "n": 247,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/curation/catalog-check.ts › function checkCatalogRelease": {
@@ -1177,7 +1173,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/domain/policy/policy.ts › function evaluate": {
-      "n": 120,
+      "n": 118,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/auth/auth.test.ts › describe.skipIf email flows": {
@@ -1325,7 +1321,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "scripts/staging.ts › function up": {
-      "n": 168,
+      "n": 160,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk": {

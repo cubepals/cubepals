@@ -5,6 +5,7 @@
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { dollars, EXTRA_HOUR_CENTS } from '../../../../legal/figures'
 import { daysSaid } from '../../../../lib/plans'
 import { PLAY_HABITS, planPoints, priceOf } from '../../../../ui'
 import { FactTable, GuideArticle, GuideLink, guideMetadata, guidePlans, Part, Questions } from '../article'
@@ -63,9 +64,10 @@ export default async function Guide() {
             : ''}
         </p>
         <p>
-          If you run out: your server sleeps until the 1st, when the hours start again. Nothing is ever
-          charged past your plan. Prices are in US dollars and include VAT where it applies;{' '}
-          <Link href="/pricing">Pricing</Link> has the details.
+          If you run out: your server sleeps until the 1st, when the hours start again. On a paid plan you can
+          allow extra hours instead, at {dollars(EXTRA_HOUR_CENTS)} each, up to a limit you set; nothing is
+          charged past your plan unless you allow it. Prices are in US dollars and include VAT where it
+          applies; <Link href="/pricing">Pricing</Link> has the details.
         </p>
       </Part>
 

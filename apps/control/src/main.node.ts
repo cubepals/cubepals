@@ -400,13 +400,13 @@ function scheduledJobs(
     },
     'listing-eligibility-sweep': () => app.listings.sweep(),
     'standing-sweep': async () => {
-      // Paid time that ran out with no word from the provider, audited before what it stops.
-      const lapsed = await app.billing.recordLapses()
+      const lapsed = await app.billing.sweep()
       if (lapsed > 0) console.warn(`standing: recorded ${lapsed} lapsed subscriptions`)
       const enforced = await app.accounts.enforce()
       if (enforced.stopped + enforced.closed > 0)
         console.warn(`standing: stopped ${enforced.stopped}, closed ${enforced.closed}`)
     },
+    'extra-play-report': () => app.billing.usage.report(),
     'artifact-gc': async () => {
       const collected = await app.artifacts.collectGarbage()
       if (collected.uploads + collected.blobs > 0)

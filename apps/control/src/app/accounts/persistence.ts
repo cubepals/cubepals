@@ -46,6 +46,7 @@ const toStanding = (row: typeof standing.$inferSelect): AccountStanding => ({
   extraUnitsAllowed: row.extraUnitsAllowed,
   afkKickMinutes: row.afkKickMinutes,
   playWarned: row.playWarned,
+  extraWarned: row.extraWarned,
 })
 
 /**

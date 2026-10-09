@@ -1,5 +1,6 @@
 import type { Tx } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { extraUnits } from '../../domain/account/extra-play.ts'
 import {
   type Capability,
   type Decision,
@@ -18,6 +19,7 @@ import {
   lockCapacity,
   runUnitsSince,
 } from '../accounts/persistence.ts'
+import { extraPlayNow } from '../billing/persistence.ts'
 import { type DeploymentCapabilities, supportOf } from '../capabilities.ts'
 import { AppError } from '../errors.ts'
 
@@ -70,6 +72,7 @@ export class AccessPolicy {
     if (counted !== null && options.lock !== false) await lockAccountActions(tx, accountId)
     const standing = await loadStanding(tx, accountId)
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    const extra = await extraPlayNow(tx, standing, now)
     return evaluate(
       {
         deployment: supportOf(this.#caps),
@@ -82,7 +85,9 @@ export class AccessPolicy {
         global: await countServers(tx),
         createsInLastHour: await createsSince(tx, accountId, new Date(now.getTime() - 3_600_000)),
         unitsThisMonth: await runUnitsSince(tx, accountId, monthStart, now),
-        extraUnitsAllowed: standing.extraUnitsAllowed,
+        extraUnitsAllowed: extraUnits(extra.decision),
+        extraOffBecause: extra.decision.may ? null : extra.decision.why,
+        owedCents: extra.owedCents,
         actionsInLastMinute:
           counted === null
             ? 0

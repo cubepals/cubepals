@@ -637,7 +637,7 @@ from presence.
 | `PlayerProfiles` | `MojangProfiles` | Name → UUID validation when adding players (even while stopped), UUID → current name before delivering commands, and UUID → skin for the faces player rows show |
 | `EventBus` | `PgNotifyEventBus` | cross-process fan-out without Redis |
 | `JobQueue` (`app/ports/jobs.ts`) | `PgBossJobs` (`infra/pg/jobs.ts`) | the queue behind operations and the side queues: `enqueue` joins the deciding transaction, and admins see and settle blocked keys (§9) |
-| `BillingProvider` | `PolarBilling` | checkout and portal links, authenticated webhooks (`receive`), a customer's current standing (`stateOf`); Polar's SDK pinned to API version 2026-04 |
+| `BillingProvider` | `PolarBilling` | checkout and portal links, authenticated webhooks (`receive`), a customer's current standing (`stateOf`); Polar's SDK pinned to API version 2026-10; extra play reported as events (`reportUsage`) |
 | `PlayAddressing` | `ConfiguredPlayAddressing` | deployment-configured addresses |
 | `RegionCatalog` | `ConfiguredRegionCatalog` | product regions from config |
 
@@ -2049,8 +2049,14 @@ the same table through `GET /api/public/plans` and `billing.plans`. The size beh
   and the minute's `standing-sweep` catches what came up in between. A server whose setup the
   new plan doesn't run (mods or a modded server type after Plus ends) is stopped the same way and
   kept exactly as it is: nothing is converted or taken off it, and it starts again on Plus.
-- Extra hours past the included ones read `power_intervals`; they stay off (`mayBuyMore`) until
-  metering to Polar is proven end to end.
+- Extra hours past the included ones, on Plus, are counted from `power_intervals` and billed
+  after they are played, on the next Plus payment, at `UNIT_CENTS` an hour: Blockly counts them,
+  holds them to the owner's limit and stops servers there, and Polar bills only what Blockly
+  reports. Who may allow any, and how many, is `domain/account/extra-play.ts`; counting and
+  reporting is `app/billing/extra-usage.ts`, through the `extra_play_months` ledger and the
+  `extra_play_reports` outbox. A charge carrying them that stays unpaid blocks starts
+  (`stopReason = unpaid`, denial `payment_due`) until it is paid; one used up stops servers with
+  `stopReason = hours`. [money-guards.md](money-guards.md#extra-play) has the guards.
 - Every change to a subscription and to the plan it gives is audited on the account, with the
   actor and `data.source` (`webhook`, `user` for the person's own refresh, `scheduled` for the
   sweep): `billing.subscribed`, `billing.cancel_scheduled`, `billing.cancel_undone`,

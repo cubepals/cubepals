@@ -22,6 +22,7 @@ const billing: BillingProvider = {
   receive: async () => null,
   stateOf: async () => null,
   pastDueSince: async () => null,
+  reportUsage: async () => {},
 }
 
 const WHERE = { page: '/servers', version: 'test-build' }

@@ -54,6 +54,9 @@ export const PLUS: PlanFigures = {
 /** Days before an unplayed world is deleted that its owner is emailed (`schedules/expiring.ts`). */
 export const DELETION_WARNINGS_DAYS = [30, 7] as const
 
+/** What an extra hour of play costs on Plus, in US cents (`domain/account/meter.ts`). */
+export const EXTRA_HOUR_CENTS = 25
+
 /** Days a failed renewal keeps the paid plan while the card is fixed (`billing/persistence.ts`). */
 export const PAST_DUE_GRACE_DAYS = 7
 

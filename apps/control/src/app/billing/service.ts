@@ -1,17 +1,20 @@
 import type { CheckoutConsent, UpgradeReason } from '@blockly/contracts'
 import { type Db, schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
-import { PAID_PLANS } from '../../domain/account/entitlements.ts'
-import { loadStanding, lockStanding } from '../accounts/persistence.ts'
+import { entitlementsFor, PAID_PLANS } from '../../domain/account/entitlements.ts'
+import { dollars } from '../../domain/policy/spend.ts'
+import { emailOf, loadStanding, lockStanding } from '../accounts/persistence.ts'
 import type { AccountService } from '../accounts/service.ts'
 import { type Actor, requestedBy } from '../actor.ts'
 import { type DeploymentCapabilities, requireCapability } from '../capabilities.ts'
+import { paymentFailed, paymentOwed } from '../emails/billing.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { FUNNEL, noteOnce } from '../insight/record.ts'
 import { listingsOfOwner } from '../listings/persistence.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import { type BillingState, BillingUnavailable } from '../ports/optional.ts'
+import type { Mailer } from '../ports/platform.ts'
 import {
   accountsWithLapses,
   type BillingSource,
@@ -21,12 +24,19 @@ import {
   subscriptionChanges,
   writeEntries,
 } from './audit.ts'
+import { ExtraUsage } from './extra-usage.ts'
 import {
+  billingFacts,
+  failingUntold,
   latestSubscription,
+  markTold,
+  owingUntold,
+  PAST_DUE_GRACE_MS,
   recordOrder,
   saveSubscription,
   settleOtherSubscriptions,
   subscriptionsLeftOut,
+  untoldAbout,
 } from './persistence.ts'
 
 /**
@@ -40,6 +50,10 @@ export class BillingService {
   readonly #caps: DeploymentCapabilities
   readonly #accounts: AccountService
   readonly #jobs: JobQueue
+  readonly #mailer: Mailer
+  /** Extra play, counted and sent to the provider to be billed (`extra-play-report`). */
+  readonly usage: ExtraUsage
+  readonly #webOrigin: string
   /** Where the web app's account page is, for the provider to send people back to. */
   readonly #returnUrl: string
 
@@ -49,6 +63,7 @@ export class BillingService {
     capabilities: DeploymentCapabilities
     accounts: AccountService
     jobs: JobQueue
+    mailer: Mailer
     webOrigin: string
   }) {
     this.#db = deps.db
@@ -56,6 +71,9 @@ export class BillingService {
     this.#caps = deps.capabilities
     this.#accounts = deps.accounts
     this.#jobs = deps.jobs
+    this.#mailer = deps.mailer
+    this.usage = new ExtraUsage({ db: deps.db, billing: deps.capabilities.billing })
+    this.#webOrigin = deps.webOrigin
     // The page reads the provider's word when people come back, before the webhook arrives.
     this.#returnUrl = new URL('/account?from=billing', deps.webOrigin).toString()
   }
@@ -78,12 +96,26 @@ export class BillingService {
     await this.#db.transaction((tx) => this.#policy.require(tx, user.id, { kind: 'billing' }))
     const standing = await loadStanding(this.#db, user.id)
     if (standing.plan === planKey) throw new AppError('invalid_choice', `You are on ${planKey} already.`)
+    // Money still owed from a payment that failed is paid first, in the portal: a new
+    // subscription would start a new bill beside the one nobody paid.
+    const { owedCents } = await billingFacts(this.#db, user.id)
+    if (owedCents > 0)
+      throw new AppError(
+        'payment_due',
+        `You owe ${dollars(owedCents)} from a payment that didn’t go through. Pay it in Manage billing first.`,
+      )
     const billing = requireCapability(this.#caps, 'billing')
     const returnUrl = new URL(this.#returnUrl)
     if (options.next !== undefined && /^\/(?![/\\])/.test(options.next))
       returnUrl.searchParams.set('next', options.next)
     const url = await this.#reach(() =>
-      billing.checkoutUrl({ userId: user.id, email: user.email, planKey, returnUrl: returnUrl.toString() }),
+      billing.checkoutUrl({
+        userId: user.id,
+        email: user.email,
+        planKey,
+        priceCents: entitlementsFor(planKey).monthlyPriceCents,
+        returnUrl: returnUrl.toString(),
+      }),
     )
     await this.#db.insert(schema.auditLog).values({
       actor: requestedBy(actor),
@@ -138,8 +170,12 @@ export class BillingService {
     const billing = requireCapability(this.#caps, 'billing')
     const event = await billing.receive(body, headers)
     if (event === null) return 'ignored'
-    if (event.kind === 'order')
-      return (await recordOrder(this.#db, billing.provider, event.order)) ? 'recorded' : 'ignored'
+    if (event.kind === 'order') {
+      const kept = await recordOrder(this.#db, billing.provider, event.order)
+      // An order paid can clear what was owed; one left unpaid can be what is owed now.
+      if (kept && event.order.userId !== null) await this.#accounts.enforceLimits(event.order.userId)
+      return kept ? 'recorded' : 'ignored'
+    }
     await this.syncSubscription(event.state, 'system:billing', 'webhook')
     return 'synced'
   }
@@ -230,6 +266,70 @@ export class BillingService {
       recorded += found
     }
     return recorded
+  }
+
+  /**
+   * `standing-sweep`'s billing, before what it stops: paid time that ran out with no word from the
+   * provider, audited (`recordLapses`), then owners told about payments that failed. Answers how
+   * many lapses were recorded.
+   */
+  async sweep(now = new Date()): Promise<number> {
+    const lapsed = await this.recordLapses(now)
+    await this.tellAboutPayments(now)
+    return lapsed
+  }
+
+  /**
+   * Tells each owner, once per charge, that a payment carrying extra play
+   * failed while the card is tried again, and that it is owed once it is still unpaid after that,
+   * when their servers stop until it is paid. Answers how many emails went.
+   */
+  async tellAboutPayments(now = new Date()): Promise<number> {
+    let told = 0
+    for (const userId of await untoldAbout(this.#db)) {
+      const to = await emailOf(this.#db, userId)
+      told += await this.#tellFailing(userId, to, now)
+      told += await this.#tellOwing(userId, to, now)
+    }
+    return told
+  }
+
+  /** A charge that failed while the card is tried again: said once, with the day it is owed by. */
+  async #tellFailing(userId: string, to: string | null, now: Date): Promise<number> {
+    const failing = await failingUntold(this.#db, userId)
+    if (to !== null)
+      for (const order of failing)
+        await this.#mailer.send({
+          to,
+          ...paymentFailed({
+            totalCents: order.totalCents,
+            extraCents: order.extraCents,
+            by: new Date(order.orderedAt.getTime() + PAST_DUE_GRACE_MS),
+            origin: this.#webOrigin,
+          }),
+        })
+    await markTold(this.#db, failing, 'failure', now)
+    return to === null ? 0 : failing.length
+  }
+
+  /** Charges now owed: said once, and the account's servers stop until they are paid. */
+  async #tellOwing(userId: string, to: string | null, now: Date): Promise<number> {
+    const owing = await owingUntold(this.#db, userId, now)
+    if (owing.length === 0) return 0
+    if (to !== null)
+      await this.#mailer.send({
+        to,
+        ...paymentOwed({
+          owedCents: owing.reduce((sum, order) => sum + order.totalCents, 0),
+          extraCents: owing.reduce((sum, order) => sum + order.extraCents, 0),
+          origin: this.#webOrigin,
+        }),
+      })
+    // Someone told they owe needn't hear that it failed as well.
+    await markTold(this.#db, owing, 'failure', now)
+    await markTold(this.#db, owing, 'owing', now)
+    await this.#accounts.enforceLimits(userId)
+    return to === null ? 0 : 1
   }
 
   async #person(actor: Actor): Promise<{ id: string; email: string }> {

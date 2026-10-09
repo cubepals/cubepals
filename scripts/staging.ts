@@ -37,7 +37,7 @@ import {
   PutBucketCorsCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
-import { createPolar } from '@polar-sh/sdk/2026-04'
+import { createPolar } from '@polar-sh/sdk/2026-10'
 import { pointCname } from './lib/cloudflare-dns.ts'
 
 const ORG = 'blockly-staging'
@@ -203,12 +203,51 @@ function polar() {
   return createPolar({ accessToken, environment: 'sandbox' })
 }
 
+/**
+ * The API version and events of staging's webhook: the payloads and deliveries the adapter reads
+ * (infra/polar/polar-billing.ts), as production's endpoint is set (docs/production.md).
+ */
+const WEBHOOK = {
+  api_version: '2026-10',
+  events: [
+    'customer.state_changed',
+    'order.created',
+    'order.updated',
+    'order.paid',
+    'order.refunded',
+    'subscription.active',
+    'subscription.past_due',
+    'subscription.canceled',
+    'subscription.uncanceled',
+    'subscription.revoked',
+  ],
+} as const
+
 /** Staging's webhook endpoints on the sandbox: the one `up` made, and any a failed run left. */
 async function stagingWebhooks(): Promise<string[]> {
   const found: string[] = []
   for await (const endpoint of polar().webhooks.iterListWebhookEndpoints({ limit: 100 }))
     if (endpoint.url === WEBHOOK_URL) found.push(endpoint.id)
   return found
+}
+
+/**
+ * Staging's webhook on the sandbox, made once; one made before keeps its secret, and is brought to
+ * the version and events the adapter reads today.
+ */
+async function pointWebhook(state: State): Promise<void> {
+  if (state.webhook !== undefined) {
+    await polar().webhooks.updateWebhookEndpoint(state.webhook.id, WEBHOOK)
+    return
+  }
+  const endpoint = await polar().webhooks.createWebhookEndpoint({
+    url: WEBHOOK_URL,
+    name: 'Blockly staging',
+    ...WEBHOOK,
+    format: 'raw',
+  })
+  state.webhook = { id: endpoint.id, secret: endpoint.secret }
+  saveState(state)
 }
 
 /** staging.cubepals.com on the web app: Cloudflare's record for it, and Fly's certificate. */
@@ -359,18 +398,7 @@ async function up(): Promise<void> {
     state.flyToken = made.token
     saveState(state)
   }
-  if (state.webhook === undefined) {
-    // The payloads the adapter reads are API 2026-04's (infra/polar).
-    const endpoint = await polar().webhooks.createWebhookEndpoint({
-      url: WEBHOOK_URL,
-      name: 'Blockly staging',
-      api_version: '2026-04',
-      format: 'raw',
-      events: ['customer.state_changed', 'order.paid', 'order.refunded'],
-    })
-    state.webhook = { id: endpoint.id, secret: endpoint.secret }
-    saveState(state)
-  }
+  await pointWebhook(state)
 
   if (state.webProxySecret === undefined) {
     state.webProxySecret = secret()

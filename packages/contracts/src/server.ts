@@ -25,6 +25,8 @@ export const STOP_REASONS = [
   'crash',
   'maintenance',
   'session_cap',
+  'hours',
+  'unpaid',
 ] as const
 export type StopReason = (typeof STOP_REASONS)[number]
 

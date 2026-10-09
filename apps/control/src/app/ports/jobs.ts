@@ -22,6 +22,7 @@ export type ScheduledJob =
   | 'backup-schedule'
   | 'artifact-gc'
   | 'standing-sweep'
+  | 'extra-play-report'
   | 'listing-eligibility-sweep'
   | 'admin-alerts'
   | 'spend-watchdog'

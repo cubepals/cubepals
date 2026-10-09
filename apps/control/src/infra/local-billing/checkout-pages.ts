@@ -38,6 +38,12 @@ export function localCheckoutPages(deps: {
     const ticket = deps.billing.ticket(String((await c.req.parseBody()).ticket ?? ''), 'checkout')
     if (ticket === null || ticket.planKey === null) return c.html(expired(), 400)
     await deliver({ type: 'subscription.started', userId: ticket.userId, planKey: ticket.planKey })
+    await deliver({
+      type: 'order.paid',
+      userId: ticket.userId,
+      planKey: ticket.planKey,
+      cents: ticket.priceCents,
+    })
     return c.redirect(ticket.returnUrl, 303)
   })
 

@@ -72,6 +72,14 @@ export function presentStatus(server: ServerView): { pill: PillStatus; label?: s
         // says what it waits for.
         case 'entitlement':
           return { pill: 'suspended', detail: 'Paused when your plan changed. Its world is safe' }
+        // The month's play, and any extra the owner allowed, is used: it sleeps until the 1st.
+        case 'hours':
+          return { pill: 'sleeping', detail: 'This month’s hours are used up. It sleeps until the 1st' }
+        case 'unpaid':
+          return {
+            pill: 'suspended',
+            detail: 'Paused until a payment is made. Its world is safe; see your account',
+          }
         case 'idle':
           return { pill: 'sleeping', detail: 'Nobody was on, so it went to sleep. Joining wakes it' }
         case 'maintenance':

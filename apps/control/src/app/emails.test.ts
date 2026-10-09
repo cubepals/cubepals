@@ -5,7 +5,8 @@
 import { describe, expect, test } from 'bun:test'
 import { passwordChanged, resetPassword, verifyEmail, welcome } from './emails/account.ts'
 import { adminAlert, spendLimit } from './emails/admins.ts'
-import { playWarning } from './emails/play.ts'
+import { paymentFailed, paymentOwed } from './emails/billing.ts'
+import { extraWarning, playWarning } from './emails/play.ts'
 import { keepingWorld, listingRemoved, serverRebuilt } from './emails/servers.ts'
 import type { Email } from './emails.ts'
 
@@ -51,6 +52,40 @@ const EMAILS: Array<{ name: string; email: Email; subject: string; figure?: stri
       origin: ORIGIN,
     }),
     subject: 'You have used 80% of this month’s play',
+    link: `${ORIGIN}/account`,
+  },
+  ...[0, 80, 100].map((mark) => ({
+    name: `extra ${mark}`,
+    email: extraWarning({
+      mark,
+      included: 60,
+      allowed: 20,
+      used: mark === 0 ? 0.4 : (20 * mark) / 100,
+      unitCents: 25,
+      origin: ORIGIN,
+    }),
+    subject: [
+      'You’re on extra hours now',
+      'You’ve used 80% of the extra hours you allowed',
+      'Your Cubepals servers are asleep until the 1st',
+    ][[0, 80, 100].indexOf(mark)] as string,
+    link: `${ORIGIN}/account`,
+  })),
+  {
+    name: 'payment failed',
+    email: paymentFailed({
+      totalCents: 1750,
+      extraCents: 250,
+      by: new Date('2026-11-08T00:00:00Z'),
+      origin: ORIGIN,
+    }),
+    subject: 'Your Cubepals payment didn’t go through',
+    link: `${ORIGIN}/account`,
+  },
+  {
+    name: 'payment owed',
+    email: paymentOwed({ owedCents: 1750, extraCents: 250, origin: ORIGIN }),
+    subject: 'Your Cubepals servers can’t start until a payment is made',
     link: `${ORIGIN}/account`,
   },
   {
@@ -132,6 +167,34 @@ describe('emails', () => {
     expect(keepingWorld({ server: bay, lastPlayed: 'then', goes: 'later', origin: ORIGIN }).html).toContain(
       `src="${ORIGIN}/email/kai-hanging.png" width="54" height="111"`,
     )
+  })
+
+  test('extra play says what it costs and where it is billed, in the words of the voice', () => {
+    const started = extraWarning({
+      mark: 0,
+      included: 60,
+      allowed: 20,
+      used: 0.4,
+      unitCents: 25,
+      origin: ORIGIN,
+    })
+    expect(started.text).toContain(
+      'You’ve played the 60 hours your plan includes this month, so your servers are on extra hours now: $0.25 an hour, up to the 20 you allowed ($5.00).',
+    )
+    expect(started.text).toContain('They’re added to your next Plus payment.')
+    expect(
+      paymentFailed({
+        totalCents: 1750,
+        extraCents: 250,
+        by: new Date('2026-11-08T00:00:00Z'),
+        origin: ORIGIN,
+      }).text,
+    ).toContain('If it still isn’t paid by 8 November, your servers can’t start until it is.')
+    expect(paymentOwed({ owedCents: 1750, extraCents: 250, origin: ORIGIN }).text).toContain(
+      'Your worlds are safe, and you can still download them.',
+    )
+    for (const email of [started, paymentOwed({ owedCents: 1, extraCents: 1, origin: ORIGIN })])
+      expect(email.text).not.toMatch(/seamless|effortless|powerful|turn on|handled|GB|RAM/i)
   })
 
   test('the text part has every link the button has, for a mail app that shows no HTML', () => {
