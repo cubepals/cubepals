@@ -619,6 +619,8 @@ const admin = router({
     ),
   /** Packs Blockly offers by name, and where each reviewed release stands (docs/modpack-templates.md). */
   curatedPacks: adminProcedure.query(({ ctx }) => ctx.services.curation.review(ctx.actor)),
+  /** Versions Cubepals tested past their catalog's listing, and templates whose plugins lag. */
+  compatibility: adminProcedure.query(({ ctx }) => ctx.services.curation.compatibility(ctx.actor)),
   publishRelease: adminProcedure
     .input(CuratedReleaseInput)
     .mutation(({ ctx, input }) => ctx.services.curation.publish(ctx.actor, input)),

@@ -456,3 +456,52 @@ describe('datapacks', () => {
     expect(isDatapack({ loaders: ['fabric'] })).toBe(false)
   })
 })
+
+describe('versions Cubepals tested', () => {
+  const paper = { gameVersion: '26.2', loaders: ['paper', 'spigot'] }
+  const bskyblock = project('bskyblock', 'BSkyBlock')
+  const listsTo = (versionId: string, gameVersions: string[], publishedAt: string) => ({
+    ...version('bskyblock', versionId, { loaders: ['paper'], gameVersions }),
+    publishedAt: new Date(publishedAt),
+  })
+  // As the catalog answers: only what it lists for the target is fitting.
+  const listed = (versions: CatalogVersion[]): CatalogData => ({
+    projects: new Map([['bskyblock', bskyblock]]),
+    fitting: new Map([['bskyblock', versions.filter((v) => v.gameVersions.includes('26.2'))]]),
+    versions: new Map(versions.map((v) => [v.versionId, v])),
+  })
+  const wanted = { target: paper, wanted: [{ projectId: 'bskyblock' }] }
+
+  test('a tested version fits its target where nothing the catalog lists does', () => {
+    const data = listed([listsTo('b1', ['26.1.1'], '2026-04-01')])
+    expect(resolve(request(wanted), data)).toEqual({
+      kind: 'conflicts',
+      conflicts: [{ kind: 'no_fitting_version', mod: 'BSkyBlock', projectId: 'bskyblock' }],
+    })
+    const tested = request({ ...wanted, tested: [{ projectId: 'bskyblock', versionId: 'b1' }] })
+    // Asked for by id when the catalog hasn't shown it yet.
+    expect(resolve(tested, { ...data, versions: new Map() })).toEqual({
+      kind: 'need',
+      projects: [],
+      versions: ['b1'],
+    })
+    expect(summary(resolved(resolve(tested, data)))).toEqual([['BSkyBlock', 'b1', 'user', []]])
+  })
+
+  test('it covers that exact version: a newer release of the project is not covered', () => {
+    const data = listed([listsTo('b2', ['26.1.1'], '2026-09-01'), listsTo('b1', ['26.1.1'], '2026-04-01')])
+    const tested = request({ ...wanted, tested: [{ projectId: 'bskyblock', versionId: 'b1' }] })
+    expect(summary(resolved(resolve(tested, data)))).toEqual([['BSkyBlock', 'b1', 'user', []]])
+    // Nor is an owner's exact choice of the untested one.
+    expect(resolve({ ...tested, wanted: [{ projectId: 'bskyblock', versionId: 'b2' }] }, data)).toMatchObject(
+      { kind: 'conflicts' },
+    )
+  })
+
+  test('a version the catalog lists for the target still wins, as before', () => {
+    const data = listed([listsTo('b2', ['26.2'], '2026-09-01'), listsTo('b1', ['26.1.1'], '2026-04-01')])
+    const tested = request({ ...wanted, tested: [{ projectId: 'bskyblock', versionId: 'b1' }] })
+    expect(summary(resolved(resolve(tested, data)))).toEqual([['BSkyBlock', 'b2', 'user', []]])
+    expect(resolve(tested, data)).toEqual(resolve(request(wanted), data))
+  })
+})
