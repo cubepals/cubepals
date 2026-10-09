@@ -1,7 +1,7 @@
 # The landing page
 
-All rights reserved, not AGPL: this directory, except the typeface in `type/`, is one of the
-Site Assets in [`brand/LICENSE.md`](../../../../brand/LICENSE.md).
+All rights reserved, not AGPL: this directory, except the typeface in `type/` and `fonts.ts`, is
+one of the Site Assets in [`brand/LICENSE.md`](../../../../brand/LICENSE.md).
 
 The page is a film the scroll plays, on one Minecraft chunk. Its story in one sentence: your
 friends type one address and a world wakes up for them; when they leave it goes back to sleep;
