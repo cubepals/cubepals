@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Draws the icons for the ways to play, as the create page shows them: Survival, Creative, Hardcore,
-Smoother survival, Create, Lifesteal, Manhunt, Skyblock, RPG survival, a modpack and a pack you
-have.
+Smoother survival, Create, Lifesteal, Manhunt, Skyblock, OneBlock, RPG survival, a modpack and a
+pack you have.
 
 The same art as scripts/server-icons.py draws for servers: sixteen-by-sixteen pixels in Blockly's
 palette, our own rather than Minecraft's, whose textures belong to Mojang. These are items, as the
@@ -214,6 +214,34 @@ ICONS: dict[str, tuple[str, dict[str, str], list[str]]] = {
             "...osssSssoo....",
             ".....ossSo......",
             "......ooo.......",
+        ],
+    ),
+    # OneBlock: the one block, grass on dirt, floating over its own shadow with nothing else around.
+    "oneblock": (
+        "OneBlock",
+        {
+            "o": "#2b3136",
+            "L": "#8fd460", "l": "#7cc852", "g": "#5aa83c", "G": "#3f7f2a",
+            "d": "#9a6a44", "D": "#6f4a28", "K": "#5a3a20",
+            "s": "#9aa7b1",
+        },
+        [
+            "......oooo......",
+            "....ooLLLLoo....",
+            "..ooLLLLlLLLoo..",
+            ".oLLlLLLLLLLLLo.",
+            ".oggLLLLLLLlGGo.",
+            ".oggggLLLLGGGGo.",
+            ".ogggggGGGGGGGo.",
+            ".odgddgdDDGDDDo.",
+            ".oddddddDDDDDDo.",
+            ".odDdddddDDKDDo.",
+            "..oodddddDDDoo..",
+            "....ooddDDoo....",
+            "......oooo......",
+            "................",
+            "....ssssssss....",
+            "................",
         ],
     ),
     # RPG survival: a book of skills, bound in purple with a gold mark, a spark beside it as it

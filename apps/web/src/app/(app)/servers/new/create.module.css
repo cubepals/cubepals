@@ -262,6 +262,9 @@
 .thumb[data-icon="skyblock"] {
   background: var(--status-sleeping-soft);
 }
+.thumb[data-icon="oneblock"] {
+  background: var(--status-info-soft);
+}
 .thumb[data-icon="rpg"] {
   background: var(--status-sleeping-soft);
 }
