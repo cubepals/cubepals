@@ -253,6 +253,15 @@
 .thumb[data-icon="create"] {
   background: var(--status-starting-soft);
 }
+.thumb[data-icon="lifesteal"] {
+  background: var(--status-online-soft);
+}
+.thumb[data-icon="manhunt"] {
+  background: var(--surface-sand);
+}
+.thumb[data-icon="skyblock"] {
+  background: var(--status-sleeping-soft);
+}
 .thumb[data-icon="modpack"] {
   background: var(--surface-sand);
 }

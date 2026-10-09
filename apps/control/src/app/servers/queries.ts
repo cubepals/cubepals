@@ -281,6 +281,7 @@ export class ServerQueries {
         blurb: template.blurb,
         icon: template.icon,
         advanced: template.advanced === true,
+        forADay: template.forADay === true,
         // What it runs is the template's own; its size, once known, the preview's.
         fits: planFit(entitlements, size?.from ?? template.title, {
           tier: size === undefined ? PARTY['5'].tier : sizeOf('5', size.tier),
@@ -301,6 +302,7 @@ export class ServerQueries {
         version: release.version,
         gameVersion: release.facts.gameVersion,
         playersNeedIt: release.facts.playersNeedIt,
+        way: 'way' in pack ? (pack.way ?? null) : null,
         fits: planFit(entitlements, pack.name, {
           tier: sizeOf('5', release.facts.tier as MemoryTier),
           loader: release.facts.loader as Loader,

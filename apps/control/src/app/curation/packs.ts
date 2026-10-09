@@ -1,3 +1,4 @@
+import type { PlayIcon } from '@blockly/contracts'
 import type { Distribution, LicenceReading, Permission } from '../../domain/mods/curation.ts'
 
 /**
@@ -20,6 +21,12 @@ export interface CuratedPack {
   blurb: string
   /** Who made it, as they sign their work: the credit shown wherever the pack is. */
   authors: string
+  /**
+   * The way to play it stands for, where it is the one Blockly offers for that: its card under
+   * "What to play" carries this name and picture, shown only while a release is offered, and the
+   * pack's own name goes beside its authors'.
+   */
+  way?: { title: string; icon: PlayIcon }
   /** Where its reviewed files come from: a project on a catalog, whose adapter knows its hosts. */
   source: { catalog: string; projectId: string }
   /** The most Blockly may do with its files, as the review found (docs/modpack-templates.md § Licences). */
@@ -62,6 +69,7 @@ export const CURATED_PACKS: readonly CuratedPack[] = [
     name: 'SkyBlock Plus',
     blurb: 'Start on one small island over the void, and grow it into a world.',
     authors: 'BPR02',
+    way: { title: 'Skyblock', icon: 'skyblock' },
     source: { catalog: 'modrinth', projectId: 'cJJdkNYP' },
     // Apache-2.0 itself, and every mod it puts on a server MIT, Apache-2.0 or GPL-3.0 (2026-09-27).
     distribution: 'mirror',

@@ -37,7 +37,7 @@
       "reason": "The tests of one class on one shared setup."
     },
     "apps/web/src/app/(app)/servers/new/page.tsx › function CreateServer": {
-      "n": 687,
+      "n": 685,
       "reason": "Its parts were moved out; what is left is one form whose state every field shares."
     },
     "scripts/smoke.ts": {
@@ -1329,7 +1329,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/(app)/servers/new/page.tsx › function CreateServer": {
-      "n": 439,
+      "n": 438,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/design/page.tsx › function DesignGallery": {
