@@ -15,11 +15,12 @@
  * - headers: a file over 50 lines opens with a doc comment: `//!`, a `/** … *\/` block before any
  *   code, a module docstring. That one is there, never what it says.
  * - indexes: a header's ``Parts (`dir/`):`` list names exactly the source files in that directory
- *   (tests may be listed or not), each with a description; a directory beside the file of its name
- *   has such a list.
+ *   (tests may be listed or not), each with a description; a directory beside the file of its name,
+ *   or holding it as Rust's `mod.rs`, has such a list.
  * - cycles: no import cycle between TypeScript modules, `import type` included: a cycle of types
  *   is the same tangle for a reader. Nor between the Rust crate's modules, read from its `use`
- *   lines; a path written out in code (`crate::a::f()`) and a macro's imports go unseen.
+ *   lines and the `crate::`, `super::` and `self::` paths written out in code; a module is its file
+ *   and everything under it. A macro's imports go unseen.
  * - unused: no file, export or dependency that nothing uses, as knip finds them from the entry
  *   points knip.jsonc names; keyed by file and name, a dependency by its package.json.
  * - duplicates: no block of TypeScript written twice, 12 lines and 80 tokens or more (jscpd), tests
@@ -364,12 +365,16 @@ function listedOn(path: string, line: number, t: string): string | null {
   return item?.[1] ?? null
 }
 
+const isModRs = (path: string) => basename(path) === 'mod.rs'
+
 /** The directory a header's ``Parts (`dir/`):`` list indexes, and the names it lists; null without one. */
 function indexOf(path: string): { dir: string; listed: string[] } | null {
   const lines = header(path)
   const at = lines.findIndex(({ text }) => /^\s*Parts \(`[^`]+\/`\):\s*$/.test(text))
   if (at === -1) return null
-  const dir = join(dirname(path), /`([^`]+)\/`/.exec(lines[at]?.text ?? '')?.[1] ?? '')
+  // A Rust `dir/mod.rs` is the directory's own file, and names it as `dir.rs` beside it would.
+  const beside = isModRs(path) ? dirname(dirname(path)) : dirname(path)
+  const dir = join(beside, /`([^`]+)\/`/.exec(lines[at]?.text ?? '')?.[1] ?? '')
   const listed: string[] = []
   for (const { line, text } of lines.slice(at + 1)) {
     const t = text.replace(/\*\/\s*$|("""|''')\s*$/, '').trim()
@@ -389,16 +394,16 @@ function checkIndexes() {
     if (index === null) continue
     const { dir, listed } = index
     indexed.add(dir)
-    const onDisk = sources.filter((p) => dirname(p) === dir).map((p) => basename(p))
+    const onDisk = sources.filter((p) => dirname(p) === dir && p !== path).map((p) => basename(p))
     for (const name of onDisk.filter((name) => !listed.includes(name) && !isTest(name)))
       report('indexes', { key: `${path} › ${name}`, message: `is in ${dir}/ but not in its index` })
     for (const name of listed.filter((name) => !onDisk.includes(name)))
       report('indexes', { key: `${path} › ${name}`, message: `is in the index but not in ${dir}/` })
   }
-  // A split's directory sits beside the file of its name, whose header keeps the index.
+  // A split's directory sits beside the file of its name, or holds it as mod.rs, whose header keeps the index.
   for (const path of sources) {
-    const dir = path.replace(/\.(rs|tsx?|py)$/, '')
-    if (!indexed.has(dir) && sources.some((p) => p.startsWith(`${dir}/`)))
+    const dir = isModRs(path) ? dirname(path) : path.replace(/\.(rs|tsx?|py)$/, '')
+    if (!indexed.has(dir) && sources.some((p) => p !== path && p.startsWith(`${dir}/`)))
       report('indexes', {
         key: path,
         message: `has no \`Parts (\`${basename(dir)}/\`):\` index in its header`,
@@ -450,41 +455,80 @@ function rustFile(crate: string, path: string[]): string | undefined {
   return undefined
 }
 
-/** The files a `use` names from the module at `here`, by their paths' longest prefixes that are files. */
-function useTargets(crate: string, here: string[], used: string, group: string | undefined): string[] {
-  let at = used.startsWith('crate') ? ['crate'] : here
-  for (const part of used.split('::').filter((p) => p !== 'crate' && p !== 'self'))
+/** The paths a `use` tree names: `a::{b, c::{self, d}}` names a::b, a::c and a::c::d. */
+function useTree(tree: string): string[] {
+  const open = tree.indexOf('{')
+  if (open === -1) return [tree.split(/\s+as\s+/)[0]?.trim() ?? '']
+  const items: string[] = ['']
+  let depth = 0
+  for (const char of tree.slice(open + 1, tree.lastIndexOf('}'))) {
+    depth += char === '{' ? 1 : char === '}' ? -1 : 0
+    if (char === ',' && depth === 0) items.push('')
+    else items[items.length - 1] += char
+  }
+  const prefix = tree.slice(0, open)
+  return items
+    .filter((item) => item.trim() !== '')
+    .flatMap((item) => useTree(item.trim()).map((p) => prefix + p))
+}
+
+/** The file a path names from the module at `here`: from the crate's root (`crate::`) or from here. */
+function pathTarget(crate: string, here: string[], path: string): string | undefined {
+  const parts = path.split('::').map((part) => part.trim())
+  let at = parts[0] === 'crate' ? ['crate'] : here
+  for (const part of parts.filter((p) => !['crate', 'self', '*', ''].includes(p)))
     at = part === 'super' ? at.slice(0, -1) : [...at, part]
-  const items = group?.split(',').map((item) => item.trim().split(/::|\s/)[0] ?? '') ?? ['']
-  return items.flatMap((item) => rustFile(crate, item === '' || item === 'self' ? at : [...at, item]) ?? [])
+  return rustFile(crate, at)
+}
+
+/** A Rust file's crate (the path to its src/) and module, `crate::a::b` as ['crate', 'a', 'b']. */
+function rustModule(path: string): { crate: string; here: string[] } {
+  const [crate = '', rel = ''] = path.split(/(?<=(?:^|\/)src)\//)
+  return {
+    crate,
+    here: ['crate', ...rel.replace(/(^|\/)(lib|main|mod)\.rs$|\.rs$/, '').split('/')].filter(Boolean),
+  }
 }
 
 /**
- * Each Rust module's `use` lines, re-exports too, as the files of the modules they name. A path
+ * Each Rust module's `use` lines, re-exports and nested groups too, and the `crate::`, `super::` and
+ * `self::` paths written out in its code, as the files of the modules they name. A `use` path
  * starts at the crate's root (`crate::`) or at this module (`super::`, `self::`, a child's name); a
  * dependency's or std's names no file, and one naming this file's own items is no edge.
+ *
+ * A module is its file and everything under it, so an edge joins the two modules just below where
+ * the paths part: fleet/heartbeat.rs using cli/upgrade.rs is fleet using cli, an edge from
+ * fleet/mod.rs to cli.rs; a part using its parent stays an edge from the part to the parent.
  */
 function rustImports(): Map<string, string[]> {
+  const files = sources.filter((p) => /(^|\/)src\/.*\.rs$/.test(p) && !/(^|\/)src\/bin\//.test(p))
+  const fileOf = new Map(files.map((p) => [`${rustModule(p).crate}/${rustModule(p).here.join('::')}`, p]))
   const graph = new Map<string, string[]>()
-  for (const path of sources.filter((p) => /(^|\/)src\/.*\.rs$/.test(p) && !/(^|\/)src\/bin\//.test(p))) {
-    const [crate = '', rel = ''] = path.split(/(?<=(?:^|\/)src)\//)
-    const here = ['crate', ...rel.replace(/(^|\/)(lib|main|mod)\.rs$|\.rs$/, '').split('/')].filter(Boolean)
+  for (const path of files) {
+    const { crate, here } = rustModule(path)
     // An inline `mod tests` reaches its parent through `use super::*`, which is no edge.
     const source = (text.get(path) ?? '')
       .replace(/\/\/.*/g, '')
       .replace(/#\[cfg\(test\)\]\s*mod\s+\w+\s*\{[\s\S]*$/, '')
-    const uses = [...source.matchAll(/\buse\s+(\w+(?:::\w+)*)(?:::\{([^;]*)\})?/g)]
-    const targets = uses.flatMap(([, used = '', group]) => useTargets(crate, here, used, group))
-    graph.set(
-      path,
-      targets.filter((file) => file !== path),
-    )
+    const paths = [
+      ...[...source.matchAll(/\buse\s+([^;]+);/g)].flatMap(([, tree = '']) => useTree(tree.trim())),
+      ...[...source.matchAll(/(?<![\w:])(?:crate|super|self)(?:::\w+)+/g)].map(([written]) => written),
+    ]
+    for (const target of paths.flatMap((p) => pathTarget(crate, here, p) ?? [])) {
+      const there = rustModule(target).here
+      const parted = here.findIndex((part, i) => part !== there[i])
+      const below = (parted === -1 ? here.length : parted) + 1
+      const lift = (module: string[], file: string) =>
+        module.length <= below ? file : (fileOf.get(`${crate}/${module.slice(0, below).join('::')}`) ?? file)
+      const [from, to] = [lift(here, path), lift(there, target)]
+      if (from !== to) graph.set(from, [...(graph.get(from) ?? []), to])
+    }
   }
   return graph
 }
 
-/** Every set of files that import each other round a cycle: Tarjan's strongly connected components. */
-function checkCycles(graph: Map<string, string[]>) {
+/** Every set of nodes that import each other round a cycle: Tarjan's strongly connected components. */
+function checkCycles(graph: Map<string, string[]>, message: string) {
   const index = new Map<string, number>()
   const low = new Map<string, number>()
   const stack: string[] = []
@@ -502,7 +546,7 @@ function checkCycles(graph: Map<string, string[]>) {
       report('cycles', {
         key: component.join(' ↔ '),
         n: component.length,
-        message: 'files that import each other',
+        message,
       })
   }
   for (const node of graph.keys()) if (!index.has(node)) visit(node)
@@ -636,7 +680,8 @@ else {
   checkNames()
   checkHeaders()
   checkIndexes()
-  checkCycles(new Map([...tsImports(), ...rustImports()]))
+  checkCycles(tsImports(), 'files that import each other')
+  checkCycles(rustImports(), 'modules that use each other')
   if (!crateRepo) checkUnused()
   if (!crateRepo) checkDuplicates()
 }
