@@ -311,17 +311,19 @@ drifted (an exit code the node may send as null was typed as a number). They now
 same pipeline, from specs blocklyd writes itself:
 
 ```
-apps/blocklyd/src/protocol/schema.rs (a test; schemars 1.2.2, a dev-dependency only)
-  → infra/fleet/node-reads.openapi.json, node-writes.openapi.json
+cubepals/blocklyd: src/protocol/schema.rs (a test; schemars 1.2.2, a dev-dependency only)
+  → openapi/node-reads.openapi.json, node-writes.openapi.json, carried by each release
+  → bun scripts/blocklyd.ts bump <version>: infra/fleet/node-reads.openapi.json, node-writes.openapi.json
     → openapi-typescript 7.13.0 → infra/fleet/generated/ (types only)
       → infra/fleet/wire.ts (names, and narrowings of what the control plane sends)
 ```
 
 - **Two specs**, because serde reads a defaulted field as optional and always writes it: what the
   node reads is generated with `defaultNonNullable: false`, like boat's requests.
-- **Drift fails twice.** `cargo test` fails when the committed specs aren't what the Rust types
-  say (`BLOCKLYD_WRITE_SCHEMA=1` rewrites them), and `bun run openapi:check` when the generated
-  types aren't what the specs say. `openapi:update` doesn't fetch them: there is nothing to fetch.
+- **Drift fails three times.** blocklyd's `cargo test` fails when its committed specs aren't what
+  the Rust types say (`BLOCKLYD_WRITE_SCHEMA=1` rewrites them), `bun scripts/blocklyd.ts check`
+  when the copies here aren't the pinned release's, and `bun run openapi:check` when the generated
+  types aren't what the specs say. `openapi:update` doesn't fetch them: a pin moves them.
 - **Nothing reaches the binary**: the schemas derive only under `cfg(test)`.
 
 ts-rs (one TypeScript type per Rust type, no serialize/deserialize distinction, `u64` as `bigint`)

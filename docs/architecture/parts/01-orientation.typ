@@ -109,7 +109,9 @@ between them are in @s-topology.
 
 = Repository and module map <s-modules>
 
-One repository: a Bun workspace (TypeScript) plus one Rust crate.
+Two repositories. `cubepals/cubepals`, a Bun workspace (TypeScript), holds everything below but
+blocklyd, which is one Rust crate in `cubepals/blocklyd`, released on its own and pinned by the
+control plane's image. A citation that starts `blocklyd/` is a path in that repository.
 
 #figure(
   table(
@@ -118,7 +120,7 @@ One repository: a Bun workspace (TypeScript) plus one Rust crate.
     [`apps/control`], [The control plane: Node 22 runs the TypeScript sources directly; Hono, tRPC, pg-boss, Drizzle, Better Auth.],
     [`apps/web`], [Next.js web app; imports only *types* from the control plane (`AppRouter`) and contracts.],
     [`apps/edge`], [The edge agent (Bun, compiled) that supervises `itzg/mc-router` and speaks the edge protocol.],
-    [`apps/blocklyd`], [The fleet's node daemon, Rust.],
+    [`cubepals/blocklyd`], [The fleet's node daemon, Rust, in its own repository; `apps/control/Dockerfile` pins a release.],
     [`apps/devtools`], [A local-only inspector (`bun run devtools`); never shipped.],
     [`packages/contracts`], [Zod schemas, view types, error codes, the realtime and edge protocols: what crosses process boundaries.],
     [`packages/db`], [Drizzle schema (52 tables), 43 SQL migrations, the migrator.],
@@ -176,7 +178,7 @@ Between packages, imports run one way, toward the shared contracts and schema:
   rt((0, 0), [`apps/edge`\ #text(size: 6.4pt)[agent]], name: <edge>),
   cp((1, 0), [`apps/web`\ #text(size: 6.4pt)[Next.js]], name: <web>),
   cp((2, 0), [`apps/control`\ #text(size: 6.4pt)[control plane]], name: <control>),
-  rt((3, 0), [`apps/blocklyd`\ #text(size: 6.4pt)[Rust]], name: <bd>),
+  rt((3, 0), [`blocklyd`\ #text(size: 6.4pt)[Rust, own repository]], name: <bd>),
   cp((1, 1), [`packages/contracts`\ #text(size: 6.4pt)[schemas · views · protocols]], name: <contracts>),
   st((2, 1), [`packages/db`\ #text(size: 6.4pt)[schema · migrations]], name: <db>),
   edge(<edge>, <contracts>, "-|>", lbl[types:\ edge protocol], label-side: right),
@@ -189,9 +191,9 @@ Between packages, imports run one way, toward the shared contracts and schema:
   `drizzle-orm` and `pg`. blocklyd shares no code with the TypeScript packages: it and the control
   plane speak HTTP.], name: "fig-packages")
 
-- `apps/blocklyd` shares no code with the TypeScript side: the contract is its HTTP protocol
-  (`apps/blocklyd/docs/protocol.md`) and the wire types mirrored in
-  `apps/control/src/infra/fleet/wire.ts`.
+- blocklyd shares no code with the TypeScript side: the contract is its HTTP protocol
+  (`blocklyd/docs/protocol.md`) and the OpenAPI documents of the pinned release, from which
+  `apps/control/src/infra/fleet/wire.ts` takes its types.
 - `infra/fleet` is the one adapter that owns database tables (`fleet_*`), read and written only by
   it.
 

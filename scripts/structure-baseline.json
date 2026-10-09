@@ -1441,27 +1441,6 @@
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     }
   },
-  "clippy::too_many_lines": {
-    "apps/blocklyd/src/manager/reconcile.rs › impl Manager › fn reconcile_inner": {
-      "n": 181,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    },
-    "apps/blocklyd/src/protocol/spec/validate.rs › impl WorkloadSpec › fn validate": {
-      "n": 114,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    }
-  },
-  "clippy::cognitive_complexity": {
-    "apps/blocklyd/src/manager/reconcile.rs › impl Manager › fn reconcile_inner": {
-      "n": 27,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    },
-    "apps/blocklyd/src/protocol/spec/validate.rs › impl WorkloadSpec › fn validate": {
-      "n": 36,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    }
-  },
-  "clippy::too_many_arguments": {},
   "names": {
     "apps/web/src/app/(app)/servers/[id]/settings/shared.tsx": {
       "reason": "What the settings sections share: whether a change can be made now, the confirm and revoked dialogs, a change's state. Its job needs naming before it can be renamed."
@@ -1476,14 +1455,6 @@
     "apps/web/src/lib/present.ts ↔ apps/web/src/ui/action-button.tsx ↔ apps/web/src/ui/index.ts ↔ apps/web/src/ui/pack.tsx ↔ apps/web/src/ui/share.tsx": {
       "n": 5,
       "reason": "ui/index.ts re-exports the components, and action-button, pack and share import ICON back from it; share imports lib/present.ts, which takes two types from ui/."
-    },
-    "apps/blocklyd/src/protocol.rs ↔ apps/blocklyd/src/protocol/exec.rs ↔ apps/blocklyd/src/protocol/lifecycle.rs ↔ apps/blocklyd/src/protocol/node.rs ↔ apps/blocklyd/src/protocol/spec.rs ↔ apps/blocklyd/src/protocol/spec/validate.rs ↔ apps/blocklyd/src/protocol/transfer.rs ↔ apps/blocklyd/src/protocol/workload.rs": {
-      "n": 8,
-      "reason": "The split re-exports every part from protocol.rs so outsiders keep their paths, and the parts take shared types (FieldError, Proto, Resources) from protocol.rs."
-    },
-    "apps/blocklyd/src/manager.rs ↔ apps/blocklyd/src/manager/logs.rs ↔ apps/blocklyd/src/manager/node.rs ↔ apps/blocklyd/src/metrics.rs": {
-      "n": 4,
-      "reason": "manager.rs re-exports lines_of and WorkloadSample from its parts, which use super::*; and metrics.rs reads the Manager that holds its Metrics."
     }
   },
   "headers": {

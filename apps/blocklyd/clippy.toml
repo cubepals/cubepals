@@ -1,7 +1,0 @@
-# Thresholds for the complexity lints that `bun run check:structure --rust` runs (scripts/
-# check-structure.ts), where what already breaks them is baselined. too_many_lines and
-# cognitive_complexity are off in an ordinary `cargo clippy`; too_many_arguments is on there, at
-# the same threshold. These are clippy's defaults, written out so they can be found.
-too-many-lines-threshold = 100
-cognitive-complexity-threshold = 25
-too-many-arguments-threshold = 7

@@ -24,7 +24,7 @@ unit runs, and the move from one build to the next and back.
   code, read the proposed crate's source, build the failing case concretely. Findings that
   couldn't be shown were dropped, and several proposals were narrowed or corrected this way.
 - **The constraints any crate had to meet:**
-  - those of `apps/blocklyd/deny.toml`: permissive licences, crates.io only, no OpenSSL;
+  - those of blocklyd's `deny.toml`: permissive licences, crates.io only, no OpenSSL;
   - TLS through rustls with ring, and a static musl release;
   - the unit's sandbox: no `AF_NETLINK`, nothing writable but the state directory.
 - **A map of everything that depends on blocklyd**, so no fix breaks a consumer:

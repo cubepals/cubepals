@@ -1,0 +1,122 @@
+name: fleet
+
+# The fleet runtime against the blocklyd this control plane pins (apps/control/Dockerfile,
+# scripts/blocklyd.ts). blocklyd itself is cubepals/blocklyd, whose own CI runs this same e2e from
+# this repository's main against every change it makes. The paths are the pin, the fleet adapter,
+# and what the e2e runs beyond it: @blockly/db, the runtime port, its test database, the S3 store,
+# and the control plane's package.json, which pins @peculiar/x509 (the fleet CA's certificates).
+# Both lists match.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/control/src/infra/fleet/**'
+      - 'apps/control/Dockerfile'
+      - 'apps/control/package.json'
+      - 'apps/control/src/app/ports/**'
+      - 'apps/control/src/infra/s3/**'
+      - 'apps/control/src/testing/fleet.ts'
+      - 'packages/db/**'
+      - 'scripts/blocklyd.ts'
+      - '.github/workflows/fleet.yml'
+  pull_request:
+    paths:
+      - 'apps/control/src/infra/fleet/**'
+      - 'apps/control/Dockerfile'
+      - 'apps/control/package.json'
+      - 'apps/control/src/app/ports/**'
+      - 'apps/control/src/infra/s3/**'
+      - 'apps/control/src/testing/fleet.ts'
+      - 'packages/db/**'
+      - 'scripts/blocklyd.ts'
+      - '.github/workflows/fleet.yml'
+  # Weekly, and on demand.
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: 1.94.1
+
+jobs:
+  pin:
+    # The image's digest and the copies beside the fleet adapter are the pinned release's.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+      - run: bun scripts/blocklyd.ts check
+
+  fleet-e2e:
+    # The control plane's fleet runtime against the pinned blocklyd, for real: enrollment over
+    # mutual TLS, placement, snapshots, restores, a daemon killed and back, a node held lost, a
+    # self-upgrade (apps/control/src/infra/fleet/fleet-runtime.e2e.test.ts). Built from its tag in
+    # debug, since only debug builds take BLOCKLYD_TEST_VERSION, which the upgrade test sets.
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: blockly
+          POSTGRES_PASSWORD: blockly
+          POSTGRES_DB: blockly
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U blockly"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://blockly:blockly@127.0.0.1:5432/blockly
+      S3_TEST_ENDPOINT: http://127.0.0.1:9000
+      # blocklyd hands data directories to the workloads' user, so it runs as root.
+      BLOCKLYD_SUDO: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+      - name: The pinned version
+        id: pin
+        run: echo "version=$(bun scripts/blocklyd.ts version)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        with:
+          repository: cubepals/blocklyd
+          ref: v${{ steps.pin.outputs.version }}
+          path: .blocklyd
+      - name: Rust ${{ env.RUST_VERSION }}
+        working-directory: .blocklyd
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup override set "$RUST_VERSION"
+      # Keyed on the toolchain and the release: a release's tag never moves, so its build is cached
+      # for good, and the next one starts from it.
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            .blocklyd/target
+          key: blocklyd-e2e-${{ env.RUST_VERSION }}-${{ steps.pin.outputs.version }}
+          restore-keys: blocklyd-e2e-${{ env.RUST_VERSION }}-
+      - run: cargo build --locked
+        working-directory: .blocklyd
+      - name: Start an S3 store
+        run: >-
+          docker run -d --name s3 -p 9000:9000 -e RUSTFS_ACCESS_KEY=blockly-test
+          -e RUSTFS_SECRET_KEY=blockly-test-secret rustfs/rustfs:1.0.0 /data
+      - run: docker pull -q alpine:3.22
+      # The node endpoint runs on Node, as in production.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+      - run: bun install --frozen-lockfile
+      - run: bun test apps/control/src/infra/fleet/fleet-runtime.e2e.test.ts
+        env:
+          BLOCKLYD_BIN: ${{ github.workspace }}/.blocklyd/target/debug/blocklyd

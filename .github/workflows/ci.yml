@@ -61,7 +61,6 @@ jobs:
       - run: bun run lint
       - run: bun run typecheck
       - run: bun run check:boundaries
-      # Clippy's part runs in blocklyd.yml, which has cargo.
       - run: bun run check:structure
       - run: bun run check:deprecated
       - uses: hashicorp/setup-terraform@v4

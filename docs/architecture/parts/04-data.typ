@@ -34,7 +34,7 @@ device for worlds. #implemented
     [Resting worlds], [A server unplayed for its plan's `storeAfterIdleDays` (Free 14, Plus 30) is `stored`: its world in the archive store, no compute, no disk.], [Idle worlds cost object storage, not disks. A join or start brings it back.], [#implemented],
     [ZFS], [`zfs snapshot` and `zfs send` streams, evaluated.], [Needs an out-of-tree kernel module on every node; nothing could be measured honestly in the test environment.], [#research],
   ),
-  caption: [Storage tiers. #src("apps/blocklyd/src/store.rs:3"), #src("apps/blocklyd/src/tree.rs:330"), #src("apps/blocklyd/src/transfer.rs:95"), #src("apps/control/src/domain/account/entitlements.ts:150").],
+  caption: [Storage tiers. #src("blocklyd/src/store.rs:3"), #src("blocklyd/src/tree.rs:330"), #src("blocklyd/src/transfer.rs:95"), #src("apps/control/src/domain/account/entitlements.ts:150").],
   kind: table,
 )
 
@@ -42,7 +42,7 @@ device for worlds. #implemented
   a snapshot and a restore are refused below it with `507 insufficient_disk`. A restore from a
   URL is refused too when the size its download announces wouldn't fit above the floor, and is
   stopped if the floor is reached while it downloads or unpacks
-  (#src("apps/blocklyd/src/manager.rs:1532")). Placement admits disk for the world when it places
+  (#src("blocklyd/src/manager.rs:1532")). Placement admits disk for the world when it places
   the server (@s-placement), which covers the normal case.
 - *A world's size is measured, not enforced.* `storage.sizeGb` is checked against usage and
   reported as an issue (`over_storage`); there is no quota on the node (#deferred).
@@ -105,9 +105,9 @@ over one PUT's limit (5 GiB less 5 MiB) goes in parts: the control plane begins 
 upload sized for it and presigns a URL for each part, the runtime sends the parts and reports their
 ETags, and the control plane completes the upload, or aborts it when anything failed
 (#src("apps/control/src/infra/s3/s3-archive-store.ts:256"),
-#src("apps/blocklyd/src/manager.rs:3038")). Only a fleet node without the
+#src("blocklyd/src/manager.rs:3038")). Only a fleet node without the
 `multipart-upload` feature still refuses such an archive before sending anything
-(`archive_too_large`, #src("apps/blocklyd/src/manager.rs:3021")): its snapshots stay on its node,
+(`archive_too_large`, #src("blocklyd/src/manager.rs:3021")): its snapshots stay on its node,
 and it can't rest or move to another node.]
 
 = The restore pipeline <s-restore>
@@ -132,7 +132,7 @@ and it can't rest or move to another node.]
   edge(<bd>, <tmp>, "-|>", lbl[unpack: files and\ dirs only, ≤ 256 GiB], label-side: right),
   edge(<tmp>, <data>, "-|>", lbl[one exchange], label-side: right),
   edge(<data>, <trash>, "-|>", lbl[old data,\ after], label-side: left),
-), caption: [A restore. The new data is assembled beside the old, so a bad archive costs nothing. #src("apps/blocklyd/src/manager.rs:1426"), #src("apps/blocklyd/src/transfer.rs:161"), #src("apps/control/src/infra/fleet/fleet-runtime.ts:980").], name: "fig-restore")
+), caption: [A restore. The new data is assembled beside the old, so a bad archive costs nothing. #src("blocklyd/src/manager.rs:1426"), #src("blocklyd/src/transfer.rs:161"), #src("apps/control/src/infra/fleet/fleet-runtime.ts:980").], name: "fig-restore")
 
 - *Sources.* A backup's snapshot handle when its runtime still holds it; else the archive store
   through a link made just before use (#src("handlers.ts:869")). On the fleet a snapshot is read
@@ -153,7 +153,7 @@ and it can't rest or move to another node.]
   old where the new was, in one step, so a crash leaves the old data or the new, never neither. A
   marker in the new data tells which side of the swap a crash fell on, and blocklyd settles it
   when it starts and before each restore. A filesystem that can't exchange gets two renames, and
-  the same recovery finishes the second (#src("apps/blocklyd/src/store.rs:301")).
+  the same recovery finishes the second (#src("blocklyd/src/store.rs:301")).
 
 = Relocation <s-relocation>
 

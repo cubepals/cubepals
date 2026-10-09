@@ -10,7 +10,9 @@ and you'll be told when it is fixed and whether you want to be credited.
 
 ## Scope
 
-- This repository: the control plane, the web app, the edge, `blocklyd` and the infrastructure code.
+- This repository: the control plane, the web app, the edge and the infrastructure code.
+- `blocklyd`, the node daemon: report it in
+  [cubepals/blocklyd](https://github.com/cubepals/blocklyd/security/advisories/new).
 - The hosted service at `cubepals.com`, `rt.cubepals.com` and `*.play.cubepals.com`.
 
 Only `main` and what runs on cubepals.com are supported; there are no older release lines.

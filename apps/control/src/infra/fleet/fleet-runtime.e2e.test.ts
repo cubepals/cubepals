@@ -30,8 +30,9 @@ import { FleetStore } from './store.ts'
  * node upgrades itself to the blocklyd the node endpoint serves, under a stand-in for systemd, and
  * rolls back from one that can't start (docs/fleet.md, "Upgrades").
  *
- *   cargo build --manifest-path apps/blocklyd/Cargo.toml
- *   BLOCKLYD_BIN=apps/blocklyd/target/debug/blocklyd DATABASE_URL=… S3_TEST_ENDPOINT=… bun test fleet-runtime.e2e
+ *   git clone -b v$(bun scripts/blocklyd.ts version) https://github.com/cubepals/blocklyd ../blocklyd
+ *   cargo build --manifest-path ../blocklyd/Cargo.toml     # debug: only it takes BLOCKLYD_TEST_VERSION
+ *   BLOCKLYD_BIN=../blocklyd/target/debug/blocklyd DATABASE_URL=… S3_TEST_ENDPOINT=… bun test fleet-runtime.e2e
  *
  * blocklyd runs as root (it hands data directories to the workload's user); BLOCKLYD_SUDO=1 runs it
  * through `sudo -n` where the tests themselves don't run as root.

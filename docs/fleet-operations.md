@@ -1,7 +1,7 @@
 # Operating a fleet
 
 How to run the `fleet` runtime: Blockly's servers on Linux hosts it manages directly, each with
-[blocklyd](../apps/blocklyd/). Why it works this way is [fleet.md](fleet.md).
+[blocklyd](https://github.com/cubepals/blocklyd), which is its own repository. Why it works this way is [fleet.md](fleet.md).
 
 Everything an operator does goes through `bun scripts/fleet.ts` (the operator API on the control
 plane's internal listener) or the node itself. Set, on the machine you operate from:
@@ -112,13 +112,13 @@ then. On the host it:
    nothing runs before that;
 2. fetches `join.sh` over TLS checked against that CA, which installs Docker from Docker's apt
    repository if it is missing (Debian and Ubuntu), gives Docker
-   [`deploy/daemon.json`](../apps/blocklyd/deploy/daemon.json) if it has none (`live-restore` so a
+   [`daemon.json`](../apps/control/src/infra/fleet/daemon.json) if it has none (`live-restore` so a
    Docker restart doesn't stop servers; inter-container traffic off; bounded logs), and installs
    the blocklyd the control plane serves, once its sha256 matches, at
    `/var/lib/blocklyd/bin/blocklyd` with `/usr/local/bin/blocklyd` linked to it, where it can
    [upgrade itself](#9-upgrading-blocklyd);
 3. runs `blocklyd join`, which writes `/etc/blocklyd/blocklyd.toml`, the CA, the token (0600) and
-   the unit [`deploy/blocklyd.service`](../apps/blocklyd/deploy/blocklyd.service), starts blocklyd,
+   the unit [`deploy/blocklyd.service`](https://github.com/cubepals/blocklyd/blob/main/deploy/blocklyd.service), starts blocklyd,
    and prints what it worked out from the host:
 
 ```text
@@ -133,7 +133,7 @@ The address is the host's one private address: RFC 1918, 100.64.0.0/10, or a Wir
 interface's. A host with several, or none, is asked which before anything is written: paste the
 line again with `--address <ip>` added to its end. The configuration holds only the deployment and
 the endpoint, so the rest is worked out again at each start, and anything you set in it wins
-([examples/blocklyd.toml](../apps/blocklyd/examples/blocklyd.toml) lists every key). Pasting the
+([examples/blocklyd.toml](https://github.com/cubepals/blocklyd/blob/main/examples/blocklyd.toml) lists every key). Pasting the
 line on a host that is already a node of this deployment changes nothing.
 
 `blocklyd doctor` says what is wrong with a host and what to do about each thing: Docker and its
@@ -329,11 +329,11 @@ CA. A node that can't be reached to re-enroll stays cut off until it is.
 
 ## 9. Upgrading blocklyd
 
-Deploying the control plane upgrades the fleet. Its image carries the blocklyd built from the same
-commit, and the node endpoint offers it, in heartbeat answers, to the nodes on an older version:
-one node per region at a time, regions side by side. Older is by the version in
-`apps/blocklyd/Cargo.toml`, so a rollout starts when that goes up; nodes already on it are left as
-they are. A node offered it:
+Deploying the control plane upgrades the fleet. Its image carries the blocklyd release it pins
+(`bun scripts/blocklyd.ts version`), and the node endpoint offers it, in heartbeat answers, to the
+nodes on an older version: one node per region at a time, regions side by side. So a rollout starts
+when a commit that moves the pin (`bun scripts/blocklyd.ts bump <version>`) is deployed; nodes
+already on it are left as they are. A node offered it:
 
 1. downloads it over its own mutual TLS and keeps it only if its sha256 is the one offered and it
    runs, saying it is the version offered;
@@ -370,12 +370,12 @@ the new binary and its sha256 from the node endpoint (`curl --cacert /etc/blockl
 ```sh
 install -D -m 0755 blocklyd /var/lib/blocklyd/bin/blocklyd
 ln -sfn /var/lib/blocklyd/bin/blocklyd /usr/local/bin/blocklyd
-cp blocklyd.service /etc/systemd/system/blocklyd.service   # apps/blocklyd/deploy/, for its ExecStopPost
+cp blocklyd.service /etc/systemd/system/blocklyd.service   # the release's, for its ExecStopPost
 systemctl daemon-reload && systemctl restart blocklyd
 ```
 
 From then on it upgrades itself. If the control plane's new version needs a feature (see
-`features` in [protocol.md](../apps/blocklyd/docs/protocol.md)), it places only on nodes that have
+`features` in [protocol.md](https://github.com/cubepals/blocklyd/blob/main/docs/protocol.md)), it places only on nodes that have
 it, and older nodes keep their servers until they upgrade.
 
 ## 10. Disk
@@ -423,7 +423,7 @@ What the line in [§2](#2-adding-a-node) does, step by step, for a host it can't
 
 **The host.** A Linux machine with:
 
-- Docker Engine, configured with [`deploy/daemon.json`](../apps/blocklyd/deploy/daemon.json)
+- Docker Engine, configured with [`daemon.json`](../apps/control/src/infra/fleet/daemon.json)
   (`live-restore` so a Docker restart doesn't stop servers; inter-container traffic off; bounded
   logs). XFS with reflink (the default for `mkfs.xfs`) for `/var/lib/blocklyd` makes snapshots
   free until the world changes, though each still needs room for a full copy above the floor;
@@ -435,9 +435,9 @@ What the line in [§2](#2-adding-a-node) does, step by step, for a host it can't
 **blocklyd.** The static binary at `/var/lib/blocklyd/bin/blocklyd`, linked from
 `/usr/local/bin/blocklyd` so it can [upgrade itself](#9-upgrading-blocklyd), checked against its
 `.sha256`: the
-node endpoint serves the one the control plane was built with, at `/fleet/v1/blocklyd` and
+node endpoint serves the release the control plane pins, at `/fleet/v1/blocklyd` and
 `/fleet/v1/blocklyd.sha256` (`curl --cacert` with the fleet CA's `ca.pem`). Then the unit
-[`deploy/blocklyd.service`](../apps/blocklyd/deploy/blocklyd.service), and
+[`deploy/blocklyd.service`](https://github.com/cubepals/blocklyd/blob/main/deploy/blocklyd.service), and
 `/etc/blocklyd/blocklyd.toml`:
 
 ```toml
@@ -460,7 +460,7 @@ enrollment_token_file = "/var/lib/blocklyd/enrollment-token"
 labels = { monthly_cost_cents = "4900", provider = "hetzner" }
 ```
 
-([examples/blocklyd.toml](../apps/blocklyd/examples/blocklyd.toml) lists every key.)
+([examples/blocklyd.toml](https://github.com/cubepals/blocklyd/blob/main/examples/blocklyd.toml) lists every key.)
 
 **The token**, from where you operate:
 

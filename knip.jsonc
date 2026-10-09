@@ -5,9 +5,8 @@
 // string runs.
 {
   "$schema": "https://unpkg.com/knip@6.40.0/schema.json",
-  // Rust, whose dead code clippy already fails; tools/openapi installs on its own lockfile; and
-  // the API types openapi-typescript writes whole from a spec.
-  "ignoreWorkspaces": ["apps/blocklyd"],
+  // tools/openapi installs on its own lockfile; and the API types openapi-typescript writes whole
+  // from a spec.
   "ignore": ["tools/**", "**/generated/**"],
   // A program on the machine, not a package: the Fly CLI.
   "ignoreBinaries": ["fly"],

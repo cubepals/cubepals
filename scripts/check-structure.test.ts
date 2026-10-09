@@ -2,7 +2,7 @@
  * check-structure.ts against small trees: for each check, a new violation fails, a baselined one
  * passes, one that grew fails, an entry that no longer violates fails, and an entry without a
  * reason fails; --update only ever lowers a number. Clippy's part (--rust) needs a crate and cargo,
- * so it is checked by running it on apps/blocklyd, not here. A repository that is one crate is
+ * so it is checked by running it in blocklyd's CI, not here. A repository that is one crate is
  * checked here without it.
  */
 import { afterAll, describe, expect, test } from 'bun:test'

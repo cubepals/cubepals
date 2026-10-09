@@ -4,7 +4,7 @@ import type { Readable } from 'node:stream'
 import { nodeName } from './ca.ts'
 
 /**
- * The control plane's client for blocklyd's API (apps/blocklyd/docs/protocol.md): mutual TLS with
+ * The control plane's client for blocklyd's API (blocklyd's docs/protocol.md): mutual TLS with
  * the control plane's own client certificate, the fleet CA as the only root, and the node's name,
  * which the control plane chose at enrollment, as what the node's certificate must say. An address
  * is only where to dial; it never identifies a node.

@@ -1,5 +1,5 @@
 // Generated from infra/fleet/node-reads.openapi.json (sha256 af74b64eedeeedb0b411abcfd82751dad117fd99cf8f1add082fdd39814d2383) by tools/openapi.
-// Do not edit. Regenerate with `bun run openapi:generate`; update the spec with `cd apps/blocklyd && BLOCKLYD_WRITE_SCHEMA=1 cargo test --lib protocol::schema`.
+// Do not edit. Regenerate with `bun run openapi:generate`; update the spec with `bun scripts/blocklyd.ts bump <version>`.
 
 export type paths = Record<string, never>;
 export type webhooks = Record<string, never>;

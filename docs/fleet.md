@@ -1,7 +1,7 @@
 # The fleet runtime
 
 `RUNTIME_PROVIDER=fleet` runs Blockly's Minecraft servers on Linux hosts Blockly manages
-directly: rented VMs or dedicated servers, each running [blocklyd](../apps/blocklyd/). One big
+directly: rented VMs or dedicated servers, each running [blocklyd](https://github.com/cubepals/blocklyd). One big
 machine is a whole deployment; many machines are the same runtime with more nodes in it. There is
 no cluster to run: no quorum, no consensus store, no Kubernetes or Nomad, no service mesh, no
 distributed filesystem, no live migration, and no automatic failover.
@@ -10,7 +10,7 @@ It is a `MinecraftRuntime` like Fly's and Docker's ([architecture §8](architect
 The application doesn't know it is there.
 
 - Operating it: [fleet-operations.md](fleet-operations.md).
-- The node's API: [apps/blocklyd/docs/protocol.md](../apps/blocklyd/docs/protocol.md).
+- The node's API: [docs/protocol.md in cubepals/blocklyd](https://github.com/cubepals/blocklyd/blob/main/docs/protocol.md).
 
 ## Contents
 
@@ -61,7 +61,7 @@ The application doesn't know it is there.
 | Operator API | the internal listener | what operators do (§ [fleet-operations.md](fleet-operations.md)) |
 
 **A node needs** Linux with cgroup v2, Docker set up as
-[`deploy/daemon.json`](../apps/blocklyd/deploy/daemon.json) (live-restore, inter-container traffic
+[`daemon.json`](../apps/control/src/infra/fleet/daemon.json) (live-restore, inter-container traffic
 off, bounded logs), a machine id of its own, a synchronised clock, a private address for its
 listeners, and free game ports; XFS with reflink under `/var/lib/blocklyd` makes snapshots cheap.
 `blocklyd doctor` checks each of these on the host and says what to do about any that falls short
@@ -103,7 +103,7 @@ TLS 1.3 only, both ways, with no 0-RTT.
   week) and who made it. It enrolls exactly one node.
 - An operator is given it as a **join token**: `bk1.` and base64url JSON with the node endpoint's
   URL, the sha256 of the fleet CA, the deployment, and the secret
-  ([protocol.md](../apps/blocklyd/docs/protocol.md#what-a-joining-host-fetches)). The line
+  ([protocol.md](https://github.com/cubepals/blocklyd/blob/main/docs/protocol.md#what-a-joining-host-fetches)). The line
   `fleet.ts token` prints fetches the CA from that URL without trusting it, stops unless the hash
   matches, and only then fetches `join.sh` and blocklyd over TLS checked against it. The token's
   hash is the trust anchor a new host starts from; everything after it is the CA's.
@@ -478,8 +478,9 @@ Docker):
 
 ## 13. Upgrades
 
-- **blocklyd** is one static binary, and the control plane's image carries the one built from the
-  same commit. Deploying the control plane rolls it out: a heartbeat's answer offers it
+- **blocklyd** is one static binary, released from its own repository, and the control plane's
+  image carries the release it pins (`bun scripts/blocklyd.ts`). Deploying a control plane that
+  pins a newer one rolls it out: a heartbeat's answer offers it
   (`upgrade: {version, sha256}`) to a node on an older version, which downloads it from the node
   endpoint over its mutual TLS, checks it, keeps the binary it ran as `blocklyd.prev`, and
   restarts into it. Servers keep running and no drain is needed: they are Docker's, not

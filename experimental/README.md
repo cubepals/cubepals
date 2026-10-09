@@ -15,4 +15,4 @@ No experiment is running now.
 
 | Experiment | Question | Now |
 |---|---|---|
-| blocklyd | Blockly's node daemon: can Blockly run Minecraft servers on its own Linux hosts, first one node and then a fleet of them? | [`apps/blocklyd`](../apps/blocklyd/) and the `fleet` runtime in [`apps/control/src/infra/fleet`](../apps/control/src/infra/fleet/) ([docs/fleet.md](../docs/fleet.md)). The experiment's reports are kept in [docs/history/blocklyd](../docs/history/blocklyd/). |
+| blocklyd | Blockly's node daemon: can Blockly run Minecraft servers on its own Linux hosts, first one node and then a fleet of them? | [cubepals/blocklyd](https://github.com/cubepals/blocklyd), its own repository, and the `fleet` runtime in [`apps/control/src/infra/fleet`](../apps/control/src/infra/fleet/) ([docs/fleet.md](../docs/fleet.md)). |

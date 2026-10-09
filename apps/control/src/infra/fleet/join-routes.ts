@@ -1,11 +1,11 @@
 /**
  * What a new host fetches from the node endpoint before it has an identity, with no
  * authentication: nothing here is secret, and the host checks each piece before using it
- * (docs/fleet-operations.md, "Adding a node"; apps/blocklyd/docs/protocol.md).
+ * (docs/fleet-operations.md, "Adding a node"; blocklyd's docs/protocol.md).
  *
  * - `GET /fleet/v1/ca.pem`: the fleet CA, fetched without trusting the connection and checked
  *   against the join token's hash.
- * - `GET /fleet/v1/join.sh`: apps/blocklyd/deploy/join.sh, with daemon.json written into it.
+ * - `GET /fleet/v1/join.sh`: join.sh, beside this file, with daemon.json written into it.
  * - `GET /fleet/v1/blocklyd` and `…/blocklyd.sha256`: the static blocklyd this control plane's
  *   image carries, and its hash in `sha256sum -c` form. A process without it starts as usual
  *   and answers 404, saying so.
@@ -41,12 +41,13 @@ export async function blocklydRelease(bin: string): Promise<UpgradeOffer | null>
 
 export function joinRoutes(options: { caPem: string; blocklydBin: string }): Hono {
   const app = new Hono()
-  // Read once: both are committed beside blocklyd, and the image carries them (Dockerfile).
-  const daemonJson = readFileSync(new URL('../../../../blocklyd/deploy/daemon.json', import.meta.url), 'utf8')
-  const script = readFileSync(
-    new URL('../../../../blocklyd/deploy/join.sh', import.meta.url),
-    'utf8',
-  ).replace('@DAEMON_JSON@', daemonJson.trimEnd())
+  // Read once, from beside this file: join.sh is the control plane's, and daemon.json is the pinned
+  // blocklyd release's (scripts/blocklyd.ts).
+  const daemonJson = readFileSync(new URL('./daemon.json', import.meta.url), 'utf8')
+  const script = readFileSync(new URL('./join.sh', import.meta.url), 'utf8').replace(
+    '@DAEMON_JSON@',
+    daemonJson.trimEnd(),
+  )
   const missing = (c: { text: (text: string, status: 404) => Response }) =>
     c.text(
       `This control plane has no blocklyd to hand out: ${options.blocklydBin} is missing. Its image carries ` +

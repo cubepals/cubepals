@@ -1,5 +1,6 @@
 /**
- * Keeps Blockly's structure from getting worse. Run: bun run check:structure [--rust] [--update]
+ * Keeps Blockly's structure from getting worse. Run: bun run check:structure [--update], and in a
+ * repository that is one Rust crate, also with --rust
  *
  * Every check reads source files (.rs, .ts, .tsx and .py under apps/, packages/ and scripts/; not
  * lockfiles, generated code, migrations, fixtures or vendored files) and holds them to:
@@ -7,9 +8,9 @@
  *   inside one too. A block opens on a line and closes on the next closer at the same indentation,
  *   which the formatters guarantee; in Python it ends where the indentation does.
  * - complexity: Biome's noExcessiveCognitiveComplexity and noExcessiveLinesPerFunction, their
- *   thresholds in biome.json (off there, so `bun run lint` passes without them), and with --rust,
- *   clippy's too_many_lines, cognitive_complexity and too_many_arguments, their thresholds in
- *   apps/blocklyd/clippy.toml. Keyed by file and the function the linter points at.
+ *   thresholds in biome.json (off there, so `bun run lint` passes without them); in a crate, with
+ *   --rust, clippy's too_many_lines, cognitive_complexity and too_many_arguments, their thresholds
+ *   in its clippy.toml. Keyed by file and the function the linter points at.
  * - names: no file or directory named utils, helpers, misc, common or shared.
  * - headers: a file over 50 lines opens with a doc comment: `//!`, a `/** … *\/` block before any
  *   code, a module docstring. That one is there, never what it says.
@@ -35,8 +36,8 @@
  * --rust. Its baseline is structure-baseline.json beside Cargo.toml, and Biome, knip and jscpd,
  * which read TypeScript, don't run. blocklyd's CI fetches this file to run it.
  *
- * The clippy checks need cargo, so they run only with --rust, in blocklyd.yml's check job, and
- * nothing else does then; the rest run in ci.yml. Layering is check-boundaries.ts's, and proving a
+ * The clippy checks need cargo, so they run only with --rust, in blocklyd's CI, and nothing else
+ * does then; the rest run in ci.yml here and in blocklyd's CI there. Layering is check-boundaries.ts's, and proving a
  * move is check-move-only.ts's.
  */
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -100,6 +101,12 @@ const update = args.includes('--update')
 const root = Bun.spawnSync(['git', 'rev-parse', '--show-toplevel']).stdout.toString().trim() || '.'
 const crateRepo = existsSync(join(root, 'Cargo.toml'))
 const BASELINE = join(root, crateRepo ? 'structure-baseline.json' : 'scripts/structure-baseline.json')
+if (rust && !crateRepo) {
+  console.error(
+    "--rust checks a repository that is one Rust crate, as blocklyd's is; this one has no Cargo.toml",
+  )
+  process.exit(2)
+}
 const SCOPE = crateRepo ? /^(src|tests|examples|benches)\// : /^(apps|packages|scripts)\//
 
 const all = Bun.spawnSync(
@@ -258,11 +265,10 @@ function checkBiome() {
 }
 
 function checkClippy() {
-  const crate = crateRepo ? root : join(root, 'apps/blocklyd')
   const lints = RUST_LINTS.flatMap((lint) => ['-W', `clippy::${lint}`])
   const run = Bun.spawnSync(
     ['cargo', 'clippy', '--locked', '--all-targets', '--message-format=json', '--', ...lints],
-    { cwd: crate, stderr: 'pipe' },
+    { cwd: root, stderr: 'pipe' },
   )
   if (run.exitCode !== 0) {
     console.error(`cargo clippy failed:\n${run.stderr.toString().trim()}`)
@@ -282,7 +288,7 @@ function checkClippy() {
     const lint = message?.code?.code.replace(/^clippy::/, '') ?? ''
     const span = message?.spans.find((s) => s.is_primary)
     if (message === undefined || span === undefined || !RUST_LINTS.includes(lint)) continue
-    const path = relative(root, resolve(crate, span.file_name))
+    const path = relative(root, resolve(root, span.file_name))
     const [n, limit] = (/\((\d+)\/(\d+)\)/.exec(message.message) ?? []).slice(1).map(Number)
     if (text.has(path))
       report(`clippy::${lint}`, {

@@ -7,7 +7,7 @@
  * the node to re-enroll stay on the token's row, and decide. `n` only lets `blocklyd join` tell
  * the host it is pasted on apart from another node's.
  *
- * blocklyd reads the same form in apps/blocklyd/src/fleet/token.rs.
+ * blocklyd reads the same form in src/fleet/token.rs in cubepals/blocklyd.
  */
 import { createHash } from 'node:crypto'
 

@@ -13,8 +13,11 @@ type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 type Paths = Record<string, Record<string, { operationId?: string }>>
 
 interface Api {
-  /** Where the provider publishes the spec, or what writes it for an API of Blockly's own. */
-  source: string | { writtenBy: string }
+  /**
+   * Where the provider publishes the spec, or, for blocklyd's, the command that pins one: its
+   * releases carry the specs, and scripts/blocklyd.ts copies the pinned release's here.
+   */
+  source: string | { command: string }
   /** The vendored copy, relative to apps/control/src/infra. */
   spec: string
   types: string
@@ -28,7 +31,7 @@ interface Api {
   defaultNonNullable?: boolean
 }
 
-const BLOCKLYD_SCHEMA = 'cd apps/blocklyd && BLOCKLYD_WRITE_SCHEMA=1 cargo test --lib protocol::schema'
+const BLOCKLYD_RELEASE = 'bun scripts/blocklyd.ts bump <version>'
 
 const APIS: Record<string, Api> = {
   boat: {
@@ -39,13 +42,13 @@ const APIS: Record<string, Api> = {
   },
   // What a blocklyd node reads leaves out what it defaults, as boat's requests do.
   'blocklyd-reads': {
-    source: { writtenBy: BLOCKLYD_SCHEMA },
+    source: { command: BLOCKLYD_RELEASE },
     spec: 'fleet/node-reads.openapi.json',
     types: 'fleet/generated/node-reads.ts',
     defaultNonNullable: false,
   },
   'blocklyd-writes': {
-    source: { writtenBy: BLOCKLYD_SCHEMA },
+    source: { command: BLOCKLYD_RELEASE },
     spec: 'fleet/node-writes.openapi.json',
     types: 'fleet/generated/node-writes.ts',
   },
@@ -66,7 +69,7 @@ const INFRA = new URL('../../apps/control/src/infra/', import.meta.url)
 const at = (path: string) => new URL(path, INFRA)
 /** What brings an API's spec up to date. */
 const refresh = (name: string, api: Api) =>
-  typeof api.source === 'string' ? `bun run openapi:update ${name}` : api.source.writtenBy
+  typeof api.source === 'string' ? `bun run openapi:update ${name}` : api.source.command
 
 const sortKeys = (value: Json): Json =>
   Array.isArray(value)

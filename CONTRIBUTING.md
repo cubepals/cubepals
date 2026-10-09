@@ -37,19 +37,16 @@ Some tests need real services and skip without their variables: `DATABASE_URL` f
 `S3_TEST_*` for an object store, `NATS_TEST_URL`, `PEBBLE_TEST_URL` and `CHALLTESTSRV_TEST_URL`.
 `.github/workflows/ci.yml` starts each one and sets its variable, and is the reference.
 
-blocklyd, the fleet node daemon, is Rust. From `apps/blocklyd`:
-
-```sh
-cargo fmt --check
-cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked
-```
+blocklyd, the fleet node daemon, is Rust, in its own repository,
+[cubepals/blocklyd](https://github.com/cubepals/blocklyd), under FSL-1.1-ALv2. This one pins a
+release of it (`bun scripts/blocklyd.ts`, which says how), and `.github/workflows/fleet.yml` runs
+the fleet runtime against that release.
 
 ## Structure
 
 `bun run check:structure` holds the tree to what a machine can judge: file and function size,
 complexity, banned names (`utils`, `helpers` and the like), file headers, directory indexes, import
-cycles, unused code and duplicates. Add `--rust` for blocklyd. It is a ratchet: what broke a rule
+cycles, unused code and duplicates. It is a ratchet: what broke a rule
 before the rule existed is listed in `scripts/structure-baseline.json` with why, and that list only
 shrinks. A change that makes anything worse fails. [CLAUDE.md](CLAUDE.md#structure) has the full
 rules and the care the checks can't judge.

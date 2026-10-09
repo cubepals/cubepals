@@ -133,8 +133,8 @@ archive's sha256 to `backups`.
 
 = Protocol operations <a-protocol>
 
-blocklyd's workload API (#src("apps/blocklyd/src/api/mod.rs:460"); full text:
-`apps/blocklyd/docs/protocol.md`). Every mutating verb is idempotent and checks its epoch rule:
+blocklyd's workload API (#src("blocklyd/src/api/mod.rs:460"); full text:
+`blocklyd/docs/protocol.md`). Every mutating verb is idempotent and checks its epoch rule:
 `Exact` (the current copy only), `Teardown` (any copy, even superseded), `Place` (create or replace;
 a newer epoch takes over). A workload made with an epoch refuses a request without one (`428`).
 
@@ -175,7 +175,7 @@ a newer epoch takes over). A workload made with an epoch refuses a request witho
     [`runtime_unavailable`, `timeout`, `runtime_error`, `transfer_failed`, `internal`], [503, 504, 502, 502, 500], [Docker or transfer failures.],
     [`forbidden`], [403], [A valid certificate for a name not allowed.],
   ),
-  caption: [Error codes: the code is the contract. #src("apps/blocklyd/src/api/error.rs:21").],
+  caption: [Error codes: the code is the contract. #src("blocklyd/src/api/error.rs:21").],
   kind: table,
 )
 
@@ -246,7 +246,7 @@ message texts (`ASLEEP_MOTD`, `LOADING_MOTD`, `RESTARTING_MOTD`, `RESTARTING_JOI
 
 == blocklyd
 
-#block(sticky: true)[TOML, every table refusing unknown keys (#src("apps/blocklyd/src/config.rs")).]
+#block(sticky: true)[TOML, every table refusing unknown keys (#src("blocklyd/src/config.rs")).]
 
 #figure(
   table(
@@ -284,7 +284,7 @@ message texts (`ASLEEP_MOTD`, `LOADING_MOTD`, `RESTARTING_MOTD`, `RESTARTING_JOI
     [`blocklyd_process_resident_memory_bytes`, `blocklyd_process_cpu_seconds`], [the daemon itself],
     [`blocklyd_heartbeats_total`, `blocklyd_fleet_contact_age_seconds`, `blocklyd_fleet_lease_remaining_seconds`, `blocklyd_certificate_renewals_total`, `blocklyd_snapshot_bytes`], [fleet mode (−1 before first contact or without a lease)],
   ),
-  caption: [Node metrics. #src("apps/blocklyd/src/metrics.rs:142").],
+  caption: [Node metrics. #src("blocklyd/src/metrics.rs:142").],
   kind: table,
 )
 

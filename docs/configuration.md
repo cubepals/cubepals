@@ -150,7 +150,7 @@ restart.
 ### Fleet
 
 `fleet` in `RUNTIME_PROVIDERS` (or as `RUNTIME_PROVIDER`): servers on Linux hosts running
-[blocklyd](../apps/blocklyd/) ([fleet.md](fleet.md), [fleet-operations.md](fleet-operations.md)).
+[blocklyd](https://github.com/cubepals/blocklyd) ([fleet.md](fleet.md), [fleet-operations.md](fleet-operations.md)).
 It needs an archive store and `OPERATOR_TOKEN`, and `FLEET_REGION_MAP` maps product regions to the
 regions nodes enroll into (`RUNTIME_REGION_MAP` may, where the fleet is the default runtime).
 
@@ -160,7 +160,7 @@ regions nodes enroll into (`RUNTIME_REGION_MAP` may, where the fleet is the defa
 | `FLEET_NODE_LISTEN` | `[::]:8443` | The node endpoint (enrollment, heartbeats, renewal), on the `api` role: every address, IPv6 and IPv4, since Fly's private network is IPv6. On a host without IPv6, `0.0.0.0:8443`. Open it on the private network only |
 | `FLEET_ENDPOINT_HOSTS` | — | Comma-separated names and addresses nodes dial the node endpoint by; its certificate names them. At least one |
 | `FLEET_JOIN_URL` | `https://<first of FLEET_ENDPOINT_HOSTS>:<FLEET_NODE_LISTEN's port>` | Where new hosts reach the node endpoint to join: the URL join tokens carry and the pasted line fetches from ([fleet-operations.md](fleet-operations.md#2-adding-a-node)). Set it when hosts reach the endpoint some other way; its certificate names this host too |
-| `FLEET_BLOCKLYD_BIN` | `/usr/local/lib/blocklyd/blocklyd` | The static blocklyd the node endpoint hands to joining hosts (`GET /fleet/v1/blocklyd`). The control plane's image builds one from the same commit and puts it there; without the file the endpoint answers 404 and says so |
+| `FLEET_BLOCKLYD_BIN` | `/usr/local/lib/blocklyd/blocklyd` | The static blocklyd the node endpoint hands to joining hosts (`GET /fleet/v1/blocklyd`). The control plane's image carries the blocklyd release it pins there (`bun scripts/blocklyd.ts version`); without the file the endpoint answers 404 and says so |
 | `FLEET_UPGRADES` | `on` | `on` offers that blocklyd to nodes on an older version, one node per region at a time, in heartbeat answers ([fleet-operations.md §9](fleet-operations.md#9-upgrading-blocklyd)); `off` offers nothing, and nodes keep what they run |
 | `FLEET_PLACEMENT` | `balanced` | `balanced`, `binpack` or `spread` |
 | `FLEET_HEADROOM_MB` | `0` | Memory a new placement must leave free on its node beside the servers running there; starts may use it |
