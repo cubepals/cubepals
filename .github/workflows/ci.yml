@@ -109,7 +109,7 @@ jobs:
             paths: . :!apps/control/src/app/operations :!apps/control/src/infra/fly :!apps/control/src/infra/docker :!apps/control/src/infra/boat :!apps/control/src/infra/fleet :!apps/control/src/infra/s3 :!apps/control/src/app/runtimes :!apps/control/src/app/backups :!apps/control/src/app/revisions :!apps/control/src/app/worlds :!apps/control/src/app/servers :!apps/control/src/app/setups :!apps/control/src/app/console :!apps/control/src/app/players :!apps/control/src/app/uploads :!apps/control/src/app/artifacts :!apps/control/src/app/mods :!apps/control/src/app/packs :!apps/control/src/app/curation :!apps/control/src/app/listings :!apps/web :!apps/edge :!scripts
     services:
       postgres:
-        image: postgres:17-alpine
+        image: public.ecr.aws/docker/library/postgres:17-alpine
         env:
           POSTGRES_USER: blockly
           POSTGRES_PASSWORD: blockly
