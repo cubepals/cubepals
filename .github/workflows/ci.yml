@@ -84,14 +84,29 @@ jobs:
   # The suite spends most of its time waiting on the job queue's half-second poll, test after test,
   # so it is split across machines: every fourth file to each, each with its own services.
   test:
-    name: Tests, part ${{ matrix.shard }} of 4
+    name: Tests, ${{ matrix.group }}
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # Grouped by what they test, near even in time (main's run on 2026-10-09: 50 to 160 seconds each,
+      # the web app's far less).
       matrix:
-        shard: [1, 2, 3, 4]
+        include:
+          - group: Server lifecycle
+            paths: apps/control/src/app/operations
+          - group: Machine providers
+            paths: apps/control/src/infra/fly apps/control/src/infra/docker apps/control/src/infra/boat apps/control/src/infra/fleet apps/control/src/infra/s3 apps/control/src/app/runtimes
+          - group: Backups, worlds and versions
+            paths: apps/control/src/app/backups apps/control/src/app/revisions apps/control/src/app/worlds apps/control/src/app/servers apps/control/src/app/setups apps/control/src/app/console apps/control/src/app/players apps/control/src/app/uploads apps/control/src/app/artifacts
+          - group: Mods, packs and listings
+            paths: apps/control/src/app/mods apps/control/src/app/packs apps/control/src/app/curation apps/control/src/app/listings
+          - group: Web app, edge and scripts
+            paths: apps/web apps/edge scripts
+          # Every test no group above names, so a new one is never left out.
+          - group: Accounts, billing and the rest of the control plane
+            paths: . :!apps/control/src/app/operations :!apps/control/src/infra/fly :!apps/control/src/infra/docker :!apps/control/src/infra/boat :!apps/control/src/infra/fleet :!apps/control/src/infra/s3 :!apps/control/src/app/runtimes :!apps/control/src/app/backups :!apps/control/src/app/revisions :!apps/control/src/app/worlds :!apps/control/src/app/servers :!apps/control/src/app/setups :!apps/control/src/app/console :!apps/control/src/app/players :!apps/control/src/app/uploads :!apps/control/src/app/artifacts :!apps/control/src/app/mods :!apps/control/src/app/packs :!apps/control/src/app/curation :!apps/control/src/app/listings :!apps/web :!apps/edge :!scripts
     services:
       postgres:
         image: postgres:17-alpine
@@ -148,8 +163,11 @@ jobs:
           done
           exit 1
       # The same files `bun test` finds on its own, dealt out by position.
-      - name: Test, part ${{ matrix.shard }} of 4
-        run: git ls-files '*.test.ts' '*.test.tsx' | awk -v n=4 -v i=${{ matrix.shard }} 'NR % n == i - 1 { print "./" $0 }' | xargs bun test
+      - name: Test ${{ matrix.group }}
+        env:
+          PATHS: ${{ matrix.paths }}
+        # Pathspecs, unquoted on purpose so each is its own argument; the :! ones exclude.
+        run: git ls-files -- $PATHS | grep -E '\.test\.tsx?$' | sed 's|^|./|' | xargs bun test
 
   # The one check branch protection requires. It passes when every part passed or was skipped.
   check:
