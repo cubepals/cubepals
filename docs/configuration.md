@@ -231,7 +231,7 @@ which environment it came from, which the project's charts leave out.
 | `DEPLOYMENT_ID` | empty (`development`) | the control plane's value | Terraform (Vercel project). Read at build time: each PostHog event says `production`, `staging` or `development` by it |
 | `NEXT_PUBLIC_POSTHOG_TOKEN` | empty; `apps/web/.env.local` to try PostHog | production only: the same token as `POSTHOG_TOKEN` | Terraform (Vercel project), from production's `POSTHOG_TOKEN`. Read at build time; empty sends nothing and hides Feedback |
 | `NEXT_PUBLIC_POSTHOG_HOST` | — | default `https://eu.i.posthog.com` | — |
-| `POSTHOG_PERSONAL_API_KEY`, `POSTHOG_PROJECT_ID` | — | production, once an operator adds them: a personal API key with error tracking write, and the project's id. With both, the build uploads its source maps to PostHog and deletes them (`apps/web/scripts/sourcemaps.ts`); without, it skips that | Vercel project, by hand (secret) |
+| `POSTHOG_PERSONAL_API_KEY`, `POSTHOG_PROJECT_ID` | — | production, once an operator adds them: a personal API key with error tracking write, and the project's id. With both, the build uploads its source maps to PostHog and deletes them (`apps/web/scripts/sourcemaps.ts`); without, it skips that | `production.env`, then Terraform to the Vercel project (secret, production builds only) |
 | `WEB_CLIENT_ADDRESS_HEADER` | empty | the header the host's edge sets and overwrites: `x-real-ip` on Vercel, `fly-client-ip` on Fly (staging's web app). Empty, no address is sent | Terraform (Vercel project); `scripts/staging.ts` |
 
 Staging's Vercel project (`blockly-staging`) builds `main` and every preview, all rewriting to
