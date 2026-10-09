@@ -437,9 +437,22 @@ async function up(): Promise<void> {
   say('edge')
   deploy(APP.edge, 'infra/fly/edge.toml', 'apps/edge/Dockerfile')
   say('web')
-  const webToml = join(mkdtempSync(join(tmpdir(), 'bly-staging-')), 'web.toml')
+  // Its word about each browser's address, which the control plane believes only with this.
+  fly(['secrets', 'import', '-a', APP.web, '--stage'], { input: `WEB_PROXY_SECRET=${webProxySecret}\n` })
+  startStopped(APP.control) // A deploy leaves stopped machines stopped; the web build reads the API.
+  deploy(APP.web, webToml(), 'apps/web/Dockerfile', [`API_UPSTREAM=${origin(APP.control)}`])
+  for (const app of [APP.realtime, APP.edge, APP.web]) startStopped(app)
+
+  await until('the web app and the API answer', 300, webAnswers)
+  say('')
+  status()
+}
+
+/** The web app's Fly config, written where a deploy reads it. */
+function webToml(): string {
+  const file = join(mkdtempSync(join(tmpdir(), 'bly-staging-')), 'web.toml')
   writeFileSync(
-    webToml,
+    file,
     [
       `app = "${APP.web}"`,
       `primary_region = "${REGION}"`,
@@ -460,15 +473,7 @@ async function up(): Promise<void> {
       '',
     ].join('\n'),
   )
-  // Its word about each browser's address, which the control plane believes only with this.
-  fly(['secrets', 'import', '-a', APP.web, '--stage'], { input: `WEB_PROXY_SECRET=${webProxySecret}\n` })
-  deploy(APP.web, webToml, 'apps/web/Dockerfile', [`API_UPSTREAM=${origin(APP.control)}`])
-  // A deploy leaves a stopped machine stopped, as `stop` left them.
-  for (const app of [APP.control, APP.realtime, APP.edge, APP.web]) startStopped(app)
-
-  await until('the web app and the API answer', 300, webAnswers)
-  say('')
-  status()
+  return file
 }
 
 /** Whether Depot's builders answered; once they don't, every later deploy goes to Fly's own. */
