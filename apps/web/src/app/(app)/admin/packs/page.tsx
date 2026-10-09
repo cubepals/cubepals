@@ -18,11 +18,13 @@ import {
   TextField,
 } from '../../../../ui'
 import { AdminTabs } from '../tabs'
+import { Compatibility } from './compatibility'
 
 /**
  * Packs Blockly offers by name (docs/modpack-templates.md). Which packs and releases exist is the
  * review in the code; each release is fetched and checked by itself, and nothing reaches people
  * making a server until an admin offers it here. Withdrawing one takes it from new servers only.
+ * Below them, templates whose plugins lag, and the versions Cubepals tested (`compatibility.tsx`).
  */
 export default function CuratedPacksPage() {
   const trpc = useTRPC()
@@ -46,6 +48,7 @@ export default function CuratedPacksPage() {
       ) : (
         packs.data?.map((pack) => <Pack key={pack.key} pack={pack} />)
       )}
+      {!packs.isError && <Compatibility />}
     </>
   )
 }

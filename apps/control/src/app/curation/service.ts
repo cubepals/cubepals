@@ -1,4 +1,4 @@
-import type { CuratedPackAdminView } from '@blockly/contracts'
+import type { CompatibilityAdminView, CuratedPackAdminView } from '@blockly/contracts'
 import type { Db } from '@blockly/db'
 import type { ReleaseRef } from '../../domain/mods/curation.ts'
 import type { PinnedModpack } from '../../domain/mods/modpack.ts'
@@ -12,6 +12,7 @@ import type { ModCatalog } from '../ports/catalog.ts'
 import type { FileFormats, PackArchives } from '../ports/formats.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { LoaderBuilds } from '../ports/loaders.ts'
+import { TEMPLATES } from '../setups/templates.ts'
 import { reviewView } from './admin-view.ts'
 import { checkCatalogRelease, type PinnedCatalogPack } from './catalog-check.ts'
 import { ingest, ingestGaveUp } from './ingest.ts'
@@ -21,6 +22,8 @@ import { OWN_PACKS, type OwnPack } from './own.ts'
 import { checkOwnRelease } from './own-check.ts'
 import { CURATED_PACKS, type CuratedPack } from './packs.ts'
 import { queueDue } from './queue.ts'
+import { compatibilityView } from './templates-view.ts'
+import { TESTED } from './tested.ts'
 
 /**
  * Packs Blockly offers by name (docs/modpack-templates.md): the reviewed releases in `packs.ts`,
@@ -43,6 +46,8 @@ import { queueDue } from './queue.ts'
  * - `admin-view.ts`: the admins' page of every reviewed pack and its releases.
  * - `order.ts`: the order a pack's releases come in, newest first.
  * - `audit.ts`: one audit row about a curated release.
+ * - `tested.ts`: the review of versions Cubepals ran past what their catalog lists.
+ * - `templates-view.ts`: the admins' view of those, and of templates whose plugins lag.
  */
 
 export type { PinnedCatalogPack } from './catalog-check.ts'
@@ -227,5 +232,14 @@ export class PackCuration {
   async review(actor: Actor): Promise<CuratedPackAdminView[]> {
     if (actor.kind !== 'admin') throw new NotFound('Curated pack')
     return reviewView(this.#db, this.#packs, this.#own)
+  }
+
+  /**
+   * The versions Cubepals tested past their listing, and the templates whose plugins trail the
+   * newest release Cubepals offers, for the admins' page. Asks the catalog; changes nothing.
+   */
+  async compatibility(actor: Actor): Promise<CompatibilityAdminView> {
+    if (actor.kind !== 'admin') throw new NotFound('Curated pack')
+    return compatibilityView(this.#catalog, TEMPLATES, TESTED)
   }
 }

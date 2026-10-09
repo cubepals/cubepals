@@ -132,3 +132,41 @@ export interface CuratedReleaseAdminView {
     code: string[]
   } | null
 }
+
+/** A version Cubepals ran on a release its catalog doesn't list it for, as admins see it. */
+export interface TestedVersionAdminView {
+  name: string
+  versionLabel: string
+  gameVersion: string
+  loaderLabel: string
+  /** The server build it ran on. */
+  build: string
+  /** `YYYY-MM-DD`. */
+  testedOn: string
+  testedBy: string
+  evidence: string
+}
+
+/** A template that brings plugins or mods, and whether they keep up with what Cubepals offers. */
+export interface TemplateCompatibilityAdminView {
+  key: string
+  title: string
+  loaderLabel: string
+  /** The newest release Cubepals offers for its server type. */
+  newest: string
+  /**
+   * `current`: every plugin lists the newest release. `covered`: a tested version stands in for
+   * each that doesn't. `lagging`: some hold the template back, named in `behind`.
+   */
+  status: 'current' | 'covered' | 'lagging'
+  /** The plugins that hold it back, each with the newest release it lists. */
+  behind: Array<{ name: string; newestListed: string | null }>
+  /** The tested versions that carry it to the newest release. */
+  tested: TestedVersionAdminView[]
+}
+
+export interface CompatibilityAdminView {
+  templates: TemplateCompatibilityAdminView[]
+  /** Every version Cubepals tested past its listing. */
+  tested: TestedVersionAdminView[]
+}

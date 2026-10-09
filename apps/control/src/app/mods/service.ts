@@ -43,6 +43,7 @@ import { recordStored } from '../artifacts/persistence.ts'
 import { type DeploymentCapabilities, requireCapability } from '../capabilities.ts'
 import { revokedIn } from '../catalog/persistence.ts'
 import type { CatalogSync, CatalogTransition } from '../catalog/sync.ts'
+import { TESTED, testedOn } from '../curation/tested.ts'
 import { AppError, NotFound } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import { CatalogUnavailable, type ModCatalog } from '../ports/catalog.ts'
@@ -539,6 +540,8 @@ export class ModService {
       // A datapack asks nothing of players, whatever environment its project declares.
       environment: (declared, loaders) =>
         installsAsDatapack({ loaders }, loader) ? 'server' : serverEnvironment(declared),
+      // Versions Cubepals ran on this target although the catalog doesn't list them there.
+      tested: testedOn(TESTED, { gameVersion, loader }).filter((t) => t.catalog === this.#catalog.id),
     }
     const { result, data } = await this.#resolve(request)
     if (result.kind === 'conflicts') return result

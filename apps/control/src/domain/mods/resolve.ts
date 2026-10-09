@@ -26,6 +26,12 @@ export interface ResolveRequest {
    * declares and the loaders it is published for.
    */
   environment: (declared: string, loaders: readonly string[]) => 'server' | 'optional' | 'both' | null
+  /**
+   * Exact versions Cubepals ran on this target although the catalog doesn't list them for it
+   * (`app/curation/tested.ts`). Each counts as fitting; another version of the same project doesn't,
+   * and one is picked only where nothing the catalog lists fits.
+   */
+  tested?: ReadonlyArray<{ projectId: string; versionId: string }>
 }
 
 export interface CatalogData {
@@ -83,10 +89,8 @@ export function resolve(request: ResolveRequest, data: CatalogData): Resolution 
   const queue: Want[] = request.wanted.map((want) => ({ ...want, origin: 'user' }))
 
   const { target } = request
-  const fits = (version: CatalogVersion) =>
-    version.state !== 'absent' &&
-    version.gameVersions.includes(target.gameVersion) &&
-    version.loaders.some((loader) => target.loaders.includes(loader))
+  const tested = testedIds(request)
+  const fits = (version: CatalogVersion) => fitsTarget(version, target, tested)
   const nameOf = (projectId: string) =>
     data.projects.get(projectId)?.name ??
     request.current.find((m) => projectOf(m) === projectId)?.name ??
@@ -176,7 +180,8 @@ export function resolve(request: ResolveRequest, data: CatalogData): Resolution 
 
   /**
    * An owner's exact choice must fit. Otherwise the pinned version stays while it fits, then
-   * a version a dependency names if it fits, then the newest fitting release, beta or alpha.
+   * a version a dependency names if it fits, then the newest fitting release, beta or alpha, then
+   * the newest version Cubepals ran on the target.
    */
   function choose(want: Want): CatalogVersion | null | 'later' {
     if (want.origin === 'user' && want.versionId !== undefined) {
@@ -202,7 +207,7 @@ export function resolve(request: ResolveRequest, data: CatalogData): Resolution 
       const newest = fitting.find((version) => version.channel === channel && fits(version))
       if (newest !== undefined) return newest
     }
-    return null
+    return newestTested(request, data, want.projectId, fits, later)
   }
 
   /**
@@ -275,6 +280,47 @@ export function resolve(request: ResolveRequest, data: CatalogData): Resolution 
 
   const mods = [...picked.values()].map((pick) => pinOf(request, pick, nameOf))
   return { kind: 'resolved', mods: [...mods, ...uploads].sort(byName) }
+}
+
+const testedIds = (request: ResolveRequest): ReadonlySet<string> =>
+  new Set((request.tested ?? []).map((entry) => entry.versionId))
+
+/** Listed by the catalog for the target, or tested on it by Cubepals. */
+function fitsTarget(
+  version: CatalogVersion,
+  target: ResolveRequest['target'],
+  tested: ReadonlySet<string>,
+): boolean {
+  if (version.state === 'absent') return false
+  if (tested.has(version.versionId)) return true
+  return (
+    version.gameVersions.includes(target.gameVersion) &&
+    version.loaders.some((loader) => target.loaders.includes(loader))
+  )
+}
+
+/**
+ * The newest of a project's tested versions that fits, once the catalog has shown them all; null
+ * where none was tested on the target.
+ */
+function newestTested(
+  request: ResolveRequest,
+  data: CatalogData,
+  projectId: string,
+  fits: (version: CatalogVersion) => boolean,
+  later: (what: { version: string }) => 'later',
+): CatalogVersion | null | 'later' {
+  const ids = (request.tested ?? []).filter((entry) => entry.projectId === projectId).map((e) => e.versionId)
+  const unseen = ids.filter((id) => !data.versions.has(id))
+  if (unseen.length > 0) {
+    for (const version of unseen) later({ version })
+    return 'later'
+  }
+  const found = ids.flatMap((id) => {
+    const version = data.versions.get(id)
+    return version != null && version.projectId === projectId && fits(version) ? [version] : []
+  })
+  return found.sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())[0] ?? null
 }
 
 const projectOf = (mod: PinnedMod): string | null => ('projectId' in mod.source ? mod.source.projectId : null)

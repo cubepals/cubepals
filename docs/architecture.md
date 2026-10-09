@@ -607,7 +607,7 @@ tRPC procedure (parse input, get actor, call ONE method, return)
 | `GuestbookService` | `star`, `notes`, `addNote`, `deleteNote` (stars and short notes on public servers) |
 | `ArtifactService` | `preflight(revision)`, `pinned`, `mirror(sha512)`, `locate(serverId, sha512, token)` (runtime-facing), `source`, `refresh`, `collectGarbage` |
 | `CatalogSync` | `refresh()` (bulk state poll → transitions → eligibility re-evaluation), `recordObserved(states)` (write-through from resolution) |
-| `PackCuration` | `queueDue`, `ingest` (fetch, verify, judge licences, keep a copy where allowed), `publish` / `withdraw` / `retry` (admins), `offered`, `releaseFor`, `newerFor` (docs/modpack-templates.md) |
+| `PackCuration` | `queueDue`, `ingest` (fetch, verify, judge licences, keep a copy where allowed), `publish` / `withdraw` / `retry` (admins), `offered`, `releaseFor`, `newerFor`, `compatibility` (admins: versions Cubepals tested, templates that lag) (docs/modpack-templates.md) |
 | `EdgeService` | `routes`, `wake`, `idleHint`, `recordSession` (the edge protocol's application side) |
 | `AccountService` | `suspend`, `reinstate`, `terminate`, `setRestrictions`, `setPlan`, `setLimits`, `grantAdmin`, `revokeAdmin` (admin actors only; each audited); the owner's own `allowExtraPlay`, `setAfkKick`, `recordSource`; `enforce` (`standing-sweep`) |
 | `BillingService` | `startCheckout`, `customerPortal`, `refresh`, `receiveWebhook` → `syncSubscription` |

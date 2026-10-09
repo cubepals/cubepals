@@ -598,6 +598,34 @@ One of Blockly's own packs is a list in `OWN_PACKS` instead, of catalog projects
 review here under an anchor named for its key. It needs no pinned releases: they are put together
 as § Blockly's own packs says.
 
+## Versions Cubepals tested
+
+A catalog's version metadata trails what really runs. BSkyBlock lists nothing past 26.1.1, and
+AOneBlock, Level and Warps nothing past 26.1.2, yet all four make their worlds on Cubepals' Paper
+26.1.2 and 26.2 (the boot test in cubepals/cubepals#10). Resolution matches a version strictly on
+release and server type, so without help a template with one of them is pulled down to an older
+release, or can't be made at all.
+
+`app/curation/tested.ts` is the review of what Cubepals ran itself. Each record names one exact
+catalog version, the release and server type it ran on, the build, the day, who tested it and what
+showed it working. Resolution counts a record as a fit only where nothing the catalog lists fits,
+so a set that resolved before resolves the same. A newer release of the same project isn't
+covered until someone tests it and adds its own record.
+
+To add one:
+
+1. Boot that exact version on Cubepals' pinned build for the target. Read the log for errors and
+   for the line that shows it working.
+2. Add the record to `TESTED`, with the version id from the catalog (`GET /v2/project/<id>/version`
+   on Modrinth) and the evidence in a line, or where the boot log is written up.
+
+Admin → Curated packs lists every record with the day it was tested. It also lists each template
+that brings plugins, against the newest release Cubepals offers for its server type. A template
+is **Up to date** when every plugin lists that release, **Tested by Cubepals** when records carry
+the ones that don't, and **Lagging** otherwise, naming each plugin that holds it back and the
+newest release it lists. Players see none of this. Moving a world forward stays its owner's
+decision.
+
 ## Tests
 
 - **Rules:**
@@ -606,6 +634,9 @@ as § Blockly's own packs says.
   - `app/curation/packs.test.ts`: the review is well formed.
   - `app/curation/own.test.ts`: Blockly's own packs are well formed, releases are named and ordered,
     and libraries' sides are read (§ Sides).
+  - `app/curation/tested.test.ts`: each tested record covers one exact version and target; a
+    template lags, is covered or keeps up; a BentoBox setup on Paper 26.2 resolves only with the
+    records.
   - `minecraft/pack-layout.test.ts` and `minecraft/packs.test.ts`: client-only files, and files that
     run as code.
 - **Adapters:**
