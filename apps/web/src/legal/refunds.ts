@@ -54,7 +54,7 @@ export const REFUNDS: Policy = {
         'Copy, fill in and email this to {support} if you’d like to use it:',
         {
           list: [
-            'To: {name}, {address}, {support}',
+            'To: {name}, {support}',
             `I hereby give notice that I withdraw from my contract for the provision of the following service: ${PLUS.name} subscription to {brand}.`,
             'Ordered on: [date]',
             'Name: [your name]',

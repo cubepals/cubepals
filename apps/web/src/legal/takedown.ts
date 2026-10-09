@@ -19,7 +19,7 @@ export const TAKEDOWN: Policy = {
       id: 'contact',
       heading: '1. Where to send notices',
       blocks: [
-        'Email {legal}. This is our single point of contact for notices about content, for users and for authorities, in English. You can also write to {name}, {address}.',
+        'Email {legal}. This is our single point of contact for notices about content, for users and for authorities, in English.',
         'We have no office or company in the EU. Authorities can contact us directly at {legal}.',
         'For a server listing that breaks our rules but isn’t illegal (for example, it isn’t suitable for everyone), the Report button on its public page is quickest.',
       ],

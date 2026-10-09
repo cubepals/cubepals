@@ -31,7 +31,7 @@ export const TERMS: Policy = {
       id: 'who',
       heading: '1. Who we are',
       blocks: [
-        '{brand} is a Minecraft: Java Edition server host. You create a server, pick what to play, share its address, and your friends join. {brand} is run by one person, {name}, an individual based in {country} (“we”, “us”), not by a company. We have no office or company in the UK or the EU. Our postal address for notices is {address}.',
+        '{brand} is a Minecraft: Java Edition server host. You create a server, pick what to play, share its address, and your friends join. {brand} is run by {name}, based in {country} (“we”, “us”), not by a company. We have no office or company in the UK or the EU. We take notices by email, at {legal}.',
         'You can reach us at {support}. Write to {legal} for legal notices and to {privacy} about your personal data.',
         'These Terms are an agreement between you and us. They apply when you create an account or use {brand}. Our [Privacy Policy](/legal/privacy), [Refunds and cancellation](/legal/refunds), [Acceptable Use Policy](/legal/acceptable-use), [Content and copyright](/legal/takedown) and [Cookies](/legal/cookies) pages are part of them.',
       ],

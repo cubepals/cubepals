@@ -21,7 +21,7 @@ export default function LegalIndex() {
           Legal
         </h1>
         <p className="type-body" style={{ color: 'var(--ink-muted)', maxWidth: 'var(--width-prose)' }}>
-          <Sentence text="{brand} is run by {name}, a sole trader based in {country}. Questions about anything here go to {support}; legal notices to {legal}; your personal data to {privacy}." />
+          <Sentence text="{brand} is run by {name}, based in {country}. Questions about anything here go to {support}; legal notices to {legal}; your personal data to {privacy}." />
         </p>
       </header>
       <ul className={styles.index}>
