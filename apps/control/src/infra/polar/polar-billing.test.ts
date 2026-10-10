@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { createServer, type IncomingHttpHeaders, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { PolarClientError } from '@polar-sh/sdk'
-import { BillingUnavailable, WebhookRejected } from '../../app/ports/optional.ts'
+import { type BillingState, BillingUnavailable, WebhookRejected } from '../../app/ports/optional.ts'
 import {
   order,
   orderEvent,
@@ -24,7 +24,7 @@ const customerState = (patch: Record<string, unknown> = {}, subscription: Record
 const signed = (event: unknown, secret = SECRET, at = new Date()) => sign(event, secret, at)
 
 /** What `customerState()` says, as a standing: Plus, renewing. */
-const PLUS_STANDING = {
+const PLUS_STANDING: BillingState = {
   userId: 'user_123',
   externalCustomerId: '992fae2a-2a17-4b7a-8d9d-e45177024a7c',
   subscription: {
