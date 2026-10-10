@@ -7,7 +7,6 @@ import { TERMS_VERSION } from '@blockly/contracts'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import styles from '../../../../legal/legal.module.css'
-import { DRAFT } from '../../../../legal/operator'
 import { hrefOf, POLICIES, policyAt } from '../../../../legal/policies'
 import { Blocks, plain, Sentence } from '../../../../legal/prose'
 import { pageMetadata } from '../../../../lib/site'
@@ -42,12 +41,6 @@ export default async function PolicyPage({ params }: Params) {
           <h1 className="type-display-md">{policy.title}</h1>
           <p className={`type-body-sm ${styles.meta}`}>Last updated {dated}</p>
         </header>
-        {DRAFT && (
-          <p className={`type-body-sm ${styles.draft}`} role="note">
-            <strong>Draft awaiting review.</strong> This policy hasn’t been checked by a lawyer yet and isn’t
-            in force. Details in brackets are still to be filled in.
-          </p>
-        )}
         <section className={styles.summary} aria-labelledby="in-short">
           <h2 id="in-short" className="type-heading-sm">
             In short

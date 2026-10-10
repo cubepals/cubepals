@@ -32,7 +32,7 @@ export const OPERATOR: Operator = {
   playDomain: 'play.cubepals.com',
   name: 'The Cubepals Authors',
   country: 'Saudi Arabia',
-  law: null,
+  law: 'the laws of the Kingdom of Saudi Arabia',
   emailProvider: 'Resend',
   emailProviderWhere: 'Ireland, on Amazon Web Services. Resend is a US company.',
   emails: {
@@ -53,9 +53,3 @@ export const PLACEHOLDERS: Record<OwnerDetail, string> = {
 
 /** The details only the operator can give. */
 export type OwnerDetail = 'name' | 'country' | 'law' | 'emailProvider' | 'emailProviderWhere'
-
-/**
- * Whether the policies are still drafts. Every page says so at its top while this is true; it is
- * turned off once a lawyer has read them.
- */
-export const DRAFT = true

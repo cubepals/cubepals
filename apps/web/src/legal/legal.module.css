@@ -29,13 +29,6 @@
   color: var(--ink-subtle);
 }
 
-/* A draft says so before anything else is read. */
-.draft {
-  padding: var(--space-12) var(--space-16);
-  background: var(--status-online-soft);
-  box-shadow: 0 0 0 2px var(--border-strong);
-}
-
 .summary {
   padding: var(--space-24);
   background: var(--surface);
