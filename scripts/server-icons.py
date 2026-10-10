@@ -216,7 +216,7 @@ ICONS: dict[str, tuple[dict[str, str], list[str]]] = {
         ],
     ),
     "blockly": (
-        {"i": "#181818", "p": "#f8f7f5"},
+        {"i": "#0d0d0d", "p": "#f8f7f5"},
         [
             "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
             "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
