@@ -8,9 +8,9 @@
   color: #ffffff;
 }
 /* On ink (the dark theme, the solid cards), the same pair turned over, so a selection still shows. */
-:root[data-theme="dark"] ::selection,
 .bl-frame--solid ::selection,
-.bk-plan[data-paid] ::selection {
+.bk-plan[data-paid] ::selection,
+:root[data-theme="dark"] ::selection {
   background: #ffffff;
   color: #181818;
 }

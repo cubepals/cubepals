@@ -300,7 +300,8 @@ export interface Environment {
   fly_org: string
   fly_machine_limit: number
   settings: Record<string, string>
-  web: { repository: string }
+  vercel_team: string
+  web: { repository: string; project: string }
 }
 
 export function environment(file = ENVIRONMENT_FILE): Environment {
