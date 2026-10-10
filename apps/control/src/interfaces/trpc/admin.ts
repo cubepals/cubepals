@@ -178,7 +178,7 @@ export const admin = router({
   /** Every server, as an operator finds it at the provider. */
   servers: adminProcedure
     .input(FleetSearchInput)
-    .query(({ ctx, input }) => ctx.services.fleet.list(ctx.actor, { ...input, limit: 50 })),
+    .query(({ ctx, input }) => ctx.services.fleet.list(ctx.actor, { ...input, limit: 200 })),
   audit: adminProcedure
     .input(AuditSearchInput)
     .query(({ ctx, input }) => ctx.services.audit.search(ctx.actor, input)),

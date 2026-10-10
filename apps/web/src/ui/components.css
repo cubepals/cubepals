@@ -2634,3 +2634,125 @@ details[open] > .bk-disclosure::before {
     background: var(--surface-sunken);
   }
 }
+
+/* ─── The fleet, as admins browse it ──────────────────────────────────────────────────────── */
+
+/* One server in the admin list: the whole row is the button, and it opens in place. */
+.bk-fleetrow {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  min-inline-size: 0;
+  transition: border-color 150ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .bk-fleetrow:hover {
+    border-color: var(--ink-subtle);
+  }
+}
+.bk-fleetrow__head {
+  appearance: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-16);
+  inline-size: 100%;
+  padding: var(--space-12) var(--space-16);
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.bk-fleetrow__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-inline-size: 0;
+}
+.bk-fleetrow__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-8);
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.bk-fleetrow__addr {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-subtle);
+  overflow-wrap: anywhere;
+}
+.bk-fleetrow__meta {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
+.bk-fleetrow__cost {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* The row's chevron, down while closed and up once open, like a disclosure's. */
+.bk-fleetrow__cost::after {
+  content: "";
+  inline-size: 6px;
+  block-size: 6px;
+  margin-block-start: -3px;
+  border-inline-end: 1.5px solid var(--ink-muted);
+  border-block-end: 1.5px solid var(--ink-muted);
+  rotate: 45deg;
+  transition: rotate 150ms ease;
+}
+.bk-fleetrow__head[aria-expanded="true"] .bk-fleetrow__cost::after {
+  margin-block-start: 3px;
+  rotate: -135deg;
+}
+.bk-fleetrow__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding: var(--space-12) var(--space-16) var(--space-16);
+  border-block-start: 1px solid var(--border);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-muted);
+}
+.bk-fleetrow__facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-4) var(--space-16);
+  margin: 0;
+}
+.bk-fleetrow__facts dt {
+  color: var(--ink-subtle);
+}
+.bk-fleetrow__facts dd {
+  margin: 0;
+  min-inline-size: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 479px) {
+  .bk-fleetrow__facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bk-fleetrow__facts dd + dt {
+    margin-block-start: var(--space-8);
+  }
+}

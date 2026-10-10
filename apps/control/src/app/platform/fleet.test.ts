@@ -108,3 +108,80 @@ describe.skipIf(!hasDatabase)('the servers, as an operator finds them', () => {
     expect(resting?.month.costCents).toBe(30)
   }, 60_000)
 })
+
+// The admin list as a fleet grows: every server found counted by the runtime and region it runs in.
+describe.skipIf(!hasDatabase)('the servers, by where they run', () => {
+  let h: Harness
+  let admin: Extract<Actor, { kind: 'admin' }>
+
+  beforeAll(async () => {
+    h = await startHarness({ runtimePrices: { runningHourCents: 10, storageMonthCents: 300 } })
+    const person = await h.user('Admin')
+    await h.db.insert(schema.platformAdmins).values({ userId: person.userId, grantedBy: 'test' })
+    admin = { kind: 'admin', userId: person.userId }
+  }, 30_000)
+
+  afterAll(async () => {
+    await h.close()
+  })
+
+  test('every server found adds up by where it runs, and each says who plays on it', async () => {
+    const owner = await h.user('Robin', 'plus')
+    const running = async (name: string) => {
+      const server = await h.create(owner, { name })
+      await h.until(server.id, 'running')
+      await h.settled(server.id)
+      return server
+    }
+    const here = await running('Here')
+    const there = await running('There')
+    await h.app.servers.stop(owner, there.id, randomUUID())
+    await h.until(there.id, 'stopped')
+    await h.settled(there.id)
+    await h.db
+      .update(schema.serverRuntimes)
+      .set({ placementRegionKey: 'far' })
+      .where(eq(schema.serverRuntimes.serverId, there.id))
+    const played = new Date('2030-01-14T20:00:00Z')
+    await h.db.insert(schema.serverPresence).values([
+      { serverId: here.id, playerUuid: randomUUID(), playerName: 'Ash', source: 'test', seenAt: played },
+      { serverId: here.id, playerUuid: randomUUID(), playerName: 'Bo', source: 'test', seenAt: played },
+      { serverId: there.id, playerUuid: randomUUID(), playerName: 'Cy', source: 'test', seenAt: played },
+    ])
+    await h.db.insert(schema.serverActivity).values({ serverId: here.id, lastPlayerAt: played })
+
+    const search = `${owner.userId}@example.test`
+    const page = await h.app.fleet.list(admin, { search, offset: 0, limit: 1 })
+    // The page holds the newest; the places count every server found.
+    expect(page.total).toBe(2)
+    expect(page.servers.map((s) => s.id)).toEqual([there.id])
+    expect(page.regions).toMatchObject([
+      { region: 'far', servers: 1, states: { stopped: 1 } },
+      { region: 'local', servers: 1, states: { running: 1 } },
+    ])
+
+    const all = await h.app.fleet.list(admin, { search, offset: 0, limit: 50 })
+    const shown = all.servers.find((s) => s.id === here.id)
+    expect(shown).toMatchObject({
+      address: `${shown?.slug}.play.test`,
+      region: 'local',
+      online: 2,
+      lastPlayedAt: played.toISOString(),
+    })
+    for (const region of all.regions) {
+      const inIt = all.servers.filter((s) => s.region === region.region)
+      expect(region.provider).toBe(inIt[0]?.runtime?.provider ?? null)
+      expect(region.month.costCents).toBe(inIt.reduce((sum, s) => sum + (s.month.costCents ?? 0), 0))
+    }
+    // The stopped one counts no players, whatever presence says.
+    expect(all.servers.find((s) => s.id === there.id)?.online).toBe(0)
+
+    // One in the trash counts as that, whatever it was doing.
+    await h.db
+      .update(schema.minecraftServers)
+      .set({ deletedAt: new Date() })
+      .where(eq(schema.minecraftServers.id, there.id))
+    const trashed = await h.app.fleet.list(admin, { search, offset: 0, limit: 50 })
+    expect(trashed.regions.find((r) => r.region === 'far')?.states).toEqual({ deleted: 1 })
+  }, 60_000)
+})

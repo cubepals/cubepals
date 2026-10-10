@@ -395,7 +395,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     stuck: new StuckWork({ db, jobs: ports.jobs, runner }),
     alerts,
     audit: new AuditQueries({ db }),
-    fleet: new Fleet({ db, runtime }),
+    fleet: new Fleet({ db, runtime, addressing: ports.addressing }),
     placement,
     economics: new RuntimeEconomics({ db, runtimes: runtime }),
     /** Start it before the edge's wakes are served. */
