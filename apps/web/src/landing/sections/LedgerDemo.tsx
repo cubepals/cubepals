@@ -172,7 +172,7 @@ function ledgerOf(play: Play, party: Party, typed: string, fit: Fit): Line[] {
     { id: 'port', group: 'address', name: 'Port, left out of it', value: '25565' },
     { id: 'motd', group: 'address', name: 'Server-list message', value: welcome(name), long: true },
     // Blockly's own until the owner picks one (packages/contracts/src/server.ts).
-    { id: 'icon', group: 'address', name: 'Server-list icon', value: 'blockly' },
+    { id: 'icon', group: 'address', name: 'Server-list icon', value: 'the Cubepals mark' },
     // Drawn when the server is made (apps/control/src/app/servers/invites.ts).
     { id: 'invite', group: 'address', name: 'Invite code', value: '12 characters' },
     // Off on a new server: anyone with the address can join (apps/control/src/domain/access/access.ts).
