@@ -102,7 +102,7 @@ function Release({ pack, release }: { pack: CuratedPackAdminView; release: Curat
     <>
       <FormRow
         label={
-          <span className="bk-row" style={{ gap: 'var(--space-8)' }}>
+          <span className="bk-row bk-wrap" style={{ gap: 'var(--space-8)' }}>
             {release.version} <Badge tone={state.tone}>{state.label}</Badge>
             {release.distribution !== null && (
               <Badge tone="outline">
@@ -122,7 +122,7 @@ function Release({ pack, release }: { pack: CuratedPackAdminView; release: Curat
           .filter((part) => part !== null)
           .join(' · ')}
         control={
-          <div className="bk-row" style={{ gap: 'var(--space-8)' }}>
+          <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)' }}>
             {(release.state === 'verified' || release.state === 'withdrawn') && pack.held === null && (
               <Button
                 variant="primary"

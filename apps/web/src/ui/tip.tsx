@@ -22,13 +22,18 @@ import { type ReactNode, useState } from 'react'
  * A few words that explain a line, on a dashed underline: they fade in on hover after a moment,
  * on keyboard focus, or on a tap where there is no hover, and go on Escape or a tap elsewhere.
  * Positioning, the hover delay, focus, dismissal and the tooltip role come from Floating UI;
- * the look is Blockly's.
+ * the look is Blockly's. On a forest surface (`data-surface="forest"`, such as a paid plan's card)
+ * the tip is light, so it never melts into the card it opens over.
  */
 export function Tip({ tip, children }: { tip: ReactNode; children: ReactNode }) {
   const [open, setOpen] = useState(false)
+  const [onForest, setOnForest] = useState(false)
   const { refs, floatingStyles, context } = useFloating({
     open,
-    onOpenChange: setOpen,
+    onOpenChange: (next) => {
+      if (next) setOnForest(Boolean(refs.domReference.current?.closest('[data-surface="forest"]')))
+      setOpen(next)
+    },
     placement: 'top-start',
     middleware: [offset(8), flip(), shift({ padding: 12 })],
     whileElementsMounted: autoUpdate,
@@ -65,7 +70,10 @@ export function Tip({ tip, children }: { tip: ReactNode; children: ReactNode }) 
             style={floatingStyles}
             {...getFloatingProps()}
           >
-            <div className="bk-tip__bubble" style={styles}>
+            <div
+              className={onForest ? 'bk-tip__bubble bk-tip__bubble--light' : 'bk-tip__bubble'}
+              style={styles}
+            >
               {tip}
             </div>
           </div>
