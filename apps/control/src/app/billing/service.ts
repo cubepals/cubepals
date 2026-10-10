@@ -13,7 +13,7 @@ import { FUNNEL, noteOnce } from '../insight/record.ts'
 import { listingsOfOwner } from '../listings/persistence.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { JobQueue } from '../ports/jobs.ts'
-import { type BillingState, BillingUnavailable } from '../ports/optional.ts'
+import { type BillingState, BillingUnavailable, type OrderNow } from '../ports/optional.ts'
 import type { Mailer } from '../ports/platform.ts'
 import {
   accountsWithLapses,
@@ -30,13 +30,16 @@ import {
   billingFacts,
   failingUntold,
   latestSubscription,
+  markOwed,
   markTold,
+  mayBeOwed,
   owingUntold,
   PAST_DUE_GRACE_MS,
   recordOrder,
   saveSubscription,
   settleOtherSubscriptions,
   subscriptionsLeftOut,
+  UNPAID_ORDER,
   untoldAbout,
 } from './persistence.ts'
 
@@ -321,6 +324,7 @@ export class BillingService {
    * when their servers stop until it is paid. Answers how many emails went.
    */
   async tellAboutPayments(now = new Date()): Promise<number> {
+    await this.confirmOwed(now)
     let told = 0
     for (const userId of await untoldAbout(this.#db)) {
       const to = await emailOf(this.#db, userId)
@@ -330,9 +334,50 @@ export class BillingService {
     return told
   }
 
+  /**
+   * Orders that may be owed (`mayBeOwed`), each read again from the provider before the account is
+   * held to owe it, so a webhook that never came never blocks someone who paid: one paid since is
+   * kept as paid. The final charge of a subscription that ended is owed only once it was tried and
+   * failed, or the provider voided it; one past the grace a failed renewal gets, once it is still
+   * unpaid. The provider not answering leaves it for the next pass. Answers how many became owed.
+   */
+  async confirmOwed(now = new Date()): Promise<number> {
+    let owed = 0
+    for (const candidate of await mayBeOwed(this.#db, now)) {
+      const fresh = await this.#orderNow(candidate.externalOrderId)
+      if (fresh === null || !UNPAID_ORDER.includes(fresh.order.status)) continue
+      if (candidate.ended && fresh.order.status !== 'void' && !fresh.chargeFailed) continue
+      await markOwed(this.#db, candidate.provider, candidate.externalOrderId, now)
+      await this.#accounts.enforceLimits(candidate.userId)
+      owed++
+    }
+    return owed
+  }
+
+  /**
+   * The order as the provider holds it now, kept as it says (paid since, or voided); null when the
+   * provider doesn't know it or doesn't answer.
+   */
+  async #orderNow(externalOrderId: string): Promise<OrderNow | null> {
+    const billing = requireCapability(this.#caps, 'billing')
+    const fresh = await billing.order(externalOrderId).catch((error: unknown) => {
+      if (error instanceof BillingUnavailable) return null
+      throw error
+    })
+    if (fresh !== null && (await recordOrder(this.#db, billing.provider, fresh.order)))
+      await settleWith(this.#db, billing.provider, fresh.order)
+    return fresh
+  }
+
   /** A charge that failed while the card is tried again: said once, with the day it is owed by. */
   async #tellFailing(userId: string, to: string | null, now: Date): Promise<number> {
-    const failing = await failingUntold(this.#db, userId)
+    const failing = []
+    // Read again first: one paid since its webhook was lost is not emailed about, and one the
+    // provider doesn't answer about waits for the next pass.
+    for (const order of await failingUntold(this.#db, userId)) {
+      const fresh = await this.#orderNow(order.externalOrderId)
+      if (fresh !== null && UNPAID_ORDER.includes(fresh.order.status)) failing.push(order)
+    }
     if (to !== null)
       for (const order of failing)
         await this.#mailer.send({
@@ -350,7 +395,7 @@ export class BillingService {
 
   /** Charges now owed: said once, and the account's servers stop until they are paid. */
   async #tellOwing(userId: string, to: string | null, now: Date): Promise<number> {
-    const owing = await owingUntold(this.#db, userId, now)
+    const owing = await owingUntold(this.#db, userId)
     if (owing.length === 0) return 0
     if (to !== null)
       await this.#mailer.send({

@@ -480,7 +480,7 @@ export class AccountService {
     const standing = await loadStanding(this.#db, userId)
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
     if (plan.includedUnits === null || plan.includedUnits === 0) return null
-    const { decision } = await extraPlayNow(this.#db, standing, now)
+    const { decision } = await extraPlayNow(this.#db, standing)
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
     const units = await runUnitsSince(this.#db, userId, monthStart, now)
     const share = (units / plan.includedUnits) * 100

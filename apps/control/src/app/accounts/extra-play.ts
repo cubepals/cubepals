@@ -24,7 +24,7 @@ export async function warnAboutExtra(
   const standing = await loadStanding(deps.db, userId, now)
   const plan = entitlementsFor(standing.plan, standing.limitOverrides)
   if (plan.includedUnits === null) return null
-  const { decision } = await extraPlayNow(deps.db, standing, now)
+  const { decision } = await extraPlayNow(deps.db, standing)
   if (!decision.may || decision.units === 0) return null
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
   const used = (await runUnitsSince(deps.db, userId, monthStart, now)) - plan.includedUnits

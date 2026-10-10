@@ -1,5 +1,19 @@
 import { type Queryable, schema, type Tx } from '@blockly/db'
-import { and, count, desc, eq, gt, inArray, isNull, lt, ne, notInArray, or, sql } from 'drizzle-orm'
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  ne,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { type BillingFacts, type ExtraPlay, extraPlay } from '../../domain/account/extra-play.ts'
 import type { AccountStanding } from '../../domain/account/standing.ts'
@@ -211,23 +225,71 @@ export async function recordOrder(q: Queryable, provider: string, order: Billing
 const orders = schema.billingOrders
 
 /**
- * Charges carrying extra play that didn't go through and won't now: their subscription ended, or
- * they have waited past the grace a failed renewal gets (`PAST_DUE_GRACE_MS`), while the provider
- * retries the card. What the account owes is all of each, the plan's own price with the extra.
+ * An order carrying extra play is never owed younger than this: the provider tries its charge
+ * first, and a subscription that ends makes its final charge pending a while before it is tried.
  */
-export function owing(userId: string, now: Date) {
-  const ended = sql`exists (select 1 from ${subscriptions} where ${subscriptions.externalSubscriptionId} = ${orders.externalSubscriptionId} and ${subscriptions.status} = 'ended')`
+const OWED_AFTER_MS = 60 * 60_000
+
+/**
+ * Charges carrying extra play that didn't go through and won't now: the provider was asked again
+ * and said so (`confirmOwed`), from `owedAt`. What the account owes is all of each, the plan's own
+ * price with the extra; one paid since, or settled by a balance, is owed no more.
+ */
+export function owing(userId: string) {
   return and(
     eq(orders.userId, userId),
     gt(orders.extraCents, 0),
     inArray(orders.status, UNPAID_ORDER),
     isNull(orders.settledBy),
-    or(ended, lt(orders.orderedAt, new Date(now.getTime() - PAST_DUE_GRACE_MS))),
+    isNotNull(orders.owedAt),
   )
 }
 
+/**
+ * Orders that may be owed now, for the provider to be asked about again before they are: unpaid,
+ * carrying extra play, at least `OWED_AFTER_MS` old, and either void, of a subscription that has
+ * ended, or past the grace a failed renewal gets while the card is tried again. `ended` says which
+ * of the first two, which are owed only once their charge has failed or they are void.
+ */
+export async function mayBeOwed(
+  q: Queryable,
+  now: Date,
+): Promise<Array<{ provider: string; externalOrderId: string; userId: string; ended: boolean }>> {
+  const ended = sql<boolean>`(${orders.status} = 'void' or exists (select 1 from ${subscriptions} where ${subscriptions.externalSubscriptionId} = ${orders.externalSubscriptionId} and ${subscriptions.status} = 'ended'))`
+  const rows = await q
+    .select({
+      provider: orders.provider,
+      externalOrderId: orders.externalOrderId,
+      userId: orders.userId,
+      ended,
+      old: sql<boolean>`${orders.orderedAt} < ${new Date(now.getTime() - PAST_DUE_GRACE_MS)}`,
+    })
+    .from(orders)
+    .where(
+      and(
+        gt(orders.extraCents, 0),
+        inArray(orders.status, UNPAID_ORDER),
+        isNull(orders.settledBy),
+        isNull(orders.owedAt),
+        lt(orders.orderedAt, new Date(now.getTime() - OWED_AFTER_MS)),
+        or(ended, lt(orders.orderedAt, new Date(now.getTime() - PAST_DUE_GRACE_MS))),
+      ),
+    )
+  return rows.map(({ old, ended, ...row }) => ({ ...row, ended: ended && !old }))
+}
+
+/** The provider said again that this order is unpaid and won't be: it is owed from `now`. */
+export async function markOwed(q: Queryable, provider: string, externalOrderId: string, now: Date) {
+  await q
+    .update(orders)
+    .set({ owedAt: now, updatedAt: now })
+    .where(
+      and(eq(orders.provider, provider), eq(orders.externalOrderId, externalOrderId), isNull(orders.owedAt)),
+    )
+}
+
 /** What the billing provider has said about an account, as extra play's guards read it. */
-export async function billingFacts(q: Queryable, userId: string, now = new Date()): Promise<BillingFacts> {
+export async function billingFacts(q: Queryable, userId: string): Promise<BillingFacts> {
   const latest = await latestSubscription(q, userId)
   const paid = and(
     eq(orders.userId, userId),
@@ -244,7 +306,7 @@ export async function billingFacts(q: Queryable, userId: string, now = new Date(
   const [owed] = await q
     .select({ cents: sql<string>`coalesce(sum(${orders.totalCents}), 0)` })
     .from(orders)
-    .where(owing(userId, now))
+    .where(owing(userId))
   return {
     subscription:
       latest === null ? null : { status: latest.status, cancelAtPeriodEnd: latest.cancelAtPeriodEnd },
@@ -306,7 +368,7 @@ export async function failingUntold(q: Queryable, userId: string): Promise<Order
 }
 
 /** Charges the account now owes for (`owing`) that the owner hasn't been told about yet. */
-export async function owingUntold(q: Queryable, userId: string, now: Date): Promise<OrderNotice[]> {
+export async function owingUntold(q: Queryable, userId: string): Promise<OrderNotice[]> {
   return q
     .select({
       provider: orders.provider,
@@ -316,7 +378,7 @@ export async function owingUntold(q: Queryable, userId: string, now: Date): Prom
       orderedAt: orders.orderedAt,
     })
     .from(orders)
-    .where(and(owing(userId, now), isNull(orders.owingToldAt)))
+    .where(and(owing(userId), isNull(orders.owingToldAt)))
 }
 
 /** The owner was told about these charges: that they failed, or that they are owed. */
@@ -341,9 +403,8 @@ export async function markTold(
 export async function extraPlayNow(
   q: Queryable,
   standing: AccountStanding,
-  now = new Date(),
 ): Promise<{ decision: ExtraPlay; owedCents: number }> {
-  const facts = await billingFacts(q, standing.userId, now)
+  const facts = await billingFacts(q, standing.userId)
   const plan = entitlementsFor(standing.plan, standing.limitOverrides)
   return { decision: extraPlay(plan, standing.extraUnitsAllowed, facts), owedCents: facts.owedCents }
 }

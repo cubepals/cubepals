@@ -15,6 +15,7 @@ import {
   type BillingEvent,
   type BillingProvider,
   type BillingState,
+  type OrderNow,
   type UsageEvent,
   WebhookRejected,
 } from '../../app/ports/optional.ts'
@@ -200,6 +201,11 @@ export class LocalBilling implements BillingProvider {
 
   /** Nothing here fails to charge. */
   async pastDueSince(): Promise<Date | null> {
+    return null
+  }
+
+  /** Every order made here is paid when it is made, so none is ever owed. */
+  async order(): Promise<OrderNow | null> {
     return null
   }
 

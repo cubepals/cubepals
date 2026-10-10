@@ -72,7 +72,7 @@ export class AccessPolicy {
     if (counted !== null && options.lock !== false) await lockAccountActions(tx, accountId)
     const standing = await loadStanding(tx, accountId)
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-    const extra = await extraPlayNow(tx, standing, now)
+    const extra = await extraPlayNow(tx, standing)
     return evaluate(
       {
         deployment: supportOf(this.#caps),

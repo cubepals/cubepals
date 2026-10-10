@@ -37,6 +37,9 @@ const polar = new PolarStandIn()
 const secret = webhookSecret()
 /** Subscriptions as Polar holds them now, by id: what `pastDueSince` reads. */
 const subscriptions = new Map<string, Record<string, unknown>>()
+/** Orders as Polar holds them now, by id, and those with a payment that failed: what `order` reads. */
+const ordersNow = new Map<string, Record<string, unknown>>()
+const declined = new Set<string>()
 /** What Polar answers an ingest with; a test sets it to fail. */
 let ingest: () => { status: number; body: unknown } = () => ({
   status: 200,
@@ -78,11 +81,32 @@ beforeEach(() => {
           ],
         },
       }
+    const orderNow = ordersAsHeld(path)
+    if (orderNow !== null) return orderNow
     const id = path.startsWith('/v1/subscriptions/') ? path.slice('/v1/subscriptions/'.length) : null
     if (id !== null) return { status: 200, body: subscriptions.get(id) ?? subscription(id) }
     return { status: 404, body: { error: 'ResourceNotFound', detail: 'Not found' } }
   }
 })
+
+/** Polar's answer about an order, or about the payments tried for one; null for anything else. */
+function ordersAsHeld(path: string): { status: number; body: unknown } | null {
+  if (path.startsWith('/v1/orders/')) {
+    const held = ordersNow.get(path.slice('/v1/orders/'.length))
+    return held === undefined
+      ? { status: 404, body: { error: 'ResourceNotFound', detail: 'Not found' } }
+      : { status: 200, body: held }
+  }
+  if (!path.startsWith('/v1/payments')) return null
+  const asked = new URL(path, 'http://polar').searchParams.get('order_id') ?? ''
+  return {
+    status: 200,
+    body: {
+      items: declined.has(asked) ? [{ status: 'failed' }] : [],
+      pagination: { total_count: 0, max_page: 1 },
+    },
+  }
+}
 
 const post = (event: unknown) => {
   const delivery = signed(event, secret)
@@ -116,7 +140,9 @@ const ordered = async (
   type = 'order.paid',
 ) => {
   const id = `order-${randomUUID()}`
-  await post(orderEvent(order(owner.userId, { id, subscription_id: sub, ...patch }), type))
+  const held = order(owner.userId, { id, subscription_id: sub, ...patch })
+  ordersNow.set(id, held)
+  await post(orderEvent(held, type))
   return id
 }
 
@@ -528,7 +554,7 @@ const renewalWithExtra = (
   Promise.resolve(
     post(
       orderEvent(
-        order(owner.userId, {
+        held(owner.userId, {
           id,
           subscription_id: sub,
           status,
@@ -549,6 +575,16 @@ const renewalWithExtra = (
     ),
   ).then(() => id)
 
+/** An order as Polar holds it now, and as it delivers it. */
+const held = (externalId: string, patch: Record<string, unknown>) => {
+  const made = order(externalId, patch)
+  ordersNow.set(made.id, made)
+  return made
+}
+
+/** An hour on, when an order made now may be owed. */
+const anHourOn = () => new Date(Date.now() + 61 * 60_000)
+
 /** The subscription as Polar holds it now, and its word that the customer's standing changed. */
 const subscriptionNow = async (owner: UserActor, sub: string, patch: Record<string, unknown>) => {
   subscriptions.set(sub, subscription(sub, patch))
@@ -564,6 +600,7 @@ test.skipIf(!hasDatabase)(
     // The renewal is made and its charge fails: past due while Polar tries the card again.
     const madeAt = new Date()
     const renewal = await renewalWithExtra(owner, sub, madeAt)
+    declined.add(renewal)
     await subscriptionNow(owner, sub, {
       status: 'past_due',
       past_due_at: madeAt.toISOString(),
@@ -588,11 +625,14 @@ test.skipIf(!hasDatabase)(
     await h.until(server.id, 'running')
     await h.settled(server.id)
 
-    // The subscription ends unpaid: the account owes it, its servers stop, and nothing new starts.
+    // The subscription ends unpaid. Within the hour nothing is owed yet; then Polar is asked
+    // again, says it is still unpaid, and the account owes it: its servers stop, nothing new starts.
     await subscriptionNow(owner, sub, { status: 'canceled' })
+    expect(await h.app.billing.confirmOwed()).toBe(0)
+    expect((await h.app.accountQueries.overview(owner)).usage.extra).toMatchObject({ owedCents: 0 })
+    await h.app.billing.tellAboutPayments(anHourOn())
     expect((await h.until(server.id, 'stopped')).lifecycle.stopReason).toBe('unpaid')
     await h.settled(server.id)
-    await h.app.billing.tellAboutPayments()
     expect(h.mail.sent.at(-1)?.subject).toBe('Your Cubepals servers can’t start until a payment is made')
     expect(h.mail.sent.at(-1)?.text).toContain('You owe $17.50 from a Plus payment')
     const owes =
@@ -656,9 +696,10 @@ test.skipIf(!hasDatabase)(
     expect(await refusal(h.app.billing.settleBalance(owner))).toBe(
       'Nothing to pay here. A payment still being tried is paid in Manage billing.',
     )
-    // Ended, and voided by Polar: owed, and paid here, naming the order.
+    // Ended, and voided by Polar: owed once Polar says so again, and paid here, naming the order.
     await subscriptionNow(owner, sub, { status: 'canceled' })
     await renewalWithExtra(owner, sub, madeAt, 'void', renewal, 333)
+    expect(await h.app.billing.confirmOwed(anHourOn())).toBe(1)
     expect((await h.app.accountQueries.overview(owner)).usage.extra).toMatchObject({
       owedCents: 2083,
       settleCents: 2083,

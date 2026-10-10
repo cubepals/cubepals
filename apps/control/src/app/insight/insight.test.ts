@@ -22,6 +22,7 @@ const billing: BillingProvider = {
   receive: async () => null,
   stateOf: async () => null,
   pastDueSince: async () => null,
+  order: async () => null,
   reportUsage: async () => {},
   settleUrl: async () => 'https://billing.test/settle',
 }

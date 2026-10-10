@@ -66,7 +66,7 @@ export class ExtraUsage {
     const standing = await loadStanding(this.#db, userId, now)
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
     if (plan.includedUnits === null) return false
-    const { decision } = await extraPlayNow(this.#db, standing, now)
+    const { decision } = await extraPlayNow(this.#db, standing)
     if (!decision.may) return false
     const start = monthOf(now)
     const spans: Array<{ from: Date; to: Date }> = [{ from: start, to: now }]

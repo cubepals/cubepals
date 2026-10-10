@@ -88,7 +88,7 @@ sends it, and never stops anything itself.
 | A ceiling: **20** extra hours a month ($5) until a renewal (`order.paid`, `subscription_cycle`) is paid, then **100** ($25) | `EXTRA_CEILING`, `entitlements.ts` | A new card's first failure costs more | `extra-play.test.ts`, `extra-usage.test.ts` |
 | The owner's own limit, from what fits under the ceiling; servers stop with `stopReason = hours` at it | `AccountService.enforceLimits`, `standing-sweep` | Play past what they said | `extra-usage.test.ts` |
 | A cancel, a failed renewal or an ending stops extra play at once: servers sleep at the included block; what was played stays owed | `extraPlayNow` read by the policy, the sweep and the reporter | Play that the final invoice may not collect | `extra-usage.test.ts` |
-| A charge carrying extra play still unpaid when its subscription ended, or 7 days after it was made, blocks starts and new servers (`payment_due`, `stopReason = unpaid`) and a new checkout until it is paid; downloads stay | `billing/persistence.ts` `owing`, `policy.ts` | Someone plays on after not paying | `extra-usage.test.ts`, `policy.test.ts` |
+| A charge carrying extra play that is owed blocks starts and new servers (`payment_due`, `stopReason = unpaid`) and a new checkout until it is paid; downloads stay. It is owed only once Polar, asked again (`BillingService.confirmOwed`), says it is still unpaid, and it is at least an hour old: a subscription's final charge once it was tried and declined (a `failed` payment) or voided, any other once 7 days have passed | `billing/persistence.ts` `owing`, `mayBeOwed`, `policy.ts` | Someone plays on after not paying; or, without the second read, a lost `order.paid` blocks someone who paid | `extra-usage.test.ts`, `policy.test.ts` |
 | Polar's own backstop: the metered price's `cap_amount`, $50 a period (twice the top ceiling, since a calendar month's extra can straddle two billing periods) | Polar | Only a bug in all of the above | — |
 
 **Counting.** Every minute (`extra-play-report`), for each account that played in the last
@@ -110,7 +110,11 @@ payment after it *receives* it, so a late one lands on the next payment, never o
 
 **Being paid.** A renewal's metered line is kept on its order (`billing_orders.extra_cents`). A
 failed one is emailed once while Polar retries the card; once it is owed, once more, and servers
-stop until it is paid. While Polar still retries it, it is paid by fixing the card: the portal's
+stop until it is paid. Before either email, and before an order is held to be owed
+(`billing_orders.owed_at`), the order is read from Polar again with its payments, so one whose
+`order.paid` was lost is kept as paid instead; Polar not answering leaves it for the next minute's
+pass. A final charge made when a subscription ends is pending at first and tried later, so it is
+owed only after an hour, and only once a payment for it failed or Polar voided it. While Polar still retries it, it is paid by fixing the card: the portal's
 "Retry payment" charges the new card, and `order.paid` clears the block. Once its subscription has
 ended, Polar won't retry it (`OrderNotEligibleForRetry`) and voids it, so the account page offers
 "Pay $x" instead: a checkout for the one-time "balance" product (found by its metadata

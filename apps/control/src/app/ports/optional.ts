@@ -107,6 +107,12 @@ export interface BillingOrder {
   orderedAt: Date
 }
 
+/** An order as the provider holds it now, and whether a charge for it was tried and failed. */
+export interface OrderNow {
+  order: BillingOrder
+  chargeFailed: boolean
+}
+
 /**
  * Extra play to bill, one event of it: `hours` as the meter counts them (a large server two an
  * hour), counted up to `at`, which is never ahead of the clock. `externalId` is the provider's
@@ -157,6 +163,12 @@ export interface BillingProvider {
    * delivery that reports neither. A delivery that isn't authentic is a WebhookRejected.
    */
   receive(body: string, headers: Readonly<Record<string, string>>): Promise<BillingEvent | null>
+  /**
+   * The order as the provider holds it now, and whether its charge failed; null for an order it
+   * doesn't know. Read before an account is held to owe it, so a lost webhook never blocks
+   * someone who paid.
+   */
+  order(externalOrderId: string): Promise<OrderNow | null>
   /** The customer's standing now; null for someone who was never a customer. */
   stateOf(userId: string): Promise<BillingState | null>
   /**

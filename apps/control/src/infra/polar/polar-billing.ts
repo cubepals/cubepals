@@ -7,6 +7,7 @@ import {
   type BillingProvider,
   type BillingState,
   BillingUnavailable,
+  type OrderNow,
   type UsageEvent,
   WebhookRejected,
 } from '../../app/ports/optional.ts'
@@ -56,6 +57,9 @@ const Products = z.object({ items: z.array(z.object({ id: z.string() })) })
 
 // The prices of a plan's product, to tell the metered line of an order from the plan's own.
 const Product = z.object({ prices: z.array(z.object({ id: z.string(), amount_type: z.string().nullish() })) })
+
+// Payments tried for an order: one that failed says its charge was tried and declined.
+const Payments = z.object({ items: z.array(z.object({ status: z.string() })) })
 
 // A customer state lists only subscriptions that pay now, `active` or `trialing` (Polar's
 // `SubscriptionStatus.active_statuses`, read 2026-09-26); one whose renewal failed is `past_due`
@@ -308,6 +312,26 @@ export class PolarBilling implements BillingProvider {
         })),
       }),
     )
+  }
+
+  /**
+   * The order as Polar holds it now, with whether a payment for it failed: Polar keeps each try at
+   * its charge as a payment, and one `failed` is a card that was declined (seen in the sandbox,
+   * 2026-10-10, on a renewal of a subscription that then ended and was voided).
+   */
+  async order(externalOrderId: string): Promise<OrderNow | null> {
+    try {
+      const data = await call('reading an order', () => this.#polar.orders.get(externalOrderId))
+      const failed = Payments.parse(
+        await call('reading an order’s payments', () =>
+          this.#polar.payments.list({ order_id: externalOrderId, status: 'failed', limit: 1 }),
+        ),
+      )
+      return { order: await this.#order(data), chargeFailed: failed.items.length > 0 }
+    } catch (error) {
+      if (error instanceof PolarClientError && error.statusCode === 404) return null
+      throw error
+    }
   }
 
   async stateOf(userId: string): Promise<BillingState | null> {

@@ -145,7 +145,7 @@ export class AccountQueries {
     const owned = await countServers(this.#db, userId)
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
     const subscription = await latestSubscription(this.#db, userId)
-    const { decision, owedCents } = await extraPlayNow(this.#db, standing, now)
+    const { decision, owedCents } = await extraPlayNow(this.#db, standing)
     const ceiling = decision.may ? decision.ceiling : 0
     const capability = (feature: Feature): Capability =>
       feature === 'create_server'
@@ -198,7 +198,7 @@ export class AccountQueries {
           choices: decision.may ? EXTRA_CHOICES.filter((units) => units <= ceiling) : [],
           ...(await extraThisMonth(this.#db, userId, now)),
           owedCents,
-          settleCents: (await settleable(this.#db, userId, now)).totalCents,
+          settleCents: (await settleable(this.#db, userId)).totalCents,
         },
       },
       features,

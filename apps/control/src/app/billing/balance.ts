@@ -26,13 +26,12 @@ const subscriptions = schema.billingSubscriptions
 export async function settleable(
   q: Queryable,
   userId: string,
-  now = new Date(),
 ): Promise<{ cents: number; totalCents: number; orders: string[] }> {
   const ended = sql`(${orders.status} = 'void' or exists (select 1 from ${subscriptions} where ${subscriptions.externalSubscriptionId} = ${orders.externalSubscriptionId} and ${subscriptions.status} = 'ended'))`
   const rows = await q
     .select({ id: orders.externalOrderId, net: orders.netCents, total: orders.totalCents })
     .from(orders)
-    .where(and(owing(userId, now), ended))
+    .where(and(owing(userId), ended))
     .orderBy(orders.externalOrderId)
   return {
     cents: rows.reduce((sum, row) => sum + row.net, 0),

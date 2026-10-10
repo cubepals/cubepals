@@ -151,10 +151,11 @@ export class PolarStandIn {
   /** Each customer's state now, by external id. */
   readonly states = new Map<string, unknown>()
   down = false
-  reply: (request: { method: string; path: string }) => { status: number; body: unknown } = () => ({
-    status: 200,
-    body: {},
-  })
+  reply: (request: { method: string; path: string; body: string }) => { status: number; body: unknown } =
+    () => ({
+      status: 200,
+      body: {},
+    })
   url = ''
   #server: Server | null = null
 
