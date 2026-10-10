@@ -129,7 +129,9 @@ function tool(command: string, args: string[]): string {
 }
 
 async function serverFacts(url: string): Promise<{ major: number; bytes: number }> {
-  const database = new SQL(url)
+  // Bun's client doesn't read `sslrootcert` from the URL as pg_dump does, so it is given the root.
+  const root = new URL(url).searchParams.get('sslrootcert')
+  const database = new SQL(root ? { url, tls: { ca: await Bun.file(root).text() } } : url)
   try {
     const [row] = (await database`
       select current_setting('server_version_num')::int / 10000 as major,

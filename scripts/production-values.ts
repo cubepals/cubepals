@@ -104,7 +104,7 @@ export const VALUES: Value[] = [
     name: 'DATABASE_URL',
     goes: ['secret'],
     where:
-      'Supabase → cubepals prod → Connect → Session pooler (port 5432), as the role blockly on the database blockly',
+      'Supabase → cubepals prod → Connect → Session pooler (port 5432), as the role blockly on the database blockly, with ?sslmode=verify-full&sslrootcert=/app/packages/db/certs/supabase-root-2021.crt (the root the control image carries)',
     shape: startsWith(['postgres://', 'postgresql://'], 'is a postgres:// URL'),
   },
   {
@@ -389,13 +389,25 @@ export function terraformEnv(values: Record<string, string>): Record<string, str
 }
 
 /**
+ * A database URL whose root certificate is named where the control image keeps it, named where a
+ * checkout of the repository keeps it instead, as the Database dump workflow runs from one.
+ */
+function inCheckout(url: string): string {
+  if (!url) return url
+  const database = new URL(url)
+  const root = database.searchParams.get('sslrootcert')
+  if (root?.startsWith('/app/')) database.searchParams.set('sslrootcert', root.slice('/app/'.length))
+  return database.toString()
+}
+
+/**
  * The Database dump workflow's values (scripts/database-dump.ts), as secrets of the repository's
  * `production` environment. Its database URL is the direct one: pg_dump needs a session of its own,
  * which a transaction pooler can't give it.
  */
 export function dumpSecrets(values: Record<string, string>): Record<string, string> {
   return {
-    DATABASE_URL: values.DATABASE_DIRECT_URL ?? '',
+    DATABASE_URL: inCheckout(values.DATABASE_DIRECT_URL ?? ''),
     DUMP_S3_ENDPOINT: `https://${values.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
     DUMP_S3_BUCKET: DUMPS_BUCKET,
     DUMP_S3_ACCESS_KEY_ID: values.DUMP_S3_ACCESS_KEY_ID ?? '',
