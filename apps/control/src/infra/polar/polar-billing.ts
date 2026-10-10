@@ -7,10 +7,14 @@ import {
   type BillingProvider,
   type BillingState,
   BillingUnavailable,
+  type Discount,
+  DiscountRefused,
+  type NewDiscount,
   type OrderNow,
   type UsageEvent,
   WebhookRejected,
 } from '../../app/ports/optional.ts'
+import { discountBody, discountOf } from './polar-discounts.ts'
 
 /**
  * Polar through its official TypeScript SDK, pinned to API version 2026-10 for requests and for
@@ -74,6 +78,12 @@ const OpenCheckouts = z.object({
 
 /** An open checkout is offered again only with this long left on it, to be paid in. */
 const CHECKOUT_LEFT_MS = 15 * 60_000
+
+// A page of discounts: each is read by `discountOf`, and `max_page` says when to stop.
+const DiscountPage = z.object({
+  items: z.array(z.unknown()),
+  pagination: z.object({ max_page: z.number().int() }),
+})
 
 // Payments tried for an order: one that failed says its charge was tried and declined.
 const Payments = z.object({ items: z.array(z.object({ status: z.string() })) })
@@ -144,6 +154,8 @@ export class PolarBilling implements BillingProvider {
       call('starting a checkout', () =>
         this.#polar.checkouts.create({
           products: [product],
+          // Polar's default too, said here so a code always has a place to be typed.
+          allow_discount_codes: true,
           external_customer_id: input.userId,
           ...email,
           success_url: input.returnUrl,
@@ -380,6 +392,56 @@ export class PolarBilling implements BillingProvider {
     )
   }
 
+  /** Every page of Polar's discounts, newest first, keeping the codes for the plans' products. */
+  async discounts(): Promise<Discount[]> {
+    const products = new Set(this.#plans.keys())
+    const found: Discount[] = []
+    for (let page = 1; ; page++) {
+      const listed = DiscountPage.parse(
+        await call('listing discount codes', () =>
+          this.#polar.discounts.list({ page, limit: 100, sorting: ['-created_at'] }),
+        ),
+      )
+      for (const item of listed.items) {
+        const discount = discountOf(item, products)
+        if (discount !== null) found.push(discount)
+      }
+      if (page >= listed.pagination.max_page) return found
+    }
+  }
+
+  /** A code limited to the plans' products. A code Polar refuses comes back in its own words. */
+  async createDiscount(input: NewDiscount): Promise<Discount> {
+    const products = Object.values(this.#products)
+    try {
+      const made = await call('making a discount code', () =>
+        this.#polar.discounts.create(discountBody(input, products)),
+      )
+      const discount = discountOf(made, new Set(products))
+      if (discount === null) throw new Error('Polar made a discount that is not a code for these plans')
+      return discount
+    } catch (error) {
+      if (error instanceof PolarClientError && (error.statusCode === 400 || error.statusCode === 422))
+        throw new DiscountRefused(refusal(error))
+      throw error
+    }
+  }
+
+  /** Only a code for these plans is deleted; one Polar no longer has is already gone. */
+  async deleteDiscount(id: string): Promise<Discount | null> {
+    try {
+      const held = discountOf(
+        await call('reading a discount code', () => this.#polar.discounts.get(id)),
+        new Set(this.#plans.keys()),
+      )
+      if (held !== null) await call('deleting a discount code', () => this.#polar.discounts.delete(id))
+      return held
+    } catch (error) {
+      if (error instanceof PolarClientError && error.statusCode === 404) return null
+      throw error
+    }
+  }
+
   async stateOf(userId: string): Promise<BillingState | null> {
     try {
       return this.#standing(
@@ -466,6 +528,14 @@ function refusesEmail(error: unknown): boolean {
   if (!(error instanceof PolarClientError) || error.statusCode !== 422) return false
   const detail = (error.error as { detail?: Array<{ loc?: unknown[] }> } | null)?.detail ?? []
   return detail.some((problem) => problem.loc?.includes('customer_email'))
+}
+
+/** What Polar said was wrong with a request: its first problem's message, or its own summary. */
+function refusal(error: PolarClientError): string {
+  const body = error.error as { detail?: string | Array<{ msg?: string }> } | null
+  const detail = body?.detail
+  if (typeof detail === 'string') return detail
+  return detail?.find((problem) => problem.msg)?.msg ?? error.message
 }
 
 /**

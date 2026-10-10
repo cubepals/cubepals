@@ -25,6 +25,7 @@ export function AdminTabs() {
           { href: '/admin/reports', label: 'Reports' },
           { href: '/admin/allowlist', label: 'Trusted mods' },
           { href: '/admin/packs', label: 'Curated packs' },
+          { href: '/admin/coupons', label: 'Coupons' },
         ]}
       />
       <Alerts current={pathname} />

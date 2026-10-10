@@ -22,6 +22,7 @@ const FAMILIES = [
   { value: 'operation.', label: 'Blocked operations' },
   { value: 'platform.', label: 'Kill switches and caps' },
   { value: 'catalog.', label: 'Mod catalog' },
+  { value: 'billing.', label: 'Billing: checkouts, payments, extra play, coupons' },
 ]
 
 /** Everything admins, owners and Blockly itself did, newest first. */

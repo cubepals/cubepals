@@ -129,6 +129,34 @@ export interface UsageEvent {
   at: Date
 }
 
+/**
+ * A discount code for the plans a deployment sells, as a customer types it at checkout: a share
+ * of the price or a fixed amount off (US cents), for the first payment, every one, or `months`
+ * of them. `maxRedemptions` and `endsAt` are null for no limit.
+ */
+export interface NewDiscount {
+  code: string
+  off: { kind: 'percent'; percent: number } | { kind: 'amount'; cents: number }
+  duration: { kind: 'once' } | { kind: 'forever' } | { kind: 'months'; months: number }
+  maxRedemptions: number | null
+  endsAt: Date | null
+}
+
+/** A discount code as the provider holds it, with how many times it was used. */
+export interface Discount extends NewDiscount {
+  id: string
+  redemptions: number
+  createdAt: Date
+}
+
+/** The provider wouldn't make a discount (a code already taken, say), in its own words. */
+export class DiscountRefused extends Error {
+  constructor(detail: string) {
+    super(detail)
+    this.name = 'DiscountRefused'
+  }
+}
+
 /** What one webhook delivery reports: a customer's standing, or an order paid or refunded. */
 export type BillingEvent = { kind: 'standing'; state: BillingState } | { kind: 'order'; order: BillingOrder }
 
@@ -190,6 +218,12 @@ export interface BillingProvider {
    * when the provider didn't take them, and they are sent again, under the same ids, later.
    */
   reportUsage(events: readonly UsageEvent[]): Promise<void>
+  /** Discount codes that apply to the plans this deployment sells, newest first. */
+  discounts(): Promise<Discount[]>
+  /** A code customers can type at checkout for those plans. One refused is a DiscountRefused. */
+  createDiscount(input: NewDiscount): Promise<Discount>
+  /** Deletes one of `discounts()` and answers what it was; null when there is no such code. */
+  deleteDiscount(id: string): Promise<Discount | null>
 }
 
 /** A webhook that didn't come from the provider, or was altered, or replayed. */
