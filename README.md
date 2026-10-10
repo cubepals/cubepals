@@ -12,7 +12,6 @@
 <p align="center">
   <a href="https://cubepals.com">Website</a> ·
   <a href="https://cubepals.com/pricing">Pricing</a> ·
-  <a href="https://cubepals.com/guides">Guides</a> ·
   <a href="docs/architecture.md">Architecture</a> ·
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
