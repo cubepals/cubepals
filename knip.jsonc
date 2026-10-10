@@ -23,7 +23,9 @@
       "entry": ["src/infra/fleet/endpoint.e2e.ts", "src/testing/silent-store.ts"],
       "project": ["src/**/*.ts"],
       // The native QUIC addon @fails-components/webtransport loads by name at runtime.
-      "ignoreDependencies": ["@fails-components/webtransport-transport-http3-quiche"]
+      // pg-boss imports @opentelemetry/api as a peer, and the image installs with --omit peer
+      // (apps/control/Dockerfile), so it is a dependency of its own.
+      "ignoreDependencies": ["@fails-components/webtransport-transport-http3-quiche", "@opentelemetry/api"]
     },
     "apps/devtools": {
       // server.ts serves index.html, whose script tag loads app.tsx.
