@@ -777,4 +777,8 @@ async function main(): Promise<void> {
 /** How long a shutdown may take before the process exits regardless. */
 const SHUTDOWN_DEADLINE_MS = 45_000
 
-await main()
+// `--check` stops here, before any configuration or connection: by this line every module above,
+// and all they import, has loaded. CI runs the built image this way, so a dependency the image
+// leaves out fails there and not at a deploy.
+if (process.argv.includes('--check')) console.warn('every module loaded')
+else await main()
