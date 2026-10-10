@@ -18,8 +18,8 @@ const GOOGLE_BUTTON = {
 
 /** The environment's canonical web origin: the only callback its Google client registers. */
 const CANONICAL = 'https://staging.blockly.test'
-/** A preview deployment of the web app, matching the team's pattern. */
-const PREVIEW = 'https://blockly-git-feature-team.vercel.app'
+/** A preview version of the web app, matching the environment's pattern. */
+const PREVIEW = 'https://pr-12-blockly-web-staging.team.workers.dev'
 /** Where the web tier's rewrite delivers every request: the api's own host. */
 const API = 'http://api.internal:4000'
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token'
@@ -42,7 +42,7 @@ describe.skipIf(!hasDatabase)('OAuth from preview deployments', () => {
       db: h.db,
       ...authMail(),
       canonicalOrigin: CANONICAL,
-      trustedOrigins: ['https://blockly-*-team.vercel.app'],
+      trustedOrigins: ['https://pr-*-blockly-web-staging.team.workers.dev'],
       secret: 'a-test-secret-that-is-long-enough-for-better-auth',
       cookiePrefix: 'blockly-test',
       github: null,
@@ -157,7 +157,7 @@ describe.skipIf(!hasDatabase)('OAuth from preview deployments', () => {
 
   test('an origin outside the pattern never receives a profile', async () => {
     signInAs()
-    const { google } = await startGoogle('https://blockly-evil.vercel.app')
+    const { google } = await startGoogle('https://pr-1-blockly-web-staging.evil.workers.dev')
     const back = await googleReturns(google.searchParams.get('state') ?? '')
     const handoff = new URL(back.headers.get('location') ?? '')
     expect(handoff.origin).toBe(CANONICAL)

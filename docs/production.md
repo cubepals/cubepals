@@ -126,15 +126,11 @@ version tagged with its commit. The Worker answers `www.cubepals.com` itself, wi
 `https://cubepals.com` that keeps the path and query.
 
 Terraform holds the Worker, its cache bucket and its routes, never its versions. A route only sees
-traffic Cloudflare proxies, so the site moves to the Worker by one value:
-
-1. Deploy (`apply` or `web`), then check the Worker on its `workers.dev` address (Cloudflare →
-   Workers & Pages → `blockly-web`): the pages, sign-in, `/api/health`.
-2. Set `"proxied": true` under `web` in `config.auto.tfvars.json` and run `apply`. `cubepals.com`
-   and `www` go through Cloudflare's proxy to the Worker, under the zone's own certificate.
-3. To go back, set it to `false` and `apply`: the records reach Vercel again.
-4. Once it has settled: turn `workers_dev` off in `wrangler.jsonc`, and delete the Vercel project
-   by hand. The first `apply` with this setup let go of it in Terraform's state without touching it.
+traffic Cloudflare proxies, so `"proxied": true` under `web` in `config.auto.tfvars.json` is what
+sends `cubepals.com` and `www` to the Worker, under the zone's own certificate. `false` makes the
+records DNS-only, and nothing behind them serves the site. The Worker's `workers.dev` address
+(Cloudflare → Workers & Pages → `blockly-web`) reaches it without the records, to check a deploy:
+the pages, sign-in, `/api/health`.
 
 If `blockly-web` or `blockly-web-cache` was made by hand before Terraform made them, import them
 (`terraform import`) rather than letting the apply fail on a name that is taken.

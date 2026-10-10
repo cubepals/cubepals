@@ -121,6 +121,49 @@ jobs:
           ../../node_modules/.bin/wrangler deploy --dry-run --env= --outdir "$RUNNER_TEMP/worker"
           ../../node_modules/.bin/wrangler deploy --dry-run --env=staging --outdir "$RUNNER_TEMP/worker-staging"
 
+  # The images deploys run, built from their Dockerfiles and started. The control plane's `--check`
+  # loads every module its start does and exits before configuration or a database are needed; the
+  # edge agent, given nothing, must get as far as asking for its first variable. A package an image
+  # leaves out, such as a peer its install omits, fails here and not at the next deploy.
+  images:
+    name: Images build and start
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the control plane
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/control/Dockerfile
+          tags: blockly-control:ci
+          load: true
+          cache-from: type=gha,scope=control
+          cache-to: type=gha,mode=max,scope=control
+      - name: The control plane loads every module it starts with
+        run: timeout 120 docker run --rm blockly-control:ci node src/main.node.ts --check
+      - name: Build the edge
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/edge/Dockerfile
+          tags: blockly-edge:ci
+          load: true
+          cache-from: type=gha,scope=edge
+          cache-to: type=gha,mode=max,scope=edge
+      - name: The edge agent runs as far as its configuration
+        run: |
+          if out=$(timeout 60 docker run --rm blockly-edge:ci 2>&1); then
+            echo "The edge agent started with no CONTROL_URL set."
+            exit 1
+          fi
+          echo "$out"
+          grep -q 'CONTROL_URL is required' <<<"$out"
+
   # The suite spends most of its time waiting on the job queue's half-second poll, test after test,
   # so it is split across machines: every fourth file to each, each with its own services.
   test:
@@ -223,7 +266,7 @@ jobs:
 
   # The one check branch protection requires. It passes when every part passed or was skipped.
   check:
-    needs: [changes, static, test, worker]
+    needs: [changes, static, test, worker, images]
     if: always()
     runs-on: ubuntu-latest
     steps:

@@ -41,15 +41,21 @@ variable "web_hostnames" {
 }
 
 variable "web_proxied" {
-  description = "Whether the web hosts go through Cloudflare's proxy to the Worker's routes: the cutover from Vercel, and the way back."
+  description = "Whether the web hosts go through Cloudflare's proxy to the Worker's routes. False leaves them DNS-only."
   type        = bool
   default     = false
 }
 
-# DNS-only, the records send browsers to Vercel, which served the site before the Worker. Proxied,
-# Cloudflare answers them itself, with the zone's certificate, and the Worker's routes take every
-# path, so the CNAME's target is never asked: flipping web_proxied moves the whole site either way
-# at once. At the zone's apex Cloudflare flattens the CNAME, so one record type serves both.
+# Proxied, Cloudflare answers the records itself, with the zone's certificate, and the Worker's
+# routes take every path, so the CNAME's target is never asked. DNS-only, browsers go to that
+# target, which no longer serves the site. At the zone's apex Cloudflare flattens the CNAME, so one
+# record type serves both.
+#
+# The target is the host that served the site before the Worker. Cloudflare's placeholder for a
+# host only a Worker answers is a proxied AAAA to 100:: (staging.ts makes staging's that way), but
+# a record's type can't change in place: Terraform would delete each record and make it again,
+# and in between the name doesn't resolve, with resolvers keeping that answer for the zone's
+# negative-cache time. So the CNAME stays.
 resource "cloudflare_dns_record" "web" {
   for_each = toset(var.web_hostnames)
   zone_id  = var.zone_id
@@ -59,7 +65,7 @@ resource "cloudflare_dns_record" "web" {
   # A proxied record's TTL is Cloudflare's own ("automatic", 1).
   ttl     = var.web_proxied ? 1 : 300
   proxied = var.web_proxied
-  comment = var.web_proxied ? "The web app, through the Worker's routes" : "The web app, on Vercel"
+  comment = var.web_proxied ? "The web app, through the Worker's routes" : "The web app, DNS-only"
 }
 
 resource "cloudflare_dns_record" "play_v4" {
