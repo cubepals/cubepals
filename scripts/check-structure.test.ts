@@ -209,6 +209,7 @@ describe('headers', () => {
       'apps/a.tsx': `'use client'\n\n/** A page. */\n${body}`,
       'apps/b.ts': `#!/usr/bin/env bun\n// biome-ignore-all lint: x\n/** A script. */\n${body}`,
       'apps/k/src/c.rs': `//! A module.\n${'pub const A: u8 = 0;\n'.repeat(51)}`,
+      'apps/k/src/f.rs': `// SPDX-License-Identifier: FSL-1.1-ALv2\n\n//! A module.\n${'pub const A: u8 = 0;\n'.repeat(51)}`,
       'scripts/d.py': `#!/usr/bin/env python3\n"""A script."""\n${'x = 1\n'.repeat(51)}`,
     }
     expect(check(tree(ok)).code).toBe(0)
