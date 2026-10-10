@@ -3,7 +3,8 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "blockly-web",
-  "main": ".open-next/worker.js",
+  // OpenNext's worker behind worker.ts, which does src/proxy.ts's job without Node middleware.
+  "main": "worker.ts",
   "compatibility_date": "2026-10-01",
   // nodejs_compat is required by the adapter. global_fetch_strictly_public makes the worker's
   // fetch() go out to the public internet, as the /api rewrite and server components need.
