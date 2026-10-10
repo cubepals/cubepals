@@ -36,12 +36,12 @@ describe('entitlements', () => {
     }
   })
 
-  test('plus runs everything, with 60 hours on sizes up to the large one', () => {
+  test('plus runs everything, with 100 hours on sizes up to the large one', () => {
     const plus = entitlementsFor('plus')
     expect(plus).toMatchObject({
       maxServers: 3,
       maxRunning: 2,
-      includedUnits: 60,
+      includedUnits: 100,
       // Extra hours, billed on the next payment, under extra-play.ts's guards.
       mayBuyMore: true,
       idleShutdownAfterMinutes: 15,
@@ -59,11 +59,11 @@ describe('entitlements', () => {
     expect(PAID_PLANS).toEqual(['plus'])
   })
 
-  test('the included block is 60 hours on the small sizes and 30 on the largest', () => {
+  test('the included block is 100 hours on the small sizes and 50 on the largest', () => {
     const included = entitlementsFor('plus').includedUnits ?? 0
-    expect(included / METER_UNITS['3g']).toBe(60)
-    expect(included / METER_UNITS['4g']).toBe(60)
-    expect(included / METER_UNITS['8g']).toBe(30)
+    expect(included / METER_UNITS['3g']).toBe(100)
+    expect(included / METER_UNITS['4g']).toBe(100)
+    expect(included / METER_UNITS['8g']).toBe(50)
   })
 
   test('a size a plan sold before still runs on it; one it never sold does not', () => {
@@ -162,10 +162,10 @@ describe('meter', () => {
     expect(isLarge('8g')).toBe(true)
   })
 
-  test('an extra hour costs what the plan’s own hours do, and a large one twice that', () => {
+  test('an extra hour costs more than the plan’s own hours, and a large one twice that', () => {
     const plus = entitlementsFor('plus')
     expect(UNIT_CENTS).toBe(25)
-    expect(plus.monthlyPriceCents / (plus.includedUnits ?? 1)).toBe(UNIT_CENTS)
+    expect(plus.monthlyPriceCents / (plus.includedUnits ?? 1)).toBeLessThan(UNIT_CENTS)
     expect(centsFor(20)).toBe(500)
     expect(centsFor(unitsFor('8g', 1))).toBe(2 * centsFor(unitsFor('4g', 1)))
   })

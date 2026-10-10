@@ -2024,7 +2024,7 @@ overrides (self-hosting).
 `planGap(plan, runs, 'offered' | 'startable')`, says whether a plan runs a size, a server type and
 mods, and `planThatRuns` names the plan that would. Creating, changing, starting, the lapse sweep
 and the create flow's cards all ask it. Free runs Vanilla and Paper without plugins on the 3 GB
-size, one server, 20 hours; Plus runs everything on 3, 4 and 8 GB, three servers, 60 hours. A size
+size, one server, 20 hours; Plus runs everything on 3, 4 and 8 GB, three servers, 100 hours. A size
 counts one hour an hour, or two for a large one (`domain/account/meter.ts`). The pricing page reads
 the same table through `GET /api/public/plans` and `billing.plans`. The size behind each answer to
 "Who is playing?" is public too, at `GET /api/public/sizes`, for the guide that shows it.

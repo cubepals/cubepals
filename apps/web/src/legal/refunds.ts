@@ -37,7 +37,7 @@ export const REFUNDS: Policy = {
         {
           list: [
             `**Less than ${FULL_REFUND_UNDER_HOURS} hours played: a full refund.** You don’t have to give a reason.`,
-            `**${FULL_REFUND_UNDER_HOURS} hours or more: you pay for what you played.** We keep the share of the price for the hours you used, out of the ${PLUS.hours} ${PLUS.name} includes, and refund the rest. For example, if you played 45 hours, we keep 45/${PLUS.hours} of the price and refund ${PLUS.hours - 45}/${PLUS.hours}. Once you have played all ${PLUS.hours}, there is nothing left to refund.`,
+            `**${FULL_REFUND_UNDER_HOURS} hours or more: you pay for what you played.** We keep the share of the price for the hours you used, out of the ${PLUS.hours} ${PLUS.name} includes, and refund the rest. For example, if you played 60 hours, we keep 60/${PLUS.hours} of the price and refund ${PLUS.hours - 60}/${PLUS.hours}. Once you have played all ${PLUS.hours}, there is nothing left to refund.`,
           ],
         },
         `${PLUS.name} is a service. Before you pay, the checkout page asks you to agree that it starts straight away, inside those 14 days, so you can play at once, and that if you cancel you pay for the hours you played as this section says.`,

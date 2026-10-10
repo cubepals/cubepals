@@ -356,7 +356,7 @@ describe.skipIf(!hasDatabase)('billing', () => {
     const owner = await h.user()
     await plus(owner)
     const overview = await h.app.accountQueries.overview(owner)
-    expect(overview.entitlements).toMatchObject({ includedUnits: 60, mayBuyMore: true })
+    expect(overview.entitlements).toMatchObject({ includedUnits: 100, mayBuyMore: true })
     const refused = await h.app.accounts.allowExtraPlay(owner, 10).then(
       () => null,
       (error: Error) => error.message,

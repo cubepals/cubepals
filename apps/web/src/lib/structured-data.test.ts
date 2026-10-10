@@ -26,7 +26,7 @@ const PLANS = [
     key: 'plus',
     name: 'Plus',
     monthlyPriceCents: 1500,
-    includedHours: 60,
+    includedHours: 100,
     maxServers: 3,
     maxPlayers: 40,
     mods: true,

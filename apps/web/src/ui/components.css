@@ -2365,6 +2365,11 @@ details[open] > .bk-disclosure::before {
 .bk-tip__bubble > :not(:first-child) {
   margin-block-start: var(--space-8);
 }
+.bk-tip__bubble a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .bk-tip__list {
   display: grid;
   gap: 2px;

@@ -41,7 +41,7 @@ export const FREE: PlanFigures = {
 export const PLUS: PlanFigures = {
   name: 'Plus',
   priceCents: 1500,
-  hours: 60,
+  hours: 100,
   maxServers: 3,
   sleepsAfterMinutes: 15,
   restsAfterDays: 30,

@@ -47,8 +47,8 @@ describe('what the policies say about the plans', () => {
     expect(PAST_DUE_GRACE_DAYS * DAY_MS).toBe(PAST_DUE_GRACE_MS)
   })
 
-  test('the full refund stops at 30 hours, half of what Plus includes', () => {
-    expect(FULL_REFUND_UNDER_HOURS).toBe(30)
+  test('the full refund stops at 50 hours, half of what Plus includes', () => {
+    expect(FULL_REFUND_UNDER_HOURS).toBe(50)
     expect(FULL_REFUND_UNDER_HOURS * 2).toBe(entitlementsFor('plus').includedUnits ?? Number.NaN)
   })
 })

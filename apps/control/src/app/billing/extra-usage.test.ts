@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto'
 import { TERMS_VERSION } from '@blockly/contracts'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
+import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { PolarBilling } from '../../infra/polar/polar-billing.ts'
 import { createBillingWebhook } from '../../interfaces/billing/webhook.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
@@ -166,6 +167,9 @@ const today = new Date()
 const at = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 15))
 
 /** A run that happened on a stopped server: one closed interval of `hours`, ending before `end`. */
+/** Plus's included hours, which each run below is counted against. */
+const PLUS_HOURS = entitlementsFor('plus').includedUnits ?? 0
+
 const ran = (serverId: string, hours: number, end = at, tier = '3g') =>
   h.db.insert(schema.powerIntervals).values({
     serverId,
@@ -256,7 +260,7 @@ test.skipIf(!hasDatabase)(
   async () => {
     const { owner } = await subscriber('Mo')
     const server = await stoppedServer(owner)
-    await ran(server.id, 60)
+    await ran(server.id, PLUS_HOURS)
     expect(await startAt(owner, server.id)).toBe(
       'You have used this month’s play time. Allow extra play in your account, or wait for the 1st.',
     )
@@ -320,7 +324,7 @@ test.skipIf(!hasDatabase)(
     const server = await stoppedServer(owner)
     const usage = h.app.billing.usage
     // Within the included hours: nothing is counted.
-    await ran(server.id, 59, new Date(at.getTime() - 30 * 3_600_000))
+    await ran(server.id, PLUS_HOURS - 1, new Date(at.getTime() - 30 * 3_600_000))
     expect(await usage.count(owner.userId, at)).toBe(false)
     // An hour and a half past them, on a large server: three hours, counted in thousandths.
     await ran(server.id, 1, new Date(at.getTime() - 20 * 3_600_000))
@@ -369,7 +373,7 @@ test.skipIf(!hasDatabase)(
     const { owner } = await subscriber('Pat')
     await h.app.accounts.allowExtraPlay(owner, 20)
     const server = await stoppedServer(owner)
-    await ran(server.id, 60.1, new Date(at.getTime() - 3_600_000))
+    await ran(server.id, PLUS_HOURS + 0.1, new Date(at.getTime() - 3_600_000))
     await h.app.billing.usage.count(owner.userId, at)
     expect(await h.app.billing.usage.cut(at)).toBe(0)
     // Whole cents' worth: 0.08 h is 2¢; the 0.02 h left, half a cent, waits for more play.
@@ -390,7 +394,7 @@ test.skipIf(!hasDatabase)(
     const { owner } = await subscriber('Quinn')
     await h.app.accounts.allowExtraPlay(owner, 20)
     const server = await stoppedServer(owner)
-    await ran(server.id, 62, new Date(at.getTime() - 5 * 3_600_000))
+    await ran(server.id, PLUS_HOURS + 2, new Date(at.getTime() - 5 * 3_600_000))
     await h.app.billing.usage.count(owner.userId, at)
     await h.app.billing.usage.cut(at)
     // Down: nothing is taken, the event waits under its id, and an outage isn't held against it.
@@ -414,7 +418,7 @@ test.skipIf(!hasDatabase)(
     const other = await subscriber('Rae')
     await h.app.accounts.allowExtraPlay(other.owner, 20)
     const theirs = await stoppedServer(other.owner)
-    await ran(theirs.id, 61, new Date(at.getTime() - 5 * 3_600_000))
+    await ran(theirs.id, PLUS_HOURS + 1, new Date(at.getTime() - 5 * 3_600_000))
     await ran(server.id, 2, new Date(at.getTime() - 2 * 3_600_000))
     await h.app.billing.usage.count(owner.userId, at)
     await h.app.billing.usage.count(other.owner.userId, at)
@@ -450,7 +454,7 @@ test.skipIf(!hasDatabase)(
     const { owner } = await subscriber('Bex')
     await h.app.accounts.allowExtraPlay(owner, 20)
     const server = await stoppedServer(owner)
-    await ran(server.id, 61, new Date(at.getTime() - 5 * 3_600_000))
+    await ran(server.id, PLUS_HOURS + 1, new Date(at.getTime() - 5 * 3_600_000))
     await h.app.billing.usage.count(owner.userId, at)
     await h.app.billing.usage.cut(at)
     const [refused] = await reportsOf(owner)
@@ -514,7 +518,7 @@ test.skipIf(!hasDatabase)(
     const server = await stoppedServer(owner)
     const next = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 1))
     // Ten minutes into the next month, a run that ended just before midnight.
-    await ran(server.id, 60.05, new Date(next.getTime() - 60_000))
+    await ran(server.id, PLUS_HOURS + 0.05, new Date(next.getTime() - 60_000))
     const tenPast = new Date(next.getTime() + 10 * 60_000)
     expect(await h.app.billing.usage.count(owner.userId, tenPast)).toBe(true)
     // Fifty thousandths: under a quarter of an hour, but the month is over; its whole cent goes.
@@ -532,7 +536,7 @@ test.skipIf(!hasDatabase)(
     const { owner, sub } = await subscriber('Tao')
     await h.app.accounts.allowExtraPlay(owner, 20)
     const server = await stoppedServer(owner)
-    await ran(server.id, 70, new Date(at.getTime() - 50 * 3_600_000))
+    await ran(server.id, PLUS_HOURS + 10, new Date(at.getTime() - 50 * 3_600_000))
     await h.app.billing.usage.count(owner.userId, at)
     await h.app.billing.usage.cut(at)
     await ordered(owner, sub, { billing_reason: 'subscription_cycle' })
@@ -554,7 +558,7 @@ test.skipIf(!hasDatabase)(
     const { owner, sub } = await subscriber('Ira')
     await h.app.accounts.allowExtraPlay(owner, 20)
     const server = await stoppedServer(owner)
-    await ran(server.id, 63.5, new Date(at.getTime() - 5 * 3_600_000))
+    await ran(server.id, PLUS_HOURS + 3.5, new Date(at.getTime() - 5 * 3_600_000))
     await h.app.billing.usage.count(owner.userId, at)
     await h.app.billing.usage.cut(at)
     await h.app.billing.usage.send()
@@ -587,7 +591,7 @@ test.skipIf(!hasDatabase)(
     const { owner, sub } = await subscriber('Uma')
     await h.app.accounts.allowExtraPlay(owner, 20)
     const server = await stoppedServer(owner)
-    await ran(server.id, 61, new Date(at.getTime() - 5 * 3_600_000))
+    await ran(server.id, PLUS_HOURS + 1, new Date(at.getTime() - 5 * 3_600_000))
     await h.app.billing.usage.count(owner.userId, at)
     await standing(owner, sub, { cancel_at_period_end: true })
     const overview = await h.app.accountQueries.overview(owner)
@@ -726,7 +730,7 @@ test.skipIf(!hasDatabase)(
     const email =
       (await h.db.select().from(schema.users).where(eq(schema.users.id, owner.userId)))[0]?.email ?? ''
     const subjects = () => h.mail.to(email).map((m) => m.subject)
-    await ran(server.id, 60, new Date(at.getTime() - 40 * 3_600_000))
+    await ran(server.id, PLUS_HOURS, new Date(at.getTime() - 40 * 3_600_000))
     expect(await warnAboutExtra(send, owner.userId, at)).toBeNull()
     await ran(server.id, 1, new Date(at.getTime() - 30 * 3_600_000))
     expect(await warnAboutExtra(send, owner.userId, at)).toBe(0)

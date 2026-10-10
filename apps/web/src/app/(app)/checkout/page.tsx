@@ -93,7 +93,9 @@ function Offer({ ask, name, offered }: { ask: CheckoutAsk; name: string; offered
           <>
             VAT included where it applies. Renews every month until you cancel.{' '}
             {offered.includedUnits !== null && (
-              <PlayHours hours={offered.includedUnits}>{offered.includedUnits} hours of play</PlayHours>
+              <PlayHours hours={offered.includedUnits} priceCents={offered.monthlyPriceCents}>
+                {offered.includedUnits} hours of play
+              </PlayHours>
             )}{' '}
             each month, up to {offered.maxServers} servers.
           </>

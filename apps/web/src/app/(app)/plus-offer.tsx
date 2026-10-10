@@ -49,7 +49,9 @@ export function PlusOffer({
           {offered.includedUnits === null ? (
             'Unlimited hours of play'
           ) : (
-            <PlayHours hours={offered.includedUnits}>{offered.includedUnits} hours of play</PlayHours>
+            <PlayHours hours={offered.includedUnits} priceCents={offered.monthlyPriceCents}>
+              {offered.includedUnits} hours of play
+            </PlayHours>
           )}{' '}
           · up to {offered.maxServers} servers
         </>
