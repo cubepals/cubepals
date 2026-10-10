@@ -36,10 +36,12 @@ resource "cloudflare_worker" "web" {
   account_id = var.account_id
   name       = var.worker
 
-  # Every deploy sets these from apps/web/wrangler.jsonc. Left to Terraform, each apply would turn
-  # observability and workers.dev off until the deploy after it turned them back on.
+  # Terraform holds the Worker's name and nothing else. Every deploy sets its settings from
+  # apps/web/wrangler.jsonc and Cloudflare fills in its references and tags, so an update from here
+  # would only undo them, and the API refuses the update the provider sends anyway (it carries a
+  # trace propagation policy the account doesn't have).
   lifecycle {
-    ignore_changes = [observability, subdomain]
+    ignore_changes = all
   }
 }
 
