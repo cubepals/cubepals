@@ -550,6 +550,16 @@
   line-height: 1.45;
   color: var(--muted);
 }
+/* A note in the margin: what keeps a picture honest, said quietly, below everything it qualifies. */
+.bl-aside {
+  margin: 0;
+  font-family: var(--font-aside), Georgia, serif;
+  font-style: italic;
+  font-size: 1.0625rem;
+  line-height: 1.3;
+  letter-spacing: 0.005em;
+  opacity: 0.62;
+}
 .bl-muted {
   color: var(--muted);
 }

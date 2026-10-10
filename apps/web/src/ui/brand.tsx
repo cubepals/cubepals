@@ -9,6 +9,9 @@
  * a second file. Nothing here recolours or reshapes it.
  */
 
+/** Where Cubepals' code is: it is open source, and the pages say so. */
+export const SOURCE_URL = 'https://github.com/cubepals/cubepals'
+
 /** The mark alone. Give it a label where it stands for the name; leave it out where the word is beside it. */
 export function Mark({ className, label }: { className?: string; label?: string }) {
   return (

@@ -19,7 +19,7 @@ import {
   Sent,
   Wake,
 } from '../landing/film/Film'
-import { digits, display, pixel } from '../landing/fonts'
+import { aside, digits, display, pixel } from '../landing/fonts'
 import { Gauge } from '../landing/Gauge'
 import { Strata } from '../landing/kit'
 import { Scroll } from '../landing/Scroll'
@@ -80,7 +80,11 @@ export default async function Landing({
     return signedIn ? account : withSource(`/sign-up?next=${encodeURIComponent(account)}`, source)
   }
   return (
-    <div className={`bl ${display.variable} ${pixel.variable} ${digits.variable}`} data-landing data-film>
+    <div
+      className={`bl ${display.variable} ${pixel.variable} ${digits.variable} ${aside.variable}`}
+      data-landing
+      data-film
+    >
       <Scroll />
       <Type />
       <Cursor />

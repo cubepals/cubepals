@@ -65,41 +65,90 @@
 
 /* Doubled so it outranks the kit's own section padding, whichever stylesheet loads last. */
 .footer.footer {
+  display: grid;
+  gap: clamp(48px, 8vh, 88px);
+  padding-block: clamp(72px, 12vh, 136px) 0;
+  border-top: var(--px) solid var(--ink);
+  font-size: 0.9375rem;
+  overflow: hidden;
+  container-type: inline-size;
+}
+.footer .footerTop {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px 32px;
-  padding-block: 28px 44px;
-  border-top: var(--px) solid var(--ink);
-  font-size: 0.875rem;
+  gap: 48px 64px;
 }
 .footer .mark {
-  font-family: var(--font-figtree), system-ui, sans-serif;
-  font-variation-settings: normal;
-  font-size: 20px;
+  font-size: 28px;
   line-height: 1;
 }
-.footer .footerLinks {
+.footer .footerGroups {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 20px;
+  gap: 40px clamp(48px, 6vw, 96px);
 }
-.footer .footerLinks a {
-  /* Room to hit: a link in a row of its own is a target, not a word in a sentence. */
+.footer .footerGroup {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+.footer .groupName {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.footer .footerGroup a {
+  /* Room to hit: a link in a column of its own is a target, not a word in a sentence. */
+  justify-self: start;
   padding-block: 4px;
   color: inherit;
+  text-decoration: none;
+}
+.footer .footerGroup a:hover {
+  text-decoration: underline;
   text-underline-offset: 0.25em;
+}
+.footer .footerFine {
+  display: grid;
+  gap: 8px;
+  padding-top: 24px;
+  border-top: var(--px) solid color-mix(in srgb, var(--ink) 14%, transparent);
 }
 .footer .legal a {
   color: inherit;
   text-underline-offset: 0.25em;
 }
 .footer .legal {
-  flex-basis: 100%;
   margin: 0;
   color: var(--muted);
   font-size: 0.75rem;
   line-height: 1.5;
   letter-spacing: 0.02em;
+}
+/* The name once more, as wide as the page, in outline, fading out as the page ends. */
+.footer .footerName {
+  margin-bottom: -0.2em;
+  /* The lockup is 4.62 of its font size wide, so this sets it edge to edge in the footer. */
+  font-size: calc(100cqi / 4.62);
+  line-height: 1;
+  white-space: nowrap;
+  color: transparent;
+  -webkit-text-stroke: 0.75px var(--ink);
+  mask-image: linear-gradient(to bottom, #000 15%, transparent 92%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 15%, transparent 92%);
+  user-select: none;
+}
+.footer .footerName svg {
+  fill: transparent;
+  stroke: var(--ink);
+  stroke-width: 0.75px;
+  overflow: visible;
+}
+.footer .footerName svg * {
+  vector-effect: non-scaling-stroke;
 }

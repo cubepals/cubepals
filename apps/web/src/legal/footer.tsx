@@ -4,6 +4,7 @@
  */
 import Link from 'next/link'
 import type { ReactNode } from 'react'
+import { SOURCE_URL } from '../ui/brand'
 import styles from './footer.module.css'
 import { hrefOf, POLICIES } from './policies'
 import { Sentence } from './prose'
@@ -47,7 +48,7 @@ export function SiteFooter({ children }: { children?: ReactNode }) {
         <PolicyLinks />
       </nav>
       <p className={styles.operator}>
-        <OperatorLine />
+        <OperatorLine /> · <a href={SOURCE_URL}>Source code</a>
       </p>
       <p className={styles.disclaimer}>{MOJANG_DISCLAIMER}</p>
     </footer>

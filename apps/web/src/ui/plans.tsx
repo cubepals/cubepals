@@ -1,6 +1,7 @@
 import type { PublicPlan } from '@blockly/contracts'
 import { Check } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { SOURCE_URL } from './brand'
 import { Badge } from './surfaces'
 import { Tip } from './tip'
 
@@ -91,7 +92,7 @@ export function PlayHours({
           </p>
           {priceCents > 0 && (
             <p>
-              Cubepals is open source: <a href="https://github.com/cubepals/cubepals">read the code</a>.
+              Cubepals is open source: <a href={SOURCE_URL}>read the code</a>.
             </p>
           )}
         </>
