@@ -445,7 +445,11 @@ describe('PolarBilling paying a balance', () => {
   test('paying a balance opens without an address Polar won’t take, as a plan checkout does', async () => {
     const tried: unknown[] = []
     polar.reply = (sent) => {
-      if (sent.method === 'GET') return { status: 200, body: { items: [{ id: 'balance_product' }] } }
+      if (sent.method === 'GET')
+        return {
+          status: 200,
+          body: { items: sent.path.startsWith('/v1/checkouts') ? [] : [{ id: 'balance_product' }] },
+        }
       const body = JSON.parse(polar.requests.at(-1)?.body ?? '{}')
       tried.push(body.customer_email)
       return body.customer_email === undefined

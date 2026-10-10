@@ -28,7 +28,7 @@ import {
 const FIXED_PRICE = '0f6f9a52-3b8c-4d0e-9a51-1f0ab2a1c001'
 const METERED_PRICE = '0f6f9a52-3b8c-4d0e-9a51-1f0ab2a1c002'
 /** The one-time product a balance is paid with, found by its metadata. */
-const BALANCE = '0f6f9a52-3b8c-4d0e-9a51-1f0ab2a1c003'
+export const BALANCE = '0f6f9a52-3b8c-4d0e-9a51-1f0ab2a1c003'
 
 type Answer = { status: number; body: unknown }
 const notFound: Answer = { status: 404, body: { error: 'ResourceNotFound', detail: 'Not found' } }
@@ -110,9 +110,10 @@ export class PolarWorld {
 
   /** A checkout made: kept open, an hour from now, as Polar answers it. */
   #checkout(body: string): Answer {
-    const asked = JSON.parse(body) as Record<string, unknown>
+    const asked = JSON.parse(body) as { prices?: Record<string, Array<{ price_amount?: number }>> }
     const made = {
       ...asked,
+      amount: Object.values(asked.prices ?? {})[0]?.[0]?.price_amount ?? 0,
       id: `checkout-${this.checkouts.size + 1}`,
       url: `https://polar.test/checkout/${this.checkouts.size + 1}`,
       status: 'open',

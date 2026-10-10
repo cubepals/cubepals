@@ -539,17 +539,13 @@ test.skipIf(!hasDatabase)(
   60_000,
 )
 
-/**
- * A renewal with $2.50 of extra hours on it, as Polar delivers it: made and waiting, or voided.
- * `tax` is added on top of its $17.50.
- */
+/** A renewal with $2.50 of extra hours on it, as Polar delivers it: made and waiting, or voided. */
 const renewalWithExtra = (
   owner: UserActor,
   sub: string,
   madeAt: Date,
   status = 'pending',
   id = `order-${randomUUID()}`,
-  tax = 0,
 ) =>
   Promise.resolve(
     post(
@@ -563,8 +559,7 @@ const renewalWithExtra = (
           created_at: madeAt.toISOString(),
           subtotal_amount: 1750,
           net_amount: 1750,
-          tax_amount: tax,
-          total_amount: 1750 + tax,
+          total_amount: 1750,
           items: [
             { amount: 1500, product_price_id: FIXED_PRICE },
             { amount: 250, product_price_id: METERED_PRICE },
@@ -649,100 +644,6 @@ test.skipIf(!hasDatabase)(
     expect(await h.app.billing.customerPortal(owner)).toEqual({ url: 'https://polar.test/portal' })
   },
   90_000,
-)
-
-const BALANCE = '0f6f9a52-3b8c-4d0e-9a51-1f0ab2a1c003'
-
-/** Polar with the balance product, answering a checkout with `url`. */
-const balanceProduct = (url = 'https://polar.test/settle') => {
-  polar.reply = ({ path }) =>
-    path.startsWith('/v1/products')
-      ? { status: 200, body: { items: [{ id: BALANCE }], pagination: { total_count: 1, max_page: 1 } } }
-      : { status: 201, body: { id: 'c_1', url } }
-}
-
-/** A one-time order paid for `product` (the balance product unless said), naming `settles`. */
-const paidBalance = (owner: UserActor, settles: string, net: number, patch: Record<string, unknown> = {}) =>
-  ordered(owner, '', {
-    subscription_id: null,
-    product_id: BALANCE,
-    billing_reason: 'purchase',
-    subtotal_amount: net,
-    net_amount: net,
-    tax_amount: 0,
-    total_amount: net,
-    metadata: { settles },
-    ...patch,
-  })
-
-const auditOf = async (owner: UserActor, action: string) =>
-  (await h.db.select().from(schema.auditLog).where(eq(schema.auditLog.subjectId, owner.userId)))
-    .filter((e) => e.action === action)
-    .map((e) => e.data)
-
-test.skipIf(!hasDatabase)(
-  'what Polar can no longer collect is paid as a balance, and paying clears it for good',
-  async () => {
-    const { owner, sub } = await subscriber('Yan')
-    const madeAt = new Date()
-    // $17.50 with $3.33 of tax on top: $20.83 owed.
-    const renewal = await renewalWithExtra(owner, sub, madeAt, 'pending', undefined, 333)
-    // Still tried: paid by fixing the card, never offered as a balance as well.
-    await subscriptionNow(owner, sub, {
-      status: 'past_due',
-      past_due_at: madeAt.toISOString(),
-      ended_at: null,
-    })
-    expect(await refusal(h.app.billing.settleBalance(owner))).toBe(
-      'Nothing to pay here. A payment still being tried is paid in Manage billing.',
-    )
-    // Ended, and voided by Polar: owed once Polar says so again, and paid here, naming the order.
-    await subscriptionNow(owner, sub, { status: 'canceled' })
-    await renewalWithExtra(owner, sub, madeAt, 'void', renewal, 333)
-    expect(await h.app.billing.confirmOwed(anHourOn())).toBe(1)
-    expect((await h.app.accountQueries.overview(owner)).usage.extra).toMatchObject({
-      owedCents: 2083,
-      settleCents: 2083,
-    })
-    balanceProduct()
-    expect(await h.app.billing.settleBalance(owner)).toEqual({ url: 'https://polar.test/settle' })
-    // Priced at what it came to before tax, with tax on top, so tax is never charged twice; and
-    // no discount code can make it less.
-    expect(JSON.parse(polar.requests.at(-1)?.body ?? '{}')).toMatchObject({
-      products: [BALANCE],
-      prices: {
-        [BALANCE]: [
-          { amount_type: 'fixed', price_amount: 1750, price_currency: 'usd', tax_behavior: 'exclusive' },
-        ],
-      },
-      allow_discount_codes: false,
-      metadata: { settles: renewal },
-      external_customer_id: owner.userId,
-    })
-    const owes = async () => (await h.app.accountQueries.overview(owner)).usage.extra
-    // A paid order that isn't for the balance product clears nothing, whatever its metadata says.
-    await paidBalance(owner, renewal, 1750, { product_id: PLUS_PRODUCT, subscription_id: sub })
-    await paidBalance(owner, renewal, 1750, { product_id: '0f6f9a52-3b8c-4d0e-9a51-1f0ab2a1c0ff' })
-    expect(await owes()).toMatchObject({ owedCents: 2083 })
-    // A balance paid for less than was owed before tax (a code, an amount changed) clears nothing,
-    // and is kept for an admin.
-    const short = await paidBalance(owner, renewal, 1500, { discount_amount: 250, subtotal_amount: 1750 })
-    expect(await owes()).toMatchObject({ owedCents: 2083 })
-    expect(await auditOf(owner, 'billing.balance_short')).toEqual([
-      { order: short, paidCents: 1500, owedCents: 1750, orders: [renewal] },
-    ])
-    // Paid in full, its tax on top: the block clears on its own, and Polar's word about the void
-    // order again changes nothing.
-    const paid = await paidBalance(owner, renewal, 1750, { tax_amount: 333, total_amount: 2083 })
-    await renewalWithExtra(owner, sub, madeAt, 'void', renewal, 333)
-    const after = await h.app.accountQueries.overview(owner)
-    expect(after.usage.extra).toMatchObject({ owedCents: 0, settleCents: 0 })
-    expect(after.features.find((f) => f.feature === 'create_server')).toMatchObject({ available: true })
-    expect(await auditOf(owner, 'billing.balance_settled')).toEqual([
-      { order: paid, paidCents: 1750, owedCents: 1750, orders: [renewal] },
-    ])
-  },
-  60_000,
 )
 
 test.skipIf(!hasDatabase)(

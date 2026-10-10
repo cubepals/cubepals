@@ -56,6 +56,8 @@ export class LocalBilling implements BillingProvider {
   readonly #webOrigin: string
   /** The extra play reported, as a provider would have billed it: for the developer, and tests. */
   readonly reported: UsageEvent[] = []
+  /** The refunds asked for. */
+  readonly refunded: Array<{ externalOrderId: string; cents: number; why: string }> = []
 
   constructor(options: { db: Db; secret: string; webOrigin: string }) {
     this.#db = options.db
@@ -202,6 +204,11 @@ export class LocalBilling implements BillingProvider {
   /** Nothing here fails to charge. */
   async pastDueSince(): Promise<Date | null> {
     return null
+  }
+
+  /** Nothing was charged, so a refund only is kept, for the developer and tests. */
+  async refund(input: { externalOrderId: string; cents: number; why: string }): Promise<void> {
+    this.refunded.push(input)
   }
 
   /** Every order made here is paid when it is made, so none is ever owed. */

@@ -125,7 +125,12 @@ marks them `settledBy` that order, which clears the block, only when the order i
 product and its own amount before tax covers theirs; anything else (another product carrying the
 metadata, a short amount) clears nothing and is kept on the account's audit log
 (`billing.balance_short`), and the debt stays. A charge still retried is never offered there, so
-nothing is paid twice.
+nothing is paid twice. "Pay $x" clicked again offers the checkout still open for the same orders
+and amount (with 15 minutes left on it) rather than a second. A balance order that pays for orders
+already paid (a second checkout, or the card fixed since) is refunded through Polar at once, before
+tax, which Polar refunds with it (`billing.balance_overpaid_refunded`); `refund_asked_at` keeps a
+webhook delivered twice from refunding twice. A balance order refunded, so that what is left of it
+no longer covers what it paid, leaves those orders owed again (`billing.balance_refunded`).
 
 **What Polar does, as seen in its sandbox (2026-10-10).**
 - Checkout shows the plan's $15 and, under "Additional metered charges may apply", the line

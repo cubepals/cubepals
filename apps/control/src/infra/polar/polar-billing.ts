@@ -58,6 +58,21 @@ const Products = z.object({ items: z.array(z.object({ id: z.string() })) })
 // The prices of a plan's product, to tell the metered line of an order from the plan's own.
 const Product = z.object({ prices: z.array(z.object({ id: z.string(), amount_type: z.string().nullish() })) })
 
+// Checkouts still open, to offer one again rather than make a second.
+const OpenCheckouts = z.object({
+  items: z.array(
+    z.object({
+      url: z.string(),
+      amount: z.number().nullish(),
+      expires_at: z.string(),
+      metadata: z.record(z.string(), z.unknown()).nullish(),
+    }),
+  ),
+})
+
+/** An open checkout is offered again only with this long left on it, to be paid in. */
+const CHECKOUT_LEFT_MS = 15 * 60_000
+
 // Payments tried for an order: one that failed says its charge was tried and declined.
 const Payments = z.object({ items: z.array(z.object({ status: z.string() })) })
 
@@ -153,6 +168,23 @@ export class PolarBilling implements BillingProvider {
   }): Promise<string> {
     const product = await this.#balanceProduct()
     if (product === null) throw new Error('No Polar product has the metadata purpose: balance')
+    // One still open for the same orders and amount is the one to pay: a second would be paid twice.
+    const open = OpenCheckouts.parse(
+      await call('finding an open payment', () =>
+        this.#polar.checkouts.list({
+          product_id: product,
+          external_customer_id: input.userId,
+          status: 'open',
+          limit: 20,
+        }),
+      ),
+    ).items.find(
+      (checkout) =>
+        checkout.metadata?.settles === input.settles.join(',') &&
+        checkout.amount === input.cents &&
+        new Date(checkout.expires_at).getTime() > Date.now() + CHECKOUT_LEFT_MS,
+    )
+    if (open !== undefined) return open.url
     const checkout = await withEmail(input.email, (email) =>
       call('starting a payment', () =>
         this.#polar.checkouts.create({
@@ -332,6 +364,18 @@ export class PolarBilling implements BillingProvider {
       if (error instanceof PolarClientError && error.statusCode === 404) return null
       throw error
     }
+  }
+
+  /** A refund through Polar, which takes the amount before tax and refunds the tax on it with it. */
+  async refund(input: { externalOrderId: string; cents: number; why: string }): Promise<void> {
+    await call('refunding an order', () =>
+      this.#polar.refunds.create({
+        order_id: input.externalOrderId,
+        amount: input.cents,
+        reason: 'duplicate',
+        comment: input.why,
+      }),
+    )
   }
 
   async stateOf(userId: string): Promise<BillingState | null> {

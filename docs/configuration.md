@@ -189,7 +189,7 @@ regions nodes enroll into (`RUNTIME_REGION_MAP` may, where the fleet is the defa
 
 | Variable | Local | Staging | Production | Set by | Notes |
 |---|---|---|---|---|---|
-| `POLAR_ACCESS_TOKEN` | optional | secret | optional (off at launch) | secret | An organization access token with `checkouts:write`, `customer_sessions:write`, `customers:read`, `subscriptions:read`, `products:read`, `orders:read`, `payments:read` and `events:write`. Absent: plans come from the account's plan column alone |
+| `POLAR_ACCESS_TOKEN` | optional | secret | optional (off at launch) | secret | An organization access token with `checkouts:write`, `customer_sessions:write`, `customers:read`, `subscriptions:read`, `products:read`, `orders:read`, `payments:read`, `refunds:write` and `events:write`. Absent: plans come from the account's plan column alone |
 | `POLAR_WEBHOOK_SECRET` | optional | secret | optional (off at launch) | secret | `whsec_…`, from the webhook endpoint in Polar's dashboard (`<WEB_CANONICAL_ORIGIN>/api/billing/webhook`, API version 2026-10, events `customer.state_changed`, `order.created`, `order.updated`, `order.paid`, `order.refunded`, `subscription.active`, `subscription.past_due`, `subscription.canceled`, `subscription.uncanceled` and `subscription.revoked`) |
 | `POLAR_SERVER` | `sandbox` | `sandbox` | `production` | tf | Named explicitly |
 | `POLAR_PRODUCTS` | optional | op | optional (off at launch) | op | `plus:<product id>`, every paid plan. Production takes it with the two secrets above or none of them ([production.md](production.md#billing-later)) |

@@ -13,7 +13,7 @@ import { FUNNEL, noteOnce } from '../insight/record.ts'
 import { listingsOfOwner } from '../listings/persistence.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { JobQueue } from '../ports/jobs.ts'
-import { type BillingState, BillingUnavailable, type OrderNow } from '../ports/optional.ts'
+import { type BillingOrder, type BillingState, BillingUnavailable, type OrderNow } from '../ports/optional.ts'
 import type { Mailer } from '../ports/platform.ts'
 import {
   accountsWithLapses,
@@ -24,7 +24,7 @@ import {
   subscriptionChanges,
   writeEntries,
 } from './audit.ts'
-import { settleable, settleWith } from './balance.ts'
+import { auditRefund, claimRefund, settleable, settleWith } from './balance.ts'
 import { auditRenewal, ExtraUsage } from './extra-usage.ts'
 import {
   billingFacts,
@@ -209,7 +209,7 @@ export class BillingService {
     if (event === null) return 'ignored'
     if (event.kind === 'order') {
       const kept = await recordOrder(this.#db, billing.provider, event.order)
-      if (kept) await settleWith(this.#db, billing.provider, event.order)
+      if (kept) await this.#balancePaid(event.order)
       if (kept) await auditRenewal(this.#db, billing.provider, event.order)
       // An order paid can clear what was owed; one left unpaid can be what is owed now.
       if (kept && event.order.userId !== null) await this.#accounts.enforceLimits(event.order.userId)
@@ -217,6 +217,30 @@ export class BillingService {
     }
     await this.syncSubscription(event.state, 'system:billing', 'webhook')
     return 'synced'
+  }
+
+  /**
+   * A balance order's word (`settleWith`): what it paid past what was still owed, the same orders
+   * paid twice or paid by card since, is refunded through the provider at once, and audited.
+   */
+  async #balancePaid(order: BillingOrder): Promise<void> {
+    const billing = requireCapability(this.#caps, 'billing')
+    const { refundCents } = await settleWith(this.#db, billing.provider, order)
+    if (refundCents <= 0) return
+    const { claimed, release } = await claimRefund(this.#db, billing.provider, order.externalOrderId)
+    if (!claimed) return
+    try {
+      await billing.refund({
+        externalOrderId: order.externalOrderId,
+        cents: refundCents,
+        why: 'Paid for orders that were already paid.',
+      })
+    } catch (error) {
+      // Not given back: the provider delivers the order again, and it is tried again then.
+      await release()
+      throw error
+    }
+    await auditRefund(this.#db, order, refundCents)
   }
 
   /**

@@ -149,7 +149,9 @@ export interface BillingProvider {
   portalUrl(input: { userId: string; returnUrl: string }): Promise<string>
   /**
    * A one-time payment for orders the provider can no longer collect (their subscription ended),
-   * which its order then names in `settles`. No discount code applies to it.
+   * which its order then names in `settles`. `cents` is what they came to before tax, and tax is
+   * added on top. No discount code applies to it. A checkout still open for the same orders and
+   * amount is offered again rather than a second one.
    */
   settleUrl(input: {
     userId: string
@@ -169,6 +171,8 @@ export interface BillingProvider {
    * someone who paid.
    */
   order(externalOrderId: string): Promise<OrderNow | null>
+  /** Gives back `cents` of a paid order, before tax (the provider refunds its tax with it). */
+  refund(input: { externalOrderId: string; cents: number; why: string }): Promise<void>
   /** The customer's standing now; null for someone who was never a customer. */
   stateOf(userId: string): Promise<BillingState | null>
   /**
