@@ -20,6 +20,7 @@ import {
   ICON,
   LoadFailed,
   Note,
+  PageSkeleton,
   ProgressBar,
   Skeleton,
   TextField,
@@ -214,7 +215,7 @@ export default function ModsPage() {
   const mods = useQuery(trpc.mods.list.queryOptions({ serverId: server.id }))
   const [pending, setPending] = useState<{ title: string; change: Change } | null>(null)
 
-  if (server.isPending || mods.isPending) return <Skeleton width={240} height={36} />
+  if (server.isPending || mods.isPending) return <PageSkeleton sections={[3]} />
   if (server.isError) return <LoadFailed error={messageOf(server.error)} onRetry={() => server.refetch()} />
   if (mods.isError) return <LoadFailed error={messageOf(mods.error)} onRetry={() => mods.refetch()} />
   const view = server.data

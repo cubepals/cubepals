@@ -1,12 +1,11 @@
 'use client'
 
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { type DehydratedState, useMutation, useQuery } from '@tanstack/react-query'
 import {
   Archive,
   Box,
   Globe,
   LayoutGrid,
-  LogOut,
   Puzzle,
   Settings,
   ShieldCheck,
@@ -19,7 +18,6 @@ import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigat
 import { type ReactNode, Suspense, useEffect, useRef } from 'react'
 import { SiteFooter } from '../../legal/footer'
 import { ApiProvider, useTRPC } from '../../lib/api'
-import { authClient } from '../../lib/auth'
 import { insightOn } from '../../lib/insight'
 import { presentStatus } from '../../lib/present'
 import { RealtimeProvider } from '../../lib/realtime'
@@ -28,13 +26,24 @@ import { SOURCE_PARAMS, sourceOf } from '../../lib/source'
 import { ICON, Note, ShareButton, StatusPill } from '../../ui'
 import { Lockup } from '../../ui/brand'
 import { ResendConfirmation } from '../(auth)/resend-confirmation'
+import { AccountMenu } from './account-menu'
 import { Feedback } from './feedback'
 import styles from './insight.module.css'
 import { MomentCard } from './moment'
+import { usePrefetch } from './prefetch'
 
-export function AppFrame({ user, children }: { user: Session['user']; children: ReactNode }) {
+export function AppFrame({
+  user,
+  data,
+  children,
+}: {
+  user: Session['user']
+  /** What the server read for the first paint (lib/first-paint.ts). */
+  data: DehydratedState
+  children: ReactNode
+}) {
   return (
-    <ApiProvider>
+    <ApiProvider data={data}>
       <RealtimeProvider>
         <Shell user={user}>{children}</Shell>
       </RealtimeProvider>
@@ -106,17 +115,19 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
       ]
     : []
 
-  const signOut = async () => {
-    await authClient.signOut()
-    router.push('/')
-  }
+  // Every link here starts its page's reads as soon as someone heads for it (./prefetch.ts).
+  const prefetch = usePrefetch()
 
+  // Next fetches each item's page whole as soon as it shows (`prefetch`), its code included, so a
+  // press swaps the page with nothing left to ask the server; this layout isn't run again for it.
   const item = (entry: { href: string; label: string; icon: ReactNode; trailing?: string | undefined }) => (
     <Link
       key={entry.href}
       href={entry.href}
+      prefetch
       className="bk-appnav__item"
       aria-current={pathname === entry.href ? 'page' : undefined}
+      {...prefetch.intent(entry.href)}
     >
       {entry.icon}
       {entry.label}
@@ -154,25 +165,8 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
         )}
         <div className="bk-appnav__spacer" />
         <div className="bk-appnav__foot">
-          <span className="bk-appnav__account" title={user.email}>
-            {user.email}
-          </span>
-          <button
-            type="button"
-            className="bk-appnav__item"
-            style={{ border: 0, background: 'none' }}
-            onClick={signOut}
-          >
-            <LogOut {...ICON} aria-hidden />
-            Sign out
-          </button>
-          {insightOn && (
-            <Feedback
-              placement="right-end"
-              className="bk-appnav__item"
-              style={{ border: 0, background: 'none' }}
-            />
-          )}
+          <AccountMenu email={user.email} />
+          {insightOn && <Feedback placement="right-end" className="bk-appnav__icon" iconOnly />}
         </div>
       </nav>
 

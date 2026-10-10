@@ -15,6 +15,7 @@ import {
   LoadFailed,
   Modal,
   Note,
+  PageSkeleton,
   PlanCard,
   ProgressBar,
   Skeleton,
@@ -26,7 +27,7 @@ import { PlusOffer } from '../plus-offer'
 export default function AccountPage() {
   // The plan section reads the query string (a return from billing), which needs a boundary.
   return (
-    <Suspense fallback={<Skeleton width={240} height={36} />}>
+    <Suspense fallback={<AccountSkeleton />}>
       <Account />
     </Suspense>
   )
@@ -36,7 +37,9 @@ function Account() {
   const trpc = useTRPC()
   const me = useQuery(trpc.account.me.queryOptions())
   const overview = useQuery(trpc.account.overview.queryOptions())
-  if (me.isPending || overview.isPending) return <Skeleton width={240} height={36} />
+  // Both are drawn with the page from the server, or asked for before its link was followed; this
+  // is for when neither had the chance.
+  if (me.isPending || overview.isPending) return <AccountSkeleton email={me.data?.email} />
   if (me.isError) return <LoadFailed error={messageOf(me.error)} onRetry={() => me.refetch()} />
   if (overview.isError)
     return <LoadFailed error={messageOf(overview.error)} onRetry={() => overview.refetch()} />
@@ -46,10 +49,10 @@ function Account() {
         <h1 className="type-display-md" style={{ color: 'var(--ink)' }}>
           Account
         </h1>
-        <p className="type-body" style={{ color: 'var(--ink-muted)' }}>
+        <Who>
           {me.data.name ? `${me.data.name} · ` : ''}
           {me.data.email}
-        </p>
+        </Who>
       </header>
       {overview.data.standing.status !== 'active' && (
         <Note tone="danger">
@@ -63,6 +66,26 @@ function Account() {
       <Includes overview={overview.data} />
       <Plans overview={overview.data} />
     </>
+  )
+}
+
+/** The line under the heading: who is signed in. */
+function Who({ children }: { children: ReactNode }) {
+  return (
+    <p className="type-body" style={{ color: 'var(--ink-muted)' }}>
+      {children}
+    </p>
+  )
+}
+
+/** The account page before its data: its heading, then its plan, its play and what it includes. */
+function AccountSkeleton({ email }: { email?: string | undefined }) {
+  return (
+    <PageSkeleton
+      title="Account"
+      lead={email === undefined ? <Skeleton width={220} height={24} /> : <Who>{email}</Who>}
+      sections={[0, 1, 4]}
+    />
   )
 }
 

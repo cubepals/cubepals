@@ -1977,21 +1977,66 @@ textarea.bk-input {
 .bk-appnav__spacer {
   flex: 1 1 auto;
 }
+/* The foot is one quiet line under a rule: the account, which opens its menu, and Feedback as an
+   icon. Smaller and dimmer than the items above, so it never reads as a place to go. */
 .bk-appnav__foot {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: var(--space-4);
-  padding: var(--space-8);
+  padding-top: var(--space-12);
   border-top: 1px solid var(--border-inverse);
-  padding-top: var(--space-16);
 }
-.bk-appnav__account {
+.bk-appnav__me,
+.bk-appnav__icon {
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink-inverse-muted);
+  cursor: pointer;
+  transition-property: background-color, color;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+.bk-appnav__me {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 32px;
+  padding: 0 var(--space-8) 0 var(--space-12);
   font-size: 13px;
   line-height: 18px;
-  color: var(--ink-inverse-muted);
+  text-align: start;
+}
+.bk-appnav__me span {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.bk-appnav__me svg {
+  flex: none;
+}
+.bk-appnav__icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+}
+.bk-appnav__me[data-open],
+.bk-appnav__icon[data-open] {
+  background: rgba(244, 248, 245, 0.08);
+  color: var(--ink-inverse);
+}
+@media (hover: hover) and (pointer: fine) {
+  .bk-appnav__me:hover,
+  .bk-appnav__icon:hover {
+    background: rgba(244, 248, 245, 0.08);
+    color: var(--ink-inverse);
+  }
 }
 
 .bk-bottombar {
@@ -2526,4 +2571,50 @@ details[open] > .bk-disclosure::before {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-float);
+}
+
+/* A popover that holds a few actions rather than a form: a line saying whose they are, then one
+   row each, as wide as the popover. */
+.bk-menu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 208px;
+  margin: calc(-1 * var(--space-4));
+}
+.bk-menu__note {
+  padding: var(--space-4) var(--space-8) var(--space-8);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-subtle);
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+}
+.bk-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  padding: var(--space-8);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--ink);
+  text-align: start;
+  cursor: pointer;
+  transition-property: background-color;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+.bk-menu__item:disabled {
+  cursor: default;
+  color: var(--ink-subtle);
+}
+@media (hover: hover) and (pointer: fine) {
+  .bk-menu__item:not(:disabled):hover {
+    background: var(--surface-sunken);
+  }
 }

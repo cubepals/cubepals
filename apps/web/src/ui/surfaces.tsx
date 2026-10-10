@@ -145,3 +145,54 @@ export function DangerZone({
 export function Skeleton({ width, height = 12 }: { width: string | number; height?: number }) {
   return <div className="bk-skeleton" style={{ width, height }} aria-hidden />
 }
+
+/**
+ * A page still on its way, drawn as the page it becomes: its own heading, which needs no data,
+ * then one block shaped like a FormSection for each section it opens with, with as many rows as
+ * that section has. Seen only on a first visit to a page whose data wasn't asked for ahead.
+ */
+export function PageSkeleton({
+  title,
+  lead,
+  sections,
+}: {
+  /** The page's heading, shown as it will be. */
+  title?: string
+  /** A line under the heading that waits on data, like the account's email. */
+  lead?: ReactNode
+  /** Each section's rows, in order: `[0, 3]` is a section of heading only, then one of three rows. */
+  sections: readonly number[]
+}) {
+  return (
+    <div className="bk-stack" style={{ gap: 'var(--space-40)' }} aria-busy>
+      {title !== undefined && (
+        <header className="bk-stack" style={{ gap: 'var(--space-8)' }}>
+          <h1 className="type-display-md" style={{ color: 'var(--ink)' }}>
+            {title}
+          </h1>
+          {lead}
+        </header>
+      )}
+      {sections.map((rows, section) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: placeholders in a fixed order, never moved.
+        <div key={section} className="bk-formsection" aria-hidden>
+          <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
+            <Skeleton width="40%" height={20} />
+            <Skeleton width="75%" height={14} />
+          </div>
+          {Array.from({ length: rows }, (_, row) => (
+            <div
+              // biome-ignore lint/suspicious/noArrayIndexKey: as above.
+              key={row}
+              className="bk-row"
+              style={{ justifyContent: 'space-between', gap: 'var(--space-24)' }}
+            >
+              <Skeleton width="45%" height={16} />
+              <Skeleton width={96} height={16} />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}

@@ -7,6 +7,7 @@ import { useEffect } from 'react'
 import { messageOf, useTRPC } from '../../../lib/api'
 import { coverFor, presentStatus } from '../../../lib/present'
 import { Button, EmptyState, ICON, ServerCard, Skeleton } from '../../../ui'
+import { usePrefetch } from '../prefetch'
 import styles from './first-world.module.css'
 
 export default function ServersPage() {
@@ -21,6 +22,12 @@ export default function ServersPage() {
   useEffect(() => {
     queries.query(trpc.servers.createOptions.queryOptions()).catch(noop)
   }, [queries, trpc])
+  // Every server shown here is one press from its page: that page opens on what the list already
+  // holds, and what else it waits on is asked for now.
+  const prefetch = usePrefetch()
+  useEffect(() => {
+    for (const server of servers.data ?? []) prefetch.page(`/servers/${server.id}`)
+  }, [servers.data, prefetch])
 
   return (
     <>

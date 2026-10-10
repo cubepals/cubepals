@@ -20,8 +20,8 @@ import {
   LoadFailed,
   Modal,
   Note,
+  PageSkeleton,
   ProgressBar,
-  Skeleton,
   TextField,
   Toggle,
 } from '../../../../../ui'
@@ -42,7 +42,8 @@ export default function BackupsPage() {
   const trpc = useTRPC()
   const backups = useQuery(trpc.backups.list.queryOptions({ serverId: server.id }))
   const platform = useQuery(trpc.platform.capabilities.queryOptions())
-  if (server.isPending || backups.isPending || platform.isPending) return <Skeleton width={240} height={36} />
+  if (server.isPending || backups.isPending || platform.isPending)
+    return <PageSkeleton title="Backups" sections={[3]} />
   if (server.isError) return <LoadFailed error={messageOf(server.error)} onRetry={() => server.refetch()} />
   if (backups.isError)
     return <LoadFailed error={messageOf(backups.error)} onRetry={() => backups.refetch()} />
