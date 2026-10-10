@@ -43,7 +43,7 @@ const DESTROY_SECONDS = 60
  * How Fly refuses a machine on a volume another machine still holds. A wake's helper fills the
  * new volume and is destroyed, and Fly can go on holding the volume after the helper is gone:
  * "volume already claimed by machine" naming no machine, its id all NUL bytes (production,
- * 2026-10-11), which failed the wake.
+ * 2026-10-10), which failed the wake.
  */
 const CLAIMED = /already claimed/i
 /** How long a new machine waits for Fly to let go of its volume, past the helper's own destroy. */

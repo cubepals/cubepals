@@ -286,7 +286,7 @@ export function storedWorlds(deps: {
  * Whether a wake other than `wakeId` waits or runs for the server. A failed wake is settled twice:
  * by `run`, which puts the world back to rest, then by the runner as it records the failure. A
  * join between the two starts the next wake, which the second must not undo: in production
- * (2026-10-11) it was cancelled as "No longer applies: the server is stored" while a player waited.
+ * (2026-10-10) it was cancelled as "No longer applies: the server is stored" while a player waited.
  * Leaving the server to it is safe: it runs next, and its restore replaces what the handle names.
  */
 async function anotherWake(tx: Tx, serverId: string, wakeId: string): Promise<boolean> {
