@@ -188,17 +188,24 @@ const extraOf = (u: AccountOverviewView['usage']) => ({
   /** What the owner allowed, as far as it counts now: none while extra play is off. */
   allowedNow: u.extra.may ? Math.min(u.extraUnitsAllowed, u.extra.ceiling) : 0,
   billed: money(Math.round(u.extra.countedUnits * u.unitCents)),
+  /** Hours as the emails say them: to a tenth, never the thousandths they are counted in. */
+  hours: Math.round(u.extra.countedUnits * 10) / 10,
 })
 
 /** The month's included play is used: on extra hours now, or asleep until the 1st, and why. */
 function UsedUp({ overview, included }: { overview: AccountOverviewView; included: number }) {
   const x = overview.usage.extra
-  const { allowedNow, billed } = extraOf(overview.usage)
-  const more = overview.plans.find((p) => (p.entitlements.includedUnits ?? 0) > included)
+  const { allowedNow, billed, hours } = extraOf(overview.usage)
+  // An upgrade only: with an admin's own hours on the account, a cheaper plan can have more.
+  const more = overview.plans.find(
+    (p) =>
+      (p.entitlements.includedUnits ?? 0) > included &&
+      p.entitlements.monthlyPriceCents > overview.entitlements.monthlyPriceCents,
+  )
   if (allowedNow > 0)
     return (
       <Note tone="info">
-        {`You're on extra hours: ${x.countedUnits} so far, ${billed}, added to your next Plus payment. Servers sleep once you reach the ${allowedNow} you allowed.`}
+        {`You're on extra hours: ${hours} so far this month, ${billed}, billed with your Plus payments. Servers sleep once you reach the ${allowedNow} you allowed.`}
       </Note>
     )
   return (
@@ -206,7 +213,7 @@ function UsedUp({ overview, included }: { overview: AccountOverviewView; include
       <Note tone="info">
         {`You've played this month's ${included} hours. Your servers sleep until the 1st${x.may ? ', unless you allow some extra play below' : ''}.`}
         {x.countedUnits > 0
-          ? ` Your ${x.countedUnits} extra hours this month, ${billed}, are added to your next Plus payment.`
+          ? ` Your ${hours} extra hours this month, ${billed}, are billed with your Plus payments.`
           : ''}
       </Note>
       {more && (
