@@ -104,13 +104,14 @@ export const VALUES: Value[] = [
     name: 'DATABASE_URL',
     goes: ['secret'],
     where:
-      'fly mpg create --org blockly-prod --region fra; then fly.io → blockly-prod → Managed Postgres → the cluster → Connect: the pooled URL (pgbouncer.…)',
+      'Supabase → cubepals prod → Connect → Session pooler (port 5432), as the role blockly on the database blockly',
     shape: startsWith(['postgres://', 'postgresql://'], 'is a postgres:// URL'),
   },
   {
     name: 'DATABASE_DIRECT_URL',
     goes: ['secret'],
-    where: 'the same page: the direct URL (direct.…)',
+    where:
+      'the same session pooler URL: it carries LISTEN, migrations and pg_dump, which need a session of their own',
     shape: startsWith(['postgres://', 'postgresql://'], 'is a postgres:// URL'),
   },
   {
@@ -292,8 +293,6 @@ function wrongValues(values: Record<string, string>): string[] {
   const known = new Set(VALUES.map((v) => v.name))
   for (const name of Object.keys(values))
     if (!known.has(name)) wrong.push(`${name} isn't a value production uses. Check its name.`)
-  if (values.DATABASE_URL && values.DATABASE_URL === values.DATABASE_DIRECT_URL)
-    wrong.push('DATABASE_URL is the pooled URL and DATABASE_DIRECT_URL the direct one; they differ.')
   return wrong
 }
 
