@@ -11,7 +11,7 @@
  * once what it holds is old. What every page reads anyway is already in the cache from the first
  * paint (lib/first-paint.ts).
  */
-import { type QueryClient, useQueryClient } from '@tanstack/react-query'
+import { noop, type QueryClient, useQueryClient } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { useTRPC } from '../../lib/api'
 
@@ -37,21 +37,21 @@ export function usePrefetch() {
 function prefetchPage(trpc: Trpc, queries: QueryClient, href: string) {
   const [, section, id, tab] = (href.split(/[?#]/)[0] ?? '').split('/')
   if (section === 'account') {
-    void queries.prefetchQuery(trpc.account.me.queryOptions())
-    void queries.prefetchQuery(trpc.account.overview.queryOptions())
-    void queries.prefetchQuery(trpc.billing.plans.queryOptions())
+    queries.query(trpc.account.me.queryOptions()).catch(noop)
+    queries.query(trpc.account.overview.queryOptions()).catch(noop)
+    queries.query(trpc.billing.plans.queryOptions()).catch(noop)
   } else if (section === 'checkout') {
-    void queries.prefetchQuery(trpc.account.overview.queryOptions())
+    queries.query(trpc.account.overview.queryOptions()).catch(noop)
   } else if (section === 'admin' && id === undefined) {
-    void queries.prefetchQuery(trpc.admin.accounts.queryOptions({ search: '' }))
+    queries.query(trpc.admin.accounts.queryOptions({ search: '' })).catch(noop)
   } else if (section === 'servers' && id === undefined) {
-    void queries.prefetchQuery(trpc.servers.list.queryOptions())
-    void queries.prefetchQuery(trpc.servers.trash.queryOptions())
-    void queries.prefetchQuery(trpc.account.overview.queryOptions())
+    queries.query(trpc.servers.list.queryOptions()).catch(noop)
+    queries.query(trpc.servers.trash.queryOptions()).catch(noop)
+    queries.query(trpc.account.overview.queryOptions()).catch(noop)
   } else if (section === 'servers' && id === 'trash') {
-    void queries.prefetchQuery(trpc.servers.trash.queryOptions())
-    void queries.prefetchQuery(trpc.servers.purgedArchives.queryOptions())
-    void queries.prefetchQuery(trpc.platform.capabilities.queryOptions())
+    queries.query(trpc.servers.trash.queryOptions()).catch(noop)
+    queries.query(trpc.servers.purgedArchives.queryOptions()).catch(noop)
+    queries.query(trpc.platform.capabilities.queryOptions()).catch(noop)
   } else if (section === 'servers' && id !== undefined && id !== 'new') {
     prefetchServer(trpc, queries, id, tab)
   }
@@ -66,20 +66,20 @@ function prefetchServer(trpc: Trpc, queries: QueryClient, serverId: string, tab:
   const view = listed?.data?.find((server) => server.id === serverId)
   if (view !== undefined && queries.getQueryData(getKey) === undefined)
     queries.setQueryData(getKey, view, { updatedAt: listed?.dataUpdatedAt })
-  void queries.prefetchQuery(trpc.servers.get.queryOptions({ serverId }))
+  queries.query(trpc.servers.get.queryOptions({ serverId })).catch(noop)
   if (tab === undefined || tab === 'players') {
-    void queries.prefetchQuery(trpc.access.get.queryOptions({ serverId }))
-    void queries.prefetchQuery(trpc.sharing.own.queryOptions({ serverId }))
+    queries.query(trpc.access.get.queryOptions({ serverId })).catch(noop)
+    queries.query(trpc.sharing.own.queryOptions({ serverId })).catch(noop)
   }
   // A mod search answers from a catalog outside Cubepals, and is asked for only on the page.
-  if (tab === 'mods') void queries.prefetchQuery(trpc.mods.list.queryOptions({ serverId }))
-  if (tab === 'world') void queries.prefetchQuery(trpc.worlds.list.queryOptions({ serverId }))
-  if (tab === 'backups') void queries.prefetchQuery(trpc.backups.list.queryOptions({ serverId }))
+  if (tab === 'mods') queries.query(trpc.mods.list.queryOptions({ serverId })).catch(noop)
+  if (tab === 'world') queries.query(trpc.worlds.list.queryOptions({ serverId })).catch(noop)
+  if (tab === 'backups') queries.query(trpc.backups.list.queryOptions({ serverId })).catch(noop)
   if (tab === 'backups' || tab === 'settings')
-    void queries.prefetchQuery(trpc.platform.capabilities.queryOptions())
+    queries.query(trpc.platform.capabilities.queryOptions()).catch(noop)
   if (tab === 'settings') {
-    void queries.prefetchQuery(trpc.servers.settingsOptions.queryOptions({ serverId }))
-    void queries.prefetchQuery(trpc.servers.revisions.queryOptions({ serverId }))
-    void queries.prefetchQuery(trpc.account.overview.queryOptions())
+    queries.query(trpc.servers.settingsOptions.queryOptions({ serverId })).catch(noop)
+    queries.query(trpc.servers.revisions.queryOptions({ serverId })).catch(noop)
+    queries.query(trpc.account.overview.queryOptions()).catch(noop)
   }
 }

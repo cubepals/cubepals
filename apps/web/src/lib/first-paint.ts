@@ -12,7 +12,7 @@
  * and asks in the browser, as it did before.
  */
 import type { AppRouter } from '@blockly/control/router'
-import { type DehydratedState, dehydrate, QueryClient } from '@tanstack/react-query'
+import { type DehydratedState, dehydrate, noop, QueryClient } from '@tanstack/react-query'
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import { createTRPCOptionsProxy } from '@trpc/tanstack-react-query'
 import { headers } from 'next/headers'
@@ -42,11 +42,11 @@ export async function firstPaint(): Promise<DehydratedState> {
   const trpc = createTRPCOptionsProxy<AppRouter>({ client, queryClient })
   // A read that fails is left out, and the page asks for it again in the browser.
   await Promise.all([
-    queryClient.prefetchQuery(trpc.account.me.queryOptions()),
-    queryClient.prefetchQuery(trpc.account.overview.queryOptions()),
-    queryClient.prefetchQuery(trpc.servers.list.queryOptions()),
-    queryClient.prefetchQuery(trpc.servers.trash.queryOptions()),
-    queryClient.prefetchQuery(trpc.billing.plans.queryOptions()),
+    queryClient.query(trpc.account.me.queryOptions()).catch(noop),
+    queryClient.query(trpc.account.overview.queryOptions()).catch(noop),
+    queryClient.query(trpc.servers.list.queryOptions()).catch(noop),
+    queryClient.query(trpc.servers.trash.queryOptions()).catch(noop),
+    queryClient.query(trpc.billing.plans.queryOptions()).catch(noop),
   ])
   return dehydrate(queryClient)
 }
