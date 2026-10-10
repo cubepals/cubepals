@@ -95,22 +95,27 @@ export class PolarWorld {
           ],
         },
       }
-    if (url.pathname === '/v1/checkouts/') return method === 'POST' ? this.#checkout(body) : this.#open(url)
-    if (url.pathname.startsWith('/v1/events/ingest') && method === 'POST')
-      return {
-        status: 200,
-        body: { inserted: (JSON.parse(body) as { events: unknown[] }).events.length, duplicates: 0 },
-      }
-    if (url.pathname === '/v1/refunds/' && method === 'POST') {
-      this.refunds.push(JSON.parse(body) as Record<string, unknown>)
-      return { status: 201, body: { id: `refund-${this.refunds.length}` } }
-    }
+    if (method === 'POST') return this.#write(url.pathname, body)
+    if (url.pathname === '/v1/checkouts/') return this.#open(url)
     if (url.pathname.startsWith('/v1/payments'))
       return list(this.declined.has(url.searchParams.get('order_id') ?? '') ? [{ status: 'failed' }] : [])
     const sub = id('/v1/subscriptions/')
     if (sub !== null) return { status: 200, body: this.subscriptions.get(sub) ?? subscription(sub) }
     const held = this.orders.get(id('/v1/orders/') ?? '')
     return held === undefined ? notFound : { status: 200, body: held }
+  }
+
+  /** What is sent to Polar: a checkout made, events taken, a refund asked for. */
+  #write(path: string, body: string): Answer {
+    if (path === '/v1/checkouts/') return this.#checkout(body)
+    if (path.startsWith('/v1/events/ingest'))
+      return {
+        status: 200,
+        body: { inserted: (JSON.parse(body) as { events: unknown[] }).events.length, duplicates: 0 },
+      }
+    if (path !== '/v1/refunds/') return notFound
+    this.refunds.push(JSON.parse(body) as Record<string, unknown>)
+    return { status: 201, body: { id: `refund-${this.refunds.length}` } }
   }
 
   /** A checkout made: kept open, an hour from now, as Polar answers it. */
