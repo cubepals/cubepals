@@ -35,6 +35,12 @@ variable "hosts" {
 resource "cloudflare_worker" "web" {
   account_id = var.account_id
   name       = var.worker
+
+  # Every deploy sets these from apps/web/wrangler.jsonc. Left to Terraform, each apply would turn
+  # observability and workers.dev off until the deploy after it turned them back on.
+  lifecycle {
+    ignore_changes = [observability, subdomain]
+  }
 }
 
 # Next's data cache and the prerendered pages (apps/web/open-next.config.ts), bound in
