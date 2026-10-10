@@ -106,8 +106,10 @@ resource "vercel_project" "web" {
     production_branch = var.production_branch
   }
   # A project without previews skips every build that isn't its production branch: a preview here
-  # would have no control plane to rewrite to. Exit 0 skips the build.
-  ignore_command = var.previews ? null : "[ \"$VERCEL_ENV\" != \"production\" ]"
+  # would have no control plane to rewrite to. Exit 0 skips the build. It reads VERCEL_ENV, which
+  # the build sees only with the system variables exposed; without them every build was skipped.
+  ignore_command                                    = var.previews ? null : "[ \"$VERCEL_ENV\" != \"production\" ]"
+  automatically_expose_system_environment_variables = true
 }
 
 resource "vercel_project_domain" "web" {
