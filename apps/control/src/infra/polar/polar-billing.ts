@@ -45,6 +45,7 @@ const CustomerState = z.object({
       product_id: z.string(),
       current_period_end: z.string(),
       cancel_at_period_end: z.boolean(),
+      created_at: z.string().nullish(),
     }),
   ),
 })
@@ -424,6 +425,7 @@ export class PolarBilling implements BillingProvider {
               status: paid.status,
               currentPeriodEnd: new Date(paid.current_period_end),
               cancelAtPeriodEnd: paid.cancel_at_period_end,
+              ...(paid.created_at ? { createdAt: new Date(paid.created_at) } : {}),
             },
     }
   }

@@ -1,14 +1,18 @@
 /**
  * Payments that carry extra play, through the real Polar adapter against a stand-in for Polar's
  * API: when one that didn't go through is owed (only once Polar, asked again, says it is still
- * unpaid), and what an owner pays it with, the balance: what clears it, and what never does.
+ * unpaid), and what an owner pays it with, the balance: what clears it, and what never does. And
+ * which of an account's subscriptions its billing reads, when it has more than one.
  *
  * Counting and sending extra play, and the first fail → told → owed → blocked run, are in
  * `extra-usage.test.ts`.
  */
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test'
+import { randomUUID } from 'node:crypto'
+import { schema } from '@blockly/db'
+import { eq } from 'drizzle-orm'
 import { hasDatabase } from '../../testing/harness.ts'
-import { PLUS_PRODUCT } from '../../testing/polar.ts'
+import { PLUS_PRODUCT, subscription } from '../../testing/polar.ts'
 import { BALANCE, PolarWorld } from '../../testing/polar-world.ts'
 import type { UserActor } from '../actor.ts'
 
@@ -268,4 +272,30 @@ test.skipIf(!hasDatabase)('a balance refunded leaves what it paid owed again', a
   ).toMatchObject({
     available: false,
   })
+})
+
+test.skipIf(!hasDatabase)('an old past-due subscription never hides a newer one that pays', async () => {
+  const owner = await w.h.user('Gil')
+  const old = randomUUID()
+  await w.standing(owner, old, { created_at: '2026-09-01T00:00:00Z' })
+  await w.ordered(owner, old, { created_at: new Date().toISOString() })
+  // Its renewal fails and Polar retries it; a new subscription, made since, pays.
+  w.subscriptions.set(
+    old,
+    subscription(old, { status: 'past_due', past_due_at: new Date().toISOString(), ended_at: null }),
+  )
+  const fresh = randomUUID()
+  await w.standing(owner, fresh, { created_at: new Date().toISOString() })
+  // Every sync writes the past-due one again, after the one that pays.
+  await w.standing(owner, fresh, { created_at: new Date().toISOString() })
+  const subs = await w.h.db
+    .select()
+    .from(schema.billingSubscriptions)
+    .where(eq(schema.billingSubscriptions.userId, owner.userId))
+  const byId = new Map(subs.map((row) => [row.externalSubscriptionId, row]))
+  expect(byId.get(old)).toMatchObject({ status: 'past_due' })
+  expect((byId.get(old)?.updatedAt.getTime() ?? 0) >= (byId.get(fresh)?.updatedAt.getTime() ?? 0)).toBe(true)
+  // The one that pays speaks for the account: extra play may be allowed.
+  expect(await w.h.app.accounts.allowExtraPlay(owner, 20)).toBe(20)
+  expect(await extraOf(owner)).toMatchObject({ may: true })
 })

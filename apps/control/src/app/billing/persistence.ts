@@ -43,6 +43,17 @@ export const RENEWAL_GRACE_MS = 3 * 24 * 60 * 60 * 1000
  */
 export const PAST_DUE_GRACE_MS = 7 * 24 * 60 * 60 * 1000
 
+/**
+ * Which of an account's subscriptions speaks for it: one that pays before one past due, before
+ * one that ended, and of those the one made last. Never the one written last: a past-due one is
+ * written on every sync, and must not hide a newer one that pays.
+ */
+const NEWEST = [
+  sql`case ${subscriptions.status} when 'active' then 0 when 'trialing' then 0 when 'past_due' then 1 else 2 end`,
+  desc(subscriptions.createdAt),
+  desc(subscriptions.updatedAt),
+]
+
 export interface SubscriptionRecord {
   userId: string
   provider: string
@@ -53,6 +64,7 @@ export interface SubscriptionRecord {
   currentPeriodEnd: Date | null
   cancelAtPeriodEnd: boolean
   pastDueAt: Date | null
+  createdAt: Date
   updatedAt: Date
 }
 
@@ -79,18 +91,18 @@ export async function billedPlan(q: Queryable, userId: string, now = new Date())
         ),
       ),
     )
-    .orderBy(desc(subscriptions.updatedAt))
+    .orderBy(...NEWEST)
     .limit(1)
   return row?.planKey ?? null
 }
 
-/** The account's newest subscription, paying or not, for the account page. */
+/** The account's subscription that speaks for it (`NEWEST`), paying or not, for the account page. */
 export async function latestSubscription(q: Queryable, userId: string): Promise<SubscriptionRecord | null> {
   const [row] = await q
     .select()
     .from(subscriptions)
     .where(eq(subscriptions.userId, userId))
-    .orderBy(desc(subscriptions.updatedAt))
+    .orderBy(...NEWEST)
     .limit(1)
   return row ?? null
 }
@@ -101,11 +113,12 @@ export async function latestSubscription(q: Queryable, userId: string): Promise<
  */
 export async function saveSubscription(
   tx: Tx,
-  subscription: Omit<SubscriptionRecord, 'updatedAt' | 'pastDueAt'>,
+  subscription: Omit<SubscriptionRecord, 'updatedAt' | 'pastDueAt' | 'createdAt'> & { createdAt?: Date },
 ): Promise<void> {
+  const made = subscription.createdAt === undefined ? {} : { createdAt: subscription.createdAt }
   await tx
     .insert(subscriptions)
-    .values({ ...subscription, pastDueAt: null, updatedAt: new Date() })
+    .values({ ...subscription, ...made, pastDueAt: null, updatedAt: new Date() })
     .onConflictDoUpdate({
       target: [subscriptions.provider, subscriptions.externalSubscriptionId],
       set: {
@@ -115,6 +128,7 @@ export async function saveSubscription(
         status: subscription.status,
         currentPeriodEnd: subscription.currentPeriodEnd,
         cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+        ...made,
         pastDueAt: null,
         updatedAt: new Date(),
       },

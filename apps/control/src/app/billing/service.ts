@@ -289,6 +289,7 @@ export class BillingService {
           status: paid.status,
           currentPeriodEnd: paid.currentPeriodEnd,
           cancelAtPeriodEnd: paid.cancelAtPeriodEnd,
+          ...(paid.createdAt === undefined ? {} : { createdAt: paid.createdAt }),
         })
       await settleOtherSubscriptions(tx, state.userId, provider, keep, pastDue)
       const after = (await loadStanding(tx, state.userId, now)).plan

@@ -76,6 +76,8 @@ export interface BillingState {
     status: 'active' | 'trialing'
     currentPeriodEnd: Date
     cancelAtPeriodEnd: boolean
+    /** When the provider made it, where it says; which of an account's subscriptions is newest. */
+    createdAt?: Date
   } | null
 }
 
