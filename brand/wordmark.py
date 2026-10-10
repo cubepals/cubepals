@@ -40,7 +40,7 @@ GAP = 14  # from the mark's box to the word's origin
 BASELINE = 50.1  # in the horizontal lockup
 STACK_BASELINE = 126.1  # in the stacked one
 
-INK = '#181818'
+INK = '#0d0d0d'
 PAPER = '#F8F7F5'
 BRAND = Path(__file__).parent
 NO_PNG = {'lockup-stacked-reversed'}  # brand/png has never held one

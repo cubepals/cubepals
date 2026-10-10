@@ -13,7 +13,7 @@ folder holds its source, in [Typst](https://typst.app):
 
 The logo comes from [`brand/`](../../brand/README.md) at render time, never copied here: the
 reversed horizontal lockup on the cover's Ink band, and the mark at its 20 px minimum in every
-page's header, with a quarter of its height clear around it. Ink `#181818` on Paper `#F8F7F5`
+page's header, with a quarter of its height clear around it. Ink `#0D0D0D` on Paper `#F8F7F5`
 are the brand's only colourways, and `style.typ` names them, with every other colour, as
 tokens. The wordmark is Figtree, carried by the lockups as outlines, and the product and the
 films are set in Geologica (`brand/README.md`, "The look around the mark"); the document keeps
