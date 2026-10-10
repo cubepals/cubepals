@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * Who moves on the chunk, and what they are doing there.
  *

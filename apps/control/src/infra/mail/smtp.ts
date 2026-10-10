@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import nodemailer, { type Transporter } from 'nodemailer'
 import type { Mailer } from '../../app/ports/platform.ts'
 

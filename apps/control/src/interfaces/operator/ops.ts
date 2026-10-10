@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Accounts and their servers, acted on from the command line, on the internal listener with the
  * operator token (docs/production.md): an account found and read, its plan and limits set, and a

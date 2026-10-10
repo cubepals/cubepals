@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * One policy: its title and date, what it says in short, then the whole of it, section by
  * section, with its contents alongside on a wide screen. While the policies are drafts, the

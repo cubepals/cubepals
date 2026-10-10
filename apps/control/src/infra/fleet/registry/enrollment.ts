@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * How a machine becomes a node: one-time tokens, a first enrollment, the same enrollment asked
  * again when its answer never arrived, and re-enrollment under an existing id.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The dev stack, served to the local network: `bun run dev:lan`.
  *

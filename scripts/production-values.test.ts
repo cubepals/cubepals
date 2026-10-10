@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What production.ts checks and hands to Terraform, on stand-in values only: none of them is real.
  * The environment's decided values come from its committed example, not an operator's own file.

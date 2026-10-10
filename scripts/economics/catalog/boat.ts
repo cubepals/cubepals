@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Boat sandboxes as catalog entries: one per size, priced per second while running.
  * Boat's plan tiers and the `xlarge` rate are not entries.

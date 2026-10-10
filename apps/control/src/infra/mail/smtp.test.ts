@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * SmtpMailer through the real nodemailer transport, against a stand-in SMTP server that answers
  * every command and keeps each message's DATA: what goes on the wire is what is checked.

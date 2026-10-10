@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Plain Minecraft on Paper (`runsOnPaper`): what a new plain server runs where Paper has a build,
  * the way back to Mojang's own server, and the servers made before it, which keep what they ran.

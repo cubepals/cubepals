@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What a day costs the owner at the provider, worked out from what the control plane recorded:
  * the price list and the arithmetic, nothing read or written. The spend watchdog

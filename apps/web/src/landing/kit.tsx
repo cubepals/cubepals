@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * What a section of proof is built from: `Section` (which also says where the camera stands,
  * when a section is a place on the page), `Demo`, `Facts`, and `Strata`, the edge between two

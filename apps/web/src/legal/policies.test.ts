@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The policies hold together: every page has its own path and anchors, every link lands on a page
  * and section that exist, and no markup is left for a reader to see.

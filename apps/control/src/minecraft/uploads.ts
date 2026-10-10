@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { isString, list, record, text } from './plain-data.ts'
 import { compareVersions } from './versions.ts'
 import { isLevelName, LEVEL_TYPES, type LevelType } from './worlds.ts'

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Tests for the review step each guide goes through: an unapproved one
  * is a 404 in production, noindex elsewhere, and left out of the index and the footers.

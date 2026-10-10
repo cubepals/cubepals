@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * World downloads (§15.5): what an archive's owner downloads, made from the archive on a worker
  * and kept in the store a day for the link to point at. The archive is the server's whole disk,

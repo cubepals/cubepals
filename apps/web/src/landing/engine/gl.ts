@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * Draws a voxel world as a one-bit print, from any angle: every surface is either ink or paper,
  * with a third colour for anything lit from within. Two passes at a low resolution, scaled up

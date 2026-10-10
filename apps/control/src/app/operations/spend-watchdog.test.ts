@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The spend watchdog (docs/money-guards.md), against a real database: the day's figure from
  * recorded play, the trip past the limit and only past it, what the trip stops (the edge's

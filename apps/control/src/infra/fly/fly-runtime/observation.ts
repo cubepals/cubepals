@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Reads a Fly machine's state and exit events as the port's observation: running, crashed and
  * when, or lost with its host. Pure: reading the machine from Fly belongs to `machines.ts`, and

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // biome-ignore-all lint/suspicious/noConsole: a benchmark script whose output is its log
 // Real protocol clients for the network benchmark: joins N offline-mode bots and keeps them online
 // until killed. Movement is driven server-side over RCON so every bot moves identically.

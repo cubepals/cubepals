@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Runs one-shot containers over volumes, as root, each removed when it ends and killed if it runs
  * past its deadline. It does not decide what a helper runs or which volumes it sees: the verbs

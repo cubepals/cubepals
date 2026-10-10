@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The question the fleet runtime asks `../placement.ts`: what a server needs of a node, judged
  * against every node as the ledger has it now, and a refusal put in words. It reads node summaries

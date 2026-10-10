@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { FreshStartView, WorldView } from '@blockly/contracts'
 import type { Db } from '@blockly/db'
 import { type Actor, authorize } from '../actor.ts'

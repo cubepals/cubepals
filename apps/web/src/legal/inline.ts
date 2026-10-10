@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The little markup a policy's sentences use, read into pieces a page renders: `[words](/path)`
  * for a link, `**words**` for the few that must stand out, and `{token}` for what the operator

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Minecraft as the application reaches it: a running server's console, whether it is ready, the
  * profiles and skins Mojang keeps for accounts, and the art a release's client jar holds for items.

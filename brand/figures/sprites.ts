@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The landing page's people, drawn for email: Moss, Kai, Noor and the worker, front view, to the
  * game's own proportions (a head 8 pixels square, a body 8 by 12, arms and legs 4 by 12), each

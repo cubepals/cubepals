@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 /* The inspector wears the product's own state colours, so what reads as asleep there reads as
    asleep here. Dark, because it sits beside a game and a terminal. */
 :root {

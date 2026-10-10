@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Item models in the shapes releases write them, made up here: nothing of Mojang's is in the
  * repository. 1.20.1 keeps an item's model at `models/item/<id>.json`; 1.21.4 and later name it in

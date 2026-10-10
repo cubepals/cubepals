@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What a new host fetches from the node endpoint before it has an identity, with no
  * authentication: nothing here is secret, and the host checks each piece before using it

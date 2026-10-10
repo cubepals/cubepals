@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Puts a backup's world in place of the server's (§9), with a way back: the current world is
  * snapshotted first, and the server returns to it if the backup doesn't come up. Who can join is

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { EdgeRoutes, SessionEvent, WakeResult } from '@blockly/contracts/edge'
 import type { Db } from '@blockly/db'
 import { ROUTABLE, type ServerStatus } from '../../domain/server/lifecycle.ts'

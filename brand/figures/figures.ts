@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The landing's people as the emails show them, written to apps/web/public/email/, where every
  * email loads them from its web origin:

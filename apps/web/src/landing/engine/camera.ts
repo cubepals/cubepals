@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The camera that travels the chunk. It is described the way a person would direct it: what to
  * look at, from which way round and how high, how much of the world to fit in the frame, how wide

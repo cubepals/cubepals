@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * DigitalOcean's CPU-Optimized droplet as a catalog entry, one VM per Minecraft server.
  * It has no shared constants; every field is written out in the entry.

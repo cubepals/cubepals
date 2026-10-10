@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The billing audit trail: every change to a subscription, and to the plan it gives,
  * is in the audit log with who made it, when, and from where (a webhook, the person, or the

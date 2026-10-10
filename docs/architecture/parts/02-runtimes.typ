@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 #import "../style.typ": *
 
 #part("Runtimes", [The one port every way of running a server goes through, how several run at once,

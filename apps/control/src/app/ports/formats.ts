@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Reading what people upload: containers and text formats, decoded into plain data. It knows
  * nothing about Minecraft; `minecraft/` says what the data means (§15.2).

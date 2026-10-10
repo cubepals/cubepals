@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Boat's and Docker's states, read as the port's observed states: a sandbox's state, and the
  * workload's `inspect` line. It asks Boat nothing: `boat-runtime.ts` reads a sandbox or runs

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { type Db, schema, type Tx } from '@blockly/db'
 import type { AccessEntry, AccessList, PlayerRef } from '../../domain/access/access.ts'
 import { entryKey } from '../../domain/access/access.ts'

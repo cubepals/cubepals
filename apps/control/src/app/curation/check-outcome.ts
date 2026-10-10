@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * How checking a release ends: what it found, kept together once it is verified, or a refusal in
  * a sentence an admin acts on. Both checks (`catalog-check.ts`, `own-check.ts`) end in one of

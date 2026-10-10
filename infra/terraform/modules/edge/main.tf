@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # The edge (§12, infra/fly/edge.toml): the app, its public addresses, which the play domains'
 # wildcard records point at, and how it reaches the control plane.
 

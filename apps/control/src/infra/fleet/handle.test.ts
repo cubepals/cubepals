@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, expect, test } from 'bun:test'
 import { decodeHandle, decodeSnapshot, encodeHandle, encodeSnapshot, type FleetRef } from './handle.ts'
 

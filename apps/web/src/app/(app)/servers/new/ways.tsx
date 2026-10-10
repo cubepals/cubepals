@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The answers to "What to play" on the create-server page: Minecraft's own three first, and every
  * other way behind "More ways to play", in two groups, game modes and modpacks. The templates'

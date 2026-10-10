@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A template that carries files Cubepals wrote and puts a plugin's jar in a folder of its own, as
  * a server made from it runs on the stand-in runtime: both arrive with the first start, both stay

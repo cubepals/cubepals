@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'

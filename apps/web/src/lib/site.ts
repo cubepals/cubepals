@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Where the site lives, whether search engines may index this deployment of it, and what a page
  * tells them about itself. Not for structured data, which is structured-data.tsx.

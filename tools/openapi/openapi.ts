@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // The typed contracts of the HTTP APIs Blockly calls. Each spec is vendored and pinned, the types
 // are generated from it, and CI fails if the committed types no longer match what the pinned
 // spec produces. blocklyd's specs are its own, written by its tests from its Rust wire types.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The plan facts the policies state, as they stood on the policies' date (`TERMS_VERSION`). The
  * Terms are an agreement, so they say these in words that don't move with every reading of the

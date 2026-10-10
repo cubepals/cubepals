@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The blocklyd rollout (docs/fleet.md, "Upgrades"): the control plane offers its own blocklyd to
  * nodes running an older one, one node per region at a time, in the answer to a heartbeat.

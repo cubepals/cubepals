@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Document control: what this document is, its status, and its revisions, oldest first. Add a
 // revision whenever what the document says changes; the cover, the footer and the revision table
 // all read it from here.

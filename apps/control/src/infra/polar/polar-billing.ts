@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { PolarClientError, PolarError, PolarRateLimitError } from '@polar-sh/sdk'
 import { createPolar, webhooks } from '@polar-sh/sdk/2026-10'
 import { z } from 'zod'

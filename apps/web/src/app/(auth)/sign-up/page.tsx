@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Sign-up: the providers and email, with where the person came from carried through to the
  * first page after, or the waitlist when Cubepals is full for now (docs/money-guards.md). The

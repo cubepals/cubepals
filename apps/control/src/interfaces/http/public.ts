@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { PublicServerView } from '@blockly/contracts'
 import { type Context, Hono } from 'hono'
 import { PNG } from 'pngjs'

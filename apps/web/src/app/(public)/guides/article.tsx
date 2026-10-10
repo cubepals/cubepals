@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What every guide page is made of: its metadata, its frame (where it sits, its date, the one
  * button at the end, its markup), and the pieces its words use: a picture from the app, a link to

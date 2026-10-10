@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Reaches one running server for its players: their facts from the console while they are on,
  * their files otherwise (through the runtime's exec, as access files are read, on every runtime),

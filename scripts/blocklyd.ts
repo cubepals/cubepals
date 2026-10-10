@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The blocklyd this control plane hands its hosts: one release of cubepals/blocklyd, pinned by
  * digest in apps/control/Dockerfile, with copies of the release's files the control plane reads

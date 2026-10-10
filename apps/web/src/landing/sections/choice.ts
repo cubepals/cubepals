@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * What the visitor answered on the landing page's own create form: what to play, what to call it,
  * and, under the grass, how many play. One small store outside React, in the manner of stage.ts, so

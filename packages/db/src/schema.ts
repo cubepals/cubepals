@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Every table Blockly keeps, as Drizzle defines them. The migrations are generated from these
  * (drizzle.config.ts reads this file), and `@blockly/db` hands them out as `schema`. Each part is

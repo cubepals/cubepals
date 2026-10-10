@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The page's models: people, the dead, a worker, a sheep. Each is a handful of boxes set out the
  * way the game builds its own figures (a head, a body, two arms and two legs, to the game's own

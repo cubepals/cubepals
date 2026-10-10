@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * How an archive goes to an S3-compatible store: in one PUT up to the strictest store's limit, in
  * parts above it. Cloudflare R2 refuses a single PUT over 5 GiB less 5 MiB, and S3 over 5 GiB; a

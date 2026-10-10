@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The Terraform side of `bun scripts/fleet.ts add` and `remove`: a Hetzner Cloud type's price from
  * the price catalog, the environment's fleet-nodes.auto.tfvars.json, and `terraform apply` for

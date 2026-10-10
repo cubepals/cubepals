@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Moves a server (§9): to another region, off a host that was lost (rebuilt from its newest
  * snapshot, its owner told), or onto another runtime through the archive store. A move the runtime

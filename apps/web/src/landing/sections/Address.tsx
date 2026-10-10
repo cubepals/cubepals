@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The first stratum under the grass: the edge. Game servers have no public address; every player
  * arrives at one door, which reads the name they typed and sends them through, and answers for a

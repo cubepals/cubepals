@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { RuntimeHandle } from './runtime.ts'
 
 /** A deployment's addressing. The only address knowledge the application layer has. */

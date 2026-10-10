@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A server's slug is the only addressing state Blockly owns. The address people type is the slug
  * plus deployment configuration, so a slug must be a valid DNS label on its own.

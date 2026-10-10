@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** What platform admins call: accounts, listings, packs, the platform, servers and the audit log. */
 import type { AccountDetailView, AccountView } from '@blockly/contracts'
 import {

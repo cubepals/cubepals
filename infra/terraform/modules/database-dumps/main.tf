@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Production's nightly database dumps (.github/workflows/database-dump.yml): a private R2 bucket
 # that deletes each dump 30 days after it was written. No app reads it. Its S3 credentials are an
 # R2 API token made in the dashboard for this bucket alone, kept in production.env and handed to the

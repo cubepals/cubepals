@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/*
  * The ledger: a long, tight list of names and values, the way a clerk would keep it. Its length is
  * the point, so nothing here makes it shorter than it is: one column on a narrow screen, two where
  * the column it sits in has the room (the column's width, not the window's, decides).

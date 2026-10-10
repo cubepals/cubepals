@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Reads and writes the strings a fake runtime issues as handles: `<provider>:v1:` for a server's
  * machine, `<provider>-snap:v1:` for a snapshot. Only the fake reads them; everyone else stores the

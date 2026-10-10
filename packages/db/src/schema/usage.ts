@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * When servers ran and who played on them: the power intervals play is metered by, the
  * disposable presence a sync rewrites, the play counted a day at a time, and everyone a server has

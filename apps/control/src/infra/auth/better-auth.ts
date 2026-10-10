@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { SIGNUPS_FULL, type SignUpAgreement } from '@blockly/contracts'
 import { type Db, schema } from '@blockly/db'
 import { betterAuth } from 'better-auth'

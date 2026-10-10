@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * How anybody on the chunk gets about. A figure this small is unsettling the moment it hurries,
  * slides or snaps, so there is one way to walk and everyone uses it: turn on the spot to face

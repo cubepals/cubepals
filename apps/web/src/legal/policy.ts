@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What a policy is made of, for the pages that show one. A policy is sections of blocks; a block
  * is a paragraph, a list, numbered steps or a small table, and each sentence in one may use the

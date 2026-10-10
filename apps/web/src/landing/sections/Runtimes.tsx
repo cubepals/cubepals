@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The runtimes stratum, the first of the dark ground: one port between Blockly and whatever runs a
  * server, and the policy that decides which runtime a new server goes to. The port and three

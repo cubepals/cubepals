@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { ModEnvironment } from '../domain/mods/catalog.ts'
 import type { MemoryTier } from '../domain/server/size.ts'
 import { serverEnvironment } from './mods.ts'

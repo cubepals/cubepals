@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What a revision places on the volume itself, run the way a server starts: the files Cubepals
  * carries, replaced at every start, and a plugin whose jar goes in a folder of its own, fetched and

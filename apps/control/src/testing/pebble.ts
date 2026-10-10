@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Pebble, Let's Encrypt's test CA, and its DNS test server: stand-ins for a real CA and DNS provider
  * in the ACME tests. The root below signs Pebble's own HTTPS listener; it is public, published in

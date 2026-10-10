@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Local development's stand-in for Polar (docs/local-development.md), which configuration allows
  * nowhere else. Checkout and the customer portal are this adapter's own pages (checkout-pages.ts),

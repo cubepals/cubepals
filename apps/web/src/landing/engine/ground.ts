@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * What is stood on. Every frame, whoever and whatever is drawn resting on the chunk's blocks (a
  * figure's feet, a sheep, the tower, the server, a chest set down) says where, and the blocks

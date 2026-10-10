@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { redirect } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { firstPaint } from '../../lib/first-paint'

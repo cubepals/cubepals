@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Puts a running server onto a new configuration (§9), with a way back: settings the game takes
  * as people play go by command, anything else waits for a snapshot when it rewrites the world,

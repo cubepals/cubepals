@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A node's row as the registry reads it from `fleet_nodes`, with what every part of the registry
  * shares: its options, its refusals, and the region lock placement takes.

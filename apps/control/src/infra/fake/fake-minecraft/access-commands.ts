@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Answers the console commands that change who may play on a fake server (whitelist, op and deop,
  * ban and pardon, by name or address) in vanilla's own words, and makes the change they report. It

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Cubepals' version numbers, read from the repository's tags rather than kept in a file, so that
  * nothing has to commit to `main` to release.

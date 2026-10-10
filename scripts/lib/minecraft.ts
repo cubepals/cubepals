@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A Minecraft client just far enough to be a player at the edge: the handshake and login the
  * game sends when someone clicks Join, and a status ping. The smoke test and the staging check

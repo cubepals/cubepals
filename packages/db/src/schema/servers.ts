@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A Minecraft server and what it is made of: its record and status, its revisions and worlds, the
  * runtime binding its compute lives behind, and the operations that change it. Who may join is

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What went wrong, read out of the server's own output (§15.6). Minecraft's failures are long
  * Java stack traces; what someone needs is the one sentence that says what happened and the one

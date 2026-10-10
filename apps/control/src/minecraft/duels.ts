@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What Blockly knows about Duels by Dartanman, the plugin the Duels template plays: the files
  * Cubepals writes for it, so two friends can fight the moment they join, with nobody standing on

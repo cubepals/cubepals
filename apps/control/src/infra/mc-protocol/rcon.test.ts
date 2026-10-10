@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { afterEach, describe, expect, test } from 'bun:test'
 import { createServer, type Server, type Socket } from 'node:net'
 import type { Locks } from '../../app/ports/locks.ts'

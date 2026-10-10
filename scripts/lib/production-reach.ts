@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Production's operators' API reached from this machine, for `scripts/ops.ts --production` and
  * `scripts/production-check.ts`: `fly proxy` to the api role's internal listener on

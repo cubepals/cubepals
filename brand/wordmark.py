@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 # /// script
 # requires-python = ">=3.11"
 # dependencies = ["fonttools", "brotli", "resvg-py"]

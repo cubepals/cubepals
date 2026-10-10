@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Writes .env from .env.example with fresh secrets in place of its public local-only ones. Leaves an
 // existing .env alone. Optional: `cp .env.example .env` runs as it is.
 import { randomBytes } from 'node:crypto'

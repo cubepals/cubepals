@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Coupon codes for the paid plans, as admins make, list and delete them. The billing provider
  * holds them and applies them when a customer types one at checkout; nothing about them is kept

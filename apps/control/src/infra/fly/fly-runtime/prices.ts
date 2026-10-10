@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Prices a Fly server from Fly's list prices: an hour of running, by its CPUs and memory, and a
  * month of its volume. It decides nothing; which runtime is cheaper is `app/runtimes/economics.ts`.

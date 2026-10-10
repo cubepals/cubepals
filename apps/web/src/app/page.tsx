@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 import type { Metadata } from 'next'
 import { Chat } from '../landing/Chat'
 import { Chunk } from '../landing/Chunk'

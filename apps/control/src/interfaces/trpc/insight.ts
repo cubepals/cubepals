@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { FeedbackInput, MomentAnswerInput, MomentAskInput, MomentRef } from '@blockly/contracts'
 import { authedProcedure, router } from './trpc.ts'
 

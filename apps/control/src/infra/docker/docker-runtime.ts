@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The local provider: one container and one named volume per server, on a network only the edge
  * also joins. It knows nothing about Minecraft; it runs whatever spec it is given.

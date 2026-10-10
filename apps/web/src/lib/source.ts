@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Where someone came from, as the link that brought them said: `utm_source` or `ref`, and the
  * rest of a campaign's tags (`utm_medium`, `utm_campaign`, `utm_content`, `utm_term`). They ride

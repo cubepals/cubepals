@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Datapacks end to end: found and resolved like mods, kept apart from them on the server. A vanilla
  * world stays vanilla for one, and a plan that doesn't run them says which does.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { dollars, EXTRA_HOUR_CENTS } from '../../../legal/figures'

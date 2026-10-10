@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, expect, test } from 'bun:test'
 import { CLIENT_ADDRESS_HEADER } from '../../app/ports/auth.ts'
 import { type AddressTrust, FORWARDED_BY, FORWARDED_CLIENT, withClientAddress } from './client-address.ts'

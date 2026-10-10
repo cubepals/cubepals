@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A copy of a world sent off its node: a snapshot's upload to the archive store, tried a few times
  * and taken over once stale; an export of one to a target the application names; and a move's

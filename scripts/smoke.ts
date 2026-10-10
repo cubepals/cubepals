@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A smoke test over the running dev stack (`docker compose up -d && bun run dev`): one account
  * and one server, taken through what a person actually does with it — created, looked at in game,

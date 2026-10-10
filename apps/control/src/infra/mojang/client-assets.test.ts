@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The client jar as Mojang's endpoints serve it, played by a tiny jar made here with made-up
  * textures: CI never downloads Mojang's. What is checked is what keeps Blockly honest about the

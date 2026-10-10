@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A balance: what an account owes that the billing provider can no longer collect on its own (a
  * renewal carrying extra play whose subscription ended, which the provider voids), paid as a

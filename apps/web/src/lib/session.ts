@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { headers } from 'next/headers'
 import { clientAddressHeaders } from './client-address'
 import { apiUpstream } from './upstream'

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { FleetPage, FleetRegionView, FleetServerView } from '@blockly/contracts'
 import { type Db, schema } from '@blockly/db'
 import { and, desc, eq, gt, ilike, inArray, lt, ne, or, type SQL, sql } from 'drizzle-orm'

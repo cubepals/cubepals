@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A server's Fly app: its name, which ties it to one deployment, the app itself on a private
  * network of its own, its Flycast address and its secrets. The app outlives its machines and

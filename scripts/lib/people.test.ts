@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A script's person gets an account the way the sign-up page gets one: agreeing to the Terms in
  * force, confirmed through the mail, then signed in. The web app and the mail catcher are

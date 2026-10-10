@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 #import "../style.typ": *
 
 #part("Orientation", [What Blockly is, the map of the whole system, and where its code lives.])

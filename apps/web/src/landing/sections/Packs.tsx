@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The packs stratum: a modpack is one choice, and everything a host usually asks about it (the
  * loader, the Minecraft, the Java, which mods a server can run, how much memory) Blockly works out

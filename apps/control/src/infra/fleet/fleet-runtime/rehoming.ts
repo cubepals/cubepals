@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A world's new home under a new epoch, after its first: a restore, a planned move off its node,
  * a move to a node with room to start, and a rebuild once its host was confirmed lost. Each takes

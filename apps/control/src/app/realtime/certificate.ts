@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { X509Certificate } from 'node:crypto'
 import { type Queryable, schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'

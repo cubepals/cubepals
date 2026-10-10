@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Whether the node endpoint itself is up: each endpoint process records that it serves, and the
  * registry reads how long nodes have had somewhere to send heartbeats.

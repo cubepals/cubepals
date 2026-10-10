@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * cubepals.com as the Cloudflare Worker `blockly-web`: production's values for lib/web-worker.ts,
  * which builds the Worker from this checkout, checks the build and deploys it, and the way back to

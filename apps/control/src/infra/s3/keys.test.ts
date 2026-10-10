@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, expect, test } from 'bun:test'
 import { S3ArchiveStore } from './s3-archive-store.ts'
 

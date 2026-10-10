@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { z } from 'zod'
 
 /** What this Blockly deployment can do at all, whoever is asking (§15.4). */

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { type PackImportJson, type PackLeftOutJson, type Queryable, schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
 import type { Loader } from '../../domain/revision/revision.ts'

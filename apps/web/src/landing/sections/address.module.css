@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/*
  * The edge: the one address every player arrives at. A server-list row, the wire a ping or a join
  * travels, and the handshake the edge reads.
  *

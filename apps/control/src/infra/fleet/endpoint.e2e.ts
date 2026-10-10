@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The node endpoint in a process of its own, for fleet-runtime.e2e.test.ts. It runs on Node, as
  * production runs it: Bun's TLS server demands a client certificate whenever it asks for one, so a

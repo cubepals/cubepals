@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { createHash } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'

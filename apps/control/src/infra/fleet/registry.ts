@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The node registry (docs/fleet.md, "Nodes"): enrollment tokens, enrollment, heartbeats,
  * certificate renewal, and the lifecycle an operator drives. Every write is one transaction, and

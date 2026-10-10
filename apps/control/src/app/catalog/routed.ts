@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Modrinth and the catalogs beside it as one ModCatalog, so resolution, the trust cache and
  * every service keep asking one catalog. A question about an id goes to the catalog the id names

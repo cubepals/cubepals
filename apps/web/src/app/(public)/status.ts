@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** What the public endpoints answer, as much of it as a preview needs. */
 export interface PublicStatus {
   name: string

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Choosing a node for a workload (docs/fleet.md, "Placement"): filter, then score. Pure: it
  * reads a snapshot of the nodes and of the reservation ledger and returns a decision with every

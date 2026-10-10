@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Stops provider compute that runs with no running server behind it, and destroys compute that no
  * live binding holds: what a purged server or a move left behind. Compute whose server the

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 blank_issues_enabled: false
 contact_links:
   - name: Help with your server or account on cubepals.com

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Hangar (hangar.papermc.io), PaperMC's plugin catalog, as a ModCatalog beside Modrinth, on the
  * client generated from Hangar's spec. What its live API showed, recorded in `fixtures/` on

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * An admin moving a reviewed release from one state to the next (docs/modpack-templates.md § A
  * release's life): offering it, withdrawing it, or asking for it to be checked again, each

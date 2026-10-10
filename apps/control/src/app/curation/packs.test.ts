@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, expect, test } from 'bun:test'
 import { isPackKey, isReleaseVersion, licenceKind } from '../../domain/mods/curation.ts'
 import { TEMPLATES } from '../setups/templates.ts'

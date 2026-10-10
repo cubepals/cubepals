@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Live administration: who can join, who operates the server, who is banned. Changed while the
  * server runs, never through a revision. Two writers exist — Blockly and in-game operators — and

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * One player's page (§15.1): where they are and where they died, their game mode, what they
  * carry and a few stats, and the three things the owner can do for them there — back to where

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What a world download holds. An archive is the server's whole disk, kept that way for restores,
  * moves and stored worlds; what its owner downloads is the part that is theirs to take: each

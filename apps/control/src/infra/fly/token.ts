@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A Fly token read the way fly-go's tokens package reads one: an optional `FlyV1` or `Bearer`
  * scheme, then comma-separated macaroons (fm1r_, fm1a_, fm2_) and user tokens. Macaroons are sent

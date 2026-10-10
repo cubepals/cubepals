@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 #import "../style.typ": *
 
 #part("Security and operations", [What is protected and from whom, what operators can see and do,

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Local development (docs/local-development.md): a deployment whose web app is on this machine or
  * its local network, as `bun run dev` and `bun run dev:lan` serve it. Nothing deployed is, since

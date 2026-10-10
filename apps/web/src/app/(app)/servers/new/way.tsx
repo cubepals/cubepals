@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * One way to play on the create-server page, as a row to pick. It does not decide what picking
  * it does or whether the plan runs it: the page passes that in.

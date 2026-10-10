@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What the operator CLIs, `fleet.ts`, `runtimes.ts` and `ops.ts`, share: reading their arguments,
  * failing under their own name, and calling their part of the control plane's operator API as the

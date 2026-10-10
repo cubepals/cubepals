@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * Holds the cast to how people move: never more of them than a scene has, nobody within a block
  * of anybody, nobody sliding sideways or backwards, jumping, hurrying or spinning. Every scene on

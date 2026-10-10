@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A sandbox still bringing its workload back after a resume answers "wait", and is asked again;
  * one Boat never saved is told it has nothing to wait for. Boat here answers each command with

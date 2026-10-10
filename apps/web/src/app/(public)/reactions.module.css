@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
  * A server's stars and notes: two quiet counts at the end of a row, on its card in the directory
  * and on its own page. They sit above a card's stretched link, so pressing one never opens the
  * server instead.

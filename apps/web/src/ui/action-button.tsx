@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 'use client'
 
 import { AlertTriangle, Check, Loader2 } from 'lucide-react'

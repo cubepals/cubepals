@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Brings a server's compute up and boots it, as provision, start and restart do. A first start
  * with no room falls back to another runtime here, and a start onto a change that rewrites the

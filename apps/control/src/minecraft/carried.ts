@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What a revision puts on the volume itself, before the image starts: the files Cubepals carries
  * for it, and the plugins whose jar goes in a folder of their own. The image has a place for

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Renders the architecture document, docs/architecture/Blockly-Architecture.pdf, from its Typst
  * source in docs/architecture, stamped with the commit, branch and date it was made from.

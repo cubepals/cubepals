@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Prepares a fake server's volume the way the itzg image does before the game starts, as
  * mc-image-helper 1.68.0 does it: the jars its environment lists, then the Modrinth pack it names;

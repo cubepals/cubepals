@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Socket } from 'node:net'
 import { LockBusy, type Locks } from '../../app/ports/locks.ts'
 import { type ConsoleTarget, ConsoleUnavailable, type ServerConsole } from '../../app/ports/minecraft.ts'

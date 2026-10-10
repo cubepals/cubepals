@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The edges of what extra play counts and bills, through the real Polar adapter against a
  * stand-in for Polar's API: counting stops at the moment extra play did (a cancel, a failed

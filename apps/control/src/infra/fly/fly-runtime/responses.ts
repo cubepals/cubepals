@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Turns an answer from the Fly Machines API into its value or the error it means: a `FlyApiError`,
  * or the port's `RuntimeFull` when a host has no room. It makes no calls of its own; which call

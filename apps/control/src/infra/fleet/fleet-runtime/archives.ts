@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A world's copies as rows in `fleet_archives`: a snapshot taken on its node, kept while anything
  * can still restore from it, and deleted (in the store and on its node) once nothing does, now

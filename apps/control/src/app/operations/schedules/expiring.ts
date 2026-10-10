@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Sends to the trash, as its owner deleting it would, a server whose time is up: one made for a
  * while once its end comes, and a world unplayed for longer than its plan keeps one, never without

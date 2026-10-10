@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
  * Sign in and sign up: a 6 + 6 split on desktop, the form on canvas and a world render in a
  * radius-2xl block beside it. Fields sit space-24 apart, as in every Blockly form.
  */

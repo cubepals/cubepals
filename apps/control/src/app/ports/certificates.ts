@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** A certificate a CA issued for a hostname, with its private key. */
 export interface IssuedCertificate {
   /** The leaf first, then its chain. */

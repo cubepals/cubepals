@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A catalog of compute offerings and their list prices: per-second runtimes, a VM per server, and
  * machines that run many servers. `scripts/fleet-hetzner.ts` reads a fleet node's monthly price

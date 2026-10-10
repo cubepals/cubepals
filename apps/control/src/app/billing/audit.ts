@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The audit trail of what people pay for: every change to a subscription and to the
  * plan it gives an account, with who or what made it and where it came from, so a billing dispute

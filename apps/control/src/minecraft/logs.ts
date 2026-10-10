@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Reads a line of server output the way the console shows it: chat first, then severity. */
 
 export type ConsoleLevel = 'info' | 'warn' | 'error' | 'chat' | 'setup'

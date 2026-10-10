@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 name: Database dump
 
 # Production's database, dumped every night to a private R2 bucket that keeps each dump 30 days

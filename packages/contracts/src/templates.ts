@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What to play, as the create page shows it before it knows who is looking: each template's name,
  * line and picture. Whether a plan runs one is the account's own answer (`TemplateView`), and what

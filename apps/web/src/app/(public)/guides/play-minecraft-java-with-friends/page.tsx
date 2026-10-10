@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The guide to playing Minecraft: Java Edition with friends. What it says about Open to LAN,
  * Essential and e4mc comes from their own pages, linked where they're named; the joining steps were

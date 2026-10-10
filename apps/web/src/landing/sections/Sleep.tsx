@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The sleep stratum: a server is awake only around the people on it, and that is what a player's
  * hours are counted by. The demonstration is

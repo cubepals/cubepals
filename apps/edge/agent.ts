@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // The edge agent: the only code that knows mc-router exists. It turns the control plane's edge
 // protocol (routes, wake, idle, sessions) into mc-router's routes file and webhooks, and
 // supervises mc-router itself. Replacing mc-router means rewriting this file, nothing else.

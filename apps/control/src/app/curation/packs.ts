@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { PlayIcon } from '@blockly/contracts'
 import type { Distribution, LicenceReading, Permission } from '../../domain/mods/curation.ts'
 

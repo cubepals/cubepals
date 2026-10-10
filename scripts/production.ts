@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Production, from nothing (docs/production.md). Every secret and account value lives in one file
  * the operator keeps, local/production/production.env, and every decided one in the environment's

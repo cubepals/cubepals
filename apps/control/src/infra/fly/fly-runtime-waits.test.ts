@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * FlyRuntime against an in-memory Fly that takes a moment to finish a stop or a destroy, as the
  * real one did on staging (2026-10-07): a start waits for the stop, and a volume for its machine.

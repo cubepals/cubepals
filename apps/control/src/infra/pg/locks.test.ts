@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { afterAll, describe, expect, test } from 'bun:test'
 import { createPool } from '@blockly/db'
 import { LockBusy } from '../../app/ports/locks.ts'

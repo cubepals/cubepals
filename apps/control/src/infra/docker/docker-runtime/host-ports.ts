@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Hands out host ports for the control plane's side of a server, one claim at a time, so two
  * servers made at once never get the same one. It does not make the container that records them:

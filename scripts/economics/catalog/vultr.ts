@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Every Vultr offering in the catalog, written on `VULTR_COMMON`.
  * Its VMs (one per Minecraft server) and its bare metal are two arrays, because each sits in a

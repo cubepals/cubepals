@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
 /* The two moments the camera stands back: the whole chunk, with the rooms' names on it. */
 
 /* Doubled so it outranks the kit's own section padding, whichever stylesheet loads last. */

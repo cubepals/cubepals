@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Decides who a name is to a fake server, the way vanilla 26.x does (measured on real servers on
  * 2026-09-23): its name cache, `usercache.json`, then Mojang, then, where accounts aren't

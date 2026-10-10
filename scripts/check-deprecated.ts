@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Fails on any use of something marked @deprecated. Run: bun run check:deprecated
 //
 // TypeScript already works out every deprecation — it is what draws the strikethrough in an

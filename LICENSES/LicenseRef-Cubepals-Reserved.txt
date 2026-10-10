@@ -1,0 +1,20 @@
+Cubepals brand and site content: all rights reserved
+
+Copyright (C) 2026 The Cubepals Authors <legal@cubepals.com>. All rights reserved.
+
+This covers the Cubepals brand and the content of the Cubepals site: the Cubepals name, mark and
+wordmark, the landing page, the site's pictures and the words of its guides. Each file it covers
+says so, in its own SPDX lines or in REUSE.toml.
+
+These files are not licensed under the GNU Affero General Public License, or under any other
+licence. You may not copy, modify, distribute, publish or otherwise reuse them, in whole or in
+part, without written permission from the copyright holder, except as the law allows without one
+and as brand/LICENSE.md permits. brand/LICENSE.md has the full terms, including the limited use
+of the brand to refer to Cubepals.
+
+Anything of someone else's inside these files stays under its owner's terms. Nothing here
+restricts a right the AGPL gives you in the rest of the code.
+
+The files are provided "as is", without warranty of any kind.
+
+Permission: legal@cubepals.com

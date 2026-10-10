@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Runs one shell job on a throwaway Fly machine mounted on a volume, and reads back the one line
  * it leaves; the machine goes whether the job succeeds or not. What the jobs do is
