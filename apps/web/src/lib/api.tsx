@@ -3,11 +3,23 @@
 import type { AppErrorCode } from '@blockly/contracts'
 import type { AppRouter } from '@blockly/control/router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { createTRPCClient, httpBatchLink, TRPCClientError } from '@trpc/client'
+import { createTRPCClient, httpBatchLink, httpLink, splitLink, TRPCClientError } from '@trpc/client'
 import { createTRPCContext } from '@trpc/tanstack-react-query'
 import { type ReactNode, useState } from 'react'
 
 export const { TRPCProvider, useTRPC, useTRPCClient } = createTRPCContext<AppRouter>()
+
+/**
+ * Calls answered by a catalog outside Cubepals (Modrinth, CurseForge), each sent on its own. A
+ * batch answers only when its slowest call does, and a catalog that is slow or rate-limited would
+ * hold back everything asked for beside it, the create page's own choices included.
+ */
+const OUTSIDE = new Set([
+  'servers.searchModpacks',
+  'servers.packFromLink',
+  'servers.packVersions',
+  'mods.search',
+])
 
 /**
  * The browser only ever talks to its own origin: /api is rewritten to the control plane, so
@@ -23,7 +35,15 @@ export function ApiProvider({ children }: { children: ReactNode }) {
       }),
   )
   const [trpcClient] = useState(() =>
-    createTRPCClient<AppRouter>({ links: [httpBatchLink({ url: '/api/trpc' })] }),
+    createTRPCClient<AppRouter>({
+      links: [
+        splitLink({
+          condition: (op) => OUTSIDE.has(op.path),
+          true: httpLink({ url: '/api/trpc' }),
+          false: httpBatchLink({ url: '/api/trpc' }),
+        }),
+      ],
+    }),
   )
   return (
     <QueryClientProvider client={queryClient}>
