@@ -21,6 +21,17 @@ terraform {
   backend "s3" {}
 }
 
+# The realtime hostname's Fly validation records, made by hand at the first deploy.
+import {
+  to = module.environment.module.dns.cloudflare_dns_record.realtime_ownership
+  id = "${var.cloudflare_zone_id}/d525c267bc753234ffeb9769279ff89b"
+}
+
+import {
+  to = module.environment.module.dns.cloudflare_dns_record.realtime_acme
+  id = "${var.cloudflare_zone_id}/2312f8f616bc62e9106a5b33bea43841"
+}
+
 provider "fly" {
   org_slug = var.fly_org
 }
