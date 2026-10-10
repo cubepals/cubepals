@@ -327,7 +327,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/config/schema.ts › function inconsistencies": {
-      "n": 72,
+      "n": 68,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/domain/access/reconcile.ts › function settle": {
@@ -1142,10 +1142,6 @@
     },
     "apps/control/src/config/config.test.ts › describe configuration": {
       "n": 228,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    },
-    "apps/control/src/config/schema.ts › function inconsistencies": {
-      "n": 102,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/domain/account/entitlements.test.ts › describe entitlements": {

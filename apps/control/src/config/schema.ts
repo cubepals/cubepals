@@ -307,6 +307,22 @@ export const isLocal = (host: string) => {
 /** How .env.example's secrets start: values anyone can read, for local development only. */
 export const LOCAL_ONLY = 'local-only-'
 
+/**
+ * A trusted pattern names its site: `*.workers.dev` would trust anyone's Worker. On workers.dev the
+ * site's name is the account's subdomain, after the Worker's own label.
+ */
+function trustedOriginProblems(patterns: readonly string[]): string[] {
+  return patterns.flatMap((pattern) => {
+    const [first = '', ...rest] = pattern.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').split('.')
+    const accountless = first.includes('*') && rest.join('.') === 'workers.dev'
+    return first === '*' || rest.some((label) => label.includes('*')) || accountless
+      ? [
+          `WEB_TRUSTED_ORIGINS trusts every site matching ${pattern}. Name the site, as in https://pr-*-blockly-web-staging.<subdomain>.workers.dev.`,
+        ]
+      : []
+  })
+}
+
 /** Consistency checks a schema cannot express. Each returns a sentence naming the fix. */
 export function inconsistencies(config: DeploymentConfig): string[] {
   const problems: string[] = []
@@ -391,14 +407,7 @@ export function inconsistencies(config: DeploymentConfig): string[] {
         `RUNTIME_PROVIDER=fake runs no real servers and forgets them on restart; ${web.origin} is a deployed origin. Use docker or fly.`,
       )
   }
-  // A trusted pattern names its site: `*.workers.dev` would trust anyone's Worker.
-  for (const pattern of config.web.trustedOrigins) {
-    const [first = '', ...rest] = pattern.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').split('.')
-    if (first === '*' || rest.some((label) => label.includes('*')))
-      problems.push(
-        `WEB_TRUSTED_ORIGINS trusts every site matching ${pattern}. Name the site, as in https://pr-*-blockly-web-staging.<subdomain>.workers.dev.`,
-      )
-  }
+  problems.push(...trustedOriginProblems(config.web.trustedOrigins))
   if (config.billing?.provider === 'polar') {
     const sold = Object.keys(config.billing.products)
     for (const plan of sold)

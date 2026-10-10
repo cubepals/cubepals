@@ -1,7 +1,8 @@
 /**
  * The web app as a Cloudflare Worker (apps/web/wrangler.jsonc) for one environment: built from this
- * checkout with that environment's values, checked, deployed, and put back to the version that ran
- * before. production-website.ts gives it production's values; staging.ts gives it staging's.
+ * checkout with that environment's values, checked, deployed or uploaded as a preview, and put back
+ * to the version that ran before. production-website.ts gives it production's values;
+ * staging-website.ts gives it staging's.
  *
  * Next writes some values into the build (the /api rewrite's target, robots.txt, the PostHog token,
  * the version) and reads others as it runs, so one set of values makes both: the build's
@@ -39,8 +40,8 @@ export interface WorkerSite {
   deploymentId: string
   /** Whether search engines may index it: production's alone. */
   indexable: boolean
-  /** WEB_PROXY_SECRET, the control plane's. */
-  proxySecret: string
+  /** WEB_PROXY_SECRET, the control plane's. Without it, a version keeps the one the Worker has. */
+  proxySecret?: string
   /** NEXT_PUBLIC_POSTHOG_TOKEN; without it the browser sends PostHog nothing. */
   posthogToken?: string
   /** POSTHOG_PERSONAL_API_KEY and POSTHOG_PROJECT_ID: with both, the build uploads its source maps. */
@@ -150,41 +151,83 @@ export function buildWorker(site: WorkerSite, sha: string, say: (line: string) =
 }
 
 /**
- * The last build deployed as the live version, tagged with its commit: OpenNext puts the
- * prerendered pages in the cache bucket, then wrangler uploads the Worker with its vars and the
- * secret. Live when it returns.
+ * OpenNext's `deploy` or `upload` of the last build, as a version tagged with its commit: OpenNext
+ * puts the prerendered pages in the cache bucket, under the build's own id, then wrangler uploads
+ * the Worker with its vars and, when the site has it, the secret. `extra` is the command's own.
  */
-export function deployWorker(site: WorkerSite, sha: string, say: (line: string) => void): void {
+function sendVersion(
+  site: WorkerSite,
+  sha: string,
+  command: 'deploy' | 'upload',
+  extra: { args?: string[]; env?: Record<string, string> } = {},
+): void {
   const dir = mkdtempSync(join(tmpdir(), 'blockly-web-'))
   const secrets = join(dir, 'secrets.json')
-  writeFileSync(secrets, JSON.stringify({ WEB_PROXY_SECRET: site.proxySecret }), { mode: 0o600 })
+  if (site.proxySecret !== undefined)
+    writeFileSync(secrets, JSON.stringify({ WEB_PROXY_SECRET: site.proxySecret }), { mode: 0o600 })
   try {
     const args = [
-      'deploy',
+      command,
       ...envArgs(site),
       '--tag',
       sha.slice(0, 12),
       '--message',
       sha,
       ...Object.entries(runtimeVars(site)).flatMap(([name, value]) => ['--var', `${name}:${value}`]),
-      '--secrets-file',
-      secrets,
+      ...(site.proxySecret !== undefined ? ['--secrets-file', secrets] : []),
+      ...(extra.args ?? []),
     ]
     // OpenNext hands its arguments to wrangler through a shell, unquoted.
     const unsafe = args.find((arg) => !/^[\w.:/@=+,-]+$/.test(arg))
     if (unsafe !== undefined)
-      throw new Error(`A deploy argument a shell would misread: ${unsafe.split(':')[0]}`)
-    const deployed = spawnSync(join(BIN, 'opennextjs-cloudflare'), args, {
+      throw new Error(`A ${command} argument a shell would misread: ${unsafe.split(':')[0]}`)
+    const sent = spawnSync(join(BIN, 'opennextjs-cloudflare'), args, {
       cwd: WEB,
-      env: wranglerEnv(site),
+      env: { ...wranglerEnv(site), ...extra.env },
       stdio: 'inherit',
     })
-    if (deployed.status !== 0) throw new Error(`The website's deploy stopped (exit ${deployed.status}).`)
+    if (sent.status !== 0) throw new Error(`The website's ${command} stopped (exit ${sent.status}).`)
   } finally {
-    unlinkSync(secrets)
+    if (existsSync(secrets)) unlinkSync(secrets)
     rmdirSync(dir)
   }
+}
+
+/** The last build deployed as the live version. Live when it returns. */
+export function deployWorker(site: WorkerSite, sha: string, say: (line: string) => void): void {
+  sendVersion(site, sha, 'deploy')
   say(`${workerName(site)} is live from ${sha.slice(0, 8)}.`)
+}
+
+/**
+ * The last build uploaded as a version that isn't live, under `alias`, which names its preview
+ * address: `https://<alias>-<worker>.<account's subdomain>.workers.dev`. That address, as wrangler
+ * reports it, or undefined when the Worker's preview URLs are off (wrangler.jsonc's preview_urls,
+ * which a deploy applies and an upload doesn't).
+ */
+export function uploadPreview(site: WorkerSite, sha: string, alias: string): string | undefined {
+  const dir = mkdtempSync(join(tmpdir(), 'blockly-web-preview-'))
+  const output = join(dir, 'wrangler-output.json')
+  try {
+    sendVersion(site, sha, 'upload', {
+      args: ['--preview-alias', alias],
+      env: { WRANGLER_OUTPUT_FILE_PATH: output },
+    })
+    return existsSync(output) ? previewAddress(readFileSync(output, 'utf8')) : undefined
+  } finally {
+    if (existsSync(output)) unlinkSync(output)
+    rmdirSync(dir)
+  }
+}
+
+/** The preview alias's address in wrangler's output file: one JSON object a line. */
+export function previewAddress(output: string): string | undefined {
+  for (const line of output.split('\n')) {
+    if (!line.trim()) continue
+    const entry = JSON.parse(line) as { type?: string; preview_alias_url?: string | null }
+    if (entry.type === 'version-upload' && entry.preview_alias_url) return entry.preview_alias_url
+  }
+  return undefined
 }
 
 /** A wrangler command's JSON answer. */

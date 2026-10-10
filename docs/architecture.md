@@ -2270,7 +2270,7 @@ answers 429 with `Retry-After`. Player faces count under a key of their own (§1
 
 | Concern | Local | Staging | Production |
 |---|---|---|---|
-| Web | `next dev` on `http://localhost:3000`, rewrites `/api/*` → `http://localhost:4000` | Worker `blockly-web-staging` at `staging.cubepals.com`; rewrites → staging control | Worker `blockly-web` at `cubepals.com`; rewrites → prod control |
+| Web | `next dev` on `http://localhost:3000`, rewrites `/api/*` → `http://localhost:4000` | Worker `blockly-web-staging` at `staging.cubepals.com`, and each pull request's preview version of it on `workers.dev`; rewrites → staging control | Worker `blockly-web` at `cubepals.com`; rewrites → prod control |
 | Control plane | host process, all roles in one: `:4000` api, `127.0.0.1:4001` internal, `127.0.0.1:7443` realtime (`:7444` WebSocket fallback) | Fly org `…-staging`: a control app with process groups api/worker, and a realtime app from the same image (`infra/fly/`) | Fly org `…-prod`, same shape; one machine a role (api, worker, realtime, edge; `scripts/production.ts` deploys with `--ha=false`) |
 | Postgres | compose service | Fly Managed Postgres (staging) | Fly Managed Postgres (prod) |
 | Runtime | `docker` (`DockerRuntime` via the Docker socket; game containers on their own network `blockly-games`, which only the edge also joins) | `fly` (a private network per game app) | `fly` (same) |
