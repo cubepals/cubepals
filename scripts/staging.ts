@@ -211,6 +211,15 @@ async function stagingWebhooks(): Promise<string[]> {
   return found
 }
 
+/**
+ * Staging's sandbox webhooks on while it runs and off while it is stopped. Polar disables an
+ * endpoint whose deliveries keep failing, and a stopped staging fails every one.
+ */
+async function setWebhooks(enabled: boolean): Promise<void> {
+  for (const id of await stagingWebhooks()) await polar().webhooks.updateWebhookEndpoint(id, { enabled })
+  say(`  sandbox webhook ${enabled ? 'on' : 'off'}`)
+}
+
 /** staging.cubepals.com on the web app: Cloudflare's record for it, and Fly's certificate. */
 async function pointWebDomain(): Promise<void> {
   say('domain')
@@ -633,12 +642,13 @@ const stopOrder = (app: string): number =>
       : STOP_FIRST.length
 
 /**
- * Every machine in the org stopped, the platform's and every server's. Volumes, the bucket,
- * secrets and the edge's and realtime's dedicated IPv4s stay, so `start` brings the platform back
- * as it was: the play domain and rt.staging's record are named after those addresses, and a cloud
+ * Every machine in the org stopped, the platform's and every server's, and the sandbox webhook
+ * off until `start`. Volumes, the bucket, secrets and the edge's and realtime's dedicated IPv4s
+ * stay, so `start` brings the platform back as it was: the play domain and rt.staging's record are named after those addresses, and a cloud
  * session can't rewrite DNS. Keeping both costs about $4 a month (owner, 2026-10-09).
  */
-function stop(): void {
+async function stop(): Promise<void> {
+  await setWebhooks(false)
   for (const app of appsInOrg().sort((a, b) => stopOrder(a) - stopOrder(b)))
     for (const machine of machinesOf(app)) {
       if (machine.state !== 'started' && machine.state !== 'starting') continue
@@ -678,11 +688,12 @@ async function start(): Promise<void> {
   if (![APP.edge, APP.realtime].every((app) => ipsOf(app).some((ip) => ip.Type === 'v4'))) {
     say('The addresses are gone; running up to take new ones.')
     await up()
-    return
+  } else {
+    for (const app of [APP.mail, APP.control, APP.realtime, APP.edge, APP.web]) startStopped(app)
+    await until('the web app and the API answer', 300, webAnswers)
+    say(`Staging is up: ${WEB}`)
   }
-  for (const app of [APP.mail, APP.control, APP.realtime, APP.edge, APP.web]) startStopped(app)
-  await until('the web app and the API answer', 300, webAnswers)
-  say(`Staging is up: ${WEB}`)
+  await setWebhooks(true)
 }
 
 /**
@@ -729,8 +740,10 @@ function env(): void {
 }
 
 const command = process.argv[2]
-if (command === 'up') await up()
-else if (command === 'stop') stop()
+if (command === 'up') {
+  await up()
+  await setWebhooks(true)
+} else if (command === 'stop') await stop()
 else if (command === 'start') await start()
 else if (command === 'status') status()
 else if (command === 'env') env()
