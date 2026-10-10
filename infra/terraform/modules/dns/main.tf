@@ -27,12 +27,10 @@ variable "realtime_hostname" { type = string }
 variable "realtime_ipv4" { type = string }
 
 variable "realtime_validation" {
-  description = "The records Fly asks for before it issues the realtime hostname's certificate."
+  description = "The record Fly checks before it issues the realtime hostname's certificate."
   type = object({
     ownership_name  = string
     ownership_value = string
-    acme_name       = string
-    acme_target     = string
   })
 }
 
@@ -86,10 +84,9 @@ resource "cloudflare_dns_record" "realtime" {
   comment = "Realtime: WebTransport over UDP on this IPv4 only, so no AAAA"
 }
 
-# Fly's certificate for the realtime hostname's TCP fallback: the TXT shows the app owns the name,
-# and the CNAME hands Fly's DNS-01 challenge to Fly's own zone. That CNAME takes the
-# _acme-challenge name the realtime role's own DNS-01 writes a TXT at, which Cloudflare refuses
-# beside a CNAME, so the realtime certificate can't renew while it is there (IMPLEMENTATION_STATUS).
+# Fly's certificate for the realtime hostname's TCP fallback: with no AAAA record, this TXT shows
+# Fly the app owns the name. Fly validates over HTTP-01, never through an _acme-challenge CNAME:
+# the realtime role writes its own DNS-01 TXT there, which Cloudflare refuses beside a CNAME.
 resource "cloudflare_dns_record" "realtime_ownership" {
   zone_id = var.zone_id
   name    = var.realtime_validation.ownership_name
@@ -98,14 +95,4 @@ resource "cloudflare_dns_record" "realtime_ownership" {
   ttl     = 300
   proxied = false
   comment = "Fly: the realtime app owns this hostname"
-}
-
-resource "cloudflare_dns_record" "realtime_acme" {
-  zone_id = var.zone_id
-  name    = var.realtime_validation.acme_name
-  type    = "CNAME"
-  content = trimsuffix(var.realtime_validation.acme_target, ".")
-  ttl     = 300
-  proxied = false
-  comment = "Fly: the DNS-01 challenge for the realtime hostname's certificate"
 }

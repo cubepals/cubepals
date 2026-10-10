@@ -53,9 +53,10 @@ resource "fly_ip" "realtime_v4" {
   type = "public_v4"
 }
 
-# Fly terminates TLS for the WebSocket fallback on TCP 443. With no AAAA record it can't check
-# ownership itself, and TLS-ALPN doesn't pass on this app, so it validates through the records
-# its outputs below name, which the dns module publishes.
+# Fly terminates TLS for the WebSocket fallback on TCP 443, and validates over HTTP-01 on port 80
+# (infra/fly/realtime.toml). With no AAAA record it checks ownership through the TXT record its
+# outputs below name, which the dns module publishes. The _acme-challenge name is left for the
+# realtime role's own DNS-01 certificate.
 resource "fly_cert" "realtime" {
   app      = fly_app.realtime.name
   hostname = var.realtime_hostname
@@ -93,8 +94,6 @@ output "realtime_validation" {
   value = {
     ownership_name  = fly_cert.realtime.ownership_name
     ownership_value = fly_cert.realtime.ownership_app_value
-    acme_name       = fly_cert.realtime.acme_challenge_name
-    acme_target     = fly_cert.realtime.acme_challenge_target
   }
 }
 
