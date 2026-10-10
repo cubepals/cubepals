@@ -174,21 +174,19 @@ describe('configuration', () => {
     )
   })
 
-  test('previews are trusted by a pattern naming the team, and proxy OAuth only with a secret', () => {
+  test('previews are trusted by a pattern naming the site, and proxy OAuth only with a secret', () => {
     expect(loadConfig(env).auth.oauthProxy).toBeNull()
     const previews = {
       ...env,
-      WEB_TRUSTED_ORIGINS: 'https://blockly-*-team.vercel.app',
+      WEB_TRUSTED_ORIGINS: 'https://pr-*-blockly-web-staging.team.workers.dev',
       AUTH_OAUTH_PROXY_SECRET: 'a-proxy-secret-for-staging',
     }
     expect(loadConfig(previews).auth.oauthProxy).toEqual({ secret: 'a-proxy-secret-for-staging' })
     expect(() => loadConfig({ ...previews, AUTH_OAUTH_PROXY_SECRET: 'short' })).toThrow(
       /auth.oauthProxy.secret/,
     )
-    for (const bare of ['https://*.vercel.app', 'https://*', 'https://preview.*.example.com'])
-      expect(() => loadConfig({ ...previews, WEB_TRUSTED_ORIGINS: bare })).toThrow(
-        /Name the project and team/,
-      )
+    for (const bare of ['https://*.workers.dev', 'https://*', 'https://preview.*.example.com'])
+      expect(() => loadConfig({ ...previews, WEB_TRUSTED_ORIGINS: bare })).toThrow(/Name the site/)
   })
 
   test('an ACME certificate names what browsers dial, and needs the CA’s terms accepted', () => {

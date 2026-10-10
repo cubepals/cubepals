@@ -4,7 +4,7 @@
   "settings": {
     "DEPLOYMENT_ID": "staging",
     "WEB_CANONICAL_ORIGIN": "https://staging.cubepals.com",
-    "WEB_TRUSTED_ORIGINS": "https://blockly-staging-*-your-vercel-team.vercel.app",
+    "WEB_TRUSTED_ORIGINS": "https://pr-*-blockly-web-staging.your-subdomain.workers.dev",
     "REALTIME_PUBLIC_URL": "https://rt.staging.cubepals.com/",
     "REALTIME_FALLBACK_URL": "wss://rt.staging.cubepals.com/transport-io",
     "REALTIME_TLS_MODE": "pinned",

@@ -194,23 +194,6 @@ function setDumpSecrets(values: Record<string, string>, env: NodeJS.ProcessEnv):
   say(`The Database dump workflow has its secrets, and dumps into ${DUMPS_BUCKET} every night.`)
 }
 
-/**
- * Terraform's Vercel resources, from before the website moved to a Cloudflare Worker: forgotten,
- * not destroyed, so the Vercel project serves cubepals.com until its records are proxied to the
- * Worker (docs/production.md § The website), and is deleted by hand after. Terraform can't plan
- * with them in its state and no Vercel provider. With none left, this does nothing.
- */
-function forgetVercel(env: NodeJS.ProcessEnv, backend: string): void {
-  const chdir = `-chdir=${ENVIRONMENT_DIR}`
-  const listed = spawnSync('terraform', [chdir, 'state', 'list'], { encoding: 'utf8', env })
-  const vercel = listed.stdout.split('\n').filter((address) => /(^|\.)vercel_/.test(address))
-  if (vercel.length === 0) return
-  run('terraform', [chdir, 'state', 'rm', ...vercel], env)
-  // Init again, so the lock file lets go of the provider the state no longer needs.
-  run('terraform', [chdir, 'init', '-input=false', `-backend-config=${backend}`], env)
-  say(`Terraform let go of ${vercel.length} Vercel resources; the Vercel project itself is untouched.`)
-}
-
 /** The nightly that ran this commit on staging and passed, if one did (nightly.yml tags them). */
 function stagingPass(): string | undefined {
   git('fetch', '--tags', '--quiet', 'origin')
@@ -237,7 +220,6 @@ async function apply(): Promise<void> {
   writeFileSync(backend, backendConfig(values.CLOUDFLARE_ACCOUNT_ID ?? ''))
   const terraform = (...args: string[]) => run('terraform', [`-chdir=${ENVIRONMENT_DIR}`, ...args], env)
   terraform('init', '-input=false', `-backend-config=${backend}`)
-  forgetVercel(env, backend)
 
   if (bucketFirst) {
     terraform(

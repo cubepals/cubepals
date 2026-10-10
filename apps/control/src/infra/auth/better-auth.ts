@@ -225,8 +225,8 @@ export function betterAuthenticator(options: AuthOptions): Authenticator {
  * Serves /api/auth/*. Behind the web tier's rewrite, a request's URL carries the api's own host;
  * Better Auth sees it at the origin the browser sent it to instead, read from the Origin header
  * and only when this deployment trusts that origin. oAuthProxy reads it to bring a preview's
- * sign-in back to the preview. The web tier's X-Forwarded-Host can't say it: Vercel's external
- * rewrites set it to the upstream's host.
+ * sign-in back to the preview. The web tier's X-Forwarded-Host isn't read for it: what that says
+ * is up to whichever host runs the rewrite, and has been the upstream's own host.
  */
 export function authHandler(auth: Auth): (request: Request) => Promise<Response> {
   return async (request) => {

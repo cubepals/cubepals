@@ -127,7 +127,7 @@ configuration; production's application status unknown.
 #fig(draw(
   spacing: (8mm, 9mm),
   who((0, 0.5), [Internet], name: <net>),
-  cp((1.4, 0), [Web\ #text(size: 6.4pt)[Vercel]], name: <web>),
+  cp((1.4, 0), [Web\ #text(size: 6.4pt)[Cloudflare Worker]], name: <web>),
   cp((2.8, 0), [`control` app\ #text(size: 6.4pt)[api · worker]], name: <ctl>),
   cp((4.2, 0), [`realtime` app\ #text(size: 6.4pt)[UDP/TCP 443]], name: <rt>),
   rt((1.4, 1.2), [`edge` app\ #text(size: 6.4pt)[TCP 25565, v4 + v6]], name: <edge>),
@@ -145,7 +145,7 @@ configuration; production's application status unknown.
   edge(<ctl>, <ext>, "-|>"),
   edge(<edge>, <nodes>, "..|>"),
   edge(<ctl>, <nodes>, "..|>"),
-), caption: [Production as configured (`infra/terraform`). Staging differs: web on Fly, a Postgres machine, Tigris, nip.io play addresses. Dotted: designed, not built.], name: "fig-topology")
+), caption: [Production as configured (`infra/terraform`). Staging differs: a Postgres machine, Tigris, nip.io play addresses. Dotted: designed, not built.], name: "fig-topology")
 
 #figure(
   table(
@@ -153,7 +153,7 @@ configuration; production's application status unknown.
     table.header[Holder][Secrets (names only)],
     [`control` and `realtime` apps], [Every control-plane secret: database URLs, `AUTH_SECRET`, OAuth clients, `WEB_PROXY_SECRET`, `REALTIME_TICKET_SECRET`, `EDGE_TOKEN`, `RUNTIME_SECRETS_KEY`, `FLY_API_TOKEN`, `SMTP_URL`, archive keys, Polar token and webhook secret, `CLOUDFLARE_DNS_API_TOKEN`; and when used, `BOAT_API_TOKEN`, `FLEET_CA_KEY`, `OPERATOR_TOKEN`.],
     [`edge` app], [`CONTROL_URL`, `EDGE_TOKEN`.],
-    [Web (Vercel)], [`WEB_PROXY_SECRET`.],
+    [Web (Cloudflare Worker)], [`WEB_PROXY_SECRET`, a secret of each version.],
     [A server's Fly app], [Its own per-server secrets, as app secrets.],
     [A fleet node], [The fleet CA's certificate (public) and a one-time token; never the operator token.],
   ),
@@ -169,7 +169,7 @@ configuration; production's application status unknown.
 - *Game servers reach the control plane only through the public artifact endpoint*: their app
   networks have no route to the org network.
 - *No deploy pipeline.* Deploys are `fly deploy` and Terraform by hand, the staging script, and
-  Vercel's git integration.
+  wrangler for the website's Worker.
 
 = Failure matrix <s-failures>
 

@@ -5,7 +5,7 @@
     "repository": "cubepals/cubepals",
     "redirects": ["www.cubepals.com"],
     "indexable": true,
-    "proxied": false
+    "proxied": true
   },
   "settings": {
     "DEPLOYMENT_ID": "prod",

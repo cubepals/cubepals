@@ -391,12 +391,12 @@ export function inconsistencies(config: DeploymentConfig): string[] {
         `RUNTIME_PROVIDER=fake runs no real servers and forgets them on restart; ${web.origin} is a deployed origin. Use docker or fly.`,
       )
   }
-  // A trusted pattern names the project and team: `*.vercel.app` would trust anyone's preview.
+  // A trusted pattern names its site: `*.workers.dev` would trust anyone's Worker.
   for (const pattern of config.web.trustedOrigins) {
     const [first = '', ...rest] = pattern.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').split('.')
     if (first === '*' || rest.some((label) => label.includes('*')))
       problems.push(
-        `WEB_TRUSTED_ORIGINS trusts every site matching ${pattern}. Name the project and team, as in https://blockly-*-<team>.vercel.app.`,
+        `WEB_TRUSTED_ORIGINS trusts every site matching ${pattern}. Name the site, as in https://pr-*-blockly-web-staging.<subdomain>.workers.dev.`,
       )
   }
   if (config.billing?.provider === 'polar') {

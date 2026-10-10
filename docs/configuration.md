@@ -93,7 +93,7 @@ Terraform stack.
 | Variable | Local | Staging | Production | Set by | Notes |
 |---|---|---|---|---|---|
 | `WEB_CANONICAL_ORIGIN` | `http://localhost:3000` | `https://staging.cubepals.com` | `https://cubepals.com` | tf | Better Auth's base URL is this plus `/api/auth`; https everywhere but loopback |
-| `WEB_TRUSTED_ORIGINS` | empty | `https://blockly-staging-*-<team>.vercel.app` | empty | tf | Previews of the staging Vercel project. A pattern must name the project and team: `*.vercel.app` is refused |
+| `WEB_TRUSTED_ORIGINS` | empty | empty | empty | tf | Other origins that serve the environment's web app, such as previews. A pattern's wildcard sits inside one label and names the site: `https://*.workers.dev` is refused |
 | `AUTH_SECRET` | generated | secret | secret | secret | Better Auth's signing key. Rotating it signs everyone out |
 | `AUTH_GOOGLE_CLIENT_ID`, `AUTH_GOOGLE_CLIENT_SECRET` | optional | secret | secret | secret | Both or neither; neither offers email only. See OAuth below |
 | `AUTH_GITHUB_CLIENT_ID`, `AUTH_GITHUB_CLIENT_SECRET` | optional | optional | optional | secret | Both or neither |

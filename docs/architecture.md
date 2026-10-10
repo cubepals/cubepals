@@ -117,7 +117,7 @@ edge destinations are written so that nothing depends on machine identity (§8, 
 | Separate orgs per environment are recommended; 6PN and billing are per org. | One Fly org per deployment. Everything a deployment runs lives in its org. | https://fly.io/docs/blueprints/staging-prod-isolation/ |
 | Fly never exposes TLS keys. UDP needs a dedicated IPv4 bound to `fly-global-services`; WebTransport on UDP 443 works. | The realtime process terminates its own TLS: a pinned self-signed cert, or ACME DNS-01 on an A-only hostname. | https://fly.io/docs/networking/udp-and-tcp/ · community.fly.io/t/…/8753 |
 | mc-router: routes file JSON (`mappings`, `default-server`) with watch mode. The webhook scaler applies to file *and* API routes, and its reply may override the backend. Connect/disconnect webhooks carry the client-claimed `player{name,uuid}`. Hostnames are lowercased, with trailing dot and Forge `\0FML` stripped. | Edge agent writes the routes file. Edge player identity is a *hint*; RCON `list` is authoritative. | https://github.com/itzg/mc-router (source at a9d1d96) |
-| Better Auth: `trustedOrigins` supports wildcards and functions; `oAuthProxy` handles previews with one registered callback; its docs recommend a reverse proxy for cross-domain setups. Vercel external rewrites proxy server-side (120 s cap; upstream caching on by default for new projects). | Same-origin proxy for all browser→API traffic. `Cache-Control: no-store` on API responses. | https://www.better-auth.com/docs/concepts/cookies · https://www.better-auth.com/docs/plugins/oauth-proxy · https://vercel.com/docs/limits |
+| Better Auth: `trustedOrigins` supports wildcards and functions; `oAuthProxy` handles previews with one registered callback; its docs recommend a reverse proxy for cross-domain setups. OpenNext's Cloudflare adapter proxies an external rewrite from the Worker with `fetch`. | Same-origin proxy for all browser→API traffic. `Cache-Control: no-store` on API responses. | https://www.better-auth.com/docs/concepts/cookies · https://www.better-auth.com/docs/plugins/oauth-proxy · https://opennext.js.org/cloudflare |
 | `*.localhost` resolves via the macOS system resolver and systemd-resolved. nip.io (`x.127.0.0.1.nip.io`) is the portable fallback. The handshake carries the typed hostname. | Local play domain `play.localhost`, fallback `127.0.0.1.nip.io`. | https://nip.io/ · minecraft.wiki SLP |
 | Transport.io: rooms are per process ("two machines is a silent split"). A cert rotation restarts the process and drops sessions. WebTransport requests carry no cookies. | Realtime is a **singleton process role**. Events travel between processes via Postgres `NOTIFY`. Tickets in the query string. | transport-io `guides/deploy.md`, `guides/certificates.md` |
 
@@ -126,7 +126,7 @@ edge destinations are written so that nothing depends on machine identity (§8, 
 ## 3. System overview
 
 ```
- Browser ──HTTPS──► Web (Next.js, Vercel) ──rewrite /api/*──► control:api ─────┐
+ Browser ──HTTPS──► Web (Next.js, Worker) ──rewrite /api/*──► control:api ─────┐
     │                                                                          │
     └──WebTransport (ticket)──────────────────────────────► control:realtime   │   Postgres
                                                               ▲  LISTEN        │   (domain, pg-boss,
@@ -1408,19 +1408,18 @@ Replacing mc-router means rewriting `apps/edge` against the same protocol. Nothi
 - **Previews:** `oAuthProxy` with `productionURL` = the *environment's* canonical origin (the
   staging web origin, not production) and a per-environment proxy secret
   (`AUTH_OAUTH_PROXY_SECRET`; absent, previews sign in with email only).
-  `web.trustedOrigins` includes the team's preview pattern (`https://<project>-*-<team>.vercel.app`),
-  never a bare `*.vercel.app` (config refuses a pattern whose wildcard spans a whole label).
-  Behind the rewrite a request's URL carries the api's host, and Vercel's external rewrites set
-  `X-Forwarded-Host` to the upstream's host too, so the api presents each `/api/auth` request to
+  `web.trustedOrigins` holds the previews' pattern, never a bare `*.workers.dev` (config refuses a
+  pattern whose wildcard spans a whole label).
+  Behind the rewrite a request's URL carries the api's host, and `X-Forwarded-Host` is whatever
+  the host running the rewrite sends, so the api presents each `/api/auth` request to
   Better Auth at the origin in its `Origin` header, when that origin is trusted. The sign-in
   POST always carries one: from the canonical origin the proxy steps aside, from a preview the
   canonical callback hands the profile back to the preview, which makes the session.
 - **Web server components** call `API_UPSTREAM` directly (server to server, forwarding the
-  cookie header). `API_UPSTREAM` is a Vercel **server-only** env var used by `rewrites()` and
+  cookie header). `API_UPSTREAM` is a **server-only** var of the Worker, used by `rewrites()` and
   RSC fetches. It never reaches the bundle.
-- **API responses** set `Cache-Control: no-store`, because Vercel caches rewrite upstreams by
-  default on new projects. Nothing long-lived goes through the rewrite (120 s cap). Realtime
-  is direct.
+- **API responses** set `Cache-Control: no-store`, so no cache between the browser and the
+  control plane keeps one. Nothing long-lived goes through the rewrite. Realtime is direct.
 - **Email flows** use Better Auth's `baseURL`, which comes from config. There are no magic links:
   people sign in with an email and a password, or a configured OAuth provider. The emails are a
   verification link on sign-up, a password reset link that works for an hour, and, once a reset
@@ -2271,7 +2270,7 @@ answers 429 with `Retry-After`. Player faces count under a key of their own (§1
 
 | Concern | Local | Staging | Production |
 |---|---|---|---|
-| Web | `next dev` on `http://localhost:3000`, rewrites `/api/*` → `http://localhost:4000` | Vercel preview + staging branch domain; rewrites → staging control | Vercel production; rewrites → prod control |
+| Web | `next dev` on `http://localhost:3000`, rewrites `/api/*` → `http://localhost:4000` | Worker `blockly-web-staging` at `staging.cubepals.com`; rewrites → staging control | Worker `blockly-web` at `cubepals.com`; rewrites → prod control |
 | Control plane | host process, all roles in one: `:4000` api, `127.0.0.1:4001` internal, `127.0.0.1:7443` realtime (`:7444` WebSocket fallback) | Fly org `…-staging`: a control app with process groups api/worker, and a realtime app from the same image (`infra/fly/`) | Fly org `…-prod`, same shape; one machine a role (api, worker, realtime, edge; `scripts/production.ts` deploys with `--ha=false`) |
 | Postgres | compose service | Fly Managed Postgres (staging) | Fly Managed Postgres (prod) |
 | Runtime | `docker` (`DockerRuntime` via the Docker socket; game containers on their own network `blockly-games`, which only the edge also joins) | `fly` (a private network per game app) | `fly` (same) |
@@ -2478,9 +2477,9 @@ not take:
    only archives survive deletion. Entitlements expose both.
 10. **Crash-consistency of snapshots.** Backups use RCON save-off/flush. Relocate and restore
     stop the server first.
-11. **Vercel rewrite caching and the 120 s cap.** `no-store` on every API response. No
+11. **Caching and time limits on the rewrite.** `no-store` on every API response. No
     long-polling through the web origin. The wake wait happens on the internal edge path,
-    not through Vercel.
+    not through the web tier.
 12. **Fly machine limit per org** must stay above `platform_controls.maxServers` +
     per-server transient machines (restore, export and relocate briefly use extra machines).
     Size caps with that headroom.

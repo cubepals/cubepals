@@ -122,7 +122,7 @@ direct-host providers #research.
   kind: table,
 )
 
-- *Other providers*: Cloudflare (DNS, R2 archive store, ACME DNS-01), Vercel (web), Polar (billing,
+- *Other providers*: Cloudflare (DNS, R2 archive store, ACME DNS-01, the web app's Worker), Polar (billing,
   merchant of record), an SMTP provider (unnamed), Modrinth and Mojang (catalog, profiles).
 - *Archives are the only thing runtimes share.* Snapshots never cross runtimes; a move between
   runtimes goes through an archive any runtime can restore, so nothing of one provider is ever

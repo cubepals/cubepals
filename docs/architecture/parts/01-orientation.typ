@@ -96,7 +96,7 @@ between them are in @s-topology.
   table(
     columns: (auto, 1.4fr, 1fr),
     table.header[Part][Does][Where it runs],
-    [Web app (`apps/web`)], [Owner and admin UI; proxies `/api/*` to the control plane so cookies stay host-only.], [Production: Vercel; staging: a standalone image on Fly],
+    [Web app (`apps/web`)], [Owner and admin UI; proxies `/api/*` to the control plane so cookies stay host-only.], [A Cloudflare Worker: `blockly-web` in production, `blockly-web-staging` on staging],
     [Control plane (`apps/control`)], [`api`: tRPC, auth, public status, webhooks, the internal listener for the edge and operators; `worker`: operations and every scheduled sweep; `realtime`: WebTransport and WebSocket hints to browsers.], [Fly: `api` and `worker` are process groups of one app; `realtime` is its own app],
     [Postgres], [All durable state: servers, operations queue (pg-boss), events (NOTIFY), billing, fleet tables.], [Production: Fly Managed Postgres, made by hand; staging: a Postgres 17 machine on Fly],
     [Edge (`apps/edge`)], [The only public Minecraft address: routes by hostname, answers pings for sleeping servers, wakes on join.], [Its own Fly app],

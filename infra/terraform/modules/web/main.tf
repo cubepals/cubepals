@@ -6,7 +6,7 @@
 # version, which scripts/lib/web-worker.ts uploads with wrangler, and the Worker's own settings
 # (observability, workers.dev) are apps/web/wrangler.jsonc's, which every deploy applies. Terraform
 # never manages versions or deployments: it would undo each deploy. A route sees only proxied
-# traffic, so until modules/dns proxies the hosts (web_proxied) nothing reaches the Worker by them.
+# traffic, so only while modules/dns proxies the hosts (web_proxied) does anything reach it by them.
 
 terraform {
   required_version = ">= 1.11"
