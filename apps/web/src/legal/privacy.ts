@@ -153,14 +153,9 @@ export const PRIVACY: Policy = {
                 'Frankfurt, Germany. Supabase is a US company.',
               ],
               [
-                'Vercel, Inc.',
-                'Hosts the {brand} website.',
-                'US company; serves the site from its global network.',
-              ],
-              [
                 'Cloudflare, Inc.',
-                'Stores copies of worlds (resting worlds, downloads and uploads) and runs our domain names.',
-                'US company; storage location chosen automatically by Cloudflare.',
+                'Hosts the {brand} website, stores copies of worlds (resting worlds, downloads and uploads) and runs our domain names.',
+                'US company; serves the site from its global network, and chooses where copies of worlds are stored automatically.',
               ],
               [
                 'PostHog, Inc.',

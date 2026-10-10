@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { Hono } from 'hono'
 import { originAllowed, ownPagesOnly } from './origins.ts'
 
-const OURS = ['https://blockly.test', 'https://blockly-staging-*-team.vercel.app']
+const OURS = ['https://blockly.test', 'https://pr-*-blockly-web-staging.team.workers.dev']
 const JSON_BODY = { 'content-type': 'application/json' }
 const app = new Hono()
 app.use('/api/trpc/*', ownPagesOnly(OURS))
@@ -16,7 +16,7 @@ const call = (method: string, origin?: string, headers: Record<string, string> =
 describe('changes made through the API', () => {
   test('come from Blockly’s own pages and its previews', async () => {
     expect((await call('POST', 'https://blockly.test')).status).toBe(200)
-    expect((await call('POST', 'https://blockly-staging-abc123-team.vercel.app')).status).toBe(200)
+    expect((await call('POST', 'https://pr-12-blockly-web-staging.team.workers.dev')).status).toBe(200)
   })
 
   test('are refused from another site, which a browser always names', async () => {
@@ -55,7 +55,7 @@ describe('changes made through the API', () => {
   })
 
   test('a pattern matches one label, not a path or a longer host', () => {
-    expect(originAllowed('https://blockly-staging-x-team.vercel.app.evil.test', OURS)).toBe(false)
-    expect(originAllowed('https://blockly-staging-a.b-team.vercel.app', OURS)).toBe(false)
+    expect(originAllowed('https://pr-1-blockly-web-staging.team.workers.dev.evil.test', OURS)).toBe(false)
+    expect(originAllowed('https://pr-1.evil-blockly-web-staging.team.workers.dev', OURS)).toBe(false)
   })
 })

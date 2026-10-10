@@ -27,7 +27,7 @@ const RANKING = new Map<string, readonly string[]>([
 
 /**
  * The region a new server starts in, given the player's country (ISO 3166 alpha-2, as
- * `x-vercel-ip-country` says it) and the regions offered, in their configured order. `nearest`
+ * `cf-ipcountry` says it) and the regions offered, in their configured order. `nearest`
  * says it was worked out from where the player is, rather than being the first by default.
  */
 export function startingRegion(

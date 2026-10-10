@@ -62,7 +62,7 @@ variable "cloudflare_account_id" { type = string }
 variable "cloudflare_zone_id" { type = string }
 
 variable "web" {
-  description = "The web app's Worker, hosts that redirect to its domain, and whether those hosts are proxied to the Worker yet (the cutover from Vercel)."
+  description = "The web app's Worker, hosts that redirect to its domain, and whether those hosts are proxied to the Worker (DNS-only when not)."
   type = object({
     worker    = string
     redirects = optional(list(string), [])

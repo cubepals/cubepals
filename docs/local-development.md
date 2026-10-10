@@ -46,7 +46,7 @@ it: `config/environments.test.ts` and `config/local.test.ts` hold them to that.
 | Email | Mailpit catches every message (`SMTP_URL`), at http://localhost:8025. |
 | Fly, Boat, a fleet | Servers run in Docker on this machine (`RUNTIME_PROVIDER=docker`), joined at `<slug>.play.localhost:25565`. |
 | Regions | One, "This computer" (`REGIONS="local:This computer"`), because that is where servers run; the create page shows no picker and Settings → Location just names it. To try the picker and the move, set `REGIONS="eu:Europe,us:North America"`: both run on this machine, and a move here changes only the region. `RUNTIME_REGION_MAP=local:local,eu:local,us:local` keeps servers made under any of the three starting. Docker allows more than one region only locally. |
-| Vercel's country header | `DEV_COUNTRY` (`US`, `DE`, …) stands in for `x-vercel-ip-country`, which picks the region a new server starts in. Empty, it starts in the first. |
+| Cloudflare's country header | `DEV_COUNTRY` (`US`, `DE`, …) stands in for `cf-ipcountry`, which picks the region a new server starts in. Empty, it starts in the first. |
 | Object storage (R2) | RustFS in docker compose. Empty `ARCHIVE_S3_ENDPOINT` turns archives off instead. |
 | Let's Encrypt, Cloudflare | Live updates use a self-signed certificate the browser pins (`REALTIME_TLS_MODE=pinned`). |
 

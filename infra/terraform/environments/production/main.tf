@@ -47,8 +47,9 @@ variable "web" {
     repository = string
     redirects  = list(string)
     indexable  = optional(bool, false)
-    # The cutover: true sends cubepals.com and its redirects to the Worker, false back to Vercel.
-    proxied = optional(bool, false)
+    # true sends cubepals.com and its redirects through Cloudflare's proxy to the Worker; false
+    # leaves the records DNS-only, and nothing behind them serves the site.
+    proxied = optional(bool, true)
   })
 }
 
