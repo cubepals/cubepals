@@ -192,14 +192,15 @@ module "edge" {
 }
 
 module "dns" {
-  source            = "../modules/dns"
-  zone_id           = var.cloudflare_zone_id
-  play_domains      = local.play_domains
-  edge_ipv4         = module.edge.ipv4
-  edge_ipv6         = module.edge.ipv6
-  realtime_hostname = local.realtime_host
-  realtime_ipv4     = module.control.realtime_ipv4
-  web_hostnames     = concat([local.web_host], var.web.redirects)
+  source              = "../modules/dns"
+  zone_id             = var.cloudflare_zone_id
+  play_domains        = local.play_domains
+  edge_ipv4           = module.edge.ipv4
+  edge_ipv6           = module.edge.ipv6
+  realtime_hostname   = local.realtime_host
+  realtime_ipv4       = module.control.realtime_ipv4
+  realtime_validation = module.control.realtime_validation
+  web_hostnames       = concat([local.web_host], var.web.redirects)
 }
 
 module "web" {

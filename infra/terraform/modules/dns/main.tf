@@ -26,6 +26,16 @@ variable "edge_ipv6" { type = string }
 variable "realtime_hostname" { type = string }
 variable "realtime_ipv4" { type = string }
 
+variable "realtime_validation" {
+  description = "The records Fly asks for before it issues the realtime hostname's certificate."
+  type = object({
+    ownership_name  = string
+    ownership_value = string
+    acme_name       = string
+    acme_target     = string
+  })
+}
+
 variable "web_hostnames" {
   description = "The web app's domain, then the hosts that redirect to it, all served by the Vercel project."
   type        = list(string)
@@ -74,4 +84,28 @@ resource "cloudflare_dns_record" "realtime" {
   ttl     = 300
   proxied = false
   comment = "Realtime: WebTransport over UDP on this IPv4 only, so no AAAA"
+}
+
+# Fly's certificate for the realtime hostname's TCP fallback: the TXT shows the app owns the name,
+# and the CNAME hands Fly's DNS-01 challenge to Fly's own zone. That CNAME takes the
+# _acme-challenge name the realtime role's own DNS-01 writes a TXT at, which Cloudflare refuses
+# beside a CNAME, so the realtime certificate can't renew while it is there (IMPLEMENTATION_STATUS).
+resource "cloudflare_dns_record" "realtime_ownership" {
+  zone_id = var.zone_id
+  name    = var.realtime_validation.ownership_name
+  type    = "TXT"
+  content = "\"${var.realtime_validation.ownership_value}\""
+  ttl     = 300
+  proxied = false
+  comment = "Fly: the realtime app owns this hostname"
+}
+
+resource "cloudflare_dns_record" "realtime_acme" {
+  zone_id = var.zone_id
+  name    = var.realtime_validation.acme_name
+  type    = "CNAME"
+  content = trimsuffix(var.realtime_validation.acme_target, ".")
+  ttl     = 300
+  proxied = false
+  comment = "Fly: the DNS-01 challenge for the realtime hostname's certificate"
 }
