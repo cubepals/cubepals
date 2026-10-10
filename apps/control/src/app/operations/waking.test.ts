@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Waking a resting world when a wake fails. A failed wake is settled twice: by the wake, which puts
  * the world back to rest, then by the runner as it records the failure. A join between the two
