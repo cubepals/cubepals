@@ -75,7 +75,7 @@ There is no metrics pipeline in the control plane; answers are durable rows read
     [Placement], [`runtime_decisions`: every placement, fallback and move with what was considered.],
     [Fleet], [`fleet_events` (47 kinds, kept 90 days; @a-metrics); `/fleet/v1/summary`; node views with memory running, placed and observed.],
     [Live hints], [The `blockly_events` NOTIFY channel → realtime → browsers.],
-    [Alerts], [Admin alerts (`blocked_operations`, `purge_overdue`, `catalog_stale`, `worlds_outgrow_plan`): live in admin and emailed once. No fleet alerts: the watch list in `docs/fleet-operations.md` is #designed.],
+    [Alerts], [Admin alerts (`blocked_operations`, `purge_overdue`, `catalog_stale`, `worlds_outgrow_plan`, `extra_play_unsent`): live in admin and emailed once. No fleet alerts: the watch list in `docs/fleet-operations.md` is #designed.],
     [Nodes], [blocklyd `/metrics` (OpenMetrics, 24 families, loopback by default): operations, HTTP, auth failures, reconciles, workloads by state, per-workload memory, CPU and disk, heartbeats, contact age, lease left, renewals, snapshot bytes.],
     [Logs], [Control plane: plain lines to stdout. Game logs through each runtime's log source (Fly NATS, Docker, blocklyd NDJSON, Boat exec).],
   ),

@@ -310,7 +310,7 @@ message texts (`ASLEEP_MOTD`, `LOADING_MOTD`, `RESTARTING_MOTD`, `RESTARTING_JOI
   `account.plan_changed`, `billing.checkout_started`, and the subscription changes in
   `app/billing/audit.ts` (`billing.subscribed`, `billing.cancel_scheduled`,
   `billing.subscription_lapsed`, `billing.subscription_ended` and the rest).
-- *Admin alerts*: `blocked_operations`, `purge_overdue`, `catalog_stale`, `worlds_outgrow_plan`.
+- *Admin alerts*: `blocked_operations`, `purge_overdue`, `catalog_stale`, `worlds_outgrow_plan`, `extra_play_unsent`.
 
 = Benchmarks and measurements <a-bench>
 

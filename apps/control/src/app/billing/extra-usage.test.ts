@@ -387,13 +387,13 @@ test.skipIf(!hasDatabase)(
     await ran(server.id, 62, new Date(at.getTime() - 5 * 3_600_000))
     await h.app.billing.usage.count(owner.userId, at)
     await h.app.billing.usage.cut(at)
-    // Down: nothing is taken, and the event waits under its id.
+    // Down: nothing is taken, the event waits under its id, and an outage isn't held against it.
     polar.down = true
     const down = await h.app.billing.usage.send()
     polar.down = false
     expect(down.sent).toBe(0)
     const [waiting] = await reportsOf(owner)
-    expect(waiting).toMatchObject({ sentAt: null, attempts: 1 })
+    expect(waiting).toMatchObject({ sentAt: null, attempts: 0, nextAttemptAt: null })
     expect(waiting?.lastError).toContain('maintenance')
     // Back: the same id goes again, and Polar counting it a duplicate is as good as taking it.
     ingest = () => ({ status: 200, body: { inserted: 0, duplicates: 1 } })
@@ -426,14 +426,78 @@ test.skipIf(!hasDatabase)(
     expect(partly.sent).toBeGreaterThanOrEqual(1)
     expect((await reportsOf(owner)).every((r) => r.sentAt !== null)).toBe(true)
     expect((await reportsOf(other.owner)).map((r) => r.sentAt)).toEqual([null])
-    // Taken later, still under its first id.
+    // Refused, it waits a minute; taken then, still under its first id.
     ingest = () => ({ status: 200, body: { inserted: 1, duplicates: 0 } })
     await h.app.billing.usage.send()
+    expect((await reportsOf(other.owner)).map((r) => r.sentAt)).toEqual([null])
+    await h.app.billing.usage.send(new Date(Date.now() + 61_000))
     expect(
       (await reportsOf(other.owner)).map((r) => [r.externalId.endsWith(':1'), r.sentAt !== null]),
     ).toEqual([[true, true]])
   },
   90_000,
+)
+
+test.skipIf(!hasDatabase)(
+  'an event Polar keeps refusing backs off, then is set aside for an admin, and newer ones flow',
+  async () => {
+    const { owner } = await subscriber('Bex')
+    await h.app.accounts.allowExtraPlay(owner, 20)
+    const server = await stoppedServer(owner)
+    await ran(server.id, 61, new Date(at.getTime() - 5 * 3_600_000))
+    await h.app.billing.usage.count(owner.userId, at)
+    await h.app.billing.usage.cut(at)
+    const [refused] = await reportsOf(owner)
+    const refuses = (body: string) => body.includes(refused?.externalId ?? '?')
+    ingest = () =>
+      refuses(polar.requests.at(-1)?.body ?? '')
+        ? { status: 422, body: { detail: [{ loc: ['body', 'events', 0], msg: 'refused' }] } }
+        : { status: 200, body: { inserted: 1, duplicates: 0 } }
+    // Each refusal waits twice as long as the one before.
+    let clock = Date.now()
+    const waits: number[] = []
+    for (let n = 1; n <= 9; n++) {
+      await h.app.billing.usage.send(new Date(clock))
+      const [row] = await reportsOf(owner)
+      expect(row).toMatchObject({ attempts: n, sentAt: null, failedAt: null })
+      waits.push(((row?.nextAttemptAt?.getTime() ?? 0) - clock) / 60_000)
+      // Tried again before its time: not sent at all.
+      const asked = ingested().length
+      await h.app.billing.usage.send(new Date(clock + 30_000))
+      expect(ingested().length).toBe(asked)
+      clock = row?.nextAttemptAt?.getTime() ?? clock
+    }
+    expect(waits).toEqual([1, 2, 4, 8, 16, 32, 64, 128, 256])
+    // A newer event meanwhile goes on its own.
+    await ran(server.id, 2, new Date(at.getTime() - 2 * 3_600_000))
+    await h.app.billing.usage.count(owner.userId, at)
+    await h.app.billing.usage.cut(at)
+    await h.app.billing.usage.send(new Date(clock - 1))
+    expect((await reportsOf(owner)).map((r) => [r.milli, r.sentAt !== null])).toEqual([
+      [1000, false],
+      [2000, true],
+    ])
+    // The tenth refusal: no longer sent, on the audit log, and an admin is told.
+    await h.app.billing.usage.send(new Date(clock))
+    const [given] = await reportsOf(owner)
+    expect(given).toMatchObject({ attempts: 10, nextAttemptAt: null })
+    expect(given?.failedAt).not.toBeNull()
+    await h.app.billing.usage.send(new Date(clock + 24 * 3_600_000))
+    expect((await reportsOf(owner))[0]?.sentAt).toBeNull()
+    const entries = await h.db
+      .select()
+      .from(schema.auditLog)
+      .where(eq(schema.auditLog.subjectId, owner.userId))
+    expect(entries.filter((e) => e.action === 'billing.extra_unsent').map((e) => e.data)).toEqual([
+      expect.objectContaining({ event: refused?.externalId, milli: 1000, cents: 25, attempts: 10 }),
+    ])
+    expect((await h.app.alerts.sweep()).raised).toContain('extra_play_unsent')
+    const alerts = await h.app.alerts.active({ kind: 'admin', userId: 'admin' })
+    expect(alerts.find((a) => a.key === 'extra_play_unsent')?.summary).toContain(
+      'Polar kept refusing is no longer sent',
+    )
+  },
+  60_000,
 )
 
 test.skipIf(!hasDatabase)(

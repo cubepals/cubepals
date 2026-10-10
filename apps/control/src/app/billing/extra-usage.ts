@@ -12,11 +12,16 @@
  * It is not where servers stop at the end of what was allowed: `AccountService.enforceLimits` is.
  */
 import { type Db, schema } from '@blockly/db'
-import { and, asc, count, desc, eq, gt, gte, isNull, lt, lte, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, gte, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { UNIT_CENTS } from '../../domain/account/meter.ts'
 import { loadStanding, runUnitsSince } from '../accounts/persistence.ts'
-import type { BillingOrder, BillingProvider } from '../ports/optional.ts'
+import {
+  type BillingOrder,
+  type BillingProvider,
+  BillingUnavailable,
+  type UsageEvent,
+} from '../ports/optional.ts'
 import { extraPlayNow } from './persistence.ts'
 
 const months = schema.extraPlayMonths
@@ -34,6 +39,17 @@ const EVENT_BEHIND_MS = 60_000
 /** Events in one request, and requests in one pass: well inside the provider's rate limit. */
 const BATCH = 25
 const BATCHES_PER_PASS = 4
+/**
+ * Refusals an event gets before it is no longer sent. With `backoff`, the last comes about eight
+ * and a half hours after the first: long enough for a fix on the provider's side, not forever.
+ */
+const MAX_REFUSALS = 10
+/** How long an event the provider refused waits: a minute, doubling, up to six hours. */
+const backoff = (attempts: number) => Math.min(60_000 * 2 ** (attempts - 1), 6 * 3_600_000)
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 500)
+
+type ReportRow = typeof reports.$inferSelect
 
 const monthOf = (at: Date) => new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1))
 const day = (at: Date) => at.toISOString().slice(0, 10)
@@ -51,7 +67,7 @@ export class ExtraUsage {
   async report(now = new Date()): Promise<void> {
     for (const userId of await this.#playing(now)) await this.count(userId, now)
     await this.cut(now)
-    const { sent, failed } = await this.send()
+    const { sent, failed } = await this.send(now)
     if (failed > 0) console.warn(`extra-play: ${failed} events not taken yet, ${sent} sent`)
   }
 
@@ -144,10 +160,13 @@ export class ExtraUsage {
 
   /**
    * Events not yet taken, oldest first, in batches. A batch the provider refuses is tried one
-   * event at a time, so one it won't take never holds back the rest; whatever fails waits for the
-   * next pass, under the same id.
+   * event at a time, so one it won't take never holds back the rest: each it refuses waits longer
+   * before it is tried again (`backoff`), and after `MAX_REFUSALS` it is no longer sent, kept on
+   * the account's audit log, and an admin is told (`extra_play_unsent`). Newer events go on in
+   * the meantime. The provider being down refuses nothing: the pass stops, and all of it is tried
+   * next minute, under the same ids.
    */
-  async send(): Promise<{ sent: number; failed: number }> {
+  async send(now = new Date()): Promise<{ sent: number; failed: number }> {
     const billing = this.#billing
     if (billing === null) return { sent: 0, failed: 0 }
     let sent = 0
@@ -156,52 +175,103 @@ export class ExtraUsage {
       const batch = await this.#db
         .select()
         .from(reports)
-        .where(isNull(reports.sentAt))
+        .where(
+          and(
+            isNull(reports.sentAt),
+            isNull(reports.failedAt),
+            or(isNull(reports.nextAttemptAt), lte(reports.nextAttemptAt, now)),
+          ),
+        )
         .orderBy(asc(reports.at), asc(reports.externalId))
         .limit(BATCH)
       if (batch.length === 0) break
-      const events = batch.map((row) => ({
-        externalId: row.externalId,
-        userId: row.userId,
-        hours: row.milli / 1000,
-        at: row.at,
-      }))
-      const taken = await billing.reportUsage(events).then(
-        () => events,
-        async (error: unknown) => {
-          if (events.length === 1) {
-            await this.#failed(events[0]?.externalId ?? '', error)
-            return []
-          }
-          const one: typeof events = []
-          for (const event of events)
-            await billing.reportUsage([event]).then(
-              () => one.push(event),
-              (alone: unknown) => this.#failed(event.externalId, alone),
-            )
-          return one
-        },
-      )
+      const { taken, down } = await this.#deliver(billing, batch, now)
       for (const event of taken)
         await this.#db
           .update(reports)
           .set({ sentAt: new Date() })
           .where(eq(reports.externalId, event.externalId))
       sent += taken.length
-      failed += events.length - taken.length
-      if (taken.length < events.length) break
+      failed += batch.length - taken.length
+      if (down) break
     }
     return { sent, failed }
   }
 
-  async #failed(externalId: string, error: unknown): Promise<void> {
+  /** One batch to the provider, then one event at a time if it refuses the batch. */
+  async #deliver(
+    billing: BillingProvider,
+    batch: ReportRow[],
+    now: Date,
+  ): Promise<{ taken: UsageEvent[]; down: boolean }> {
+    const events = batch.map((row) => ({
+      externalId: row.externalId,
+      userId: row.userId,
+      hours: row.milli / 1000,
+      at: row.at,
+    }))
+    const whole = await billing.reportUsage(events).then(
+      () => null,
+      (error: unknown) => error,
+    )
+    if (whole === null) return { taken: events, down: false }
+    if (whole instanceof BillingUnavailable) {
+      await this.#noted(batch, whole)
+      return { taken: [], down: true }
+    }
+    const taken: UsageEvent[] = []
+    for (const [i, row] of batch.entries()) {
+      const event = events[i] as UsageEvent
+      const alone = await billing.reportUsage([event]).then(
+        () => null,
+        (error: unknown) => error,
+      )
+      if (alone === null) taken.push(event)
+      else if (alone instanceof BillingUnavailable) {
+        await this.#noted(batch.slice(i), alone)
+        return { taken, down: true }
+      } else await this.#refused(row, alone, now)
+    }
+    return { taken, down: false }
+  }
+
+  /** The provider was down: what it said is kept, and nothing counts against the events. */
+  async #noted(rows: readonly ReportRow[], error: unknown): Promise<void> {
+    for (const row of rows)
+      await this.#db
+        .update(reports)
+        .set({ lastError: messageOf(error) })
+        .where(eq(reports.externalId, row.externalId))
+  }
+
+  /** The provider refused the event: tried again after a wait, or, refused enough, no longer. */
+  async #refused(row: ReportRow, error: unknown, now: Date): Promise<void> {
+    const attempts = row.attempts + 1
+    const gaveUp = attempts >= MAX_REFUSALS
     await this.#db
       .update(reports)
       .set({
-        attempts: sql`${reports.attempts} + 1`,
-        lastError: (error instanceof Error ? error.message : String(error)).slice(0, 500),
+        attempts,
+        lastError: messageOf(error),
+        nextAttemptAt: gaveUp ? null : new Date(now.getTime() + backoff(attempts)),
+        failedAt: gaveUp ? now : null,
       })
-      .where(eq(reports.externalId, externalId))
+      .where(eq(reports.externalId, row.externalId))
+    if (!gaveUp) return
+    console.error(`extra-play: ${row.externalId} refused ${attempts} times, no longer sent`)
+    await this.#db.insert(schema.auditLog).values({
+      actor: 'system:billing',
+      action: 'billing.extra_unsent',
+      subjectType: 'account',
+      subjectId: row.userId,
+      data: {
+        event: row.externalId,
+        milli: row.milli,
+        cents: Math.floor((row.milli * UNIT_CENTS) / 1000),
+        attempts,
+        error: messageOf(error),
+      },
+    })
   }
 
   /** Accounts with a server that ran in the last quarter of an hour, or runs now. */
@@ -283,4 +353,13 @@ export async function auditRenewal(db: Db, provider: string, order: BillingOrder
       matches: Math.abs(reportedCents - order.extraCents) <= 1,
     },
   })
+}
+
+/** Events the provider refused until they were no longer sent (`MAX_REFUSALS`): hours not billed. */
+export async function unsentExtra(db: Db): Promise<{ events: number; milli: number }> {
+  const [row] = await db
+    .select({ events: count(), milli: sql<string>`coalesce(sum(${reports.milli}), 0)` })
+    .from(reports)
+    .where(isNotNull(reports.failedAt))
+  return { events: row?.events ?? 0, milli: Number(row?.milli ?? 0) }
 }

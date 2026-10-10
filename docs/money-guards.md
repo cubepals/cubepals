@@ -104,7 +104,12 @@ once a quarter of an hour waits, once anything has waited ten minutes, or once i
 Each event is written before it is sent, with the id `extra:<account>:<YYYY-MM>:<n>`, which Polar
 keeps for good: sent again it counts as a duplicate, never twice. Unsent events go oldest first,
 25 to a request, at most four requests a pass; a batch Polar refuses is sent one at a time so one
-bad event never holds back the rest; whatever fails is sent again next minute. Events are dated a
+bad event never holds back the rest. An event Polar refuses waits a minute before it is sent
+again, then twice as long each time, up to six hours; after ten refusals (about eight and a half
+hours) it is no longer sent (`failed_at`), it goes on the account's audit log as
+`billing.extra_unsent` with its hours and cents, and the `extra_play_unsent` admin alert says how
+many are set aside. Newer events go on meanwhile. Polar being down refuses nothing: the pass stops
+and everything is sent again next minute. Events are dated a
 minute behind the clock, because Polar refuses one from the future. Polar bills an event on the
 payment after it *receives* it, so a late one lands on the next payment, never on none.
 
