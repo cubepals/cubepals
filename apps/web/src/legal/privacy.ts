@@ -108,17 +108,34 @@ export const PRIVACY: Policy = {
       ],
     },
     {
+      id: 'google',
+      heading: '3. Signing in with Google',
+      blocks: [
+        'You can make a {brand} account, or sign in to one, with your Google account instead of a password. When you do, Google asks you to let {brand} see your basic profile, and nothing more: we ask only for the openid, email and profile permissions. We never see your Google password, and we can’t read your Gmail, Drive, contacts or anything else in your Google account.',
+        {
+          list: [
+            '**What we receive from Google:** your name, your email address, whether Google has confirmed that email address, the address of your profile picture, and your Google account ID, with the sign-in tokens Google gives us for it.',
+            '**What we use it for:** only to create your {brand} account and sign you in to it, to keep your name and picture with your account, and to email you about your account and servers. Your Google account ID is how we know it’s you the next time you sign in with Google.',
+            '**Who we share it with:** no one, except the providers that store our database and run {brand} for us (section 5), who keep it on our behalf. We don’t sell it, use it for advertising, or use it to train AI models, and no person reads it except to answer you or to keep {brand} safe.',
+            '**How we keep it safe:** it is stored in our database in Frankfurt, Germany, encrypted in transit, and only the person who runs {brand} has access to it (section 8).',
+            '**How long we keep it, and how to remove it:** for as long as you have your account. Delete your account, or email {privacy}, and we delete what Google gave us with it within 30 days. You can also remove {brand}’s access at any time from your Google account, at myaccount.google.com/permissions; you then can’t sign in with Google until you allow it again.',
+          ],
+        },
+        '{brand}’s use of information received from Google APIs adheres to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements.',
+      ],
+    },
+    {
       id: 'players',
-      heading: '3. If you play on someone’s server',
+      heading: '4. If you play on someone’s server',
       blocks: [
         'You don’t need a {brand} account to join a server. When you join one, we process your Minecraft username and player ID, when you were on, and anything the server’s owner adds about you (for example a ban reason). The server’s own files and logs keep what Minecraft records, such as your position and chat. If the server is published, its public page shows your Minecraft name while you are on it, if the server checks accounts.',
         'If you join with an invite link, we check the name you type with Mojang so the owner can add you.',
-        'You can use the rights in section 8 for this data too: email {privacy} with your Minecraft name. The server’s owner controls who plays and what happens on their server, so we may pass your request on to them.',
+        'You can use the rights in section 9 for this data too: email {privacy} with your Minecraft name. The server’s owner controls who plays and what happens on their server, so we may pass your request on to them.',
       ],
     },
     {
       id: 'sharing',
-      heading: '4. Who else handles your data',
+      heading: '5. Who else handles your data',
       blocks: [
         'We use a small number of providers to run {brand}. They handle personal data on our behalf, under contracts that require them to keep it safe and use it only to provide their service to us. We don’t share your data with anyone else unless the law requires it (for example a valid court order), or to protect people’s safety.',
         {
@@ -127,8 +144,13 @@ export const PRIVACY: Policy = {
             rows: [
               [
                 'Fly.io, Inc.',
-                'Runs our servers, your game servers and our database.',
-                'Frankfurt, Germany, the database included; Ashburn, US for game servers moved to North America. Fly.io is a US company.',
+                'Runs our servers and your game servers.',
+                'Frankfurt, Germany; Ashburn, US for game servers moved to North America. Fly.io is a US company.',
+              ],
+              [
+                'Supabase, Inc.',
+                'Hosts our database: your account and everything in section 2 that we store.',
+                'Frankfurt, Germany. Supabase is a US company.',
               ],
               [
                 'Vercel, Inc.',
@@ -178,15 +200,15 @@ export const PRIVACY: Policy = {
     },
     {
       id: 'transfers',
-      heading: '5. Data sent outside the UK and EU',
+      heading: '6. Data sent outside the UK and EU',
       blocks: [
-        '{brand} is run from {country}, so when we look after your account, fix a problem or answer you, your data is accessed from there. Neither the UK nor the EU has recognised Saudi Arabia as protecting personal data to their standard. The UK GDPR and the EU GDPR still apply to everything we do with your data, wherever we are, and we follow them: your rights in section 8 are the same.',
+        '{brand} is run from {country}, so when we look after your account, fix a problem or answer you, your data is accessed from there. Neither the UK nor the EU has recognised Saudi Arabia as protecting personal data to their standard. The UK GDPR and the EU GDPR still apply to everything we do with your data, wherever we are, and we follow them: your rights in section 9 are the same.',
         'Some of the providers above are in the US, so your data may be handled there. When it is, we rely on the provider being certified under the EU–US Data Privacy Framework (and its UK Extension), or on the European Commission’s standard contractual clauses (with the UK Addendum), which require the provider to protect your data to EU and UK standards. Email {privacy} for a copy of the safeguards that apply.',
       ],
     },
     {
       id: 'retention',
-      heading: '6. How long we keep it',
+      heading: '7. How long we keep it',
       blocks: [
         {
           list: [
@@ -205,14 +227,14 @@ export const PRIVACY: Policy = {
     },
     {
       id: 'security',
-      heading: '7. Keeping it safe',
+      heading: '8. Keeping it safe',
       blocks: [
         'Passwords are stored only as secure hashes. Everything between your browser and {brand} is encrypted. Sign-in cookies can’t be read by scripts on the page. Access to our systems is limited to the person who runs {brand}. If a breach puts your data at risk, we will tell you and the regulator as the law requires.',
       ],
     },
     {
       id: 'rights',
-      heading: '8. Your rights',
+      heading: '9. Your rights',
       blocks: [
         'You have the right to:',
         {
@@ -232,21 +254,21 @@ export const PRIVACY: Policy = {
     },
     {
       id: 'age',
-      heading: '9. Children',
+      heading: '10. Children',
       blocks: [
         '{brand} accounts are for people aged 18 and over, and we don’t knowingly collect data from children to create accounts. If you think a child has made an account, email {privacy} and we will act as our [Terms](/legal/terms#accounts) describe. Players who join a server without an account may be younger; we only process the Minecraft details described in section 3 about them.',
       ],
     },
     {
       id: 'cookies',
-      heading: '10. Cookies',
+      heading: '11. Cookies',
       blocks: [
         'We only use cookies and browser storage that are needed for {brand} to work, such as keeping you signed in. We don’t use advertising or tracking cookies, and the way we count how {brand} is used stores nothing on your device. Our [Cookies](/legal/cookies) page lists each one.',
       ],
     },
     {
       id: 'changes',
-      heading: '11. Changes to this policy',
+      heading: '12. Changes to this policy',
       blocks: [
         'If we change how we use your data, we will update this page and its date. If the change matters, we will email you before it takes effect.',
       ],
