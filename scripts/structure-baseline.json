@@ -36,10 +36,6 @@
       "n": 856,
       "reason": "The tests of one class on one shared setup."
     },
-    "apps/web/src/app/(app)/servers/new/page.tsx › function CreateServer": {
-      "n": 685,
-      "reason": "Its parts were moved out; what is left is one form whose state every field shares."
-    },
     "scripts/smoke.ts": {
       "n": 847,
       "reason": "One linear run whose steps share state."
@@ -615,7 +611,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/(app)/servers/new/page.tsx › function CreateServer": {
-      "n": 163,
+      "n": 154,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/(public)/browse/directory.tsx › function Directory": {
@@ -1313,7 +1309,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/(app)/servers/new/page.tsx › function CreateServer": {
-      "n": 438,
+      "n": 362,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/design/page.tsx › function DesignGallery": {

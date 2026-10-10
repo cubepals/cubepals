@@ -12,7 +12,10 @@ import type { CuratedReleaseRecord } from './persistence.ts'
  * A pack's releases, newest first: a reviewed pack's in the review's order, Blockly's own by the
  * Minecraft each runs on, from those put together so far.
  */
-export const orderOf = (pack: CuratedPack | OwnPack, releases: readonly CuratedReleaseRecord[]): string[] =>
+export const orderOf = (
+  pack: CuratedPack | OwnPack,
+  releases: readonly Pick<CuratedReleaseRecord, 'key' | 'version'>[],
+): string[] =>
   'releases' in pack
     ? pack.releases.map((spec) => spec.version)
     : ownOrder(

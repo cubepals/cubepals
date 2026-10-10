@@ -189,6 +189,42 @@
   color: var(--status-danger);
 }
 
+/* Every other way to play, opened in place under the first three: a choice like the rest, only
+   quieter, with no item of its own, and a mark that turns as it opens. */
+.row[data-more] {
+  color: var(--ink-muted);
+}
+.row[data-more] .rowTitle {
+  color: var(--ink-muted);
+}
+@media (hover: hover) and (pointer: fine) {
+  .row[data-more]:hover .rowTitle {
+    color: var(--ink);
+  }
+}
+.moreMark {
+  transition: rotate var(--quick) var(--ease);
+}
+.row[aria-expanded="true"] .moreMark {
+  rotate: 180deg;
+}
+.more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-20);
+}
+.more[hidden] {
+  display: none;
+}
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.groupTitle {
+  color: var(--ink-muted);
+}
+
 /* A choice's picture: the item on its own colour, or a pack's image filling the square. */
 .thumb {
   position: relative;

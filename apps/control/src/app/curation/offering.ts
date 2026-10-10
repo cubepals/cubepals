@@ -12,10 +12,10 @@ import { AppError, NotFound } from '../errors.ts'
 import { orderOf } from './order.ts'
 import { type OwnPack, ownPack } from './own.ts'
 import { type CuratedPack, curatedPack } from './packs.ts'
-import { type CuratedReleaseRecord, loadRelease, loadReleases } from './persistence.ts'
+import { loadPublished, loadRelease, loadReleases, type OfferableRecord } from './persistence.ts'
 
 /** A verified release, with the pack a server of it pins and what checking it found. */
-type CheckedRelease = CuratedReleaseRecord & { pack: PinnedModpack; facts: CuratedFactsJson }
+type CheckedRelease = OfferableRecord & { pack: PinnedModpack; facts: CuratedFactsJson }
 
 /** A pack offered to people making a server, at the release they would get. */
 export interface OfferedPack {
@@ -33,7 +33,9 @@ export async function offered(
   own: readonly OwnPack[],
 ): Promise<OfferedPack[]> {
   const keys = [...own, ...packs].map((pack) => pack.key)
-  const releases = await loadReleases(db, keys)
+  // Only a published release is ever offered, and each pack's order keeps the published ones in
+  // the same order among themselves, so the rest needn't be read.
+  const releases = await loadPublished(db, keys)
   return [...own, ...packs].flatMap((pack) => {
     const theirs = releases.filter((record) => record.key === pack.key)
     const release = offeredRelease(orderOf(pack, theirs), theirs)
@@ -83,5 +85,5 @@ export async function newerFor(
   return checked === null ? null : { pack, release: checked }
 }
 
-const checkedOf = (record: CuratedReleaseRecord): CheckedRelease | null =>
+const checkedOf = (record: OfferableRecord): CheckedRelease | null =>
   record.pack === null || record.facts === null ? null : { ...record, pack: record.pack, facts: record.facts }

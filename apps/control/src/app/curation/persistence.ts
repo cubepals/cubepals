@@ -70,6 +70,36 @@ export async function loadReleases(q: Queryable, keys?: readonly string[]): Prom
   return rows.map(recordOf)
 }
 
+/** A release as offering it reads it: which it is, where it stands, and what servers of it get. */
+export type OfferableRecord = Pick<CuratedReleaseRecord, 'key' | 'version' | 'state' | 'pack' | 'facts'>
+
+/**
+ * The published releases of these packs, with only what offering them reads. Every create page
+ * and every pick of a pack by name asks this, so it leaves out the releases nobody is offered and
+ * the review's own record of each.
+ */
+export async function loadPublished(q: Queryable, keys: readonly string[]): Promise<OfferableRecord[]> {
+  if (keys.length === 0) return []
+  const rows = await q
+    .select({
+      packKey: releases.packKey,
+      version: releases.version,
+      state: releases.state,
+      pack: releases.pack,
+      facts: releases.facts,
+    })
+    .from(releases)
+    .where(and(inArray(releases.packKey, [...keys]), eq(releases.state, 'published')))
+    .orderBy(asc(releases.packKey), asc(releases.createdAt))
+  return rows.map((row) => ({
+    key: row.packKey,
+    version: row.version,
+    state: row.state,
+    pack: row.pack === null ? null : { environment: 'both', icon: null, ...row.pack },
+    facts: row.facts,
+  }))
+}
+
 /** A reviewed release seen for the first time, waiting to be checked. Says whether it was new. */
 export async function insertPending(q: Queryable, key: string, version: string): Promise<boolean> {
   const inserted = await q
