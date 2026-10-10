@@ -51,6 +51,9 @@ const CustomerState = z.object({
 // A subscription event carries the subscription, and its customer the external id.
 const SubscriptionEvent = z.object({ customer: z.object({ external_id: z.string().nullish() }) })
 
+// Products found by their metadata: the one a balance is settled with.
+const Products = z.object({ items: z.array(z.object({ id: z.string() })) })
+
 // The prices of a plan's product, to tell the metered line of an order from the plan's own.
 const Product = z.object({ prices: z.array(z.object({ id: z.string(), amount_type: z.string().nullish() })) })
 
@@ -69,6 +72,7 @@ const Subscription = z.object({
 const Order = z.object({
   status: z.string(),
   subscription_id: z.string().nullish(),
+  metadata: z.record(z.string(), z.unknown()).nullish(),
   items: z.array(z.object({ amount: z.number().int(), product_price_id: z.string().nullish() })).default([]),
   id: z.string(),
   created_at: z.string(),
@@ -93,6 +97,8 @@ export class PolarBilling implements BillingProvider {
   readonly #plans: ReadonlyMap<string, string>
   /** Product → its prices, by id, with whether each is metered; read from Polar once each. */
   readonly #prices = new Map<string, Map<string, boolean>>()
+  /** The one-time product a balance is settled with, found by its metadata once. */
+  #balance: string | null = null
 
   constructor(options: PolarBillingOptions) {
     this.#polar = createPolar({
@@ -129,6 +135,41 @@ export class PolarBilling implements BillingProvider {
       if (refusesEmail(error)) return create(null)
       throw error
     })
+    return checkout.url
+  }
+
+  /**
+   * A checkout for the "balance" product (metadata `purpose: balance`, one-time, any price) at
+   * exactly what is owed, as an ad-hoc price, naming the orders it settles in its metadata. Polar
+   * no longer retries a renewal once its subscription has ended, and voids it; this is how that
+   * money is paid (seen in the sandbox, 2026-10-10).
+   */
+  async settleUrl(input: {
+    userId: string
+    email: string
+    cents: number
+    settles: readonly string[]
+    returnUrl: string
+  }): Promise<string> {
+    if (this.#balance === null) {
+      const found = await call('finding the balance product', () =>
+        this.#polar.products.list({ metadata: { purpose: 'balance' }, is_archived: false }),
+      )
+      this.#balance = Products.parse(found).items[0]?.id ?? null
+    }
+    const product = this.#balance
+    if (product === null) throw new Error('No Polar product has the metadata purpose: balance')
+    const checkout = await call('starting a payment', () =>
+      this.#polar.checkouts.create({
+        products: [product],
+        prices: { [product]: [{ amount_type: 'fixed', price_amount: input.cents, price_currency: 'usd' }] },
+        metadata: { settles: input.settles.join(',') },
+        external_customer_id: input.userId,
+        customer_email: input.email,
+        success_url: input.returnUrl,
+        return_url: input.returnUrl,
+      }),
+    )
     return checkout.url
   }
 
@@ -199,6 +240,9 @@ export class PolarBilling implements BillingProvider {
       status: order.status,
       extraCents,
       externalSubscriptionId: order.subscription_id ?? null,
+      settles: String(order.metadata?.settles ?? '')
+        .split(',')
+        .filter((id) => id.length > 0),
       orderedAt: new Date(order.created_at),
     }
   }

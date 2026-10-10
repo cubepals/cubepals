@@ -166,9 +166,12 @@ in Polar's production dashboard (polar.sh, not the sandbox):
    that meter: `unit_amount` 25 (cents an hour) and `cap_amount` 5000 ($50 a period, twice the
    most a player may allow in a month, as a last resort). Blockly sends `play.extra` events and
    needs no id of either ([money-guards.md](money-guards.md#extra-play)).
-3. Settings → Developers → an organization access token with `checkouts:write`, `customer_sessions:write`, `customers:read`, `subscriptions:read`, `products:read` and `events:write`:
+3. A one-time product "Cubepals balance" with a custom (pay-what-you-want) price and the metadata
+   `purpose: balance`. A payment Polar can no longer collect (its subscription ended) is paid
+   with it, at the amount owed ([money-guards.md](money-guards.md#extra-play)).
+4. Settings → Developers → an organization access token with `checkouts:write`, `customer_sessions:write`, `customers:read`, `subscriptions:read`, `products:read` and `events:write`:
    `POLAR_ACCESS_TOKEN`.
-4. Settings → Webhooks → an endpoint `https://cubepals.com/api/billing/webhook`, API version
+5. Settings → Webhooks → an endpoint `https://cubepals.com/api/billing/webhook`, API version
    2026-10, events `customer.state_changed`, `order.created`, `order.updated`, `order.paid`, `order.refunded`, `subscription.active`, `subscription.past_due`, `subscription.canceled`, `subscription.uncanceled` and `subscription.revoked`. Its secret (`whsec_…`) is `POLAR_WEBHOOK_SECRET`.
 
 Then `bun scripts/production.ts apply`. The three come together or not at all; `check` and the

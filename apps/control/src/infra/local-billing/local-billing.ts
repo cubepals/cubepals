@@ -31,11 +31,13 @@ const PERIOD_MS = 365 * 24 * 60 * 60_000
 
 /** What a link to a page carries: whose it is, what it is for, and where it goes back to. */
 export interface Ticket {
-  page: 'checkout' | 'portal'
+  page: 'checkout' | 'portal' | 'settle'
   userId: string
   /** The plan a checkout is for, and what Blockly says it costs; null and 0 for the portal. */
   planKey: string | null
   priceCents: number
+  /** The orders a payment settles, for the settle page. */
+  settles?: string[]
   returnUrl: string
   expires: number
 }
@@ -44,7 +46,7 @@ export interface Ticket {
 export type Delivery =
   | { type: 'subscription.started'; userId: string; planKey: string }
   | { type: 'subscription.cancelled'; userId: string }
-  | { type: 'order.paid'; userId: string; planKey: string; cents: number }
+  | { type: 'order.paid'; userId: string; planKey: string | null; cents: number; settles?: string[] }
 
 export class LocalBilling implements BillingProvider {
   readonly provider = 'local'
@@ -86,6 +88,23 @@ export class LocalBilling implements BillingProvider {
     })
   }
 
+  /** The settle page: a payment for what is owed, with nothing charged, as the others. */
+  async settleUrl(input: {
+    userId: string
+    cents: number
+    settles: readonly string[]
+    returnUrl: string
+  }): Promise<string> {
+    return this.#link({
+      page: 'settle',
+      userId: input.userId,
+      planKey: null,
+      priceCents: input.cents,
+      settles: [...input.settles],
+      returnUrl: input.returnUrl,
+    })
+  }
+
   /** The ticket a page's link carries, when it was signed here and still works; null otherwise. */
   ticket(value: string, page: Ticket['page'], now = Date.now()): Ticket | null {
     const [payload = '', signature = ''] = value.split('.')
@@ -115,7 +134,7 @@ export class LocalBilling implements BillingProvider {
           externalOrderId: `local-${randomUUID()}`,
           userId: event.userId,
           planKey: event.planKey,
-          billingReason: 'subscription_create',
+          billingReason: event.planKey === null ? 'purchase' : 'subscription_create',
           currency: 'usd',
           subtotalCents: cents,
           discountCents: 0,
@@ -126,6 +145,7 @@ export class LocalBilling implements BillingProvider {
           status: 'paid',
           extraCents: 0,
           externalSubscriptionId: null,
+          settles: event.settles ?? [],
           orderedAt: new Date(),
         },
       }

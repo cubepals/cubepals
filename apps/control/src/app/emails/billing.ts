@@ -1,8 +1,8 @@
 /**
  * What an owner is told when a payment carrying extra play fails: once while the card is tried
  * again, and once if it is still unpaid after that, when their servers can't start until it is
- * (`BillingService.tellAboutPayments`). Both say what to do, which is the same: pay it in Manage
- * billing on the account page.
+ * (`BillingService.tellAboutPayments`). Both say what to do: fix the card in Manage billing while
+ * it is still tried, and once it is owed, pay it on the account page.
  */
 import { dollars } from '../../domain/policy/spend.ts'
 import { ACCOUNT, type Email, layout, p } from '../emails.ts'
@@ -43,7 +43,7 @@ export function paymentOwed(input: { owedCents: number; extraCents: number; orig
   const lines = [
     `You owe ${dollars(input.owedCents)} from a Plus payment that didn’t go through, ${dollars(input.extraCents)} of it for extra hours.`,
     'Until it’s paid, your servers can’t start and you can’t make new ones. Your worlds are safe, and you can still download them.',
-    'Pay it in Manage billing on your account, and your servers can start again straight away.',
+    'Pay it on your account, and your servers can start again straight away.',
   ]
   const preheader = 'Your worlds are safe. Pay it on your account to play again.'
   return {

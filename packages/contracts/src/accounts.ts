@@ -227,6 +227,8 @@ export interface AccountOverviewView {
       countedUnits: number
       reportedUnits: number
       owedCents: number
+      /** Of that, what is paid as a balance (`billing.settle`); the rest by fixing the card. */
+      settleCents: number
     }
   }
   /** Each as the API would answer it now. */

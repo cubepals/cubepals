@@ -34,6 +34,7 @@ import {
   PAST_DUE_GRACE_MS,
   recordOrder,
   saveSubscription,
+  settleable,
   settleOtherSubscriptions,
   subscriptionsLeftOut,
   untoldAbout,
@@ -102,7 +103,7 @@ export class BillingService {
     if (owedCents > 0)
       throw new AppError(
         'payment_due',
-        `You owe ${dollars(owedCents)} from a payment that didn’t go through. Pay it in Manage billing first.`,
+        `You owe ${dollars(owedCents)} from a payment that didn’t go through. Pay it on your account first.`,
       )
     const billing = requireCapability(this.#caps, 'billing')
     const returnUrl = new URL(this.#returnUrl)
@@ -130,6 +131,39 @@ export class BillingService {
           ? {}
           : { terms: options.consent.terms, startNow: options.consent.startNow }),
       },
+    })
+    return { url }
+  }
+
+  /**
+   * A payment for what the account owes that the provider can no longer collect on its own (its
+   * subscription ended); paying it clears the block when the provider's word arrives.
+   */
+  async settleBalance(actor: Actor): Promise<{ url: string }> {
+    const user = await this.#person(actor)
+    await this.#db.transaction((tx) => this.#policy.require(tx, user.id, { kind: 'billing' }))
+    const owed = await settleable(this.#db, user.id)
+    if (owed.cents === 0)
+      throw new AppError(
+        'invalid_choice',
+        'Nothing to pay here. A payment still being tried is paid in Manage billing.',
+      )
+    const billing = requireCapability(this.#caps, 'billing')
+    const url = await this.#reach(() =>
+      billing.settleUrl({
+        userId: user.id,
+        email: user.email,
+        cents: owed.cents,
+        settles: owed.orders,
+        returnUrl: this.#returnUrl,
+      }),
+    )
+    await this.#db.insert(schema.auditLog).values({
+      actor: requestedBy(actor),
+      action: 'billing.balance_payment_started',
+      subjectType: 'account',
+      subjectId: user.id,
+      data: { cents: owed.cents, orders: owed.orders },
     })
     return { url }
   }

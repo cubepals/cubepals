@@ -537,6 +537,8 @@ const billing = router({
     }),
   ),
   portal: authedProcedure.mutation(({ ctx }) => ctx.services.billing.customerPortal(ctx.actor)),
+  /** What is owed and can no longer be retried, paid at once (`BillingService.settleBalance`). */
+  settle: authedProcedure.mutation(({ ctx }) => ctx.services.billing.settleBalance(ctx.actor)),
   /** After a checkout: the provider's word now, before its webhook arrives. */
   refresh: authedProcedure.mutation(({ ctx }) => ctx.services.billing.refresh(ctx.actor)),
 })

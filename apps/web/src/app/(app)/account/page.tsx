@@ -275,13 +275,31 @@ function ExtraPlay({ overview }: { overview: AccountOverviewView }) {
   )
 }
 
-/** Money owed from a payment that didn't go through: what it blocks, and where it is paid. */
-function Owed({ cents }: { cents: number }) {
-  if (cents === 0) return null
+/**
+ * Money owed from a payment that didn't go through: what it blocks, and how it is paid. One the
+ * provider can no longer collect is paid here at once; one it still tries is paid by fixing the
+ * card in Manage billing.
+ */
+function Owed({ extra }: { extra: AccountOverviewView['usage']['extra'] }) {
+  const trpc = useTRPC()
+  const settle = useMutation(
+    trpc.billing.settle.mutationOptions({ onSuccess: ({ url }) => window.location.assign(url) }),
+  )
+  if (extra.owedCents === 0) return null
   return (
-    <Note tone="danger">
-      {`You owe ${money(cents)} from a payment that didn’t go through. Your servers can’t start until it’s paid in Manage billing. Your worlds are safe, and you can still download them.`}
-    </Note>
+    <>
+      <Note tone="danger">
+        {`You owe ${money(extra.owedCents)} from a payment that didn’t go through. Your servers can’t start until it’s paid${extra.settleCents > 0 ? '' : ' in Manage billing'}. Your worlds are safe, and you can still download them.`}
+      </Note>
+      {extra.settleCents > 0 && (
+        <div className="bk-row">
+          <Button variant="primary" disabled={settle.isPending} onClick={() => settle.mutate()}>
+            {`Pay ${money(extra.settleCents)}`}
+          </Button>
+        </div>
+      )}
+      {settle.isError && <Note tone="danger">{messageOf(settle.error)}</Note>}
+    </>
   )
 }
 
@@ -359,7 +377,7 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
       {billing && !billing.available && billing.code !== 'deployment_unsupported' && (
         <Note tone="info">{billing.message}</Note>
       )}
-      <Owed cents={overview.usage.extra.owedCents} />
+      <Owed extra={overview.usage.extra} />
       {refresh.isPending && <p className="type-body-sm">Checking your payment…</p>}
       {failure && <Note tone="danger">{messageOf(failure)}</Note>}
     </FormSection>

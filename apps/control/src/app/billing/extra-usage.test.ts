@@ -512,37 +512,57 @@ test.skipIf(!hasDatabase)(
   60_000,
 )
 
+/** A renewal with $2.50 of extra hours on it, as Polar delivers it: made and waiting, or voided. */
+const renewalWithExtra = (
+  owner: UserActor,
+  sub: string,
+  madeAt: Date,
+  status = 'pending',
+  id = `order-${randomUUID()}`,
+) =>
+  Promise.resolve(
+    post(
+      orderEvent(
+        order(owner.userId, {
+          id,
+          subscription_id: sub,
+          status,
+          paid: false,
+          billing_reason: 'subscription_cycle',
+          created_at: madeAt.toISOString(),
+          subtotal_amount: 1750,
+          net_amount: 1750,
+          total_amount: 1750,
+          items: [
+            { amount: 1500, product_price_id: FIXED_PRICE },
+            { amount: 250, product_price_id: METERED_PRICE },
+          ],
+        }),
+        status === 'pending' ? 'order.created' : 'order.updated',
+      ),
+    ),
+  ).then(() => id)
+
+/** The subscription as Polar holds it now, and its word that the customer's standing changed. */
+const subscriptionNow = async (owner: UserActor, sub: string, patch: Record<string, unknown>) => {
+  subscriptions.set(sub, subscription(sub, patch))
+  await standing(owner, sub, {}, false)
+}
+
 test.skipIf(!hasDatabase)(
-  'a payment carrying extra fails, is told, becomes owed, blocks, and paying clears it',
+  'a payment carrying extra fails, is told, then is owed: servers stop and nothing new starts',
   async () => {
     const { owner, sub } = await subscriber('Vic')
     await h.app.accounts.allowExtraPlay(owner, 20)
     const server = await stoppedServer(owner)
-    // The renewal is made, with $2.50 of extra hours on it, and its charge fails.
+    // The renewal is made and its charge fails: past due while Polar tries the card again.
     const madeAt = new Date()
-    const renewal = await ordered(
-      owner,
-      sub,
-      {
-        status: 'pending',
-        paid: false,
-        billing_reason: 'subscription_cycle',
-        created_at: madeAt.toISOString(),
-        subtotal_amount: 1750,
-        net_amount: 1750,
-        total_amount: 1750,
-        items: [
-          { amount: 1500, product_price_id: FIXED_PRICE },
-          { amount: 250, product_price_id: METERED_PRICE },
-        ],
-      },
-      'order.created',
-    )
-    subscriptions.set(
-      sub,
-      subscription(sub, { status: 'past_due', past_due_at: madeAt.toISOString(), ended_at: null }),
-    )
-    await standing(owner, sub, {}, false)
+    const renewal = await renewalWithExtra(owner, sub, madeAt)
+    await subscriptionNow(owner, sub, {
+      status: 'past_due',
+      past_due_at: madeAt.toISOString(),
+      ended_at: null,
+    })
     const [kept] = await h.db
       .select()
       .from(schema.billingOrders)
@@ -563,54 +583,78 @@ test.skipIf(!hasDatabase)(
     await h.settled(server.id)
 
     // The subscription ends unpaid: the account owes it, its servers stop, and nothing new starts.
-    subscriptions.set(sub, subscription(sub, { status: 'canceled' }))
-    await standing(owner, sub, {}, false)
+    await subscriptionNow(owner, sub, { status: 'canceled' })
     expect((await h.until(server.id, 'stopped')).lifecycle.stopReason).toBe('unpaid')
     await h.settled(server.id)
     await h.app.billing.tellAboutPayments()
     expect(h.mail.sent.at(-1)?.subject).toBe('Your Cubepals servers can’t start until a payment is made')
     expect(h.mail.sent.at(-1)?.text).toContain('You owe $17.50 from a Plus payment')
     const owes =
-      'You owe $17.50 from a payment that didn’t go through. Pay it in Manage billing on your account, and your servers can start again.'
+      'You owe $17.50 from a payment that didn’t go through. Pay it on your account, and your servers can start again.'
     expect(await refusal(h.app.servers.start(owner, server.id, crypto.randomUUID()))).toBe(owes)
     expect(await refusal(h.create(owner, { name: 'Another' }))).toBe(owes)
     expect(
       await refusal(
         h.app.billing.startCheckout(owner, 'plus', { consent: { terms: TERMS_VERSION, startNow: true } }),
       ),
-    ).toBe('You owe $17.50 from a payment that didn’t go through. Pay it in Manage billing first.')
-    expect((await h.app.accountQueries.overview(owner)).usage.extra.owedCents).toBe(1750)
-    // The portal, where it is paid, stays open.
+    ).toBe('You owe $17.50 from a payment that didn’t go through. Pay it on your account first.')
+    // The portal stays open.
     polar.reply = () => ({ status: 201, body: { customer_portal_url: 'https://polar.test/portal' } })
     expect(await h.app.billing.customerPortal(owner)).toEqual({ url: 'https://polar.test/portal' })
-
-    // Paid: the block clears on its own.
-    await post(
-      orderEvent(
-        order(owner.userId, {
-          id: renewal,
-          subscription_id: sub,
-          status: 'paid',
-          billing_reason: 'subscription_cycle',
-          total_amount: 1750,
-          net_amount: 1750,
-          subtotal_amount: 1750,
-          items: [],
-        }),
-        'order.paid',
-      ),
-    )
-    // A late delivery of the order as it was made doesn't make it unpaid again.
-    await post(
-      orderEvent(
-        order(owner.userId, { id: renewal, subscription_id: sub, status: 'pending' }),
-        'order.updated',
-      ),
-    )
-    expect((await h.app.accountQueries.overview(owner)).usage.extra.owedCents).toBe(0)
-    expect(await refusal(h.app.servers.start(owner, server.id, crypto.randomUUID()))).toBeNull()
   },
   90_000,
+)
+
+test.skipIf(!hasDatabase)(
+  'what Polar can no longer collect is paid as a balance, and paying clears it for good',
+  async () => {
+    const { owner, sub } = await subscriber('Yan')
+    const madeAt = new Date()
+    const renewal = await renewalWithExtra(owner, sub, madeAt)
+    // Still tried: paid by fixing the card, never offered as a balance as well.
+    await subscriptionNow(owner, sub, {
+      status: 'past_due',
+      past_due_at: madeAt.toISOString(),
+      ended_at: null,
+    })
+    expect(await refusal(h.app.billing.settleBalance(owner))).toBe(
+      'Nothing to pay here. A payment still being tried is paid in Manage billing.',
+    )
+    // Ended, and voided by Polar: owed, and paid here, at exactly that, naming the order.
+    await subscriptionNow(owner, sub, { status: 'canceled' })
+    await renewalWithExtra(owner, sub, madeAt, 'void', renewal)
+    expect((await h.app.accountQueries.overview(owner)).usage.extra).toMatchObject({
+      owedCents: 1750,
+      settleCents: 1750,
+    })
+    const BALANCE = '0f6f9a52-3b8c-4d0e-9a51-1f0ab2a1c003'
+    polar.reply = ({ path }) =>
+      path.startsWith('/v1/products')
+        ? { status: 200, body: { items: [{ id: BALANCE }], pagination: { total_count: 1, max_page: 1 } } }
+        : { status: 201, body: { id: 'c_1', url: 'https://polar.test/settle' } }
+    expect(await h.app.billing.settleBalance(owner)).toEqual({ url: 'https://polar.test/settle' })
+    expect(JSON.parse(polar.requests.at(-1)?.body ?? '{}')).toMatchObject({
+      products: [BALANCE],
+      prices: { [BALANCE]: [{ amount_type: 'fixed', price_amount: 1750, price_currency: 'usd' }] },
+      metadata: { settles: renewal },
+      external_customer_id: owner.userId,
+    })
+    // Paid: the block clears on its own, and Polar's word about the void order again changes nothing.
+    await ordered(owner, sub, {
+      subscription_id: null,
+      product_id: BALANCE,
+      billing_reason: 'purchase',
+      total_amount: 1750,
+      net_amount: 1750,
+      subtotal_amount: 1750,
+      metadata: { settles: renewal },
+    })
+    await renewalWithExtra(owner, sub, madeAt, 'void', renewal)
+    const after = await h.app.accountQueries.overview(owner)
+    expect(after.usage.extra).toMatchObject({ owedCents: 0, settleCents: 0 })
+    expect(after.features.find((f) => f.feature === 'create_server')).toMatchObject({ available: true })
+  },
+  60_000,
 )
 
 test.skipIf(!hasDatabase)(

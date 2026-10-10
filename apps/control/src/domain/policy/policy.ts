@@ -185,7 +185,7 @@ export function evaluate(facts: PolicyFacts, capability: Capability): Decision {
   if ((provisions || starts) && capability.kind !== 'restore_archive' && facts.owedCents > 0)
     return deny(
       'payment_due',
-      `You owe ${dollars(facts.owedCents)} from a payment that didn’t go through. Pay it in Manage billing on your account, and your servers can start again.`,
+      `You owe ${dollars(facts.owedCents)} from a payment that didn’t go through. Pay it on your account, and your servers can start again.`,
     )
 
   // Writing where strangers read it takes an address someone confirmed, as making a server does.

@@ -5,6 +5,8 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { TERMS_VERSION } from '@blockly/contracts'
+import { schema } from '@blockly/db'
+import { eq } from 'drizzle-orm'
 import { loadStanding } from '../../app/accounts/persistence.ts'
 import { createBillingWebhook } from '../../interfaces/billing/webhook.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
@@ -68,6 +70,25 @@ describe.skipIf(!hasDatabase)('the local checkout', () => {
     expect((await loadStanding(h.db, actor.userId)).plan).toBe('free')
     await h.app.billing.refresh(actor)
     expect((await loadStanding(h.db, actor.userId)).plan).toBe('free')
+  })
+
+  test('a balance paid here is a paid order naming the orders it settles', async () => {
+    const actor = await h.user()
+    const url = await billing.settleUrl({
+      userId: actor.userId,
+      cents: 1750,
+      settles: ['o-1'],
+      returnUrl: 'http://localhost:3000/account',
+    })
+    expect(await (await pages.request(new URL(url).pathname + new URL(url).search)).text()).toContain(
+      'Pay $17.50',
+    )
+    expect((await press(url)).status).toBe(303)
+    const [kept] = await h.db
+      .select()
+      .from(schema.billingOrders)
+      .where(eq(schema.billingOrders.userId, actor.userId))
+    expect(kept).toMatchObject({ billingReason: 'purchase', status: 'paid', totalCents: 1750, planKey: null })
   })
 
   test('extra play is kept here, once per id, instead of being sent anywhere', async () => {

@@ -17,7 +17,7 @@ import type { Capability, DenialCode } from '../../domain/policy/policy.ts'
 import { type MemoryTier, PARTY, playerCapacity, sizeLabel } from '../../domain/server/size.ts'
 import type { Actor } from '../actor.ts'
 import { extraThisMonth } from '../billing/extra-usage.ts'
-import { extraPlayNow, latestSubscription, PAST_DUE_GRACE_MS } from '../billing/persistence.ts'
+import { extraPlayNow, latestSubscription, PAST_DUE_GRACE_MS, settleable } from '../billing/persistence.ts'
 import { NotFound } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import { listUnpurged } from '../servers/persistence.ts'
@@ -89,6 +89,8 @@ export interface AccountOverview {
       countedUnits: number
       reportedUnits: number
       owedCents: number
+      /** Of that, what is paid as a balance (`billing.settle`); the rest by fixing the card. */
+      settleCents: number
     }
   }
   features: Array<{ feature: Feature; available: boolean; code?: DenialCode; message?: string }>
@@ -195,6 +197,7 @@ export class AccountQueries {
           choices: decision.may ? EXTRA_CHOICES.filter((units) => units <= ceiling) : [],
           ...(await extraThisMonth(this.#db, userId, now)),
           owedCents,
+          settleCents: (await settleable(this.#db, userId, now)).cents,
         },
       },
       features,

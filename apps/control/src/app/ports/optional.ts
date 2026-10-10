@@ -100,6 +100,8 @@ export interface BillingOrder {
   extraCents: number
   /** The subscription it charged for; null for none. */
   externalSubscriptionId: string | null
+  /** Orders it paid for in their place: a balance settled (`settleUrl`). */
+  settles: string[]
   orderedAt: Date
 }
 
@@ -137,6 +139,17 @@ export interface BillingProvider {
     returnUrl: string
   }): Promise<string>
   portalUrl(input: { userId: string; returnUrl: string }): Promise<string>
+  /**
+   * A one-time payment of `cents` for orders the provider can no longer collect (their
+   * subscription ended), which its order then names in `settles`.
+   */
+  settleUrl(input: {
+    userId: string
+    email: string
+    cents: number
+    settles: readonly string[]
+    returnUrl: string
+  }): Promise<string>
   /**
    * One webhook delivery, from the raw body: the standing or the order it reports, or null for a
    * delivery that reports neither. A delivery that isn't authentic is a WebhookRejected.

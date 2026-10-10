@@ -447,7 +447,7 @@ describe('extra play and money owed', () => {
       ok: false as const,
       code: 'payment_due' as const,
       message:
-        'You owe $20.00 from a payment that didn’t go through. Pay it in Manage billing on your account, and your servers can start again.',
+        'You owe $20.00 from a payment that didn’t go through. Pay it on your account, and your servers can start again.',
     }
     expect(evaluate(owed, start)).toEqual(due)
     expect(evaluate(owed, create)).toEqual(due)

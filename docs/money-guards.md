@@ -110,8 +110,13 @@ payment after it *receives* it, so a late one lands on the next payment, never o
 
 **Being paid.** A renewal's metered line is kept on its order (`billing_orders.extra_cents`). A
 failed one is emailed once while Polar retries the card; once it is owed, once more, and servers
-stop until it is paid. Paying it (a retry Polar makes after the card is fixed in its portal)
-arrives as `order.paid` and clears the block on its own.
+stop until it is paid. While Polar still retries it, it is paid by fixing the card: the portal's
+"Retry payment" charges the new card, and `order.paid` clears the block. Once its subscription has
+ended, Polar won't retry it (`OrderNotEligibleForRetry`) and voids it, so the account page offers
+"Pay $x" instead: a checkout for the one-time "balance" product (found by its metadata
+`purpose: balance`) at exactly what is owed, as an ad-hoc price, with the orders it settles in its
+metadata. Its `order.paid` marks them `settled`, which clears the block. A charge still retried is
+never offered there, so nothing is paid twice.
 
 **What Polar does, as seen in its sandbox (2026-10-10).**
 - Checkout shows the plan's $15 and, under "Additional metered charges may apply", the line
