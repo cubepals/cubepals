@@ -9,7 +9,7 @@
  * (`schedules.ts`). `WOKEN_BY` comes from `bringing-up.ts`: the one import between families, since
  * a wake is a start a connection asked for.
  */
-import { type AppliedConfigJson, type Db, schema } from '@blockly/db'
+import { type AppliedConfigJson, type Db, schema, type Tx } from '@blockly/db'
 import { entitlementsFor } from '../../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { markReseed } from '../../access/persistence.ts'
@@ -26,7 +26,7 @@ import type { ServerTransitions } from '../../servers/transitions.ts'
 import { openInterval } from '../../servers/usage.ts'
 import { enqueuePrune } from '../../worlds/service.ts'
 import type { BootSequence } from '../boot.ts'
-import { otherWork } from '../persistence.ts'
+import { openOfKinds, otherWork } from '../persistence.ts'
 import { NoLongerApplies, type OperationHandler } from '../runner.ts'
 import { appliedConfig, type ServerBinding } from './binding.ts'
 import { WOKEN_BY } from './bringing-up.ts'
@@ -187,14 +187,15 @@ export function storedWorlds(deps: {
 
   /**
    * A wake that didn't finish: whatever it made goes, and the server rests again, its copy
-   * untouched, for the owner or the next join to try again.
+   * untouched, for the owner or the next join to try again. Only while `wakeId` is the wake
+   * restoring it: see `anotherWake`.
    */
-  const backToStored = async (serverId: string, reason: string) => {
+  const backToStored = async (serverId: string, wakeId: string, reason: string) => {
     const { handle } = await loadRuntime(db, serverId, runtime.providers)
     const released = handle === null ? null : await runtime.release(handle).catch(() => handle)
     await db.transaction(async (tx) => {
       const locked = await lockServer(tx, serverId)
-      if (locked?.lifecycle.status !== 'restoring') return
+      if (locked?.lifecycle.status !== 'restoring' || (await anotherWake(tx, serverId, wakeId))) return
       if (released !== null) await saveHandle(tx, serverId, released, locked.regionKey)
       await transitions.outcome(tx, locked, { type: 'stored' })
       await tx.insert(schema.auditLog).values({
@@ -215,7 +216,7 @@ export function storedWorlds(deps: {
       const server = ctx.server
       const decision = await stillAllowed(server, 'continue_starting')
       if (!decision.ok) {
-        await backToStored(server.id, decision.message)
+        await backToStored(server.id, ctx.op.id, decision.message)
         return { status: 'cancelled', reason: decision.message }
       }
       const archives = deps.archives
@@ -247,7 +248,7 @@ export function storedWorlds(deps: {
         // Sent to the trash while it woke: the decommission behind this takes what it made.
         if (error instanceof NoLongerApplies) throw error
         // What went wrong is the platform's to read; the owner reads that the world is safe.
-        await backToStored(server.id, inFull(error))
+        await backToStored(server.id, ctx.op.id, inFull(error))
         const words = ownersWords(error)
         return {
           status: 'failed',
@@ -274,9 +275,20 @@ export function storedWorlds(deps: {
     },
     /** Before the runner records a failure: it finds the server resting, and records none. */
     async abandon(op, reason, ended) {
-      if (ended === 'failed') await backToStored(op.serverId, reason)
+      if (ended === 'failed') await backToStored(op.serverId, op.id, reason)
     },
   }
 
   return { store, unstore }
+}
+
+/**
+ * Whether a wake other than `wakeId` waits or runs for the server. A failed wake is settled twice:
+ * by `run`, which puts the world back to rest, then by the runner as it records the failure. A
+ * join between the two starts the next wake, which the second must not undo: in production
+ * (2026-10-11) it was cancelled as "No longer applies: the server is stored" while a player waited.
+ * Leaving the server to it is safe: it runs next, and its restore replaces what the handle names.
+ */
+async function anotherWake(tx: Tx, serverId: string, wakeId: string): Promise<boolean> {
+  return (await openOfKinds(tx, [serverId], ['unstore'])).some((wake) => wake.id !== wakeId)
 }

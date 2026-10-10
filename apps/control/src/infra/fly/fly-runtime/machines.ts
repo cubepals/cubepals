@@ -12,7 +12,7 @@ import { z } from 'zod'
 import type { ExecResult } from '../../../app/ports/runtime.ts'
 import type { FlyClient, FlySchemas } from '../client.ts'
 import { META } from '../machine-config.ts'
-import { launched, must, succeeded } from './responses.ts'
+import { idOf, launched, must, succeeded } from './responses.ts'
 
 type Machine = FlySchemas['Machine']
 type MachineConfig = FlySchemas['fly.MachineConfig']
@@ -39,6 +39,15 @@ const NOT_YET =
  * staging, a volume deleted straight after was refused in 3 of 6 rests (docs/metrics.md).
  */
 const DESTROY_SECONDS = 60
+/**
+ * How Fly refuses a machine on a volume another machine still holds. A wake's helper fills the
+ * new volume and is destroyed, and Fly can go on holding the volume after the helper is gone:
+ * "volume already claimed by machine" naming no machine, its id all NUL bytes (production,
+ * 2026-10-11), which failed the wake.
+ */
+const CLAIMED = /already claimed/i
+/** How long a new machine waits for Fly to let go of its volume, past the helper's own destroy. */
+const CLAIM_SECONDS = 180
 
 // The spec says a flat Lease; flyctl reads { status, data: Lease }. Accept either until a live
 // machine settles it (docs/dependency-audit.md).
@@ -68,6 +77,12 @@ export async function readMachine(fly: FlyClient, app: string, machineId: string
   return MACHINE_GONE.has(machine.state ?? '') ? null : machine
 }
 
+/**
+ * A new machine on the volume its config mounts. While Fly says another machine still holds that
+ * volume, the holder is looked for: a live server machine of this deployment is the one being
+ * made, and is used as it is; a helper left over is destroyed; anything else, and a holder Fly no
+ * longer lists, is waited out. After three minutes Fly's refusal stands. No volume is deleted here.
+ */
 export async function createMachine(
   fly: FlyClient,
   app: string,
@@ -76,8 +91,10 @@ export async function createMachine(
   secretsVersion: number | undefined,
   name: string,
 ): Promise<Machine> {
-  return launched(
-    await fly.POST('/v1/apps/{app_name}/machines', {
+  const volumeId = config.mounts?.[0]?.volume
+  const deadline = Date.now() + CLAIM_SECONDS * 1000
+  for (;;) {
+    const created = await fly.POST('/v1/apps/{app_name}/machines', {
       params: { path: { app_name: app } },
       body: {
         name,
@@ -86,9 +103,42 @@ export async function createMachine(
         skip_launch: true,
         ...(secretsVersion === undefined ? {} : { min_secrets_version: secretsVersion }),
       },
-    }),
-    'creating the machine',
+    })
+    const claimed =
+      volumeId !== undefined &&
+      created.response.status === 412 &&
+      CLAIMED.test(JSON.stringify(created.error ?? ''))
+    if (!claimed || Date.now() > deadline) return launched(created, 'creating the machine')
+    const adopted = await clearClaim(fly, app, volumeId, config.metadata?.[META.deployment])
+    if (adopted !== null) return adopted
+  }
+}
+
+/**
+ * One step towards a volume Fly says is claimed: this deployment's live server machine on it, to
+ * be used as it is; else null, once a helper of its left on the volume is destroyed, or a second
+ * has passed for whatever else holds it.
+ */
+async function clearClaim(
+  fly: FlyClient,
+  app: string,
+  volumeId: string,
+  deployment: string | undefined,
+): Promise<Machine | null> {
+  const listed = must(
+    await fly.GET('/v1/apps/{app_name}/machines', { params: { path: { app_name: app } } }),
+    'listing machines',
   )
+  const holder = listed.find(
+    (m) => m.state !== 'destroyed' && (m.config?.mounts ?? []).some((mount) => mount.volume === volumeId),
+  )
+  const metadata = holder?.config?.metadata
+  const role = metadata?.[META.deployment] === deployment ? metadata?.[META.role] : undefined
+  if (holder !== undefined && role === 'minecraft' && !MACHINE_GONE.has(holder.state ?? '')) return holder
+  if (holder !== undefined && role === 'helper')
+    await destroyMachine(fly, app, idOf(holder, 'a helper machine'))
+  else await sleep(1000)
+  return null
 }
 
 export async function updateMachine(
