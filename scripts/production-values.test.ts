@@ -79,6 +79,7 @@ describe('the values file', () => {
       [
         'AUTH_SECRET',
         'EDGE_TOKEN',
+        'OPERATOR_TOKEN',
         'REALTIME_TICKET_SECRET',
         'RUNTIME_SECRETS_KEY',
         'WEB_PROXY_SECRET',

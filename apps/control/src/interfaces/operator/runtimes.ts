@@ -1,9 +1,10 @@
-import { timingSafeEqual } from 'node:crypto'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { AppError, NotFound } from '../../app/errors.ts'
+import { requestedBy } from '../../app/actor.ts'
+import { AppError } from '../../app/errors.ts'
 import type { RuntimeEconomics } from '../../app/runtimes/economics.ts'
 import type { RuntimePlacement } from '../../app/runtimes/service.ts'
+import { gate, operatorOf } from './gate.ts'
 
 /**
  * Where servers run, as operators steer it (docs/runtimes.md), on the internal listener with the
@@ -36,24 +37,8 @@ const MoveBody = z.object({ to: z.string().min(1) })
 export function createRuntimesApi(options: RuntimesApiOptions): Hono {
   const { placement, economics } = options
   const app = new Hono()
-  const expected = Buffer.from(`Bearer ${options.token}`)
-  const by = (c: { req: { header: (name: string) => string | undefined } }) =>
-    `operator:${(c.req.header('x-operator') ?? 'unnamed').slice(0, 64)}`
-
-  app.use(`${RUNTIMES_BASE}/*`, async (c, next) => {
-    const given = Buffer.from(c.req.header('authorization') ?? '')
-    if (given.length !== expected.length || !timingSafeEqual(given, expected))
-      return c.json({ error: 'unauthorized' }, 401)
-    await next()
-  })
-  app.onError((error, c) => {
-    if (error instanceof AppError) return c.json({ error: { code: error.code, message: error.message } }, 400)
-    if (error instanceof NotFound)
-      return c.json({ error: { code: 'not_found', message: error.message } }, 404)
-    if (error instanceof z.ZodError)
-      return c.json({ error: { code: 'invalid', message: z.prettifyError(error) } }, 400)
-    return c.json({ error: { code: 'failed', message: (error as Error).message } }, 500)
-  })
+  const by = (c: Parameters<typeof operatorOf>[0]) => requestedBy(operatorOf(c))
+  gate(app, RUNTIMES_BASE, options.token)
 
   app.get(`${RUNTIMES_BASE}/summary`, async (c) => {
     const days = Math.min(Math.max(Number(c.req.query('days') ?? 7) || 7, 1), 90)

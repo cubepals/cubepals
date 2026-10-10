@@ -88,7 +88,8 @@ export class SharingQueries {
     const owner = viewer?.kind === 'user' && viewer.userId === server.ownerId
     const shown = await this.#shown(server)
     if (!owner && !shown) return null
-    const reader = viewer === null || viewer.kind === 'system' ? null : viewer.userId
+    const reader =
+      viewer === null || viewer.kind === 'system' || viewer.kind === 'operator' ? null : viewer.userId
     return this.#view(server, {
       invited: false,
       preview: owner && !shown,

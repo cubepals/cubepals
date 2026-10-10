@@ -446,7 +446,7 @@ export class BillingService {
   }
 
   async #person(actor: Actor): Promise<{ id: string; email: string }> {
-    if (actor.kind === 'system') throw new NotFound('Account')
+    if (actor.kind === 'system' || actor.kind === 'operator') throw new NotFound('Account')
     const [user] = await this.#db
       .select({ id: schema.users.id, email: schema.users.email })
       .from(schema.users)

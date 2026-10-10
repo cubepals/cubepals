@@ -88,7 +88,7 @@ import { S3ArchiveStore } from './infra/s3/s3-archive-store.ts'
 import { createBillingWebhook } from './interfaces/billing/webhook.ts'
 import { createInternalApp } from './interfaces/edge/internal.ts'
 import { createApiApp } from './interfaces/http/api.ts'
-import { createRuntimesApi } from './interfaces/operator/runtimes.ts'
+import { operatorApis } from './interfaces/operator/mount.ts'
 import { startRealtime } from './interfaces/realtime/server.node.ts'
 import { createRuntimeApp } from './interfaces/runtime/artifacts.ts'
 import type { Services } from './interfaces/trpc/trpc.ts'
@@ -724,16 +724,9 @@ async function main(): Promise<void> {
 
     await app.waiter.start()
     const internal = createInternalApp({ edge: app.edge, token: config.edge.token })
-    // Operators' API, beside the edge's, on the internal listener only: where servers run.
-    if (config.operatorToken !== null)
-      internal.route(
-        '/',
-        createRuntimesApi({
-          placement: app.placement,
-          economics: app.economics,
-          token: config.operatorToken,
-        }),
-      )
+    // Operators' APIs, beside the edge's, on the internal listener only: where servers run, and
+    // accounts and their servers.
+    if (config.operatorToken !== null) internal.route('/', operatorApis(app, config.operatorToken))
     await serveFleet(provider, { config, db, internal, stops, app })
     const internalServer = serve({
       fetch: internal.fetch,

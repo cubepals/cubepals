@@ -115,7 +115,7 @@ export class GuestbookService {
 
 /** The person asking. The platform itself neither stars nor writes. */
 function personOf(actor: Actor, what: string): string {
-  if (actor.kind === 'system') throw new NotFound(what)
+  if (actor.kind === 'system' || actor.kind === 'operator') throw new NotFound(what)
   return actor.userId
 }
 

@@ -9,7 +9,7 @@ import {
 } from '../../domain/account/entitlements.ts'
 import { extraUnits } from '../../domain/account/extra-play.ts'
 import type { Restrictions } from '../../domain/account/standing.ts'
-import { type Actor, requestedBy } from '../actor.ts'
+import { type Actor, requestedBy, runsThePlatform } from '../actor.ts'
 import { extraPlayNow } from '../billing/persistence.ts'
 import { playWarning } from '../emails/play.ts'
 import { AppError, NotFound } from '../errors.ts'
@@ -70,7 +70,7 @@ const WARN_AT = [50, 80, 100] as const
 /**
  * Account standing, as admins set it (§4). Suspension stops what the account
  * runs and denies it everything but looking; termination closes its servers for good. Every
- * change is audited. Only admin actors reach these methods.
+ * change is audited. Only admins and operators reach these methods.
  *
  * It also watches what an account's play costs it, and says so before the money does.
  */
@@ -539,7 +539,7 @@ export class AccountService {
     data: Record<string, unknown>,
     apply: (tx: Tx, standing: NonNullable<Awaited<ReturnType<typeof lockStanding>>>) => Promise<void>,
   ): Promise<void> {
-    if (actor.kind !== 'admin') throw new NotFound('Account')
+    if (!runsThePlatform(actor)) throw new NotFound('Account')
     await this.#db.transaction(async (tx) => {
       const standing = await lockStanding(tx, userId)
       if (standing === null) throw new NotFound('Account')

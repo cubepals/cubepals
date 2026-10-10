@@ -9,7 +9,7 @@ import { memoryMb } from '../../domain/server/size.ts'
 import { checkSlug, type Slug, slugCandidates } from '../../domain/server/slug.ts'
 import { createAccess } from '../access/persistence.ts'
 import { loadStanding } from '../accounts/persistence.ts'
-import { type Actor, authorize, requestedBy, type UserActor } from '../actor.ts'
+import { type Actor, authorize, type OperatorActor, requestedBy, type UserActor } from '../actor.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { FUNNEL, noteOnce } from '../insight/record.ts'
 import { loadOperation } from '../operations/persistence.ts'
@@ -43,6 +43,7 @@ import {
   slugAvailable,
 } from './persistence.ts'
 import type { ServerTransitions } from './transitions.ts'
+import { UpkeepNow } from './upkeep-now.ts'
 
 export type { CreateServerRequest } from './new-server.ts'
 
@@ -64,6 +65,8 @@ export class MinecraftServerService {
   readonly #builds: LoaderBuilds
   /** Setups resolve mods through the catalog, which is built after this service. */
   readonly #setups: () => SetupService
+  /** Resting and purging one server now, at an operator's word, on this service's database. */
+  readonly upkeep: UpkeepNow
 
   constructor(deps: {
     db: Db
@@ -88,10 +91,28 @@ export class MinecraftServerService {
     this.#jobs = deps.jobs
     this.#builds = deps.loaderBuilds
     this.#setups = deps.setups
+    this.upkeep = new UpkeepNow({ db: deps.db, transitions: deps.transitions, events: deps.events })
   }
 
   async createMinecraftServer(actor: UserActor, request: CreateServerRequest): Promise<MinecraftServer> {
-    const existing = await findByCreateKey(this.#db, actor.userId, request.idempotencyKey)
+    return this.#create(actor, actor, request)
+  }
+
+  /**
+   * A server an operator makes for an account (`interfaces/operator/ops.ts`): made as its owner
+   * would make it and held to their plan, with the operator recorded as who made it.
+   */
+  createFor(
+    operator: OperatorActor,
+    ownerId: string,
+    request: CreateServerRequest,
+  ): Promise<MinecraftServer> {
+    return this.#create({ kind: 'user', userId: ownerId }, operator, request)
+  }
+
+  /** A new server for `owner`, made by `madeBy`: the owner, or an operator for them. */
+  async #create(owner: UserActor, madeBy: Actor, request: CreateServerRequest): Promise<MinecraftServer> {
+    const existing = await findByCreateKey(this.#db, owner.userId, request.idempotencyKey)
     if (existing) return existing
 
     const draft = await draftNewServer(
@@ -101,7 +122,7 @@ export class MinecraftServerService {
         builds: this.#builds,
         resolve: (from, by) => this.#setups().resolve(from, by),
       },
-      actor,
+      owner,
       request,
     )
     const { regionKey, memoryTier, createdFrom, revision, world, plan, storageGb, origin } = draft
@@ -110,13 +131,13 @@ export class MinecraftServerService {
       // The server this one replaces makes way first, so it counts against nothing, and hands
       // over its address: whoever has it in their server list finds the new one there.
       const replaced =
-        request.replaces === undefined ? null : await this.#makeWay(tx, actor, request.replaces)
-      await this.#policy.require(tx, actor.userId, { kind: 'create_server', memoryTier })
+        request.replaces === undefined ? null : await this.#makeWay(tx, owner, request.replaces)
+      await this.#policy.require(tx, owner.userId, { kind: 'create_server', memoryTier })
       const slug = await this.#claimSlug(tx, request.name, replaced?.slug ?? request.slug)
       const created = await insertServer(
         tx,
         {
-          ownerId: actor.userId,
+          ownerId: owner.userId,
           name: request.name,
           slug,
           inviteCode: newInviteCode(),
@@ -128,24 +149,24 @@ export class MinecraftServerService {
             ? { expiresAt: new Date(Date.now() + TEMPORARY_HOURS * 3_600_000) }
             : {}),
         },
-        { ...revision, createdBy: requestedBy(actor) },
+        { ...revision, createdBy: requestedBy(madeBy) },
         world,
       )
       const placed = await this.#placement.place(
         tx,
         {
           serverId: created.server.id,
-          ownerId: actor.userId,
+          ownerId: owner.userId,
           plan,
           regionKey,
           memoryMb: memoryMb(memoryTier),
           storageGb,
         },
-        requestedBy(actor),
+        requestedBy(madeBy),
       )
       await createRuntimeBinding(tx, created.server.id, placed.provider)
       await createAccess(tx, created.server.id)
-      await this.#audit(tx, actor, 'server.created', created.server.id, {
+      await this.#audit(tx, madeBy, 'server.created', created.server.id, {
         slug,
         gameVersion: revision.gameVersion,
         loader: revision.loader,
@@ -155,18 +176,18 @@ export class MinecraftServerService {
       await noteOnce(tx, {
         event: FUNNEL.serverCreated,
         subject: created.server.id,
-        userId: actor.userId,
+        userId: owner.userId,
         properties: { from: createdFrom ?? 'direct', loader: revision.loader },
       })
       await this.#events.publish(tx, {
         type: 'server_changed',
         serverId: created.server.id,
-        ownerId: actor.userId,
+        ownerId: owner.userId,
         status: created.server.lifecycle.status,
         version: created.server.version,
       })
       await this.#transitions.enqueue(tx, created.server, 'provision', {
-        requestedBy: requestedBy(actor),
+        requestedBy: requestedBy(madeBy),
         idempotencyKey: 'provision',
       })
       return created.server

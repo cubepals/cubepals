@@ -1,7 +1,8 @@
 /**
- * What the operator CLIs, `fleet.ts` and `runtimes.ts`, share: reading their arguments, failing
- * under their own name, and calling their part of the control plane's operator API as the
- * operator. Which commands each has, and what they print, is its own.
+ * What the operator CLIs, `fleet.ts`, `runtimes.ts` and `ops.ts`, share: reading their arguments,
+ * failing under their own name, and calling their part of the control plane's operator API as the
+ * operator. `production-check.ts` calls it too, and has its refusals thrown, so it can clean up
+ * after them. Which commands each has, and what they print, is its own.
  */
 
 /** Arguments as positionals and `--name value` options; a bare `--flag` is `'true'`, and options repeat. */
@@ -25,12 +26,17 @@ export function flags(args: string[]): { positional: string[]; options: Map<stri
 
 /**
  * A CLI's way out, `fail`, and its calls to the operator API under `part` (`/fleet/v1`). OPERATOR_API
- * and OPERATOR_TOKEN reach it, `docs` says how to get them, and OPERATOR (or USER) is who acted.
+ * and OPERATOR_TOKEN reach it, `docs` says how to get them, and OPERATOR (or USER) is who acted. A
+ * call the API refuses exits, unless `refusals` is `throw`: then it throws, with the API's words.
  */
-export function operatorCli(name: string, part: string, docs: string) {
+export function operatorCli(name: string, part: string, docs: string, refusals: 'exit' | 'throw' = 'exit') {
   function fail(message: string): never {
     console.error(`${name}: ${message}`)
     process.exit(1)
+  }
+  const refuse = (message: string): never => {
+    if (refusals === 'throw') throw new Error(message)
+    return fail(message)
   }
 
   async function api(
@@ -49,13 +55,13 @@ export function operatorCli(name: string, part: string, docs: string) {
         ...(body ? { 'content-type': 'application/json' } : {}),
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
-    }).catch((error: Error) => fail(`the operator API doesn't answer: ${error.message}`))
+    }).catch((error: Error) => refuse(`the operator API doesn't answer: ${error.message}`))
     const answer = (await response.json().catch(() => null)) as {
       error?: { code?: string; message?: string } | string
     } | null
     if (!response.ok) {
       const error = answer?.error
-      fail(typeof error === 'object' ? `${error.code}: ${error.message}` : `HTTP ${response.status}`)
+      refuse(typeof error === 'object' ? `${error.code}: ${error.message}` : `HTTP ${response.status}`)
     }
     return answer
   }

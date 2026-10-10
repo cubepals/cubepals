@@ -179,4 +179,4 @@ export class ListingQueries {
 
 /** The person reading the directory, if anyone signed in is. */
 const readerOf = (viewer: Actor | null): string | null =>
-  viewer === null || viewer.kind === 'system' ? null : viewer.userId
+  viewer === null || viewer.kind === 'system' || viewer.kind === 'operator' ? null : viewer.userId
