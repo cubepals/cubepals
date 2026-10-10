@@ -50,6 +50,9 @@ import { TESTED } from './tested.ts'
  * - `templates-view.ts`: the admins' view of those, and of templates whose plugins lag.
  */
 
+/** How long the packs new servers are offered are kept before they are read again. */
+export const OFFERED_KEPT_MS = 30_000
+
 export type { PinnedCatalogPack } from './catalog-check.ts'
 export type { OfferedPack } from './offering.ts'
 
@@ -69,6 +72,8 @@ export class PackCuration {
   readonly #loaderBuilds: LoaderBuilds
   readonly #packs: readonly CuratedPack[]
   readonly #own: readonly OwnPack[]
+  /** What `offered()` last answered, and when it asked; null once a move makes it out of date. */
+  #offered: { at: number; packs: Promise<OfferedPack[]> } | null = null
 
   constructor(deps: {
     db: Db
@@ -173,19 +178,20 @@ export class PackCuration {
   // ─── Offering ──────────────────────────────────────────────────────────────────────────────
 
   /** An admin offering a verified release to new servers, or offering a withdrawn one again. */
-  publish(actor: Actor, release: ReleaseRef): Promise<void> {
-    return move(
+  async publish(actor: Actor, release: ReleaseRef): Promise<void> {
+    await move(
       { db: this.#db, packs: this.#packs, own: this.#own },
       actor,
       release,
       'publish',
       'curation.published',
     )
+    this.#offered = null
   }
 
   /** An admin taking a release from new servers; every server that plays it keeps it. */
-  withdraw(actor: Actor, release: ReleaseRef, reason: string): Promise<void> {
-    return move(
+  async withdraw(actor: Actor, release: ReleaseRef, reason: string): Promise<void> {
+    await move(
       { db: this.#db, packs: this.#packs, own: this.#own },
       actor,
       release,
@@ -193,6 +199,7 @@ export class PackCuration {
       'curation.withdrawn',
       reason.trim() || null,
     )
+    this.#offered = null
   }
 
   /** An admin asking for a refused release to be checked again, once what refused it is fixed. */
@@ -210,9 +217,22 @@ export class PackCuration {
   /**
    * The packs new servers are offered, in the review's order, each at its newest published
    * release. A pack no longer in the review isn't offered, whatever its releases say.
+   *
+   * Every create page asks, and so does every pick of a pack by name, while the answer changes
+   * only when an admin publishes or withdraws a release. It is kept for a short while, forgotten
+   * at once when this process moves a release, and never kept when reading it failed. Another
+   * process's move shows here once the kept answer is that old.
    */
   offered(): Promise<OfferedPack[]> {
-    return offered(this.#db, this.#packs, this.#own)
+    const kept = this.#offered
+    if (kept !== null && Date.now() - kept.at < OFFERED_KEPT_MS) return kept.packs
+    const packs = offered(this.#db, this.#packs, this.#own)
+    const keeping = { at: Date.now(), packs }
+    this.#offered = keeping
+    packs.catch(() => {
+      if (this.#offered === keeping) this.#offered = null
+    })
+    return packs
   }
 
   /** The release a new server of a pack plays: the one asked for, which must be offered, or the newest. */

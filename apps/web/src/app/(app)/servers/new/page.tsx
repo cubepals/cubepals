@@ -1,12 +1,12 @@
 'use client'
 
-import type {
-  CuratedPackView,
-  ModpackHit,
-  PartySize,
-  SetupPreview,
-  SetupSourceInput,
-  TemplateView,
+import {
+  type ModpackHit,
+  type PartySize,
+  type SetupPreview,
+  type SetupSourceInput,
+  TEMPLATE_CARDS,
+  type TemplateCard,
 } from '@blockly/contracts'
 import { noop, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft } from 'lucide-react'
@@ -32,11 +32,11 @@ import { PackDrop, type ReadPack } from '../../pack-drop'
 import { PlusOffer } from '../../plus-offer'
 import styles from './create.module.css'
 import { keptChoice, keptPath } from './kept'
-import { Modpacks, paidFor, typingNext } from './modpacks'
+import { Modpacks, typingNext } from './modpacks'
 import { Part } from './part'
 import { useRegion } from './region'
-import { curatedMeta, curatedPicture, type Picture, packPicture, Thumb, wayPicture } from './thumb'
-import { Way } from './way'
+import { curatedPicture, type Picture, packPicture, Thumb, wayPicture } from './thumb'
+import { Ways } from './ways'
 
 /**
  * Making a server is three questions on one page. The first is what to play, which decides the
@@ -47,7 +47,7 @@ import { Way } from './way'
  */
 export default function CreateServerPage() {
   return (
-    <Suspense fallback={<Skeleton width={320} height={36} />}>
+    <Suspense fallback={null}>
       <CreateServer />
     </Suspense>
   )
@@ -139,7 +139,6 @@ function CreateServer() {
     enabled: from !== null,
     placeholderData: (previous) => previous,
   })
-  const templates = options.data?.templates ?? []
   // Packs Blockly offers by name, each at the release a new server plays.
   const curated = options.data?.packs ?? []
   // Nothing chosen, nothing blocked: the preview keeps its last answer while it waits for a choice.
@@ -154,8 +153,6 @@ function CreateServer() {
   const creating = overview.data?.features.find((f) => f.feature === 'create_server')
   // The server being replaced makes way first, so the plan's limit doesn't stand in the way.
   const atLimit = replace === null && creating?.available === false ? (creating.message ?? null) : null
-  const outOfPlan = (template: TemplateView): string | null =>
-    template.fits.allowed ? null : template.fits.reason
   // A plan edge the person met here, where another plan would run it: a paid plan's own words,
   // said where the choice was made, and a way on without it.
   const limitCode = creating?.available === false ? creating.code : undefined
@@ -230,11 +227,8 @@ function CreateServer() {
   const [version, setVersion] = useState<string | undefined>(() =>
     from?.kind === 'template' ? from.gameVersion : undefined,
   )
-  const pickTemplate = (template: TemplateView) =>
-    void choose(
-      { kind: 'template', key: template.key, ...(version === undefined ? {} : { gameVersion: version }) },
-      template.key,
-    )
+  const pickTemplate = (key: string) =>
+    void choose({ kind: 'template', key, ...(version === undefined ? {} : { gameVersion: version }) }, key)
   const pickVersion = (value: string) => {
     setVersion(value)
     if (from?.kind === 'template') setFrom({ ...from, gameVersion: value })
@@ -247,14 +241,14 @@ function CreateServer() {
     }
     if (await choose(source, hit.projectId)) setPack(hit)
   }
-  const pickCurated = (pack: CuratedPackView) =>
-    void choose({ kind: 'curated', key: pack.key }, `curated:${pack.key}`)
+  const pickCurated = (key: string) => void choose({ kind: 'curated', key }, `curated:${key}`)
   const pickOwnPack = async (read: ReadPack) => {
     setOwnPack(read)
     await choose({ kind: 'import', importId: read.importId }, read.importId)
   }
 
-  const template = from?.kind === 'template' ? templates.find((one) => one.key === from.key) : undefined
+  // A template's name and picture are the same for everyone, so the bar says them without waiting.
+  const template = from?.kind === 'template' ? TEMPLATE_CARDS.find((one) => one.key === from.key) : undefined
   const forADay = temporary ?? template?.forADay === true
   const curatedPick = from?.kind === 'curated' ? curated.find((one) => one.key === from.key) : undefined
   const picked = from?.kind === 'modpack' ? pack : null
@@ -487,125 +481,27 @@ function CreateServer() {
           </div>
         ) : (
           <div key="ways" className={styles.swap}>
-            {options.isPending ? (
-              <div className={styles.ways}>
-                {[0, 1, 2, 3].map((i) => (
-                  <Skeleton key={i} width="100%" height={74} />
-                ))}
-              </div>
-            ) : (
-              <div className={styles.ways}>
-                {templates
-                  .filter((one) => !one.advanced)
-                  .map((one) => {
-                    const why = outOfPlan(one)
-                    return (
-                      <Way
-                        key={one.key}
-                        picture={wayPicture(one.icon)}
-                        title={one.title}
-                        blurb={one.blurb}
-                        why={why}
-                        picked={template?.key === one.key}
-                        busy={checking === one.key}
-                        disabled={atLimit !== null || (why !== null && !paidFor(one.fits))}
-                        onPick={() => pickTemplate(one)}
-                      />
-                    )
-                  })}
-                {/* Packs Blockly offers by name: real ones their authors publish, each at a release
-                    Blockly checked. Picking one is picking what to play, like a template. */}
-                {curated.map((one) => {
-                  const why = one.fits.allowed ? null : one.fits.reason
-                  return (
-                    <Way
-                      key={one.key}
-                      picture={curatedPicture(one)}
-                      title={one.way?.title ?? one.name}
-                      blurb={one.blurb}
-                      meta={curatedMeta(one)}
-                      why={why}
-                      picked={from?.kind === 'curated' && from.key === one.key}
-                      busy={checking === `curated:${one.key}`}
-                      disabled={atLimit !== null || (why !== null && !paidFor(one.fits))}
-                      onPick={() => pickCurated(one)}
-                    />
-                  )
-                })}
-                {/* A modpack is a way to play too, so it is asked here and not hidden away. Which
-                    packs a plan runs is said pack by pack, in the list. */}
-                <Way
-                  ref={modpackWay}
-                  picture={wayPicture('modpack')}
-                  title="A modpack"
-                  blurb={
-                    picked?.name ??
-                    (from?.kind === 'modpack' ? preview.data?.from : undefined) ??
-                    'Play a pack someone made. Cubepals sets up all of it.'
-                  }
-                  why={null}
-                  picked={from?.kind === 'modpack'}
-                  busy={false}
-                  disabled={atLimit !== null}
-                  onPick={() => {
-                    setRefused(null)
-                    setPicking('packs')
-                  }}
-                />
-                {/* A pack they already have, as whatever file it came as: Blockly works out which. */}
-                <Way
-                  picture={wayPicture('ownpack')}
-                  title="A pack you have"
-                  blurb={
-                    (from?.kind === 'import' ? ownPack?.pack.name : undefined) ??
-                    'Drop its file: a server pack, a Modrinth pack or a launcher’s export.'
-                  }
-                  why={null}
-                  picked={from?.kind === 'import'}
-                  busy={false}
-                  disabled={atLimit !== null}
-                  onPick={() => {
-                    setRefused(null)
-                    setPicking('upload')
-                  }}
-                />
-              </div>
-            )}
+            <Ways
+              live={options.data}
+              from={from}
+              checking={checking}
+              locked={atLimit !== null}
+              modpackLine={picked?.name ?? (from?.kind === 'modpack' ? preview.data?.from : undefined)}
+              ownPackLine={from?.kind === 'import' ? ownPack?.pack.name : undefined}
+              modpackRef={modpackWay}
+              onTemplate={pickTemplate}
+              onCurated={pickCurated}
+              onModpacks={() => {
+                setRefused(null)
+                setPicking('packs')
+              }}
+              onOwnPack={() => {
+                setRefused(null)
+                setPicking('upload')
+              }}
+            />
             {options.isError && <Note tone="danger">{messageOf(options.error)}</Note>}
             {refused !== null && <Note tone="info">{refused.message}</Note>}
-            {/* The server types, for the people who came looking for one by name. */}
-            {templates.some((one) => one.advanced) && (
-              <details>
-                <summary className="type-body-sm bk-disclosure">Picking mods yourself?</summary>
-                <div
-                  className="bk-row bk-wrap"
-                  style={{ gap: 'var(--space-8)', marginBlockStart: 'var(--space-12)' }}
-                >
-                  {templates
-                    .filter((one) => one.advanced)
-                    .map((one) => (
-                      <button
-                        key={one.key}
-                        type="button"
-                        className="bk-tag"
-                        aria-pressed={template?.key === one.key}
-                        aria-busy={checking === one.key || undefined}
-                        disabled={atLimit !== null || (outOfPlan(one) !== null && !paidFor(one.fits))}
-                        onClick={() => pickTemplate(one)}
-                      >
-                        {one.title}
-                      </button>
-                    ))}
-                </div>
-                {[
-                  ...new Set(templates.filter((one) => one.advanced).flatMap((one) => outOfPlan(one) ?? [])),
-                ].map((why) => (
-                  <p key={why} className={`type-body-sm ${styles.quiet}`}>
-                    {why}
-                  </p>
-                ))}
-              </details>
-            )}
           </div>
         )}
         {/* What Blockly makes of the choice, where it says more than the choice's own name. */}
@@ -749,7 +645,7 @@ function reveal(part: HTMLElement | null) {
  * What "Just for a day" means as it stands: what they chose, or else what their way to play
  * suggests, and then Blockly says it chose it, with the toggle as the way back.
  */
-function lasting(chosen: boolean | null, template: TemplateView | undefined): string {
+function lasting(chosen: boolean | null, template: TemplateCard | undefined): string {
   if (!(chosen ?? template?.forADay))
     return 'For an evening with friends or a modpack you want to try. Cubepals clears it up afterwards.'
   const why = chosen === null ? `${template?.title} is played in an evening, so this one lasts a day. ` : ''
