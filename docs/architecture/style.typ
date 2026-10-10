@@ -11,7 +11,7 @@
 // horizontal lockup 120 px wide, 90 pt); with clear space of a quarter of the mark's height on
 // every side. Typst reads them from brand/ itself, so the document always shows the current files.
 
-#let brand-ink = rgb("#181818")
+#let brand-ink = rgb("#0d0d0d")
 #let brand-paper = rgb("#f8f7f5")
 #let brand-mark = "/brand/mark.svg"
 #let brand-lockup = "/brand/lockup-horizontal.svg"

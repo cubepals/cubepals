@@ -58,7 +58,7 @@ const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
 ]
 
 // The same colours the stylesheet names (landing.css): ink, paper, the night field and the torch.
-const INK = rgb('#181818')
+const INK = rgb('#0d0d0d')
 const PAPER = rgb('#F8F7F5')
 const NIGHT = rgb('#8C86F2')
 const TORCH = rgb('#FFB01F')

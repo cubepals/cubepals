@@ -4,7 +4,7 @@
 
 /* Selected text, on every page: ink behind, white on it. */
 ::selection {
-  background: #181818;
+  background: #0d0d0d;
   color: #ffffff;
 }
 /* On ink (the dark theme, the solid cards), the same pair turned over, so a selection still shows. */
@@ -12,5 +12,5 @@
 .bk-plan[data-paid] ::selection,
 :root[data-theme="dark"] ::selection {
   background: #ffffff;
-  color: #181818;
+  color: #0d0d0d;
 }

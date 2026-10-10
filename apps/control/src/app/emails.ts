@@ -22,7 +22,7 @@
  * - `servers.ts`: what happened to one server: off the directory, an idle world, a rebuild.
  */
 
-export const INK = '#181818'
+export const INK = '#0d0d0d'
 const PAPER = '#F8F7F5'
 const STONE = '#E6E3DC'
 export const MUTED = '#3a3835'
@@ -124,7 +124,7 @@ export function layout(input: {
   const { origin } = input
   const stand = input.figure && !input.figure.hang ? input.figure.name : undefined
   const hang = input.figure?.hang ? input.figure.name : undefined
-  const lockup = `<a href="${origin}"><img src="${origin}/email/lockup.png" width="160" height="44" alt="cubepals" style="display:block;border:0;background:#181818"></a>`
+  const lockup = `<a href="${origin}"><img src="${origin}/email/lockup.png" width="160" height="44" alt="cubepals" style="display:block;border:0;background:#0d0d0d"></a>`
   const top = `${input.chip ? `<div style="margin:0 0 14px">${chip(input.chip)}</div>` : ''}
       <h1 style="margin:0 0 16px;font:800 26px/1.2 ${SANS};letter-spacing:-.01em;color:${INK}">${input.heading}</h1>`
   const fallback = input.action

@@ -31,7 +31,7 @@ visibly dominates. The circle-to-square ratio is √(4/π) ≈ 1.1284.
 | `lockup-horizontal.svg` + `-reversed` | primary lockup |
 | `lockup-stacked.svg` + `-reversed` | when width is tight |
 | `app-icon.svg` | rounded tile, mark at 58%, radius 22.37% |
-| `avatar.svg` | the profile picture on every platform (GitHub, Polar, socials): the app icon's mark on a square of Avatar Ink, with no rounding, since each platform crops its own shape. `png/avatar.png` is it at 1024px |
+| `avatar.svg` | the profile picture on every platform (GitHub, Polar, socials): the app icon's mark on a square of Ink, with no rounding, since each platform crops its own shape. `png/avatar.png` is it at 1024px |
 | `favicon.svg` | mark, ink |
 | `png/` | raster versions, 1024–2000px |
 | `wordmark.py` | outlines the word and draws the lockups, their PNGs and the link preview |
@@ -71,13 +71,12 @@ two elements fight. Keep the ratio if you rebuild the lockup at another size.
 
 | name | hex | use |
 |---|---|---|
-| Ink | `#181818` | the mark |
+| Ink | `#0D0D0D` | the mark, type, edges, shadows and every dark ground |
 | Paper | `#F8F7F5` | background, and the mark reversed |
-| Avatar Ink | `#0D0D0D` | the avatar's ground only |
 
-Ink on Paper, or Paper on Ink. No other colourways are approved. The avatar is the one exception:
-platforms set it beside their own dark themes (GitHub's is `#0D1117`), where Ink reads as grey, so
-its ground is the darker Avatar Ink.
+Ink on Paper, or Paper on Ink. No other colourways are approved. Ink is one black everywhere: the
+same on the site, the icons, the avatar and the emails. It was `#181818` until October 2026, which
+read as grey beside the dark themes other platforms set it in (GitHub's is `#0D1117`).
 
 ## Clear space and minimum size
 
