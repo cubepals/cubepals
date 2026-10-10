@@ -7,19 +7,21 @@
  *                                     ones already made. Run again, it keeps what is there
  *   bun scripts/production.ts check   says which values are missing or wrong, and starts the control
  *                                     plane's own configuration check on them, as a machine will
- *   bun scripts/production.ts apply   check, then Terraform (it shows the plan and asks), then the
- *                                     control, realtime and edge apps deployed from this checkout,
- *                                     then this commit pushed as the `production` branch, which
- *                                     Vercel builds, and released as the next vX.Y.Z (versions.ts).
+ *   bun scripts/production.ts apply   check, the website built from this checkout, then Terraform
+ *                                     (it shows the plan and asks), then the control, realtime and
+ *                                     edge apps deployed from this checkout, then this commit pushed
+ *                                     as the `production` branch, the website deployed, and the
+ *                                     commit released as the next vX.Y.Z (versions.ts).
  *                                     Only a commit a nightly passed on staging goes, unless
  *                                     --without-staging says otherwise. The first time, it stops
  *                                     after making the archive and dumps buckets, so their tokens can
  *                                     be made for them. After Terraform, it gives the Database dump
  *                                     workflow its secrets, in the repository's `production` environment
- *   bun scripts/production.ts web     main's commit pushed as the `production` branch, for Vercel to
- *                                     build, when nothing the Fly apps are built from changed since
- *                                     the last deploy and main's CI passed on it: no staging pass,
- *                                     no Fly deploy (production-web.ts says which paths are which)
+ *   bun scripts/production.ts web     main's commit built as the website, pushed as the `production`
+ *                                     branch and deployed, when neither Terraform nor anything the
+ *                                     Fly apps are built from changed since the last deploy and
+ *                                     main's CI passed on it: no staging pass, no Fly deploy
+ *                                     (production-web.ts says which paths are which)
  *   bun scripts/production.ts hotfix  this commit, once CI passed on it, without a staging pass:
  *                                     only the Fly apps it is built into, the website if it
  *                                     reaches it, then a check that production answers. Never
@@ -27,17 +29,18 @@
  *                                     `production` with only the fix on it
  *   bun scripts/production.ts rollback [fly|website]
  *                                     each Fly app back to the image it ran before, and the
- *                                     website back to the commit it was built from before
+ *                                     website back to the version that was live before
  *
  * The `production` branch names what is live, so it is moved, not merged: a push here may move
- * it past a hotfix branch's commit. Every website build is asked of Vercel's API
- * (production-website.ts), since the builds a push starts end skipped on this project.
+ * it past a hotfix branch's commit. The website is the Cloudflare Worker `blockly-web`, built here
+ * with production's values and deployed with wrangler (production-website.ts, lib/web-worker.ts).
  *
  * Needs terraform, flyctl and gh. Nothing here prints a value, only names.
  */
 import { spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { buildWorker, deployWorker } from './lib/web-worker.ts'
 import {
   backendConfig,
   DUMPS_BUCKET,
@@ -54,7 +57,7 @@ import {
   valuesFile,
 } from './production-values.ts'
 import { appsFor, type FlyApp, flyInputs, reachesWebsite, terraformIn } from './production-web.ts'
-import { buildWebsite, liveCommits } from './production-website.ts'
+import { productionSite, rollbackWebsite } from './production-website.ts'
 import { isNightly, nextVersion, repositoryTags } from './versions.ts'
 
 const say = (line: string) => process.stdout.write(`${line}\n`)
@@ -123,17 +126,6 @@ function productionEnv(values: Record<string, string>): NodeJS.ProcessEnv {
   return env
 }
 
-/** cubepals.com on Vercel, as production-website.ts reaches it. */
-function website(values: Record<string, string>) {
-  const settings = environment()
-  return {
-    token: values.VERCEL_API_TOKEN ?? '',
-    team: settings.vercel_team,
-    project: settings.web.project,
-    repository: settings.web.repository,
-  }
-}
-
 const DOCKERFILES: Record<FlyApp, string> = {
   control: 'apps/control/Dockerfile',
   realtime: 'apps/control/Dockerfile',
@@ -183,7 +175,7 @@ function requireClean(): void {
 
 /**
  * The Database dump workflow's secrets, in the repository's `production` environment. Only `main`'s
- * workflows reach them, and `production`'s, which Vercel's deployments name; a branch's never do.
+ * workflows reach them, and the `production` branch's; a branch's never do.
  */
 function setDumpSecrets(values: Record<string, string>, env: NodeJS.ProcessEnv): void {
   const repository = environment().web.repository
@@ -200,6 +192,23 @@ function setDumpSecrets(values: Record<string, string>, env: NodeJS.ProcessEnv):
   for (const [name, value] of Object.entries(dumpSecrets(values)))
     run('gh', ['secret', 'set', name, '--env', DUMPS_ENVIRONMENT, '--repo', repository], env, value)
   say(`The Database dump workflow has its secrets, and dumps into ${DUMPS_BUCKET} every night.`)
+}
+
+/**
+ * Terraform's Vercel resources, from before the website moved to a Cloudflare Worker: forgotten,
+ * not destroyed, so the Vercel project serves cubepals.com until its records are proxied to the
+ * Worker (docs/production.md § The website), and is deleted by hand after. Terraform can't plan
+ * with them in its state and no Vercel provider. With none left, this does nothing.
+ */
+function forgetVercel(env: NodeJS.ProcessEnv, backend: string): void {
+  const chdir = `-chdir=${ENVIRONMENT_DIR}`
+  const listed = spawnSync('terraform', [chdir, 'state', 'list'], { encoding: 'utf8', env })
+  const vercel = listed.stdout.split('\n').filter((address) => /(^|\.)vercel_/.test(address))
+  if (vercel.length === 0) return
+  run('terraform', [chdir, 'state', 'rm', ...vercel], env)
+  // Init again, so the lock file lets go of the provider the state no longer needs.
+  run('terraform', [chdir, 'init', '-input=false', `-backend-config=${backend}`], env)
+  say(`Terraform let go of ${vercel.length} Vercel resources; the Vercel project itself is untouched.`)
 }
 
 /** The nightly that ran this commit on staging and passed, if one did (nightly.yml tags them). */
@@ -228,6 +237,7 @@ async function apply(): Promise<void> {
   writeFileSync(backend, backendConfig(values.CLOUDFLARE_ACCOUNT_ID ?? ''))
   const terraform = (...args: string[]) => run('terraform', [`-chdir=${ENVIRONMENT_DIR}`, ...args], env)
   terraform('init', '-input=false', `-backend-config=${backend}`)
+  forgetVercel(env, backend)
 
   if (bucketFirst) {
     terraform(
@@ -245,27 +255,21 @@ async function apply(): Promise<void> {
     return
   }
 
+  // Built before anything changes, so a build that fails stops the apply here.
+  const site = productionSite(values, environment())
+  const head = git('rev-parse', 'HEAD')
+  buildWorker(site, head, say)
   terraform('apply', '-input=false')
   setDumpSecrets(values, env)
   // The control app first: its release runs the migrations.
   for (const app of ['control', 'realtime', 'edge'] as const) deployApp(app, env)
   moveProduction(env)
-  await buildWebsite(website(values), git('rev-parse', 'HEAD'), say)
+  deployWorker(site, head, say)
   const version = `v${nextVersion(repositoryTags())}`
   const notes = passed ? `Ran on staging as ${passed}.` : 'Deployed without a staging run.'
   run(
     'gh',
-    [
-      'release',
-      'create',
-      version,
-      '--target',
-      git('rev-parse', 'HEAD'),
-      '--latest',
-      '--generate-notes',
-      '--notes',
-      notes,
-    ],
+    ['release', 'create', version, '--target', head, '--latest', '--generate-notes', '--notes', notes],
     env,
   )
   say('')
@@ -283,7 +287,14 @@ async function web(): Promise<void> {
     say('Only main’s latest commit goes to production. Check out main and pull it.')
     process.exit(1)
   }
-  const fly = flyInputs(changedSinceLive())
+  const changed = changedSinceLive()
+  // What the website deploys into (its Worker, cache bucket and routes) is Terraform's.
+  const terraform = terraformIn(changed)
+  if (terraform.length > 0) {
+    say(`Since the last deploy, Terraform changed too (${terraform.slice(0, 3).join(', ')}): run apply.`)
+    process.exit(1)
+  }
+  const fly = flyInputs(changed)
   if (fly.length > 0) {
     say(
       `Since the last deploy, what the Fly apps are built from changed too (${fly.slice(0, 5).join(', ')}).`,
@@ -295,8 +306,10 @@ async function web(): Promise<void> {
     say('CI hasn’t passed on this commit yet; the website goes once it has.')
     process.exit(1)
   }
+  const site = productionSite(values, environment())
+  buildWorker(site, head, say)
   moveProduction(process.env)
-  await buildWebsite(website(values), head, say)
+  deployWorker(site, head, say)
 }
 
 /**
@@ -356,9 +369,11 @@ async function hotfix(): Promise<void> {
     return
   }
   const env = productionEnv(values)
+  const website = site ? productionSite(values, environment()) : undefined
+  if (website) buildWorker(website, head, say)
   for (const app of apps) deployApp(app, env)
   moveProduction(env)
-  if (site) await buildWebsite(website(values), head, say)
+  if (website) deployWorker(website, head, say)
   const shipped = [...apps, ...(site ? ['website'] : [])].join(', ')
   if (!(await answers(apps, env))) {
     say(
@@ -399,11 +414,8 @@ async function rollback(part: string | undefined): Promise<void> {
     if (image === null) say(`${app}: there is no earlier image to go back to.`)
     else deployApp(app, env, image)
   }
-  if (part !== 'fly') {
-    const [, previous] = await liveCommits(website(values))
-    if (previous === undefined) say('The website has no earlier build to go back to.')
-    else await buildWebsite(website(values), previous, say)
-  }
+  if (part !== 'fly' && !rollbackWebsite(productionSite(values, environment()), say))
+    say('The website has no earlier version to go back to.')
   say(
     (await answers(apps, env))
       ? 'Rolled back, and production answers.'

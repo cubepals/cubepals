@@ -9,7 +9,7 @@ import { apiUpstream } from './src/lib/upstream'
 
 /**
  * The self-hosted image (apps/web/Dockerfile) builds a standalone server, traced from the
- * repository root so the workspace packages come along. Vercel builds without it.
+ * repository root so the workspace packages come along. The Worker build (OpenNext) doesn't.
  */
 const standalone = process.env.NEXT_OUTPUT === 'standalone'
 
@@ -44,7 +44,8 @@ export default {
   productionBrowserSourceMaps: sourceMaps,
   env: {
     BLOCKLY_ENVIRONMENT: environment,
-    BLOCKLY_VERSION: (process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev').slice(0, 12),
+    // The commit a deploy builds from: scripts/lib/web-worker.ts sets it.
+    BLOCKLY_VERSION: (process.env.GIT_COMMIT_SHA ?? 'dev').slice(0, 12),
   },
   // `bun run dev:lan` opens the dev server to other devices; Next refuses its dev resources to any
   // origin not named here, which would leave a phone with a page and no scripts.
@@ -53,8 +54,8 @@ export default {
     : {}),
   // Types are checked by the workspace's `bun run typecheck`, not during the build.
   typescript: { ignoreBuildErrors: true },
-  // The /api rewrite and src/proxy.ts's matcher then agree on case: /API/auth/… is a 404, not a
-  // way to the control plane around the proxy.
+  // The /api rewrite and src/lib/before-next.ts's sign-in paths then agree on case: /API/auth/… is
+  // a 404, not a way to the control plane around it.
   experimental: { caseSensitiveRoutes: true },
   // Every deployment but production says noindex on every response, files and images too, which
   // the pages' own robots meta can't reach.

@@ -3,7 +3,9 @@
 #   terraform init -backend-config=backend.hcl
 #   TF_VAR_secrets='{…}' TF_VAR_secret_versions='{…}' TF_VAR_operator_settings='{…}' \
 #   TF_VAR_cloudflare_account_id=… TF_VAR_cloudflare_zone_id=… terraform apply
-# with FLY_API_TOKEN (an org token for the staging org), CLOUDFLARE_API_TOKEN and VERCEL_API_TOKEN.
+# with FLY_API_TOKEN (an org token for the staging org) and CLOUDFLARE_API_TOKEN.
+# The staging that runs today is scripts/staging.ts's, which makes its own apps, records and web
+# Worker without Terraform; this environment is the same stack as production's, kept valid.
 # Fleet nodes are listed in fleet-nodes.auto.tfvars.json; `bun scripts/fleet.ts add` adds one, with
 # its join line in TF_VAR_fleet_join_lines and HCLOUD_TOKEN as TF_VAR_hcloud_token.
 
@@ -12,7 +14,6 @@ terraform {
   required_providers {
     fly        = { source = "ampbase-io/fly", version = "0.3.0" }
     cloudflare = { source = "cloudflare/cloudflare", version = "5.25.0" }
-    vercel     = { source = "vercel/vercel", version = "5.16.0" }
     hcloud     = { source = "hetznercloud/hcloud", version = "1.70.0" }
   }
   # State in an R2 bucket of the operator's, named in backend.hcl.
@@ -25,10 +26,6 @@ provider "fly" {
 
 provider "cloudflare" {}
 
-provider "vercel" {
-  team = var.vercel_team
-}
-
 # The fleet's Hetzner project. Until fleet-nodes.auto.tfvars.json lists a node, nothing calls it,
 # so a stand-in of the length the provider checks lets every other apply go on without a token.
 provider "hcloud" {
@@ -37,16 +34,15 @@ provider "hcloud" {
 
 variable "fly_org" { type = string }
 variable "fly_machine_limit" { type = number }
-variable "vercel_team" { type = string }
 variable "settings" { type = map(string) }
 variable "secret_names" { type = list(string) }
 variable "web" {
   type = object({
-    project           = string
-    repository        = string
-    production_branch = string
-    previews          = bool
+    # As apps/web/wrangler.jsonc names staging's Worker.
+    worker  = optional(string, "blockly-web-staging")
+    proxied = optional(bool, false)
   })
+  default = {}
 }
 
 variable "operator_settings" {

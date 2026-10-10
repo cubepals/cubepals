@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build && node scripts/sourcemaps.ts",
-    "start": "next start --port 3000"
+    "start": "next start --port 3000",
+    "worker:build": "opennextjs-cloudflare build",
+    "worker:preview": "opennextjs-cloudflare preview --port 8787 --var API_UPSTREAM:http://127.0.0.1:4000 --var WEB_CANONICAL_ORIGIN:http://localhost:8787"
   },
   "dependencies": {
     "@blockly/contracts": "workspace:*",
@@ -29,7 +31,9 @@
   },
   "devDependencies": {
     "@blockly/control": "workspace:*",
+    "@opennextjs/cloudflare": "1.20.10",
     "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0"
+    "@types/react-dom": "19.3.0",
+    "wrangler": "4.149.0"
   }
 }

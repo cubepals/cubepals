@@ -1,13 +1,6 @@
 {
   "fly_org": "blockly-staging",
   "fly_machine_limit": 20,
-  "vercel_team": "your-vercel-team",
-  "web": {
-    "project": "blockly-staging",
-    "repository": "cubepals/cubepals",
-    "production_branch": "main",
-    "previews": true
-  },
   "settings": {
     "DEPLOYMENT_ID": "staging",
     "WEB_CANONICAL_ORIGIN": "https://staging.cubepals.com",

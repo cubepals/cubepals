@@ -1,5 +1,7 @@
-# The web app, for self-hosting; staging and production run it on Vercel. Build from the
-# repository root:
+# The web app, for self-hosting; staging and production run it as a Cloudflare Worker
+# (wrangler.jsonc). This image doesn't tell the control plane each browser's address, which only
+# the Worker's entry does (src/lib/before-next.ts), so sign-in's limits count every browser behind
+# it as one. Build from the repository root:
 #   docker build -f apps/web/Dockerfile --build-arg API_UPSTREAM=https://control.example.com -t blockly-web .
 # Next writes the /api rewrite when it builds, so API_UPSTREAM is a build argument: the control
 # plane this image fronts is fixed at build time.

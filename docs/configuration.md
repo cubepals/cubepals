@@ -9,7 +9,7 @@ Nothing in the code names a deployment, a domain or a port.
 | Environment | Where the values come from |
 |---|---|
 | Local | `.env` at the repository root, a copy of `.env.example` as it is ([local development](local-development.md): what stands in there for outside services) |
-| Staging, production | Fly secrets on each app, set by Terraform (`infra/terraform`), plus each app's `infra/fly/*.toml` `[env]`; the web app's `API_UPSTREAM` on Vercel, also set by Terraform. Until Blockly has its domain, staging is made by `scripts/staging.ts` instead ([below](#staging-on-the-providers-own-addresses)) |
+| Staging, production | Fly secrets on each app, set by Terraform (`infra/terraform`), plus each app's `infra/fly/*.toml` `[env]`; the web app's values with each deploy of its Cloudflare Worker (`scripts/lib/web-worker.ts`). Until Blockly has its domain, staging is made by `scripts/staging.ts` instead ([below](#staging-on-the-providers-own-addresses)) |
 
 For staging and production, what the deployment decides is in
 `infra/terraform/environments/<name>/config.auto.tfvars.json` (`settings`). Git ignores that file:
@@ -28,14 +28,17 @@ and `scripts/staging-check.ts` checks it:
 
 - `bun scripts/staging.ts up` makes whatever is missing in the `blockly-staging` Fly org and
   deploys this checkout: a Postgres machine, a Mailpit that only the org's private network
-  reaches, the control (api and worker), realtime, edge and web apps, a Tigris bucket for
-  archives, and the Polar sandbox webhook. The API answers on `fly.dev`, the web app on
-  staging.cubepals.com, and players join `<server>.play.staging.cubepals.com`, whose wildcard
+  reaches, the control (api and worker), realtime and edge apps, a Tigris bucket for
+  archives, and the Polar sandbox webhook; then the web app as the Cloudflare Worker
+  `blockly-web-staging`, built with staging's values, as production's is. The API answers on
+  `fly.dev`, the web app on staging.cubepals.com (a proxied record its route answers), and
+  players join `<server>.play.staging.cubepals.com`, whose wildcard
   records `up` points at the edge. The passwords and keys it made stay in
   `local/staging/state.json`, or come from `STAGING_STATE` where there is no such file.
 - `bun scripts/staging.ts start` starts the platform again before testing, its database first;
   servers start when someone plays. `bun scripts/staging.ts stop` stops every machine in the
-  org afterwards, the servers' included, and says whether any still runs.
+  org afterwards, the servers' included, and says whether any still runs. Neither touches the
+  web Worker, which costs nothing idle.
 - `bun scripts/staging.ts status` shows what exists and where to reach it.
   `bun scripts/staging.ts env` writes what a cloud environment needs to run all of this to
   `local/staging/cloud.env`, to paste into its settings.
@@ -51,11 +54,13 @@ and `scripts/staging-check.ts` checks it:
 This staging differs from the design the tables' Staging column describes, which Terraform makes:
 Postgres is Supabase's staging project (Free, eu-central-1), not Managed Postgres, reached
 through its session pooler, which carries `LISTEN` too, so there is no `DATABASE_DIRECT_URL`;
-`STAGING_DATABASE_URL` names it, and `down` leaves it be; archives go to Tigris, not R2; the web app runs on Fly, not Vercel;
-the API and realtime are on `fly.dev`, not staging's own domain; mail goes to the Mailpit; and
+`STAGING_DATABASE_URL` names it, and `down` leaves it be; archives go to Tigris, not R2;
+the web Worker is `staging.ts`'s, not Terraform's; the API and realtime are on `fly.dev`, not staging's own domain; mail goes to the Mailpit; and
 there is no OAuth sign-in, only email.
 
-It needs flyctl signed in with a card on the org, and `POLAR_ACCESS_TOKEN` (sandbox, with
+It needs flyctl signed in with a card on the org, `CLOUDFLARE_API_TOKEN` (DNS on cubepals.com)
+and `CLOUDFLARE_WORKERS_API_TOKEN` (Workers Scripts, Workers Routes and R2 on its account) in
+`local/secrets/staging.env` or the environment, and `POLAR_ACCESS_TOKEN` (sandbox, with
 `webhooks:read` and `webhooks:write` beside the scopes below) and `POLAR_PRODUCTS` in `.env`.
 
 ## Control plane: every variable
@@ -228,17 +233,20 @@ which environment it came from, which the project's charts leave out.
 
 | Variable | Local | Staging and production | Set by |
 |---|---|---|---|
-| `API_UPSTREAM` | default `http://127.0.0.1:4000` | the control app's origin (`https://bly-<id>-control.fly.dev`); server-side only, never in the bundle | Terraform (Vercel project) |
+| `API_UPSTREAM` | default `http://127.0.0.1:4000` | the control app's origin (`https://bly-<id>-control.fly.dev`); server-side only, never in the bundle. Read at build time too: the `/api` rewrite is written into the build | The Worker's deploy (`scripts/lib/web-worker.ts`), build and vars |
 | `NEXT_OUTPUT` | — | — | `standalone` in `apps/web/Dockerfile` for self-hosting, where `API_UPSTREAM` is a build argument because Next writes the rewrite at build time |
-| `WEB_PROXY_SECRET` | empty | the control plane's value: sent with each browser's address on every `/api/auth` call and session check (`src/proxy.ts`, `src/lib/client-address.ts`) | Terraform (Vercel project, write-only) |
-| `DEPLOYMENT_ID` | empty (`development`) | the control plane's value | Terraform (Vercel project). Read at build time: each PostHog event says `production`, `staging` or `development` by it |
-| `NEXT_PUBLIC_POSTHOG_TOKEN` | empty; `apps/web/.env.local` to try PostHog | production only: the same token as `POSTHOG_TOKEN` | Terraform (Vercel project), from production's `POSTHOG_TOKEN`. Read at build time; empty sends nothing and hides Feedback |
+| `WEB_PROXY_SECRET` | empty | the control plane's value: sent with each browser's address on every `/api/auth` call and session check (`src/lib/before-next.ts`, `src/lib/client-address.ts`) | The Worker's deploy, as a secret (a secrets file, never a var) |
+| `DEPLOYMENT_ID` | empty (`development`) | the control plane's value | The Worker's build. Read at build time: each PostHog event says `production`, `staging` or `development` by it |
+| `GIT_COMMIT_SHA` | — (`dev`) | the commit deployed | The Worker's build: the version PostHog's events and source maps carry |
+| `NEXT_PUBLIC_POSTHOG_TOKEN` | empty; `apps/web/.env.local` to try PostHog | production only: the same token as `POSTHOG_TOKEN` | The Worker's build, from production's `POSTHOG_TOKEN`. Read at build time; empty sends nothing and hides Feedback |
 | `NEXT_PUBLIC_POSTHOG_HOST` | — | default `https://eu.i.posthog.com` | — |
-| `POSTHOG_PERSONAL_API_KEY`, `POSTHOG_PROJECT_ID` | — | production, once an operator adds them: a personal API key with error tracking write, and the project's id. With both, the build uploads its source maps to PostHog and deletes them (`apps/web/scripts/sourcemaps.ts`); without, it skips that | `production.env`, then Terraform to the Vercel project (secret, production builds only) |
-| `WEB_CLIENT_ADDRESS_HEADER` | empty | the header the host's edge sets and overwrites: `x-real-ip` on Vercel, `fly-client-ip` on Fly (staging's web app). Empty, no address is sent | Terraform (Vercel project); `scripts/staging.ts` |
+| `POSTHOG_PERSONAL_API_KEY`, `POSTHOG_PROJECT_ID` | — | production, once an operator adds them: a personal API key with error tracking write, and the project's id. With both, the build uploads its source maps to PostHog and deletes them (`apps/web/scripts/sourcemaps.ts`); without, it skips that | `production.env`, then production's Worker build only (never Terraform) |
+| `WEB_CANONICAL_ORIGIN`, `WEB_INDEXABLE` | as the control plane's; `WEB_INDEXABLE` empty | the site's address; `WEB_INDEXABLE=1` in production alone, from `web.indexable` | The Worker's build (robots, the sitemap) and vars |
+| `WEB_CLIENT_ADDRESS_HEADER` | empty | `cf-connecting-ip`, which Cloudflare's edge sets and overwrites. Empty, no address is sent | The Worker's deploy, as a var |
 
-Staging's Vercel project (`blockly-staging`) builds `main` and every preview, all rewriting to
-staging's control plane. Production's (`blockly`) builds only its `production` branch.
+Production's Worker is `blockly-web`, deployed by `scripts/production.ts`; staging's is
+`blockly-web-staging` (`wrangler.jsonc`'s `staging` environment), deployed by `scripts/staging.ts`.
+Each is built with its environment's values and checked against them before it goes out.
 
 ## Secrets
 
@@ -253,7 +261,7 @@ when the value does (a date works), so Terraform re-sends it: Fly returns only a
 | `EDGE_TOKEN` | random, shared by the control and edge apps | Set both in one apply |
 | `RUNTIME_SECRETS_KEY` | random, `version:key` | A version bump, with the old key kept as `RUNTIME_SECRETS_PREVIOUS_KEYS` until nothing runs on it ([below](#rotating-the-runtime-key)) |
 | `AUTH_OAUTH_PROXY_SECRET` | random (staging) | A sign-in in flight fails |
-| `WEB_PROXY_SECRET` | random, shared by the control plane and the web app | Set both in one apply, then deploy the control app and redeploy Vercel's production deployment together: Vercel gives a changed value only to new deployments. Until both run on it, sign-in counts the web tier's address for everyone |
+| `WEB_PROXY_SECRET` | random, shared by the control plane and the web app | Set both in one apply, which deploys the control app and the website with it. Until both run on it, sign-in counts the web tier's address for everyone |
 | `DATABASE_URL` | Fly Managed Postgres, pooled | Restart both apps |
 | `DATABASE_DIRECT_URL` | Fly Managed Postgres, direct | Restart both apps |
 | `FLY_API_TOKEN` | `fly tokens create org` | Restart the control app |
@@ -324,13 +332,15 @@ Production does all of this with `bun scripts/production.ts apply`, from one fil
 ([production.md](production.md)); what follows is what it runs.
 
 Terraform owns the apps, their addresses and secrets, DNS, the archive bucket, production's
-database dumps bucket ([production.md](production.md#database-dumps)) and the Vercel project; `fly deploy` owns machines and releases. Fly's Terraform provider (`ampbase-io/fly`)
+database dumps bucket ([production.md](production.md#database-dumps)) and the website's Worker,
+cache bucket and routes; `fly deploy` owns machines and releases, and wrangler the Worker's versions. Fly's Terraform provider (`ampbase-io/fly`)
 has no Managed Postgres resource, so the database is made once with `fly mpg create`; its pooled
 URL (`pgbouncer.<cluster>.flympg.net`) becomes the `DATABASE_URL` secret and its direct one
 (`direct.<cluster>.flympg.net`) `DATABASE_DIRECT_URL`.
 
 1. Tokens in the environment: `FLY_API_TOKEN` (an org token for the environment's org),
-   `CLOUDFLARE_API_TOKEN` (DNS edit on the zone, R2 edit on the account), `VERCEL_API_TOKEN`.
+   `CLOUDFLARE_API_TOKEN` (DNS and Workers Routes edit on the zone, R2 and Workers Scripts edit
+   on the account).
 2. State: an R2 bucket of the operator's, named in `backend.hcl` (not committed):
    ```hcl
    bucket                      = "blockly-terraform-state"
@@ -355,4 +365,5 @@ URL (`pgbouncer.<cluster>.flympg.net`) becomes the `DATABASE_URL` secret and its
 5. Deploy, from the repository root:
    `fly deploy . --config infra/fly/control.toml --dockerfile apps/control/Dockerfile --app bly-<id>-control`
    (migrations run first), then `realtime.toml` (and `fly scale count 1`), then `edge.toml`.
-6. Vercel builds the web app from the repository on its own.
+6. Build and deploy the website's Worker with the environment's values: `production.ts` does it
+   with `scripts/lib/web-worker.ts`, which passes the same values to the build and the deploy.

@@ -1,14 +1,11 @@
 {
   "fly_org": "blockly-prod",
   "fly_machine_limit": 20,
-  "vercel_team": "your-vercel-team",
   "web": {
-    "project": "blockly",
     "repository": "cubepals/cubepals",
-    "production_branch": "production",
-    "previews": false,
     "redirects": ["www.cubepals.com"],
-    "indexable": true
+    "indexable": true,
+    "proxied": false
   },
   "settings": {
     "DEPLOYMENT_ID": "prod",

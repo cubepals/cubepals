@@ -4,7 +4,7 @@
 #   terraform init -backend-config=backend.hcl
 #   TF_VAR_secrets='{…}' TF_VAR_secret_versions='{…}' TF_VAR_operator_settings='{…}' \
 #   TF_VAR_cloudflare_account_id=… TF_VAR_cloudflare_zone_id=… TF_VAR_database_dumps_bucket=… terraform apply
-# with FLY_API_TOKEN (an org token for the production org), CLOUDFLARE_API_TOKEN and VERCEL_API_TOKEN.
+# with FLY_API_TOKEN (an org token for the production org) and CLOUDFLARE_API_TOKEN.
 # Servers run on Fly alone: the fleet's Hetzner nodes are optional, and none is listed. Once
 # fleet-nodes.auto.tfvars.json lists one (`bun scripts/fleet.ts add`), its join line comes in
 # TF_VAR_fleet_join_lines and HCLOUD_TOKEN as TF_VAR_hcloud_token.
@@ -14,7 +14,6 @@ terraform {
   required_providers {
     fly        = { source = "ampbase-io/fly", version = "0.3.0" }
     cloudflare = { source = "cloudflare/cloudflare", version = "5.25.0" }
-    vercel     = { source = "vercel/vercel", version = "5.16.0" }
     hcloud     = { source = "hetznercloud/hcloud", version = "1.70.0" }
   }
   # State in an R2 bucket of the operator's, named in backend.hcl.
@@ -27,10 +26,6 @@ provider "fly" {
 
 provider "cloudflare" {}
 
-provider "vercel" {
-  team = var.vercel_team
-}
-
 # The fleet's Hetzner project. Until fleet-nodes.auto.tfvars.json lists a node, nothing calls it,
 # so a stand-in of the length the provider checks lets every other apply go on without a token.
 provider "hcloud" {
@@ -39,30 +34,22 @@ provider "hcloud" {
 
 variable "fly_org" { type = string }
 variable "fly_machine_limit" { type = number }
-variable "vercel_team" { type = string }
 variable "settings" { type = map(string) }
 variable "secret_names" { type = list(string) }
 variable "optional_secret_names" { type = list(string) }
+
+# repository and indexable are production.ts's (the GitHub environment's secrets, the website's
+# build); Terraform reads the rest.
 variable "web" {
   type = object({
-    project           = string
-    repository        = string
-    production_branch = string
-    previews          = bool
-    redirects         = list(string)
-    indexable         = optional(bool, false)
+    # As apps/web/wrangler.jsonc names production's Worker.
+    worker     = optional(string, "blockly-web")
+    repository = string
+    redirects  = list(string)
+    indexable  = optional(bool, false)
+    # The cutover: true sends cubepals.com and its redirects to the Worker, false back to Vercel.
+    proxied = optional(bool, false)
   })
-}
-
-variable "web_secrets" {
-  type      = map(string)
-  sensitive = true
-  default   = {}
-}
-
-variable "web_secret_versions" {
-  type    = map(string)
-  default = {}
 }
 
 variable "operator_settings" {
@@ -128,8 +115,6 @@ module "environment" {
   cloudflare_account_id = var.cloudflare_account_id
   cloudflare_zone_id    = var.cloudflare_zone_id
   web                   = var.web
-  web_secrets           = var.web_secrets
-  web_secret_versions   = var.web_secret_versions
   fleet_nodes           = var.fleet_nodes
   fleet_join_lines      = var.fleet_join_lines
   fleet_hetzner         = var.fleet_hetzner

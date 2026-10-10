@@ -1,6 +1,6 @@
 # One environment, whole: the Fly organization's apps, the control plane's configuration, the
-# edge, DNS, the archive bucket, the web project and the fleet's Hetzner nodes. environments/<name>
-# passes its values in.
+# edge, DNS, the archive bucket, the web app's Worker and the fleet's Hetzner nodes.
+# environments/<name> passes its values in.
 #
 # What is decided lives in each environment's config.auto.tfvars.json and is checked by the
 # control plane's own config loader (apps/control/src/config/environments.test.ts). What is not
@@ -14,7 +14,6 @@ terraform {
   required_providers {
     fly        = { source = "ampbase-io/fly" }
     cloudflare = { source = "cloudflare/cloudflare" }
-    vercel     = { source = "vercel/vercel" }
     hcloud     = { source = "hetznercloud/hcloud" }
   }
 }
@@ -63,28 +62,12 @@ variable "cloudflare_account_id" { type = string }
 variable "cloudflare_zone_id" { type = string }
 
 variable "web" {
-  description = "The Vercel project, its repository, production branch, whether it builds previews, hosts that redirect to its domain, and whether search engines may index it."
+  description = "The web app's Worker, hosts that redirect to its domain, and whether those hosts are proxied to the Worker yet (the cutover from Vercel)."
   type = object({
-    project           = string
-    repository        = string
-    production_branch = string
-    previews          = bool
-    redirects         = optional(list(string), [])
-    indexable         = optional(bool, false)
+    worker    = string
+    redirects = optional(list(string), [])
+    proxied   = optional(bool, false)
   })
-}
-
-variable "web_secrets" {
-  description = "Values only the web app's production builds get, by name: POSTHOG_PERSONAL_API_KEY and POSTHOG_PROJECT_ID upload its source maps."
-  type        = map(string)
-  sensitive   = true
-  default     = {}
-}
-
-variable "web_secret_versions" {
-  description = "A non-secret marker per web secret that changes when its value does."
-  type        = map(string)
-  default     = {}
 }
 
 variable "fleet_nodes" {
@@ -201,27 +184,17 @@ module "dns" {
   realtime_ipv4       = module.control.realtime_ipv4
   realtime_validation = module.control.realtime_validation
   web_hostnames       = concat([local.web_host], var.web.redirects)
+  web_proxied         = var.web.proxied
 }
 
+# The Worker, its cache bucket and its routes. What it runs, and the values it runs with
+# (API_UPSTREAM, WEB_PROXY_SECRET, the build's), come with each deploy (scripts/lib/web-worker.ts).
 module "web" {
-  source               = "../modules/web"
-  project              = var.web.project
-  repository           = var.web.repository
-  production_branch    = var.web.production_branch
-  domain               = local.web_host
-  api_upstream         = local.api_origin
-  proxy_secret         = var.secrets["WEB_PROXY_SECRET"]
-  proxy_secret_version = var.secret_versions["WEB_PROXY_SECRET"]
-  previews             = var.web.previews
-  redirects            = var.web.redirects
-  deployment_id        = var.settings["DEPLOYMENT_ID"]
-  posthog_token        = lookup(var.settings, "POSTHOG_TOKEN", "")
-  canonical_origin     = var.settings["WEB_CANONICAL_ORIGIN"]
-  indexable            = var.web.indexable
-  # Source maps go up only with both values; the versions say whether they were given.
-  posthog_personal_api_key         = lookup(var.web_secrets, "POSTHOG_PERSONAL_API_KEY", "")
-  posthog_personal_api_key_version = lookup(var.web_secret_versions, "POSTHOG_PERSONAL_API_KEY", "")
-  posthog_project_id               = lookup(var.web_secrets, "POSTHOG_PROJECT_ID", "")
+  source     = "../modules/web"
+  account_id = var.cloudflare_account_id
+  zone_id    = var.cloudflare_zone_id
+  worker     = var.web.worker
+  hosts      = concat([local.web_host], var.web.redirects)
 }
 
 locals {

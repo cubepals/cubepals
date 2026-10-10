@@ -30,7 +30,7 @@ const complete: Record<string, string> = {
   CLOUDFLARE_ACCOUNT_ID: '0123456789abcdef0123456789abcdef',
   CLOUDFLARE_ZONE_ID: 'fedcba9876543210fedcba9876543210',
   CLOUDFLARE_API_TOKEN: 'stand-in-cloudflare-api-token',
-  VERCEL_API_TOKEN: 'stand-in-vercel-token',
+  CLOUDFLARE_WORKERS_API_TOKEN: 'stand-in-cloudflare-workers-token',
   TF_STATE_ACCESS_KEY_ID: 'stand-in-state-key-id',
   TF_STATE_SECRET_ACCESS_KEY: 'stand-in-state-secret',
   FLY_API_TOKEN: 'FlyV1 fm2_stand-in-org-token',
@@ -172,25 +172,17 @@ describe('what Terraform gets', () => {
     })
     expect(env.TF_VAR_cloudflare_zone_id).toBe(complete.CLOUDFLARE_ZONE_ID)
     expect(env.AWS_ACCESS_KEY_ID).toBe(complete.TF_STATE_ACCESS_KEY_ID)
-    expect(env.VERCEL_API_TOKEN).toBe(complete.VERCEL_API_TOKEN)
   })
 
-  test("the web app's own values reach only its production builds, with a version each", () => {
+  test("the website's own values, its deploy token included, never reach Terraform", () => {
     const env = terraformEnv({
       ...complete,
       POSTHOG_PERSONAL_API_KEY: 'phx_example',
       POSTHOG_PROJECT_ID: '1234',
     })
-    expect(JSON.parse(env.TF_VAR_web_secrets ?? '{}')).toEqual({
-      POSTHOG_PERSONAL_API_KEY: 'phx_example',
-      POSTHOG_PROJECT_ID: '1234',
-    })
-    expect(Object.keys(JSON.parse(env.TF_VAR_web_secret_versions ?? '{}')).sort()).toEqual([
-      'POSTHOG_PERSONAL_API_KEY',
-      'POSTHOG_PROJECT_ID',
-    ])
-    expect(env.TF_VAR_secrets).not.toContain('phx_example')
-    expect(JSON.parse(terraformEnv(complete).TF_VAR_web_secrets ?? '')).toEqual({})
+    const all = Object.values(env).join('\n')
+    expect(all).not.toContain('phx_example')
+    expect(all).not.toContain(complete.CLOUDFLARE_WORKERS_API_TOKEN)
   })
 
   test('a version changes with its value and holds none of it', () => {
