@@ -24,7 +24,7 @@ import {
   subscriptionChanges,
   writeEntries,
 } from './audit.ts'
-import { ExtraUsage } from './extra-usage.ts'
+import { auditRenewal, ExtraUsage } from './extra-usage.ts'
 import {
   billingFacts,
   failingUntold,
@@ -172,6 +172,7 @@ export class BillingService {
     if (event === null) return 'ignored'
     if (event.kind === 'order') {
       const kept = await recordOrder(this.#db, billing.provider, event.order)
+      if (kept) await auditRenewal(this.#db, billing.provider, event.order)
       // An order paid can clear what was owed; one left unpaid can be what is owed now.
       if (kept && event.order.userId !== null) await this.#accounts.enforceLimits(event.order.userId)
       return kept ? 'recorded' : 'ignored'

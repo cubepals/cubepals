@@ -452,6 +452,39 @@ test.skipIf(!hasDatabase)(
 )
 
 test.skipIf(!hasDatabase)(
+  'a paid renewal is checked against what was sent for it, once',
+  async () => {
+    const { owner, sub } = await subscriber('Ira')
+    await h.app.accounts.allowExtraPlay(owner, 20)
+    const server = await stoppedServer(owner)
+    await ran(server.id, 63.5, new Date(at.getTime() - 5 * 3_600_000))
+    await h.app.billing.usage.count(owner.userId, at)
+    await h.app.billing.usage.cut(at)
+    await h.app.billing.usage.send()
+    const renewal = {
+      status: 'paid',
+      billing_reason: 'subscription_cycle',
+      created_at: new Date(Date.now() + 60_000).toISOString(),
+      items: [
+        { amount: 1500, product_price_id: FIXED_PRICE },
+        { amount: 88, product_price_id: METERED_PRICE },
+      ],
+    }
+    const id = await ordered(owner, sub, renewal)
+    // Polar's word again is the same order: still one entry.
+    await post(orderEvent(order(owner.userId, { id, subscription_id: sub, ...renewal })))
+    const entries = await h.db
+      .select()
+      .from(schema.auditLog)
+      .where(eq(schema.auditLog.subjectId, owner.userId))
+    expect(entries.filter((e) => e.action === 'billing.extra_billed').map((e) => e.data)).toEqual([
+      { order: id, billedCents: 88, reportedCents: 88, matches: true },
+    ])
+  },
+  60_000,
+)
+
+test.skipIf(!hasDatabase)(
   'cancelling stops extra at once, and what was played still goes to Polar',
   async () => {
     const { owner, sub } = await subscriber('Uma')

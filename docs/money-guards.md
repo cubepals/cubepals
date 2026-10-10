@@ -113,6 +113,27 @@ failed one is emailed once while Polar retries the card; once it is owed, once m
 stop until it is paid. Paying it (a retry Polar makes after the card is fixed in its portal)
 arrives as `order.paid` and clears the block on its own.
 
+**What Polar does, as seen in its sandbox (2026-10-10).**
+- Checkout shows the plan's $15 and, under "Additional metered charges may apply", the line
+  "Extra play $0.25 / hour". The portal shows "Metered Usage · Extra play $x" on the
+  subscription, and, once it is set to end, a "Final Charge" card with the metered charges and
+  "This will be the final charge before the subscription ends."
+- A card can't be removed in the portal while a subscription still uses it, even once it is set to
+  end: Polar answers `PaymentMethodInUseByActiveSubscription` ("Add another one or cancel the
+  subscription first"). Replacing it with one that later declines is still possible, so a renewal
+  that fails is what guards 3 and 4 are for.
+- An event id sent twice is counted once (`inserted: 0, duplicates: 1`).
+- Polar counts an event on the customer's meter within seconds, but bills it only once its own
+  job has turned it into a billing entry, which took about ten minutes. An event that arrives
+  later than that before a renewal is billed on the next one; 3.5 hours sent seven minutes before
+  a renewal weren't on it, and were on the next period's meter at $0.88 (Polar rounds the half
+  cent up). On a subscription that ends, the final invoice is the last one, so hours played in the
+  last minutes before it ends may never be billed: bounded by the reporting delay, and the
+  renewal check below says when it happened.
+- Each paid renewal is checked against what Blockly sent since the order before it
+  (`billing.extra_billed` on the account's audit log, with both amounts); a difference is kept for
+  an admin, never acted on.
+
 ### Session cap (`apps/control/src/app/operations/schedules/session-cap.ts`)
 
 No plan sets one (`maxSessionMinutes: null`). It is an admin's tool for one account, such as an

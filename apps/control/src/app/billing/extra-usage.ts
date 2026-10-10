@@ -12,10 +12,11 @@
  * It is not where servers stop at the end of what was allowed: `AccountService.enforceLimits` is.
  */
 import { type Db, schema } from '@blockly/db'
-import { and, asc, count, eq, gt, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, gte, isNull, lt, lte, or, sql } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { UNIT_CENTS } from '../../domain/account/meter.ts'
 import { loadStanding, runUnitsSince } from '../accounts/persistence.ts'
-import type { BillingProvider } from '../ports/optional.ts'
+import type { BillingOrder, BillingProvider } from '../ports/optional.ts'
 import { extraPlayNow } from './persistence.ts'
 
 const months = schema.extraPlayMonths
@@ -226,4 +227,60 @@ export async function extraThisMonth(
     .from(months)
     .where(and(eq(months.userId, userId), eq(months.month, day(monthOf(now)))))
   return { countedUnits: (row?.accruedMilli ?? 0) / 1000, reportedUnits: (row?.reportedMilli ?? 0) / 1000 }
+}
+
+/**
+ * A paid renewal, checked against what was sent for it: the extra play its metered line billed,
+ * and the extra play Blockly sent between the subscription's order before and this one. The two
+ * can differ honestly (the provider bills an event on the payment after it has processed it, which
+ * can be a later one), so a difference is kept on the account's audit log, once per order, for an
+ * admin to read, never acted on.
+ */
+export async function auditRenewal(db: Db, provider: string, order: BillingOrder): Promise<void> {
+  if (order.billingReason !== 'subscription_cycle' || order.status !== 'paid' || order.userId === null) return
+  const log = schema.auditLog
+  const [told] = await db
+    .select({ id: log.id })
+    .from(log)
+    .where(and(eq(log.action, 'billing.extra_billed'), sql`${log.data}->>'order' = ${order.externalOrderId}`))
+  if (told !== undefined) return
+  const orders = schema.billingOrders
+  const [before] = await db
+    .select({ at: orders.orderedAt })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.provider, provider),
+        eq(orders.userId, order.userId),
+        order.externalSubscriptionId === null
+          ? sql`true`
+          : eq(orders.externalSubscriptionId, order.externalSubscriptionId),
+        lt(orders.orderedAt, order.orderedAt),
+      ),
+    )
+    .orderBy(desc(orders.orderedAt))
+    .limit(1)
+  const [sent] = await db
+    .select({ milli: sql<string>`coalesce(sum(${reports.milli}), 0)` })
+    .from(reports)
+    .where(
+      and(
+        eq(reports.userId, order.userId),
+        gte(reports.sentAt, before?.at ?? new Date(0)),
+        lt(reports.sentAt, order.orderedAt),
+      ),
+    )
+  const reportedCents = Math.round((Number(sent?.milli ?? 0) / 1000) * UNIT_CENTS)
+  await db.insert(log).values({
+    actor: 'system:billing',
+    action: 'billing.extra_billed',
+    subjectType: 'account',
+    subjectId: order.userId,
+    data: {
+      order: order.externalOrderId,
+      billedCents: order.extraCents,
+      reportedCents,
+      matches: Math.abs(reportedCents - order.extraCents) <= 1,
+    },
+  })
 }
