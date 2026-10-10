@@ -3,7 +3,8 @@
  * nowhere else. Checkout and the customer portal are this adapter's own pages (checkout-pages.ts),
  * and what they do arrives as a signed delivery at the webhook Polar's would, so a plan is granted
  * and cancelled the way a payment grants and cancels it, with the paid order a checkout makes.
- * Nothing is charged, and extra play is kept here (`reported`) rather than sent anywhere.
+ * Nothing is charged, and extra play is kept here (`reported`) rather than sent anywhere. Discount
+ * codes are kept in memory until a restart, to try the admin pages with; its checkout takes none.
  *
  * Its record of who pays is `billing_subscriptions` itself: a provider keeps its own, and this one
  * has nowhere else to keep it.
@@ -15,6 +16,9 @@ import {
   type BillingEvent,
   type BillingProvider,
   type BillingState,
+  type Discount,
+  DiscountRefused,
+  type NewDiscount,
   type OrderNow,
   type UsageEvent,
   WebhookRejected,
@@ -58,6 +62,8 @@ export class LocalBilling implements BillingProvider {
   readonly reported: UsageEvent[] = []
   /** The refunds asked for. */
   readonly refunded: Array<{ externalOrderId: string; cents: number; why: string }> = []
+  /** Discount codes made here, newest first. */
+  readonly #discounts: Discount[] = []
 
   constructor(options: { db: Db; secret: string; webOrigin: string }) {
     this.#db = options.db
@@ -220,6 +226,30 @@ export class LocalBilling implements BillingProvider {
   async reportUsage(events: readonly UsageEvent[]): Promise<void> {
     for (const event of events)
       if (!this.reported.some((kept) => kept.externalId === event.externalId)) this.reported.push(event)
+  }
+
+  async discounts(): Promise<Discount[]> {
+    return [...this.#discounts]
+  }
+
+  /** A code is one of a kind, whatever its case, as a provider holds it. */
+  async createDiscount(input: NewDiscount): Promise<Discount> {
+    const code = input.code.toLowerCase()
+    if (this.#discounts.some((held) => held.code.toLowerCase() === code))
+      throw new DiscountRefused('A discount with this code already exists.')
+    const discount: Discount = {
+      ...input,
+      id: `local-${randomUUID()}`,
+      redemptions: 0,
+      createdAt: new Date(),
+    }
+    this.#discounts.unshift(discount)
+    return discount
+  }
+
+  async deleteDiscount(id: string): Promise<Discount | null> {
+    const at = this.#discounts.findIndex((held) => held.id === id)
+    return at === -1 ? null : (this.#discounts.splice(at, 1)[0] ?? null)
   }
 
   #link(ticket: Omit<Ticket, 'expires'>): string {

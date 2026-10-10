@@ -26,6 +26,11 @@ const billing: BillingProvider = {
   refund: async () => {},
   reportUsage: async () => {},
   settleUrl: async () => 'https://billing.test/settle',
+  discounts: async () => [],
+  createDiscount: async () => {
+    throw new Error('no discounts here')
+  },
+  deleteDiscount: async () => null,
 }
 
 const WHERE = { page: '/servers', version: 'test-build' }

@@ -31,6 +31,9 @@ describe('the API router', () => {
       'admin.retryOperation',
       'admin.discardOperation',
       'admin.audit',
+      'admin.coupons.list',
+      'admin.coupons.create',
+      'admin.coupons.delete',
       'listings.star',
       'listings.notes',
       'listings.addNote',
@@ -64,6 +67,60 @@ describe('admin procedures', () => {
 
     const admin = appRouter.createCaller({ actor: user, services: services(true) })
     expect(await admin.admin.accounts({ search: '' })).toEqual({ total: 0, accounts: [] })
+  })
+})
+
+describe('coupons', () => {
+  const asked: unknown[][] = []
+  const services = (admin: boolean) =>
+    ({
+      accounts: { isAdmin: async () => admin },
+      billing: {
+        coupons: {
+          list: async (...args: unknown[]) => asked.push(['list', ...args]) && [],
+          create: async (...args: unknown[]) => asked.push(['create', ...args]) && { id: 'c-1' },
+          delete: async (...args: unknown[]) => void asked.push(['delete', ...args]),
+        },
+      },
+    }) as unknown as Services
+  const user = { kind: 'user' as const, userId: 'u-1' }
+  const coupon = {
+    code: 'FRIENDS20',
+    off: { kind: 'percent' as const, percent: 20 },
+    duration: { kind: 'months' as const, months: 3 },
+    maxRedemptions: null,
+    endsAt: '2026-12-31T23:59:59.000Z',
+  }
+
+  test('are for admins only, and reach the coupon service as `admin`', async () => {
+    const outsider = appRouter.createCaller({ actor: user, services: services(false) })
+    await expect(outsider.admin.coupons.list()).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(outsider.admin.coupons.create(coupon)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(outsider.admin.coupons.delete({ couponId: 'c-1' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
+    expect(asked).toEqual([])
+
+    const admin = appRouter.createCaller({ actor: user, services: services(true) })
+    const actor = { kind: 'admin', userId: 'u-1' }
+    expect(await admin.admin.coupons.list()).toEqual([])
+    expect(await admin.admin.coupons.create(coupon)).toMatchObject({ id: 'c-1' })
+    await admin.admin.coupons.delete({ couponId: 'c-1' })
+    expect(asked).toEqual([
+      ['list', actor],
+      ['create', actor, coupon],
+      ['delete', actor, 'c-1'],
+    ])
+  })
+
+  test('refuse a code that is not 3 to 32 letters and digits, and more than 100% off', async () => {
+    const admin = appRouter.createCaller({ actor: user, services: services(true) })
+    await expect(admin.admin.coupons.create({ ...coupon, code: 'NO SPACES' })).rejects.toThrow(
+      'A code is 3 to 32 letters and digits, with no spaces.',
+    )
+    await expect(
+      admin.admin.coupons.create({ ...coupon, off: { kind: 'percent', percent: 120 } }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
   })
 })
 

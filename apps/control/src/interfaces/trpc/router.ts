@@ -84,6 +84,7 @@ import {
 import type { RealtimeConnectInfo } from '@blockly/contracts/realtime'
 import { z } from 'zod'
 import { type AccountDetail, type AccountRow, publicPlans } from '../../app/accounts/queries.ts'
+import { coupons } from './coupons.ts'
 import { insight } from './insight.ts'
 import { adminProcedure, authedProcedure, publicProcedure, router } from './trpc.ts'
 
@@ -668,6 +669,7 @@ const admin = router({
   audit: adminProcedure
     .input(AuditSearchInput)
     .query(({ ctx, input }) => ctx.services.audit.search(ctx.actor, input)),
+  coupons,
 })
 
 const listings = router({

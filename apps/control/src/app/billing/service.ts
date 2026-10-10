@@ -25,6 +25,7 @@ import {
   writeEntries,
 } from './audit.ts'
 import { auditRefund, claimRefund, settleable, settleWith } from './balance.ts'
+import { Coupons } from './coupons.ts'
 import { auditRenewal, ExtraUsage } from './extra-usage.ts'
 import {
   billingFacts,
@@ -57,6 +58,8 @@ export class BillingService {
   readonly #mailer: Mailer
   /** Extra play, counted and sent to the provider to be billed (`extra-play-report`). */
   readonly usage: ExtraUsage
+  /** Coupon codes, made and deleted by admins. */
+  readonly coupons: Coupons
   readonly #webOrigin: string
   /** Where the web app's account page is, for the provider to send people back to. */
   readonly #returnUrl: string
@@ -77,6 +80,7 @@ export class BillingService {
     this.#jobs = deps.jobs
     this.#mailer = deps.mailer
     this.usage = new ExtraUsage({ db: deps.db, billing: deps.capabilities.billing })
+    this.coupons = new Coupons({ db: deps.db, capabilities: deps.capabilities })
     this.#webOrigin = deps.webOrigin
     // The page reads the provider's word when people come back, before the webhook arrives.
     this.#returnUrl = new URL('/account?from=billing', deps.webOrigin).toString()

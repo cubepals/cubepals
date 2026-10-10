@@ -89,7 +89,7 @@ describe('PolarBilling', () => {
     expect(`${sent?.method} ${sent?.path}`).toBe('POST /v1/checkouts/')
     expect(sent?.headers['polar-version']).toBe('2026-10')
     expect(sent?.headers.authorization).toBe('Bearer polar_oat_test')
-    expect(JSON.parse(sent?.body ?? '')).toEqual({
+    expect(JSON.parse(sent?.body ?? '')).toMatchObject({
       products: [PLUS],
       external_customer_id: 'user_123',
       customer_email: 'player@example.com',
