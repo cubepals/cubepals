@@ -227,6 +227,13 @@ describe('what Terraform gets', () => {
     })
   })
 
+  test('the dump reads the database root from the checkout, where the control image has it under /app', () => {
+    const verified = `${complete.DATABASE_DIRECT_URL}?sslmode=verify-full&sslrootcert=/app/packages/db/certs/root.crt`
+    const url = new URL(dumpSecrets({ ...complete, DATABASE_DIRECT_URL: verified }).DATABASE_URL ?? '')
+    expect(url.searchParams.get('sslrootcert')).toBe('packages/db/certs/root.crt')
+    expect(url.searchParams.get('sslmode')).toBe('verify-full')
+  })
+
   test("the state lives in the operator's R2 bucket, under the account's endpoint", () => {
     expect(backendConfig('0123456789abcdef0123456789abcdef')).toContain(
       'endpoints                   = { s3 = "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com" }',
