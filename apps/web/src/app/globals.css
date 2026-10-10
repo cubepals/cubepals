@@ -1,3 +1,16 @@
 @import "../ui/tokens.css";
 @import "../ui/components.css";
 @import "../ui/items.css";
+
+/* Selected text, on every page: ink behind, white on it. */
+::selection {
+  background: #181818;
+  color: #ffffff;
+}
+/* On ink (the dark theme, the solid cards), the same pair turned over, so a selection still shows. */
+:root[data-theme="dark"] ::selection,
+.bl-frame--solid ::selection,
+.bk-plan[data-paid] ::selection {
+  background: #ffffff;
+  color: #181818;
+}

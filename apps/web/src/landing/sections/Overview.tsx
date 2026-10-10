@@ -95,7 +95,7 @@ export function Worlds({ played }: { played?: boolean } = {}) {
             Every server is a world like this one
           </h2>
           <p className="bl-lede">The dark ones are asleep.</p>
-          <p className="bl-small">A drawing of the idea, not a count of servers.</p>
+          <p className="bl-aside">A drawing of the idea, not a count of servers.</p>
         </div>
       </div>
     </section>
