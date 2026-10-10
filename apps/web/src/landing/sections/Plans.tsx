@@ -3,7 +3,7 @@
  */
 import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
-import { planPoints, priceOf } from '../../ui/plans'
+import { PlanPoint, planPoints, priceOf } from '../../ui/plans'
 import { Section } from '../kit'
 import styles from './surface.module.css'
 
@@ -59,7 +59,9 @@ export function Plans({
               <p className={styles.pitch}>{PITCH[plan.key] ?? ''}</p>
               <ul className={styles.points}>
                 {planPoints(plan).map((point) => (
-                  <li key={point}>{point}</li>
+                  <li key={point}>
+                    <PlanPoint plan={plan} point={point} />
+                  </li>
                 ))}
               </ul>
               <Link

@@ -28,6 +28,17 @@ export function planPoints(plan: PublicPlan): string[] {
 
 const hoursPoint = (plan: PublicPlan) => `${plan.includedHours} hours of play each month`
 
+/** One of a plan's points as a card shows it: the hours on the dashed line that says what they are. */
+export function PlanPoint({ plan, point }: { plan: PublicPlan; point: string }) {
+  return point === hoursPoint(plan) ? (
+    <PlayHours hours={plan.includedHours} priceCents={plan.monthlyPriceCents}>
+      {point}
+    </PlayHours>
+  ) : (
+    point
+  )
+}
+
 /**
  * How much play a month's hours are, in evenings rather than numbers. A multiplayer session runs
  * about an hour and a half on average and a player plays about 11 hours a month (industry figures,
@@ -123,13 +134,7 @@ export function PlanCard({
         {planPoints(plan).map((point) => (
           <li key={point} className="type-body-sm">
             <Check size={16} strokeWidth={2.25} aria-hidden />
-            {point === hoursPoint(plan) ? (
-              <PlayHours hours={plan.includedHours} priceCents={plan.monthlyPriceCents}>
-                {point}
-              </PlayHours>
-            ) : (
-              point
-            )}
+            <PlanPoint plan={plan} point={point} />
           </li>
         ))}
       </ul>
