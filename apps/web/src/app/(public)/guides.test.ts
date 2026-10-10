@@ -59,15 +59,12 @@ describe('guides', () => {
     }
   })
 
-  test('ship unapproved: merging publishes nothing', () => {
-    expect(GUIDES.every((guide) => !guide.approved)).toBe(true)
-  })
-
-  test('each has its page, which a production build can load before it answers 404', async () => {
+  test('each has its page, which production serves once the guide is approved', async () => {
     production()
     for (const guide of GUIDES) {
       const page = await import(`./guides/${guide.slug}/page.tsx`)
-      expect(() => page.generateMetadata()).toThrow()
+      if (guide.approved) expect(page.generateMetadata().alternates?.canonical).toBe(`/guides/${guide.slug}`)
+      else expect(() => page.generateMetadata()).toThrow()
     }
   })
 })
