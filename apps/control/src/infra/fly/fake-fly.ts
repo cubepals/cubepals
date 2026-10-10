@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * An in-memory Fly Machines API, faithful where the adapter depends on it.
  * Leases carry nonces and are required for changes; volumes filled from a snapshot or a fork

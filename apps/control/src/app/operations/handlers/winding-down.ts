@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Takes a server down: stopped (its world saved and measured first), decommissioned into the trash
  * with its storage kept, or purged for good. Each ends what the server is billed for and who is on

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Who a player is to a server (§15.1). A server that verifies accounts knows a player by the
  * UUID of their Minecraft account. One that doesn't derives a UUID from the name the player

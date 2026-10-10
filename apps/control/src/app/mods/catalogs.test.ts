@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Two catalogs in one server (docs/architecture.md §15.2): a plugin from Hangar beside one from
  * Modrinth, resolved as one set, installed, and held to each catalog's own states.

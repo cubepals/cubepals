@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Generates src/ui/tokens.css from the Blockly design system's tokens.json.
 // Run after updating tokens.json: bun run apps/web/scripts/tokens.ts
 import { readFileSync, writeFileSync } from 'node:fs'

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Payments that carry extra play, through the real Polar adapter against a stand-in for Polar's
  * API: when one that didn't go through is owed (only once Polar, asked again, says it is still

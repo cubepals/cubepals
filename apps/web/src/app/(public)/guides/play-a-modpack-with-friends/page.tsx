@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The guide to playing a modpack with your friends. The steps were done on a local stack, with the
  * Create setup on Plus, and the pictures are from that run.

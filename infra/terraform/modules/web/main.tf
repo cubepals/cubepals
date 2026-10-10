@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # The web app as a Cloudflare Worker (§14, §16): the Worker, the R2 bucket OpenNext keeps Next's
 # data cache in, and the routes that send the site's hosts to it. The Worker answers the hosts that
 # redirect (www.) itself, so no redirect rule is needed (apps/web/src/lib/before-next.ts).

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Local development's stand-ins (config/local.ts): on this machine, a missing or half-filled
  * outside account never stops the stack; on a deployment, nothing of it applies.

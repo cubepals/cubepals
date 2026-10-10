@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * Where the page rests on a section: the scroll position that shows the section's beginning and
  * the one that shows its end (the same, when the section fits one screen). The scrolling rides

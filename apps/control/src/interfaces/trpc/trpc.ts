@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { AppErrorCode, PlatformCapabilities } from '@blockly/contracts'
 import { initTRPC, TRPCError } from '@trpc/server'
 import { ZodError } from 'zod'

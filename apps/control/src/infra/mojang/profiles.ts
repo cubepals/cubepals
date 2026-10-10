@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { PNG } from 'pngjs'
 import type { PlayerProfiles, SkinPixels } from '../../app/ports/minecraft.ts'
 

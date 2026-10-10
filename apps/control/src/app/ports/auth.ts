@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Sign-in and sessions, whoever provides them (Better Auth, in infra/auth). The interfaces serve
  * its endpoints and ask it who a request belongs to; nothing else about it leaks out.

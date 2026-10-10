@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The emails about a person's account: the welcome once it is ready, the link that confirms its
  * email, a reset link, and the notice that its password changed. Sign-in sends them

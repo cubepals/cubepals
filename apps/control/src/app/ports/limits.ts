@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Counting what the surfaces nobody signs in to may do (§15.6): a public page, an invite link,
  * the status endpoint, the badge. Everything an account does is bounded by `AccessPolicy`; this

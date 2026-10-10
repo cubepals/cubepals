@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** What the Worker does before Next: www sent on, and sign-in calls told the browser's real address. */
 import { afterEach, describe, expect, test } from 'bun:test'
 import { beforeNext } from './before-next'

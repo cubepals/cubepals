@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # One fleet node on Hetzner Cloud (docs/fleet-operations.md §2): a server on the deployment's
 # private network, a firewall that keeps its public side shut, and cloud-init that runs the join
 # line `bun scripts/fleet.ts add` minted for it. blocklyd works out the rest on the host.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Copies the install made for a server's release into its volume before it first starts, and
  * makes that install, once, when there is none yet. It does not decide whether a server has an

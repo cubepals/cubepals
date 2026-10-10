@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The guide to a Minecraft server for friends in the UK and Europe. Where servers run is
  * production's region map (infra/terraform/environments/production, eu:fra and us:iad), and Fly's

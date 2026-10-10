@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What a day costs, as the spend watchdog works it out (docs/money-guards.md): Fly's prices by
  * size, the part of each run inside the day, stray compute and disks, rounding up, and the limit

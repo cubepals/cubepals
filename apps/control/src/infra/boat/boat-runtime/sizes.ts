@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Boat's sandbox sizes, by memory, disk and list price while running. It
  * neither makes nor resizes a sandbox; `sandboxes.ts` does, on the size `boat-runtime.ts` asks for.

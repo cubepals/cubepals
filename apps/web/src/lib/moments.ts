@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What the good-moment question says it noticed, so it reads as noticed and not as a form: the
  * friend who joined, the server that woke, the second week of play, and when.

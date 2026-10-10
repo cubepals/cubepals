@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { defineContract, fromClient, fromServer, type MapOf, reliable } from 'transport-io'
 import { z } from 'zod'
 import { OPERATION_KINDS, OPERATION_STEPS, SERVER_STATUSES } from './server.ts'

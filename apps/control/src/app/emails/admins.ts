@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What the platform tells every admin by email: an alert it raised (platform/alerts.ts), and a day
  * whose spend passed the daily limit (operations/schedules/spend.ts).

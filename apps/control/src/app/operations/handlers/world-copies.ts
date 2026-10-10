@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Copies of a server's world, each recorded as a backup: a provider snapshot, taken consistent,
  * and a snapshot packed into the archive store and read back before it counts. It makes copies;

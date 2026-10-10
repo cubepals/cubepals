@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * OpenNext's Cloudflare build for the web app. Nothing here revalidates on demand (no
  * revalidateTag or revalidatePath), so there is no tag cache and no queue. The landing page and

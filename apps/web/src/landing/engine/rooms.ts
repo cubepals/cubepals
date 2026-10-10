@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * What goes on in the rooms under the grass. Every room is about the same thing, a server
  * (engine/server.ts), and each shows the one thing its section says about it: it is woken at the

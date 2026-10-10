@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Versions Cubepals ran itself on a Minecraft release and server type their catalog doesn't list
  * them for. Catalogs trail what really runs: BSkyBlock lists nothing past 26.1.1, yet it makes its

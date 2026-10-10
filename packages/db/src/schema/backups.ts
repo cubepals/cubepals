@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A server's backups: provider snapshots and copies in the archive store, with what each was made
  * from and where it stands. The files themselves are `artifacts.ts`'s.

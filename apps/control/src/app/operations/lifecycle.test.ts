@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { schema } from '@blockly/db'
@@ -183,7 +187,7 @@ describe.skipIf(!hasDatabase)('server lifecycle', () => {
     const { id } = await h.create(owner)
     await h.until(id, 'running')
     await power('stop', owner, id)
-    await h.until(id, 'stopped')
+    await h.until(id, 'stopped').then(() => h.settled(id)) // reconcile skips a stop still finishing
     const { handle } = await loadRuntime(h.db, id, ['fake'])
     if (handle === null) throw new Error('no handle')
     // Started at the provider, not through Blockly.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * An admin fixing someone's server, end to end against the fake provider: each action refused to
  * anyone but an admin and without a reason, done the owner's way as `admin:<id>`, and audited with

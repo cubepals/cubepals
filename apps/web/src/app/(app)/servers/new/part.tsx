@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * One question of the create-server page: its frame, its heading, and how it opens once the
  * questions before it are answered. What goes inside each question lives with the page and the

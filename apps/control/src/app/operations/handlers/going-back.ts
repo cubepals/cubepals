@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A server put back on the configuration it last ran, after a change to it didn't come up: with
  * the world from before the change where the change rewrote it, or removed files beside it. It

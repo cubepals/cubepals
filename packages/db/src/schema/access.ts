@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Who may join a server and who runs it: the whitelist, operators and bans, as Blockly keeps them
  * and as the game reports them back.

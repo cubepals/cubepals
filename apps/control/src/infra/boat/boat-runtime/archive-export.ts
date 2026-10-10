@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A snapshot's archive, uploaded to the archive store from inside its sandbox: in one PUT or, larger
  * than one carries, in parts. It neither finds nor wakes the sandbox, which `boat-runtime.ts` does

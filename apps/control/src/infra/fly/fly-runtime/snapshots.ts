@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A Fly volume's snapshots: one taken and reported only once Fly has finished writing it, and
  * which of those taken Fly no longer holds. Fly can't delete one before it expires; how long they

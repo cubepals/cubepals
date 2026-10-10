@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What a mod catalog says about projects and versions, neutral to which catalog it is
  * (docs/architecture.md §15.5). Resolution works on these; the catalog port returns them.

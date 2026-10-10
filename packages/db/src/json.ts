@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Shapes stored in jsonb columns. The control plane's domain owns the meaning of these values;
 // these interfaces are what the database promises to hand back. Persistence code maps between
 // the two, so a drift between them is a compile error there rather than a silent mismatch.
@@ -212,6 +216,8 @@ export interface LimitOverridesJson {
   includedUnits?: number
   /** How long one run may last, where an admin holds this account to short runs (an AFK farm). */
   maxSessionMinutes?: number
+  /** How long an empty server runs before it sleeps, in place of the plan's (the staging check's). */
+  idleShutdownAfterMinutes?: number
 }
 
 export interface IneligibleReasonJson {

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Holds one fake server's console output, the last 2000 lines, and hands it to whoever reads or
  * follows it. It does not decide what a line says: the server and the image do

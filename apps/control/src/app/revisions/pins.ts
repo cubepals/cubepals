@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Which build of its server software a revision pins (§4), so it boots the same way every time:
  * a server type's current build, and the Paper build plain Minecraft runs on. Reading the build

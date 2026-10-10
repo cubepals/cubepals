@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { ConsoleTarget, ReadinessProbe, ServerConsole, ServerStatusPing } from '../ports/minecraft.ts'
 import type { LogLine, LogSource } from '../ports/platform.ts'
 import {

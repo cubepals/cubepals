@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // @peculiar/x509 needs a Reflect polyfill loaded before it, and since 2.0 leaves the choice to us.
 import 'reflect-metadata'
 import { createHash, X509Certificate as NodeX509, webcrypto } from 'node:crypto'

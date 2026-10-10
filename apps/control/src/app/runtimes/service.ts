@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { type Db, schema, type Tx } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { PLAN_KEYS } from '../../domain/account/entitlements.ts'

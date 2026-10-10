@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 name: CI
 
 on:
@@ -264,9 +268,20 @@ jobs:
           # shellcheck disable=SC2086
           git ls-files -- $PATHS | grep -E '\.test\.tsx?$' | sed 's|^|./|' | xargs bun test
 
+  # Every file says whose it is and under what license, in its own SPDX lines or in REUSE.toml.
+  # It runs on every change, prose included: a new picture or document needs its line too.
+  licenses:
+    name: Every file has a license
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: pipx run reuse==6.2.0 lint
+
   # The one check branch protection requires. It passes when every part passed or was skipped.
   check:
-    needs: [changes, static, test, worker, images]
+    needs: [changes, licenses, static, test, worker, images]
     if: always()
     runs-on: ubuntu-latest
     steps:

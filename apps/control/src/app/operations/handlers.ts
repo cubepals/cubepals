@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Builds the handler for every operation a server can run (§9) from the parts in `handlers/`,
  * handing each part only the ports, services and steps it uses. It holds no logic of its own:

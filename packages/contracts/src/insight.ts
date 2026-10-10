@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What a person tells Cubepals' builder: a line of feedback from the sidebar, and the answer to
  * "How's it going?" asked after a good moment. The control plane sends both to PostHog.

@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/*
  * The packs stratum: one example pack followed down four steps. What kind of file it is, what it
  * needs, which of its jars a server runs, and the start that finds what reading couldn't.
  *

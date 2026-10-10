@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { Db, Tx } from '@blockly/db'
 import { catalogOfId } from '../../domain/mods/catalog.ts'
 import type { ModCatalog, ProjectState, VersionState } from '../ports/catalog.ts'

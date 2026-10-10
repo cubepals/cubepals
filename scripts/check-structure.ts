@@ -1,12 +1,17 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Keeps Blockly's structure from getting worse. Run: bun run check:structure [--update], and in a
  * repository that is one Rust crate, also with --rust
  *
  * Every check reads source files (.rs, .ts, .tsx and .py under apps/, packages/ and scripts/; not
  * lockfiles, generated code, migrations, fixtures or vendored files) and holds them to:
- * - size: a file at most 800 lines; an `impl` block, class or function at most 600, and a method
- *   inside one too. A block opens on a line and closes on the next closer at the same indentation,
- *   which the formatters guarantee; in Python it ends where the indentation does.
+ * - size: a file at most 800 lines, not counting the SPDX lines that open it; an `impl` block,
+ *   class or function at most 600, and a method inside one too. A block opens on a line and closes
+ *   on the next closer at the same indentation, which the formatters guarantee; in Python it ends
+ *   where the indentation does.
  * - complexity: Biome's noExcessiveCognitiveComplexity and noExcessiveLinesPerFunction, their
  *   thresholds in biome.json (off there, so `bun run lint` passes without them); in a crate, with
  *   --rust, clippy's too_many_lines, cognitive_complexity and too_many_arguments, their thresholds
@@ -123,6 +128,21 @@ const langOf = (path: string): Lang | undefined => SOURCE[path.split('.').pop() 
 const sources = all.filter((path) => langOf(path) !== undefined)
 const text = new Map(sources.map((path) => [path, readFileSync(join(root, path), 'utf8')]))
 const linesOf = (path: string) => (text.get(path) ?? '').replace(/\n$/, '').split('\n')
+/** An SPDX line, or the bare comment line `reuse annotate` writes between two. */
+const LICENSE_LINE = /^(\/\/|#)( SPDX-[A-Za-z-]+:.*)?$/
+/**
+ * A file's length without its license header: the SPDX lines at its top (after a `#!` line) and
+ * the blank lines round them. They say whose the file is, not what it does, so adding them to every
+ * file grows none of them toward a limit.
+ */
+function lengthOf(path: string): number {
+  const lines = linesOf(path)
+  const start = lines[0]?.startsWith('#!') ? 1 : 0
+  let end = start
+  while (end < lines.length && ((lines[end] ?? '') === '' || LICENSE_LINE.test(lines[end] ?? ''))) end++
+  const header = lines.slice(start, end).some((line) => line.includes(' SPDX-')) ? end - start : 0
+  return lines.length - header
+}
 
 const findings: Record<string, Finding[]> = {}
 function report(check: string, finding: Finding) {
@@ -219,9 +239,9 @@ function functionAt(path: string, line: number, known: Map<string, Block[]>): st
 
 function checkSize() {
   for (const path of sources) {
-    const lines = linesOf(path)
-    if (lines.length > FILE_LINES)
-      report('size', { key: path, n: lines.length, limit: FILE_LINES, message: 'lines in the file' })
+    const length = lengthOf(path)
+    if (length > FILE_LINES)
+      report('size', { key: path, n: length, limit: FILE_LINES, message: 'lines in the file' })
     for (const block of blocks(path).filter((b) => b.end - b.start + 1 > BLOCK_LINES))
       report('size', {
         key: `${path} › ${block.name}`,
@@ -334,9 +354,9 @@ function hasHeader(lang: Lang, lines: string[]): boolean {
 
 function checkHeaders() {
   for (const path of sources) {
-    const lines = linesOf(path)
-    if (lines.length > HEADER_AFTER && !hasHeader(langOf(path) as Lang, lines))
-      report('headers', { key: path, message: `has ${lines.length} lines and no header comment` })
+    const length = lengthOf(path)
+    if (length > HEADER_AFTER && !hasHeader(langOf(path) as Lang, linesOf(path)))
+      report('headers', { key: path, message: `has ${length} lines and no header comment` })
   }
 }
 

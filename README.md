@@ -38,8 +38,11 @@ boundary. To work on it, start with [CONTRIBUTING.md](CONTRIBUTING.md); running 
 
 ## License
 
-[GNU Affero General Public License v3.0 only](LICENSE). If you run a modified version of
-Cubepals as a network service, you must offer its users the source of that version.
+Copyright (C) 2026 The Cubepals Authors. The code is free software: you can redistribute it and/or
+modify it under the terms of the [GNU Affero General Public License, version 3 only](LICENSE)
+(AGPL-3.0-only). It is distributed in the hope that it will be useful, but without any warranty;
+see the licence for details. If you run a modified version of Cubepals as a network service, you
+must offer its users the source of that version.
 
 The **code** is AGPL. The **brand and the site** are not: the Cubepals name, mark and wordmark,
 the landing page, the site's pictures and the guides' words are all rights reserved.

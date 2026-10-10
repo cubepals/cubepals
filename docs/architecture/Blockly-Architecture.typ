@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Blockly's architecture: the canonical technical description of how Blockly runs Minecraft
 // servers. Render it with `bun scripts/architecture.ts`; see README.md here for how to keep it
 // true. The commit, branch and date on the cover and in the footer come from that script; its

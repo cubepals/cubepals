@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What reaches the operator through PostHog: the funnel events kept in `record.ts`, sent by
  * the worker; a line of feedback from the sidebar; and "How's it going?" after a good moment, at

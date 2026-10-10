@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * One DNS record in a Cloudflare zone, made or corrected to what a script wants, and the account
  * that holds the zone. The token needs only "Edit zone DNS" on that zone. Used by staging.ts to put

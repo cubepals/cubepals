@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A release's item art, the way BlueMap gets it: from the release's own client jar, found through
  * Mojang's version manifest and checked against the SHA-1 the manifest gives, so Blockly never

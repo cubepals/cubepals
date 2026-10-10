@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Extra play end to end, through the real Polar adapter against a stand-in for Polar's API: who
  * may allow it (each guard, from what Polar's webhooks said), the servers that stop when it runs

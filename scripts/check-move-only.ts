@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Proves a `Move:` pull request only moves code. Run: bun run check:move-only [--base <ref>]
 // [--head <ref>] [--allow <file>]
 //

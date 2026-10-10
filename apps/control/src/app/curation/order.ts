@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The order a pack's releases come in, newest first: a reviewed pack's as its review lists them,
  * Blockly's own by the Minecraft each runs on.

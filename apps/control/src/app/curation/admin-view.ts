@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The admins' page of curated packs: every reviewed pack, and each of its releases as checking
  * and the admins left it, whatever its state. It only reads.

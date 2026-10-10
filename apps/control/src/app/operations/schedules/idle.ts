@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Decides whether a running server nobody is on has been idle long enough for its plan, or was
  * woken by a connection nobody followed, and stops it if so. The idle check and the edge's hint

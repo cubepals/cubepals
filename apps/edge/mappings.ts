@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Where mc-router sends each hostname, from what the control plane says about its server.
 
 import type { EdgeRoutes } from '@blockly/contracts/edge'

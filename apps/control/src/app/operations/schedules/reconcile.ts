@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Brings what is recorded of each server in line with what its provider lists, from where the last
  * settled pass began: a crash is recorded, compute behind a server that holds none is stopped, and

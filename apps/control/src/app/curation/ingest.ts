@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Ingestion of one pending release (docs/modpack-templates.md § Ingestion): the check that applies
  * to it run in a work directory of its own, and what it found kept once, or its refusal recorded.

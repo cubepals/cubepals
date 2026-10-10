@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Every file a server installs, fetched from where its pack says and matched to the hash the pack
  * gives it: the same rule for a catalog pack's release and for one of Blockly's own.

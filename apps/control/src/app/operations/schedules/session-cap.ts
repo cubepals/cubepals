@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Warns a run in game as it nears its account's session cap, then stops it at the cap, the
  * ordinary way. Only an admin sets a cap; the month's run hours stay the real budget, and those are

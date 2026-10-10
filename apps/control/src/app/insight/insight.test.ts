@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The funnel, feedback and the good-moment question end to end, against a stand-in for PostHog:
  * each event kept once where it happens and sent once by the worker's pass, feedback's exact

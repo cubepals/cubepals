@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * staging.cubepals.com as the Cloudflare Worker `blockly-web-staging`: staging's values for
  * lib/web-worker.ts, and the two ways a commit reaches the Worker without the rest of staging.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 'use client'
 
 import { SERVER_ICONS, type ServerIcon, type ServerView } from '@blockly/contracts'

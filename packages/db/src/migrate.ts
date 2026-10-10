@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import { createDb, createPool, migrationsFolder } from './index.ts'
 

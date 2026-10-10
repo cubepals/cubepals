@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Holds a fake server's access lists (whitelist, operators, player and IP bans) as the running
  * server does: read from their files as it starts, kept in memory, and each saved whole over its

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { isLocalDeployment, localBilling, localNotes, localOnly } from './local.ts'
 import { DeploymentConfig, inconsistencies } from './schema.ts'
 

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { Metadata, Viewport } from 'next'
 import { Figtree, IBM_Plex_Mono } from 'next/font/google'
 import type { ReactNode } from 'react'

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { CompatibilityAdminView, CuratedPackAdminView } from '@blockly/contracts'
 import type { Db } from '@blockly/db'
 import type { ReleaseRef } from '../../domain/mods/curation.ts'

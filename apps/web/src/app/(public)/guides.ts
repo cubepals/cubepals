@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The guides: each one's address, title, description and dates, and whether it has passed review.
  * This list decides where a guide appears. While a guide is unapproved it can be read locally and

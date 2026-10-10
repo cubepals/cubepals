@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Checking one reviewed release of a catalog pack (docs/modpack-templates.md § Ingestion): that its
  * authors still publish exactly the reviewed bytes, that it opens safely, how a server pins it,

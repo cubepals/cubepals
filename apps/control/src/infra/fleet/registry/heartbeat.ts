@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What one heartbeat does to the registry: the certificate the node must present, its report
  * applied in one transaction, and the fences sent back for copies it must not run.

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # One environment, whole: the Fly organization's apps, the control plane's configuration, the
 # edge, DNS, the archive bucket, the web app's Worker and the fleet's Hetzner nodes.
 # environments/<name> passes its values in.

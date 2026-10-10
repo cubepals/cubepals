@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Finding a modpack to play on the create-server page: by search, by a pasted link, and at which
  * of its versions. It does not check whether a pack can be made or create anything: it hands the

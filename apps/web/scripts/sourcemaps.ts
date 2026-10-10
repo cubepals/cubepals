@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // After `next build`: uploads the browser bundle's source maps to PostHog, so the errors it shows
 // read as the code was written, then deletes them, so no map is served. Runs only when the build
 // has POSTHOG_PERSONAL_API_KEY (a personal API key with error tracking write) and

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Dedicated servers from bare-metal specialists as catalog entries: phoenixNAP, Latitude.sh, Cherry Servers.
  * One entry each, with no shared constants; every field is written out in its entry.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The rules for what a revision places itself: how carried files name the running world, how they
  * are named and diffed, and which changes to them are undone with the snapshot from before

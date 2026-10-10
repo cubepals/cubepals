@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * GitHub's mark (Primer Octicons `mark-github`, MIT). GitHub asks for its logo in black or white,
  * so it takes the button's ink, which is one or the other in each theme.

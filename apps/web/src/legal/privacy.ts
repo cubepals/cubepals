@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The Privacy Policy, for the UK GDPR and the EU GDPR: who is responsible, what is collected and
  * why, who else handles it, how long it is kept and how to use your rights. Every line matches

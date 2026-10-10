@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Files Blockly keeps and builds from: stored artifacts by hash, uploads in flight, uploaded mods,
  * and the packs read from them.

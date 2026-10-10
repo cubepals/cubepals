@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The database dump's own decisions, on stand-in values: which values a run needs, the dump's key,
  * reading pg_dump's version and pg_restore's list, the size line, and what an error may print.

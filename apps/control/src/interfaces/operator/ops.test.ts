@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The accounts and servers operators reach from `scripts/ops.ts`, over services that only record
  * what they were asked: the token is checked before anything, and every call is the operator's.

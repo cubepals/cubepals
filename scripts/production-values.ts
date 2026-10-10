@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Every value production needs before it can come up (docs/production.md): what each is, where the
  * operator gets it, and where it goes. `bun scripts/production.ts` reads them from one file the

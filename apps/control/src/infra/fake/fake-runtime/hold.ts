@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Holds the next few calls of one verb until a test lets them go, as a provider call that hangs
  * does. It does not decide where in a verb the hold sits, or which calls reach it: the verb does

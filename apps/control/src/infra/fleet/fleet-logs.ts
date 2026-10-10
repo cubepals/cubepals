@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { LogLine, LogSource } from '../../app/ports/platform.ts'
 import type { RuntimeHandle } from '../../app/ports/runtime.ts'
 import type { FleetRuntime } from './fleet-runtime.ts'

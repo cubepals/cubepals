@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The guide to hosting a Minecraft server without port forwarding. The router and CGNAT facts come
  * from the Minecraft Wiki, minecraft.net and RFC 6598, and playit.gg is described from its own

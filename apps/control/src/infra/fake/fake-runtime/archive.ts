@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Moves a storage directory to and from an archive store as a gzipped tar: up in one PUT or in
  * parts, as the Fly and Docker exports do, and down from a link. It never sees a server or a

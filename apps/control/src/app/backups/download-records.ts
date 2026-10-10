@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The world downloads made of archives, as rows: the one being made or ready for an archive, the
  * newest whatever its state, and those whose copy the store no longer needs. What a download

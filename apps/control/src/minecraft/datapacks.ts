@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Datapacks → the world. A server's datapacks are part of its revision, beside its mods, and go
  * into the `datapacks` folder of the world it runs, by a step of Blockly's own before the image

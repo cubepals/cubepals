@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What new servers are offered by name is read on every create page and every pick of a pack, and
  * changes only when a release is published or withdrawn: read lean, kept briefly, and forgotten

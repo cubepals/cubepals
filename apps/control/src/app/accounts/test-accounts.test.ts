@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Accounts Cubepals uses to test itself: made by an admin only, confirmed and on the plan picked
  * with no password and no payment, audited, and left out of the business's numbers, the billing

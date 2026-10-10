@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What an owner is told when a payment carrying extra play fails: once while the card is tried
  * again, and once if it is still unpaid after that, when their servers can't start until it is

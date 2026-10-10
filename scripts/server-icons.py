@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """
 Draws Blockly's server icons: the picture an owner picks for their world, and Blockly's own,
 which a server shows until they do.

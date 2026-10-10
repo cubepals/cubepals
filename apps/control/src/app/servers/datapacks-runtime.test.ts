@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Datapacks and the void, as a container: the spec of a revision with datapacks, the step that puts
  * them into the world it opens, run by a real shell against a volume in a temporary directory, and

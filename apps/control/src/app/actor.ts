@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { MinecraftServer } from '../domain/server/server.ts'
 import { NotFound } from './errors.ts'
 

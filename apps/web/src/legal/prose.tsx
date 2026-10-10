@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A policy's words on the page: its blocks, and in each sentence its links, its emphasis and the
  * operator's details. A detail not given yet is a marked placeholder, never a guess.

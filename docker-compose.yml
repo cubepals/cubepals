@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Local development. `docker compose up -d` starts everything the control plane talks to;
 # the control plane and the web app run on the host: `bun run dev` starts both (or
 # `bun run dev:control` and `bun run dev:web` one at a time).

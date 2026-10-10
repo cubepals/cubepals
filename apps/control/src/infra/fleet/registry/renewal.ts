@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Renewing an enrolled node's certificates, asked for over mutual TLS with its current one.
  * The new certificate takes over when a heartbeat presents it, in `heartbeat.ts`; a machine's first

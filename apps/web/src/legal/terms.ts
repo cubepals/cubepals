@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The Terms of Service: the agreement between a player and the person who runs Cubepals. Every
  * promise in it is one the product keeps today; plan facts come from `figures.ts`. Payment terms

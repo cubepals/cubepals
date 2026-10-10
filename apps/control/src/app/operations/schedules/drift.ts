@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Applies a changed spec to running servers nobody is playing on, a few a pass, through the same
  * `apply` as any change. What a server's spec should be is `servers/specs.ts`'s; applying it is the

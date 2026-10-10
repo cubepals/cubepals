@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The Cloudflare Worker's entry (wrangler.jsonc's `main`): src/lib/before-next.ts, then OpenNext's
  * generated worker, which runs Next.

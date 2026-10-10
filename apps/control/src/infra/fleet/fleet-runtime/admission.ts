@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Room to run on a node (docs/fleet.md, "Admission"): claimed in the ledger, under the region's
  * lock, before a node is asked to start a copy, so two starts can't both take the last of it; and

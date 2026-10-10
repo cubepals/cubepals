@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Brings a running server's access files in line with Blockly's record (§15.1). A stopped server
  * keeps its pending changes for its next boot, and a delivery that fails is recorded on the

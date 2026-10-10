@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Boat sandboxes: one whole Linux VM per server, billed by the second while it runs and free while
  * stopped, running the server's workload as a Docker container (sandbox-scripts.ts). A stopped

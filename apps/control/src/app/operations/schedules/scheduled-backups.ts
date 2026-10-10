@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Queues each day's backup of every server played on since its last one, then retires the backups
  * past their lifetime or whose snapshot the provider let go. Weekly archives, and erasing the ones

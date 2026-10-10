@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Every Hetzner offering in the catalog.
  * Its cloud VM for one server, its large cloud VMs and its dedicated servers are three arrays,

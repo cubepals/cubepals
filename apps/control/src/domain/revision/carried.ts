@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What a revision puts on the server's disk itself, beside what the image installs: files Cubepals
  * wrote, carried the way a pack carries its `overrides/` (docs/modpack-system.md § Carried files),

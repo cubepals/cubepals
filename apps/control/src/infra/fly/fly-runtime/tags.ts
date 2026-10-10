@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Writes servers' tags onto their Fly machines' metadata, through the metadata endpoint, which
  * neither restarts a machine nor needs its lease. Which tags a server has is the caller's; how a

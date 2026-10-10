@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
  * Blockly components. Every value comes from tokens.css; the refinements on top of it are
  * press feedback, hover only on real pointers, compositor-friendly motion and image outlines.
  *

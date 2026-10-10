@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { createHash } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
 import { rm } from 'node:fs/promises'

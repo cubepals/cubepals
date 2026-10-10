@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The two scenes that stand back: the turn, where the whole column is in view with its rooms
  * named, and all the worlds under one night sky.

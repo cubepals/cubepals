@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import https from 'node:https'
 import { connect as tcpConnect } from 'node:net'
 import type { Readable } from 'node:stream'

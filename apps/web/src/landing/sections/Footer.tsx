@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 import Link from 'next/link'
 import { footerGuides } from '../../app/(public)/guides'
 import { GuideLinks } from '../../app/(public)/guides/links'

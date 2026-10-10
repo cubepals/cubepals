@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, expect, spyOn, test } from 'bun:test'
 import { RateLimiterMemory } from 'rate-limiter-flexible'
 import { MemoryLimits } from './memory-limits.ts'

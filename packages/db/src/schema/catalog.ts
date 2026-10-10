@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Blockly's cache of the mod catalogs and its trust in them: projects and versions as last read,
  * the refreshes that read them, checked and curated packs, and the projects trusted outright.

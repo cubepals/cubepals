@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Restarts a running world onto a bigger disk as soon as it outgrows its own, telling its players
  * first, on plans whose disks grow. Measuring a world as it stops is the `stop` operation's

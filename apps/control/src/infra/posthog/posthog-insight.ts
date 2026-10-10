@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * PostHog, through its own Node SDK, in its EU cloud. Every event, errors included, says which
  * environment sent it (`production`, `staging` or `development`): the project's charts count

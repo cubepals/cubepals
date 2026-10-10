@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { type BuiltLoader, type LoaderBuilds, LoaderBuildsUnavailable } from '../../app/ports/loaders.ts'
 
 /** Each server type's current build, as a test sets it; the builds the live lists had on 2026-09-19. */

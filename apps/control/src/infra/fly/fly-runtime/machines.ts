@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Fly machines: read, found by role, made, changed under their lease, destroyed, waited on and
  * run commands in. It decides neither when a machine changes nor in what order with its volume;

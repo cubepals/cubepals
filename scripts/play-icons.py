@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """
 Draws the icons for the ways to play, as the create page shows them: Survival, Creative, Hardcore,
 Smoother survival, Create, Lifesteal, Manhunt, Skyblock, OneBlock, RPG survival, Duels, a modpack

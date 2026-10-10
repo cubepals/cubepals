@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { gzipSync } from 'node:zlib'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import nbt from 'prismarine-nbt'

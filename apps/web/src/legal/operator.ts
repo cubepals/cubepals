@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Who runs Cubepals and how to reach them, as the policies and the footer say it. Cubepals is run
  * under the name "The Cubepals Authors", and notices come by email, not post. A detail not given

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { createHash, randomUUID } from 'node:crypto'
 import { type Db, schema } from '@blockly/db'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'

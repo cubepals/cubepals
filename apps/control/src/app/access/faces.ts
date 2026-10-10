@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { PlayerName } from '@blockly/contracts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { isAccountUuid } from '../../minecraft/identity.ts'

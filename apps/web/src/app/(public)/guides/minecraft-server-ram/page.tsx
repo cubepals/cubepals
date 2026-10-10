@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The guide to how much RAM a Minecraft server needs. What decides memory comes from the Minecraft
  * Wiki; the sizes Cubepals runs are rendered from PARTY in the control plane's size.ts through

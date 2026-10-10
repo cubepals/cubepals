@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The Minecraft lifecycle on staging, on Fly, timed. Run it after `bun scripts/staging.ts up`:
  *
@@ -11,6 +15,14 @@
  * it's started again. Every wait a player would feel is timed, and every step asserts. Before all
  * that, whatever an earlier run left (a run that failed or was cancelled before its end) is purged.
  *
+ * The sleep is the real one, only sooner: the check's own account is given a one-minute idle time
+ * (an account's `idleShutdownAfterMinutes` override) for that step alone, so the control plane's
+ * own idle check stops the server as it would after the plan's ten minutes, and nothing else on
+ * staging changes.
+ *
+ * While a step waits it says so every 20 seconds, with what it last saw of the server and its
+ * machine, and the run ends with a table of every step and its time (`lib/check-progress.ts`).
+ *
  * The private parts are reached the way an operator would: Postgres and Mailpit over `fly proxy`,
  * the server's machines and volumes through flyctl, the stored copy through the bucket's own API.
  */
@@ -19,6 +31,7 @@ import { createHash, randomInt, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { SQL } from 'bun'
+import { Progress, type StepResult, seconds, summaryTable } from './lib/check-progress.ts'
 import { type Edge, join, login } from './lib/minecraft.ts'
 import { type Api, people } from './lib/people.ts'
 
@@ -27,7 +40,8 @@ const STATE_FILE = 'local/staging/state.json'
 const KEEP = process.argv.includes('--keep')
 
 const say = (line: string) => process.stdout.write(`${line}\n`)
-const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`
+/** How long the check's own server stays up with nobody on it, against the Free plan's ten. */
+const SLEEP_AFTER_MINUTES = 1
 
 if (!existsSync(STATE_FILE) && !process.env.STAGING_STATE) {
   say('No staging to check: run bun scripts/staging.ts up first.')
@@ -47,9 +61,13 @@ const state = JSON.parse(
 
 const failures: string[] = []
 const timings: string[] = []
+const results: StepResult[] = []
+const progress = new Progress({ write: say })
+setInterval(() => progress.tick(), 1000).unref()
 
 async function step(name: string, run: () => Promise<string | undefined>, limitSeconds = 900): Promise<void> {
   const started = Date.now()
+  progress.begin()
   try {
     const note = await Promise.race([
       run(),
@@ -57,9 +75,13 @@ async function step(name: string, run: () => Promise<string | undefined>, limitS
         setTimeout(() => stop(new Error(`gave up after ${limitSeconds}s`)), limitSeconds * 1000).unref(),
       ),
     ])
+    progress.end()
+    results.push({ name, ok: true, ms: Date.now() - started })
     say(`  ok   ${name}${note ? ` — ${note}` : ''}  (${seconds(Date.now() - started)})`)
   } catch (error) {
+    progress.end()
     failures.push(name)
+    results.push({ name, ok: false, ms: Date.now() - started })
     say(`  FAIL ${name} — ${(error as Error).message}  (${seconds(Date.now() - started)})`)
   }
 }
@@ -107,6 +129,30 @@ const machinesOf = (serverId: string) =>
     name: string
     state: string
   }[]
+/**
+ * What Fly last said of the server's machines, for progress lines. It is read in the background,
+ * at most every 15 seconds, so a wait being timed (a join) is never held up by flyctl.
+ */
+const flySeen = { text: '', at: 0, reading: false }
+function readFly(serverId: string): void {
+  if (serverId === '' || flySeen.reading || Date.now() - flySeen.at < 15_000) return
+  flySeen.reading = true
+  const child = Bun.spawn(['fly', 'machines', 'list', '-a', appOf(serverId), '--json'], {
+    stdout: 'pipe',
+    stderr: 'ignore',
+  })
+  Promise.all([new Response(child.stdout).text(), child.exited])
+    .then(([out, code]) => {
+      if (code !== 0) return
+      const states = ((JSON.parse(out || '[]') ?? []) as { state: string }[]).map((m) => m.state)
+      flySeen.text = `Fly: ${states.length === 0 ? 'no machine' : states.join(', ')}`
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      flySeen.at = Date.now()
+      flySeen.reading = false
+    })
+}
 const volumesOf = (serverId: string) =>
   (JSON.parse(fly(['volumes', 'list', '-a', appOf(serverId), '--json']) || '[]') ?? []) as {
     id: string
@@ -145,15 +191,43 @@ let api: Api = async () => {
 let owner = { email: '', password: '' }
 let server = { id: '', slug: '' }
 const view = (serverId: string) => api('servers.get', { serverId }, 'GET')
+/** What a progress line says of the server: its state, the operation on it, and Fly's machines. */
+// biome-ignore lint/suspicious/noExplicitAny: servers.get, read loosely as waitFor reads it
+function sawServer(v: any): void {
+  const op = v.activeOperation
+  const reason = v.status === 'stopped' && v.stopReason ? ` (${v.stopReason})` : ''
+  const operation = op ? `, ${op.kind}: ${op.step ?? op.status}` : ''
+  readFly(server.id)
+  progress.saw(`server ${v.status}${reason}${operation}${flySeen.text ? ` | ${flySeen.text}` : ''}`)
+}
 // biome-ignore lint/suspicious/noExplicitAny: the app's own contracts, read loosely as in the smoke test
 async function waitFor(want: (v: any) => boolean, what: string, limit = 600): Promise<any> {
+  progress.waiting(what)
   const deadline = Date.now() + limit * 1000
   while (Date.now() < deadline) {
     const now = await view(server.id)
     if (want(now)) return now
+    sawServer(now)
     await Bun.sleep(2000)
   }
   throw new Error(`never ${what} within ${limit}s`)
+}
+/** A wait on something other than the server's state (a join), with the server watched meanwhile. */
+async function watching<T>(what: string, wait: Promise<T>): Promise<T> {
+  progress.waiting(what)
+  let over = false
+  const watch = async () => {
+    while (!over) {
+      await view(server.id).then(sawServer, () => undefined)
+      await Bun.sleep(5000)
+    }
+  }
+  void watch()
+  try {
+    return await wait
+  } finally {
+    over = true
+  }
 }
 const settled = (limit = 600) => waitFor((v) => v.activeOperation === null, 'settled', limit)
 const address = () => `${server.slug}.${PLAY_DOMAIN}`
@@ -196,8 +270,12 @@ await step('is purged, and Fly holds no server app without a server', async () =
     )
     const waiting = () =>
       sql(`select count(*) from minecraft_servers where id in (${ids}) and status <> 'purged'`)
+    progress.waiting('earlier servers purged')
     const deadline = Date.now() + 600_000
-    while ((await waiting()) !== '0' && Date.now() < deadline) await Bun.sleep(5000)
+    for (let now = await waiting(); now !== '0' && Date.now() < deadline; now = await waiting()) {
+      progress.saw(`${now} of ${left.length} not purged yet`)
+      await Bun.sleep(5000)
+    }
     check((await waiting()) === '0', `${await waiting()} of ${left.length} not purged`)
   }
   const apps = (
@@ -258,7 +336,7 @@ await step('is made on Fly and comes up', async () => {
 if (server.id === '') process.exit(1)
 
 await step('answers a player through the edge, at its own address', async () => {
-  const took = await join(EDGE, address(), 'StagingCheck', 60_000)
+  const took = await watching('a player answered', join(EDGE, address(), 'StagingCheck', 60_000))
   const said = await login(EDGE, address(), 'StagingCheck')
   check(said === 'wants an account', `the server said "${said}"`)
   return `${address()} answered in ${timed('join while running', took)}, and asks for an account`
@@ -279,22 +357,39 @@ await step('keeps what is written into its world', async () => {
 await step(
   'goes to sleep on its own when nobody plays',
   async () => {
-    const at = Date.now()
-    const asleep = await waitFor((v) => v.status === 'stopped', 'went to sleep', 1500)
-    await settled()
-    check(asleep.stopReason === 'idle', `it stopped for ${asleep.stopReason}`)
-    const machines = machinesOf(server.id)
-    check(
-      machines.every((m) => m.state === 'stopped'),
-      `Fly shows ${machines.map((m) => m.state).join(', ')}`,
+    // The control plane's own idle check, on this account's idle time rather than the plan's.
+    // Whatever happens, the account goes back to its plan's after this step, so nothing later in
+    // the run is put to sleep under it.
+    const account = `user_id = (select id from users where email = '${owner.email}')`
+    await sql(
+      `update account_standing set limit_overrides = limit_overrides || '{"idleShutdownAfterMinutes": ${SLEEP_AFTER_MINUTES}}' where ${account}`,
     )
-    return `after ${seconds(Date.now() - at)} of waiting; its machine is stopped, its volume kept`
+    try {
+      const at = Date.now()
+      const asleep = await waitFor((v) => v.status === 'stopped', 'went to sleep', 1500)
+      await settled()
+      check(asleep.stopReason === 'idle', `it stopped for ${asleep.stopReason}`)
+      const machines = machinesOf(server.id)
+      check(
+        machines.every((m) => m.state === 'stopped'),
+        `Fly shows ${machines.map((m) => m.state).join(', ')}`,
+      )
+      const volumes = volumesOf(server.id).filter(
+        (v) => v.state !== 'destroyed' && v.state !== 'pending_destroy',
+      )
+      check(volumes.length > 0, 'Fly kept no volume for it')
+      return `after ${seconds(Date.now() - at)} of waiting, idle after ${SLEEP_AFTER_MINUTES} min on this account; its machine is stopped, its volume kept`
+    } finally {
+      await sql(
+        `update account_standing set limit_overrides = limit_overrides - 'idleShutdownAfterMinutes' where ${account}`,
+      )
+    }
   },
   1600,
 )
 
 await step('wakes when a player joins', async () => {
-  const took = await join(EDGE, address(), 'StagingWaker', 300_000)
+  const took = await watching('a joining player answered', join(EDGE, address(), 'StagingWaker', 300_000))
   await waitFor((v) => v.status === 'running', 'woke', 300)
   await settled()
   return `the player waited ${timed('wake from sleep (machine started)', took)}`
@@ -327,7 +422,7 @@ await step('rests in the archive store once nobody has played for weeks, and let
 })
 
 await step('comes back from the archive when a player joins', async () => {
-  const took = await join(EDGE, address(), 'StagingWaker', 900_000)
+  const took = await watching('a joining player answered', join(EDGE, address(), 'StagingWaker', 900_000))
   await waitFor((v) => v.status === 'running', 'came back', 600)
   await settled()
   const restore = Number(await tookOf('unstore')) * 1000
@@ -353,7 +448,7 @@ await step('comes back after its machine is killed under it', async () => {
   const seen = await view(server.id)
   if (seen.status === 'stopped' || seen.status === 'crashed')
     await api('servers.start', { serverId: server.id, requestId: randomUUID() })
-  await join(EDGE, address(), 'StagingCheck', 300_000)
+  await watching('a player answered', join(EDGE, address(), 'StagingCheck', 300_000))
   const took = Date.now() - at
   await waitFor((v) => v.status === 'running', 'running again', 300)
   check((await seedOf()) === world.seed, 'it came back as another world')
@@ -382,8 +477,12 @@ if (!KEEP)
       `insert into pgboss.job (name, data, policy, retry_limit) values ('purge-sweep', '{}', 'singleton', 0)`,
     )
     const status = () => sql(`select status from minecraft_servers where id = '${server.id}'`)
+    progress.waiting('purged')
     const deadline = Date.now() + 600_000
-    while ((await status()) !== 'purged' && Date.now() < deadline) await Bun.sleep(5000)
+    for (let now = await status(); now !== 'purged' && Date.now() < deadline; now = await status()) {
+      progress.saw(`server ${now}`)
+      await Bun.sleep(5000)
+    }
     check((await status()) === 'purged', `it is ${await status()}`)
     const app = fly(['apps', 'list', '-o', 'blockly-staging', '--json'])
     check(!app.includes(appOf(server.id)), `Fly still has ${appOf(server.id)}`)
@@ -391,6 +490,7 @@ if (!KEEP)
   })
 
 say(`\n${timings.map((line) => `  ${line}`).join('\n')}`)
+say(`\n${summaryTable(results, Date.now() - started).join('\n')}`)
 const summary = failures.length === 0 ? 'all good' : `${failures.length} failed: ${failures.join(', ')}`
 say(`\n${summary} in ${seconds(Date.now() - started)}`)
 process.exit(failures.length === 0 ? 0 : 1)

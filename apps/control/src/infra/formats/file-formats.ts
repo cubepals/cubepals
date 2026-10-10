@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { PassThrough, Readable } from 'node:stream'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import { configure, HttpRangeReader, Uint8ArrayWriter, ZipReader } from '@zip.js/zip.js'

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * SIGNUP_ALLOWLIST through the real Better Auth: a listed address and one at a listed domain get
  * an account, anyone else is refused with nothing written.

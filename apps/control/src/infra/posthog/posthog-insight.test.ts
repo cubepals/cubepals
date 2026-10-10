@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The PostHog adapter through the real SDK, against a stand-in for PostHog's endpoint: every event
  * carries its environment, and a refused send says so without throwing.

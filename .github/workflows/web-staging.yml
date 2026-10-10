@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 name: Website on staging
 
 # blockly-web-staging, the website alone (scripts/staging-website.ts). Each push to main goes live

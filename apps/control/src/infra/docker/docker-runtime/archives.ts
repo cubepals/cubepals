@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Moves a volume's files to and from the archive store as a tar.gz, from helper containers that
  * reach the store the way a game runtime does: up in one PUT or in parts, down from a link. It

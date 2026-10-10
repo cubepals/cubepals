@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What a joining host fetches from the node endpoint (join-routes.ts), as join.sh and `blocklyd
  * join` read it, and the release the upgrade rollout reads from the same binary.

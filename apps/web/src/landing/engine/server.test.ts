@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The server kit's own behaviour: a rack takes and gives trays one at a time, boots, blinks,
  * stops at a fault and goes dark, stands as a frame of empty bays; and how the kit's pieces move.

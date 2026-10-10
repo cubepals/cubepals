@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Why a request was refused, in the order AccessPolicy checks them. The web app words each one
  * differently: "Not available on this Blockly deployment" is not "Upgrade your plan".

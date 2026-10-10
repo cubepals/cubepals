@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The warnings as a month's included play runs out, at half, four fifths and all of it
  * (`AccountService.warnAboutPlay`), and as extra play the owner allowed is used: when it starts,

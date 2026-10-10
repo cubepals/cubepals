@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 #import "../style.typ": *
 
 #part("Appendices", [Reference material: interfaces, entities, protocol, configuration, signals,

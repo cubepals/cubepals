@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The cookie notice: every cookie and browser-storage key {brand} sets, all of them needed for
  * the service to work, which is why the site asks for no consent. Its analytics (PostHog,

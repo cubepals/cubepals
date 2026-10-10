@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { NOTES_SHOWN, type NotesView, type StarView } from '@blockly/contracts'
 import { type Db, type Queryable, schema, type Tx } from '@blockly/db'
 import { cleanNote, sameNote } from '../../domain/listing/note.ts'

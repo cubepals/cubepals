@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What a worker checks again before it boots a server (§9): that its owner may still run it, and
  * that every jar it needs can be handed to it. It only answers; refusing, failing or stopping the

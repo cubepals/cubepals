@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 'use client'
 
 import { Palette, Play, RotateCw, Square, Swords } from 'lucide-react'

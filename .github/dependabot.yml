@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Monthly and grouped: one pull request per ecosystem a month for minor and patch updates (Bun's
 # has a second, Next's with what builds it as a Worker) and one for majors, which break more often
 # and are reviewed apart. New releases wait a week (a month for majors) before they are offered, so

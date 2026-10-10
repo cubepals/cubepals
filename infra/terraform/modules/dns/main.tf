@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # DNS for an environment (§11 hostname audit): the web hosts, wildcard A/AAAA records for the play
 # domain and each alias to the edge, and the realtime hostname's A record, with no AAAA (§19.6).
 # Every record but the web hosts' is DNS-only: Cloudflare's proxy carries neither Minecraft's TCP

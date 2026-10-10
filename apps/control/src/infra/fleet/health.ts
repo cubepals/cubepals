@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A node's health, from its heartbeats (docs/fleet.md, "Health"). Pure: the ages it reads are
  * database time (`now() - last_heartbeat_at`), so no clock is compared across machines.

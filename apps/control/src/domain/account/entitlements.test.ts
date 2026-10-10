@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, expect, test } from 'bun:test'
 import {
   diskForWorld,
@@ -178,5 +182,13 @@ describe('datapacks', () => {
     expect(planGap(entitlementsFor('free'), datapack, 'offered')).toBe('datapacks')
     expect(planGap(entitlementsFor('plus'), datapack, 'offered')).toBeNull()
     expect(planThatRuns(datapack)).toBe('plus')
+  })
+})
+
+describe('an account’s own idle time', () => {
+  test('one account can sleep sooner than its plan, and every other keeps the plan’s', () => {
+    expect(entitlementsFor('free', { idleShutdownAfterMinutes: 1 }).idleShutdownAfterMinutes).toBe(1)
+    expect(entitlementsFor('free', {}).idleShutdownAfterMinutes).toBe(10)
+    expect(entitlementsFor('plus', { maxServers: 4 }).idleShutdownAfterMinutes).toBe(15)
   })
 })

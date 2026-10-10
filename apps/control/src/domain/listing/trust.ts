@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { Entitlements } from '../account/entitlements.ts'
 import type { AccountStanding } from '../account/standing.ts'
 import type { PinnedMod } from '../mods/artifact.ts'

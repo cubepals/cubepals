@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What sign-up shows when the control plane can't say whether there's room for another free
  * account (docs/money-guards.md): no form, because sign-up offers only a place it knows is there.

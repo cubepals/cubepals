@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { EDGE_PROTOCOL_BASE, IdleHint, SessionEvent, WakeRequest } from '@blockly/contracts/edge'
 import { Hono } from 'hono'

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * This deployment's sandboxes at Boat, through their life: found by name, made, brought up and
  * kept up as asked, stopped and deleted, each create and resume spent from the plan's starts. It

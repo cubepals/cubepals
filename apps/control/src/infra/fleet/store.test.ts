@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { createHash, randomBytes } from 'node:crypto'
 import { MemoryStore } from '../../testing/memory-store.ts'

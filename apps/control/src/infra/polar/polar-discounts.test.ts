@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Discount codes through Polar's API, against a stand-in for it: what a new code is sent as,
  * what Polar's discounts read back as, which of them are this deployment's, and checkout leaving

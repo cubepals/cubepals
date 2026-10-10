@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The other worlds. Every Blockly server is a world like the one the page digs through, and when
  * the camera stands far enough back they are all there: small floating pieces of ground, each

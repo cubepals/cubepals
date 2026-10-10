@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Reading what a pack's own files parse to (JSON, TOML, properties), whose shape nothing promises:
  * a value of the wrong kind reads as absent, never as an error. Not for what Blockly writes itself,

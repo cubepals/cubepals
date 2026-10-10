@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Runs one program on this computer and collects what it printed. It does not decide what the
  * program sees as its storage: `exec` in `fake-runtime.ts` rewrites the mount path first.

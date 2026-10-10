@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The spend watchdog (docs/money-guards.md): works out what today has cost from what the control
  * plane recorded, and when it passes the platform's daily limit, turns off starts and creation,

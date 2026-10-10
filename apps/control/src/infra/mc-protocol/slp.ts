@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Socket } from 'node:net'
 import type { ReadinessProbe, ServerStatusPing } from '../../app/ports/minecraft.ts'
 import type { Endpoint } from '../../app/ports/runtime.ts'

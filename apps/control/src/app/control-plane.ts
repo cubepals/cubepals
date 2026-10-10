@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { Db } from '@blockly/db'
 import { PlayerFaces } from './access/faces.ts'
 import { AccessReconciler } from './access/reconciler.ts'

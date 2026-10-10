@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { InstallSeed, RuntimeSpec } from '../app/ports/runtime.ts'
 import type { ModArtifact } from '../domain/mods/artifact.ts'
 import {

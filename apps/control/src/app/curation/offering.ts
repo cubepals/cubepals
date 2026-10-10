@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What people making or updating a server are offered: the packs still in the review, each at a
  * release that was checked and that an admin published. It only reads.

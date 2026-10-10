@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The guards on extra play, as `extraPlay` decides them from what the billing provider said: each
  * one that stops it, the sentence it says, and the ceiling that grows with a paid renewal.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { readFileSync } from 'node:fs'
 import { TEMPLATE_CARDS, type TemplateCard, type TemplateKey } from '@blockly/contracts'
 import type { ServerSetup } from '../../domain/setup/setup.ts'

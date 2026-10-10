@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The machine stratum: how two answers size a server's machine, what every start checks before
  * anyone is let in, and how a start that fails is read. The demonstration is MachineDemo; the facts

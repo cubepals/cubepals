@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Rests a world nobody plays in the archive store, and wakes it from there (§15.5 stored worlds):
  * store and unstore share the copy a world rests in and the way back to resting. Making and

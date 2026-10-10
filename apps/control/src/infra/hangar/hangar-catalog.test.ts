@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Hangar's own answers, recorded from hangar.papermc.io on 2026-10-09 (`fixtures/`). Only a
  * file's bytes are stood in for: a test jar replaces OldCombatMechanics' 9 MB one, and the

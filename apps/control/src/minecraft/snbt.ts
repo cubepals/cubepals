@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Reads SNBT, the text Minecraft prints NBT as: what `data get` answers over the console. The
  * values come out as prismarine-nbt's `simplify` leaves a file's, so one reader serves a live

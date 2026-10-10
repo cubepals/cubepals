@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { TERMS_VERSION } from '@blockly/contracts'
 import type { MetadataRoute } from 'next'
 import { hrefOf, POLICIES } from '../legal/policies'

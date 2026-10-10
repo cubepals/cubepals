@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Staging on Fly. It stays: when nobody is testing, its machines are stopped, which keeps its
  * database, worlds, bucket, secrets and two addresses, and costs only their storage and about $4

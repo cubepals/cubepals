@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { type RealtimeMap, realtimeContract } from '@blockly/contracts/realtime'
 import { type ConnectRequest, createServer, refuse, type ServerPeer } from 'transport-io'
 import { listenHttp3 } from 'transport-io/node-transport'

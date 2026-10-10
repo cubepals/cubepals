@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The Fly volumes a server's world lives on: found, made, grown, waited on while they hydrate,
  * and deleted. It never decides when a volume may go; the verbs in `fly-runtime.ts` order that

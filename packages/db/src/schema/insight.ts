@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What the product's owner learns about how it is used (docs/metrics.md, "Insight"): each funnel
  * event, kept once here before it is sent, and the short question asked at a good moment.

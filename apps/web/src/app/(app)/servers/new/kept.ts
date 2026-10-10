@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { PARTY_SIZES, type PartySize, type SetupSourceInput } from '@blockly/contracts'
 
 /**

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Upkeep the sweeps do on their own, done now for one server when an operator asks
  * (`interfaces/operator/ops.ts`): its world rested in the archive store, through the `store`

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The shell scripts helper machines run, and what they print read back: an archive of a volume
  * sent in one PUT or left for parts, the parts sent, and a volume filled from an archive. Pure:

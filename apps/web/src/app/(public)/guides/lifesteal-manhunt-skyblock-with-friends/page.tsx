@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The guide to Lifesteal, Manhunt and Skyblock with friends. Each was made from its card on a
  * local stack, on Plus, and played with test players: a heart taken and a player eliminated and

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A provider in memory, for tests and for running the control plane without Docker. It knows
  * nothing about Minecraft: whatever runs is a `FakeWorkload`. Each server's storage is a real

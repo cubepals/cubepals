@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** The waiting room's hold on a join, byte for byte, without a server or a client. */
 import { expect, test } from 'bun:test'
 import { Held, turnAway } from './hold.ts'

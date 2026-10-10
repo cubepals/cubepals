@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { createHash } from 'node:crypto'
 import type { Db, PackJarJson, PackLeftOutJson } from '@blockly/db'
 import { INDEX_FILE, isJar, playersNeedIt, readIndex, serverFiles } from '../../minecraft/mrpack.ts'

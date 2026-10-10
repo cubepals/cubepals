@@ -88,10 +88,27 @@ Everyone here follows the
 Cubepals repository shares. Security problems are reported privately, as [SECURITY.md](SECURITY.md)
 says, never in an issue. Help with an account on cubepals.com is in [SUPPORT.md](SUPPORT.md).
 
-## Brand
+## Licenses
 
-The code is AGPL-3.0. The Cubepals name, the files in `brand/`, the landing page
+The code is AGPL-3.0-only. The Cubepals name, the files in `brand/`, the landing page
 (`apps/web/src/landing/`), the pictures in `apps/web/public/imagery/` and
 `apps/web/public/guides/`, and the guides' words are not:
 [brand/LICENSE.md](brand/LICENSE.md). A change to them is contributed under those terms.
 [LICENSING.md](LICENSING.md) lists what is under what.
+
+Every file says whose it is and under what license, as [REUSE](https://reuse.software) asks, and CI
+runs `reuse lint`. A new source file opens with two SPDX lines above its doc comment, written with
+`#` in Python, shell, YAML and Terraform and as one `/* */` block in CSS:
+
+<!-- REUSE-IgnoreStart -->
+```ts
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+```
+<!-- REUSE-IgnoreEnd -->
+
+On the landing page and in a guide's `page.tsx` the license is `LicenseRef-Cubepals-Reserved`. A
+file that can't hold a comment, such as a picture or JSON, is covered by [REUSE.toml](REUSE.toml);
+something that isn't ours gets its owner's license there, never ours. `uvx reuse lint` checks it
+before you push.

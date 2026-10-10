@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { connect, type NatsConnection } from '@nats-io/transport-node'
 import { z } from 'zod'
 import type { LogLine, LogSource } from '../../app/ports/platform.ts'

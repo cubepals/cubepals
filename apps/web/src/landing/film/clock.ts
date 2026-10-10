@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The beat the page is resting on, as far as the scrolling and the canvas need to know it. A beat
  * plays by itself, at its own pace, and the reader's scrolling moves it: scrolling on hurries

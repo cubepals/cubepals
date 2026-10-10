@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The registry as placement and operators read it: each node with the ledger's reservations on it,
  * and the health upkeep records for it.

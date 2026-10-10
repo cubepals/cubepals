@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Reads and writes a fake server's `server.properties`: the file the image writes from the
  * environment as the server starts, and the `white-list` line the server reads and rewrites. It

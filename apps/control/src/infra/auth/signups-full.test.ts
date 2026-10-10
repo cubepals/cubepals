@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The free-account cap (docs/money-guards.md), through the real Better Auth asking the real
  * account service: the last place is taken and the next sign-up refused, by email and by a

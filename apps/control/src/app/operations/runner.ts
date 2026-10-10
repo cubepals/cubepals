@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { Db } from '@blockly/db'
 import type { OperationKind, Phase, ServerStatus } from '../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'

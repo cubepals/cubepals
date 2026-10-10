@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The product analytics service (PostHog): funnel events, feedback and errors, each about an
  * account by its id and never by its email. A deployment without it has none: the composition

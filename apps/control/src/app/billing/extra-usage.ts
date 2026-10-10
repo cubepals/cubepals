@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Extra play, counted and sent to the billing provider to be billed on the next payment
  * (docs/money-guards.md). Blockly is the only judge of hours: it counts what an account played past

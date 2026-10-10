@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The web app's build: the /api rewrite to the control plane, standalone output for self-hosting,
  * and what PostHog needs from the build (the environment, the version, source maps).

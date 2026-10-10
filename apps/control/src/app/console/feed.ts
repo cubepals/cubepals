@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { Db } from '@blockly/db'
 import { type ConsoleLevel, classifyLine } from '../../minecraft/logs.ts'
 import { isAdmin } from '../accounts/persistence.ts'

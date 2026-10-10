@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Content and copyright: how to tell us about something on {brand} that is illegal or infringes
  * a right, and how a server's owner can answer. Built to meet the EU Digital Services Act's

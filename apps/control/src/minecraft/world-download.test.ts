@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What a world download leaves out and keeps, pinned path by path for each kind of server, and
  * the note that names the mods it left out.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { Insight, InsightEvent } from '../app/ports/insight.ts'
 
 /** Everything the application would send to PostHog, in order, instead of PostHog. */

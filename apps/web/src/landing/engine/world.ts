@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * A voxel world small enough to hold in a few typed arrays: one Minecraft chunk, 16 blocks square,
  * from above the surface down to bedrock. The landing page draws it as a core sample.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Writes what a runtime said about a server's compute into the server's `observed` record, as the
  * schedules keep it: its state and when, and why it stopped or that its host was lost. Asking the

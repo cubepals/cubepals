@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What Blockly knows about each account and the platform as a whole: admins, an account's standing
  * and plan, the platform's kill switches and caps, what each day cost, the places sign-ups in

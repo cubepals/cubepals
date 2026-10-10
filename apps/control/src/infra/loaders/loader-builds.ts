@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { z } from 'zod'
 import { type BuiltLoader, type LoaderBuilds, LoaderBuildsUnavailable } from '../../app/ports/loaders.ts'
 

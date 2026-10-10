@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 import type { PublicPlan } from '@blockly/contracts'
 import { Demo, Section } from '../kit'
 import { LedgerDemo } from './LedgerDemo'

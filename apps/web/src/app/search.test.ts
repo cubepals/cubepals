@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Tests for what search engines are told, deployment by deployment: robots.txt, the sitemap, and
  * noindex on the pages kept out of search.
