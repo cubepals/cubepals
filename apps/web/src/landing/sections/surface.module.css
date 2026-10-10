@@ -133,8 +133,9 @@
 /* The name once more, as wide as the page, in outline, fading out as the page ends. */
 .footer .footerName {
   margin-bottom: -0.2em;
-  /* The lockup is 4.62 of its font size wide, so this sets it edge to edge in the footer. */
-  font-size: calc(100cqi / 4.62);
+  /* The lockup is about 4.62 of its font size wide; set a little narrower, so a face that renders
+     wider still fits and the last letter is never cut. */
+  font-size: calc(100cqi / 4.8);
   line-height: 1;
   white-space: nowrap;
   color: transparent;
