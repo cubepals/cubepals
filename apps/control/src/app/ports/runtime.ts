@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The provider boundary (docs/architecture.md §7, §8). The application says what a server's
  * workload should be — this spec, running or stopped, in this product region — and a runtime

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * One player as Minecraft keeps them, and what can be done to them from the console: where they
  * are, where they last died, their game mode, what they carry, and the stats the game counts. Read

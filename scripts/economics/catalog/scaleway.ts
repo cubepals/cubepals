@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Scaleway's Elastic Metal dedicated servers as catalog entries.
  * Other providers live in their own files beside this one.

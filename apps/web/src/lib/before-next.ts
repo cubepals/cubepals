@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What the Cloudflare Worker (worker.ts) does with a request before Next sees it. Next 16 runs a
  * proxy only on the Node.js runtime, which OpenNext's Cloudflare adapter calls experimental and

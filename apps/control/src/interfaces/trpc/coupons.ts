@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { CouponRef, CreateCouponInput } from '@blockly/contracts'
 import { adminProcedure, router } from './trpc.ts'
 

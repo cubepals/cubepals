@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Google's "G", in the colours Google's sign-in branding requires. It is the one mark in Blockly
  * not drawn in currentColor: a third party's logo, not an icon from the working set.

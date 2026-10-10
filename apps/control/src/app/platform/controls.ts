@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { PlatformControlsView } from '@blockly/contracts'
 import { type Db, schema } from '@blockly/db'
 import type { PlatformControls } from '../../domain/policy/policy.ts'

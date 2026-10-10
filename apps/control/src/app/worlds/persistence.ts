@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { type Queryable, schema, type Tx } from '@blockly/db'
 import { and, asc, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm'
 import type { World } from '../../domain/world/world.ts'

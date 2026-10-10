@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * One player's page: read from the game while they are on, from their files while they are away,
  * and from what was kept when the server went to sleep; changes done now, or kept until they join

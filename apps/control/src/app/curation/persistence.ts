@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { type CuratedFactsJson, type Queryable, schema } from '@blockly/db'
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import type { Distribution, ReleaseState } from '../../domain/mods/curation.ts'

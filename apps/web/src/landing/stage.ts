@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * What the landing page's chunk is doing right now, shared between the canvas that draws it and
  * the demonstrations that drive it. One small store outside React, so a demonstration anywhere on

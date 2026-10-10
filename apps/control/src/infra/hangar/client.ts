@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Hangar's API (hangar.papermc.io), typed from Hangar's own OpenAPI spec (tools/openapi), its
  * public `/api/v1` routes only. Only `infra/hangar/` sees these types; the rest of Blockly sees

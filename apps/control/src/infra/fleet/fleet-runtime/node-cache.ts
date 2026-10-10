@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What the fleet runtime's synchronous methods know of each node (its address, lifecycle, region,
  * hosts and price), read from `fleet_nodes` now and every few seconds after. A read that fails

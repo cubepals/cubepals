@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A short note on a public server's guestbook, as it is kept and shown: one line of plain text.
  * Nothing in it is markup, and nothing in it can hide or reorder what is around it.

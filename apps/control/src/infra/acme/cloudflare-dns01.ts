@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import Cloudflare from 'cloudflare'
 import type { Dns01Solver } from './acme-issuer.ts'
 

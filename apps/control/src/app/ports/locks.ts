@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Mutual exclusion that holds across every control-plane process: api and worker may run on
  * separate machines and still take turns.

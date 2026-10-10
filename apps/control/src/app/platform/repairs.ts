@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * An admin fixing someone's server (§9): starting it, sending it to the trash or taking it back
  * out, and restoring one of its backups. Each goes the way its owner's own would, as `admin:<id>`:

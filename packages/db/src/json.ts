@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Shapes stored in jsonb columns. The control plane's domain owns the meaning of these values;
 // these interfaces are what the database promises to hand back. Persistence code maps between
 // the two, so a drift between them is a compile error there rather than a silent mismatch.

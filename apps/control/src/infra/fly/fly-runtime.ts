@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Fly Machines: one app per server, on a private network of its own, with one volume and at most
  * one Minecraft machine, reached through the app's Flycast address. List-before-create is the

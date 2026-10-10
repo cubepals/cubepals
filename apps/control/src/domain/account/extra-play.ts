@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Who may play past their plan's included hours, and how far: the guards that keep extra play,
  * which is billed after it is played, from being play nobody pays for (docs/money-guards.md). Pure,

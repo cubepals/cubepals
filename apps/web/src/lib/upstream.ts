@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The control plane this web app fronts: server-side only. Local development defaults to the
  * control plane's local listener; every deployed environment sets API_UPSTREAM.

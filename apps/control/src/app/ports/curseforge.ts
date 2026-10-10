@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * CurseForge, as far as Blockly may use it (docs/modpack-system.md § CurseForge). Its API terms
  * (14 Aug 2024, §3.1) rule out using the API for any product that competes with CurseForge, and

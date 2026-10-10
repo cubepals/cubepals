@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # The control plane (§16): the control app (api and worker process groups, infra/fly/control.toml)
 # and the realtime app (infra/fly/realtime.toml), both running the control image with the same
 # DeploymentConfig. Machines come from `fly deploy`; this module owns the apps, the realtime

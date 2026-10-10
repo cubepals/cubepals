@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The frame of the pages anyone can read: the directory, pricing, the guides and the policies.
  * Signed in or not, the header says where to go next, and the footer leads on to the guides.

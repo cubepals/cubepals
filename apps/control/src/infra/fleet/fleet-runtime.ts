@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The fleet: Blockly's servers on Linux machines it manages directly, each running blocklyd, as
  * one more MinecraftRuntime (docs/fleet.md). The application asks for a server's workload and gets

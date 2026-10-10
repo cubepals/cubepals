@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** The timestamp columns every table writes the same way: with a time zone, set on insert. */
 import { timestamp } from 'drizzle-orm/pg-core'
 

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The admins' view of templates' plugins: every version Cubepals tested past what its catalog
  * lists, with the day it was tested, and which templates' plugins trail the newest release Cubepals

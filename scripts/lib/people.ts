@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * People on a Blockly web app, as the smoke test and the staging check use them: signed up and
  * confirmed through the mail they were sent (a Mailpit), then calling the same API the pages call.

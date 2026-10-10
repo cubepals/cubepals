@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Every email the application sends: its subject, and an HTML part whose lockup, figure and font
  * stylesheet all load from the web origin it was given, with the same links as its text.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The chunk the landing page digs through: a house on the surface, and under it one room for each
  * thing Blockly does that a player never sees. Built by hand, block by block, and judged by eye.

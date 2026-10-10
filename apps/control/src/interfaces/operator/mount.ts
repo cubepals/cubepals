@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Hono } from 'hono'
 import type { ControlPlane } from '../../app/control-plane.ts'
 import { createOpsApi } from './ops.ts'

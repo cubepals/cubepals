@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A mod catalog (Modrinth, and Hangar beside it through `catalog/routed.ts`), seen only as far as Blockly uses one: search while authoring, exact
  * versions for resolution, and bulk states for the trust cache (docs/architecture.md §15.3).

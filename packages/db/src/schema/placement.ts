@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Where servers run when a deployment has several runtimes (docs/runtimes.md): an operator's
  * placement rules, and each decision made under them.

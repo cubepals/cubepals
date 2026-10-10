@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * One player on one server, beyond who may join (`access.ts`): what their files said when the
  * server last went to sleep, and what the owner asked for while they were away, waiting for them

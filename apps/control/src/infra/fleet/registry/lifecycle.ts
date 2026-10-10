@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * An operator's changes to a node: drain it, hold it lost, reinstate it, retire it, clear its
  * quarantine, set its labels.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Removes the directories of a server's deleted worlds while it runs, since removing them takes an
  * `exec` on running compute. The command is `minecraft/worlds.ts`'s; deleting a world, and

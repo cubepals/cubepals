@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The ground under whoever is standing: a block somebody stands on is kept, with the ring round
  * it, and stops being kept when they have moved on.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Records who is online on each running server, read from the server's own console, and delivers
  * an access change, or what the owner asked for on a player's page, waiting for someone who has

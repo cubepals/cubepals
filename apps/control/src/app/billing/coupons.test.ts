@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Coupons as admins make, list and delete them: through the billing port (the local adapter's
  * codes, kept in memory), audited, refused to anyone else, and the provider's refusals and

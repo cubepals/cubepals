@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Cubepals' emails: the one layout every email is built on, and the pieces its words are set in.
  * Each email is its plain text plus an HTML part: the lockup on an Ink tile, a white card with a

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { RuntimeFull } from '../../app/ports/runtime.ts'
 import { BoatApiError, type BoatClient } from './client.ts'
 

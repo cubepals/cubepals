@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Which paths reach production by which road: the website alone, or a hotfix's Fly apps. */
 import { describe, expect, test } from 'bun:test'
 import { appsFor, flyInputs, reachesWebsite, terraformIn } from './production-web.ts'

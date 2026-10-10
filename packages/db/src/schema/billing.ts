@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What people pay for: subscriptions to a plan and the orders that charged them, as the billing
  * provider reported them, and the extra play Blockly reports to the provider to be billed.

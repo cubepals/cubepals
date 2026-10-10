@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The shape of a catalog entry: the `Offering` type every provider file writes its entries in.
  * It also carries what entries are built with: the check date and the PassMark single-thread helper.

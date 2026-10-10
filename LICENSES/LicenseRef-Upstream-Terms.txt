@@ -1,0 +1,10 @@
+Third-party material under its owner's terms
+
+The files this covers are copies of material someone else published, and their SPDX lines in
+REUSE.toml name whose: an API's description and the types generated from it, answers recorded
+from a public API, and a certificate authority's public certificate. Their owners published them
+without a licence this repository can name. They are here only to build and test against their
+owners' services.
+
+They are not licensed under the GNU Affero General Public License or under any other licence of
+this repository, and The Cubepals Authors grant no rights in them. Their owners' terms apply.

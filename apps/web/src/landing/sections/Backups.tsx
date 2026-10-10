@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The backups stratum: a world as something that can go back. When a backup is taken, which ones a
  * plan keeps, what a change that doesn't start comes back from, and where a deleted server waits.

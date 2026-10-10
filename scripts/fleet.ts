@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Operating a fleet: the nodes the `fleet` runtime places servers on (docs/fleet-operations.md).
  *

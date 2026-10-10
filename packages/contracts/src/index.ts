@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 export * from './access.ts'
 export * from './accounts.ts'
 export * from './agreements.ts'

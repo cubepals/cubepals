@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { UserActor } from '../app/actor.ts'
 import type { ControlPlane } from '../app/control-plane.ts'
 

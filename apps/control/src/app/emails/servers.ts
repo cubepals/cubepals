@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The emails to a server's owner about what happened to that server: it left the directory over
  * a mod (listings/service.ts), its idle world will be deleted (operations/schedules/expiring.ts),

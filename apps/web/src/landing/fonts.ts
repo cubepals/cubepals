@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Geologica, Instrument_Serif, Pixelify_Sans } from 'next/font/google'
 import localFont from 'next/font/local'
 

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Cubepals' mark and lockup, drawn rather than set in type, so every place the product says its
  * own name says it the same way. The shapes and the proportions come from `brand/README.md`:

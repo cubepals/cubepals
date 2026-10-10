@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
  * Inventory slots and the items in them, drawn from a release's own textures (items.tsx). Nine
  * slots fit a phone's width; the textures stay pixel-crisp at any size.
  */

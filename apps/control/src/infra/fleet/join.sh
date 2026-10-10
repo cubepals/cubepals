@@ -1,4 +1,9 @@
 #!/bin/sh
+
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Makes this host a node of a Blockly fleet (docs/fleet-operations.md, "Adding a node"). The node
 # endpoint serves this script at /fleet/v1/join.sh, with daemon.json written into it. The line
 # `bun scripts/fleet.ts token` prints fetches it only once the fleet CA matches the token's hash,

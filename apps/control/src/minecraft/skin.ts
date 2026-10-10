@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A player's face, cut from their skin the way the game draws a head: the front of the head, with
  * the front of the hat over it. A skin is 64×64, or 64×32 from before the game had a second layer

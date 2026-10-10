@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 #import "../style.typ": *
 
 #part("Data", [Where worlds live, how they are backed up and restored, and how they move: between

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Which region a new server starts in: the one nearest the player, by the country their request
  * came from. Nearest is rough network distance, as a ranking of the regions Blockly knows the place

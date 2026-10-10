@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import createClient, { type ClientOptions } from 'openapi-fetch'
 import type { components, paths } from './generated/boat.ts'
 

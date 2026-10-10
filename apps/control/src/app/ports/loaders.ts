@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Where each server type publishes its builds (§4: a revision pins its loader build, so it boots
  * the same way every time rather than on whatever is newest that day). Vanilla has no build of

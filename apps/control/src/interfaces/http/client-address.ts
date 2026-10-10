@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { timingSafeEqual } from 'node:crypto'
 import { isIP } from 'node:net'
 import { CLIENT_ADDRESS_HEADER } from '../../app/ports/auth.ts'

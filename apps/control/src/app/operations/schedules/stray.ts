@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Finds compute the provider says is running that no running server here accounts for: a server
  * the control plane thinks is stopped, one it doesn't know, or one bound to other compute. Such a

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Sending a file straight to the store: its fingerprint first, so the control plane can check
  * the bytes it gets are the ones chosen, then a PUT to the link it signed, with progress.

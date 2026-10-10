@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Worlds on the volume: the generation types Blockly makes worlds with and the variables that say
  * so, the level names it runs, and the one command that removes worlds it no longer keeps.

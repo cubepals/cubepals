@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Whether a Fly volume snapshot holds the volume as it was when it was asked for, or as it was
  * some time later. On a running server's app:

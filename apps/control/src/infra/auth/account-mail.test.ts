@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What sign-in sends, through the real Better Auth handler on a real database: each email with an
  * HTML part whose pictures load from the web origin, and one welcome once an account is ready.

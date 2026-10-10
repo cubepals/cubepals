@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Versions Cubepals tested past their catalog's listing: each record covers one exact version on
  * one target, resolving a setup honours them only there, and the admins' view says which

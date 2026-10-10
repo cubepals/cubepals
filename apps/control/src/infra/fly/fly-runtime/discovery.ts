@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Finds this deployment's servers among the organization's apps and machines on Fly: every one
  * there is, and the machines that changed since a moment. It reads only; what a machine's state

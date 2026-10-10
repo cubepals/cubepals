@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/*
  * The landing page's own look, kept apart from the product's (ui/tokens.css): the page is a
  * cross-section of a Minecraft world, printed in ink on paper, that gets darker as it digs.
  *

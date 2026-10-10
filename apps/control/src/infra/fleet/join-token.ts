@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The token an operator gives a new host, and the line it is pasted in (docs/fleet-operations.md,
  * "Adding a node"). The token is `bk1.` and base64url JSON: the node endpoint's URL (`u`), the

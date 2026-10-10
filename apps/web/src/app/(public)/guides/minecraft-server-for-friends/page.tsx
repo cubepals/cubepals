@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The guide to making a Minecraft server for friends. Every step was done on a local stack, and the
  * pictures are from that run; numbers come from the plan table.

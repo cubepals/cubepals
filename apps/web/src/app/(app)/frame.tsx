@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 'use client'
 
 import { type DehydratedState, useMutation, useQuery } from '@tanstack/react-query'

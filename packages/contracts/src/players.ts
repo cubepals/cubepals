@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * One player on one server: where they are, where they died, their game mode, what they carry,
  * a few stats, and what waits for them to join. Their access is `access.ts`'s, read and changed

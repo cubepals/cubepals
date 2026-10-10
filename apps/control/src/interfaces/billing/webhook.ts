@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Hono } from 'hono'
 import type { BillingService } from '../../app/billing/service.ts'
 import { CapabilityUnavailable } from '../../app/capabilities.ts'

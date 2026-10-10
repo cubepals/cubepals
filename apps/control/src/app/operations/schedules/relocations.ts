@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Asks for the moves the platform makes on its own, a few a pass: a server whose region now maps
  * elsewhere, one whose host has been lost past its grace, and one an operator asked to move to

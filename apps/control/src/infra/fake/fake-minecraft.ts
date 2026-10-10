@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A stand-in for the itzg image running a vanilla server, for the fake runtime. It does what
  * Blockly depends on, the way the real ones do it (docs/architecture.md §15.1, §19a):

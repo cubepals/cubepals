@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The realtime endpoint's own state: the self-signed certificate browsers pin, where the
  * deployment pins one.

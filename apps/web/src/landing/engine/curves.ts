@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The few curves everything under the grass moves along: held between two ends, eased, part-way
  * from one value to another, and an angle the shortest way round. What a particular piece does

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Console commands the platform itself issues, and parsers for their answers. */
 
 export const SAVE_ALL_FLUSH = 'save-all flush'

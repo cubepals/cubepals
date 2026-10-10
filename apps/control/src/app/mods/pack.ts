@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { PackView } from '@blockly/contracts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { ModCatalog } from '../ports/catalog.ts'

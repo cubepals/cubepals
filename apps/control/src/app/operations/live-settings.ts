@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { AppliedConfigJson, Db } from '@blockly/db'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { SETTING_ENV } from '../../minecraft/runtime-spec.ts'

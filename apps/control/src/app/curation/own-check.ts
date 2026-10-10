@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Checking one release of one of Blockly's own packs (docs/modpack-templates.md § Blockly's own
  * packs): its list resolved on the Minecraft it is named for, held to what it says of players and

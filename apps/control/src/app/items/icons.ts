@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The pictures in a player's inventory: for each item, how the browser draws it from its release's
  * own textures, and those textures. The art is the release's, read from its client jar through

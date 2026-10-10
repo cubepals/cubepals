@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Regions on Fly: the Fly region a product region maps to, the map checked against Fly's live
  * regions at boot, and whether a region has room for a machine now. It makes nothing; machines

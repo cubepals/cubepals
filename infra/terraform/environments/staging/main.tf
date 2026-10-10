@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # The staging environment. Values decided in the repository are in config.auto.tfvars.json; the
 # rest arrive at apply time (docs/configuration.md):
 #   terraform init -backend-config=backend.hcl

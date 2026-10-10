@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The Minecraft lifecycle on staging, on Fly, timed. Run it after `bun scripts/staging.ts up`:
  *

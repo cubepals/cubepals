@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * World downloads end to end: an archive in a real S3 store, copied on a worker for its owner to
  * download, holding the world and what is theirs and leaving out what Blockly may not hand on,

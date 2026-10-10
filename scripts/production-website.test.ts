@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Production's website values, from the committed example and stand-in values: none of them real. */
 import { describe, expect, test } from 'bun:test'
 import { ENVIRONMENT_EXAMPLE, environment } from './production-values.ts'

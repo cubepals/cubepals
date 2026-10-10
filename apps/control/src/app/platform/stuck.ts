@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { BlockedOperationView, OverduePurgeView, StuckWorkView } from '@blockly/contracts'
 import { type Db, schema } from '@blockly/db'
 import { type Actor, requestedBy } from '../actor.ts'

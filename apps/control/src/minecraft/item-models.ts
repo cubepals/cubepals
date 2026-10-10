@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * How the game draws an item in an inventory slot, read from its own model files: flat layers for
  * most items, a cube's three visible faces for most blocks. From 1.21.4 an item's definition in

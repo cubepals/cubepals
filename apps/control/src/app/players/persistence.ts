@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What Blockly keeps about one player beyond who may join: the snapshot their files gave as their
  * server went to sleep, and what waits for them to join. Who has played, and when, is

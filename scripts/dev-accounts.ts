@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Test accounts for local development, one per plan: `bun run dev:accounts`, with `bun run dev`
  * running (docs/local-development.md).

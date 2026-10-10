@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The Acceptable Use Policy: what may run on {brand}, and what may be published through it. The
  * Terms make it binding; how a breach is handled is the Terms' section on suspension.

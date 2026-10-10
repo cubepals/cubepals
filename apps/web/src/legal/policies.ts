@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { ACCEPTABLE_USE } from './acceptable-use'
 import { COOKIES } from './cookies'
 import type { Policy } from './policy'

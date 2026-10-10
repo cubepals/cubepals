@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The MinecraftServer state machine. Commands are what people and systems ask for; outcomes are
  * what workers report back. Both are decided here, without touching infrastructure, so services

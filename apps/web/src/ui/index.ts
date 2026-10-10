@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 export { ActionButton } from './action-button'
 export { Button } from './Button'
 export { Console, type ConsoleLine } from './Console'

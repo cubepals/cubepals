@@ -1,4 +1,9 @@
 #!/bin/bash
+
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Self-contained Fly Machine benchmark: runs the itzg image's /start in the background, drives a fixed
 # workload over RCON, samples metrics every 5 s into /data/results.jsonl, then idles until DEADLINE_MIN
 # so results can be pulled. The machine exits at the deadline no matter what (run with --rm).

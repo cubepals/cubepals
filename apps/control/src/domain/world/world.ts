@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** A world's generation identity: fixed when it is created, independent of server settings. */
 export interface World {
   id: string

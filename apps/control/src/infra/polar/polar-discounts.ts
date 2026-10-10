@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Discount codes in Polar's terms (SDK 2026-10 `models`, read 2026-10-10): what a new code is sent
  * as, and a discount Polar holds read back as one, or as nothing when it isn't a code for the

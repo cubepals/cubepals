@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The control plane with the real Polar adapter against a stand-in for Polar's API, for tests of
  * what Polar's word does to an account: subscriptions, orders and their payments as Polar holds

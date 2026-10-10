@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Answers and files from real servers, captured on 2026-10-07 into `player-fixtures/`: vanilla
  * 1.20.1 joined by a mineflayer bot, and Fabric 26.3 (with ViaFabric, so the same bot could join)

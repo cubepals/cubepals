@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { timingSafeEqual } from 'node:crypto'
 import type { Db, Tx } from '@blockly/db'
 import type { ModArtifact, PinnedMod } from '../../domain/mods/artifact.ts'

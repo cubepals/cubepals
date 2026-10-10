@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Names the labels that mark a container, a volume, a snapshot or an install as one deployment's,
  * which is how every listing here finds what is Blockly's. It does not decide what a label is set

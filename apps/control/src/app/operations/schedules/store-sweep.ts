@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Finds the servers nobody has played on for as long as their plan says and hands them, a few a
  * pass, to the `store` operation, which checks everything again before it lets anything go

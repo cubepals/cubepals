@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
  * Making a server, on one page: three questions, each opening as the one before is answered, and
  * a bar that stays in view with what is being made and the button that makes it.
  *

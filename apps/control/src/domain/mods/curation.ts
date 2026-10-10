@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Packs Blockly offers by name (docs/modpack-templates.md): real packs their authors publish, each
  * reviewed for what its licences let Blockly do with it, and pinned release by release. A server

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // The look of Blockly's architecture document: brand, colour, type, page, tables, status labels,
 // callouts, and the drawing conventions every diagram shares. Parts import this file and nothing
 // else; every colour, typeface and size they use is a token named here.

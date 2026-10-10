@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Says what a server's game container is made with: its image, environment, labels, ports, and the
  * limits it runs under on this machine. It does not make, start or remove one, nor choose its host

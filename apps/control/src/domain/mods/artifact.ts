@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Durable references only. A revision must be reproducible months later, so nothing that
  * expires (a presigned URL) is ever part of it.

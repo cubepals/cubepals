@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // What a player's client is told about a server that can't be joined as it is, spoken as a
 // Minecraft server would: the server list gets a status with the message, and a join is turned
 // away with it, or handed back to be connected elsewhere.

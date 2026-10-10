@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Pulls an image the daemon doesn't have, and gives up on a pull that stalls. It does not decide
  * which image a server or a helper runs: the verbs (`docker-runtime.ts`) and `helper.ts` do.

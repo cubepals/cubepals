@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A server's runtime binding as operations hold it: the compute its handle names, and the
  * configuration it was last booted with. It reads and writes the binding row and nothing else of

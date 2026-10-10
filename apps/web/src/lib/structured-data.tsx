@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What the pages tell search engines Cubepals is, as schema.org JSON-LD. Prices come from the same
  * plan table the page shows, so the markup can't disagree with it. Left out until they exist: the

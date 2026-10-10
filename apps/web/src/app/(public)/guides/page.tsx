@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The /guides index: every approved guide. Off production it also lists the drafts waiting for
  * review, marked as drafts, so they can be read in a preview; production never shows a

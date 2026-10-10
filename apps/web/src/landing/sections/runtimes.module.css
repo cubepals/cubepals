@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/*
  * The runtimes stratum: the rule ladder, drawn as rails.
  *
  * The ladder is a list of rows with no gap between them. Each row is two columns: a gutter of fixed

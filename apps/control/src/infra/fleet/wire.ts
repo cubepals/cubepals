@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * blocklyd's wire types, as the control plane writes and reads them. They are generated from the
  * node's own Rust types (each cubepals/blocklyd release carries them as *.openapi.json, which

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The small picture beside a choice on the create-server page, with the mark on its corner that
  * says whether it is picked or being checked. It knows how a choice looks, not how it is chosen:

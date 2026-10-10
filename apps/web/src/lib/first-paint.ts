@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What the signed-in pages are drawn with on their first paint, asked of the control plane on the
  * server with the browser's own cookie, so a page opened from an address or a reload arrives with

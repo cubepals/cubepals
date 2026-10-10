@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/*
  * The fleet stratum: two machines, the ledger they answer to, and one cable.
  *
  * A machine is one narrow drawing, two columns wide all the way down: blocks on the left, words on

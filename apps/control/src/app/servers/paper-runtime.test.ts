@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Plain Minecraft on Paper, as a container: the spec of a plain revision with a Paper build, the
  * step that starts a Paper jar already installed with no call to Paper's API, and the one that

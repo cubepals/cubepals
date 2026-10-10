@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * An account's standing as admins and its owner set it: active, suspended or closed, its plan and
  * restrictions, an admin's limits, and the owner's own choices (extra play, the AFK kick), with

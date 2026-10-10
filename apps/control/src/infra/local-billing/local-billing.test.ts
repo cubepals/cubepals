@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The local checkout end to end, as the Upgrade and Manage billing buttons reach it: the link the
  * billing service hands out, the page's button, the signed delivery through the webhook route

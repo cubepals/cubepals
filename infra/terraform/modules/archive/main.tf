@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # The archive store (§15.4, optional per deployment): an R2 bucket, open to presigned uploads
 # from the web origin. Its S3 credentials are an R2 API token made in the dashboard and handed to
 # the control plane as ARCHIVE_S3_ACCESS_KEY_ID / ARCHIVE_S3_SECRET_ACCESS_KEY secrets.

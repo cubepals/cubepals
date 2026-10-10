@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Starting over in one step (§4), end to end: a fresh world, another round on a server made for a
  * day, and a new season where LifeStealZ runs, each with the world it leaves kept and a snapshot

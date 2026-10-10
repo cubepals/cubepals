@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The guide to how much a Minecraft server costs. Every price, hour and limit is
  * rendered from the plan table, and the play habits from the plan cards' own guidance, so nothing

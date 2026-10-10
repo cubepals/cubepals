@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * check-structure.ts against small trees: for each check, a new violation fails, a baselined one
  * passes, one that grew fails, an entry that no longer violates fails, and an entry without a
@@ -45,6 +49,9 @@ const consts = (n: number) =>
 const classOf = (n: number) =>
   `/** One class. */\nexport class Big {\n${Array.from({ length: n - 2 }, (_, i) => `  f${i} = ${i}`).join('\n')}\n}\n`
 
+// The SPDX lines below are the test trees' own, not this file's.
+// REUSE-IgnoreStart
+
 describe('size', () => {
   test('a new file over 800 lines fails, naming the number and the limit', () => {
     const { code, out } = check(tree({ 'apps/big.ts': consts(801) }))
@@ -59,6 +66,16 @@ describe('size', () => {
     const { code, out } = check(tree(files, entry(800)))
     expect(code).toBe(1)
     expect(out).toContain('apps/big.ts: grew from 800 to 801 lines in the file, limit 800')
+  })
+
+  test("a file's SPDX lines don't count toward its size, after a #! line too", () => {
+    const spdx = (c: string) =>
+      `${c} SPDX-FileCopyrightText: 2026 The Cubepals Authors\n${c}\n${c} SPDX-License-Identifier: AGPL-3.0-only\n\n`
+    const ts = `${spdx('//')}${consts(800)}`
+    const py = `#!/usr/bin/env python3\n\n${spdx('#')}"""Numbers."""\n${'x = 1\n'.repeat(798)}`
+    expect(check(tree({ 'apps/a.ts': ts, 'scripts/b.py': py })).code).toBe(0)
+    const plain = `// A comment that isn't one.\n//\n${consts(800)}`
+    expect(check(tree({ 'apps/a.ts': plain })).out).toContain('apps/a.ts: 802 lines in the file')
   })
 
   test('a block over 600 lines fails by its name; a method inside a class counts too', () => {
@@ -191,6 +208,7 @@ describe('names', () => {
 describe('headers', () => {
   // Lines that differ, so no two runs of them are a duplicate.
   const body = Array.from({ length: 51 }, (_, i) => `export const a${i} = ${i}\n`).join('')
+  const types = Array.from({ length: 51 }, (_, i) => `export type T${i} = { k: ${i} }\n`).join('')
 
   test('a file over 50 lines without a doc comment first fails; a list with a reason holds it', () => {
     const { code, out } = check(tree({ 'apps/a.ts': body }))
@@ -211,6 +229,8 @@ describe('headers', () => {
       'apps/k/src/c.rs': `//! A module.\n${'pub const A: u8 = 0;\n'.repeat(51)}`,
       'apps/k/src/f.rs': `// SPDX-License-Identifier: FSL-1.1-ALv2\n\n//! A module.\n${'pub const A: u8 = 0;\n'.repeat(51)}`,
       'scripts/d.py': `#!/usr/bin/env python3\n"""A script."""\n${'x = 1\n'.repeat(51)}`,
+      'apps/e.tsx': `// SPDX-FileCopyrightText: 2026 The Cubepals Authors\n//\n// SPDX-License-Identifier: AGPL-3.0-only\n\n'use client'\n\n/** Types. */\n${types}`,
+      'scripts/g.py': `#!/usr/bin/env python3\n\n# SPDX-FileCopyrightText: 2026 The Cubepals Authors\n#\n# SPDX-License-Identifier: AGPL-3.0-only\n\n"""A script."""\n${'x = 1\n'.repeat(51)}`,
     }
     expect(check(tree(ok)).code).toBe(0)
     const late = check(tree({ 'apps/e.ts': `import { b } from './b.ts'\n/** Too late. */\n${body}` }))
@@ -430,3 +450,5 @@ describe('a repository that is one crate', () => {
     expect(check(dir).code).toBe(0)
   })
 })
+
+// REUSE-IgnoreEnd

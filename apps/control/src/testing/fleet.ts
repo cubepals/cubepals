@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import 'reflect-metadata'
 import { randomBytes, webcrypto } from 'node:crypto'
 import { createDb, createPool, type Db, migrationsFolder } from '@blockly/db'

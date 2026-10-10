@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Keeps each server's storage as directories under the fake's root: its volumes, and the copies
  * its snapshots are. It knows nothing of boxes, handles or power: which directory a server uses

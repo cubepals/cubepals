@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { ModArtifact } from '../../domain/mods/artifact.ts'
 import { diskName } from '../../minecraft/jars.ts'
 import { deriveServerSecret, type SecretKeyring } from '../secrets.ts'

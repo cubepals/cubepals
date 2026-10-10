@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The emails as extra play is used: the first time in a month an account plays past its included
  * hours on extra it allowed, then at four fifths of its limit and at all of it. Each is sent once a

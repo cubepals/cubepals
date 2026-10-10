@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The fleet runtime's own state (docs/fleet.md): its nodes and their tokens, archives on them,
  * placements and their history, what the nodes observe, their endpoints and events.

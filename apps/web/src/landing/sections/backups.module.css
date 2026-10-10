@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/*
  * The backups stratum: one server, its two shelves of backups, what a running server is told
  * around a copy, the things that can happen to it, and what each one did.
  *

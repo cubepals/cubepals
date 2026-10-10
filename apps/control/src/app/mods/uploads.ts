@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { type Queryable, schema } from '@blockly/db'
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm'
 import type { ModMetadata } from '../../minecraft/uploads.ts'

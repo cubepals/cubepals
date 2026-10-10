@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What a server someone asks for will be: its release, server type, size, settings, first
  * revision and first world, decided before anything is written.

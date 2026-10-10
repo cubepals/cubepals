@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The secret half of a server's invite link. Whoever holds it may open the server's page and,
  * while the whitelist is on, put themselves on it, so it is drawn from the system's random

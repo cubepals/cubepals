@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { timingSafeEqual } from 'node:crypto'
 import type { Hono } from 'hono'
 import { z } from 'zod'

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The local checkout's pages, in place of Polar's checkout and customer portal: one starts a
  * plan, one cancels it, and one pays a balance owed. Each sends what it did to the billing webhook as a signed delivery,

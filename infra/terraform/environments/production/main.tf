@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # The production environment, cubepals.com. docs/production.md brings it up from nothing, and
 # `bun scripts/production.ts apply` runs this with every value it needs. Values decided in the
 # repository are in config.auto.tfvars.json; the rest arrive at apply time (docs/configuration.md):

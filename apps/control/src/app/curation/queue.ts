@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Which reviewed releases are due to be checked: each one Blockly hasn't seen is recorded as
  * pending, and every pending one is queued for its check (docs/modpack-templates.md § Ingestion).

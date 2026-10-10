@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The foot of the pages: who runs the service, every policy, and Mojang's words. The landing page
  * builds its own from the same parts.

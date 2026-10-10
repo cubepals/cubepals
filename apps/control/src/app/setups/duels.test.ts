@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The Duels template: Paper 1.21.11 with Duels from Modrinth and OldCombatMechanics from Hangar,
  * offered with Plus, and a server of it starting on a void world with the arena, the kit and the

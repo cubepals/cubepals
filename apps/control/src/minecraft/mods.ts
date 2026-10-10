@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { DATAPACK, isDatapack } from '../domain/mods/artifact.ts'
 import type { Loader } from '../domain/revision/revision.ts'
 

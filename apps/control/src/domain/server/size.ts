@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Server size is a product promise in memory ("a 4 GB server"), chosen by how many people play.
  * CPU and machine class are infrastructure and never appear here.

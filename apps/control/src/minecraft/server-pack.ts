@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { PackLoader } from './mrpack.ts'
 import { record, releaseId, text } from './plain-data.ts'
 

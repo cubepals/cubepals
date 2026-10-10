@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Queues again the decommission or purge a deleted server still owes, until it converges: the
  * purge once its restore window has closed, and before that a decommission whose retries ran out.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { PinnedMod } from '../mods/artifact.ts'
 import type { ReleaseRef } from '../mods/curation.ts'
 import type { CarriedFile } from '../revision/carried.ts'

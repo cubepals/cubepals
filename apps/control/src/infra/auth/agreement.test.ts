@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * No account without the Terms it is made under, through the real Better Auth handler on a real
  * database: an email sign-up without them is refused with the reason, a provider's round trip

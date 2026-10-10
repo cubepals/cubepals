@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { RateLimiterMemory } from 'rate-limiter-flexible'
 import type { Limits } from '../../app/ports/limits.ts'
 

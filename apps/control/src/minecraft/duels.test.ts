@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What Cubepals writes for Duels, read as the plugin reads it: the arena on the running world's
  * platform, the room built where a world has none, the kit, and who may play.

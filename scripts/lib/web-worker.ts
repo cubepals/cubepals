@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The web app as a Cloudflare Worker (apps/web/wrangler.jsonc) for one environment: built from this
  * checkout with that environment's values, checked, deployed or uploaded as a preview, and put back

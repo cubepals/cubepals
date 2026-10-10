@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What the control plane is told about the browser behind a sign-in: its address as this app's
  * host saw it, and the secret that makes the control plane believe it (WEB_PROXY_SECRET). Sign-in's

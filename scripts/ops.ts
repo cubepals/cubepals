@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Accounts and their servers from the command line, without signing in to the website
  * (docs/production.md § From the command line).

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What operations ask of the running game through its console: where it answers, and the save
  * that winds it down before its process goes away. All of it is best effort; the commands

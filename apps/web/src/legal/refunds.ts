@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Refunds and cancellation: how to cancel, the refund within 14 days of buying, and what happens
  * when a plan ends. Within 14 days, a full refund below `FULL_REFUND_UNDER_HOURS` of play (a

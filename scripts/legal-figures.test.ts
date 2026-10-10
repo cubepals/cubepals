@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The plan facts the policies state (apps/web/src/legal/figures.ts) against the plan table the
  * control plane enforces. The web app may not import the control plane, so the check lives here.

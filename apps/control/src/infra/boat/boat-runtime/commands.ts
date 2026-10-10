@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The sandbox's program and other commands, run through Boat's command endpoint. It never reads or
  * changes the sandbox itself, which `sandboxes.ts` does, and never decides which verb a port verb

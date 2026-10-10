@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The periodic work the control plane does outside any one server's queue (§9), one job to each
  * method: `main.node.ts` runs each on its schedule, and `EdgeService` asks `evaluateIdle`. Each job

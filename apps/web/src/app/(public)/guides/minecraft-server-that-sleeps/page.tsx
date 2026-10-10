@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The guide to a Minecraft server that sleeps when nobody plays. The timers come from the plan
  * table; going to sleep, saving first, and waking on a join were watched on a local stack. No wake

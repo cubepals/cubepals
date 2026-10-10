@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { notFound, permanentRedirect } from 'next/navigation'
 import { apiUpstream } from '../../../../lib/upstream'
 

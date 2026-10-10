@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Funnel events, kept once in the transaction of what they describe (`insight_events`), and the
  * good moments an owner may be asked about (`insight_asks`). Writing here sends nothing: the

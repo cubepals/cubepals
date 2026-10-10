@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The accounts people sign in to, as Better Auth keeps them: users, their sessions, the providers
  * they sign in with, and pending verifications. Property names are Better Auth's field names. What

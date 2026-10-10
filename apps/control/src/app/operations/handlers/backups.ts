@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The backups an owner keeps: a snapshot of the server as it is, and a snapshot's world packed into
  * the archive store. Neither touches the server's status: a failure is recorded on the backup, and

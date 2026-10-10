@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { Metadata } from 'next'
 import { UNLISTED } from '../../../../lib/site'
 import { playingLine, publicUrl, statusOf } from '../../status'

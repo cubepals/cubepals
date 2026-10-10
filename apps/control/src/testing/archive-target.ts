@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { ArchiveTarget, PutPart } from '../app/ports/runtime.ts'
 import { MAX_PUT_BYTES, partPlan } from '../infra/s3/parts.ts'
 

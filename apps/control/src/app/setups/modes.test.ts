@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The templates that are game modes: Paper and plugins from the catalog, on the newest release
  * where all of them run, offered with Plus as any plugin is, and Manhunt starting out as a server

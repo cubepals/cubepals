@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { Loader } from '../revision/revision.ts'
 import type { MemoryTier } from '../server/size.ts'
 

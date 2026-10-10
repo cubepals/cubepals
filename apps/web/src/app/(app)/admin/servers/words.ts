@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * How the admin servers page words what the API reports: a server's state, the runtime it is on,
  * and money. The API sends the domain's own words (`stored`, `fly`); what an admin reads is

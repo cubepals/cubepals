@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # One Fly organization per environment (§16): its apps' names, and its machine limit, which the
 # control plane enforces against platform_controls.maxServers (§19.12): admins set that in the
 # database, so the check lives where the number does.

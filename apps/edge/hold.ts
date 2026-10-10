@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A join held while its server wakes. A client gives up on a connection that says nothing for
  * 30 s, and a wake takes 40 to 60, so the hold speaks to it while it waits: a login query every

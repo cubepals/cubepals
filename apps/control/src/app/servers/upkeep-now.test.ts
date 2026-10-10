@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What an operator does to accounts and servers through the operators' API, against the whole
  * control plane on the fake provider: a server made for someone, rested now, and purged now, each

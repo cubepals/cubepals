@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Run with Node, as the control plane runs: a store that accepts connections and never answers,
 // and one call to it. Prints how the call ended, as JSON. Bun's node:http never fires socket
 // timeouts, so this can't run inside `bun test` itself (see s3-archive-store.test.ts).

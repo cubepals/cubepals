@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Where an account came from, by campaign: the UTM tags past a link's source, which the funnel
  * counts sign-ups by. The source alone, kept once and only in

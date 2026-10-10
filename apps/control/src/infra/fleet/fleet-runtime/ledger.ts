@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The placement ledger: where each server's world lives (`fleet_placements`), under which epoch,
  * and the history of its homes (`fleet_placement_history`). An epoch is only ever raised, by

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A player's items as Minecraft keeps them, read into what the player page shows: where each
  * stack sits, what it is, how many, and what its tooltip would say (its name, a name someone gave

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { type Db, schema, type Tx } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'

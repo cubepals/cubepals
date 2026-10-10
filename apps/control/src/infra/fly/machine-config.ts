@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { createHash } from 'node:crypto'
 import type { RuntimeSpec, RuntimeTags } from '../../app/ports/runtime.ts'
 import type { FlySchemas } from './client.ts'

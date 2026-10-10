@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * OVHcloud's dedicated servers as catalog entries.
  * The EU company and OVHcloud US are two arrays, because each sits in a different place in `CATALOG`.

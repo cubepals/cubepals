@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * UpCloud's Cloud Native VMs as catalog entries, one VM per Minecraft server.
  * Other providers live in their own files beside this one.

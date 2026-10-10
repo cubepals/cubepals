@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+
 /**
  * The fleet stratum: Blockly's own machines, run without a cluster. Each machine runs blocklyd; one
  * Postgres ledger says where every world is placed; a sleeping world holds only its disk, and its
