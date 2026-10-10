@@ -12,6 +12,7 @@ import { RoutedCatalog } from './app/catalog/routed.ts'
 import { type ControlPlane, composeControlPlane } from './app/control-plane.ts'
 import { passwordChanged, resetPassword, verifyEmail, welcome } from './app/emails/account.ts'
 import { ItemIcons } from './app/items/icons.ts'
+import { ServerRepairs } from './app/platform/repairs.ts'
 import { CLIENT_ADDRESS_HEADER } from './app/ports/auth.ts'
 import type { ScheduledJob } from './app/ports/jobs.ts'
 import type { PlayerProfiles, ReadinessProbe, ServerConsole } from './app/ports/minecraft.ts'
@@ -498,6 +499,7 @@ function apiServices(
     platform: { capabilities: supportOf(capabilities) },
     platformControls: app.platform,
     stuck: app.stuck,
+    repairs: new ServerRepairs({ db, servers: app.servers, backups: app.backups }),
     fleet: app.fleet,
     alerts: app.alerts,
     audit: app.audit,

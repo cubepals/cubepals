@@ -29,6 +29,7 @@ import {
   ensureStanding,
   grantAdmin,
   holdFreePlace,
+  insertTestUser,
   isAdmin,
   joinWaitlist,
   listAdmins,
@@ -159,6 +160,48 @@ export class AccountService {
     if (!PLANS.has(plan)) throw new AppError('invalid_choice', `There is no ${plan} plan.`)
     await this.#change(actor, userId, 'account.plan_set', { plan }, (tx) =>
       saveStanding(tx, userId, { plan }),
+    )
+  }
+
+  /**
+   * An account for testing Cubepals, made by an admin for an inbox they hold: its email confirmed
+   * and no password, so whoever reads that inbox signs in with Google or a password reset. Its
+   * plan is given the way `setPlan` gives one, without payment, and it is a test account from the
+   * start (`setTestAccount`).
+   */
+  async createTestAccount(actor: Actor, email: string, plan: string): Promise<{ userId: string }> {
+    if (actor.kind !== 'admin') throw new NotFound('Account')
+    if (!PLANS.has(plan)) throw new AppError('invalid_choice', `There is no ${plan} plan.`)
+    const address = email.trim().toLowerCase()
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address))
+      throw new AppError('invalid_choice', 'That doesn’t look like an email address.')
+    return this.#db.transaction(async (tx) => {
+      const userId = await insertTestUser(tx, address)
+      if (userId === null)
+        throw new AppError(
+          'invalid_choice',
+          'An account has that email already. Mark it as a test account on its page.',
+        )
+      await ensureStanding(tx, userId)
+      await saveStanding(tx, userId, { plan, testAccount: true })
+      await tx.insert(schema.auditLog).values({
+        actor: requestedBy(actor),
+        action: 'account.test_created',
+        subjectType: 'account',
+        subjectId: userId,
+        data: { email: address, plan },
+      })
+      return { userId }
+    })
+  }
+
+  /**
+   * Whether an account is one Cubepals uses to test itself: left out of the business's numbers,
+   * and never sent to the billing provider or to analytics.
+   */
+  async setTestAccount(actor: Actor, userId: string, test: boolean): Promise<void> {
+    await this.#change(actor, userId, test ? 'account.test_marked' : 'account.test_unmarked', {}, (tx) =>
+      saveStanding(tx, userId, { testAccount: test }),
     )
   }
 

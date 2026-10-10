@@ -2,6 +2,7 @@ import { type Db, schema } from '@blockly/db'
 import { and, eq, gt, inArray, lt, ne, sql } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { isMemoryTier, MEMORY_TIERS, memoryMb } from '../../domain/server/size.ts'
+import { notTest } from '../accounts/persistence.ts'
 import { PAID_ORDER } from '../billing/persistence.ts'
 import type { RuntimeHandle, RuntimeMachine } from '../ports/runtime.ts'
 import type { Runtimes } from './router.ts'
@@ -168,7 +169,8 @@ export class RuntimeEconomics {
       .from(servers)
       .innerJoin(bindings, eq(bindings.serverId, servers.id))
       .leftJoin(schema.accountStanding, eq(schema.accountStanding.userId, servers.ownerId))
-      .where(ne(servers.status, 'purged'))
+      // Servers on Cubepals' own test accounts cost it, but aren't the business it measures.
+      .where(and(ne(servers.status, 'purged'), notTest(this.#db, servers.ownerId)))
     const ids = live.map((row) => row.id)
 
     const ran =
@@ -222,7 +224,7 @@ export class RuntimeEconomics {
         fees: sql<string>`sum(round(${schema.billingOrders.totalCents} * ${PAYMENT_FEE.percent / 100}::numeric) + ${PAYMENT_FEE.fixedCents}::numeric)`,
       })
       .from(schema.billingOrders)
-      .where(paidBetween(from, to))
+      .where(and(paidBetween(from, to), notTest(this.#db, schema.billingOrders.userId)))
       .groupBy(schema.billingOrders.userId)
 
     const backupBytes = new Map(backups.map((row) => [row.serverId, Number(row.bytes)]))

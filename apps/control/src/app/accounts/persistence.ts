@@ -1,5 +1,6 @@
 import { type Queryable, schema, type Tx } from '@blockly/db'
 import {
+  type AnyColumn,
   and,
   count,
   desc,
@@ -48,6 +49,7 @@ const toStanding = (row: typeof standing.$inferSelect): AccountStanding => ({
   afkKickMinutes: row.afkKickMinutes,
   playWarned: row.playWarned,
   extraWarned: row.extraWarned,
+  testAccount: row.testAccount,
 })
 
 /**
@@ -209,6 +211,53 @@ export async function ensureStanding(q: Queryable, userId: string): Promise<void
   await q.insert(standing).values({ userId }).onConflictDoNothing()
 }
 
+// ─── Test accounts ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * A user an admin makes for testing, its email confirmed and no password set: whoever holds the
+ * inbox signs in with Google, or sets a password through a reset. Null when the email is taken.
+ */
+export async function insertTestUser(tx: Tx, email: string): Promise<string | null> {
+  const address = email.trim().toLowerCase()
+  const users = schema.users
+  const [taken] = await tx
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(sql`lower(${users.email})`, address))
+  if (taken !== undefined) return null
+  const [made] = await tx
+    .insert(users)
+    .values({
+      id: crypto.randomUUID(),
+      name: address.split('@')[0] ?? '',
+      email: address,
+      emailVerified: true,
+    })
+    .onConflictDoNothing()
+    .returning({ id: users.id })
+  return made?.id ?? null
+}
+
+/**
+ * The accounts in this column that aren't test accounts, for a query that counts the business or
+ * sends people to a service outside Cubepals: `where(notTest(q, table.userId))`.
+ */
+export const notTest = (q: Queryable, userId: AnyColumn) =>
+  notExists(
+    q
+      .select({ one: sql`1` })
+      .from(standing)
+      .where(and(eq(standing.userId, userId), eq(standing.testAccount, true))),
+  )
+
+export async function isTestAccount(q: Queryable, userId: string): Promise<boolean> {
+  const [row] = await q
+    .select({ test: standing.testAccount })
+    .from(standing)
+    .where(eq(standing.userId, userId))
+  return row?.test === true
+}
+
 export async function loadControls(q: Queryable): Promise<PlatformControls> {
   const [row] = await q.select().from(schema.platformControls).where(eq(schema.platformControls.id, 1))
   if (!row) throw new Error('platform_controls has no row; run the migrations')
@@ -365,7 +414,7 @@ export async function recordSignupSource(
 /**
  * Accounts on the free plan, as sign-up counts them against `maxFreeAccounts`: every account but
  * one a subscription pays for (or holds through its grace), one an admin gave another plan, a
- * closed one, and an admin's own. An account whose standing isn't written yet is free.
+ * closed one, a test account, and an admin's own. An account whose standing isn't written yet is free.
  */
 export async function countFreeAccounts(q: Queryable): Promise<number> {
   const standing = schema.accountStanding
@@ -385,7 +434,10 @@ export async function countFreeAccounts(q: Queryable): Promise<number> {
       and(
         isNull(schema.platformAdmins.userId),
         notExists(paying),
-        or(isNull(standing.userId), and(eq(standing.plan, 'free'), ne(standing.status, 'terminated'))),
+        or(
+          isNull(standing.userId),
+          and(eq(standing.plan, 'free'), ne(standing.status, 'terminated'), eq(standing.testAccount, false)),
+        ),
       ),
     )
   return row?.n ?? 0

@@ -68,6 +68,8 @@ export const RestoreBackupInput = z.object({
   withConfiguration: z.boolean(),
   acknowledgeRevoked: z.boolean().optional(),
 })
+/** An admin restoring one of someone's backups, as its owner would; why goes in the audit log. */
+export const AdminRestoreInput = RestoreBackupInput.extend({ reason: z.string().trim().min(1).max(500) })
 
 // ─── Worlds ─────────────────────────────────────────────────────────────────────────────────
 

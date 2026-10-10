@@ -3,7 +3,12 @@ import type { AccountDetailView, AccountView } from '@blockly/contracts'
 import {
   AccountRef,
   AccountSearchInput,
+  AdminRestoreInput,
+  AdminStartInput,
+  AdminTrashInput,
+  AdminUntrashInput,
   AuditSearchInput,
+  CreateTestAccountInput,
   CuratedReleaseInput,
   FleetSearchInput,
   LimitsInput,
@@ -14,7 +19,9 @@ import {
   PlatformControlsInput,
   ReportRef,
   RestrictionsInput,
+  ServerRef,
   StandingReasonInput,
+  TestAccountInput,
   TrustProjectInput,
   UntrustProjectInput,
   WithdrawReleaseInput,
@@ -33,6 +40,7 @@ const accountView = (row: AccountRow): AccountView => ({
   reason: row.standing.reason,
   plan: row.standing.plan,
   admin: row.admin,
+  test: row.standing.testAccount,
   servers: row.servers,
 })
 
@@ -81,6 +89,15 @@ export const admin = router({
   setLimits: adminProcedure
     .input(LimitsInput)
     .mutation(({ ctx, input }) => ctx.services.accounts.setLimits(ctx.actor, input.userId, input)),
+  /** An account to test Cubepals with: confirmed, on the plan picked, and marked as a test account. */
+  createTestAccount: adminProcedure
+    .input(CreateTestAccountInput)
+    .mutation(({ ctx, input }) =>
+      ctx.services.accounts.createTestAccount(ctx.actor, input.email, input.plan),
+    ),
+  setTestAccount: adminProcedure
+    .input(TestAccountInput)
+    .mutation(({ ctx, input }) => ctx.services.accounts.setTestAccount(ctx.actor, input.userId, input.test)),
   grantAdmin: adminProcedure
     .input(AccountRef)
     .mutation(({ ctx, input }) => ctx.services.accounts.grantAdmin(ctx.actor, input.userId)),
@@ -133,6 +150,23 @@ export const admin = router({
   ),
   stopForMaintenance: adminProcedure.input(MaintenanceStopInput).mutation(async ({ ctx, input }) => {
     await ctx.services.servers.stopForMaintenance(ctx.actor, input.serverId, input.requestId, input.reason)
+  }),
+  /** Someone's server as an admin fixes it, the way its owner would: why goes in the audit log. */
+  startServer: adminProcedure.input(AdminStartInput).mutation(async ({ ctx, input }) => {
+    await ctx.services.repairs.start(ctx.actor, input.serverId, input.requestId, input.reason)
+  }),
+  trashServer: adminProcedure.input(AdminTrashInput).mutation(async ({ ctx, input }) => {
+    await ctx.services.repairs.trash(ctx.actor, input.serverId, input.confirmName, input.reason)
+  }),
+  untrashServer: adminProcedure.input(AdminUntrashInput).mutation(async ({ ctx, input }) => {
+    await ctx.services.repairs.untrash(ctx.actor, input.serverId, input.reason)
+  }),
+  /** Its backups, as its owner's backups page lists them, to restore one. */
+  serverBackups: adminProcedure
+    .input(ServerRef)
+    .query(({ ctx, input }) => ctx.services.backupQueries.list(ctx.actor, input.serverId)),
+  restoreBackup: adminProcedure.input(AdminRestoreInput).mutation(async ({ ctx, input }) => {
+    await ctx.services.repairs.restore(ctx.actor, input.serverId, input, input.requestId, input.reason)
   }),
   stuck: adminProcedure.query(({ ctx }) => ctx.services.stuck.list(ctx.actor)),
   retryOperation: adminProcedure

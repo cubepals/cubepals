@@ -8,6 +8,11 @@ product funnel, feedback and errors go to PostHog as well ([Insight](#insight)).
 Every query takes the plan in force the way `loadStanding` does: a paying subscription's plan,
 else the account's own. `plan_of` below is that rule; paste it in front of any query that needs it.
 
+Test accounts are Cubepals' own, made or marked by an admin to test production with
+(`account_standing.test_account`). They aren't customers: leave them out of every count
+(`and not s.test_account`). The product does the same where it counts: free places at sign-up,
+the runtime economics report, and what goes to PostHog and the billing provider.
+
 ```sql
 with plan_of as (
   select s.user_id,
@@ -27,7 +32,9 @@ with plan_of as (
 PostHog's EU cloud holds three things: the funnel, feedback, and errors. Production alone sends
 them (`POSTHOG_TOKEN`, `NEXT_PUBLIC_POSTHOG_TOKEN`, [configuration.md](configuration.md)); every
 event carries `environment` (`production`, `staging`, `development`), and the project's test-account
-filter leaves out all but production. With no token nothing is sent.
+filter leaves out all but production. With no token nothing is sent. Nothing about a test account
+is sent: its funnel events stay unsent, its feedback goes nowhere, and it is never asked how it's
+going.
 
 **The funnel**, sent by the control plane with the account's id as `distinct_id`, never its email.
 Each is written once, in the transaction of what it describes, to `insight_events` (unique on

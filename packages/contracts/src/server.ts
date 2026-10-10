@@ -377,6 +377,15 @@ export const DeleteServerInput = z.object({
   confirmName: z.string(),
 })
 
+/** Why an admin acts on someone else's server, kept in the audit log beside what was done. */
+const adminReason = z.string().trim().min(1).max(500)
+/** An admin starting someone's server. */
+export const AdminStartInput = PowerInput.extend({ reason: adminReason })
+/** An admin sending someone's server to the trash, confirmed by its name like its owner's delete. */
+export const AdminTrashInput = DeleteServerInput.extend({ reason: adminReason })
+/** An admin taking someone's server back out of the trash. */
+export const AdminUntrashInput = ServerRef.extend({ reason: adminReason })
+
 /** Internal progress steps; the web app words them for people. */
 export const OPERATION_STEPS = [
   'queued',

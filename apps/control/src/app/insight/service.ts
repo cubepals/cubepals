@@ -2,12 +2,19 @@
  * What reaches the operator through PostHog: the funnel events kept in `record.ts`, sent by
  * the worker; a line of feedback from the sidebar; and "How's it going?" after a good moment, at
  * most once a fortnight. Each is about an account by its id; only feedback carries the sender's
- * email, so the operator can write back. With no analytics service, nothing here sends anything.
+ * email, so the operator can write back. With no analytics service, nothing here sends anything,
+ * and nothing about a test account is ever sent: its events wait unsent, and it is asked nothing.
  */
 import type { InsightSentView, MomentAskView, MomentKey } from '@blockly/contracts'
 import { type Db, schema } from '@blockly/db'
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull } from 'drizzle-orm'
-import { actionsSince, loadStanding, lockAccountActions } from '../accounts/persistence.ts'
+import {
+  actionsSince,
+  isTestAccount,
+  loadStanding,
+  lockAccountActions,
+  notTest,
+} from '../accounts/persistence.ts'
 import type { UserActor } from '../actor.ts'
 import { AppError } from '../errors.ts'
 import type { Insight } from '../ports/insight.ts'
@@ -60,7 +67,7 @@ export class InsightService {
     const waiting = await this.#db
       .select()
       .from(events)
-      .where(isNull(events.sentAt))
+      .where(and(isNull(events.sentAt), notTest(this.#db, events.userId)))
       .orderBy(asc(events.at))
       .limit(BATCH)
     let sent = 0
@@ -110,7 +117,7 @@ export class InsightService {
         .where(eq(schema.users.id, actor.userId))
       return { email: user?.email ?? '', plan: (await loadStanding(tx, actor.userId)).plan }
     })
-    if (this.#insight === null) return { sent: false }
+    if (this.#insight === null || (await isTestAccount(this.#db, actor.userId))) return { sent: false }
     const sent = await this.#insight.send({
       distinctId: actor.userId,
       event: 'survey sent',
@@ -137,7 +144,8 @@ export class InsightService {
    * person may be making a server or paying.
    */
   async ask(actor: UserActor, busy: boolean): Promise<MomentAskView | null> {
-    if (this.#insight === null || busy || (await this.#midway(actor.userId))) return null
+    if (this.#insight === null || busy || (await isTestAccount(this.#db, actor.userId))) return null
+    if (await this.#midway(actor.userId)) return null
     const asks = schema.insightAsks
     const now = Date.now()
     const open = and(eq(asks.userId, actor.userId), isNull(asks.answeredAt), isNull(asks.dismissedAt))
@@ -194,7 +202,8 @@ export class InsightService {
         ),
       )
       .returning({ moment: asks.moment })
-    if (answered.length === 0 || this.#insight === null) return { sent: false }
+    if (answered.length === 0 || this.#insight === null || (await isTestAccount(this.#db, actor.userId)))
+      return { sent: false }
     const more = input.text === undefined || input.text === '' ? null : input.text
     const sent = await this.#insight.send({
       distinctId: actor.userId,
@@ -232,7 +241,8 @@ export class InsightService {
         ),
       )
       .returning({ moment: asks.moment })
-    if (dismissed.length > 0) this.#survey(actor.userId, 'survey dismissed', moment)
+    if (dismissed.length > 0 && !(await isTestAccount(this.#db, actor.userId)))
+      this.#survey(actor.userId, 'survey dismissed', moment)
   }
 
   /** A server of theirs still being made, or a checkout started within the hour and not yet paid. */

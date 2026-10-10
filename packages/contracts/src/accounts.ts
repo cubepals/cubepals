@@ -26,6 +26,8 @@ export interface AccountView {
   reason: string | null
   plan: string
   admin: boolean
+  /** One Cubepals uses to test itself: left out of its numbers, billing and analytics. */
+  test: boolean
   /** Live servers, not counting the trash. */
   servers: number
 }
@@ -55,6 +57,12 @@ export const RestrictionsInput = z.object({
   consoleCommands: z.boolean(),
 })
 export const PlanInput = z.object({ userId, plan: z.string().trim().min(1).max(40) })
+/** An account an admin makes to test Cubepals with, for an inbox they hold, on the plan they pick. */
+export const CreateTestAccountInput = z.object({
+  email: z.email('That doesn’t look like an email address.').max(254),
+  plan: z.string().trim().min(1).max(40),
+})
+export const TestAccountInput = z.object({ userId, test: z.boolean() })
 export const LimitsInput = z.object({
   userId,
   maxServers: z.number().int().min(0).max(1000).nullable(),

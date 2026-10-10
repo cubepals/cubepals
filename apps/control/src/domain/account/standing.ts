@@ -40,6 +40,8 @@ export interface AccountStanding {
   playWarned: string | null
   /** The last extra-play email sent, as `YYYY-MM:mark` (0, 80 or 100); null before any. */
   extraWarned: string | null
+  /** Cubepals' own, for testing it: never billed, and left out of its numbers and analytics. */
+  testAccount: boolean
 }
 
 export function newStanding(userId: string): AccountStanding {
@@ -54,5 +56,6 @@ export function newStanding(userId: string): AccountStanding {
     afkKickMinutes: null,
     playWarned: null,
     extraWarned: null,
+    testAccount: false,
   }
 }

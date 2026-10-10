@@ -1,0 +1,1 @@
+ALTER TABLE "account_standing" ADD COLUMN "test_account" boolean DEFAULT false NOT NULL;

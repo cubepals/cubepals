@@ -3,7 +3,7 @@ import { type Db, schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { entitlementsFor, PAID_PLANS } from '../../domain/account/entitlements.ts'
 import { dollars } from '../../domain/policy/spend.ts'
-import { emailOf, loadStanding, lockStanding } from '../accounts/persistence.ts'
+import { emailOf, isTestAccount, loadStanding, lockStanding } from '../accounts/persistence.ts'
 import type { AccountService } from '../accounts/service.ts'
 import { type Actor, requestedBy } from '../actor.ts'
 import { type DeploymentCapabilities, requireCapability } from '../capabilities.ts'
@@ -452,6 +452,12 @@ export class BillingService {
       .from(schema.users)
       .where(eq(schema.users.id, actor.userId))
     if (!user) throw new NotFound('Account')
+    // A test account never reaches the billing provider: its plan is given on the admin pages.
+    if (await isTestAccount(this.#db, user.id))
+      throw new AppError(
+        'invalid_choice',
+        'This is a test account: it never pays, and its plan is set by an admin.',
+      )
     return user
   }
 
