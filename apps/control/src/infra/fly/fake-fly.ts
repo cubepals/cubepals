@@ -87,6 +87,12 @@ export class FakeFly {
    */
   destroyReads = 0
   boundDeletes = 0
+  /**
+   * New machines refused on a volume a destroyed machine had, as Fly went on holding one after its
+   * machine was gone (production, 2026-10-11); and every machine refused on a claimed volume.
+   */
+  lingeringClaims = 0
+  claimedCreates = 0
   /** Listings that still show a deleted volume as `created`, as Fly's did for a moment. */
   deletedListReads = 0
   readonly #lingering: { app: string; volume: FakeVolume; readsLeft: number }[] = []
@@ -270,19 +276,7 @@ export class FakeFly {
       if (!app) return missing()
       const list = this.machines.get(app) ?? []
       if (method === 'GET') return json(list)
-      if (this.refusal !== null) return json(this.refusal, 412)
-      const machine: FakeMachine = {
-        id: `m_${++this.#ids}`,
-        name: String(body.name),
-        region: String(body.region),
-        state: body.skip_launch ? 'created' : 'started',
-        config: body.config as Json,
-        events: [],
-        updated_at: new Date().toISOString(),
-        prepareReadsLeft: this.prepareReads,
-      }
-      this.machines.set(app, [...list, machine])
-      return json(machine)
+      return this.#create(app, body)
     }
     m = path.match(/^\/v1\/apps\/([^/]+)\/machines\/([^/]+)(?:\/(\w+))?$/)
     if (m) {
@@ -440,6 +434,44 @@ export class FakeFly {
       { error: `failed_precondition: volume is currently bound to machine: ${bound.id}` },
       { status: 412 },
     )
+  }
+
+  /** A new machine, unless Fly refuses it: its host is full, or its volume claimed. */
+  #create(app: string, body: Json): Response {
+    const refused = this.refusal ?? this.#claimed(app, body.config as Json)
+    if (refused !== null) return Response.json(refused, { status: 412 })
+    const machine: FakeMachine = {
+      id: `m_${++this.#ids}`,
+      name: String(body.name),
+      region: String(body.region),
+      state: body.skip_launch ? 'created' : 'started',
+      config: body.config as Json,
+      events: [],
+      updated_at: new Date().toISOString(),
+      prepareReadsLeft: this.prepareReads,
+    }
+    this.machines.set(app, [...(this.machines.get(app) ?? []), machine])
+    return Response.json(machine)
+  }
+
+  /**
+   * Why Fly refuses a new machine on the volume its config mounts, if it does: another machine
+   * still holds it, or Fly still holds it for one it has destroyed, naming none.
+   */
+  #claimed(app: string, config: Json): Json | null {
+    const volumeId = (config.mounts as Json[] | undefined)?.[0]?.volume
+    if (volumeId === undefined) return null
+    const mounts = (x: FakeMachine) =>
+      (x.config.mounts as Json[] | undefined)?.some((m) => m.volume === volumeId)
+    const holder = (this.machines.get(app) ?? []).find(mounts)
+    const lingering = holder === undefined && this.lingeringClaims > 0 && this.destroyed.some(mounts)
+    if (holder === undefined && !lingering) return null
+    if (lingering) this.lingeringClaims--
+    else this.#moment(app, holder as FakeMachine)
+    this.claimedCreates++
+    return {
+      error: `failed_precondition: volume already claimed by machine ${holder?.id ?? '\u0000'.repeat(14)}`,
+    }
   }
 
   /**
