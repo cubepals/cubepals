@@ -1,6 +1,7 @@
 /**
  * One DNS record in a Cloudflare zone, made or corrected to what a script wants. The token needs
- * only "Edit zone DNS" on that zone. Used by staging.ts to put staging.cubepals.com on Fly.
+ * only "Edit zone DNS" on that zone. Used by staging.ts to put staging.cubepals.com and its play
+ * domain on Fly.
  */
 
 interface Answer<T> {
@@ -16,8 +17,12 @@ interface DnsRecord {
   proxied: boolean
 }
 
-/** `name` as a DNS-only CNAME to `target`, so the host behind it can get its own certificate. */
-export async function pointCname(token: string, zone: string, name: string, target: string): Promise<void> {
+/** One DNS-only record, by its name and type: never proxied, so Fly gets the traffic and the certificates. */
+export async function pointRecord(
+  token: string,
+  zone: string,
+  want: { type: 'A' | 'AAAA' | 'CNAME'; name: string; content: string },
+): Promise<void> {
   const cloudflare = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
     const response = await fetch(`https://api.cloudflare.com/client/v4${path}`, {
       ...init,
@@ -31,9 +36,9 @@ export async function pointCname(token: string, zone: string, name: string, targ
   const [found] = await cloudflare<{ id: string }[]>(`/zones?name=${zone}`)
   if (!found) throw new Error(`Cloudflare has no zone ${zone} this token can reach`)
   const records = `/zones/${found.id}/dns_records`
-  const [record] = await cloudflare<DnsRecord[]>(`${records}?name=${name}`)
-  const body = JSON.stringify({ type: 'CNAME', name, content: target, proxied: false, ttl: 1 })
+  const [record] = await cloudflare<DnsRecord[]>(`${records}?name=${want.name}&type=${want.type}`)
+  const body = JSON.stringify({ ...want, proxied: false, ttl: 1 })
   if (!record) await cloudflare(records, { method: 'POST', body })
-  else if (record.type !== 'CNAME' || record.content !== target || record.proxied)
+  else if (record.content !== want.content || record.proxied)
     await cloudflare(`${records}/${record.id}`, { method: 'PUT', body })
 }

@@ -15,7 +15,8 @@
  * The web app is at staging.cubepals.com (a DNS-only CNAME in Cloudflare, so Fly issues its
  * certificate), with Google sign-in. Only STAGING_DEVELOPERS, the admin and the staging check's
  * own domain can make an account there (SIGNUP_ALLOWLIST). The API and realtime stay on fly.dev,
- * and players join `<server>.<edge address>.nip.io`. Postgres is Supabase's staging project, through
+ * and players join `<server>.play.staging.cubepals.com`, whose wildcard records point at the edge's
+ * own addresses. Postgres is Supabase's staging project, through
  * its session pooler (STAGING_DATABASE_URL), and mail goes to a Mailpit that only the org's private network reaches (`fly proxy 8025 -a bly-staging-mail`). Archives go to a
  * Tigris bucket. Payments are Polar's sandbox: POLAR_ACCESS_TOKEN and POLAR_PRODUCTS come from
  * .env, and `up` adds the webhook that `down` removes. What `up` generates (passwords, keys, the
@@ -38,7 +39,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import { createPolar } from '@polar-sh/sdk/2026-10'
-import { pointCname } from './lib/cloudflare-dns.ts'
+import { pointRecord } from './lib/cloudflare-dns.ts'
 
 const ORG = 'blockly-staging'
 const REGION = 'fra'
@@ -54,6 +55,7 @@ const origin = (app: string) => `https://${app}.fly.dev`
 const WEBHOOK_URL = `${origin(APP.control)}/api/billing/webhook`
 const WEB_HOST = 'staging.cubepals.com'
 const WEB = `https://${WEB_HOST}`
+const PLAY_DOMAIN = 'play.staging.cubepals.com'
 /** The org token the control plane creates servers with; `down` revokes every one named so. */
 const TOKEN_NAME = 'bly-staging-control'
 /**
@@ -255,14 +257,20 @@ async function pointWebhook(state: State): Promise<void> {
   saveState(state)
 }
 
-/** staging.cubepals.com on the web app: Cloudflare's record for it, and Fly's certificate. */
-async function pointWebDomain(): Promise<void> {
-  say('domain')
+/**
+ * staging.cubepals.com on the web app, with Fly's certificate, and every name under the play
+ * domain on the edge's own addresses, as production's are.
+ */
+async function pointDomains(edge: { v4: string; v6: string | undefined }): Promise<void> {
+  say('domains')
   const token = process.env.CLOUDFLARE_API_TOKEN
   if (!token) throw new Error(`CLOUDFLARE_API_TOKEN (DNS for cubepals.com) is not in ${SECRETS_FILE}`)
-  await pointCname(token, 'cubepals.com', WEB_HOST, `${APP.web}.fly.dev`)
+  await pointRecord(token, 'cubepals.com', { type: 'CNAME', name: WEB_HOST, content: `${APP.web}.fly.dev` })
   if (!fly(['certs', 'show', WEB_HOST, '-a', APP.web], { allowFail: true }))
     fly(['certs', 'add', WEB_HOST, '-a', APP.web])
+  await pointRecord(token, 'cubepals.com', { type: 'A', name: `*.${PLAY_DOMAIN}`, content: edge.v4 })
+  if (edge.v6)
+    await pointRecord(token, 'cubepals.com', { type: 'AAAA', name: `*.${PLAY_DOMAIN}`, content: edge.v6 })
 }
 
 /** Who can sign in and how: Google, and accounts only for the developers and the check. */
@@ -389,11 +397,10 @@ async function up(): Promise<void> {
     ensureIp(app, 'shared_v4')
     ensureIp(app, 'v6')
   }
-  const edgeV4 = ipsOf(APP.edge).find((ip) => ip.Type === 'v4')?.Address
+  const edgeIps = ipsOf(APP.edge)
+  const edgeV4 = edgeIps.find((ip) => ip.Type === 'v4')?.Address
   if (!edgeV4) throw new Error('the edge has no dedicated IPv4')
-  const playDomain = `${edgeV4.replaceAll('.', '-')}.nip.io`
-
-  await pointWebDomain()
+  await pointDomains({ v4: edgeV4, v6: edgeIps.find((ip) => ip.Type === 'v6')?.Address })
 
   say('credentials')
   if (state.flyToken === undefined) {
@@ -425,7 +432,7 @@ async function up(): Promise<void> {
     REALTIME_TLS_MODE: 'pinned',
     REALTIME_TLS_HOSTNAME: `${APP.realtime}.fly.dev`,
     REALTIME_TICKET_SECRET: state.ticketSecret,
-    PLAY_DOMAIN: playDomain,
+    PLAY_DOMAIN,
     PLAY_PORT: '25565',
     REGIONS: 'eu:Europe,us:North America',
     RUNTIME_PROVIDER: 'fly',
@@ -577,10 +584,9 @@ function status(): void {
   }
   const buckets = bucketsInOrg()
   say(`buckets: ${buckets.join(', ') || 'none'}`)
-  const edgeV4 = apps.includes(APP.edge) ? ipsOf(APP.edge).find((ip) => ip.Type === 'v4')?.Address : undefined
   say('')
   say(`web:   ${WEB}`)
-  if (edgeV4) say(`play:  <server>.${edgeV4.replaceAll('.', '-')}.nip.io`)
+  if (apps.includes(APP.edge)) say(`play:  <server>.${PLAY_DOMAIN}`)
   say(`mail:  fly proxy 8025 -a ${APP.mail}, then http://localhost:8025`)
   say(`admin: sign up as ${ADMIN_EMAIL}; the confirmation arrives in that mail catcher`)
 }
@@ -668,7 +674,7 @@ const stopOrder = (app: string): number =>
 /**
  * Every machine in the org stopped, the platform's and every server's, and the sandbox webhook
  * off until `start`. Volumes, the bucket, secrets and the edge's and realtime's dedicated IPv4s
- * stay, so `start` brings the platform back as it was: the play domain and rt.staging's record are named after those addresses, and a cloud
+ * stay, so `start` brings the platform back as it was: the play domain's records point at those addresses, and a cloud
  * session can't rewrite DNS. Keeping both costs about $4 a month (owner, 2026-10-09).
  */
 async function stop(): Promise<void> {

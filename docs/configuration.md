@@ -29,8 +29,9 @@ and `scripts/staging-check.ts` checks it:
 - `bun scripts/staging.ts up` makes whatever is missing in the `blockly-staging` Fly org and
   deploys this checkout: a Postgres machine, a Mailpit that only the org's private network
   reaches, the control (api and worker), realtime, edge and web apps, a Tigris bucket for
-  archives, and the Polar sandbox webhook. The web app and the API answer on `fly.dev`; players
-  join `<server>.<edge IPv4, dashed>.nip.io`. The passwords and keys it made stay in
+  archives, and the Polar sandbox webhook. The API answers on `fly.dev`, the web app on
+  staging.cubepals.com, and players join `<server>.play.staging.cubepals.com`, whose wildcard
+  records `up` points at the edge. The passwords and keys it made stay in
   `local/staging/state.json`, or come from `STAGING_STATE` where there is no such file.
 - `bun scripts/staging.ts start` starts the platform again before testing, its database first;
   servers start when someone plays. `bun scripts/staging.ts stop` stops every machine in the
@@ -51,7 +52,7 @@ This staging differs from the design the tables' Staging column describes, which
 Postgres is Supabase's staging project (Free, eu-central-1), not Managed Postgres, reached
 through its session pooler, which carries `LISTEN` too, so there is no `DATABASE_DIRECT_URL`;
 `STAGING_DATABASE_URL` names it, and `down` leaves it be; archives go to Tigris, not R2; the web app runs on Fly, not Vercel;
-addresses are on `fly.dev` and `nip.io`, not staging's own domain; mail goes to the Mailpit; and
+the API and realtime are on `fly.dev`, not staging's own domain; mail goes to the Mailpit; and
 there is no OAuth sign-in, only email.
 
 It needs flyctl signed in with a card on the org, and `POLAR_ACCESS_TOKEN` (sandbox, with

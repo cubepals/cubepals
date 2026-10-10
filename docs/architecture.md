@@ -2289,7 +2289,7 @@ answers 429 with `Retry-After`. Player faces count under a key of their own (§1
 
 The Staging column is the Terraform design; the staging that exists is made by
 `scripts/staging.ts` in the `blockly-staging` org, with the web app on Fly, Postgres on a machine
-of its own, archives in Tigris, and addresses on `fly.dev` and `nip.io`
+of its own, archives in Tigris, and the API and realtime on `fly.dev`
 ([configuration.md](configuration.md)).
 
 **Local, in practice.**
