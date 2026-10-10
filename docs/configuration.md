@@ -42,6 +42,14 @@ and `scripts/staging-check.ts` checks it:
 - `bun scripts/staging.ts status` shows what exists and where to reach it.
   `bun scripts/staging.ts env` writes what a cloud environment needs to run all of this to
   `local/staging/cloud.env`, to paste into its settings.
+- `bun scripts/staging-website.ts deploy` deploys the web Worker alone, from this checkout, with
+  the secret it already has; the web-staging workflow runs it on each push to main.
+  `bun scripts/staging-website.ts preview <n>` uploads this checkout as pull request `<n>`'s
+  preview version, not live, at `https://pr-<n>-blockly-web-staging.<subdomain>.workers.dev`; the
+  workflow runs it on each pull request from this repository and names the address in a comment.
+  `up` tells the control plane to trust those addresses (`WEB_TRUSTED_ORIGINS`) and lets their
+  Google sign-in come back through staging's callback (`AUTH_OAUTH_PROXY_SECRET`). A preview
+  talks to staging's control plane, which doesn't start for it: start staging to use one.
 - `bun scripts/staging-check.ts` takes one Free server through its life on Fly (made, joined
   through the edge, asleep, woken, rested in the archive store with its machine and volume let
   go, woken from the archive, the same world, killed and started again) and times each wait.
@@ -56,7 +64,7 @@ Postgres is Supabase's staging project (Free, eu-central-1), not Managed Postgre
 through its session pooler, which carries `LISTEN` too, so there is no `DATABASE_DIRECT_URL`;
 `STAGING_DATABASE_URL` names it, and `down` leaves it be; archives go to Tigris, not R2;
 the web Worker is `staging.ts`'s, not Terraform's; the API and realtime are on `fly.dev`, not staging's own domain; mail goes to the Mailpit; and
-there is no OAuth sign-in, only email.
+Google is its only OAuth sign-in.
 
 It needs flyctl signed in with a card on the org, `CLOUDFLARE_API_TOKEN` (DNS on cubepals.com)
 and `CLOUDFLARE_WORKERS_API_TOKEN` (Workers Scripts, Workers Routes and R2 on its account) in
@@ -93,7 +101,7 @@ Terraform stack.
 | Variable | Local | Staging | Production | Set by | Notes |
 |---|---|---|---|---|---|
 | `WEB_CANONICAL_ORIGIN` | `http://localhost:3000` | `https://staging.cubepals.com` | `https://cubepals.com` | tf | Better Auth's base URL is this plus `/api/auth`; https everywhere but loopback |
-| `WEB_TRUSTED_ORIGINS` | empty | empty | empty | tf | Other origins that serve the environment's web app, such as previews. A pattern's wildcard sits inside one label and names the site: `https://*.workers.dev` is refused |
+| `WEB_TRUSTED_ORIGINS` | empty | `https://pr-*-blockly-web-staging.<subdomain>.workers.dev` (staging.ts) | empty | tf | Other origins that serve the environment's web app: on staging, each pull request's preview. A pattern's wildcard sits inside one label and names the site; on workers.dev that includes the account's subdomain, so `https://*.workers.dev` and `https://pr-*.workers.dev` are refused |
 | `AUTH_SECRET` | generated | secret | secret | secret | Better Auth's signing key. Rotating it signs everyone out |
 | `AUTH_GOOGLE_CLIENT_ID`, `AUTH_GOOGLE_CLIENT_SECRET` | optional | secret | secret | secret | Both or neither; neither offers email only. See OAuth below |
 | `AUTH_GITHUB_CLIENT_ID`, `AUTH_GITHUB_CLIENT_SECRET` | optional | optional | optional | secret | Both or neither |

@@ -14,8 +14,10 @@
  *
  * The web app is the Cloudflare Worker blockly-web-staging, at staging.cubepals.com (a proxied
  * record its route answers), as production's is a Worker; it costs nothing idle, so stop and start
- * leave it be. Google sign-in; only STAGING_DEVELOPERS, the admin and the staging check's own
- * domain can make an account there (SIGNUP_ALLOWLIST). The API and realtime stay on fly.dev,
+ * leave it be. Each pull request's preview of it (staging-website.ts) is trusted as staging's own
+ * pages, and signs in with Google through the canonical callback (AUTH_OAUTH_PROXY_SECRET).
+ * Google sign-in; only STAGING_DEVELOPERS, the admin and the staging check's own domain can make
+ * an account there (SIGNUP_ALLOWLIST). The API and realtime stay on fly.dev,
  * and players join `<server>.play.staging.cubepals.com`, whose wildcard records point at the edge's
  * own addresses. Postgres is Supabase's staging project, through
  * its session pooler (STAGING_DATABASE_URL), and mail goes to a Mailpit that only the org's private network reaches (`fly proxy 8025 -a bly-staging-mail`). Archives go to a
@@ -40,8 +42,9 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import { createPolar } from '@polar-sh/sdk/2026-10'
-import { pointRecord, zoneAccount } from './lib/cloudflare-dns.ts'
+import { pointRecord } from './lib/cloudflare-dns.ts'
 import { buildWorker, deployWorker } from './lib/web-worker.ts'
+import { previewOrigins, stagingCloudflare, stagingSite } from './staging-website.ts'
 
 const ORG = 'blockly-staging'
 const REGION = 'fra'
@@ -280,13 +283,22 @@ async function pointDomains(edge: { v4: string; v6: string | undefined }): Promi
     await pointRecord(token, 'cubepals.com', { type: 'AAAA', name: `*.${PLAY_DOMAIN}`, content: edge.v6 })
 }
 
-/** Who can sign in and how: Google, and accounts only for the developers and the check. */
-function signIn(state: State): Record<string, string> {
+/**
+ * Who can sign in and how: Google, and accounts only for the developers and the check. Each pull
+ * request's preview (staging-website.ts) counts as staging's own pages, and its Google sign-in
+ * comes back through the canonical callback with a secret derived from staging's own, which holds
+ * still across runs without another entry in the state.
+ */
+async function signIn(state: State): Promise<Record<string, string>> {
   const developers = (process.env.STAGING_DEVELOPERS ?? '').split(',').map((entry) => entry.trim())
   return {
     SIGNUP_ALLOWLIST: [`@${checkDomain(state)}`, ...developers].filter(Boolean).join(','),
     AUTH_GOOGLE_CLIENT_ID: process.env.AUTH_GOOGLE_CLIENT_ID ?? '',
     AUTH_GOOGLE_CLIENT_SECRET: process.env.AUTH_GOOGLE_CLIENT_SECRET ?? '',
+    WEB_TRUSTED_ORIGINS: await previewOrigins(await stagingCloudflare()),
+    AUTH_OAUTH_PROXY_SECRET: createHash('sha256')
+      .update(`oauth-proxy:${state.authSecret}`)
+      .digest('base64url'),
   }
 }
 
@@ -431,7 +443,7 @@ async function up(): Promise<void> {
     // pooler's limit with a deploy's migrations and the machines a rolling deploy overlaps.
     DATABASE_POOL_MAX: '5',
     WEB_CANONICAL_ORIGIN: WEB,
-    ...signIn(state),
+    ...(await signIn(state)),
     REALTIME_PUBLIC_URL: `${origin(APP.realtime)}/`,
     REALTIME_FALLBACK_URL: `wss://${APP.realtime}.fly.dev/transport-io`,
     REALTIME_TLS_MODE: 'pinned',
@@ -492,25 +504,12 @@ async function up(): Promise<void> {
 }
 
 /**
- * The web app as the Worker blockly-web-staging, built from this checkout with staging's values,
- * as production's is with its own: the /api rewrite to staging's control plane, noindex, and its
- * word about each browser's address, which the control plane believes only with the secret.
+ * The web app as the Worker blockly-web-staging, built from this checkout with staging's values
+ * (staging-website.ts), with the secret that makes the control plane believe its word about each
+ * browser's address.
  */
 async function deployWeb(proxySecret: string): Promise<void> {
-  const token = process.env.CLOUDFLARE_WORKERS_API_TOKEN
-  if (!token)
-    throw new Error(
-      `CLOUDFLARE_WORKERS_API_TOKEN (Workers and R2 on cubepals.com's account) is not in ${SECRETS_FILE}`,
-    )
-  const site = {
-    env: 'staging',
-    apiUpstream: origin(APP.control),
-    canonicalOrigin: WEB,
-    deploymentId: 'staging',
-    indexable: false,
-    proxySecret,
-    cloudflare: { token, accountId: await zoneAccount(dnsToken(), 'cubepals.com') },
-  } as const
+  const site = stagingSite(await stagingCloudflare(), proxySecret)
   const sha = Bun.spawnSync(['git', 'rev-parse', 'HEAD']).stdout.toString().trim()
   buildWorker(site, sha, say)
   deployWorker(site, sha, say)
