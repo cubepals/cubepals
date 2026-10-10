@@ -7,7 +7,8 @@
  * What is sent goes through an outbox: each event is written, under the id the provider keeps it
  * by, before it is sent, and sent again until the provider takes it. A lost reply or a crash sends
  * an event again under the same id, which the provider counts once, so nothing is dropped or billed
- * twice. Hours are counted in thousandths, rounded down, so any rounding is the player's.
+ * twice. Hours are counted in thousandths, rounded down, and sent in whole cents' worth, so any
+ * rounding is the player's.
  *
  * It is not where servers stop at the end of what was allowed: `AccountService.enforceLimits` is.
  */
@@ -31,6 +32,12 @@ const reports = schema.extraPlayReports
 
 /** An event goes once this much is waiting, in thousandths of an hour: a quarter of an hour. */
 const EVENT_MILLI = 250
+/**
+ * Every event is a whole number of cents' worth, in thousandths of an hour: 40 (0.04 h) at 25¢ an
+ * hour. Polar multiplies what it is sent by the price and rounds to a cent; a sum of whole cents
+ * never rounds, so its rounding never goes against the player.
+ */
+const CENT_MILLI = 1000 / gcd(1000, UNIT_CENTS)
 /** Or once anything has waited this long, so a run that ends is billed soon after. */
 const EVENT_WAIT_MS = 10 * 60_000
 /**
@@ -48,6 +55,10 @@ const BATCHES_PER_PASS = 4
 const MAX_REFUSALS = 10
 /** How long an event the provider refused waits: a minute, doubling, up to six hours. */
 const backoff = (attempts: number) => Math.min(60_000 * 2 ** (attempts - 1), 6 * 3_600_000)
+
+function gcd(a: number, b: number): number {
+  return b === 0 ? a : gcd(b, a % b)
+}
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 500)
 
@@ -186,8 +197,9 @@ export class ExtraUsage {
   }
 
   /**
-   * Events from what was counted and not yet sent: once a quarter of an hour waits, once anything
-   * has waited ten minutes, and whatever is left of a month that is over. Each is written with
+   * Events from what was counted and not yet sent, in whole cents' worth (`CENT_MILLI`): once a
+   * quarter of an hour waits, once anything has waited ten minutes, and what is left of a month
+   * that is over. Each is written with
    * the next id of its account's month, and what it carries counts as reported from then on.
    */
   async cut(now = new Date()): Promise<number> {
@@ -196,7 +208,7 @@ export class ExtraUsage {
       .from(months)
       .where(
         and(
-          gt(months.accruedMilli, months.reportedMilli),
+          sql`${months.accruedMilli} - ${months.reportedMilli} >= ${CENT_MILLI}`,
           or(
             sql`${months.accruedMilli} - ${months.reportedMilli} >= ${EVENT_MILLI}`,
             lte(months.pendingSince, new Date(now.getTime() - EVENT_WAIT_MS)),
@@ -211,7 +223,11 @@ export class ExtraUsage {
           .from(months)
           .where(and(eq(months.userId, row.userId), eq(months.month, row.month)))
           .for('update')
-        if (locked === undefined || locked.accruedMilli <= locked.reportedMilli) return
+        if (locked === undefined) return
+        // Whole cents' worth only: the rest waits for more play, and what is left when a month is
+        // over (under a cent) is never billed.
+        const milli = Math.floor((locked.accruedMilli - locked.reportedMilli) / CENT_MILLI) * CENT_MILLI
+        if (milli <= 0) return
         const [made] = await tx
           .select({ n: count() })
           .from(reports)
@@ -220,12 +236,17 @@ export class ExtraUsage {
           externalId: `extra:${row.userId}:${row.month.slice(0, 7)}:${(made?.n ?? 0) + 1}`,
           userId: row.userId,
           month: row.month,
-          milli: locked.accruedMilli - locked.reportedMilli,
+          milli,
           at: new Date(now.getTime() - EVENT_BEHIND_MS),
         })
+        const reported = locked.reportedMilli + milli
         await tx
           .update(months)
-          .set({ reportedMilli: locked.accruedMilli, pendingSince: null, updatedAt: now })
+          .set({
+            reportedMilli: reported,
+            pendingSince: reported < locked.accruedMilli ? now : null,
+            updatedAt: now,
+          })
           .where(and(eq(months.userId, row.userId), eq(months.month, row.month)))
       })
     return due.length

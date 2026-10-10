@@ -106,6 +106,9 @@ it plays now.
 
 **Reporting.** What was counted and not yet reported becomes an event in `extra_play_reports`
 once a quarter of an hour waits, once anything has waited ten minutes, or once its month is over.
+Each event carries whole cents' worth only, a multiple of 0.04 h at 25¢ an hour, so the sum Polar
+bills is whole cents and its rounding never goes against the player; the rest waits for more play,
+and what is left of a month when it is over, under a cent, is never billed.
 Each event is written before it is sent, with the id `extra:<account>:<YYYY-MM>:<n>`, which Polar
 keeps for good: sent again it counts as a duplicate, never twice. Unsent events go oldest first,
 25 to a request, at most four requests a pass; a batch Polar refuses is sent one at a time so one

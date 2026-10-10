@@ -372,8 +372,14 @@ test.skipIf(!hasDatabase)(
     await ran(server.id, 60.1, new Date(at.getTime() - 3_600_000))
     await h.app.billing.usage.count(owner.userId, at)
     expect(await h.app.billing.usage.cut(at)).toBe(0)
+    // Whole cents' worth: 0.08 h is 2¢; the 0.02 h left, half a cent, waits for more play.
     expect(await h.app.billing.usage.cut(new Date(at.getTime() + 10 * 60_000))).toBe(1)
-    expect((await reportsOf(owner)).map((r) => r.milli)).toEqual([100])
+    expect((await reportsOf(owner)).map((r) => r.milli)).toEqual([80])
+    expect(await extraThisMonth(h.db, owner.userId, at)).toEqual({ countedUnits: 0.1, reportedUnits: 0.08 })
+    // Its month over, still under a cent: never billed.
+    const next = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 2))
+    expect(await h.app.billing.usage.cut(next)).toBe(0)
+    expect((await reportsOf(owner)).map((r) => r.milli)).toEqual([80])
   },
   60_000,
 )
@@ -511,10 +517,10 @@ test.skipIf(!hasDatabase)(
     await ran(server.id, 60.05, new Date(next.getTime() - 60_000))
     const tenPast = new Date(next.getTime() + 10 * 60_000)
     expect(await h.app.billing.usage.count(owner.userId, tenPast)).toBe(true)
-    // Fifty units' worth of thousandths: under a quarter of an hour, but the month is over.
+    // Fifty thousandths: under a quarter of an hour, but the month is over; its whole cent goes.
     expect(await h.app.billing.usage.cut(tenPast)).toBe(1)
     const [report] = await reportsOf(owner)
-    expect(report).toMatchObject({ month: at.toISOString().slice(0, 7).concat('-01'), milli: 50 })
+    expect(report).toMatchObject({ month: at.toISOString().slice(0, 7).concat('-01'), milli: 40 })
     expect(report?.externalId).toBe(`extra:${owner.userId}:${at.toISOString().slice(0, 7)}:1`)
   },
   60_000,
@@ -569,7 +575,7 @@ test.skipIf(!hasDatabase)(
       .from(schema.auditLog)
       .where(eq(schema.auditLog.subjectId, owner.userId))
     expect(entries.filter((e) => e.action === 'billing.extra_billed').map((e) => e.data)).toEqual([
-      { order: id, billedCents: 88, reportedCents: 88, matches: true },
+      { order: id, billedCents: 88, reportedCents: 87, matches: true },
     ])
   },
   60_000,
