@@ -184,6 +184,9 @@ describe.skipIf(!hasDatabase)('server lifecycle', () => {
     await h.until(id, 'running')
     await power('stop', owner, id)
     await h.until(id, 'stopped')
+    // The stop records the server stopped before it records itself finished, and reconcile leaves
+    // a server with an operation in flight for its next pass.
+    await h.settled(id)
     const { handle } = await loadRuntime(h.db, id, ['fake'])
     if (handle === null) throw new Error('no handle')
     // Started at the provider, not through Blockly.
