@@ -20,6 +20,18 @@
  *                                     build, when nothing the Fly apps are built from changed since
  *                                     the last deploy and main's CI passed on it: no staging pass,
  *                                     no Fly deploy (production-web.ts says which paths are which)
+ *   bun scripts/production.ts hotfix  this commit, once CI passed on it, without a staging pass:
+ *                                     only the Fly apps it is built into, the website if it
+ *                                     reaches it, then a check that production answers. Never
+ *                                     Terraform. From main, or from a branch made from
+ *                                     `production` with only the fix on it
+ *   bun scripts/production.ts rollback [fly|website]
+ *                                     each Fly app back to the image it ran before, and the
+ *                                     website back to the commit it was built from before
+ *
+ * The `production` branch names what is live, so it is moved, not merged: a push here may move
+ * it past a hotfix branch's commit. Every website build is asked of Vercel's API
+ * (production-website.ts), since the builds a push starts end skipped on this project.
  *
  * Needs terraform, flyctl and gh. Nothing here prints a value, only names.
  */
@@ -41,7 +53,8 @@ import {
   VALUES_FILE,
   valuesFile,
 } from './production-values.ts'
-import { flyInputs } from './production-web.ts'
+import { appsFor, type FlyApp, flyInputs, reachesWebsite, terraformIn } from './production-web.ts'
+import { buildWebsite, liveCommits } from './production-website.ts'
 import { isNightly, nextVersion, repositoryTags } from './versions.ts'
 
 const say = (line: string) => process.stdout.write(`${line}\n`)
@@ -101,6 +114,74 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv, input?: st
 const git = (...args: string[]) => spawnSync('git', args, { encoding: 'utf8' }).stdout.trim()
 
 /**
+ * The environment flyctl and Terraform run in: production's. Inherited Fly credentials would win
+ * over production's, and a shell set up for staging has staging's.
+ */
+function productionEnv(values: Record<string, string>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...terraformEnv(values) }
+  delete env.FLY_ACCESS_TOKEN
+  return env
+}
+
+/** cubepals.com on Vercel, as production-website.ts reaches it. */
+function website(values: Record<string, string>) {
+  const settings = environment()
+  return {
+    token: values.VERCEL_API_TOKEN ?? '',
+    team: settings.vercel_team,
+    project: settings.web.project,
+    repository: settings.web.repository,
+  }
+}
+
+const DOCKERFILES: Record<FlyApp, string> = {
+  control: 'apps/control/Dockerfile',
+  realtime: 'apps/control/Dockerfile',
+  edge: 'apps/edge/Dockerfile',
+}
+
+/**
+ * One Fly app deployed from this checkout, or from an image a release of it already ran (a
+ * rollback). One machine a role, as FLY_PLATFORM_MACHINES counts them; a second machine each comes
+ * once a blip matters.
+ */
+function deployApp(app: FlyApp, env: NodeJS.ProcessEnv, image?: string): void {
+  const source = image ? ['--image', image] : ['.', '--dockerfile', DOCKERFILES[app], '--remote-only']
+  const config = ['--config', `infra/fly/${app}.toml`, '--app', `bly-prod-${app}`]
+  run('fly', ['deploy', ...source, ...config, '--yes', '--ha=false'], env)
+}
+
+/** This commit as the `production` branch, which names what is live, wherever it was before. */
+function moveProduction(env: NodeJS.ProcessEnv): void {
+  git('fetch', '--quiet', 'origin', 'production')
+  const live = git('rev-parse', 'origin/production')
+  run('git', ['push', `--force-with-lease=production:${live}`, 'origin', 'HEAD:production'], env)
+}
+
+/** Whether CI passed on a commit, on main or on the pull request that carries it. */
+function ciPassed(sha: string): boolean {
+  const ci = spawnSync(
+    'gh',
+    ['run', 'list', '--workflow', 'CI', '--commit', sha, '--json', 'conclusion', '-q', '.[0].conclusion'],
+    { encoding: 'utf8' },
+  )
+  return ci.stdout.trim() === 'success'
+}
+
+/** What differs between the live commit and this one, as paths. */
+function changedSinceLive(): string[] {
+  git('fetch', '--quiet', 'origin', 'production')
+  return git('diff', '--name-only', 'origin/production', 'HEAD').split('\n').filter(Boolean)
+}
+
+function requireClean(): void {
+  if (git('status', '--porcelain') !== '') {
+    say('This checkout has changes that aren’t committed. Production deploys a commit: commit or stash them.')
+    process.exit(1)
+  }
+}
+
+/**
  * The Database dump workflow's secrets, in the repository's `production` environment. Only `main`'s
  * workflows reach them, and `production`'s, which Vercel's deployments name; a branch's never do.
  */
@@ -127,7 +208,7 @@ function stagingPass(): string | undefined {
   return git('tag', '--points-at', 'HEAD').split('\n').find(isNightly)
 }
 
-function apply(): void {
+async function apply(): Promise<void> {
   const values = read()
   if (!check(values)) process.exit(1)
   if (git('status', '--porcelain') !== '') {
@@ -142,9 +223,7 @@ function apply(): void {
   }
   const { missing, bucketFirst } = problemsOf(values)
 
-  // Inherited Fly credentials would win over production's, and a shell set up for staging has staging's.
-  const env: NodeJS.ProcessEnv = { ...process.env, ...terraformEnv(values) }
-  delete env.FLY_ACCESS_TOKEN
+  const env = productionEnv(values)
   const backend = resolve(dirname(VALUES_FILE), 'backend.hcl')
   writeFileSync(backend, backendConfig(values.CLOUDFLARE_ACCOUNT_ID ?? ''))
   const terraform = (...args: string[]) => run('terraform', [`-chdir=${ENVIRONMENT_DIR}`, ...args], env)
@@ -168,30 +247,10 @@ function apply(): void {
 
   terraform('apply', '-input=false')
   setDumpSecrets(values, env)
-  const deploy = (app: string, dockerfile: string, ...extra: string[]) =>
-    run(
-      'fly',
-      [
-        'deploy',
-        '.',
-        '--config',
-        `infra/fly/${app}.toml`,
-        '--dockerfile',
-        dockerfile,
-        '--app',
-        `bly-prod-${app}`,
-        '--remote-only',
-        '--yes',
-        ...extra,
-      ],
-      env,
-    )
-  // The control app first: its release runs the migrations. One machine a role, as
-  // FLY_PLATFORM_MACHINES counts them. A second machine each comes once a blip matters.
-  deploy('control', 'apps/control/Dockerfile', '--ha=false')
-  deploy('realtime', 'apps/control/Dockerfile', '--ha=false')
-  deploy('edge', 'apps/edge/Dockerfile', '--ha=false')
-  run('git', ['push', 'origin', 'HEAD:production'], env)
+  // The control app first: its release runs the migrations.
+  for (const app of ['control', 'realtime', 'edge'] as const) deployApp(app, env)
+  moveProduction(env)
+  await buildWebsite(website(values), git('rev-parse', 'HEAD'), say)
   const version = `v${nextVersion(repositoryTags())}`
   const notes = passed ? `Ran on staging as ${passed}.` : 'Deployed without a staging run.'
   run(
@@ -210,66 +269,156 @@ function apply(): void {
     env,
   )
   say('')
-  say(`Production is ${version}, and Vercel is building cubepals.com from the production branch.`)
+  say(`Production is ${version}.`)
   say('Check it as docs/production.md § Check it says.')
 }
 
 /** The website alone to production: main's commit, when only the website changed since the last deploy. */
-function web(): void {
-  if (git('status', '--porcelain') !== '') {
-    say('This checkout has changes that aren’t committed. Production deploys a commit: commit or stash them.')
-    process.exit(1)
-  }
-  git('fetch', '--quiet', 'origin', 'main', 'production')
+async function web(): Promise<void> {
+  const values = read()
+  requireClean()
+  git('fetch', '--quiet', 'origin', 'main')
   const head = git('rev-parse', 'HEAD')
   if (head !== git('rev-parse', 'origin/main')) {
     say('Only main’s latest commit goes to production. Check out main and pull it.')
     process.exit(1)
   }
-  if (spawnSync('git', ['merge-base', '--is-ancestor', 'origin/production', 'HEAD']).status !== 0) {
-    say('The production branch isn’t behind this commit. Run apply, which deploys everything.')
-    process.exit(1)
-  }
-  const fly = flyInputs(git('diff', '--name-only', 'origin/production', 'HEAD').split('\n').filter(Boolean))
+  const fly = flyInputs(changedSinceLive())
   if (fly.length > 0) {
     say(
       `Since the last deploy, what the Fly apps are built from changed too (${fly.slice(0, 5).join(', ')}).`,
     )
-    say('Run apply, after a nightly has passed on this commit.')
+    say('Run apply after a nightly has passed on this commit, or hotfix if it can’t wait.')
     process.exit(1)
   }
-  const ci = spawnSync(
-    'gh',
-    [
-      'run',
-      'list',
-      '--branch',
-      'main',
-      '--workflow',
-      'CI',
-      '--commit',
-      head,
-      '--json',
-      'conclusion',
-      '-q',
-      '.[0].conclusion',
-    ],
-    { encoding: 'utf8' },
-  ).stdout.trim()
-  if (ci !== 'success') {
-    say(`CI on this commit is ${ci || 'not run'}; the website goes once it has passed.`)
+  if (!ciPassed(head)) {
+    say('CI hasn’t passed on this commit yet; the website goes once it has.')
     process.exit(1)
   }
-  run('git', ['push', 'origin', 'HEAD:production'], process.env)
-  say('Vercel is building cubepals.com from the production branch.')
+  moveProduction(process.env)
+  await buildWebsite(website(values), head, say)
+}
+
+/**
+ * Whether production answers: the API through the website, realtime's own TLS, and every machine
+ * of the apps just deployed started with its checks passing. Tried for two minutes.
+ */
+async function answers(apps: readonly FlyApp[], env: NodeJS.ProcessEnv): Promise<boolean> {
+  const reached = (url: string) =>
+    fetch(url, { signal: AbortSignal.timeout(10_000) }).then(
+      (response) => response.status < 500,
+      () => false,
+    )
+  const healthy = (app: FlyApp) => {
+    const listed = spawnSync('fly', ['machines', 'list', '-a', `bly-prod-${app}`, '--json'], {
+      encoding: 'utf8',
+      env,
+    })
+    const machines = JSON.parse(listed.stdout || '[]') as { state: string; checks?: { status: string }[] }[]
+    return machines.every(
+      (m) => m.state === 'started' && (m.checks ?? []).every((c) => c.status === 'passing'),
+    )
+  }
+  for (let tries = 0; tries < 8; tries++) {
+    const up =
+      (await reached('https://cubepals.com/api/health')) && (await reached('https://rt.cubepals.com/'))
+    if (up && apps.every(healthy)) return true
+    await Bun.sleep(15_000)
+  }
+  return false
+}
+
+/**
+ * A fix to production now, without a staging pass: this commit, once CI passed on it, into only
+ * the Fly apps it is built into and the website if it reaches it. From main, or, when main holds
+ * other work that hasn't been on staging, from a branch made from `production` with the fix
+ * cherry-picked onto it. Never Terraform, which goes through apply.
+ */
+async function hotfix(): Promise<void> {
+  const values = read()
+  if (!check(values)) process.exit(1)
+  requireClean()
+  const head = git('rev-parse', 'HEAD')
+  const paths = changedSinceLive()
+  const terraform = terraformIn(paths)
+  if (terraform.length > 0) {
+    say(`This changes Terraform (${terraform.slice(0, 3).join(', ')}), which only apply puts in place.`)
+    process.exit(1)
+  }
+  if (!ciPassed(head)) {
+    say('CI hasn’t passed on this commit. Open a pull request for it and wait for CI, then run hotfix again.')
+    process.exit(1)
+  }
+  const apps = appsFor(paths)
+  const site = reachesWebsite(paths)
+  if (apps.length === 0 && !site) {
+    say('Nothing that runs in production changed since the last deploy.')
+    return
+  }
+  const env = productionEnv(values)
+  for (const app of apps) deployApp(app, env)
+  moveProduction(env)
+  if (site) await buildWebsite(website(values), head, say)
+  const shipped = [...apps, ...(site ? ['website'] : [])].join(', ')
+  if (!(await answers(apps, env))) {
+    say(
+      `The hotfix (${shipped}) is out, but production isn’t answering as it should. Look now; roll back with: bun scripts/production.ts rollback`,
+    )
+    process.exit(1)
+  }
+  say(
+    `Hotfix ${head.slice(0, 8)} is live (${shipped}), with no staging run: the next nightly covers it on main.`,
+  )
+}
+
+/** The image an app ran before the one it runs now, from its release history; null when there is none. */
+function previousImage(app: FlyApp, env: NodeJS.ProcessEnv): string | null {
+  const listed = spawnSync('fly', ['releases', '-a', `bly-prod-${app}`, '--image', '--json'], {
+    encoding: 'utf8',
+    env,
+  })
+  const releases = JSON.parse(listed.stdout || '[]') as { Status: string; ImageRef: string }[]
+  const images = releases
+    .filter((release) => release.Status === 'complete')
+    .map((release) => release.ImageRef)
+  return images.find((image) => image !== images[0]) ?? null
+}
+
+/**
+ * Production back to what ran before, when a deploy went wrong: each Fly app to its previous image,
+ * and the website to the commit it was built from before. `fly` or `website` alone, or both. It
+ * doesn't undo a migration (a later release's columns stay; the older code ignores them) or a
+ * secret, and the `production` branch still names the newer commit: fix forward, then deploy again.
+ */
+async function rollback(part: string | undefined): Promise<void> {
+  const values = read()
+  const env = productionEnv(values)
+  const apps: FlyApp[] = part === 'website' ? [] : ['control', 'realtime', 'edge']
+  for (const app of apps) {
+    const image = previousImage(app, env)
+    if (image === null) say(`${app}: there is no earlier image to go back to.`)
+    else deployApp(app, env, image)
+  }
+  if (part !== 'fly') {
+    const [, previous] = await liveCommits(website(values))
+    if (previous === undefined) say('The website has no earlier build to go back to.')
+    else await buildWebsite(website(values), previous, say)
+  }
+  say(
+    (await answers(apps, env))
+      ? 'Rolled back, and production answers.'
+      : 'Rolled back, but production isn’t answering yet. Look now.',
+  )
 }
 
 const command = process.argv[2]
 if (command === 'init') init()
 else if (command === 'check') process.exit(check(read()) ? 0 : 1)
-else if (command === 'apply') apply()
-else if (command === 'web') web()
+else if (command === 'apply') await apply()
+else if (command === 'web') await web()
+else if (command === 'hotfix') await hotfix()
+else if (command === 'rollback') await rollback(process.argv[3])
 else {
-  say('Usage: bun scripts/production.ts init | check | apply | web')
+  say('Usage: bun scripts/production.ts init | check | apply | web | hotfix | rollback [fly|website]')
   process.exit(1)
 }

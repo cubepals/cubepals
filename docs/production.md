@@ -108,6 +108,36 @@ as the `production` branch for Vercel to build. It refuses when anything the Fly
 changed since the last deploy (`apps/control`, `apps/edge`, `packages`, `infra/fly`, the lockfile):
 that goes through `apply`, after a nightly.
 
+Every website build is asked of Vercel's API after the push: on this project the builds a push
+to `production` starts end skipped, while one asked for through the API builds.
+
+### A fix that can't wait for the nightly
+
+```sh
+bun scripts/production.ts hotfix
+```
+
+It deploys the checked-out commit once CI has passed on it, with no staging pass: only the Fly apps
+the change is built into (control and realtime for `apps/control`, edge for `apps/edge`, all three
+for `packages` or the lockfile), the website if the change reaches it, then it checks that
+production answers. It never applies Terraform. When main holds other backend work that hasn't
+been on staging, make a branch from `production`, cherry-pick the fix onto it, open a pull request
+so CI runs, and run `hotfix` from that branch. The fix still lands on main the usual way, and the
+next nightly covers it there.
+
+### Going back
+
+```sh
+bun scripts/production.ts rollback          # the Fly apps and the website
+bun scripts/production.ts rollback fly      # the Fly apps alone
+bun scripts/production.ts rollback website  # the website alone
+```
+
+Each Fly app goes back to the image its previous release ran, and the website is built again from
+the commit it was built from before (Vercel's own instant rollback would stop later builds from
+going live until undone). A rollback doesn't undo a migration or a secret, and the `production`
+branch still names the newer commit: fix forward, then deploy again.
+
 ## 4. Check it
 
 1. `dig +short rt.cubepals.com` gives one IPv4 address and `dig +short AAAA rt.cubepals.com`
