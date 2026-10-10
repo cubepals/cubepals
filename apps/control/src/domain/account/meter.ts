@@ -25,7 +25,7 @@ export const unitsFor = (tier: MemoryTier, hours: number): number => hours * MET
 /** Whether an hour on this size uses more than one of the included hours. */
 export const isLarge = (tier: MemoryTier): boolean => METER_UNITS[tier] > 1
 
-/** What one unit past the included block costs, in cents: the same as the plan's own hours. */
+/** What one unit past the included block costs, in cents: more than the plan's own hours. */
 export const UNIT_CENTS = 25
 
 /** Play past the included block, as money, for everywhere an owner is shown what it would cost. */

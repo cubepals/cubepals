@@ -76,7 +76,7 @@ the delay is the time until the mobs got to them. The hours still bound it.
 
 ### Extra play
 
-Plus players can play past their 60 hours, at 25¢ an hour (a large server two), billed after it
+Plus players can play past their 100 hours, at 25¢ an hour (a large server two), billed after it
 is played, on their next Plus payment. Money lost here is play Polar never collects, so every
 guard is about who may run up hours they then don't pay for. Blockly is the only judge of hours:
 it counts them, holds them to the owner's limit and stops servers; Polar only bills what Blockly

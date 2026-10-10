@@ -5,6 +5,7 @@ import {
   FloatingPortal,
   flip,
   offset,
+  safePolygon,
   shift,
   useClick,
   useDismiss,
@@ -34,7 +35,8 @@ export function Tip({ tip, children }: { tip: ReactNode; children: ReactNode }) 
   })
   const { getReferenceProps, getFloatingProps } = useInteractions([
     // A moment before it shows, so passing over the line doesn't flash it.
-    useHover(context, { delay: { open: 180, close: 80 }, move: false }),
+    // The pointer can cross to the tip and stay on it, for a link inside.
+    useHover(context, { delay: { open: 180, close: 80 }, move: false, handleClose: safePolygon() }),
     useFocus(context),
     useClick(context, { ignoreMouse: true }),
     useDismiss(context),

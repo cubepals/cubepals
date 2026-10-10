@@ -362,20 +362,20 @@ describe('money guards at their trip points', () => {
     })
   })
 
-  test('Free’s 20 hours and Plus’s 60: the last hour starts, none past it', () => {
+  test('Free’s 20 hours and Plus’s 100: the last hour starts, none past it', () => {
     const free = entitlementsFor('free')
     expect(evaluate(facts({ entitlements: free, unitsThisMonth: 19.99 }), start)).toEqual({ ok: true })
     expect(evaluate(facts({ entitlements: free, unitsThisMonth: 20 }), start)).toMatchObject({
       code: 'limit_reached',
     })
     const plus = entitlementsFor('plus')
-    expect(evaluate(facts({ entitlements: plus, unitsThisMonth: 59.9 }), start)).toEqual({ ok: true })
-    expect(evaluate(facts({ entitlements: plus, unitsThisMonth: 60 }), start)).toMatchObject({
+    expect(evaluate(facts({ entitlements: plus, unitsThisMonth: 99.9 }), start)).toEqual({ ok: true })
+    expect(evaluate(facts({ entitlements: plus, unitsThisMonth: 100 }), start)).toMatchObject({
       code: 'limit_reached',
     })
     // Waking from a join is a start too, and a restart is held to the hours as well.
     expect(
-      evaluate(facts({ entitlements: plus, unitsThisMonth: 60 }), {
+      evaluate(facts({ entitlements: plus, unitsThisMonth: 100 }), {
         kind: 'restart_server',
         runs: plain('3g'),
       }),
@@ -423,16 +423,16 @@ describe('extra play and money owed', () => {
   test('past the hours, a start says what would help: extra play allowed, off, or used up', () => {
     const plus = entitlementsFor('plus')
     const at = (patch: Partial<PolicyFacts>) =>
-      evaluate(facts({ entitlements: plus, unitsThisMonth: 60, ...patch }), start)
+      evaluate(facts({ entitlements: plus, unitsThisMonth: 100, ...patch }), start)
     expect(at({ extraUnitsAllowed: 20 })).toEqual({ ok: true })
-    expect(at({ unitsThisMonth: 80, extraUnitsAllowed: 20 })).toEqual({
+    expect(at({ unitsThisMonth: 120, extraUnitsAllowed: 20 })).toEqual({
       ok: false,
       code: 'limit_reached',
       message:
         'You have used the extra play you allowed this month. Raise it in your account, or wait for the 1st.',
     })
     // At the ceiling there is nothing to raise.
-    expect(at({ unitsThisMonth: 80, extraUnitsAllowed: 20, extraMayRise: false })).toMatchObject({
+    expect(at({ unitsThisMonth: 120, extraUnitsAllowed: 20, extraMayRise: false })).toMatchObject({
       message: 'You have used the most extra play you can allow this month. It resets on the 1st.',
     })
     expect(at({})).toMatchObject({

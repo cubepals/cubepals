@@ -57,7 +57,7 @@ describe('public plans', () => {
         key: 'plus',
         name: 'Plus',
         monthlyPriceCents: 1500,
-        includedHours: 60,
+        includedHours: 100,
         sleepsAfterMinutes: 15,
         maxServers: 3,
         maxPlayers: 40,

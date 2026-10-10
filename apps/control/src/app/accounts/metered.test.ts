@@ -110,12 +110,12 @@ describe.skipIf(!hasDatabase)('metered play', () => {
     await h.settled(server.id)
     const sentTo = () => h.mail.sent.filter((m) => m.subject.includes('play')).length
 
-    // Nothing to say at a sixth of the way through Plus's 60 hours.
-    await ran(server.id, '3g', 10, 1)
+    // Nothing to say at 15 of Plus's 100 hours.
+    await ran(server.id, '3g', 15, 1)
     expect(await h.app.accounts.warnAboutPlay(owner.userId, at)).toBeNull()
 
     // Half: said once, and not again on the next sweep.
-    await ran(server.id, '3g', 20, 1)
+    await ran(server.id, '3g', 35, 1)
     expect(await h.app.accounts.warnAboutPlay(owner.userId, at)).toBe(50)
     const after = sentTo()
     expect(after).toBeGreaterThan(0)
@@ -123,9 +123,9 @@ describe.skipIf(!hasDatabase)('metered play', () => {
     expect(sentTo()).toBe(after)
 
     // Four fifths, then all of it: each said once, in its own words.
-    await ran(server.id, '3g', 18, 1)
+    await ran(server.id, '3g', 30, 1)
     expect(await h.app.accounts.warnAboutPlay(owner.userId, at)).toBe(80)
-    await ran(server.id, '3g', 12, 1)
+    await ran(server.id, '3g', 20, 1)
     expect(await h.app.accounts.warnAboutPlay(owner.userId, at)).toBe(100)
     const last = h.mail.sent.at(-1)
     expect(last?.subject).toContain('asleep until the 1st')
@@ -142,8 +142,8 @@ describe.skipIf(!hasDatabase)('metered play', () => {
     await h.until(server.id, 'stopped')
     await h.settled(server.id)
 
-    // Plus includes 60 hours; 60 spent.
-    await ran(server.id, '3g', 60, 1)
+    // Plus includes 100 hours; 100 spent.
+    await ran(server.id, '3g', 100, 1)
     const refused = await start(owner, server.id)
     // A plan an admin gave has no payment to add extra hours to, so the refusal says why.
     expect(refused).toBe(

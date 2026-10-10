@@ -164,9 +164,9 @@ const PLANS: Record<string, Entitlements> = {
     // 6 GB ran on the same four-core 8 GB machine as 8 GB and cost the same, so it isn't sold.
     allowedMemoryTiers: ['3g', '4g', '8g'],
     legacyMemoryTiers: ['2g', '6g'],
-    // 60 included hours; a large server uses two an hour (meter.ts). Past `storage.paidForGb` of
+    // 100 included hours; a large server uses two an hour (meter.ts). Past `storage.paidForGb` of
     // worlds an account is an admin alert.
-    includedUnits: 60,
+    includedUnits: 100,
     // Extra hours, 25¢ each (meter.ts), up to a limit the owner sets under `EXTRA_CEILING`, billed
     // on the next Plus payment. Who may allow them is `extra-play.ts`'s to say.
     mayBuyMore: true,

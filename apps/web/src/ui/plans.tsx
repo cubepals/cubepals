@@ -40,13 +40,31 @@ export const PLAY_HABITS = [
 ] as const
 const COVERS = ['', 'the first', 'the first two', 'all three']
 
-/** What a month's hours of play are, on the dashed line wherever a plan states them. */
-export function PlayHours({ hours, children }: { hours: number; children: ReactNode }) {
+/**
+ * What a month's hours of play are, on the dashed line wherever a plan states them. A paid plan's
+ * opens with why its price is what it is, and ends with where the code is.
+ */
+export function PlayHours({
+  hours,
+  priceCents,
+  children,
+}: {
+  hours: number
+  priceCents: number
+  children: ReactNode
+}) {
   const covered = PLAY_HABITS.filter((habit) => habit.hours <= hours).length
   return (
     <Tip
       tip={
         <>
+          {priceCents > 0 && (
+            <p>
+              {dollars(priceCents)} for {hours} hours isn’t cheap, and we know it. Cubepals is one person, and
+              plans are what pay for the servers. Hours get cheaper to run as more people play, and the price
+              will follow.
+            </p>
+          )}
           <p>Hours count while your server is on, and everyone on it shares them.</p>
           <ul className="bk-tip__list">
             {PLAY_HABITS.map((habit) => (
@@ -60,6 +78,11 @@ export function PlayHours({ hours, children }: { hours: number; children: ReactN
               ? `${hours} covers ${COVERS[covered]}.`
               : `${hours} is about ${Math.round(hours / 2.5)} evenings of play.`}
           </p>
+          {priceCents > 0 && (
+            <p>
+              Cubepals is open source: <a href="https://github.com/cubepals/cubepals">read the code</a>.
+            </p>
+          )}
         </>
       }
     >
@@ -100,7 +123,13 @@ export function PlanCard({
         {planPoints(plan).map((point) => (
           <li key={point} className="type-body-sm">
             <Check size={16} strokeWidth={2.25} aria-hidden />
-            {point === hoursPoint(plan) ? <PlayHours hours={plan.includedHours}>{point}</PlayHours> : point}
+            {point === hoursPoint(plan) ? (
+              <PlayHours hours={plan.includedHours} priceCents={plan.monthlyPriceCents}>
+                {point}
+              </PlayHours>
+            ) : (
+              point
+            )}
           </li>
         ))}
       </ul>

@@ -21,7 +21,7 @@ const plus: PublicPlan = {
   key: 'plus',
   name: 'Plus',
   monthlyPriceCents: 1500,
-  includedHours: 60,
+  includedHours: 100,
   sleepsAfterMinutes: 15,
   maxServers: 3,
   maxPlayers: 40,
@@ -49,7 +49,7 @@ describe('plans as people read them', () => {
     expect(priceOf(450)).toBe('$4.50 a month')
     expect(planPoints(plus)).toEqual([
       'Up to 3 servers and 40 players',
-      '60 hours of play each month',
+      '100 hours of play each month',
       'Modpacks, mods and plugins',
       'Weekly backups to download',
     ])
