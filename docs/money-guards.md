@@ -92,12 +92,17 @@ sends it, and never stops anything itself.
 | Polar's own backstop: the metered price's `cap_amount`, $50 a period (twice the top ceiling, since a calendar month's extra can straddle two billing periods) | Polar | Only a bug in all of the above | — |
 
 **Counting.** Every minute (`extra-play-report`), for each account that played in the last
-quarter of an hour and may play extra now, Blockly takes the month's units past the included
-block, held to what it may use, in thousandths of an hour rounded down, and raises the month's
-row in `extra_play_months` to it. The row only grows, and nothing is counted while extra play is
-off, so lowering a limit never un-bills hours already played, and a cancel stops the count. The
-month is the UTC calendar month ("resets on the 1st"); in a month's first hour the month before
-is counted to its last moment too.
+quarter of an hour, or has a month before this one that isn't final yet, Blockly takes each such
+month's units past the included block, held to what it may use, in thousandths of an hour rounded
+down, and raises the month's row in `extra_play_months` to it. The row only grows, so lowering a
+limit never un-bills hours already played. While extra play is on, the count runs to now; once a
+cancel, a failed renewal or an ending stops it, the count runs to that moment
+(`billing_subscriptions.canceled_at`, Polar's own `canceled_at` where it says, or `past_due_at`)
+and no further, so what was played before it is billed even when no count ran in between. The
+month is the UTC calendar month ("resets on the 1st"). A month is counted until it is final
+(`final_at`): over for an hour, past `usage-close`, with nothing of the account's that ran in it
+still running. An account that may play extra and ran last month is counted then whether or not
+it plays now.
 
 **Reporting.** What was counted and not yet reported becomes an event in `extra_play_reports`
 once a quarter of an hour waits, once anything has waited ten minutes, or once its month is over.

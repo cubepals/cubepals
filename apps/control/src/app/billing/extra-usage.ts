@@ -13,8 +13,10 @@
  */
 import { type Db, schema } from '@blockly/db'
 import { and, asc, count, desc, eq, gt, gte, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { type Entitlements, entitlementsFor } from '../../domain/account/entitlements.ts'
+import { extraBeforeStop, extraPlay } from '../../domain/account/extra-play.ts'
 import { UNIT_CENTS } from '../../domain/account/meter.ts'
+import type { AccountStanding } from '../../domain/account/standing.ts'
 import { loadStanding, runUnitsSince } from '../accounts/persistence.ts'
 import {
   type BillingOrder,
@@ -22,7 +24,7 @@ import {
   BillingUnavailable,
   type UsageEvent,
 } from '../ports/optional.ts'
-import { extraPlayNow } from './persistence.ts'
+import { billingFacts, extraStoppedAt } from './persistence.ts'
 
 const months = schema.extraPlayMonths
 const reports = schema.extraPlayReports
@@ -51,7 +53,14 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 
 type ReportRow = typeof reports.$inferSelect
 
+/**
+ * How long a month must have been over before its count is final: past `usage-close`, which closes
+ * an interval left open within ten minutes.
+ */
+const FINAL_AFTER_MS = 60 * 60_000
+
 const monthOf = (at: Date) => new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1))
+const nextMonth = (month: Date) => new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1))
 const day = (at: Date) => at.toISOString().slice(0, 10)
 
 export class ExtraUsage {
@@ -65,51 +74,115 @@ export class ExtraUsage {
 
   /** `extra-play-report`: count, cut events from what was counted, and send what waits. */
   async report(now = new Date()): Promise<void> {
-    for (const userId of await this.#playing(now)) await this.count(userId, now)
+    const accounts = new Set([...(await this.#playing(now)), ...(await this.#unfinished(now))])
+    for (const userId of accounts) await this.count(userId, now)
     await this.cut(now)
     const { sent, failed } = await this.send(now)
     if (failed > 0) console.warn(`extra-play: ${failed} events not taken yet, ${sent} sent`)
   }
 
   /**
-   * The account's extra play this month, counted up to now, where it may play extra now: what it
-   * played past its included hours, held to what it may use. It only grows, so a limit lowered
-   * after hours were played never takes them back, and hours played while it couldn't use extra
-   * (servers sleep then) are never counted. In a month's first hour, the month before is counted
-   * too, to its last moment. True when something new was counted.
+   * The account's extra play this month, and in any month before it that isn't final yet: what it
+   * played past its included hours, held to what it could use, up to now or to the moment extra
+   * play stopped (`#allowance`). It only grows, so a limit lowered after hours were played never
+   * takes them back, and hours played while it couldn't use extra (servers sleep then) are never
+   * counted. A month before this one is final (`finalAt`) once it has been over `FINAL_AFTER_MS`
+   * and nothing that ran in it still runs; it is counted for the last time then. True when
+   * something new was counted.
    */
   async count(userId: string, now = new Date()): Promise<boolean> {
     const standing = await loadStanding(this.#db, userId, now)
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
     if (plan.includedUnits === null) return false
-    const { decision } = await extraPlayNow(this.#db, standing)
-    if (!decision.may) return false
-    const start = monthOf(now)
-    const spans: Array<{ from: Date; to: Date }> = [{ from: start, to: now }]
-    if (now.getTime() - start.getTime() < 3_600_000)
-      spans.push({ from: monthOf(new Date(start.getTime() - 1)), to: start })
+    const allowance = await this.#allowance(standing, plan, now)
     let grew = false
-    for (const span of spans) {
-      const units = await runUnitsSince(this.#db, userId, span.from, span.to)
-      // Rounded down, but not by a binary fraction's last digit: 60.05 hours is 50 thousandths past 60.
-      const milli = Math.floor(Math.min(units - plan.includedUnits, decision.units) * 1000 + 1e-6)
-      if (milli <= 0) continue
-      const rows = await this.#db
-        .insert(months)
-        .values({ userId, month: day(span.from), accruedMilli: milli, pendingSince: now })
-        .onConflictDoUpdate({
-          target: [months.userId, months.month],
-          set: {
-            accruedMilli: milli,
-            pendingSince: sql`coalesce(${months.pendingSince}, ${now})`,
-            updatedAt: now,
-          },
-          setWhere: sql`${months.accruedMilli} < ${milli}`,
-        })
-        .returning({ userId: months.userId })
-      grew ||= rows.length > 0
+    for (const month of await this.#months(userId, now, allowance !== null)) {
+      const end = new Date(Math.min(nextMonth(month).getTime(), now.getTime()))
+      const to = allowance === null ? month : new Date(Math.min(end.getTime(), allowance.until.getTime()))
+      if (allowance !== null && to > month) {
+        const units = await runUnitsSince(this.#db, userId, month, to)
+        // Rounded down, but not by a binary fraction's last digit: 60.05 hours is 50 thousandths past 60.
+        const milli = Math.floor(Math.min(units - plan.includedUnits, allowance.units) * 1000 + 1e-6)
+        if (milli > 0) grew = (await this.#raise(userId, month, milli, now)) || grew
+      }
+      if (month < monthOf(now)) await this.#finalize(userId, month, now)
     }
     return grew
+  }
+
+  /**
+   * What the account may count, and up to when: while it may play extra, what it allowed, up to
+   * now; once it stopped (a cancel, a failed renewal, an ending), what it could use before, up to
+   * that moment (`extraStoppedAt`). Null when it never could.
+   */
+  async #allowance(
+    standing: AccountStanding,
+    plan: Entitlements,
+    now: Date,
+  ): Promise<{ units: number; until: Date } | null> {
+    const facts = await billingFacts(this.#db, standing.userId)
+    const decision = extraPlay(plan, standing.extraUnitsAllowed, facts)
+    if (decision.may) return { units: decision.units, until: now }
+    const stopped = await extraStoppedAt(this.#db, standing.userId)
+    const before = extraBeforeStop(plan, standing.extraUnitsAllowed, facts)
+    return stopped !== null && before.may ? { units: before.units, until: stopped } : null
+  }
+
+  /** The months to count: this one, and those before it not final yet, the last one included. */
+  async #months(userId: string, now: Date, mayCount: boolean): Promise<Date[]> {
+    const current = monthOf(now)
+    const previous = monthOf(new Date(current.getTime() - 1))
+    const rows = await this.#db
+      .select({ month: months.month, finalAt: months.finalAt })
+      .from(months)
+      .where(and(eq(months.userId, userId), lt(months.month, day(current))))
+    const open = rows.filter((row) => row.finalAt === null).map((row) => new Date(`${row.month}T00:00:00Z`))
+    if (mayCount && !rows.some((row) => row.month === day(previous))) open.push(previous)
+    return [current, ...open]
+  }
+
+  /** Raises the month's count to `milli`, never lowers it. True when it grew. */
+  async #raise(userId: string, month: Date, milli: number, now: Date): Promise<boolean> {
+    const rows = await this.#db
+      .insert(months)
+      .values({ userId, month: day(month), accruedMilli: milli, pendingSince: now })
+      .onConflictDoUpdate({
+        target: [months.userId, months.month],
+        set: {
+          accruedMilli: milli,
+          pendingSince: sql`coalesce(${months.pendingSince}, ${now})`,
+          updatedAt: now,
+        },
+        setWhere: sql`${months.accruedMilli} < ${milli}`,
+      })
+      .returning({ userId: months.userId })
+    return rows.length > 0
+  }
+
+  /**
+   * A month before this one is final once it has been over `FINAL_AFTER_MS` (an interval closes
+   * late, `usage-close`) and no server of the account that ran in it still runs.
+   */
+  async #finalize(userId: string, month: Date, now: Date): Promise<void> {
+    const end = nextMonth(month)
+    if (now.getTime() < end.getTime() + FINAL_AFTER_MS) return
+    const intervals = schema.powerIntervals
+    const [running] = await this.#db
+      .select({ n: count() })
+      .from(intervals)
+      .innerJoin(schema.minecraftServers, eq(schema.minecraftServers.id, intervals.serverId))
+      .where(
+        and(
+          eq(schema.minecraftServers.ownerId, userId),
+          isNull(intervals.stoppedAt),
+          lt(intervals.startedAt, end),
+        ),
+      )
+    if ((running?.n ?? 0) > 0) return
+    await this.#db
+      .insert(months)
+      .values({ userId, month: day(month), finalAt: now })
+      .onConflictDoUpdate({ target: [months.userId, months.month], set: { finalAt: now, updatedAt: now } })
   }
 
   /**
@@ -272,6 +345,35 @@ export class ExtraUsage {
         error: messageOf(error),
       },
     })
+  }
+
+  /**
+   * Accounts with a month before this one that isn't final, and those that may play extra whose
+   * servers ran last month, its count not made final yet: each is counted until it is, whether or
+   * not it plays now.
+   */
+  async #unfinished(now: Date): Promise<string[]> {
+    const current = monthOf(now)
+    const previous = monthOf(new Date(current.getTime() - 1))
+    const open = await this.#db
+      .selectDistinct({ userId: months.userId })
+      .from(months)
+      .where(and(lt(months.month, day(current)), isNull(months.finalAt)))
+    const intervals = schema.powerIntervals
+    const ranLastMonth = await this.#db
+      .selectDistinct({ userId: schema.minecraftServers.ownerId })
+      .from(intervals)
+      .innerJoin(schema.minecraftServers, eq(schema.minecraftServers.id, intervals.serverId))
+      .innerJoin(schema.accountStanding, eq(schema.accountStanding.userId, schema.minecraftServers.ownerId))
+      .where(
+        and(
+          gt(schema.accountStanding.extraUnitsAllowed, 0),
+          lt(intervals.startedAt, current),
+          or(isNull(intervals.stoppedAt), gt(intervals.stoppedAt, previous)),
+          sql`not exists (select 1 from ${months} where ${months.userId} = ${schema.minecraftServers.ownerId} and ${months.month} = ${day(previous)})`,
+        ),
+      )
+    return [...open, ...ranLastMonth].map((row) => row.userId)
   }
 
   /** Accounts with a server that ran in the last quarter of an hour, or runs now. */

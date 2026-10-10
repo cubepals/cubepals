@@ -66,3 +66,15 @@ export function extraPlay(plan: Entitlements, allowed: number, billing: BillingF
 
 /** The extra play the account may use now, in units: zero whenever it may not. */
 export const extraUnits = (decision: ExtraPlay): number => (decision.may ? decision.units : 0)
+
+/**
+ * The extra play the account could use before it stopped (a cancel, a failed renewal, an ending,
+ * or what it owes since): the decision as it stood while its subscription still renewed and paid.
+ * What was played up to that moment is counted and billed; nothing after it.
+ */
+export const extraBeforeStop = (plan: Entitlements, allowed: number, billing: BillingFacts): ExtraPlay =>
+  extraPlay(plan, allowed, {
+    ...billing,
+    subscription: { status: 'active', cancelAtPeriodEnd: false },
+    owedCents: 0,
+  })

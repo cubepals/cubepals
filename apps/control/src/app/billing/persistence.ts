@@ -64,6 +64,7 @@ export interface SubscriptionRecord {
   currentPeriodEnd: Date | null
   cancelAtPeriodEnd: boolean
   pastDueAt: Date | null
+  canceledAt: Date | null
   createdAt: Date
   updatedAt: Date
 }
@@ -116,9 +117,11 @@ export async function saveSubscription(
   subscription: Omit<SubscriptionRecord, 'updatedAt' | 'pastDueAt' | 'createdAt'> & { createdAt?: Date },
 ): Promise<void> {
   const made = subscription.createdAt === undefined ? {} : { createdAt: subscription.createdAt }
+  // Set to end: when the provider says, or else the first Blockly heard of it. Renewing: never.
+  const canceledAt = subscription.cancelAtPeriodEnd ? (subscription.canceledAt ?? new Date()) : null
   await tx
     .insert(subscriptions)
-    .values({ ...subscription, ...made, pastDueAt: null, updatedAt: new Date() })
+    .values({ ...subscription, ...made, canceledAt, pastDueAt: null, updatedAt: new Date() })
     .onConflictDoUpdate({
       target: [subscriptions.provider, subscriptions.externalSubscriptionId],
       set: {
@@ -129,6 +132,10 @@ export async function saveSubscription(
         currentPeriodEnd: subscription.currentPeriodEnd,
         cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
         ...made,
+        canceledAt:
+          subscription.cancelAtPeriodEnd && subscription.canceledAt === null
+            ? sql`coalesce(${subscriptions.canceledAt}, ${canceledAt})`
+            : canceledAt,
         pastDueAt: null,
         updatedAt: new Date(),
       },
@@ -178,7 +185,11 @@ export async function settleOtherSubscriptions(
       .where(and(otherOpen(userId, provider, keep), eq(subscriptions.externalSubscriptionId, id)))
   await tx
     .update(subscriptions)
-    .set({ status: 'ended', updatedAt: new Date() })
+    .set({
+      status: 'ended',
+      canceledAt: sql`coalesce(${subscriptions.canceledAt}, now())`,
+      updatedAt: new Date(),
+    })
     .where(
       and(
         otherOpen(userId, provider, keep),
@@ -407,6 +418,19 @@ export async function markTold(
       .update(orders)
       .set(what === 'failure' ? { failureToldAt: now } : { owingToldAt: now })
       .where(and(eq(orders.provider, order.provider), eq(orders.externalOrderId, order.externalOrderId)))
+}
+
+/**
+ * When the account's extra play stopped, by its subscription's own word: when it was set to end or
+ * ended, or when its renewal failed. Null while it renews and pays, or for none. Extra play is
+ * counted up to here, never past.
+ */
+export async function extraStoppedAt(q: Queryable, userId: string): Promise<Date | null> {
+  const latest = await latestSubscription(q, userId)
+  if (latest === null) return null
+  if (latest.status === 'past_due') return latest.pastDueAt
+  if (latest.status === 'ended' || latest.cancelAtPeriodEnd) return latest.canceledAt
+  return null
 }
 
 /**

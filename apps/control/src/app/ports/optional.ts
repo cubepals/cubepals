@@ -78,6 +78,8 @@ export interface BillingState {
     cancelAtPeriodEnd: boolean
     /** When the provider made it, where it says; which of an account's subscriptions is newest. */
     createdAt?: Date
+    /** When it was set to end, where the provider says; null while it renews. */
+    canceledAt?: Date | null
   } | null
 }
 
