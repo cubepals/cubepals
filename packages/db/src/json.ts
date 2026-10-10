@@ -212,6 +212,8 @@ export interface LimitOverridesJson {
   includedUnits?: number
   /** How long one run may last, where an admin holds this account to short runs (an AFK farm). */
   maxSessionMinutes?: number
+  /** How long an empty server runs before it sleeps, in place of the plan's (the staging check's). */
+  idleShutdownAfterMinutes?: number
 }
 
 export interface IneligibleReasonJson {

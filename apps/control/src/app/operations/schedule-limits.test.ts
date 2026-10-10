@@ -117,4 +117,25 @@ describe.skipIf(!hasDatabase)('an idle evaluation that stops', () => {
     ).toBe('stopped')
     expect((await h.until(id, 'stopped')).lifecycle.stopReason).toBe('idle')
   }, 30_000)
+
+  test('an account’s own idle time stops its server sooner than the plan’s', async () => {
+    const owner = await h.user('Checker')
+    const { id } = await h.create(owner)
+    await h.until(id, 'running')
+    await h.settled(id)
+    await h.db
+      .update(schema.powerIntervals)
+      .set({ startedAt: sql`now() - interval '2 minutes'` })
+      .where(eq(schema.powerIntervals.serverId, id))
+    await h.db.delete(schema.serverActivity).where(eq(schema.serverActivity.serverId, id))
+    const later = new Date(Date.now() + IDLE_GRACE_MS)
+    // Two minutes empty is well inside Free's ten.
+    expect(await h.app.schedules.evaluateIdle(await h.server(id), later)).toBe('recently_active')
+    await h.db
+      .update(schema.accountStanding)
+      .set({ limitOverrides: { idleShutdownAfterMinutes: 1 } })
+      .where(eq(schema.accountStanding.userId, owner.userId))
+    expect(await h.app.schedules.evaluateIdle(await h.server(id), later)).toBe('stopped')
+    expect((await h.until(id, 'stopped')).lifecycle.stopReason).toBe('idle')
+  }, 30_000)
 })

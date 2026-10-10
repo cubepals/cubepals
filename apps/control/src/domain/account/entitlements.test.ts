@@ -180,3 +180,11 @@ describe('datapacks', () => {
     expect(planThatRuns(datapack)).toBe('plus')
   })
 })
+
+describe('an account’s own idle time', () => {
+  test('one account can sleep sooner than its plan, and every other keeps the plan’s', () => {
+    expect(entitlementsFor('free', { idleShutdownAfterMinutes: 1 }).idleShutdownAfterMinutes).toBe(1)
+    expect(entitlementsFor('free', {}).idleShutdownAfterMinutes).toBe(10)
+    expect(entitlementsFor('plus', { maxServers: 4 }).idleShutdownAfterMinutes).toBe(15)
+  })
+})

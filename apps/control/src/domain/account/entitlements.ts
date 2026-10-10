@@ -110,6 +110,11 @@ export interface LimitOverrides {
    * that defeats the kick). No plan caps a run: the month's hours already bound what it costs.
    */
   maxSessionMinutes?: number
+  /**
+   * How long an empty server on this account runs before it sleeps, in place of the plan's. The
+   * staging check sets a minute on its own account, so the real idle stop runs without the wait.
+   */
+  idleShutdownAfterMinutes?: number
 }
 
 const EVERY_LOADER: readonly Loader[] = ['vanilla', 'paper', 'fabric', 'quilt', 'neoforge', 'forge']
@@ -237,6 +242,7 @@ export function entitlementsFor(plan: string, overrides: LimitOverrides = {}): E
     maxRunning: overrides.maxRunning ?? base.maxRunning,
     includedUnits: overrides.includedUnits ?? base.includedUnits,
     maxSessionMinutes: overrides.maxSessionMinutes ?? base.maxSessionMinutes,
+    idleShutdownAfterMinutes: overrides.idleShutdownAfterMinutes ?? base.idleShutdownAfterMinutes,
   }
 }
 

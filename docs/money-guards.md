@@ -59,7 +59,7 @@ can't both see 9 running and both start.
 |---|---|---|---|---|
 | Hours a month (`includedUnits`) | **20** | **60** (an 8 GB hour counts as 2) | A server runs until it idles out, every day | `policy.test.ts` "Free's 20 hours and Plus's 60…"; `metered.test.ts`; `usage.test.ts` |
 | Hours run out → running servers stop | `standing-sweep`, every minute | same | A run already going runs until it idles out | `metered.test.ts` |
-| Idle shutdown (`idleShutdownAfterMinutes`) | **10 min** | **15 min** | An empty server runs until the month's hours are spent | `schedule-limits.test.ts`, `edge.test.ts` |
+| Idle shutdown (`idleShutdownAfterMinutes`; one account's `limitOverrides` can replace it, as the staging check's does with a minute) | **10 min** | **15 min** | An empty server runs until the month's hours are spent | `schedule-limits.test.ts`, `edge.test.ts` |
 | Wake probation | 5 min | 5 min | A join nobody follows runs the whole idle window | `edge.test.ts` |
 | Wakes an hour, per server | 12 | 12 | A forged join wakes it every time, bounded by the hours | `edge.test.ts` "woken over and over…" |
 | AFK kick (`playerIdleKickMinutes`) | **15 min** | 15 min; the owner may change it | A standing player keeps the server up until the hours run out | `minecraft.test.ts`, `plan-caps.test.ts` |

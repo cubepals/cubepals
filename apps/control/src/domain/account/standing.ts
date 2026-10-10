@@ -22,6 +22,7 @@ export interface AccountStanding {
     maxRunning?: number
     includedUnits?: number
     maxSessionMinutes?: number
+    idleShutdownAfterMinutes?: number
   }
   /**
    * Play past the plan's included block that the owner has allowed, in meter units. Zero means
