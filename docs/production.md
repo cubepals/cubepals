@@ -56,7 +56,7 @@ the random secrets (`AUTH_SECRET`, `WEB_PROXY_SECRET`, `REALTIME_TICKET_SECRET`,
 | `VERCEL_API_TOKEN` | vercel.com → Account Settings → Tokens, scoped to the team | Terraform's Vercel provider only |
 | `TF_STATE_ACCESS_KEY_ID`, `TF_STATE_SECRET_ACCESS_KEY` | Cloudflare → R2 → Manage API tokens → Create Account API token: Object Read & Write, `blockly-terraform-state` only | Terraform's state backend only |
 | `FLY_API_TOKEN` | `fly tokens create org blockly-prod` | Terraform's Fly provider, `fly deploy`, and the control plane, which makes servers' machines with it |
-| `DATABASE_URL`, `DATABASE_DIRECT_URL` | fly.io → blockly-prod → Managed Postgres → the cluster → Connect: the pooled URL (`pgbouncer.…`) and the direct one (`direct.…`) | Control plane |
+| `DATABASE_URL`, `DATABASE_DIRECT_URL` | Supabase → cubepals prod → Connect → Session pooler (port 5432), as the role `blockly` on the database `blockly`: the same URL for both, since session mode carries `LISTEN`, migrations and `pg_dump` | Control plane |
 | `AUTH_GOOGLE_CLIENT_ID`, `AUTH_GOOGLE_CLIENT_SECRET` | Google Auth Platform → Clients → Create client → Web application. Origin `https://cubepals.com`; redirect `https://cubepals.com/api/auth/callback/google` | Control plane |
 | `SMTP_URL` | The mail provider, as `smtps://user:password@host:465` | Control plane |
 | `CLOUDFLARE_DNS_API_TOKEN` | Cloudflare → My Profile → API Tokens → Create Token → "Edit zone DNS" template, zone cubepals.com | Realtime role: it proves `rt.cubepals.com` to Let's Encrypt |
