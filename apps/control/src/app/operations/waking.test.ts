@@ -5,7 +5,7 @@
 /**
  * Waking a resting world when a wake fails. A failed wake is settled twice: by the wake, which puts
  * the world back to rest, then by the runner as it records the failure. A join between the two
- * starts the next wake. In production (2026-10-11) the second settling put that wake's server back
+ * starts the next wake. In production (2026-10-10) the second settling put that wake's server back
  * to rest, and the wake was cancelled as "No longer applies: the server is stored" while the player
  * waited for it. The rest of resting and waking is `storing.test.ts`, which needs a real S3 store.
  */

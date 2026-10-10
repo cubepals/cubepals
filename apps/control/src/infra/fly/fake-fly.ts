@@ -93,7 +93,7 @@ export class FakeFly {
   boundDeletes = 0
   /**
    * New machines refused on a volume a destroyed machine had, as Fly went on holding one after its
-   * machine was gone (production, 2026-10-11); and every machine refused on a claimed volume.
+   * machine was gone (production, 2026-10-10); and every machine refused on a claimed volume.
    */
   lingeringClaims = 0
   claimedCreates = 0
