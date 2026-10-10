@@ -8,7 +8,8 @@
  * skipped by moving one timestamp: made and started, joined through the edge, left until it goes to
  * sleep, woken by a join, rested in the archive store with its machine and volume let go, woken from
  * the archive by a join, and checked to be the same world. Then its machine is killed under it, and
- * it's started again. Every wait a player would feel is timed, and every step asserts.
+ * it's started again. Every wait a player would feel is timed, and every step asserts. Before all
+ * that, whatever an earlier run left (a run that failed or was cancelled before its end) is purged.
  *
  * The private parts are reached the way an operator would: Postgres and Mailpit over `fly proxy`,
  * the server's machines and volumes through flyctl, the stored copy through the bucket's own API.
@@ -125,7 +126,7 @@ if (!edgeV4) {
   process.exit(2)
 }
 const EDGE: Edge = { host: edgeV4, port: 25565 }
-const PLAY_DOMAIN = `${edgeV4.replaceAll('.', '-')}.nip.io`
+const PLAY_DOMAIN = 'play.staging.cubepals.com'
 // The proxies come up in a moment.
 for (let i = 0; i < 30; i++) {
   const ready = await fetch('http://127.0.0.1:18025/api/v1/info').then(
@@ -166,6 +167,53 @@ const tookOf = (kind: string) =>
   sql(
     `select round(extract(epoch from (finished_at - created_at))::numeric, 1) from server_operations where server_id = '${server.id}' and kind = '${kind}' and status = 'succeeded' order by created_at desc limit 1`,
   )
+
+/** A server's Fly app, `bly-staging-` and its id's 32 hex digits, back to that id. */
+function serverIdOf(app: string): string | undefined {
+  const hex = /^bly-staging-([0-9a-f]{32})$/.exec(app)?.[1]
+  return (
+    hex && `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  )
+}
+
+// A run that stops before its end leaves its server, and its volume, behind; staging's control
+// plane runs a few minutes a night, too briefly for its own sweeps to catch it. Earlier runs'
+// servers go through the same purge as this run's own, and a server app no server holds goes too.
+say('\nwhat earlier runs left')
+await step('is purged, and Fly holds no server app without a server', async () => {
+  const left = (await database.unsafe(
+    `select s.id from minecraft_servers s join users u on u.id = s.owner_id
+      where u.email like '%.check.staging.blockly.test' and s.status <> 'purged'`,
+  )) as { id: string }[]
+  if (left.length > 0) {
+    const ids = left.map(({ id }) => `'${id}'`).join(', ')
+    await sql(
+      `update minecraft_servers set status = 'deleted', deleted_at = coalesce(deleted_at, now()),
+         purge_after = now() - interval '1 minute' where id in (${ids})`,
+    )
+    await sql(
+      `insert into pgboss.job (name, data, policy, retry_limit) values ('purge-sweep', '{}', 'singleton', 0)`,
+    )
+    const waiting = () =>
+      sql(`select count(*) from minecraft_servers where id in (${ids}) and status <> 'purged'`)
+    const deadline = Date.now() + 600_000
+    while ((await waiting()) !== '0' && Date.now() < deadline) await Bun.sleep(5000)
+    check((await waiting()) === '0', `${await waiting()} of ${left.length} not purged`)
+  }
+  const apps = (
+    JSON.parse(fly(['apps', 'list', '-o', 'blockly-staging', '--json'])) as { Name: string }[]
+  ).map((app) => app.Name)
+  const unheld: string[] = []
+  for (const app of apps) {
+    const id = serverIdOf(app)
+    if (id === undefined) continue
+    const status = await sql(`select status from minecraft_servers where id = '${id}'`)
+    if (status !== '' && status !== 'purged') continue
+    fly(['apps', 'destroy', app, '--yes'])
+    unheld.push(app)
+  }
+  return `${left.length} servers purged, ${unheld.length} apps without a server destroyed`
+})
 
 say('\nthe account')
 await step('signs up on staging and confirms through its mail catcher', async () => {
