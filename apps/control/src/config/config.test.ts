@@ -387,3 +387,16 @@ describe('mail', () => {
     expect(loadConfig(env).mail.subjectPrefix).toBe('')
   })
 })
+
+describe("staging's pull request previews", () => {
+  const previews = 'https://pr-*-blockly-web-staging.team.workers.dev'
+
+  test('are trusted by the Worker’s name and the account’s workers.dev subdomain', () => {
+    expect(loadConfig({ ...env, WEB_TRUSTED_ORIGINS: previews }).web.trustedOrigins).toEqual([previews])
+  })
+
+  test('are never trusted by a pattern another account’s Worker could match', () => {
+    for (const anyone of ['https://pr-*-blockly-web-staging.workers.dev', 'https://*.team.workers.dev'])
+      expect(() => loadConfig({ ...env, WEB_TRUSTED_ORIGINS: anyone })).toThrow(/Name the site/)
+  })
+})
