@@ -62,10 +62,10 @@ export const PAST_DUE_GRACE_DAYS = 7
 
 /**
  * Hours of play, counted as the account page counts them (a large server spends two an hour),
- * below which cancelling in the first 14 days gets everything back: half of Plus's month, a policy
- * choice. At or past it, only the part not played is refunded, as the law requires.
+ * below which cancelling in the first 14 days gets everything back, a policy choice. At or past
+ * it, only the part not played is refunded, as the law requires.
  */
-export const FULL_REFUND_UNDER_HOURS = PLUS.hours / 2
+export const FULL_REFUND_UNDER_HOURS = 30
 
 /** Minutes a player may stand still in game before the server kicks them, by default. */
 export const AFK_KICK_MINUTES = 15
