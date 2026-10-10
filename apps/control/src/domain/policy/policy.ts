@@ -105,6 +105,8 @@ export interface PolicyFacts {
   extraUnitsAllowed: number
   /** Why extra play is off when it is, for the refusal at the end of the included hours. */
   extraOffBecause: string | null
+  /** Whether the owner may still raise their limit: it is under their ceiling. */
+  extraMayRise: boolean
   /** What the account owes from a payment that didn't go through; anything owed blocks starts. */
   owedCents: number
   /** What the account itself did of the capability's rate-limited kind in the last minute. */
@@ -299,7 +301,9 @@ const plural = (n: number) => (n === 1 ? '' : 's')
 /** What a start at the end of the month's play is told: what ran out, and what would help. */
 function usedUp(entitlements: Entitlements, facts: PolicyFacts): string {
   if (facts.extraUnitsAllowed > 0)
-    return 'You have used the extra play you allowed this month. Raise it in your account, or wait for the 1st.'
+    return facts.extraMayRise
+      ? 'You have used the extra play you allowed this month. Raise it in your account, or wait for the 1st.'
+      : 'You have used the most extra play you can allow this month. It resets on the 1st.'
   if (!entitlements.mayBuyMore) return 'You have used this month’s play time. It resets on the 1st.'
   if (facts.extraOffBecause === null)
     return 'You have used this month’s play time. Allow extra play in your account, or wait for the 1st.'

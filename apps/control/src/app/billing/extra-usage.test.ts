@@ -242,8 +242,9 @@ test.skipIf(!hasDatabase)(
     await h.until(server.id, 'stopped')
     await h.settled(server.id)
     await ran(server.id, 20, new Date(at.getTime() - 2 * 3_600_000))
+    // 20 is the ceiling until a renewal is paid, so there is nothing to raise.
     expect(await startAt(owner, server.id)).toBe(
-      'You have used the extra play you allowed this month. Raise it in your account, or wait for the 1st.',
+      'You have used the most extra play you can allow this month. It resets on the 1st.',
     )
   },
   60_000,

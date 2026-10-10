@@ -87,6 +87,8 @@ export function extraWarning(input: {
   mark: number
   included: number
   allowed: number
+  /** The most the owner may allow now: once `allowed` is that, raising it isn't offered. */
+  ceiling: number
   used: number
   unitCents: number
   origin: string
@@ -95,6 +97,7 @@ export function extraWarning(input: {
   const each = dollars(input.unitCents)
   const soFar = dollars(Math.round(input.used * input.unitCents))
   const upTo = dollars(input.allowed * input.unitCents)
+  const mayRaise = input.allowed < input.ceiling
   const said =
     input.mark >= 100
       ? {
@@ -103,7 +106,9 @@ export function extraWarning(input: {
           preheader: `${soFar} of extra hours, on your next Plus payment.`,
           lines: [
             `You’ve played the ${input.allowed} extra hours you allowed this month: ${soFar}, added to your next Plus payment.`,
-            'Your servers sleep until the 1st, or until you raise your limit on your account.',
+            mayRaise
+              ? 'Your servers sleep until the 1st, or until you raise your limit on your account.'
+              : 'Your servers sleep until the 1st.',
           ],
         }
       : input.mark >= 80
@@ -113,7 +118,9 @@ export function extraWarning(input: {
             preheader: `${soFar} so far, on your next Plus payment.`,
             lines: [
               `You’ve played ${input.used} of the ${input.allowed} extra hours you allowed this month: ${soFar} so far, added to your next Plus payment.`,
-              'When they’re used up your servers sleep until the 1st, unless you raise your limit.',
+              mayRaise
+                ? 'When they’re used up your servers sleep until the 1st, unless you raise your limit.'
+                : 'When they’re used up your servers sleep until the 1st.',
             ],
           }
         : {

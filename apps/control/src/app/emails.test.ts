@@ -60,6 +60,7 @@ const EMAILS: Array<{ name: string; email: Email; subject: string; figure?: stri
       mark,
       included: 60,
       allowed: 20,
+      ceiling: 100,
       used: mark === 0 ? 0.4 : (20 * mark) / 100,
       unitCents: 25,
       origin: ORIGIN,
@@ -174,10 +175,16 @@ describe('emails', () => {
       mark: 0,
       included: 60,
       allowed: 20,
+      ceiling: 20,
       used: 0.4,
       unitCents: 25,
       origin: ORIGIN,
     })
+    // At the ceiling, the limit can't be raised, so it isn't offered.
+    const atCeiling = (mark: number) =>
+      extraWarning({ mark, included: 60, allowed: 20, ceiling: 20, used: 20, unitCents: 25, origin: ORIGIN })
+    expect(atCeiling(100).text).toContain('Your servers sleep until the 1st.\n')
+    for (const mark of [80, 100]) expect(atCeiling(mark).text).not.toContain('raise')
     expect(started.text).toContain(
       'You’ve played the 60 hours your plan includes this month, so your servers are on extra hours now: $0.25 an hour, up to the 20 you allowed ($5.00).',
     )

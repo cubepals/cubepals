@@ -45,6 +45,7 @@ export async function warnAboutExtra(
         mark: reached,
         included: plan.includedUnits,
         allowed: decision.units,
+        ceiling: decision.ceiling,
         used: Math.min(decision.units, Math.round(used * 10) / 10),
         unitCents: UNIT_CENTS,
         origin: deps.origin,

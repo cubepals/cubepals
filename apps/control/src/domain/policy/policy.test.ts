@@ -31,6 +31,7 @@ const facts = (patch: Partial<PolicyFacts> = {}): PolicyFacts => ({
   unitsThisMonth: 0,
   extraUnitsAllowed: 0,
   extraOffBecause: null,
+  extraMayRise: true,
   owedCents: 0,
   actionsInLastMinute: 0,
   ...patch,
@@ -429,6 +430,10 @@ describe('extra play and money owed', () => {
       code: 'limit_reached',
       message:
         'You have used the extra play you allowed this month. Raise it in your account, or wait for the 1st.',
+    })
+    // At the ceiling there is nothing to raise.
+    expect(at({ unitsThisMonth: 80, extraUnitsAllowed: 20, extraMayRise: false })).toMatchObject({
+      message: 'You have used the most extra play you can allow this month. It resets on the 1st.',
     })
     expect(at({})).toMatchObject({
       message: 'You have used this month’s play time. Allow extra play in your account, or wait for the 1st.',

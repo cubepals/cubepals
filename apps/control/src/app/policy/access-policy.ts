@@ -87,6 +87,7 @@ export class AccessPolicy {
         unitsThisMonth: await runUnitsSince(tx, accountId, monthStart, now),
         extraUnitsAllowed: extraUnits(extra.decision),
         extraOffBecause: extra.decision.may ? null : extra.decision.why,
+        extraMayRise: extra.decision.may && extra.decision.units < extra.decision.ceiling,
         owedCents: extra.owedCents,
         actionsInLastMinute:
           counted === null
