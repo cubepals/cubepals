@@ -124,7 +124,7 @@ export class ListingService {
 
   /** Anyone signed in can flag a listing they see; once, until an admin looks at it. */
   async report(actor: Actor, serverId: string, reason: string): Promise<void> {
-    if (actor.kind === 'system') throw new NotFound('Listing')
+    if (actor.kind === 'system' || actor.kind === 'operator') throw new NotFound('Listing')
     const why = reason.trim()
     if (why.length < 3 || why.length > 500)
       throw new AppError('invalid_choice', 'Say what is wrong in 3 to 500 characters.')

@@ -135,7 +135,7 @@ restart.
 |---|---|---|---|---|---|
 | `RUNTIME_PROVIDER` | `docker` | `fly` | `fly` | tf | The default runtime, where new servers go unless a placement rule says otherwise. `fake` in tests; `boat` for Boat's sandboxes (`BOAT_*` below); `fleet` for hosts running blocklyd ([below](#fleet)) |
 | `RUNTIME_PROVIDERS` | `RUNTIME_PROVIDER` | — | — | tf | Every runtime the deployment runs at once, comma-separated (`fly,fleet`), the default among them ([runtimes.md](runtimes.md)) |
-| `OPERATOR_TOKEN` | — | — | — | secret | Bearer token of the operators' API on the internal listener (`scripts/runtimes.ts`, `scripts/fleet.ts`); `FLEET_OPERATOR_TOKEN` is read too. None turns the API off; required when the fleet runs |
+| `OPERATOR_TOKEN` | — | — | random (`production.ts init`) | secret | Bearer token of the operators' APIs on the internal listener (`scripts/ops.ts`, `scripts/runtimes.ts`, `scripts/fleet.ts`); `FLEET_OPERATOR_TOKEN` is read too. None turns the APIs off; required when the fleet runs |
 | `DOCKER_SOCKET`, `DOCKER_GAME_NETWORK` | `/var/run/docker.sock`, `blockly-games` | — | — | — | Docker only |
 | `FLY_ORG` | — | `blockly-staging` | `blockly-prod` | tf | One organization per environment |
 | `FLY_API_TOKEN` | — | secret | secret | secret | An organization token (`fly tokens create org <org>`): the runtime creates and destroys game machines with it |

@@ -5,8 +5,9 @@ How production comes up on cubepals.com the first time, and how to check it. Eve
 
 Production is Terraform (`infra/terraform/environments/production`) plus three `fly deploy`s, and
 `bun scripts/production.ts` runs all of it from one file of values. Servers run on Fly alone: no
-Boat, no Hetzner nodes, no `OPERATOR_TOKEN` or `FLEET_*` values. Billing is off until Polar's
-values are added ([below](#billing-later)).
+Boat, no Hetzner nodes, no `FLEET_*` values. `OPERATOR_TOKEN` is set, for the operators' API
+([below](#from-the-command-line)). Billing is off until Polar's values are added
+([below](#billing-later)).
 
 What Terraform makes: the Fly apps `bly-prod-control`, `bly-prod-realtime` and `bly-prod-edge`
 with their addresses, certificate and secrets; the DNS records for `cubepals.com`,
@@ -47,7 +48,8 @@ bun scripts/production.ts init
 
 writes `local/production/production.env` (never committed, readable only by you). It already holds
 the random secrets (`AUTH_SECRET`, `WEB_PROXY_SECRET`, `REALTIME_TICKET_SECRET`, `EDGE_TOKEN`,
-`RUNTIME_SECRETS_KEY`). Above each empty value it says where to get it. The same list:
+`OPERATOR_TOKEN`, `RUNTIME_SECRETS_KEY`). Run again, it makes any random one the file doesn't hold
+yet and keeps the rest. Above each empty value it says where to get it. The same list:
 
 | Value | Where to get it | Where it goes |
 |---|---|---|
@@ -154,6 +156,43 @@ branch still names the newer commit: fix forward, then deploy again.
 8. **A backup:** on the server's Backups page, make one; it's listed, and downloads.
 9. **A wake:** leave the server empty until it sleeps. Minecraft's server list says
    "Sleeping · join to wake it up". Join, and it wakes.
+10. **A whole life:** `bun scripts/production-check.ts` ([below](#from-the-command-line)).
+
+## From the command line
+
+The control plane's operators' API answers on its internal listener, behind `OPERATOR_TOKEN`, so
+accounts and servers can be looked after without signing in to the website. Every action goes
+through the same services the website's own do, and the audit log records it as
+`operator:<name>`, the name being `OPERATOR` (or `USER`) on the machine that asked.
+
+```sh
+bun scripts/ops.ts --production account you@example.com     # standing, plan, limits, servers
+bun scripts/ops.ts --production plan you@example.com plus    # comp onto Plus; `free` takes it back
+bun scripts/ops.ts --production limits you@example.com --servers 3 --running 2
+bun scripts/ops.ts --production create you@example.com "Test world"   # Free survival for five unless told
+bun scripts/ops.ts --production rest <server>                # its world to the archive store now
+bun scripts/ops.ts --production purge <server> --name "Test world"    # out of the trash, for good, now
+```
+
+The top of `scripts/ops.ts` lists every command. `--production` opens `fly proxy` to
+`bly-prod-control`'s internal listener with production's own `FLY_API_TOKEN` and `OPERATOR_TOKEN`,
+read from `local/production/production.env`; neither is printed, and a shell's own Fly token never
+reaches it. Without `--production`, `OPERATOR_API` and `OPERATOR_TOKEN` say where, as for
+`scripts/runtimes.ts`.
+
+```sh
+bun scripts/production-check.ts [--owner you@example.com]
+```
+
+runs a real server's life on production as `operator:production-check`, for the first address in
+`ADMIN_EMAILS` unless `--owner` names another account: a server named "Production check" and the
+time is made, joined through the edge at its own `<slug>.play.cubepals.com` until it answers,
+stopped, rested in the archive store with Fly left holding no machine or volume of it, joined
+again and timed coming back from the archive, then sent to the trash and purged, after which Fly
+holds no app `bly-prod-<its id without dashes>`. Each wait is reported, as the staging check does.
+Whatever fails, the server it made is trashed and purged before it exits. It counts against the
+account's plan like any server: a Free account that already has one needs
+`ops.ts limits <account> --servers 2` first.
 
 ## Database dumps
 

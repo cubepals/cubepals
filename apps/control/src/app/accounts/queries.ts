@@ -15,7 +15,7 @@ import { UNIT_CENTS } from '../../domain/account/meter.ts'
 import type { AccountStanding } from '../../domain/account/standing.ts'
 import type { Capability, DenialCode } from '../../domain/policy/policy.ts'
 import { type MemoryTier, PARTY, playerCapacity, sizeLabel } from '../../domain/server/size.ts'
-import type { Actor } from '../actor.ts'
+import { type Actor, runsThePlatform } from '../actor.ts'
 import { settleable } from '../billing/balance.ts'
 import { extraThisMonth } from '../billing/extra-usage.ts'
 import { extraPlayNow, latestSubscription, PAST_DUE_GRACE_MS } from '../billing/persistence.ts'
@@ -138,7 +138,7 @@ export class AccountQueries {
    * policy answers it now: the same function the API enforces with, run without its lock.
    */
   async overview(actor: Actor, now = new Date()): Promise<AccountOverview> {
-    if (actor.kind === 'system') throw new NotFound('Account')
+    if (actor.kind === 'system' || actor.kind === 'operator') throw new NotFound('Account')
     const userId = actor.userId
     const standing = await loadStanding(this.#db, userId, now)
     const entitlements = entitlementsFor(standing.plan, standing.limitOverrides)
@@ -212,7 +212,7 @@ export class AccountQueries {
 
   /** The signed-in person: who they are, whether they administer, and their standing. */
   async me(actor: Actor): Promise<Me> {
-    if (actor.kind === 'system') throw new NotFound('Account')
+    if (actor.kind === 'system' || actor.kind === 'operator') throw new NotFound('Account')
     const [user] = await this.#db.select().from(schema.users).where(eq(schema.users.id, actor.userId))
     if (!user) throw new NotFound('Account')
     const standing = await loadStanding(this.#db, user.id)
@@ -229,13 +229,13 @@ export class AccountQueries {
     actor: Actor,
     query: { search: string; offset: number; limit: number },
   ): Promise<{ accounts: AccountRow[]; total: number }> {
-    if (actor.kind !== 'admin') throw new NotFound('Account')
+    if (!runsThePlatform(actor)) throw new NotFound('Account')
     const { rows, total } = await searchAccounts(this.#db, query.search, query.offset, query.limit)
     return { accounts: rows, total }
   }
 
   async get(actor: Actor, userId: string): Promise<AccountDetail> {
-    if (actor.kind !== 'admin') throw new NotFound('Account')
+    if (!runsThePlatform(actor)) throw new NotFound('Account')
     const [user] = await this.#db.select().from(schema.users).where(eq(schema.users.id, userId))
     if (!user) throw new NotFound('Account')
     const { rows } = await searchAccounts(this.#db, user.email, 0, 1)

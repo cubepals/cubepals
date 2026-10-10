@@ -69,11 +69,11 @@ export function storedWorlds(deps: {
   // nobody having played since the copy and nothing else waiting for the server. A join or a start
   // brings it back from that copy.
 
-  /** Why a server may not rest now, or null when it may. */
-  const whyNotStore = async (server: MinecraftServer, now: Date): Promise<string | null> => {
+  /** Why a server may not rest now, or null when it may. One an operator rests `now` may have been played. */
+  const whyNotStore = async (server: MinecraftServer, now: Date, asked: boolean): Promise<string | null> => {
     if (!(await loadControls(db)).storingEnabled) return 'Resting worlds is paused.'
     const standing = await loadStanding(db, server.ownerId)
-    const days = entitlementsFor(standing.plan, standing.limitOverrides).storeAfterIdleDays
+    const days = asked ? 0 : entitlementsFor(standing.plan, standing.limitOverrides).storeAfterIdleDays
     if (now.getTime() - server.lastActiveAt.getTime() < days * DAY_MS) return 'It was played recently.'
     return null
   }
@@ -107,7 +107,7 @@ export function storedWorlds(deps: {
         return { status: 'cancelled', reason: 'It has no world to rest.' }
       let copy: BackupRecord
       if (server.lifecycle.status === 'stopped') {
-        const why = await whyNotStore(server, new Date())
+        const why = await whyNotStore(server, new Date(), ctx.op.input.now === true)
         if (why !== null) return { status: 'cancelled', reason: why }
         await ctx.step('saving')
         copy = await storedCopyFor(server, binding.handle, binding.applied)
