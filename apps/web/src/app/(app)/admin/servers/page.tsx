@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { isNotFound, messageOf, useTRPC } from '../../../../lib/api'
 import { useDebounced } from '../../../../lib/hooks'
 import { Badge, EmptyState, FormRow, FormSection, Note, Skeleton, TextField } from '../../../../ui'
+import { ServerActions } from '../server-actions'
 import { AdminTabs } from '../tabs'
 
 const dollars = (cents: number): string => `$${(cents / 100).toFixed(2)}`
@@ -109,10 +110,13 @@ function Server({ server }: { server: FleetServerView }) {
         </>
       }
       control={
-        <span className="type-body-sm bk-num" style={{ whiteSpace: 'nowrap' }}>
-          {server.month.hours} h
-          {server.month.costCents === null ? '' : ` · ${dollars(server.month.costCents)}`}
-        </span>
+        <div className="bk-stack" style={{ gap: 'var(--space-8)', alignItems: 'flex-end' }}>
+          <span className="type-body-sm bk-num" style={{ whiteSpace: 'nowrap' }}>
+            {server.month.hours} h
+            {server.month.costCents === null ? '' : ` · ${dollars(server.month.costCents)}`}
+          </span>
+          <ServerActions server={server} />
+        </div>
       }
     />
   )

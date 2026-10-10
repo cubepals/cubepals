@@ -6,7 +6,6 @@ import { useParams } from 'next/navigation'
 import { type SubmitEvent, useState } from 'react'
 import { isNotFound, messageOf, useTRPC } from '../../../../../lib/api'
 import { useNow } from '../../../../../lib/hooks'
-import { newId } from '../../../../../lib/ids'
 import { said, useOutcome } from '../../../../../lib/outcome'
 import { whenTaken } from '../../../../../lib/present'
 import * as rules from '../../../../../lib/rules'
@@ -24,6 +23,7 @@ import {
   TextField,
   Toggle,
 } from '../../../../../ui'
+import { ServerActions } from '../../server-actions'
 import { StandingBadge } from '../../standing'
 
 /** One account, as an admin runs it: standing, plan and limits, restrictions, and what was done. */
@@ -47,7 +47,6 @@ function Account({ account }: { account: AccountDetailView }) {
   const now = useNow(60_000)
   const refresh = () => queries.invalidateQueries({ queryKey: trpc.admin.pathKey() })
   const [closing, setClosing] = useState<'suspend' | 'terminate' | null>(null)
-  const [stopping, setStopping] = useState<AccountDetailView['serverList'][number] | null>(null)
   const reinstate = useMutation(trpc.admin.reinstate.mutationOptions({ onSuccess: refresh }))
   const grant = useMutation(trpc.admin.grantAdmin.mutationOptions({ onSuccess: refresh }))
   const revoke = useMutation(trpc.admin.revokeAdmin.mutationOptions({ onSuccess: refresh }))
@@ -63,6 +62,7 @@ function Account({ account }: { account: AccountDetailView }) {
           {account.name || account.email}
           <StandingBadge account={account} />
           {account.admin && <Badge tone="info">Admin</Badge>}
+          {account.test && <Badge tone="outline">Test</Badge>}
         </h1>
         <p className="type-body" style={{ color: 'var(--ink-muted)' }}>
           {account.email}
@@ -96,6 +96,7 @@ function Account({ account }: { account: AccountDetailView }) {
       </FormSection>
 
       <Restrictions account={account} />
+      <TestAccount account={account} />
 
       <FormSection
         title="Admin"
@@ -139,18 +140,11 @@ function Account({ account }: { account: AccountDetailView }) {
                 </span>
               }
               description={`${server.slug} · ${server.status}`}
-              control={
-                server.status === 'running' ? (
-                  <Button variant="outline" size="sm" onClick={() => setStopping(server)}>
-                    Stop for maintenance
-                  </Button>
-                ) : null
-              }
+              control={<ServerActions server={server} />}
             />
           ))
         )}
       </FormSection>
-      {stopping && <MaintenanceStop server={stopping} onClose={() => setStopping(null)} />}
 
       <FormSection title="History" description="What admins and Cubepals did to this account.">
         {account.history.length === 0 ? (
@@ -202,63 +196,6 @@ function Account({ account }: { account: AccountDetailView }) {
       )}
       {closing && <Close account={account} kind={closing} onClose={() => setClosing(null)} />}
     </>
-  )
-}
-
-/** One server stopped for the platform's upkeep: its owner sees Blockly did it, and can start it again. */
-function MaintenanceStop({
-  server,
-  onClose,
-}: {
-  server: AccountDetailView['serverList'][number]
-  onClose: () => void
-}) {
-  const trpc = useTRPC()
-  const queries = useQueryClient()
-  const [reason, setReason] = useState('')
-  const [requestId] = useState(() => newId())
-  const stop = useMutation(
-    trpc.admin.stopForMaintenance.mutationOptions({
-      onSuccess: () => {
-        onClose()
-        return queries.invalidateQueries({ queryKey: trpc.admin.pathKey() })
-      },
-    }),
-  )
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={`Stop ${server.name} for maintenance?`}
-      actions={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            disabled={reason.trim().length === 0 || stop.isPending}
-            onClick={() => stop.mutate({ serverId: server.id, requestId, reason })}
-          >
-            Stop it
-          </Button>
-        </>
-      }
-    >
-      <div className="bk-stack" style={{ gap: 'var(--space-16)' }}>
-        <p>
-          It saves and stops. Its owner sees Cubepals stopped it for maintenance, and can start it again
-          whenever they like.
-        </p>
-        <TextField
-          label="Why"
-          value={reason}
-          maxLength={500}
-          onChange={(event) => setReason(event.target.value)}
-        />
-        {stop.error && <Note tone="danger">{messageOf(stop.error)}</Note>}
-      </div>
-    </Modal>
   )
 }
 
@@ -411,6 +348,36 @@ function Restrictions({ account }: { account: AccountDetailView }) {
             checked={account.restrictions.consoleCommands}
             disabled={save.isPending}
             onChange={(on) => set({ consoleCommands: on })}
+          />
+        }
+      />
+    </FormSection>
+  )
+}
+
+/** Cubepals' own accounts, for testing it, are kept out of its numbers, billing and analytics. */
+function TestAccount({ account }: { account: AccountDetailView }) {
+  const trpc = useTRPC()
+  const queries = useQueryClient()
+  const save = useMutation(
+    trpc.admin.setTestAccount.mutationOptions({
+      onSuccess: () => queries.invalidateQueries({ queryKey: trpc.admin.pathKey() }),
+    }),
+  )
+  return (
+    <FormSection
+      title="Test account"
+      description="One Cubepals uses to test itself. It never pays, and it is left out of the numbers, billing and analytics."
+    >
+      {save.isError && <Note tone="danger">{messageOf(save.error)}</Note>}
+      <FormRow
+        label="A test account"
+        control={
+          <Toggle
+            ariaLabel="A test account"
+            checked={account.test}
+            disabled={save.isPending}
+            onChange={(test) => save.mutate({ userId: account.userId, test })}
           />
         }
       />

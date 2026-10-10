@@ -25,6 +25,7 @@ import type { PlatformAlerts } from '../../app/platform/alerts.ts'
 import type { AuditQueries } from '../../app/platform/audit.ts'
 import type { PlatformControlsService } from '../../app/platform/controls.ts'
 import type { Fleet } from '../../app/platform/fleet.ts'
+import type { ServerRepairs } from '../../app/platform/repairs.ts'
 import type { StuckWork } from '../../app/platform/stuck.ts'
 import type { PlayerService } from '../../app/players/service.ts'
 import type { RealtimeTickets } from '../../app/ports/tickets.ts'
@@ -69,6 +70,7 @@ export interface Services {
   platform: { capabilities: PlatformCapabilities }
   platformControls: PlatformControlsService
   stuck: StuckWork
+  repairs: ServerRepairs
   fleet: Fleet
   alerts: PlatformAlerts
   audit: AuditQueries

@@ -1,9 +1,8 @@
 import { readFile } from 'node:fs/promises'
-import type { Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createDb, createPool, type Db } from '@blockly/db'
-import { type ServerType, serve } from '@hono/node-server'
+import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import type { Pool } from 'pg'
 import type { PgBoss } from 'pg-boss'
@@ -13,6 +12,7 @@ import { RoutedCatalog } from './app/catalog/routed.ts'
 import { type ControlPlane, composeControlPlane } from './app/control-plane.ts'
 import { passwordChanged, resetPassword, verifyEmail, welcome } from './app/emails/account.ts'
 import { ItemIcons } from './app/items/icons.ts'
+import { ServerRepairs } from './app/platform/repairs.ts'
 import { CLIENT_ADDRESS_HEADER } from './app/ports/auth.ts'
 import type { ScheduledJob } from './app/ports/jobs.ts'
 import type { PlayerProfiles, ReadinessProbe, ServerConsole } from './app/ports/minecraft.ts'
@@ -88,6 +88,7 @@ import { S3ArchiveStore } from './infra/s3/s3-archive-store.ts'
 import { createBillingWebhook } from './interfaces/billing/webhook.ts'
 import { createInternalApp } from './interfaces/edge/internal.ts'
 import { createApiApp } from './interfaces/http/api.ts'
+import { closeServer } from './interfaces/http/listener.ts'
 import { operatorApis } from './interfaces/operator/mount.ts'
 import { startRealtime } from './interfaces/realtime/server.node.ts'
 import { createRuntimeApp } from './interfaces/runtime/artifacts.ts'
@@ -498,6 +499,7 @@ function apiServices(
     platform: { capabilities: supportOf(capabilities) },
     platformControls: app.platform,
     stuck: app.stuck,
+    repairs: new ServerRepairs({ db, servers: app.servers, backups: app.backups }),
     fleet: app.fleet,
     alerts: app.alerts,
     audit: app.audit,
@@ -774,20 +776,5 @@ async function main(): Promise<void> {
 
 /** How long a shutdown may take before the process exits regardless. */
 const SHUTDOWN_DEADLINE_MS = 45_000
-/** How long requests in flight get to finish once a listener closes. */
-const REQUEST_GRACE_MS = 5_000
-
-/**
- * Stops taking connections and ends idle keep-alive ones at once, which `close` alone would wait
- * out (the edge's polls keep one open), then ends whatever is still open after a grace period.
- */
-function closeServer(server: ServerType): Promise<void> {
-  const http = server as Server
-  return new Promise<void>((resolve) => {
-    http.close(() => resolve())
-    http.closeIdleConnections()
-    setTimeout(() => http.closeAllConnections(), REQUEST_GRACE_MS).unref()
-  })
-}
 
 await main()

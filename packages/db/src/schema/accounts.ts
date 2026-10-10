@@ -62,6 +62,11 @@ export const accountStanding = pgTable('account_standing', {
   signupCampaign: text('signup_campaign'),
   signupContent: text('signup_content'),
   signupTerm: text('signup_term'),
+  /**
+   * An account the people who run Cubepals use to test it: made by an admin or marked by one. It
+   * is left out of the business's numbers and never sent to the billing provider or analytics.
+   */
+  testAccount: boolean('test_account').notNull().default(false),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })

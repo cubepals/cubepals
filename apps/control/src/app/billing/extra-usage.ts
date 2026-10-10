@@ -18,7 +18,7 @@ import { type Entitlements, entitlementsFor } from '../../domain/account/entitle
 import { extraBeforeStop, extraPlay } from '../../domain/account/extra-play.ts'
 import { UNIT_CENTS } from '../../domain/account/meter.ts'
 import type { AccountStanding } from '../../domain/account/standing.ts'
-import { loadStanding, runUnitsSince } from '../accounts/persistence.ts'
+import { loadStanding, notTest, runUnitsSince } from '../accounts/persistence.ts'
 import {
   type BillingOrder,
   type BillingProvider,
@@ -274,6 +274,8 @@ export class ExtraUsage {
             isNull(reports.sentAt),
             isNull(reports.failedAt),
             or(isNull(reports.nextAttemptAt), lte(reports.nextAttemptAt, now)),
+            // A test account's play is never sent to be billed; it waits, unsent.
+            notTest(this.#db, reports.userId),
           ),
         )
         .orderBy(asc(reports.at), asc(reports.externalId))
