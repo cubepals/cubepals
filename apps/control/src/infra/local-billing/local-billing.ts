@@ -146,6 +146,8 @@ export class LocalBilling implements BillingProvider {
           extraCents: 0,
           externalSubscriptionId: null,
           settles: event.settles ?? [],
+          // Only the settle page sends what it settles.
+          balance: event.planKey === null && (event.settles ?? []).length > 0,
           orderedAt: new Date(),
         },
       }

@@ -14,7 +14,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 import { users } from './auth.ts'
-import { ts, updatedAt } from './columns.ts'
+import { createdAt, ts, updatedAt } from './columns.ts'
 
 export const billingSubscriptions = pgTable(
   'billing_subscriptions',
@@ -36,6 +36,13 @@ export const billingSubscriptions = pgTable(
      * null otherwise. The plan lasts a grace period from then.
      */
     pastDueAt: ts('past_due_at'),
+    /**
+     * When it was set to end, or ended, as the provider says it (or when Blockly first heard);
+     * null while it renews. Extra play is counted up to here and no further.
+     */
+    canceledAt: ts('canceled_at'),
+    /** When the provider made it; which of an account's subscriptions is its newest. */
+    createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
@@ -78,6 +85,15 @@ export const billingOrders = pgTable(
     /** When the owner was told a charge carrying extra play failed, and when it left them owing. */
     failureToldAt: ts('failure_told_at'),
     owingToldAt: ts('owing_told_at'),
+    /**
+     * When the account came to owe it: set only after the provider was asked again and said it
+     * is still unpaid (`confirmOwed`); null while it isn't owed, and once it is paid.
+     */
+    owedAt: ts('owed_at'),
+    /** The balance order that paid it in its place (`settleUrl`); null while nothing has. */
+    settledBy: text('settled_by'),
+    /** A balance order Blockly asked the provider to refund, for it paid what was settled already. */
+    refundAskedAt: ts('refund_asked_at'),
     orderedAt: ts('ordered_at').notNull(),
     updatedAt: updatedAt(),
   },
@@ -104,6 +120,8 @@ export const extraPlayMonths = pgTable(
     accruedMilli: integer('accrued_milli').notNull().default(0),
     reportedMilli: integer('reported_milli').notNull().default(0),
     pendingSince: ts('pending_since'),
+    /** When the month was counted for the last time: it is over, and nothing still runs in it. */
+    finalAt: ts('final_at'),
     updatedAt: updatedAt(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.month] })],
@@ -126,8 +144,13 @@ export const extraPlayReports = pgTable(
     /** When the hours were counted: the event's time, never ahead of the clock. */
     at: ts('at').notNull(),
     sentAt: ts('sent_at'),
+    /** Times the provider refused it; an outage isn't counted. */
     attempts: integer('attempts').notNull().default(0),
     lastError: text('last_error'),
+    /** Not sent again before this, after a refusal; null to send it on the next pass. */
+    nextAttemptAt: ts('next_attempt_at'),
+    /** Refused `MAX_REFUSALS` times: no longer sent, and an admin is told (`extra_play_unsent`). */
+    failedAt: ts('failed_at'),
   },
   (t) => [
     index('extra_play_reports_unsent').on(t.sentAt),

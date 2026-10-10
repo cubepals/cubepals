@@ -11,7 +11,7 @@ const subscriptions = schema.billingSubscriptions
 export const PAID_ORDER = ['paid', 'partially_refunded', 'refunded']
 
 /** Statuses of an order whose charge hasn't gone through, or never will: nothing was paid. */
-const UNPAID_ORDER = ['draft', 'pending', 'void']
+export const UNPAID_ORDER = ['draft', 'pending', 'void']
 
 /** Statuses a provider reports for a subscription that pays for its plan. */
 export const PAYING = ['active', 'trialing']
@@ -199,24 +199,12 @@ export async function recordOrder(q: Queryable, provider: string, order: Billing
         ...row,
         refundedCents: sql`greatest(${schema.billingOrders.refundedCents}, ${order.refundedCents})`,
         // Word that an order is waiting for its charge, arriving after word that it was paid, is
-        // older word: a paid order stays paid, and one a balance settled stays settled.
-        status: sql`case when ${schema.billingOrders.status} in ('paid', 'partially_refunded', 'refunded') and ${order.status} in ('draft', 'pending') then ${schema.billingOrders.status} when ${schema.billingOrders.status} = 'settled' and ${order.status} in ('draft', 'pending', 'void') then 'settled' else ${order.status} end`,
+        // older word: a paid order stays paid. One a balance paid keeps the provider's word, and
+        // `settledBy` says it is paid all the same.
+        status: sql`case when ${schema.billingOrders.status} in ('paid', 'partially_refunded', 'refunded') and ${order.status} in ('draft', 'pending') then ${schema.billingOrders.status} else ${order.status} end`,
         updatedAt: new Date(),
       },
     })
-  // A balance paid: the orders it names are settled, theirs no longer owed.
-  if (order.settles.length > 0 && PAID_ORDER.includes(order.status))
-    await q
-      .update(schema.billingOrders)
-      .set({ status: 'settled', updatedAt: new Date() })
-      .where(
-        and(
-          eq(schema.billingOrders.provider, provider),
-          eq(schema.billingOrders.userId, order.userId),
-          inArray(schema.billingOrders.externalOrderId, order.settles),
-          inArray(schema.billingOrders.status, UNPAID_ORDER),
-        ),
-      )
   return true
 }
 
@@ -227,12 +215,13 @@ const orders = schema.billingOrders
  * they have waited past the grace a failed renewal gets (`PAST_DUE_GRACE_MS`), while the provider
  * retries the card. What the account owes is all of each, the plan's own price with the extra.
  */
-function owing(userId: string, now: Date) {
+export function owing(userId: string, now: Date) {
   const ended = sql`exists (select 1 from ${subscriptions} where ${subscriptions.externalSubscriptionId} = ${orders.externalSubscriptionId} and ${subscriptions.status} = 'ended')`
   return and(
     eq(orders.userId, userId),
     gt(orders.extraCents, 0),
     inArray(orders.status, UNPAID_ORDER),
+    isNull(orders.settledBy),
     or(ended, lt(orders.orderedAt, new Date(now.getTime() - PAST_DUE_GRACE_MS))),
   )
 }
@@ -283,6 +272,7 @@ export async function untoldAbout(q: Queryable): Promise<string[]> {
       and(
         gt(orders.extraCents, 0),
         inArray(orders.status, UNPAID_ORDER),
+        isNull(orders.settledBy),
         or(isNull(orders.failureToldAt), isNull(orders.owingToldAt)),
       ),
     )
@@ -308,28 +298,11 @@ export async function failingUntold(q: Queryable, userId: string): Promise<Order
         eq(orders.userId, userId),
         gt(orders.extraCents, 0),
         inArray(orders.status, ['pending']),
+        isNull(orders.settledBy),
         isNull(orders.failureToldAt),
         sql`exists (select 1 from ${subscriptions} where ${subscriptions.externalSubscriptionId} = ${orders.externalSubscriptionId} and ${subscriptions.status} = 'past_due')`,
       ),
     )
-}
-
-/**
- * What of what the account owes the provider can no longer collect itself, and so is paid as a
- * balance (`settleUrl`): charges whose subscription ended, which the provider voids. One still
- * retried is paid by fixing the card in the portal instead, so it is never paid twice.
- */
-export async function settleable(
-  q: Queryable,
-  userId: string,
-  now = new Date(),
-): Promise<{ cents: number; orders: string[] }> {
-  const ended = sql`(${orders.status} = 'void' or exists (select 1 from ${subscriptions} where ${subscriptions.externalSubscriptionId} = ${orders.externalSubscriptionId} and ${subscriptions.status} = 'ended'))`
-  const rows = await q
-    .select({ id: orders.externalOrderId, cents: orders.totalCents })
-    .from(orders)
-    .where(and(owing(userId, now), ended))
-  return { cents: rows.reduce((sum, row) => sum + row.cents, 0), orders: rows.map((row) => row.id) }
 }
 
 /** Charges the account now owes for (`owing`) that the owner hasn't been told about yet. */

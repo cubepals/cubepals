@@ -24,6 +24,7 @@ import {
   subscriptionChanges,
   writeEntries,
 } from './audit.ts'
+import { settleable, settleWith } from './balance.ts'
 import { auditRenewal, ExtraUsage } from './extra-usage.ts'
 import {
   billingFacts,
@@ -34,7 +35,6 @@ import {
   PAST_DUE_GRACE_MS,
   recordOrder,
   saveSubscription,
-  settleable,
   settleOtherSubscriptions,
   subscriptionsLeftOut,
   untoldAbout,
@@ -163,7 +163,7 @@ export class BillingService {
       action: 'billing.balance_payment_started',
       subjectType: 'account',
       subjectId: user.id,
-      data: { cents: owed.cents, orders: owed.orders },
+      data: { cents: owed.cents, totalCents: owed.totalCents, orders: owed.orders },
     })
     return { url }
   }
@@ -206,6 +206,7 @@ export class BillingService {
     if (event === null) return 'ignored'
     if (event.kind === 'order') {
       const kept = await recordOrder(this.#db, billing.provider, event.order)
+      if (kept) await settleWith(this.#db, billing.provider, event.order)
       if (kept) await auditRenewal(this.#db, billing.provider, event.order)
       // An order paid can clear what was owed; one left unpaid can be what is owed now.
       if (kept && event.order.userId !== null) await this.#accounts.enforceLimits(event.order.userId)

@@ -135,7 +135,8 @@ export class PolarBilling implements BillingProvider {
 
   /**
    * A checkout for the "balance" product (metadata `purpose: balance`, one-time, any price) at
-   * exactly what is owed, as an ad-hoc price, naming the orders it settles in its metadata. Polar
+   * exactly what is owed before tax, as an ad-hoc price with tax on top, naming the orders it
+   * settles in its metadata. Polar
    * no longer retries a renewal once its subscription has ended, and voids it; this is how that
    * money is paid (seen in the sandbox, 2026-10-10).
    */
@@ -146,20 +147,27 @@ export class PolarBilling implements BillingProvider {
     settles: readonly string[]
     returnUrl: string
   }): Promise<string> {
-    if (this.#balance === null) {
-      const found = await call('finding the balance product', () =>
-        this.#polar.products.list({ metadata: { purpose: 'balance' }, is_archived: false }),
-      )
-      this.#balance = Products.parse(found).items[0]?.id ?? null
-    }
-    const product = this.#balance
+    const product = await this.#balanceProduct()
     if (product === null) throw new Error('No Polar product has the metadata purpose: balance')
     const checkout = await withEmail(input.email, (email) =>
       call('starting a payment', () =>
         this.#polar.checkouts.create({
           products: [product],
-          prices: { [product]: [{ amount_type: 'fixed', price_amount: input.cents, price_currency: 'usd' }] },
+          // Priced before tax, with tax added on top at the payer's rate: what the orders it
+          // settles came to with their tax, never tax twice.
+          prices: {
+            [product]: [
+              {
+                amount_type: 'fixed',
+                price_amount: input.cents,
+                price_currency: 'usd',
+                tax_behavior: 'exclusive',
+              },
+            ],
+          },
           metadata: { settles: input.settles.join(',') },
+          // A code would let less than what is owed clear it.
+          allow_discount_codes: false,
           external_customer_id: input.userId,
           ...email,
           success_url: input.returnUrl,
@@ -168,6 +176,17 @@ export class PolarBilling implements BillingProvider {
       ),
     )
     return checkout.url
+  }
+
+  /** The one-time product a balance is settled with (metadata `purpose: balance`), read once. */
+  async #balanceProduct(): Promise<string | null> {
+    if (this.#balance === null) {
+      const found = await call('finding the balance product', () =>
+        this.#polar.products.list({ metadata: { purpose: 'balance' }, is_archived: false }),
+      )
+      this.#balance = Products.parse(found).items[0]?.id ?? null
+    }
+    return this.#balance
   }
 
   async portalUrl(input: { userId: string; returnUrl: string }): Promise<string> {
@@ -222,6 +241,15 @@ export class PolarBilling implements BillingProvider {
         (await this.#metered(order.product_id, item.product_price_id))
       )
         extraCents += item.amount
+    const settles = String(order.metadata?.settles ?? '')
+      .split(',')
+      .filter((id) => id.length > 0)
+    // Only an order for the balance product pays for others: metadata on anything else is not ours.
+    const balance =
+      settles.length > 0 &&
+      !!order.product_id &&
+      !this.#plans.has(order.product_id) &&
+      order.product_id === (await this.#balanceProduct())
     return {
       externalOrderId: order.id,
       userId: order.customer.external_id ?? null,
@@ -237,9 +265,8 @@ export class PolarBilling implements BillingProvider {
       status: order.status,
       extraCents,
       externalSubscriptionId: order.subscription_id ?? null,
-      settles: String(order.metadata?.settles ?? '')
-        .split(',')
-        .filter((id) => id.length > 0),
+      settles,
+      balance,
       orderedAt: new Date(order.created_at),
     }
   }

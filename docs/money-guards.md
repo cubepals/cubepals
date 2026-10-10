@@ -114,9 +114,14 @@ stop until it is paid. While Polar still retries it, it is paid by fixing the ca
 "Retry payment" charges the new card, and `order.paid` clears the block. Once its subscription has
 ended, Polar won't retry it (`OrderNotEligibleForRetry`) and voids it, so the account page offers
 "Pay $x" instead: a checkout for the one-time "balance" product (found by its metadata
-`purpose: balance`) at exactly what is owed, as an ad-hoc price, with the orders it settles in its
-metadata. Its `order.paid` marks them `settled`, which clears the block. A charge still retried is
-never offered there, so nothing is paid twice.
+`purpose: balance`), with the orders it settles in its metadata and no discount codes. It is priced
+at what those orders came to before tax (`net`), as an ad-hoc price with `tax_behavior: exclusive`,
+so the payer's tax goes on top once and they pay what they owed, never tax twice. Its `order.paid`
+marks them `settledBy` that order, which clears the block, only when the order is for the balance
+product and its own amount before tax covers theirs; anything else (another product carrying the
+metadata, a short amount) clears nothing and is kept on the account's audit log
+(`billing.balance_short`), and the debt stays. A charge still retried is never offered there, so
+nothing is paid twice.
 
 **What Polar does, as seen in its sandbox (2026-10-10).**
 - Checkout shows the plan's $15 and, under "Additional metered charges may apply", the line

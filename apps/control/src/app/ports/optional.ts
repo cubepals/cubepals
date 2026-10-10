@@ -102,6 +102,8 @@ export interface BillingOrder {
   externalSubscriptionId: string | null
   /** Orders it paid for in their place: a balance settled (`settleUrl`). */
   settles: string[]
+  /** It is for the provider's balance product, the only one whose `settles` is believed. */
+  balance: boolean
   orderedAt: Date
 }
 
@@ -140,8 +142,8 @@ export interface BillingProvider {
   }): Promise<string>
   portalUrl(input: { userId: string; returnUrl: string }): Promise<string>
   /**
-   * A one-time payment of `cents` for orders the provider can no longer collect (their
-   * subscription ended), which its order then names in `settles`.
+   * A one-time payment for orders the provider can no longer collect (their subscription ended),
+   * which its order then names in `settles`. No discount code applies to it.
    */
   settleUrl(input: {
     userId: string
