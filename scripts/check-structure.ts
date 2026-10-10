@@ -315,10 +315,14 @@ function checkNames() {
   }
 }
 
-/** Whether a file opens with its doc comment. Only a `#!` line, a directive or a comment may come first. */
+/**
+ * Whether a file opens with its doc comment. Only a `#!` line, a directive or a comment may come
+ * first, such as the SPDX lines that say a file's license; in Rust a plain `//` comment, not a doc
+ * comment (`//!`, `///`).
+ */
 function hasHeader(lang: Lang, lines: string[]): boolean {
   const skipped = {
-    rust: /^(#!|$)/,
+    rust: /^(#!|\/\/(?![!/])|$)/,
     ts: /^(#!|['"]use (client|server)['"];?$|\/\/|$)/,
     py: /^(#|$)/,
   }[lang]
