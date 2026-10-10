@@ -32,7 +32,8 @@ export function ServerCard({
   address: string
 }) {
   return (
-    <Link href={href} className="bk-server">
+    // Fetched whole as soon as the card shows, so pressing it opens the server at once.
+    <Link href={href} prefetch className="bk-server">
       <div className="bk-server__media">
         <Image src={image} alt="" fill sizes="(min-width: 1280px) 360px, (min-width: 640px) 50vw, 100vw" />
         <span className="bk-server__status">

@@ -13,6 +13,7 @@ import {
   LoadFailed,
   Modal,
   Note,
+  PageSkeleton,
   Skeleton,
   TextField,
 } from '../../../../../ui'
@@ -29,7 +30,7 @@ export default function SettingsPage() {
   const server = useServer()
   const trpc = useTRPC()
   const options = useQuery(trpc.servers.settingsOptions.queryOptions({ serverId: server.id }))
-  if (server.isPending) return <Skeleton width={240} height={36} />
+  if (server.isPending) return <PageSkeleton title="Settings" sections={[2, 4]} />
   if (server.isError) return <LoadFailed error={messageOf(server.error)} onRetry={() => server.refetch()} />
   const view = server.data
 

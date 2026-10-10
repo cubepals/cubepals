@@ -16,6 +16,7 @@ import {
   FormSection,
   LoadFailed,
   Note,
+  PageSkeleton,
   PlayerRow,
   Skeleton,
   SuggestField,
@@ -34,7 +35,7 @@ export default function PlayersPage() {
     refresh({ serverId: server.id })
   }, [refresh, server.id])
 
-  if (server.isPending || access.isPending) return <Skeleton width={240} height={36} />
+  if (server.isPending || access.isPending) return <PageSkeleton title="Players" sections={[1, 3]} />
   if (server.isError || access.isError)
     return (
       <EmptyState

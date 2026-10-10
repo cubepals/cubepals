@@ -19,6 +19,7 @@ export {
   EmptyState,
   LoadFailed,
   Note,
+  PageSkeleton,
   Skeleton,
 } from './surfaces'
 export { Tip } from './tip'

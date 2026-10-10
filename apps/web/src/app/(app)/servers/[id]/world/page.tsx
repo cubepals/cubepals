@@ -17,8 +17,8 @@ import {
   LoadFailed,
   Modal,
   Note,
+  PageSkeleton,
   Select,
-  Skeleton,
   TextField,
   Toggle,
 } from '../../../../../ui'
@@ -29,7 +29,7 @@ export default function WorldPage() {
   const server = useServer()
   const trpc = useTRPC()
   const worlds = useQuery(trpc.worlds.list.queryOptions({ serverId: server.id }))
-  if (server.isPending || worlds.isPending) return <Skeleton width={240} height={36} />
+  if (server.isPending || worlds.isPending) return <PageSkeleton title="World" sections={[1, 2]} />
   if (server.isError) return <LoadFailed error={messageOf(server.error)} onRetry={() => server.refetch()} />
   if (worlds.isError) return <LoadFailed error={messageOf(worlds.error)} onRetry={() => worlds.refetch()} />
   const view = server.data

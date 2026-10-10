@@ -1,14 +1,14 @@
 'use client'
 
 /**
- * The sidebar's Feedback item and its popover: one box, sent to Cubepals' builder through the
+ * The sidebar's Feedback button and its popover: one box, sent to Cubepals' builder through the
  * control plane, which attaches who sent it. Not a form page and not PostHog's own widget.
  */
 import type { Placement } from '@floating-ui/react'
 import { useMutation } from '@tanstack/react-query'
 import { MessageSquare } from 'lucide-react'
 import { usePathname } from 'next/navigation'
-import { type CSSProperties, type KeyboardEvent, type SubmitEvent, useState } from 'react'
+import { type KeyboardEvent, type SubmitEvent, useState } from 'react'
 import { messageOf, useTRPC } from '../../lib/api'
 import { APP_VERSION } from '../../lib/insight'
 import { Button, ICON, Popover } from '../../ui'
@@ -17,19 +17,20 @@ import { Button, ICON, Popover } from '../../ui'
 const FEEDBACK_MAX = 4000
 
 /**
- * Telling Cubepals what's on your mind: a quiet item at the foot of the sidebar (the foot of the
- * page on a phone) that opens one box and a Send button. Who sent it, the page, the plan and the
- * build go with it without being asked for. Esc or a press elsewhere puts it away; Cmd or Ctrl
- * with Enter sends.
+ * Telling Cubepals what's on your mind: a quiet icon at the foot of the sidebar (a small button at
+ * the foot of the page on a phone) that opens one box and a Send button. Who sent it, the page,
+ * the plan and the build go with it without being asked for. Esc or a press elsewhere puts it
+ * away; Cmd or Ctrl with Enter sends.
  */
 export function Feedback({
   placement,
   className,
-  style,
+  iconOnly = false,
 }: {
   placement: Placement
   className: string
-  style?: CSSProperties
+  /** Only the icon shows; its name is still read out, and shown on hover. */
+  iconOnly?: boolean
 }) {
   const trpc = useTRPC()
   const page = usePathname()
@@ -69,9 +70,14 @@ export function Feedback({
       label="Feedback"
       placement={placement}
       anchor={(reference) => (
-        <button type="button" className={className} style={style} {...reference()}>
-          <MessageSquare {...ICON} aria-hidden />
-          Feedback
+        <button
+          type="button"
+          className={className}
+          {...(iconOnly ? { 'aria-label': 'Feedback', title: 'Feedback' } : {})}
+          {...reference()}
+        >
+          <MessageSquare {...(iconOnly ? { size: 16, strokeWidth: 1.75 } : ICON)} aria-hidden />
+          {!iconOnly && 'Feedback'}
         </button>
       )}
     >

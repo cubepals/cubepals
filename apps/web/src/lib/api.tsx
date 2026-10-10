@@ -2,7 +2,12 @@
 
 import type { AppErrorCode } from '@blockly/contracts'
 import type { AppRouter } from '@blockly/control/router'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import {
+  type DehydratedState,
+  HydrationBoundary,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query'
 import { createTRPCClient, httpBatchLink, httpLink, splitLink, TRPCClientError } from '@trpc/client'
 import { createTRPCContext } from '@trpc/tanstack-react-query'
 import { type ReactNode, useState } from 'react'
@@ -24,13 +29,19 @@ const OUTSIDE = new Set([
 /**
  * The browser only ever talks to its own origin: /api is rewritten to the control plane, so
  * cookies stay host-only and no API address is ever baked into the bundle.
+ *
+ * `data` is what the server already read for this page (lib/first-paint.ts), so it is drawn with
+ * it rather than fetched again after it loads.
  */
-export function ApiProvider({ children }: { children: ReactNode }) {
+export function ApiProvider({ data, children }: { data?: DehydratedState; children: ReactNode }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
         defaultOptions: {
-          queries: { staleTime: 5_000, retry: 1, refetchOnWindowFocus: true },
+          // An answer is shown again at once on every later visit, and asked for anew behind it
+          // once it is half a minute old: realtime hints refresh what changes sooner. One not
+          // shown for half an hour is let go.
+          queries: { staleTime: 30_000, gcTime: 30 * 60_000, retry: 1, refetchOnWindowFocus: true },
         },
       }),
   )
@@ -48,7 +59,7 @@ export function ApiProvider({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
-        {children}
+        <HydrationBoundary state={data}>{children}</HydrationBoundary>
       </TRPCProvider>
     </QueryClientProvider>
   )
