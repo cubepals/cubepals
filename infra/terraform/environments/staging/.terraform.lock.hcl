@@ -6,6 +6,7 @@ provider "registry.terraform.io/ampbase-io/fly" {
   constraints = "0.3.0"
   hashes = [
     "h1:7s3CsXkkO5bKIsfu0vd2qbuNzEHvqqaSkgWMCwtcKp0=",
+    "h1:ZeiJ5B1CL7CkHEbtb5rMwpp/IJhaORlf47tDCljTlH4=",
     "zh:08305b1b2fb257889eacb907638cd0b1eb2bb86297964d20ba5645b531e1c2e2",
     "zh:0de87f57894e83d3bc16e1723d5f25a0aea203104c57f2d308cccc804f4f3602",
     "zh:2509ea0b04ce1716ebb1ba43fe5a6a0d492fdaa6644db5e118c438e5ba8aa52b",
@@ -28,6 +29,7 @@ provider "registry.terraform.io/cloudflare/cloudflare" {
   constraints = "5.25.0"
   hashes = [
     "h1:+GkpgNYiwEwYBCXgZbA2W+d05oeqOkfbOsOBj9xB9Vs=",
+    "h1:4Vr7vxzlhEJ/zBS7Y6Iao6aJMLCZPHjxfSmKGThifiA=",
     "zh:403d477c0e4c05a9f9886ef7e750dcc3488be7cd2210207e98b4a731bc499159",
     "zh:4a2a4659c3273ddb1437a34865eac21823a117557b050786ba510ac5f34047cf",
     "zh:6e4a2f6ed105b5353c7b56962d00f923873dd68af6509b9b9f595057edba1915",
@@ -45,6 +47,7 @@ provider "registry.terraform.io/hetznercloud/hcloud" {
   constraints = "1.70.0"
   hashes = [
     "h1:+nY9Xo3ZB2vlA7uu0ZTvrMqecI6FrYNwVu3k9/t1bqg=",
+    "h1:Sypb6YVdXAvNlQNCJaxingPkz2A8g4S5EB6siQU/Lcs=",
     "zh:0f5e78e1ca0d8bb2a220c84dcd51f6b2ea82365a6ed757875f18d6f28b137bbe",
     "zh:1113a271be7b0a7242815dc201f8d04eaeb78e3049ba3828d3005cbfe7314c71",
     "zh:172fc561f73e569ef3ffed6f40f2b35fa7ab6ddbfffc753ddd7a301ed9aadfb4",
