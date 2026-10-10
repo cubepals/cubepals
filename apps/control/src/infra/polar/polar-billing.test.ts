@@ -23,6 +23,20 @@ const customerState = (patch: Record<string, unknown> = {}, subscription: Record
   state('user_123', patch, { current_period_end: '2026-10-01T00:00:00Z', ...subscription })
 const signed = (event: unknown, secret = SECRET, at = new Date()) => sign(event, secret, at)
 
+/** What `customerState()` says, as a standing: Plus, renewing. */
+const PLUS_STANDING = {
+  userId: 'user_123',
+  externalCustomerId: '992fae2a-2a17-4b7a-8d9d-e45177024a7c',
+  subscription: {
+    externalSubscriptionId: 'e5149aae-e521-42b9-b24c-abb3d71eea2e',
+    planKey: 'plus',
+    status: 'active',
+    currentPeriodEnd: new Date('2026-10-01T00:00:00Z'),
+    cancelAtPeriodEnd: false,
+    canceledAt: null,
+  },
+}
+
 describe('PolarBilling', () => {
   const requests: { method: string; path: string; headers: IncomingHttpHeaders; body: string }[] = []
   let reply: () => { status: number; body: unknown } = () => ({ status: 200, body: {} })
@@ -162,17 +176,7 @@ describe('PolarBilling', () => {
     const delivery = signed(stateChanged(customerState()))
     expect(await billing.receive(delivery.body, delivery.headers)).toEqual({
       kind: 'standing',
-      state: {
-        userId: 'user_123',
-        externalCustomerId: '992fae2a-2a17-4b7a-8d9d-e45177024a7c',
-        subscription: {
-          externalSubscriptionId: 'e5149aae-e521-42b9-b24c-abb3d71eea2e',
-          planKey: 'plus',
-          status: 'active',
-          currentPeriodEnd: new Date('2026-10-01T00:00:00Z'),
-          cancelAtPeriodEnd: false,
-        },
-      },
+      state: PLUS_STANDING,
     })
     expect(requests.at(-1)?.path).toBe('/v1/customers/external/user_123/state')
   })
