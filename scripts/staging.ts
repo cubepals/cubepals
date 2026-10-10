@@ -666,12 +666,16 @@ const stopOrder = (app: string): number =>
       : STOP_FIRST.length
 
 /**
- * Every machine in the org stopped, the platform's and every server's. Volumes, the bucket,
- * secrets and the edge's and realtime's dedicated IPv4s stay, so `start` brings the platform back
- * as it was: the play domain and rt.staging's record are named after those addresses, and a cloud
+ * Every machine in the org stopped, the platform's and every server's, and the sandbox webhook
+ * off until `start`. Volumes, the bucket, secrets and the edge's and realtime's dedicated IPv4s
+ * stay, so `start` brings the platform back as it was: the play domain and rt.staging's record are named after those addresses, and a cloud
  * session can't rewrite DNS. Keeping both costs about $4 a month (owner, 2026-10-09).
  */
-function stop(): void {
+async function stop(): Promise<void> {
+  // Polar disables an endpoint whose deliveries keep failing, and a stopped staging fails every one.
+  for (const id of await stagingWebhooks())
+    await polar().webhooks.updateWebhookEndpoint(id, { enabled: false })
+  say('  sandbox webhook off')
   for (const app of appsInOrg().sort((a, b) => stopOrder(a) - stopOrder(b)))
     for (const machine of machinesOf(app)) {
       if (machine.state !== 'started' && machine.state !== 'starting') continue
@@ -711,14 +715,14 @@ async function start(): Promise<void> {
   if (![APP.edge, APP.realtime].every((app) => ipsOf(app).some((ip) => ip.Type === 'v4'))) {
     say('The addresses are gone; running up to take new ones.')
     await up()
-    return
+  } else {
+    for (const app of [APP.mail, APP.control, APP.realtime, APP.edge, APP.web]) startStopped(app)
+    await until('the web app and the API answer', 300, webAnswers)
+    // `stop` turned the webhook off; `up` turns it on itself.
+    const state = loadState()
+    if (state.webhook !== undefined && process.env.POLAR_ACCESS_TOKEN) await pointWebhook(state)
+    say(`Staging is up: ${WEB}`)
   }
-  for (const app of [APP.mail, APP.control, APP.realtime, APP.edge, APP.web]) startStopped(app)
-  await until('the web app and the API answer', 300, webAnswers)
-  // Deliveries failed while it was stopped, so Polar may have disabled the webhook.
-  const state = loadState()
-  if (state.webhook !== undefined && process.env.POLAR_ACCESS_TOKEN) await pointWebhook(state)
-  say(`Staging is up: ${WEB}`)
 }
 
 /**
@@ -766,7 +770,7 @@ function env(): void {
 
 const command = process.argv[2]
 if (command === 'up') await up()
-else if (command === 'stop') stop()
+else if (command === 'stop') await stop()
 else if (command === 'start') await start()
 else if (command === 'status') status()
 else if (command === 'env') env()
