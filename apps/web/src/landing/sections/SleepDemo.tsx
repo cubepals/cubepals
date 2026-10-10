@@ -177,7 +177,7 @@ function monthSaid(month: number, plan: PublicPlan, plans: readonly PublicPlan[]
   if (month > included) {
     // A bigger plan that would hold this month, said the way the account page says it.
     const roomier = plans.find((each) => each.includedHours > included && each.includedHours >= month)
-    return `More than the ${included} hours on ${plan.name}. When they run out, the server sleeps until the 1st, when the hours start again; nothing is charged past the plan.${
+    return `More than the ${included} hours on ${plan.name}. When they run out, the server sleeps until the 1st, when the hours start again, unless you allow extra hours, up to a limit you set.${
       roomier ? ` ${roomier.name} has ${roomier.includedHours} hours a month.` : ''
     }`
   }

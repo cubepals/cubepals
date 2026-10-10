@@ -1,10 +1,14 @@
-// The plan facts the policies state (apps/web/src/legal/figures.ts) against the plan table the
-// control plane enforces. The web app may not import the control plane, so the check lives here.
-// A plan that changes fails this until the policies, and their date, change with it.
+/**
+ * The plan facts the policies state (apps/web/src/legal/figures.ts) against the plan table the
+ * control plane enforces. The web app may not import the control plane, so the check lives here.
+ * A plan that changes fails this until the policies, and their date, change with it.
+ */
 import { describe, expect, test } from 'bun:test'
 import { PAST_DUE_GRACE_MS } from '../apps/control/src/app/billing/persistence.ts'
 import { entitlementsFor } from '../apps/control/src/domain/account/entitlements.ts'
+import { UNIT_CENTS } from '../apps/control/src/domain/account/meter.ts'
 import {
+  EXTRA_HOUR_CENTS,
   FREE,
   FULL_REFUND_UNDER_HOURS,
   PAST_DUE_GRACE_DAYS,
@@ -34,6 +38,10 @@ describe('what the policies say about the plans', () => {
         downloadDays: plan.backupPolicy.archiveRetentionDays,
       })
     })
+
+  test('an extra hour costs what they say', () => {
+    expect(EXTRA_HOUR_CENTS).toBe(UNIT_CENTS)
+  })
 
   test('a failed renewal keeps the plan as long as they say', () => {
     expect(PAST_DUE_GRACE_DAYS * DAY_MS).toBe(PAST_DUE_GRACE_MS)

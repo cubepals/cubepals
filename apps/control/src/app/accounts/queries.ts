@@ -4,6 +4,8 @@ import { schema } from '@blockly/db'
 import { and, desc, eq } from 'drizzle-orm'
 import {
   type Entitlements,
+  EXTRA_CEILING,
+  EXTRA_CHOICES,
   entitlementsFor,
   PAID_PLANS,
   PLAN_KEYS,
@@ -14,7 +16,9 @@ import type { AccountStanding } from '../../domain/account/standing.ts'
 import type { Capability, DenialCode } from '../../domain/policy/policy.ts'
 import { type MemoryTier, PARTY, playerCapacity, sizeLabel } from '../../domain/server/size.ts'
 import type { Actor } from '../actor.ts'
-import { latestSubscription, PAST_DUE_GRACE_MS } from '../billing/persistence.ts'
+import { settleable } from '../billing/balance.ts'
+import { extraThisMonth } from '../billing/extra-usage.ts'
+import { extraPlayNow, latestSubscription, PAST_DUE_GRACE_MS } from '../billing/persistence.ts'
 import { NotFound } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import { listUnpurged } from '../servers/persistence.ts'
@@ -71,6 +75,24 @@ export interface AccountOverview {
     hoursThisMonth: number
     extraUnitsAllowed: number
     unitCents: number
+    /**
+     * Extra play: whether the account may allow any now, and if not why, in one sentence; the most
+     * it may allow and the limits it picks from; what it has run up this month, in units, and of
+     * that what was sent to be billed; and what it owes from a payment that didn't go through.
+     */
+    extra: {
+      may: boolean
+      why: string | null
+      ceiling: number
+      /** The ceiling once a renewal is paid, while it is higher than today's; null otherwise. */
+      nextCeiling: number | null
+      choices: number[]
+      countedUnits: number
+      reportedUnits: number
+      owedCents: number
+      /** Of that, what is paid as a balance (`billing.settle`); the rest by fixing the card. */
+      settleCents: number
+    }
   }
   features: Array<{ feature: Feature; available: boolean; code?: DenialCode; message?: string }>
   /** Every plan, for comparing and upgrading. */
@@ -123,6 +145,8 @@ export class AccountQueries {
     const owned = await countServers(this.#db, userId)
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
     const subscription = await latestSubscription(this.#db, userId)
+    const { decision, owedCents } = await extraPlayNow(this.#db, standing)
+    const ceiling = decision.may ? decision.ceiling : 0
     const capability = (feature: Feature): Capability =>
       feature === 'create_server'
         ? { kind: 'create_server', memoryTier: entitlements.allowedMemoryTiers[0] ?? '2g' }
@@ -166,6 +190,16 @@ export class AccountQueries {
         hoursThisMonth: round(await runHoursSince(this.#db, userId, monthStart, now)),
         extraUnitsAllowed: standing.extraUnitsAllowed,
         unitCents: UNIT_CENTS,
+        extra: {
+          may: decision.may,
+          why: decision.may ? null : decision.why,
+          ceiling,
+          nextCeiling: decision.may && ceiling < EXTRA_CEILING.renewed ? EXTRA_CEILING.renewed : null,
+          choices: decision.may ? EXTRA_CHOICES.filter((units) => units <= ceiling) : [],
+          ...(await extraThisMonth(this.#db, userId, now)),
+          owedCents,
+          settleCents: (await settleable(this.#db, userId)).totalCents,
+        },
       },
       features,
       sizeLabels: entitlements.allowedMemoryTiers.map(sizeAndParty),

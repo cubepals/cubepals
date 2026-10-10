@@ -37,7 +37,7 @@ import {
   PutBucketCorsCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
-import { createPolar } from '@polar-sh/sdk/2026-04'
+import { createPolar } from '@polar-sh/sdk/2026-10'
 import { pointCname } from './lib/cloudflare-dns.ts'
 
 const ORG = 'blockly-staging'
@@ -203,6 +203,26 @@ function polar() {
   return createPolar({ accessToken, environment: 'sandbox' })
 }
 
+/**
+ * The API version and events of staging's webhook: the payloads and deliveries the adapter reads
+ * (infra/polar/polar-billing.ts), as production's endpoint is set (docs/production.md).
+ */
+const WEBHOOK = {
+  api_version: '2026-10',
+  events: [
+    'customer.state_changed',
+    'order.created',
+    'order.updated',
+    'order.paid',
+    'order.refunded',
+    'subscription.active',
+    'subscription.past_due',
+    'subscription.canceled',
+    'subscription.uncanceled',
+    'subscription.revoked',
+  ],
+} as const
+
 /** Staging's webhook endpoints on the sandbox: the one `up` made, and any a failed run left. */
 async function stagingWebhooks(): Promise<string[]> {
   const found: string[] = []
@@ -212,12 +232,27 @@ async function stagingWebhooks(): Promise<string[]> {
 }
 
 /**
- * Staging's sandbox webhooks on while it runs and off while it is stopped. Polar disables an
- * endpoint whose deliveries keep failing, and a stopped staging fails every one.
+ * Staging's webhook on the sandbox, made once; one made before keeps its secret, and is brought to
+ * the version and events the adapter reads today. It is enabled again too: Polar disables an
+ * endpoint whose deliveries kept failing, which they do while staging is stopped.
  */
-async function setWebhooks(enabled: boolean): Promise<void> {
-  for (const id of await stagingWebhooks()) await polar().webhooks.updateWebhookEndpoint(id, { enabled })
-  say(`  sandbox webhook ${enabled ? 'on' : 'off'}`)
+async function pointWebhook(state: State): Promise<void> {
+  if (state.webhook !== undefined) {
+    const endpoint = await polar().webhooks.updateWebhookEndpoint(state.webhook.id, {
+      ...WEBHOOK,
+      enabled: true,
+    })
+    say(`  webhook ${endpoint.api_version}, ${endpoint.events.length} events, enabled: ${endpoint.enabled}`)
+    return
+  }
+  const endpoint = await polar().webhooks.createWebhookEndpoint({
+    url: WEBHOOK_URL,
+    name: 'Blockly staging',
+    ...WEBHOOK,
+    format: 'raw',
+  })
+  state.webhook = { id: endpoint.id, secret: endpoint.secret }
+  saveState(state)
 }
 
 /** staging.cubepals.com on the web app: Cloudflare's record for it, and Fly's certificate. */
@@ -368,18 +403,7 @@ async function up(): Promise<void> {
     state.flyToken = made.token
     saveState(state)
   }
-  if (state.webhook === undefined) {
-    // The payloads the adapter reads are API 2026-04's (infra/polar).
-    const endpoint = await polar().webhooks.createWebhookEndpoint({
-      url: WEBHOOK_URL,
-      name: 'Blockly staging',
-      api_version: '2026-04',
-      format: 'raw',
-      events: ['customer.state_changed', 'order.paid', 'order.refunded'],
-    })
-    state.webhook = { id: endpoint.id, secret: endpoint.secret }
-    saveState(state)
-  }
+  await pointWebhook(state)
 
   if (state.webProxySecret === undefined) {
     state.webProxySecret = secret()
@@ -648,7 +672,10 @@ const stopOrder = (app: string): number =>
  * session can't rewrite DNS. Keeping both costs about $4 a month (owner, 2026-10-09).
  */
 async function stop(): Promise<void> {
-  await setWebhooks(false)
+  // Polar disables an endpoint whose deliveries keep failing, and a stopped staging fails every one.
+  for (const id of await stagingWebhooks())
+    await polar().webhooks.updateWebhookEndpoint(id, { enabled: false })
+  say('  sandbox webhook off')
   for (const app of appsInOrg().sort((a, b) => stopOrder(a) - stopOrder(b)))
     for (const machine of machinesOf(app)) {
       if (machine.state !== 'started' && machine.state !== 'starting') continue
@@ -691,9 +718,11 @@ async function start(): Promise<void> {
   } else {
     for (const app of [APP.mail, APP.control, APP.realtime, APP.edge, APP.web]) startStopped(app)
     await until('the web app and the API answer', 300, webAnswers)
+    // `stop` turned the webhook off; `up` turns it on itself.
+    const state = loadState()
+    if (state.webhook !== undefined && process.env.POLAR_ACCESS_TOKEN) await pointWebhook(state)
     say(`Staging is up: ${WEB}`)
   }
-  await setWebhooks(true)
 }
 
 /**
@@ -740,10 +769,8 @@ function env(): void {
 }
 
 const command = process.argv[2]
-if (command === 'up') {
-  await up()
-  await setWebhooks(true)
-} else if (command === 'stop') await stop()
+if (command === 'up') await up()
+else if (command === 'stop') await stop()
 else if (command === 'start') await start()
 else if (command === 'status') status()
 else if (command === 'env') env()

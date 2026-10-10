@@ -2,7 +2,8 @@
  * Local development's stand-in for Polar (docs/local-development.md), which configuration allows
  * nowhere else. Checkout and the customer portal are this adapter's own pages (checkout-pages.ts),
  * and what they do arrives as a signed delivery at the webhook Polar's would, so a plan is granted
- * and cancelled the way a payment grants and cancels it. Nothing is charged.
+ * and cancelled the way a payment grants and cancels it, with the paid order a checkout makes.
+ * Nothing is charged, and extra play is kept here (`reported`) rather than sent anywhere.
  *
  * Its record of who pays is `billing_subscriptions` itself: a provider keeps its own, and this one
  * has nowhere else to keep it.
@@ -14,6 +15,8 @@ import {
   type BillingEvent,
   type BillingProvider,
   type BillingState,
+  type OrderNow,
+  type UsageEvent,
   WebhookRejected,
 } from '../../app/ports/optional.ts'
 
@@ -29,10 +32,13 @@ const PERIOD_MS = 365 * 24 * 60 * 60_000
 
 /** What a link to a page carries: whose it is, what it is for, and where it goes back to. */
 export interface Ticket {
-  page: 'checkout' | 'portal'
+  page: 'checkout' | 'portal' | 'settle'
   userId: string
-  /** The plan a checkout is for; null for the portal. */
+  /** The plan a checkout is for, and what Blockly says it costs; null and 0 for the portal. */
   planKey: string | null
+  priceCents: number
+  /** The orders a payment settles, for the settle page. */
+  settles?: string[]
   returnUrl: string
   expires: number
 }
@@ -41,12 +47,17 @@ export interface Ticket {
 export type Delivery =
   | { type: 'subscription.started'; userId: string; planKey: string }
   | { type: 'subscription.cancelled'; userId: string }
+  | { type: 'order.paid'; userId: string; planKey: string | null; cents: number; settles?: string[] }
 
 export class LocalBilling implements BillingProvider {
   readonly provider = 'local'
   readonly #db: Db
   readonly #key: Buffer
   readonly #webOrigin: string
+  /** The extra play reported, as a provider would have billed it: for the developer, and tests. */
+  readonly reported: UsageEvent[] = []
+  /** The refunds asked for. */
+  readonly refunded: Array<{ externalOrderId: string; cents: number; why: string }> = []
 
   constructor(options: { db: Db; secret: string; webOrigin: string }) {
     this.#db = options.db
@@ -55,17 +66,46 @@ export class LocalBilling implements BillingProvider {
     this.#webOrigin = options.webOrigin
   }
 
-  async checkoutUrl(input: { userId: string; planKey: string; returnUrl: string }): Promise<string> {
+  async checkoutUrl(input: {
+    userId: string
+    planKey: string
+    priceCents?: number
+    returnUrl: string
+  }): Promise<string> {
     return this.#link({
       page: 'checkout',
       userId: input.userId,
       planKey: input.planKey,
+      priceCents: input.priceCents ?? 0,
       returnUrl: input.returnUrl,
     })
   }
 
   async portalUrl(input: { userId: string; returnUrl: string }): Promise<string> {
-    return this.#link({ page: 'portal', userId: input.userId, planKey: null, returnUrl: input.returnUrl })
+    return this.#link({
+      page: 'portal',
+      userId: input.userId,
+      planKey: null,
+      priceCents: 0,
+      returnUrl: input.returnUrl,
+    })
+  }
+
+  /** The settle page: a payment for what is owed, with nothing charged, as the others. */
+  async settleUrl(input: {
+    userId: string
+    cents: number
+    settles: readonly string[]
+    returnUrl: string
+  }): Promise<string> {
+    return this.#link({
+      page: 'settle',
+      userId: input.userId,
+      planKey: null,
+      priceCents: input.cents,
+      settles: [...input.settles],
+      returnUrl: input.returnUrl,
+    })
   }
 
   /** The ticket a page's link carries, when it was signed here and still works; null otherwise. */
@@ -89,6 +129,32 @@ export class LocalBilling implements BillingProvider {
     if (!this.#verify(`delivery.${body}`, headers[SIGNATURE] ?? ''))
       throw new WebhookRejected('the local checkout did not sign this delivery')
     const event = JSON.parse(body) as Delivery
+    if (event.type === 'order.paid') {
+      const cents = event.cents
+      return {
+        kind: 'order',
+        order: {
+          externalOrderId: `local-${randomUUID()}`,
+          userId: event.userId,
+          planKey: event.planKey,
+          billingReason: event.planKey === null ? 'purchase' : 'subscription_create',
+          currency: 'usd',
+          subtotalCents: cents,
+          discountCents: 0,
+          netCents: cents,
+          taxCents: 0,
+          totalCents: cents,
+          refundedCents: 0,
+          status: 'paid',
+          extraCents: 0,
+          externalSubscriptionId: null,
+          settles: event.settles ?? [],
+          // Only the settle page sends what it settles.
+          balance: event.planKey === null && (event.settles ?? []).length > 0,
+          orderedAt: new Date(),
+        },
+      }
+    }
     const state: BillingState = {
       userId: event.userId,
       externalCustomerId: `local-${event.userId}`,
@@ -138,6 +204,22 @@ export class LocalBilling implements BillingProvider {
   /** Nothing here fails to charge. */
   async pastDueSince(): Promise<Date | null> {
     return null
+  }
+
+  /** Nothing was charged, so a refund only is kept, for the developer and tests. */
+  async refund(input: { externalOrderId: string; cents: number; why: string }): Promise<void> {
+    this.refunded.push(input)
+  }
+
+  /** Every order made here is paid when it is made, so none is ever owed. */
+  async order(): Promise<OrderNow | null> {
+    return null
+  }
+
+  /** Kept, once each, the way a provider keeps an event's id. */
+  async reportUsage(events: readonly UsageEvent[]): Promise<void> {
+    for (const event of events)
+      if (!this.reported.some((kept) => kept.externalId === event.externalId)) this.reported.push(event)
   }
 
   #link(ticket: Omit<Ticket, 'expires'>): string {

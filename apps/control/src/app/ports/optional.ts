@@ -76,6 +76,10 @@ export interface BillingState {
     status: 'active' | 'trialing'
     currentPeriodEnd: Date
     cancelAtPeriodEnd: boolean
+    /** When the provider made it, where it says; which of an account's subscriptions is newest. */
+    createdAt?: Date
+    /** When it was set to end, where the provider says; null while it renews. */
+    canceledAt?: Date | null
   } | null
 }
 
@@ -94,7 +98,35 @@ export interface BillingOrder {
   taxCents: number
   totalCents: number
   refundedCents: number
+  /** `paid`; `pending` while its charge hasn't gone through; `refunded`, `void`… as the provider says. */
+  status: string
+  /** What of it is extra play (the metered line), before discounts and tax. */
+  extraCents: number
+  /** The subscription it charged for; null for none. */
+  externalSubscriptionId: string | null
+  /** Orders it paid for in their place: a balance settled (`settleUrl`). */
+  settles: string[]
+  /** It is for the provider's balance product, the only one whose `settles` is believed. */
+  balance: boolean
   orderedAt: Date
+}
+
+/** An order as the provider holds it now, and whether a charge for it was tried and failed. */
+export interface OrderNow {
+  order: BillingOrder
+  chargeFailed: boolean
+}
+
+/**
+ * Extra play to bill, one event of it: `hours` as the meter counts them (a large server two an
+ * hour), counted up to `at`, which is never ahead of the clock. `externalId` is the provider's
+ * permanent key for the event: sent twice, it is billed once.
+ */
+export interface UsageEvent {
+  externalId: string
+  userId: string
+  hours: number
+  at: Date
 }
 
 /** What one webhook delivery reports: a customer's standing, or an order paid or refunded. */
@@ -107,13 +139,44 @@ export type BillingEvent = { kind: 'standing'; state: BillingState } | { kind: '
 export interface BillingProvider {
   /** The provider's name, as `billing_subscriptions` records it. */
   readonly provider: string
-  checkoutUrl(input: { userId: string; email: string; planKey: string; returnUrl: string }): Promise<string>
+  /**
+   * `priceCents`: what Blockly says the plan costs, for a provider with no product of its own to
+   * charge it (the local checkout); Polar's product sets its own price.
+   */
+  checkoutUrl(input: {
+    userId: string
+    email: string
+    planKey: string
+    priceCents?: number
+    returnUrl: string
+  }): Promise<string>
   portalUrl(input: { userId: string; returnUrl: string }): Promise<string>
+  /**
+   * A one-time payment for orders the provider can no longer collect (their subscription ended),
+   * which its order then names in `settles`. `cents` is what they came to before tax, and tax is
+   * added on top. No discount code applies to it. A checkout still open for the same orders and
+   * amount is offered again rather than a second one.
+   */
+  settleUrl(input: {
+    userId: string
+    email: string
+    cents: number
+    settles: readonly string[]
+    returnUrl: string
+  }): Promise<string>
   /**
    * One webhook delivery, from the raw body: the standing or the order it reports, or null for a
    * delivery that reports neither. A delivery that isn't authentic is a WebhookRejected.
    */
   receive(body: string, headers: Readonly<Record<string, string>>): Promise<BillingEvent | null>
+  /**
+   * The order as the provider holds it now, and whether its charge failed; null for an order it
+   * doesn't know. Read before an account is held to owe it, so a lost webhook never blocks
+   * someone who paid.
+   */
+  order(externalOrderId: string): Promise<OrderNow | null>
+  /** Gives back `cents` of a paid order, before tax (the provider refunds its tax with it). */
+  refund(input: { externalOrderId: string; cents: number; why: string }): Promise<void>
   /** The customer's standing now; null for someone who was never a customer. */
   stateOf(userId: string): Promise<BillingState | null>
   /**
@@ -122,6 +185,11 @@ export interface BillingProvider {
    * standing lists only subscriptions that pay now, so it can't tell the two apart on its own.
    */
   pastDueSince(externalSubscriptionId: string): Promise<Date | null>
+  /**
+   * Extra play for the provider to add to each account's next payment. All or nothing: it throws
+   * when the provider didn't take them, and they are sent again, under the same ids, later.
+   */
+  reportUsage(events: readonly UsageEvent[]): Promise<void>
 }
 
 /** A webhook that didn't come from the provider, or was altered, or replayed. */

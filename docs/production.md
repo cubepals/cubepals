@@ -161,11 +161,18 @@ Production runs without billing: everyone is on the plan their account says. To 
 in Polar's production dashboard (polar.sh, not the sandbox):
 
 1. A product for Plus; its id goes in the file as `POLAR_PRODUCTS=plus:<id>`.
-2. Settings → Developers → an organization access token with `checkouts:write`,
-   `customer_sessions:write`, `customers:read` and `subscriptions:read`: `POLAR_ACCESS_TOKEN`.
-3. Settings → Webhooks → an endpoint `https://cubepals.com/api/billing/webhook`, API version
-   2026-04, events `customer.state_changed`, `order.paid` and `order.refunded`. Its secret
-   (`whsec_…`) is `POLAR_WEBHOOK_SECRET`.
+2. A meter "Extra play": filter `name eq "play.extra"`, aggregation `sum` of `hours`, unit
+   `custom` with the label "hour". On the Plus product, beside its $15 price, a metered price on
+   that meter: `unit_amount` 25 (cents an hour) and `cap_amount` 5000 ($50 a period, twice the
+   most a player may allow in a month, as a last resort). Blockly sends `play.extra` events and
+   needs no id of either ([money-guards.md](money-guards.md#extra-play)).
+3. A one-time product "Cubepals balance" with a custom (pay-what-you-want) price and the metadata
+   `purpose: balance`. A payment Polar can no longer collect (its subscription ended) is paid
+   with it, at the amount owed ([money-guards.md](money-guards.md#extra-play)).
+4. Settings → Developers → an organization access token with `checkouts:write`, `customer_sessions:write`, `customers:read`, `subscriptions:read`, `products:read`, `orders:read`, `payments:read`, `refunds:write` and `events:write`:
+   `POLAR_ACCESS_TOKEN`.
+5. Settings → Webhooks → an endpoint `https://cubepals.com/api/billing/webhook`, API version
+   2026-10, events `customer.state_changed`, `order.created`, `order.updated`, `order.paid`, `order.refunded`, `subscription.active`, `subscription.past_due`, `subscription.canceled`, `subscription.uncanceled` and `subscription.revoked`. Its secret (`whsec_…`) is `POLAR_WEBHOOK_SECRET`.
 
 Then `bun scripts/production.ts apply`. The three come together or not at all; `check` and the
 plan both refuse one without the others.

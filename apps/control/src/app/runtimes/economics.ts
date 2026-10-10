@@ -2,6 +2,7 @@ import { type Db, schema } from '@blockly/db'
 import { and, eq, gt, inArray, lt, ne, sql } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { isMemoryTier, MEMORY_TIERS, memoryMb } from '../../domain/server/size.ts'
+import { PAID_ORDER } from '../billing/persistence.ts'
 import type { RuntimeHandle, RuntimeMachine } from '../ports/runtime.ts'
 import type { Runtimes } from './router.ts'
 
@@ -123,6 +124,14 @@ const SMALLEST_MB = Math.min(...MEMORY_TIERS.map((tier) => memoryMb(tier)))
 
 const round = (value: number, places = 2) => Math.round(value * 10 ** places) / 10 ** places
 
+/** Orders made in a window that were paid: revenue. A charge still pending, or voided, earned nothing. */
+const paidBetween = (from: Date, to: Date) =>
+  and(
+    sql`${schema.billingOrders.orderedAt} >= ${from}`,
+    lt(schema.billingOrders.orderedAt, to),
+    inArray(schema.billingOrders.status, PAID_ORDER),
+  )
+
 export class RuntimeEconomics {
   readonly #db: Db
   readonly #runtimes: Runtimes
@@ -213,7 +222,7 @@ export class RuntimeEconomics {
         fees: sql<string>`sum(round(${schema.billingOrders.totalCents} * ${PAYMENT_FEE.percent / 100}::numeric) + ${PAYMENT_FEE.fixedCents}::numeric)`,
       })
       .from(schema.billingOrders)
-      .where(and(sql`${schema.billingOrders.orderedAt} >= ${from}`, lt(schema.billingOrders.orderedAt, to)))
+      .where(paidBetween(from, to))
       .groupBy(schema.billingOrders.userId)
 
     const backupBytes = new Map(backups.map((row) => [row.serverId, Number(row.bytes)]))

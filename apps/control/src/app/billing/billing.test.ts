@@ -184,7 +184,7 @@ describe.skipIf(!hasDatabase)('billing', () => {
       outcome: 'synced',
     })
     const other = signed(
-      { type: 'product.updated', timestamp: new Date().toISOString(), api_version: '2026-04', data: {} },
+      { type: 'product.updated', timestamp: new Date().toISOString(), api_version: '2026-10', data: {} },
       secret,
     )
     const ignored = await webhook.request('/api/billing/webhook', {
@@ -352,16 +352,16 @@ describe.skipIf(!hasDatabase)('billing', () => {
     expect(rows.map((row) => row.status)).toEqual(['active'])
   })
 
-  test('Plus has its hours and no more: nothing is ever charged past them yet', async () => {
+  test('Plus sells extra hours, but none before its first payment is on record', async () => {
     const owner = await h.user()
     await plus(owner)
     const overview = await h.app.accountQueries.overview(owner)
-    expect(overview.entitlements).toMatchObject({ includedUnits: 60, mayBuyMore: false })
+    expect(overview.entitlements).toMatchObject({ includedUnits: 60, mayBuyMore: true })
     const refused = await h.app.accounts.allowExtraPlay(owner, 10).then(
       () => null,
       (error: Error) => error.message,
     )
-    expect(refused).toBe('Extra hours aren’t available yet. This month’s hours reset on the 1st.')
+    expect(refused).toBe('Extra hours open once your first Plus payment has gone through.')
     expect((await loadStanding(h.db, owner.userId)).extraUnitsAllowed).toBe(0)
   })
 

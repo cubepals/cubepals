@@ -24,7 +24,18 @@ export type ServerStatus =
    */
   | 'stored'
 
-export type StopReason = 'user' | 'idle' | 'policy' | 'entitlement' | 'crash' | 'maintenance' | 'session_cap'
+export type StopReason =
+  | 'user'
+  | 'idle'
+  | 'policy'
+  | 'entitlement'
+  | 'crash'
+  | 'maintenance'
+  | 'session_cap'
+  /** The month's play, with whatever extra the owner allowed, ran out. */
+  | 'hours'
+  /** The account owes for a payment that didn't go through. */
+  | 'unpaid'
 
 /** The phase an operation was in when it failed; retry resumes it. */
 export type Phase = 'provisioning' | 'starting' | 'stopping' | 'updating' | 'restoring' | 'relocating'

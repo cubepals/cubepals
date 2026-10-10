@@ -381,7 +381,7 @@ write on a staging bucket. The same tests then run against it:
 S3_TEST_ACCESS_KEY_ID=… S3_TEST_SECRET_ACCESS_KEY=… bun test src/infra/s3`. Browser uploads
 will also need a CORS rule on the bucket, which belongs with custom uploads.
 
-## Billing: Polar's new official SDK, pinned to API 2026-04
+## Billing: Polar's new official SDK, pinned to API 2026-10
 
 `PolarBilling` (`infra/polar/`) is the `BillingProvider`, on `@polar-sh/sdk` 1.0.0-alpha.22.
 
@@ -390,17 +390,19 @@ Speakeasy) was deprecated and its repository archived in September 2026. Polar's
 now lives in the main `polarsource/polar` repository under the same package name, published on
 the `next` tag. It is a pre-release, pinned here to an exact version. What keeps that safe is
 that the wire contract is not the package's: Polar versions its API by date, and the SDK exposes
-each version as its own module. Blockly imports `@polar-sh/sdk/2026-04`, which sends
-`Polar-Version: 2026-04` on every request and types webhook payloads for that version. The SDK
+each version as its own module. Blockly imports `@polar-sh/sdk/2026-10`, which sends
+`Polar-Version: 2026-10` on every request and types webhook payloads for that version. The SDK
 has no dependencies. Generating a client from Polar's OpenAPI spec was the alternative. It would
 have meant re-implementing webhook verification, including Polar's two key formats, which the
 SDK already handles.
 
 **API version.** Polar releases a version each quarter. Each version spends three months as Next
 (which can still break), three as Current (frozen) and three as Deprecated, then is removed.
-`2026-04` is Current. `2026-10` becomes Current in the first week of October 2026, and `2026-04`
-is then removed in January 2027. Moving means changing the import path, with the compiler
-showing every changed field, and moving the webhook endpoint's `api_version` with it.
+`2026-10` became Current on 2026-10-01, and `2026-04`, Deprecated since, is removed at the
+January 2027 release. Blockly moved to `2026-10` on 2026-10-10: in SDK 1.0.2 the two versions'
+types differ only in license keys' `member` fields and `api_version`, none of which Blockly
+reads. Moving means changing the import path, with the compiler showing every changed field, and
+moving the webhook endpoints' `api_version` with it (`scripts/staging.ts up` does staging's).
 
 **Proof of concept**, offline because it needs no account, on Bun 1.3.11 and Node 22.23.2, 15 of 15:
 - Webhooks were signed with the `standardwebhooks` library, independently of Polar's code.
@@ -429,7 +431,7 @@ check refuses a product for a plan that doesn't exist or a paid plan nothing sel
 the local stand-in with webhooks signed in the test (`infra/polar/polar-billing.test.ts`, 9 of 9).
 
 **Still to verify on Polar:** the sandbox run needs a sandbox organization access token, one
-product for the `plus` plan, and a webhook endpoint on API version 2026-04 that sends
+product for the `plus` plan, and a webhook endpoint on API version 2026-10 that sends
 `customer.state_changed`, with its secret. With those in `POLAR_*`, the checkout, portal and
 standing calls run against sandbox. A subscription made there proves the webhook end to end.
 

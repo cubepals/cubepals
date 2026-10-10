@@ -9,6 +9,7 @@ import {
   ilike,
   inArray,
   isNull,
+  lt,
   lte,
   ne,
   notExists,
@@ -46,6 +47,7 @@ const toStanding = (row: typeof standing.$inferSelect): AccountStanding => ({
   extraUnitsAllowed: row.extraUnitsAllowed,
   afkKickMinutes: row.afkKickMinutes,
   playWarned: row.playWarned,
+  extraWarned: row.extraWarned,
 })
 
 /**
@@ -273,7 +275,14 @@ export async function runUnitsSince(q: Queryable, ownerId: string, since: Date, 
     })
     .from(intervals)
     .innerJoin(servers, eq(servers.id, intervals.serverId))
-    .where(and(eq(servers.ownerId, ownerId), sql`coalesce(${intervals.stoppedAt}, ${now}) > ${since}`))
+    // A run that starts after `now` (a span that ends before the clock) has no time in it.
+    .where(
+      and(
+        eq(servers.ownerId, ownerId),
+        sql`coalesce(${intervals.stoppedAt}, ${now}) > ${since}`,
+        lt(intervals.startedAt, now),
+      ),
+    )
   return Number(row?.units ?? 0) / 3600
 }
 

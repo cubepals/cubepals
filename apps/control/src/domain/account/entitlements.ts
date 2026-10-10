@@ -167,9 +167,9 @@ const PLANS: Record<string, Entitlements> = {
     // 60 included hours; a large server uses two an hour (meter.ts). Past `storage.paidForGb` of
     // worlds an account is an admin alert.
     includedUnits: 60,
-    // Extra hours (25¢ each, up to a limit the owner sets) wait until billing meters them end to
-    // end: allowing play nobody is billed for is no better than a surprise bill. Until then a server sleeps at the block, and the owner's cap stays at zero.
-    mayBuyMore: false,
+    // Extra hours, 25¢ each (meter.ts), up to a limit the owner sets under `EXTRA_CEILING`, billed
+    // on the next Plus payment. Who may allow them is `extra-play.ts`'s to say.
+    mayBuyMore: true,
     mayChooseAfkKick: true,
     // Joining wakes a server, so an empty one waiting an hour only spends the owner's hours.
     idleShutdownAfterMinutes: 15,
@@ -196,6 +196,17 @@ const PLANS: Record<string, Entitlements> = {
     createsPerHour: 10,
   },
 }
+
+/**
+ * The most extra play an owner may allow a month, in units, on a plan where they may buy more: a
+ * ceiling that grows with what the account has paid. Until its first renewal is paid it is 20 ($5),
+ * and after that 100 ($25). Extra play is billed after it is played, so this is what Cubepals
+ * risks on an account whose card then fails (the owner's numbers, 2026-10-10).
+ */
+export const EXTRA_CEILING = { untilRenewed: 20, renewed: 100 } as const
+
+/** The limits an owner picks extra play from, in units; the page offers the ones under the ceiling. */
+export const EXTRA_CHOICES: readonly number[] = [0, 20, 50, 100]
 
 /**
  * How long any plan may need a snapshot, in days (§8: a provider's snapshot retention is set to

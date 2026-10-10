@@ -42,8 +42,8 @@ describe('entitlements', () => {
       maxServers: 3,
       maxRunning: 2,
       includedUnits: 60,
-      // Not until billing meters extra hours end to end.
-      mayBuyMore: false,
+      // Extra hours, billed on the next payment, under extra-play.ts's guards.
+      mayBuyMore: true,
       idleShutdownAfterMinutes: 15,
       // Every plan kicks idle players by default; never is the owner's own choice.
       playerIdleKickMinutes: 15,

@@ -146,7 +146,9 @@ export class EdgeService {
             ? 'suspended'
             : error.code === 'platform_paused'
               ? 'paused'
-              : error.code === 'limit_reached' || error.code === 'not_entitled'
+              : error.code === 'limit_reached' ||
+                  error.code === 'not_entitled' ||
+                  error.code === 'payment_due'
                 ? 'quota'
                 : 'unknown'
         return { outcome: 'denied', reason }

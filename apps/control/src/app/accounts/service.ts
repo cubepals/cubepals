@@ -2,13 +2,15 @@ import type { SignUpAgreement, SignupSource } from '@blockly/contracts'
 import { type Db, schema, type Tx } from '@blockly/db'
 import {
   type Entitlements,
+  EXTRA_CEILING,
   entitlementsFor,
   PAID_PLANS,
   planGap,
-  planName,
 } from '../../domain/account/entitlements.ts'
+import { extraUnits } from '../../domain/account/extra-play.ts'
 import type { Restrictions } from '../../domain/account/standing.ts'
 import { type Actor, requestedBy } from '../actor.ts'
+import { extraPlayNow } from '../billing/persistence.ts'
 import { playWarning } from '../emails/play.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { forgetAccount } from '../guestbook/persistence.ts'
@@ -20,6 +22,7 @@ import { runsOf } from '../revisions/caps.ts'
 import { listOwned, listUnpurged, loadRevision } from '../servers/persistence.ts'
 import type { MinecraftServerService } from '../servers/service.ts'
 import { openIntervalStart } from '../servers/usage.ts'
+import { warnAboutExtra } from './extra-play.ts'
 import {
   countTakenFreePlaces,
   emailOf,
@@ -55,13 +58,6 @@ const NO_TAGS: CampaignTags = { medium: null, campaign: null, content: null, ter
 
 /** Waitlist addresses taken a minute before it waits: people type one address, scripts many. */
 const WAITLIST_PER_MINUTE = 30
-
-/**
- * The most extra play an owner may allow in a month, in meter units. It is a stop on a runaway
- * mistake, not a judgement about what anyone wants: 500 extra hours is already far more than a
- * server for friends will ever use.
- */
-const MOST_EXTRA_UNITS = 500
 
 /**
  * Where this month's play is worth saying something about, in per cent of the included block.
@@ -168,26 +164,26 @@ export class AccountService {
 
   /**
    * How much play past the plan's included block the owner allows themselves to be charged for
-   * (§15.5). It is theirs to set and nobody else's: Blockly never spends past it, so the answer
-   * to "will this surprise me on the 1st" is always no. Zero, where every account starts, means
-   * servers simply sleep when the block runs out, as they do on free.
+   * (§15.5), billed on their next payment. It is theirs to set and nobody else's: Blockly never
+   * spends past it, so the answer to "will this surprise me" is always no. Only an account extra
+   * play's guards let (`domain/account/extra-play.ts`) may allow any, up to its ceiling; zero,
+   * where every account starts, is always allowed, and means servers sleep when the block runs out.
    */
   async allowExtraPlay(actor: Actor, units: number): Promise<number> {
     if (actor.kind !== 'user') throw new NotFound('Account')
-    if (!Number.isInteger(units) || units < 0 || units > MOST_EXTRA_UNITS)
-      throw new AppError(
-        'invalid_choice',
-        `Allow between 0 and ${MOST_EXTRA_UNITS} hours of extra play a month.`,
-      )
+    if (!Number.isInteger(units) || units < 0)
+      throw new AppError('invalid_choice', 'Allow a whole number of hours of extra play, or none.')
     const standing = await loadStanding(this.#db, actor.userId)
-    if (!entitlementsFor(standing.plan, standing.limitOverrides).mayBuyMore) {
-      const sells = PAID_PLANS.find((plan) => entitlementsFor(plan).mayBuyMore)
-      throw new AppError(
-        'not_entitled',
-        sells === undefined
-          ? 'Extra hours aren’t available yet. This month’s hours reset on the 1st.'
-          : `Your plan doesn’t include extra hours. ${planName(sells)} does.`,
-      )
+    if (units > 0) {
+      const { decision } = await extraPlayNow(this.#db, standing)
+      if (!decision.may) throw new AppError('not_entitled', decision.why)
+      if (units > decision.ceiling)
+        throw new AppError(
+          'invalid_choice',
+          decision.ceiling < EXTRA_CEILING.renewed
+            ? `You can allow up to ${decision.ceiling} extra hours a month until your first renewal is paid, then up to ${EXTRA_CEILING.renewed}.`
+            : `You can allow up to ${decision.ceiling} extra hours a month.`,
+        )
     }
     await this.#db.transaction(async (tx) => {
       const locked = await lockStanding(tx, actor.userId)
@@ -201,6 +197,8 @@ export class AccountService {
         data: { units },
       })
     })
+    // A start refused at the end of the hours is the owner's to try again; one lowered stops now.
+    await this.enforceLimits(actor.userId)
     return units
   }
 
@@ -240,18 +238,25 @@ export class AccountService {
     await recordSignupSource(this.#db, actor.userId, { source, ...tags })
   }
 
-  /** Limits above or below the plan's, for this account only; null returns to the plan's. */
+  /**
+   * Limits above or below the plan's, for this account only; null returns to the plan's. Hours of
+   * play a month (`includedUnits`) are given the same way: to make up for a bad month, or to test.
+   */
   async setLimits(
     actor: Actor,
     userId: string,
-    limits: { maxServers: number | null; maxRunning: number | null },
+    limits: { maxServers: number | null; maxRunning: number | null; includedUnits?: number | null },
   ): Promise<void> {
     for (const value of [limits.maxServers, limits.maxRunning])
       if (value !== null && (!Number.isInteger(value) || value < 0 || value > 1000))
         throw new AppError('invalid_choice', 'Limits are whole numbers from 0 to 1000.')
+    const hours = limits.includedUnits ?? null
+    if (hours !== null && (!Number.isInteger(hours) || hours < 0 || hours > 10_000))
+      throw new AppError('invalid_choice', 'Hours of play are a whole number from 0 to 10,000.')
     const overrides = {
       ...(limits.maxServers === null ? {} : { maxServers: limits.maxServers }),
       ...(limits.maxRunning === null ? {} : { maxRunning: limits.maxRunning }),
+      ...(hours === null ? {} : { includedUnits: hours }),
     }
     await this.#change(actor, userId, 'account.limits_set', { limits: overrides }, (tx) =>
       saveStanding(tx, userId, { limitOverrides: overrides }),
@@ -376,7 +381,10 @@ export class AccountService {
    * work are left to the enforcement sweep, which stops them once that work is done; a starting
    * one is refused by its own worker, which re-checks standing before it boots.
    */
-  async stopServersOf(userId: string, reason: 'policy' | 'entitlement' = 'policy'): Promise<number> {
+  async stopServersOf(
+    userId: string,
+    reason: 'policy' | 'entitlement' | 'hours' | 'unpaid' = 'policy',
+  ): Promise<number> {
     let stopped = 0
     for (const server of await listOwned(this.#db, userId)) {
       if (server.lifecycle.status !== 'running') continue
@@ -408,13 +416,15 @@ export class AccountService {
     for (const userId of await ownersRunning(this.#db))
       if (!inactive.has(userId)) {
         await this.warnAboutPlay(userId)
+        await warnAboutExtra({ db: this.#db, mailer: this.#mailer, origin: this.#webOrigin }, userId)
         stopped += await this.enforceLimits(userId)
       }
     return { stopped, closed }
   }
 
   /**
-   * What the account's plan allows now, applied to what it runs: servers
+   * What the account's plan allows now, applied to what it runs: everything stops while it owes
+   * money (`unpaid`) or once its play is used up (`hours`); otherwise servers
    * the plan doesn't run (a size it never sold, or mods it doesn't include) stop, then the most
    * recently started beyond the plan's running limit, all with reason `entitlement`. Nothing is
    * deleted or changed.
@@ -422,10 +432,14 @@ export class AccountService {
   async enforceLimits(userId: string): Promise<number> {
     const standing = await loadStanding(this.#db, userId)
     const allowed = entitlementsFor(standing.plan, standing.limitOverrides)
+    // Money owed from a payment that didn't go through stops everything until it is paid.
+    const { decision, owedCents } = await extraPlayNow(this.#db, standing)
+    if (owedCents > 0) return await this.stopServersOf(userId, 'unpaid')
     // Play that has run out stops everything, not just the next start: a run already going is
-    // what spends the money. Nobody is ever charged past what they allowed (§15.5).
-    const spent = await this.#spentItsPlay(userId, allowed, standing.extraUnitsAllowed)
-    if (spent) return await this.stopServersOf(userId, 'entitlement')
+    // what spends the money. Nobody is ever charged past what they allowed (§15.5), and extra
+    // play that stopped being allowed (a cancel, a failed payment) stops at the included block.
+    const spent = await this.#spentItsPlay(userId, allowed, extraUnits(decision))
+    if (spent) return await this.stopServersOf(userId, 'hours')
     const started = new Map<string, number>()
     const running = (await listOwned(this.#db, userId)).filter((s) => RUNNING.has(s.lifecycle.status))
     for (const server of running)
@@ -466,6 +480,7 @@ export class AccountService {
     const standing = await loadStanding(this.#db, userId)
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
     if (plan.includedUnits === null || plan.includedUnits === 0) return null
+    const { decision } = await extraPlayNow(this.#db, standing)
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
     const units = await runUnitsSince(this.#db, userId, monthStart, now)
     const share = (units / plan.includedUnits) * 100
@@ -484,8 +499,8 @@ export class AccountService {
           mark: reached,
           included: plan.includedUnits,
           used: Math.round(units * 10) / 10,
-          extraAllowed: standing.extraUnitsAllowed,
-          mayBuyMore: plan.mayBuyMore,
+          extraAllowed: extraUnits(decision),
+          mayBuyMore: decision.may,
           origin: this.#webOrigin,
         }),
       })

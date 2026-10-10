@@ -83,6 +83,7 @@ export const ALERT_KEYS = [
   'purge_overdue',
   'catalog_stale',
   'worlds_outgrow_plan',
+  'extra_play_unsent',
 ] as const
 export type AlertKey = (typeof ALERT_KEYS)[number]
 

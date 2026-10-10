@@ -46,6 +46,16 @@ describe('presentStatus', () => {
       'Paused when your plan changed. Its world is safe',
     )
 
+    // Hours used up is sleep, not a pause, and it never says joining wakes it, which it can't.
+    expect(presentStatus(stopped('hours'))).toEqual({
+      pill: 'sleeping',
+      detail: 'This month’s hours are used up. It sleeps until the 1st',
+    })
+    expect(presentStatus(stopped('unpaid'))).toEqual({
+      pill: 'suspended',
+      detail: 'Paused until a payment is made. Its world is safe; see your account',
+    })
+
     expect(presentStatus(stopped('policy')).pill).toBe('suspended')
     expect(presentStatus(stopped('entitlement')).pill).toBe('suspended')
     expect(presentStatus(stopped('crash')).pill).toBe('crashed')

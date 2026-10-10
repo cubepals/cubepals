@@ -60,6 +60,10 @@ export const stopReason = pgEnum('stop_reason', [
   'crash',
   'maintenance',
   'session_cap',
+  // This month's play, with any extra the owner allowed, is used up.
+  'hours',
+  // The account owes for extra play a payment didn't cover (docs/money-guards.md).
+  'unpaid',
 ])
 export const loader = pgEnum('loader', ['vanilla', 'paper', 'fabric', 'quilt', 'neoforge', 'forge'])
 

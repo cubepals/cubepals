@@ -82,16 +82,7 @@ function Play({ overview }: { overview: AccountOverviewView }) {
   const { usage: u, entitlements: e } = overview
   const again = () => void queries.invalidateQueries({ queryKey: trpc.account.overview.queryKey() })
   // Each choice saves as it is made, and its line says so for a moment.
-  const allowed = useOutcome(undefined)
   const kicked = useOutcome(undefined)
-  const allow = useMutation(
-    trpc.account.allowExtraPlay.mutationOptions({
-      onSuccess: () => {
-        again()
-        allowed.settled()
-      },
-    }),
-  )
   const afk = useMutation(
     trpc.account.setAfkKick.mutationOptions({
       onSuccess: () => {
@@ -109,10 +100,8 @@ function Play({ overview }: { overview: AccountOverviewView }) {
   const used = Math.min(1, u.unitsThisMonth / included)
   const share = Math.round(used * 100)
   const left = Math.max(0, included - u.unitsThisMonth)
-  const extraUsed = Math.max(0, u.unitsThisMonth - included)
   // An hour on a large server counts two; said only to someone whose month shows it.
   const doubled = u.unitsThisMonth > u.hoursThisMonth
-  const more = overview.plans.find((p) => (p.entitlements.includedUnits ?? 0) > included)
 
   return (
     <FormSection
@@ -121,29 +110,11 @@ function Play({ overview }: { overview: AccountOverviewView }) {
     >
       <ProgressBar onPaper value={share} label={`${share}% of this month's play`} />
       {share >= 100 ? (
-        u.extraUnitsAllowed > 0 ? (
-          <Note tone="info">
-            {`You're past what your plan includes. The ${extraUsed} hours since then cost ${money(extraUsed * u.unitCents)}, and servers sleep once you reach the ${u.extraUnitsAllowed} you allowed.`}
-          </Note>
-        ) : (
-          <>
-            <Note tone="info">
-              {`You've played this month's ${included} hours. Your servers sleep until the 1st${e.mayBuyMore ? ', unless you allow some extra play below' : ''}.`}
-            </Note>
-            {more && (
-              <PlusOffer
-                why={`${title(more.key)} has ${more.entitlements.includedUnits} hours a month.`}
-                plan={more.key}
-                reason="hours"
-                next="/account"
-              />
-            )}
-          </>
-        )
+        <UsedUp overview={overview} included={included} />
       ) : share >= 80 ? (
         <Note tone="info">
           {left} hours left this month.
-          {e.mayBuyMore ? ' Nothing is charged unless you allow it below.' : ''}
+          {u.extra.may ? ' Nothing more is charged unless you allow it below.' : ''}
         </Note>
       ) : share >= 50 ? (
         <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
@@ -156,29 +127,7 @@ function Play({ overview }: { overview: AccountOverviewView }) {
           {u.hoursThisMonth} hours on the clock: a large server counts two for each hour it runs.
         </p>
       )}
-      {e.mayBuyMore && (
-        <FormRow
-          label="Extra play you allow"
-          description={`${allowed.said === 'done' ? 'Saved. ' : ''}Past what your plan includes, ${money(u.unitCents)} an hour. Cubepals stops your servers at this number, so nothing costs more than you said.`}
-          control={
-            <div className="bk-row" style={{ gap: 'var(--space-8)', alignItems: 'center' }}>
-              <select
-                className="bk-input bk-num"
-                style={{ inlineSize: 'auto' }}
-                value={u.extraUnitsAllowed}
-                disabled={allow.isPending}
-                onChange={(event) => allow.mutate({ units: Number(event.target.value) })}
-              >
-                {[0, 20, 50, 100, 200].map((units) => (
-                  <option key={units} value={units}>
-                    {units === 0 ? 'None' : `${units} hours · up to ${money(units * u.unitCents)}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-          }
-        />
-      )}
+      {e.mayBuyMore && <ExtraPlay overview={overview} />}
       {e.mayChooseAfkKick && (
         <FormRow
           label="Kick players who stand still"
@@ -229,9 +178,135 @@ function Play({ overview }: { overview: AccountOverviewView }) {
           even when nobody is playing. It is the most expensive way to run a server.
         </p>
       </Modal>
-      {allow.isError && <Note tone="danger">{messageOf(allow.error)}</Note>}
       {afk.isError && <Note tone="danger">{messageOf(afk.error)}</Note>}
     </FormSection>
+  )
+}
+
+/** Extra play as the page says it: the limit that counts now, and what extra hours came to. */
+const extraOf = (u: AccountOverviewView['usage']) => ({
+  /** What the owner allowed, as far as it counts now: none while extra play is off. */
+  allowedNow: u.extra.may ? Math.min(u.extraUnitsAllowed, u.extra.ceiling) : 0,
+  billed: money(Math.round(u.extra.countedUnits * u.unitCents)),
+  /** Hours as the emails say them: to a tenth, never the thousandths they are counted in. */
+  hours: Math.round(u.extra.countedUnits * 10) / 10,
+})
+
+/** The month's included play is used: on extra hours now, or asleep until the 1st, and why. */
+function UsedUp({ overview, included }: { overview: AccountOverviewView; included: number }) {
+  const x = overview.usage.extra
+  const { allowedNow, billed, hours } = extraOf(overview.usage)
+  // An upgrade only: with an admin's own hours on the account, a cheaper plan can have more.
+  const more = overview.plans.find(
+    (p) =>
+      (p.entitlements.includedUnits ?? 0) > included &&
+      p.entitlements.monthlyPriceCents > overview.entitlements.monthlyPriceCents,
+  )
+  if (allowedNow > 0)
+    return (
+      <Note tone="info">
+        {`You're on extra hours: ${hours} so far this month, ${billed}, billed with your Plus payments. Servers sleep once you reach the ${allowedNow} you allowed.`}
+      </Note>
+    )
+  return (
+    <>
+      <Note tone="info">
+        {`You've played this month's ${included} hours. Your servers sleep until the 1st${x.may ? ', unless you allow some extra play below' : ''}.`}
+        {x.countedUnits > 0
+          ? ` Your ${hours} extra hours this month, ${billed}, are billed with your Plus payments.`
+          : ''}
+      </Note>
+      {more && (
+        <PlusOffer
+          why={`${title(more.key)} has ${more.entitlements.includedUnits} hours a month.`}
+          plan={more.key}
+          reason="hours"
+          next="/account"
+        />
+      )}
+    </>
+  )
+}
+
+/**
+ * The owner's own limit on extra play, from the choices under their ceiling, saved as it is
+ * picked; or, while extra play is off for them, the one sentence that says why.
+ */
+function ExtraPlay({ overview }: { overview: AccountOverviewView }) {
+  const trpc = useTRPC()
+  const queries = useQueryClient()
+  const allowed = useOutcome(undefined)
+  const allow = useMutation(
+    trpc.account.allowExtraPlay.mutationOptions({
+      onSuccess: () => {
+        void queries.invalidateQueries({ queryKey: trpc.account.overview.queryKey() })
+        allowed.settled()
+      },
+    }),
+  )
+  const u = overview.usage
+  const x = u.extra
+  if (!x.may)
+    return x.why === null ? null : (
+      <FormRow label="Extra play" description={x.why} control={<span className="type-body">Off</span>} />
+    )
+  const later =
+    x.nextCeiling === null
+      ? ''
+      : ` Up to ${x.ceiling} hours a month until your first renewal is paid, then up to ${x.nextCeiling}.`
+  return (
+    <>
+      <FormRow
+        label="Extra play you allow"
+        description={`${allowed.said === 'done' ? 'Saved. ' : ''}Past what your plan includes, ${money(u.unitCents)} an hour, added to your next Plus payment. Cubepals stops your servers at this number, so nothing costs more than you said.${later}`}
+        control={
+          <div className="bk-row" style={{ gap: 'var(--space-8)', alignItems: 'center' }}>
+            <select
+              className="bk-input bk-num"
+              style={{ inlineSize: 'auto' }}
+              value={extraOf(u).allowedNow}
+              disabled={allow.isPending}
+              onChange={(event) => allow.mutate({ units: Number(event.target.value) })}
+            >
+              {x.choices.map((units) => (
+                <option key={units} value={units}>
+                  {units === 0 ? 'None' : `${units} hours · up to ${money(units * u.unitCents)}`}
+                </option>
+              ))}
+            </select>
+          </div>
+        }
+      />
+      {allow.isError && <Note tone="danger">{messageOf(allow.error)}</Note>}
+    </>
+  )
+}
+
+/**
+ * Money owed from a payment that didn't go through: what it blocks, and how it is paid. One the
+ * provider can no longer collect is paid here at once; one it still tries is paid by fixing the
+ * card in Manage billing.
+ */
+function Owed({ extra }: { extra: AccountOverviewView['usage']['extra'] }) {
+  const trpc = useTRPC()
+  const settle = useMutation(
+    trpc.billing.settle.mutationOptions({ onSuccess: ({ url }) => window.location.assign(url) }),
+  )
+  if (extra.owedCents === 0) return null
+  return (
+    <>
+      <Note tone="danger">
+        {`You owe ${money(extra.owedCents)} from a payment that didn’t go through. Your servers can’t start until it’s paid${extra.settleCents > 0 ? '' : ' in Manage billing'}. Your worlds are safe, and you can still download them.`}
+      </Note>
+      {extra.settleCents > 0 && (
+        <div className="bk-row">
+          <Button variant="primary" disabled={settle.isPending} onClick={() => settle.mutate()}>
+            {`Pay ${money(extra.settleCents)}`}
+          </Button>
+        </div>
+      )}
+      {settle.isError && <Note tone="danger">{messageOf(settle.error)}</Note>}
+    </>
   )
 }
 
@@ -309,6 +384,7 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
       {billing && !billing.available && billing.code !== 'deployment_unsupported' && (
         <Note tone="info">{billing.message}</Note>
       )}
+      <Owed extra={overview.usage.extra} />
       {refresh.isPending && <p className="type-body-sm">Checking your payment…</p>}
       {failure && <Note tone="danger">{messageOf(failure)}</Note>}
     </FormSection>

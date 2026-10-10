@@ -8,7 +8,7 @@ export const PLUS_PRODUCT = 'd8dd2de1-21b7-4a41-8bc3-ce909c0cfe23'
 /** A webhook secret in Polar's format. */
 export const webhookSecret = () => `whsec_${randomBytes(24).toString('base64')}`
 
-/** A customer's state, shaped like API 2026-04's CustomerState, paying for plus unless patched. */
+/** A customer's state, shaped like API 2026-10's CustomerState, paying for plus unless patched. */
 export const customerState = (
   externalId: string | null,
   patch: Record<string, unknown> = {},
@@ -46,7 +46,7 @@ export const customerState = (
 })
 
 /**
- * A subscription, shaped like API 2026-04's Subscription (the fields a standing doesn't carry):
+ * A subscription, shaped like API 2026-10's Subscription (the fields a standing doesn't carry):
  * Plus, cancelled and ended, unless patched.
  */
 export const subscription = (id: string, patch: Record<string, unknown> = {}) => ({
@@ -75,7 +75,7 @@ export const subscription = (id: string, patch: Record<string, unknown> = {}) =>
   ...patch,
 })
 
-/** An order, shaped like API 2026-04's Order: Plus bought for $15, no tax, unless patched. */
+/** An order, shaped like API 2026-10's Order: Plus bought for $15, no tax, unless patched. */
 export const order = (externalId: string | null, patch: Record<string, unknown> = {}) => ({
   id: 'b1c4e2f0-6f1d-4a57-9e57-7c1f0f4d2a11',
   created_at: '2026-09-26T10:00:00Z',
@@ -118,14 +118,14 @@ export const order = (externalId: string | null, patch: Record<string, unknown> 
 export const orderEvent = (data: unknown, type = 'order.paid') => ({
   type,
   timestamp: new Date().toISOString(),
-  api_version: '2026-04',
+  api_version: '2026-10',
   data,
 })
 
 export const stateChanged = (data: unknown) => ({
   type: 'customer.state_changed',
   timestamp: new Date().toISOString(),
-  api_version: '2026-04',
+  api_version: '2026-10',
   data,
 })
 
@@ -151,10 +151,11 @@ export class PolarStandIn {
   /** Each customer's state now, by external id. */
   readonly states = new Map<string, unknown>()
   down = false
-  reply: (request: { method: string; path: string }) => { status: number; body: unknown } = () => ({
-    status: 200,
-    body: {},
-  })
+  reply: (request: { method: string; path: string; body: string }) => { status: number; body: unknown } =
+    () => ({
+      status: 200,
+      body: {},
+    })
   url = ''
   #server: Server | null = null
 

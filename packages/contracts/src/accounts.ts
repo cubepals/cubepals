@@ -34,7 +34,8 @@ export interface AccountDetailView extends AccountView {
   /** The plans an admin can put the account on. */
   plans: string[]
   restrictions: { provisioning: boolean; publicListing: boolean; consoleCommands: boolean }
-  limits: { maxServers: number | null; maxRunning: number | null }
+  /** `includedUnits`: hours of play a month instead of the plan's, as an admin gives them. */
+  limits: { maxServers: number | null; maxRunning: number | null; includedUnits: number | null }
   serverList: Array<{ id: string; name: string; slug: string; status: string; deleted: boolean }>
   history: Array<{ at: string; actor: string; action: string; data: Record<string, unknown> }>
 }
@@ -58,10 +59,15 @@ export const LimitsInput = z.object({
   userId,
   maxServers: z.number().int().min(0).max(1000).nullable(),
   maxRunning: z.number().int().min(0).max(1000).nullable(),
+  /** Hours of play a month instead of the plan's; null returns to the plan's. */
+  includedUnits: z.number().int().min(0).max(10_000).nullable(),
 })
 
-/** How much play past the plan's included block the owner allows, in meter units. */
-export const AllowExtraPlayInput = z.object({ units: z.number().int().min(0).max(500) })
+/**
+ * How much play past the plan's included block the owner allows, in meter units: at most the
+ * highest ceiling there is (`EXTRA_CEILING` in the control plane), which decides each account's own.
+ */
+export const AllowExtraPlayInput = z.object({ units: z.number().int().min(0).max(100) })
 
 /**
  * The AFK kick the owner sets, in minutes; null goes back to the plan's own. 0 is never: the most
@@ -206,6 +212,24 @@ export interface AccountOverviewView {
     /** Units past the included block the owner has allowed, and what they cost per unit. */
     extraUnitsAllowed: number
     unitCents: number
+    /**
+     * Extra play: whether the account may allow any now, and if not why, in one sentence; the most
+     * it may allow and the limits it picks from; what it has run up this month, in units, and of
+     * that what was sent to be billed; and what it owes from a payment that didn't go through.
+     */
+    extra: {
+      may: boolean
+      why: string | null
+      ceiling: number
+      /** The ceiling once a renewal is paid, while it is higher than today's; null otherwise. */
+      nextCeiling: number | null
+      choices: number[]
+      countedUnits: number
+      reportedUnits: number
+      owedCents: number
+      /** Of that, what is paid as a balance (`billing.settle`); the rest by fixing the card. */
+      settleCents: number
+    }
   }
   /** Each as the API would answer it now. */
   features: Array<{

@@ -30,6 +30,9 @@ const facts = (patch: Partial<PolicyFacts> = {}): PolicyFacts => ({
   createsInLastHour: 0,
   unitsThisMonth: 0,
   extraUnitsAllowed: 0,
+  extraOffBecause: null,
+  extraMayRise: true,
+  owedCents: 0,
   actionsInLastMinute: 0,
   ...patch,
 })
@@ -409,6 +412,63 @@ describe('money guards at their trip points', () => {
     }
     expect(evaluate(off('publicListingEnabled'), { kind: 'list_publicly' })).toMatchObject({
       code: 'platform_paused',
+    })
+  })
+})
+
+describe('extra play and money owed', () => {
+  const create = { kind: 'create_server', memoryTier: '3g' } as const
+  const start = { kind: 'start_server', runs: plain('3g') } as const
+
+  test('past the hours, a start says what would help: extra play allowed, off, or used up', () => {
+    const plus = entitlementsFor('plus')
+    const at = (patch: Partial<PolicyFacts>) =>
+      evaluate(facts({ entitlements: plus, unitsThisMonth: 60, ...patch }), start)
+    expect(at({ extraUnitsAllowed: 20 })).toEqual({ ok: true })
+    expect(at({ unitsThisMonth: 80, extraUnitsAllowed: 20 })).toEqual({
+      ok: false,
+      code: 'limit_reached',
+      message:
+        'You have used the extra play you allowed this month. Raise it in your account, or wait for the 1st.',
+    })
+    // At the ceiling there is nothing to raise.
+    expect(at({ unitsThisMonth: 80, extraUnitsAllowed: 20, extraMayRise: false })).toMatchObject({
+      message: 'You have used the most extra play you can allow this month. It resets on the 1st.',
+    })
+    expect(at({})).toMatchObject({
+      message: 'You have used this month’s play time. Allow extra play in your account, or wait for the 1st.',
+    })
+    expect(
+      at({ extraOffBecause: 'Your last payment didn’t go through, so extra hours are off until it does.' }),
+    ).toMatchObject({
+      message:
+        'You have used this month’s play time, and it resets on the 1st. Your last payment didn’t go through, so extra hours are off until it does.',
+    })
+  })
+
+  test('money owed stops starts and new servers, and nothing else', () => {
+    const owed = facts({ entitlements: entitlementsFor('plus'), owedCents: 2000 })
+    const due = {
+      ok: false as const,
+      code: 'payment_due' as const,
+      message:
+        'You owe $20.00 from a payment that didn’t go through. Pay it on your account, and your servers can start again.',
+    }
+    expect(evaluate(owed, start)).toEqual(due)
+    expect(evaluate(owed, create)).toEqual(due)
+    expect(evaluate(owed, { kind: 'restart_server', runs: plain('3g') })).toEqual(due)
+    expect(evaluate(owed, { kind: 'continue_starting' })).toEqual(due)
+    // A world is still theirs to look at, download and say who may join; paying is still open.
+    expect(
+      evaluate({ ...owed, deployment: { archives: true, billing: true } }, { kind: 'download_archive' }),
+    ).toEqual({
+      ok: true,
+    })
+    expect(evaluate(owed, { kind: 'manage_access' })).toEqual({ ok: true })
+    expect(
+      evaluate({ ...owed, deployment: { archives: false, billing: true } }, { kind: 'billing' }),
+    ).toEqual({
+      ok: true,
     })
   })
 })

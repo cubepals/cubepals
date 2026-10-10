@@ -17,7 +17,8 @@
  * Parts (`emails/`):
  * - `account.ts`: welcome, confirming an email, a reset link and a changed password.
  * - `admins.ts`: what the platform tells every admin: a raised alert, the daily spend limit.
- * - `play.ts`: the warnings as a month's included play runs out.
+ * - `billing.ts`: a payment carrying extra play that failed, and one still owed after that.
+ * - `play.ts`: the warnings as a month's included play runs out, and as extra play is used.
  * - `servers.ts`: what happened to one server: off the directory, an idle world, a rebuild.
  */
 

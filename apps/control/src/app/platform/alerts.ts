@@ -3,6 +3,7 @@ import type { Db } from '@blockly/db'
 import { entitlementsFor, PLAN_KEYS } from '../../domain/account/entitlements.ts'
 import { listAdmins, loadStanding } from '../accounts/persistence.ts'
 import type { Actor } from '../actor.ts'
+import { unsentExtra } from '../billing/extra-usage.ts'
 import type { CatalogSync } from '../catalog/sync.ts'
 import { adminAlert } from '../emails/admins.ts'
 import { NotFound } from '../errors.ts'
@@ -25,6 +26,7 @@ const WHERE: Record<AlertKey, string> = {
   purge_overdue: '/admin/operations',
   catalog_stale: '/admin/platform',
   worlds_outgrow_plan: '/admin/accounts',
+  extra_play_unsent: '/admin/accounts',
 }
 
 interface Condition {
@@ -130,6 +132,7 @@ export class PlatformAlerts {
         key: 'worlds_outgrow_plan',
         summary: `${outgrown} ${outgrown === 1 ? 'account keeps' : 'accounts keep'} more world data than ${outgrown === 1 ? 'its plan covers' : 'their plans cover'}, and ${outgrown === 1 ? 'costs' : 'cost'} more than ${outgrown === 1 ? 'it pays' : 'they pay'}.`,
       })
+    conditions.push(...(await unsentCondition(this.#db)))
     return conditions
   }
 
@@ -150,4 +153,17 @@ export class PlatformAlerts {
     }
     return told
   }
+}
+
+/** Extra play Polar refused until it was no longer sent: hours played and never billed. */
+async function unsentCondition(db: Db): Promise<Condition[]> {
+  const { events, milli } = await unsentExtra(db)
+  if (events === 0) return []
+  const one = events === 1
+  return [
+    {
+      key: 'extra_play_unsent',
+      summary: `${events} extra-play ${one ? 'event' : 'events'} (${milli / 1000} h) Polar kept refusing ${one ? 'is' : 'are'} no longer sent and won't be billed; each is on its account's audit log as billing.extra_unsent.`,
+    },
+  ]
 }

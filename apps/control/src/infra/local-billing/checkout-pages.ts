@@ -1,6 +1,6 @@
 /**
- * The local checkout's two pages, in place of Polar's checkout and customer portal: one starts a
- * plan, the other cancels it. Each sends what it did to the billing webhook as a signed delivery,
+ * The local checkout's pages, in place of Polar's checkout and customer portal: one starts a
+ * plan, one cancels it, and one pays a balance owed. Each sends what it did to the billing webhook as a signed delivery,
  * through the same route a Polar delivery takes, then goes back to the account page, which reads
  * the plan as it would after a real payment. Only `local-billing.ts` makes their links.
  */
@@ -38,6 +38,38 @@ export function localCheckoutPages(deps: {
     const ticket = deps.billing.ticket(String((await c.req.parseBody()).ticket ?? ''), 'checkout')
     if (ticket === null || ticket.planKey === null) return c.html(expired(), 400)
     await deliver({ type: 'subscription.started', userId: ticket.userId, planKey: ticket.planKey })
+    await deliver({
+      type: 'order.paid',
+      userId: ticket.userId,
+      planKey: ticket.planKey,
+      cents: ticket.priceCents,
+    })
+    return c.redirect(ticket.returnUrl, 303)
+  })
+
+  app.get(`${LOCAL_BILLING_PATH}/settle`, (c) => {
+    const ticket = deps.billing.ticket(c.req.query('ticket') ?? '', 'settle')
+    if (ticket === null) return c.html(expired(), 400)
+    const owed = `$${(ticket.priceCents / 100).toFixed(2)}`
+    return c.html(
+      page(
+        'Test payment',
+        `<p>This account owes ${owed} from a payment that didn’t go through. Nothing is charged here, on your own computer; paying settles it the way a payment would.</p>`,
+        form(c.req.query('ticket') ?? '', `Pay ${owed}`, ticket),
+      ),
+    )
+  })
+
+  app.post(`${LOCAL_BILLING_PATH}/settle`, async (c) => {
+    const ticket = deps.billing.ticket(String((await c.req.parseBody()).ticket ?? ''), 'settle')
+    if (ticket === null) return c.html(expired(), 400)
+    await deliver({
+      type: 'order.paid',
+      userId: ticket.userId,
+      planKey: null,
+      cents: ticket.priceCents,
+      settles: ticket.settles ?? [],
+    })
     return c.redirect(ticket.returnUrl, 303)
   })
 

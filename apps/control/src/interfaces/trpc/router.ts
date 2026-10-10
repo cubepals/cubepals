@@ -537,6 +537,8 @@ const billing = router({
     }),
   ),
   portal: authedProcedure.mutation(({ ctx }) => ctx.services.billing.customerPortal(ctx.actor)),
+  /** What is owed and can no longer be retried, paid at once (`BillingService.settleBalance`). */
+  settle: authedProcedure.mutation(({ ctx }) => ctx.services.billing.settleBalance(ctx.actor)),
   /** After a checkout: the provider's word now, before its webhook arrives. */
   refresh: authedProcedure.mutation(({ ctx }) => ctx.services.billing.refresh(ctx.actor)),
 })
@@ -565,6 +567,7 @@ const accountDetailView = (detail: AccountDetail): AccountDetailView => ({
   limits: {
     maxServers: detail.standing.limitOverrides.maxServers ?? null,
     maxRunning: detail.standing.limitOverrides.maxRunning ?? null,
+    includedUnits: detail.standing.limitOverrides.includedUnits ?? null,
   },
   serverList: detail.serverList,
   history: detail.history.map((h) => ({ ...h, at: h.at.toISOString() })),

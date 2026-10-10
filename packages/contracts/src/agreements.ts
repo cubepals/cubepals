@@ -12,7 +12,7 @@ import { z } from 'zod'
  * matters to players is a new date here and on the pages, so the audit log can say which
  * version someone agreed to.
  */
-export const TERMS_VERSION = '2026-10-03'
+export const TERMS_VERSION = '2026-10-10'
 
 /** A version as the pages date it. Any well-formed date is kept as said: the log records it. */
 const version = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
