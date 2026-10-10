@@ -163,11 +163,22 @@ export interface FleetServerView {
   id: string
   name: string
   slug: string
+  /** Where players join it: "cherry-grove.play.cubepals.com". */
+  address: string
   status: string
   deleted: boolean
   /** "3 GB". */
   size: string
   owner: { userId: string; email: string; name: string; plan: string }
+  /**
+   * Where it runs: the provider's own region where its runtime names one ("fra"), otherwise the
+   * region it was made for. Servers group by this and their runtime.
+   */
+  region: string
+  /** Players on it now; none unless it runs. */
+  online: number
+  /** When someone last played on it; null before anyone has. */
+  lastPlayedAt: string | null
   /** The provider's names for what it holds, and a link to them; null before it holds anything. */
   provider: { names: Array<{ label: string; value: string }>; link: string | null } | null
   /**
@@ -188,7 +199,22 @@ export const FleetSearchInput = z.object({
   offset: z.number().int().min(0).max(100_000).default(0),
 })
 
+/** Every server the search found in one place: one runtime's one region. */
+export interface FleetRegionView {
+  /** The runtime they are on; null for servers bound to none yet. */
+  provider: string | null
+  region: string
+  servers: number
+  /** How many are in each status. One in the trash counts as `deleted`, whatever it was doing. */
+  states: Record<string, number>
+  /** Their month so far, added up; costCents is null when none of them is billed by the server. */
+  month: { hours: number; costCents: number | null }
+}
+
 export interface FleetPage {
   total: number
+  /** The newest of them, up to the page's limit. */
   servers: FleetServerView[]
+  /** Every one the search found, by where it runs, the place with the most first. */
+  regions: FleetRegionView[]
 }

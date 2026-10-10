@@ -411,7 +411,11 @@ export interface RuntimeCapacity {
 export type RuntimeTags = Readonly<Record<string, string>>
 
 export interface RuntimeLocation {
-  /** The provider's names, in the order an operator reads them: `app`, `machine`, `region`… */
+  /**
+   * The provider's names, in the order an operator reads them: `app`, `machine`, `region`… Where
+   * the provider places compute by region, one is labelled `Region` ("fra"): the admin list
+   * groups servers by it.
+   */
   names: ReadonlyArray<{ label: string; value: string }>
   link: string | null
 }
