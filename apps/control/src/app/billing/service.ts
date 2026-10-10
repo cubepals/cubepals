@@ -8,7 +8,7 @@ import type { AccountService } from '../accounts/service.ts'
 import { type Actor, requestedBy } from '../actor.ts'
 import { type DeploymentCapabilities, requireCapability } from '../capabilities.ts'
 import { paymentFailed, paymentOwed } from '../emails/billing.ts'
-import { AppError, NotFound } from '../errors.ts'
+import { AppError, inFull, NotFound } from '../errors.ts'
 import { FUNNEL, noteOnce } from '../insight/record.ts'
 import { listingsOfOwner } from '../listings/persistence.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
@@ -382,13 +382,15 @@ export class BillingService {
 
   /**
    * The order as the provider holds it now, kept as it says (paid since, or voided); null when the
-   * provider doesn't know it or doesn't answer.
+   * provider doesn't know it, doesn't answer or refuses, so one order waits for the next pass
+   * instead of stopping the sweep and the hours limits enforced after it.
    */
   async #orderNow(externalOrderId: string): Promise<OrderNow | null> {
     const billing = requireCapability(this.#caps, 'billing')
     const fresh = await billing.order(externalOrderId).catch((error: unknown) => {
-      if (error instanceof BillingUnavailable) return null
-      throw error
+      if (!(error instanceof BillingUnavailable))
+        console.error(`billing: reading order ${externalOrderId} failed: ${inFull(error)}`)
+      return null
     })
     if (fresh !== null && (await recordOrder(this.#db, billing.provider, fresh.order)))
       await settleWith(this.#db, billing.provider, fresh.order)

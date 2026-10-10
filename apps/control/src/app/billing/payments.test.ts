@@ -114,6 +114,25 @@ test.skipIf(!hasDatabase)('Polar not answering leaves an order unowed until it d
   expect(await w.h.app.billing.confirmOwed(anHourOn())).toBe(1)
 })
 
+test.skipIf(!hasDatabase)(
+  'Polar refusing to show an order leaves it unowed, and the sweep goes on',
+  async () => {
+    const { owner, sub } = await w.subscriber('Cy')
+    await w.subscriptionNow(owner, sub, { status: 'canceled' })
+    await w.renewalWithExtra(owner, sub, new Date(), { status: 'void' })
+    // A token without orders:read, say: an answer that isn't Polar being down.
+    const answer = w.polar.reply
+    w.polar.reply = (request) =>
+      request.path.startsWith('/v1/orders/')
+        ? { status: 403, body: { detail: 'Forbidden' } }
+        : answer(request)
+    expect(await w.h.app.billing.confirmOwed(anHourOn())).toBe(0)
+    expect(await w.h.app.billing.sweep(anHourOn())).toBe(0)
+    w.polar.reply = answer
+    expect(await w.h.app.billing.confirmOwed(anHourOn())).toBe(1)
+  },
+)
+
 const refusal = (promise: Promise<unknown>) =>
   promise.then(
     () => null,
