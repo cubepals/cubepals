@@ -1,0 +1,26 @@
+// cubepals.com as a Cloudflare Worker, built by OpenNext (opennextjs-cloudflare build). A proof of
+// concept: nothing deploys it, and production stays on Vercel.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "blockly-web",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-01",
+  // nodejs_compat is required by the adapter. global_fetch_strictly_public makes the worker's
+  // fetch() go out to the public internet, as the /api rewrite and server components need.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "blockly-web" }],
+  // Next's data cache and the prerendered pages (open-next.config.ts). Class A and B operations
+  // stay inside R2's free monthly allowance at this site's traffic.
+  "r2_buckets": [{ "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "blockly-web-cache" }],
+  // next/image through Cloudflare Images: unique transformations, 5,000 a month free.
+  "images": { "binding": "IMAGES" },
+  "observability": { "enabled": true },
+  // Server-side only, as on Vercel. WEB_PROXY_SECRET is a secret (wrangler secret put), never here.
+  "vars": {
+    "API_UPSTREAM": "http://127.0.0.1:4000",
+    "WEB_CANONICAL_ORIGIN": "http://localhost:8787",
+    "WEB_CLIENT_ADDRESS_HEADER": "cf-connecting-ip",
+    "DEPLOYMENT_ID": "local"
+  }
+}
