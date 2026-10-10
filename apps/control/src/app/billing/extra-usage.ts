@@ -25,7 +25,7 @@ import {
   BillingUnavailable,
   type UsageEvent,
 } from '../ports/optional.ts'
-import { billingFacts, extraStoppedAt } from './persistence.ts'
+import { billingFacts, extraStoppedAt, latestSubscription } from './persistence.ts'
 
 const months = schema.extraPlayMonths
 const reports = schema.extraPlayReports
@@ -285,11 +285,47 @@ export class ExtraUsage {
           .update(reports)
           .set({ sentAt: new Date() })
           .where(eq(reports.externalId, event.externalId))
+      await this.#unbilled(batch, taken)
       sent += taken.length
       failed += batch.length - taken.length
       if (down) break
     }
     return { sent, failed }
+  }
+
+  /**
+   * Events the provider took after the account's subscription ended: its last invoice was made
+   * when it ended, and nothing bills them now. Kept on the account's audit log, with the last
+   * order of that subscription, for an admin; nothing else is done.
+   */
+  async #unbilled(batch: readonly ReportRow[], taken: readonly UsageEvent[]): Promise<void> {
+    const went = new Set(taken.map((event) => event.externalId))
+    const rows = batch.filter((row) => went.has(row.externalId))
+    for (const userId of new Set(rows.map((row) => row.userId))) {
+      const latest = await latestSubscription(this.#db, userId)
+      if (latest?.status !== 'ended') continue
+      const orders = schema.billingOrders
+      const [last] = await this.#db
+        .select({ id: orders.externalOrderId })
+        .from(orders)
+        .where(eq(orders.externalSubscriptionId, latest.externalSubscriptionId))
+        .orderBy(desc(orders.orderedAt))
+        .limit(1)
+      for (const row of rows.filter((r) => r.userId === userId))
+        await this.#db.insert(schema.auditLog).values({
+          actor: 'system:billing',
+          action: 'billing.extra_unbilled',
+          subjectType: 'account',
+          subjectId: userId,
+          data: {
+            event: row.externalId,
+            milli: row.milli,
+            cents: Math.floor((row.milli * UNIT_CENTS) / 1000),
+            subscription: latest.externalSubscriptionId,
+            lastOrder: last?.id ?? null,
+          },
+        })
+    }
   }
 
   /** One batch to the provider, then one event at a time if it refuses the batch. */

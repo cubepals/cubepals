@@ -96,6 +96,11 @@ export class PolarWorld {
         },
       }
     if (url.pathname === '/v1/checkouts/') return method === 'POST' ? this.#checkout(body) : this.#open(url)
+    if (url.pathname.startsWith('/v1/events/ingest') && method === 'POST')
+      return {
+        status: 200,
+        body: { inserted: (JSON.parse(body) as { events: unknown[] }).events.length, duplicates: 0 },
+      }
     if (url.pathname === '/v1/refunds/' && method === 'POST') {
       this.refunds.push(JSON.parse(body) as Record<string, unknown>)
       return { status: 201, body: { id: `refund-${this.refunds.length}` } }

@@ -2,7 +2,8 @@
  * The edges of what extra play counts and bills, through the real Polar adapter against a
  * stand-in for Polar's API: counting stops at the moment extra play did (a cancel, a failed
  * renewal), not at the last count before it; a month is counted until it is final, whether or not
- * the account plays now.
+ * the account plays now; and what reaches Polar after a subscription's last invoice is kept as
+ * unbilled.
  *
  * Counting within a month, cutting and sending events are in `extra-usage.test.ts`.
  */
@@ -157,4 +158,45 @@ test.skipIf(!hasDatabase)(
     expect((await monthRow(owner, month))?.finalAt).not.toBeNull()
   },
   60_000,
+)
+
+test.skipIf(!hasDatabase)(
+  'what reaches Polar after a cancelled subscription’s last invoice is kept as unbilled',
+  async () => {
+    const { owner, sub, server } = await playing('Lou')
+    const month = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1))
+    const played = new Date(month.getTime() + 10 * 24 * hour)
+    await ran(server.id, played, new Date(played.getTime() + 2 * hour))
+    const at = new Date(played.getTime() + 3 * hour)
+    await w.h.app.billing.usage.count(owner.userId, at)
+    await w.h.app.billing.usage.cut(at)
+    // It ends, and its last invoice is made, before the event reaches Polar.
+    await w.subscriptionNow(owner, sub, { status: 'canceled' })
+    const last = await w.renewalWithExtra(owner, sub, new Date(), { status: 'paid' })
+    await w.h.app.billing.usage.send()
+    const [event] = await w.h.db
+      .select()
+      .from(schema.extraPlayReports)
+      .where(eq(schema.extraPlayReports.userId, owner.userId))
+    expect(event?.sentAt).not.toBeNull()
+    expect(await w.audited(owner, 'billing.extra_unbilled')).toEqual([
+      { event: event?.externalId, milli: 1000, cents: 25, subscription: sub, lastOrder: last },
+    ])
+  },
+  60_000,
+)
+
+test.skipIf(!hasDatabase)(
+  'what reaches Polar while the subscription renews is not kept as unbilled',
+  async () => {
+    const { owner, server } = await playing('Max')
+    const month = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1))
+    const played = new Date(month.getTime() + 10 * 24 * hour)
+    await ran(server.id, played, new Date(played.getTime() + 2 * hour))
+    const at = new Date(played.getTime() + 3 * hour)
+    await w.h.app.billing.usage.count(owner.userId, at)
+    await w.h.app.billing.usage.cut(at)
+    await w.h.app.billing.usage.send()
+    expect(await w.audited(owner, 'billing.extra_unbilled')).toEqual([])
+  },
 )

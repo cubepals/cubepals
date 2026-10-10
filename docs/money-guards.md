@@ -161,7 +161,9 @@ no longer covers what it paid, leaves those orders owed again (`billing.balance_
   a renewal weren't on it, and were on the next period's meter at $0.88 (Polar rounds the half
   cent up). On a subscription that ends, the final invoice is the last one, so hours played in the
   last minutes before it ends may never be billed: bounded by the reporting delay, and the
-  renewal check below says when it happened.
+  renewal check below says when it happened. An event Polar takes after the subscription has
+  ended is billed by nothing, and is kept on the account's audit log as `billing.extra_unbilled`
+  with its hours, its cents and the subscription's last order.
 - Each paid renewal is checked against what Blockly sent since the order before it
   (`billing.extra_billed` on the account's audit log, with both amounts); a difference is kept for
   an admin, never acted on.
