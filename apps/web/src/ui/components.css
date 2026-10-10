@@ -599,9 +599,16 @@ textarea.bk-input {
 }
 .bk-formrow {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-24);
+  gap: var(--space-12) var(--space-24);
+}
+/* The words take the room and give it back; a control that no longer fits beside them goes
+   under them, never past the card's edge. */
+.bk-formrow > :first-child {
+  flex: 1 1 16rem;
+  min-width: 0;
 }
 .bk-formrow__label {
   font-size: 15px;
@@ -2409,6 +2416,15 @@ details[open] > .bk-disclosure::before {
 /* A tip with more than a sentence: its paragraphs and a short list, a little apart. */
 .bk-tip__bubble > :not(:first-child) {
   margin-block-start: var(--space-8);
+}
+/* Opened from a forest surface: the page's own surface, edged in ink, so it stands apart from the
+   card under it (tip.tsx). */
+.bk-tip__bubble--light {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow:
+    0 0 0 1px var(--border-strong),
+    var(--shadow-float);
 }
 .bk-tip__bubble a {
   color: inherit;
