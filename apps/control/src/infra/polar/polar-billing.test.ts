@@ -424,3 +424,53 @@ describe('PolarBilling and extra play', () => {
     ).rejects.toBeInstanceOf(BillingUnavailable)
   })
 })
+
+describe('PolarBilling paying a balance', () => {
+  const polar = new PolarStandIn()
+  let billing: PolarBilling
+
+  beforeAll(async () => {
+    await polar.start()
+    billing = new PolarBilling({
+      accessToken: 'polar_oat_test',
+      webhookSecret: SECRET,
+      server: 'sandbox',
+      products: { plus: PLUS },
+      baseUrl: polar.url,
+    })
+  })
+
+  afterAll(() => polar.close())
+
+  test('paying a balance opens without an address Polar won’t take, as a plan checkout does', async () => {
+    const tried: unknown[] = []
+    polar.reply = (sent) => {
+      if (sent.method === 'GET') return { status: 200, body: { items: [{ id: 'balance_product' }] } }
+      const body = JSON.parse(polar.requests.at(-1)?.body ?? '{}')
+      tried.push(body.customer_email)
+      return body.customer_email === undefined
+        ? { status: 201, body: { id: 'co_3', url: 'https://sandbox.polar.sh/checkout/polar_c_3' } }
+        : {
+            status: 422,
+            body: {
+              error: 'RequestValidationError',
+              detail: [{ loc: ['body', 'CheckoutProductsCreate', 'customer_email'], msg: 'reserved name' }],
+            },
+          }
+    }
+    const url = await billing.settleUrl({
+      userId: 'user_9',
+      email: 'player@example.test',
+      cents: 1688,
+      settles: ['order_1'],
+      returnUrl: 'http://localhost:3000/account',
+    })
+    expect(url).toBe('https://sandbox.polar.sh/checkout/polar_c_3')
+    expect(tried).toEqual(['player@example.test', undefined])
+    expect(JSON.parse(polar.requests.at(-1)?.body ?? '')).toMatchObject({
+      products: ['balance_product'],
+      metadata: { settles: 'order_1' },
+      external_customer_id: 'user_9',
+    })
+  })
+})

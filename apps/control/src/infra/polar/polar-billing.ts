@@ -119,22 +119,17 @@ export class PolarBilling implements BillingProvider {
   }): Promise<string> {
     const product = this.#products[input.planKey]
     if (product === undefined) throw new Error(`No Polar product sells the ${input.planKey} plan`)
-    const create = (email: string | null) =>
+    const checkout = await withEmail(input.email, (email) =>
       call('starting a checkout', () =>
         this.#polar.checkouts.create({
           products: [product],
           external_customer_id: input.userId,
-          ...(email === null ? {} : { customer_email: email }),
+          ...email,
           success_url: input.returnUrl,
           return_url: input.returnUrl,
         }),
-      )
-    // An address Polar won't take (one on a reserved domain, as local test accounts have) isn't the
-    // person's to fix: the checkout opens without it and asks them for one.
-    const checkout = await create(input.email).catch((error: unknown) => {
-      if (refusesEmail(error)) return create(null)
-      throw error
-    })
+      ),
+    )
     return checkout.url
   }
 
@@ -159,16 +154,18 @@ export class PolarBilling implements BillingProvider {
     }
     const product = this.#balance
     if (product === null) throw new Error('No Polar product has the metadata purpose: balance')
-    const checkout = await call('starting a payment', () =>
-      this.#polar.checkouts.create({
-        products: [product],
-        prices: { [product]: [{ amount_type: 'fixed', price_amount: input.cents, price_currency: 'usd' }] },
-        metadata: { settles: input.settles.join(',') },
-        external_customer_id: input.userId,
-        customer_email: input.email,
-        success_url: input.returnUrl,
-        return_url: input.returnUrl,
-      }),
+    const checkout = await withEmail(input.email, (email) =>
+      call('starting a payment', () =>
+        this.#polar.checkouts.create({
+          products: [product],
+          prices: { [product]: [{ amount_type: 'fixed', price_amount: input.cents, price_currency: 'usd' }] },
+          metadata: { settles: input.settles.join(',') },
+          external_customer_id: input.userId,
+          ...email,
+          success_url: input.returnUrl,
+          return_url: input.returnUrl,
+        }),
+      ),
     )
     return checkout.url
   }
@@ -370,6 +367,18 @@ function refusesEmail(error: unknown): boolean {
   if (!(error instanceof PolarClientError) || error.statusCode !== 422) return false
   const detail = (error.error as { detail?: Array<{ loc?: unknown[] }> } | null)?.detail ?? []
   return detail.some((problem) => problem.loc?.includes('customer_email'))
+}
+
+/**
+ * A checkout made with the customer's email, or without it when Polar won't take the address (one
+ * on a reserved domain, as test accounts have): that isn't the person's to fix, so the checkout
+ * opens without it and asks them for one.
+ */
+function withEmail<T>(email: string, create: (field: { customer_email?: string }) => Promise<T>): Promise<T> {
+  return create({ customer_email: email }).catch((error: unknown) => {
+    if (refusesEmail(error)) return create({})
+    throw error
+  })
 }
 
 /** Polar's outage, rate limit or an unreachable network is billing being unavailable. */
