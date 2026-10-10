@@ -233,11 +233,16 @@ async function stagingWebhooks(): Promise<string[]> {
 
 /**
  * Staging's webhook on the sandbox, made once; one made before keeps its secret, and is brought to
- * the version and events the adapter reads today.
+ * the version and events the adapter reads today. It is enabled again too: Polar disables an
+ * endpoint whose deliveries kept failing, which they do while staging is stopped.
  */
 async function pointWebhook(state: State): Promise<void> {
   if (state.webhook !== undefined) {
-    await polar().webhooks.updateWebhookEndpoint(state.webhook.id, WEBHOOK)
+    const endpoint = await polar().webhooks.updateWebhookEndpoint(state.webhook.id, {
+      ...WEBHOOK,
+      enabled: true,
+    })
+    say(`  webhook ${endpoint.api_version}, ${endpoint.events.length} events, enabled: ${endpoint.enabled}`)
     return
   }
   const endpoint = await polar().webhooks.createWebhookEndpoint({
@@ -710,6 +715,9 @@ async function start(): Promise<void> {
   }
   for (const app of [APP.mail, APP.control, APP.realtime, APP.edge, APP.web]) startStopped(app)
   await until('the web app and the API answer', 300, webAnswers)
+  // Deliveries failed while it was stopped, so Polar may have disabled the webhook.
+  const state = loadState()
+  if (state.webhook !== undefined && process.env.POLAR_ACCESS_TOKEN) await pointWebhook(state)
   say(`Staging is up: ${WEB}`)
 }
 
