@@ -28,7 +28,7 @@ const result = spawnSync(
     '--release-name',
     'cubepals-web',
     '--release-version',
-    (process.env.VERCEL_GIT_COMMIT_SHA ?? 'local').slice(0, 12),
+    (process.env.GIT_COMMIT_SHA ?? 'local').slice(0, 12),
     '--delete-after',
   ],
   { stdio: 'inherit', env: { ...process.env, POSTHOG_CLI_API_KEY: key, POSTHOG_CLI_PROJECT_ID: project } },

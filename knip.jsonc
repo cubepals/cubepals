@@ -8,8 +8,8 @@
   // tools/openapi installs on its own lockfile; and the API types openapi-typescript writes whole
   // from a spec.
   "ignore": ["tools/**", "**/generated/**"],
-  // A program on the machine, not a package: the Fly CLI.
-  "ignoreBinaries": ["fly"],
+  // Programs on the machine, not packages: the Fly CLI and Terraform.
+  "ignoreBinaries": ["fly", "terraform"],
   "workspaces": {
     ".": {
       // Every script at the top is run by hand, by package.json or by CI.
@@ -36,9 +36,10 @@
       "project": ["**/*.ts"]
     },
     "apps/web": {
-      // The design tokens' generator, run by hand.
-      "entry": ["scripts/tokens.ts"],
-      "project": ["src/**/*.{ts,tsx}", "scripts/**/*.ts"]
+      // The design tokens' generator, run by hand; the Worker's entry, which wrangler.jsonc names;
+      // and OpenNext's config, which its build reads.
+      "entry": ["scripts/tokens.ts", "worker.ts", "open-next.config.ts"],
+      "project": ["src/**/*.{ts,tsx}", "scripts/**/*.ts", "worker.ts", "open-next.config.ts"]
     },
     "packages/db": {
       "project": ["src/**/*.ts"]

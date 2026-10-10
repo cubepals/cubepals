@@ -25,7 +25,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { SQL } from 'bun'
 import { type Api, people } from './lib/people.ts'
 
-const WEB = 'https://bly-staging-web.fly.dev'
+const WEB = 'https://staging.cubepals.com'
 const KEEP = process.argv.includes('--keep')
 const PACK = process.argv.includes('--pack')
 const REST = process.argv.includes('--rest')

@@ -1,8 +1,9 @@
-# Monthly and grouped: at most two pull requests per ecosystem a month, one for minor and patch
-# updates and one for majors, which break more often and are reviewed apart. New releases wait a
-# week (a month for majors) before they are offered, so a broken or hijacked release has time to be
-# pulled. Security fixes skip all of that: they arrive when published, one pull request per
-# ecosystem. Bun has no Dependabot security updates, so its fixes come with the monthly ones.
+# Monthly and grouped: one pull request per ecosystem a month for minor and patch updates (Bun's
+# has a second, Next's with what builds it as a Worker) and one for majors, which break more often
+# and are reviewed apart. New releases wait a week (a month for majors) before they are offered, so
+# a broken or hijacked release has time to be pulled. Security fixes skip all of that: they arrive
+# when published, one pull request per ecosystem. Bun has no Dependabot security updates, so its
+# fixes come with the monthly ones.
 # Each pull request is labelled `dependencies` only, never a label per ecosystem. Minor and patch
 # updates merge themselves once `check` passes (workflows/dependabot.yml); majors and actions wait
 # for a person.
@@ -13,7 +14,7 @@ updates:
     schedule:
       interval: monthly
     labels: [dependencies]
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 3
     cooldown:
       default-days: 7
       semver-major-days: 30
@@ -26,6 +27,12 @@ updates:
       bun-security:
         applies-to: security-updates
         patterns: ['*']
+      # Next and what builds it as a Worker move together, so CI's Worker build judges them as a
+      # pair: a Next release the adapter can't build yet fails it rather than merging alone. A
+      # dependency goes to the first group it matches; their majors come with the rest in bun-major.
+      next:
+        patterns: ['next', '@opennextjs/cloudflare', 'wrangler']
+        update-types: [minor, patch]
       bun:
         patterns: ['*']
         update-types: [minor, patch]

@@ -1,15 +1,24 @@
-// cubepals.com as a Cloudflare Worker, built by OpenNext (opennextjs-cloudflare build). A proof of
-// concept: nothing deploys it, and production stays on Vercel.
+// The web app as a Cloudflare Worker, built by OpenNext (`opennextjs-cloudflare build`) and deployed
+// by scripts/lib/web-worker.ts: production's `blockly-web` by production.ts, staging's
+// `blockly-web-staging` (`--env staging`) by staging.ts. Nothing here holds a value: the deploy
+// passes every var with --var and WEB_PROXY_SECRET in a secrets file, built from the same values
+// the build had.
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "blockly-web",
-  // OpenNext's worker behind worker.ts, which does src/proxy.ts's job without Node middleware.
+  // src/lib/before-next.ts, then OpenNext's worker.
   "main": "worker.ts",
   "compatibility_date": "2026-10-01",
   // nodejs_compat is required by the adapter. global_fetch_strictly_public makes the worker's
   // fetch() go out to the public internet, as the /api rewrite and server components need.
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  // Production's routes (cubepals.com/*, www.cubepals.com/*) are Terraform's
+  // (infra/terraform/modules/web); a deploy given no routes leaves them be. Until cubepals.com's
+  // records are proxied, workers.dev is the one address that reaches this Worker; turn it off
+  // after the cutover (docs/production.md).
+  "workers_dev": true,
+  "preview_urls": false,
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "blockly-web" }],
   // Next's data cache and the prerendered pages (open-next.config.ts). Class A and B operations
   // stay inside R2's free monthly allowance at this site's traffic.
@@ -17,11 +26,15 @@
   // next/image through Cloudflare Images: unique transformations, 5,000 a month free.
   "images": { "binding": "IMAGES" },
   "observability": { "enabled": true },
-  // Server-side only, as on Vercel. WEB_PROXY_SECRET is a secret (wrangler secret put), never here.
-  "vars": {
-    "API_UPSTREAM": "http://127.0.0.1:4000",
-    "WEB_CANONICAL_ORIGIN": "http://localhost:8787",
-    "WEB_CLIENT_ADDRESS_HEADER": "cf-connecting-ip",
-    "DEPLOYMENT_ID": "local"
+  "env": {
+    // Worker blockly-web-staging, at staging.cubepals.com alone. Bindings aren't inherited, so
+    // each is named again with staging's own.
+    "staging": {
+      "routes": [{ "pattern": "staging.cubepals.com/*", "zone_name": "cubepals.com" }],
+      "workers_dev": false,
+      "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "blockly-web-staging" }],
+      "r2_buckets": [{ "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "blockly-web-staging-cache" }],
+      "images": { "binding": "IMAGES" }
+    }
   }
 }

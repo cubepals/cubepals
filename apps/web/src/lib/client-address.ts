@@ -5,7 +5,7 @@
  * it everyone would count as one.
  *
  * The header comes from configuration, not from guessing the host: WEB_CLIENT_ADDRESS_HEADER names
- * the one its edge sets and overwrites (`fly-client-ip` on Fly, `x-real-ip` on Vercel). Any other
+ * the one its edge sets and overwrites (`cf-connecting-ip` on Cloudflare, `fly-client-ip` on Fly). Any other
  * header a browser could write itself.
  */
 export function clientAddressHeaders(incoming: Headers): Record<string, string> {

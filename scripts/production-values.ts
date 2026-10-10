@@ -27,10 +27,10 @@ export const DUMPS_ENVIRONMENT = 'production'
 
 /**
  * Where a value goes. `secret` and `operator` reach the control plane (TF_VAR_secrets,
- * TF_VAR_operator_settings); `web` reaches only the Vercel project's production builds
- * (TF_VAR_web_secrets); `account` is a TF_VAR of its own; `apply` is only for the tools that
- * apply, and FLY_API_TOKEN is both that and a secret. `dump` reaches only the Database dump
- * workflow, as a secret of the repository's `production` environment (dumpSecrets).
+ * TF_VAR_operator_settings); `web` reaches only the website's build and deploy
+ * (production-website.ts), never Terraform; `account` is a TF_VAR of its own; `apply` is only for
+ * the tools that apply, and FLY_API_TOKEN is both that and a secret. `dump` reaches only the
+ * Database dump workflow, as a secret of the repository's `production` environment (dumpSecrets).
  */
 export type Destination = 'secret' | 'operator' | 'web' | 'account' | 'apply' | 'dump'
 
@@ -77,12 +77,13 @@ export const VALUES: Value[] = [
     name: 'CLOUDFLARE_API_TOKEN',
     goes: ['apply'],
     where:
-      'Cloudflare → My Profile → API Tokens → Create Token → Custom token: Zone · DNS · Edit on cubepals.com, and Account · Workers R2 Storage · Edit',
+      "Cloudflare → My Profile → API Tokens → Create Token → Custom token, for Terraform: Zone · DNS · Edit and Zone · Workers Routes · Edit on cubepals.com, and Account · Workers R2 Storage · Edit and Account · Workers Scripts · Edit on the zone's account",
   },
   {
-    name: 'VERCEL_API_TOKEN',
-    goes: ['apply'],
-    where: 'vercel.com → Account Settings → Tokens → Create, scoped to the team in config.auto.tfvars.json',
+    name: 'CLOUDFLARE_WORKERS_API_TOKEN',
+    goes: ['web'],
+    where:
+      "Cloudflare → My Profile → API Tokens → Create Token → Custom token, for the website's deploys: Account · Workers Scripts · Edit and Account · Workers R2 Storage · Edit on the zone's account",
   },
   {
     name: 'TF_STATE_ACCESS_KEY_ID',
@@ -302,8 +303,7 @@ export interface Environment {
   fly_org: string
   fly_machine_limit: number
   settings: Record<string, string>
-  vercel_team: string
-  web: { repository: string; project: string }
+  web: { worker: string; repository: string; indexable?: boolean }
 }
 
 export function environment(file = ENVIRONMENT_FILE): Environment {
@@ -368,23 +368,17 @@ export function terraformEnv(values: Record<string, string>): Record<string, str
       ]),
     )
   const secrets = pick('secret')
-  const web = pick('web')
   return {
     TF_VAR_secrets: JSON.stringify(secrets),
     TF_VAR_secret_versions: JSON.stringify(
       Object.fromEntries(Object.entries(secrets).map(([name, value]) => [name, versionOf(value)])),
     ),
     TF_VAR_operator_settings: JSON.stringify(pick('operator')),
-    TF_VAR_web_secrets: JSON.stringify(web),
-    TF_VAR_web_secret_versions: JSON.stringify(
-      Object.fromEntries(Object.entries(web).map(([name, value]) => [name, versionOf(value)])),
-    ),
     TF_VAR_cloudflare_account_id: values.CLOUDFLARE_ACCOUNT_ID ?? '',
     TF_VAR_cloudflare_zone_id: values.CLOUDFLARE_ZONE_ID ?? '',
     TF_VAR_database_dumps_bucket: DUMPS_BUCKET,
     FLY_API_TOKEN: values.FLY_API_TOKEN ?? '',
     CLOUDFLARE_API_TOKEN: values.CLOUDFLARE_API_TOKEN ?? '',
-    VERCEL_API_TOKEN: values.VERCEL_API_TOKEN ?? '',
     // The S3 backend's credentials, for the state bucket alone.
     AWS_ACCESS_KEY_ID: values.TF_STATE_ACCESS_KEY_ID ?? '',
     AWS_SECRET_ACCESS_KEY: values.TF_STATE_SECRET_ACCESS_KEY ?? '',

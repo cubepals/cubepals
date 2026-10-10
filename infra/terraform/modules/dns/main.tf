@@ -1,7 +1,8 @@
-# DNS for an environment (§11 hostname audit): the web hosts to Vercel, wildcard A/AAAA records
-# for the play domain and each alias to the edge, and the realtime hostname's A record, with no
-# AAAA (§19.6). Every record is DNS-only: Cloudflare's proxy carries neither Minecraft's TCP nor
-# WebTransport's UDP, and Vercel issues the web hosts' certificates itself.
+# DNS for an environment (§11 hostname audit): the web hosts, wildcard A/AAAA records for the play
+# domain and each alias to the edge, and the realtime hostname's A record, with no AAAA (§19.6).
+# Every record but the web hosts' is DNS-only: Cloudflare's proxy carries neither Minecraft's TCP
+# nor WebTransport's UDP. The web hosts are proxied once web_proxied says so, which hands them to
+# the Worker's routes (modules/web).
 
 terraform {
   required_version = ">= 1.11"
@@ -35,21 +36,30 @@ variable "realtime_validation" {
 }
 
 variable "web_hostnames" {
-  description = "The web app's domain, then the hosts that redirect to it, all served by the Vercel project."
+  description = "The web app's domain, then the hosts that redirect to it."
   type        = list(string)
 }
 
-# Vercel's own name for every project's domains. At the zone's apex Cloudflare flattens it into
-# the addresses it resolves to, so one record type serves both cubepals.com and a subdomain.
+variable "web_proxied" {
+  description = "Whether the web hosts go through Cloudflare's proxy to the Worker's routes: the cutover from Vercel, and the way back."
+  type        = bool
+  default     = false
+}
+
+# DNS-only, the records send browsers to Vercel, which served the site before the Worker. Proxied,
+# Cloudflare answers them itself, with the zone's certificate, and the Worker's routes take every
+# path, so the CNAME's target is never asked: flipping web_proxied moves the whole site either way
+# at once. At the zone's apex Cloudflare flattens the CNAME, so one record type serves both.
 resource "cloudflare_dns_record" "web" {
   for_each = toset(var.web_hostnames)
   zone_id  = var.zone_id
   name     = each.key
   type     = "CNAME"
   content  = "cname.vercel-dns.com"
-  ttl      = 300
-  proxied  = false
-  comment  = "The web app, on Vercel"
+  # A proxied record's TTL is Cloudflare's own ("automatic", 1).
+  ttl     = var.web_proxied ? 1 : 300
+  proxied = var.web_proxied
+  comment = var.web_proxied ? "The web app, through the Worker's routes" : "The web app, on Vercel"
 }
 
 resource "cloudflare_dns_record" "play_v4" {

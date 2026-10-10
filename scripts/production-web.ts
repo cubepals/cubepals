@@ -2,7 +2,7 @@
  * Which changes may reach production by which road, judged from the paths a deploy carries:
  *
  * - the website alone (`production.ts web`): nothing the Fly apps are built from changed, so
- *   Vercel's build is all it takes;
+ *   the website's own build and deploy is all it takes;
  * - a hotfix (`production.ts hotfix`): the Fly apps the change is built into, and only those,
  *   and never a Terraform change, which goes through `apply`.
  *

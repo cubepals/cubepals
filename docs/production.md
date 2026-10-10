@@ -13,8 +13,10 @@ What Terraform makes: the Fly apps `bly-prod-control`, `bly-prod-realtime` and `
 with their addresses, certificate and secrets; the DNS records for `cubepals.com`,
 `www.cubepals.com` (a redirect), `rt.cubepals.com` and `*.play.cubepals.com`; the R2 bucket
 named by `ARCHIVE_S3_BUCKET`; the private R2 bucket `blockly-prod-database-dumps`, where the
-database is dumped every night ([below](#database-dumps)); and the Vercel project `blockly`, which
-builds the `production` branch.
+database is dumped every night ([below](#database-dumps)); and the website's Cloudflare Worker
+`blockly-web`, with the R2 bucket `blockly-web-cache` for Next's data cache and the routes
+`cubepals.com/*` and `www.cubepals.com/*`. What the Worker runs isn't Terraform's: `production.ts`
+builds it from the checkout and deploys it with wrangler ([The website](#the-website)).
 
 ## 1. Accounts (once)
 
@@ -24,21 +26,19 @@ Each of these needs an account or a card, so nothing here does them.
    limit to what `fly_machine_limit` says ([money-guards.md](money-guards.md#the-provider-ceiling-fly_machine_limit)).
 2. **Database.** `fly mpg create --org blockly-prod --region fra --name bly-prod-db`, choosing
    the plan it offers. Terraform can't make it: Fly's provider has no Managed Postgres.
-3. **Cloudflare.** R2 turned on for the account (it asks for a card even on the free tier), and a
-   bucket named `blockly-terraform-state` for Terraform's state.
-4. **Vercel.** The team in `config.auto.tfvars.json` (`vercel_team`), on a plan that allows a
-   commercial site, with Vercel's GitHub app allowed on `cubepals/cubepals`. Without that app,
-   Terraform can't make the project.
-5. **Google sign-in.** In console.cloud.google.com, a project for Cubepals. Under Google Auth
+3. **Cloudflare.** R2 turned on for the account (it asks for a card even on the free tier), a
+   bucket named `blockly-terraform-state` for Terraform's state, and the Workers Paid plan, which
+   the website's server rendering needs (the free plan allows 10 ms of CPU a request).
+4. **Google sign-in.** In console.cloud.google.com, a project for Cubepals. Under Google Auth
    Platform: Branding (name Cubepals, support email, authorized domain `cubepals.com`), then
    Audience → **Publish app**. While it says "Testing", only listed test users can sign in.
-6. **Mail.** An SMTP provider that sends as `hello@cubepals.com`, with the DNS records it asks
+5. **Mail.** An SMTP provider that sends as `hello@cubepals.com`, with the DNS records it asks
    for (SPF, DKIM) added in Cloudflare by hand. None is chosen yet.
 
 ## 2. The values
 
-The environment's decided values (Fly org, Vercel team, repository, machine limit, non-secret
-settings) live in `infra/terraform/environments/production/config.auto.tfvars.json`, which git
+The environment's decided values (Fly org, repository, machine limit, non-secret settings, and
+whether the website's hosts are proxied to its Worker yet) live in `infra/terraform/environments/production/config.auto.tfvars.json`, which git
 ignores. Copy `config.auto.tfvars.example.json` beside it to that name and put in your own values;
 `production.ts` stops and says so while it is missing. The secrets go in a separate file:
 
@@ -54,8 +54,8 @@ yet and keeps the rest. Above each empty value it says where to get it. The same
 | Value | Where to get it | Where it goes |
 |---|---|---|
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID` | Cloudflare → cubepals.com → Overview, right column | Terraform: the bucket, the records, and the realtime role's DNS-01 zone |
-| `CLOUDFLARE_API_TOKEN` | Cloudflare → My Profile → API Tokens → Create Token → Custom: Zone · DNS · Edit on cubepals.com, Account · Workers R2 Storage · Edit | Terraform's Cloudflare provider only |
-| `VERCEL_API_TOKEN` | vercel.com → Account Settings → Tokens, scoped to the team | Terraform's Vercel provider only |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare → My Profile → API Tokens → Create Token → Custom: Zone · DNS · Edit and Zone · Workers Routes · Edit on cubepals.com; Account · Workers R2 Storage · Edit and Account · Workers Scripts · Edit | Terraform's Cloudflare provider only |
+| `CLOUDFLARE_WORKERS_API_TOKEN` | The same page, another custom token: Account · Workers Scripts · Edit and Account · Workers R2 Storage · Edit | The website's deploys and rollbacks (wrangler) only |
 | `TF_STATE_ACCESS_KEY_ID`, `TF_STATE_SECRET_ACCESS_KEY` | Cloudflare → R2 → Manage API tokens → Create Account API token: Object Read & Write, `blockly-terraform-state` only | Terraform's state backend only |
 | `FLY_API_TOKEN` | `fly tokens create org blockly-prod` | Terraform's Fly provider, `fly deploy`, and the control plane, which makes servers' machines with it |
 | `DATABASE_URL`, `DATABASE_DIRECT_URL` | Supabase → cubepals prod → Connect → Session pooler (port 5432), as the role `blockly` on the database `blockly`: the same URL for both, since session mode carries `LISTEN`, migrations and `pg_dump` | Control plane |
@@ -90,11 +90,15 @@ bun scripts/production.ts apply
 
 1. The first time, it makes only the two buckets and stops. Make their R2 tokens (the table
    above), put their keys in the file, and run `apply` again.
-2. Terraform shows the plan and asks before it changes anything. Answer `yes`.
+2. It builds the website from this checkout with production's values and checks the build
+   (`robots.txt` lets crawlers in, `/api` goes to `bly-prod-control`), so a build that fails stops
+   it before anything changes.
+3. Terraform shows the plan and asks before it changes anything. Answer `yes`.
    Then it gives the Database dump workflow its secrets ([below](#database-dumps)).
-3. It deploys `bly-prod-control` (its release runs the migrations), then `bly-prod-realtime` (one
+4. It deploys `bly-prod-control` (its release runs the migrations), then `bly-prod-realtime` (one
    machine, always), then `bly-prod-edge`, all from this checkout.
-4. It pushes the commit as the `production` branch. Vercel builds `cubepals.com` from it.
+5. It pushes the commit as the `production` branch and deploys the website's build: live when it
+   returns.
 
 `apply` can be run again at any time: it changes only what differs. It's also how a value changes
 later: edit the file, run `apply`. Never run `terraform destroy` here.
@@ -105,13 +109,35 @@ A change to the website alone goes without a staging pass or a Fly deploy:
 bun scripts/production.ts web
 ```
 
-From a clean checkout of main's latest commit, once main's CI has passed on it, it pushes the commit
-as the `production` branch for Vercel to build. It refuses when anything the Fly apps are built from
-changed since the last deploy (`apps/control`, `apps/edge`, `packages`, `infra/fly`, the lockfile):
-that goes through `apply`, after a nightly.
+From a clean checkout of main's latest commit, once main's CI has passed on it, it builds and
+checks the website, pushes the commit as the `production` branch and deploys the build. It refuses
+when anything the Fly apps are built from changed since the last deploy (`apps/control`,
+`apps/edge`, `packages`, `infra/fly`, the lockfile), or Terraform did: that goes through `apply`,
+after a nightly.
 
-Every website build is asked of Vercel's API after the push: on this project the builds a push
-to `production` starts end skipped, while one asked for through the API builds.
+### The website
+
+`cubepals.com` is the Cloudflare Worker `blockly-web` (`apps/web/wrangler.jsonc`), built by
+OpenNext. `production.ts` builds it where it runs, with the values the rest of production is made
+from (`API_UPSTREAM` is `bly-prod-control`'s address; `WEB_CANONICAL_ORIGIN`, `DEPLOYMENT_ID` and
+`POSTHOG_TOKEN` from the settings; `WEB_INDEXABLE` from `web.indexable`), and deploys it with
+wrangler: the same values as the Worker's vars, `WEB_PROXY_SECRET` in a secrets file, and the
+version tagged with its commit. The Worker answers `www.cubepals.com` itself, with a 308 to
+`https://cubepals.com` that keeps the path and query.
+
+Terraform holds the Worker, its cache bucket and its routes, never its versions. A route only sees
+traffic Cloudflare proxies, so the site moves to the Worker by one value:
+
+1. Deploy (`apply` or `web`), then check the Worker on its `workers.dev` address (Cloudflare →
+   Workers & Pages → `blockly-web`): the pages, sign-in, `/api/health`.
+2. Set `"proxied": true` under `web` in `config.auto.tfvars.json` and run `apply`. `cubepals.com`
+   and `www` go through Cloudflare's proxy to the Worker, under the zone's own certificate.
+3. To go back, set it to `false` and `apply`: the records reach Vercel again.
+4. Once it has settled: turn `workers_dev` off in `wrangler.jsonc`, and delete the Vercel project
+   by hand. The first `apply` with this setup let go of it in Terraform's state without touching it.
+
+If `blockly-web` or `blockly-web-cache` was made by hand before Terraform made them, import them
+(`terraform import`) rather than letting the apply fail on a name that is taken.
 
 ### A fix that can't wait for the nightly
 
@@ -135,18 +161,18 @@ bun scripts/production.ts rollback fly      # the Fly apps alone
 bun scripts/production.ts rollback website  # the website alone
 ```
 
-Each Fly app goes back to the image its previous release ran, and the website is built again from
-the commit it was built from before (Vercel's own instant rollback would stop later builds from
-going live until undone). A rollback doesn't undo a migration or a secret, and the `production`
+Each Fly app goes back to the image its previous release ran, and the website to the Worker
+version that was live before, at once and without a build (`wrangler rollback`; any of the last
+100 versions). A rollback doesn't undo a migration or a secret, and the `production`
 branch still names the newer commit: fix forward, then deploy again.
 
 ## 4. Check it
 
 1. `dig +short rt.cubepals.com` gives one IPv4 address and `dig +short AAAA rt.cubepals.com`
    nothing; `dig +short anything.play.cubepals.com` gives the edge's address.
-2. `https://bly-prod-control.fly.dev/api/health` answers, and `https://cubepals.com` loads once
-   Vercel's build is done (vercel.com → the `blockly` project → Deployments).
-   `https://www.cubepals.com` goes to `https://cubepals.com`.
+2. `https://bly-prod-control.fly.dev/api/health` answers, and `https://cubepals.com` loads (before
+   the cutover, the Worker's `workers.dev` address). `https://www.cubepals.com` goes to
+   `https://cubepals.com`.
 3. `fly logs -a bly-prod-realtime` shows the certificate for `rt.cubepals.com` issued.
 4. **Sign in with Google** at `https://cubepals.com` with the address in `ADMIN_EMAILS`. Admin
    appears in the menu.

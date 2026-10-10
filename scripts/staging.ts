@@ -12,16 +12,18 @@
  *   bun scripts/staging.ts down     destroys every part, the servers staging made included: only
  *                                   when staging itself is to go, not to stop it
  *
- * The web app is at staging.cubepals.com (a DNS-only CNAME in Cloudflare, so Fly issues its
- * certificate), with Google sign-in. Only STAGING_DEVELOPERS, the admin and the staging check's
- * own domain can make an account there (SIGNUP_ALLOWLIST). The API and realtime stay on fly.dev,
+ * The web app is the Cloudflare Worker blockly-web-staging, at staging.cubepals.com (a proxied
+ * record its route answers), as production's is a Worker; it costs nothing idle, so stop and start
+ * leave it be. Google sign-in; only STAGING_DEVELOPERS, the admin and the staging check's own
+ * domain can make an account there (SIGNUP_ALLOWLIST). The API and realtime stay on fly.dev,
  * and players join `<server>.play.staging.cubepals.com`, whose wildcard records point at the edge's
  * own addresses. Postgres is Supabase's staging project, through
  * its session pooler (STAGING_DATABASE_URL), and mail goes to a Mailpit that only the org's private network reaches (`fly proxy 8025 -a bly-staging-mail`). Archives go to a
  * Tigris bucket. Payments are Polar's sandbox: POLAR_ACCESS_TOKEN and POLAR_PRODUCTS come from
  * .env, and `up` adds the webhook that `down` removes. What `up` generates (passwords, keys, the
  * bucket's credentials) stays in local/staging/state.json, or comes from STAGING_STATE where there
- * is no such file: a cloud environment carries it there (`env`). CLOUDFLARE_API_TOKEN,
+ * is no such file: a cloud environment carries it there (`env`). CLOUDFLARE_API_TOKEN (DNS),
+ * CLOUDFLARE_WORKERS_API_TOKEN (Workers and R2 on the zone's account, for the web app),
  * AUTH_GOOGLE_CLIENT_ID, AUTH_GOOGLE_CLIENT_SECRET, STAGING_DEVELOPERS and STAGING_DATABASE_URL come
  * from the environment or local/secrets/staging.env; `up` keeps the last into the state too, for the
  * staging check.
@@ -29,9 +31,8 @@
  * Needs flyctl signed in to an account in the org, and a card on the org.
  */
 import { createHash, randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import {
   DeleteObjectsCommand,
   ListObjectsV2Command,
@@ -39,15 +40,16 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import { createPolar } from '@polar-sh/sdk/2026-10'
-import { pointRecord } from './lib/cloudflare-dns.ts'
+import { pointRecord, zoneAccount } from './lib/cloudflare-dns.ts'
+import { buildWorker, deployWorker } from './lib/web-worker.ts'
 
 const ORG = 'blockly-staging'
 const REGION = 'fra'
+/** The web app isn't one: it is a Worker (deployWeb). */
 const APP = {
   control: 'bly-staging-control',
   realtime: 'bly-staging-realtime',
   edge: 'bly-staging-edge',
-  web: 'bly-staging-web',
   mail: 'bly-staging-mail',
 } as const
 const PLATFORM = Object.values(APP)
@@ -257,17 +259,22 @@ async function pointWebhook(state: State): Promise<void> {
   saveState(state)
 }
 
+/** The token that edits cubepals.com's DNS. */
+function dnsToken(): string {
+  const token = process.env.CLOUDFLARE_API_TOKEN
+  if (!token) throw new Error(`CLOUDFLARE_API_TOKEN (DNS for cubepals.com) is not in ${SECRETS_FILE}`)
+  return token
+}
+
 /**
- * staging.cubepals.com on the web app, with Fly's certificate, and every name under the play
- * domain on the edge's own addresses, as production's are.
+ * staging.cubepals.com proxied, so the web Worker's route answers it under the zone's certificate
+ * (100:: is Cloudflare's address for a host with no origin), and every name under the play domain
+ * on the edge's own addresses, as production's are.
  */
 async function pointDomains(edge: { v4: string; v6: string | undefined }): Promise<void> {
   say('domains')
-  const token = process.env.CLOUDFLARE_API_TOKEN
-  if (!token) throw new Error(`CLOUDFLARE_API_TOKEN (DNS for cubepals.com) is not in ${SECRETS_FILE}`)
-  await pointRecord(token, 'cubepals.com', { type: 'CNAME', name: WEB_HOST, content: `${APP.web}.fly.dev` })
-  if (!fly(['certs', 'show', WEB_HOST, '-a', APP.web], { allowFail: true }))
-    fly(['certs', 'add', WEB_HOST, '-a', APP.web])
+  const token = dnsToken()
+  await pointRecord(token, 'cubepals.com', { type: 'AAAA', name: WEB_HOST, content: '100::', proxied: true })
   await pointRecord(token, 'cubepals.com', { type: 'A', name: `*.${PLAY_DOMAIN}`, content: edge.v4 })
   if (edge.v6)
     await pointRecord(token, 'cubepals.com', { type: 'AAAA', name: `*.${PLAY_DOMAIN}`, content: edge.v6 })
@@ -393,10 +400,8 @@ async function up(): Promise<void> {
   // WebTransport runs over UDP, which Fly carries on a dedicated IPv4 only; an AAAA record would
   // send browsers where it can't reach.
   ensureIp(APP.realtime, 'v4')
-  for (const app of [APP.control, APP.web]) {
-    ensureIp(app, 'shared_v4')
-    ensureIp(app, 'v6')
-  }
+  ensureIp(APP.control, 'shared_v4')
+  ensureIp(APP.control, 'v6')
   const edgeIps = ipsOf(APP.edge)
   const edgeV4 = edgeIps.find((ip) => ip.Type === 'v4')?.Address
   if (!edgeV4) throw new Error('the edge has no dedicated IPv4')
@@ -476,44 +481,39 @@ async function up(): Promise<void> {
   deploy(APP.realtime, 'infra/fly/realtime.toml', 'apps/control/Dockerfile')
   say('edge')
   deploy(APP.edge, 'infra/fly/edge.toml', 'apps/edge/Dockerfile')
+  // A deploy leaves stopped machines stopped.
+  for (const app of [APP.control, APP.realtime, APP.edge]) startStopped(app)
   say('web')
-  // Its word about each browser's address, which the control plane believes only with this.
-  fly(['secrets', 'import', '-a', APP.web, '--stage'], { input: `WEB_PROXY_SECRET=${webProxySecret}\n` })
-  startStopped(APP.control) // A deploy leaves stopped machines stopped; the web build reads the API.
-  deploy(APP.web, webToml(), 'apps/web/Dockerfile', [`API_UPSTREAM=${origin(APP.control)}`])
-  for (const app of [APP.realtime, APP.edge, APP.web]) startStopped(app)
+  await deployWeb(webProxySecret)
 
   await until('the web app and the API answer', 300, webAnswers)
   say('')
   status()
 }
 
-/** The web app's Fly config, written where a deploy reads it. */
-function webToml(): string {
-  const file = join(mkdtempSync(join(tmpdir(), 'bly-staging-')), 'web.toml')
-  writeFileSync(
-    file,
-    [
-      `app = "${APP.web}"`,
-      `primary_region = "${REGION}"`,
-      // Next writes the /api rewrite at build time; server-rendered pages read it as they run.
-      '[env]',
-      `  API_UPSTREAM = "${origin(APP.control)}"`,
-      // The browser's address as Fly's proxy saw it, sent to the control plane with the secret.
-      '  WEB_CLIENT_ADDRESS_HEADER = "fly-client-ip"',
-      '[http_service]',
-      '  internal_port = 3000',
-      '  force_https = true',
-      '  auto_stop_machines = "off"',
-      '  auto_start_machines = false',
-      '  min_machines_running = 1',
-      '[[vm]]',
-      '  size = "shared-cpu-1x"',
-      '  memory = "1gb"',
-      '',
-    ].join('\n'),
-  )
-  return file
+/**
+ * The web app as the Worker blockly-web-staging, built from this checkout with staging's values,
+ * as production's is with its own: the /api rewrite to staging's control plane, noindex, and its
+ * word about each browser's address, which the control plane believes only with the secret.
+ */
+async function deployWeb(proxySecret: string): Promise<void> {
+  const token = process.env.CLOUDFLARE_WORKERS_API_TOKEN
+  if (!token)
+    throw new Error(
+      `CLOUDFLARE_WORKERS_API_TOKEN (Workers and R2 on cubepals.com's account) is not in ${SECRETS_FILE}`,
+    )
+  const site = {
+    env: 'staging',
+    apiUpstream: origin(APP.control),
+    canonicalOrigin: WEB,
+    deploymentId: 'staging',
+    indexable: false,
+    proxySecret,
+    cloudflare: { token, accountId: await zoneAccount(dnsToken(), 'cubepals.com') },
+  } as const
+  const sha = Bun.spawnSync(['git', 'rev-parse', 'HEAD']).stdout.toString().trim()
+  buildWorker(site, sha, say)
+  deployWorker(site, sha, say)
 }
 
 /** Whether Depot's builders answered; once they don't, every later deploy goes to Fly's own. */
@@ -662,7 +662,7 @@ async function empty(bucket: Bucket): Promise<void> {
 // ─── Stopped, not gone ───────────────────────────────────────────────────────────────────────
 
 /** Stopped first, what could start a server again; then the servers; then what they all need. */
-const STOP_FIRST: readonly string[] = [APP.control, APP.realtime, APP.edge, APP.web]
+const STOP_FIRST: readonly string[] = [APP.control, APP.realtime, APP.edge]
 const STOP_LAST: readonly string[] = [APP.mail]
 const stopOrder = (app: string): number =>
   STOP_FIRST.includes(app)
@@ -722,7 +722,7 @@ async function start(): Promise<void> {
     say('The addresses are gone; running up to take new ones.')
     await up()
   } else {
-    for (const app of [APP.mail, APP.control, APP.realtime, APP.edge, APP.web]) startStopped(app)
+    for (const app of [APP.mail, APP.control, APP.realtime, APP.edge]) startStopped(app)
     await until('the web app and the API answer', 300, webAnswers)
     // `stop` turned the webhook off; `up` turns it on itself.
     const state = loadState()
