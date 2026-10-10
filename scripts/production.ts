@@ -16,6 +16,10 @@
  *                                     after making the archive and dumps buckets, so their tokens can
  *                                     be made for them. After Terraform, it gives the Database dump
  *                                     workflow its secrets, in the repository's `production` environment
+ *   bun scripts/production.ts web     main's commit pushed as the `production` branch, for Vercel to
+ *                                     build, when nothing the Fly apps are built from changed since
+ *                                     the last deploy and main's CI passed on it: no staging pass,
+ *                                     no Fly deploy (production-web.ts says which paths are which)
  *
  * Needs terraform, flyctl and gh. Nothing here prints a value, only names.
  */
@@ -37,6 +41,7 @@ import {
   VALUES_FILE,
   valuesFile,
 } from './production-values.ts'
+import { flyInputs } from './production-web.ts'
 import { isNightly, nextVersion, repositoryTags } from './versions.ts'
 
 const say = (line: string) => process.stdout.write(`${line}\n`)
@@ -209,11 +214,62 @@ function apply(): void {
   say('Check it as docs/production.md § Check it says.')
 }
 
+/** The website alone to production: main's commit, when only the website changed since the last deploy. */
+function web(): void {
+  if (git('status', '--porcelain') !== '') {
+    say('This checkout has changes that aren’t committed. Production deploys a commit: commit or stash them.')
+    process.exit(1)
+  }
+  git('fetch', '--quiet', 'origin', 'main', 'production')
+  const head = git('rev-parse', 'HEAD')
+  if (head !== git('rev-parse', 'origin/main')) {
+    say('Only main’s latest commit goes to production. Check out main and pull it.')
+    process.exit(1)
+  }
+  if (spawnSync('git', ['merge-base', '--is-ancestor', 'origin/production', 'HEAD']).status !== 0) {
+    say('The production branch isn’t behind this commit. Run apply, which deploys everything.')
+    process.exit(1)
+  }
+  const fly = flyInputs(git('diff', '--name-only', 'origin/production', 'HEAD').split('\n').filter(Boolean))
+  if (fly.length > 0) {
+    say(
+      `Since the last deploy, what the Fly apps are built from changed too (${fly.slice(0, 5).join(', ')}).`,
+    )
+    say('Run apply, after a nightly has passed on this commit.')
+    process.exit(1)
+  }
+  const ci = spawnSync(
+    'gh',
+    [
+      'run',
+      'list',
+      '--branch',
+      'main',
+      '--workflow',
+      'CI',
+      '--commit',
+      head,
+      '--json',
+      'conclusion',
+      '-q',
+      '.[0].conclusion',
+    ],
+    { encoding: 'utf8' },
+  ).stdout.trim()
+  if (ci !== 'success') {
+    say(`CI on this commit is ${ci || 'not run'}; the website goes once it has passed.`)
+    process.exit(1)
+  }
+  run('git', ['push', 'origin', 'HEAD:production'], process.env)
+  say('Vercel is building cubepals.com from the production branch.')
+}
+
 const command = process.argv[2]
 if (command === 'init') init()
 else if (command === 'check') process.exit(check(read()) ? 0 : 1)
 else if (command === 'apply') apply()
+else if (command === 'web') web()
 else {
-  say('Usage: bun scripts/production.ts init | check | apply')
+  say('Usage: bun scripts/production.ts init | check | apply | web')
   process.exit(1)
 }

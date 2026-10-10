@@ -97,6 +97,17 @@ bun scripts/production.ts apply
 `apply` can be run again at any time: it changes only what differs. It's also how a value changes
 later: edit the file, run `apply`. Never run `terraform destroy` here.
 
+A change to the website alone goes without a staging pass or a Fly deploy:
+
+```sh
+bun scripts/production.ts web
+```
+
+From a clean checkout of main's latest commit, once main's CI has passed on it, it pushes the commit
+as the `production` branch for Vercel to build. It refuses when anything the Fly apps are built from
+changed since the last deploy (`apps/control`, `apps/edge`, `packages`, `infra/fly`, the lockfile):
+that goes through `apply`, after a nightly.
+
 ## 4. Check it
 
 1. `dig +short rt.cubepals.com` gives one IPv4 address and `dig +short AAAA rt.cubepals.com`
