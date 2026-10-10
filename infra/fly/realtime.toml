@@ -53,6 +53,13 @@ primary_region = "fra"
     port = 443
     handlers = ["tls", "http"]
 
+  # Plain HTTP only redirects, and lets Fly renew the fallback's certificate over HTTP-01, so the
+  # _acme-challenge name stays free for the realtime role's own DNS-01 TXT records.
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
   [[services.tcp_checks]]
     interval = "15s"
     timeout = "2s"
