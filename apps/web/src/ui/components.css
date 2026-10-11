@@ -2435,8 +2435,8 @@ details[open] > .bk-disclosure::before {
 .bk-tip__bubble > :not(:first-child) {
   margin-block-start: var(--space-8);
 }
-/* Opened from a forest surface: the page's own surface, edged in ink, so it stands apart from the
-   card under it (tip.tsx). */
+/* Opened from light text, so from a dark surface: the page's own surface, edged in ink, so it
+   stands apart from what it opens over (tip.tsx). */
 .bk-tip__bubble--light {
   background: var(--surface);
   color: var(--ink);
