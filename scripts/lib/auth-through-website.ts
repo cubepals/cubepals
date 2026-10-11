@@ -29,6 +29,15 @@ type Probe = {
 
 const json = (answer: Response) => (answer.headers.get('content-type') ?? '').startsWith('application/json')
 
+/** Whether the answer sends the browser to Google's own sign-in host. */
+function googleHost(text: string): boolean {
+  try {
+    return new URL((JSON.parse(text) as { url: string }).url).host === 'accounts.google.com'
+  } catch {
+    return false
+  }
+}
+
 const PROBES: Probe[] = [
   { name: 'session', method: 'GET', path: '/api/auth/get-session', ok: (a) => a.status === 200 && json(a) },
   {
@@ -36,7 +45,7 @@ const PROBES: Probe[] = [
     method: 'POST',
     path: '/api/auth/sign-in/social',
     body: { provider: 'google', callbackURL: '/servers' },
-    ok: (a, text) => a.status === 200 && text.includes('accounts.google.com'),
+    ok: (a, text) => a.status === 200 && googleHost(text),
   },
   {
     name: 'Google return',
