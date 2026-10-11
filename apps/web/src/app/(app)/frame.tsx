@@ -34,6 +34,7 @@ import { AccountMenu } from './account-menu'
 import { Feedback } from './feedback'
 import styles from './insight.module.css'
 import { MomentCard } from './moment'
+import { MoreMenu, type NavEntry } from './more-menu'
 import { usePrefetch } from './prefetch'
 
 export function AppFrame({
@@ -90,31 +91,31 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
     refetchInterval: 120_000,
   })
 
-  const serverItems = serverId
+  const serverItems: NavEntry[] = serverId
     ? [
-        { href: `/servers/${serverId}`, label: 'Overview', icon: <LayoutGrid {...ICON} aria-hidden /> },
+        { href: `/servers/${serverId}`, label: 'Overview', icon: LayoutGrid },
         {
           href: `/servers/${serverId}/players`,
           label: 'Players',
-          icon: <Users {...ICON} aria-hidden />,
+          icon: Users,
           trailing: view?.players ? String(view.players.online) : undefined,
         },
         {
           href: `/servers/${serverId}/mods`,
           label: view?.loader === 'paper' ? 'Plugins' : 'Mods',
-          icon: <Puzzle {...ICON} aria-hidden />,
+          icon: Puzzle,
         },
-        { href: `/servers/${serverId}/world`, label: 'World', icon: <Globe {...ICON} aria-hidden /> },
-        { href: `/servers/${serverId}/backups`, label: 'Backups', icon: <Archive {...ICON} aria-hidden /> },
+        { href: `/servers/${serverId}/world`, label: 'World', icon: Globe },
+        { href: `/servers/${serverId}/backups`, label: 'Backups', icon: Archive },
         {
           href: `/servers/${serverId}/console`,
           label: 'Console',
-          icon: <SquareTerminal {...ICON} aria-hidden />,
+          icon: SquareTerminal,
         },
         {
           href: `/servers/${serverId}/settings`,
           label: 'Settings',
-          icon: <Settings {...ICON} aria-hidden />,
+          icon: Settings,
         },
       ]
     : []
@@ -124,7 +125,7 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
 
   // Next fetches each item's page whole as soon as it shows (`prefetch`), its code included, so a
   // press swaps the page with nothing left to ask the server; this layout isn't run again for it.
-  const item = (entry: { href: string; label: string; icon: ReactNode; trailing?: string | undefined }) => (
+  const item = (entry: NavEntry) => (
     <Link
       key={entry.href}
       href={entry.href}
@@ -133,20 +134,20 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
       aria-current={pathname === entry.href ? 'page' : undefined}
       {...prefetch.intent(entry.href)}
     >
-      {entry.icon}
+      <entry.icon {...ICON} aria-hidden />
       {entry.label}
       {entry.trailing !== undefined && <span className="bk-appnav__trailing">{entry.trailing}</span>}
     </Link>
   )
 
-  const servers = { href: '/servers', label: 'Servers', icon: <Box {...ICON} aria-hidden /> }
-  const admin = {
+  const servers: NavEntry = { href: '/servers', label: 'Servers', icon: Box }
+  const admin: NavEntry = {
     href: '/admin',
     label: 'Admin',
-    icon: <ShieldCheck {...ICON} aria-hidden />,
+    icon: ShieldCheck,
     trailing: alerts.data?.length ? String(alerts.data.length) : undefined,
   }
-  const account = { href: '/account', label: 'Account', icon: <UserRound {...ICON} aria-hidden /> }
+  const account: NavEntry = { href: '/account', label: 'Account', icon: UserRound }
 
   return (
     <div className="bk-shell">
@@ -205,12 +206,25 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
         <MomentCard />
       </div>
 
+      {/* The bar holds five: Servers, a server's first three pages, and More for the rest and the
+          account, which the sidebar's foot holds on a wider screen. */}
       <nav className="bk-bottombar bk-on-dark" aria-label="Cubepals">
-        {[servers, ...serverItems].slice(0, 5).map(item)}
+        {[servers, ...serverItems.slice(0, BAR_PAGES)].map(item)}
+        <MoreMenu
+          email={user.email}
+          pages={serverItems.slice(BAR_PAGES)}
+          account={account}
+          admin={admin}
+          isAdmin={me.data?.admin === true}
+          pathname={pathname}
+        />
       </nav>
     </div>
   )
 }
+
+/** How many of a server's pages the phone's bottom bar shows; More holds the rest. */
+const BAR_PAGES = 3
 
 const labelOf = (label: string | undefined) => (label === undefined ? {} : { label })
 

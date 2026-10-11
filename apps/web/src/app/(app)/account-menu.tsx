@@ -8,6 +8,7 @@
  * The signed-in account at the foot of the sidebar: its email, quiet, and pressed it opens the one
  * thing done to the account from anywhere, signing out. Kept behind a press so it is never hit by
  * accident on the way to something else. The account's own page is the Account item above it.
+ * Signing out is also the last row of the phone's More menu (./more-menu.tsx).
  */
 import { ChevronsUpDown, LogOut } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -16,17 +17,10 @@ import { authClient } from '../../lib/auth'
 import { Popover } from '../../ui'
 
 /** The foot's icons: smaller than the items' above, as the foot is quieter than they are. */
-const SMALL = { size: 16, strokeWidth: 1.75 } as const
+export const SMALL = { size: 16, strokeWidth: 1.75 } as const
 
 export function AccountMenu({ email }: { email: string }) {
-  const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [leaving, setLeaving] = useState(false)
-  const signOut = async () => {
-    setLeaving(true)
-    await authClient.signOut()
-    router.push('/')
-  }
   return (
     <Popover
       open={open}
@@ -47,11 +41,25 @@ export function AccountMenu({ email }: { email: string }) {
     >
       <div className="bk-menu">
         <p className="bk-menu__note">Signed in as {email}</p>
-        <button type="button" className="bk-menu__item" disabled={leaving} onClick={signOut}>
-          <LogOut {...SMALL} aria-hidden />
-          {leaving ? 'Signing out…' : 'Sign out'}
-        </button>
+        <SignOut />
       </div>
     </Popover>
+  )
+}
+
+/** The menu row that signs out and goes to the front page. */
+export function SignOut() {
+  const router = useRouter()
+  const [leaving, setLeaving] = useState(false)
+  const signOut = async () => {
+    setLeaving(true)
+    await authClient.signOut()
+    router.push('/')
+  }
+  return (
+    <button type="button" className="bk-menu__item" disabled={leaving} onClick={signOut}>
+      <LogOut {...SMALL} aria-hidden />
+      {leaving ? 'Signing out…' : 'Sign out'}
+    </button>
   )
 }
