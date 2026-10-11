@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Whether signing in and signing up work through the website, for the staging and production
- * checks and every website deploy (production.ts).
+ * Whether signing in and signing up work through the website, asked after every website deploy
+ * (production.ts).
  * Sign-in is the way in: if it breaks, nobody gets in. So each way of it is asked, without making
  * an account:
  *

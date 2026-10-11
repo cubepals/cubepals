@@ -23,7 +23,6 @@
 
 import { randomUUID } from 'node:crypto'
 import { resolve4 } from 'node:dns/promises'
-import { authWorks } from './lib/auth-through-website.ts'
 import { type Edge, join } from './lib/minecraft.ts'
 import { flags, operatorCli } from './lib/operator-cli.ts'
 import { productionFlyEnv, productionValues, reachProduction } from './lib/production-reach.ts'
@@ -144,11 +143,6 @@ if (!owner) {
 say(`production check, as operator:production-check, for ${owner}; players at <server>.${PLAY_DOMAIN}`)
 
 try {
-  say('\nthe website')
-  await step('signs in and signs up through the website, every way', 60, () =>
-    authWorks('https://cubepals.com'),
-  )
-
   say('\nthe server')
   await step('is made for the account and comes up', 900, async () => {
     const at = Date.now()
