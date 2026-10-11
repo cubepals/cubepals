@@ -4,7 +4,7 @@
 
 /**
  * Runs one-shot containers over volumes, as root, each removed when it ends and killed if it runs
- * past its deadline. It does not decide what a helper runs or which volumes it sees: the verbs
+ * past its deadline, and asks again after a wait or a log the daemon's answer to never ended. It does not decide what a helper runs or which volumes it sees: the verbs
  * (`docker-runtime.ts`), `archives.ts` and `installs.ts` do.
  */
 
@@ -56,8 +56,13 @@ export function helperRunner(docker: Docker, deployment: string): RunHelper {
           )
         }, HELPER_DEADLINE_MS)
       })
-      const result = (await Promise.race([container.wait(), deadline])) as { StatusCode: number }
-      const logs = (await container.logs({ stdout: true, stderr: true })) as Buffer
+      const result = (await Promise.race([
+        reasked((abortSignal) => container.wait({ abortSignal })),
+        deadline,
+      ])) as { StatusCode: number }
+      const logs = (await reasked((abortSignal) =>
+        container.logs({ stdout: true, stderr: true, abortSignal }),
+      )) as Buffer
       if (result.StatusCode !== 0)
         throw new Error(
           `A helper container failed with code ${result.StatusCode}: ${streamOf(logs, 2).trim().slice(0, 300)}`,
@@ -67,6 +72,39 @@ export function helperRunner(docker: Docker, deployment: string): RunHelper {
       clearTimeout(timer)
       await container.remove({ force: true }).catch(() => undefined)
     }
+  }
+}
+
+/** How long the first ask of a wait or a log has to end before it is asked again. */
+const FIRST_ASK_MS = 10_000
+/** The longest any one ask is given, however many came before it. */
+const LONGEST_ASK_MS = 2 * 60 * 1000
+
+/**
+ * A call to the daemon that is asked again when it doesn't end. Bun's node:http client, which
+ * dockerode speaks through, now and then takes in the whole of a response the daemon sends after
+ * its headers (a wait's exit code, a stopped container's log) and never ends it, so the call would
+ * hang for good. Each ask is given twice as long as the one before, up to a ceiling; one that hasn't
+ * ended by then is dropped and asked again. Only calls that give the same answer when asked twice
+ * belong here: a wait on a helper (an exited container answers at once) and its log.
+ */
+async function reasked<T>(call: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  for (let ms = FIRST_ASK_MS; ; ms = Math.min(ms * 2, LONGEST_ASK_MS)) {
+    const abort = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const asked = call(abort.signal)
+    const late = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), ms)
+    })
+    try {
+      const answer = await Promise.race([asked.then((value) => ({ value })), late])
+      if (answer !== null) return answer.value
+    } finally {
+      clearTimeout(timer)
+    }
+    // The dropped ask fails once aborted, if it ever settles; nothing waits on it any more.
+    asked.catch(() => undefined)
+    abort.abort()
   }
 }
 

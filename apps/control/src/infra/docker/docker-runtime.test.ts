@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs'
 import Docker from 'dockerode'
 import { type RuntimeSpec, runtimeKey } from '../../app/ports/runtime.ts'
 import { S3ArchiveStore } from '../s3/s3-archive-store.ts'
+import { helperRunner } from './docker-runtime/helper.ts'
 import { DockerRuntime } from './docker-runtime.ts'
 import { decodeHandle, encodeHandle } from './handle.ts'
 
@@ -75,29 +76,14 @@ describe.skipIf(!existsSync(SOCKET) || !s3.endpoint || !s3.bucket)('Docker volum
   const key = runtimeKey(randomUUID())
   const archiveKey = `archives/test/${randomUUID()}.tar.gz`
 
-  /** Runs a shell command in a throwaway container with the volume at /data; returns its output. */
-  async function inVolume(volume: string, script: string): Promise<string> {
-    const container = await docker.createContainer({
-      Image: IMAGE,
-      Cmd: ['sh', '-c', script],
-      HostConfig: { Mounts: [{ Type: 'volume', Source: volume, Target: '/data' }] },
+  /**
+   * Runs a shell command in a throwaway container with the volume at /data; returns what it
+   * printed. It is the runtime's own helper, so it waits for the container the way the runtime does.
+   */
+  const inVolume = (volume: string, script: string) =>
+    helperRunner(docker, deployment)(IMAGE, ['sh', '-c', script], {
+      mounts: [{ Type: 'volume', Source: volume, Target: '/data' }],
     })
-    try {
-      await container.start()
-      await container.wait()
-      const logs = (await container.logs({ stdout: true, stderr: true })) as Buffer
-      // Framed output: skip each 8-byte header.
-      let out = ''
-      for (let at = 0; at + 8 <= logs.length; ) {
-        const length = logs.readUInt32BE(at + 4)
-        out += logs.subarray(at + 8, at + 8 + length).toString('utf8')
-        at += 8 + length
-      }
-      return out
-    } finally {
-      await container.remove({ force: true })
-    }
-  }
 
   // Both images the runtime uses here, pulled before any test so a slow registry isn't counted
   // against a test's time.
@@ -467,28 +453,10 @@ describe.skipIf(!existsSync(SOCKET))('Docker installs', () => {
   const install = { key: `alpine test ${deployment}`, env: {}, paths: ['server.jar', '.manifest.json'] }
   const made = `bly-${deployment}-install-${createHash('sha256').update(install.key).digest('hex').slice(0, 16)}`
 
-  async function inVolume(volume: string, script: string): Promise<string> {
-    const container = await docker.createContainer({
-      Image: IMAGE,
-      Cmd: ['sh', '-c', script],
-      HostConfig: { Mounts: [{ Type: 'volume', Source: volume, Target: '/data' }] },
+  const inVolume = (volume: string, script: string) =>
+    helperRunner(docker, deployment)(IMAGE, ['sh', '-c', script], {
+      mounts: [{ Type: 'volume', Source: volume, Target: '/data' }],
     })
-    try {
-      await container.start()
-      await container.wait()
-      const logs = (await container.logs({ stdout: true })) as Buffer
-      // Framed output: skip each 8-byte header.
-      let out = ''
-      for (let at = 0; at + 8 <= logs.length; ) {
-        const length = logs.readUInt32BE(at + 4)
-        out += logs.subarray(at + 8, at + 8 + length).toString('utf8')
-        at += 8 + length
-      }
-      return out
-    } finally {
-      await container.remove({ force: true })
-    }
-  }
 
   afterAll(async () => {
     await runtime.destroy(key).catch(() => undefined)
@@ -506,16 +474,21 @@ describe.skipIf(!existsSync(SOCKET))('Docker installs', () => {
       Name: made,
       Labels: { 'blockly.deployment': deployment, 'blockly.install': install.key },
     })
-    await inVolume(
-      made,
-      'echo jar > /data/server.jar && echo {} > /data/.manifest.json && echo p > /data/.rcon-cli.env && touch /data/.blockly-install-done',
+    await step(
+      'making the install',
+      inVolume(
+        made,
+        'echo jar > /data/server.jar && echo {} > /data/.manifest.json && echo p > /data/.rcon-cli.env && touch /data/.blockly-install-done',
+      ),
     )
     const handle = await step(
       'provisioning with the install',
       runtime.ensureProvisioned(key, { regionKey: 'local' }, spec, progress, install),
     )
     const { volume } = decodeHandle(handle)
-    expect(await inVolume(volume, 'ls -A /data | sort')).toBe('.manifest.json\nserver.jar\n')
-    expect((await inVolume(volume, 'cat /data/server.jar')).trim()).toBe('jar')
+    expect(await step('listing the world', inVolume(volume, 'ls -A /data | sort'))).toBe(
+      '.manifest.json\nserver.jar\n',
+    )
+    expect((await step('reading the jar', inVolume(volume, 'cat /data/server.jar'))).trim()).toBe('jar')
   }, 60_000)
 })

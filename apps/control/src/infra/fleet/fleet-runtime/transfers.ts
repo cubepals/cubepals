@@ -138,14 +138,17 @@ export class Transfers {
         throw new Error(
           `The store holds ${held?.sizeBytes ?? 'nothing'}; the node sent ${sent.sizeBytes} bytes`,
         )
-      await this.#db.execute(sql`
-        UPDATE fleet_archives SET status = 'ready', sha256 = ${sent.sha256}, size_bytes = ${sent.sizeBytes},
-          uploaded_at = now(), error = NULL WHERE id = ${archiveId}`)
-      await event(this.#db, 'snapshot.uploaded', {
-        node: claimed.node_id,
-        workload: claimed.workload,
-        epoch: Number(claimed.epoch),
-        data: { id: archiveId, sizeBytes: sent.sizeBytes, ms: sent.durationMs },
+      // One transaction, so a copy seen as ready has its event already.
+      await this.#db.transaction(async (t) => {
+        await t.execute(sql`
+          UPDATE fleet_archives SET status = 'ready', sha256 = ${sent.sha256}, size_bytes = ${sent.sizeBytes},
+            uploaded_at = now(), error = NULL WHERE id = ${archiveId}`)
+        await event(t, 'snapshot.uploaded', {
+          node: claimed.node_id,
+          workload: claimed.workload,
+          epoch: Number(claimed.epoch),
+          data: { id: archiveId, sizeBytes: sent.sizeBytes, ms: sent.durationMs },
+        })
       })
       return 'ready'
     } catch (error) {
@@ -161,19 +164,21 @@ export class Transfers {
       const message = large === null ? (error as Error).message : `${TOO_BIG}${large.reason}`
       // A copy too big for one upload stays too big: it is left on its node, and not sent again.
       const final = large !== null || claimed.attempts >= UPLOAD_ATTEMPTS
-      await this.#db.execute(sql`
-        UPDATE fleet_archives SET status = ${final ? 'failed' : 'local'}, error = ${message} WHERE id = ${archiveId}`)
-      if (final)
-        await event(this.#db, 'snapshot.upload_failed', {
-          workload: claimed.workload,
-          data: {
-            id: archiveId,
-            error: message,
-            ...(large === null
-              ? {}
-              : { code: 'archive_too_large', sizeBytes: large.sizeBytes, limitBytes: large.limitBytes }),
-          },
-        })
+      await this.#db.transaction(async (t) => {
+        await t.execute(sql`
+          UPDATE fleet_archives SET status = ${final ? 'failed' : 'local'}, error = ${message} WHERE id = ${archiveId}`)
+        if (final)
+          await event(t, 'snapshot.upload_failed', {
+            workload: claimed.workload,
+            data: {
+              id: archiveId,
+              error: message,
+              ...(large === null
+                ? {}
+                : { code: 'archive_too_large', sizeBytes: large.sizeBytes, limitBytes: large.limitBytes }),
+            },
+          })
+      })
       return 'failed'
     }
   }

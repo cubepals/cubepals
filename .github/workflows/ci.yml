@@ -218,16 +218,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Mirrors refuse bursts when parallel jobs pull at once, so each pull retries.
+      # Mirrors refuse bursts when parallel jobs pull at once, so each pull retries. The Docker
+      # runtime's tests run helpers on alpine and curl; pulled here, no test pulls them itself, and
+      # alpine comes from ECR's mirror of Docker Hub's library under the name the runtime asks for.
       - name: Pull the test images
         run: |
-          for image in public.ecr.aws/docker/library/nats:2.15.0 ghcr.io/rustfs/rustfs:1.0.0 ghcr.io/letsencrypt/pebble-challtestsrv:2.10.1 ghcr.io/letsencrypt/pebble:2.10.1; do
+          for image in public.ecr.aws/docker/library/nats:2.15.0 ghcr.io/rustfs/rustfs:1.0.0 ghcr.io/letsencrypt/pebble-challtestsrv:2.10.1 ghcr.io/letsencrypt/pebble:2.10.1 public.ecr.aws/docker/library/alpine:3.22 curlimages/curl:8.22.0; do
             for wait in 2 5 10 20 40 0; do
               docker pull -q "$image" && break
               [ "$wait" = 0 ] && exit 1
               sleep "$wait"
             done
           done
+          docker tag public.ecr.aws/docker/library/alpine:3.22 alpine:3.22
       - name: Start NATS
         run: docker run -d --name nats -p 4222:4222 public.ecr.aws/docker/library/nats:2.15.0 --user blockly-test --pass fm2_blockly_test
       - name: Start an S3 store
