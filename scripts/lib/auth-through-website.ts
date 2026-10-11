@@ -4,7 +4,7 @@
 
 /**
  * Whether signing in and signing up work through the website, for the staging and production
- * checks, every website deploy (production.ts) and the watch on cubepals.com (sign-in-watch.yml).
+ * checks and every website deploy (production.ts).
  * Sign-in is the way in: if it breaks, nobody gets in. So each way of it is asked, without making
  * an account:
  *
