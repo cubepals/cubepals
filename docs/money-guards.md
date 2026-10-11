@@ -181,7 +181,7 @@ AFK farm that defeats the kick: warnings at 10 and 2 minutes, then an ordinary s
 | Guard | When it runs | What it does | If it breaks | Tested |
 |---|---|---|---|---|
 | `reconcile` | every minute; a full pass hourly | Stops compute that starts running behind a stopped or failed server, and records crashes | Such a machine runs until the orphan sweep, at most an hour | `lifecycle.test.ts` "compute running behind a stopped server…" |
-| `orphans` | hourly at :17, **and at once when the watchdog sees a stray** | **Stops** running compute that no running server accounts for: a stopped server's, one the database doesn't know, one left by a move. Destroys compute of purged servers and compute left by moves | A leaked machine runs at its size's price, and no cap counts it | `spend-watchdog.test.ts` "a machine Fly runs…"; `lifecycle.test.ts` |
+| `orphans` | hourly at :17, **and at once when the watchdog sees a stray** | **Stops** running compute that no running server accounts for: a stopped server's, one the database doesn't know, one left by a move. Destroys compute of purged servers and compute left by moves. Deletes volumes left beside a world that no machine mounts, such as a failed wake's (docs/runtimes.md) | A leaked machine runs at its size's price, and no cap counts it; a leaked volume bills at the volume price until the server's next rest | `spend-watchdog.test.ts` "a machine Fly runs…"; `lifecycle.test.ts`; `waking.test.ts`; `fly-runtime-leftovers.test.ts` |
 | `usage-close` | every 10 min | Closes power intervals left open, so metering never counts time off | Over-counts hours; spends nothing | existing schedule tests |
 | `store-sweep` | hourly | Rests worlds unplayed for 14 days (Free) or 30 (Plus), letting go of machine and disk | Idle disks stay, at the volume price | `storing.test.ts` |
 
@@ -217,7 +217,9 @@ out, and the runbook says how to stop them sooner.
 
 - **If it breaks:** the running cap still holds the day (see "The bound that matters").
 - **What it can't see:** bandwidth (Fly charges for egress past its allowance), snapshots, the
-  platform's own seven machines, and IPv4 addresses. Fly's bill is the truth. This is the early
+  platform's own seven machines, IPv4 addresses, and volumes no server's record accounts for:
+  disks are counted from the servers that hold one, so a volume a failed wake left beside a
+  world isn't, until the orphan sweep deletes it. Fly's bill is the truth. This is the early
   warning.
 - **Tested:** `domain/policy/spend.test.ts` (prices, a full day, rounding, the limit at and one
   cent past), `app/operations/spend-watchdog.test.ts` (under the limit, at it, a cent past, once a day, an

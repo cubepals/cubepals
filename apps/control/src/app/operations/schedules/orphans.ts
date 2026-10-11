@@ -7,12 +7,14 @@
  * live binding holds: what a purged server or a move left behind. Compute whose server the
  * database doesn't know is stopped if it runs, and otherwise kept for an operator. Noticing a
  * stray machine as it changes is `reconcile.ts`'s too; a server's own end is the `purge`
- * operation's (`handlers/winding-down.ts`).
+ * operation's (`handlers/winding-down.ts`). Storage left beside a server's world goes as the sweep
+ * ends (`leftovers.ts`).
  */
 import { type Db, schema } from '@blockly/db'
 import type { Runtimes } from '../../runtimes/router.ts'
 import { findServer, loadRuntime, lockServer } from '../../servers/persistence.ts'
 import { activeOperation } from '../persistence.ts'
+import { clearingLeftovers } from './leftovers.ts'
 import { SERVER_ID } from './reconcile.ts'
 import { strayCompute } from './stray.ts'
 
@@ -20,10 +22,18 @@ export function clearingOrphans(deps: {
   db: Db
   runtime: Pick<
     Runtimes,
-    'inventory' | 'providerOf' | 'providers' | 'destroy' | 'observeChanged' | 'sameCompute' | 'stop'
+    | 'inventory'
+    | 'providerOf'
+    | 'providers'
+    | 'destroy'
+    | 'observeChanged'
+    | 'sameCompute'
+    | 'stop'
+    | 'clearLeftovers'
   >
 }) {
   const { db, runtime } = deps
+  const clearLeftovers = clearingLeftovers(deps)
 
   /**
    * Running compute no running server accounts for is stopped, never destroyed: it is billed by
@@ -91,6 +101,7 @@ export function clearingOrphans(deps: {
       if ((await activeOperation(db, server.id)) !== null) continue
       await runtime.destroy(owner, item.handle)
     }
+    await clearLeftovers()
   }
 
   return orphans

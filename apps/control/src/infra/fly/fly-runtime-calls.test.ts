@@ -313,6 +313,7 @@ describe('FlyRuntime calls, in order, for a resting world', () => {
       `POST ${at('/secrets')}`,
       `POST ${at('/machines')}`,
       `GET ${at('/volumes/vol_4')}`,
+      `GET ${at('/volumes')}`,
     ])
   })
 })
