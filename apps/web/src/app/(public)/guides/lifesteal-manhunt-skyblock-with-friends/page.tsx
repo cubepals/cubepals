@@ -35,16 +35,16 @@ export default async function Guide() {
 
       <Part id="starting" title="Starting one">
         <p>
-          On the create page, under <strong>What to play</strong>, pick <strong>Lifesteal</strong>,{' '}
-          <strong>Manhunt</strong> or <strong>Skyblock</strong>, then say who’s playing and name it. Cubepals
-          picks the Minecraft version everything in it runs on, and says so. Your friends join with plain
-          Minecraft at that version.
+          On the create page, under <strong>What to play</strong>, open <strong>More ways to play</strong> and
+          pick <strong>Lifesteal</strong>, <strong>Manhunt</strong> or <strong>Skyblock</strong>, then say
+          who’s playing and name it. Cubepals picks the Minecraft version everything in it runs on, and says
+          so. Your friends join with plain Minecraft at that version.
         </p>
         <Shot
           src={`${PICTURES}/what-to-play.png`}
           width={680}
-          height={455}
-          alt="The What to play question with Lifesteal picked, next to Manhunt and Skyblock. Under it: Cubepals picked Minecraft 26.2, the newest that everything in Lifesteal runs on."
+          height={240}
+          alt="The game modes under More ways to play, with Lifesteal picked. Next to it: Smoother survival, Manhunt, and Skyblock, a small island in the void, a tree and a chest."
         />
       </Part>
 
