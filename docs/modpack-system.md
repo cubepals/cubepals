@@ -84,8 +84,8 @@ advanced feature.
   puts its file back. A plugin that fills in what a file leaves out (Bukkit's `copyDefaults`, as
   LifeStealZ does) lets a carried file hold only the values Cubepals changes. BentoBox's addons
   don't: they fill a gap with defaults of their own that differ from the file they ship (no Nether
-  islands, unprotected visitors), so OneBlock carries AOneBlock's whole file with one value
-  changed (`app/setups/aoneblock-config.yml`).
+  islands, unprotected visitors), so Skyblock and OneBlock carry BSkyBlock's and AOneBlock's whole
+  files with one value changed (`app/setups/bskyblock-config.yml`, `app/setups/aoneblock-config.yml`).
 - **The running world.** A carried file names the world the server runs as `{{blockly.level}}`
   (`RUNNING_LEVEL`). It is written with the level's name in its place (`world`, `world-2`, …), so
   the file follows the server when the owner switches worlds or starts a fresh one: Duels' arena

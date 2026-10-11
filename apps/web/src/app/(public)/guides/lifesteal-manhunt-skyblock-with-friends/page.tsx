@@ -3,11 +3,13 @@
 // SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
 
 /**
- * The guide to Lifesteal, Manhunt and Skyblock with friends. Each was made from its card on a
- * local stack, on Plus, and played with test players: a heart taken and a player eliminated and
- * revived (LifeStealZ 2.21.1), a hunt started and won (Manhunt+ 1.4.2), and the island SkyBlock
- * Plus 1.0.9 starts you on. The pictures are from that run. What each mode is comes from its own
- * page and files, linked where named; the price from the plan table.
+ * The guide to Lifesteal, Manhunt and Skyblock with friends. Lifesteal and Manhunt were made from
+ * their cards on a local stack, on Plus, and played with test players: a heart taken and a player
+ * eliminated and revived (LifeStealZ 2.21.1), a hunt started and won (Manhunt+ 1.4.2). The
+ * pictures are from that run. Skyblock was run from its template's own server spec in Docker
+ * (BentoBox 3.23.3, BSkyBlock 1.20.0), and a test player joined: an island was made for them, and
+ * the chest's contents below are what it held. What each mode is comes from its own page and files,
+ * linked where named; the price from the plan table.
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -27,8 +29,7 @@ export default async function Guide() {
       <p className="type-body">
         Lifesteal, Manhunt and Skyblock are three ways to play Minecraft: Java Edition with friends that need
         nothing but a server: no map to build, and nothing for your friends to install. On Cubepals each one
-        is a card under <strong>What to play</strong>. Lifesteal and Manhunt run a plugin and Skyblock is a
-        modpack, so all three come with {plus}
+        is a card under <strong>What to play</strong>. All three run plugins, so they come with {plus}
         {paid ? `, ${priceOf(paid.monthlyPriceCents)} with ${paid.includedHours} hours of play` : ''}.
       </p>
 
@@ -115,15 +116,20 @@ export default async function Guide() {
 
       <Part id="skyblock" title="Skyblock">
         <p>
-          You start on one small island over the void: some dirt and grass, an oak tree, and a chest with an
-          ice block and a bucket of lava. Everything else you make from that. It runs{' '}
-          <a href="https://modrinth.com/modpack/skyblock-plus">SkyBlock Plus</a>, whose advancements are
-          rearranged to hint at what to try next, such as a cobblestone generator. There’s a Nether island
-          too.
+          You start on a small island over the void: some dirt and grass, an oak tree, and a chest with a
+          bucket of lava, two blocks of ice, and seeds, a sapling and a few plants to start a farm. Everything
+          else you make from that. It runs <a href="https://modrinth.com/plugin/bskyblock">BSkyBlock</a> on{' '}
+          <a href="https://modrinth.com/plugin/bentobox">BentoBox</a>, with island levels and warps.
         </p>
         <p>
-          SkyBlock Plus only changes the server, so friends join with plain Minecraft, and everyone starts on
-          the same island.
+          Each friend gets an island of their own the first time they join, and there’s one waiting in the
+          Nether and the End too. <code>/island</code> takes you home. To share one island, invite a friend
+          with <code>/island team invite</code> and their name; up to four play on one island.
+        </p>
+        <p>
+          <a href="https://modrinth.com/modpack/skyblock-plus">SkyBlock Plus</a>, where everyone shares one
+          island and the advancements hint at what to try next, is under <strong>Modpacks</strong> on the
+          create page.
         </p>
       </Part>
 

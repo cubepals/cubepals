@@ -25,9 +25,9 @@ export interface Template extends Omit<TemplateCard, 'advanced' | 'forADay'> {
   advanced?: boolean
   forADay?: boolean
   /**
-   * No template is a modpack: a pack is chosen by name. One that stands for a way to play, as
-   * SkyBlock Plus does for Skyblock, says so in its review (`curation/packs.ts`), and its card
-   * shows only while the pack is offered.
+   * No template is a modpack: a pack is chosen by name. One that stands for a way to play says so
+   * in its review (`CuratedPack.way` in `curation/packs.ts`), and its card shows only while the
+   * pack is offered.
    */
   setup: Omit<ServerSetup, 'gameVersion' | 'loaderVersion' | 'party' | 'modpack'>
 }
@@ -35,6 +35,7 @@ export interface Template extends Omit<TemplateCard, 'advanced' | 'forADay'> {
 const WORLD = { levelType: 'minecraft:normal', hardcore: false }
 const BENTOBOX_ADDONS = 'plugins/BentoBox/addons'
 const AONEBLOCK_CONFIG = readFileSync(new URL('./aoneblock-config.yml', import.meta.url), 'utf8')
+const BSKYBLOCK_CONFIG = readFileSync(new URL('./bskyblock-config.yml', import.meta.url), 'utf8')
 
 const SETUPS: Record<TemplateKey, Template['setup']> = {
   survival: {
@@ -79,6 +80,22 @@ const SETUPS: Record<TemplateKey, Template['setup']> = {
     // Manhunt+ (MIT), whose hunters' compasses point at the runner.
     mods: [{ catalog: 'modrinth', projectId: 'V67rIXws' }],
     settings: { defaultGameMode: 'survival', difficulty: 'normal', pvp: true },
+    world: WORLD,
+  },
+  skyblock: {
+    loader: 'paper',
+    // BentoBox with BSkyBlock, Level and Warps (all EPL-2.0).
+    // BentoBox loads its addons only from its own folder, never from plugins/.
+    mods: [
+      { catalog: 'modrinth', projectId: 'aBVLHiAW' },
+      { catalog: 'modrinth', projectId: 'ASGn77Qd', dir: BENTOBOX_ADDONS },
+      { catalog: 'modrinth', projectId: 'OWzL9XSJ', dir: BENTOBOX_ADDONS },
+      { catalog: 'modrinth', projectId: 'P08aFayx', dir: BENTOBOX_ADDONS },
+    ],
+    // BSkyBlock's own settings with an island made for each player as they first join; without
+    // it, a friend lands in a plain world and has to know to type /island.
+    files: [{ path: `${BENTOBOX_ADDONS}/BSkyBlock/config.yml`, content: BSKYBLOCK_CONFIG }],
+    settings: { defaultGameMode: 'survival', difficulty: 'normal', pvp: false },
     world: WORLD,
   },
   oneblock: {

@@ -111,7 +111,7 @@ export const GUIDES: readonly Guide[] = [
     description:
       'What Lifesteal, Manhunt and Skyblock are, and how to start a server for each one with your friends, who join with plain Minecraft. For Java Edition.',
     published: '2026-10-10',
-    modified: '2026-10-10',
+    modified: '2026-10-11',
     approved: true,
   },
 ]

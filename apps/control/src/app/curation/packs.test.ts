@@ -60,7 +60,6 @@ describe('the review of packs Blockly offers by name', () => {
   test('a pack that stands for a way to play wears a picture of its own', () => {
     // Its card sits among the templates', so it shares neither their picture nor their name.
     const ways = CURATED_PACKS.flatMap((pack) => (pack.way === undefined ? [] : [pack.way]))
-    expect(ways.map((way) => way.title)).toContain('Skyblock')
     const taken = TEMPLATES.flatMap((template) => [template.icon, template.title])
     for (const way of ways) {
       expect(taken).not.toContain(way.icon)

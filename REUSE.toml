@@ -105,6 +105,13 @@ precedence = "closest"
 SPDX-FileCopyrightText = ["The AOneBlock authors (BentoBoxWorld)", "2026 The Cubepals Authors"]
 SPDX-License-Identifier = "EPL-2.0"
 
+# BSkyBlock's settings as it writes them, with one change (templates.ts).
+[[annotations]]
+path = "apps/control/src/app/setups/bskyblock-config.yml"
+precedence = "closest"
+SPDX-FileCopyrightText = ["The BSkyBlock authors (BentoBoxWorld)", "2026 The Cubepals Authors"]
+SPDX-License-Identifier = "EPL-2.0"
+
 # Supabase's root certificate, which the database connection trusts.
 [[annotations]]
 path = "packages/db/certs/supabase-root-2021.crt"
