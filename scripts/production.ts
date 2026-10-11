@@ -44,6 +44,7 @@
 import { spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { authWorks } from './lib/auth-through-website.ts'
 import { buildWorker, deployWorker } from './lib/web-worker.ts'
 import {
   backendConfig,
@@ -251,6 +252,7 @@ async function apply(): Promise<void> {
   for (const app of ['control', 'realtime', 'edge'] as const) deployApp(app, env)
   moveProduction(env)
   deployWorker(site, head, say)
+  await signInGuard()
   const version = `v${nextVersion(repositoryTags())}`
   const notes = passed ? `Ran on staging as ${passed}.` : 'Deployed without a staging run.'
   run(
@@ -296,6 +298,27 @@ async function web(): Promise<void> {
   buildWorker(site, head, say)
   moveProduction(process.env)
   deployWorker(site, head, say)
+  await signInGuard()
+}
+
+/**
+ * After the website goes out: every way of signing in and signing up works through cubepals.com
+ * (scripts/lib/auth-through-website.ts). Sign-in is the way in, so a deploy that breaks it says so
+ * at once and names the way back. Tried for a minute, while Cloudflare takes the new version.
+ */
+async function signInGuard(): Promise<void> {
+  let failure = ''
+  for (let tries = 0; tries < 6; tries++) {
+    try {
+      say(`Sign-in and sign-up through the website: ${await authWorks('https://cubepals.com')}.`)
+      return
+    } catch (error) {
+      failure = (error as Error).message
+      await Bun.sleep(10_000)
+    }
+  }
+  say(`On cubepals.com, ${failure}. Roll the website back now: bun scripts/production.ts rollback website`)
+  process.exit(1)
 }
 
 /**
@@ -359,7 +382,10 @@ async function hotfix(): Promise<void> {
   if (website) buildWorker(website, head, say)
   for (const app of apps) deployApp(app, env)
   moveProduction(env)
-  if (website) deployWorker(website, head, say)
+  if (website) {
+    deployWorker(website, head, say)
+    await signInGuard()
+  }
   const shipped = [...apps, ...(site ? ['website'] : [])].join(', ')
   if (!(await answers(apps, env))) {
     say(
