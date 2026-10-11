@@ -14,10 +14,9 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   // Production's routes (cubepals.com/*, www.cubepals.com/*) are Terraform's
-  // (infra/terraform/modules/web); a deploy given no routes leaves them be. Until cubepals.com's
-  // records are proxied, workers.dev is the one address that reaches this Worker; turn it off
-  // after the cutover (docs/production.md).
-  "workers_dev": true,
+  // (infra/terraform/modules/web); a deploy given no routes leaves them be. cubepals.com is the
+  // only address that reaches this Worker: no workers.dev copy of production for anyone to find.
+  "workers_dev": false,
   "preview_urls": false,
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "blockly-web" }],
   // Next's data cache and the prerendered pages (open-next.config.ts). Class A and B operations
