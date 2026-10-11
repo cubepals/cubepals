@@ -51,9 +51,10 @@ export default async function Guide() {
         </p>
         <ol>
           <li>
-            <strong>What to play.</strong> Survival, Creative, Hardcore, Smoother survival, or a modpack. Pick
-            one and the Minecraft version, the server software and its settings are chosen to match. There are
-            games too:{' '}
+            <strong>What to play.</strong> Survival, Creative or Hardcore, or open{' '}
+            <strong>More ways to play</strong> for the rest: Smoother survival, game modes, and modpacks. Pick
+            one and the Minecraft version, the server software and its settings are chosen to match. The game
+            modes include{' '}
             <GuideLink to="lifesteal-manhunt-skyblock-with-friends">
               Lifesteal, Manhunt and Skyblock
             </GuideLink>
@@ -81,8 +82,8 @@ export default async function Guide() {
         <Shot
           src={`${PICTURES}/name-it.png`}
           width={680}
-          height={268}
-          alt="The “Name it” question with the server name Maple Hollow typed in. Under it: Friends join at maple-hollow.play.cubepals.com. The bar below says Survival, Minecraft 26.3, Europe, and has the Create server button."
+          height={278}
+          alt="The “Name it” question with the server name Maple Hollow typed in. Under it: Friends join at maple-hollow.play.cubepals.com. The bar below says Survival, Minecraft 26.3, Europe, closest to you, and Up to 5 players, and has the Create server button."
           caption="The bar at the bottom says what’s being made, and holds the one button."
         />
       </Part>
@@ -99,7 +100,7 @@ export default async function Guide() {
           src={`${PICTURES}/address.png`}
           width={576}
           height={202}
-          alt="A server’s page showing it Online, its address maple-hollow.play.cubepals.com with a Copy address button, and the line: In Minecraft: Java Edition 26.3, open Multiplayer, then Add Server, and paste it."
+          alt="A server’s page showing it Online, its address maple-hollow.play.cubepals.com with a Copy address button, and the line: In Minecraft: Java Edition 26.3, open Multiplayer, then Add Server, and paste it. Consoles and phones can’t join."
         />
         <p>
           For friends who are new to it,{' '}

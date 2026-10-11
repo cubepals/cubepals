@@ -50,8 +50,8 @@ const PINGING = 'Pinging...'
 const SLEEPING_NOTICE = '127.0.0.1:25563'
 /** Where a restarting server's name leads. apps/edge/agent.ts */
 const RESTARTING_NOTICE = '127.0.0.1:25564'
-/** How long a join is held for a wake: wakeWaitMs 25_000. apps/control/src/main.node.ts */
-const HOLD = '25 s'
+/** How long the edge's waiting room holds a join for a wake: WAKE_HOLD_MS 180000. apps/edge/agent.ts */
+const HOLD = '3 min'
 
 /** The protocol version the edge's own status request speaks, a 1.21 client's. apps/edge/notice.ts */
 const PROTOCOL = 767
@@ -222,7 +222,9 @@ const SAID = {
   through: 'The held join got in. From here the server checks the player itself.',
   waits:
     'The edge holds the join while the control plane waits for the restart. It never starts the server twice.',
-  turned: <>Still restarting. The edge’s own notice turns the join away: {quote(JOIN_RESTARTING)}</>,
+  turned: (
+    <>Still restarting when the hold ran out, so the edge turns the join away: {quote(JOIN_RESTARTING)}</>
+  ),
   // The whole of a held join in one go, for someone who asked for less motion and sees no steps.
   wokeWhole: (
     <>
@@ -234,7 +236,7 @@ const SAID = {
   turnedWhole: (
     <>
       The edge held the join while the restart was waited for, and never started the server twice. Still
-      restarting, so its own notice turned the join away: {quote(JOIN_RESTARTING)}
+      restarting when the hold ran out, so the edge turned the join away: {quote(JOIN_RESTARTING)}
     </>
   ),
 } satisfies Record<string, ReactNode>

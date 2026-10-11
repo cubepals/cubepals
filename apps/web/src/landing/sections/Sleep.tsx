@@ -54,7 +54,7 @@ export function Sleep({ plans, bare }: { plans: PublicPlan[]; bare?: boolean }) 
 
       <Demo
         label="A week of evenings to fill with play, what that week keeps a server awake for beside a server that never sleeps, and then the days nobody plays: a machine, a disk and a stored copy, and a join on any day"
-        note="An example week, with a month taken as a twelfth of a year. The days, the rest and the wake are sped up, and nothing is really started. It shows a join that gets in as the server comes up; on the staging machines in September 2026 a wake outlasted the join that asked for it, so that join was dropped with no message and the friend joined again."
+        note="An example week, with a month taken as a twelfth of a year. The days, the rest and the wake are sped up, and nothing is really started. It shows a join that gets in as the server comes up: the edge holds a join for up to 3 minutes while it wakes."
       >
         <SleepDemo plans={plans} />
       </Demo>

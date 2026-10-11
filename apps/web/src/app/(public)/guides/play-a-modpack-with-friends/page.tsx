@@ -50,9 +50,10 @@ export default async function Guide() {
 
       <Part id="picking" title="Picking a pack">
         <p>
-          On the create page, under <strong>What to play</strong>, choose <strong>A modpack</strong>. Search
-          Modrinth by name, or paste a link to a pack, or pick from the ones most people are playing. Cubepals
-          installs the whole thing: mods, settings and all.
+          On the create page, under <strong>What to play</strong>, open <strong>More ways to play</strong> and
+          choose <strong>A modpack</strong>, under Modpacks. Search Modrinth by name, or paste a link to a
+          pack, or pick from the ones most people are playing. Cubepals installs the whole thing: mods,
+          settings and all.
         </p>
         <Shot
           src={`${PICTURES}/search.png`}
@@ -132,7 +133,7 @@ export default async function Guide() {
           {
             question: 'Can I add mods myself?',
             answer:
-              'Yes. Under What to play, “Picking mods yourself?” starts a server on a mod loader, and the server’s Mods page adds mods to it.',
+              'Yes. Under What to play, More ways to play ends with “Picking mods yourself?”, which starts a server on a mod loader, and the server’s Mods page adds mods to it.',
           },
           {
             question: 'Where do I start?',

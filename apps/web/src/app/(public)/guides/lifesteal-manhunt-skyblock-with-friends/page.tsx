@@ -68,7 +68,11 @@ export default async function Guide() {
             <code>/revive</code> and their name. They come back with one heart.
           </li>
         </ul>
-        <p>Hearts belong to players, not to the world, so a new world doesn’t give them back.</p>
+        <p>
+          Hearts belong to players, not to the world. To start everyone over, open the server’s{' '}
+          <strong>World</strong> page and press <strong>Start a new season</strong>: everyone goes back to 10
+          hearts on a fresh world, and last season’s world is kept in Backups.
+        </p>
       </Part>
 
       <Part id="manhunt" title="Manhunt">
@@ -109,8 +113,9 @@ export default async function Guide() {
           </li>
         </ol>
         <p>
-          For another round on fresh ground, open the server’s <strong>World</strong> page and use{' '}
-          <strong>Start a new world</strong>. The old one stays, and you pick the runner and hunters again.
+          For another round on fresh ground, open the server’s <strong>World</strong> page and press{' '}
+          <strong>Start another round</strong>. The old world stays under Other worlds, and you pick the
+          runner and hunters again.
         </p>
       </Part>
 

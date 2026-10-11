@@ -102,9 +102,9 @@ const HEAP_SHARE = { plain: 0.75, modded: 0.65 }
 /** From this much memory up, at least this much stays outside the heap. runtime-spec.ts */
 const KEPT_OUTSIDE_FROM_MB = 3072
 const KEPT_OUTSIDE_MB = 1024
-/** The image every server runs, pinned to one release; its tag ends in the Java. runtime-spec.ts */
-const IMAGE = 'itzg/minecraft-server:2026.9.1-java'
-
+/** The pinned image: its tag ends in the Java, and plain Minecraft's in Alpine (imageFor, runtime-spec.ts). */
+const imageOf = (p: (typeof PLAY)[Play]) =>
+  `itzg/minecraft-server:2026.9.1-java${p.java}${p.modded ? '' : '-alpine'}`
 interface Machine {
   gb: number
   memoryMb: number
@@ -126,7 +126,7 @@ function machineFor(play: Play, party: Party): Machine {
   const heapMb = memoryMb >= KEPT_OUTSIDE_FROM_MB ? Math.min(share, memoryMb - KEPT_OUTSIDE_MB) : share
   // Dedicated cores by memory. apps/control/src/infra/fly/machine-config.ts
   const cores = memoryMb <= 3072 ? 1 : memoryMb <= 4096 ? 2 : 4
-  return { gb, memoryMb, heapMb, floored: heapMb < share, cores, image: `${IMAGE}${played.java}` }
+  return { gb, memoryMb, heapMb, floored: heapMb < share, cores, image: imageOf(played) }
 }
 
 /**

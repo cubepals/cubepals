@@ -35,9 +35,9 @@ export default function Guide() {
         </p>
         <Shot
           src={`${PICTURES}/bar.png`}
-          width={700}
-          height={92}
-          alt="The bar at the bottom of the create page: Maple Hollow, Survival, Minecraft 26.3, Europe, and the Create server button."
+          width={696}
+          height={88}
+          alt="The bar at the bottom of the create page: Maple Hollow, Survival, Minecraft 26.3, Europe, closest to you, Up to 5 players, and the Create server button."
         />
         <p>
           The regions are run on <a href="https://docs.fly.io/reference/regions">Fly.io</a>, whose region list

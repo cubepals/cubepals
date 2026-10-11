@@ -98,7 +98,7 @@ export default async function PricingPage() {
         </Question>
         <Question title="What’s plain Minecraft?">
           The game as it comes, with nothing for your friends to install. Paper runs too, without plugins.
-          {paid ? ` Mods, plugins and modpacks come with ${paid.name}.` : ''}
+          {paid ? ` Mods, plugins, modpacks and datapacks come with ${paid.name}.` : ''}
         </Question>
         {paid && (
           <Question title="Can I cancel?">
