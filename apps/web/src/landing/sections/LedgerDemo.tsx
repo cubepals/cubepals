@@ -64,6 +64,10 @@ const COLUMNS: readonly (readonly { key: GroupKey; title: string }[])[] = [
 /** The release of the game image every server runs (apps/control/src/minecraft/runtime-spec.ts). */
 const IMAGE_RELEASE = '2026.9.1'
 
+/** Whether a choice runs the image's Alpine build: plain Minecraft on Java 21 or 25 (runtime-spec.ts). */
+const alpine = (play: Play, java: number): boolean =>
+  play.loader === 'vanilla' && play.mods.length === 0 && (java === 21 || java === 25)
+
 /** The Java a Minecraft release needs (apps/control/src/minecraft/versions.ts). */
 function javaFor(release: string): number {
   const [major = 0, minor = 0, patch = 0] = release.split('.').map((part) => Number.parseInt(part, 10))
@@ -144,8 +148,13 @@ function ledgerOf(play: Play, party: Party, typed: string, fit: Fit): Line[] {
     { id: 'mods', group: 'game', name: 'Mod installed', value: modded ? play.mods.join(', ') : null },
     { id: 'jars', group: 'game', name: 'Jars go in', value: type.jars },
     { id: 'java', group: 'game', name: 'Java', value: String(java) },
-    // The image's tag (runtime-spec.ts).
-    { id: 'image', group: 'game', name: 'Image tag', value: `${IMAGE_RELEASE}-java${java}` },
+    // The image's tag: plain Minecraft on Java 21 or 25 takes the Alpine build (imageFor, runtime-spec.ts).
+    {
+      id: 'image',
+      group: 'game',
+      name: 'Image tag',
+      value: `${IMAGE_RELEASE}-java${java}${alpine(play, java) ? '-alpine' : ''}`,
+    },
     // MODE, DIFFICULTY, HARDCORE, PVP, from the template (templates.ts; runtime-spec.ts).
     { id: 'mode', group: 'game', name: 'Game mode', value: play.gameMode },
     { id: 'difficulty', group: 'game', name: 'Difficulty', value: play.difficulty },
@@ -160,7 +169,7 @@ function ledgerOf(play: Play, party: Party, typed: string, fit: Fit): Line[] {
     // No seed is set unless one is given, and the create page gives none (servers/service.ts).
     { id: 'seed', group: 'game', name: 'Seed', value: 'random', said: true },
     // MAX_WORLD_SIZE (runtime-spec.ts).
-    { id: 'border', group: 'game', name: 'World border', value: `${plan.border} blocks` },
+    { id: 'border', group: 'game', name: 'World border', value: `${plan.border} blocks from the center` },
     // MAX_PLAYERS, from the group (apps/control/src/domain/server/size.ts).
     { id: 'players', group: 'game', name: 'Max players', value: String(party.maxPlayers) },
     // ONLINE_MODE: on for every new server (revision.ts; runtime-spec.ts).

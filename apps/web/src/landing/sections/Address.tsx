@@ -31,9 +31,8 @@ export function Address({ plans = [], bare }: { plans?: PublicPlan[]; bare?: boo
         label="A server list row for an example address, the wire a refresh or a join travels to whichever end answers, and the handshake the edge reads"
         note={
           <>
-            Sped up, with an example address. It shows a server that is up within the hold. On the staging
-            machines in September 2026 a wake took longer than <span className="bl-mono">25 s</span>, so the
-            first join was dropped with no message and the player had to join again.
+            Sped up, with an example address. It shows a server that is up within the hold. When one isn’t,
+            the edge turns the join away and says why: “Still starting · join again in a moment”.
           </>
         }
       >
@@ -44,8 +43,8 @@ export function Address({ plans = [], bare }: { plans?: PublicPlan[]; bare?: boo
         items={[
           // ROUTES_POLL_MS, default 1000. apps/edge/agent.ts
           { name: 'The edge re-reads its routes', value: 'every 1000 ms' },
-          // wakeWaitMs 25_000. apps/control/src/main.node.ts
-          { name: 'A join is held for a wake', value: 'up to 25 s' },
+          // WAKE_HOLD_MS, default 180000: the edge's waiting room. apps/edge/agent.ts
+          { name: 'A join is held for a wake', value: 'up to 3 min' },
           // A ping is answered by the edge's notice and never reported as a session.
           // apps/edge/agent.ts, apps/edge/notice.ts
           { name: 'A list refresh wakes a server, or keeps one awake', value: 'never', said: true },

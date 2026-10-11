@@ -39,7 +39,7 @@ export const GUIDES: readonly Guide[] = [
     description:
       'Make a Minecraft server for you and your friends in three decisions: what to play, who’s playing, and a name. Free to start. For Java Edition.',
     published: '2026-10-10',
-    modified: '2026-10-10',
+    modified: '2026-10-11',
     approved: true,
   },
   {
@@ -93,7 +93,7 @@ export const GUIDES: readonly Guide[] = [
     description:
       'Play a Minecraft modpack with your friends without installing a server: pick a pack from Modrinth and Cubepals installs all of it. With Plus.',
     published: '2026-10-10',
-    modified: '2026-10-10',
+    modified: '2026-10-11',
     approved: true,
   },
   {
@@ -102,7 +102,7 @@ export const GUIDES: readonly Guide[] = [
     description:
       'Cubepals runs servers in Frankfurt for friends in the UK, Ireland, the Netherlands, the Nordics and the rest of Europe, and in Virginia for the US.',
     published: '2026-10-10',
-    modified: '2026-10-10',
+    modified: '2026-10-11',
     approved: true,
   },
   {

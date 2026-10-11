@@ -49,8 +49,9 @@ export function Fleet({ bare }: { bare?: boolean } = {}) {
             name: 'What blocklyd is',
             value: (
               <>
-                blocklyd-x86_64-linux-musl, 8.3 MB
-                {/* cubepals/blocklyd README.md; docs/fleet-operations.md; docs/fleet.md */}
+                blocklyd, 8.9 MB
+                {/* The pinned release's binary (bun scripts/blocklyd.ts version; its GitHub Release
+                    asset, 8,889,088 bytes at 0.3.0). cubepals/blocklyd README.md; docs/fleet.md */}
                 <Why>
                   Built as one static binary. It runs each world in a locked-down container, which shares the
                   machine’s kernel, and it never chooses where anything runs.

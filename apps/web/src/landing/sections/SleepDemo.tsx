@@ -179,11 +179,11 @@ function monthSaid(month: number, plan: PublicPlan, plans: readonly PublicPlan[]
   const included = plan.includedHours
   if (month === 0) return `Nothing ran, so none of the ${included} hours on ${plan.name} were used.`
   if (month > included) {
-    // A bigger plan that would hold this month, said the way the account page says it.
+    // A bigger plan that would hold this month, said the way the account page says it. Only a paid
+    // plan allows extra hours (mayBuyMore, entitlements.ts), as the pricing page says.
     const roomier = plans.find((each) => each.includedHours > included && each.includedHours >= month)
-    return `More than the ${included} hours on ${plan.name}. When they run out, the server sleeps until the 1st, when the hours start again, unless you allow extra hours, up to a limit you set.${
-      roomier ? ` ${roomier.name} has ${roomier.includedHours} hours a month.` : ''
-    }`
+    const extra = plan.monthlyPriceCents > 0 ? ', unless you allow extra hours, up to a limit you set' : ''
+    return `More than the ${included} hours on ${plan.name}. When they run out, the server sleeps until the 1st, when the hours start again${extra}.${roomier ? ` ${roomier.name} has ${roomier.includedHours} hours a month.` : ''}`
   }
   // The week counts an hour awake as one of the plan's hours. On a plan that runs large servers
   // that isn't the whole of it, and the note says so.

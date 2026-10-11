@@ -35,7 +35,7 @@ export function Runtimes({ bare }: { bare?: boolean } = {}) {
 
       <Demo
         label="The rule ladder: a new server drops through the placement rules, and the decision is recorded"
-        note="A simulation of the placement policy, slowed down to read; it has not run in production. The rules, the servers and their ids are examples, and the two clouds go by cloud-a and cloud-b in place of their names. Every verdict is the code’s own sentence, and each bucket is the number the code gives that rule and that server. Here only the default can be full; in the policy, any runtime can."
+        note="A simulation of the placement policy, slowed down to read. Production runs servers on one cloud, with no rules, so nothing like this has happened there yet. The rules, the servers and their ids are examples, and the two clouds go by cloud-a and cloud-b in place of their names. Every verdict is the code’s own sentence, and each bucket is the number the code gives that rule and that server. Here only the default can be full; in the policy, any runtime can."
       >
         <RuntimesDemo />
       </Demo>

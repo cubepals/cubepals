@@ -34,8 +34,9 @@ export interface Play {
 }
 
 /**
- * The first five rows of "What to play", in the create page's order, with its titles and blurbs
- * and what each one sets (apps/control/src/app/setups/templates.ts).
+ * Five of the ways on "What to play", with the create page's titles and blurbs and what each one
+ * sets (apps/control/src/app/setups/templates.ts): Minecraft's own three, which the create page
+ * shows first, then Smoother survival and Create from its "More ways to play".
  *
  * A template names no release: a new server gets the newest one Blockly offers that its server
  * type runs on and its mods have a build for (apps/control/src/app/setups/service.ts).
