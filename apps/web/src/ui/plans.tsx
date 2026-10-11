@@ -125,11 +125,7 @@ export function PlanCard({
   action?: ReactNode
 }) {
   return (
-    <section
-      className="bk-plan"
-      aria-label={plan.name}
-      data-paid={plan.monthlyPriceCents > 0 || undefined}
-    >
+    <section className="bk-plan" aria-label={plan.name} data-paid={plan.monthlyPriceCents > 0 || undefined}>
       <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)', justifyContent: 'space-between' }}>
         <h3 className="type-eyebrow">{plan.name}</h3>
         {current && <Badge tone="grass">Yours</Badge>}
