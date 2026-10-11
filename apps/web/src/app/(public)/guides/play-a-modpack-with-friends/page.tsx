@@ -73,9 +73,9 @@ export default async function Guide() {
         </p>
         <Shot
           src={`${PICTURES}/create.png`}
-          width={700}
-          height={546}
-          alt="The What to play question with Create picked: Machines, gears and contraptions, with the Create mod ready to go."
+          width={680}
+          height={458}
+          alt="The game modes under More ways to play, with Create picked: Machines, gears and contraptions, with the Create mod ready to go."
         />
       </Part>
 

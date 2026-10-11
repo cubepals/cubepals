@@ -75,8 +75,8 @@ export default async function Guide() {
         <Shot
           src={`${PICTURES}/what-to-play.png`}
           width={680}
-          height={525}
-          alt="The “What to play” question on the create page, with Survival picked. The other choices are Creative, Hardcore, Smoother survival, Create, A modpack and A pack you have."
+          height={284}
+          alt="The “What to play” question on the create page, with Survival picked, next to Creative and Hardcore. The fourth card, More ways to play, opens Lifesteal, OneBlock, modpacks and more."
         />
         <Shot
           src={`${PICTURES}/name-it.png`}
