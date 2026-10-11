@@ -14,6 +14,7 @@ License. A few files are other people's and stay under their own licences.
 | Typefaces: Press Start 2P, IBM Plex | `apps/web/src/landing/type/`, `docs/architecture/fonts/` | [OFL-1.1](LICENSES/OFL-1.1.txt), their authors' |
 | API descriptions and the types generated from them: Fly's Machines API, Hangar, Modrinth | `apps/control/src/infra/{fly,hangar,modrinth}/` | Apache-2.0, MIT and CC0-1.0, their authors' |
 | AOneBlock's settings, with one change | `apps/control/src/app/setups/aoneblock-config.yml` | [EPL-2.0](LICENSES/EPL-2.0.txt), AOneBlock's authors' |
+| BSkyBlock's settings, with one change | `apps/control/src/app/setups/bskyblock-config.yml` | [EPL-2.0](LICENSES/EPL-2.0.txt), BSkyBlock's authors' |
 | Boat's API description, Hangar's recorded answers, Supabase's root certificate | `apps/control/src/infra/boat/`, `apps/control/src/infra/hangar/fixtures/`, `packages/db/certs/` | Their owners' terms, no licence from us |
 | blocklyd's API description and Docker settings, copied from the release this repository pins | `apps/control/src/infra/fleet/` (the `.json` files and `generated/`) | [FSL-1.1-ALv2](LICENSES/FSL-1.1-ALv2.txt) |
 | blocklyd, the daemon that runs servers on a fleet's own hosts | [cubepals/blocklyd](https://github.com/cubepals/blocklyd) | [FSL-1.1-ALv2](https://github.com/cubepals/blocklyd/blob/main/LICENSE.md) from 0.3.0; each version becomes Apache-2.0 two years after it is published |

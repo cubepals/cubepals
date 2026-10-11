@@ -84,6 +84,14 @@ export const TEMPLATE_CARDS = [
     forADay: true,
   },
   {
+    key: 'skyblock',
+    title: 'Skyblock',
+    blurb: 'A small island in the void, a tree and a chest. Grow it into a world.',
+    icon: 'skyblock',
+    advanced: false,
+    forADay: false,
+  },
+  {
     key: 'oneblock',
     title: 'OneBlock',
     blurb: 'One block under your feet. Break it and it comes back as something new.',

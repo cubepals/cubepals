@@ -2164,13 +2164,15 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   large one (`tierFor`). A pack's is below.
 - Templates (`app/setups/templates.ts`) are named for what is played: Survival, Creative,
   Hardcore, Smoother survival (Paper), Create (NeoForge with the Create mod), Lifesteal (Paper with
-  LifeStealZ), Manhunt (Paper with Manhunt+), OneBlock (Paper with BentoBox, and AOneBlock,
-  Level and Warps in `plugins/BentoBox/addons`) and RPG survival (Paper with AuraSkills), with the
-  bare server types under "more ways to play". Their words never mention a loader, a build or a
-  mod list, and none names a Minecraft version: that is picked when the server is made, and the
-  create page says which and why when it isn't the newest (OneBlock gets 26.1.2, the newest its
-  addons list). OneBlock carries AOneBlock's settings with an island made for each player on first
-  join, so nobody has to know a command to start. Manhunt is played in an evening, so a server of
+  LifeStealZ), Manhunt (Paper with Manhunt+), Skyblock (Paper with BentoBox, and BSkyBlock, Level
+  and Warps in `plugins/BentoBox/addons`), OneBlock (the same with AOneBlock in BSkyBlock's place)
+  and RPG survival (Paper with AuraSkills), with the bare server types under "more ways to play".
+  Their words never mention a loader, a build or a mod list, and none names a Minecraft version:
+  that is picked when the server is made, and the create page says which and why when it isn't the
+  newest (an addon the catalog lists only to 26.1.2 holds its template there, unless Cubepals' own
+  boot test covers it, `curation/tested.ts`). Skyblock and OneBlock carry their game mode's
+  settings with an island made for each player on first join, so nobody has to know a command to
+  start. Manhunt is played in an evening, so a server of
   it starts out as one that lasts a day (`forADay`); its owner can turn that off before making it.
 - Duels (Paper with Duels by Dartanman from Modrinth and OldCombatMechanics from Hangar, on
   1.21.11, where Duels stops) is playable on first join: it is made on a void world, and carries
@@ -2180,9 +2182,10 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   world the server runs, so it follows a fresh world, which is void with the same platform. A world
   of another kind, made with "Make your own world", gets a room of stone built in the platform's
   place as the server starts.
-- A curated pack can stand for a way to play (`CuratedPack.way`): SkyBlock Plus is the Skyblock
-  card, with its own name and authors under it. The card is the pack's, so it shows only while a
-  release is published, and picking it is picking the pack.
+- A curated pack can stand for a way to play (`CuratedPack.way`): its card carries the way's name
+  and picture, with the pack's own name and authors under it. The card is the pack's, so it shows
+  only while a release is published, and picking it is picking the pack. None does today: SkyBlock
+  Plus is listed under Modpacks by its own name, since the Skyblock card is the template.
 - How each server was made is kept in `minecraft_servers.created_from`.
 
 **Copies.** "Make one like this" copies a setup, and only what the server last booted. Nothing its

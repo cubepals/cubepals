@@ -73,7 +73,7 @@ export const CURATED_PACKS: readonly CuratedPack[] = [
     name: 'SkyBlock Plus',
     blurb: 'Start on one small island over the void, and grow it into a world.',
     authors: 'BPR02',
-    way: { title: 'Skyblock', icon: 'skyblock' },
+    // Not the Skyblock card: that is the template, on Paper with BSkyBlock (`setups/templates.ts`).
     source: { catalog: 'modrinth', projectId: 'cJJdkNYP' },
     // Apache-2.0 itself, and every mod it puts on a server MIT, Apache-2.0 or GPL-3.0 (2026-09-27).
     distribution: 'mirror',
