@@ -9,6 +9,7 @@ import Docker from 'dockerode'
 import type { LogLine, LogSource } from '../../app/ports/platform.ts'
 import type { RuntimeHandle } from '../../app/ports/runtime.ts'
 import { decodeHandle } from './handle.ts'
+import { reasked } from './reasked.ts'
 
 /** Container output as raw lines. Docker prefixes each with an RFC 3339 timestamp when asked. */
 export class DockerLogSource implements LogSource {
@@ -19,10 +20,18 @@ export class DockerLogSource implements LogSource {
   }
 
   async recent(handle: RuntimeHandle, limit: number): Promise<LogLine[]> {
-    const { container } = decodeHandle(handle)
-    const buffer = (await this.#docker
-      .getContainer(container)
-      .logs({ stdout: true, stderr: true, timestamps: true, tail: limit, follow: false })) as Buffer
+    const target = this.#docker.getContainer(decodeHandle(handle).container)
+    // The last lines, read whole; asked again if the daemon's answer never ends.
+    const buffer = (await reasked(({ signal }) =>
+      target.logs({
+        stdout: true,
+        stderr: true,
+        timestamps: true,
+        tail: limit,
+        follow: false,
+        abortSignal: signal,
+      }),
+    )) as Buffer
     const lines: LogLine[] = []
     for await (const line of this.#lines(Readable.from([buffer]))) lines.push(line)
     return lines
