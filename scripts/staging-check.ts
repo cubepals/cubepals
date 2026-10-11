@@ -31,6 +31,7 @@ import { createHash, randomInt, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { SQL } from 'bun'
+import { authWorks } from './lib/auth-through-website.ts'
 import { Progress, type StepResult, seconds, summaryTable } from './lib/check-progress.ts'
 import { type Edge, join, login } from './lib/minecraft.ts'
 import { type Api, people } from './lib/people.ts'
@@ -294,6 +295,7 @@ await step('is purged, and Fly holds no server app without a server', async () =
 })
 
 say('\nthe account')
+await step('signs in and signs up through the website, every way', () => authWorks(WEB))
 await step('signs up on staging and confirms through its mail catcher', async () => {
   // Staging lets only its allowlist make accounts; this domain is on it, and private to its state
   // (staging.ts derives the same one).
