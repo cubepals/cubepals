@@ -4,14 +4,11 @@
 
 name: Sign-in watch
 
-# Every way of signing in and signing up, asked through cubepals.com every 15 minutes
-# (scripts/auth-watch.ts). Sign-in is the way in, so a break fails this run even when nothing was
-# deployed, and a failed scheduled run is what GitHub sends mail about. No secrets: it asks what any
-# browser could, and makes no account.
+# Signs in and signs up through cubepals.com once an hour (scripts/auth-watch.ts). No secrets.
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 permissions:
