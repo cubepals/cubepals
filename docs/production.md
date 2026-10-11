@@ -128,9 +128,9 @@ version tagged with its commit. The Worker answers `www.cubepals.com` itself, wi
 Terraform holds the Worker, its cache bucket and its routes, never its versions. A route only sees
 traffic Cloudflare proxies, so `"proxied": true` under `web` in `config.auto.tfvars.json` is what
 sends `cubepals.com` and `www` to the Worker, under the zone's own certificate. `false` makes the
-records DNS-only, and nothing behind them serves the site. The Worker's `workers.dev` address
-(Cloudflare → Workers & Pages → `blockly-web`) reaches it without the records, to check a deploy:
-the pages, sign-in, `/api/health`.
+records DNS-only, and nothing behind them serves the site. The Worker has no `workers.dev`
+address (`apps/web/wrangler.jsonc`): `cubepals.com` is how a deploy is checked, the pages,
+sign-in and `/api/health`, and `bun scripts/production.ts rollback website` undoes one.
 
 If `blockly-web` or `blockly-web-cache` was made by hand before Terraform made them, import them
 (`terraform import`) rather than letting the apply fail on a name that is taken.
@@ -166,8 +166,7 @@ branch still names the newer commit: fix forward, then deploy again.
 
 1. `dig +short rt.cubepals.com` gives one IPv4 address and `dig +short AAAA rt.cubepals.com`
    nothing; `dig +short anything.play.cubepals.com` gives the edge's address.
-2. `https://bly-prod-control.fly.dev/api/health` answers, and `https://cubepals.com` loads (before
-   the cutover, the Worker's `workers.dev` address). `https://www.cubepals.com` goes to
+2. `https://bly-prod-control.fly.dev/api/health` answers, and `https://cubepals.com` loads. `https://www.cubepals.com` goes to
    `https://cubepals.com`.
 3. `fly logs -a bly-prod-realtime` shows the certificate for `rt.cubepals.com` issued.
 4. **Sign in with Google** at `https://cubepals.com` with the address in `ADMIN_EMAILS`. Admin
