@@ -5,7 +5,7 @@
 /**
  * Whether signing in and signing up work on a site right now (scripts/lib/auth-through-website.ts):
  *   bun scripts/auth-watch.ts [https://cubepals.com]
- * sign-in-watch.yml runs it against production every 15 minutes, so a break shows as a failed run
+ * sign-in-watch.yml runs it against production once an hour, so a break shows as a failed run
  * even when nothing was deployed.
  */
 import { authWorks } from './lib/auth-through-website.ts'
