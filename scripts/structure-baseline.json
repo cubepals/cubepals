@@ -418,10 +418,6 @@
       "n": 16,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
-    "apps/control/src/infra/fleet/fleet-runtime/transfers.ts › upload": {
-      "n": 19,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    },
     "apps/control/src/infra/fleet/fleet-runtime/transfers.ts › exportSnapshot": {
       "n": 38,
       "reason": "Over the threshold when the check began, and not yet looked at."
@@ -1181,7 +1177,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/docker/docker-runtime.test.ts › describe.skipIf(!existsSync(SOCKET) || !s3.endpoint || !s3.b…": {
-      "n": 309,
+      "n": 296,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/docker/docker-runtime/engine.test.ts › test a first provision with an install seed makes the server, copies nothing yet, and makes the install once": {
