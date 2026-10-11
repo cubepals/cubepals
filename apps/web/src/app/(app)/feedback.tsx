@@ -10,7 +10,7 @@
  */
 import type { Placement } from '@floating-ui/react'
 import { useMutation } from '@tanstack/react-query'
-import { MessageSquare } from 'lucide-react'
+import { CircleHelp } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 import { type KeyboardEvent, type SubmitEvent, useState } from 'react'
 import { messageOf, useTRPC } from '../../lib/api'
@@ -80,7 +80,7 @@ export function Feedback({
           {...(iconOnly ? { 'aria-label': 'Feedback', title: 'Feedback' } : {})}
           {...reference()}
         >
-          <MessageSquare {...(iconOnly ? { size: 16, strokeWidth: 1.75 } : ICON)} aria-hidden />
+          <CircleHelp {...(iconOnly ? { size: 16, strokeWidth: 1.75 } : ICON)} aria-hidden />
           {!iconOnly && 'Feedback'}
         </button>
       )}
