@@ -72,6 +72,16 @@ describe('admin procedures', () => {
     const admin = appRouter.createCaller({ actor: user, services: services(true) })
     expect(await admin.admin.accounts({ search: '' })).toEqual({ total: 0, accounts: [] })
   })
+
+  test('answer "not found" to an admin using a test account, even one made an admin', async () => {
+    const using = appRouter.createCaller({
+      actor: { kind: 'user', userId: 'test-1' },
+      impersonatedBy: 'admin-1',
+      services: services(true),
+    })
+    await expect(using.admin.accounts({ search: '' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(using.admin.useAs({ userId: 'test-2' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
 })
 
 describe('coupons', () => {

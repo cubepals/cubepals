@@ -10,6 +10,7 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import type { Pool } from 'pg'
 import type { PgBoss } from 'pg-boss'
+import { Impersonation } from './app/accounts/impersonation.ts'
 import type { BillingService } from './app/billing/service.ts'
 import { archivesMissing, type DeploymentCapabilities, supportOf } from './app/capabilities.ts'
 import { RoutedCatalog } from './app/catalog/routed.ts'
@@ -474,6 +475,7 @@ function apiServices(
     servers: app.servers,
     accounts: app.accounts,
     accountQueries: app.accountQueries,
+    impersonation: new Impersonation({ db }),
     billing: app.billing,
     listings: app.listings,
     listingQueries: app.listingQueries,

@@ -1,0 +1,41 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/* The strip across the top of every page while an admin uses a test account: in its own colour so
+   nobody forgets whose account they are in, and kept in view as the page scrolls. */
+
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-16);
+  background: var(--ember);
+  color: #0d0d0d;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.back {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.back:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

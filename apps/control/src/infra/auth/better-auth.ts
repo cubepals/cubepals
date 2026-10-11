@@ -6,7 +6,10 @@ import { SIGNUPS_FULL, type SignUpAgreement } from '@blockly/contracts'
 import { type Db, schema } from '@blockly/db'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { APIError } from 'better-auth/api'
+import { APIError, createAuthMiddleware, isAPIError } from 'better-auth/api'
+import { expireCookie } from 'better-auth/cookies'
+import { admin } from 'better-auth/plugins/admin'
+import { defaultAc } from 'better-auth/plugins/admin/access'
 import { oAuthProxy } from 'better-auth/plugins/oauth-proxy'
 import type { Authenticator } from '../../app/ports/auth.ts'
 import type { Mailer } from '../../app/ports/platform.ts'
@@ -62,6 +65,22 @@ export interface AuthOptions {
 
 /** How long a reset link works. */
 const RESET_LINK_SECONDS = 60 * 60
+
+/** How long an admin may use a test account before signing in again (app/accounts/impersonation.ts). */
+const IMPERSONATION_SECONDS = 60 * 60
+
+/**
+ * Better Auth's admin plugin, for its impersonation only: the session it makes for the test
+ * account, the admin's kept in a signed cookie, and the way back. Who is an admin and who may be
+ * used is the application's to say, so its role check passes for everyone, and none of its
+ * endpoints are served over HTTP (`disabledPaths`): the application calls the two it needs.
+ */
+const impersonation = admin({
+  impersonationSessionDuration: IMPERSONATION_SECONDS,
+  roles: { user: defaultAc.newRole({ user: ['impersonate'], session: [] }) },
+  adminRoles: [],
+})
+const ADMIN_PATHS = Object.values(impersonation.endpoints).map((endpoint) => endpoint.path)
 
 /** Whether `email` is one the allowlist names, itself or by its `@domain`. */
 export function listed(allowlist: readonly string[], email: string): boolean {
@@ -164,9 +183,22 @@ export function createAuth(options: AuthOptions) {
     onAPIError: { errorURL: `${options.canonicalOrigin}/sign-in` },
     // Providers register one callback per environment, on its canonical origin. A sign-in that
     // starts on a preview goes out and back through it, and the preview gets the session.
-    plugins: options.oauthProxy
-      ? [oAuthProxy({ productionURL: options.canonicalOrigin, secret: options.oauthProxy.secret })]
-      : [],
+    plugins: [
+      impersonation,
+      ...(options.oauthProxy
+        ? [oAuthProxy({ productionURL: options.canonicalOrigin, secret: options.oauthProxy.secret })]
+        : []),
+    ],
+    disabledPaths: ADMIN_PATHS,
+    hooks: {
+      // The way back keeps the "don't remember me" marker the test account's session was given,
+      // and while it stays the admin's own session is never extended. Nobody signs in to Cubepals
+      // that way, so it goes.
+      after: createAuthMiddleware(async (ctx) => {
+        if (ctx.path === '/admin/stop-impersonating' && !isAPIError(ctx.context.returned))
+          expireCookie(ctx, ctx.context.authCookies.dontRememberToken)
+      }),
+    },
     databaseHooks: {
       user: {
         create: {
@@ -207,6 +239,18 @@ export function createAuth(options: AuthOptions) {
           },
         },
       },
+      session: {
+        update: {
+          // A session is extended as it is used, unless its cookies say not to remember it, which
+          // the browser holds. An admin's hour as a test account ends when it ends, whatever the
+          // browser sends.
+          async before(session, context) {
+            const current = context?.context.session?.session
+            if (current?.impersonatedBy && session.expiresAt !== undefined)
+              return { data: { ...session, expiresAt: current.expiresAt } }
+          },
+        },
+      },
     },
   })
 }
@@ -219,8 +263,26 @@ export function betterAuthenticator(options: AuthOptions): Authenticator {
   const handle = authHandler(auth)
   return {
     handle,
-    async userOf(headers) {
-      return (await auth.api.getSession({ headers }))?.user.id ?? null
+    async sessionOf(headers) {
+      const found = await auth.api.getSession({ headers })
+      if (found === null) return null
+      return { userId: found.user.id, impersonatedBy: found.session.impersonatedBy ?? null }
+    },
+    switchFor(request, response) {
+      const keep = (set: Headers) => {
+        for (const cookie of set.getSetCookie()) response.append('set-cookie', cookie)
+      }
+      return {
+        async impersonate(userId) {
+          keep(
+            (await auth.api.impersonateUser({ body: { userId }, headers: request, returnHeaders: true }))
+              .headers,
+          )
+        },
+        async stopImpersonating() {
+          keep((await auth.api.stopImpersonating({ headers: request, returnHeaders: true })).headers)
+        },
+      }
     },
   }
 }

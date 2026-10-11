@@ -73,7 +73,7 @@ import { z } from 'zod'
 import { publicPlans } from '../../app/accounts/queries.ts'
 import { admin } from './admin.ts'
 import { insight } from './insight.ts'
-import { authedProcedure, publicProcedure, router } from './trpc.ts'
+import { authedProcedure, publicProcedure, router, sessionOf } from './trpc.ts'
 
 /** Each procedure: parse, get the actor, call one service method, return. Nothing else. */
 
@@ -466,6 +466,10 @@ const realtime = router({
 
 const account = router({
   me: authedProcedure.query(({ ctx }) => ctx.services.accountQueries.me(ctx.actor)),
+  /** An admin using a test account (`admin.useAs`), back to their own session. */
+  switchBack: authedProcedure.mutation(({ ctx }) =>
+    ctx.services.impersonation.end(ctx.actor, ctx.impersonatedBy ?? null, sessionOf(ctx)),
+  ),
   overview: authedProcedure.query(async ({ ctx }): Promise<AccountOverviewView> => {
     const overview = await ctx.services.accountQueries.overview(ctx.actor)
     const billed = overview.plan.billed

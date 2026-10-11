@@ -11,13 +11,23 @@ import { RecordedInsight } from '../../testing/insight.ts'
 import type { Services } from '../trpc/trpc.ts'
 import { createApiApp } from './api.ts'
 
+/** An authenticator that says the request is `userId`'s, or signed out for null. */
+const signedInAs = (userId: () => string | null) => ({
+  handle: async () => new Response(null, { status: 404 }),
+  sessionOf: async () => {
+    const id = userId()
+    return id === null ? null : { userId: id, impersonatedBy: null }
+  },
+  switchFor: () => ({ impersonate: async () => {}, stopImpersonating: async () => {} }),
+})
+
 // The gap origins.ts closes, through the real tRPC handler: `billing.portal` takes no input, so a
 // form posted from a sibling of the web domain, with the session cookie SameSite lets through,
 // would otherwise run it.
 describe('a signed-in change with no input', () => {
   const opened: string[] = []
   const app = createApiApp({
-    auth: { handle: async () => new Response(null, { status: 404 }), userOf: async () => 'u-1' },
+    auth: signedInAs(() => 'u-1'),
     methods: { google: false, github: false },
     addresses: { proxySecret: null, hostHeader: null },
     origins: ['https://blockly.test'],
@@ -58,7 +68,7 @@ describe('errors and feedback', () => {
   const posthog = new RecordedInsight()
   let signedIn: string | null = 'u-1'
   const app = createApiApp({
-    auth: { handle: async () => new Response(null, { status: 404 }), userOf: async () => signedIn },
+    auth: signedInAs(() => signedIn),
     methods: { google: false, github: false },
     addresses: { proxySecret: null, hostHeader: null },
     origins: ['https://blockly.test'],

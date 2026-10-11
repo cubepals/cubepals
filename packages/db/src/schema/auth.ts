@@ -20,6 +20,12 @@ export const users = pgTable('users', {
   image: text('image'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
+  // Better Auth's admin plugin keeps these. Blockly uses the plugin only to sign an admin in as a
+  // test account; who is an admin is `platform_admins`, and suspending is `account_standing`'s.
+  role: text('role'),
+  banned: boolean('banned').default(false),
+  banReason: text('ban_reason'),
+  banExpires: ts('ban_expires'),
 })
 
 export const authSessions = pgTable(
@@ -35,6 +41,8 @@ export const authSessions = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    /** The admin using this test account's session ("Use as this account"); null for its own. */
+    impersonatedBy: text('impersonated_by'),
   },
   (t) => [index('auth_sessions_user_idx').on(t.userId)],
 )
