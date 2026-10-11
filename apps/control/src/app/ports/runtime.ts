@@ -304,6 +304,16 @@ export interface MinecraftRuntime {
    */
   release(handle: RuntimeHandle): Promise<RuntimeHandle>
   /**
+   * Deletes storage held for a server that nothing uses: what a wake, a restore or a move that
+   * failed partway made, or a delete that gave up on. Storage a machine mounts is kept, and so is
+   * what `handle` names, unless `worldElsewhere`: a resting server's world is in the archive store.
+   * Asked with the server's current handle while nothing else is in flight for it, since a restore
+   * makes storage before any handle names it; a runtime may clear the same as its own restore
+   * ends. One attempt at each, no waiting: what can't go yet stays for the next call. Returns what
+   * it deleted, by the provider's names. A runtime that never leaves storage behind has no need of it.
+   */
+  clearLeftovers?(handle: RuntimeHandle, worldElsewhere: boolean): Promise<readonly string[]>
+  /**
    * A handle for a server this runtime holds nothing for, as `release` leaves one: it serves
    * `endpoint`, `restore` from an archive, which makes storage and compute, and `destroy`. How a
    * world in the archive store comes to a runtime it never ran on (a move between runtimes).

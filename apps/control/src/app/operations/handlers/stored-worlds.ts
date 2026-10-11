@@ -188,11 +188,11 @@ export function storedWorlds(deps: {
   /**
    * A wake that didn't finish: whatever it made goes, and the server rests again, its copy
    * untouched, for the owner or the next join to try again. Only while `wakeId` is the wake
-   * restoring it: see `anotherWake`.
+   * restoring it: see `anotherWake`. What the provider holds on to, the orphan sweep clears later.
    */
   const backToStored = async (serverId: string, wakeId: string, reason: string) => {
     const { handle } = await loadRuntime(db, serverId, runtime.providers)
-    const released = handle === null ? null : await runtime.release(handle).catch(() => handle)
+    const released = handle === null ? null : await runtime.release(handle).catch(keptBy(serverId, handle))
     await db.transaction(async (tx) => {
       const locked = await lockServer(tx, serverId)
       if (locked?.lifecycle.status !== 'restoring' || (await anotherWake(tx, serverId, wakeId))) return
@@ -291,4 +291,18 @@ export function storedWorlds(deps: {
  */
 async function anotherWake(tx: Tx, serverId: string, wakeId: string): Promise<boolean> {
   return (await openOfKinds(tx, [serverId], ['unstore'])).some((wake) => wake.id !== wakeId)
+}
+
+/**
+ * A failed wake's release that failed in turn: the handle stays as it was, and what it names is
+ * the orphan sweep's (`schedules/leftovers.ts`), said in the log rather than dropped.
+ */
+function keptBy(serverId: string, handle: RuntimeHandle) {
+  return (error: unknown): RuntimeHandle => {
+    console.warn(
+      `unstore: ${serverId} still holds what a failed wake made; the orphan sweep clears it`,
+      error,
+    )
+    return handle
+  }
 }

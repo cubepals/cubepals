@@ -180,6 +180,16 @@ server left too. Compute whose server the database doesn't know is kept, and log
 (`orphans: <runtime> holds <key>…`): after a restore from a backup, that is every server made since,
 and only an operator can say what it is.
 
+The same sweep, as it ends, asks each server's own runtime for storage it holds beside the world
+that no machine mounts (`clearLeftovers`): what a wake, a restore or a move that failed partway
+made, or a delete that gave up while the provider still held the volume. It keeps what the
+server's handle names, unless the server is resting, whose world is in the archive store. It asks
+under the server's lock, never with an operation in flight, and once per volume with no waiting;
+what the provider still holds goes on a later pass. Each deletion is in the log
+(`orphans: deleted <ids>, left beside <server>'s world`) and the audit log
+(`server.leftover_storage_deleted`). On Fly, a wake from the archive also clears what earlier
+failed wakes left as soon as it is up.
+
 ## 6. Operating it
 
 `scripts/runtimes.ts` talks to the operators' API (`/runtimes/v1` on the internal listener) with

@@ -4,8 +4,9 @@
 
 /**
  * The Fly volumes a server's world lives on: found, made, grown, waited on while they hydrate,
- * and deleted. It never decides when a volume may go; the verbs in `fly-runtime.ts` order that
- * against the machines on it. Snapshots of a volume are `snapshots.ts`.
+ * and deleted, as are the ones left beside a world that no machine mounts. It never decides when
+ * a volume may go; the verbs in `fly-runtime.ts` order that against the machines on it.
+ * Snapshots of a volume are `snapshots.ts`.
  */
 
 import type { FlyClient, FlySchemas } from '../client.ts'
@@ -141,6 +142,62 @@ export async function deleteVolume(fly: FlyClient, app: string, volumeId: string
     }
     await sleep(1000)
   }
+}
+
+/**
+ * The app's world volumes that nothing uses, deleted: not `keep`, not going already, and neither
+ * mounted by a machine Fly lists nor attached to one. An attachment to a machine Fly no longer
+ * lists counts for nothing: Fly went on claiming a wake's volume for a helper it had destroyed,
+ * naming no machine (2026-10-10), and only a delete finds out whether it still does. What a wake,
+ * a restore or a move that failed partway made, or a delete that gave up on. Each is asked once,
+ * with no wait for Fly to let go: one it still holds stays for the next call. Export volumes are
+ * left alone: an export makes one before any machine mounts it, and deletes its own. Returns the
+ * ids deleted.
+ */
+export async function deleteLeftoverVolumes(
+  fly: FlyClient,
+  app: string,
+  keep: string | null,
+): Promise<string[]> {
+  const listed = await fly.GET('/v1/apps/{app_name}/volumes', { params: { path: { app_name: app } } })
+  if (listed.response.status === 404) return []
+  const unused = must(listed, 'listing volumes').filter(
+    (v) => v.name === VOLUME_NAME && v.id !== keep && !VOLUME_GONE.has(v.state ?? ''),
+  )
+  if (unused.length === 0) return []
+  const machines = must(
+    await fly.GET('/v1/apps/{app_name}/machines', { params: { path: { app_name: app } } }),
+    'listing machines',
+  ).filter((m) => m.state !== 'destroyed')
+  const mounted = new Set(machines.flatMap((m) => (m.config?.mounts ?? []).map((mount) => mount.volume)))
+  const listedIds = new Set(machines.flatMap((m) => (m.id ? [m.id] : [])))
+  const deleted: string[] = []
+  for (const volume of unused) {
+    const volumeId = idOf(volume, 'a volume')
+    if (mounted.has(volumeId) || listedIds.has(volume.attached_machine_id ?? '')) continue
+    const answer = await fly.DELETE('/v1/apps/{app_name}/volumes/{volume_id}', {
+      params: { path: { app_name: app, volume_id: volumeId } },
+    })
+    if (answer.response.ok || answer.response.status === 404) deleted.push(volumeId)
+  }
+  return deleted
+}
+
+/**
+ * As a wake from the archive ends, world volumes an earlier wake that failed made, which Fly
+ * wouldn't let go of then: one stayed, and the next wake made another beside it (2026-10-11).
+ * Nothing else makes one in the app while the wake runs. One Fly still holds is the orphan sweep's,
+ * and never fails the wake that worked.
+ */
+export async function clearEarlierWakes(fly: FlyClient, app: string, volumeId: string): Promise<void> {
+  const deleted = await deleteLeftoverVolumes(fly, app, volumeId).catch((error: unknown) => {
+    console.warn(
+      `fly: clearing what earlier wakes left in ${app} failed; the orphan sweep tries again`,
+      error,
+    )
+    return []
+  })
+  if (deleted.length > 0) console.warn(`fly: deleted ${deleted.join(', ')}, left beside ${app}'s world`)
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))

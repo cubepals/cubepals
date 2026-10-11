@@ -80,8 +80,10 @@ import { idOf, succeeded } from './fly-runtime/responses.ts'
 import { goneSnapshots, takeSnapshot } from './fly-runtime/snapshots.ts'
 import { tagMachines } from './fly-runtime/tags.ts'
 import {
+  clearEarlierWakes,
   createVolume,
   dataVolume,
+  deleteLeftoverVolumes,
   deleteVolume,
   ensureVolume,
   fitVolume,
@@ -429,7 +431,9 @@ export class FlyRuntime implements MinecraftRuntime {
         restoreJob(from.download.url),
       )
     }
-    return this.#replace(ref, volume, ref.region, spec, progress)
+    const next = await this.#replace(ref, volume, ref.region, spec, progress)
+    if (from.kind === 'archive') await clearEarlierWakes(this.#fly, ref.app, idOf(volume, 'a volume'))
+    return next
   }
 
   async relocate(
@@ -586,6 +590,16 @@ export class FlyRuntime implements MinecraftRuntime {
     if (machineId !== null || volumeId !== null)
       throw new Error(`${ref.app} still holds a machine or a volume after letting them go`)
     return encodeHandle({ ...ref, machineId: null, volumeId: null })
+  }
+
+  /**
+   * World volumes in the server's app that no machine mounts, beside the one the handle names; or
+   * beside none, for a world resting in the archive store.
+   */
+  async clearLeftovers(handle: RuntimeHandle, worldElsewhere: boolean): Promise<readonly string[]> {
+    const ref = decodeHandle(handle)
+    requireOwnApp(ref.app, this.#deployment)
+    return deleteLeftoverVolumes(this.#fly, ref.app, worldElsewhere ? null : ref.volumeId)
   }
 
   async destroy(target: RuntimeKey | RuntimeHandle): Promise<void> {

@@ -14,6 +14,7 @@
  * - `drift.ts`: applies a changed spec to running servers nobody is playing on, a few a pass.
  * - `expiring.ts`: sends to the trash a server whose time is up, warning first where a plan says.
  * - `idle.ts`: decides whether an empty running server has been idle long enough to stop.
+ * - `leftovers.ts`: deletes storage a failed wake, restore or move left beside a server's world.
  * - `observations.ts`: writes what a runtime said about a server's compute into its `observed` record.
  * - `orphans.ts`: stops compute no running server accounts for; destroys what no binding holds.
  * - `presence.ts`: records who is online on each running server, read from its console.

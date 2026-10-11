@@ -39,6 +39,7 @@ interface FakeVolume {
   snapshot_retention?: number
   snapshot_id?: string
   source_volume_id?: string
+  attached_machine_id?: string
 }
 
 /**
@@ -91,6 +92,8 @@ export class FakeFly {
    */
   destroyReads = 0
   boundDeletes = 0
+  /** Deletes refused as bound, though no machine Fly lists mounts the volume, as it holds a claim. */
+  heldDeletes = 0
   /**
    * New machines refused on a volume a destroyed machine had, as Fly went on holding one after its
    * machine was gone (production, 2026-10-10); and every machine refused on a claimed volume.
@@ -425,17 +428,21 @@ export class FakeFly {
     return shown.map((l) => ({ ...l.volume, state: 'created' }))
   }
 
-  /** A volume that can't go now: its host is gone, or a machine is still bound to it. */
+  /**
+   * A volume that can't go now: its host is gone, a machine is still bound to it, or Fly still holds
+   * it for a machine it no longer lists.
+   */
   #refusedDelete(app: string, volumeId: string): Response | null {
     if (this.unreachable.has(volumeId)) return Response.json({ error: 'host unreachable' }, { status: 503 })
     const bound = (this.machines.get(app) ?? []).find((x) =>
       (x.config.mounts as Json[] | undefined)?.some((mount) => mount.volume === volumeId),
     )
-    if (bound === undefined) return null
+    if (bound === undefined && this.heldDeletes <= 0) return null
     this.boundDeletes++
-    this.#moment(app, bound)
+    if (bound === undefined) this.heldDeletes--
+    else this.#moment(app, bound)
     return Response.json(
-      { error: `failed_precondition: volume is currently bound to machine: ${bound.id}` },
+      { error: `failed_precondition: volume is currently bound to machine: ${bound?.id ?? ''}` },
       { status: 412 },
     )
   }

@@ -93,6 +93,8 @@ export interface Runtimes extends Pick<MinecraftRuntime, HandleVerbs> {
   ): Promise<RuntimeHandle>
   adopt(provider: string, key: RuntimeKey, placement: Placement, spec: RuntimeSpec): Promise<RuntimeHandle>
   destroy(provider: string, target: RuntimeKey | RuntimeHandle): Promise<void>
+  /** `MinecraftRuntime.clearLeftovers`, by the runtime that issued `handle`; none where it has none. */
+  clearLeftovers(handle: RuntimeHandle, worldElsewhere: boolean): Promise<readonly string[]>
 
   /**
    * Whether a stopped server's endpoint still reaches it and nothing else, on the runtime that
@@ -302,6 +304,10 @@ export class RuntimeRouter implements Runtimes {
 
   release(handle: RuntimeHandle): Promise<RuntimeHandle> {
     return this.#of(handle).release(handle)
+  }
+
+  async clearLeftovers(handle: RuntimeHandle, worldElsewhere: boolean): Promise<readonly string[]> {
+    return (await this.#of(handle).clearLeftovers?.(handle, worldElsewhere)) ?? []
   }
 
   observe(handle: RuntimeHandle): Promise<RuntimeObservation> {
