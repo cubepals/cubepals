@@ -32,7 +32,7 @@ import {
 } from '@blockly/contracts'
 import type { AccountDetail, AccountRow } from '../../app/accounts/queries.ts'
 import { coupons } from './coupons.ts'
-import { adminProcedure, router } from './trpc.ts'
+import { adminProcedure, router, sessionOf } from './trpc.ts'
 
 const accountView = (row: AccountRow): AccountView => ({
   userId: row.userId,
@@ -102,6 +102,10 @@ export const admin = router({
   setTestAccount: adminProcedure
     .input(TestAccountInput)
     .mutation(({ ctx, input }) => ctx.services.accounts.setTestAccount(ctx.actor, input.userId, input.test)),
+  /** Signed in as a test account, to play and test as it, until it switches back (`account.switchBack`). */
+  useAs: adminProcedure
+    .input(AccountRef)
+    .mutation(({ ctx, input }) => ctx.services.impersonation.start(ctx.actor, input.userId, sessionOf(ctx))),
   grantAdmin: adminProcedure
     .input(AccountRef)
     .mutation(({ ctx, input }) => ctx.services.accounts.grantAdmin(ctx.actor, input.userId)),

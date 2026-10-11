@@ -7,7 +7,6 @@ import type { AuthMethods } from '@blockly/contracts'
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { getHTTPStatusCodeFromError } from '@trpc/server/http'
 import { Hono } from 'hono'
-import type { UserActor } from '../../app/actor.ts'
 import type { Authenticator } from '../../app/ports/auth.ts'
 import { appRouter } from '../trpc/router.ts'
 import type { Services } from '../trpc/trpc.ts'
@@ -83,10 +82,15 @@ export function createApiApp(deps: {
       endpoint: '/api/trpc',
       req: c.req.raw,
       router: appRouter,
-      createContext: async ({ req }) => ({
-        actor: await actorFrom(deps.auth, req.headers),
-        services: deps.services,
-      }),
+      createContext: async ({ req, resHeaders }) => {
+        const session = await deps.auth.sessionOf(req.headers)
+        return {
+          actor: session === null ? null : { kind: 'user' as const, userId: session.userId },
+          impersonatedBy: session?.impersonatedBy ?? null,
+          session: deps.auth.switchFor(req.headers, resHeaders),
+          services: deps.services,
+        }
+      },
       onError({ error, path, ctx }) {
         if (error.code === 'INTERNAL_SERVER_ERROR') console.error('tRPC', error.cause ?? error)
         if (getHTTPStatusCodeFromError(error) >= 500)
@@ -103,9 +107,4 @@ export function createApiApp(deps: {
   )
 
   return app
-}
-
-async function actorFrom(auth: Authenticator, headers: Headers): Promise<UserActor | null> {
-  const userId = await auth.userOf(headers)
-  return userId === null ? null : { kind: 'user', userId }
 }

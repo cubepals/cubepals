@@ -13,7 +13,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const [session, data] = await Promise.all([currentSession(), firstPaint()])
   if (session === null) redirect('/sign-in')
   return (
-    <AppFrame user={session.user} data={data}>
+    <AppFrame user={session.user} data={data} usingAs={Boolean(session.session.impersonatedBy)}>
       {children}
     </AppFrame>
   )

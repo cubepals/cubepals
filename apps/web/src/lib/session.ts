@@ -8,6 +8,8 @@ import { apiUpstream } from './upstream'
 
 export interface Session {
   user: { id: string; name: string; email: string; emailVerified: boolean }
+  /** `impersonatedBy` is the admin using this test account ("Use as this account"), when one is. */
+  session: { impersonatedBy?: string | null }
 }
 
 /** The signed-in person, asked of the control plane with the browser's own cookie and address. */

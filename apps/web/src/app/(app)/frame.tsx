@@ -36,20 +36,25 @@ import styles from './insight.module.css'
 import { MomentCard } from './moment'
 import { MoreMenu, type NavEntry } from './more-menu'
 import { usePrefetch } from './prefetch'
+import { UsingAs } from './using-as'
 
 export function AppFrame({
   user,
   data,
+  usingAs,
   children,
 }: {
   user: Session['user']
   /** What the server read for the first paint (lib/first-paint.ts). */
   data: DehydratedState
+  /** An admin is using this test account (./using-as.tsx). */
+  usingAs: boolean
   children: ReactNode
 }) {
   return (
     <ApiProvider data={data}>
       <RealtimeProvider>
+        {usingAs && <UsingAs userId={user.id} email={user.email} />}
         <Shell user={user}>{children}</Shell>
       </RealtimeProvider>
     </ApiProvider>

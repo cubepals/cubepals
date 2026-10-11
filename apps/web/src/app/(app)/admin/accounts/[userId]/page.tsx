@@ -368,12 +368,29 @@ function TestAccount({ account }: { account: AccountDetailView }) {
       onSuccess: () => queries.invalidateQueries({ queryKey: trpc.admin.pathKey() }),
     }),
   )
+  // Signed in as it, a fresh load of its servers shows Cubepals as it sees it, with nothing of the
+  // admin's left in the page. The bar on every page switches back (../../../using-as.tsx).
+  const use = useMutation(
+    trpc.admin.useAs.mutationOptions({ onSuccess: () => window.location.assign('/servers') }),
+  )
+  const failure = save.error ?? use.error
   return (
     <FormSection
       title="Test account"
       description="One Cubepals uses to test itself. It never pays, and it is left out of the numbers, billing and analytics."
+      actions={
+        account.test && !account.admin ? (
+          <Button
+            variant="outline"
+            disabled={use.isPending || use.isSuccess}
+            onClick={() => use.mutate({ userId: account.userId })}
+          >
+            Use as this account
+          </Button>
+        ) : undefined
+      }
     >
-      {save.isError && <Note tone="danger">{messageOf(save.error)}</Note>}
+      {failure && <Note tone="danger">{messageOf(failure)}</Note>}
       <FormRow
         label="A test account"
         control={

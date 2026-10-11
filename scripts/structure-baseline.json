@@ -1775,9 +1775,6 @@
     "apps/control/src/config/schema.ts › isLoopback": {
       "reason": "Kept for a change in progress that uses it; remove the export if that change doesn't."
     },
-    "apps/control/src/interfaces/trpc/trpc.ts › Context": {
-      "reason": "Kept for a change in progress that uses it; remove the export if that change doesn't."
-    },
     "apps/control/src/minecraft/diagnosis.ts › Remedy": {
       "reason": "Kept for a change in progress that uses it; remove the export if that change doesn't."
     },

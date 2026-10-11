@@ -7,6 +7,7 @@ import { initTRPC, TRPCError } from '@trpc/server'
 import { ZodError } from 'zod'
 import type { PlayerFaces } from '../../app/access/faces.ts'
 import type { AccessService } from '../../app/access/service.ts'
+import type { Impersonation } from '../../app/accounts/impersonation.ts'
 import type { AccountQueries } from '../../app/accounts/queries.ts'
 import type { AccountService } from '../../app/accounts/service.ts'
 import type { UserActor } from '../../app/actor.ts'
@@ -32,6 +33,7 @@ import type { Fleet } from '../../app/platform/fleet.ts'
 import type { ServerRepairs } from '../../app/platform/repairs.ts'
 import type { StuckWork } from '../../app/platform/stuck.ts'
 import type { PlayerService } from '../../app/players/service.ts'
+import type { SessionSwitch } from '../../app/ports/auth.ts'
 import type { RealtimeTickets } from '../../app/ports/tickets.ts'
 import type { RevisionService } from '../../app/revisions/service.ts'
 import type { ServerQueries } from '../../app/servers/queries.ts'
@@ -46,6 +48,7 @@ export interface Services {
   servers: MinecraftServerService
   accounts: AccountService
   accountQueries: AccountQueries
+  impersonation: Impersonation
   billing: BillingService
   listings: ListingService
   listingQueries: ListingQueries
@@ -82,6 +85,13 @@ export interface Services {
 
 export interface Context {
   actor: UserActor | null
+  /**
+   * The admin using this test account ("Use as this account"), when one is. Admin procedures are
+   * refused to such a session. Absent counts as nobody.
+   */
+  impersonatedBy?: string | null
+  /** The request's session, to switch to a test account and back. Absent outside HTTP. */
+  session?: SessionSwitch
   services: Services
 }
 
@@ -163,6 +173,13 @@ const translateErrors = t.middleware(async ({ next }) => {
   return result
 })
 
+/** The request's session, which only HTTP requests carry. */
+export function sessionOf(ctx: Pick<Context, 'session'>): SessionSwitch {
+  if (ctx.session === undefined)
+    throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Sign in first.' })
+  return ctx.session
+}
+
 export const router = t.router
 export const publicProcedure = t.procedure.use(translateErrors)
 export const authedProcedure = publicProcedure.use(({ ctx, next }) => {
@@ -172,10 +189,11 @@ export const authedProcedure = publicProcedure.use(({ ctx, next }) => {
 
 /**
  * For platform admins only, acting as `admin:<id>`. Anyone else is told there is nothing here,
- * the way a server they don't own looks.
+ * the way a server they don't own looks. So is an admin using a test account: that session is the
+ * test account's, whatever it is later made.
  */
 export const adminProcedure = authedProcedure.use(async ({ ctx, next }) => {
-  if (!(await ctx.services.accounts.isAdmin(ctx.actor.userId)))
+  if (ctx.impersonatedBy || !(await ctx.services.accounts.isAdmin(ctx.actor.userId)))
     throw new TRPCError({ code: 'NOT_FOUND', message: 'Not found' })
   return next({ ctx: { ...ctx, actor: { kind: 'admin' as const, userId: ctx.actor.userId } } })
 })
