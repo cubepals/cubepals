@@ -1973,13 +1973,25 @@ textarea.bk-input {
     color: var(--ink-inverse);
   }
 }
-.bk-appnav__item[aria-current="page"] {
+.bk-appnav__item[aria-current="page"],
+.bk-appnav__item[data-here] {
   background: var(--grass);
   color: var(--ink-on-grass);
   font-weight: 600;
 }
-.bk-appnav__item[aria-current="page"]:focus-visible {
+.bk-appnav__item[aria-current="page"]:focus-visible,
+.bk-appnav__item[data-here]:focus-visible {
   outline-color: var(--ink-on-grass);
+}
+/* The phone bar's More, a button that reads as one of the bar's links; held lit while it is open. */
+.bk-appnav__more {
+  border: 0;
+  background: none;
+  font-family: inherit;
+}
+.bk-appnav__more[data-open]:not([data-here]) {
+  background: rgba(244, 248, 245, 0.08);
+  color: var(--ink-inverse);
 }
 .bk-appnav__trailing {
   margin-left: auto;
@@ -2634,6 +2646,25 @@ details[open] > .bk-disclosure::before {
 .bk-menu__item:disabled {
   cursor: default;
   color: var(--ink-subtle);
+}
+a.bk-menu__item {
+  text-decoration: none;
+}
+.bk-menu__item[aria-current="page"] {
+  background: var(--surface-sunken);
+  font-weight: 600;
+}
+.bk-menu__trailing {
+  margin-left: auto;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-subtle);
+}
+/* Links to pages first, then whose account it is: the note opens its own part under a rule. */
+.bk-menu__item + .bk-menu__note {
+  margin-top: var(--space-4);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--border);
 }
 @media (hover: hover) and (pointer: fine) {
   .bk-menu__item:not(:disabled):hover {
