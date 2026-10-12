@@ -257,14 +257,26 @@ jobs:
             sleep 1
           done
           exit 1
-      # The same files `bun test` finds on its own, dealt out by position.
+      # The same files `bun test` finds on its own, dealt out by position. The console shows the
+      # same as without the JUnit report, and the exit code is the same.
       - name: Test ${{ matrix.group }}
         env:
           PATHS: ${{ matrix.paths }}
         # Pathspecs, unquoted on purpose so each is its own argument; the :! ones exclude.
         run: |
           # shellcheck disable=SC2086
-          git ls-files -- $PATHS | grep -E '\.test\.tsx?$' | sed 's|^|./|' | xargs bun test
+          git ls-files -- $PATHS | grep -E '\.test\.tsx?$' | sed 's|^|./|' |
+            xargs bun test --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"
+      # Each test's result, for the pull request's comment (ci-comment.yml). It never fails the job.
+      - name: Keep the test results
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-${{ matrix.group }}
+          path: ${{ runner.temp }}/junit.xml
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Every file says whose it is and under what license, in its own SPDX lines or in REUSE.toml.
   # It runs on every change, prose included: a new picture or document needs its line too.

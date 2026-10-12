@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+name: CI comment
+
+# One comment on each pull request with its CI run's results (scripts/ci-comment.ts): running while
+# CI runs, then each part's result and every failed test. workflow_run gives the token write
+# access on pull requests from forks too, so the job never checks out or runs their code: it runs
+# the base branch's scripts and reads the run's JUnit reports as data. A push to main gets no
+# comment. A failure here only warns: `check` in ci.yml judges the run, not this.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [requested, in_progress, completed]
+
+permissions:
+  actions: read
+  pull-requests: write
+
+# One at a time for a pull request's head, so "running" never lands after the results.
+concurrency:
+  group: ci-comment-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+
+jobs:
+  comment:
+    name: Report the checks on the pull request
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts
+            packages/contracts/src
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      # Each test group's report, in a directory of its artifact's name.
+      - name: Download the test results
+        if: github.event.action == 'completed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: >-
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'junit-*' --dir "$RUNNER_TEMP/junit" ||
+          echo "::warning::The run's test results couldn't be downloaded."
+      - name: Say how CI is going
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          JUNIT: ${{ github.event.action == 'completed' && format('{0}/junit', runner.temp) || '' }}
+        run: >-
+          bun scripts/ci-comment.ts ||
+          echo "::warning::The CI comment couldn't be written."
