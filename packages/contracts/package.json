@@ -10,7 +10,8 @@
     "./durations": "./src/durations.ts",
     "./limits": "./src/limits.ts",
     "./local": "./src/local.ts",
-    "./play-today": "./src/play-today.ts"
+    "./play-today": "./src/play-today.ts",
+    "./meter": "./src/meter.ts"
   },
   "dependencies": {
     "transport-io": "0.13.2",

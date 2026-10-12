@@ -34,6 +34,8 @@
  * - `servers.ts`: what happened to one server: off the directory, an idle world, a rebuild.
  */
 
+import { blocksFilled, METER, meterLine } from '@blockly/contracts/meter'
+
 export const INK = '#0d0d0d'
 const PAPER = '#F8F7F5'
 const STONE = '#E6E3DC'
@@ -103,15 +105,16 @@ export const box = (rows: string) =>
  * is what is used, or what is left when `said` says so, which the line under it says too.
  */
 export const meter = (hours: number, included: number, said: 'used' | 'left' = 'used') => {
-  const filled = Math.min(10, Math.round((hours / included) * 10))
+  const filled = blocksFilled(hours, included)
+  const { blockPx, gapPx, edgePx } = METER
   const cells = Array.from(
-    { length: 10 },
+    { length: METER.blocks },
     (_, i) =>
-      `<td style="width:22px;height:22px;padding:0;background:${i < filled ? INK : STONE};border:2px solid ${INK}"></td>`,
-  ).join('<td style="width:4px;padding:0"></td>')
+      `<td style="width:${blockPx}px;height:${blockPx}px;padding:0;background:${i < filled ? INK : STONE};border:${edgePx}px solid ${INK}"></td>`,
+  ).join(`<td style="width:${gapPx}px;padding:0"></td>`)
   return `
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 8px"><tr>${cells}</tr></table>
-<p style="margin:0 0 20px;font:700 14px/1.4 ${MONO};color:${INK}">${hours} of ${included} hours${said === 'left' ? ' left' : ''}</p>`
+<p style="margin:0 0 20px;font:700 14px/1.4 ${MONO};color:${INK}">${meterLine(hours, included, said)}</p>`
 }
 
 /** A figure's picture, from the web origin's /email/. */
