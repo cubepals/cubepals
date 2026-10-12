@@ -21,14 +21,21 @@
   /* A state a person should watch change, rather than find already changed. */
   --morph: 320ms;
   --image-outline: oklch(0 0 0 / 0.1);
+  /* The one chevron, Lucide's chevron-down cut square: a select draws it in the theme's ink (a
+     background can't take currentColor), and a disclosure masks currentColor with it. */
+  --chevron-ink: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230d0d0d' stroke-width='2.4' stroke-linecap='square'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --chevron-inverse: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f8f7f5' stroke-width='2.4' stroke-linecap='square'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --chevron: var(--chevron-ink);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --image-outline: oklch(1 0 0 / 0.1);
+    --chevron: var(--chevron-inverse);
   }
 }
 :root[data-theme="dark"] {
   --image-outline: oklch(1 0 0 / 0.1);
+  --chevron: var(--chevron-inverse);
 }
 
 *,
@@ -351,17 +358,14 @@ img {
 }
 .bk-selectctl {
   appearance: none;
+  /* The chevron's ink stands as far from the border as the text does on the left, with the same
+     gap again before the text. */
   padding-right: var(--space-40);
-  background-image:
-    linear-gradient(45deg, transparent 50%, currentColor 50%),
-    linear-gradient(135deg, currentColor 50%, transparent 50%);
-  background-position:
-    calc(100% - 22px) 22px,
-    calc(100% - 16px) 22px;
-  background-size:
-    6px 6px,
-    6px 6px;
+  background-image: var(--chevron);
+  background-position: right 14px center;
+  background-size: 20px 20px;
   background-repeat: no-repeat;
+  cursor: pointer;
 }
 .bk-input::placeholder {
   color: var(--ink-subtle);
@@ -371,10 +375,16 @@ textarea.bk-input {
   resize: vertical;
 }
 @media (hover: hover) and (pointer: fine) {
-  .bk-input:hover,
-  .bk-selectctl:hover {
+  .bk-input:hover:not(:disabled),
+  .bk-selectctl:hover:not(:disabled) {
     border-color: var(--ink-subtle);
   }
+}
+/* Dimmed whole, chevron and all, the way a button is when it can't be pressed. */
+.bk-input:disabled,
+.bk-selectctl:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .bk-input--mono {
   font-family: var(--font-mono);
@@ -399,6 +409,12 @@ textarea.bk-input {
   display: flex;
   align-items: stretch;
   gap: var(--space-8);
+}
+/* A button beside the field is as tall as it: its block and the edge under it end where the
+   field's border does. */
+.bk-affixed > .bk-btn {
+  height: auto;
+  margin-block-end: 3px;
 }
 
 /* An icon inside the field rather than beside it: a search that looks like one. */
@@ -2483,15 +2499,16 @@ textarea.bk-input {
 }
 .bk-disclosure::before {
   content: "";
-  inline-size: 6px;
-  block-size: 6px;
-  border-inline-end: 1.5px solid currentColor;
-  border-block-end: 1.5px solid currentColor;
-  rotate: -45deg;
+  flex: none;
+  inline-size: 16px;
+  block-size: 16px;
+  background: currentColor;
+  mask: var(--chevron-ink) center / contain no-repeat;
+  rotate: -90deg;
   transition: rotate 150ms ease;
 }
 details[open] > .bk-disclosure::before {
-  rotate: 45deg;
+  rotate: 0deg;
 }
 @media (hover: hover) {
   .bk-disclosure:hover {
@@ -2811,6 +2828,8 @@ details[open] > .bk-disclosure::before {
   align-items: center;
   gap: var(--space-8);
   width: 100%;
+  /* As easy to hit as a suggestion's row. */
+  min-height: 40px;
   padding: var(--space-8);
   border: 0;
   background: none;
@@ -2930,17 +2949,15 @@ a.bk-menu__item {
 /* The row's chevron, down while closed and up once open, like a disclosure's. */
 .bk-fleetrow__cost::after {
   content: "";
-  inline-size: 6px;
-  block-size: 6px;
-  margin-block-start: -3px;
-  border-inline-end: 1.5px solid var(--ink-muted);
-  border-block-end: 1.5px solid var(--ink-muted);
-  rotate: 45deg;
+  flex: none;
+  inline-size: 16px;
+  block-size: 16px;
+  background: var(--ink-muted);
+  mask: var(--chevron-ink) center / contain no-repeat;
   transition: rotate 150ms ease;
 }
 .bk-fleetrow__head[aria-expanded="true"] .bk-fleetrow__cost::after {
-  margin-block-start: 3px;
-  rotate: -135deg;
+  rotate: 180deg;
 }
 .bk-fleetrow__body {
   display: flex;

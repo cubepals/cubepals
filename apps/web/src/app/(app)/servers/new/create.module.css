@@ -383,15 +383,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The release, where someone may pick another: the bar's own words, underlined to say so. */
+/* The release, where someone may pick another: the bar's own words, underlined to say so, and
+   the site's chevron in the bar's light ink rather than the browser's arrow. */
 .barVersion {
+  appearance: none;
   font: inherit;
   color: var(--ink-inverse);
-  background: transparent;
+  background: var(--chevron-inverse) right center / 16px 16px no-repeat;
   border: 0;
   border-block-end: 1px dashed currentColor;
   border-radius: 0;
-  padding: 0;
+  padding: 0 20px 0 0;
   cursor: pointer;
 }
 .barVersion:focus-visible {

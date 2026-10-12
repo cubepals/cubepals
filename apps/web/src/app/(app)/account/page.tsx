@@ -177,7 +177,7 @@ function Play({ overview }: { overview: AccountOverviewView }) {
           }`}
           control={
             <select
-              className="bk-input bk-num"
+              className="bk-selectctl bk-num"
               style={{ inlineSize: 'auto' }}
               value={kicksAfter}
               disabled={afk.isPending}
@@ -341,7 +341,7 @@ function ExtraPlay({ overview }: { overview: AccountOverviewView }) {
         control={
           <div className="bk-row" style={{ gap: 'var(--space-8)', alignItems: 'center' }}>
             <select
-              className="bk-input bk-num"
+              className="bk-selectctl bk-num"
               style={{ inlineSize: 'auto' }}
               value={extraOf(u).allowedNow}
               disabled={allow.isPending}
