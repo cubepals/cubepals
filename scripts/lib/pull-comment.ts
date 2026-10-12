@@ -4,8 +4,9 @@
 
 /**
  * GitHub's REST API with the workflow's token, and the one comment a script keeps on a pull
- * request: found by the marker its body opens with, edited in place, written new only when there
- * is none. Used by preview-comment.ts and ci-comment.ts. It imports nothing, so it runs before
+ * request: found by the marker its body opens with and the account that writes it (COMMENT_AUTHOR,
+ * the Cubepals app's bot where the workflow has its token, else github-actions[bot]), edited in
+ * place, written new only when there is none. Used by preview-comment.ts and ci-comment.ts. It imports nothing, so it runs before
  * `bun install`. Not for what a comment says: each script writes its own.
  */
 
@@ -29,13 +30,16 @@ export async function github(path: string, init: RequestInit = {}): Promise<Resp
   return response
 }
 
+/** The account the comments are written as: only its own comment can be edited. */
+const author = (): string => process.env.COMMENT_AUTHOR || 'github-actions[bot]'
+
 /** The id of the comment the workflow wrote on the pull request before, found by its marker. */
 async function existing(repo: string, pull: number | string, marker: string): Promise<number | undefined> {
   for (let page = 1; ; page++) {
     const response = await github(`repos/${repo}/issues/${pull}/comments?per_page=100&page=${page}`)
     const comments = (await response.json()) as { id: number; body?: string; user?: { login?: string } }[]
     const ours = comments.find(
-      (comment) => comment.user?.login === 'github-actions[bot]' && comment.body?.startsWith(marker),
+      (comment) => comment.user?.login === author() && comment.body?.startsWith(marker),
     )
     if (ours) return ours.id
     if (comments.length < 100) return undefined

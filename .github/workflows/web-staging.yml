@@ -111,11 +111,22 @@ jobs:
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.3
+      # Cubepals' own bot writes the comment where the repository has its app (CUBEPALS_APP_CLIENT_ID
+      # and CUBEPALS_APP_PRIVATE_KEY); without them, or if it fails, github-actions[bot] does.
+      - name: Cubepals' bot
+        id: bot
+        if: steps.ready.outputs.run == 'true' && vars.CUBEPALS_APP_CLIENT_ID != ''
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.CUBEPALS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CUBEPALS_APP_PRIVATE_KEY }}
       # One comment on the pull request (scripts/preview-comment.ts), edited at each step.
       - name: Say it is building
         if: steps.ready.outputs.run == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
+          COMMENT_AUTHOR: ${{ steps.bot.outputs.app-slug && format('{0}[bot]', steps.bot.outputs.app-slug) || 'github-actions[bot]' }}
         run: >-
           bun .preview-tools/scripts/preview-comment.ts building ||
           echo "::warning::The preview comment couldn't say it is building."
@@ -129,7 +140,8 @@ jobs:
       - name: Say how it went
         if: ${{ !cancelled() && steps.ready.outputs.run == 'true' }}
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
+          COMMENT_AUTHOR: ${{ steps.bot.outputs.app-slug && format('{0}[bot]', steps.bot.outputs.app-slug) || 'github-actions[bot]' }}
           URL: ${{ steps.upload.outputs.url }}
           VERSION: ${{ steps.upload.outputs.version }}
         run: >-

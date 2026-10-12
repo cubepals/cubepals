@@ -46,9 +46,20 @@ jobs:
         run: >-
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'junit-*' --dir "$RUNNER_TEMP/junit" ||
           echo "::warning::The run's test results couldn't be downloaded."
+      # Cubepals' own bot writes the comment where the repository has its app (CUBEPALS_APP_CLIENT_ID
+      # and CUBEPALS_APP_PRIVATE_KEY); without them, or if it fails, github-actions[bot] does.
+      - name: Cubepals' bot
+        id: bot
+        if: vars.CUBEPALS_APP_CLIENT_ID != ''
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.CUBEPALS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CUBEPALS_APP_PRIVATE_KEY }}
       - name: Say how CI is going
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
+          COMMENT_AUTHOR: ${{ steps.bot.outputs.app-slug && format('{0}[bot]', steps.bot.outputs.app-slug) || 'github-actions[bot]' }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.event.workflow_run.id }}
           JUNIT: ${{ github.event.action == 'completed' && format('{0}/junit', runner.temp) || '' }}
