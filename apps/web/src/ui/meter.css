@@ -1,0 +1,38 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
+ * The block meter (meter.tsx): ten Stone blocks with an Ink edge, filled with Ink to the mark, as
+ * the emails draw it. Its sizes come from the component; a block is its size plus its edge, as an
+ * email's table cell is. On a narrow card the blocks shrink and stay square, so ten always fit.
+ */
+.bk-meter {
+  display: grid;
+  gap: var(--space-8);
+  justify-items: start;
+}
+.bk-meter__blocks {
+  display: grid;
+  grid-template-columns: repeat(
+      var(--meter-blocks),
+      minmax(0, calc(var(--meter-block) + 2 * var(--meter-edge)))
+    );
+  gap: var(--meter-gap);
+  inline-size: 100%;
+}
+.bk-meter__block {
+  box-sizing: border-box;
+  aspect-ratio: 1;
+  border: var(--meter-edge) solid var(--border-strong);
+  background: var(--surface-sand);
+}
+.bk-meter__block[data-filled] {
+  background: var(--ink);
+}
+.bk-meter__line {
+  font-weight: 700;
+  color: var(--ink);
+}

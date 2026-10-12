@@ -13,6 +13,7 @@ import { checkoutHref } from '../../../lib/checkout'
 import { useOutcome } from '../../../lib/outcome'
 import { dayOf, loaderLabel } from '../../../lib/present'
 import {
+  BlockMeter,
   Button,
   FormRow,
   FormSection,
@@ -21,7 +22,6 @@ import {
   Note,
   PageSkeleton,
   PlanCard,
-  ProgressBar,
   Skeleton,
   Tip,
 } from '../../../ui'
@@ -99,17 +99,9 @@ function AccountSkeleton({ email }: { email?: string | undefined }) {
 
 const title = (plan: string) => `${plan[0]?.toUpperCase() ?? ''}${plan.slice(1)}`
 
-/** Hours left as people say them: "no hours", "less than an hour", "about an hour", "about 12 hours". */
-function leftSaid(left: number): string {
-  if (left <= 0) return 'no hours'
-  const hours = Math.round(left)
-  if (hours < 1) return 'less than an hour'
-  return hours === 1 ? 'about an hour' : `about ${hours} hours`
-}
-
-/** Hours carried in from last month, as the month's line says them; nothing when none did. */
+/** Hours carried in from last month, said under the month's meter; nothing when none did. */
 const fromLastMonth = (carried: number) =>
-  carried > 0 ? `, ${carried} of them from last month and used first` : ''
+  carried > 0 ? `${carried} of these hours are from last month and used first. ` : ''
 
 /** Money, as people write it: "$4.20". */
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
@@ -149,9 +141,9 @@ function Play({ overview }: { overview: AccountOverviewView }) {
   return (
     <FormSection
       title="Play this month"
-      description={`${title(leftSaid(left))} left of ${included}${fromLastMonth(u.carriedUnits)}. More on the 1st, and unused hours carry into the next month, once.`}
+      description={`${fromLastMonth(u.carriedUnits)}More on the 1st, and unused hours carry into the next month, once.`}
     >
-      <ProgressBar onPaper value={100 - share} label={`${100 - share}% of this month's play left`} />
+      <BlockMeter left={left} included={included} label="This month's play" />
       {share >= 100 ? (
         <UsedUp overview={overview} included={included} />
       ) : share >= 80 ? (
@@ -231,11 +223,12 @@ function PlayTotal({ overview }: { overview: AccountOverviewView }) {
   if (total === null) return null
   const share = Math.round(Math.min(1, total.units / total.included) * 100)
   return (
-    <FormSection
-      title="Free hours"
-      description={`${title(leftSaid(Math.max(0, total.included - total.units)))} left of ${total.included}. They come once, not every month.`}
-    >
-      <ProgressBar onPaper value={100 - share} label={`${100 - share}% of your free hours left`} />
+    <FormSection title="Free hours" description="They come once, not every month.">
+      <BlockMeter
+        left={Math.max(0, total.included - total.units)}
+        included={total.included}
+        label="Your free hours"
+      />
       {share >= 100 && <FreeHoursUsed hours={total.included} next="/account" />}
     </FormSection>
   )
@@ -252,11 +245,12 @@ function PlayToday({ overview }: { overview: AccountOverviewView }) {
   if (today === null || (total !== null && total.units >= total.included)) return null
   const share = Math.round(Math.min(1, today.units / today.included) * 100)
   return (
-    <FormSection
-      title="Play today"
-      description={`${title(leftSaid(Math.max(0, today.included - today.units)))} left of ${today.included}. More every day at midnight.`}
-    >
-      <ProgressBar onPaper value={100 - share} label={`${100 - share}% of today's play left`} />
+    <FormSection title="Play today" description="More every day at midnight.">
+      <BlockMeter
+        left={Math.max(0, today.included - today.units)}
+        included={today.included}
+        label="Today's play"
+      />
       {share >= 100 && <OutForToday hours={today.included} backAt={today.backAt} next="/account" />}
     </FormSection>
   )
