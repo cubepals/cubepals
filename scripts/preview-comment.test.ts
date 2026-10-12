@@ -35,7 +35,7 @@ describe('previewComment', () => {
     expect(body).toContain('| **Preview** | — |')
     expect(body).not.toContain('Version')
     expect(body).toContain(
-      'Staging is stopped: start it with `bun scripts/staging.ts start` to sign in on the preview.',
+      'Staging is stopped. To sign in on the preview, a maintainer starts it: [run Staging](https://github.com/cubepals/cubepals/actions/workflows/staging.yml).',
     )
   })
 })

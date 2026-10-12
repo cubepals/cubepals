@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+name: Staging
+
+# Staging's machines started or stopped from GitHub, so signing in on a pull request's preview
+# needs no checkout and no Fly token: the preview comment links here. Only people with write access
+# see "Run workflow", so only maintainers can start it. Started staging is stopped again each
+# night, so one left running costs a day at most. It shares the Nightly's concurrency group: neither
+# changes staging under the other.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Start or stop staging's machines
+        type: choice
+        options: [start, stop]
+        default: start
+  schedule:
+    - cron: '30 3 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    name: Staging machines
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
+        with:
+          version: 0.4.111
+      # The release ships only `flyctl`; the scripts call it `fly`, as its installer names it.
+      - run: ln -s flyctl "$(dirname "$(command -v flyctl)")/fly" && fly version
+      - run: bun install --frozen-lockfile
+      - name: Start or stop staging
+        env:
+          ACTION: ${{ github.event_name == 'schedule' && 'stop' || inputs.action }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          STAGING_STATE: ${{ secrets.STAGING_STATE }}
+          POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
+        run: bun scripts/staging.ts "$ACTION"
