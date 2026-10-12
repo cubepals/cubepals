@@ -15,6 +15,7 @@
  * can say "building" before `bun install`. Not for building or uploading anything: that is
  * staging-website.ts.
  */
+import { keepComment } from './lib/pull-comment.ts'
 import { API } from './staging-website.ts'
 
 export type PreviewState = 'building' | 'ready' | 'failed'
@@ -92,32 +93,6 @@ const need = (name: string): string => {
   return value
 }
 
-async function github(path: string, init: RequestInit = {}): Promise<Response> {
-  const response = await fetch(`https://api.github.com/${path}`, {
-    ...init,
-    headers: {
-      authorization: `Bearer ${need('GH_TOKEN')}`,
-      accept: 'application/vnd.github+json',
-      'content-type': 'application/json',
-    },
-  })
-  if (!response.ok) throw new Error(`GitHub answered ${response.status} to ${init.method ?? 'GET'} ${path}`)
-  return response
-}
-
-/** The id of the comment this script wrote on the pull request before, if any. */
-async function existing(repo: string, pull: string): Promise<number | undefined> {
-  for (let page = 1; ; page++) {
-    const response = await github(`repos/${repo}/issues/${pull}/comments?per_page=100&page=${page}`)
-    const comments = (await response.json()) as { id: number; body?: string; user?: { login?: string } }[]
-    const ours = comments.find(
-      (comment) => comment.user?.login === 'github-actions[bot]' && comment.body?.startsWith(MARKER),
-    )
-    if (ours) return ours.id
-    if (comments.length < 100) return undefined
-  }
-}
-
 if (import.meta.main) {
   const state = process.argv[2]
   if (state !== 'building' && state !== 'ready' && state !== 'failed') {
@@ -136,12 +111,5 @@ if (import.meta.main) {
     stagingUp: await stagingRunning(),
     now: new Date(),
   })
-  const id = await existing(repo, pull)
-  await github(
-    id === undefined ? `repos/${repo}/issues/${pull}/comments` : `repos/${repo}/issues/comments/${id}`,
-    {
-      method: id === undefined ? 'POST' : 'PATCH',
-      body: JSON.stringify({ body }),
-    },
-  )
+  await keepComment(repo, pull, MARKER, body)
 }
