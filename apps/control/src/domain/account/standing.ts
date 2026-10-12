@@ -25,6 +25,7 @@ export interface AccountStanding {
     maxServers?: number
     maxRunning?: number
     includedUnits?: number
+    carryUnits?: number
     maxSessionMinutes?: number
     idleShutdownAfterMinutes?: number
   }

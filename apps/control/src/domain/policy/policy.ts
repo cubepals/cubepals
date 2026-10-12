@@ -109,7 +109,10 @@ export interface PolicyFacts {
    * without what hours chipped in covered.
    */
   unitsThisMonth: number
-  /** What was left of last month's block and carried into this one, in units. */
+  /**
+   * What was left of last month's block and carried into this one, in units: never more than the
+   * plan's `carryUnits` (`accounts/play-month.ts`).
+   */
   carriedThisMonth: number
   /**
    * Hours chipped in that the server being started has left, in units: it may start once the

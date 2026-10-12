@@ -20,6 +20,8 @@ export interface PlanFigures {
   per: 'day' | 'month'
   /** Hours of play included once, in all, with `hours` the most a day; null: none. */
   totalHours: number | null
+  /** The most of a month's unused hours that carry into the next month, once; null: none carry. */
+  carryHours: number | null
   maxServers: number
   /** Minutes a server keeps running after the last player leaves. */
   sleepsAfterMinutes: number
@@ -42,6 +44,7 @@ export const FREE: PlanFigures = {
   hours: 2,
   per: 'day',
   totalHours: 20,
+  carryHours: null,
   maxServers: 1,
   sleepsAfterMinutes: 10,
   restsAfterDays: 14,
@@ -58,6 +61,7 @@ export const PLUS: PlanFigures = {
   hours: 120,
   per: 'month',
   totalHours: null,
+  carryHours: 50,
   maxServers: 3,
   sleepsAfterMinutes: 15,
   restsAfterDays: 30,

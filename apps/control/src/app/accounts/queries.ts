@@ -94,7 +94,7 @@ export interface AccountOverview {
     total: AccountOverviewView['usage']['total']
     unitsThisMonth: number
     hoursThisMonth: number
-    /** What was left of last month's block and carried into this one, in units. */
+    /** What was left of last month's block and carried into this one, up to the plan's `carryUnits`, in units. */
     carriedUnits: number
     extraUnitsAllowed: number
     unitCents: number

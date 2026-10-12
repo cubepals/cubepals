@@ -37,6 +37,7 @@ describe('what the policies say about the plans', () => {
         hours: plan.dailyUnits ?? plan.includedUnits ?? Number.NaN,
         per: plan.dailyUnits === null ? 'month' : 'day',
         totalHours: plan.totalUnits,
+        carryHours: plan.carryUnits,
         maxServers: plan.maxServers,
         sleepsAfterMinutes: plan.idleShutdownAfterMinutes ?? Number.NaN,
         restsAfterDays: plan.storeAfterIdleDays,

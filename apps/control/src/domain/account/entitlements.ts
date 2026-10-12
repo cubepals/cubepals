@@ -31,10 +31,16 @@ export interface Entitlements {
   /**
    * The play a plan includes each month, in meter units (`meter.ts`): one unit is an hour on the
    * smallest size, and bigger sizes spend them faster, in proportion to what they cost. A month
-   * runs from the owner's midnight on the 1st, and what is left of it carries into the next month
-   * once (`accounts/play-month.ts`). Null means no monthly block: a plan that counts its play by the day (`dailyUnits`), or none at all.
+   * runs from the owner's midnight on the 1st, and what is left of it, up to `carryUnits`, carries
+   * into the next month once (`accounts/play-month.ts`). Null means no monthly block: a plan that counts its play by the day (`dailyUnits`), or none at all.
    */
   includedUnits: number | null
+  /**
+   * The most of a month's own block that carries into the next month, in meter units: what is
+   * left of it, up to this, is spent first there and never carries again. A public plan term, like
+   * the block. Null: nothing carries.
+   */
+  carryUnits: number | null
   /**
    * The play a plan includes each day, in meter units, from the owner's local midnight to the next
    * (`play-day.ts`). Nothing carries over and there is no monthly total. Null: no daily block.
@@ -133,6 +139,8 @@ export interface LimitOverrides {
   maxRunning?: number
   /** An account given more play than its plan includes, by an admin rather than by paying. */
   includedUnits?: number
+  /** How much of a month's block carries into the next on this account, in place of the plan's. */
+  carryUnits?: number
   /**
    * A cap on how long one run lasts, where an admin holds this one account to it (an AFK farm
    * that defeats the kick). No plan caps a run: the plan's hours already bound what it costs.
@@ -163,6 +171,7 @@ const PLANS: Record<string, Entitlements> = {
     legacyMemoryTiers: ['2g', '4g'],
     // 20 hours of play once, at most 2 of them a day, and no monthly total.
     includedUnits: null,
+    carryUnits: null,
     dailyUnits: 2,
     totalUnits: 20,
     mayBuyMore: false,
@@ -206,6 +215,8 @@ const PLANS: Record<string, Entitlements> = {
     // 120 included hours; a large server uses two an hour (meter.ts). Past `storage.paidForGb` of
     // worlds an account is an admin alert.
     includedUnits: 120,
+    // Up to 50 of a month's unused hours carry into the next, so a month holds at most 170.
+    carryUnits: 50,
     dailyUnits: null,
     totalUnits: null,
     // Extra hours, 25¢ each (meter.ts), up to a limit the owner sets under the account's ceiling
@@ -270,6 +281,7 @@ export function entitlementsFor(plan: string, overrides: LimitOverrides = {}): E
     maxServers: overrides.maxServers ?? base.maxServers,
     maxRunning: overrides.maxRunning ?? base.maxRunning,
     includedUnits: overrides.includedUnits ?? base.includedUnits,
+    carryUnits: overrides.carryUnits ?? base.carryUnits,
     // An account an admin gave its own monthly play is held to that, as before the block existed.
     totalUnits: overrides.includedUnits === undefined ? base.totalUnits : null,
     maxSessionMinutes: overrides.maxSessionMinutes ?? base.maxSessionMinutes,

@@ -103,6 +103,12 @@ const title = (plan: string) => `${plan[0]?.toUpperCase() ?? ''}${plan.slice(1)}
 const fromLastMonth = (carried: number) =>
   carried > 0 ? `${carried} of these hours are from last month and used first. ` : ''
 
+/** When the month's hours come back, and how many unused ones the plan carries into the next. */
+const comesBack = (carry: number | null) =>
+  carry !== null && carry > 0
+    ? `More on the 1st, and up to ${carry} unused hours carry into the next month, once.`
+    : 'More on the 1st.'
+
 /** Money, as people write it: "$4.20". */
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
 
@@ -110,7 +116,7 @@ const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
  * This month's play, and what happens when it runs out. Nobody should ever be surprised on the
  * 1st, so the warning arrives long before the money does, and what Blockly may charge past the
  * included block is the owner's own number — zero until they say otherwise. The month's hours are
- * the plan's and what was left of last month's, which are spent first.
+ * the plan's and what was left of last month's, up to the plan's carry, which are spent first.
  */
 function Play({ overview }: { overview: AccountOverviewView }) {
   const trpc = useTRPC()
@@ -141,7 +147,7 @@ function Play({ overview }: { overview: AccountOverviewView }) {
   return (
     <FormSection
       title="Play this month"
-      description={`${fromLastMonth(u.carriedUnits)}More on the 1st, and unused hours carry into the next month, once.`}
+      description={`${fromLastMonth(u.carriedUnits)}${comesBack(e.carryUnits)}`}
     >
       <BlockMeter left={left} included={included} label="This month's play" />
       {share >= 100 ? (

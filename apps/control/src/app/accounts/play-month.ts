@@ -5,10 +5,11 @@
 /**
  * This month's play, on a plan with a monthly block (`Entitlements.includedUnits`): the spans it
  * is counted over, from the owner's local midnight on the 1st, in meter units, and what carried
- * into it from last month's block. What is left of a month's own block carries into the next month, and
- * no further: carried hours are spent first, so a month that plays into them keeps its own for the
- * month after. A month the block did not cover from its 1st carries nothing. The clock is
- * `domain/account/play-day.ts`'s; stopping servers when the month is used is the session check's.
+ * into it from last month's block. What is left of a month's own block, up to the plan's
+ * `carryUnits`, carries into the next month, and no further: carried hours are spent first, so a
+ * month that plays into them keeps its own for the month after. A month the block did not cover
+ * from its 1st carries nothing. The clock is `domain/account/play-day.ts`'s; stopping servers when
+ * the month is used is the session check's.
  *
  * It is not where play is read: `billing/chip-in-meter.ts` (`meteredMonth`) reads each month's
  * play over these spans with what friends chipped in taken out, which never counts against the
@@ -40,11 +41,12 @@ export interface PlayMonth {
 
 /**
  * What carries out of the last of `months`: each month's own block, less what it played past what
- * carried into it. `months` is the play of each whole month the block covered, oldest first.
+ * carried into it, and never more than `cap`. `months` is the play of each whole month the block
+ * covered, oldest first.
  */
-export function carriedOut(included: number, months: readonly number[]): number {
+export function carriedOut(included: number, cap: number, months: readonly number[]): number {
   let carried = 0
-  for (const units of months) carried = Math.max(0, included - Math.max(0, units - carried))
+  for (const units of months) carried = Math.min(cap, Math.max(0, included - Math.max(0, units - carried)))
   return carried
 }
 
@@ -55,6 +57,8 @@ export interface MonthSpans {
   next: Date
   /** The plan's monthly block, in units. */
   included: number
+  /** The most of a month's own block that carries into the next, in units. */
+  carry: number
   /** Each whole month before this one the block covered, oldest first, at most `MONTHS_BACK`. */
   before: Array<{ from: Date; to: Date }>
 }
@@ -67,7 +71,7 @@ export interface MonthSpans {
 export async function monthSpans(
   q: Queryable,
   standing: Pick<AccountStanding, 'userId' | 'timeZone' | 'plan'>,
-  plan: Pick<Entitlements, 'includedUnits'>,
+  plan: Pick<Entitlements, 'includedUnits' | 'carryUnits'>,
   now: Date,
   at: Date = now,
 ): Promise<MonthSpans | null> {
@@ -86,6 +90,7 @@ export async function monthSpans(
     start,
     next: nextMonthStart(at, zone),
     included: plan.includedUnits,
+    carry: plan.carryUnits ?? 0,
     before: before.map((from) => ({ from, to: nextMonthStart(from, zone) })),
   }
 }
@@ -99,7 +104,7 @@ export function playOf(month: MonthSpans, units: readonly number[]): PlayMonth {
     start: month.start,
     next: month.next,
     included: month.included,
-    carried: carriedOut(month.included, units.slice(0, -1)),
+    carried: carriedOut(month.included, month.carry, units.slice(0, -1)),
     units: units.at(-1) ?? 0,
   }
 }

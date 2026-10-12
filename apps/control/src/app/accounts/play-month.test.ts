@@ -4,7 +4,8 @@
 
 /**
  * The monthly block: counted from the owner's midnight on the 1st, with what was left of last
- * month's carried into it once, and the policy holding a start to both.
+ * month's, up to the plan's carry, carried into it once, and the policy and chip-ins holding play
+ * to both.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
@@ -14,27 +15,50 @@ import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { nextMonthStart } from '../../domain/account/play-day.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
-import { meteredMonth } from '../billing/chip-in-meter.ts'
+import { chippedInLeft, meteredMonth } from '../billing/chip-in-meter.ts'
 import { addMonths } from '../billing/years.ts'
 import { loadStanding } from './persistence.ts'
 import { carriedOut } from './play-month.ts'
 
 const PLUS_HOURS = entitlementsFor('plus').includedUnits ?? 0
+const PLUS_CARRY = entitlementsFor('plus').carryUnits ?? 0
 
 describe('what carries into a month', () => {
-  test('a month with no play carries all of its hours, and no more than them', () => {
-    expect(carriedOut(100, [0])).toBe(100)
-    expect(carriedOut(100, [0, 0, 0])).toBe(100)
+  test('Plus carries up to 50 hours, so a month holds at most 170', () => {
+    expect(PLUS_HOURS).toBe(120)
+    expect(PLUS_CARRY).toBe(50)
+    expect(PLUS_HOURS + carriedOut(PLUS_HOURS, PLUS_CARRY, [0])).toBe(170)
+    // An admin's own block or carry stands in for the plan's; Free has no month to carry.
+    expect(entitlementsFor('plus', { carryUnits: 120 }).carryUnits).toBe(120)
+    expect(entitlementsFor('free').carryUnits).toBeNull()
   })
 
-  test('what is left of a month’s own hours carries, after the carried ones are spent', () => {
-    expect(carriedOut(100, [30])).toBe(70)
-    expect(carriedOut(100, [130])).toBe(0)
-    // 100 carried in and 150 played: the carried 100 went first, so 50 of the month's own are left.
-    expect(carriedOut(100, [0, 150])).toBe(50)
-    // Carried hours that weren't played don't carry again.
-    expect(carriedOut(100, [0, 40])).toBe(100)
-    expect(carriedOut(100, [])).toBe(0)
+  test('what is left of a month’s own hours carries, up to the cap', () => {
+    // 120 unused: 50 carry.
+    expect(carriedOut(120, 50, [0])).toBe(50)
+    // 30 unused: all 30 carry.
+    expect(carriedOut(120, 50, [90])).toBe(30)
+    expect(carriedOut(120, 50, [130])).toBe(0)
+    expect(carriedOut(120, 50, [])).toBe(0)
+    // A plan that carries nothing.
+    expect(carriedOut(120, 0, [0])).toBe(0)
+  })
+
+  test('carried hours are spent first and never carry again', () => {
+    // 50 carried in and 40 played: all of it from the carried, so the month's own 120 are whole.
+    expect(carriedOut(120, 50, [0, 40])).toBe(50)
+    // 50 carried in and 150 played: the carried 50 went first, so 20 of the month's own are left.
+    expect(carriedOut(120, 50, [0, 150])).toBe(20)
+    // 50 carried in and none of them played: still only 50 carry, the month's own.
+    expect(carriedOut(120, 50, [0, 0])).toBe(50)
+    expect(carriedOut(100, 100, [0, 150])).toBe(50)
+  })
+
+  test('a year of Plus never holds more than 170 in a month', () => {
+    const year = [0, 0, 30, 170, 100, 0, 170, 60, 0, 200, 10, 0]
+    const carried = year.map((_, i) => carriedOut(PLUS_HOURS, PLUS_CARRY, year.slice(0, i)))
+    expect(carried).toEqual([0, 50, 50, 50, 0, 20, 50, 0, 50, 50, 0, 50])
+    for (const into of carried) expect(PLUS_HOURS + into).toBeLessThanOrEqual(170)
   })
 })
 
@@ -93,31 +117,31 @@ describe.skipIf(!hasDatabase)('the play month', () => {
     const after = await month(actor, new Date(second.getTime() + 2 * HOUR_MS))
     expect(after?.start).toEqual(second)
     expect(Math.round((after?.units ?? 0) * 100) / 100).toBe(1)
-    // The two hours before midnight were last month's, and the rest of its hours carried.
-    expect(Math.round((after?.carried ?? 0) * 100) / 100).toBe(PLUS_HOURS - 2)
+    // The two hours before midnight were last month's, and of the rest of its hours, 50 carried.
+    expect(Math.round((after?.carried ?? 0) * 100) / 100).toBe(PLUS_CARRY)
   }, 40_000)
 
-  test('a month with no play carries all of its hours into the next, and no further', async () => {
+  test('a month with no play carries 50 of its hours into the next, and no further', async () => {
     const zone = 'America/Los_Angeles'
     const { actor, serverId } = await owner('Rio', zone)
     const [first, second, third] = months(zone)
     // The month the plan began in carries nothing: it wasn't Plus from its 1st.
     expect((await month(actor, new Date(first.getTime() + HOUR_MS)))?.carried).toBe(0)
-    // Nothing played in the first whole month: all of it carries into the second.
+    // Nothing played in the first whole month: 50 of it carry into the second.
     const into = await month(actor, new Date(second.getTime() + HOUR_MS))
-    expect(into).toMatchObject({ included: PLUS_HOURS, carried: PLUS_HOURS, units: 0 })
-    // Nothing played in the second either: only its own hours carry into the third.
-    expect((await month(actor, new Date(third.getTime() + HOUR_MS)))?.carried).toBe(PLUS_HOURS)
+    expect(into).toMatchObject({ included: PLUS_HOURS, carried: PLUS_CARRY, units: 0 })
+    // Nothing played in the second either: only 50 of its own hours carry into the third.
+    expect((await month(actor, new Date(third.getTime() + HOUR_MS)))?.carried).toBe(PLUS_CARRY)
     // Played into the carried hours and past them: what's left of the month's own carries.
     await ran(serverId, new Date(second.getTime() + HOUR_MS), PLUS_HOURS + 30)
-    expect((await month(actor, new Date(third.getTime() + HOUR_MS)))?.carried).toBe(PLUS_HOURS - 30)
+    expect((await month(actor, new Date(third.getTime() + HOUR_MS)))?.carried).toBe(PLUS_CARRY - 30)
   }, 40_000)
 
   test('a start is refused only once the carried hours are played too', async () => {
     const zone = 'Europe/Paris'
     const { actor, serverId } = await owner('Noor', zone)
     const [, second] = months(zone)
-    const at = new Date(second.getTime() + 2 * PLUS_HOURS * HOUR_MS + MINUTE_MS)
+    const at = new Date(second.getTime() + (PLUS_HOURS + PLUS_CARRY) * HOUR_MS + MINUTE_MS)
     const check = () =>
       h.db.transaction((tx) =>
         h.app.policy.check(
@@ -128,12 +152,38 @@ describe.skipIf(!hasDatabase)('the play month', () => {
           { lock: false },
         ),
       )
-    // A whole month's hours played this month, with all of last month's carried: there's room.
+    // A whole month's hours played this month, with 50 of last month's carried: there's room.
     await ran(serverId, second, PLUS_HOURS)
     expect(await check()).toMatchObject({ ok: true })
     // The carried hours played as well: the month is used up.
-    await ran(serverId, new Date(second.getTime() + PLUS_HOURS * HOUR_MS), PLUS_HOURS)
+    await ran(serverId, new Date(second.getTime() + PLUS_HOURS * HOUR_MS), PLUS_CARRY)
     expect(await check()).toMatchObject({ ok: false, code: 'limit_reached' })
+  }, 40_000)
+
+  test('hours chipped in cover play from where the month’s and the 50 carried run out', async () => {
+    const zone = 'Europe/Lisbon'
+    const { actor, serverId } = await owner('Ivo', zone)
+    const [, second] = months(zone)
+    const friend = await h.user('Jo')
+    // 20 hours chipped in to the server on the 1st of the second month.
+    await h.db.insert(schema.chipIns).values({
+      provider: 'polar',
+      externalOrderId: crypto.randomUUID(),
+      serverId,
+      payerId: friend.userId,
+      cents: 500,
+      netCents: 500,
+      milli: 20_000,
+      receivedAt: second,
+    })
+    // The month's 120, the 50 carried, and 10 more played: those 10 are the chipped-in hours'.
+    await ran(serverId, second, PLUS_HOURS + PLUS_CARRY + 10)
+    const at = new Date(second.getTime() + (PLUS_HOURS + PLUS_CARRY + 11) * HOUR_MS)
+    const played = await month(actor, at)
+    expect(played?.carried).toBe(PLUS_CARRY)
+    expect(Math.round((played?.units ?? 0) * 100) / 100).toBe(PLUS_HOURS + PLUS_CARRY)
+    const left = await chippedInLeft(h.db, actor.userId, at)
+    expect(Math.round((left.get(serverId) ?? 0) * 100) / 100).toBe(10)
   }, 40_000)
 })
 
@@ -209,7 +259,7 @@ describe.skipIf(!hasDatabase)('the play month after Free', () => {
     expect((await month(actor, new Date(second.getTime() + HOUR_MS)))?.carried).toBe(0)
   }, 40_000)
 
-  test('a gift that runs on from another carries a whole month once', async () => {
+  test('a gift that runs on from another carries 50 of a whole month once', async () => {
     const zone = 'Europe/Berlin'
     const [first, second, third] = months(zone)
     const actor = await longOnFree('Cy', zone, first)
@@ -217,7 +267,7 @@ describe.skipIf(!hasDatabase)('the play month after Free', () => {
     await gift(actor, next)
     // The month the first gift began in wasn't Plus from its 1st: nothing carries out of it.
     expect((await month(actor, new Date(second.getTime() + HOUR_MS)))?.carried).toBe(0)
-    // The second month was Plus throughout, gift to gift: its hours carry into the third.
-    expect((await month(actor, new Date(third.getTime() + HOUR_MS)))?.carried).toBe(PLUS_HOURS)
+    // The second month was Plus throughout, gift to gift: 50 of its hours carry into the third.
+    expect((await month(actor, new Date(third.getTime() + HOUR_MS)))?.carried).toBe(PLUS_CARRY)
   }, 40_000)
 })

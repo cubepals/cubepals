@@ -227,6 +227,8 @@ export interface LimitOverridesJson {
   maxRunning?: number
   /** Play an admin granted past what the plan includes, in meter units. */
   includedUnits?: number
+  /** How much of a month's block carries into the next, in place of the plan's, in meter units. */
+  carryUnits?: number
   /** How long one run may last, where an admin holds this account to short runs (an AFK farm). */
   maxSessionMinutes?: number
   /** How long an empty server runs before it sleeps, in place of the plan's (the staging check's). */

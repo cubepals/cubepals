@@ -182,6 +182,8 @@ export interface EntitlementsView {
    * size, and bigger sizes spend them faster. Null: no monthly block.
    */
   includedUnits: number | null
+  /** The most of a month's unused block that carries into the next month, once, in units. Null: none. */
+  carryUnits: number | null
   /** The play the plan includes each day, from the owner's midnight, in units. Null: none. */
   dailyUnits: number | null
   /** The play the plan includes in all, once, in units, with the day's on top. Null: none. */
@@ -272,8 +274,8 @@ export interface AccountOverviewView {
     unitsThisMonth: number
     hoursThisMonth: number
     /**
-     * Hours left of last month's included play, carried into this month on top of the plan's. They
-     * are spent first, and carry no further.
+     * Hours left of last month's included play, carried into this month on top of the plan's, up
+     * to the plan's `carryUnits`. They are spent first, and carry no further.
      */
     carriedUnits: number
     /** Units past the included block the owner has allowed, and what they cost per unit. */
