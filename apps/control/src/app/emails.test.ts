@@ -14,7 +14,7 @@ import { adminAlert, spendLimit } from './emails/admins.ts'
 import { paymentFailed, paymentOwed } from './emails/billing.ts'
 import { extraWarning, playWarning } from './emails/play.ts'
 import { keepingWorld, listingRemoved, serverRebuilt } from './emails/servers.ts'
-import { type Email, esc, INK } from './emails.ts'
+import { type Email, esc, INK, meter } from './emails.ts'
 
 const ORIGIN = 'https://staging.blockly.test'
 const bay = { id: 'srv_7Kq2', name: 'Sunrise <Bay>' }
@@ -275,5 +275,16 @@ describe('emails', () => {
 
   test('the text part has every link the button has, for a mail app that shows no HTML', () => {
     for (const e of EMAILS) expect(e.email.text).toContain(e.link.replace(/&amp;/g, '&'))
+  })
+
+  test('the meter fills a block for each tenth, to the nearest, and says the hours to a tenth', () => {
+    const filled = (html: string) => html.split(`background:${INK}`).length - 1
+    expect(filled(meter(120, 120, 'left'))).toBe(10)
+    expect(filled(meter(96, 120, 'left'))).toBe(8)
+    expect(filled(meter(5, 120, 'left'))).toBe(0)
+    expect(filled(meter(0, 120, 'left'))).toBe(0)
+    expect(filled(meter(150, 120))).toBe(10)
+    expect(meter(96, 120, 'left')).toContain('96 of 120 hours left')
+    expect(meter(12.34, 20)).toContain('12.3 of 20 hours</p>')
   })
 })
