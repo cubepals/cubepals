@@ -96,12 +96,14 @@ describe.skipIf(!existsSync(SOCKET))('Docker logs', () => {
 
   test('a tail ends when its container is gone', async () => {
     const { made, handle } = await container()
-    await made.start()
     const seen: string[] = []
     const reading = (async () => {
       for await (const line of logs.tail(handle, new AbortController().signal)) seen.push(line.text)
       return 'ended'
     })()
+    // Watched before it starts: a tail on a running container reads from now on, and the three
+    // lines can all come out before it attaches.
+    await made.start()
     await until(() => seen.length >= 3, 'the run')
     await made.remove({ force: true })
     expect(await reading).toBe('ended')
