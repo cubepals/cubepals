@@ -9,7 +9,7 @@ name: blockly
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: mirror.gcr.io/library/postgres:17-alpine
     environment:
       POSTGRES_USER: blockly
       POSTGRES_PASSWORD: blockly
@@ -26,7 +26,7 @@ services:
 
   # Catches verification and sign-in emails: http://localhost:8025
   mailpit:
-    image: axllent/mailpit:v1.27
+    image: mirror.gcr.io/axllent/mailpit:v1.27
     ports:
       - "127.0.0.1:1025:1025"
       - "${DEV_BIND:-127.0.0.1}:8025:8025"
@@ -34,7 +34,7 @@ services:
   # Object storage (S3) for archives, uploads and mirrored mods: http://127.0.0.1:9000.
   # RustFS is S3-compatible and maintained; MinIO's community edition is archived.
   objects:
-    image: rustfs/rustfs:1.0.0
+    image: mirror.gcr.io/rustfs/rustfs:1.0.0
     environment:
       RUSTFS_ACCESS_KEY: ${ARCHIVE_S3_ACCESS_KEY_ID:-blockly}
       RUSTFS_SECRET_KEY: ${ARCHIVE_S3_SECRET_ACCESS_KEY:-blockly-local-secret}
@@ -46,7 +46,7 @@ services:
   # Creates the control plane's bucket once the store answers, and lets the web app's pages put
   # uploads straight into it (CORS). curl signs S3 requests itself.
   objects-bucket:
-    image: curlimages/curl:8.22.0
+    image: mirror.gcr.io/curlimages/curl:8.22.0
     depends_on:
       - objects
     environment:
