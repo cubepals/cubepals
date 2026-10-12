@@ -8,7 +8,7 @@
 # a broken or hijacked release has time to be pulled. Security fixes skip all of that: they arrive
 # when published, one pull request per ecosystem. Bun has no Dependabot security updates, so its
 # fixes come with the monthly ones.
-# Each pull request is labelled `dependencies` only, never a label per ecosystem. Minor and patch
+# Each pull request is labelled `dependencies` only, never a label per ecosystem, and assigned to v0id-user. Minor and patch
 # updates merge themselves once `check` passes (workflows/dependabot.yml); majors and actions wait
 # for a person.
 version: 2
@@ -18,6 +18,7 @@ updates:
     schedule:
       interval: monthly
     labels: [dependencies]
+    assignees: [v0id-user]
     open-pull-requests-limit: 3
     cooldown:
       default-days: 7
@@ -49,6 +50,7 @@ updates:
     schedule:
       interval: monthly
     labels: [dependencies]
+    assignees: [v0id-user]
     open-pull-requests-limit: 1
     cooldown:
       default-days: 7

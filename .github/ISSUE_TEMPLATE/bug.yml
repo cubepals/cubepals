@@ -5,6 +5,7 @@
 name: Bug
 description: Something in the code doesn't work as it should.
 labels: [bug]
+assignees: [v0id-user]
 body:
   - type: textarea
     id: what

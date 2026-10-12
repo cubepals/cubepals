@@ -5,6 +5,7 @@
 name: Idea
 description: Something Cubepals could do.
 labels: [enhancement]
+assignees: [v0id-user]
 body:
   - type: textarea
     id: problem
