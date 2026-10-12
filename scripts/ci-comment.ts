@@ -225,7 +225,10 @@ function failures(run: Run, done: boolean): string[] {
 export function ciComment(run: Run): string {
   const done = run.conclusion !== null
   const updated = `${run.now.toISOString().slice(0, 16).replace('T', ' ')} UTC`
-  const jobs = run.jobs.filter((job) => !UNLISTED.includes(job.name))
+  // The API lists jobs as they started; the test groups go together, after the other parts.
+  const jobs = run.jobs
+    .filter((job) => !UNLISTED.includes(job.name))
+    .sort((a, b) => Number(a.name.startsWith(TESTS)) - Number(b.name.startsWith(TESTS)))
   const summary = [
     ['Status', `**${STATE[done ? (run.conclusion as string) : 'running'] ?? `❔ ${run.conclusion}`}**`],
     ['Commit', `[\`${run.sha.slice(0, 7)}\`](https://github.com/${run.repo}/commit/${run.sha})`],

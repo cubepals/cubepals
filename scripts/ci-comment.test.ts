@@ -77,10 +77,11 @@ const parts = (tests: string | null, others: string | null = 'success'): Job[] =
   job('Find what changed', 'success'),
   job('Every file has a license', 'success'),
   job('Lint, types and structure', others),
-  job('Web app builds as a Worker', others),
-  job('Images build and start', others),
+  // In the order they started, as the API lists them: test groups among the other parts.
   job('Tests, Server lifecycle', tests),
+  job('Web app builds as a Worker', others),
   job('Tests, Web app, edge and scripts', tests),
+  job('Images build and start', others),
   job('check', tests === null ? null : 'success'),
 ]
 
@@ -137,6 +138,9 @@ describe('ciComment', () => {
     expect(body).not.toContain('Find what changed')
     expect(body).not.toContain('[check]')
     expect(body).toContain('1,202 tests passed.')
+    const order = ['Every file', 'Lint', 'Web app builds', 'Images', 'Tests, Server', 'Tests, Web app']
+    const positions = order.map((name) => body.indexOf(`| [${name}`))
+    expect(positions).toEqual([...positions].sort((a, b) => a - b))
     expect(body).not.toContain('<details>')
   })
 
