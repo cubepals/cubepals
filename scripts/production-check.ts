@@ -9,7 +9,8 @@
  *
  * As `operator:production-check`, through the operators' API (scripts/lib/production-reach.ts),
  * for one account (the first of ADMIN_EMAILS unless --owner names another): a server is made,
- * joined through the edge at its own address until it answers, stopped, rested in the archive
+ * joined through the edge at its own address until it answers, put to sleep (its Fly machine
+ * suspended, where production suspends) and woken by a join within 15 s, stopped, rested in the archive
  * store with its Fly machine and volume let go, joined again and timed coming back from the
  * archive, then sent to the trash and purged, after which Fly holds no app of it. Whatever happens
  * on the way, the server it made goes to the trash and is purged before it exits.
@@ -30,6 +31,13 @@ import { productionFlyEnv, productionValues, reachProduction } from './lib/produ
 
 const PLAY_DOMAIN = 'play.cubepals.com'
 const FLY_ORG = 'blockly-prod'
+
+/**
+ * The longest a join may wait to wake a server from Fly's suspend, as staging's check holds it
+ * (scripts/staging-check.ts): a resume measured about 1.5 s, and ten times that is room for a slow
+ * edge or Fly.
+ */
+const SUSPENDED_WAKE_LIMIT_MS = 15_000
 
 const say = (line: string) => process.stdout.write(`${line}\n`)
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`
@@ -83,17 +91,24 @@ function fly(args: string[]): unknown {
     throw new Error(`fly ${args.slice(0, 2).join(' ')}: ${ran.stderr.toString().trim()}`)
   return JSON.parse(ran.stdout.toString() || '[]') ?? []
 }
+/** A server's machines on Fly, by name and state; none when its app is gone. */
+const machinesOf = (serverId: string) =>
+  appExists(serverId)
+    ? (fly(['machines', 'list', '-a', appOf(serverId)]) as { name: string; state: string }[])
+    : []
 const appOf = (serverId: string) => `bly-prod-${serverId.replaceAll('-', '')}`
 const appExists = (serverId: string) =>
   (fly(['apps', 'list', '-o', FLY_ORG]) as { Name: string }[]).some((app) => app.Name === appOf(serverId))
+/** A server's live volumes on Fly; none when its app is gone. */
+const volumesOf = (serverId: string) =>
+  appExists(serverId)
+    ? (fly(['volumes', 'list', '-a', appOf(serverId)]) as { name: string; state: string }[]).filter(
+        (volume) => volume.state !== 'destroyed' && volume.state !== 'pending_destroy',
+      )
+    : []
 /** Machines and live volumes Fly holds for a server; none when its app is gone. */
 function heldBy(serverId: string): string[] {
-  if (!appExists(serverId)) return []
-  const machines = fly(['machines', 'list', '-a', appOf(serverId)]) as { name: string; state: string }[]
-  const volumes = (
-    fly(['volumes', 'list', '-a', appOf(serverId)]) as { name: string; state: string }[]
-  ).filter((volume) => volume.state !== 'destroyed' && volume.state !== 'pending_destroy')
-  return [...machines, ...volumes].map((held) => `${held.name} ${held.state}`)
+  return [...machinesOf(serverId), ...volumesOf(serverId)].map((held) => `${held.name} ${held.state}`)
 }
 
 // ─── The server, through the operators' API ──────────────────────────────────────────────────
@@ -106,6 +121,8 @@ interface View {
   activeOperation: { kind: string } | null
 }
 let server: View | null = null
+/** How its machine slept, as Fly shows it: `suspended` or `stopped`. */
+let sleptAs = ''
 const view = async () => (await api('GET', `/servers/${server?.id}`)) as View
 async function until(want: (v: View) => boolean, what: string, limitSeconds: number): Promise<View> {
   const deadline = Date.now() + limitSeconds * 1000
@@ -159,6 +176,32 @@ try {
     const took = await join(edge, address(), 'ProdCheck', 300_000)
     await until((v) => v.status === 'running', 'running', 300)
     return `${address()} on ${edge.host} answered in ${timed('join', took)}`
+  })
+
+  await step('sleeps when asked, its machine suspended and its volume kept', 300, async () => {
+    await api('POST', `/servers/${server?.id}/stop`)
+    await settledAs('stopped', 300)
+    const states = [...new Set(machinesOf(server?.id ?? '').map((machine) => machine.state))]
+    // Asleep is suspended while production suspends (FLY_SUSPEND), stopped while it doesn't.
+    must(
+      states.length === 1 && (states[0] === 'suspended' || states[0] === 'stopped'),
+      `Fly shows ${states.join(', ')}`,
+    )
+    sleptAs = states[0] ?? ''
+    must(volumesOf(server?.id ?? '').length > 0, 'Fly kept no volume for it')
+    return `its machine is ${sleptAs}`
+  })
+
+  await step('wakes when a player joins', 300, async () => {
+    const edge = await edgeFor(address())
+    const took = await join(edge, address(), 'ProdCheck', 300_000)
+    await settledAs('running', 300)
+    const waited = timed(`wake from sleep (machine ${sleptAs})`, took)
+    must(
+      sleptAs !== 'suspended' || took <= SUSPENDED_WAKE_LIMIT_MS,
+      `the player waited ${waited} to wake it from suspend, over ${seconds(SUSPENDED_WAKE_LIMIT_MS)}`,
+    )
+    return `the player waited ${waited}`
   })
 
   await step('stops when asked', 300, async () => {
