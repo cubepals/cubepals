@@ -69,6 +69,11 @@ proves it, and CI runs it on every `Move:` pull request.
 3. Work that isn't finished can still merge if nobody can reach it yet; that beats a branch that
    drifts for weeks.
 
+Each pull request gets comments from **cubepals**, the project's own bot: one with its checks (every
+part of CI, how many tests passed, and each failed test with its error), and, for a branch in this
+repository, one with its website preview. Both are edited in place as runs go, so the latest is
+always at the top of the same comment.
+
 `main` takes no force pushes and keeps a linear history.
 
 **Production** is the `production` branch, which only moves forward: a maintainer's
