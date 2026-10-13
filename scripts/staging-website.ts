@@ -6,12 +6,17 @@
  * staging.cubepals.com as the Cloudflare Worker `blockly-web-staging`: staging's values for
  * lib/web-worker.ts, and the two ways a commit reaches the Worker without the rest of staging.
  *
- *   bun scripts/staging-website.ts deploy        this checkout, built with staging's values and live
+ *   bun scripts/staging-website.ts deploy        this checkout, built with staging's values and live,
+ *                                                and the previews' router with it
  *   bun scripts/staging-website.ts preview <n>   this checkout as pull request <n>'s preview version,
- *                                                at pr-<n>-blockly-web-staging.<subdomain>.workers.dev
+ *                                                at pr-<n>.preview.cubepals.com
  *
  * The web-staging workflow runs both: deploy on each push to main, preview on each pull request
- * from this repository. `staging.ts up` deploys the Worker with the rest of staging, from
+ * from this repository. Cloudflare serves a preview version at its workers.dev alias alone,
+ * pr-<n>-blockly-web-staging.<subdomain>.workers.dev; the previews' router
+ * (apps/web/preview-router.ts) answers for its branded address, through the proxied wildcard
+ * record deploy keeps for it with CLOUDFLARE_API_TOKEN (DNS). A preview whose branded address
+ * doesn't answer yet is named by its alias. `staging.ts up` deploys the Worker with the rest of staging, from
  * stagingSite, and tells staging's control plane to trust the previews' addresses (previewOrigins).
  *
  * Neither command touches the control plane or the Worker's WEB_PROXY_SECRET: a version keeps the
@@ -21,14 +26,19 @@
  * `url` when there is one, and its version's id as `version`.
  */
 import { appendFileSync } from 'node:fs'
-import { zoneAccount } from './lib/cloudflare-dns.ts'
-import { buildWorker, deployWorker, uploadPreview, type WorkerSite } from './lib/web-worker.ts'
+import { pointRecord, zoneAccount } from './lib/cloudflare-dns.ts'
+import { buildWorker, deployRouter, deployWorker, uploadPreview, type WorkerSite } from './lib/web-worker.ts'
 
 /** As staging.ts names them: the control app on fly.dev, and the site's one address. */
 export const API = 'https://bly-staging-control.fly.dev'
 export const WEB = 'https://staging.cubepals.com'
 /** wrangler.jsonc's `staging` environment. */
 const WORKER = 'blockly-web-staging'
+/** Where the previews are, as apps/web/preview-router.jsonc routes them: `pr-<n>.` before it. */
+export const PREVIEW_DOMAIN = 'preview.cubepals.com'
+
+/** A pull request's branded preview address; `*` for the pattern they all match. */
+export const brandedPreview = (pull: string) => `https://pr-${pull}.${PREVIEW_DOMAIN}`
 
 type Cloudflare = WorkerSite['cloudflare']
 
@@ -61,11 +71,22 @@ export function stagingSite(cloudflare: Cloudflare, proxySecret?: string): Worke
   }
 }
 
-/** The pattern every pull request's preview address matches, under the account's workers.dev subdomain. */
-export const previewPattern = (subdomain: string) => `https://pr-*-${WORKER}.${subdomain}.workers.dev`
+/** What follows `pr-<n>` in a preview's alias, on the account's workers.dev subdomain. */
+export const aliasSuffix = (subdomain: string) => `-${WORKER}.${subdomain}.workers.dev`
 
-/** WEB_TRUSTED_ORIGINS for staging's control plane: the previews, on the account's own subdomain. */
-export async function previewOrigins(cloudflare: Cloudflare): Promise<string> {
+/** The pattern every pull request's preview alias matches, under the account's workers.dev subdomain. */
+export const previewPattern = (subdomain: string) => `https://pr-*${aliasSuffix(subdomain)}`
+
+/**
+ * WEB_TRUSTED_ORIGINS for staging's control plane: the previews at their branded addresses, and at
+ * their aliases on the account's own subdomain.
+ */
+export async function previewOrigins(cloudflare: Cloudflare): Promise<string[]> {
+  return [brandedPreview('*'), previewPattern(await workersSubdomain(cloudflare))]
+}
+
+/** The account's workers.dev subdomain, which the previews' aliases are under. */
+async function workersSubdomain(cloudflare: Cloudflare): Promise<string> {
   const response = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${cloudflare.accountId}/workers/subdomain`,
     { headers: { authorization: `Bearer ${cloudflare.token}` } },
@@ -74,7 +95,19 @@ export async function previewOrigins(cloudflare: Cloudflare): Promise<string> {
   const subdomain = answer.result?.subdomain
   if (!answer.success || !subdomain)
     throw new Error('Cloudflare named no workers.dev subdomain for the account')
-  return previewPattern(subdomain)
+  return subdomain
+}
+
+/** Whether a preview answers at an address within a minute: a new branded one may take that long. */
+async function answers(url: string): Promise<boolean> {
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    const response = await fetch(`${url}/robots.txt`, { signal: AbortSignal.timeout(10_000) }).catch(
+      () => null,
+    )
+    if (response?.ok) return true
+    await Bun.sleep(5000)
+  }
+  return false
 }
 
 const head = () => Bun.spawnSync(['git', 'rev-parse', 'HEAD']).stdout.toString().trim()
@@ -84,22 +117,39 @@ async function deploy(): Promise<void> {
   const sha = head()
   buildWorker(site, sha, say)
   deployWorker(site, sha, say)
+  const suffix = aliasSuffix(await workersSubdomain(site.cloudflare))
+  deployRouter(site, { PREVIEW_DOMAIN, PREVIEW_SUFFIX: suffix }, say)
+  const dns = process.env.CLOUDFLARE_API_TOKEN
+  if (!dns) {
+    say(`No CLOUDFLARE_API_TOKEN (DNS): *.${PREVIEW_DOMAIN} is left as it is.`)
+    return
+  }
+  // Answered by the router's route alone, so it points nowhere: Cloudflare's convention for that.
+  await pointRecord(dns, 'cubepals.com', {
+    type: 'AAAA',
+    name: `*.${PREVIEW_DOMAIN}`,
+    content: '100::',
+    proxied: true,
+  })
 }
 
 async function preview(pull: string | undefined): Promise<void> {
   if (!pull || !/^[1-9]\d*$/.test(pull)) throw new Error('Name the pull request by its number')
-  const site = stagingSite(await stagingCloudflare())
+  const branded = brandedPreview(pull)
+  const site = { ...stagingSite(await stagingCloudflare()), forwardedHost: new URL(branded).host }
   const sha = head()
   buildWorker(site, sha, say)
-  const { url, version } = uploadPreview(site, sha, `pr-${pull}`)
+  const { url: alias, version } = uploadPreview(site, sha, `pr-${pull}`)
   if (version !== undefined && process.env.GITHUB_OUTPUT)
     appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`)
-  if (url === undefined) {
+  if (alias === undefined) {
     say(
       `Uploaded, but ${WORKER} has preview URLs off: a deploy with wrangler.jsonc's preview_urls turns them on.`,
     )
     return
   }
+  const url = (await answers(branded)) ? branded : alias
+  if (url === alias) say(`${branded} doesn't answer yet, so the preview is named by its alias.`)
   say(`Pull request ${pull}'s preview: ${url}`)
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `url=${url}\n`)
 }

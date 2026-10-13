@@ -2,10 +2,19 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/** Staging's website and its previews: values, trusted addresses, the router's routes, the upload. */
 import { describe, expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { originAllowed } from '../apps/control/src/interfaces/http/origins.ts'
 import { previewUpload } from './lib/web-worker.ts'
-import { previewPattern, stagingSite } from './staging-website.ts'
+import {
+  aliasSuffix,
+  brandedPreview,
+  PREVIEW_DOMAIN,
+  previewPattern,
+  stagingSite,
+} from './staging-website.ts'
 
 const CLOUDFLARE = { token: 'stand-in', accountId: 'stand-in' }
 
@@ -30,6 +39,24 @@ describe("staging's website and its previews", () => {
     expect(matches('https://pr-12-blockly-web-staging.team.workers.dev')).toBe(true)
     expect(matches('https://pr-12-blockly-web.team.workers.dev')).toBe(false)
     expect(matches('https://pr-12-blockly-web-staging.other.workers.dev')).toBe(false)
+  })
+
+  test("trusts every pull request's branded address, and only those", () => {
+    const pattern = brandedPreview('*')
+    expect(pattern).toBe('https://pr-*.preview.cubepals.com')
+    expect(brandedPreview('12')).toBe('https://pr-12.preview.cubepals.com')
+    const matches = (origin: string) => originAllowed(origin, [pattern])
+    expect(matches('https://pr-12.preview.cubepals.com')).toBe(true)
+    expect(matches('https://preview.cubepals.com')).toBe(false)
+    expect(matches('https://pr-12.preview.cubepals.com.example')).toBe(false)
+    expect(previewPattern('team')).toBe(`https://pr-*${aliasSuffix('team')}`)
+  })
+
+  test("routes the previews' router where the previews are", () => {
+    const config = readFileSync(join(import.meta.dir, '../apps/web/preview-router.jsonc'), 'utf8')
+    const routes = (JSON.parse(config.replace(/^\s*\/\/.*$/gm, '')) as { routes: { pattern: string }[] })
+      .routes
+    expect(routes.map((route) => route.pattern)).toEqual([PREVIEW_DOMAIN, `*.${PREVIEW_DOMAIN}/*`])
   })
 
   test("reads the preview's address and version from wrangler's output file", () => {

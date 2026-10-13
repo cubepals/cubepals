@@ -272,10 +272,18 @@ which the project's charts leave out.
 | `POSTHOG_PERSONAL_API_KEY`, `POSTHOG_PROJECT_ID` | — | production, once an operator adds them: a personal API key with error tracking write, and the project's id. With both, the build uploads its source maps to PostHog and deletes them (`apps/web/scripts/sourcemaps.ts`); without, it skips that | `production.env`, then production's Worker build only (never Terraform) |
 | `WEB_CANONICAL_ORIGIN`, `WEB_INDEXABLE` | as the control plane's; `WEB_INDEXABLE` empty | the site's address; `WEB_INDEXABLE=1` in production alone, from `web.indexable` | The Worker's build (robots, the sitemap) and vars |
 | `WEB_CLIENT_ADDRESS_HEADER` | empty | `cf-connecting-ip`, which Cloudflare's edge sets and overwrites. Empty, no address is sent | The Worker's deploy, as a var |
+| `WEB_FORWARDED_HOST` | empty | empty; a pull request's preview alone: its branded host, `pr-<n>.preview.cubepals.com`, which the previews' router (`apps/web/preview-router.ts`) says in `x-forwarded-host`. The `/api` calls of a request saying it tell the control plane that host | The preview's upload (`scripts/staging-website.ts`), as a var |
 
 Production's Worker is `blockly-web`, deployed by `scripts/production.ts`; staging's is
 `blockly-web-staging` (`wrangler.jsonc`'s `staging` environment), deployed by `scripts/staging.ts`.
-Each is built with its environment's values and checked against them before it goes out.
+Each is built with its environment's values and checked against them before it goes out. A page's
+server render waits at most `RENDER_READ_MS` (`src/lib/upstream.ts`) on each answer from the
+control plane, and is sent without the ones that take longer.
+
+`blockly-web-previews` (`apps/web/preview-router.jsonc`) answers for `*.preview.cubepals.com`, each
+pull request's preview at its own address, and sends each request on to that preview's workers.dev
+alias. `scripts/staging-website.ts deploy` deploys it with staging's website and keeps its proxied
+wildcard record.
 
 ## Secrets
 

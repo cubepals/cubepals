@@ -1,0 +1,23 @@
+// The previews' router (preview-router.ts): pr-<n>.preview.cubepals.com to pull request <n>'s
+// preview of blockly-web-staging, deployed with staging's website by scripts/staging-website.ts,
+// which passes PREVIEW_DOMAIN, and PREVIEW_SUFFIX, the previews' workers.dev address after `pr-<n>`.
+// The routes name PREVIEW_DOMAIN too (scripts/staging-website.test.ts holds them to it).
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "blockly-web-previews",
+  "main": "preview-router.ts",
+  "compatibility_date": "2026-10-01",
+  // Its fetch() goes out to the public internet, where the previews' workers.dev aliases are: a
+  // Worker can't otherwise reach another Worker on the same account.
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    // A Custom Domain, so Cloudflare issues preview.cubepals.com a certificate that covers the names
+    // under it as well, which the zone's own certificate, one level deep, doesn't.
+    { "pattern": "preview.cubepals.com", "custom_domain": true },
+    // Each pull request's address, through the proxied wildcard record *.preview.cubepals.com.
+    { "pattern": "*.preview.cubepals.com/*", "zone_name": "cubepals.com" }
+  ],
+  "observability": { "enabled": true }
+}

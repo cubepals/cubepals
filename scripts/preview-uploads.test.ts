@@ -76,4 +76,6 @@ test('a preview origin names its pull request', () => {
   expect(PREVIEW_ORIGIN.exec(preview(123))?.[1]).toBe('123')
   expect(PREVIEW_ORIGIN.test(WEB)).toBe(false)
   expect(PREVIEW_ORIGIN.test(`${preview(1)}/sign-in`)).toBe(false)
+  expect(PREVIEW_ORIGIN.exec('https://pr-45.preview.cubepals.com')?.[1]).toBe('45')
+  expect(PREVIEW_ORIGIN.test('https://pr-45.preview.cubepals.com.evil.example')).toBe(false)
 })

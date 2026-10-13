@@ -15,7 +15,7 @@
  * add once a preview is up, remove when its pull request closes, and sweep each day and on each
  * push to main, which also puts back an origin two pull requests' runs raced each other for.
  * sweep reads the open pull requests with GH_TOKEN from REPO, and the previews' workers.dev
- * subdomain with CLOUDFLARE_WORKERS_API_TOKEN. Every other rule and origin stays as it was.
+ * subdomain with CLOUDFLARE_WORKERS_API_TOKEN; it keeps each preview's branded origin and its alias. Every other rule and origin stays as it was.
  *
  * `staging.ts up` keeps staging.cubepals.com in the rules with `allowing`, and gives the preview
  * environment a new bucket's keys with `sharePreviewKeys`. Nothing here prints a key. Not for the
@@ -33,8 +33,9 @@ export interface Bucket {
   secretAccessKey: string
 }
 
-/** A preview's origin, its pull request's number first. */
-export const PREVIEW_ORIGIN = /^https:\/\/pr-(\d+)-blockly-web-staging\.[a-z0-9-]+\.workers\.dev$/
+/** A preview's origin, branded or its alias, its pull request's number first. */
+export const PREVIEW_ORIGIN =
+  /^https:\/\/pr-(\d+)(?:\.preview\.cubepals\.com|-blockly-web-staging\.[a-z0-9-]+\.workers\.dev)$/
 
 /** An upload's PUT, its checks, and the ETag a multipart upload reads back. */
 const uploadRule = (origins: string[]): CORSRule => ({
@@ -198,8 +199,10 @@ if (import.meta.main) {
     say(changed ? `Pull request ${pull}'s preview may no longer upload worlds.` : 'Nothing to remove.')
   } else if (command === 'sweep') {
     const open = new Set(await openPulls(need('REPO')))
-    const pattern = await previewOrigins(await stagingCloudflare())
-    const origins = [...open].map((pull) => pattern.replaceAll('*', String(pull)))
+    const patterns = await previewOrigins(await stagingCloudflare())
+    const origins = patterns.flatMap((pattern) =>
+      [...open].map((pull) => pattern.replaceAll('*', String(pull))),
+    )
     const changed = await changeCors(bucket, (rules) =>
       allowing(
         closing(rules, (pull) => open.has(pull)),

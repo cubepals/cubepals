@@ -40,6 +40,8 @@ export interface WorkerSite {
   apiUpstream: string
   /** WEB_CANONICAL_ORIGIN: the site's one address. */
   canonicalOrigin: string
+  /** WEB_FORWARDED_HOST: a preview's branded address, which the previews' router reaches it by. */
+  forwardedHost?: string
   /** DEPLOYMENT_ID, by which every PostHog event says which environment built the page. */
   deploymentId: string
   /** Whether search engines may index it: production's alone. */
@@ -77,6 +79,7 @@ function runtimeVars(site: WorkerSite): Record<string, string> {
     WEB_CANONICAL_ORIGIN: site.canonicalOrigin,
     // Cloudflare sets and overwrites it with the address that reached its edge.
     WEB_CLIENT_ADDRESS_HEADER: 'cf-connecting-ip',
+    ...(site.forwardedHost ? { WEB_FORWARDED_HOST: site.forwardedHost } : {}),
     ...(site.indexable ? { WEB_INDEXABLE: '1' } : {}),
   }
 }
@@ -201,6 +204,29 @@ function sendVersion(
 export function deployWorker(site: WorkerSite, sha: string, say: (line: string) => void): void {
   sendVersion(site, sha, 'deploy')
   say(`${workerName(site)} is live from ${sha.slice(0, 8)}.`)
+}
+
+/**
+ * The previews' router (apps/web/preview-router.jsonc) deployed with its vars: which addresses are
+ * previews, and the aliases they stand for. Its routes go with it: wrangler makes what is missing.
+ */
+export function deployRouter(
+  site: WorkerSite,
+  vars: { PREVIEW_DOMAIN: string; PREVIEW_SUFFIX: string },
+  say: (line: string) => void,
+): void {
+  const result = spawnSync(
+    join(BIN, 'wrangler'),
+    [
+      'deploy',
+      '--config',
+      'preview-router.jsonc',
+      ...Object.entries(vars).flatMap(([name, value]) => ['--var', `${name}:${value}`]),
+    ],
+    { cwd: WEB, env: wranglerEnv(site), stdio: 'inherit' },
+  )
+  if (result.status !== 0) throw new Error(`The previews' router's deploy stopped (exit ${result.status}).`)
+  say("The previews' router is live.")
 }
 
 /** A preview as wrangler reports it: its version, and the alias's address when there is one. */

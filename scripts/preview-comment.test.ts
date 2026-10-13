@@ -26,7 +26,7 @@ describe('previewComment', () => {
     expect(body).toContain('| **Updated** | 2026-10-11 14:02 UTC |')
     expect(body).toContain(`[Workflow run](${base.runUrl})`)
     expect(body).toContain('| **Version** | `abcd-1234` |')
-    expect(body).toContain('Staging is running.')
+    expect(body).toContain('Staging’s API answers, so signing in on the preview works.')
   })
 
   test('while building: no address yet, no version, and staging stopped', () => {
@@ -34,8 +34,9 @@ describe('previewComment', () => {
     expect(body).toContain('| **Status** | **🔨 Building** |')
     expect(body).toContain('| **Preview** | — |')
     expect(body).not.toContain('Version')
+    expect(body).toContain('Staging’s API didn’t answer yet. It wakes when the preview is opened.')
     expect(body).toContain(
-      'Staging is stopped. To sign in on the preview, a maintainer starts it: [run Staging](https://github.com/cubepals/cubepals/actions/workflows/staging.yml).',
+      'Mail and game servers need all of staging, which a maintainer starts: [run Staging](https://github.com/cubepals/cubepals/actions/workflows/staging.yml).',
     )
   })
 })

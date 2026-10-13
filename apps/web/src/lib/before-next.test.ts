@@ -79,6 +79,19 @@ describe('a call to /api goes to the control plane as it is', () => {
     expect(sent?.headers.get('x-forwarded-proto')).toBe('https')
   })
 
+  test('a preview says its branded address only when the request came from there', () => {
+    const alias = 'https://pr-7-blockly-web-staging.team.workers.dev/api/auth/sign-in/social'
+    const via = (host: string) =>
+      toControlPlane(new Request(alias, { headers: { 'x-forwarded-host': host } }))?.headers.get(
+        'x-forwarded-host',
+      )
+    process.env = { ...saved, API_UPSTREAM: 'https://bly-staging-control.fly.dev' }
+    expect(via('pr-7.preview.cubepals.com')).toBe('pr-7-blockly-web-staging.team.workers.dev')
+    process.env.WEB_FORWARDED_HOST = 'pr-7.preview.cubepals.com'
+    expect(via('pr-7.preview.cubepals.com')).toBe('pr-7.preview.cubepals.com')
+    expect(via('elsewhere.example')).toBe('pr-7-blockly-web-staging.team.workers.dev')
+  })
+
   test('a body goes with it', async () => {
     upstream()
     const sent = toControlPlane(

@@ -1,0 +1,69 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * The Worker `blockly-web-previews` (preview-router.jsonc), which puts each pull request's preview
+ * of staging's website at pr-<n>.preview.cubepals.com. A preview is a version of
+ * blockly-web-staging that isn't live, and Cloudflare serves such a version at its workers.dev alias
+ * alone, so this sends each request on to that alias (PREVIEW_SUFFIX, after `pr-<n>`) and its
+ * answer back. The deploy (scripts/staging-website.ts) gives it both PREVIEW_DOMAIN and the suffix.
+ *
+ * The preview is told the address the browser used (x-forwarded-host), which it believes for its
+ * own branded address alone (before-next.ts), so sign-in, its cookies and its redirects stay on
+ * that address. A redirect that names the alias names the branded address instead. Every answer
+ * keeps search engines out. Not for staging.cubepals.com or production, which reach their Workers
+ * by their own routes.
+ */
+
+interface Env {
+  /** Where the previews are: `pr-<n>.` before it for each pull request. */
+  PREVIEW_DOMAIN: string
+  /** What follows `pr-<n>` in a preview's workers.dev alias. */
+  PREVIEW_SUFFIX: string
+}
+
+/** The workers.dev alias a branded host stands for, or null for any other host. */
+export function aliasOf(host: string, env: Env): string | null {
+  const [, pull, domain] = /^pr-([1-9]\d*)\.(.+)$/.exec(host) ?? []
+  return pull === undefined || domain !== env.PREVIEW_DOMAIN
+    ? null
+    : `https://pr-${pull}${env.PREVIEW_SUFFIX}`
+}
+
+/** The request the alias gets: the browser's, saying which address it was sent to. */
+export function toAlias(request: Request, alias: string): Request {
+  const url = new URL(request.url)
+  const headers = new Headers(request.headers)
+  headers.delete('host')
+  headers.set('x-forwarded-host', url.host)
+  headers.set('x-forwarded-proto', 'https')
+  const bodyless = request.method === 'GET' || request.method === 'HEAD'
+  return new Request(`${alias}${url.pathname}${url.search}`, {
+    method: request.method,
+    headers,
+    body: bodyless ? null : request.body,
+    redirect: 'manual',
+    ...(bodyless ? {} : { duplex: 'half' }),
+  } as RequestInit)
+}
+
+/** The alias's answer as the browser gets it: on the branded address, and kept out of search. */
+export function fromAlias(response: Response, alias: string, branded: string): Response {
+  const answer = new Response(response.body, response)
+  const location = answer.headers.get('location')
+  if (location?.startsWith(`${alias}/`) || location === alias)
+    answer.headers.set('location', `${branded}${location.slice(alias.length)}`)
+  answer.headers.set('x-robots-tag', 'noindex')
+  return answer
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const branded = new URL(request.url).origin
+    const alias = aliasOf(new URL(request.url).hostname, env)
+    if (alias === null)
+      return new Response('No preview here.', { status: 404, headers: { 'x-robots-tag': 'noindex' } })
+    return fromAlias(await fetch(toAlias(request, alias)), alias, branded)
+  },
+}

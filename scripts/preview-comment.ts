@@ -5,8 +5,9 @@
 /**
  * The one comment on a pull request that names its website preview (web-staging.yml): its state,
  * its address and the pages worth opening, the commit, the run, the Worker's version, and whether
- * staging's control plane answers right now, which signing in on a preview needs, with a link to
- * start it that only maintainers can use (staging.yml).
+ * staging's control plane answers right now, which signing in on a preview needs. While staging is
+ * stopped its API wakes on a request (lib/control-wake.ts), the preview's included; mail and game
+ * servers need all of it, which a link starts that only maintainers can use (staging.yml).
  *
  *   bun scripts/preview-comment.ts building | ready | failed
  *
@@ -72,8 +73,10 @@ export function previewComment(preview: Preview): string {
     ...body,
     '',
     preview.stagingUp
-      ? 'Staging is running.'
-      : `Staging is stopped. To sign in on the preview, a maintainer starts it: [run Staging](https://github.com/${preview.repo}/actions/workflows/staging.yml).`,
+      ? 'Staging’s API answers, so signing in on the preview works.'
+      : 'Staging’s API didn’t answer yet. It wakes when the preview is opened.',
+    '',
+    `Mail and game servers need all of staging, which a maintainer starts: [run Staging](https://github.com/${preview.repo}/actions/workflows/staging.yml).`,
     '',
   ].join('\n')
 }

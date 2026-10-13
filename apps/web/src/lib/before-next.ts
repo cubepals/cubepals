@@ -14,7 +14,8 @@
  * - a call to /api goes to the control plane as it is, and its answer comes back as it is
  *   (toControlPlane). next.config.ts's rewrite does the same in development and the self-hosted
  *   image, but on the Worker it follows redirects itself, so sign-in's last redirect, the one that
- *   sets the session cookie, never reached the browser.
+ *   sets the session cookie, never reached the browser. A pull request's preview reached through
+ *   the previews' router (preview-router.ts) tells it the branded address the browser used.
  */
 import { CLAIMED, clientAddressHeaders } from './client-address'
 import { canonicalOrigin } from './site'
@@ -42,15 +43,18 @@ const API = /^\/api\//
 /**
  * The request to send the control plane for a call to /api, or null for anything else. Its
  * redirects are the browser's to follow (`redirect: 'manual'`), and it is told the site's own host
- * and scheme, as the rewrite tells it.
+ * and scheme, as the rewrite tells it. A preview given WEB_FORWARDED_HOST, its branded address,
+ * says that host instead when the request says it came from there: no other claim is believed.
  */
 export function toControlPlane(request: Request): Request | null {
   const url = new URL(request.url)
   if (!API.test(url.pathname)) return null
+  const branded = process.env.WEB_FORWARDED_HOST
+  const viaRouter = branded !== undefined && request.headers.get('x-forwarded-host') === branded
   const headers = new Headers(request.headers)
   headers.delete('host')
-  headers.set('x-forwarded-host', url.host)
-  headers.set('x-forwarded-proto', url.protocol.replace(':', ''))
+  headers.set('x-forwarded-host', viaRouter ? branded : url.host)
+  headers.set('x-forwarded-proto', viaRouter ? 'https' : url.protocol.replace(':', ''))
   const bodyless = request.method === 'GET' || request.method === 'HEAD'
   return new Request(`${apiUpstream()}${url.pathname}${url.search}`, {
     method: request.method,

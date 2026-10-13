@@ -12,6 +12,7 @@
     "next-env.d.ts",
     "next.config.ts",
     "worker.ts",
+    "preview-router.ts",
     "open-next.config.ts",
     "src/**/*.ts",
     "src/**/*.tsx",

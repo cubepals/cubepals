@@ -40,9 +40,16 @@
     },
     "apps/web": {
       // The design tokens' generator, run by hand; the Worker's entry, which wrangler.jsonc names;
-      // and OpenNext's config, which its build reads.
-      "entry": ["scripts/tokens.ts", "worker.ts", "open-next.config.ts"],
-      "project": ["src/**/*.{ts,tsx}", "scripts/**/*.ts", "worker.ts", "open-next.config.ts"]
+      // the previews' router, which preview-router.jsonc names; and OpenNext's config, which its
+      // build reads.
+      "entry": ["scripts/tokens.ts", "worker.ts", "preview-router.ts", "open-next.config.ts"],
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "scripts/**/*.ts",
+        "worker.ts",
+        "preview-router.ts",
+        "open-next.config.ts"
+      ]
     },
     "packages/db": {
       "project": ["src/**/*.ts"]
