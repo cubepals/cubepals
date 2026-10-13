@@ -6,7 +6,9 @@ name: PR title
 
 # Pull requests are squash-merged, so the title becomes the commit on main: it says the change in
 # 50 characters or fewer (scripts/check-subject.ts, which the commit-msg hook runs too). A retitle
-# runs it again. Dependabot's and other bots' titles are theirs to write.
+# runs it again. The title and body name nobody by accident either (scripts/check-mentions.ts), since
+# the body becomes the commit's and commits turn any at-sign name into a mention. Dependabot's and
+# other bots' pull requests are theirs to write.
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
@@ -30,3 +32,8 @@ jobs:
       - run: bun run scripts/check-subject.ts --title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
+      - name: Mentions nobody
+        run: bun run scripts/check-mentions.ts --pr
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}

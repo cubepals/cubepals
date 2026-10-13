@@ -3,8 +3,10 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 # Git hooks, installed by `bun install` (package.json's prepare). CI checks the pull request title
-# with the same script, since that title becomes the commit on main.
+# and body with the same scripts, since they become the commit on main.
 commit-msg:
   commands:
     subject:
       run: bun run scripts/check-subject.ts {1}
+    mentions:
+      run: bun run scripts/check-mentions.ts {1}
