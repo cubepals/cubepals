@@ -22,4 +22,22 @@ describe('browser events', () => {
     expect(ENVIRONMENT).toBe('development')
     expect(stamped(null)).toBeNull()
   })
+
+  test('page addresses leave without their query, so an email in one never does', () => {
+    const out = stamped({
+      event: '$pageview',
+      properties: {
+        $current_url: 'https://cubepals.com/check-email?email=steve%40example.test',
+        $referrer: 'https://example.test/path?token=abc#top',
+        $prev_pageview_url: 'https://cubepals.com/sign-up',
+        utm_source: 'news',
+      },
+    })
+    expect(out?.properties.$current_url).toBe('https://cubepals.com/check-email')
+    expect(out?.properties.$referrer).toBe('https://example.test/path')
+    expect(out?.properties.$prev_pageview_url).toBe('https://cubepals.com/sign-up')
+    expect(out?.properties.utm_source).toBe('news')
+    expect(JSON.stringify(out)).not.toContain('example.test?')
+    expect(JSON.stringify(out)).not.toContain('steve')
+  })
 })

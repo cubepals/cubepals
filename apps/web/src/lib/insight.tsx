@@ -59,10 +59,23 @@ export function Insight() {
   return null
 }
 
-/** An event on its way out: marked with this build's environment, and with no address on it. */
+/** Page addresses an event carries; their query can hold an email or a token, so it never leaves. */
+const ADDRESSES = ['$current_url', '$referrer', '$initial_referrer', '$prev_pageview_url'] as const
+
+/** An address without its query or fragment; anything that isn't a string is left as it is. */
+function bare(address: unknown): unknown {
+  return typeof address === 'string' ? address.replace(/[?#].*$/, '') : address
+}
+
+/**
+ * An event on its way out: marked with this build's environment, with no IP address, and with page
+ * addresses cut to their path (sign-up's `/check-email?email=...` among them). Campaign tags are
+ * read from the query before this, so they still arrive as their own properties.
+ */
 export function stamped<T extends { properties: Record<string, unknown> }>(event: T | null): T | null {
   if (event === null) return null
   const { $ip: _address, ...properties } = event.properties
+  for (const key of ADDRESSES) if (key in properties) properties[key] = bare(properties[key])
   return { ...event, properties: { ...properties, environment: ENVIRONMENT } }
 }
 
