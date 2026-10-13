@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The Terms of Service: the agreement between a player and the person who runs Cubepals. Every
+ * The Terms of Service: the agreement between a player and Cubepals. Every
  * promise in it is one the product keeps today; plan facts come from `figures.ts`. Payment terms
  * in detail are the Refunds page's, and what may be run or published is the Acceptable Use page's.
  */
@@ -24,7 +24,7 @@ import type { Policy } from './policy'
 export const TERMS: Policy = {
   slug: 'terms',
   title: 'Terms of Service',
-  description: 'The agreement between you and the person who runs {brand}.',
+  description: 'The agreement between you and {brand}.',
   summary: [
     'You must be 18 or over to have an account.',
     `Free costs nothing and includes ${FREE.totalHours} hours of play in all, at most ${FREE.hours} a day, counted from midnight where you are. ${PLUS.name} is ${dollars(PLUS.priceCents)} a month, or ${dollars(PLUS.yearPriceCents ?? 0)} for a year paid once, VAT included where it applies, and includes ${PLUS.hours} hours of play a month.`,
@@ -60,7 +60,7 @@ export const TERMS: Policy = {
         'People who only join someone’s server to play don’t need a {brand} account. The account holder who runs a server is responsible for who they invite to it.',
         'If we learn that an account belongs to someone under 18, we will suspend it and email the address on the account. If it was a mistake, reply within 14 days and show us. Otherwise we close the account, offer a download of its worlds where we can, and delete it as our [Privacy Policy](/legal/privacy#retention) says. If the account paid for a plan, we refund the payment for the period it was in.',
         'Keep your password safe and don’t share your account. You are responsible for what happens under your account unless it was used without your permission and you couldn’t reasonably have stopped it. Tell us at {support} straight away if you think someone else has access.',
-        'Use a real email address you read. We use it for things you need to know: confirming your account, resetting your password, warnings about your play time, and warnings before a world is deleted.',
+        'Use a real email address you read. We use it for things you need to know: confirming your account, resetting your password, warnings about your play time, and warnings before a world is deleted. Now and then we may also write to you personally, to ask how it’s going. We don’t send marketing.',
         'One account per person. Don’t create extra accounts to get more free hours or servers.',
       ],
     },
