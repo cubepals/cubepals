@@ -87,9 +87,14 @@ describe('a call to /api goes to the control plane as it is', () => {
       )
     process.env = { ...saved, API_UPSTREAM: 'https://bly-staging-control.fly.dev' }
     expect(via('pr-7.preview.cubepals.com')).toBe('pr-7-blockly-web-staging.team.workers.dev')
-    process.env.WEB_FORWARDED_HOST = 'pr-7.preview.cubepals.com'
+    process.env.WEB_FORWARDED_HOST = 'pr-7.preview.cubepals.com,b226b58.preview.cubepals.com'
     expect(via('pr-7.preview.cubepals.com')).toBe('pr-7.preview.cubepals.com')
+    expect(via('b226b58.preview.cubepals.com')).toBe('b226b58.preview.cubepals.com')
     expect(via('elsewhere.example')).toBe('pr-7-blockly-web-staging.team.workers.dev')
+    expect(via('pr-7.preview.cubepals.com,b226b58.preview.cubepals.com')).toBe(
+      'pr-7-blockly-web-staging.team.workers.dev',
+    )
+    expect(via('')).toBe('pr-7-blockly-web-staging.team.workers.dev')
   })
 
   test('a body goes with it', async () => {

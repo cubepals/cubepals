@@ -43,17 +43,19 @@ const API = /^\/api\//
 /**
  * The request to send the control plane for a call to /api, or null for anything else. Its
  * redirects are the browser's to follow (`redirect: 'manual'`), and it is told the site's own host
- * and scheme, as the rewrite tells it. A preview given WEB_FORWARDED_HOST, its branded address,
- * says that host instead when the request says it came from there: no other claim is believed.
+ * and scheme, as the rewrite tells it. A preview given WEB_FORWARDED_HOST, its branded addresses
+ * (its pull request's and its commit's, a comma between them), says one of those hosts instead
+ * when the request says it came from there: no other claim is believed.
  */
 export function toControlPlane(request: Request): Request | null {
   const url = new URL(request.url)
   if (!API.test(url.pathname)) return null
-  const branded = process.env.WEB_FORWARDED_HOST
-  const viaRouter = branded !== undefined && request.headers.get('x-forwarded-host') === branded
+  const forwarded = request.headers.get('x-forwarded-host')
+  const branded = process.env.WEB_FORWARDED_HOST?.split(',') ?? []
+  const viaRouter = forwarded !== null && forwarded !== '' && branded.includes(forwarded)
   const headers = new Headers(request.headers)
   headers.delete('host')
-  headers.set('x-forwarded-host', viaRouter ? branded : url.host)
+  headers.set('x-forwarded-host', viaRouter ? forwarded : url.host)
   headers.set('x-forwarded-proto', viaRouter ? 'https' : url.protocol.replace(':', ''))
   const bodyless = request.method === 'GET' || request.method === 'HEAD'
   return new Request(`${apiUpstream()}${url.pathname}${url.search}`, {
