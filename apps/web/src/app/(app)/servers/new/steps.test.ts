@@ -4,14 +4,17 @@
 
 /**
  * What the create page reports, with a mock standing in for posthog-js's capture: a choice once
- * its field settles, never the name's text, and where a view stopped when it leaves.
+ * its field settles, never the name's text, where a view stopped when it leaves, and what it did
+ * on the page besides choosing.
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
-import { CREATE_EVENTS, choicesOf, createSteps } from './steps.ts'
+import { CREATE_EVENTS, choicesOf, createSteps, missingOf } from './steps.ts'
 
 const sent = mock((_event: string, _properties: Record<string, unknown>, _leaving?: boolean) => {})
 
 const SETTLE = 20
+/** What `create_left` adds for a view that pressed, typed and scrolled nothing. */
+const NOTHING_ELSE = { presses: 0, typed: false, ready: false, furthest_seen: 'play' }
 const settled = () => Bun.sleep(SETTLE * 3)
 const events = () => sent.mock.calls.map(([event, properties]) => ({ event, properties }))
 
@@ -76,7 +79,7 @@ describe('the create page reports', () => {
       { event: CREATE_EVENTS.chose, properties: { field: 'play', kind: 'template', key: 'survival' } },
       { event: CREATE_EVENTS.chose, properties: { field: 'size', value: '5' } },
       { event: CREATE_EVENTS.chose, properties: { field: 'region', value: 'eu' } },
-      { event: CREATE_EVENTS.left, properties: { last_step: 'size', seconds: 27 } },
+      { event: CREATE_EVENTS.left, properties: { last_step: 'size', seconds: 27, ...NOTHING_ELSE } },
     ])
     // Sent as the page goes, by the transport that outlives it (lib/insight.tsx).
     expect(sent.mock.calls.at(-1)?.[2]).toBe(true)
@@ -88,7 +91,7 @@ describe('the create page reports', () => {
     steps.left()
     expect(events()).toEqual([
       { event: CREATE_EVENTS.opened, properties: { first_server: true } },
-      { event: CREATE_EVENTS.left, properties: { last_step: 'opened', seconds: 0 } },
+      { event: CREATE_EVENTS.left, properties: { last_step: 'opened', seconds: 0, ...NOTHING_ELSE } },
     ])
   })
 
@@ -107,5 +110,107 @@ describe('the create page reports', () => {
       [CREATE_EVENTS.refused, { code: 'other' }],
       [CREATE_EVENTS.done, { seconds: 0 }],
     ])
+  })
+})
+
+describe('what a view does besides choosing', () => {
+  beforeEach(() => sent.mockClear())
+
+  test('a view that only read: how far it saw, that it pressed and typed nothing, and for how long', () => {
+    const { steps, after } = view()
+    steps.seen('button', false)
+    after(4_000)
+    steps.seen('size', false)
+    steps.seen('size', false)
+    after(8_000)
+    steps.left()
+    expect(events()).toEqual([
+      { event: CREATE_EVENTS.seen, properties: { what: 'button', seconds: 0, ready: false } },
+      { event: CREATE_EVENTS.seen, properties: { what: 'size', seconds: 4 } },
+      {
+        event: CREATE_EVENTS.left,
+        properties: {
+          last_step: 'opened',
+          seconds: 12,
+          presses: 0,
+          typed: false,
+          ready: false,
+          furthest_seen: 'size',
+        },
+      },
+    ])
+  })
+
+  test('presses that choose nothing: only the listed ones are named, every one is counted', () => {
+    const { steps } = view()
+    steps.touched()
+    steps.acted('more_opened')
+    steps.touched()
+    steps.acted('packs_opened')
+    steps.acted('someone typed this')
+    steps.acted(undefined)
+    steps.typed()
+    steps.left()
+    expect(events()).toEqual([
+      { event: CREATE_EVENTS.acted, properties: { action: 'more_opened' } },
+      { event: CREATE_EVENTS.acted, properties: { action: 'packs_opened' } },
+      {
+        event: CREATE_EVENTS.left,
+        properties: {
+          last_step: 'opened',
+          seconds: 0,
+          presses: 2,
+          typed: true,
+          ready: false,
+          furthest_seen: 'play',
+        },
+      },
+    ])
+  })
+
+  test('the button: pressed before it could be, with what was missing, then ready once', () => {
+    const { steps, after } = view()
+    steps.unready(['play', 'name'])
+    steps.unready([])
+    after(30_000)
+    steps.ready(true)
+    steps.ready(false)
+    steps.ready(true)
+    steps.left()
+    expect(events().map(({ event, properties }) => [event, properties])).toEqual([
+      [CREATE_EVENTS.unready, { missing: 'play,name' }],
+      [CREATE_EVENTS.ready, { seconds: 30 }],
+      [
+        CREATE_EVENTS.left,
+        { last_step: 'opened', seconds: 30, presses: 0, typed: false, ready: true, furthest_seen: 'play' },
+      ],
+    ])
+  })
+
+  test('nothing more once the server is made', () => {
+    const { steps } = view()
+    steps.done()
+    sent.mockClear()
+    steps.acted('more_opened')
+    steps.seen('name', true)
+    steps.ready(true)
+    steps.unready(['name'])
+    expect(events()).toEqual([])
+  })
+
+  test('what stands in the way of the button, by the page’s own rule', () => {
+    const none = { from: null, name: '', preview: { error: null } }
+    expect(missingOf(none, false)).toEqual(['play', 'size', 'name'])
+    expect(missingOf(none, true)).toEqual(['play', 'name'])
+    const survival = { kind: 'template', key: 'survival' } as const
+    const needsPlus = { data: { size: { allowed: false } }, error: null } as unknown as Parameters<
+      typeof missingOf
+    >[0]['preview']
+    expect(missingOf({ from: survival, name: 'Sunset', preview: needsPlus }, true)).toEqual(['plan'])
+    expect(missingOf({ from: survival, name: ' ', preview: { error: new Error('x') } }, true)).toEqual([
+      'name',
+      'check',
+    ])
+    expect(missingOf({ from: survival, name: 'Sunset', preview: { error: null } }, true)).toEqual([])
   })
 })

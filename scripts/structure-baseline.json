@@ -1273,7 +1273,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/(app)/servers/new/page.tsx › function CreateServer": {
-      "n": 353,
+      "n": 347,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/design/page.tsx › function DesignGallery": {

@@ -37,6 +37,8 @@ export function Part({
       className={`bk-enter ${styles.part}`}
       style={{ '--i': index } as CSSProperties}
       data-closed={!open || undefined}
+      // How the create page tells its parts apart as they come into view (watching.ts).
+      data-part
       aria-labelledby={heading}
     >
       <h2 id={heading} className={`type-heading-md ${styles.partTitle}`}>

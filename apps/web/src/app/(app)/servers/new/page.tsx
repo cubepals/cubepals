@@ -42,7 +42,7 @@ import { previewOf } from './preview'
 import { useRegion } from './region'
 import { ReleasePick } from './release'
 import { useCreate } from './sending'
-import { useSteps } from './steps'
+import { createMark, useSteps } from './steps'
 import { curatedPicture, type Picture, packPicture, Thumb, wayPicture } from './thumb'
 import { Ways } from './ways'
 
@@ -159,7 +159,7 @@ function CreateServer() {
   // and sends usable first.
   const { atLimit, limitCode, moreServers } = usePlanLimit(replace)
   // Where people stop: what they chose and what stood in the way, never what they typed.
-  useSteps({ from, partySize, region: region.picked, name, temporary, preview, refused, create })
+  const page = useSteps({ from, partySize, region: region.picked, name, temporary, preview, refused, create })
 
   // A question opens once the ones before it are answered, and not before the page knows
   // whether it asks who is playing at all.
@@ -355,7 +355,7 @@ function CreateServer() {
   }
 
   return (
-    <form className={styles.page} onSubmit={submit}>
+    <form ref={page} className={styles.page} onSubmit={submit}>
       <h1 className={`type-display-md bk-enter ${styles.title}`}>Create a server</h1>
 
       {replacing.data && (
@@ -394,20 +394,13 @@ function CreateServer() {
           ) : null
         ) : picking === 'packs' ? (
           <div key="packs" className={styles.swap}>
-            <div>
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={<ArrowLeft size={16} strokeWidth={1.75} aria-hidden />}
-                onClick={() => {
-                  setRefused(null)
-                  setCameBack(true)
-                  setPicking('ways')
-                }}
-              >
-                Other ways to play
-              </Button>
-            </div>
+            <BackToWays
+              onBack={() => {
+                setRefused(null)
+                setCameBack(true)
+                setPicking('ways')
+              }}
+            />
             <Modpacks
               picked={picked?.projectId ?? (from?.kind === 'modpack' ? from.projectId : null)}
               pickedVersion={from?.kind === 'modpack' ? (from.versionId ?? null) : null}
@@ -424,20 +417,13 @@ function CreateServer() {
           </div>
         ) : picking === 'upload' ? (
           <div key="upload" className={styles.swap}>
-            <div>
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={<ArrowLeft size={16} strokeWidth={1.75} aria-hidden />}
-                onClick={() => {
-                  setRefused(null)
-                  setCameBack(true)
-                  setPicking('ways')
-                }}
-              >
-                Other ways to play
-              </Button>
-            </div>
+            <BackToWays
+              onBack={() => {
+                setRefused(null)
+                setCameBack(true)
+                setPicking('ways')
+              }}
+            />
             <PackDrop
               disabled={atLimit !== null}
               onStart={() => {
@@ -626,6 +612,23 @@ function CreateServer() {
         .
       </p>
     </form>
+  )
+}
+
+/** The way back from the packs or the upload to the list of ways to play. */
+function BackToWays({ onBack }: { onBack: () => void }) {
+  return (
+    <div>
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={<ArrowLeft size={16} strokeWidth={1.75} aria-hidden />}
+        onClick={onBack}
+        {...createMark('ways_back')}
+      >
+        Other ways to play
+      </Button>
+    </div>
   )
 }
 

@@ -21,8 +21,10 @@ import {
 } from '@blockly/contracts'
 import { ChevronDown } from 'lucide-react'
 import { type Ref, useEffect, useId, useState } from 'react'
+import { seenMark } from '../../../(public)/steps'
 import styles from './create.module.css'
 import { paidFor } from './modpacks'
+import { createMark } from './steps'
 import { curatedMeta, curatedPicture, wayPicture } from './thumb'
 import { Way } from './way'
 
@@ -87,6 +89,7 @@ export function Ways({
         busy={checking === one.key}
         disabled={locked || (fit !== null && why !== null && !paidFor(fit))}
         onPick={() => onTemplate(one.key)}
+        mark={lockedMark(fit)}
       />
     )
   }
@@ -109,6 +112,7 @@ export function Ways({
         busy={checking === `curated:${one.key}`}
         disabled={locked || (why !== null && !paidFor(one.fits))}
         onPick={() => onCurated(one.key)}
+        mark={lockedMark(one.fits)}
       />
     )
   }
@@ -123,6 +127,7 @@ export function Ways({
           aria-expanded={more}
           aria-controls={region}
           onClick={toggle}
+          {...createMark(more ? 'more_closed' : 'more_opened')}
         >
           <span className={styles.thumb} aria-hidden>
             <ChevronDown size={20} strokeWidth={2} className={styles.moreMark} />
@@ -157,6 +162,7 @@ export function Ways({
               busy={false}
               disabled={locked}
               onPick={onModpacks}
+              mark={createMark('packs_opened')}
             />
             {/* A pack they already have, as whatever file it came as: Cubepals works out which. */}
             <Way
@@ -168,6 +174,7 @@ export function Ways({
               busy={false}
               disabled={locked}
               onPick={onOwnPack}
+              mark={createMark('upload_opened')}
             />
           </div>
         </div>
@@ -175,6 +182,14 @@ export function Ways({
       </div>
     </>
   )
+}
+
+/**
+ * A way another plan runs is shown with that plan's reason in place of its line: a paid offer,
+ * counted as `section_seen` (`locked_` and the plan) the first time one comes into view.
+ */
+function lockedMark(fit: PlanFit | null) {
+  return fit !== null && !fit.allowed && fit.plan !== null ? seenMark(`locked_${fit.plan}`) : undefined
 }
 
 /**
@@ -230,7 +245,9 @@ function ServerTypes({
   ]
   return (
     <details>
-      <summary className="type-body-sm bk-disclosure">Picking mods yourself?</summary>
+      <summary className="type-body-sm bk-disclosure" {...createMark('server_types_opened')}>
+        Picking mods yourself?
+      </summary>
       <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)', marginBlockStart: 'var(--space-12)' }}>
         {types.map((one) => {
           const fit = fits(one.key)

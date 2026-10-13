@@ -15,6 +15,7 @@ import { messageOf, useTRPC } from '../../../../lib/api'
 import { useDebounced } from '../../../../lib/hooks'
 import { Note, Select, Skeleton, TextField } from '../../../../ui'
 import styles from './create.module.css'
+import { createMark, useSearchSteps } from './steps'
 import { packPicture, Thumb } from './thumb'
 
 /** Whether a paid plan runs what this plan doesn't: then it can be chosen, with that plan offered. */
@@ -74,6 +75,7 @@ export function Modpacks({
     ...trpc.servers.searchModpacks.queryOptions({ text: searching ? settled : '', limit: 8, offset: 0 }),
     placeholderData: (previous) => previous,
   })
+  useSearchSteps({ on: searching, words: settled, answer: packs }, { address: link, answer: linked })
   const found = link === null ? (packs.data ?? []) : []
   const versionRow = (hit: ModpackHit) =>
     picked === hit.projectId ? (
@@ -127,7 +129,12 @@ export function Modpacks({
         // server pack, downloaded from its CurseForge page, dropped here.
         <p className={`type-body-sm ${styles.quiet}`}>
           Nothing by that name here. Is it on CurseForge? Download its server pack from its page there, then{' '}
-          <button type="button" className="bk-linkbutton" onClick={onHaveFile}>
+          <button
+            type="button"
+            className="bk-linkbutton"
+            onClick={onHaveFile}
+            {...createMark('upload_opened')}
+          >
             drop it here
           </button>
           .
@@ -151,7 +158,7 @@ export function Modpacks({
       ))}
       <p className={`type-body-sm ${styles.quiet}`}>
         Have the pack as a file?{' '}
-        <button type="button" className="bk-linkbutton" onClick={onHaveFile}>
+        <button type="button" className="bk-linkbutton" onClick={onHaveFile} {...createMark('upload_opened')}>
           Drop it in instead
         </button>
         .
@@ -182,7 +189,7 @@ function LinkRefused({
           ·{' '}
         </>
       )}
-      <button type="button" className="bk-linkbutton" onClick={onHaveFile}>
+      <button type="button" className="bk-linkbutton" onClick={onHaveFile} {...createMark('upload_opened')}>
         Drop a file
       </button>
     </Note>
@@ -277,6 +284,7 @@ function Pack({
         aria-busy={busy || undefined}
         disabled={disabled || (why !== null && !paysFor)}
         onClick={onPick}
+        {...createMark('pack_pressed')}
       >
         <Thumb picture={packPicture(hit)} state={busy ? 'busy' : picked ? 'picked' : undefined} />
         <span className={styles.rowText}>

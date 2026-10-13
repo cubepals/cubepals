@@ -24,6 +24,7 @@ export function Way({
   busy,
   disabled,
   onPick,
+  mark,
   ref,
 }: {
   picture: Picture
@@ -37,6 +38,8 @@ export function Way({
   busy: boolean
   disabled: boolean
   onPick: () => void
+  /** The page's marks for the row: a press of it, or it coming into view (steps.ts). */
+  mark?: Readonly<Record<`data-${string}`, string>>
   ref?: Ref<HTMLButtonElement>
 }) {
   return (
@@ -48,6 +51,7 @@ export function Way({
       aria-busy={busy || undefined}
       disabled={disabled}
       onClick={onPick}
+      {...mark}
     >
       <Thumb picture={picture} state={busy ? 'busy' : picked ? 'picked' : undefined} />
       <span className={styles.rowText}>
