@@ -157,11 +157,12 @@ function safeName(name: string): string {
 const NEAR_DEATH = 16
 
 /**
- * Back near where they died, standing on the highest block there that isn't lava or fire, as
- * `spreadplayers` finds it in a column it picks at random: within a block first, then within
- * `NEAR_DEATH` blocks. In the Nether, under its bedrock roof (`under`, which older releases
- * refuse). Where they died over the void or in a lake of lava, the game finds nowhere and says so,
- * and `accepted` is false.
+ * Back near where they died, as `spreadplayers` finds it in a column it picks at random: within a
+ * block first, then within `NEAR_DEATH` blocks. Java's stands them on the column's highest non-air
+ * block, never on lava, water, a bubble column or fire (minecraft.wiki, Commands/spreadplayers).
+ * In the Nether, under its bedrock roof (`under`, which older releases refuse). Where they died
+ * over the void or in a lake of lava, the game finds nowhere and says so, and `accepted` is false.
+ * What else is no place to stand, `safeFooting` asks after.
  */
 export function teleportNearDeath(name: string, death: Place): string[] {
   const player = safeName(name)
@@ -170,6 +171,54 @@ export function teleportNearDeath(name: string, death: Place): string[] {
     (range) =>
       `execute in ${death.dimension} run spreadplayers ${death.x + 0.5} ${death.z + 0.5} 0 ${range}${under} false ${player}`,
   )
+}
+
+/**
+ * Blocks `spreadplayers` will stand a player on that hurt, trap or carry them off: magma burns,
+ * cactus and berry bushes prick, powder snow freezes, a wither rose withers, a campfire or a lava
+ * cauldron burns, a dripstone spike pierces, and a portal takes them elsewhere. Bedrock's own
+ * spreadplayers turns down the same magma, roses, campfires, bushes and portals (minecraft.wiki);
+ * Java's doesn't before 26.3. Every id here is the game's since 1.17, older than any release offered.
+ */
+const HAZARDS = [
+  'magma_block',
+  'cactus',
+  'powder_snow',
+  'sweet_berry_bush',
+  'wither_rose',
+  'campfire',
+  'soul_campfire',
+  'lava_cauldron',
+  'pointed_dripstone',
+  'nether_portal',
+  'end_portal',
+  'end_gateway',
+]
+
+/**
+ * Whether a player who is on stands on none of `HAZARDS`: a test with no `run`, which the game
+ * answers "Test passed" or "Test failed" (`commands.execute.conditional.pass` and `.fail` in its
+ * `en_us.json`, 1.20.1 and 1.21.4 alike). `onHazard` reads the answer.
+ */
+export function safeFooting(name: string): string {
+  const tests = HAZARDS.map((block) => `unless block ~ ~-1 ~ minecraft:${block}`).join(' ')
+  return `execute as ${safeName(name)} at @s ${tests}`
+}
+
+/** The test failed: they stand on a hazard. Any other answer leaves the game's own choice be. */
+export function onHazard(answer: string): boolean {
+  return /^Test failed/.test(answer.trim())
+}
+
+/** Where a player who is on stands; `positionOf` reads the answer. */
+export function positionQuery(name: string): string {
+  return `data get entity ${safeName(name)} Pos`
+}
+
+/** `x, y, z` from the answer to `positionQuery`; null where it doesn't say, as for someone gone. */
+export function positionOf(answer: string): [number, number, number] | null {
+  const data = HAS_DATA.exec(answer.trim())
+  return data ? numbers(parseSnbt(data[1] ?? '')) : null
 }
 
 /**

@@ -13,10 +13,14 @@ import { LibraryFileFormats } from '../infra/formats/file-formats.ts'
 import {
   accepted,
   livePlayerQueries,
+  onHazard,
   parseLivePlayer,
   parsePlayerFiles,
   playerFromFile,
+  positionOf,
+  positionQuery,
   readPlayerFiles,
+  safeFooting,
   setGameMode,
   statsFromFile,
   teleportNearDeath,
@@ -190,5 +194,31 @@ describe('what the page asks of the console', () => {
       expect(accepted(answers[`gamemode adventure ${name}`] ?? '')).toBe(true)
     }
     expect(accepted('Could not spread 1 entity around 0.5, 0.5 (too many entities for space)')).toBe(false)
+  })
+
+  test('after the game stands them somewhere: what is underfoot, and where that is', async () => {
+    const footing = safeFooting('Kai')
+    expect(footing.startsWith('execute as Kai at @s unless block ~ ~-1 ~ minecraft:magma_block ')).toBe(true)
+    // What the game's own spreadplayers takes (minecraft.wiki) but burns, pricks, freezes or carries off.
+    for (const block of [
+      'cactus',
+      'powder_snow',
+      'campfire',
+      'wither_rose',
+      'sweet_berry_bush',
+      'end_portal',
+    ])
+      expect(footing).toContain(`unless block ~ ~-1 ~ minecraft:${block}`)
+    expect(() => safeFooting('Kai @e')).toThrow()
+    // The game's words for a test with no `run` (`commands.execute.conditional.*`, en_us.json).
+    expect(onHazard('Test failed')).toBe(true)
+    expect(onHazard('Test passed')).toBe(false)
+    // Anything else leaves the game's own choice be: a loader's wording never sends them to the spawn.
+    expect(onHazard('')).toBe(false)
+
+    expect(positionQuery('Fern')).toBe('data get entity Fern Pos')
+    const answers = await answersOf('26.3')
+    expect(positionOf(answers['data get entity Fern Pos'] ?? '')).toEqual([3.5, 80, -4.5])
+    expect(positionOf(answers['data get entity Nobody Pos'] ?? '')).toBeNull()
   })
 })

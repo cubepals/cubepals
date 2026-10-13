@@ -13,6 +13,7 @@ import { copyFile, mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { schema } from '@blockly/db'
 import { and, eq, sql } from 'drizzle-orm'
+import type { FakeGround } from '../../infra/fake/fake-minecraft.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 
 /** A real 1.20.1 player's files: creative, last died at 12 -60 34 in the Overworld, a named sword. */
@@ -153,19 +154,19 @@ describe.skipIf(!hasDatabase)('a player on, and one away', () => {
   }, 30_000)
 })
 
-/** Every column within `radius` of a point topped with lava, or with nothing at all. */
+/** Every column within `radius` of a point topped the same: lava, nothing at all, magma… */
 const pour = (
   id: string,
   at: { dimension: string; x: number; z: number },
   radius: number,
-  top: 'lava' | 'void',
+  top: FakeGround,
 ) => {
   for (let x = at.x - radius; x <= at.x + radius; x++)
     for (let z = at.z - radius; z <= at.z + radius; z++) h.minecraft.ground(id, { ...at, x, z }, top)
 }
 
 describe.skipIf(!hasDatabase)('back where they died, standing somewhere safe', () => {
-  test('died in a cave: they stand on the highest block above it', async () => {
+  test('died in a cave: they stand on the highest block above it, and are told where', async () => {
     const { owner, id } = await running()
     const kai = { uuid: randomUUID(), name: 'Kai' }
     h.minecraft.join(id, kai)
@@ -173,7 +174,10 @@ describe.skipIf(!hasDatabase)('back where they died, standing somewhere safe', (
     h.minecraft.ground(id, { dimension: 'minecraft:overworld', x: 5, z: -9 }, 71)
     await h.app.schedules.presenceSync()
 
-    expect(await h.app.players.teleport(owner, id, kai.uuid, 'death')).toEqual({ done: 'now' })
+    expect(await h.app.players.teleport(owner, id, kai.uuid, 'death')).toEqual({
+      done: 'now',
+      note: 'Kai is on safe ground 59 blocks from where they died, at 5, 71, -9.',
+    })
     expect(h.minecraft.placeOf(id, kai.uuid)).toEqual({
       dimension: 'minecraft:overworld',
       x: 5.5,
@@ -192,7 +196,12 @@ describe.skipIf(!hasDatabase)('back where they died, standing somewhere safe', (
     pour(id, death, 2, 'lava')
     await h.app.schedules.presenceSync()
 
-    expect(await h.app.players.teleport(owner, id, kai.uuid, 'death')).toEqual({ done: 'now' })
+    expect(await h.app.players.teleport(owner, id, kai.uuid, 'death')).toEqual({
+      done: 'now',
+      note: expect.stringMatching(
+        /^Kai is on safe ground \d+ blocks from where they died, at -?\d+, 64, -?\d+\.$/,
+      ),
+    })
     const beside = h.minecraft.placeOf(id, kai.uuid)
     expect(beside).toMatchObject({ dimension: 'minecraft:the_nether', y: 64 })
     const off = Math.max(Math.abs((beside?.x ?? 0) - 40.5), Math.abs((beside?.z ?? 0) - 40.5))
@@ -206,6 +215,33 @@ describe.skipIf(!hasDatabase)('back where they died, standing somewhere safe', (
     expect(h.minecraft.placeOf(id, kai.uuid)).toMatchObject({ dimension: 'minecraft:overworld', y: 64 })
     // The page still says where they died.
     expect((await h.app.players.view(owner, id, kai.uuid)).lastDeath).toEqual(death)
+  }, 30_000)
+
+  test('died on a cactus: off it, beside it; in a field of magma, the spawn, saying so', async () => {
+    const { owner, id } = await running()
+    const kai = { uuid: randomUUID(), name: 'Kai' }
+    h.minecraft.join(id, kai)
+    await saveFiles(id, kai.uuid)
+    const death = { dimension: 'minecraft:overworld', x: 200, y: 65, z: 200 }
+    h.minecraft.die(id, kai.uuid, death)
+    // The game would stand them on top of it: the trip looks again, and lands beside it.
+    h.minecraft.ground(id, death, { on: 'minecraft:cactus', y: 67 })
+    await h.app.schedules.presenceSync()
+
+    expect(await h.app.players.teleport(owner, id, kai.uuid, 'death')).toEqual({ done: 'now' })
+    const beside = h.minecraft.placeOf(id, kai.uuid)
+    expect(beside).toMatchObject({ dimension: 'minecraft:overworld', y: 64 })
+    const off = Math.max(Math.abs((beside?.x ?? 0) - 200.5), Math.abs((beside?.z ?? 0) - 200.5))
+    expect(off).toBe(1)
+
+    // Everywhere near is magma, which the game would stand them on every time.
+    pour(id, death, 20, { on: 'minecraft:magma_block', y: 64 })
+    expect(await h.app.players.teleport(owner, id, kai.uuid, 'death')).toEqual({
+      done: 'now',
+      note: 'There was nowhere safe to stand near where Kai died, so they went to the spawn.',
+    })
+    expect(h.minecraft.placeOf(id, kai.uuid)).toMatchObject({ dimension: 'minecraft:overworld', y: 64 })
+    expect(Math.abs(h.minecraft.placeOf(id, kai.uuid)?.x ?? 200)).toBeLessThan(2)
   }, 30_000)
 
   test('fell into the void: the spawn, now or as they next join, and the audit says so', async () => {

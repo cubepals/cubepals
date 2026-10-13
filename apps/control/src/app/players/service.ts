@@ -36,7 +36,7 @@ import {
   replaceSnapshots,
   type WaitingKind,
 } from './persistence.ts'
-import { type PlayerAction, PlayerReading } from './reading.ts'
+import { type ActionOutcome, type PlayerAction, PlayerReading } from './reading.ts'
 
 /** Who asks for what waits, once the player arrives. */
 const ON_JOIN = 'system:access'
@@ -192,6 +192,7 @@ export class PlayerService {
             what: action.what,
             askedBy: action.requestedBy,
             ...(outcome === 'at_spawn' ? { instead: 'spawn' } : {}),
+            ...(typeof outcome === 'object' ? { at: placed(outcome.near) } : {}),
           },
         )
       })
@@ -250,7 +251,7 @@ export class PlayerService {
             ? `${here.name} hasn’t died on this server yet.`
             : 'This world has no spawn yet.',
         )
-      if (outcome === 'done' || outcome === 'at_spawn') {
+      if (outcome === 'done' || outcome === 'at_spawn' || typeof outcome === 'object') {
         // What was done now replaces what waited for the same.
         await dropWaiting(this.#db, server.id, uuid, action.kind)
         return doneNow(outcome, here.name)
@@ -289,12 +290,25 @@ export class PlayerService {
 }
 
 /** Done at once, saying so where it went other than asked. */
-function doneNow(outcome: 'done' | 'at_spawn', name: string): PlayerChangeView {
+function doneNow(
+  outcome: Exclude<ActionOutcome, 'not_on' | 'nowhere' | 'failed'>,
+  name: string,
+): PlayerChangeView {
   if (outcome === 'done') return { done: 'now' }
+  if (outcome === 'at_spawn')
+    return {
+      done: 'now',
+      note: `There was nowhere safe to stand near where ${name} died, so they went to the spawn.`,
+    }
   return {
     done: 'now',
-    note: `There was nowhere safe to stand near where ${name} died, so they went to the spawn.`,
+    note: `${name} is on safe ground ${outcome.blocks} blocks from where they died, at ${placed(outcome.near)}.`,
   }
+}
+
+/** "12, 64, 34": a block, as the game's own coordinates show it. */
+function placed(place: { x: number; y: number; z: number }): string {
+  return [place.x, place.y, place.z].join(', ')
 }
 
 function factsView(facts: PlayerFacts, stats: PlayerStats | null): PlayerSnapshotJson {

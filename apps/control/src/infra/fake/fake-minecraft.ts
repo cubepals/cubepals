@@ -19,7 +19,9 @@
  * - RCON wants the secret the spec carries; a status ping answers once the world is loaded;
  * - each player on has a place and may have a last death, which `data get entity`, `tp` and
  *   `spreadplayers` (under `execute in`) read and move, answering in vanilla's words (1.20.1, 26.3);
- *   `spreadplayers` stands them on a column's highest block, never on lava or over the void;
+ *   `spreadplayers` stands them on a column's highest block, never on lava or over the void but
+ *   on magma or a cactus all the same, and `execute as … at @s unless block ~ ~-1 ~ …` tests what
+ *   they stand on ("Test passed", "Test failed");
  * It knows these as a Minecraft server would, not through Blockly's translation code.
  *
  * The server is its process, its players and its running game, which every command and every
@@ -91,6 +93,8 @@ interface Server {
   deaths: Map<string, FakePlace>
   /** What tops each column (`<dimension> <x> <z>`) tests set; any other stands a player at 64. */
   ground: Map<string, FakeGround>
+  /** How many times `spreadplayers` was asked around each point (`<dimension> <x> <z>`). */
+  spreads: Map<string, number>
   log: ServerLog
 }
 
@@ -384,6 +388,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
         places: new Map(),
         deaths: new Map(),
         ground: new Map(),
+        spreads: new Map(),
         log: new ServerLog(),
       }
       this.#servers.set(machine.key, server)
@@ -474,7 +479,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
       case 'data':
         return this.#data(server, args)
       case 'execute':
-        return this.#executeIn(server, args)
+        return args[0] === 'as' ? this.#testFooting(server, args) : this.#executeIn(server, args)
       case 'save-all':
         return 'Saving the game (this may take a moment!)Saved the game'
       case 'save-off':
@@ -566,13 +571,36 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
       const name = rest.at(-1) ?? ''
       const uuid = this.#onlineNamed(server, name)
       if (uuid === null) return 'No entity was found'
-      const found = standing(server, dimension, Number(x), Number(z), Number(range))
+      const found = spread(server, dimension, Number(x), Number(z), Number(range))
       if (found === null)
         return `Could not spread 1 entity around ${x}, ${z} (too many entities for space - try using spread of at most 0.00)`
       server.places.set(uuid, { dimension, ...found })
       return `Spread 1 entity/entities around ${x}, ${z} with an average distance of 0.00 block(s) apart`
     }
     return 'Unknown or incomplete command, see below for error'
+  }
+
+  /**
+   * `execute as <name> at @s unless block ~ ~-1 ~ <block> …`, testing what a player on stands on,
+   * answered as the game words it (`commands.execute.conditional.*` in its `en_us.json`).
+   */
+  #testFooting(server: Server, args: string[]): string {
+    const [, name = '', at, self, ...tests] = args
+    if (at !== 'at' || self !== '@s') return 'Unknown or incomplete command, see below for error'
+    const uuid = this.#onlineNamed(server, name)
+    if (uuid === null) return 'No entity was found'
+    const place = server.places.get(uuid) ?? { dimension: 'minecraft:overworld', x: 0, y: 64, z: 0 }
+    const top = server.ground.get(`${place.dimension} ${Math.floor(place.x)} ${Math.floor(place.z)}`)
+    const refused = new Set<string>()
+    for (let i = 0; i < tests.length; i += 6) {
+      const [unless, block, ...under] = tests.slice(i, i + 6)
+      const id = under[3]
+      if (unless !== 'unless' || block !== 'block' || under.slice(0, 3).join(' ') !== '~ ~-1 ~' || !id)
+        return 'Unknown or incomplete command, see below for error'
+      refused.add(id)
+    }
+    const on = typeof top === 'object' ? top.on : null
+    return on !== null && refused.has(on) ? 'Test failed' : 'Test passed'
   }
 
   #onlineNamed(server: Server, name: string): string | null {
@@ -622,15 +650,20 @@ export interface FakePlace {
   z: number
 }
 
-/** Lava, the void, or the height a player stands at on the column's highest block. */
-export type FakeGround = number | 'lava' | 'void'
+/**
+ * Lava, the void, the height a player stands at on the column's highest block, or that height on
+ * a block that hurts (`{ on: 'minecraft:magma_block', y: 64 }`), which `spreadplayers` takes all
+ * the same.
+ */
+export type FakeGround = number | 'lava' | 'void' | { on: string; y: number }
 
 /**
  * Where `spreadplayers` stands one player within `range` of a point: the middle of a column whose
- * highest block isn't lava, the nearest such where vanilla picks one at random; null where every
- * column in range is lava or void.
+ * highest block isn't lava, null where every column in range is lava or void. Vanilla picks one at
+ * random; this takes the nearest, and the next nearest each further time it is asked around the
+ * same point, so asking again lands somewhere else, as it would.
  */
-function standing(
+function spread(
   server: Server,
   dimension: string,
   x: number,
@@ -638,15 +671,21 @@ function standing(
   range: number,
 ): { x: number; y: number; z: number } | null {
   const [cx, cz] = [Math.floor(x), Math.floor(z)]
-  const columns: [number, number][] = []
+  const found: { x: number; y: number; z: number; off: number }[] = []
   for (let bx = Math.floor(x - range); bx <= Math.floor(x + range); bx++)
-    for (let bz = Math.floor(z - range); bz <= Math.floor(z + range); bz++) columns.push([bx, bz])
-  columns.sort(([ax, az], [bx, bz]) => Math.hypot(ax - cx, az - cz) - Math.hypot(bx - cx, bz - cz))
-  for (const [bx, bz] of columns) {
-    const top = server.ground.get(`${dimension} ${bx} ${bz}`) ?? 64
-    if (typeof top === 'number') return { x: bx + 0.5, y: top, z: bz + 0.5 }
-  }
-  return null
+    for (let bz = Math.floor(z - range); bz <= Math.floor(z + range); bz++) {
+      const top = server.ground.get(`${dimension} ${bx} ${bz}`) ?? 64
+      if (top === 'lava' || top === 'void') continue
+      const y = typeof top === 'number' ? top : top.y
+      found.push({ x: bx + 0.5, y, z: bz + 0.5, off: Math.hypot(bx - cx, bz - cz) })
+    }
+  found.sort((a, b) => a.off - b.off)
+  const key = `${dimension} ${cx} ${cz}`
+  const asked = server.spreads.get(key) ?? 0
+  const pick = found[asked % found.length]
+  if (pick === undefined) return null
+  server.spreads.set(key, asked + 1)
+  return { x: pick.x, y: pick.y, z: pick.z }
 }
 
 /** Whether the release this server runs keeps PvP as a game rule: 1.21.9 and after. */
