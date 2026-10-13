@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { AuthMethods } from '@blockly/contracts'
-import { apiUpstream } from '../../lib/upstream'
+import { apiUpstream, RENDER_READ_MS } from '../../lib/upstream'
 
 /**
  * Which ways in this deployment offers, asked of the control plane on each request, so turning
@@ -11,10 +11,13 @@ import { apiUpstream } from '../../lib/upstream'
  */
 export async function authMethods(): Promise<AuthMethods> {
   try {
-    const response = await fetch(`${apiUpstream()}/api/auth-methods`, { cache: 'no-store' })
+    const response = await fetch(`${apiUpstream()}/api/auth-methods`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(RENDER_READ_MS),
+    })
     if (response.ok) return (await response.json()) as AuthMethods
   } catch {
-    // The control plane is unreachable. Email still renders, and says so if someone uses it.
+    // The control plane is unreachable or slow. Email still renders, and says so if someone uses it.
   }
   return { google: false, github: false, turnstileSiteKey: null }
 }
@@ -26,12 +29,15 @@ export async function authMethods(): Promise<AuthMethods> {
  */
 export async function signupsOpen(): Promise<'open' | 'full' | 'unknown'> {
   try {
-    const response = await fetch(`${apiUpstream()}/api/signups`, { cache: 'no-store' })
+    const response = await fetch(`${apiUpstream()}/api/signups`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(RENDER_READ_MS),
+    })
     if (!response.ok) return 'unknown'
     const { open } = (await response.json()) as { open?: unknown }
     if (typeof open === 'boolean') return open ? 'open' : 'full'
   } catch {
-    // The control plane is unreachable: below, as unknown.
+    // The control plane is unreachable or slow: below, as unknown.
   }
   return 'unknown'
 }

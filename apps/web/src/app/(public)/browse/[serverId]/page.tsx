@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { notFound, permanentRedirect } from 'next/navigation'
-import { apiUpstream } from '../../../../lib/upstream'
+import { apiUpstream, RENDER_READ_MS } from '../../../../lib/upstream'
 
 /**
  * Where a listing used to live. A server's page is its own address now, so a link shared before
@@ -11,7 +11,10 @@ import { apiUpstream } from '../../../../lib/upstream'
  */
 export default async function ListingRedirect({ params }: { params: Promise<{ serverId: string }> }) {
   const input = encodeURIComponent(JSON.stringify({ serverId: (await params).serverId }))
-  const response = await fetch(`${apiUpstream()}/api/trpc/listings.get?input=${input}`, { cache: 'no-store' })
+  const response = await fetch(`${apiUpstream()}/api/trpc/listings.get?input=${input}`, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(RENDER_READ_MS),
+  })
   const slug = response.ok
     ? ((await response.json()) as { result?: { data?: { slug?: string } } }).result?.data?.slug
     : null

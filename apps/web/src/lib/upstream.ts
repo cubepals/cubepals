@@ -16,3 +16,11 @@ export function apiUpstream(): string {
     throw new Error('API_UPSTREAM must name the control plane the /api rewrite forwards to')
   return upstream.replace(/\/$/, '')
 }
+
+/**
+ * The most a page's server render waits on one answer from the control plane. Past it the page is
+ * sent without that answer, as when the control plane is unreachable: a stopped or waking control
+ * plane (a pull request's preview while staging sleeps) never holds a page blank. The /api rewrite,
+ * which the browser waits on itself, has no such limit.
+ */
+export const RENDER_READ_MS = 2_000

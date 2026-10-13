@@ -27,7 +27,7 @@ export const playingLine = (status: PublicStatus): string =>
 import { InviteCode } from '@blockly/contracts'
 import { WEB_PORT } from '@blockly/contracts/local'
 import { headers } from 'next/headers'
-import { apiUpstream } from '../../lib/upstream'
+import { apiUpstream, RENDER_READ_MS } from '../../lib/upstream'
 
 /**
  * A link preview is read by somebody else's server, so what it points at has to be an address
@@ -51,7 +51,10 @@ export type PublicRead = PublicStatus | 'missing' | 'unanswered'
 
 async function read(path: string): Promise<PublicRead> {
   try {
-    const response = await fetch(`${apiUpstream()}${path}`, { cache: 'no-store' })
+    const response = await fetch(`${apiUpstream()}${path}`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(RENDER_READ_MS),
+    })
     if (response.ok) return (await response.json()) as PublicStatus
     return response.status === 404 ? 'missing' : 'unanswered'
   } catch {
