@@ -23,7 +23,8 @@ const dollars = (cents: number): string => `$${cents % 100 === 0 ? cents / 100 :
 /**
  * The plans, from the plan table the control plane enforces, so nothing here can promise what a
  * server won't do. The last thing a player needs; after it the page turns, and digs. With no plans
- * to show (the control plane can't be reached) the section is left out.
+ * to show (the control plane can't be reached) the section is left out. Everyone is already in on
+ * the grass below it, as on the closing it hands over to, so nobody arrives during the flight.
  */
 export function Plans({
   plans,
@@ -44,6 +45,7 @@ export function Plans({
       tone="paper"
       y={66}
       shot={{ az: 30, el: 54, span: 34, turn: 16 }}
+      act="friends"
       className={styles.plans}
     >
       <h2 className="bl-h2">{paid ? `Free, or ${priceOf(paid.monthlyPriceCents)} for more` : 'Free'}</h2>

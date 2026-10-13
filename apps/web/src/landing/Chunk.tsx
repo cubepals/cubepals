@@ -41,6 +41,7 @@ import { clamp, lerp } from './engine/curves'
 import { buildFleet, COHORTS, FAR_FACES, type Fleet, type Island } from './engine/fleet'
 import { type Packed, type Palette, Renderer, type Rgb } from './engine/gl'
 import { Ground } from './engine/ground'
+import { Handover } from './engine/handover'
 import { hash3, Kind, Mesh, relight, type Taken, type World } from './engine/world'
 import { playing } from './film/clock'
 import { choice } from './sections/choice'
@@ -578,11 +579,8 @@ export function Chunk() {
       movingData[at + 7] = Math.max(0, Math.min(255, Math.round(solid * 255)))
       moving += 1
     }
-    /** A box of the cast's: drawn, and what it rests on is kept under it. */
-    const stand: typeof put = (x, y, z, sx, sy, sz, tone, kind, group, inside, round, tipped, solid) => {
-      if ((solid ?? 1) > 0.5) ground.rest(x, y, z, sx, sy, sz)
-      put(x, y, z, sx, sy, sz, tone, kind, group, inside, round, tipped, solid)
-    }
+    // The cast's boxes, and what a section puts on handed to the next through the print's dots.
+    const handover = new Handover(put, ground)
     const actors = (time: number): Packed => {
       moving = 0
       ground.next()
@@ -612,29 +610,31 @@ export function Chunk() {
             count: number,
             size?: number,
           ) => scatter(at, out, count, time * 1000, size)
+      dirty = handover.step(time, act, room, roomSeen, quiet, !surfaceNear) || dirty
       if (!surfaceSeen) castBusy = false
-      else if (act === 'play') castBusy = cast.playStep(choice.get().play, step, stand, chips, HOME, quiet)
+      else if (handover.act === 'play')
+        castBusy = cast.playStep(choice.get().play, step, handover.grass, chips, HOME, quiet)
       else {
         const now = stage.get()
-        // At the page's last scene everyone is in, whatever the server at the top is doing, and
+        // At the page's last scenes everyone is in, whatever the server at the top is doing, and
         // is found already at what they do: nobody is watched walking in a second time.
-        const closing = act === 'friends'
+        const closing = handover.act === 'friends'
         const count = closing ? 3 : now.power === 'awake' ? now.players : 0
-        castBusy = cast.friendsStep(count, step, stand, chips, HOME, quiet, closing)
+        castBusy = cast.friendsStep(count, step, handover.grass, chips, HOME, quiet, closing)
         // Before anyone is in, whoever typed the address is at the end of the path with a torch.
-        cast.callerStep(act === 'knock', step, stand, quiet)
-        castBusy = castBusy || (act === 'knock' && !quiet)
+        cast.callerStep(handover.act === 'knock', step, handover.grass, quiet)
+        castBusy = castBusy || (handover.act === 'knock' && !quiet)
       }
       if (!surfaceNear) castBusy = false
       if ((lamps[CELLAR] ?? 0) > 0.02) {
         const chosen = choice.get()
-        cast.cellar(stage.get().ledger, chosen.play, chosen.party, passed, stand, quiet)
+        cast.cellar(stage.get().ledger, chosen.play, chosen.party, passed, handover.stand, quiet)
         castBusy = castBusy || !quiet
       }
       // Under the grass, the worker is in whichever room the page has reached. A demonstration
       // may have the room's lamps low or out; the worker is there all the same, by helmet lamp.
-      if (room && roomSeen) {
-        cast.roomStep(room, passed, stand, chips, quiet, stage.get().rooms[room])
+      if (handover.room) {
+        cast.roomStep(handover.room, passed, handover.below, chips, quiet, stage.get().rooms[handover.room])
         castBusy = castBusy || !quiet
       }
       // Chips are bare paper whatever they came off, so a dig shows on the darkest rock.
