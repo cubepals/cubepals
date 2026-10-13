@@ -6,10 +6,13 @@
 
 import type { UpgradeReason } from '@blockly/contracts'
 import { useQuery } from '@tanstack/react-query'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 import { useTRPC } from '../../lib/api'
 import { checkoutHref } from '../../lib/checkout'
+import { upgradeDeclined, upgradePressed, upgradeShown } from '../../lib/paying'
 import { Button, Card, Note, PlayHours } from '../../ui'
+import { placeOf } from '../(public)/steps'
 
 /**
  * Where someone has just reached for something their plan leaves out, and only there, the plan
@@ -17,6 +20,8 @@ import { Button, Card, Note, PlayHours } from '../../ui'
  * it goes through the checkout page (the agreement, then paying), which brings them back to the
  * page they were on, with what they chose kept. Where this Blockly
  * sells no plans, it is only the line that says why.
+ *
+ * Each is counted as it is drawn, and as its button or its way on is pressed (lib/paying.ts).
  */
 export function PlusOffer({
   why,
@@ -36,12 +41,15 @@ export function PlusOffer({
 }) {
   const trpc = useTRPC()
   const router = useRouter()
+  const path = usePathname()
   const overview = useQuery(trpc.account.overview.queryOptions())
   const sells = overview.data?.features.find((f) => f.feature === 'billing')?.available === true
   const offered = overview.data?.plans.find((p) => p.key === plan)?.entitlements
   // The line alone where there is nothing to buy: no plans sold here, or that plan already theirs.
-  if (!sells || offered === undefined || overview.data?.plan.key === plan)
-    return <Note tone="info">{why}</Note>
+  const lineOnly = !sells || offered === undefined || overview.data?.plan.key === plan
+  const counted = { plan, reason, where: placeOf(path) }
+  useShown(counted, overview.data === undefined ? null : !lineOnly)
+  if (lineOnly) return <Note tone="info">{why}</Note>
   const name = `${plan[0]?.toUpperCase() ?? ''}${plan.slice(1)}`
   return (
     <Card
@@ -65,7 +73,8 @@ export function PlusOffer({
           <Button
             variant="primary"
             size="sm"
-            onClick={() =>
+            onClick={() => {
+              upgradePressed(counted)
               router.push(
                 checkoutHref({
                   plan,
@@ -73,12 +82,19 @@ export function PlusOffer({
                   next: next ?? `${window.location.pathname}${window.location.search}`,
                 }),
               )
-            }
+            }}
           >
             Get {name}
           </Button>
           {instead && (
-            <Button variant="ghost" size="sm" onClick={instead.onClick}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                upgradeDeclined(counted)
+                instead.onClick()
+              }}
+            >
               {instead.label}
             </Button>
           )}
@@ -86,6 +102,17 @@ export function PlusOffer({
       }
     />
   )
+}
+
+/**
+ * Counts an offer once where it is drawn, as soon as the account's answer says how it is shown
+ * (`button`, or null while that is not known yet), and again only if the plan or reason changes.
+ */
+function useShown(offered: { plan: string; reason: UpgradeReason; where: string }, button: boolean | null) {
+  const { plan, reason, where } = offered
+  useEffect(() => {
+    if (button !== null) upgradeShown({ plan, reason, where }, button)
+  }, [plan, reason, where, button])
 }
 
 /** A price as it is said: "$15", or "$4.50" where there are cents. */

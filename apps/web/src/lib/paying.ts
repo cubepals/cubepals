@@ -16,6 +16,12 @@
  * - `chip_in_opened`: an amount pressed to chip in, signed in, on to paying: `cents`.
  *   `chip_in_returned`: back on the server's page from paying.
  * - `extra_play_set`: the owner's own limit on extra play changed: `units`, its hours.
+ * - `upgrade_shown`: a plan was offered where someone reached for what theirs leaves out
+ *   (`PlusOffer`), once where it is drawn: `plan`, `reason` (an `UpgradeReason`), `where` the page
+ *   is (app/(public)/steps.ts), and `button`, whether it came with its price and a way to get it
+ *   or only as the line that says why. `upgrade_pressed`: its button was pressed. `upgrade_declined`:
+ *   the way on without it was taken ("Choose plain Minecraft instead"). Both with `plan`, `reason`
+ *   and `where`.
  *
  * Amounts are the offer's own, never a card, an address or a name; PostHog runs cookieless
  * (lib/insight.tsx).
@@ -31,6 +37,9 @@ const PAYING_EVENTS = {
   chipInOpened: 'chip_in_opened',
   chipInReturned: 'chip_in_returned',
   extraPlaySet: 'extra_play_set',
+  upgradeShown: 'upgrade_shown',
+  upgradePressed: 'upgrade_pressed',
+  upgradeDeclined: 'upgrade_declined',
 } as const
 
 type Plan = AccountOverviewView['plan']
@@ -59,6 +68,28 @@ export function chipInOpened(cents: number): void {
 /** Back on the server's page from chipping in. */
 export function chipInReturned(): void {
   capture(PAYING_EVENTS.chipInReturned, {})
+}
+
+/** Where a plan is offered: which plan, why, and on what page. */
+interface Offered {
+  plan: string
+  reason: UpgradeReason
+  where: string
+}
+
+/** A plan offered where it was reached for; `button`: with its price and a way to get it. */
+export function upgradeShown(offered: Offered, button: boolean): void {
+  capture(PAYING_EVENTS.upgradeShown, { ...offered, button })
+}
+
+/** The offer's button, on to the checkout page. */
+export function upgradePressed(offered: Offered): void {
+  capture(PAYING_EVENTS.upgradePressed, { ...offered }, true)
+}
+
+/** The way on without it. */
+export function upgradeDeclined(offered: Offered): void {
+  capture(PAYING_EVENTS.upgradeDeclined, { ...offered })
 }
 
 /** The owner's limit on extra play, in hours. */
