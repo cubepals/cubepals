@@ -14,6 +14,7 @@ import { AgreementNote } from './agreement'
 import styles from './auth.module.css'
 import { GitHubMark } from './github-mark'
 import { GoogleMark } from './google-mark'
+import { type Flow, failed, started } from './steps'
 
 /** A way in besides email: each a switch in `AuthMethods`. */
 type Provider = 'google' | 'github'
@@ -58,6 +59,7 @@ const markedWith = (url: string, provider: Provider) =>
  * simply open. Under them all, the line that says continuing agrees to the Terms.
  */
 export function AuthEntry({
+  flow,
   title,
   description,
   methods,
@@ -69,6 +71,8 @@ export function AuthEntry({
   footer,
   children,
 }: {
+  /** Making an account or signing in, as what this page reports says it. */
+  flow: Flow
   title: string
   description?: string
   methods: AuthMethods
@@ -97,6 +101,11 @@ export function AuthEntry({
   const [redirecting, setRedirecting] = useState<Provider | null>(null)
   const [socialError, setSocialError] = useState<string | null>(null)
 
+  // A provider that sent them back refused: its code, once the page shows it.
+  useEffect(() => {
+    if (failure) failed(flow, failedWith?.id ?? 'google', failure)
+  }, [flow, failure, failedWith])
+
   useEffect(() => {
     if (open && opening.current) region.current?.querySelector('input')?.focus({ preventScroll: true })
     opening.current = false
@@ -114,6 +123,7 @@ export function AuthEntry({
   const continueWith = async (provider: (typeof PROVIDERS)[number]) => {
     setRedirecting(provider.id)
     setSocialError(null)
+    started(flow, provider.id)
     // On success the browser is already on its way to the provider. It carries the Terms agreed
     // to, without which the control plane makes no new account.
     const { error } = await authClient.signIn.social({
@@ -123,6 +133,7 @@ export function AuthEntry({
       additionalData: { agreement: AGREED },
     })
     if (error) {
+      failed(flow, provider.id, 'unreachable')
       setRedirecting(null)
       setSocialError(`We could not open ${provider.name} sign-in. Try again in a moment, or use your email.`)
     }

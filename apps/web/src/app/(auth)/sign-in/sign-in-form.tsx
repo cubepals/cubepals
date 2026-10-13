@@ -12,6 +12,7 @@ import * as rules from '../../../lib/rules'
 import { useChecked } from '../../../lib/use-checked'
 import { Button, TextField } from '../../../ui'
 import styles from '../auth.module.css'
+import { answered, started } from '../steps'
 
 export function SignInForm({ next }: { next: string }) {
   const router = useRouter()
@@ -26,8 +27,10 @@ export function SignInForm({ next }: { next: string }) {
     if (!checked.check()) return
     setBusy(true)
     setError(null)
+    started('signin', 'email')
     const { error: failure } = await authClient.signIn.email({ email, password })
     setBusy(false)
+    answered('signin', failure)
     if (failure) {
       // Only a wrong password is called one: a refusal for trying too often is said as that, and
       // anything else as ours.

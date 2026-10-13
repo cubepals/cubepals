@@ -7,6 +7,7 @@
  */
 import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
+import { ctaMark, planMark } from '../../app/(public)/steps'
 import { PlanPoint, planPoints, priceOf } from '../../ui/plans'
 import { Section } from '../kit'
 import styles from './surface.module.css'
@@ -71,6 +72,7 @@ export function Plans({
               <Link
                 href={isPaid ? getPlan(plan.key) : create}
                 className={`bl-btn ${isPaid ? 'bl-btn--lit' : ''} ${styles.action}`}
+                {...(isPaid ? planMark(plan.key, 'month') : ctaMark('plans_create'))}
               >
                 {isPaid ? `Get ${plan.name}` : 'Create a server'}
               </Link>

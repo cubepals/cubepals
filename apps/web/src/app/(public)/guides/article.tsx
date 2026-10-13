@@ -18,6 +18,8 @@ import { canonicalOrigin, pageMetadata, UNLISTED } from '../../../lib/site'
 import { guideSchema, JsonLd } from '../../../lib/structured-data'
 import { Button } from '../../../ui'
 import { GUIDES, guideHref, guidesIndexLive, liveGuide } from '../guides'
+import { GuideEnd } from '../presses'
+import { ctaMark } from '../steps'
 import styles from './article.module.css'
 
 /** A guide's title, description and address; noindex until it is approved. */
@@ -78,9 +80,15 @@ export async function GuideArticle({ slug, children }: { slug: string; children:
           <Link href="/">A Minecraft server that starts when your friends join</Link>. Free to start, no card
           needed.
         </p>
-        <Button variant="primary" size="lg" href={signedIn ? '/servers/new' : '/sign-up'}>
+        <Button
+          variant="primary"
+          size="lg"
+          href={signedIn ? '/servers/new' : '/sign-up'}
+          {...ctaMark('guide_create')}
+        >
           Create a server
         </Button>
+        <GuideEnd slug={slug} />
       </section>
       <JsonLd
         schema={guideSchema(

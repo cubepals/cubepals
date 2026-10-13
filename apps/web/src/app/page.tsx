@@ -44,6 +44,8 @@ import { currentSession } from '../lib/session'
 import { canonicalOrigin } from '../lib/site'
 import { sourceOf, withSource } from '../lib/source'
 import { appSchema, JsonLd, siteSchema } from '../lib/structured-data'
+import { Presses } from './(public)/presses'
+import { ctaMark } from './(public)/steps'
 import '../landing/landing.css'
 
 // "Minecraft" is what people search for and read first; it is never the first word of the name.
@@ -90,6 +92,7 @@ export default async function Landing({
       data-film
     >
       <Scroll />
+      <Presses />
       <Type />
       <Cursor />
       <Chat />
@@ -115,7 +118,7 @@ export default async function Landing({
           <Asleep proof={<Sleep plans={plans} bare />} />
           <Strata from="var(--stone)" to="var(--paper)" />
           <Overview played>
-            <a className="bl-btn" href="#price">
+            <a className="bl-btn" href="#price" {...ctaMark('to_price')}>
               Straight to what it costs
             </a>
           </Overview>

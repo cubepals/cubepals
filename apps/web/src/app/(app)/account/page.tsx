@@ -11,6 +11,7 @@ import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { messageOf, useTRPC } from '../../../lib/api'
 import { checkoutHref } from '../../../lib/checkout'
 import { useOutcome } from '../../../lib/outcome'
+import { billingReturned, extraPlaySet } from '../../../lib/paying'
 import { dayOf, loaderLabel } from '../../../lib/present'
 import {
   BlockMeter,
@@ -345,7 +346,11 @@ function ExtraPlay({ overview }: { overview: AccountOverviewView }) {
               style={{ inlineSize: 'auto' }}
               value={extraOf(u).allowedNow}
               disabled={allow.isPending}
-              onChange={(event) => allow.mutate({ units: Number(event.target.value) })}
+              onChange={(event) => {
+                const units = Number(event.target.value)
+                extraPlaySet(units)
+                allow.mutate({ units })
+              }}
             >
               {x.choices.map((units) => (
                 <option key={units} value={units}>
@@ -413,10 +418,14 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
     router.replace('/account')
     refresh.mutate(undefined, {
       onSuccess: () => {
+        const before = overview.plan
+        void queries
+          .fetchQuery(trpc.account.overview.queryOptions())
+          .then((now) => billingReturned(before, now.plan))
         if (next !== null && /^\/(?![/\\])/.test(next)) router.replace(next)
       },
     })
-  }, [params, billing, refresh, router])
+  }, [params, billing, refresh, router, overview.plan, queries, trpc])
 
   // Chose a plan before they had an account, or from a page without one to show: carry on to
   // the checkout page for it, once, rather than ask them to choose again here.

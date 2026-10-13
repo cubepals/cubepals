@@ -9,6 +9,7 @@ import { dollars } from '../../../legal/figures'
 import { checkoutHref } from '../../../lib/checkout'
 import { behindSignUp, useSignedIn } from '../../../lib/viewer'
 import { Button } from '../../../ui'
+import { ctaMark, planMark } from '../steps'
 
 /**
  * A plan's button on the pricing page, and under it the same plan for a year paid at once where
@@ -30,7 +31,7 @@ export function GetPlan({
   const signedIn = useSignedIn()
   if (!paid)
     return (
-      <Button variant="outline" href={behindSignUp(signedIn, '/servers/new')}>
+      <Button variant="outline" href={behindSignUp(signedIn, '/servers/new')} {...ctaMark('pricing_create')}>
         Create a server
       </Button>
     )
@@ -40,11 +41,11 @@ export function GetPlan({
       : behindSignUp(false, `/account?get=${plan}${term === 'year' ? '&term=year' : ''}&reason=pricing`)
   return (
     <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
-      <Button variant="primary" href={href('month')}>
+      <Button variant="primary" href={href('month')} {...planMark(plan, 'month')}>
         Get {name}
       </Button>
       {yearlyCents !== null && (
-        <Link href={href('year')} className="type-body-sm">
+        <Link href={href('year')} className="type-body-sm" {...planMark(plan, 'year')}>
           Or {dollars(yearlyCents)} for a year, paid once
         </Link>
       )}

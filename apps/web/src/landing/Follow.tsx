@@ -6,6 +6,7 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
+import { ctaMark } from '../app/(public)/steps'
 
 /**
  * The one button, kept in reach. The dig is long, and whoever decides halfway down that they want
@@ -37,7 +38,13 @@ export function Follow({ create }: { create: string }) {
   return (
     <>
       <span ref={marker} hidden />
-      <Link href={create} className="bl-follow" data-shown={shown || undefined} tabIndex={shown ? 0 : -1}>
+      <Link
+        href={create}
+        className="bl-follow"
+        data-shown={shown || undefined}
+        tabIndex={shown ? 0 : -1}
+        {...ctaMark('follow_create')}
+      >
         Create a server
       </Link>
     </>

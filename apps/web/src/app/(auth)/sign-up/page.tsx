@@ -48,6 +48,7 @@ export default async function SignUpPage({
   if (open === 'unknown') return <SignupsUnknown />
   return (
     <AuthEntry
+      flow="signup"
       title="Create your account"
       description="Free to start. No card needed."
       methods={methods}

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test'
-import { ENVIRONMENT, stamped } from './insight'
+import { asCode, ENVIRONMENT, stamped } from './insight'
 
 // Every event the browser sends passes through `stamped` on its way out (posthog-js's
 // before_send): pageviews, web vitals, autocaptured errors and the ones boundaries report.
@@ -21,5 +21,14 @@ describe('browser events', () => {
     }
     expect(ENVIRONMENT).toBe('development')
     expect(stamped(null)).toBeNull()
+  })
+
+  // A refusal's code can come from an address anyone types (a provider's `?error=`).
+  test('a code a step carries is a code, or other', () => {
+    expect(asCode('USER_ALREADY_EXISTS')).toBe('user_already_exists')
+    expect(asCode('limit_reached')).toBe('limit_reached')
+    expect(asCode('steve@example.com')).toBe('other')
+    expect(asCode('That email is taken')).toBe('other')
+    expect(asCode(null)).toBe('other')
   })
 })

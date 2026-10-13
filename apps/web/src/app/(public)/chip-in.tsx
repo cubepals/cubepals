@@ -13,6 +13,7 @@ import { CHIP_IN_AMOUNTS, type PublicServerView } from '@blockly/contracts'
 import { useMutation } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { messageOf, useTRPC } from '../../lib/api'
+import { chipInOpened, chipInReturned } from '../../lib/paying'
 import { behindSignIn, useSignedIn } from '../../lib/viewer'
 import { Button, FormSection, Note } from '../../ui'
 
@@ -25,7 +26,11 @@ export function ChipIn({ view, to }: { view: PublicServerView; to: { slug: strin
   const signedIn = useSignedIn()
   // Back from the payment: read once the page is in the browser, the only place the address is.
   const [back, setBack] = useState(false)
-  useEffect(() => setBack(new URLSearchParams(window.location.search).get('chipped') === '1'), [])
+  useEffect(() => {
+    const chipped = new URLSearchParams(window.location.search).get('chipped') === '1'
+    setBack(chipped)
+    if (chipped) chipInReturned()
+  }, [])
   const start = useMutation(
     trpc.chipIns.start.mutationOptions({ onSuccess: ({ url }) => window.location.assign(url) }),
   )
@@ -50,7 +55,10 @@ export function ChipIn({ view, to }: { view: PublicServerView; to: { slug: strin
               key={cents}
               variant="outline"
               disabled={start.isPending}
-              onClick={() => start.mutate({ to, cents })}
+              onClick={() => {
+                chipInOpened(cents)
+                start.mutate({ to, cents })
+              }}
             >
               ${cents / 100} · {hours(cents)} hours
             </Button>

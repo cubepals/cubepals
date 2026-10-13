@@ -17,11 +17,12 @@ import type { AccountOverviewView, EntitlementsView } from '@blockly/contracts'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { FULL_REFUND_UNDER_HOURS } from '../../../legal/figures'
 import { consentFor, UNCONSENTED } from '../../../lib/agreement'
 import { messageOf, useTRPC } from '../../../lib/api'
 import { type CheckoutAsk, checkoutHref, checkoutOf } from '../../../lib/checkout'
+import { checkoutContinued, checkoutOpened } from '../../../lib/paying'
 import { Button, Card, Checkbox, LoadFailed, Note, PlayHours, Skeleton } from '../../../ui'
 
 export default function CheckoutPage() {
@@ -107,11 +108,14 @@ function Offer({
   const [startNow, setStartNow] = useState(false)
   const [unticked, setUnticked] = useState(false)
   const consent = consentFor(terms, startNow)
+  const { plan, term = 'month', reason } = ask
+  useEffect(() => checkoutOpened(plan, term, reason), [plan, term, reason])
   const pay = () => {
     if (consent === null) {
       setUnticked(true)
       return
     }
+    checkoutContinued(plan, term)
     checkout.mutate({
       plan: ask.plan,
       term: ask.term ?? 'month',

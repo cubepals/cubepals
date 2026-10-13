@@ -6,6 +6,7 @@
 
 import { useState } from 'react'
 import { authClient } from '../../lib/auth'
+import { resent } from './steps'
 
 /**
  * A new confirmation link, for an account that hasn't confirmed its email. Links work for an hour,
@@ -27,6 +28,7 @@ export function ResendConfirmation({
     setState('sending')
     const { error } = await authClient.sendVerificationEmail({ email, callbackURL: '/servers/new' })
     setState(error ? 'failed' : 'sent')
+    resent(!error)
   }
 
   if (state === 'sent') return <span>Sent. The new link works for an hour.</span>

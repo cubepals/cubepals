@@ -122,7 +122,7 @@ export function Button(props: ButtonProps) {
     )
   if (href !== undefined)
     return (
-      <Link href={href} className={classes} aria-disabled={rest.disabled || undefined}>
+      <Link href={href} className={classes} aria-disabled={rest.disabled || undefined} {...marksOf(rest)}>
         {content}
       </Link>
     )
@@ -140,3 +140,7 @@ export function Button(props: ButtonProps) {
     </button>
   )
 }
+
+/** The `data-` attributes a button carries onto the link it draws as: what a press of it reports, for one. */
+const marksOf = (props: object) =>
+  Object.fromEntries(Object.entries(props).filter(([key]) => key.startsWith('data-')))

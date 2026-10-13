@@ -14,6 +14,7 @@ import * as rules from '../../../lib/rules'
 import { useChecked } from '../../../lib/use-checked'
 import { Button, TextField } from '../../../ui'
 import styles from '../auth.module.css'
+import { answered, started } from '../steps'
 import { Turnstile } from './turnstile'
 
 /**
@@ -59,6 +60,7 @@ export function SignUpForm({ next, turnstileSiteKey }: { next: string; turnstile
     }
     setBusy(true)
     setError(null)
+    started('signup', 'email')
     const { error: failure } = await authClient.signUp.email(
       {
         // Better Auth's sign-up takes a name, but nothing in Blockly shows one yet. It stays empty
@@ -75,6 +77,7 @@ export function SignUpForm({ next, turnstileSiteKey }: { next: string; turnstile
     // A Turnstile answer works once: the next try needs a fresh one.
     setToken(null)
     setUsed((n) => n + 1)
+    answered('signup', failure)
     // Filled up between the page and the form: the page says so, with its waitlist.
     if (failure?.code === SIGNUPS_FULL) {
       router.push(`/sign-up?error=${SIGNUPS_FULL}`)

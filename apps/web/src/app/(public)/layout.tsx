@@ -15,6 +15,8 @@ import { ViewerProvider } from '../../lib/viewer'
 import { Button } from '../../ui'
 import { guidesIndexLive } from './guides'
 import { GuideLinks } from './guides/links'
+import { Presses } from './presses'
+import { ctaMark } from './steps'
 
 export default async function PublicLayout({ children }: { children: ReactNode }) {
   const session = await currentSession()
@@ -25,14 +27,18 @@ export default async function PublicLayout({ children }: { children: ReactNode }
           Cubepals
         </Link>
         <nav className="bk-topnav__links" aria-label="Cubepals">
-          <Link href="/browse" className="bk-topnav__link">
+          <Link href="/browse" className="bk-topnav__link" {...ctaMark('header_browse')}>
             Browse servers
           </Link>
-          <Link href="/pricing" className="bk-topnav__link">
+          <Link href="/pricing" className="bk-topnav__link" {...ctaMark('header_pricing')}>
             Pricing
           </Link>
           {guidesIndexLive() && (
-            <Link href="/guides" className="bk-topnav__link bk-topnav__link--wide">
+            <Link
+              href="/guides"
+              className="bk-topnav__link bk-topnav__link--wide"
+              {...ctaMark('header_guides')}
+            >
               Guides
             </Link>
           )}
@@ -43,7 +49,7 @@ export default async function PublicLayout({ children }: { children: ReactNode }
               Your servers
             </Button>
           ) : (
-            <Button variant="outline" href="/sign-in">
+            <Button variant="outline" href="/sign-in" {...ctaMark('header_sign_in')}>
               Sign in
             </Button>
           )}
@@ -54,6 +60,7 @@ export default async function PublicLayout({ children }: { children: ReactNode }
           <ViewerProvider signedIn={session !== null}>{children}</ViewerProvider>
         </ApiProvider>
       </main>
+      <Presses />
       <SiteFooter>
         <GuideLinks index />
       </SiteFooter>

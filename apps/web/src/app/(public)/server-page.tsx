@@ -19,6 +19,7 @@ import { Badge, Button, CopyField, FormSection, GetPack, Note, TextField } from 
 import styles from './like-this.module.css'
 import { Reactions } from './reactions'
 import { ReportServer, reportable } from './report'
+import { ctaMark } from './steps'
 
 /**
  * A server as the people it is shared with see it: its own page, and the same page reached
@@ -162,7 +163,12 @@ function LikeThis({ view, invite }: { view: PublicServerView; invite?: string | 
           own.
         </span>
       </span>
-      <Button variant="outline" size="sm" href={behindSignUp(signedIn, `/servers/new?${query}`)}>
+      <Button
+        variant="outline"
+        size="sm"
+        href={behindSignUp(signedIn, `/servers/new?${query}`)}
+        {...ctaMark('copy_server')}
+      >
         Make one like this
       </Button>
     </aside>

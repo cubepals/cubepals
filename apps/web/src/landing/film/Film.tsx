@@ -12,6 +12,7 @@
 import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
 import { type ReactNode, useId, useRef, useState } from 'react'
+import { ctaMark } from '../../app/(public)/steps'
 import { Lockup } from '../../ui/brand'
 import type { RoomKey } from '../engine/chunk'
 import type { Tone } from '../kit'
@@ -92,10 +93,14 @@ export function Night({ create, signedIn }: { create: string; signedIn: boolean 
             <Lockup />
           </Link>
           <nav className={styles.links} aria-label="Cubepals">
-            <Link href="/pricing" className={styles.link}>
+            <Link href="/pricing" className={styles.link} {...ctaMark('nav_pricing')}>
               Pricing
             </Link>
-            <Link href={signedIn ? '/servers' : '/sign-in'} className={styles.link}>
+            <Link
+              href={signedIn ? '/servers' : '/sign-in'}
+              className={styles.link}
+              {...(signedIn ? {} : ctaMark('nav_sign_in'))}
+            >
               {signedIn ? 'Your servers' : 'Sign in'}
             </Link>
           </nav>
@@ -104,7 +109,7 @@ export function Night({ create, signedIn }: { create: string; signedIn: boolean 
           A Minecraft server that starts when your friends join
         </h1>
         <div className={styles.go}>
-          <Link href={create} className="bl-btn bl-btn--lg">
+          <Link href={create} className="bl-btn bl-btn--lg" {...ctaMark('hero_create')}>
             Create a server
           </Link>
           <p>
@@ -658,7 +663,7 @@ export function Last({ create }: { create: string }) {
       <div className={styles.words} data-over>
         <h2 className="bl-display">Start a world with your friends</h2>
         <div>
-          <Link href={create} className="bl-btn bl-btn--lg">
+          <Link href={create} className="bl-btn bl-btn--lg" {...ctaMark('last_create')}>
             Create a server
           </Link>
         </div>

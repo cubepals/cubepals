@@ -2,6 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Sign-in: the providers and email, then on to where the person was headed. The form itself is
+ * `sign-in-form.tsx`.
+ */
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -28,6 +32,7 @@ export default async function SignInPage({
   const reset = firstParam(params.reset) === 'done'
   return (
     <AuthEntry
+      flow="signin"
       title="Welcome back"
       methods={methods}
       redirects={{
