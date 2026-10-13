@@ -30,7 +30,7 @@ Fraud and abuse tuning, costs and margins, competitors, pricing history, strateg
 
 ## No accidental mentions
 
-In commits, PR titles and bodies, issues and comments, never write `@name` as plain text: GitHub turns it into a mention and notifies whoever owns that name. Minecraft selectors (`@s`, `@p`), package scopes and emails go inside backticks closed on the same line; scan for a stray `@` before committing.
+Never put `@` before a name in a commit message or a PR body, not even inside backticks. Commits do not render markdown, and a squash merge copies the PR body into the commit, so `@s` becomes a mention of the GitHub user "s". Write "the s selector" or "the player" instead. In issues and comments, selectors, package scopes and emails go inside backticks closed on the same line.
 
 ## Structure
 
