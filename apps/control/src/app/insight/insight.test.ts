@@ -176,13 +176,14 @@ describe.skipIf(!hasDatabase)('the funnel, for servers and their players', () =>
     expect(asks).toMatchObject([{ moment: FUNNEL.firstWake, detail: { serverName: 'Test server' } }])
   }, 30_000)
 
-  test('a friend joining is the second name the account’s servers have seen, once', async () => {
+  test('a server’s first join is anyone’s, and a friend the second name its account has seen, each once', async () => {
     const owner = await h.user()
     const { id } = await running(owner)
     await sent(owner.userId)
     h.minecraft.join(id, { uuid: randomUUID(), name: 'Steve' })
     await h.app.schedules.presenceSync()
-    expect(await sent(owner.userId)).toEqual([])
+    // The server's first join is anyone's, once; a friend is the second name.
+    expect((await sent(owner.userId)).map((e) => e.event)).toEqual([FUNNEL.serverFirstJoin])
     // The same person again, under another case, is still the owner.
     h.minecraft.join(id, { uuid: randomUUID(), name: 'steve' })
     await h.app.schedules.presenceSync()

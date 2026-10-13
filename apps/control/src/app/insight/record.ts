@@ -16,6 +16,7 @@ export const FUNNEL = {
   signedUp: 'signed_up',
   serverCreated: 'server_created',
   serverFirstStarted: 'server_first_started',
+  serverFirstJoin: 'server_first_join',
   firstFriendJoined: 'moment_first_friend_joined',
   firstWake: 'moment_first_wake',
   firstWeek: 'moment_first_week',
@@ -92,7 +93,8 @@ export async function serverRan(q: Queryable, serverId: string, woken: boolean, 
 }
 
 /**
- * Who is on one of the account's servers, as the server itself says. Nothing links an account
+ * Who is on one of the account's servers, as the server itself says: the server's first join, by
+ * anyone, is kept once for it. Nothing links an account
  * to a Minecraft player, so the first name ever seen on any of its servers counts as the owner's,
  * and the second, a friend. A second week of play is two calendar
  * weeks (Monday to Sunday, UTC) with any minute of play on any of its servers.
@@ -110,6 +112,8 @@ export async function playersSeen(
     .where(eq(servers.id, serverId))
   if (server === undefined) return
   const owner = server.ownerId
+  // Anyone on it at all, the owner included: the server was played on, once.
+  await noteOnce(q, { event: FUNNEL.serverFirstJoin, subject: serverId, userId: owner, at })
   if (!(await kept(q, FUNNEL.firstFriendJoined, owner))) {
     const [earliest] = await q
       .select({ name: schema.serverPlayers.playerName })
