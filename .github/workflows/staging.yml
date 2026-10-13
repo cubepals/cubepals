@@ -4,8 +4,9 @@
 
 name: Staging
 
-# Staging's machines started or stopped from GitHub, so signing in on a pull request's preview
-# needs no checkout and no Fly token: the preview comment links here. Only people with write access
+# Staging's machines started or stopped from GitHub, so mail and game servers on a pull request's
+# preview need no checkout and no Fly token: the preview comment links here. Stopped, staging's API
+# still wakes for a preview's request (scripts/lib/control-wake.ts). Only people with write access
 # see "Run workflow", so only maintainers can start it. Started staging is stopped again each
 # night, so one left running costs a day at most. It shares the Nightly's concurrency group: neither
 # changes staging under the other.

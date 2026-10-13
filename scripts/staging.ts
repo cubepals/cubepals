@@ -8,7 +8,8 @@
  * a month for the addresses.
  *
  *   bun scripts/staging.ts up       every part, in the `blockly-staging` org, deployed from this checkout
- *   bun scripts/staging.ts stop     every machine in the org stopped, the servers' included
+ *   bun scripts/staging.ts stop     every machine in the org stopped, the servers' included; a
+ *                                   request to the API wakes it alone until it is idle again
  *   bun scripts/staging.ts start    the platform started again, as it was; servers start when played
  *   bun scripts/staging.ts status   what exists there now, and where to reach it
  *   bun scripts/staging.ts env      what a cloud environment needs to run all of this, written to
@@ -45,6 +46,7 @@ import { INTERNAL_PORT, MAIL_PORT } from '@blockly/contracts/local'
 import { createPolar } from '@polar-sh/sdk/2026-10'
 import { GAME_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { pointRecord } from './lib/cloudflare-dns.ts'
+import { asleep, awake, serve } from './lib/control-wake.ts'
 import { buildWorker, deployWorker } from './lib/web-worker.ts'
 import { allowing, type Bucket, changeCors, sharePreviewKeys } from './preview-uploads.ts'
 import { previewOrigins, stagingCloudflare, stagingSite } from './staging-website.ts'
@@ -290,7 +292,7 @@ async function signIn(state: State): Promise<Record<string, string>> {
     SIGNUP_ALLOWLIST: [`@${checkDomain(state)}`, ...developers].filter(Boolean).join(','),
     AUTH_GOOGLE_CLIENT_ID: process.env.AUTH_GOOGLE_CLIENT_ID ?? '',
     AUTH_GOOGLE_CLIENT_SECRET: process.env.AUTH_GOOGLE_CLIENT_SECRET ?? '',
-    WEB_TRUSTED_ORIGINS: await previewOrigins(await stagingCloudflare()),
+    WEB_TRUSTED_ORIGINS: (await previewOrigins(await stagingCloudflare())).join(','),
     AUTH_OAUTH_PROXY_SECRET: createHash('sha256')
       .update(`oauth-proxy:${state.authSecret}`)
       .digest('base64url'),
@@ -656,7 +658,8 @@ const stopOrder = (app: string): number =>
  * Every machine in the org stopped, the platform's and every server's, and the sandbox webhook
  * off until `start`. Volumes, the bucket, secrets and the edge's and realtime's dedicated IPv4s
  * stay, so `start` brings the platform back as it was: the play domain's records point at those addresses, and a cloud
- * session can't rewrite DNS. Keeping both costs about $4 a month.
+ * session can't rewrite DNS. Keeping both costs about $4 a month. The API's machine is left to wake
+ * on a request, so a pull request's preview answers while nobody tests, and `start` keeps it up.
  */
 async function stop(): Promise<void> {
   // Polar disables an endpoint whose deliveries keep failing, and a stopped staging fails every one.
@@ -669,6 +672,8 @@ async function stop(): Promise<void> {
       fly(['machine', 'stop', machine.id, '-a', app])
       say(`  stopped ${app} ${machine.id}`)
     }
+  // A preview's request wakes the API alone, and Fly stops it again once it is idle (control-wake.ts).
+  for (const id of serve(APP.control, asleep)) say(`  ${APP.control} ${id} wakes on a request`)
   const running = appsInOrg().flatMap((app) =>
     machinesOf(app)
       .filter((machine) => machine.state === 'started' || machine.state === 'starting')
@@ -703,6 +708,8 @@ async function start(): Promise<void> {
     say('The addresses are gone; running up to take new ones.')
     await up()
   } else {
+    // Running for as long as staging is, as control.toml has it: the edge reaches it privately.
+    for (const id of serve(APP.control, (services) => awake(services))) say(`  ${APP.control} ${id} stays up`)
     for (const app of [APP.mail, APP.control, APP.realtime, APP.edge]) startStopped(app)
     await until('the web app and the API answer', 300, webAnswers)
     // `stop` turned the webhook off; `up` turns it on itself.
