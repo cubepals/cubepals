@@ -45,6 +45,7 @@ import {
   strikeArm,
   veiled,
 } from './models'
+import { Pasture } from './pasture'
 import { type Light, Rooms, type Showing } from './rooms'
 import { SCENES } from './scenes'
 import {
@@ -173,9 +174,6 @@ const PATCHES: readonly (readonly Spot[])[] = [
 interface Grazer extends Body {
   to: number
   rest: number
-  clock: number
-  /** How far down its head is, 0 up to 1 grazing. */
-  head: number
 }
 
 /**
@@ -359,9 +357,9 @@ export class Cast {
     ...bodyAt(patch[0] as Spot, index === 0 ? [1, 0] : [0, -1]),
     to: 1,
     rest: 3 + index * 2.5,
-    clock: index * 1.3,
-    head: 1,
   }))
+  /** The grass the sheep stop at, and how each eats from it. */
+  private readonly pasture = new Pasture(PATCHES)
   private clock = 0
   /** Where a carried torch is just now, if anyone is carrying one: it lights the ground round it. */
   torch: readonly [number, number, number] | null = null
@@ -615,23 +613,22 @@ export class Cast {
   }
 
   /**
-   * The sheep: now and then a slow amble to the next corner of its own patch, and a long while
-   * with its head down. True while either is walking or turning.
+   * The sheep: now and then a slow amble to the next corner of its own patch, a long while stood
+   * there, and a mouthful of its grass (engine/pasture.ts). True while any of it is moving.
    */
   private graze(dt: number, box: Box): boolean {
     let ambling = false
+    this.pasture.draw(dt, box)
     this.herd.forEach((one, index) => {
       const patch = PATCHES[index % PATCHES.length] as readonly Spot[]
-      one.clock += dt
-      if (one.rest > 0) one.rest -= dt
+      const down = this.pasture.head(index, one.rest > 0 ? (one.to - 1) % patch.length : -1, dt)
+      // It finishes a mouthful before it sets off.
+      if (one.rest > 0 || this.pasture.eating) one.rest -= dt
       else if (walk(one, patch[one.to % patch.length] as Spot, AMBLE, dt, 0.8)) {
-        one.rest = 7 + hash3(index, one.to, 5) * 6
+        one.rest = 9 + hash3(index, one.to, 5) * 6
         one.to += 1
       } else ambling = true
-      // Head down while it stands, up now and then to look about; it is lowered and raised, not flipped.
-      const down = one.rest > 0 && Math.sin(one.clock * 0.45 + index * 2) > -0.35 ? 1 : 0
-      one.head += clamp(down - one.head, -dt * 1.8, dt * 1.8)
-      if (one.head > 0.001 && one.head < 0.999) ambling = true
+      if (this.pasture.eating) ambling = true
       sheep(
         box,
         {
@@ -643,7 +640,8 @@ export class Cast {
           stride: strideOf(one, AMBLE),
           inside: 0,
         },
-        ease(clamp(one.head)),
+        down,
+        this.pasture.shake,
       )
     })
     return ambling

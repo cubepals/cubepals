@@ -385,7 +385,7 @@ export function figure(box: Box, at: Stance, look: Skin, pose: Pose = {}): [numb
 }
 
 /** A sheep: a woolly box on four legs, with a head it lowers to graze (0 up, 1 down). */
-export function sheep(box: Box, at: Stance, grazing: number): void {
+export function sheep(box: Box, at: Stance, grazing: number, shake = 0): void {
   const sinH = Math.sin(at.heading)
   const cosH = Math.cos(at.heading)
   const part = (
@@ -400,6 +400,7 @@ export function sheep(box: Box, at: Stance, grazing: number): void {
     tipped: number,
     tone: number,
     kind: number,
+    turned = 0,
   ) => {
     const ct = Math.cos(tipped)
     const st = Math.sin(tipped)
@@ -418,7 +419,7 @@ export function sheep(box: Box, at: Stance, grazing: number): void {
       kind,
       0,
       at.inside,
-      at.heading,
+      at.heading + turned,
       tipped,
     )
   }
@@ -431,8 +432,9 @@ export function sheep(box: Box, at: Stance, grazing: number): void {
   ] as const)
     part(x, 0.36, z, -0.18, 0, 0.16, 0.36, 0.16, swing * way * 0.5, 60, Kind.planks)
   part(0, 0.62, 0, 0, 0, 0.62, 0.56, 0.94, 0, 252, Kind.wool)
-  // The head, from the neck at the front of the body: it comes down to the grass.
-  part(0, 0.7, 0.42, 0, 0.2, 0.36, 0.36, 0.34, grazing * 0.95, 130, Kind.planks)
+  // The head, from the neck at the front of the body: it comes down to the grass, and is shaken
+  // from side to side about its own middle.
+  part(0, 0.7, 0.42, 0, 0.2, 0.36, 0.36, 0.34, grazing * 0.95, 130, Kind.planks, shake)
 }
 
 /** A box-drawer that draws everything a little thinner: for a whole scene coming or going at once. */

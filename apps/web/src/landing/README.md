@@ -153,7 +153,9 @@ these hold everywhere:
   both are walked, and the path is walked one at a time.
 - People and things come out of scattered dots where they arrive and thin back into them as they
   go, in the print's own grain; nothing is there and then not. One way to play gives way to the
-  next the same way, the two crossing.
+  next the same way, the two crossing. So does one section's cast to the next one's, on the
+  grass and in a room: what was on thins away as the camera flies, and the next comes in
+  (`engine/handover.ts`). Scrolled back, the same happens the other way.
 - A blow is drawn back slowly, brought down, and rested after. A job has pauses in it.
 - A scene is one small story that can be taken in at a glance, and it opens in the middle of
   things, so what it is shows at once.
@@ -164,14 +166,16 @@ first three.
 **On the grass.** Friends who join walk in along the path, one at a time, turn off it to a place
 of their own and get on with something: one fells the tree, one builds a tower that stays when
 they have gone, one fishes. The first screen has two of them, and a day long enough to see them
-at it. Two sheep graze, each on its own patch. The chimney smokes while anyone is in. A section
+at it. Two sheep graze, each on its own patch, with tufts of tall grass at the corners where
+they stop: now and then one lowers its head to a tuft, eats, and lifts it again with a small shake,
+never both at once (`engine/pasture.ts`). The chimney smokes while anyone is in. A section
 with `act="play"` (the two questions) has the grass play out the way to play that is chosen, each
 in its own light: one person with a torch that lights the grass round them, meeting one of the
 dead at dusk for survival, and two of them by night for hardcore; three people and no dead, in a
 plainer, flatter print, for the smoother kind; a pyramid, a gate and a winding stair built block
 by block by someone flying, each finished with a block of gold, for creative; a water wheel and a
-hammer for the Create mod. `act="friends"` (the closing, and the two scenes before it, so the change happens while the grass
-is off the screen) has all three already at their places.
+hammer for the Create mod. `act="friends"` (the closing, and the two scenes before it, all the worlds and the plans, so the
+change happens while the grass is off the screen) has all three already at their places.
 
 **Under it.** Every room is about the same thing, a server, and shows the one thing its section
 says about it. The server is one machine built from the game's own parts (`engine/server.ts`), the
