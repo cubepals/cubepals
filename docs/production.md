@@ -236,7 +236,7 @@ account's plan like any server: a Free account that already has one needs
 
 ## Database dumps
 
-Every night at 03:30 UTC, the Database dump workflow (`.github/workflows/database-dump.yml`, running
+Every night at 03:37 UTC, the Database dump workflow (`.github/workflows/database-dump.yml`, running
 `scripts/database-dump.ts`) dumps the database with `pg_dump --format=custom`, has `pg_restore`
 read the dump back, and uploads it to `blockly-prod-database-dumps` as
 `blockly-<UTC time>.dump`. The bucket is private, and deletes each dump after 30 days. The run

@@ -9,7 +9,7 @@ name: Nightly
 # and made a prerelease; production.ts deploys only such a commit.
 on:
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '13 2 * * *'
   workflow_dispatch:
 
 permissions:

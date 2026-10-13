@@ -12,7 +12,7 @@ name: Database dump
 # environment, which production.ts sets; until they are, the run says so and passes.
 on:
   schedule:
-    - cron: '30 3 * * *'
+    - cron: '37 3 * * *'
   workflow_dispatch:
 
 permissions:
