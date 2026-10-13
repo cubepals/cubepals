@@ -6,8 +6,8 @@
  * The edges of what extra play counts and bills, through the real Polar adapter against a
  * stand-in for Polar's API: counting stops at the moment extra play did (a cancel, a failed
  * renewal), not at the last count before it; a month is counted until it is final, whether or not
- * the account plays now; and what reaches Polar after a subscription's last invoice is kept as
- * unbilled.
+ * the account plays now; what reaches Polar after a subscription's last invoice is kept as
+ * unbilled; and Polar refusing Blockly's own token holds every event until it takes them again.
  *
  * Counting within a month, cutting and sending events are in `extra-usage.test.ts`.
  */
@@ -16,7 +16,7 @@ import { DAY_MS, HOUR_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
 import { hasDatabase } from '../../testing/harness.ts'
-import { subscription } from '../../testing/polar.ts'
+import { subscription, tokenRefused } from '../../testing/polar.ts'
 import { PolarWorld } from '../../testing/polar-world.ts'
 import type { UserActor } from '../actor.ts'
 
@@ -191,6 +191,36 @@ test.skipIf(!hasDatabase)(
 )
 
 test.skipIf(!hasDatabase)(
+  'what reaches Polar once a subscription set to end is past its period is kept as unbilled, before word it ended',
+  async () => {
+    const { owner, sub, server } = await playing('Ned')
+    const month = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1))
+    const played = new Date(month.getTime() + 10 * DAY_MS)
+    await ran(server.id, played, new Date(played.getTime() + 2 * HOUR_MS))
+    const at = new Date(played.getTime() + 3 * HOUR_MS)
+    await w.h.app.billing.usage.count(owner.userId, at)
+    await w.h.app.billing.usage.cut(at)
+    // Set to end, its period over an hour ago: its final invoice is made, and the word that it
+    // ended hasn't come yet.
+    const last = await w.renewalWithExtra(owner, sub, new Date(), { status: 'paid' })
+    await w.standing(owner, sub, {
+      cancel_at_period_end: true,
+      current_period_end: new Date(Date.now() - HOUR_MS).toISOString(),
+    })
+    await w.h.app.billing.usage.send()
+    const [event] = await w.h.db
+      .select()
+      .from(schema.extraPlayReports)
+      .where(eq(schema.extraPlayReports.userId, owner.userId))
+    expect(event?.sentAt).not.toBeNull()
+    expect(await w.audited(owner, 'billing.extra_unbilled')).toEqual([
+      { event: event?.externalId, milli: 1000, cents: 25, subscription: sub, lastOrder: last },
+    ])
+  },
+  60_000,
+)
+
+test.skipIf(!hasDatabase)(
   'what reaches Polar while the subscription renews is not kept as unbilled',
   async () => {
     const { owner, server } = await playing('Max')
@@ -203,4 +233,41 @@ test.skipIf(!hasDatabase)(
     await w.h.app.billing.usage.send()
     expect(await w.audited(owner, 'billing.extra_unbilled')).toEqual([])
   },
+)
+
+test.skipIf(!hasDatabase)(
+  'Polar refusing Blockly’s token drops nothing, and an admin is told once it has waited an hour',
+  async () => {
+    const { owner, server } = await playing('Tam')
+    const month = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1))
+    const played = new Date(month.getTime() + 10 * DAY_MS)
+    await ran(server.id, played, new Date(played.getTime() + 2 * HOUR_MS))
+    const at = new Date(played.getTime() + 3 * HOUR_MS)
+    await w.h.app.billing.usage.count(owner.userId, at)
+    await w.h.app.billing.usage.cut(at)
+    const event = async () => {
+      const [row] = await w.h.db
+        .select()
+        .from(schema.extraPlayReports)
+        .where(eq(schema.extraPlayReports.userId, owner.userId))
+      return row
+    }
+    // Revoked for half a day: far past the refusals an event gets, and none is held against it.
+    const reply = w.polar.reply
+    w.polar.reply = (request) =>
+      request.path.startsWith('/v1/events/ingest') ? tokenRefused(401) : reply(request)
+    for (let hour = 0; hour < 12; hour++)
+      await w.h.app.billing.usage.send(new Date(at.getTime() + hour * HOUR_MS))
+    expect(await event()).toMatchObject({ sentAt: null, failedAt: null, attempts: 0 })
+    const later = new Date(at.getTime() + 12 * HOUR_MS)
+    expect((await w.h.app.alerts.sweep(later)).raised).toContain('extra_play_waiting')
+    const alerts = await w.h.app.alerts.active({ kind: 'admin', userId: 'admin' }, later)
+    expect(alerts.find((a) => a.key === 'extra_play_waiting')?.summary).toContain('Invalid token')
+    // A new token: the same event goes, and the alert clears.
+    w.polar.reply = reply
+    await w.h.app.billing.usage.send(later)
+    expect((await event())?.sentAt).not.toBeNull()
+    expect((await w.h.app.alerts.sweep(later)).cleared).toContain('extra_play_waiting')
+  },
+  60_000,
 )

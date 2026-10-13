@@ -294,6 +294,8 @@ export async function recordOrder(q: Queryable, provider: string, order: Billing
         // older word: a paid order stays paid. One a balance paid keeps the provider's word, and
         // `settledBy` says it is paid all the same.
         status: sql`case when ${schema.billingOrders.status} in ('paid', 'partially_refunded', 'refunded') and ${order.status} in ('draft', 'pending') then ${schema.billingOrders.status} else ${order.status} end`,
+        // The provider's word about it: it knows the order after all (`markUnknown`).
+        unknownAt: null,
         updatedAt: new Date(),
       },
     })
@@ -307,6 +309,13 @@ const orders = schema.billingOrders
  * first, and a subscription that ends makes its final charge pending a while before it is tried.
  */
 const OWED_AFTER_MS = HOUR_MS
+
+/** An order the provider said it doesn't know (`markUnknown`) is read again after this long. */
+const UNKNOWN_RETRY_MS = DAY_MS
+
+/** Not one the provider said it doesn't know in the last `UNKNOWN_RETRY_MS`. */
+const notUnknown = (now: Date) =>
+  or(isNull(orders.unknownAt), lt(orders.unknownAt, new Date(now.getTime() - UNKNOWN_RETRY_MS)))
 
 /**
  * Charges carrying extra play that didn't go through and won't now: the provider was asked again
@@ -327,7 +336,8 @@ export function owing(userId: string) {
  * Orders that may be owed now, for the provider to be asked about again before they are: unpaid,
  * carrying extra play, at least `OWED_AFTER_MS` old, and either void, of a subscription that has
  * ended, or past the grace a failed renewal gets while the card is tried again. `ended` says which
- * of the first two, which are owed only once their charge has failed or they are void.
+ * of the first two, which are owed only once their charge has failed or they are void. One the
+ * provider said it doesn't know waits a day (`markUnknown`).
  */
 export async function mayBeOwed(
   q: Queryable,
@@ -349,6 +359,7 @@ export async function mayBeOwed(
         inArray(orders.status, UNPAID_ORDER),
         isNull(orders.settledBy),
         isNull(orders.owedAt),
+        notUnknown(now),
         lt(orders.orderedAt, new Date(now.getTime() - OWED_AFTER_MS)),
         or(ended, lt(orders.orderedAt, new Date(now.getTime() - PAST_DUE_GRACE_MS))),
       ),
@@ -364,6 +375,44 @@ export async function markOwed(q: Queryable, provider: string, externalOrderId: 
     .where(
       and(eq(orders.provider, provider), eq(orders.externalOrderId, externalOrderId), isNull(orders.owedAt)),
     )
+}
+
+/**
+ * The provider, asked again about an order, said it doesn't know it: it isn't read again for a day
+ * (`UNKNOWN_RETRY_MS`). The account it is for the first time it is said, else null, so it is
+ * audited and logged once.
+ */
+export async function markUnknown(
+  q: Queryable,
+  provider: string,
+  externalOrderId: string,
+  now: Date,
+): Promise<string | null> {
+  const which = and(eq(orders.provider, provider), eq(orders.externalOrderId, externalOrderId))
+  const [first] = await q
+    .update(orders)
+    .set({ unknownAt: now, updatedAt: now })
+    .where(and(which, isNull(orders.unknownAt)))
+    .returning({ userId: orders.userId })
+  if (first !== undefined) return first.userId
+  await q.update(orders).set({ unknownAt: now, updatedAt: now }).where(which)
+  return null
+}
+
+/** Unpaid charges carrying extra play that the provider says it doesn't know, for an admin. */
+export async function unknownOrders(q: Queryable): Promise<number> {
+  const [row] = await q
+    .select({ n: count() })
+    .from(orders)
+    .where(
+      and(
+        isNotNull(orders.unknownAt),
+        gt(orders.extraCents, 0),
+        inArray(orders.status, UNPAID_ORDER),
+        isNull(orders.settledBy),
+      ),
+    )
+  return row?.n ?? 0
 }
 
 /** What the billing provider has said about an account, as extra play's guards read it. */
@@ -421,9 +470,10 @@ export async function untoldAbout(q: Queryable): Promise<string[]> {
 
 /**
  * Charges carrying extra play that failed while the provider still retries them (their
- * subscription past due), that the owner hasn't been told about yet.
+ * subscription past due), that the owner hasn't been told about yet; one the provider said it
+ * doesn't know waits a day (`markUnknown`).
  */
-export async function failingUntold(q: Queryable, userId: string): Promise<OrderNotice[]> {
+export async function failingUntold(q: Queryable, userId: string, now: Date): Promise<OrderNotice[]> {
   return q
     .select({
       provider: orders.provider,
@@ -440,6 +490,7 @@ export async function failingUntold(q: Queryable, userId: string): Promise<Order
         inArray(orders.status, ['pending']),
         isNull(orders.settledBy),
         isNull(orders.failureToldAt),
+        notUnknown(now),
         sql`exists (select 1 from ${subscriptions} where ${subscriptions.externalSubscriptionId} = ${orders.externalSubscriptionId} and ${subscriptions.status} = 'past_due')`,
       ),
     )

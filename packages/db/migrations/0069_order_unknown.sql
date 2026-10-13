@@ -1,0 +1,1 @@
+ALTER TABLE "billing_orders" ADD COLUMN "unknown_at" timestamp with time zone;

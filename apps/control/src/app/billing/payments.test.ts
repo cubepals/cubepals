@@ -298,6 +298,69 @@ test.skipIf(!hasDatabase)(
   60_000,
 )
 
+test.skipIf(!hasDatabase)(
+  'a final charge a balance paid, then charged after all, is refunded once and the balance stands',
+  async () => {
+    const { owner, sub } = await w.subscriber('Hal')
+    await w.subscriptionNow(owner, sub, { status: 'canceled' })
+    // Its final charge, still pending and never tried a week on: owed, and paid as a balance.
+    const final = await w.renewalWithExtra(owner, sub, new Date(Date.now() - 8 * DAY_MS))
+    expect(await w.h.app.billing.confirmOwed(anHourOn())).toBe(1)
+    const balance = await w.paidBalance(owner, final, 1750)
+    expect(await extraOf(owner)).toMatchObject({ owedCents: 0 })
+    // Polar charges it after all. The charge is given back, asked for again on each delivery
+    // until Polar takes it, and then never again.
+    const charged = { ...w.orders.get(final), status: 'paid' as const, paid: true }
+    const reply = w.polar.reply
+    w.polar.reply = (request) => (request.path.startsWith('/v1/refunds') ? failing() : reply(request))
+    const given = () => w.refunds.filter((r) => r.order_id === final || r.order_id === balance)
+    await w.ordered(owner, sub, charged)
+    expect(given()).toEqual([])
+    w.polar.reply = reply
+    await w.ordered(owner, sub, charged)
+    await w.ordered(owner, sub, charged)
+    expect(given()).toEqual([
+      { order_id: final, amount: 1750, reason: 'duplicate', comment: 'Paid already, as a balance.' },
+    ])
+    expect(await w.audited(owner, 'billing.paid_twice_refunded')).toEqual([
+      { order: final, balance, refundCents: 1750 },
+    ])
+    expect(await extraOf(owner)).toMatchObject({ owedCents: 0 })
+  },
+  60_000,
+)
+
+test.skipIf(!hasDatabase)(
+  'an order Polar doesn’t know is read again a day later, not every pass, and an admin is told once',
+  async () => {
+    const { owner, sub } = await w.subscriber('Ike')
+    await w.subscriptionNow(owner, sub, { status: 'canceled' })
+    const lost = await w.renewalWithExtra(owner, sub, new Date(), { status: 'void' })
+    const held = w.orders.get(lost)
+    w.orders.delete(lost)
+    const reads = () => w.polar.requests.filter((r) => r.path.startsWith(`/v1/orders/${lost}`)).length
+    const at = anHourOn()
+    expect(await w.h.app.billing.confirmOwed(at)).toBe(0)
+    expect(await w.h.app.billing.confirmOwed(at)).toBe(0)
+    await w.h.app.billing.tellAboutPayments(at)
+    expect(reads()).toBe(1)
+    expect(await w.audited(owner, 'billing.order_unknown')).toEqual([{ order: lost }])
+    expect((await w.h.app.alerts.sweep(at)).raised).toContain('billing_order_unknown')
+    // A day on it is read again; still unknown, it is audited no more.
+    const dayOn = new Date(at.getTime() + DAY_MS + MINUTE_MS)
+    expect(await w.h.app.billing.confirmOwed(dayOn)).toBe(0)
+    expect(reads()).toBe(2)
+    expect(await w.audited(owner, 'billing.order_unknown')).toHaveLength(1)
+    // Polar knows it again: owed as it says, and the alert clears.
+    if (held !== undefined) w.orders.set(lost, held)
+    const twoDaysOn = new Date(dayOn.getTime() + DAY_MS + MINUTE_MS)
+    expect(await w.h.app.billing.confirmOwed(twoDaysOn)).toBe(1)
+    expect(await w.kept(lost)).toMatchObject({ unknownAt: null })
+    expect((await w.h.app.alerts.sweep(twoDaysOn)).cleared).toContain('billing_order_unknown')
+  },
+  60_000,
+)
+
 test.skipIf(!hasDatabase)('a balance refunded leaves what it paid owed again', async () => {
   const { owner, renewal } = await owingBalance('Fay')
   const paid = await w.paidBalance(owner, renewal, 1750)

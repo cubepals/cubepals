@@ -96,8 +96,16 @@ export const billingOrders = pgTable(
     owedAt: ts('owed_at'),
     /** The balance order that paid it in its place (`settleUrl`); null while nothing has. */
     settledBy: text('settled_by'),
-    /** A balance order Blockly asked the provider to refund, for it paid what was settled already. */
+    /**
+     * When Blockly asked the provider to refund it: a balance order that paid what was settled
+     * already, or an order a balance had settled that was then charged as well.
+     */
     refundAskedAt: ts('refund_asked_at'),
+    /**
+     * When the provider last said it doesn't know this order, read again before it is owed. It is
+     * read again a day later, not every pass; any word from the provider about it clears this.
+     */
+    unknownAt: ts('unknown_at'),
     orderedAt: ts('ordered_at').notNull(),
     updatedAt: updatedAt(),
   },

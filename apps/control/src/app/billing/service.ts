@@ -28,7 +28,7 @@ import {
   subscriptionChanges,
   writeEntries,
 } from './audit.ts'
-import { auditRefund, claimRefund, settleable, settleWith } from './balance.ts'
+import { auditPaidTwice, auditRefund, claimRefund, paidTwice, settleable, settleWith } from './balance.ts'
 import { ChipIns } from './chip-ins.ts'
 import { Coupons } from './coupons.ts'
 import { auditRenewal, ExtraUsage } from './extra-usage.ts'
@@ -39,6 +39,7 @@ import {
   latestSubscription,
   markOwed,
   markTold,
+  markUnknown,
   mayBeOwed,
   owingUntold,
   PAST_DUE_GRACE_MS,
@@ -289,6 +290,7 @@ export class BillingService {
    */
   async #orderKept(provider: string, order: BillingOrder): Promise<void> {
     await this.#balancePaid(order)
+    await this.#paidTwice(order)
     await this.chipIns.record(provider, order)
     await auditRenewal(this.#db, provider, order)
     if (order.paysForYear) await this.#yearPaid(order)
@@ -304,21 +306,38 @@ export class BillingService {
   async #balancePaid(order: BillingOrder): Promise<void> {
     const billing = requireCapability(this.#caps, 'billing')
     const { refundCents } = await settleWith(this.#db, billing.provider, order)
-    if (refundCents <= 0) return
-    const { claimed, release } = await claimRefund(this.#db, billing.provider, order.externalOrderId)
-    if (!claimed) return
+    if (await this.#refundOnce(order.externalOrderId, refundCents, 'Paid for orders that were already paid.'))
+      await auditRefund(this.#db, order, refundCents)
+  }
+
+  /**
+   * An order a balance paid in its place, charged after all (`paidTwice`): the charge is refunded
+   * through the provider at once, and audited. The balance stands, so it is paid for once.
+   */
+  async #paidTwice(order: BillingOrder): Promise<void> {
+    const billing = requireCapability(this.#caps, 'billing')
+    const { refundCents, settledBy } = await paidTwice(this.#db, billing.provider, order)
+    if (settledBy === null) return
+    if (await this.#refundOnce(order.externalOrderId, refundCents, 'Paid already, as a balance.'))
+      await auditPaidTwice(this.#db, order, settledBy, refundCents)
+  }
+
+  /**
+   * Gives `cents` of the order back through the provider, once (`claimRefund`): true when it was
+   * refunded now. One the provider doesn't take is asked for again when it delivers the order again.
+   */
+  async #refundOnce(externalOrderId: string, cents: number, why: string): Promise<boolean> {
+    if (cents <= 0) return false
+    const billing = requireCapability(this.#caps, 'billing')
+    const { claimed, release } = await claimRefund(this.#db, billing.provider, externalOrderId)
+    if (!claimed) return false
     try {
-      await billing.refund({
-        externalOrderId: order.externalOrderId,
-        cents: refundCents,
-        why: 'Paid for orders that were already paid.',
-      })
+      await billing.refund({ externalOrderId, cents, why })
     } catch (error) {
-      // Not given back: the provider delivers the order again, and it is tried again then.
       await release()
       throw error
     }
-    await auditRefund(this.#db, order, refundCents)
+    return true
   }
 
   /**
@@ -524,7 +543,7 @@ export class BillingService {
   async confirmOwed(now = new Date()): Promise<number> {
     let owed = 0
     for (const candidate of await mayBeOwed(this.#db, now)) {
-      const fresh = await this.#orderNow(candidate.externalOrderId)
+      const fresh = await this.#orderNow(candidate.externalOrderId, now)
       if (fresh === null || !UNPAID_ORDER.includes(fresh.order.status)) continue
       if (candidate.ended && fresh.order.status !== 'void' && !fresh.chargeFailed) continue
       await markOwed(this.#db, candidate.provider, candidate.externalOrderId, now)
@@ -537,16 +556,35 @@ export class BillingService {
   /**
    * The order as the provider holds it now, kept as it says (paid since, or voided); null when the
    * provider doesn't know it, doesn't answer or refuses, so one order waits for the next pass
-   * instead of stopping the sweep and the hours limits enforced after it.
+   * instead of stopping the sweep and the hours limits enforced after it. One it doesn't know is
+   * marked (`markUnknown`) and read again a day later, not every pass; the first time, it is kept
+   * on the account's audit log and an admin is told (`billing_order_unknown`).
    */
-  async #orderNow(externalOrderId: string): Promise<OrderNow | null> {
+  async #orderNow(externalOrderId: string, now: Date): Promise<OrderNow | null> {
     const billing = requireCapability(this.#caps, 'billing')
-    const fresh = await billing.order(externalOrderId).catch((error: unknown) => {
+    let fresh: OrderNow | null
+    try {
+      fresh = await billing.order(externalOrderId)
+    } catch (error) {
       if (!(error instanceof BillingUnavailable))
         console.error(`billing: reading order ${externalOrderId} failed: ${inFull(error)}`)
       return null
-    })
-    if (fresh !== null && (await recordOrder(this.#db, billing.provider, fresh.order)))
+    }
+    if (fresh === null) {
+      const userId = await markUnknown(this.#db, billing.provider, externalOrderId, now)
+      if (userId !== null) {
+        console.error(`billing: ${billing.provider} doesn't know order ${externalOrderId}`)
+        await this.#db.insert(schema.auditLog).values({
+          actor: 'system:billing',
+          action: 'billing.order_unknown',
+          subjectType: 'account',
+          subjectId: userId,
+          data: { order: externalOrderId },
+        })
+      }
+      return null
+    }
+    if (await recordOrder(this.#db, billing.provider, fresh.order))
       await settleWith(this.#db, billing.provider, fresh.order)
     return fresh
   }
@@ -556,8 +594,8 @@ export class BillingService {
     const failing = []
     // Read again first: one paid since its webhook was lost is not emailed about, and one the
     // provider doesn't answer about waits for the next pass.
-    for (const order of await failingUntold(this.#db, userId)) {
-      const fresh = await this.#orderNow(order.externalOrderId)
+    for (const order of await failingUntold(this.#db, userId, now)) {
+      const fresh = await this.#orderNow(order.externalOrderId, now)
       if (fresh !== null && UNPAID_ORDER.includes(fresh.order.status)) failing.push(order)
     }
     if (to !== null)

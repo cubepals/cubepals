@@ -103,6 +103,8 @@ export const ALERT_KEYS = [
   'catalog_stale',
   'worlds_outgrow_plan',
   'extra_play_unsent',
+  'extra_play_waiting',
+  'billing_order_unknown',
   'free_accounts_linked',
 ] as const
 export type AlertKey = (typeof ALERT_KEYS)[number]

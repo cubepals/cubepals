@@ -9,7 +9,8 @@ import { entitlementsFor, PLAN_KEYS } from '../../domain/account/entitlements.ts
 import { unreviewedLinks } from '../accounts/free-play.ts'
 import { adminInbox, loadStanding } from '../accounts/persistence.ts'
 import type { Actor } from '../actor.ts'
-import { unsentExtra } from '../billing/extra-usage.ts'
+import { unsentExtra, waitingExtra } from '../billing/extra-usage.ts'
+import { unknownOrders } from '../billing/persistence.ts'
 import type { CatalogSync } from '../catalog/sync.ts'
 import { adminAlert } from '../emails/admins.ts'
 import { NotFound } from '../errors.ts'
@@ -33,6 +34,8 @@ const WHERE: Record<AlertKey, string> = {
   catalog_stale: '/admin/platform',
   worlds_outgrow_plan: '/admin/accounts',
   extra_play_unsent: '/admin/accounts',
+  extra_play_waiting: '/admin/platform',
+  billing_order_unknown: '/admin/accounts',
   free_accounts_linked: '/admin',
 }
 
@@ -150,7 +153,12 @@ export class PlatformAlerts {
         key: 'worlds_outgrow_plan',
         summary: `${outgrown} ${outgrown === 1 ? 'account keeps' : 'accounts keep'} more world data than ${outgrown === 1 ? 'its plan covers' : 'their plans cover'}, and ${outgrown === 1 ? 'costs' : 'cost'} more than ${outgrown === 1 ? 'it pays' : 'they pay'}.`,
       })
-    conditions.push(...(await unsentCondition(this.#db)), ...(await linkedCondition(this.#db)))
+    conditions.push(
+      ...(await unsentCondition(this.#db)),
+      ...(await waitingCondition(this.#db, now)),
+      ...(await unknownCondition(this.#db)),
+      ...(await linkedCondition(this.#db)),
+    )
     return conditions
   }
 
@@ -198,6 +206,35 @@ async function unsentCondition(db: Db): Promise<Condition[]> {
     {
       key: 'extra_play_unsent',
       summary: `${events} extra-play ${one ? 'event' : 'events'} (${milli / 1000} h) Polar kept refusing ${one ? 'is' : 'are'} no longer sent and won't be billed; each is on its account's audit log as billing.extra_unsent.`,
+    },
+  ]
+}
+
+/**
+ * Extra play Polar hasn't taken for an hour: it is down, or refuses Blockly's token. Nothing is
+ * lost; it is sent once Polar takes it, and billed on the payment after.
+ */
+async function waitingCondition(db: Db, now: Date): Promise<Condition[]> {
+  const { events, milli, lastError } = await waitingExtra(db, now)
+  if (events === 0) return []
+  const one = events === 1
+  return [
+    {
+      key: 'extra_play_waiting',
+      summary: `${events} extra-play ${one ? 'event' : 'events'} (${milli / 1000} h) ${one ? 'has' : 'have'} waited over an hour for Polar to take ${one ? 'it' : 'them'}. Polar said: ${(lastError ?? '').slice(0, 200)}`,
+    },
+  ]
+}
+
+/** Unpaid charges carrying extra play Polar says it doesn't know: never owed until it does. */
+async function unknownCondition(db: Db): Promise<Condition[]> {
+  const orders = await unknownOrders(db)
+  if (orders === 0) return []
+  const one = orders === 1
+  return [
+    {
+      key: 'billing_order_unknown',
+      summary: `${orders} unpaid ${one ? 'charge' : 'charges'} carrying extra play ${one ? 'is' : 'are'} unknown to Polar, so ${one ? 'it is' : 'they are'} never owed until Polar knows ${one ? 'it' : 'them'}; each is asked about once a day, and is on its account's audit log as billing.order_unknown.`,
     },
   ]
 }

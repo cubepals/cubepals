@@ -8,6 +8,8 @@
  * one-time order of the provider's balance product (`settleUrl`), and that order's word clearing
  * the orders it names. Only an order for the balance product that covers what those orders came to,
  * before tax, clears them; anything else is kept on the account's audit log and the debt stays.
+ * Whatever is paid twice, a balance for what was paid already or an order charged after a balance
+ * cleared it, is answered as a refund to give back.
  *
  * It is not where an order becomes owed (`persistence.ts` `owing`) or where the block it puts on
  * servers is enforced (the policy).
@@ -89,23 +91,50 @@ export async function settleWith(
     await audit(q, order, 'billing.balance_short', { ...facts, orders: open.map((row) => row.id) })
     return none
   }
-  if (open.length > 0) {
-    await q
-      .update(orders)
-      .set({ settledBy: order.externalOrderId, updatedAt: new Date() })
-      .where(
-        and(
-          eq(orders.provider, provider),
-          inArray(
-            orders.externalOrderId,
-            open.map((row) => row.id),
-          ),
-          isNull(orders.settledBy),
-        ),
-      )
-    await audit(q, order, 'billing.balance_settled', { ...facts, orders: open.map((row) => row.id) })
-  }
-  return { refundCents: order.netCents - owedNet }
+  // Still unpaid as it is cleared: one the provider charged meanwhile is left to its charge, and
+  // what the balance paid for it is given back below, so it is never paid for twice (`paidTwice`).
+  const settled =
+    open.length === 0
+      ? []
+      : await q
+          .update(orders)
+          .set({ settledBy: order.externalOrderId, updatedAt: new Date() })
+          .where(
+            and(
+              eq(orders.provider, provider),
+              inArray(
+                orders.externalOrderId,
+                open.map((row) => row.id),
+              ),
+              isNull(orders.settledBy),
+              inArray(orders.status, UNPAID_ORDER),
+            ),
+          )
+          .returning({ id: orders.externalOrderId, net: orders.netCents })
+  if (settled.length > 0)
+    await audit(q, order, 'billing.balance_settled', { ...facts, orders: settled.map((row) => row.id) })
+  return { refundCents: order.netCents - settled.reduce((sum, row) => sum + row.net, 0) }
+}
+
+/**
+ * An order a balance paid in its place (`settledBy`) that the provider charged after all, a final
+ * charge still pending when it was owed: paid for twice. The balance stands, and what the charge
+ * paid, before tax, is answered as `refundCents`, to be given back on the order itself (the caller
+ * asks once, `claimRefund`). Nothing for any other order.
+ */
+export async function paidTwice(
+  q: Queryable,
+  provider: string,
+  order: BillingOrder,
+): Promise<{ refundCents: number; settledBy: string | null }> {
+  const none = { refundCents: 0, settledBy: null }
+  if (order.balance || order.status !== 'paid') return none
+  const [row] = await q
+    .select({ settledBy: orders.settledBy, refunded: orders.refundedCents })
+    .from(orders)
+    .where(and(eq(orders.provider, provider), eq(orders.externalOrderId, order.externalOrderId)))
+  if (row === undefined || row.settledBy === null) return none
+  return { refundCents: order.netCents - row.refunded, settledBy: row.settledBy }
 }
 
 /**
@@ -136,7 +165,7 @@ const clearedBy = (q: Queryable, provider: string, order: BillingOrder) =>
     .where(and(eq(orders.provider, provider), eq(orders.settledBy, order.externalOrderId)))
 
 /**
- * Claims the refund of a balance order for this caller, once: false when it was asked for already,
+ * Claims the refund of an order for this caller, once: false when it was asked for already,
  * so a webhook delivered twice never refunds twice. `release` gives it back when the provider
  * didn't take the refund, for the provider's next delivery to try again.
  */
@@ -168,6 +197,14 @@ export const auditRefund = (q: Queryable, order: BillingOrder, cents: number) =>
     order: order.externalOrderId,
     refundCents: cents,
     orders: order.settles,
+  })
+
+/** An order a balance had paid, charged as well, was refunded: kept on the account's audit log. */
+export const auditPaidTwice = (q: Queryable, order: BillingOrder, balance: string, cents: number) =>
+  audit(q, order, 'billing.paid_twice_refunded', {
+    order: order.externalOrderId,
+    balance,
+    refundCents: cents,
   })
 
 function audit(q: Queryable, order: BillingOrder, action: string, data: Record<string, unknown>) {

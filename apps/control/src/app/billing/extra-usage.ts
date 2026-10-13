@@ -67,6 +67,8 @@ const BATCHES_PER_PASS = 4
  * and a half hours after the first: long enough for a fix on the provider's side, not forever.
  */
 const MAX_REFUSALS = 10
+/** An event the provider hasn't taken this long after it was cut is an admin's to look at. */
+const WAITING_ALERT_MS = HOUR_MS
 /** How long an event the provider refused waits: a minute, doubling, up to six hours. */
 const backoff = (attempts: number) => Math.min(MINUTE_MS * 2 ** (attempts - 1), 6 * HOUR_MS)
 
@@ -295,8 +297,9 @@ export class ExtraUsage {
    * event at a time, so one it won't take never holds back the rest: each it refuses waits longer
    * before it is tried again (`backoff`), and after `MAX_REFUSALS` it is no longer sent, kept on
    * the account's audit log, and an admin is told (`extra_play_unsent`). Newer events go on in
-   * the meantime. The provider being down refuses nothing: the pass stops, and all of it is tried
-   * next minute, under the same ids.
+   * the meantime. The provider being down, or refusing Blockly's own token, refuses nothing: the
+   * pass stops, all of it is tried next minute under the same ids, and an admin is told once it
+   * has waited an hour (`extra_play_waiting`).
    */
   async send(now = new Date()): Promise<{ sent: number; failed: number }> {
     const billing = this.#billing
@@ -325,7 +328,7 @@ export class ExtraUsage {
           .update(reports)
           .set({ sentAt: new Date() })
           .where(eq(reports.externalId, event.externalId))
-      await this.#unbilled(batch, taken)
+      await this.#unbilled(batch, taken, now)
       sent += taken.length
       failed += batch.length - taken.length
       if (down) break
@@ -334,16 +337,20 @@ export class ExtraUsage {
   }
 
   /**
-   * Events the provider took after the account's subscription ended: its last invoice was made
-   * when it ended, and nothing bills them now. Kept on the account's audit log, with the last
+   * Events the provider took after the account's subscription made its last invoice: it ended, or
+   * it was set to end and its period is over (its final invoice was made then, before the word
+   * that it ended arrives). Nothing bills them now. Kept on the account's audit log, with the last
    * order of that subscription, for an admin; nothing else is done.
    */
-  async #unbilled(batch: readonly ReportRow[], taken: readonly UsageEvent[]): Promise<void> {
+  async #unbilled(batch: readonly ReportRow[], taken: readonly UsageEvent[], now: Date): Promise<void> {
     const went = new Set(taken.map((event) => event.externalId))
     const rows = batch.filter((row) => went.has(row.externalId))
     for (const userId of new Set(rows.map((row) => row.userId))) {
       const latest = await latestSubscription(this.#db, userId)
-      if (latest?.status !== 'ended') continue
+      if (latest === null) continue
+      const periodOver =
+        latest.cancelAtPeriodEnd && latest.currentPeriodEnd !== null && latest.currentPeriodEnd <= now
+      if (latest.status !== 'ended' && !periodOver) continue
       const orders = schema.billingOrders
       const [last] = await this.#db
         .select({ id: orders.externalOrderId })
@@ -555,6 +562,35 @@ export async function auditRenewal(db: Db, provider: string, order: BillingOrder
       matches: Math.abs(reportedCents - order.extraCents) <= 1,
     },
   })
+}
+
+/**
+ * Events still waiting for the provider after `WAITING_ALERT_MS`, which it was asked to take and
+ * didn't: it is down, or refuses Blockly's own token (revoked, or short a scope), which never
+ * counts against an event, so they wait for a person. With the last error it gave, newest first.
+ */
+export async function waitingExtra(
+  db: Db,
+  now = new Date(),
+): Promise<{ events: number; milli: number; lastError: string | null }> {
+  const waiting = and(
+    isNull(reports.sentAt),
+    isNull(reports.failedAt),
+    isNotNull(reports.lastError),
+    lt(reports.at, new Date(now.getTime() - WAITING_ALERT_MS)),
+    notTest(db, reports.userId),
+  )
+  const [row] = await db
+    .select({ events: count(), milli: sql<string>`coalesce(sum(${reports.milli}), 0)` })
+    .from(reports)
+    .where(waiting)
+  const [last] = await db
+    .select({ error: reports.lastError })
+    .from(reports)
+    .where(waiting)
+    .orderBy(desc(reports.at))
+    .limit(1)
+  return { events: row?.events ?? 0, milli: Number(row?.milli ?? 0), lastError: last?.error ?? null }
 }
 
 /** Events the provider refused until they were no longer sent (`MAX_REFUSALS`): hours not billed. */
