@@ -22,11 +22,15 @@ const BRACKETED = /<[^<>\n]*>/g
 
 /** The mentions GitHub would make of this text, each as written. */
 export function mentionsIn(text: string): string[] {
-  const kept = text
+  let kept = text
     .split('\n')
     .filter((line) => !line.startsWith('#'))
     .join('\n')
-    .replace(BRACKETED, '')
+  // Until nothing changes, so a bracket left by one pass can't hide a mention from the next.
+  for (let before = ''; before !== kept; ) {
+    before = kept
+    kept = kept.replace(BRACKETED, ' ')
+  }
   return [...kept.matchAll(MENTION)].map((match) => match[0])
 }
 
