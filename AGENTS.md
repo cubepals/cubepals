@@ -32,6 +32,10 @@ Fraud and abuse tuning, costs and margins, competitors, pricing history, strateg
 
 Never put `@` before a name in a commit message or a PR body, not even inside backticks. Commits do not render markdown, and a squash merge copies the PR body into the commit, so `@s` becomes a mention of the GitHub user "s". Write "the s selector" or "the player" instead. In issues and comments, selectors, package scopes and emails go inside backticks closed on the same line.
 
+## Titles and slips
+
+A PR or commit title says what changed, plainly, the way someone reading the history wants it. It doesn't state the motive. When something public goes wrong (a title, a mention, a post), stop, say what happened, and ask; don't close, reopen or force-push to cover it.
+
 ## Structure
 
 A source file past about 800 lines, or one `impl` block, class or function past about 600, is split by concern before more is added to it. Splitting is its own change, titled `Move: …`, in which code moves and nothing else does. `bun run check:move-only` proves it.

@@ -420,7 +420,7 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
       onSuccess: () => {
         const before = overview.plan
         void queries
-          .fetchQuery(trpc.account.overview.queryOptions())
+          .query(trpc.account.overview.queryOptions())
           .then((now) => billingReturned(before, now.plan))
         if (next !== null && /^\/(?![/\\])/.test(next)) router.replace(next)
       },

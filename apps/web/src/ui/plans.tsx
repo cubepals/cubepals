@@ -121,7 +121,7 @@ export function PlayHours({
         <>
           {priceCents > 0 && (
             <p>
-              {dollars(priceCents)} for {hours} hours isn’t cheap, and we know it. Cubepals is one person, and
+              {dollars(priceCents)} for {hours} hours isn’t cheap, and we know it. Cubepals is small, and
               plans are what pay for the servers. Hours get cheaper to run as more people play, and the price
               will follow.
             </p>

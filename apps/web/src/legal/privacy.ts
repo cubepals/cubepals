@@ -17,7 +17,7 @@ export const PRIVACY: Policy = {
   summary: [
     'We collect what we need to run your account and your servers: your email, how you sign in, your servers and worlds, and the Minecraft names of the people who play on them.',
     'We don’t sell your data, show ads, or use tracking cookies. We count how {brand} is used without cookies or anything stored on your device.',
-    '{brand} is run by one person in {country}. Your servers and our database are in Frankfurt, Germany, unless you move a server. Some of the companies that help us run {brand} are in the US.',
+    '{brand} is run from {country}. Your servers and our database are in Frankfurt, Germany, unless you move a server. Some of the companies that help us run {brand} are in the US.',
     'You can ask us for a copy of your data, to correct it, or to delete it, by emailing {privacy}.',
   ],
   sections: [
@@ -27,7 +27,7 @@ export const PRIVACY: Policy = {
       blocks: [
         '{brand} is run by {name}, based in {country} (“we”, “us”). We are the controller of the personal data described here. We take notices by email, at {legal}.',
         'We have no office or company in the UK or the EU. Because we offer {brand} to people there, the UK GDPR and the EU GDPR apply to us all the same.',
-        'For anything about your personal data, email {privacy}. We don’t have a data protection officer; the person who runs {brand} answers these emails.',
+        'For anything about your personal data, email {privacy}. We don’t have a data protection officer; we answer these emails ourselves.',
       ],
     },
     {
@@ -41,7 +41,7 @@ export const PRIVACY: Policy = {
             rows: [
               [
                 '**Your account:** email address, password (stored only as a secure hash), whether you’ve confirmed your email, and when you joined. If you sign in with Google or GitHub: your name and profile picture address from that account, its account ID, and the sign-in tokens it gives us.',
-                'To create your account, sign you in, and email you things about your account and servers.',
+                'To create your account, sign you in, and email you things about your account and servers. Now and then we may also write to you personally, to ask how it’s going. We don’t send marketing.',
                 'Contract',
               ],
               [
@@ -126,7 +126,7 @@ export const PRIVACY: Policy = {
             '**What we receive from Google:** your name, your email address, whether Google has confirmed that email address, the address of your profile picture, and your Google account ID, with the sign-in tokens Google gives us for it.',
             '**What we use it for:** only to create your {brand} account and sign you in to it, to keep your name and picture with your account, and to email you about your account and servers. Your Google account ID is how we know it’s you the next time you sign in with Google.',
             '**Who we share it with:** no one, except the providers that store our database and run {brand} for us (section 5), who keep it on our behalf. We don’t sell it, use it for advertising, or use it to train AI models, and no person reads it except to answer you or to keep {brand} safe.',
-            '**How we keep it safe:** it is stored in our database in Frankfurt, Germany, encrypted in transit, and only the person who runs {brand} has access to it (section 8).',
+            '**How we keep it safe:** it is stored in our database in Frankfurt, Germany, encrypted in transit, and only we have access to it (section 8).',
             '**How long we keep it, and how to remove it:** for as long as you have your account. Delete your account, or email {privacy}, and we delete what Google gave us with it within 30 days. You can also remove {brand}’s access at any time from your Google account, at myaccount.google.com/permissions; you then can’t sign in with Google until you allow it again.',
           ],
         },
@@ -163,7 +163,7 @@ export const PRIVACY: Policy = {
               ],
               [
                 'Cloudflare, Inc.',
-                'Hosts the {brand} website, stores copies of worlds (resting worlds, downloads and uploads), runs our domain names, and checks that a person is signing up (Turnstile).',
+                'Hosts the {brand} website, stores copies of worlds (resting worlds, downloads and uploads), runs our domain names, checks that a person is signing up (Turnstile), and sends our personal notes.',
                 'US company; serves the site from its global network, and chooses where copies of worlds are stored automatically.',
               ],
               [
@@ -239,7 +239,7 @@ export const PRIVACY: Policy = {
       id: 'security',
       heading: '8. Keeping it safe',
       blocks: [
-        'Passwords are stored only as secure hashes. Everything between your browser and {brand} is encrypted. Sign-in cookies can’t be read by scripts on the page. Access to our systems is limited to the person who runs {brand}. If a breach puts your data at risk, we will tell you and the regulator as the law requires.',
+        'Passwords are stored only as secure hashes. Everything between your browser and {brand} is encrypted. Sign-in cookies can’t be read by scripts on the page. Access to our systems is limited to us. If a breach puts your data at risk, we will tell you and the regulator as the law requires.',
       ],
     },
     {
