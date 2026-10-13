@@ -24,6 +24,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmdirSync,
+  rmSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
@@ -40,8 +41,8 @@ export interface WorkerSite {
   apiUpstream: string
   /** WEB_CANONICAL_ORIGIN: the site's one address. */
   canonicalOrigin: string
-  /** WEB_FORWARDED_HOST: a preview's branded address, which the previews' router reaches it by. */
-  forwardedHost?: string
+  /** WEB_FORWARDED_HOST: a preview's branded addresses, which the previews' router reaches it by. */
+  forwardedHosts?: string[]
   /** DEPLOYMENT_ID, by which every PostHog event says which environment built the page. */
   deploymentId: string
   /** Whether search engines may index it: production's alone. */
@@ -79,7 +80,7 @@ function runtimeVars(site: WorkerSite): Record<string, string> {
     WEB_CANONICAL_ORIGIN: site.canonicalOrigin,
     // Cloudflare sets and overwrites it with the address that reached its edge.
     WEB_CLIENT_ADDRESS_HEADER: 'cf-connecting-ip',
-    ...(site.forwardedHost ? { WEB_FORWARDED_HOST: site.forwardedHost } : {}),
+    ...(site.forwardedHosts ? { WEB_FORWARDED_HOST: site.forwardedHosts.join(',') } : {}),
     ...(site.indexable ? { WEB_INDEXABLE: '1' } : {}),
   }
 }
@@ -208,31 +209,56 @@ export function deployWorker(site: WorkerSite, sha: string, say: (line: string) 
 
 /**
  * The previews' router (apps/web/preview-router.jsonc) deployed with its vars: which addresses are
- * previews, and the aliases they stand for. Its routes go with it: wrangler makes what is missing.
+ * previews, and the aliases they stand for; and bound to `commits`, the KV namespace naming each
+ * commit's version, whose id only the account knows, so it goes into a copy of the config. Its
+ * routes go with it: wrangler makes what is missing.
  */
 export function deployRouter(
   site: WorkerSite,
   vars: { PREVIEW_DOMAIN: string; PREVIEW_SUFFIX: string },
+  commits: string,
   say: (line: string) => void,
 ): void {
-  const result = spawnSync(
-    join(BIN, 'wrangler'),
-    [
-      'deploy',
-      '--config',
-      'preview-router.jsonc',
-      ...Object.entries(vars).flatMap(([name, value]) => ['--var', `${name}:${value}`]),
-    ],
-    { cwd: WEB, env: wranglerEnv(site), stdio: 'inherit' },
-  )
-  if (result.status !== 0) throw new Error(`The previews' router's deploy stopped (exit ${result.status}).`)
+  const dir = mkdtempSync(join(tmpdir(), 'blockly-web-previews-'))
+  const config = routerConfig(readFileSync(join(WEB, 'preview-router.jsonc'), 'utf8'), commits)
+  writeFileSync(join(dir, 'wrangler.json'), JSON.stringify(config))
+  try {
+    const result = spawnSync(
+      join(BIN, 'wrangler'),
+      [
+        'deploy',
+        '--config',
+        join(dir, 'wrangler.json'),
+        ...Object.entries(vars).flatMap(([name, value]) => ['--var', `${name}:${value}`]),
+      ],
+      { cwd: WEB, env: wranglerEnv(site), stdio: 'inherit' },
+    )
+    if (result.status !== 0) throw new Error(`The previews' router's deploy stopped (exit ${result.status}).`)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
   say("The previews' router is live.")
 }
 
-/** A preview as wrangler reports it: its version, and the alias's address when there is one. */
+/** preview-router.jsonc as wrangler gets it: its entry by its whole path, and bound to `commits`. */
+export function routerConfig(jsonc: string, commits: string): Record<string, unknown> {
+  const config = JSON.parse(jsonc.replace(/^\s*\/\/.*$/gm, '')) as Record<string, unknown>
+  delete config.$schema
+  return {
+    ...config,
+    main: join(WEB, String(config.main)),
+    kv_namespaces: [{ binding: 'COMMITS', id: commits }],
+  }
+}
+
+/**
+ * A preview as wrangler reports it: its version, the alias's address when there is one, and the
+ * version's own address, which keeps serving it after newer uploads.
+ */
 export interface PreviewUpload {
   url: string | undefined
   version: string | undefined
+  versionUrl: string | undefined
 }
 
 /**
@@ -251,7 +277,7 @@ export function uploadPreview(site: WorkerSite, sha: string, alias: string): Pre
     })
     return existsSync(output)
       ? previewUpload(readFileSync(output, 'utf8'))
-      : { url: undefined, version: undefined }
+      : { url: undefined, version: undefined, versionUrl: undefined }
   } finally {
     if (existsSync(output)) unlinkSync(output)
     rmdirSync(dir)
@@ -265,12 +291,17 @@ export function previewUpload(output: string): PreviewUpload {
     const entry = JSON.parse(line) as {
       type?: string
       version_id?: string | null
+      preview_url?: string | null
       preview_alias_url?: string | null
     }
     if (entry.type === 'version-upload')
-      return { url: entry.preview_alias_url || undefined, version: entry.version_id || undefined }
+      return {
+        url: entry.preview_alias_url || undefined,
+        version: entry.version_id || undefined,
+        versionUrl: entry.preview_url || undefined,
+      }
   }
-  return { url: undefined, version: undefined }
+  return { url: undefined, version: undefined, versionUrl: undefined }
 }
 
 /** A wrangler command's JSON answer. */

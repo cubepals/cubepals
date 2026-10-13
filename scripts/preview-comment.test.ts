@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/** The preview comment's text: its state, address, commits and what staging can do right now. */
 import { describe, expect, test } from 'bun:test'
 import { MARKER, previewComment } from './preview-comment.ts'
 
@@ -29,11 +30,25 @@ describe('previewComment', () => {
     expect(body).toContain('Staging’s API answers, so signing in on the preview works.')
   })
 
+  test('lists the latest five commits, newest first, each at its own address', () => {
+    const shas = ['a', 'b', 'c', 'd', 'e', 'f'].map((letter) => `${letter.repeat(7)}0123456789`)
+    const body = previewComment({ ...base, state: 'ready', url, commits: shas, stagingUp: true })
+    const listed = body.split('\n').filter((line) => line.startsWith('- '))
+    expect(listed).toHaveLength(5)
+    expect(listed[0]).toBe(
+      `- [\`aaaaaaa\`](https://github.com/cubepals/cubepals/commit/${shas[0]}) · [aaaaaaa.preview.cubepals.com](https://aaaaaaa.preview.cubepals.com)`,
+    )
+    expect(listed[4]).toContain('[eeeeeee.preview.cubepals.com](https://eeeeeee.preview.cubepals.com)')
+    expect(body).not.toContain('fffffff')
+    expect(body.indexOf('| **Preview** |')).toBeLessThan(body.indexOf('Each commit at its own address'))
+  })
+
   test('while building: no address yet, no version, and staging stopped', () => {
     const body = previewComment({ ...base, state: 'building', stagingUp: false })
     expect(body).toContain('| **Status** | **🔨 Building** |')
     expect(body).toContain('| **Preview** | — |')
     expect(body).not.toContain('Version')
+    expect(body).not.toContain('Each commit')
     expect(body).toContain('Staging’s API didn’t answer yet. It wakes when the preview is opened.')
     expect(body).toContain(
       'Mail and game servers need all of staging, which a maintainer starts: [run Staging](https://github.com/cubepals/cubepals/actions/workflows/staging.yml).',

@@ -6,7 +6,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { CORSRule } from '@aws-sdk/client-s3'
 import { HOUR_S } from '@blockly/contracts/durations'
-import { allowing, closing, PREVIEW_ORIGIN } from './preview-uploads.ts'
+import { allowing, COMMIT_ORIGIN, closing, PREVIEW_ORIGIN } from './preview-uploads.ts'
 
 const WEB = 'https://staging.cubepals.com'
 const preview = (pull: number) => `https://pr-${pull}-blockly-web-staging.cloudflare-c49.workers.dev`
@@ -66,6 +66,25 @@ describe('closing', () => {
     expect(closing([{ ...site, AllowedOrigins: [preview(9)] }, other], () => false)).toEqual([other])
   })
 
+  test("takes a commit's origin with its pull request, and one nobody recorded", () => {
+    const commit = (sha: string) => `https://${sha}.preview.cubepals.com`
+    const commits = new Map([
+      ['b226b58', { sha: 'b226b58a0c', pull: 7, at: '2026-10-13T10:00:00.000Z' }],
+      ['c0ffee0', { sha: 'c0ffee0a0c', pull: 8, at: '2026-10-13T11:00:00.000Z' }],
+    ])
+    const named = [
+      { ...site, AllowedOrigins: [WEB, commit('b226b58'), commit('c0ffee0'), commit('1234567')] },
+    ]
+    // Closing pull request 7, an unrecorded commit waits for the sweep.
+    expect(closing(named, (pull) => pull !== 7, commits)).toEqual([
+      { ...site, AllowedOrigins: [WEB, commit('c0ffee0'), commit('1234567')] },
+    ])
+    // The sweep, with pull request 8 open, takes it.
+    expect(closing(named, (pull) => pull === 8, commits)).toEqual([
+      { ...site, AllowedOrigins: [WEB, commit('c0ffee0')] },
+    ])
+  })
+
   test('never takes an origin that only looks like a preview', () => {
     const lookalike = 'https://pr-7-blockly-web-staging.cloudflare-c49.workers.dev.evil.example'
     expect(closing([{ ...site, AllowedOrigins: [lookalike] }], () => false)).toHaveLength(1)
@@ -78,4 +97,7 @@ test('a preview origin names its pull request', () => {
   expect(PREVIEW_ORIGIN.test(`${preview(1)}/sign-in`)).toBe(false)
   expect(PREVIEW_ORIGIN.exec('https://pr-45.preview.cubepals.com')?.[1]).toBe('45')
   expect(PREVIEW_ORIGIN.test('https://pr-45.preview.cubepals.com.evil.example')).toBe(false)
+  expect(COMMIT_ORIGIN.exec('https://b226b58.preview.cubepals.com')?.[1]).toBe('b226b58')
+  expect(COMMIT_ORIGIN.test('https://b226b58a.preview.cubepals.com')).toBe(false)
+  expect(COMMIT_ORIGIN.test('https://b226b58.preview.cubepals.com.evil.example')).toBe(false)
 })

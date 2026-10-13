@@ -4,10 +4,10 @@
 
 /**
  * Which sites may put worlds into staging's bucket. A browser uploads a world straight into it,
- * so its CORS rules name staging.cubepals.com and each open pull request's preview, by exact
- * origin: Tigris takes no wildcard in one.
+ * so its CORS rules name staging.cubepals.com and each open pull request's preview, and each of its
+ * previewed commits, by exact origin: Tigris takes no wildcard in one.
  *
- *   bun scripts/preview-uploads.ts add <url>    the preview at <url> may upload
+ *   bun scripts/preview-uploads.ts add <url>... the previews at each <url> may upload
  *   bun scripts/preview-uploads.ts remove <n>   pull request <n>'s preview may no longer
  *   bun scripts/preview-uploads.ts sweep        exactly the open pull requests' previews may
  *
@@ -15,7 +15,9 @@
  * add once a preview is up, remove when its pull request closes, and sweep each day and on each
  * push to main, which also puts back an origin two pull requests' runs raced each other for.
  * sweep reads the open pull requests with GH_TOKEN from REPO, and the previews' workers.dev
- * subdomain with CLOUDFLARE_WORKERS_API_TOKEN; it keeps each preview's branded origin and its alias. Every other rule and origin stays as it was.
+ * subdomain and which commit is whose (lib/preview-commits.ts) with CLOUDFLARE_WORKERS_API_TOKEN;
+ * it keeps each preview's branded origin and its alias, and each of its commits' origins, and
+ * drops a commit's origin nobody recorded. Every other rule and origin stays as it was.
  *
  * `staging.ts up` keeps staging.cubepals.com in the rules with `allowing`, and gives the preview
  * environment a new bucket's keys with `sharePreviewKeys`. Nothing here prints a key. Not for the
@@ -23,7 +25,8 @@
  */
 import { type CORSRule, GetBucketCorsCommand, PutBucketCorsCommand, S3Client } from '@aws-sdk/client-s3'
 import { HOUR_S } from '@blockly/contracts/durations'
-import { previewOrigins, stagingCloudflare, WEB } from './staging-website.ts'
+import { findCommits, listCommits, type PreviewCommit } from './lib/preview-commits.ts'
+import { brandedCommit, pullPatterns, stagingCloudflare, WEB } from './staging-website.ts'
 
 export interface Bucket {
   name: string
@@ -36,6 +39,9 @@ export interface Bucket {
 /** A preview's origin, branded or its alias, its pull request's number first. */
 export const PREVIEW_ORIGIN =
   /^https:\/\/pr-(\d+)(?:\.preview\.cubepals\.com|-blockly-web-staging\.[a-z0-9-]+\.workers\.dev)$/
+
+/** A previewed commit's branded origin, its first seven characters first. */
+export const COMMIT_ORIGIN = /^https:\/\/([0-9a-f]{7})\.preview\.cubepals\.com$/
 
 /** An upload's PUT, its checks, and the ETag a multipart upload reads back. */
 const uploadRule = (origins: string[]): CORSRule => ({
@@ -61,12 +67,25 @@ export function allowing(rules: CORSRule[], origins: string[]): CORSRule[] {
   )
 }
 
-/** The rules without the previews of pull requests `open` turns down. A rule left naming nobody goes. */
-export function closing(rules: CORSRule[], open: (pull: number) => boolean): CORSRule[] {
+/**
+ * The rules without the previews of pull requests `open` turns down, a commit's by whose `commits`
+ * says it is: one it doesn't name counts as no open pull request's. A rule left naming nobody goes.
+ */
+export function closing(
+  rules: CORSRule[],
+  open: (pull: number) => boolean,
+  commits: Map<string, PreviewCommit> = new Map(),
+): CORSRule[] {
+  const pullOf = (origin: string): number | undefined => {
+    const commit = COMMIT_ORIGIN.exec(origin)?.[1]
+    if (commit !== undefined) return commits.get(commit)?.pull ?? 0
+    const pull = PREVIEW_ORIGIN.exec(origin)?.[1]
+    return pull === undefined ? undefined : Number(pull)
+  }
   return rules.flatMap((rule) => {
     const origins = (rule.AllowedOrigins ?? []).filter((origin) => {
-      const pull = PREVIEW_ORIGIN.exec(origin)?.[1]
-      return pull === undefined || open(Number(pull))
+      const pull = pullOf(origin)
+      return pull === undefined || open(pull)
     })
     if (origins.length === rule.AllowedOrigins?.length) return [rule]
     return origins.length === 0 ? [] : [{ ...rule, AllowedOrigins: origins }]
@@ -150,7 +169,7 @@ const need = (name: string): string => {
 const say = (line: string) => process.stdout.write(`${line}\n`)
 
 /** The open pull requests from this repository's own branches: the ones that get a preview. */
-async function openPulls(repo: string): Promise<number[]> {
+export async function openPulls(repo: string): Promise<number[]> {
   const pulls: number[] = []
   for (let page = 1; ; page++) {
     const response = await fetch(
@@ -169,21 +188,36 @@ async function openPulls(repo: string): Promise<number[]> {
   }
 }
 
-/** Adds the origin, then reads it back: another pull request's run may have written over it. */
-async function add(bucket: Bucket, origin: string): Promise<void> {
+/** Adds the origins, then reads them back: another pull request's run may have written over them. */
+async function add(bucket: Bucket, origins: string[]): Promise<void> {
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const changed = await changeCors(bucket, (rules) => allowing(rules, [WEB, origin]))
+    const changed = await changeCors(bucket, (rules) => allowing(rules, [WEB, ...origins]))
     await Bun.sleep(5000)
-    if ((await corsRules(bucket)).some((rule) => rule.AllowedOrigins?.includes(origin))) {
-      say(changed ? `${origin} may upload worlds now.` : `${origin} could already upload worlds.`)
+    const named = new Set((await corsRules(bucket)).flatMap((rule) => rule.AllowedOrigins ?? []))
+    if (origins.every((origin) => named.has(origin))) {
+      const which = origins.join(' and ')
+      say(changed ? `${which} may upload worlds now.` : `${which} could already upload worlds.`)
       return
     }
   }
-  throw new Error(`${origin} went missing from the bucket's rules three times`)
+  throw new Error(`${origins.join(' or ')} went missing from the bucket's rules three times`)
+}
+
+/** Which commit is whose, as the previews' KV namespace records them; none before there is one. */
+async function recordedCommits(): Promise<Map<string, PreviewCommit>> {
+  const cloudflare = await stagingCloudflare()
+  const namespace = await findCommits(cloudflare)
+  return namespace === undefined ? new Map() : listCommits(cloudflare, namespace)
+}
+
+/** A preview's origin, branded, its alias or a commit's, from its address. */
+const previewOrigin = (url: string): string | undefined => {
+  const origin = URL.canParse(url) ? new URL(url).origin : ''
+  return PREVIEW_ORIGIN.test(origin) || COMMIT_ORIGIN.test(origin) ? origin : undefined
 }
 
 if (import.meta.main) {
-  const [command, argument = ''] = process.argv.slice(2)
+  const [command, argument = '', ...more] = process.argv.slice(2)
   const bucket: Bucket = {
     name: need('STAGING_BUCKET_NAME'),
     endpoint: need('STAGING_BUCKET_ENDPOINT'),
@@ -191,27 +225,34 @@ if (import.meta.main) {
     accessKeyId: need('STAGING_BUCKET_ACCESS_KEY_ID'),
     secretAccessKey: need('STAGING_BUCKET_SECRET_ACCESS_KEY'),
   }
-  if (command === 'add' && URL.canParse(argument) && PREVIEW_ORIGIN.test(new URL(argument).origin)) {
-    await add(bucket, new URL(argument).origin)
+  const origins = [argument, ...more].map(previewOrigin)
+  if (command === 'add' && origins.every((origin) => origin !== undefined)) {
+    await add(bucket, origins as string[])
   } else if (command === 'remove' && /^\d+$/.test(argument)) {
     const pull = Number(argument)
-    const changed = await changeCors(bucket, (rules) => closing(rules, (other) => other !== pull))
+    // Without the records, the closed pull request's commits wait for the sweep.
+    const commits = await recordedCommits().catch(() => new Map<string, PreviewCommit>())
+    const changed = await changeCors(bucket, (rules) => closing(rules, (other) => other !== pull, commits))
     say(changed ? `Pull request ${pull}'s preview may no longer upload worlds.` : 'Nothing to remove.')
   } else if (command === 'sweep') {
     const open = new Set(await openPulls(need('REPO')))
-    const patterns = await previewOrigins(await stagingCloudflare())
-    const origins = patterns.flatMap((pattern) =>
-      [...open].map((pull) => pattern.replaceAll('*', String(pull))),
-    )
+    const patterns = await pullPatterns(await stagingCloudflare())
+    const commits = await recordedCommits()
+    const origins = [
+      ...patterns.flatMap((pattern) => [...open].map((pull) => pattern.replaceAll('*', String(pull)))),
+      ...[...commits.values()]
+        .filter((commit) => open.has(commit.pull))
+        .map((commit) => brandedCommit(commit.sha)),
+    ]
     const changed = await changeCors(bucket, (rules) =>
       allowing(
-        closing(rules, (pull) => open.has(pull)),
+        closing(rules, (pull) => open.has(pull), commits),
         [WEB, ...origins],
       ),
     )
     say(`${changed ? 'Now' : 'Already'} ${open.size} open pull requests' previews may upload worlds.`)
   } else {
-    say('bun scripts/preview-uploads.ts add <preview url> | remove <pull request> | sweep')
+    say('bun scripts/preview-uploads.ts add <preview url>... | remove <pull request> | sweep')
     process.exitCode = 2
   }
 }

@@ -8,9 +8,12 @@ name: Website on staging
 # at staging.cubepals.com, with the previews' router (apps/web/preview-router.ts); each pull request
 # from this repository gets a preview version at pr-<n>.preview.cubepals.com, which the router sends
 # on to its alias, pr-<n>-blockly-web-staging.<subdomain>.workers.dev, named in one comment on the
-# pull request. The nightly still deploys the whole of staging. Neither starts staging's machines;
-# while staging is stopped, a preview's first request to the control plane wakes its API
-# (scripts/lib/control-wake.ts), and the page renders without what it couldn't ask in time.
+# pull request. Each push's version also stays at <sha7>.preview.cubepals.com after newer pushes:
+# the upload records which version each commit is in a Workers KV namespace the router reads
+# (scripts/lib/preview-commits.ts), and the comment lists the latest commits. The nightly still
+# deploys the whole of staging. Neither starts staging's machines; while staging is stopped, a
+# preview's first request to the control plane wakes its API (scripts/lib/control-wake.ts), and
+# the page renders without what it couldn't ask in time.
 #
 # The staging environment deploys from main only, so previews use their own environment, preview,
 # holding CLOUDFLARE_WORKERS_API_TOKEN and CLOUDFLARE_ACCOUNT_ID. Without them the preview is
@@ -20,7 +23,8 @@ name: Website on staging
 # world bucket, kept there by `staging.ts up`) let scripts/preview-uploads.ts name each open pull
 # request's preview in the bucket's CORS rules, which take no wildcard. A preview is added once it
 # is up and removed when its pull request closes; a sweep each day and on each push to main keeps
-# exactly the open ones.
+# exactly the open ones. A closed pull request's commits lose their addresses the same way
+# (scripts/preview-commits.ts).
 #
 # The comment and the CORS tooling run from the base branch's copy of scripts/, never the pull
 # request's, which may predate them. Neither can turn a pull request red: a failure there warns.
@@ -146,6 +150,7 @@ jobs:
           COMMENT_AUTHOR: ${{ steps.bot.outputs.app-slug && format('{0}[bot]', steps.bot.outputs.app-slug) || 'github-actions[bot]' }}
           URL: ${{ steps.upload.outputs.url }}
           VERSION: ${{ steps.upload.outputs.version }}
+          COMMIT_URL: ${{ steps.upload.outputs.commit_url }}
         run: >-
           bun .preview-tools/scripts/preview-comment.ts "$([ -n "$URL" ] && echo ready || echo failed)" ||
           echo "::warning::The preview comment couldn't say how the preview went."
@@ -153,20 +158,21 @@ jobs:
         if: ${{ !cancelled() && steps.upload.outputs.url != '' }}
         env:
           URL: ${{ steps.upload.outputs.url }}
+          COMMIT_URL: ${{ steps.upload.outputs.commit_url }}
           STAGING_BUCKET_NAME: ${{ secrets.STAGING_BUCKET_NAME }}
           STAGING_BUCKET_ENDPOINT: ${{ secrets.STAGING_BUCKET_ENDPOINT }}
           STAGING_BUCKET_REGION: ${{ secrets.STAGING_BUCKET_REGION }}
           STAGING_BUCKET_ACCESS_KEY_ID: ${{ secrets.STAGING_BUCKET_ACCESS_KEY_ID }}
           STAGING_BUCKET_SECRET_ACCESS_KEY: ${{ secrets.STAGING_BUCKET_SECRET_ACCESS_KEY }}
         run: >-
-          bun .preview-tools/scripts/preview-uploads.ts add "$URL" ||
+          bun .preview-tools/scripts/preview-uploads.ts add "$URL" ${COMMIT_URL:+"$COMMIT_URL"} ||
           echo "::warning::The preview can't take world uploads: its address isn't in the bucket's CORS rules."
 
-  # The bucket's CORS rules without closed pull requests' previews: one on its closing, all of them
-  # each day and on each push to main. From main's own scripts: a closing pull request's tree may
-  # predate them.
+  # The bucket's CORS rules without closed pull requests' previews, then the records of their
+  # commits, which the rules' clean-up reads: one on its closing, all of them each day and on each
+  # push to main. From main's own scripts: a closing pull request's tree may predate them.
   origins:
-    name: Keep the previews' world uploads to open pull requests
+    name: Keep previews to open pull requests
     if: >-
       github.event_name != 'pull_request' ||
       (github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository)
@@ -188,7 +194,7 @@ jobs:
       REPO: ${{ github.repository }}
       PULL: ${{ github.event.pull_request.number }}
     steps:
-      - name: Whether this environment holds the bucket
+      - name: Whether this environment holds the bucket and the commits
         id: ready
         run: |
           if [ -n "$STAGING_BUCKET_NAME" ] && [ -n "$STAGING_BUCKET_SECRET_ACCESS_KEY" ]; then
@@ -197,16 +203,22 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
             echo "::notice::No CORS rules to keep: the preview environment has no STAGING_BUCKET_* secrets."
           fi
-      - if: steps.ready.outputs.run == 'true'
+          if [ -n "$CLOUDFLARE_WORKERS_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "commits=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "commits=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No commits to forget: the preview environment has no CLOUDFLARE_WORKERS_API_TOKEN or CLOUDFLARE_ACCOUNT_ID."
+          fi
+      - if: steps.ready.outputs.run == 'true' || steps.ready.outputs.commits == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
-      - if: steps.ready.outputs.run == 'true'
+      - if: steps.ready.outputs.run == 'true' || steps.ready.outputs.commits == 'true'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.3.11
-      - if: steps.ready.outputs.run == 'true'
+      - if: steps.ready.outputs.run == 'true' || steps.ready.outputs.commits == 'true'
         run: bun install --frozen-lockfile
       - name: Forget the closed pull request's preview
         if: steps.ready.outputs.run == 'true' && github.event_name == 'pull_request'
@@ -218,3 +230,13 @@ jobs:
         run: >-
           bun scripts/preview-uploads.ts sweep ||
           echo "::warning::The sweep of the bucket's CORS rules failed; the next one tries again."
+      - name: Forget the closed pull request's commits
+        if: steps.ready.outputs.commits == 'true' && github.event_name == 'pull_request'
+        run: >-
+          bun scripts/preview-commits.ts forget "$PULL" ||
+          echo "::warning::The closed pull request's commits keep their addresses; the next sweep takes them."
+      - name: Keep exactly the open pull requests' commits
+        if: steps.ready.outputs.commits == 'true' && github.event_name != 'pull_request'
+        run: >-
+          bun scripts/preview-commits.ts sweep ||
+          echo "::warning::The sweep of the previewed commits failed; the next one tries again."

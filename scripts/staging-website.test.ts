@@ -7,10 +7,12 @@ import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { originAllowed } from '../apps/control/src/interfaces/http/origins.ts'
-import { previewUpload } from './lib/web-worker.ts'
+import { previewUpload, routerConfig } from './lib/web-worker.ts'
 import {
   aliasSuffix,
+  brandedCommit,
   brandedPreview,
+  COMMIT_PATTERN,
   PREVIEW_DOMAIN,
   previewPattern,
   stagingSite,
@@ -52,11 +54,30 @@ describe("staging's website and its previews", () => {
     expect(previewPattern('team')).toBe(`https://pr-*${aliasSuffix('team')}`)
   })
 
+  test("trusts each commit's branded address by its shape, and only those", () => {
+    expect(brandedCommit('b226b58a0c1d2e3f')).toBe('https://b226b58.preview.cubepals.com')
+    expect(COMMIT_PATTERN).toBe('https://???????.preview.cubepals.com')
+    const matches = (origin: string) => originAllowed(origin, [COMMIT_PATTERN])
+    expect(matches(brandedCommit('b226b58a0c1d2e3f'))).toBe(true)
+    expect(matches('https://pr-12.preview.cubepals.com')).toBe(false)
+    expect(matches('https://b226b58a.preview.cubepals.com')).toBe(false)
+    expect(matches('https://b2.6b58.preview.cubepals.com')).toBe(false)
+  })
+
   test("routes the previews' router where the previews are", () => {
     const config = readFileSync(join(import.meta.dir, '../apps/web/preview-router.jsonc'), 'utf8')
     const routes = (JSON.parse(config.replace(/^\s*\/\/.*$/gm, '')) as { routes: { pattern: string }[] })
       .routes
     expect(routes.map((route) => route.pattern)).toEqual([PREVIEW_DOMAIN, `*.${PREVIEW_DOMAIN}/*`])
+  })
+
+  test("deploys the router bound to the commits' namespace, its entry found from anywhere", () => {
+    const config = readFileSync(join(import.meta.dir, '../apps/web/preview-router.jsonc'), 'utf8')
+    const deployed = routerConfig(config, 'namespace-id')
+    expect(deployed.kv_namespaces).toEqual([{ binding: 'COMMITS', id: 'namespace-id' }])
+    expect(deployed.main).toBe(join(import.meta.dir, '../apps/web/preview-router.ts'))
+    expect(deployed.name).toBe('blockly-web-previews')
+    expect(deployed.$schema).toBeUndefined()
   })
 
   test("reads the preview's address and version from wrangler's output file", () => {
@@ -73,9 +94,10 @@ describe("staging's website and its previews", () => {
     expect(previewUpload(output)).toEqual({
       url: 'https://pr-12-blockly-web-staging.team.workers.dev',
       version: 'v',
+      versionUrl: 'https://0123abcd-blockly-web-staging.team.workers.dev',
     })
     expect(
       previewUpload(JSON.stringify({ type: 'version-upload', version_id: 'v', preview_alias_url: null })),
-    ).toEqual({ url: undefined, version: 'v' })
+    ).toEqual({ url: undefined, version: 'v', versionUrl: undefined })
   })
 })
