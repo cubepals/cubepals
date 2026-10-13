@@ -10,6 +10,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { currentSession } from '../../../lib/session'
+import { ctaMark } from '../../(public)/steps'
 import { AuthEntry } from '../auth-entry'
 import { authMethods, firstParam, localPath } from '../auth-methods'
 import { SignInForm } from './sign-in-form'
@@ -49,7 +50,10 @@ export default async function SignInPage({
       emailOpen={failure === 'account_not_linked' || reset}
       footer={
         <>
-          Don't have an account? <Link href={`/sign-up${back}`}>Create one</Link>
+          Don't have an account?{' '}
+          <Link href={`/sign-up${back}`} {...ctaMark('to_sign_up')}>
+            Create one
+          </Link>
         </>
       }
     >

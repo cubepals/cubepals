@@ -11,6 +11,7 @@ import { canonicalOrigin, pageMetadata } from '../../../lib/site'
 import { appSchema, JsonLd } from '../../../lib/structured-data'
 import { eachOf, PlanCard, priceOf } from '../../../ui'
 import { guideHref, publishedGuides } from '../guides'
+import { detailMark, seenMark } from '../steps'
 import { GetPlan } from './get-plan'
 
 /** The title and description say the plans' own numbers, or nothing about them when the table can't be read. */
@@ -63,6 +64,7 @@ export default async function PricingPage() {
           <PlanCard
             key={plan.key}
             plan={plan}
+            mark={seenMark(`plan_${plan.key}`)}
             action={
               <GetPlan
                 plan={plan.key}
@@ -89,7 +91,7 @@ export default async function PricingPage() {
         <h2 id="questions" className="type-heading-md" style={{ color: 'var(--ink)' }}>
           Questions
         </h2>
-        <Question title="What counts as an hour?">
+        <Question which="hours" title="What counts as an hour?">
           Time your server is running. It sleeps {free?.sleepsAfterMinutes ?? 10} minutes after everyone
           leaves
           {paid && paid.sleepsAfterMinutes !== free?.sleepsAfterMinutes
@@ -98,20 +100,20 @@ export default async function PricingPage() {
           , and a start that fails never uses your hours.
         </Question>
         {paid && shared && (
-          <Question title="Does everyone need to pay?">
+          <Question which="everyone_pays" title="Does everyone need to pay?">
             No. One person has {paid.name} and their friends just join. If {shared.friends} of you share it,
             that’s {shared.each} each. Hours count while the server runs, not for each player, so an evening
             with everyone on uses the same hours as an evening alone.
           </Question>
         )}
-        <Question title="What if we run out?">
+        <Question which="run_out" title="What if we run out?">
           Your server sleeps until {hoursAgainSaid(plans)}.{onceSaid(free, paid)}
           {paid
             ? ` On ${paid.name} you can allow extra hours instead, at ${dollars(EXTRA_HOUR_CENTS)} each, up to a limit you set, added to your next payment.`
             : ''}{' '}
           Nothing is charged past your plan unless you allow it.
         </Question>
-        <Question title="What happens to a world nobody plays?">
+        <Question which="unplayed_world" title="What happens to a world nobody plays?">
           It sleeps as soon as everyone leaves. After {daysSaid(free?.restsAfterDays ?? 14)} without play
           {paid ? ` (${daysSaid(paid.restsAfterDays)} on ${paid.name})` : ''} it rests in storage: joining
           still wakes it, it just takes a couple of minutes.
@@ -120,12 +122,12 @@ export default async function PricingPage() {
             : ''}
           {paid ? ` ${paid.name} worlds are kept for as long as you have ${paid.name}.` : ''}
         </Question>
-        <Question title="What’s plain Minecraft?">
+        <Question which="plain_minecraft" title="What’s plain Minecraft?">
           The game as it comes, with nothing for your friends to install. Paper runs too, without plugins.
           {paid ? ` Mods, plugins, modpacks and datapacks come with ${paid.name}.` : ''}
         </Question>
         {paid && (
-          <Question title="Can I cancel?">
+          <Question which="cancel" title="Can I cancel?">
             Any time, from your account. You keep {paid.name} until the end of the month you paid for. Your
             worlds stay; a modded one waits, whole, until you have {paid.name} again.
             {yearSaid(
@@ -134,8 +136,10 @@ export default async function PricingPage() {
             )}
           </Question>
         )}
-        <Question title="Bedrock or consoles?">Not yet. Cubepals runs Minecraft: Java Edition.</Question>
-        <Question title="Which modpacks?">
+        <Question which="bedrock" title="Bedrock or consoles?">
+          Not yet. Cubepals runs Minecraft: Java Edition.
+        </Question>
+        <Question which="modpacks" title="Which modpacks?">
           Modrinth packs, from a search or a link. A pack from CurseForge or a launcher runs from its file:
           download its server pack, or export it, and drop it in. Cubepals can’t install straight from
           CurseForge.
@@ -154,9 +158,10 @@ export default async function PricingPage() {
 /** What the page says about a year of the paid plan, where the plan is sold by the year. */
 const yearSaid = (paid: PublicPlan | undefined, said: string) => (paid?.yearlyPriceCents ? said : '')
 
-function Question({ title, children }: { title: string; children: React.ReactNode }) {
+/** One question, opened in place; `which` is its code, counted as it opens. */
+function Question({ which, title, children }: { which: string; title: string; children: React.ReactNode }) {
   return (
-    <details>
+    <details {...detailMark(which)}>
       <summary className="type-body bk-disclosure" style={{ color: 'var(--ink)' }}>
         {title}
       </summary>

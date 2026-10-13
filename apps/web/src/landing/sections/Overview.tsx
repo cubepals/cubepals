@@ -7,6 +7,7 @@
  * named, and all the worlds under one night sky.
  */
 import type { ReactNode } from 'react'
+import { seenMark } from '../../app/(public)/steps'
 import { ROOMS, roomFaces, roomY } from '../engine/chunk'
 import { ROOM_NAMES } from '../names'
 import styles from './overview.module.css'
@@ -24,6 +25,7 @@ export function Overview({ children, played }: { children?: ReactNode; played?: 
   return (
     <section
       id="underneath"
+      {...seenMark('underneath')}
       className={played ? `bl-section ${styles.overview} ${styles.brief}` : `bl-section ${styles.overview}`}
       data-name="What’s underneath"
       data-tone="paper"
@@ -70,6 +72,7 @@ export function Worlds({ played }: { played?: boolean } = {}) {
   return (
     <section
       id="worlds"
+      {...seenMark('worlds')}
       className={
         played
           ? `bl-section ${styles.overview} ${styles.worlds} ${styles.brief}`

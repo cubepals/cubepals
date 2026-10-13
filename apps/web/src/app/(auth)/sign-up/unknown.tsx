@@ -10,6 +10,7 @@
 import { Hourglass } from 'lucide-react'
 import Link from 'next/link'
 import { EmptyState } from '../../../ui'
+import { ctaMark } from '../../(public)/steps'
 
 export function SignupsUnknown() {
   return (
@@ -19,7 +20,10 @@ export function SignupsUnknown() {
       description="Cubepals can't check for room just now. Reload to try again."
       action={
         <p className="type-body-sm">
-          Already have an account? <Link href="/sign-in">Sign in</Link>
+          Already have an account?{' '}
+          <Link href="/sign-in" {...ctaMark('to_sign_in')}>
+            Sign in
+          </Link>
         </p>
       }
     />

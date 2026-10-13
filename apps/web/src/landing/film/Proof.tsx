@@ -9,6 +9,7 @@
  * opens the beat's section over it.
  */
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
+import { detailMark } from '../../app/(public)/steps'
 import styles from './film.module.css'
 
 /**
@@ -20,6 +21,7 @@ import styles from './film.module.css'
 export function Proof({
   says,
   label,
+  detail,
   open,
   onOpen,
   children,
@@ -28,6 +30,8 @@ export function Proof({
   says: string
   /** What the panel is, for a screen reader. */
   label: string
+  /** The beat's id: opening its proof is counted by it (app/(public)/steps.ts). */
+  detail: string
   open: boolean
   onOpen: (open: boolean) => void
   children: ReactNode
@@ -63,6 +67,7 @@ export function Proof({
         data-over
         aria-expanded={open}
         aria-controls={id}
+        {...detailMark(detail)}
         onClick={() => onOpen(!open)}
       >
         {open ? 'Back to the picture' : says}

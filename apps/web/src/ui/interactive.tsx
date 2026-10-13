@@ -118,11 +118,14 @@ export function CopyField({
   value,
   label = 'Copy address',
   concealed = false,
+  mark,
 }: {
   value: string
   label?: string
   /** Only the button: for what is pasted rather than read, like a long download link. */
   concealed?: boolean
+  /** The page's mark for a press of the button, so the copy is counted (app/(public)/steps.ts). */
+  mark?: Readonly<Record<`data-${string}`, string>>
 }) {
   const [done, setDone] = useState<'copied' | 'selected' | null>(null)
   const shown = useRef<HTMLSpanElement>(null)
@@ -140,6 +143,7 @@ export function CopyField({
       <button
         type="button"
         className="bk-btn bk-btn--outline bk-btn--sm bk-btn--lead"
+        {...mark}
         onClick={async () => {
           // The clipboard API exists only in a secure context. A page opened at a network address
           // (the dev stack on another device) has no way left to write the clipboard, so the

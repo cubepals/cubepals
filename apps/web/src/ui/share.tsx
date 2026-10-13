@@ -33,6 +33,8 @@ export function ShareButton({ serverId, name }: { serverId: string; name: string
         variant="outline"
         size="sm"
         icon={<Share2 {...ICON} aria-hidden />}
+        // Counted as `cta_pressed` (app/(public)/steps.ts), as are the copies below.
+        data-cta="share_open"
         onClick={() => setOpen(true)}
       >
         Share
@@ -78,7 +80,7 @@ function ShareSheet({ serverId, name, onClose }: { serverId: string; name: strin
         <div className="bk-stack" style={{ gap: 'var(--space-20)' }}>
           <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
             <span className="bk-field__label">Invite a friend</span>
-            <CopyField value={view.inviteUrl} label="Copy invite" />
+            <CopyField value={view.inviteUrl} label="Copy invite" mark={{ 'data-cta': 'copy_invite' }} />
             <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
               {view.whitelistOnly
                 ? 'It shows them what to install, and adds them to the players who may join.'
@@ -97,7 +99,7 @@ function ShareSheet({ serverId, name, onClose }: { serverId: string; name: strin
 
           <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
             <span className="bk-field__label">Or just the address</span>
-            <CopyField value={view.joinAddress} />
+            <CopyField value={view.joinAddress} mark={{ 'data-cta': 'copy_address' }} />
           </div>
 
           <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
@@ -110,7 +112,9 @@ function ShareSheet({ serverId, name, onClose }: { serverId: string; name: strin
             <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
               Gives it a page anyone can open, and puts it in Cubepals’ directory.
             </p>
-            {view.public && <CopyField value={view.pageUrl} label="Copy page" />}
+            {view.public && (
+              <CopyField value={view.pageUrl} label="Copy page" mark={{ 'data-cta': 'copy_page' }} />
+            )}
             {view.public && !view.listed && (
               <Note tone="info">
                 {view.moderation === 'removed'

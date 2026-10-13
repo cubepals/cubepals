@@ -42,6 +42,7 @@ import {
   Skeleton,
   StatusPill,
 } from '../../../../ui'
+import { ctaMark } from '../../../(public)/steps'
 import { FreeHoursUsed } from '../../free-hours-used'
 import { OutForToday } from '../../out-for-today'
 import { PlusOffer } from '../../plus-offer'
@@ -102,7 +103,7 @@ function Overview({ server }: { server: ServerView }) {
           )}
         </div>
         <div className="bk-stack" style={{ maxWidth: 'var(--width-form)', gap: 'var(--space-8)' }}>
-          <CopyField value={server.joinAddress} />
+          <CopyField value={server.joinAddress} mark={ctaMark('copy_address')} />
           <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
             {joinLine(server.gameVersion, pack, server.joinsNewer)}
           </p>
@@ -182,7 +183,7 @@ function Working({
             <span className="type-label" style={{ color: 'var(--ink)' }}>
               Send this to your friends while you wait
             </span>
-            <CopyField value={server.joinAddress} />
+            <CopyField value={server.joinAddress} mark={ctaMark('copy_address')} />
             <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
               {joinLine(server.gameVersion, pack, server.joinsNewer)}
             </p>
@@ -270,6 +271,7 @@ function Actions({ server, wake }: { server: ServerView; wake: Wake }) {
           busy={busy?.kind === 'restart' ? undefined : busyWord(server.activeOperation)}
           said={power.said}
           disabled={busy?.kind === 'restart'}
+          {...ctaMark(POWER_PRESS[now])}
         />
         {/* Restart stays while the server is busy, so a restart morphs on the button that was
             pressed rather than unmounting halfway through stopping and starting again. */}
@@ -291,6 +293,7 @@ function Actions({ server, wake }: { server: ServerView; wake: Wake }) {
             busy={busy?.kind === 'restart' ? busyWord(busy) : undefined}
             said={again.said}
             disabled={busy !== null && busy.kind !== 'restart'}
+            {...ctaMark('server_restart')}
           />
         )}
       </div>
@@ -315,6 +318,9 @@ function Actions({ server, wake }: { server: ServerView; wake: Wake }) {
     </div>
   )
 }
+
+/** What a press of the power button is counted as, by the phase it was in. */
+const POWER_PRESS = { sleep: 'server_sleep', wake: 'server_wake', start: 'server_start' } as const
 
 /** Out for today: the plan plays by the day, and today's is used. The server sleeps until midnight. */
 const outForToday = (server: ServerView) =>
@@ -702,9 +708,14 @@ function FirstFriend({ server }: { server: ServerView }) {
     <Note tone="success">
       <span className="bk-stack" style={{ gap: 'var(--space-12)' }}>
         <span>Nobody has joined yet. This link shows your friends what the server is and how to get in.</span>
-        <CopyField value={share.data.inviteUrl} label="Copy link" />
+        <CopyField value={share.data.inviteUrl} label="Copy link" mark={ctaMark('copy_invite')} />
         <span>
-          <button type="button" className="bk-btn bk-btn--ghost bk-btn--sm" onClick={dismiss}>
+          <button
+            type="button"
+            className="bk-btn bk-btn--ghost bk-btn--sm"
+            onClick={dismiss}
+            {...ctaMark('first_friend_done')}
+          >
             Got it
           </button>
         </span>
@@ -741,10 +752,15 @@ function FirstMod({ server }: { server: ServerView }) {
     <Note tone="success">
       <span className="bk-row bk-wrap" style={{ gap: 'var(--space-12)', alignItems: 'center' }}>
         <span>Make it yours: Cubepals can add a mod and keep your world.</span>
-        <Link href={`/servers/${server.id}/mods`} onClick={dismiss}>
+        <Link href={`/servers/${server.id}/mods`} onClick={dismiss} {...ctaMark('first_mod_find')}>
           Find one
         </Link>
-        <button type="button" className="bk-btn bk-btn--ghost bk-btn--sm" onClick={dismiss}>
+        <button
+          type="button"
+          className="bk-btn bk-btn--ghost bk-btn--sm"
+          onClick={dismiss}
+          {...ctaMark('first_mod_later')}
+        >
           Not now
         </button>
       </span>

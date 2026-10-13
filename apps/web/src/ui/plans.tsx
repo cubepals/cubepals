@@ -180,15 +180,23 @@ export function PlanCard({
   plan,
   current = false,
   action,
+  mark,
 }: {
   plan: PublicPlan
   /** The plan the person is on, marked as theirs. */
   current?: boolean
   action?: ReactNode
+  /** The page's mark for the card coming into view, so it is counted (app/(public)/steps.ts). */
+  mark?: Readonly<Record<`data-${string}`, string>>
 }) {
   const shared = eachOf(plan)
   return (
-    <section className="bk-plan" aria-label={plan.name} data-paid={plan.monthlyPriceCents > 0 || undefined}>
+    <section
+      className="bk-plan"
+      aria-label={plan.name}
+      data-paid={plan.monthlyPriceCents > 0 || undefined}
+      {...mark}
+    >
       <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)', justifyContent: 'space-between' }}>
         <h3 className="type-eyebrow">{plan.name}</h3>
         {current && <Badge tone="grass">Yours</Badge>}

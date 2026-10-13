@@ -14,6 +14,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { currentSession } from '../../../lib/session'
 import { sourceOf, withSource } from '../../../lib/source'
+import { ctaMark } from '../../(public)/steps'
 import { AuthEntry } from '../auth-entry'
 import { authMethods, firstParam, localPath, signupsOpen } from '../auth-methods'
 import { SignupsFull } from './full'
@@ -62,7 +63,10 @@ export default async function SignUpPage({
       failedVia={firstParam(params.via)}
       footer={
         <>
-          Already have an account? <Link href={`/sign-in${back}`}>Sign in</Link>
+          Already have an account?{' '}
+          <Link href={`/sign-in${back}`} {...ctaMark('to_sign_in')}>
+            Sign in
+          </Link>
         </>
       }
     >

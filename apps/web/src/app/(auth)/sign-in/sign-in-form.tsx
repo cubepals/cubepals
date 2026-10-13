@@ -11,6 +11,7 @@ import { type AuthErrorCode, authClient } from '../../../lib/auth'
 import * as rules from '../../../lib/rules'
 import { useChecked } from '../../../lib/use-checked'
 import { Button, TextField } from '../../../ui'
+import { ctaMark } from '../../(public)/steps'
 import styles from '../auth.module.css'
 import { answered, started } from '../steps'
 
@@ -68,7 +69,11 @@ export function SignInForm({ next }: { next: string }) {
         error={error}
         onChange={(e) => setPassword(e.target.value)}
       />
-      <Link href="/forgot-password" className={`type-body-sm ${styles.forgot}`}>
+      <Link
+        href="/forgot-password"
+        className={`type-body-sm ${styles.forgot}`}
+        {...ctaMark('forgot_password')}
+      >
         Forgot your password?
       </Link>
       <Button variant="primary" size="lg" block type="submit" disabled={busy}>

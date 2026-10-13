@@ -4,6 +4,7 @@
 
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { ctaMark } from '../../(public)/steps'
 import styles from '../auth.module.css'
 import { ForgotPasswordForm } from './forgot-password-form'
 
@@ -22,7 +23,10 @@ export default function ForgotPasswordPage() {
       </header>
       <ForgotPasswordForm />
       <p className={`type-body-sm ${styles.footer}`}>
-        Remembered it? <Link href="/sign-in">Sign in</Link>
+        Remembered it?{' '}
+        <Link href="/sign-in" {...ctaMark('to_sign_in')}>
+          Sign in
+        </Link>
       </p>
     </div>
   )

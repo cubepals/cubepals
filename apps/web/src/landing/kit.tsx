@@ -8,6 +8,7 @@
  * grounds.
  */
 import type { CSSProperties, ReactNode } from 'react'
+import { seenMark } from '../app/(public)/steps'
 import { type RoomKey, roomFaces, roomY } from './engine/chunk'
 import { ROOM_NAMES } from './names'
 
@@ -112,6 +113,8 @@ export function Section({
     <section
       // A room's section answers to the room's name, so the gauge and a sent link can reach it.
       id={id ?? room}
+      // And is counted by it the first time it comes into view (app/(public)/steps.ts).
+      {...seenMark(id ?? room ?? '')}
       data-name={name ?? (room ? ROOM_NAMES[room] : undefined)}
       className={className ? `bl-section ${className}` : 'bl-section'}
       data-tone={tone}

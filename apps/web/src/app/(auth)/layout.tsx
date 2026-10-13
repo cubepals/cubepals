@@ -9,6 +9,7 @@ import type { ReactNode } from 'react'
 import { SiteFooter } from '../../legal/footer'
 import { UNLISTED } from '../../lib/site'
 import { Lockup } from '../../ui/brand'
+import { Presses } from '../(public)/presses'
 import styles from './auth.module.css'
 
 /** Signing in, up and back in is nothing to land on from a search. */
@@ -35,6 +36,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         </div>
       </main>
       <SiteFooter />
+      <Presses />
     </div>
   )
 }

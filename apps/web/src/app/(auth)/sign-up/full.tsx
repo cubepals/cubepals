@@ -18,6 +18,7 @@ import { ApiProvider, messageOf, useTRPC } from '../../../lib/api'
 import * as rules from '../../../lib/rules'
 import { useChecked } from '../../../lib/use-checked'
 import { Button, EmptyState, Note, TextField } from '../../../ui'
+import { ctaMark } from '../../(public)/steps'
 import styles from '../auth.module.css'
 
 /** The page's own API client around the view, for a page outside the app's frame. */
@@ -63,7 +64,10 @@ function Full({ source }: { source: string | null }) {
               {join.isPending ? 'Adding you…' : 'Tell me when there’s room'}
             </Button>
             <p className="type-body-sm">
-              Already have an account? <Link href="/sign-in">Sign in</Link>
+              Already have an account?{' '}
+              <Link href="/sign-in" {...ctaMark('to_sign_in')}>
+                Sign in
+              </Link>
             </p>
           </form>
         )

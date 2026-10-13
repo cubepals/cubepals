@@ -10,6 +10,7 @@ import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { AGREED } from '../../lib/agreement'
 import { authClient } from '../../lib/auth'
 import { Button, ICON, Note } from '../../ui'
+import { ctaMark } from '../(public)/steps'
 import { AgreementNote } from './agreement'
 import styles from './auth.module.css'
 import { GitHubMark } from './github-mark'
@@ -182,6 +183,7 @@ export function AuthEntry({
             aria-expanded={open}
             aria-controls={regionId}
             iconEnd={<ChevronDown {...ICON} aria-hidden />}
+            {...ctaMark('use_email')}
             onClick={() => {
               opening.current = !open
               setOpen(!open)

@@ -26,6 +26,7 @@ import {
   Skeleton,
   Tip,
 } from '../../../ui'
+import { ctaMark, planMark, seenMark } from '../../(public)/steps'
 import { FreeHoursUsed } from '../free-hours-used'
 import { OutForToday } from '../out-for-today'
 import { PlusOffer } from '../plus-offer'
@@ -507,12 +508,13 @@ function billingActions(overview: AccountOverviewView, opening: boolean, openPor
         <Button
           variant="primary"
           href={checkoutHref({ plan: year.planKey, term: 'year', reason: 'account' })}
+          {...ctaMark('renew_year')}
         >
           Renew for a year
         </Button>
       )}
       {billed !== null && (
-        <Button variant="outline" disabled={opening} onClick={openPortal}>
+        <Button variant="outline" disabled={opening} onClick={openPortal} {...ctaMark('manage_billing')}>
           Manage billing
         </Button>
       )}
@@ -622,9 +624,14 @@ function Plans({ overview }: { overview: AccountOverviewView }) {
             key={plan.key}
             plan={plan}
             current={plan.key === overview.plan.key}
+            mark={seenMark(`plan_${plan.key}`)}
             action={
               sells && plan.monthlyPriceCents > 0 && plan.key !== overview.plan.key ? (
-                <Button variant="primary" href={checkoutHref({ plan: plan.key, reason: 'account' })}>
+                <Button
+                  variant="primary"
+                  href={checkoutHref({ plan: plan.key, reason: 'account' })}
+                  {...planMark(plan.key, 'month')}
+                >
                   Get {plan.name}
                 </Button>
               ) : undefined

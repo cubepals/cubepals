@@ -7,7 +7,7 @@
  */
 import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
-import { ctaMark, planMark } from '../../app/(public)/steps'
+import { ctaMark, planMark, seenMark } from '../../app/(public)/steps'
 import { PlanPoint, planPoints, priceOf } from '../../ui/plans'
 import { Section } from '../kit'
 import styles from './surface.module.css'
@@ -55,6 +55,7 @@ export function Plans({
               key={plan.key}
               className={`bl-frame ${isPaid ? `bl-frame--solid ${styles.paid}` : ''} ${styles.card}`}
               aria-label={plan.name}
+              {...seenMark(`plan_${plan.key}`)}
             >
               <h3 className={styles.name}>{plan.name}</h3>
               <p className={styles.price}>

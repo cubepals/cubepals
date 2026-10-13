@@ -18,7 +18,9 @@ import { useDebounced } from '../../../lib/hooks'
 import { iconSrc, loaderLabel, timeAgo } from '../../../lib/present'
 import { useSignedIn } from '../../../lib/viewer'
 import { Badge, EmptyState, Note, Skeleton, TextField } from '../../../ui'
+import { useBrowseSteps } from '../presses'
 import { Reactions } from '../reactions'
+import { ctaMark } from '../steps'
 import styles from './browse.module.css'
 
 type Kind = 'any' | 'vanilla' | 'modded'
@@ -36,6 +38,7 @@ export function Directory() {
     ...trpc.listings.browse.queryOptions({ search: settled, tag, onlineNow, kind }),
     placeholderData: (previous) => previous,
   })
+  useBrowseSteps({ searched: settled !== '', tag, kind, online: onlineNow }, found)
   return (
     <>
       <header className="bk-stack" style={{ gap: 'var(--space-8)' }}>
@@ -139,7 +142,7 @@ function Card({ listing }: { listing: ListingCardView }) {
         />
         <div className="bk-stack" style={{ gap: 'var(--space-4)', minWidth: 0 }}>
           <h2 className="type-title-md">
-            <Link href={`/server/${listing.slug}`} className={styles.open}>
+            <Link href={`/server/${listing.slug}`} className={styles.open} {...ctaMark('browse_open')}>
               {listing.name}
             </Link>
           </h2>

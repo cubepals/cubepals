@@ -90,7 +90,7 @@ export const PRIVACY: Policy = {
                 'Legitimate interests',
               ],
               [
-                '**How {brand} is used:** the pages visited, how fast they loaded and errors the site hit, counted without cookies and with nothing stored on your device, without your name, email or IP address. Steps your account reaches (signing up, making a server, its first start, a friend’s first join, upgrading), recorded by your account’s ID, never your email. There are no screen recordings.',
+                '**How {brand} is used:** the pages visited, which parts of them came into view and which of their buttons were pressed (never what was typed), how fast they loaded and errors the site hit, counted without cookies and with nothing stored on your device, without your name, email or IP address. Steps your account reaches (signing up, making a server, its first start, a friend’s first join, upgrading), recorded by your account’s ID, never your email. There are no screen recordings.',
                 'To see where {brand} works and where people get stuck, and to fix what breaks.',
                 'Legitimate interests',
               ],

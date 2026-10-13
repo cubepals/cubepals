@@ -30,6 +30,7 @@ import { SOURCE_PARAMS, sourceOf } from '../../lib/source'
 import { ICON, Note, ShareButton, StatusPill } from '../../ui'
 import { Lockup } from '../../ui/brand'
 import { ResendConfirmation } from '../(auth)/resend-confirmation'
+import { Presses } from '../(public)/presses'
 import { AccountMenu } from './account-menu'
 import { Feedback } from './feedback'
 import styles from './insight.module.css'
@@ -56,6 +57,7 @@ export function AppFrame({
       <RealtimeProvider>
         {usingAs && <UsingAs userId={user.id} email={user.email} />}
         <Shell user={user}>{children}</Shell>
+        <Presses />
       </RealtimeProvider>
     </ApiProvider>
   )

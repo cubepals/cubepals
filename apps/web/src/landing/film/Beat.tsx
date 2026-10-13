@@ -10,6 +10,7 @@
  * scrolling hurries or runs backwards (clock.ts).
  */
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
+import { seenMark } from '../../app/(public)/steps'
 import { type RoomKey, roomY } from '../engine/chunk'
 import { useReducedMotion } from '../hooks'
 import { type Shot, shotAttributes, type Tone, type Zoom } from '../kit'
@@ -213,6 +214,14 @@ export function Beat({
   className?: string
   children?: ReactNode
 }) {
+  // Every beat answers to a name, so the gauge and a sent link can reach it, and it is counted by
+  // it as it is reached and as its proof is opened (app/(public)/steps.ts).
+  const named =
+    id ??
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
   // With the proof open the picture steps aside for it, and comes back when it shuts. The camera
   // and the rides read where a section stands when the page is measured, so they are told to.
   const stands = open ? 'left' : side
@@ -225,14 +234,8 @@ export function Beat({
   return (
     <section
       ref={at}
-      // Every beat answers to a name, so the gauge and a sent link can reach it.
-      id={
-        id ??
-        name
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '')
-      }
+      id={named}
+      {...seenMark(named)}
       className={
         className ? `bl-section bl-beat ${styles.beat} ${className}` : `bl-section bl-beat ${styles.beat}`
       }
@@ -260,7 +263,7 @@ export function Beat({
         )}
         <i ref={bar} className={styles.through} aria-hidden />
         {proof && (
-          <Proof says={says} label={`${name}: how it works`} open={open} onOpen={onOpen}>
+          <Proof says={says} label={`${name}: how it works`} detail={named} open={open} onOpen={onOpen}>
             {proof}
           </Proof>
         )}

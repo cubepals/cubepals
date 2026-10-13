@@ -10,13 +10,14 @@ import { CopyPlus, ExternalLink } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { type SubmitEvent, useState } from 'react'
-import { messageOf, useTRPC } from '../../lib/api'
+import { codeOf, messageOf, useTRPC } from '../../lib/api'
 import { iconSrc, joinLine, loaderLabel } from '../../lib/present'
 import * as rules from '../../lib/rules'
 import { useChecked } from '../../lib/use-checked'
 import { behindSignUp, useSignedIn } from '../../lib/viewer'
 import { Badge, Button, CopyField, FormSection, GetPack, Note, TextField } from '../../ui'
 import styles from './like-this.module.css'
+import { inviteAnswered } from './presses'
 import { Reactions } from './reactions'
 import { ReportServer, reportable } from './report'
 import { ctaMark } from './steps'
@@ -79,7 +80,7 @@ export function ServerPage({ view, invitedBy }: { view: PublicServerView; invite
         title="Join"
         description={joinLine(view.gameVersion, view.needs.modpack, view.needs.joinsNewer)}
       >
-        <CopyField value={view.joinAddress} />
+        <CopyField value={view.joinAddress} mark={ctaMark('copy_join_address')} />
         {view.players.length > 0 && (
           <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
             On now: {view.players.join(', ')}.
@@ -182,7 +183,12 @@ function LikeThis({ view, invite }: { view: PublicServerView; invite?: string | 
 export function JoinThroughInvite({ code, view }: { code: string; view: PublicServerView }) {
   const trpc = useTRPC()
   const [playerName, setPlayerName] = useState('')
-  const join = useMutation(trpc.sharing.join.mutationOptions())
+  const join = useMutation(
+    trpc.sharing.join.mutationOptions({
+      onSuccess: ({ added }) => inviteAnswered({ added }),
+      onError: (error) => inviteAnswered({ refused: codeOf(error) }),
+    }),
+  )
   const checked = useChecked(rules.playerName, playerName)
   const submit = (event: SubmitEvent) => {
     event.preventDefault()
@@ -262,7 +268,10 @@ export function RunsOnBlockly({ view, invite }: { view: PublicServerView; invite
           {!offersCopy(view) && (
             <>
               {' '}
-              <Link href={behindSignUp(signedIn, '/servers/new')}>Make one of your own</Link>.
+              <Link href={behindSignUp(signedIn, '/servers/new')} {...ctaMark('own_server')}>
+                Make one of your own
+              </Link>
+              .
             </>
           )}
         </p>
