@@ -45,8 +45,9 @@ and `scripts/staging-check.ts` checks it:
 - `bun scripts/staging-website.ts deploy` deploys the web Worker alone, from this checkout, with
   the secret it already has; the web-staging workflow runs it on each push to main.
   `bun scripts/staging-website.ts preview <n>` uploads this checkout as pull request `<n>`'s
-  preview version, not live, at `https://pr-<n>-blockly-web-staging.<subdomain>.workers.dev`; the
-  workflow runs it on each pull request from this repository and names the address in a comment.
+  preview version, not live, at `https://pr-<n>.preview.cubepals.com`, and at its commit's
+  `https://<sha7>.preview.cubepals.com`, which keeps that version after newer pushes; the
+  workflow runs it on each pull request from this repository and names the addresses in a comment.
   `up` tells the control plane to trust those addresses (`WEB_TRUSTED_ORIGINS`) and lets their
   Google sign-in come back through staging's callback (`AUTH_OAUTH_PROXY_SECRET`). A preview
   talks to staging's control plane, which doesn't start for it: start staging to use one.
@@ -102,7 +103,7 @@ Terraform stack.
 | Variable | Local | Staging | Production | Set by | Notes |
 |---|---|---|---|---|---|
 | `WEB_CANONICAL_ORIGIN` | `http://localhost:3000` | `https://staging.cubepals.com` | `https://cubepals.com` | tf | Better Auth's base URL is this plus `/api/auth`; https everywhere but loopback |
-| `WEB_TRUSTED_ORIGINS` | empty | `https://pr-*-blockly-web-staging.<subdomain>.workers.dev` (staging.ts) | empty | tf | Other origins that serve the environment's web app: on staging, each pull request's preview. A pattern's wildcard sits inside one label and names the site; on workers.dev that includes the account's subdomain, so `https://*.workers.dev` and `https://pr-*.workers.dev` are refused |
+| `WEB_TRUSTED_ORIGINS` | empty | `https://pr-*.preview.cubepals.com`, `https://pr-*-blockly-web-staging.<subdomain>.workers.dev` and `https://???????.preview.cubepals.com` (staging.ts) | empty | tf | Other origins that serve the environment's web app: on staging, each pull request's preview and each previewed commit's. `*` stands for one or more letters, digits or dashes, `?` for one letter or digit, inside one label. A pattern's wildcards name the site; on workers.dev that includes the account's subdomain, so `https://*.workers.dev`, `https://pr-*.workers.dev` and `https://???.workers.dev` are refused |
 | `AUTH_SECRET` | generated | secret | secret | secret | Better Auth's signing key. Rotating it signs everyone out |
 | `AUTH_GOOGLE_CLIENT_ID`, `AUTH_GOOGLE_CLIENT_SECRET` | optional | secret | secret | secret | Both or neither; neither offers email only. See OAuth below |
 | `AUTH_GITHUB_CLIENT_ID`, `AUTH_GITHUB_CLIENT_SECRET` | optional | optional | optional | secret | Both or neither |
@@ -272,7 +273,7 @@ which the project's charts leave out.
 | `POSTHOG_PERSONAL_API_KEY`, `POSTHOG_PROJECT_ID` | — | production, once an operator adds them: a personal API key with error tracking write, and the project's id. With both, the build uploads its source maps to PostHog and deletes them (`apps/web/scripts/sourcemaps.ts`); without, it skips that | `production.env`, then production's Worker build only (never Terraform) |
 | `WEB_CANONICAL_ORIGIN`, `WEB_INDEXABLE` | as the control plane's; `WEB_INDEXABLE` empty | the site's address; `WEB_INDEXABLE=1` in production alone, from `web.indexable` | The Worker's build (robots, the sitemap) and vars |
 | `WEB_CLIENT_ADDRESS_HEADER` | empty | `cf-connecting-ip`, which Cloudflare's edge sets and overwrites. Empty, no address is sent | The Worker's deploy, as a var |
-| `WEB_FORWARDED_HOST` | empty | empty; a pull request's preview alone: its branded host, `pr-<n>.preview.cubepals.com`, which the previews' router (`apps/web/preview-router.ts`) says in `x-forwarded-host`. The `/api` calls of a request saying it tell the control plane that host | The preview's upload (`scripts/staging-website.ts`), as a var |
+| `WEB_FORWARDED_HOST` | empty | empty; a pull request's preview alone: its branded hosts, `pr-<n>.preview.cubepals.com` and its commit's `<sha7>.preview.cubepals.com`, a comma between them, one of which the previews' router (`apps/web/preview-router.ts`) says in `x-forwarded-host`. The `/api` calls of a request saying one tell the control plane that host | The preview's upload (`scripts/staging-website.ts`), as a var |
 
 Production's Worker is `blockly-web`, deployed by `scripts/production.ts`; staging's is
 `blockly-web-staging` (`wrangler.jsonc`'s `staging` environment), deployed by `scripts/staging.ts`.

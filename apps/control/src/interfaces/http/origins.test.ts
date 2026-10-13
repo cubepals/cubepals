@@ -6,7 +6,11 @@ import { describe, expect, test } from 'bun:test'
 import { Hono } from 'hono'
 import { originAllowed, ownPagesOnly } from './origins.ts'
 
-const OURS = ['https://blockly.test', 'https://pr-*-blockly-web-staging.team.workers.dev']
+const OURS = [
+  'https://blockly.test',
+  'https://pr-*-blockly-web-staging.team.workers.dev',
+  'https://???????.preview.blockly.test',
+]
 const JSON_BODY = { 'content-type': 'application/json' }
 const app = new Hono()
 app.use('/api/trpc/*', ownPagesOnly(OURS))
@@ -21,6 +25,17 @@ describe('changes made through the API', () => {
   test('come from Blockly’s own pages and its previews', async () => {
     expect((await call('POST', 'https://blockly.test')).status).toBe(200)
     expect((await call('POST', 'https://pr-12-blockly-web-staging.team.workers.dev')).status).toBe(200)
+    expect((await call('POST', 'https://b226b58.preview.blockly.test')).status).toBe(200)
+  })
+
+  test('a `?` stands for one letter or digit, never a dot or a dash', () => {
+    const commits = ['https://???????.preview.blockly.test']
+    expect(originAllowed('https://b226b58.preview.blockly.test', commits)).toBe(true)
+    expect(originAllowed('https://b226b5.preview.blockly.test', commits)).toBe(false)
+    expect(originAllowed('https://b226b58a.preview.blockly.test', commits)).toBe(false)
+    expect(originAllowed('https://b2.6b58.preview.blockly.test', commits)).toBe(false)
+    expect(originAllowed('https://b22-b58.preview.blockly.test', commits)).toBe(false)
+    expect(originAllowed('https://b226b58.preview.blockly.test.evil', commits)).toBe(false)
   })
 
   test('are refused from another site, which a browser always names', async () => {

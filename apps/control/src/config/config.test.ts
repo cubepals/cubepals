@@ -459,7 +459,17 @@ describe("staging's pull request previews", () => {
   })
 
   test('are never trusted by a pattern another account’s Worker could match', () => {
-    for (const anyone of ['https://pr-*-blockly-web-staging.workers.dev', 'https://*.team.workers.dev'])
+    for (const anyone of [
+      'https://pr-*-blockly-web-staging.workers.dev',
+      'https://*.team.workers.dev',
+      'https://???????.workers.dev',
+      'https://abc.???.workers.dev',
+    ])
       expect(() => loadConfig({ ...env, WEB_TRUSTED_ORIGINS: anyone })).toThrow(/Name the site/)
+  })
+
+  test('each previewed commit is trusted by its address’s shape on the site’s own domain', () => {
+    const commits = 'https://???????.preview.cubepals.com'
+    expect(loadConfig({ ...env, WEB_TRUSTED_ORIGINS: commits }).web.trustedOrigins).toEqual([commits])
   })
 })

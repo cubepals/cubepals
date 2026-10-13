@@ -4,14 +4,21 @@
 
 import type { MiddlewareHandler } from 'hono'
 
-/** Exact origins, or patterns with a single `*` label: `https://*.preview.example.com`. */
+/**
+ * Exact origins, or patterns whose `*` stands for one or more letters, digits or dashes and whose
+ * `?` stands for one letter or digit, never a dot: `https://pr-*.preview.example.com`,
+ * `https://???????.preview.example.com`.
+ */
 export function originAllowed(origin: string | undefined, allowed: readonly string[]): boolean {
   if (!origin) return false
   return allowed.some((pattern) => {
-    if (!pattern.includes('*')) return pattern === origin
-    const [before = '', after = ''] = pattern.split('*')
-    const literal = (s: string) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-    return new RegExp(`^${literal(before)}[a-z0-9-]+${literal(after)}$`).test(origin)
+    if (!/[*?]/.test(pattern)) return pattern === origin
+    const literal = (s: string) => s.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    const source = pattern
+      .split(/([*?])/)
+      .map((part) => (part === '*' ? '[a-z0-9-]+' : part === '?' ? '[a-z0-9]' : literal(part)))
+      .join('')
+    return new RegExp(`^${source}$`).test(origin)
   })
 }
 

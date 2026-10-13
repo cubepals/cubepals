@@ -393,8 +393,8 @@ export const LOCAL_ONLY = 'local-only-'
 function trustedOriginProblems(patterns: readonly string[]): string[] {
   return patterns.flatMap((pattern) => {
     const [first = '', ...rest] = pattern.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').split('.')
-    const accountless = first.includes('*') && rest.join('.') === 'workers.dev'
-    return first === '*' || rest.some((label) => label.includes('*')) || accountless
+    const accountless = /[*?]/.test(first) && rest.join('.') === 'workers.dev'
+    return first === '*' || rest.some((label) => /[*?]/.test(label)) || accountless
       ? [
           `WEB_TRUSTED_ORIGINS trusts every site matching ${pattern}. Name the site, as in https://pr-*-blockly-web-staging.<subdomain>.workers.dev.`,
         ]
