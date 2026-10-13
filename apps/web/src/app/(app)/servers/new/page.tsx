@@ -35,12 +35,14 @@ import { PackDrop, type ReadPack } from '../../pack-drop'
 import { PlusOffer } from '../../plus-offer'
 import styles from './create.module.css'
 import { keptChoice, keptPath } from './kept'
+import { usePlanLimit } from './limit'
 import { Modpacks, typingNext } from './modpacks'
 import { Part } from './part'
 import { previewOf } from './preview'
 import { useRegion } from './region'
 import { ReleasePick } from './release'
 import { useCreate } from './sending'
+import { useSteps } from './steps'
 import { curatedPicture, type Picture, packPicture, Thumb, wayPicture } from './thumb'
 import { Ways } from './ways'
 
@@ -155,16 +157,9 @@ function CreateServer() {
   // after a click. Each answer is the one creating would give: the account's own verdict on
   // another server, and each template's fit, which the control plane works out as a preview does
   // and sends usable first.
-  const overview = useQuery(trpc.account.overview.queryOptions())
-  const creating = overview.data?.features.find((f) => f.feature === 'create_server')
-  // The server being replaced makes way first, so the plan's limit doesn't stand in the way.
-  const atLimit = replace === null && creating?.available === false ? (creating.message ?? null) : null
-  // A plan edge the person met here, where another plan would run it: a paid plan's own words,
-  // said where the choice was made, and a way on without it.
-  const limitCode = creating?.available === false ? creating.code : undefined
-  const moreServers = overview.data?.plans.find(
-    (p) => p.entitlements.maxServers > (overview.data?.entitlements.maxServers ?? 0),
-  )
+  const { atLimit, limitCode, moreServers } = usePlanLimit(replace)
+  // Where people stop: what they chose and what stood in the way, never what they typed.
+  useSteps({ from, partySize, region: region.picked, name, temporary, preview, refused, create })
 
   // A question opens once the ones before it are answered, and not before the page knows
   // whether it asks who is playing at all.

@@ -11,6 +11,10 @@
  * names anyone: no identify, no email, no address, no clicks or text read off the page, and no
  * recordings, which PostHog doesn't make without storage. With no token it does nothing at all.
  *
+ * Pages name their own steps through `capture`, each area's events listed in one typed module
+ * beside it (the create page's `servers/new/steps.ts`, for one). Their properties are codes,
+ * counts and yes or no: never text someone typed, and never anything that names them.
+ *
  * Not for anything about an account: control sends those, by the account's id.
  */
 import posthog from 'posthog-js'
@@ -32,31 +36,41 @@ let started = false
 /** Starts PostHog once, as the page loads. Renders nothing. */
 export function Insight() {
   useEffect(() => {
-    if (!insightOn || started) return
-    started = true
-    posthog.init(TOKEN, {
-      api_host: HOST,
-      cookieless_mode: 'always',
-      persistence: 'memory',
-      person_profiles: 'never',
-      ip: false,
-      capture_pageview: 'history_change',
-      capture_pageleave: true,
-      capture_exceptions: true,
-      capture_performance: { web_vitals: true, network_timing: false },
-      // Nothing read off the page: no clicks, dead clicks or heatmaps, whatever the project turns on.
-      autocapture: false,
-      capture_dead_clicks: false,
-      enable_heatmaps: false,
-      disable_session_recording: true,
-      disable_surveys: true,
-      // Registered as the client loads, so every event carries them, autocaptured ones included.
-      loaded: (ph) => ph.register({ environment: ENVIRONMENT, app_version: APP_VERSION }),
-      // And held to it on the way out: no event leaves without its environment, or with an address.
-      before_send: stamped,
-    })
+    start()
   }, [])
   return null
+}
+
+/**
+ * Starts PostHog where it sends anything and hasn't started yet; whether it is running. A page's
+ * own effects run before the root layout's, so the first step a page names may start it too.
+ */
+function start(): boolean {
+  if (!insightOn || typeof window === 'undefined') return false
+  if (started) return true
+  started = true
+  posthog.init(TOKEN, {
+    api_host: HOST,
+    cookieless_mode: 'always',
+    persistence: 'memory',
+    person_profiles: 'never',
+    ip: false,
+    capture_pageview: 'history_change',
+    capture_pageleave: true,
+    capture_exceptions: true,
+    capture_performance: { web_vitals: true, network_timing: false },
+    // Nothing read off the page: no clicks, dead clicks or heatmaps, whatever the project turns on.
+    autocapture: false,
+    capture_dead_clicks: false,
+    enable_heatmaps: false,
+    disable_session_recording: true,
+    disable_surveys: true,
+    // Registered as the client loads, so every event carries them, autocaptured ones included.
+    loaded: (ph) => ph.register({ environment: ENVIRONMENT, app_version: APP_VERSION }),
+    // And held to it on the way out: no event leaves without its environment, or with an address.
+    before_send: stamped,
+  })
+  return true
 }
 
 /** An event on its way out: marked with this build's environment, and with no address on it. */
@@ -70,4 +84,26 @@ export function stamped<T extends { properties: Record<string, unknown> }>(event
 export function reportError(error: unknown, boundary: string): void {
   if (!insightOn || !started) return
   posthog.captureException(error, { boundary, environment: ENVIRONMENT, app_version: APP_VERSION })
+}
+
+/** What a page's step carries: codes, counts and yes or no. */
+export type Said = Record<string, string | number | boolean>
+
+/**
+ * A step a page names, as `event` with `properties`. `leaving`: the page is going away, so it is
+ * sent at once by `sendBeacon`, which the browser finishes after the page has gone, rather than
+ * waiting in posthog-js's batch. Nothing when PostHog is off.
+ */
+export function capture(event: string, properties: Said, leaving = false): void {
+  if (!start()) return
+  posthog.capture(event, properties, leaving ? { transport: 'sendBeacon', send_instantly: true } : undefined)
+}
+
+/**
+ * A code as a step may carry it: lowercase letters, digits and underscores, else `other`. Some
+ * codes come from an address anyone can type, so nothing else gets through.
+ */
+export function asCode(value: string | null | undefined): string {
+  const code = value?.toLowerCase() ?? ''
+  return /^[a-z0-9_]{1,64}$/.test(code) ? code : 'other'
 }

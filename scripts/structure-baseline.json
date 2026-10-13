@@ -583,7 +583,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/(app)/servers/new/page.tsx › function CreateServer": {
-      "n": 153,
+      "n": 149,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/(public)/browse/directory.tsx › function Directory": {
@@ -1273,7 +1273,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/(app)/servers/new/page.tsx › function CreateServer": {
-      "n": 358,
+      "n": 353,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/design/page.tsx › function DesignGallery": {
