@@ -28,6 +28,10 @@ Players know this product as **Cubepals**, at `cubepals.com`. **Blockly** is its
 
 Fraud and abuse tuning, costs and margins, competitors, pricing history, strategy and vendor trials never go in this repository, its commits, PRs or issues: code reads such numbers from private configuration, with a harmless default ([CLAUDE.md](CLAUDE.md)).
 
+## No accidental mentions
+
+In commits, PR titles and bodies, issues and comments, never write `@name` as plain text: GitHub turns it into a mention and notifies whoever owns that name. Minecraft selectors (`@s`, `@p`), package scopes and emails go inside backticks closed on the same line; scan for a stray `@` before committing.
+
 ## Structure
 
 A source file past about 800 lines, or one `impl` block, class or function past about 600, is split by concern before more is added to it. Splitting is its own change, titled `Move: …`, in which code moves and nothing else does. `bun run check:move-only` proves it.
