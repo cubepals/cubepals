@@ -58,6 +58,8 @@ function start(): boolean {
     capture_pageview: 'history_change',
     capture_pageleave: true,
     capture_exceptions: true,
+    // `?ref=` arrives as its own campaign property, beside the utm_ ones.
+    custom_campaign_params: ['ref'],
     capture_performance: { web_vitals: true, network_timing: false },
     // Nothing read off the page: no clicks, dead clicks or heatmaps, whatever the project turns on.
     autocapture: false,
@@ -73,23 +75,42 @@ function start(): boolean {
   return true
 }
 
-/** Page addresses an event carries; their query can hold an email or a token, so it never leaves. */
+/** Page addresses an event carries; their query can hold an email or a token, so only tags leave. */
 const ADDRESSES = ['$current_url', '$referrer', '$initial_referrer', '$prev_pageview_url'] as const
 
-/** An address without its query or fragment; anything that isn't a string is left as it is. */
+/** A campaign tag's key: `utm_` and a name (utm_source, utm_campaign...), or `ref`. */
+const TAG_KEY = /^(utm_[a-z_]{1,32}|ref)$/
+/** A tag's value as it may leave: short, and only letters, digits, dots, underscores and dashes. */
+const TAG_VALUE = /^[A-Za-z0-9._-]{1,64}$/
+
+/**
+ * An address cut to its path and its campaign tags: every other query key and the fragment are
+ * dropped, and so is a tag whose value could carry more than a tag. Anything that isn't a string is
+ * left as it is.
+ */
 function bare(address: unknown): unknown {
-  return typeof address === 'string' ? address.replace(/[?#].*$/, '') : address
+  if (typeof address !== 'string') return address
+  const path = address.replace(/[?#].*$/, '')
+  const query = /^[^?#]*\?([^#]*)/.exec(address)?.[1] ?? ''
+  const tags = [...new URLSearchParams(query)].filter(
+    ([key, value]) => TAG_KEY.test(key) && TAG_VALUE.test(value),
+  )
+  return tags.length === 0 ? path : `${path}?${tags.map(([key, value]) => `${key}=${value}`).join('&')}`
 }
 
 /**
  * An event on its way out: marked with this build's environment, with no IP address, and with page
- * addresses cut to their path (sign-up's `/check-email?email=...` among them). Campaign tags are
- * read from the query before this, so they still arrive as their own properties.
+ * addresses cut to their path and campaign tags (sign-up's `/check-email?email=...` leaves as
+ * `/check-email`). The tags posthog-js reads off the query into their own properties are held to
+ * the same rule: one whose value isn't a short plain code isn't sent.
  */
 export function stamped<T extends { properties: Record<string, unknown> }>(event: T | null): T | null {
   if (event === null) return null
   const { $ip: _address, ...properties } = event.properties
   for (const key of ADDRESSES) if (key in properties) properties[key] = bare(properties[key])
+  for (const [key, value] of Object.entries(properties)) {
+    if (TAG_KEY.test(key) && typeof value === 'string' && !TAG_VALUE.test(value)) delete properties[key]
+  }
   return { ...event, properties: { ...properties, environment: ENVIRONMENT } }
 }
 
