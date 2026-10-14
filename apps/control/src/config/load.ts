@@ -91,6 +91,17 @@ const databaseFrom = (env: NodeJS.ProcessEnv) => ({
   poolMax: Number(env.DATABASE_POOL_MAX ?? 10),
 })
 
+/**
+ * How many server operations a worker runs at once. Each spends minutes waiting on Fly and on a
+ * boot, holding no database connection meanwhile, so what bounds them is Fly, not the worker: new
+ * apps go out at one a second (infra/fly/client.ts), and 32 at once keeps that pace busy through a
+ * rush. Starts and wakes take seconds each, so 8 of their own clear a rush of joins quickly.
+ */
+const operationsFrom = (env: NodeJS.ProcessEnv) => ({
+  concurrency: Number(env.SERVER_OPERATIONS_CONCURRENCY ?? 32),
+  wakeConcurrency: Number(env.SERVER_WAKES_CONCURRENCY ?? 8),
+})
+
 /** PostHog with its token, and the environment every event says it came from; none without one. */
 const insightFrom = (env: NodeJS.ProcessEnv) =>
   env.POSTHOG_TOKEN
@@ -249,6 +260,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
     deploymentId: env.DEPLOYMENT_ID,
     roles: list(env.ROLES ?? 'api,worker,realtime'),
     database: databaseFrom(env),
+    operations: operationsFrom(env),
     web: { canonicalOrigin: env.WEB_CANONICAL_ORIGIN, trustedOrigins: list(env.WEB_TRUSTED_ORIGINS) },
     listen: {
       api: env.API_LISTEN ?? `127.0.0.1:${API_PORT}`,

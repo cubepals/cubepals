@@ -467,6 +467,7 @@ async function startWorker(
   boss: PgBoss,
   app: ControlPlane,
   provider: Awaited<ReturnType<typeof runtimesFor>>,
+  operations: DeploymentConfig['operations'],
 ): Promise<void> {
   // What the last worker was running when it stopped carries on now, not at its deadline: taken
   // back as this one starts, and again once the heartbeat it may have sent just before has lapsed.
@@ -480,7 +481,7 @@ async function startWorker(
     )
   await takeBack()
   setTimeout(() => void takeBack(), (OPERATION_HEARTBEAT_SECONDS + 1) * 1000).unref()
-  await workServerOperations(boss, (attempt) => app.runner.run(attempt), 8)
+  await workServerOperations(boss, (attempt) => app.runner.run(attempt), operations)
   await workArtifactMirror(boss, (artifact) => app.artifacts.mirror(artifact))
   await workPackImports(boss, {
     run: (id) => app.packs.runImport(id),
@@ -722,7 +723,7 @@ async function main(): Promise<void> {
     console.warn(`api on ${config.listen.api}, internal on ${config.listen.internal}`)
   }
 
-  if (config.roles.includes('worker')) await startWorker(boss, app, provider)
+  if (config.roles.includes('worker')) await startWorker(boss, app, provider, config.operations)
 
   if (config.roles.includes('realtime')) {
     const realtime = await startRealtime({

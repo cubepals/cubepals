@@ -4,7 +4,7 @@
 
 import type { Tx } from '@blockly/db'
 import { sql } from 'drizzle-orm'
-import { fromDrizzle, PgBoss } from 'pg-boss'
+import { fromDrizzle, type JobWithMetadata, PgBoss } from 'pg-boss'
 import type {
   BlockedOperation,
   CurationJob,
@@ -19,6 +19,12 @@ import type {
 const SCHEMA = 'pgboss'
 /** One queue for every server operation: strict FIFO per server, parallel across servers. */
 const SERVER_OPS = 'server-ops'
+/**
+ * The priority a start or a wake goes in at: fetched before everything else, and the only work the
+ * wake lane takes. Everything else keeps pg-boss's default, 0. Priority orders the heads of the
+ * servers' queues; it never lets an operation pass one queued before it for the same server.
+ */
+const WAKE_PRIORITY = 1
 /**
  * How often, in seconds, a worker's word that it still holds an operation may go unsaid before
  * the operation counts as cut off: pg-boss's floor. A worker says so every half of it.
@@ -127,7 +133,10 @@ export class PgBossJobs implements JobQueue {
     this.#boss = boss
   }
 
-  async enqueue(tx: Tx, job: { operationId: string; serverId: string; retryLimit: number }): Promise<void> {
+  async enqueue(
+    tx: Tx,
+    job: { operationId: string; serverId: string; retryLimit: number; wakes: boolean },
+  ): Promise<void> {
     await this.#boss.send(
       SERVER_OPS,
       { operationId: job.operationId },
@@ -135,6 +144,7 @@ export class PgBossJobs implements JobQueue {
         id: job.operationId,
         singletonKey: job.serverId,
         retryLimit: job.retryLimit,
+        ...(job.wakes ? { priority: WAKE_PRIORITY } : {}),
         db: fromDrizzle(tx, sql),
       },
     )
@@ -350,27 +360,36 @@ export async function workArtifactMirror(
   )
 }
 
+/**
+ * Works server operations in two lanes on the one queue, so each server's operations still run in
+ * the order they were asked for. The main lane takes anything, starts and wakes first; the wake
+ * lane takes only starts and wakes, so a player joining never waits behind new servers being made,
+ * however many there are.
+ */
 export async function workServerOperations(
   boss: PgBoss,
   run: (attempt: JobAttempt) => Promise<void>,
-  concurrency: number,
+  lanes: { concurrency: number; wakeConcurrency: number },
   pollingIntervalSeconds = 1,
 ): Promise<void> {
+  const handle = async ([job]: JobWithMetadata[]) => {
+    if (!job) return
+    const { operationId } = job.data as { operationId: string }
+    // pg-boss keeps the error as JSON, which can't hold a NUL: a message quoting raw bytes from
+    // a provider's stream would leave the job unrecorded until it expired.
+    await run({ operationId, retryCount: job.retryCount, retryLimit: job.retryLimit }).catch(
+      (error: unknown) => {
+        if (!(error instanceof Error) || !error.message.includes('\u0000')) throw error
+        throw new Error(error.message.replaceAll('\u0000', ''))
+      },
+    )
+  }
+  const lane = { batchSize: 1, includeMetadata: true, pollingIntervalSeconds } as const
+  await boss.work(SERVER_OPS, { ...lane, localConcurrency: lanes.concurrency }, handle)
   await boss.work(
     SERVER_OPS,
-    { batchSize: 1, includeMetadata: true, localConcurrency: concurrency, pollingIntervalSeconds },
-    async ([job]) => {
-      if (!job) return
-      const { operationId } = job.data as { operationId: string }
-      // pg-boss keeps the error as JSON, which can't hold a NUL: a message quoting raw bytes from
-      // a provider's stream would leave the job unrecorded until it expired.
-      await run({ operationId, retryCount: job.retryCount, retryLimit: job.retryLimit }).catch(
-        (error: unknown) => {
-          if (!(error instanceof Error) || !error.message.includes('\u0000')) throw error
-          throw new Error(error.message.replaceAll('\u0000', ''))
-        },
-      )
-    },
+    { ...lane, localConcurrency: lanes.wakeConcurrency, minPriority: WAKE_PRIORITY },
+    handle,
   )
 }
 
