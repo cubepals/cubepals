@@ -8,6 +8,8 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { ownIconPath } from '@blockly/contracts'
+import { schema } from '@blockly/db'
+import { eq, sql } from 'drizzle-orm'
 import { PNG } from 'pngjs'
 import { ServerIcons } from '../../app/server-icons/service.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
@@ -107,4 +109,26 @@ describe.skipIf(!hasDatabase)('a server’s own icon', () => {
       ownIcon: ownIconPath(id, own.sha256),
     })
   }, 40_000)
+
+  test('goes when its server is purged', async () => {
+    const owner = await h.user()
+    const { id } = await h.create(owner)
+    const own = picture(42)
+    await h.app.servers.saveIdentity(owner, id, { picture: own })
+    await h.until(id, 'running')
+    await h.settled(id)
+    await h.app.servers.deleteServer(owner, id, (await h.server(id)).name)
+    await h.until(id, 'deleted')
+    await h.settled(id)
+    await h.db
+      .update(schema.minecraftServers)
+      .set({ purgeAfter: sql`now() - interval '1 hour'` })
+      .where(eq(schema.minecraftServers.id, id))
+    await h.app.schedules.purgeSweep()
+    await h.until(id, 'purged', 20_000)
+    await h.settled(id)
+    expect(await h.db.select().from(schema.serverIcons).where(eq(schema.serverIcons.serverId, id))).toEqual(
+      [],
+    )
+  }, 60_000)
 })

@@ -181,6 +181,8 @@ export function windingDown(deps: {
         // Its guestbook too: the notes were about a server that is no longer anywhere.
         await tx.delete(schema.serverStars).where(eq(schema.serverStars.serverId, server.id))
         await tx.delete(schema.serverNotes).where(eq(schema.serverNotes.serverId, server.id))
+        // And the pictures its owner gave it.
+        await tx.delete(schema.serverIcons).where(eq(schema.serverIcons.serverId, server.id))
         // The provider's snapshots went with everything else.
         await tx
           .update(schema.backups)
