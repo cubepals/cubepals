@@ -40,6 +40,7 @@
  * The `production` branch names what is live, so it is moved, not merged: a push here may move
  * it past a hotfix branch's commit. The website is the Cloudflare Worker `blockly-web`, built here
  * with production's values and deployed with wrangler (production-website.ts, lib/web-worker.ts).
+ * Each time it goes out, IndexNow is sent its sitemap (lib/indexnow.ts).
  *
  * Needs terraform, flyctl and gh. Nothing here prints a value, only names.
  */
@@ -47,6 +48,7 @@ import { spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { authWorks } from './lib/auth-through-website.ts'
+import { pingIndexNow } from './lib/indexnow.ts'
 import { buildWorker, deployWorker } from './lib/web-worker.ts'
 import { bringUpToDate } from './production-tfvars.ts'
 import {
@@ -257,6 +259,7 @@ async function apply(): Promise<void> {
   moveProduction(env)
   deployWorker(site, head, say)
   await signInGuard()
+  await pingIndexNow(site, say)
   const version = `v${nextVersion(repositoryTags())}`
   const notes = passed ? `Ran on staging as ${passed}.` : 'Deployed without a staging run.'
   run(
@@ -303,6 +306,7 @@ async function web(): Promise<void> {
   moveProduction(process.env)
   deployWorker(site, head, say)
   await signInGuard()
+  await pingIndexNow(site, say)
 }
 
 /**
@@ -389,6 +393,7 @@ async function hotfix(): Promise<void> {
   if (website) {
     deployWorker(website, head, say)
     await signInGuard()
+    await pingIndexNow(website, say)
   }
   const shipped = [...apps, ...(site ? ['website'] : [])].join(', ')
   if (!(await answers(apps, env))) {
