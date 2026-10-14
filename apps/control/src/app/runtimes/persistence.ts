@@ -176,6 +176,25 @@ export async function switchUnstarted(
   return switched.length > 0
 }
 
+/**
+ * A binding whose server has never booted moves from one runtime to another, letting go of what
+ * the first held for it: a first start that couldn't come up there. False once it has booted, or
+ * is on another runtime already.
+ */
+export async function switchNeverBooted(
+  q: Queryable,
+  serverId: string,
+  from: string,
+  to: string,
+): Promise<boolean> {
+  const switched = await q
+    .update(bindings)
+    .set({ provider: to, handle: null, updatedAt: new Date() })
+    .where(and(eq(bindings.serverId, serverId), eq(bindings.provider, from), isNull(bindings.applied)))
+    .returning({ serverId: bindings.serverId })
+  return switched.length > 0
+}
+
 /** How many live servers each runtime holds. */
 export async function serversByProvider(q: Queryable): Promise<Map<string, number>> {
   return boundExcept(q, ['deleted', 'purged'])

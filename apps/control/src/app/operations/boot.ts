@@ -475,8 +475,9 @@ export class BootSequence {
       try {
         await this.#runtime.waitRunning(handle, AbortSignal.timeout(this.#timeouts.runningMs))
       } catch (error) {
-        // One that stopped before it was even up still said why, if it got far enough to say.
-        throw (await this.#diagnosed(handle)) ?? error
+        // One that stopped before it was even up still said why, if it got far enough to say; one
+        // that didn't is said by how far it got, with what its provider said kept as the cause.
+        throw (await this.#diagnosed(handle)) ?? new NotReady(stoppedWhile(reached), { cause: error })
       }
       await this.#waitReady(
         ctx,
@@ -535,13 +536,8 @@ export class BootSequence {
     let failureRead = since.getTime()
     let reportsRead = 0
     for (;;) {
-      try {
-        await this.#probe.ping(endpoint, AbortSignal.timeout(5_000))
-        return
-      } catch (error) {
-        if (error instanceof AnswerUnreadable) throw new Unreadable({ cause: error })
-        lastError = error
-      }
+      lastError = await this.#notAnswered(endpoint)
+      if (lastError === null) return
       const observation = await this.#runtime.observe(handle)
       if (observation.state === 'crashed' || observation.state === 'stopped')
         throw await this.#whyItStopped(handle, stoppedWhile(reached()))
@@ -575,6 +571,20 @@ export class BootSequence {
     const found = await this.#diagnosed(handle, true)
     if (found instanceof Diagnosed) throw found
     throw new Stuck(reached(), { cause: found ?? lastError })
+  }
+
+  /**
+   * Null where the server answers a status ping, else what the ping ran into. An answer that can't
+   * be read is final: every ping reads it the same.
+   */
+  async #notAnswered(endpoint: GameEndpoint): Promise<unknown> {
+    try {
+      await this.#probe.ping(endpoint, AbortSignal.timeout(5_000))
+      return null
+    } catch (error) {
+      if (error instanceof AnswerUnreadable) throw new Unreadable({ cause: error })
+      return error
+    }
   }
 
   /**

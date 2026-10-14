@@ -116,6 +116,29 @@ export class RuntimePlacement {
     return placed === null || placed.ruleId === null ? null : this.defaultProvider
   }
 
+  /**
+   * Where a server goes whose first start couldn't come up on `from`: the first other runtime this
+   * deployment runs, in the order configured, below its provider's limit and with room for it, as
+   * the overflow chooses at placement. Null where there is none.
+   */
+  async nextFor(
+    server: { regionKey: string },
+    from: string,
+    size: { memoryMb: number; storageGb: number },
+  ): Promise<string | null> {
+    const held = await computeByProvider(this.#db)
+    for (const provider of this.#runtimes.providers) {
+      if (provider === from) continue
+      const ceiling = this.#runtimes.ceilingOf(provider)
+      if (ceiling !== null && (held.get(provider) ?? 0) >= ceiling) continue
+      const room = await this.#runtimes
+        .hasRoom(provider, { regionKey: server.regionKey }, size)
+        .catch(() => false)
+      if (room) return provider
+    }
+    return null
+  }
+
   async fellBack(tx: Tx, serverId: string, from: string, to: string, reason: string): Promise<void> {
     await recordDecision(tx, {
       serverId,

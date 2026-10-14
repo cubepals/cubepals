@@ -4,10 +4,11 @@
 
 /**
  * Brings a server's compute up and boots it, as provision, start and restart do. A first start
- * with no room falls back to another runtime here, and a start onto a change that rewrites the
- * world goes the way an update does, with a snapshot to go back to. Updating a running server is
- * `updating.ts`; waking a resting world is `stored-worlds.ts`, which imports `WOKEN_BY` from here:
- * the one import between families, a constant naming who asked for a run.
+ * with no room falls back to another runtime here, as does a new server that can't come up where
+ * it is, and a start onto a change that rewrites the world goes the way an update does, with a
+ * snapshot to go back to. Updating a running server is `updating.ts`; waking a resting world is
+ * `stored-worlds.ts`, which imports `WOKEN_BY` from here: the one import between families, a
+ * constant naming who asked for a run.
  */
 import type { AppliedConfigJson, Db } from '@blockly/db'
 import { rewritesWorld } from '../../../domain/revision/revision.ts'
@@ -16,7 +17,7 @@ import { aside, inFull, inPlainWords, PermanentFailure } from '../../errors.ts'
 import type { AccessPolicy } from '../../policy/access-policy.ts'
 import { RuntimeFull, type RuntimeHandle, type RuntimeSpec, runtimeKey } from '../../ports/runtime.ts'
 import { runsOf } from '../../revisions/caps.ts'
-import { switchUnstarted } from '../../runtimes/persistence.ts'
+import { switchNeverBooted, switchUnstarted } from '../../runtimes/persistence.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import type { RuntimePlacement } from '../../runtimes/service.ts'
 import { loadRevision, lockServer, type RuntimeBinding, saveHandle } from '../../servers/persistence.ts'
@@ -24,7 +25,7 @@ import type { DesiredRuntime, RuntimeSpecs } from '../../servers/specs.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { clearPresence, closeInterval, openInterval } from '../../servers/usage.ts'
 import { enqueuePrune } from '../../worlds/service.ts'
-import type { BootSequence } from '../boot.ts'
+import { type BootSequence, notUpHere } from '../boot.ts'
 import {
   NoLongerApplies,
   type OperationContext,
@@ -55,10 +56,75 @@ const asItSlept = (
     ? { ...desired, digest: applied.specDigest }
     : desired
 
+/** What a server's start onto another runtime reads and writes. */
+interface OtherRuntimes {
+  db: Db
+  runtime: Pick<Runtimes, 'destroy'>
+  placement: Pick<RuntimePlacement, 'fallbackFor' | 'fellBack' | 'nextFor'>
+}
+
+/**
+ * The explicit fallback (docs/runtimes.md): a server that has never started, whose runtime had
+ * no room, starts on the one placement falls back to instead, and stays there. Only a binding
+ * that still holds nothing moves so, and the move is recorded; what the first runtime may have
+ * begun for it is cleared. Null when there is nowhere to fall back to.
+ */
+async function fallBack(
+  { db, runtime, placement }: OtherRuntimes,
+  server: MinecraftServer,
+  binding: RuntimeBinding,
+  error: unknown,
+): Promise<string | null> {
+  if (!(error instanceof RuntimeFull) || binding.handle !== null || binding.applied !== null) return null
+  const to = await placement.fallbackFor(server.id, binding.provider)
+  if (to === null) return null
+  const switched = await db.transaction(async (tx) => {
+    if (!(await switchUnstarted(tx, server.id, binding.provider, to))) return false
+    await placement.fellBack(tx, server.id, binding.provider, to, error.message)
+    return true
+  })
+  if (!switched) return null
+  await runtime.destroy(binding.provider, runtimeKey(server.id)).catch(() => undefined)
+  return to
+}
+
+/**
+ * A new server whose first start couldn't come up on `from` (it hung, stopped saying nothing
+ * recognised, or answered in a way that can't be read) goes to the next runtime with room, once,
+ * on record. Its storage holds nothing anyone played: nobody joins a server before it first runs,
+ * and only a binding that has never booted moves. Null when there is nowhere to go.
+ */
+async function moveOn(
+  { db, runtime, placement }: OtherRuntimes,
+  ctx: OperationContext,
+  from: string,
+  desired: DesiredRuntime,
+  error: unknown,
+): Promise<string | null> {
+  const server = ctx.server
+  const to = await placement.nextFor(server, from, {
+    memoryMb: desired.spec.resources.memoryMb,
+    storageGb: desired.spec.storage.sizeGb,
+  })
+  if (to === null) return null
+  const switched = await db.transaction(async (tx) => {
+    if (!(await switchNeverBooted(tx, server.id, from, to))) return false
+    await placement.fellBack(tx, server.id, from, to, inFull(error))
+    return true
+  })
+  if (!switched) return null
+  console.warn(
+    `operation ${ctx.op.kind} ${ctx.op.id}: didn't come up on ${from}, moving to ${to} (${inFull(error)})`,
+  )
+  // What still runs there stops with it; one left behind is the orphan sweep's.
+  await runtime.destroy(from, runtimeKey(server.id)).catch(() => undefined)
+  return to
+}
+
 export function bringingUp(deps: {
   db: Db
-  runtime: Pick<Runtimes, 'ensureProvisioned' | 'apply' | 'stop' | 'destroy'>
-  placement: Pick<RuntimePlacement, 'fallbackFor' | 'fellBack'>
+  runtime: Pick<Runtimes, 'providers' | 'ensureProvisioned' | 'apply' | 'stop' | 'destroy'>
+  placement: Pick<RuntimePlacement, 'fallbackFor' | 'fellBack' | 'nextFor'>
   policy: Pick<AccessPolicy, 'check'>
   specs: Pick<RuntimeSpecs, 'desired'>
   boot: Pick<BootSequence, 'run'>
@@ -93,33 +159,12 @@ export function bringingUp(deps: {
   } = deps
 
   /**
-   * The explicit fallback (docs/runtimes.md): a server that has never started, whose runtime had
-   * no room, starts on the one placement falls back to instead, and stays there. Only a binding
-   * that still holds nothing moves so, and the move is recorded; what the first runtime may have
-   * begun for it is cleared. Null when there is nowhere to fall back to.
+   * Brings compute up matching the desired spec, then boots. Shared by provision and start;
+   * `elsewhere`, a new server that can't come up on its runtime moves to the next (`moveOn`).
    */
-  const fallBack = async (
-    server: MinecraftServer,
-    binding: RuntimeBinding,
-    error: unknown,
-  ): Promise<string | null> => {
-    if (!(error instanceof RuntimeFull) || binding.handle !== null || binding.applied !== null) return null
-    const to = await deps.placement.fallbackFor(server.id, binding.provider)
-    if (to === null) return null
-    const switched = await db.transaction(async (tx) => {
-      if (!(await switchUnstarted(tx, server.id, binding.provider, to))) return false
-      await deps.placement.fellBack(tx, server.id, binding.provider, to, error.message)
-      return true
-    })
-    if (!switched) return null
-    await runtime.destroy(binding.provider, runtimeKey(server.id)).catch(() => undefined)
-    return to
-  }
-
-  /** Brings compute up matching the desired spec, then boots. Shared by provision and start. */
   const bringUp = async (
     ctx: OperationContext,
-    options: { startAgainOnHang?: boolean } = {},
+    options: { startAgainOnHang?: boolean; elsewhere?: boolean } = {},
   ): Promise<DesiredRuntime> => {
     const server = ctx.server
     // Provisioning a server whose world rests in the store would give it new, empty storage. Only
@@ -140,24 +185,34 @@ export function bringingUp(deps: {
         desired.install,
       )
     const handle = await provisioned(desired.spec).catch(async (error: unknown) => {
-      const fallback = await fallBack(server, binding, error)
+      const fallback = await fallBack(deps, server, binding, error)
       if (fallback === null) throw error
       provider = fallback
       return provisioned(desired.spec)
     })
     desired = asItSlept(desired, binding.applied, ctx.reached())
-    // A pack server whose start taught its pack something starts again on what it learned.
-    await boot.run(
-      ctx,
-      server,
-      handle,
-      desired.revision,
-      async () => {
-        desired = await specs.desired(db, server)
-        return provisioned(desired.spec)
-      },
-      options,
-    )
+    // A server that may yet move on is waited on once on each runtime, not twice: two waits in
+    // all, inside the half hour the queue gives an operation.
+    const elsewhere = options.elsewhere === true && binding.applied === null && runtime.providers.length > 1
+    const booting = (started: RuntimeHandle) =>
+      // A pack server whose start taught its pack something starts again on what it learned.
+      boot.run(
+        ctx,
+        server,
+        started,
+        desired.revision,
+        async () => {
+          desired = await specs.desired(db, server)
+          return provisioned(desired.spec)
+        },
+        elsewhere ? { startAgainOnHang: false } : options,
+      )
+    await booting(handle).catch(async (error: unknown) => {
+      const next = elsewhere && notUpHere(error) ? await moveOn(deps, ctx, provider, desired, error) : null
+      if (next === null) throw error
+      provider = next
+      await booting(await provisioned(desired.spec))
+    })
     return desired
   }
 
@@ -169,7 +224,7 @@ export function bringingUp(deps: {
     async run(ctx) {
       const decision = await stillAllowed(ctx.server, 'continue_provisioning')
       if (!decision.ok) throw new PermanentFailure(decision.message)
-      const desired = await bringUp(ctx)
+      const desired = await bringUp(ctx, { elsewhere: true })
       await db.transaction(async (tx) => {
         const server = await lockServer(tx, ctx.server.id)
         // Deleted while it was being built: the queued decommission cleans up after us.

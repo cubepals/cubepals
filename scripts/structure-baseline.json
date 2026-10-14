@@ -1021,7 +1021,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/handlers/bringing-up.ts › function bringingUp": {
-      "n": 209,
+      "n": 201,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/handlers/moving.ts › function moving": {
