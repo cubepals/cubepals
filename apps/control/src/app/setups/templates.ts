@@ -6,7 +6,10 @@ import { readFileSync } from 'node:fs'
 import { TEMPLATE_CARDS, type TemplateCard, type TemplateKey } from '@blockly/contracts'
 import type { ServerSetup } from '../../domain/setup/setup.ts'
 import { DUELS_FILES } from '../../minecraft/duels.ts'
+import { WAITING_FILES } from '../../minecraft/duels-waiting.ts'
+import { CHATSENTINEL, LIBERTYBANS, LUCKPERMS, moderationFiles } from '../../minecraft/moderation.ts'
 import { VOID_LEVEL } from '../../minecraft/worlds.ts'
+import { CHAT_FILTER } from '../moderation/service.ts'
 
 /**
  * What Blockly offers when it asks "what do you want to play?" (§15.6). Each one is a setup with
@@ -129,10 +132,23 @@ const SETUPS: Record<TemplateKey, Template['setup']> = {
       // OldCombatMechanics from Hangar (MPL-2.0): the fast, cooldown-free combat of Minecraft 1.8.
       // Its own defaults put everyone on its "old" modeset in every world, so nothing is configured.
       { catalog: 'hangar', projectId: 'hangar:2087' },
+      // A Duels server is made to have strangers on it, so it comes with the moderation tools and
+      // the chat filter on, as the Players page turns them on, and off again there. Grim
+      // (GPL-3.0-or-later) is the anticheat: by its own defaults it undoes a move it can't believe
+      // and tells helpers, and never kicks or bans by itself, so nothing is configured.
+      { catalog: 'modrinth', projectId: LIBERTYBANS },
+      { catalog: 'modrinth', projectId: LUCKPERMS },
+      { catalog: 'modrinth', projectId: CHATSENTINEL },
+      { catalog: 'modrinth', projectId: 'LJNGWSvH' },
     ],
-    files: DUELS_FILES,
+    files: [...DUELS_FILES, ...WAITING_FILES, ...moderationFiles(CHAT_FILTER)],
     // Adventure, so nobody breaks the platform; Easy, since there is nothing to eat between fights.
-    settings: { defaultGameMode: 'adventure', difficulty: 'easy', pvp: true },
+    settings: {
+      defaultGameMode: 'adventure',
+      difficulty: 'easy',
+      pvp: true,
+      motd: 'Duels: one on one, with parkour and a pit while you wait',
+    },
     world: { levelType: VOID_LEVEL, hardcore: false },
   },
   fabric: { loader: 'fabric', mods: [], settings: { defaultGameMode: 'survival' }, world: WORLD },

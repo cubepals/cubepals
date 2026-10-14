@@ -71,11 +71,21 @@ interface SetupModpack {
   curated?: ReleaseRef
 }
 
-/** The settings that make an experience; the rest of a server's settings are its own. */
+/**
+ * The settings that make an experience; the rest of a server's settings are its own. A template
+ * may also say what its servers show in the server list until their owner says otherwise; a copy
+ * never carries another server's.
+ */
 type SetupSettings = Partial<
   Pick<
     ServerSettings,
-    'difficulty' | 'defaultGameMode' | 'pvp' | 'spawnProtection' | 'viewDistance' | 'simulationDistance'
+    | 'difficulty'
+    | 'defaultGameMode'
+    | 'pvp'
+    | 'spawnProtection'
+    | 'viewDistance'
+    | 'simulationDistance'
+    | 'motd'
   >
 >
 

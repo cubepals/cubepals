@@ -262,4 +262,26 @@ describe('the world a carried file names', () => {
     expect(readFileSync(arena, 'utf8')).toBe('Spawn: { World: world, Y: -60 }\n')
     rmSync(data, { recursive: true })
   })
+
+  test('a file in the running world goes into the world the server starts on, and leaves the one it left', async () => {
+    const data = mkdtempSync(join(tmpdir(), 'carried-'))
+    const pack = { path: `${RUNNING_LEVEL}/datapacks/p/pack.mcmeta`, content: '{}\n' }
+    const inWorld = { ...revision, files: [pack] }
+    expect(toRuntimeSpec({ ...input, revision: inWorld }).env.BLOCKLY_FILES).toStartWith(
+      'world/datapacks/p/pack.mcmeta ',
+    )
+    expect(await start(data, inWorld)).toBe(0)
+    expect(readFileSync(`${data}/world/datapacks/p/pack.mcmeta`, 'utf8')).toBe('{}\n')
+    expect(await start(data, inWorld, 'world-2')).toBe(0)
+    expect(readFileSync(`${data}/world-2/datapacks/p/pack.mcmeta`, 'utf8')).toBe('{}\n')
+    expect(existsSync(`${data}/world/datapacks/p/pack.mcmeta`)).toBe(false)
+    // A path that leaves the server's folder once the world is named is still refused.
+    expect(() =>
+      toRuntimeSpec({
+        ...input,
+        revision: { ...revision, files: [{ path: `${RUNNING_LEVEL}/../x`, content: '' }] },
+      }),
+    ).toThrow('Cubepals can')
+    rmSync(data, { recursive: true })
+  })
 })

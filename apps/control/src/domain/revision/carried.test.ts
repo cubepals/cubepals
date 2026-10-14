@@ -54,12 +54,31 @@ describe('files Cubepals carries', () => {
     expect(onLevel(arena, 'world-2').content).toBe('A: world-2\nB: world-2_nether\n')
     const plain = { path: 'plugins/LifeStealZ/config.yml', content: 'world: {{level}}\n' }
     expect(onLevel(plain, 'world-2')).toEqual(plain)
+    // A file that goes in the world itself, as a datapack does, goes in the world the server runs.
+    expect(onLevel({ path: `${RUNNING_LEVEL}/datapacks/p/pack.mcmeta`, content: '' }, 'world-2').path).toBe(
+      'world-2/datapacks/p/pack.mcmeta',
+    )
   })
 
   test('a file is named by the plugin it sets up, not by its path', () => {
     expect(fileLabel('plugins/LifeStealZ/config.yml')).toBe('LifeStealZ settings')
     expect(fileLabel('plugins/OldCombatMechanics/config.yml')).toBe('OldCombatMechanics settings')
     expect(fileLabel('bukkit.yml')).toBe('bukkit.yml')
+    expect(fileLabel(`${RUNNING_LEVEL}/datapacks/cubepals-duels/pack.mcmeta`)).toBe('cubepals-duels datapack')
+  })
+
+  test('a datapack, which is several files, is named once in the diff', () => {
+    const pack = (content: string) =>
+      ['pack.mcmeta', 'data/cubepals/function/tick.mcfunction'].map((file) => ({
+        path: `${RUNNING_LEVEL}/datapacks/cubepals-duels/${file}`,
+        content,
+      }))
+    expect(describeChanges(draft(), draft({ files: pack('a') }))).toEqual([
+      { field: 'files', added: ['cubepals-duels datapack'], removed: [], changed: [] },
+    ])
+    expect(describeChanges(draft({ files: pack('a') }), draft({ files: pack('b') }))).toEqual([
+      { field: 'files', added: [], removed: [], changed: ['cubepals-duels datapack'] },
+    ])
   })
 
   test('the diff lists carried files the way it lists mods', () => {

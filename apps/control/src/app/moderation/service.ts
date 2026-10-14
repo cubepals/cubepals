@@ -47,7 +47,7 @@ import { endOf } from './delivery.ts'
 const actions = schema.serverModerationActions
 
 /** ChatSentinel's own settings with Cubepals' changes, which its header lists. */
-const CHAT_FILTER = readFileSync(new URL('./chatsentinel-config.yml', import.meta.url), 'utf8')
+export const CHAT_FILTER = readFileSync(new URL('./chatsentinel-config.yml', import.meta.url), 'utf8')
 
 /** How much of a server's history its page shows: the newest. */
 const HISTORY_SHOWN = 500

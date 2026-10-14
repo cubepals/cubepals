@@ -93,14 +93,15 @@ export function carriedEnv(
     sha512: mod.artifact.sha512,
     url: artifactUrl(mod.artifact),
   }))
-  const wrong = [...jars, ...revision.files]
+  // A path is judged as it is written, with the running world's name in it.
+  const files = revision.files.map((file) => onLevel(file, levelName))
+  const wrong = [...jars, ...files]
     .filter((entry) => !placeablePath(entry.path) || ('url' in entry && /\s/.test(entry.url)))
     .map((entry) => entry.path)
   if (wrong.length > 0) throw new Error(`Cubepals can't place ${wrong.join(', ')} on a server.`)
   return {
     [JARS_VARIABLE]: jars.map((jar) => `${jar.path} ${jar.sha512} ${jar.url}`).join('\n'),
-    [FILES_VARIABLE]: revision.files
-      .map((file) => onLevel(file, levelName))
+    [FILES_VARIABLE]: files
       .map((file) => `${file.path} ${Buffer.from(file.content, 'utf8').toString('base64')}`)
       .join('\n'),
   }

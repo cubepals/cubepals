@@ -61,7 +61,8 @@ export const USER_MARK = '==user=='
 
 /**
  * The commands a helper may use: warn, mute, kick and ban players and take it back, see a player's
- * history and who is muted or banned, and hear of what other helpers and the chat filter do.
+ * history and who is muted or banned, and hear of what other helpers, the chat filter and, where a
+ * server runs it, the Grim anticheat see.
  */
 const HELPER_PERMISSIONS = [
   'libertybans.commands',
@@ -75,6 +76,8 @@ const HELPER_PERMISSIONS = [
   ]),
   ...['history', 'warns', 'banlist', 'mutelist'].map((list) => `libertybans.list.${list}`),
   'chatsentinel.notify',
+  'grim.alerts',
+  'grim.alerts.enable-on-join',
 ]
 
 /** Punishing an address, which behind the edge is everyone's. Nobody may, operators included. */

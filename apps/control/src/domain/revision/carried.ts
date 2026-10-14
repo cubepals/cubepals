@@ -14,7 +14,10 @@ import type { PinnedMod } from '../mods/artifact.ts'
 
 /** A file Cubepals wrote, at its path under the server's directory, as UTF-8 text. */
 export interface CarriedFile {
-  /** Relative to the server's directory: `plugins/LifeStealZ/config.yml`. */
+  /**
+   * Relative to the server's directory: `plugins/LifeStealZ/config.yml`. May start with
+   * `RUNNING_LEVEL`, for a file that goes in the world the server runs, as a datapack does.
+   */
   path: string
   /** May name the world the server runs as `RUNNING_LEVEL`. */
   content: string
@@ -29,7 +32,7 @@ export const RUNNING_LEVEL = '{{blockly.level}}'
 
 /** A carried file as it is written to a server running `levelName`. */
 export const onLevel = (file: CarriedFile, levelName: string): CarriedFile => ({
-  path: file.path,
+  path: file.path.replaceAll(RUNNING_LEVEL, levelName),
   content: file.content.replaceAll(RUNNING_LEVEL, levelName),
 })
 
@@ -48,22 +51,30 @@ export function filesChanged(
 ): { added: string[]; removed: string[]; changed: string[] } {
   const before = new Map(from.map((file) => [file.path, file.content]))
   const after = new Map(to.map((file) => [file.path, file.content]))
+  // A datapack is several files under one label, said once.
+  const labels = (paths: string[]) => [...new Set(paths.map(fileLabel))]
   return {
-    added: [...after.keys()].filter((path) => !before.has(path)).map(fileLabel),
-    removed: [...before.keys()].filter((path) => !after.has(path)).map(fileLabel),
-    changed: [...after]
-      .filter(([path, content]) => before.has(path) && before.get(path) !== content)
-      .map(([path]) => fileLabel(path)),
+    added: labels([...after.keys()].filter((path) => !before.has(path))),
+    removed: labels([...before.keys()].filter((path) => !after.has(path))),
+    changed: labels(
+      [...after]
+        .filter(([path, content]) => before.has(path) && before.get(path) !== content)
+        .map(([path]) => path),
+    ),
   }
 }
 
 /**
  * A carried file in a person's words: a plugin's settings by the plugin's name, which is the
- * folder it keeps them in, and any other file by its own name.
+ * folder it keeps them in, a datapack's files by the datapack's name, and any other file by its
+ * own name.
  */
 export function fileLabel(path: string): string {
   const [top, folder, ...rest] = path.split('/')
   if (top === 'plugins' && folder !== undefined && rest.length > 0) return `${folder} settings`
+  const [level, datapacks, pack, ...inside] = path.split('/')
+  if (level === RUNNING_LEVEL && datapacks === 'datapacks' && pack !== undefined && inside.length > 0)
+    return `${pack} datapack`
   return path.split('/').at(-1) ?? path
 }
 
