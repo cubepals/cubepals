@@ -589,7 +589,6 @@ export interface SettingsOptions {
     viewDistance: { min: number; max: number }
     simulationDistance: { min: number; max: number }
     spawnProtection: { min: number; max: number }
-    motdLength: number
     /** What the current size holds. */
     maxPlayers: number
   }

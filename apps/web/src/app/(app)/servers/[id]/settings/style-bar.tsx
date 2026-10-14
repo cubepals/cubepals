@@ -12,27 +12,8 @@
 import { MOTD_COLOURS } from '@blockly/contracts'
 import { Bold, Italic, RemoveFormatting, Strikethrough, Underline } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { COLOUR_NAMES } from './message-codes'
 import styles from './style-bar.module.css'
-
-/** The game's names for its colours, in the game's order, as a player would say them. */
-const COLOUR_NAMES: Record<string, string> = {
-  '0': 'Black',
-  '1': 'Dark blue',
-  '2': 'Dark green',
-  '3': 'Dark aqua',
-  '4': 'Dark red',
-  '5': 'Dark purple',
-  '6': 'Gold',
-  '7': 'Grey',
-  '8': 'Dark grey',
-  '9': 'Blue',
-  a: 'Green',
-  b: 'Aqua',
-  c: 'Red',
-  d: 'Light purple',
-  e: 'Yellow',
-  f: 'White',
-}
 
 const STYLES: Array<{ code: string; name: string; icon: ReactNode }> = [
   { code: 'l', name: 'Bold', icon: <Bold size={16} strokeWidth={2.25} aria-hidden /> },

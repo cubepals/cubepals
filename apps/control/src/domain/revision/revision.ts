@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { motdCutSentence, motdLayout } from '@blockly/contracts/motd-layout'
 import { motdText } from '@blockly/contracts/server-list'
 import { isDatapack, type PinnedMod } from '../mods/artifact.ts'
 import { type PinnedModpack, samePack } from '../mods/modpack.ts'
@@ -98,22 +99,21 @@ export function defaultSettings(input: {
 /**
  * A new server's message in the server list, under its name. Not the name again, which the list
  * already shows, but a line in Blockly's words that an owner wants to make their own; a name too
- * long to quote in one line leaves just the words.
+ * long to quote within what the list shows leaves just the words.
  */
 export function welcome(name: string): string {
   const quoted = `"${name.trim()}", a server created by Cubepals`
-  return quoted.length <= SETTING_BOUNDS.motdLength ? quoted : 'A server created by Cubepals'
+  return motdLayout(quoted).cutCount === 0 ? quoted : 'A server created by Cubepals'
 }
 
 const DIFFICULTIES: readonly Difficulty[] = ['peaceful', 'easy', 'normal', 'hard']
 const GAME_MODES: readonly GameMode[] = ['survival', 'creative', 'adventure', 'spectator']
 
-/** What the server itself accepts, and what a Minecraft client shows of a MOTD. */
+/** What the server itself accepts. */
 export const SETTING_BOUNDS = {
   viewDistance: { min: 3, max: 32 },
   simulationDistance: { min: 3, max: 32 },
   spawnProtection: { min: 0, max: 64 },
-  motdLength: 59,
 } as const
 
 /** Everything wrong with a set of settings, worded for the person changing them. */
@@ -135,10 +135,13 @@ export function settingsProblems(settings: ServerSettings, capacity: number): st
     problems.push(`Spawn protection goes from 0 to ${SETTING_BOUNDS.spawnProtection.max} blocks.`)
   if (!Number.isInteger(settings.maxPlayers) || settings.maxPlayers < 1 || settings.maxPlayers > capacity)
     problems.push(`This size holds up to ${capacity} players. Pick a bigger size for more.`)
-  // Counted as the list shows it: formatting codes take no room.
-  const motd = motdText(settings.motd).trim()
-  if (motd.length === 0 || motd.length > SETTING_BOUNDS.motdLength || /\p{Cc}/u.test(settings.motd))
-    problems.push(`The message of the day is one line of up to ${SETTING_BOUNDS.motdLength} characters.`)
+  // One line, which the list wraps onto its two by the game's own widths; codes take no room.
+  if (motdText(settings.motd).trim().length === 0) problems.push('Write something to show under the name.')
+  else if (/\p{Cc}/u.test(settings.motd)) problems.push('The server message is one line of text.')
+  else {
+    const { cutCount } = motdLayout(settings.motd)
+    if (cutCount > 0) problems.push(motdCutSentence(cutCount))
+  }
   return problems
 }
 

@@ -6,10 +6,30 @@
  * What the style bar under the server message does to the text: it writes `&` codes into it, the
  * same codes a person could type, so the text stays the one truth. A code goes around the
  * selection, with the codes after it that put the rest of the message back as it was; with nothing
- * selected, it goes at the caret and holds from there on. Not for drawing the message: that is
- * `motdRuns`, in the contracts.
+ * selected, it goes at the caret and holds from there on. The colours' names live here too, for
+ * the bar and the hints. Not for drawing the message: that is `motdRuns`, in the contracts.
  */
 import { MOTD_CODE, MOTD_COLOURS, MOTD_STYLES } from '@blockly/contracts'
+
+/** The game's names for its colours, in the game's order, as a player would say them. */
+export const COLOUR_NAMES: Record<string, string> = {
+  '0': 'Black',
+  '1': 'Dark blue',
+  '2': 'Dark green',
+  '3': 'Dark aqua',
+  '4': 'Dark red',
+  '5': 'Dark purple',
+  '6': 'Gold',
+  '7': 'Grey',
+  '8': 'Dark grey',
+  '9': 'Blue',
+  a: 'Green',
+  b: 'Aqua',
+  c: 'Red',
+  d: 'Light purple',
+  e: 'Yellow',
+  f: 'White',
+}
 
 /** How the list draws one place in the message: its colour's code, or null for its grey, and its styles' codes. */
 interface Look {

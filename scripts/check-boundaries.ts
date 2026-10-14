@@ -19,7 +19,7 @@ type Layer = (typeof LAYERS)[number]
  * (`@blockly/contracts/limits`), and how Minecraft's server list reads a message
  * (`@blockly/contracts/server-list`). None imports anything itself.
  */
-const PURE_PACKAGES = /^@blockly\/contracts\/(durations|limits|server-list)$/
+const PURE_PACKAGES = /^@blockly\/contracts\/(durations|limits|motd-layout|server-list)$/
 const APP_PACKAGES = /^(@blockly\/(db|contracts)(\/.*)?|drizzle-orm(\/.*)?|zod|node:.*)$/
 
 /** A string literal holding a hostname, with or without a scheme (§17). */

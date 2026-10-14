@@ -7,7 +7,6 @@
 import {
   DIFFICULTIES,
   GAME_MODES,
-  motdText,
   type RevisionChangeView,
   type ServerSettingsView,
   type ServerView,
@@ -19,7 +18,7 @@ import { useTRPC } from '../../../../../lib/api'
 import { type Outcome, said, useOutcome } from '../../../../../lib/outcome'
 import { presentChange, settingLabel } from '../../../../../lib/present'
 import { Button, FormRow, FormSection, Select, TextField, Toggle } from '../../../../../ui'
-import { ServerMessage } from './server-message'
+import { messageProblem, ServerMessage } from './server-message'
 import { ConfirmChange, changeable, planLines, useChanged, whatHappens } from './shared'
 
 const DIFFICULTY_LABELS: Record<(typeof DIFFICULTIES)[number], string> = {
@@ -127,10 +126,7 @@ function GameForm({
       return [key, ok ? null : `Choose ${min} to ${max}.`]
     }),
   ) as Record<NumberSetting, string | null>
-  const motdProblem =
-    motdText(draft.motd).length > options.bounds.motdLength
-      ? `Keep it to ${options.bounds.motdLength} characters, so it fits in the server list.`
-      : null
+  const motdProblem = messageProblem(draft.motd)
   const valid = Object.values(problems).every((p) => p === null) && motdProblem === null
   const next: ServerSettingsView = {
     ...draft,
@@ -223,7 +219,7 @@ function GameForm({
         <ServerMessage
           view={view}
           value={draft.motd}
-          limit={options.bounds.motdLength}
+          maxPlayers={problems.maxPlayers === null ? next.maxPlayers : draft.maxPlayers}
           problem={motdProblem}
           onChange={(motd) => setDraft({ ...draft, motd })}
         />
