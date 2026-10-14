@@ -7,12 +7,11 @@
  * Each email is its plain text plus an HTML part, in one of two shapes:
  * - `layout`: the lockup on an Ink tile, a white card with a 2px Ink edge, a heading, the words,
  *   one Ink button. A few carry one of the landing's people (brand/figures/), standing on the
- *   card's top edge or hanging from it by the hands. For news a person can miss: the welcome,
- *   what happened to a server, play running out, an admin's alerts.
- * - `plain`: a short letter, the wordmark in text, the link as words. For what a person must see:
- *   confirming an email, a reset, a changed password, a payment, a world about to be deleted.
- *   Gmail files the big shape, with its picture, button and hidden preheader, under Promotions;
- *   this one reaches the inbox.
+ *   card's top edge or hanging from it by the hands. For the account's own emails (confirming an
+ *   email, a reset, a changed password) and for news: the welcome, what happened to a server,
+ *   play running out, an admin's alerts.
+ * - `plain`: a short letter, the wordmark in text, the link as words: a payment, a gift's code, a
+ *   world about to be deleted.
  *
  * Pictures and the font stylesheet load from the web origin each email is given, under /email/
  * (apps/web/public/email/): production's from its own site, staging's from staging, a local
@@ -45,8 +44,8 @@ export const SANS = `'Geologica', system-ui, -apple-system, 'Segoe UI', Helvetic
 export const MONO = `'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace`
 
 /**
- * An email as it is sent: the subject, both parts, and with `layout` the line an inbox shows under
- * the subject. A `plain` one has none: the inbox shows its first words.
+ * An email as it is sent: the subject, both parts, and for most `layout` ones the line an inbox
+ * shows under the subject. Without one, the inbox shows its first words.
  */
 export type Email = { subject: string; preheader?: string; html: string; text: string }
 
@@ -131,7 +130,8 @@ export const ADMIN = 'You get this because you are a Cubepals admin.'
 export function layout(input: {
   /** The web origin the pictures, the font stylesheet and the lockup's link are on. */
   origin: string
-  preheader: string
+  /** The line an inbox shows under the subject, hidden in the body. Without it, the heading. */
+  preheader?: string
   /** Standing on the card, or with `hang`, hanging inside it from its top edge. */
   figure?: { name: FigureName; hang?: boolean }
   chip?: Chip
@@ -158,7 +158,7 @@ export function layout(input: {
 <title>${esc(input.heading)}</title>
 </head>
 <body style="margin:0;padding:0;background:${PAPER}">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(input.preheader)}&#8199;&#65279;&#847;&#8199;&#65279;&#847;</div>
+${input.preheader === undefined ? '' : `<div style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(input.preheader)}&#8199;&#65279;&#847;&#8199;&#65279;&#847;</div>`}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER}"><tr><td align="center" style="padding:32px 16px 40px">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
     ${
@@ -195,6 +195,16 @@ export function layout(input: {
 /**
  * A short letter on white: the wordmark in text, the words with their link among them, who it is
  * for. No picture, button, card, font stylesheet or hidden preheader.
+ *
+ * The account's emails are `layout`, not this: a designed email is not what lands in Promotions.
+ * Gmail sorts by who sends a message, what kind of message it is and how people have treated mail
+ * like it (workspace.google.com/blog/productivity-collaboration/how-gmail-sorts-your-email-based-on-your-preferences).
+ * Google's sender guidelines (support.google.com/a/answer/81126) ask for authentication, one From
+ * address per kind of message, no promotion inside a notification and no content hidden with CSS,
+ * and say nothing against a logo, a table layout or a button; Postmark's own reset template has
+ * all three. What senders' tests found moving a message is an offer, a marketing footer, social
+ * icons or a List-Unsubscribe header, so the account's emails carry none of them, and no hidden
+ * preheader. They come from their own address (MAIL_ACCOUNT_FROM), DKIM-signed for its domain.
  */
 export function plain(input: { subject: string; body: string; why: string }): string {
   return `<!doctype html>

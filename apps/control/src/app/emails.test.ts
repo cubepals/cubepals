@@ -5,8 +5,7 @@
 /**
  * Every email the application sends: its subject, its shape, and an HTML part with the same links
  * as its text. A `layout` one's lockup, figure and font stylesheet load from the web origin it was
- * given; a `plain` one, for what a person must see, loads nothing and carries nothing Gmail reads
- * as marketing.
+ * given; a `plain` one loads nothing. The account's own emails carry nothing read as marketing.
  */
 import { describe, expect, test } from 'bun:test'
 import { passwordChanged, resetPassword, verifyEmail, welcome } from './emails/account.ts'
@@ -38,23 +37,23 @@ const EMAILS: Array<{
   },
   {
     name: 'confirm',
-    email: verifyEmail(`${ORIGIN}/api/auth/verify-email?token=t&callbackURL=%2Fservers`),
+    email: verifyEmail(`${ORIGIN}/api/auth/verify-email?token=t&callbackURL=%2Fservers`, ORIGIN),
     subject: 'Confirm your email for Cubepals',
-    shape: 'plain',
+    shape: 'layout',
     link: `${ORIGIN}/api/auth/verify-email?token=t&amp;callbackURL=%2Fservers`,
   },
   {
     name: 'reset',
-    email: resetPassword(`${ORIGIN}/api/auth/reset-password/x`),
+    email: resetPassword(`${ORIGIN}/api/auth/reset-password/x`, ORIGIN),
     subject: 'Reset your Cubepals password',
-    shape: 'plain',
+    shape: 'layout',
     link: `${ORIGIN}/api/auth/reset-password/x`,
   },
   {
     name: 'changed',
     email: passwordChanged(ORIGIN),
     subject: 'Your Cubepals password was changed',
-    shape: 'plain',
+    shape: 'layout',
     link: `${ORIGIN}/forgot-password`,
   },
   {
@@ -175,8 +174,8 @@ describe('emails', () => {
       expect(html).toContain(`<img src="${ORIGIN}/email/lockup.png" width="160" height="44"`)
       expect(html).toContain(`<link href="${ORIGIN}/email/fonts.css" rel="stylesheet">`)
       expect(html).toContain(`href="${e.link}"`)
-      // The line an inbox shows under the subject, hidden in the body.
-      expect(html).toContain(String(e.email.preheader).replace(/&/g, '&amp;'))
+      // The line an inbox shows under the subject, hidden in the body (the account's have none).
+      if (e.email.preheader) expect(html).toContain(e.email.preheader.replace(/&/g, '&amp;'))
       const pictures = [...html.matchAll(/<img src="([^"]+)"/g)].map((m) => m[1])
       expect(pictures).toEqual([
         `${ORIGIN}/email/lockup.png`,
@@ -287,4 +286,22 @@ describe('emails', () => {
     expect(meter(96, 120, 'left')).toContain('96 of 120 hours left')
     expect(meter(12.34, 20)).toContain('12.3 of 20 hours</p>')
   })
+})
+
+describe('account emails', () => {
+  test.each(EMAILS.filter((e) => ['confirm', 'reset', 'changed'].includes(e.name)))(
+    '$name: the account’s own email says only what the account needs',
+    (e) => {
+      const { html } = e.email
+      // Nothing hidden, no figure, and one way on: the button, with its address under it.
+      expect(e.email.preheader).toBeUndefined()
+      expect(html).not.toContain('display:none')
+      expect(html.match(/<img /g)).toHaveLength(1)
+      expect(
+        html.match(new RegExp(`href="${e.link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'g')),
+      ).toHaveLength(1)
+      expect(html.match(/<a /g)).toHaveLength(3)
+      expect(html).not.toMatch(/unsubscribe|preferences|follow us|offer|discount/i)
+    },
+  )
 })

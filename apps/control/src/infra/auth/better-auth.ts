@@ -29,8 +29,8 @@ export interface AuthOptions {
    * link, and for the web origin its pictures load from.
    */
   emails: {
-    verifyEmail(url: string): Email
-    resetPassword(url: string): Email
+    verifyEmail(url: string, origin: string): Email
+    resetPassword(url: string, origin: string): Email
     passwordChanged(origin: string): Email
     welcome(origin: string): Email
   }
@@ -150,7 +150,7 @@ export function createAuth(options: AuthOptions) {
       // web app's /reset-password with the token (or with `?error=INVALID_TOKEN`).
       resetPasswordTokenExpiresIn: RESET_LINK_SECONDS,
       async sendResetPassword({ user, url }) {
-        await send(user.email, options.emails.resetPassword(url))
+        await send(user.email, options.emails.resetPassword(url, origin))
       },
       // Whoever knew the old password is signed out everywhere, and the owner is told.
       revokeSessionsOnPasswordReset: true,
@@ -163,7 +163,7 @@ export function createAuth(options: AuthOptions) {
       sendOnSignUp: true,
       autoSignInAfterVerification: true,
       async sendVerificationEmail({ user, url }) {
-        await send(user.email, options.emails.verifyEmail(url))
+        await send(user.email, options.emails.verifyEmail(url, origin))
       },
       // Better Auth calls this only when the address goes from unconfirmed to confirmed, so a link
       // followed twice welcomes once. (It would call it for a changed email too; changing one is

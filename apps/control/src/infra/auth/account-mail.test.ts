@@ -121,12 +121,12 @@ describe.skipIf(!hasDatabase)('account mail', () => {
     const [confirm, reset] = outbox.to(email)
     // The reset link lands on a page that keeps the email, for password managers.
     expect(new URL(outbox.link(email)).searchParams.get('callbackURL')).toBe(redirectTo)
-    // Plain letters, which Gmail keeps in the inbox, with the link among the words.
-    expect(confirm?.html).toContain('>cubepals</p>')
-    expect(confirm?.html).not.toContain('<img')
+    // The lockup and the button, loading from the web origin sign-in serves.
+    expect(confirm?.html).toContain(`<img src="${ORIGIN}/email/lockup.png"`)
+    expect(confirm?.html).toContain('>Confirm your email</a>')
     expect(reset?.subject).toBe('Reset your Cubepals password')
-    expect(reset?.html).toContain('>cubepals</p>')
-    expect(reset?.html).toContain('>Choose a new one here</a>')
+    expect(reset?.html).toContain(`<img src="${ORIGIN}/email/lockup.png"`)
+    expect(reset?.html).toContain('>Choose a new password</a>')
   })
 
   test('a welcome that fails to send fails neither the confirmation nor the account', async () => {

@@ -5,10 +5,11 @@
 /**
  * The emails about a person's account: the welcome once it is ready, the link that confirms its
  * email, a reset link, and the notice that its password changed. Sign-in sends them
- * (infra/auth/better-auth.ts, given these by main.node.ts), from the account sender. All but the
- * welcome are `plain`, so they reach the inbox rather than Promotions.
+ * (infra/auth/better-auth.ts, given these by main.node.ts), from the account sender. All are
+ * `layout`; all but the welcome are short, with no figure or preheader, and say nothing but what
+ * the account needs (emails.ts says why).
  */
-import { ACCOUNT, type Email, layout, link, p, plain } from '../emails.ts'
+import { ACCOUNT, type Email, layout, p } from '../emails.ts'
 
 /** Once, when an account is ready: its email confirmed, or made through Google or GitHub. */
 export function welcome(origin: string): Email {
@@ -34,35 +35,35 @@ export function welcome(origin: string): Email {
   }
 }
 
-export function verifyEmail(url: string): Email {
+export function verifyEmail(url: string, origin: string): Email {
   const subject = 'Confirm your email for Cubepals'
   return {
     subject,
     text: `Confirm your email to start creating servers:\n\n${url}\n\nIf you did not sign up, ignore this email.`,
-    html: plain({
-      subject,
-      body:
-        p(`${link({ label: 'Confirm your email', url })} to start creating servers.`) +
-        p('If you did not sign up, ignore this email.'),
+    html: layout({
+      origin,
+      heading: 'Confirm your email',
+      body: p('Confirm your email to start creating servers.'),
+      action: { label: 'Confirm your email', url },
+      after: p('If you did not sign up, ignore this email.'),
       why: 'You get this because someone signed up to Cubepals with this address.',
     }),
   }
 }
 
-export function resetPassword(url: string): Email {
+export function resetPassword(url: string, origin: string): Email {
   const subject = 'Reset your Cubepals password'
   return {
     subject,
     text: `Someone asked to reset the password for your Cubepals account. Choose a new one here:\n\n${url}\n\nThe link works for an hour, once. If it was not you, ignore this email: your password stays as it is.`,
-    html: plain({
-      subject,
-      body:
-        p(
-          `Someone asked to reset the password for your Cubepals account. ${link({ label: 'Choose a new one here', url })}.`,
-        ) +
-        p(
-          'The link works for an hour, once. If it was not you, ignore this email: your password stays as it is.',
-        ),
+    html: layout({
+      origin,
+      heading: 'Reset your password',
+      body: p('Someone asked to reset the password for your Cubepals account.'),
+      action: { label: 'Choose a new password', url },
+      after: p(
+        'The link works for an hour, once. If it was not you, ignore this email: your password stays as it is.',
+      ),
       why: ACCOUNT,
     }),
   }
@@ -74,11 +75,13 @@ export function passwordChanged(origin: string): Email {
   return {
     subject,
     text: `The password for your Cubepals account was just changed, and every device was signed out.\n\nIf that was not you, reset it again now:\n\n${url}`,
-    html: plain({
-      subject,
+    html: layout({
+      origin,
+      heading: 'Your password was changed',
       body:
         p('The password for your Cubepals account was just changed, and every device was signed out.') +
-        p(`If that was not you, ${link({ label: 'reset it again now', url })}.`),
+        p('If that was not you, reset it again now.'),
+      action: { label: 'Reset your password', url },
       why: ACCOUNT,
     }),
   }
