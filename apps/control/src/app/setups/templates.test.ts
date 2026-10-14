@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from 'bun:test'
 import { PLAY_ICONS } from '@blockly/contracts'
-import { SETTING_BOUNDS } from '../../domain/revision/revision.ts'
+import { motdLayout } from '@blockly/contracts/motd-layout'
 import { TEMPLATES } from './templates.ts'
 
 describe('what to play', () => {
@@ -28,8 +28,8 @@ describe('what to play', () => {
       expect(template.blurb).toMatch(/\.$/)
       // Nothing on a card names a loader, a build or a version: that is Blockly's business.
       expect(template.blurb.toLowerCase()).not.toContain('loader')
-      // A server list message is one the settings page would take too.
-      expect(template.setup.settings.motd?.length ?? 0).toBeLessThanOrEqual(SETTING_BOUNDS.motdLength)
+      // A server list message is one the settings page would take too: it fits the list's two lines.
+      expect(motdLayout(template.setup.settings.motd ?? '').cutCount).toBe(0)
     }
   })
 })
