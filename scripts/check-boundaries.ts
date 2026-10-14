@@ -15,10 +15,11 @@ type Layer = (typeof LAYERS)[number]
 
 /**
  * Domain and minecraft import no packages, but for the units of time (`@blockly/contracts/durations`),
- * written once for every workspace, and the bounds the API holds what people type to
- * (`@blockly/contracts/limits`). Neither imports anything itself.
+ * written once for every workspace, the bounds the API holds what people type to
+ * (`@blockly/contracts/limits`), and how Minecraft's server list reads a message
+ * (`@blockly/contracts/server-list`). None imports anything itself.
  */
-const PURE_PACKAGES = /^@blockly\/contracts\/(durations|limits)$/
+const PURE_PACKAGES = /^@blockly\/contracts\/(durations|limits|server-list)$/
 const APP_PACKAGES = /^(@blockly\/(db|contracts)(\/.*)?|drizzle-orm(\/.*)?|zod|node:.*)$/
 
 /** A string literal holding a hostname, with or without a scheme (§17). */
@@ -275,9 +276,13 @@ if (PROVIDER_ID !== null)
     for (const match of withoutComments(readFileSync(file, 'utf8')).matchAll(PROVIDER_ID))
       fail(file, `${match[0]} names a runtime: the API's contracts never tell runtimes apart`)
 
-// Values written once and read from anywhere: domain/ reads the limits, the edge's image copies
-// Minecraft's ports alone. Each stays a file that imports nothing.
-for (const path of ['packages/contracts/src/limits.ts', 'apps/control/src/minecraft/ports.ts'])
+// Values written once and read from anywhere: domain/ reads the limits and the server list's
+// codes, the edge's image copies Minecraft's ports alone. Each stays a file that imports nothing.
+for (const path of [
+  'packages/contracts/src/limits.ts',
+  'packages/contracts/src/server-list.ts',
+  'apps/control/src/minecraft/ports.ts',
+])
   if (imports(readFileSync(join(ROOT, path), 'utf8')).length > 0)
     problems.push(`${path}: imports nothing, so anything may read it`)
 

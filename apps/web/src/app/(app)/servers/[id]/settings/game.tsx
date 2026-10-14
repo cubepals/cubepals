@@ -7,6 +7,7 @@
 import {
   DIFFICULTIES,
   GAME_MODES,
+  motdText,
   type RevisionChangeView,
   type ServerSettingsView,
   type ServerView,
@@ -18,6 +19,7 @@ import { useTRPC } from '../../../../../lib/api'
 import { type Outcome, said, useOutcome } from '../../../../../lib/outcome'
 import { presentChange, settingLabel } from '../../../../../lib/present'
 import { Button, FormRow, FormSection, Select, TextField, Toggle } from '../../../../../ui'
+import { ServerMessage } from './server-message'
 import { ConfirmChange, changeable, planLines, useChanged, whatHappens } from './shared'
 
 const DIFFICULTY_LABELS: Record<(typeof DIFFICULTIES)[number], string> = {
@@ -126,7 +128,7 @@ function GameForm({
     }),
   ) as Record<NumberSetting, string | null>
   const motdProblem =
-    draft.motd.length > options.bounds.motdLength
+    motdText(draft.motd).length > options.bounds.motdLength
       ? `Keep it to ${options.bounds.motdLength} characters, so it fits in the server list.`
       : null
   const valid = Object.values(problems).every((p) => p === null) && motdProblem === null
@@ -218,12 +220,12 @@ function GameForm({
             <Toggle checked={draft.pvp} ariaLabel="PvP" onChange={(pvp) => setDraft({ ...draft, pvp })} />
           }
         />
-        <TextField
-          label="Server message"
+        <ServerMessage
+          view={view}
           value={draft.motd}
-          onChange={(event) => setDraft({ ...draft, motd: event.target.value })}
-          error={motdProblem}
-          help={`Shown under the name in your friends’ server list, from the server’s next start. ${Math.max(0, options.bounds.motdLength - draft.motd.length)} characters left.`}
+          limit={options.bounds.motdLength}
+          problem={motdProblem}
+          onChange={(motd) => setDraft({ ...draft, motd })}
         />
         <div className="bk-grid" style={{ gap: 'var(--space-16)' }}>
           {number(

@@ -81,9 +81,9 @@ import type { PackService } from '../packs/service.ts'
 import type { CatalogHit, ModCatalog } from '../ports/catalog.ts'
 import type { PlayAddressing, RegionCatalog } from '../ports/platform.ts'
 import { hasDatapacks, isModded } from '../revisions/caps.ts'
+import { pictureOf } from '../server-icons/view.ts'
 import { loadPackChecks } from '../setups/persistence.ts'
-import type { SetupService, SetupSource } from '../setups/service.ts'
-import { sizeOf } from '../setups/service.ts'
+import { type SetupService, type SetupSource, sizeOf } from '../setups/service.ts'
 import { TEMPLATES } from '../setups/templates.ts'
 import {
   countLive,
@@ -631,7 +631,7 @@ export class ServerQueries {
       id: server.id,
       name: server.name,
       description: server.description,
-      icon: (server.icon as ServerView['icon']) ?? null,
+      ...pictureOf(server),
       tags: [...server.tags],
       slug: server.slug,
       joinAddress: formatJoinAddress(this.#addressing.primary(server.slug)),

@@ -9,6 +9,7 @@
     "./edge": "./src/edge.ts",
     "./durations": "./src/durations.ts",
     "./limits": "./src/limits.ts",
+    "./server-list": "./src/server-list.ts",
     "./local": "./src/local.ts",
     "./play-today": "./src/play-today.ts",
     "./meter": "./src/meter.ts"

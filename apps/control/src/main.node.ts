@@ -32,6 +32,7 @@ import type { MinecraftRuntime } from './app/ports/runtime.ts'
 import { acmeCertificate, currentCertificate, publishCertificate } from './app/realtime/certificate.ts'
 import { RoutedAdapters, RuntimeRouter } from './app/runtimes/router.ts'
 import { scheduledJobs } from './app/scheduled-jobs.ts'
+import { ServerIcons } from './app/server-icons/service.ts'
 import { presenceFor } from './app/servers/usage.ts'
 import { installTuning } from './app/tuning.ts'
 import { loadConfig } from './config/load.ts'
@@ -440,6 +441,7 @@ function apiServices(
       assets: new MojangClientAssets({ root: join(tmpdir(), 'blockly-client-assets') }),
     }),
     faces: app.faces,
+    icons: new ServerIcons({ db }),
     console: app.console,
     tickets,
     platform: { capabilities: supportOf(capabilities) },

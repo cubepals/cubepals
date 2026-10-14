@@ -136,7 +136,10 @@ export class RuntimeSpecs {
         worldRadius: plan.worldRadius,
         storageGb: Math.max(plan.storage.startGb, await grownStorage(q, server.id)),
       },
-      iconUrl: this.#links.icon(server.icon ?? BLOCKLY_ICON),
+      iconUrl:
+        server.ownIcon === null
+          ? this.#links.icon(server.icon ?? BLOCKLY_ICON)
+          : this.#links.ownIcon(server.id, server.ownIcon),
     })
     const spec = { ...built, labels: { ...built.labels, [SECRETS_VERSION_LABEL]: String(current.version) } }
     return {

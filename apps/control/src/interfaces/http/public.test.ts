@@ -6,6 +6,7 @@ import { describe, expect, test } from 'bun:test'
 import type { PublicPlan } from '@blockly/contracts'
 import type { PlayerFaces } from '../../app/access/faces.ts'
 import type { ItemIcons } from '../../app/items/icons.ts'
+import type { ServerIcons } from '../../app/server-icons/service.ts'
 import type { SharingQueries } from '../../app/sharing/queries.ts'
 import { createPublicApp } from './public.ts'
 
@@ -16,6 +17,7 @@ describe('public sizes', () => {
     sharing: {} as SharingQueries,
     faces: {} as PlayerFaces,
     items: {} as ItemIcons,
+    icons: {} as ServerIcons,
   })
 
   test('each answer to who is playing, with the players it holds and its memory', async () => {
@@ -37,6 +39,7 @@ describe('public plans', () => {
     sharing: {} as SharingQueries,
     faces: {} as PlayerFaces,
     items: {} as ItemIcons,
+    icons: {} as ServerIcons,
   })
 
   test('Free and Plus, with what each costs and includes', async () => {
@@ -95,7 +98,12 @@ describe('player faces', () => {
       uuid === account ? face : uuid === '069a79f444e94726a5befca90e38aaf6' ? 'unavailable' : null,
     named: async (name: string) => (name === 'Notch' ? face : null),
   } as unknown as PlayerFaces
-  const app = createPublicApp({ sharing: {} as SharingQueries, faces, items: {} as ItemIcons })
+  const app = createPublicApp({
+    sharing: {} as SharingQueries,
+    faces,
+    items: {} as ItemIcons,
+    icons: {} as ServerIcons,
+  })
 
   test('an 8×8 picture, cached for the hour Blockly keeps it', async () => {
     const response = await app.request(`/api/public/players/${account}/face.png`)

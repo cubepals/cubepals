@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/** A Minecraft server as the domain knows it: what its owner made, named and picked for it. */
 import type { Lifecycle } from './lifecycle.ts'
 import type { MemoryTier } from './size.ts'
 import type { Slug } from './slug.ts'
@@ -18,6 +19,8 @@ export interface MinecraftServer {
   description: string
   /** One of Blockly's own icons, by key; null until the owner picks one. */
   icon: string | null
+  /** The sha256 of the owner's own picture, while it shows instead of `icon`. */
+  ownIcon: string | null
   /** Words from the directory's fixed set. */
   tags: readonly string[]
   slug: Slug

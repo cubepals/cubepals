@@ -3,20 +3,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A Minecraft server and what it is made of: its record and status, its revisions and worlds, the
- * runtime binding its compute lives behind, and the operations that change it. Who may join is
- * `access.ts`'s; backups are `backups.ts`'s.
+ * A Minecraft server and what it is made of: its record and status, its own pictures, its
+ * revisions and worlds, the runtime binding its compute lives behind, and the operations that
+ * change it. Who may join is `access.ts`'s; backups are `backups.ts`'s.
  */
 import { sql } from 'drizzle-orm'
 import {
   type AnyPgColumn,
   bigint,
   boolean,
+  customType,
   index,
   integer,
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   uniqueIndex,
   uuid,
@@ -88,6 +90,11 @@ export const minecraftServers = pgTable(
     description: text('description').notNull().default(''),
     /** One of Blockly's own icons, by key; null until the owner picks one. */
     icon: text('icon'),
+    /**
+     * The sha256 of the owner's own picture in `server_icons`, while it is the server's icon: it
+     * then shows instead of `icon`. Null while a fixed icon, or Blockly's, shows.
+     */
+    ownIcon: text('own_icon'),
     /** Up to five words from a fixed set, for the directory's filters. */
     tags: text('tags').array().notNull().default([]),
     slug: text('slug').notNull(),
@@ -146,6 +153,28 @@ export const minecraftServers = pgTable(
     uniqueIndex('servers_create_idem').on(t.ownerId, t.createIdempotencyKey),
     index('servers_owner_live').on(t.ownerId).where(sql`${t.deletedAt} is null`),
   ],
+)
+
+/** Raw bytes, as node-postgres hands a bytea over. */
+const bytes = customType<{ data: Buffer }>({ dataType: () => 'bytea' })
+
+/**
+ * The pictures owners gave their servers, as the 64 square PNGs Minecraft's list shows: the
+ * server's runtime fetches one by its server and hash at each start, and pages by the same.
+ * Earlier ones stay a while, so a machine restarting on its old configuration still finds the
+ * one it was given.
+ */
+export const serverIcons = pgTable(
+  'server_icons',
+  {
+    serverId: uuid('server_id')
+      .notNull()
+      .references((): AnyPgColumn => minecraftServers.id),
+    sha256: text('sha256').notNull(),
+    png: bytes('png').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.serverId, t.sha256] })],
 )
 
 export const retiredSlugs = pgTable('retired_slugs', {

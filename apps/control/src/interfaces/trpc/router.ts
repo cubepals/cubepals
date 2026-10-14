@@ -81,6 +81,7 @@ import { admin } from './admin.ts'
 import { chipIns } from './chip-ins.ts'
 import { gifts } from './gifts.ts'
 import { insight } from './insight.ts'
+import { ownIcon } from './own-icon.ts'
 import { authedProcedure, publicProcedure, router, sessionOf } from './trpc.ts'
 
 /** Each procedure: parse, get the actor, call one service method, return. Nothing else. */
@@ -143,7 +144,9 @@ const servers = router({
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
   saveIdentity: authedProcedure.input(SaveIdentityInput).mutation(async ({ ctx, input }) => {
-    await ctx.services.servers.saveIdentity(ctx.actor, input.serverId, input)
+    const { picture } = input
+    const own = picture === undefined || picture === null ? picture : ownIcon(Buffer.from(picture, 'base64'))
+    await ctx.services.servers.saveIdentity(ctx.actor, input.serverId, { ...input, picture: own })
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
   /** A new invite link; the old one stops working. */

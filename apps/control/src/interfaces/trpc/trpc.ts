@@ -39,6 +39,7 @@ import type { PlayerService } from '../../app/players/service.ts'
 import type { SessionSwitch } from '../../app/ports/auth.ts'
 import type { RealtimeTickets } from '../../app/ports/tickets.ts'
 import type { RevisionService } from '../../app/revisions/service.ts'
+import type { ServerIcons } from '../../app/server-icons/service.ts'
 import type { ServerQueries } from '../../app/servers/queries.ts'
 import type { MinecraftServerService } from '../../app/servers/service.ts'
 import type { SharingQueries } from '../../app/sharing/queries.ts'
@@ -75,6 +76,7 @@ export interface Services {
   players: PlayerService
   items: ItemIcons
   faces: PlayerFaces
+  icons: ServerIcons
   console: ConsoleService
   tickets: RealtimeTickets
   realtime: { url: string; fallbackUrl: string; certificateSha256(): Promise<string | null> }

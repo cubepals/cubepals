@@ -142,6 +142,7 @@ export interface DirectoryRow {
     name: string
     description: string
     icon: string | null
+    ownIcon: string | null
     tags: string[]
     slug: string
     status: string
@@ -211,6 +212,7 @@ export async function directory(
         name: servers.name,
         description: servers.description,
         icon: servers.icon,
+        ownIcon: servers.ownIcon,
         tags: servers.tags,
         slug: servers.slug,
         status: servers.status,

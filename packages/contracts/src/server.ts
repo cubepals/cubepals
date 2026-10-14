@@ -10,6 +10,7 @@ import {
   NAME_MAX_LENGTH,
   SEED_MAX_LENGTH,
 } from './limits.ts'
+import { OWN_ICON_MAX_BYTES } from './server-list.ts'
 
 export const SERVER_STATUSES = [
   'provisioning',
@@ -524,6 +525,15 @@ export const SaveIdentityInput = z.object({
   name: z.string().trim().min(1).max(NAME_MAX_LENGTH).optional(),
   description: z.string().trim().max(DESCRIPTION_MAX_LENGTH).optional(),
   icon: ServerIcon.nullable().optional(),
+  /**
+   * A picture of the owner's own, as the page made it: a 64 square PNG, in base64. It is the
+   * server's icon from then on; null goes back to the icon picked, or to Blockly's.
+   */
+  picture: z
+    .base64()
+    .max(Math.ceil(OWN_ICON_MAX_BYTES / 3) * 4)
+    .nullable()
+    .optional(),
   tags: z.array(ServerTag).max(5).optional(),
 })
 export const ChangeAddressInput = z.object({
@@ -606,6 +616,8 @@ export interface ServerView {
   name: string
   description: string
   icon: ServerIcon | null
+  /** Where its own picture is fetched, when the owner gave it one: then it shows instead of `icon`. */
+  ownIcon: string | null
   tags: string[]
   slug: string
   /** Fully formatted, ready to copy. The web app never assembles addresses. */

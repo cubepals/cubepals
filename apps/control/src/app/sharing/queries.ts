@@ -25,6 +25,7 @@ import { packView } from '../mods/pack.ts'
 import type { ModCatalog } from '../ports/catalog.ts'
 import type { Limits } from '../ports/limits.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
+import { pictureOf } from '../server-icons/view.ts'
 import {
   findByInvite,
   findLiveBySlug,
@@ -226,7 +227,7 @@ export class SharingQueries {
       slug: server.slug,
       name: server.name,
       description: server.description,
-      icon: (server.icon as PublicServerView['icon']) ?? null,
+      ...pictureOf(server),
       tags: [...server.tags],
       joinAddress: formatJoinAddress(this.#addressing.primary(server.slug)),
       awake,

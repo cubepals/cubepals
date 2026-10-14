@@ -31,6 +31,7 @@ function toServer(row: ServerRow): MinecraftServer {
     name: row.name,
     description: row.description,
     icon: row.icon,
+    ownIcon: row.ownIcon,
     tags: row.tags,
     slug: row.slug as Slug,
     inviteCode: row.inviteCode,
@@ -555,6 +556,7 @@ export async function saveIdentity(
     name?: string
     description?: string
     icon?: string | null
+    ownIcon?: string | null
     tags?: readonly string[]
     slug?: string
     inviteCode?: string
@@ -568,6 +570,7 @@ export async function saveIdentity(
       ...(change.name === undefined ? {} : { name: change.name }),
       ...(change.description === undefined ? {} : { description: change.description }),
       ...(change.icon === undefined ? {} : { icon: change.icon }),
+      ...(change.ownIcon === undefined ? {} : { ownIcon: change.ownIcon }),
       ...(change.tags === undefined ? {} : { tags: [...change.tags] }),
       ...(change.inviteCode === undefined ? {} : { inviteCode: change.inviteCode }),
       ...(change.slug === undefined ? {} : { slug: change.slug }),

@@ -134,8 +134,9 @@ function Card({ listing }: { listing: ListingCardView }) {
     <article className={`bk-card bk-card--link bk-stack ${styles.card}`}>
       <header className="bk-row" style={{ gap: 'var(--space-12)', alignItems: 'flex-start' }}>
         <Image
-          src={iconSrc(listing.icon)}
+          src={iconSrc(listing.icon, listing.ownIcon)}
           alt=""
+          unoptimized
           width={40}
           height={40}
           style={{ imageRendering: 'pixelated' }}

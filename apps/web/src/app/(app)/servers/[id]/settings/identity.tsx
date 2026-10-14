@@ -4,21 +4,20 @@
 
 'use client'
 
-import { SERVER_ICONS, type ServerIcon, type ServerView } from '@blockly/contracts'
+import type { ServerView } from '@blockly/contracts'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import Image from 'next/image'
 import { type SubmitEvent, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
 import { useDebounced } from '../../../../../lib/hooks'
 import { type Outcome, said, useOutcome } from '../../../../../lib/outcome'
-import { iconSrc } from '../../../../../lib/present'
 import * as rules from '../../../../../lib/rules'
 import { useChecked } from '../../../../../lib/use-checked'
 import { Button, FormSection, Note, TextField } from '../../../../../ui'
+import { IconPicker, useIconChoice } from './icon-picker'
 import { ConfirmChange, useChanged } from './shared'
 
 /**
- * What the owner calls their world, says about it, and picks for its picture, plus the address
+ * What the owner calls their world, says about it, and picks or gives for its picture, plus the address
  * friends type. None of it restarts anything; the icon reaches Minecraft's server list at the
  * next start.
  */
@@ -28,7 +27,7 @@ export function Identity({ view }: { view: ServerView }) {
   const address = useOutcome(view)
   return (
     <FormSection title="Name and address" description="What you call it, and where your friends find it.">
-      <Words key={`${view.name}-${view.icon}`} view={view} outcome={words} />
+      <Words key={`${view.name}-${view.icon}-${view.ownIcon}`} view={view} outcome={words} />
       <AddressField key={view.slug} view={view} outcome={address} />
     </FormSection>
   )
@@ -40,7 +39,7 @@ function Words({ view, outcome }: { view: ServerView; outcome: Outcome }) {
   const [name, setName] = useState(view.name)
   const checkedName = useChecked(rules.serverName, name)
   const [description, setDescription] = useState(view.description)
-  const [icon, setIcon] = useState<ServerIcon | null>(view.icon)
+  const icon = useIconChoice(view)
   const save = useMutation(
     trpc.servers.saveIdentity.mutationOptions({
       onSuccess: (next) => {
@@ -49,12 +48,12 @@ function Words({ view, outcome }: { view: ServerView; outcome: Outcome }) {
       },
     }),
   )
-  const dirty = name.trim() !== view.name || description.trim() !== view.description || icon !== view.icon
+  const dirty = name.trim() !== view.name || description.trim() !== view.description || icon.dirty
 
   const submit = (event: SubmitEvent) => {
     event.preventDefault()
     if (!dirty || name.trim().length === 0) return
-    save.mutate({ serverId: view.id, name: name.trim(), description: description.trim(), icon })
+    save.mutate({ serverId: view.id, name: name.trim(), description: description.trim(), ...icon.input })
   }
   return (
     <form className="bk-stack" style={{ gap: 'var(--space-16)' }} onSubmit={submit}>
@@ -79,27 +78,7 @@ function Words({ view, outcome }: { view: ServerView; outcome: Outcome }) {
         />
         <span className="bk-field__help">Shown to anyone you share it with.</span>
       </label>
-      <fieldset className="bk-stack" style={{ gap: 'var(--space-8)', border: 0, padding: 0 }}>
-        <legend className="bk-field__label">Icon</legend>
-        <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)' }}>
-          {/* Blockly's own comes first: it is what a server shows until another is picked. */}
-          {[null, ...SERVER_ICONS].map((key) => (
-            <button
-              key={key ?? 'blockly'}
-              type="button"
-              className="bk-icon-pick"
-              aria-pressed={icon === key}
-              aria-label={key ?? 'Cubepals’ own'}
-              onClick={() => setIcon(key)}
-            >
-              <Image src={iconSrc(key)} alt="" width={32} height={32} />
-            </button>
-          ))}
-        </div>
-        <span className="bk-field__help">
-          Shown on the server’s page, and in Minecraft’s server list after the next start.
-        </span>
-      </fieldset>
+      <IconPicker choice={icon} />
       {/* It stays a moment after saving, to say it did. */}
       {(dirty || outcome.said !== null) && (
         <div>

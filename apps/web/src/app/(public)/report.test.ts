@@ -19,6 +19,7 @@ const page = (change: Partial<PublicServerView> = {}): PublicServerView => ({
   name: 'Sunset Valley',
   description: '',
   icon: null,
+  ownIcon: null,
   tags: [],
   joinAddress: 'sunset.play.blockly.test',
   awake: true,

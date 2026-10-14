@@ -57,6 +57,8 @@ export interface PublicServerView {
   name: string
   description: string
   icon: ServerIcon | null
+  /** Where its owner's own picture is fetched; it shows instead of `icon` when there is one. */
+  ownIcon: string | null
   tags: string[]
   joinAddress: string
   /** Awake now, or asleep until someone joins. */

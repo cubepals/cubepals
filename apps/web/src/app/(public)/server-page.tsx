@@ -38,8 +38,9 @@ export function ServerPage({ view, invitedBy }: { view: PublicServerView; invite
       <header className="bk-row bk-wrap" style={{ gap: 'var(--space-16)', alignItems: 'center' }}>
         {/* Square, as Minecraft's server list shows it. */}
         <Image
-          src={iconSrc(view.icon)}
+          src={iconSrc(view.icon, view.ownIcon)}
           alt=""
+          unoptimized
           width={64}
           height={64}
           style={{ imageRendering: 'pixelated' }}

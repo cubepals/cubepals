@@ -10,8 +10,12 @@ import type { Face, PlayerFaces } from '../../app/access/faces.ts'
 import { publicPlans, publicSizes } from '../../app/accounts/queries.ts'
 import { AppError } from '../../app/errors.ts'
 import type { ItemIcons } from '../../app/items/icons.ts'
+import type { ServerIcons } from '../../app/server-icons/service.ts'
 import type { SharingQueries } from '../../app/sharing/queries.ts'
 import { serverCard } from './card.ts'
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const SHA256 = /^[0-9a-f]{64}$/
 
 /**
  * A public server's state, for anything outside Blockly (§15.6): a community page, a bot, a
@@ -22,6 +26,7 @@ export function createPublicApp(deps: {
   sharing: SharingQueries
   faces: PlayerFaces
   items: ItemIcons
+  icons: ServerIcons
 }): Hono {
   const app = new Hono()
 
@@ -152,6 +157,8 @@ export function createPublicApp(deps: {
     return c.body(new Uint8Array(png))
   })
 
+  ownIconRoute(app, deps.icons)
+
   function faceResponse(c: Context, face: Face) {
     if (face === 'unavailable') {
       c.header('Cache-Control', 'no-store')
@@ -184,6 +191,20 @@ export function createPublicApp(deps: {
   }
 
   return app
+}
+
+/** An owner's own picture, at the address its views name: by its hash, under its own server. */
+function ownIconRoute(app: Hono, icons: ServerIcons): void {
+  app.get('/api/public/icons/:serverId/:file', async (c) => {
+    const serverId = c.req.param('serverId') ?? ''
+    const sha256 = (c.req.param('file') ?? '').replace(/\.png$/, '')
+    const known = UUID.test(serverId) && SHA256.test(sha256)
+    const png = known ? await icons.forPage(serverId, sha256) : null
+    if (png === null) return c.json({ error: 'not_found' }, 404)
+    c.header('Cache-Control', `public, max-age=${DAY_S}, immutable`)
+    c.header('Content-Type', 'image/png')
+    return c.body(new Uint8Array(png))
+  })
 }
 
 function facePng(face: Uint8Array): Buffer {

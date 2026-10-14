@@ -119,6 +119,14 @@ const revision = {
   createdBy: 'u',
 }
 
+describe('the server list message in a runtime spec', () => {
+  test('the server list message carries the colours its owner typed with &', () => {
+    const coloured = { ...revision, settings: { ...revision.settings, motd: '&6Sunset &lValley & friends' } }
+    expect(toRuntimeSpec({ ...input, revision: coloured }).env.MOTD).toBe('§6Sunset §lValley & friends')
+    expect(toRuntimeSpec({ ...input, revision }).env.MOTD).toBe('Sunset Valley')
+  })
+})
+
 describe('toRuntimeSpec', () => {
   test("the picture the owner picked is the server's icon in the multiplayer list", () => {
     const plain = toRuntimeSpec({ ...input, revision })
