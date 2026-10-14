@@ -4,6 +4,7 @@
 
 import { z } from 'zod'
 import { PAID_PLANS } from '../domain/account/entitlements.ts'
+import { DEFAULT_ABUSE_LIMITS } from '../domain/account/tuning.ts'
 
 /**
  * Everything a deployment can differ in. Parsed once at boot and consumed by the composition
@@ -182,6 +183,8 @@ const AbuseLimits = z
       giftsPerDay: Count,
       wrongCodesPerHour: Count,
       wakesPerHour: Count,
+      // Optional, so a deployment's ABUSE_LIMITS from before it existed still parses.
+      inviteJoinsPerHour: Count.default(DEFAULT_ABUSE_LIMITS.inviteJoinsPerHour),
     },
     { error: 'ABUSE_LIMITS is the deployment’s abuse limits, as JSON (docs/configuration.md)' },
   )

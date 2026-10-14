@@ -223,7 +223,7 @@ deployment refuses a value that isn't the shape below. The values themselves are
 | Variable | Local | Staging | Production | Set by | Shape |
 |---|---|---|---|---|---|
 | `FREE_LINK_TUNING` | default | default | secret | secret | `{ "weights": { "mainPlayer", "inbox", "signedUpClose", "network" }, "link", "medium", "high", "signedUpCloseMs", "mainShare", "mainForS", "networkKeptMs" }`: the weights are non-negative; `link`, `medium`, `high` and `mainShare` are in [0, 1], with `link < medium < high`; the rest are positive whole numbers |
-| `ABUSE_LIMITS` | default | default | secret | secret | `{ "chipIn": { "payerDayCents", "serverDayCents" }, "extraCeiling": { "untilRenewed", "renewed" }, "giftsPerDay", "wrongCodesPerHour", "wakesPerHour" }`: whole numbers, positive but for `untilRenewed`, which is at most `renewed` |
+| `ABUSE_LIMITS` | default | default | secret | secret | `{ "chipIn": { "payerDayCents", "serverDayCents" }, "extraCeiling": { "untilRenewed", "renewed" }, "giftsPerDay", "wrongCodesPerHour", "wakesPerHour", "inviteJoinsPerHour" }`: whole numbers, positive but for `untilRenewed`, which is at most `renewed`; `inviteJoinsPerHour` may be left out for its default |
 
 ### Product analytics (optional)
 
