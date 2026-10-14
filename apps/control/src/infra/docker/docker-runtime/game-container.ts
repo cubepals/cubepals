@@ -64,7 +64,10 @@ export function gameContainer(
   }
 }
 
-/** What a container records of the spec it was made from, to tell whether it must be made again. */
-export function specDigest(spec: RuntimeSpec): string {
+/**
+ * What a container records of the spec it was made from, to tell whether it must be made again.
+ * Not `resumesOn`, which Docker, keeping no workload asleep, has no use for.
+ */
+export function specDigest({ resumesOn: _resumesOn, ...spec }: RuntimeSpec): string {
   return createHash('sha256').update(JSON.stringify(spec)).digest('hex').slice(0, 32)
 }

@@ -317,7 +317,7 @@ export function scriptOnNew(verb: Verb, ...args: readonly string[]): string {
 export const inWorkload = (command: readonly string[]) =>
   ['docker', 'exec', WORKLOAD, ...command.map(quote)].join(' ')
 
-export const specDigest = (spec: RuntimeSpec) =>
+export const specDigest = ({ resumesOn: _resumesOn, ...spec }: RuntimeSpec) =>
   createHash('sha256').update(JSON.stringify(spec)).digest('hex').slice(0, 32)
 
 /**

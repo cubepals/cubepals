@@ -51,6 +51,7 @@ export function specDigest(spec: RuntimeSpec): string {
   const {
     secrets: _secrets,
     storage: { reconstructible: _reconstructible, ...storage },
+    resumesOn: _resumesOn,
     ...rest
   } = spec
   return createHash('sha256')
@@ -141,13 +142,19 @@ export class RuntimeSpecs {
           ? this.#links.icon(server.icon ?? BLOCKLY_ICON)
           : this.#links.ownIcon(server.id, server.ownIcon),
     })
-    const spec = { ...built, labels: { ...built.labels, [SECRETS_VERSION_LABEL]: String(current.version) } }
+    const labelled = {
+      ...built,
+      labels: { ...built.labels, [SECRETS_VERSION_LABEL]: String(current.version) },
+    }
+    const driftDigest = specDigest(withoutPlanLimits(labelled))
+    // What drift leaves for the next start, a machine asleep can leave too: it wakes as it slept.
+    const spec = { ...labelled, resumesOn: driftDigest }
     return {
       revision,
       world,
       spec,
       digest: specDigest(spec),
-      driftDigest: specDigest(withoutPlanLimits(spec)),
+      driftDigest,
       secretsVersion: current.version,
       install: installOf(revision),
     }

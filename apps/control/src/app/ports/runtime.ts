@@ -79,6 +79,13 @@ export interface RuntimeSpec {
   ports: readonly PortSpec[]
   stop: { signal: 'SIGTERM' | 'SIGINT'; timeoutSeconds: number }
   labels: Readonly<Record<string, string>>
+  /**
+   * Which specs a workload asleep may wake on as it slept: two with the same value differ only in
+   * what the workload reads as it starts (a server's message, its picture, a plan's limits). A
+   * runtime that keeps a sleeping workload's memory resumes one asleep on either, and the other
+   * waits for its next boot. No digest sees it.
+   */
+  resumesOn?: string
 }
 
 /**
