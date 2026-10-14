@@ -81,9 +81,7 @@ describe.skipIf(!hasDatabase)('email flows', () => {
     const before = cookieOf(await signIn(email, 'first password 1'))
     expect((await sessionOf(before))?.user.email).toBe(email)
 
-    // As the web app's form asks: the page it lands on keeps the email, for password managers.
-    const redirectTo = `/reset-password?email=${encodeURIComponent(email)}`
-    const asked = await call('/request-password-reset', { body: { email, redirectTo } })
+    const asked = await call('/request-password-reset', { body: { email, redirectTo: '/reset-password' } })
     expect(asked.status).toBe(200)
     const mail = outbox.to(email).at(-1)
     expect(mail?.subject).toBe('Reset your Cubepals password')
@@ -95,7 +93,6 @@ describe.skipIf(!hasDatabase)('email flows', () => {
     expect(followed.status).toBe(302)
     const landing = new URL(followed.headers.get('location') ?? '')
     expect(`${landing.origin}${landing.pathname}`).toBe(`${ORIGIN}/reset-password`)
-    expect(landing.searchParams.get('email')).toBe(email)
     const token = landing.searchParams.get('token')
     expect(token).toBeTruthy()
 

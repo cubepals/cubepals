@@ -108,15 +108,19 @@ describe.skipIf(!hasDatabase)('account mail', () => {
 
   test('every email sign-in sends has an HTML part on the web origin', async () => {
     const email = address('html')
+    // As the web app's form asks.
+    const redirectTo = `/reset-password?email=${encodeURIComponent(email)}`
     await signUp(auth, email)
     await auth.handler(
       new Request(`${ORIGIN}/api/auth/request-password-reset`, {
         method: 'POST',
         headers: { origin: ORIGIN, 'content-type': 'application/json' },
-        body: JSON.stringify({ email, redirectTo: '/reset-password' }),
+        body: JSON.stringify({ email, redirectTo }),
       }),
     )
     const [confirm, reset] = outbox.to(email)
+    // The reset link lands on a page that keeps the email, for password managers.
+    expect(new URL(outbox.link(email)).searchParams.get('callbackURL')).toBe(redirectTo)
     // Plain letters, which Gmail keeps in the inbox, with the link among the words.
     expect(confirm?.html).toContain('>cubepals</p>')
     expect(confirm?.html).not.toContain('<img')
