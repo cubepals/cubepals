@@ -7,12 +7,20 @@
 import type { RevisionView, ServerView } from '@blockly/contracts'
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { Fragment, type ReactNode, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
 import { useNow } from '../../../../../lib/hooks'
 import { said, useOutcome } from '../../../../../lib/outcome'
-import { busyWord, loaderLabel, presentChange, revisionTitle, timeAgo } from '../../../../../lib/present'
+import {
+  busyWord,
+  loaderLabel,
+  presentChange,
+  revisionTitle,
+  settingLabel,
+  timeAgo,
+} from '../../../../../lib/present'
 import { Badge, Button, FormRow, FormSection, Note, Skeleton } from '../../../../../ui'
+import { StyledMessage } from './server-message'
 import { ConfirmChange, planLines, useChanged, whatHappens } from './shared'
 
 const SHOWN = 8
@@ -82,7 +90,7 @@ export function History({ view }: { view: ServerView }) {
           }
           description={
             <>
-              {summary(revision)}
+              <Summary revision={revision} />
               <br />
               <span className="type-caption" style={{ color: 'var(--ink-muted)' }}>
                 {timeAgo(revision.createdAt, now)}
@@ -162,8 +170,24 @@ function State({ revision, view }: { revision: RevisionView; view: ServerView })
   return null
 }
 
-function summary(revision: RevisionView): string {
+/** What a revision changed, in a line. */
+export function Summary({ revision }: { revision: RevisionView }): ReactNode {
   if (revision.reason === 'created' || revision.changes.length === 0)
     return `Minecraft ${revision.gameVersion}, ${loaderLabel(revision.loader)}`
-  return revision.changes.map(presentChange).join(' · ')
+  return revision.changes.map((change, i) => (
+    <Fragment key={change.field}>
+      {i > 0 && ' · '}
+      {/* The server message is drawn as the list draws it, not as the codes it was typed with. */}
+      {change.field === 'motd' &&
+      'from' in change &&
+      typeof change.from === 'string' &&
+      typeof change.to === 'string' ? (
+        <>
+          {settingLabel('motd')} <StyledMessage motd={change.from} /> → <StyledMessage motd={change.to} />
+        </>
+      ) : (
+        presentChange(change)
+      )}
+    </Fragment>
+  ))
 }

@@ -193,6 +193,10 @@ describe('what a server runs', () => {
     expect(loaderWithBuild('vanilla', null)).toBe('Vanilla')
     expect(loaderWithBuild('vanilla', '132')).toBe('Vanilla on Paper')
     expect(presentChange({ field: 'onPaper', from: true, to: false })).toBe('Runs on Paper on → off')
+    // Where words can't take colour, the server message reads without its codes.
+    expect(presentChange({ field: 'motd', from: 'Hello', to: '&d&lcubepals &8· &71.8 PvP' })).toBe(
+      'Server message “Hello” → “cubepals · 1.8 PvP”',
+    )
     expect(loaderWithBuild('fabric', null)).toBe('Fabric')
     expect(presentChange({ field: 'loaderVersion', from: '0.19.5', to: '0.19.6' })).toBe(
       'Build 0.19.5 → 0.19.6',
