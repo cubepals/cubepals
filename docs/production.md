@@ -220,6 +220,30 @@ read from `local/production/production.env`; neither is printed, and a shell's o
 reaches it. Without `--production`, `OPERATOR_API` and `OPERATOR_TOKEN` say where, as for
 `scripts/runtimes.ts`.
 
+The same commands also cover a server's console, identity, mods and players pages, Browse and its
+allowlist, and the switches on `/admin/platform`. `accounts create <email> [--name]` makes an
+account with no password for a person, who signs in with the email link or Google; it is for a
+person to run, never a script.
+
+An agent reaches all of it through `scripts/ops-mcp.ts`, an MCP server over stdio with one tool per
+command. It reads the same values and prints no token. Tools that can't be undone say so. In Claude
+Code, from the repository:
+
+```sh
+claude mcp add cubepals-ops -e OPERATOR=you -- bun "$PWD/scripts/ops-mcp.ts" --production
+```
+
+In Claude Desktop, under `mcpServers` in `claude_desktop_config.json` (with `bun` and `fly` on the
+PATH it starts servers with):
+
+```json
+"cubepals-ops": {
+  "command": "bun",
+  "args": ["/path/to/cubepals/scripts/ops-mcp.ts", "--production"],
+  "env": { "OPERATOR": "you" }
+}
+```
+
 ```sh
 bun scripts/production-check.ts [--owner you@example.com]
 ```

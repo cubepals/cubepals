@@ -44,7 +44,7 @@ export function operatorCli(name: string, part: string, docs: string, refusals: 
   }
 
   async function api(
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     path: string,
     body?: object,
   ): Promise<unknown> {

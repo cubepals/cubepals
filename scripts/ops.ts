@@ -3,10 +3,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Accounts and their servers from the command line, without signing in to the website
- * (docs/production.md § From the command line).
+ * Accounts, their servers and the platform from the command line, without signing in to the
+ * website (docs/production.md § From the command line). `scripts/ops-mcp.ts` offers the same to an
+ * agent.
  *
  *   bun scripts/ops.ts accounts [search]            accounts whose email or name holds it
+ *   bun scripts/ops.ts accounts create <email> [--name <name>]
+ *                                                   an account with no password, for a person to
+ *                                                   run: its person signs in with the email link or
+ *                                                   Google; nothing is sent until then
  *   bun scripts/ops.ts account <email|id>           standing, plan, limits, servers, what was done
  *   bun scripts/ops.ts plan <email|id> plus|free    comp an account onto Plus, or back to Free
  *   bun scripts/ops.ts limits <email|id> [--servers n] [--running n] [--hours n]
@@ -22,6 +27,32 @@
  *   bun scripts/ops.ts rest <server>                a stopped server's world to the archive store now
  *   bun scripts/ops.ts purge <server> --name <its name>
  *                                                   a server in the trash, gone for good now
+ *   bun scripts/ops.ts console <server> [command] [--lines n]
+ *                                                   a command sent and its answer, or without one
+ *                                                   the lines the console printed lately
+ *   bun scripts/ops.ts identity <server> [--name <name>] [--description <text>]
+ *                               [--icon <key>|none] [--tags a,b] [--address <slug>]
+ *                                                   what its identity settings set
+ *   bun scripts/ops.ts mods <server> [search <text> | add <project[@version]>... | remove <id>...]
+ *                          [--plan] [--move-to <version>] [--acknowledge-revoked]
+ *                                                   its mods or plugins, found, added or removed as
+ *                                                   the mods page does; --plan only shows the change
+ *   bun scripts/ops.ts players <server>             its whitelist, operators, bans and helpers
+ *   bun scripts/ops.ts whitelist <server> on|off
+ *   bun scripts/ops.ts whitelist|operator|helper <server> add|remove <player>
+ *   bun scripts/ops.ts ban <server> <player> [--reason <why>]
+ *   bun scripts/ops.ts pardon <server> <player>
+ *   bun scripts/ops.ts moderation <server> [on|off] [--chat-filter on|off]
+ *                                                   the moderation tools, read or turned on or off
+ *   bun scripts/ops.ts listing <server> [publish|unlist]
+ *                                                   where it stands in Browse, or put in or out
+ *   bun scripts/ops.ts official <server> on|off --reason <why>
+ *                                                   the "Run by Cubepals" mark
+ *   bun scripts/ops.ts allowlist [add <project> [--note <text>] | remove <catalog> <project>]
+ *   bun scripts/ops.ts platform [set <switch> <value>...] the admins' platform switches, as
+ *                                                   `platform` names them: `set startsEnabled false`
+ *   bun scripts/ops.ts platform fly-suspend [on|off|default]
+ *   bun scripts/ops.ts platform refresh-catalog
  *   bun scripts/ops.ts health [--window 24h|7d|30d] [--json]
  *                                                   servers now, how long work takes, what failed,
  *                                                   the slowest, and the money
@@ -51,6 +82,9 @@ const say = (line: string) => process.stdout.write(`${line}\n`)
 const show = (value: unknown) => say(JSON.stringify(value, null, 2))
 const first = (what: string) => positional[0] ?? fail(`${command} needs ${what}`)
 const encoded = (ref: string) => encodeURIComponent(ref)
+const second = (what: string) => positional[1] ?? fail(`${command} needs ${what}`)
+const onOff = (given: string | undefined, what: string) =>
+  given === 'on' ? true : given === 'off' ? false : fail(`${what} is on or off`)
 
 /** A limit as given: a whole number, or `plan` for the plan's own. */
 function limit(name: string, current: number | null | undefined): number | null {
@@ -75,6 +109,11 @@ if (process.argv.includes('--production'))
 
 switch (command) {
   case 'accounts': {
+    if (positional[0] === 'create') {
+      const email = second('an email address')
+      show(await api('POST', '/accounts', { email, ...(option('name') ? { name: option('name') } : {}) }))
+      break
+    }
     const search = positional[0] ? `?search=${encoded(positional[0])}` : ''
     const found = (await api('GET', `/accounts${search}`)) as {
       total: number
@@ -137,6 +176,172 @@ switch (command) {
     show(await api('POST', `/servers/${first('a server id')}/${command}`, { confirmName }))
     break
   }
+  case 'console': {
+    const server = `/servers/${first('a server id')}/console`
+    const sent = positional.slice(1).join(' ')
+    if (sent) say(((await api('POST', server, { command: sent })) as { output: string }).output)
+    else {
+      const lines = option('lines') ? `?lines=${option('lines')}` : ''
+      const { lines: printed } = (await api('GET', `${server}${lines}`)) as {
+        lines: Array<{ at: string; text: string }>
+      }
+      for (const line of printed) say(`${line.at}  ${line.text}`)
+    }
+    break
+  }
+  case 'identity': {
+    const server = first('a server id')
+    const icon = option('icon')
+    const identity = {
+      ...(option('name') === undefined ? {} : { name: option('name') }),
+      ...(option('description') === undefined ? {} : { description: option('description') }),
+      ...(icon === undefined ? {} : { icon: icon === 'none' ? null : icon }),
+      ...(option('tags') === undefined ? {} : { tags: option('tags')?.split(',').filter(Boolean) }),
+    }
+    if (Object.keys(identity).length > 0) show(await api('PATCH', `/servers/${server}/identity`, identity))
+    if (option('address') !== undefined)
+      show(await api('PUT', `/servers/${server}/address`, { slug: option('address') }))
+    if (Object.keys(identity).length === 0 && option('address') === undefined)
+      fail('identity needs --name, --description, --icon, --tags or --address')
+    break
+  }
+  case 'mods': {
+    const mods = `/servers/${first('a server id')}/mods`
+    const [, action, ...refs] = positional
+    if (action === undefined) show(await api('GET', mods))
+    else if (action === 'search') show(await api('GET', `${mods}/search?text=${encoded(refs.join(' '))}`))
+    else if (action === 'add' || action === 'remove') {
+      if (refs.length === 0) fail(`mods ${action} needs what to ${action}`)
+      const change = {
+        ...(action === 'add'
+          ? {
+              add: refs.map((ref) => {
+                const [projectId, versionId] = ref.split('@')
+                return { projectId, ...(versionId ? { versionId } : {}) }
+              }),
+            }
+          : { remove: refs }),
+        ...(option('move-to') ? { moveTo: option('move-to') } : {}),
+      }
+      if (option('plan')) show(await api('POST', `${mods}/plan`, change))
+      else
+        show(
+          await api('POST', mods, {
+            ...change,
+            acknowledgeRevoked: option('acknowledge-revoked') === 'true',
+          }),
+        )
+    } else fail('mods takes search, add or remove')
+    break
+  }
+  case 'players':
+    show(await api('GET', `/servers/${first('a server id')}/access`))
+    break
+  case 'whitelist':
+  case 'operator':
+  case 'helper': {
+    const access = `/servers/${first('a server id')}/access`
+    const action = second('add, remove, or for the whitelist on or off')
+    if (command === 'whitelist' && (action === 'on' || action === 'off'))
+      show(await api('PUT', `${access}/whitelist`, { enabled: action === 'on' }))
+    else if (action === 'add')
+      show(await api('POST', `${access}/${command}`, { name: positional[2] ?? fail('add needs a player') }))
+    else if (action === 'remove')
+      show(
+        await api(
+          'DELETE',
+          `${access}/${command}/${encoded(positional[2] ?? fail('remove needs a player'))}`,
+        ),
+      )
+    else fail(`${command} takes add or remove`)
+    break
+  }
+  case 'ban': {
+    const name = second('a player')
+    show(
+      await api('POST', `/servers/${first('a server id')}/access/ban`, {
+        name,
+        ...(option('reason') ? { reason: option('reason') } : {}),
+      }),
+    )
+    break
+  }
+  case 'pardon':
+    show(await api('DELETE', `/servers/${first('a server id')}/access/ban/${encoded(second('a player'))}`))
+    break
+  case 'moderation': {
+    const moderation = `/servers/${first('a server id')}/moderation`
+    if (positional[1] === undefined) show(await api('GET', moderation))
+    else {
+      const enabled = onOff(positional[1], 'moderation')
+      const filter = option('chat-filter')
+      show(
+        await api('PUT', moderation, {
+          enabled,
+          chatFilter: filter === undefined ? false : onOff(filter, '--chat-filter'),
+        }),
+      )
+    }
+    break
+  }
+  case 'listing': {
+    const listing = `/servers/${first('a server id')}/listing`
+    const action = positional[1]
+    if (action === undefined) show(await api('GET', listing))
+    else if (action === 'publish' || action === 'unlist')
+      show(await api('PUT', listing, { public: action === 'publish' }))
+    else fail('listing takes publish or unlist')
+    break
+  }
+  case 'official': {
+    const official = onOff(positional[1], 'official')
+    const reason = option('reason') ?? fail('official needs --reason, which the audit log keeps')
+    show(await api('PUT', `/servers/${first('a server id')}/official`, { official, reason }))
+    break
+  }
+  case 'allowlist': {
+    const [action, ...rest] = positional
+    if (action === undefined) show(await api('GET', '/allowlist'))
+    else if (action === 'add')
+      show(
+        await api('POST', '/allowlist', {
+          projectId: rest[0] ?? fail('allowlist add needs a project'),
+          ...(option('note') ? { note: option('note') } : {}),
+        }),
+      )
+    else if (action === 'remove') {
+      const needs = 'allowlist remove needs the catalog and the project, as allowlist lists them'
+      const catalog = rest[0] ?? fail(needs)
+      const project = rest[1] ?? fail(needs)
+      show(await api('DELETE', `/allowlist/${encoded(catalog)}/${encoded(project)}`))
+    } else fail('allowlist takes add or remove')
+    break
+  }
+  case 'platform': {
+    const [action, ...rest] = positional
+    if (action === undefined) show(await api('GET', '/platform'))
+    else if (action === 'set') {
+      if (rest.length === 0 || rest.length % 2 !== 0)
+        fail('platform set takes a switch and its value, as many as you like')
+      const change: Record<string, boolean | number> = {}
+      for (let i = 0; i < rest.length; i += 2) {
+        const value = rest[i + 1] ?? ''
+        change[rest[i] ?? ''] = value === 'true' || value === 'false' ? value === 'true' : Number(value)
+      }
+      show(await api('PATCH', '/platform', change))
+    } else if (action === 'fly-suspend') {
+      const given = rest[0]
+      if (given === undefined) show(await api('GET', '/platform/fly-suspend'))
+      else
+        show(
+          await api('PUT', '/platform/fly-suspend', {
+            on: given === 'default' ? null : onOff(given, 'fly-suspend'),
+          }),
+        )
+    } else if (action === 'refresh-catalog') show(await api('POST', '/platform/catalog-refresh'))
+    else fail('platform takes set, fly-suspend or refresh-catalog')
+    break
+  }
   case 'health': {
     const window = (option('window') ?? '24h') as HealthWindow
     if (!['24h', '7d', '30d'].includes(window)) fail('--window is 24h, 7d or 30d')
@@ -169,7 +374,7 @@ switch (command) {
   }
   default:
     say(
-      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|trash|untrash|rest|purge|health|operations|operation',
+      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|trash|untrash|rest|purge|console|identity|mods|players|whitelist|operator|helper|ban|pardon|moderation|listing|official|allowlist|platform|health|operations|operation',
     )
     say('See the top of scripts/ops.ts, and docs/production.md.')
     if (command !== 'help') process.exit(1)
