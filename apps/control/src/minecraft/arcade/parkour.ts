@@ -163,6 +163,8 @@ export const PARKOUR_PART: Part = {
     `scoreboard objectives setdisplay sidebar.team.aqua ${NS}.pk.side`,
   ],
   build: [
+    // Room around the course on a world that has ground there; a void world has nothing to clear.
+    fill([-140, 90, -5], [-28, 112, 6], 'air'),
     fill(START_FROM, START_TO, 'smooth_stone'),
     fill(BACK_FROM, BACK_TO, 'quartz_block'),
     ...COURSE.map(({ at, kind }) =>

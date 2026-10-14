@@ -6,8 +6,9 @@
  * The Arcade's falling floor, east of the hub: two floors over the void, whose blocks turn red
  * under a player's feet and drop a moment later. Players wait for a round in a lobby beside it; a
  * round starts ten seconds after someone is waiting, with everyone waiting by then. With two or
- * more, the last one standing wins; alone, it is how long you last. Both are kept: the longest
- * anyone lasted, and wins. Not the boards (`boards.ts`) or the way here from the hub (`hub.ts`).
+ * more, the last one standing wins, and the last two falling together is a draw; alone, it is how
+ * long you last. Both are kept: the longest anyone lasted, and wins. Not the boards (`boards.ts`)
+ * or the way here from the hub (`hub.ts`).
  *
  * A round is `#state` in its objective: 0 nobody waiting, 1 counting down, 2 under way.
  */
@@ -80,6 +81,7 @@ export const FLOOR_PART: Part = {
       `execute as @a[${ALIVE}] unless entity @s[${ROUND}] run tag @s remove ${FF}.alive`,
       `execute store result score #alive ${FF} if entity @a[${ALIVE}]`,
       `execute if score #started ${FF} matches 2.. if score #alive ${FF} matches 1 as @a[${ALIVE}] at @s run function ${NS}:floor/win`,
+      `execute if score #started ${FF} matches 2.. if score #alive ${FF} matches 0 run tellraw @a[${ZONE}] "Nobody is left standing, so it’s a draw."`,
       `execute if score #alive ${FF} matches 0 run function ${NS}:floor/end`,
     ],
     'floor/step': CORNERS.map((corner) => `execute positioned ~${corner} run function ${NS}:floor/mark`),
@@ -135,6 +137,9 @@ export const FLOOR_PART: Part = {
     `scoreboard objectives setdisplay sidebar.team.yellow ${FF}.best`,
   ],
   build: [
+    // Room around the floors and the lobby on a world that has ground there.
+    fill([38, 88, -12], [62, 112, 12], 'air'),
+    fill([28, 101, -3], [37, 106, 3], 'air'),
     fill(LOBBY_FROM, LOBBY_TO, 'smooth_stone'),
     fill(BACK_FROM, BACK_TO, 'quartz_block'),
     fill([37, 101, -3], [37, 103, 3], 'glass'),

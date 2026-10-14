@@ -13,10 +13,12 @@ export type Block = readonly [number, number, number]
 
 /**
  * One part of the datapack. Its functions go under `arcade:`, by the name given; `load` runs as
- * the world loads, `build` once its chunks are in, a moment later, and `tick` every tick.
+ * the world loads, `build` once its chunks are in, a moment later, and `tick` every tick. `data`
+ * is any other file it needs under `data/arcade/`, as JSON: `loot_table/head.json`.
  */
 export interface Part {
   functions: Readonly<Record<string, readonly string[]>>
+  data?: Readonly<Record<string, unknown>>
   load: readonly string[]
   build: readonly string[]
   tick: readonly string[]

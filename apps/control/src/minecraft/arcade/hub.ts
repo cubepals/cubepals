@@ -85,11 +85,14 @@ export const HUB_PART: Part = {
     'forceload add -16 -16 15 15',
     `scoreboard objectives add ${BACK} trigger`,
     `scoreboard objectives add ${NS}.left minecraft.custom:minecraft.leave_game`,
+    `scoreboard objectives add ${NS}.food food`,
     `team add ${HUB}`,
     `team modify ${HUB} friendlyFire false`,
     `team modify ${HUB} collisionRule never`,
   ],
   build: [
+    // Room around the hub and its boards on a world that has ground there.
+    fill([-13, 90, -9], [13, 116, 10], 'air'),
     fill(FLOOR_FROM, FLOOR_TO, 'polished_andesite'),
     fill(
       [FLOOR_FROM[0] + 1, 100, FLOOR_FROM[2] + 1],
@@ -108,6 +111,8 @@ export const HUB_PART: Part = {
     `execute as @a[scores={${BACK}=1..}] run function ${TO_HUB}`,
     `execute as @a[scores={${NS}.left=1..}] run function ${TO_HUB}`,
     `execute as @a[${FALLEN}] run function ${TO_HUB}`,
-    `effect give @a[team=!${NS}.pit] minecraft:saturation 1 0 true`,
+    // Never hungry outside the pit, and in it as hungry as anyone fighting: fed only once hunger
+    // shows, so nothing is sent to a player who is full.
+    `effect give @a[team=!${NS}.pit,scores={${NS}.food=..19}] minecraft:saturation 1 0 true`,
   ],
 }

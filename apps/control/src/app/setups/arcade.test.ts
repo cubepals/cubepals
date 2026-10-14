@@ -109,7 +109,7 @@ describe.skipIf(!hasDatabase)('arcade', () => {
     await h.settled(server.id)
     const revision = await loadRevision(h.db, server.desiredRevisionId)
     // Every game is the datapack, so the only plugins are the ones for strangers, and ViaVersion.
-    expect(revision.mods.map((m) => m.source.projectId).sort()).toEqual(
+    expect(revision.mods.map((m) => ('projectId' in m.source ? m.source.projectId : '')).sort()).toEqual(
       [CHATSENTINEL, 'LJNGWSvH', LIBERTYBANS, LUCKPERMS, VIAVERSION].sort(),
     )
     expect(revision.files).toEqual([...ARCADE_FILES, ...moderationFiles(CHAT_FILTER)])
@@ -117,7 +117,7 @@ describe.skipIf(!hasDatabase)('arcade', () => {
       defaultGameMode: 'adventure',
       difficulty: 'easy',
       pvp: true,
-      motd: 'Arcade: parkour, a falling floor and a pit, with high scores to beat',
+      motd: 'Arcade: parkour, falling floor and a pit, with high scores',
     })
     expect([runsModeration(revision.mods), filtersChat(revision.mods)]).toEqual([true, true])
     expect((await listWorlds(h.db, server.id)).map((w) => [w.levelName, w.levelType])).toEqual([

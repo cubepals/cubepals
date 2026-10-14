@@ -12,9 +12,9 @@
  * does. Scores and boards live in the world's own scoreboard and storage, so they hold through
  * restarts and sleep, and start again on a fresh world, as the world's own things do.
  *
- * Everything is built at fixed places from y 100 up, with the void below, so it stands the same on
- * any kind of world, and is built again each time the world loads: a block knocked out is back by
- * the next start. A player who falls is caught well above the ground of a world that has one.
+ * Everything is built at fixed places from y 100 up, with the void below, and built again each time
+ * the world loads: a block knocked out is back by the next start. On a world of another kind, made
+ * with "Make your own world", the room around each place is cleared first, so it stands the same.
  *
  * Parts (`arcade/`):
  * - `datapack.ts`: the shape of a part, the hub's place, and how a place is named in a selector.
@@ -25,7 +25,7 @@
  * - `pit.ts`: the pit, its kit and kills.
  */
 import { type CarriedFile, RUNNING_LEVEL } from '../domain/revision/carried.ts'
-import { BOARDS_PART, HEAD_LOOT, TMP } from './arcade/boards.ts'
+import { BOARDS_PART, TMP } from './arcade/boards.ts'
 import { NS, type Part } from './arcade/datapack.ts'
 import { FLOOR_PART } from './arcade/floor.ts'
 import { HUB_PART } from './arcade/hub.ts'
@@ -86,7 +86,12 @@ export const ARCADE_FILES: readonly CarriedFile[] = [
   },
   { path: `${PACK}/data/minecraft/tags/function/load.json`, content: `{ "values": ["${NS}:load"] }\n` },
   { path: `${PACK}/data/minecraft/tags/function/tick.json`, content: `{ "values": ["${NS}:tick"] }\n` },
-  { path: `${PACK}/data/${NS}/loot_table/head.json`, content: `${JSON.stringify(HEAD_LOOT, null, 2)}\n` },
+  ...PARTS.flatMap((part) =>
+    Object.entries(part.data ?? {}).map(([name, json]) => ({
+      path: `${PACK}/data/${NS}/${name}`,
+      content: `${JSON.stringify(json, null, 2)}\n`,
+    })),
+  ),
   ...Object.entries(FUNCTIONS).map(([name, commands]) => ({
     path: `${PACK}/data/${NS}/function/${name}.mcfunction`,
     content: lines(commands),

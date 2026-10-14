@@ -57,6 +57,8 @@ export const PIT_PART: Part = {
     `scoreboard objectives setdisplay sidebar.team.red ${PIT}.kills`,
   ],
   build: [
+    // Room around the pit on a world that has ground there.
+    fill([-12, 96, -45], [12, 112, -17], 'air'),
     fill([-8, 96, -41], [8, 100, -25], 'stone_bricks'),
     fill([-7, 97, -40], [7, 100, -26], 'air'),
     fill([-7, 96, -40], [7, 96, -26], 'smooth_stone'),

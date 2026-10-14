@@ -14,6 +14,12 @@ import { ARCADE_FILES } from './arcade.ts'
 import { placeablePath } from './carried.ts'
 
 const PACK = 'world-2/datapacks/cubepals-arcade'
+
+/**
+ * The most blocks one `fill` may change: the game rule `max_block_modifications`, 32768 by default
+ * (Minecraft 26.2, `gamerule max_block_modifications` on a new world).
+ */
+const MAX_BLOCK_CHANGES = 32768
 const FUNCTIONS = `${PACK}/data/arcade/function/`
 
 const files = ARCADE_FILES.map((file) => onLevel(file, 'world-2'))
@@ -130,6 +136,14 @@ describe('the Arcade datapack as Minecraft loads it', () => {
 })
 
 describe('the Arcade as its players find it', () => {
+  test('no fill changes more blocks than one command may, as max_block_modifications allows', () => {
+    for (const command of everyCommand.filter((line) => line.startsWith('fill '))) {
+      const [x1 = 0, y1 = 0, z1 = 0, x2 = 0, y2 = 0, z2 = 0] = (command.match(/-?\d+/g) ?? []).map(Number)
+      const blocks = (Math.abs(x2 - x1) + 1) * (Math.abs(y2 - y1) + 1) * (Math.abs(z2 - z1) + 1)
+      expect(`${command}: ${blocks <= MAX_BLOCK_CHANGES}`).toBe(`${command}: true`)
+    }
+  })
+
   test('each game has its place, apart from the hub and from each other', () => {
     expect([...zones.keys()].sort()).toEqual(['arcade.floor', 'arcade.hub', 'arcade.parkour', 'arcade.pit'])
     const all = [...zones.values()]

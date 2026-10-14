@@ -170,7 +170,7 @@ const SETUPS: Record<TemplateKey, Template['setup']> = {
       defaultGameMode: 'adventure',
       difficulty: 'easy',
       pvp: true,
-      motd: 'Arcade: parkour, a falling floor and a pit, with high scores to beat',
+      motd: 'Arcade: parkour, falling floor and a pit, with high scores',
     },
     world: { levelType: VOID_LEVEL, hardcore: false },
   },

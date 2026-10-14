@@ -63,6 +63,22 @@ export const onSidebar = (objective: string): string[] => [
   `function ${NS}:boards/side with storage ${WORK} new`,
 ]
 
+/** The loot table that fills a player head with the profile of the player it is run as. */
+const HEAD_LOOT = {
+  pools: [
+    {
+      rolls: 1,
+      entries: [
+        {
+          type: 'minecraft:item',
+          name: 'minecraft:player_head',
+          functions: [{ function: 'minecraft:fill_player_head', entity: 'this' }],
+        },
+      ],
+    },
+  ],
+}
+
 export const BOARDS_PART: Part = {
   functions: {
     'boards/submit': [
@@ -148,20 +164,5 @@ export const BOARDS_PART: Part = {
     `function ${NS}:boards/render {board:"${key}"}`,
   ]),
   tick: [],
-}
-
-/** The loot table that fills a player head with the profile of the player it is run as. */
-export const HEAD_LOOT = {
-  pools: [
-    {
-      rolls: 1,
-      entries: [
-        {
-          type: 'minecraft:item',
-          name: 'minecraft:player_head',
-          functions: [{ function: 'minecraft:fill_player_head', entity: 'this' }],
-        },
-      ],
-    },
-  ],
+  data: { 'loot_table/head.json': HEAD_LOOT },
 }
