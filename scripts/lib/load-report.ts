@@ -282,12 +282,23 @@ function timelineRows(timeline: readonly Moment[]): string[] {
   ]
 }
 
+/** The most servers running at once, as the platform's health counted them, and when the run first got there. */
+function peakLine(timeline: readonly Moment[]): string {
+  const most = Math.max(0, ...timeline.map((m) => m.running))
+  const first = timeline.find((m) => m.running === most)
+  return first === undefined
+    ? 'No servers running were counted.'
+    : `At the peak ${most} servers were running, first reached ${took(first.t)} after the start, with ${first.inWorld} players in a world.`
+}
+
 /** The report as Markdown, for the PR and for people: what went wrong first. */
 export function markdown(report: Report): string {
   const lines = [
     `# Load test ${report.run}: ${report.arrivals} people over ${report.overMinutes} min, plan ${report.plan}`,
     '',
     `Started ${report.startedAt}, took ${took(report.tookMs)}.`,
+    '',
+    peakLine(report.timeline),
     '',
     '## Failures',
     '',

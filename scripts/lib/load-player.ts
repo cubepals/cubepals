@@ -130,7 +130,11 @@ export class Player {
   readonly index: number
   readonly run: Run
 
-  constructor(index: number, plan: 'free' | 'plus', run: Run) {
+  /** A burst's person: friends counted for them, and a life that ends once they have played. */
+  readonly #burst: { friends: number; burst: boolean } | undefined
+
+  constructor(index: number, plan: 'free' | 'plus', run: Run, burst?: { friends: number; burst: boolean }) {
+    this.#burst = burst
     this.index = index
     this.#plan = plan
     this.run = run
@@ -294,6 +298,7 @@ export class Player {
       const first = await this.#begin()
       if (first === undefined) return
       await this.#together(first)
+      if (this.#burst?.burst) return
       const sleptAs = await this.#sleeps(first)
       await this.#chaos(ASLEEP, first)
       this.phase = 'away'
@@ -389,7 +394,7 @@ export class Player {
    */
   async #together(server: Server): Promise<void> {
     this.phase = 'playing'
-    const friends = between(...this.run.friends)
+    const friends = this.#burst?.friends ?? between(...this.run.friends)
     const names = [
       `Load${this.index}`,
       ...Array.from({ length: friends }, (_, j) => `Load${this.index}x${j + 1}`),

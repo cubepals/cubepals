@@ -209,7 +209,12 @@ if (process.argv[2] === 'clean') {
 
 // ─── The run ─────────────────────────────────────────────────────────────────────────────────
 
-const arrivals = Number(option('arrivals', '60'))
+// A burst (`--people`) has everyone arrive within `--ramp` seconds, play, and stop there: no
+// sleep, nothing after it, nobody careless, the platform left alone.
+const burst = process.argv.includes('--people')
+const people_ = Number(option('people', '50'))
+const rampS = Number(option('ramp', '60'))
+const arrivals = burst ? people_ : Number(option('arrivals', '60'))
 const overMinutes = Number(option('over', '20'))
 const planChoice = option('plan', 'mix')
 const rangeOf = (name: string, fallback: string): [number, number] => {
@@ -219,7 +224,7 @@ const rangeOf = (name: string, fallback: string): [number, number] => {
 const friends = rangeOf('friends', '3-10')
 const playMinutes = rangeOf('play', '3-15')
 const idleMinutes = Number(option('idle', '1'))
-const aggression = Number(option('aggression', '0.33'))
+const aggression = burst ? 0 : Number(option('aggression', '0.33'))
 const run = new Date().toISOString().slice(5, 16).replace(/[-T:]/g, '')
 const out = option('out', `local/load-test/${run}`)
 const planOf = (): 'free' | 'plus' =>
@@ -228,26 +233,50 @@ const planOf = (): 'free' | 'plus' =>
  * When each person arrives, ms from the start: a Poisson stream, each gap drawn from the
  * exponential with the mean `--over` / `--arrivals`, so about `--arrivals` come in `--over`.
  */
-const arrivalTimes: number[] = []
-for (let at = 0; ; ) {
+const arrivalTimes: number[] = burst
+  ? Array.from({ length: people_ }, (_, i) => (i * rampS * SECOND_MS) / people_)
+  : []
+for (let at = 0; !burst; ) {
   at += -Math.log(1 - Math.random()) * ((overMinutes * MINUTE_MS) / arrivals)
   if (at > overMinutes * MINUTE_MS) break
   arrivalTimes.push(at)
 }
-// Enough probes for the players likely in a world at once: half the people on Plus, each with
+// In a burst each person's plan and players are picked as they are counted, and there are probes
+// for all of their players at once: `--players a-b` on each Plus server, the owner among them.
+const players_ = rangeOf('players', '3-6')
+const pickedPlan = arrivalTimes.map(() => planOf())
+const pickedPlayers = arrivalTimes.map(
+  () => players_[0] + Math.floor(Math.random() * (players_[1] - players_[0] + 1)),
+)
+const burstBots = pickedPlan.reduce(
+  (sum, plan, i) => sum + (plan === 'plus' ? (pickedPlayers[i] ?? 0) : 0),
+  0,
+)
+// Otherwise enough for the players likely in a world at once: half the people on Plus, each with
 // their friends, most of their play overlapping.
 const probeCount = Number(
   option(
     'probes',
-    String(Math.ceil((arrivals * 0.5 * (1 + (friends[0] + friends[1]) / 2) * 0.8) / PLAYERS_PER_PROBE)),
+    String(
+      Math.ceil(
+        burst
+          ? burstBots / PLAYERS_PER_PROBE
+          : (arrivals * 0.5 * (1 + (friends[0] + friends[1]) / 2) * 0.8) / PLAYERS_PER_PROBE,
+      ),
+    ),
   ),
 )
 const probeApp = `${PROBE_PREFIX}${run}`
 const started = Date.now()
 
-say(
-  `load test ${run}: ${arrivalTimes.length} people arriving over ${overMinutes} min (${planChoice}), ${friends.join('-')} friends, ${playMinutes.join('-')} min of play, a share of ${aggression} careless, at ${WEB}`,
-)
+if (burst)
+  say(
+    `burst ${run}: ${people_} people within ${rampS}s (${planChoice}), ${players_.join('-')} players a Plus server (${burstBots} headless), ${playMinutes.join('-')} min of play, at ${WEB}`,
+  )
+else
+  say(
+    `load test ${run}: ${arrivalTimes.length} people arriving over ${overMinutes} min (${planChoice}), ${friends.join('-')} friends, ${playMinutes.join('-')} min of play, a share of ${aggression} careless, at ${WEB}`,
+  )
 tunnel(18025, MAIL_PORT, 'bly-staging-mail')
 say(`${probeCount} probes, in ${probeApp}`)
 const probes: Probe[] = await probesUp(probeApp, probeCount, databaseHost)
@@ -457,12 +486,13 @@ async function restartEdge(): Promise<void> {
 }
 
 const shaken = Promise.all(
-  (
-    [
-      [0.45, restartControl],
-      [0.6, stopBehindItsBack],
-      [0.75, restartEdge],
-    ] as const
+  (burst
+    ? []
+    : ([
+        [0.45, restartControl],
+        [0.6, stopBehindItsBack],
+        [0.75, restartEdge],
+      ] as const)
   ).map(async ([share, shake]) => {
     await Bun.sleep(share * overMinutes * MINUTE_MS)
     await shake().catch((error: unknown) =>
@@ -476,7 +506,9 @@ const shaken = Promise.all(
 await Promise.all(
   arrivalTimes.map(async (at, i) => {
     await Bun.sleep(at)
-    const player = new Player(i, planOf(), playerRun)
+    const player = burst
+      ? new Player(i, pickedPlan[i] ?? 'free', playerRun, { friends: (pickedPlayers[i] ?? 1) - 1, burst })
+      : new Player(i, planOf(), playerRun)
     players.push(player)
     await player.live().catch((error: unknown) => {
       say(`  person ${i} stopped: ${(error as Error).message}`)
