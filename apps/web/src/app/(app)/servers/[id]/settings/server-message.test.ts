@@ -30,6 +30,14 @@ describe('the server message', () => {
     expect(html).toContain('50 characters left.')
   })
 
+  test('has a bar of colours and styles, each named, showing what the caret’s place has', () => {
+    const html = drawn('&6Gold')
+    expect(html).toContain('<legend class="bk-visually-hidden">Colour and style</legend>')
+    expect(html).toContain('aria-label="Gold" title="Gold" aria-pressed="true"')
+    expect(html).toContain('aria-label="Bold" title="Bold" aria-pressed="false"')
+    expect(html).toContain('aria-label="Reset"')
+  })
+
   test('plain text stays plain, in the list’s own grey', () => {
     expect(drawn('Hello')).toContain(
       '<span style="color:#808080;font-weight:400;font-style:normal;text-decoration:none">Hello</span>',

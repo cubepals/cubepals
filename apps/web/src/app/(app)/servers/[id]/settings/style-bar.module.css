@@ -1,0 +1,88 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
+ * The server message's style bar: the colours as two rows of eight, the way the game's own
+ * charts lay them out, and the styles beside them, or under them where the page is narrow.
+ */
+
+.bar {
+  display: flex;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8) var(--space-16);
+}
+
+.colours {
+  display: grid;
+  grid-template-columns: repeat(8, 24px);
+  gap: var(--space-4);
+}
+
+.styles {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.swatch,
+.toggle {
+  padding: 0;
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition-property: background-color, border-color, color, scale;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+
+.swatch {
+  inline-size: 24px;
+  block-size: 24px;
+}
+
+/* The colour picked stands apart by a ring of ink, as the swatch's own colour can't say it. */
+.swatch[aria-pressed="true"] {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 32px;
+  block-size: 32px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.toggle[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.swatch:focus-visible,
+.toggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .toggle:hover:not([aria-pressed="true"]) {
+    border-color: var(--ink-subtle);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .swatch:active,
+  .toggle:active {
+    scale: 0.92;
+  }
+}

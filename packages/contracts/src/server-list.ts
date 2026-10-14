@@ -45,7 +45,13 @@ export const MOTD_COLOURS: Readonly<Record<string, string>> = {
 }
 
 /** The styles, from the same page: obfuscated, bold, strikethrough, underlined, italic, reset. */
-const MOTD_STYLES = { k: 'obfuscated', l: 'bold', m: 'strikethrough', n: 'underlined', o: 'italic' } as const
+export const MOTD_STYLES = {
+  k: 'obfuscated',
+  l: 'bold',
+  m: 'strikethrough',
+  n: 'underlined',
+  o: 'italic',
+} as const
 type MotdStyle = (typeof MOTD_STYLES)[keyof typeof MOTD_STYLES]
 
 /** The colour the multiplayer list draws a message in where it sets none: 0x808080. */
@@ -55,13 +61,13 @@ export const MOTD_DEFAULT_COLOUR = '#808080'
  * A code as people type it, with `&` as most hosts and plugins take it, or with the section sign
  * the game itself reads. Any other `&` is just an ampersand.
  */
-const CODE = /[&§]([0-9a-fk-or])/gi
+export const MOTD_CODE = /[&§]([0-9a-fk-or])/gi
 
 /** The message as the game reads it: each `&` code becomes the section sign's. */
-export const motdForGame = (motd: string): string => motd.replace(CODE, (_, code: string) => `§${code}`)
+export const motdForGame = (motd: string): string => motd.replace(MOTD_CODE, (_, code: string) => `§${code}`)
 
 /** What the list shows of the message, without its codes: what its length is counted in. */
-export const motdText = (motd: string): string => motd.replace(CODE, '')
+export const motdText = (motd: string): string => motd.replace(MOTD_CODE, '')
 
 /** A stretch of the message drawn the same way. */
 export interface MotdRun {
@@ -86,7 +92,7 @@ export function motdRuns(motd: string): MotdRun[] {
       last.text += text
     else runs.push({ text, colour, styles })
   }
-  for (const match of motd.matchAll(CODE)) {
+  for (const match of motd.matchAll(MOTD_CODE)) {
     push(motd.slice(at, match.index))
     at = match.index + match[0].length
     const code = (match[1] ?? '').toLowerCase()
