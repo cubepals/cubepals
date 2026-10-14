@@ -135,9 +135,9 @@
 
 /* The page's two forms (Layouts.tsx). Before anything has run, a screen under 1024 pixels wide
    shows the phone's page and a wider one the film; once it runs, only the one shown is there. A
-   phone is sent its page alone, and keeps it at any width. */
+   phone is sent its page alone, and keeps it at any width. The beta banner above both stays. */
 @media (max-width: 1023px) {
-  .bl:has(> [data-phone]) > :not([data-phone], footer) {
+  .bl:has(> [data-phone]) > :not([data-phone], [data-banner], footer) {
     display: none;
   }
 }

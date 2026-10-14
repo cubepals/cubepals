@@ -8,6 +8,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { SiteFooter } from '../../legal/footer'
 import { UNLISTED } from '../../lib/site'
+import { WithBeta } from '../../ui/beta'
 import { Lockup } from '../../ui/brand'
 import { Presses } from '../(public)/presses'
 import styles from './auth.module.css'
@@ -25,9 +26,11 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="bk-page">
       <header className="bk-topnav">
-        <Link href="/" className="bk-wordmark" aria-label="Cubepals">
-          <Lockup />
-        </Link>
+        <WithBeta>
+          <Link href="/" className="bk-wordmark" aria-label="Cubepals">
+            <Lockup />
+          </Link>
+        </WithBeta>
       </header>
       <main className={styles.split}>
         <div className={styles.column}>{children}</div>

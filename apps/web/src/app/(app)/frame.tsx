@@ -29,6 +29,7 @@ import { RealtimeProvider } from '../../lib/realtime'
 import type { Session } from '../../lib/session'
 import { SOURCE_PARAMS, sourceOf } from '../../lib/source'
 import { ICON, Note, ShareButton, StatusPill } from '../../ui'
+import { BetaBanner, WithBeta } from '../../ui/beta'
 import { Lockup } from '../../ui/brand'
 import { ResendConfirmation } from '../(auth)/resend-confirmation'
 import { Presses } from '../(public)/presses'
@@ -57,6 +58,7 @@ export function AppFrame({
     <ApiProvider data={data}>
       <RealtimeProvider>
         {usingAs && <UsingAs userId={user.id} email={user.email} />}
+        <BetaBanner />
         <Shell user={user}>{children}</Shell>
         <Presses />
       </RealtimeProvider>
@@ -181,9 +183,11 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
   return (
     <div className="bk-shell">
       <nav className="bk-appnav bk-on-dark" aria-label="Cubepals">
-        <Link href="/servers" className="bk-appnav__brand" aria-label="Cubepals">
-          <Lockup />
-        </Link>
+        <WithBeta>
+          <Link href="/servers" className="bk-appnav__brand" aria-label="Cubepals">
+            <Lockup />
+          </Link>
+        </WithBeta>
         <div className="bk-appnav__group">
           {item(servers)}
           {item(account)}

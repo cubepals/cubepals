@@ -4,6 +4,7 @@
 
 import Link from 'next/link'
 import { ctaMark } from '../../app/(public)/steps'
+import { WithBeta } from '../../ui/beta'
 import { Lockup } from '../../ui/brand'
 import styles from './film.module.css'
 
@@ -11,9 +12,11 @@ import styles from './film.module.css'
 export function Nav({ signedIn }: { signedIn: boolean }) {
   return (
     <header className={styles.nav}>
-      <Link href="/" className={styles.wordmark} aria-label="Cubepals">
-        <Lockup />
-      </Link>
+      <WithBeta>
+        <Link href="/" className={styles.wordmark} aria-label="Cubepals">
+          <Lockup />
+        </Link>
+      </WithBeta>
       <nav className={styles.links} aria-label="Cubepals">
         <Link href="/pricing" className={styles.link} {...ctaMark('nav_pricing')}>
           Pricing
