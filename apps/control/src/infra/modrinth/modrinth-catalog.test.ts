@@ -104,7 +104,7 @@ function modrinth(routes: (url: URL) => Response | Promise<Response>) {
     return routes(new URL(request.url))
   }
   const catalog = new ModrinthCatalog(
-    modrinthClient('cubepals/cubepals (test)', { fetch: fetch as never, maxWaitMs: 5 }),
+    modrinthClient('cubepals/cubepals (test)', { fetch: fetch as never, maxWaitMs: 5, log: () => {} }),
   )
   return { catalog, requests }
 }
