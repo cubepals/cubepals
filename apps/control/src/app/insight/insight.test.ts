@@ -5,7 +5,8 @@
 /**
  * The funnel, feedback and the good-moment question end to end, against a stand-in for PostHog:
  * each event kept once where it happens and sent once by the worker's pass, feedback's exact
- * payload and pacing, and when the question is asked.
+ * payload and pacing, when the question is asked, and what every event says of its account:
+ * whether it is ours, and where it came from.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -14,6 +15,7 @@ import { schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { RecordedInsight } from '../../testing/insight.ts'
+import { grantAdmin, loadStanding } from '../accounts/persistence.ts'
 import type { UserActor } from '../actor.ts'
 import type { BillingProvider } from '../ports/optional.ts'
 import { FUNNEL } from './record.ts'
@@ -137,6 +139,71 @@ describe.skipIf(!hasDatabase)('the funnel, for an account', () => {
       )
     expect(row?.sentAt).toBeInstanceOf(Date)
   })
+})
+
+// Our own activity is marked so every count can leave it out; a player's reads as it always has.
+describe.skipIf(!hasDatabase)('what every event says of its account', () => {
+  test('a player’s events carry no internal mark, not even false', async () => {
+    const owner = await h.user()
+    await h.app.accounts.opened(owner.userId)
+    const [event] = await sent(owner.userId)
+    expect(event?.properties).toEqual({})
+  })
+
+  test('an admin’s events are marked internal', async () => {
+    const owner = await h.user()
+    await grantAdmin(h.db, owner.userId, 'config')
+    await h.app.accounts.opened(owner.userId)
+    const [event] = await sent(owner.userId)
+    expect(event?.properties).toEqual({ internal: true })
+  })
+
+  test('so are those of an account on our own domain, a production check’s among them', async () => {
+    const owner = await h.user()
+    await h.db
+      .update(schema.users)
+      .set({ email: `sre-${owner.userId}@cubepals.com` })
+      .where(eq(schema.users.id, owner.userId))
+    await h.app.accounts.opened(owner.userId)
+    await withMoment(FUNNEL.firstWake, 0, owner)
+    expect((await sent(owner.userId)).map((e) => e.properties)).toEqual([{ internal: true }])
+    // What the person is asked, and putting it away, are ours too.
+    await h.app.insight.ask(owner, false)
+    await h.app.insight.dismiss(owner, FUNNEL.firstWake)
+    expect(posthog.events.filter((e) => e.distinctId === owner.userId).map((e) => e.event)).toEqual([
+      FUNNEL.signedUp,
+      'survey shown',
+      'survey dismissed',
+    ])
+    for (const event of posthog.events.filter((e) => e.distinctId === owner.userId))
+      expect(event.properties).toMatchObject({ internal: true })
+  })
+
+  test('a server made carries where its owner came from, and nothing that names them', async () => {
+    const owner = await h.user('Steve', 'plus')
+    await loadStanding(h.db, owner.userId)
+    await h.app.accounts.recordSource(owner, 'tiktok', {
+      medium: 'paid',
+      campaign: 'launch',
+      content: 'clip-2',
+      term: null,
+    })
+    await h.create(owner)
+    const created = (await sent(owner.userId)).find((e) => e.event === FUNNEL.serverCreated)
+    expect(created?.properties).toMatchObject({
+      from: 'direct',
+      signup_source: 'tiktok',
+      signup_medium: 'paid',
+      signup_campaign: 'launch',
+    })
+    expect(Object.keys(created?.properties ?? {}).sort()).toEqual([
+      'from',
+      'loader',
+      'signup_campaign',
+      'signup_medium',
+      'signup_source',
+    ])
+  }, 30_000)
 })
 
 describe.skipIf(!hasDatabase)('the funnel, for servers and their players', () => {

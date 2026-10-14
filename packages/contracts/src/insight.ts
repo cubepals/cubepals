@@ -4,7 +4,8 @@
 
 /**
  * What a person tells Cubepals' builder: a line of feedback from the sidebar, and the answer to
- * "How's it going?" asked after a good moment. The control plane sends both to PostHog.
+ * "How's it going?" asked after a good moment. The control plane sends both to PostHog. And
+ * which accounts are Cubepals' own, whose events every count can leave out.
  */
 import { z } from 'zod'
 
@@ -57,4 +58,13 @@ export interface MomentAskView {
 /** Whether PostHog took it: false when it couldn't be reached, or this deployment sends nothing. */
 export interface InsightSentView {
   sent: boolean
+}
+
+/** Cubepals' own email domain: an account on it, or under it, is one of ours. */
+export const OWN_DOMAIN = 'cubepals.com'
+
+/** Whether an email is on Cubepals' own domain, so the account's activity is ours, not a player's. */
+export function ownEmail(email: string): boolean {
+  const domain = email.slice(email.lastIndexOf('@') + 1).toLowerCase()
+  return domain === OWN_DOMAIN || domain.endsWith(`.${OWN_DOMAIN}`)
 }
