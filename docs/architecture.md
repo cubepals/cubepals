@@ -2240,7 +2240,15 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   starts everyone on 1.8 combat by its own defaults, so it carries nothing. The arena names the
   world the server runs, so it follows a fresh world, which is void with the same platform. A world
   of another kind, made with "Make your own world", gets a room of stone built in the platform's
-  place as the server starts.
+  place as the server starts. A player waiting for an opponent has a short parkour and a pit where
+  everyone fights everyone, with a kit of its own, beside the platform, and a welcome that points to
+  both and to `/duel join`: one datapack Cubepals carries into the running world, which vanilla
+  reads, so no plugin is added (`minecraft/duels-waiting.ts`). It builds only on a void world. A
+  Duels server is made for strangers, so it also comes with the moderation tools and chat filter on,
+  which the Players page can turn off, and the Grim anticheat, which by its own defaults only undoes
+  a move it can't believe and tells helpers. Its server list message names the mode.
+  ViaVersion comes along, as with any template held to an older release, so the newest Minecraft
+  joins too.
 - A curated pack can stand for a way to play (`CuratedPack.way`): its card carries the way's name
   and picture, with the pack's own name and authors under it. The card is the pack's, so it shows
   only while a release is published, and picking it is picking the pack. None does today: SkyBlock

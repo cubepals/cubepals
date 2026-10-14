@@ -92,6 +92,9 @@ advanced feature.
   stays on the world everyone plays. The revision keeps the placeholder, so a switch changes no
   carried file and makes no diff; the switch itself restarts the server, which writes the file
   again. Double braces around a name of Blockly's own: no plugin's settings hold anything like it.
+  A path may start with it too, for a file that goes in the world itself: the Duels template's
+  datapack (`{{blockly.level}}/datapacks/cubepals-duels/…`) goes into the world the server starts
+  on, and leaves the one it switched away from. The diff names a datapack once, by its folder.
 - **Paths.** Relative, letters, digits and `.`, `_`, `+`, `-` only, and never a file Blockly keeps
   itself (`server.properties`, the access lists, `.blockly-` marks). A wrong one fails building the
   spec: it is a mistake in a template, never skipped.
