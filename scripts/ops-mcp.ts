@@ -224,15 +224,26 @@ tool(
 )
 tool(
   'server_identity_set',
-  'What the identity settings set: the name, the description its page and Browse show, the icon, and the tags. Each left out stays.',
+  'What the identity settings set: the name, the description its page and Browse show, the icon or a picture of its own, and the tags. Each left out stays.',
   {
     serverId,
     name: z.string().optional(),
     description: z.string().optional().describe('What its page and Browse say about it'),
     icon: z.string().nullable().optional().describe('One of Cubepals’ icons by key, or null for none'),
+    picture: z
+      .string()
+      .nullable()
+      .optional()
+      .describe('A 64 by 64 PNG in base64, its own icon; null goes back to the icon'),
     tags: z.array(z.string()).optional(),
   },
   ({ serverId: id, ...identity }) => ['PATCH', at(id, '/identity'), identity],
+)
+tool(
+  'server_message_set',
+  'Sets the message players see under the server’s name in their server list; it reaches the game at the server’s next start. Its other settings stay.',
+  { serverId, motd: z.string().max(200) },
+  (a) => ['PUT', at(a.serverId, '/message'), { motd: a.motd }],
 )
 tool(
   'server_address_set',

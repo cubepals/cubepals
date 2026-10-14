@@ -33,6 +33,8 @@
  *   bun scripts/ops.ts identity <server> [--name <name>] [--description <text>]
  *                               [--icon <key>|none] [--tags a,b] [--address <slug>]
  *                                                   what its identity settings set
+ *   bun scripts/ops.ts message <server> <text>      the message under its name in server lists
+ *                                                   from its next start
  *   bun scripts/ops.ts mods <server> [search <text> | add <project[@version]>... | remove <id>...]
  *                          [--plan] [--move-to <version>] [--acknowledge-revoked]
  *                                                   its mods or plugins, found, added or removed as
@@ -205,6 +207,11 @@ switch (command) {
       fail('identity needs --name, --description, --icon, --tags or --address')
     break
   }
+  case 'message':
+    show(
+      await api('PUT', `/servers/${first('a server id')}/message`, { motd: positional.slice(1).join(' ') }),
+    )
+    break
   case 'mods': {
     const mods = `/servers/${first('a server id')}/mods`
     const [, action, ...refs] = positional
@@ -374,7 +381,7 @@ switch (command) {
   }
   default:
     say(
-      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|trash|untrash|rest|purge|console|identity|mods|players|whitelist|operator|helper|ban|pardon|moderation|listing|official|allowlist|platform|health|operations|operation',
+      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|trash|untrash|rest|purge|console|identity|message|mods|players|whitelist|operator|helper|ban|pardon|moderation|listing|official|allowlist|platform|health|operations|operation',
     )
     say('See the top of scripts/ops.ts, and docs/production.md.')
     if (command !== 'help') process.exit(1)

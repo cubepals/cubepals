@@ -20,6 +20,17 @@ const SERVER = '0d2f4e6a-8b1c-4d3e-9f50-a1b2c3d4e5f6'
 const ADA = { kind: 'operator', name: 'ada' }
 const PLAYER = '3b1f5c2a-7d4e-4f6a-9b8c-1d2e3f4a5b6c'
 const JAR = 'a'.repeat(128)
+const SETTINGS = {
+  difficulty: 'normal',
+  defaultGameMode: 'survival',
+  pvp: true,
+  viewDistance: 8,
+  simulationDistance: 6,
+  maxPlayers: 5,
+  motd: 'A server created by Cubepals',
+  spawnProtection: 0,
+  onlineMode: true,
+}
 const CONTROLS = {
   provisioningEnabled: true,
   startsEnabled: true,
@@ -66,6 +77,9 @@ function recordingApi(calls: Array<[string, ...unknown[]]>) {
       setLimits: record('accounts.setLimits'),
       createAccount: record('accounts.createAccount', { userId: OWNER }),
     } as unknown as OpsApiOptions['accounts'],
+    revisions: {
+      changeSettings: record('revisions.changeSettings'),
+    } as unknown as OpsApiOptions['revisions'],
     servers: {
       saveIdentity: record('servers.saveIdentity'),
       changeAddress: record('servers.changeAddress'),
@@ -76,7 +90,7 @@ function recordingApi(calls: Array<[string, ...unknown[]]>) {
       undeleteServer: record('servers.undeleteServer'),
     } as unknown as OpsApiOptions['servers'],
     queries: {
-      get: record('queries.get', { id: SERVER, status: 'running' }),
+      get: record('queries.get', { id: SERVER, status: 'running', version: 4, settings: SETTINGS }),
       access: record('queries.access', {
         entries: [{ list: 'ban', player: { uuid: PLAYER, name: 'Griefer' } }],
       }),
@@ -318,7 +332,7 @@ describe('the operators’ API: a server’s console, identity and mods', () => 
     expect((await call('GET', `/servers/${SERVER}/console?lines=many`)).status).toBe(400)
   })
 
-  test('sets a server’s identity and address as its settings page does', async () => {
+  test('sets a server’s identity, address and server list message as its settings pages do', async () => {
     const identity = {
       name: 'Island',
       description: 'Come build with us',
@@ -332,6 +346,25 @@ describe('the operators’ API: a server’s console, identity and mods', () => 
       ['servers.changeAddress', ADA, SERVER, 'island-home'],
     ])
     expect((await call('PATCH', `/servers/${SERVER}/identity`, { icon: 'no-such-icon' })).status).toBe(400)
+    // A picture of its own is read as the web reads one, so one that isn't a picture is refused.
+    const picture = Buffer.from('not a picture').toString('base64')
+    expect((await call('PATCH', `/servers/${SERVER}/identity`, { picture })).status).toBe(400)
+    expect(named('servers.saveIdentity')).toHaveLength(1)
+
+    // The server list message is one of its settings: changed alone, at the version it was read.
+    expect((await call('PUT', `/servers/${SERVER}/message`, { motd: 'Come build with us' })).status).toBe(200)
+    const { onlineMode: _, ...game } = SETTINGS
+    expect(named('revisions.changeSettings')).toEqual([
+      [
+        'revisions.changeSettings',
+        ADA,
+        SERVER,
+        { ...game, motd: 'Come build with us' },
+        expect.any(String),
+        { version: 4 },
+      ],
+    ])
+    expect((await call('PUT', `/servers/${SERVER}/message`, { motd: 'x'.repeat(201) })).status).toBe(400)
   })
 
   test('lists, searches, plans, adds and removes mods as the mods page does', async () => {
