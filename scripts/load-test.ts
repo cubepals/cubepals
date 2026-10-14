@@ -289,13 +289,15 @@ const started = Date.now()
 const records: StepRecord[] = []
 const chaos: ChaosFinding[] = []
 const machines: MachineRun[] = []
-/** What Fly says a server's machine is, or `none`. */
-const machineState = async (serverId: string) =>
-  (
-    JSON.parse((await fly(['machines', 'list', '-a', appOf(serverId), '--json'])) || '[]') as {
-      state: string
-    }[]
-  )[0]?.state ?? 'none'
+/** What Fly says a server's machine is: `none` without one, `not on Fly` for a server on another runtime. */
+const machineState = async (serverId: string) => {
+  const listed = await fly(['machines', 'list', '-a', appOf(serverId), '--json']).catch((error: unknown) => {
+    if (/app not found/i.test((error as Error).message)) return null
+    throw error
+  })
+  if (listed === null) return 'not on Fly'
+  return (JSON.parse(listed || '[]') as { state: string }[])[0]?.state ?? 'none'
+}
 const playerRun = {
   id: run,
   domain: DOMAIN,
