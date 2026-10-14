@@ -31,6 +31,7 @@ import { type SecretKeyring, singleKey } from '../app/secrets.ts'
 import { findServer } from '../app/servers/persistence.ts'
 import type { CreateServerRequest } from '../app/servers/service.ts'
 import { ConfiguredPlayAddressing, ConfiguredRegionCatalog } from '../config/play-addressing.ts'
+import { DEFAULT_ROOM } from '../domain/policy/room.ts'
 import type { MinecraftServer } from '../domain/server/server.ts'
 import { CurseForgeLinks } from '../infra/curseforge/curseforge-links.ts'
 import { FakeCatalog } from '../infra/fake/fake-catalog.ts'
@@ -148,6 +149,11 @@ export interface HarnessOptions {
    * servers running; `{}` keeps the defaults, for tests of the caps themselves.
    */
   controls?: Partial<typeof schema.platformControls.$inferInsert>
+  /**
+   * What new servers leave to starts and wakes, and how long creates may wait. By default no
+   * reserve, so the caps trip where the operation tests set them; `DEFAULT_ROOM` for tests of room.
+   */
+  room?: { wakeReserve: number; createWaitSeconds: number }
 }
 
 /** The caps the operation tests run under unless they ask otherwise. */
@@ -297,6 +303,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       ownPacks: options.ownPacks ?? [],
       bootTimeouts: options.provider?.bootTimeouts ?? { runningMs: 5_000, readyMs: 3_000 },
       wakeWaitMs: options.provider?.wakeWaitMs ?? 5_000,
+      room: options.room ?? { ...DEFAULT_ROOM, wakeReserve: 0 },
     },
   )
   runtimeFacing = createRuntimeApp({ artifacts: app.artifacts })

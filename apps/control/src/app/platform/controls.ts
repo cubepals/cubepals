@@ -19,7 +19,7 @@ import { CatalogUnavailable } from '../ports/catalog.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import { onEarlierKeys } from '../servers/persistence.ts'
 import { domainJoins } from '../servers/usage.ts'
-import { controlsChangedBy, latestSpendDay, namesFor, saveControls } from './persistence.ts'
+import { controlsChangedBy, latestSpendDay, loadCreatesFull, namesFor, saveControls } from './persistence.ts'
 
 /**
  * The platform's kill switches and global caps, as admins change them (§4, abuse controls). The
@@ -59,8 +59,10 @@ export class PlatformControlsService {
     const heard = await this.#catalog.lastHeard()
     const person = changed.by?.match(/^(?:user|admin):(.+)$/)?.[1]
     const names = await namesFor(this.#db, { users: person ? [person] : [], servers: [] })
+    const full = await loadCreatesFull(this.#db)
     return {
       ...pickControls(controls),
+      createsFull: full === null ? null : { ...full, since: full.since.toISOString() },
       updatedBy: changed.by,
       updatedByEmail: person ? (names.users.get(person) ?? null) : null,
       updatedAt: changed.at.toISOString(),

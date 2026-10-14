@@ -2,9 +2,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * When an empty running server goes to sleep, by the one rule the idle check and the server page
+ * share, and how long its idle time is while room is tight.
+ */
 import { describe, expect, test } from 'bun:test'
 import { MINUTE_MS } from '@blockly/contracts/durations'
-import { bedtime, WAKE_PROBATION_MS } from './idle.ts'
+import { bedtime, idleMinutesNow, WAKE_PROBATION_MS } from './idle.ts'
 
 const at = (minutes: number) => new Date(Date.UTC(2026, 9, 11, 14, 0) + minutes * MINUTE_MS)
 
@@ -44,5 +48,23 @@ describe('when an empty server goes to sleep', () => {
   test('without a run on record, only a play says when it last had company', () => {
     expect(bedtime(null, at(-5), 10)).toEqual({ at: at(5), why: 'idle' })
     expect(bedtime(null, null, 10)).toBeNull()
+  })
+})
+
+describe('the idle time while room is tight', () => {
+  const tight = { free: true, tight: true, tightMinutes: 3 }
+
+  test('a free server nobody is on sleeps after the shorter time while room is tight', () => {
+    expect(idleMinutesNow(10, tight)).toBe(3)
+    expect(idleMinutesNow(10, { ...tight, tight: false })).toBe(10)
+  })
+
+  test('a paid server keeps its plan’s idle time however tight room is', () => {
+    expect(idleMinutesNow(15, { ...tight, free: false })).toBe(15)
+    expect(idleMinutesNow(null, { ...tight, free: false })).toBeNull()
+  })
+
+  test('it only ever shortens a plan’s idle time', () => {
+    expect(idleMinutesNow(2, tight)).toBe(2)
   })
 })

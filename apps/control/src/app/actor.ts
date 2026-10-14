@@ -29,6 +29,7 @@ export type Actor =
         | 'disk'
         /** The spend watchdog, pausing starts and creation once a day passes its limit. */
         | 'spend'
+        | 'room'
     }
   /** Someone running the deployment through the operators' API (`interfaces/operator/`), by name. */
   | { kind: 'operator'; name: string }

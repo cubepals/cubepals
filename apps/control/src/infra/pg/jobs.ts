@@ -127,7 +127,10 @@ export class PgBossJobs implements JobQueue {
     this.#boss = boss
   }
 
-  async enqueue(tx: Tx, job: { operationId: string; serverId: string; retryLimit: number }): Promise<void> {
+  async enqueue(
+    tx: Tx,
+    job: { operationId: string; serverId: string; retryLimit: number; priority?: number },
+  ): Promise<void> {
     await this.#boss.send(
       SERVER_OPS,
       { operationId: job.operationId },
@@ -135,6 +138,7 @@ export class PgBossJobs implements JobQueue {
         id: job.operationId,
         singletonKey: job.serverId,
         retryLimit: job.retryLimit,
+        priority: job.priority ?? 0,
         db: fromDrizzle(tx, sql),
       },
     )
@@ -407,6 +411,8 @@ const CRON: Record<ScheduledJob, string> = {
   // A day's spend against its limit. At the most the platform runs at
   // once, ten minutes between passes is about 35 cents past the limit before it pauses.
   'spend-watchdog': '*/10 * * * *',
+  // Creates closed for want of room open again within a minute of room freeing.
+  'creates-room': '* * * * *',
   'usage-close': '*/10 * * * *',
   // Whose each server is and what it's called, at the provider: a rename shows there within minutes.
   'provider-tags': '*/10 * * * *',

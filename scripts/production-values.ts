@@ -184,6 +184,12 @@ export const VALUES: Value[] = [
     where: 'the private records: production’s abuse limits, as one line of JSON (docs/configuration.md)',
     shape: json,
   },
+  {
+    name: 'CAPACITY_TUNING',
+    goes: ['secret'],
+    where: 'the private records: production’s capacity tuning, as one line of JSON (docs/configuration.md)',
+    shape: json,
+  },
   { name: 'AUTH_SECRET', goes: ['secret'], where: '', generate: random },
   { name: 'WEB_PROXY_SECRET', goes: ['secret'], where: '', generate: random },
   { name: 'REALTIME_TICKET_SECRET', goes: ['secret'], where: '', generate: random },

@@ -31,6 +31,7 @@ export type ScheduledJob =
   | 'admin-alerts'
   | 'free-play-links'
   | 'spend-watchdog'
+  | 'creates-room'
   | 'usage-close'
   | 'provider-tags'
   | 'runtime-upkeep'
@@ -76,7 +77,14 @@ export interface JobAttempt {
  * exists only if the domain write that asked for it committed.
  */
 export interface JobQueue {
-  enqueue(tx: Tx, job: { operationId: string; serverId: string; retryLimit: number }): Promise<void>
+  /**
+   * `priority`: across servers, a worker takes the highest first, and the oldest among equals; a
+   * server's own operations stay in the order they were asked. 0 when absent.
+   */
+  enqueue(
+    tx: Tx,
+    job: { operationId: string; serverId: string; retryLimit: number; priority?: number },
+  ): Promise<void>
   /**
    * `artifact-mirror` (§9): copy a catalog jar into the store. One job per bytes: asking again
    * while one is queued or running asks for nothing more.

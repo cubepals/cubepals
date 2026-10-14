@@ -9,7 +9,11 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DEFAULT_ABUSE_LIMITS, DEFAULT_FREE_LINK_TUNING } from '../apps/control/src/domain/account/tuning.ts'
+import {
+  DEFAULT_ABUSE_LIMITS,
+  DEFAULT_CAPACITY_TUNING,
+  DEFAULT_FREE_LINK_TUNING,
+} from '../apps/control/src/domain/account/tuning.ts'
 import {
   backendConfig,
   DUMPS_BUCKET,
@@ -54,6 +58,7 @@ const complete: Record<string, string> = {
   ACME_AGREE_TOS: 'true',
   FREE_LINK_TUNING: JSON.stringify(DEFAULT_FREE_LINK_TUNING),
   ABUSE_LIMITS: JSON.stringify(DEFAULT_ABUSE_LIMITS),
+  CAPACITY_TUNING: JSON.stringify(DEFAULT_CAPACITY_TUNING),
 }
 const without = (...names: string[]) =>
   Object.fromEntries(Object.entries(complete).filter(([name]) => !names.includes(name)))

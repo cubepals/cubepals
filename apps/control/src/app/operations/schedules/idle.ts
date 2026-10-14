@@ -4,7 +4,8 @@
 
 /**
  * Decides whether a running server nobody is on has been idle long enough for its plan, or was
- * woken by a connection nobody followed, and stops it if so. The idle check and the edge's hint
+ * woken by a connection nobody followed, and stops it if so. While room is tight, a free server's
+ * idle time is shorter (`idleMinutesFor`). The idle check and the edge's hint
  * (`edge/service.ts`) both ask through the same decision. Reading who is online is `presence.ts`'s;
  * the stop itself is the `stop` operation's.
  */
@@ -14,6 +15,7 @@ import { entitlementsFor } from '../../../domain/account/entitlements.ts'
 import { bedtime } from '../../../domain/server/idle.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { loadStanding } from '../../accounts/persistence.ts'
+import { idleMinutesFor } from '../../platform/room.ts'
 import { listByStatus } from '../../servers/persistence.ts'
 import type { MinecraftServerService } from '../../servers/service.ts'
 import { lastActivity, openRun, presenceFor } from '../../servers/usage.ts'
@@ -56,7 +58,7 @@ export function idleStops(deps: {
     const run = await openRun(db, server.id)
     const played = await lastActivity(db, server.id)
     const standing = await loadStanding(db, server.ownerId)
-    const minutes = entitlementsFor(standing.plan, standing.limitOverrides).idleShutdownAfterMinutes
+    const minutes = await idleMinutesFor(db, entitlementsFor(standing.plan, standing.limitOverrides))
     // A run a connection woke that nobody joined is stopped early, whatever the plan allows an
     // idle server: waking something has to be worth its money, and nothing here can be forged.
     // Otherwise the plan's idle time counts from this run's start or the last play in it, never

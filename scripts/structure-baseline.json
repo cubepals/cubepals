@@ -1137,7 +1137,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/domain/policy/policy.ts › function evaluate": {
-      "n": 111,
+      "n": 109,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/auth/auth.test.ts › describe.skipIf email flows": {

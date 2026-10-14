@@ -146,7 +146,9 @@ export class MinecraftServerService {
       // over its address: whoever has it in their server list finds the new one there.
       const replaced =
         request.replaces === undefined ? null : await this.#makeWay(tx, owner, request.replaces)
-      await this.#policy.require(tx, owner.userId, { kind: 'create_server', memoryTier })
+      // Room is asked last, before anything is written: a create refused for it leaves nothing.
+      const where = { regionKey, memoryMb: memoryMb(memoryTier), storageGb }
+      await this.#policy.require(tx, owner.userId, { kind: 'create_server', memoryTier, where })
       const slug = await this.#claimSlug(tx, madeBy, request.name, replaced?.slug ?? request.slug)
       const created = await insertServer(
         tx,

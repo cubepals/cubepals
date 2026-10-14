@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { type Queryable, schema, type Tx } from '@blockly/db'
-import { and, count, desc, eq, inArray, isNull, like, lt, lte, notInArray, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, isNull, like, lt, lte, min, notInArray, or, sql } from 'drizzle-orm'
 import type { PlatformControls } from '../../domain/policy/policy.ts'
 import type { DaySpend } from '../../domain/policy/spend.ts'
 
@@ -27,6 +27,48 @@ export async function controlsChangedBy(q: Queryable): Promise<{ by: string | nu
     .from(schema.platformControls)
     .where(eq(schema.platformControls.id, 1))
   return row ?? { by: null, at: new Date(0) }
+}
+
+/** Creates the platform closed by itself for want of room; null while they are open. */
+export interface CreatesFull {
+  for: 'free' | 'everyone'
+  because: string
+  since: Date
+}
+
+export async function loadCreatesFull(q: Queryable): Promise<CreatesFull | null> {
+  const controls = schema.platformControls
+  const [row] = await q
+    .select({
+      for: controls.createsFullFor,
+      because: controls.createsFullBecause,
+      since: controls.createsFullSince,
+    })
+    .from(controls)
+    .where(eq(controls.id, 1))
+  if (row?.for == null || row.since === null) return null
+  return { for: row.for, because: row.because ?? '', since: row.since }
+}
+
+/** Records creates closed by themselves, or open again with null; the operator's switch is left. */
+export async function saveCreatesFull(tx: Tx, full: CreatesFull | null): Promise<void> {
+  await tx
+    .update(schema.platformControls)
+    .set({
+      createsFullFor: full?.for ?? null,
+      createsFullBecause: full?.because ?? null,
+      createsFullSince: full?.since ?? null,
+    })
+    .where(eq(schema.platformControls.id, 1))
+}
+
+/** When the oldest create still waiting for a worker was asked for; null when none waits. */
+export async function oldestWaitingCreate(q: Queryable): Promise<Date | null> {
+  const [row] = await q
+    .select({ at: min(operations.createdAt) })
+    .from(operations)
+    .where(and(eq(operations.kind, 'provision'), eq(operations.status, 'queued')))
+  return row?.at ?? null
 }
 
 // ─── Spend ──────────────────────────────────────────────────────────────────────────────────

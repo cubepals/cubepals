@@ -39,6 +39,7 @@ import { PlatformAlerts } from './platform/alerts.ts'
 import { AuditQueries } from './platform/audit.ts'
 import { PlatformControlsService } from './platform/controls.ts'
 import { Fleet } from './platform/fleet.ts'
+import { CreateRoom } from './platform/room.ts'
 import { StuckWork } from './platform/stuck.ts'
 import { PlayerService } from './players/service.ts'
 import { AccessPolicy } from './policy/access-policy.ts'
@@ -127,6 +128,8 @@ export interface ControlPlaneSettings {
   curatedPacks?: readonly CuratedPack[]
   /** Blockly's own packs; the review in `curation/own.ts` unless a test brings its own. */
   ownPacks?: readonly OwnPack[]
+  /** What new servers leave to the ones people have, and how long creates may wait. */
+  room?: { wakeReserve: number; createWaitSeconds: number }
 }
 
 /**
@@ -136,7 +139,6 @@ export interface ControlPlaneSettings {
  */
 export function composeControlPlane(ports: ControlPlanePorts, settings: ControlPlaneSettings) {
   const { db, events, runtime, profiles } = ports
-  const policy = new AccessPolicy(ports.capabilities, runtime.serverCeiling)
   const placement = new RuntimePlacement({
     db,
     runtimes: runtime,
@@ -144,6 +146,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     defaultProvider: settings.defaultRuntime,
     archives: ports.capabilities.archives !== null,
   })
+  const policy = new AccessPolicy(ports.capabilities, new CreateRoom({ db, placement, runtime, settings }))
   const transitions = new ServerTransitions(events, ports.jobs)
   const links = new ArtifactLinks(settings.artifactsRuntimeFacingUrl, settings.runtimeSecrets)
   const specs = new RuntimeSpecs(settings.runtimeSecrets, links)

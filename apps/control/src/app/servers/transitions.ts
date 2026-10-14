@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { Tx } from '@blockly/db'
+import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import {
   type Command,
   decide,
@@ -12,6 +13,7 @@ import {
   transition,
 } from '../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
+import { loadStanding } from '../accounts/persistence.ts'
 import { AppError } from '../errors.ts'
 import { insertOperation, type OperationRecord } from '../operations/persistence.ts'
 import type { EventBus } from '../ports/events.ts'
@@ -39,6 +41,13 @@ const RETRIES: Record<OperationKind, number> = {
   // A wake that fails puts the world back, stored, whole: the owner or the next join tries again.
   unstore: 0,
 }
+
+/**
+ * Which operation a worker takes first when several servers wait (a server's own stay in order):
+ * a start or wake on a paid plan, then everything else for servers people already have, and a new
+ * server's first build last, so creates never hold up the servers people already have.
+ */
+const AHEAD = { create: 0, existing: 1, paidWake: 2 }
 
 export interface OperationRequest {
   requestedBy: string
@@ -128,7 +137,12 @@ export class ServerTransitions {
       idempotencyKey: request.idempotencyKey,
     })
     if (created) {
-      await this.#jobs.enqueue(tx, { operationId: record.id, serverId: server.id, retryLimit: RETRIES[kind] })
+      await this.#jobs.enqueue(tx, {
+        operationId: record.id,
+        serverId: server.id,
+        retryLimit: RETRIES[kind],
+        priority: await ahead(tx, server, kind),
+      })
       await this.#events.publish(tx, {
         type: 'operation_progress',
         serverId: server.id,
@@ -157,4 +171,13 @@ export class ServerTransitions {
     })
     return saved
   }
+}
+
+/** Where an operation goes in the line (`AHEAD`): a wake's place depends on its owner's plan. */
+async function ahead(tx: Tx, server: MinecraftServer, kind: OperationKind): Promise<number> {
+  if (kind === 'provision') return AHEAD.create
+  if (kind !== 'start' && kind !== 'unstore') return AHEAD.existing
+  const standing = await loadStanding(tx, server.ownerId)
+  const paid = entitlementsFor(standing.plan, standing.limitOverrides).monthlyPriceCents > 0
+  return paid ? AHEAD.paidWake : AHEAD.existing
 }

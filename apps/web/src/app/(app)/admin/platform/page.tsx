@@ -39,6 +39,7 @@ type Controls = Omit<
   | 'playDomains'
   | 'serverCeiling'
   | 'runtimeKeys'
+  | 'createsFull'
 >
 type Switch =
   | 'provisioningEnabled'
@@ -81,6 +82,14 @@ const SWITCHES: Array<{ key: Switch; label: string; off: string }> = [
     off: 'No world is deleted for going unplayed, and nobody is warned. Free worlds are kept until this is on.',
   },
 ]
+
+/** What ran out when creates closed by themselves (`app/platform/room.ts`). */
+const RAN_OUT: Record<string, string> = {
+  servers: 'every place for a server is taken, less what is kept for wakes',
+  running: 'every place to run is taken, less what is kept for wakes',
+  runtimes: 'the hosting provider has no room for another',
+  queue: 'new servers are already waiting too long to be built',
+}
 
 const controlsOf = (view: PlatformControlsView): Controls => ({
   provisioningEnabled: view.provisioningEnabled,
@@ -143,6 +152,11 @@ function Platform({ view }: { view: PlatformControlsView }) {
         }
       >
         {save.isError && <Note tone="danger">{messageOf(save.error)}</Note>}
+        {view.createsFull && (
+          <Note tone="info">
+            {`Creating servers closed by itself ${view.createsFull.for === 'free' ? 'for free plans' : 'for everyone'} ${whenTaken(view.createsFull.since, now).toLowerCase()}: ${RAN_OUT[view.createsFull.because] ?? view.createsFull.because}. It opens again by itself once there is room. The switch below stays yours.`}
+          </Note>
+        )}
         {SWITCHES.map((entry) => (
           <FormRow
             key={entry.key}

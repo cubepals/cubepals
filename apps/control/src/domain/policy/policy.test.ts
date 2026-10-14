@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test'
+import { MINUTE_MS } from '@blockly/contracts/durations'
 import { entitlementsFor } from '../account/entitlements.ts'
 import { newStanding } from '../account/standing.ts'
 import type { MemoryTier } from '../server/size.ts'
-import { evaluate, PER_MINUTE, type PolicyFacts } from './policy.ts'
+import { evaluate, FULL, PER_MINUTE, type PolicyFacts } from './policy.ts'
 
 /** A server playing plain Minecraft on this size. */
 const plain = (tier: MemoryTier) => ({ tier, loader: 'vanilla' as const, modded: false })
@@ -31,6 +32,9 @@ const facts = (patch: Partial<PolicyFacts> = {}): PolicyFacts => ({
   entitlements: entitlementsFor('free'),
   owned: { servers: 0, running: 0 },
   global: { servers: 0, running: 0 },
+  room: { runtimes: true, queuedCreateMs: 0 },
+  // No reserve and no free share, so the caps trip where they are set; `room.test.ts` has both.
+  roomRules: { wakeReserve: 0, createWaitMs: MINUTE_MS, freeShare: 1 },
   createsInLastHour: 0,
   unitsThisMonth: 0,
   carriedThisMonth: 0,
@@ -250,7 +254,7 @@ describe('evaluate', () => {
   test('the provider’s machine limit caps servers below the admins’ cap (§19.12)', () => {
     const ceiling = facts({ serverCeiling: 21, global: { servers: 21, running: 3 } })
     expect(evaluate(ceiling, { kind: 'create_server', memoryTier: '3g' })).toMatchObject({
-      code: 'limit_reached',
+      code: 'platform_full',
     })
     expect(
       evaluate(facts({ serverCeiling: 21, global: { servers: 20, running: 3 } }), {
@@ -263,8 +267,8 @@ describe('evaluate', () => {
   test('global caps guard the platform, each step answering with its own code (§15.5)', () => {
     const full = facts({ global: { servers: 40, running: 3 } })
     expect(evaluate(full, { kind: 'create_server', memoryTier: '3g' })).toMatchObject({
-      code: 'limit_reached',
-      message: 'Cubepals is full right now. Try again soon.',
+      code: 'platform_full',
+      message: FULL,
     })
     const busy = facts({ global: { servers: 3, running: 15 } })
     expect(evaluate(busy, { kind: 'start_server', runs: plain('3g') })).toMatchObject({
@@ -298,7 +302,7 @@ describe('money guards at their trip points', () => {
   const create = { kind: 'create_server', memoryTier: '3g' } as const
   const start = { kind: 'start_server', runs: plain('3g') } as const
 
-  test('the platform runs ten at once: the tenth starts, the eleventh is told it is busy', () => {
+  test('the platform runs ten at once: the tenth starts, the eleventh is told it is busy or full', () => {
     const nine = facts({ controls: launch, global: { servers: 20, running: 9 } })
     expect(evaluate(nine, start)).toEqual({ ok: true })
     expect(evaluate(nine, create)).toEqual({ ok: true })
@@ -309,7 +313,7 @@ describe('money guards at their trip points', () => {
       message: 'Cubepals is busy right now. Try again in a few minutes.',
     } as const
     expect(evaluate(ten, start)).toEqual(busy)
-    expect(evaluate(ten, create)).toEqual(busy)
+    expect(evaluate(ten, create)).toEqual({ ok: false, code: 'platform_full', message: FULL })
     // A restart keeps the slot it holds, so it is never the one over.
     expect(evaluate(ten, { kind: 'restart_server', runs: plain('3g') })).toEqual({ ok: true })
   })
@@ -326,12 +330,12 @@ describe('money guards at their trip points', () => {
       })
     expect(evaluate(at(29), create)).toEqual({ ok: true })
     expect(evaluate(at(30), create)).toMatchObject({
-      code: 'limit_reached',
+      code: 'platform_full',
       message: expect.stringContaining('full'),
     })
     expect(evaluate(at(30), { kind: 'undelete_server' })).toMatchObject({ code: 'limit_reached' })
     // An admin's cap above the provider's still stops at the provider's.
-    expect(evaluate(at(30, 100), create)).toMatchObject({ code: 'limit_reached' })
+    expect(evaluate(at(30, 100), create)).toMatchObject({ code: 'platform_full' })
   })
 
   test('a free account makes three servers an hour at most', () => {

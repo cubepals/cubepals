@@ -58,3 +58,16 @@ export function bedtime(
   if (since === null) return null
   return { at: new Date(since.getTime() + idleMinutes * MINUTE_MS), why: 'idle' }
 }
+
+/**
+ * The idle time an empty server gets now: its plan's, but no longer than `tightMinutes` for a
+ * server on a free plan while room is tight, so the room goes to people who want to play. Never
+ * shortened on a paid plan; and a server anyone is on doesn't idle at all.
+ */
+export function idleMinutesNow(
+  planMinutes: number | null,
+  room: { free: boolean; tight: boolean; tightMinutes: number },
+): number | null {
+  if (!room.free || !room.tight) return planMinutes
+  return planMinutes === null ? room.tightMinutes : Math.min(planMinutes, room.tightMinutes)
+}
