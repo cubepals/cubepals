@@ -212,9 +212,9 @@ if (process.argv[2] === 'clean') {
 // A burst (`--people`) has everyone arrive within `--ramp` seconds, play, and stop there: no
 // sleep, nothing after it, nobody careless, the platform left alone.
 const burst = process.argv.includes('--people')
-const people_ = Number(option('people', '50'))
+const burstPeople = Number(option('people', '50'))
 const rampS = Number(option('ramp', '60'))
-const arrivals = burst ? people_ : Number(option('arrivals', '60'))
+const arrivals = burst ? burstPeople : Number(option('arrivals', '60'))
 const overMinutes = Number(option('over', '20'))
 const planChoice = option('plan', 'mix')
 const rangeOf = (name: string, fallback: string): [number, number] => {
@@ -234,7 +234,7 @@ const planOf = (): 'free' | 'plus' =>
  * exponential with the mean `--over` / `--arrivals`, so about `--arrivals` come in `--over`.
  */
 const arrivalTimes: number[] = burst
-  ? Array.from({ length: people_ }, (_, i) => (i * rampS * SECOND_MS) / people_)
+  ? Array.from({ length: burstPeople }, (_, i) => (i * rampS * SECOND_MS) / burstPeople)
   : []
 for (let at = 0; !burst; ) {
   at += -Math.log(1 - Math.random()) * ((overMinutes * MINUTE_MS) / arrivals)
@@ -243,10 +243,10 @@ for (let at = 0; !burst; ) {
 }
 // In a burst each person's plan and players are picked as they are counted, and there are probes
 // for all of their players at once: `--players a-b` on each Plus server, the owner among them.
-const players_ = rangeOf('players', '3-6')
+const playersEach = rangeOf('players', '3-6')
 const pickedPlan = arrivalTimes.map(() => planOf())
 const pickedPlayers = arrivalTimes.map(
-  () => players_[0] + Math.floor(Math.random() * (players_[1] - players_[0] + 1)),
+  () => playersEach[0] + Math.floor(Math.random() * (playersEach[1] - playersEach[0] + 1)),
 )
 const burstBots = pickedPlan.reduce(
   (sum, plan, i) => sum + (plan === 'plus' ? (pickedPlayers[i] ?? 0) : 0),
@@ -267,11 +267,10 @@ const probeCount = Number(
   ),
 )
 const probeApp = `${PROBE_PREFIX}${run}`
-const started = Date.now()
 
 if (burst)
   say(
-    `burst ${run}: ${people_} people within ${rampS}s (${planChoice}), ${players_.join('-')} players a Plus server (${burstBots} headless), ${playMinutes.join('-')} min of play, at ${WEB}`,
+    `burst ${run}: ${burstPeople} people within ${rampS}s (${planChoice}), ${playersEach.join('-')} players a Plus server (${burstBots} headless), ${playMinutes.join('-')} min of play, at ${WEB}`,
   )
 else
   say(
@@ -282,6 +281,8 @@ say(`${probeCount} probes, in ${probeApp}`)
 const probes: Probe[] = await probesUp(probeApp, probeCount, databaseHost)
 const operator = await admin()
 const site = people(WEB, MAILPIT)
+// The run's clock starts as people start arriving, the probes already up.
+const started = Date.now()
 
 const records: StepRecord[] = []
 const chaos: ChaosFinding[] = []
