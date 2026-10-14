@@ -57,6 +57,8 @@ const WEB = 'https://staging.cubepals.com'
 const MAILPIT = 'http://127.0.0.1:18025'
 const ADMIN_EMAIL = 'admin@staging.blockly.test'
 const PROBE_PREFIX = 'bly-load-probe-'
+/** The most events Fly's Machines API lists at once, as its own refusal of more says. */
+const EVENTS_LIMIT = 50
 
 const say = (line: string) => process.stdout.write(`${line}\n`)
 const option = (name: string, fallback: string) => {
@@ -134,11 +136,12 @@ async function machineRuns(app: string): Promise<MachineRun[]> {
   }[]
   return Promise.all(
     machines.map(async (m) => {
-      const events = (await (
-        await fetch(`https://api.machines.dev/v1/apps/${app}/machines/${m.id}/events?limit=200`, {
-          headers: { authorization: `Bearer ${process.env.FLY_API_TOKEN}` },
-        })
-      ).json()) as { status: string; timestamp: number }[]
+      const response = await fetch(
+        `https://api.machines.dev/v1/apps/${app}/machines/${m.id}/events?limit=${EVENTS_LIMIT}`,
+        { headers: { authorization: `Bearer ${process.env.FLY_API_TOKEN}` } },
+      )
+      if (!response.ok) throw new Error(`Fly's events for ${m.id} answered ${response.status}`)
+      const events = (await response.json()) as { status: string; timestamp: number }[]
       const { cpu_kind, cpus, memory_mb } = m.config.guest
       return {
         app,
@@ -243,7 +246,12 @@ const playerRun = {
       say(`  FAIL ${step.player} ${step.step}: ${step.error}${step.operation ? ` | ${step.operation}` : ''}`)
   },
   beforeTrash: async (serverId: string) => {
-    machines.push(...(await machineRuns(appOf(serverId)).catch(() => [])))
+    machines.push(
+      ...(await machineRuns(appOf(serverId)).catch((error: unknown) => {
+        say(`  machine hours of ${serverId} unread: ${(error as Error).message}`)
+        return []
+      })),
+    )
   },
 }
 const players = Array.from(
@@ -323,7 +331,12 @@ const retries = (await database.unsafe(
      count(*) filter (where status = 'failed')::int as failed
    from server_operations where server_id in (${made.map((id) => `'${id}'`).join(', ') || 'null'}) group by kind order by kind`,
 )) as Array<{ kind: string; operations: number; retried: number; failed: number }>
-machines.push(...(await machineRuns(probeApp).catch(() => [])))
+machines.push(
+  ...(await machineRuns(probeApp).catch((error: unknown) => {
+    say(`machine hours of the probes unread: ${(error as Error).message}`)
+    return []
+  })),
+)
 await probesDown(probeApp)
 
 const limit = firstLimit(records)

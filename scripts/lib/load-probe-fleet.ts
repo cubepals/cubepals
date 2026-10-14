@@ -100,6 +100,10 @@ export class Probe {
     }
   }
 
+  versions(): Promise<string[]> {
+    return this.#call('/versions') as Promise<string[]>
+  }
+
   load(): Promise<{ load: number; players: number }> {
     return this.#call('/load') as Promise<{ load: number; players: number }>
   }
@@ -119,7 +123,7 @@ export async function probesUp(app: string, count: number, databaseHost: string)
         ...['-a', app, '-r', REGION, '--name', `probe-${i}`, ...PROBE_GUEST, '--restart', 'no'],
         ...['--file-local', `/load/probe.js=${file}`],
         ...['--entrypoint', 'sh', '--', '-c'],
-        'cd /load && bun add mineflayer@4.39.0 vec3@0.1.10 && exec bun probe.js serve',
+        'cd /load && bun add mineflayer@4.39.0 minecraft-data@3.117.0 vec3@0.1.10 && exec bun probe.js serve',
       ])
       const id = /Machine ID: (\w+)/.exec(out)?.[1]
       if (id === undefined) throw new Error(`no machine id in: ${out.slice(0, 200)}`)

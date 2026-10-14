@@ -101,6 +101,8 @@ export class Player {
   #email = ''
   #servers: { id: string; name: string; slug: string }[] = []
   #template = ''
+  /** The game version its server runs, which its headless players play. */
+  #version = ''
   #plan: 'free' | 'plus'
   readonly index: number
   readonly run: Run
@@ -224,7 +226,7 @@ export class Player {
   /** A join timed at the probe: in the world where it plays, the server's answer where it can't. */
   #join(name: string, timeoutMs: number) {
     const kind = this.#plays() ? 'join' : 'answer'
-    return this.#job(this.probe, { kind, address: this.#address(), name, timeoutMs })
+    return this.#job(this.probe, { kind, address: this.#address(), name, version: this.#version, timeoutMs })
   }
 
   async journey(): Promise<void> {
@@ -266,16 +268,18 @@ export class Player {
           .map((t) => t.key),
       )
       this.#template = pickTemplate(this.index, allowed)
+      const gameVersion = await this.#spokenVersion(this.#template)
       const name = `Load ${this.index}`
       const created = await this.#api('servers.create', {
         idempotencyKey: this.run.key(),
         name,
-        from: { kind: 'template', key: this.#template },
+        from: { kind: 'template', key: this.#template, ...(gameVersion ? { gameVersion } : {}) },
         partySize: this.#plan === 'plus' ? '10' : '5',
         regionKey: 'eu',
       })
       this.#servers.push({ id: created.id, name, slug: created.slug })
       const up = await this.#ready(created.id)
+      this.#version = up.gameVersion
       this.phase = 'ready'
       return {
         template: this.#template,
@@ -283,6 +287,20 @@ export class Player {
         note: `${up.memoryTier}, ${up.gameVersion} ${up.loader}`,
       }
     })
+  }
+
+  /**
+   * Where its players play, the newest release of the template the headless player speaks, chosen
+   * as the create page's version picker offers it; the template's own newest otherwise.
+   */
+  async #spokenVersion(template: string): Promise<string | undefined> {
+    if (!this.#plays()) return undefined
+    const spoken = new Set(await this.probe.versions())
+    const releases = (await this.#api('servers.setupReleases', { key: template }, 'GET')) as {
+      gameVersion: string
+      runs: boolean
+    }[]
+    return releases.find((r) => r.runs && spoken.has(r.gameVersion))?.gameVersion
   }
 
   async #middle(): Promise<void> {
@@ -299,7 +317,9 @@ export class Player {
           version: view.version,
           onlineMode: false,
         })
-        await this.#ready(server.id, 600)
+        const applied = await this.#ready(server.id, 600)
+        if (applied.settings.onlineMode !== false)
+          throw new Error('account checks are still on after the change settled')
         const access = await this.#api('access.get', { serverId: server.id }, 'GET')
         if (access.whitelistEnabled || access.pendingWhitelistEnabled)
           for (const name of names) await this.#api('access.addToWhitelist', { serverId: server.id, name })
@@ -330,6 +350,7 @@ export class Player {
             kind: 'play',
             address: this.#address(),
             name,
+            version: this.#version,
             minutes: this.run.playMinutes,
             timeoutMs: 300_000,
           }

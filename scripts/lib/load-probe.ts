@@ -7,14 +7,15 @@
  * `blockly-staging`, since the game port can't be reached from where the test is driven. It is a
  * small HTTP server the test reaches through `fly proxy`, and its jobs are players at the edge:
  *
- *   POST /jobs {kind: 'play', address, name, minutes}   a headless player (mineflayer) joins the
+ *   POST /jobs {kind: 'play', address, name, version, minutes}   a headless player (mineflayer) joins the
  *        server's own address, walks, chats, breaks and places blocks for `minutes`, and leaves
- *   POST /jobs {kind: 'join', address, name, timeoutMs} joins until it is in the world, timed, and leaves
+ *   POST /jobs {kind: 'join', address, name, version, timeoutMs} joins until it is in the world, timed, and leaves
  *   POST /jobs {kind: 'answer', address, name, timeoutMs}
  *        the game's handshake and login until the server answers (`minecraft.ts` `join`), for a
  *        server that checks accounts, which a headless player has none of
  *   GET /jobs/<id>   whether it is done, and what it found
  *   GET /load        the machine's load and the players it holds
+ *   GET /versions    the game versions its headless players speak
  *
  * A join turned away while a world wakes (the edge's "join again", or the connection dropped
  * before the world) is tried again, as a player clicks Join again; every attempt is counted and
@@ -49,7 +50,6 @@ interface Bot {
   game: { gameMode: string }
   inventory: { items(): Item[] }
   blockAt(at: Vec): Block | null
-  findBlock(options: { matching: (block: Block) => boolean; maxDistance: number }): Block | null
   canDigBlock(block: Block): boolean
   dig(block: Block): Promise<void>
   equip(item: Item, where: 'hand'): Promise<void>
@@ -57,7 +57,7 @@ interface Bot {
   look(yaw: number, pitch: number, force: boolean): Promise<void>
   setControlState(control: 'forward' | 'jump' | 'sprint', on: boolean): void
   chat(text: string): void
-  quit(): void
+  end(reason?: string): void
   once(event: 'spawn', listener: () => void): void
   on(event: 'kicked' | 'end' | 'error', listener: (reason: unknown) => void): void
 }
@@ -69,13 +69,18 @@ interface Mineflayer {
     auth: 'offline'
     hideErrors: boolean
     checkTimeoutInterval: number
+    version: string
   }): Bot
 }
 // By names in variables, so nothing here resolves them before they run where they are installed.
 const MINEFLAYER = 'mineflayer'
 const VEC3 = 'vec3'
+const MINECRAFT_DATA = 'minecraft-data'
 const mineflayer = async () => ((await import(MINEFLAYER)) as { default: Mineflayer }).default
 const vec3 = async () => ((await import(VEC3)) as { Vec3: new (x: number, y: number, z: number) => Vec }).Vec3
+
+/** How long a player takes to join again after being turned away. */
+const JOIN_AGAIN_MS = 5000
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 /** A kick's reason as the game sends it, a chat component or text, as plain words. */
@@ -91,6 +96,7 @@ interface Attempt {
 async function enter(
   address: string,
   name: string,
+  version: string,
   timeoutMs: number,
 ): Promise<{ bot: Bot; ms: number; attempts: Attempt[] }> {
   const { createBot } = await mineflayer()
@@ -105,6 +111,9 @@ async function enter(
       auth: 'offline',
       hideErrors: true,
       checkTimeoutInterval: 60_000,
+      // A player's game is the version it is: guessed from the edge's answer for a sleeping
+      // server, it would be the edge's own.
+      version,
     })
     const ended = await new Promise<string | null>((resolve) => {
       const timer = setTimeout(() => resolve(`not in the world within ${timeoutMs / 1000}s`), timeoutMs)
@@ -118,8 +127,12 @@ async function enter(
     })
     attempts.push({ ms: Date.now() - at, ended })
     if (ended === null) return { bot, ms: Date.now() - started, attempts }
-    bot.quit()
-    await Bun.sleep(2000)
+    // A version the player can't speak is no wait a second try ends.
+    if (ended.includes('No data available for version')) throw Object.assign(new Error(ended), { attempts })
+    bot.end()
+    // A player reads why and clicks Join again a few seconds later; sooner, Bukkit's connection
+    // throttle, which counts every join from the edge's one address, would turn each one away.
+    await Bun.sleep(JOIN_AGAIN_MS)
   }
   throw Object.assign(new Error(`never in the world within ${timeoutMs / 1000}s`), { attempts })
 }
@@ -172,20 +185,20 @@ async function play(bot: Bot, name: string, minutes: number): Promise<Played> {
   return done
 }
 
-/** A solid block near the player broken, then put back on top of another, as a builder does. */
+/** The ground beside the player broken, then put back where it was, as a builder does. */
 async function breakAndPlace(
   bot: Bot,
   Vec3: new (x: number, y: number, z: number) => Vec,
   done: Played,
 ): Promise<void> {
-  const target = bot.findBlock({
-    matching: (block) => block.boundingBox === 'block' && bot.canDigBlock(block),
-    maxDistance: 4,
-  })
-  if (target === null) {
-    done.misses.push('no block in reach to break')
+  const at = bot.entity?.position
+  if (at === undefined) return
+  const target = bot.blockAt(at.offset(1, -1, 0))
+  if (target === null || target.boundingBox !== 'block' || !bot.canDigBlock(target)) {
+    done.misses.push(`nothing to break beside it (${target?.name ?? 'unloaded'})`)
     return
   }
+  const below = bot.blockAt(target.position.offset(0, -1, 0))
   await bot.dig(target)
   done.dug++
   await Bun.sleep(800)
@@ -194,7 +207,6 @@ async function breakAndPlace(
     done.misses.push(`nothing picked up from ${target.name} (${bot.game.gameMode})`)
     return
   }
-  const below = bot.blockAt(target.position.offset(0, -1, 0))
   if (below === null || below.boundingBox !== 'block') {
     done.misses.push('nothing to place on')
     return
@@ -205,8 +217,8 @@ async function breakAndPlace(
 }
 
 type Job =
-  | { kind: 'play'; address: string; name: string; minutes: number; timeoutMs: number }
-  | { kind: 'join'; address: string; name: string; timeoutMs: number }
+  | { kind: 'play'; address: string; name: string; version: string; minutes: number; timeoutMs: number }
+  | { kind: 'join'; address: string; name: string; version: string; timeoutMs: number }
   | { kind: 'answer'; address: string; name: string; timeoutMs: number }
 
 const results = new Map<string, { done: boolean; result?: unknown; error?: string; attempts?: Attempt[] }>()
@@ -215,14 +227,14 @@ let players = 0
 async function run(job: Job): Promise<unknown> {
   if (job.kind === 'answer')
     return { ms: await join({ host: job.address, port: GAME_PORT }, job.address, job.name, job.timeoutMs) }
-  const { bot, ms, attempts } = await enter(job.address, job.name, job.timeoutMs)
+  const { bot, ms, attempts } = await enter(job.address, job.name, job.version, job.timeoutMs)
   players++
   try {
     if (job.kind === 'join') return { ms, attempts }
     return { ms, attempts, ...(await play(bot, job.name, job.minutes)) }
   } finally {
     players--
-    bot.quit()
+    bot.end()
   }
 }
 
@@ -265,6 +277,11 @@ Bun.serve({
       const found = results.get(job)
       return found === undefined ? new Response('no such job', { status: 404 }) : Response.json(found)
     }
+    // The game versions its headless players speak, as the protocol data it carries lists them.
+    if (path === '/versions')
+      return Response.json(
+        ((await import(MINECRAFT_DATA)) as { supportedVersions: { pc: string[] } }).supportedVersions.pc,
+      )
     if (path === '/load')
       return Response.json({ load: Number(readFileSync('/proc/loadavg', 'utf8').split(' ')[0]), players })
     return new Response('not found', { status: 404 })
