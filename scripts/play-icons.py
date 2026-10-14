@@ -6,7 +6,7 @@
 
 """
 Draws the icons for the ways to play, as the create page shows them: Survival, Creative, Hardcore,
-Smoother survival, Create, Lifesteal, Manhunt, Skyblock, OneBlock, RPG survival, Duels, a modpack
+Smoother survival, Create, Lifesteal, Manhunt, Skyblock, OneBlock, RPG survival, Duels, Arcade, a modpack
 and a pack you have.
 
 The same art as scripts/server-icons.py draws for servers: sixteen-by-sixteen pixels in Blockly's
@@ -298,6 +298,29 @@ ICONS: dict[str, tuple[str, dict[str, str], list[str]]] = {
             ".oHo...oo...oHo.",
             "oko..........oko",
             ".o............o.",
+            "................",
+        ],
+    ),
+    # Arcade: a gold cup, for the best score on the board.
+    "arcade": (
+        "Arcade",
+        {"o": "#2b3136", "L": "#fbe9a6", "y": "#f3d36b", "Y": "#c9962e", "k": "#7a5134", "h": "#a06d3f"},
+        [
+            "................",
+            "..oooooooooooo..",
+            ".ooLyyyyyyyyYoo.",
+            "oyoLyyyyyyyyYoyo",
+            "oyoLyyyyyyyyYoYo",
+            ".ooLyyyyyyyyYoo.",
+            "..oLyyyyyyyyYo..",
+            "..oyyyyyyyyYYo..",
+            "...oyyyyyyYYo...",
+            "....ooyyYYoo....",
+            "......oyYo......",
+            "......oyYo......",
+            ".....oyyYYo.....",
+            "....ohhhhhko....",
+            "....oooooooo....",
             "................",
         ],
     ),

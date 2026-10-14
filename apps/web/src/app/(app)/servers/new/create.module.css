@@ -313,6 +313,9 @@
 .thumb[data-icon="duels"] {
   background: var(--status-offline-soft);
 }
+.thumb[data-icon="arcade"] {
+  background: var(--status-starting-soft);
+}
 .thumb[data-icon="modpack"] {
   background: var(--surface-sand);
 }

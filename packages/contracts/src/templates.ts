@@ -116,6 +116,14 @@ export const TEMPLATE_CARDS = [
     forADay: false,
   },
   {
+    key: 'arcade',
+    title: 'Arcade',
+    blurb: 'Parkour against the clock, a falling floor and a pit, with high scores to beat.',
+    icon: 'arcade',
+    advanced: false,
+    forADay: false,
+  },
+  {
     key: 'create',
     title: 'Create',
     blurb: 'Machines, gears and contraptions, with the Create mod ready to go.',

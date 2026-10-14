@@ -1,0 +1,145 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * The Arcade template: Paper on the newest release the moderation tools run on, with them, the
+ * chat filter and the Grim anticheat, and ViaVersion when that release isn't the newest; offered
+ * with Plus; and a server of it starting on a void world with the games' datapack and the
+ * moderation files, the datapack following the server onto a fresh world.
+ */
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { onLevel } from '../../domain/revision/carried.ts'
+import { ARCADE_FILES } from '../../minecraft/arcade.ts'
+import {
+  CHATSENTINEL,
+  filtersChat,
+  LIBERTYBANS,
+  LUCKPERMS,
+  moderationFiles,
+  runsModeration,
+} from '../../minecraft/moderation.ts'
+import { VIAVERSION } from '../../minecraft/mods.ts'
+import { offeredVersions } from '../../minecraft/versions.ts'
+import { VOID_LEVEL } from '../../minecraft/worlds.ts'
+import { Cdn } from '../../testing/cdn.ts'
+import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { CHAT_FILTER } from '../moderation/service.ts'
+import { loadRevision } from '../servers/persistence.ts'
+import { listWorlds } from '../worlds/persistence.ts'
+
+let h: Harness
+const cdn = new Cdn()
+
+/** A Paper plugin on the catalog, under its real project id, at one version for these releases. */
+const plugin = (projectId: string, name: string, gameVersions: string[], versionId: string) =>
+  h.catalog.publish(
+    {
+      projectId,
+      slug: projectId,
+      name,
+      summary: '',
+      iconUrl: null,
+      environments: ['server_only'],
+      downloads: 1,
+    },
+    [
+      {
+        versionId,
+        projectId,
+        versionLabel: '1.0',
+        channel: 'release',
+        state: 'listed',
+        environment: 'server_only',
+        loaders: ['paper', 'spigot'],
+        gameVersions,
+        publishedAt: new Date(Date.UTC(2026, 0, 1)),
+        file: cdn.file(versionId),
+        dependencies: [],
+      },
+    ],
+  )
+
+describe.skipIf(!hasDatabase)('arcade', () => {
+  beforeAll(async () => {
+    await cdn.start()
+    h = await startHarness()
+    // As Modrinth listed them on 2026-10-14: ChatSentinel 2.0.3 and Grim 2.3.74 stop at 26.2,
+    // LibertyBans and LuckPerms run on 26.3 too, and ViaVersion on every release offered.
+    plugin(LIBERTYBANS, 'LibertyBans', ['1.21.11', '26.2', '26.3'], 'libertybans-1')
+    plugin(LUCKPERMS, 'LuckPerms', ['1.21.11', '26.2', '26.3'], 'luckperms-1')
+    plugin(CHATSENTINEL, 'ChatSentinel', ['1.21.11', '26.2'], 'chatsentinel-1')
+    plugin('LJNGWSvH', 'Grim Anticheat', ['1.21.11', '26.2'], 'grim-1')
+    plugin(
+      VIAVERSION,
+      'ViaVersion',
+      offeredVersions().map((offered) => offered.id),
+      'viaversion-1',
+    )
+  }, 30_000)
+
+  afterAll(async () => {
+    await h.close()
+    cdn.close()
+  })
+
+  test('it runs on the newest Paper the moderation tools do, with ViaVersion so newer Minecraft joins', async () => {
+    const owner = await h.user('Ana', 'plus')
+    expect(await h.app.queries.setupPreview(owner, { kind: 'template', key: 'arcade' })).toMatchObject({
+      from: 'Arcade',
+      loader: 'paper',
+      gameVersion: '26.2',
+      joinsNewer: true,
+      mods: ['ChatSentinel', 'Grim Anticheat', 'LibertyBans', 'LuckPerms', 'ViaVersion'],
+    })
+    const { templates } = await h.app.queries.createOptions(await h.user('Lee'))
+    expect(templates.find((template) => template.key === 'arcade')?.fits).toEqual({
+      allowed: false,
+      reason: 'Mods and plugins come with Plus.',
+      plan: 'plus',
+    })
+  }, 30_000)
+
+  test('its server starts on a void world with the games, the boards and the moderation tools', async () => {
+    const owner = await h.user('Kai', 'plus')
+    const server = await h.create(owner, { from: { kind: 'template', key: 'arcade' } })
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+    const revision = await loadRevision(h.db, server.desiredRevisionId)
+    // Every game is the datapack, so the only plugins are the ones for strangers, and ViaVersion.
+    expect(revision.mods.map((m) => m.source.projectId).sort()).toEqual(
+      [CHATSENTINEL, 'LJNGWSvH', LIBERTYBANS, LUCKPERMS, VIAVERSION].sort(),
+    )
+    expect(revision.files).toEqual([...ARCADE_FILES, ...moderationFiles(CHAT_FILTER)])
+    expect(revision.settings).toMatchObject({
+      defaultGameMode: 'adventure',
+      difficulty: 'easy',
+      pvp: true,
+      motd: 'Arcade: parkour, a falling floor and a pit, with high scores to beat',
+    })
+    expect([runsModeration(revision.mods), filtersChat(revision.mods)]).toEqual([true, true])
+    expect((await listWorlds(h.db, server.id)).map((w) => [w.levelName, w.levelType])).toEqual([
+      ['world', VOID_LEVEL],
+    ])
+    const volume = h.runtime.machine(server.id)?.dir ?? ''
+    for (const file of revision.files.map((carried) => onLevel(carried, 'world')))
+      expect(readFileSync(`${volume}/${file.path}`, 'utf8')).toBe(file.content)
+
+    // A fresh world is void like the one it left, and the games go into it.
+    await h.app.worlds.freshStart(owner, server.id, randomUUID())
+    await h.until(
+      server.id,
+      (s) => s.lifecycle.status === 'running' && s.activeWorldId !== server.activeWorldId,
+    )
+    await h.settled(server.id)
+    expect((await listWorlds(h.db, server.id)).map((w) => [w.levelName, w.levelType])).toEqual([
+      ['world', VOID_LEVEL],
+      ['world-2', VOID_LEVEL],
+    ])
+    expect(readFileSync(`${volume}/world-2/datapacks/cubepals-arcade/pack.mcmeta`, 'utf8')).toContain(
+      'Arcade',
+    )
+  }, 30_000)
+})
