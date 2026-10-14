@@ -121,7 +121,14 @@ describe('ops-mcp.ts', () => {
     let client: Client
     let stderr = ''
     beforeAll(async () => {
-      const transport = new StdioClientTransport({ command: 'bun', args: [MCP], env: env(), stderr: 'pipe' })
+      // The SDK fills in the shell's USER when the env leaves it out, and CI's runner has one: blank it,
+      // so nobody is named and the default is what's tested.
+      const transport = new StdioClientTransport({
+        command: 'bun',
+        args: [MCP],
+        env: env({ USER: '' }),
+        stderr: 'pipe',
+      })
       transport.stderr?.on('data', (chunk: Buffer) => {
         stderr += chunk.toString()
       })

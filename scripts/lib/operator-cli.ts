@@ -73,7 +73,7 @@ export function operatorCli(
       method,
       headers: {
         authorization: `Bearer ${token}`,
-        'x-operator': process.env.OPERATOR ?? process.env.FLEET_OPERATOR ?? process.env.USER ?? unnamed,
+        'x-operator': process.env.OPERATOR || process.env.FLEET_OPERATOR || process.env.USER || unnamed,
         ...(body ? { 'content-type': 'application/json' } : {}),
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
