@@ -78,6 +78,9 @@ describe('settings', () => {
     ])
     expect(settingsProblems({ ...draft().settings, motd: 'x'.repeat(60) }, 4)).toHaveLength(1)
     expect(settingsProblems({ ...draft().settings, motd: 'two\nlines' }, 4)).toHaveLength(1)
+    // Formatting codes take no room in the list, so they don't count; codes alone say nothing.
+    expect(settingsProblems({ ...draft().settings, motd: `&a&l${'x'.repeat(59)}` }, 4)).toEqual([])
+    expect(settingsProblems({ ...draft().settings, motd: '&a&l' }, 4)).toHaveLength(1)
   })
 })
 
