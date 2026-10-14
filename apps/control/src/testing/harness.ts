@@ -149,15 +149,16 @@ export interface HarnessOptions {
    * servers running; `{}` keeps the defaults, for tests of the caps themselves.
    */
   controls?: Partial<typeof schema.platformControls.$inferInsert>
-  /**
-   * What new servers leave to starts and wakes, and how long creates may wait. By default no
-   * reserve, so the caps trip where the operation tests set them; `DEFAULT_ROOM` for tests of room.
-   */
-  room?: { wakeReserve: number; createWaitSeconds: number }
 }
 
-/** The caps the operation tests run under unless they ask otherwise. */
-const TEST_CONTROLS = { maxServers: 40, maxRunningServers: 15 }
+/**
+ * The caps the operation tests run under unless they ask otherwise: creates fill 40 servers and 15
+ * running, above the reserve they leave to starts and wakes.
+ */
+const TEST_CONTROLS = {
+  maxServers: 40 + DEFAULT_ROOM.wakeReserve,
+  maxRunningServers: 15 + DEFAULT_ROOM.wakeReserve,
+}
 
 /**
  * For @hono/node-server's listener: left to its default, it puts its own Response in the global's
@@ -303,7 +304,6 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       ownPacks: options.ownPacks ?? [],
       bootTimeouts: options.provider?.bootTimeouts ?? { runningMs: 5_000, readyMs: 3_000 },
       wakeWaitMs: options.provider?.wakeWaitMs ?? 5_000,
-      room: options.room ?? { ...DEFAULT_ROOM, wakeReserve: 0 },
     },
   )
   runtimeFacing = createRuntimeApp({ artifacts: app.artifacts })

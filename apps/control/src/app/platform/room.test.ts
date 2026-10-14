@@ -19,7 +19,6 @@ import { randomUUID } from 'node:crypto'
 import { schema } from '@blockly/db'
 import { count, eq, sql } from 'drizzle-orm'
 import { FULL } from '../../domain/policy/policy.ts'
-import { DEFAULT_ROOM } from '../../domain/policy/room.ts'
 import { hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
 import { IDLE_GRACE_MS } from '../operations/schedules.ts'
@@ -31,7 +30,7 @@ const was = tuning()
 /** A platform where six run at once, with the people on it and each one's server by name. */
 async function platform() {
   installTuning({ ...was, capacity: { freeShare: 0.5, tightShare: 0.5, tightIdleMinutes: 1 } })
-  const h = await startHarness({ controls: { maxServers: 20, maxRunningServers: 6 }, room: DEFAULT_ROOM })
+  const h = await startHarness({ controls: { maxServers: 20, maxRunningServers: 6 } })
   const owned = new Map<string, { owner: UserActor; id: string }>()
   const of = (who: string) => {
     const server = owned.get(who)
