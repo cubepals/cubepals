@@ -343,7 +343,18 @@ export function workloadConfig(spec: RuntimeSpec, serverId: string): Record<stri
     StopSignal: spec.stop.signal,
     StopTimeout: spec.stop.timeoutSeconds,
     HostConfig: {
-      Mounts: [{ Type: 'volume', Source: DATA_VOLUME, Target: spec.storage.mountPath }],
+      // A new volume stays root's, as a new Fly volume is, rather than taking the image's /data
+      // with its uid: the image hands /data to its user only when its owner isn't that user, and
+      // what Blockly's steps write as root before it (a plugin's folder) must go with it. Copied,
+      // the folder stayed root's, and every server with plugins exited 1 on its first start.
+      Mounts: [
+        {
+          Type: 'volume',
+          Source: DATA_VOLUME,
+          Target: spec.storage.mountPath,
+          VolumeOptions: { NoCopy: true },
+        },
+      ],
       Memory: spec.resources.memoryMb * 1024 * 1024,
       // Mods are code the owner chose to run (docs/modpack-system.md § Security).
       SecurityOpt: ['no-new-privileges:true'],

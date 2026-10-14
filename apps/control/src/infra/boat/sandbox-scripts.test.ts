@@ -7,8 +7,9 @@ import { createHash, randomBytes } from 'node:crypto'
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { RuntimeSpec } from '../../app/ports/runtime.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
-import { script, scriptOnNew, type Verb } from './sandbox-scripts.ts'
+import { script, scriptOnNew, type Verb, workloadConfig } from './sandbox-scripts.ts'
 
 const MIB = 1024 ** 2
 
@@ -273,4 +274,26 @@ describe('the sandbox program’s wait for a resumed sandbox’s workload', () =
     expect(looks).toBeLessThan(5)
     expect(since).toBeNull()
   }, 20_000)
+})
+
+describe('the workload’s container', () => {
+  const spec: RuntimeSpec = {
+    image: 'itzg/minecraft-server:2026.9.1-java21',
+    env: { EULA: 'TRUE' },
+    secrets: {},
+    resources: { memoryMb: 3072 },
+    storage: { mountPath: '/data', sizeGb: 3 },
+    ports: [{ name: 'game', port: 25565, protocol: 'tcp', audience: ['edge', 'control'] }],
+    stop: { signal: 'SIGTERM', timeoutSeconds: 90 },
+    labels: {},
+  }
+
+  // A new volume took the image's /data, owned by its user, so the image never handed over the
+  // plugins folder Blockly's steps had made as root, and Duels exited 1 on Boat (staging, 2026-10-14).
+  test('mounts a new world volume empty and root’s, as a new Fly volume is', () => {
+    const config = workloadConfig(spec, 'server') as { HostConfig: { Mounts: unknown[] } }
+    expect(config.HostConfig.Mounts).toEqual([
+      { Type: 'volume', Source: 'blockly-data', Target: '/data', VolumeOptions: { NoCopy: true } },
+    ])
+  })
 })
