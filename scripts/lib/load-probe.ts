@@ -155,6 +155,19 @@ interface Played {
   dropped: string | null
 }
 
+/**
+ * A game action given ACTION_MS: one the server never confirms (a block a lobby won't let break)
+ * would otherwise hold the player past its minutes, and the whole run with it.
+ */
+const ACTION_MS = 30 * SECOND_MS
+const within = <T>(action: Promise<T>, what: string): Promise<T> =>
+  Promise.race([
+    action,
+    Bun.sleep(ACTION_MS).then(() => {
+      throw new Error(`${what} never finished`)
+    }),
+  ])
+
 /** Walking about, a word in chat now and then, a block broken and put back: a player's minutes. */
 async function play(bot: Bot, name: string, minutes: number): Promise<Played> {
   const Vec3 = await vec3()
@@ -171,7 +184,7 @@ async function play(bot: Bot, name: string, minutes: number): Promise<Played> {
   const until = Date.now() + minutes * MINUTE_MS
   for (let turn = 0; !over && Date.now() < until; turn++) {
     try {
-      await bot.look(Math.random() * 2 * Math.PI, 0, true)
+      await within(bot.look(Math.random() * 2 * Math.PI, 0, true), 'looking about')
       bot.setControlState('forward', true)
       bot.setControlState('jump', Math.random() < 0.2)
       await Bun.sleep(1500 + Math.random() * 1500)
@@ -182,7 +195,7 @@ async function play(bot: Bot, name: string, minutes: number): Promise<Played> {
         bot.chat(`${name} here, ${['hi all', 'nice spot', 'over here', 'brb'][turn % 4]}`)
         done.chats++
       }
-      if (turn % 4 === 1) await breakAndPlace(bot, Vec3, done)
+      if (turn % 4 === 1) await within(breakAndPlace(bot, Vec3, done), 'breaking and placing')
     } catch (error) {
       done.misses.push(messageOf(error))
     }

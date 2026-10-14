@@ -508,7 +508,11 @@ const shaken = Promise.all(
 
 // ─── People arrive at random, each living their own life ─────────────────────────────────────
 
-await Promise.all(
+// The last arrival, the longest play, and room for every wait a life can have: past it, the
+// report is written with whoever is still going counted as such.
+const lastArrival = arrivalTimes.at(-1) ?? 0
+const deadline = lastArrival + (playMinutes[1] + 45) * MINUTE_MS
+const lives = Promise.all(
   arrivalTimes.map(async (at, i) => {
     await Bun.sleep(at)
     const player = burst
@@ -521,6 +525,12 @@ await Promise.all(
     })
   }),
 )
+await Promise.race([
+  lives,
+  Bun.sleep(deadline).then(() =>
+    say(`  past the deadline: ${players.filter((p) => p.phase !== 'done').length} people still going`),
+  ),
+])
 await shaken
 clearInterval(watching)
 say(await line())
