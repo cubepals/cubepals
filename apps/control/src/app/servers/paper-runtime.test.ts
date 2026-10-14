@@ -6,14 +6,17 @@
  * Plain Minecraft on Paper, as a container: the spec of a plain revision with a Paper build, the
  * step that starts a Paper jar already installed with no call to Paper's API, and the one that
  * gives any other server type back the Nether and End a Paper one kept beside the world, and the
- * world's state Paper 26 keeps in each dimension. Drift sees neither step. Whether a revision runs on Paper is `runsOnPaper`'s.
+ * world's state Paper 26 keeps in each dimension, Bukkit's connection throttle off, since every
+ * player came through the edge's one address, and Paper reading a PROXY protocol header, which
+ * tells it each player's own. Drift sees none of these steps. Whether a revision runs on Paper is `runsOnPaper`'s.
  */
 import { describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { defaultSettings, type ServerRevision } from '../../domain/revision/revision.ts'
-import { installOf, toRuntimeSpec, withoutFilesStep } from '../../minecraft/runtime-spec.ts'
+import { installOf, PROXY_ENV, toRuntimeSpec, withoutFilesStep } from '../../minecraft/runtime-spec.ts'
+import { withoutPlanLimits } from './specs.ts'
 
 const input = {
   serverId: 's-1',
@@ -116,6 +119,27 @@ describe('plain Minecraft on Paper', () => {
     rmSync(data, { recursive: true })
   })
 
+  test('a Paper server lets in every player the edge brings, however close together', () => {
+    const onPaper = { ...revision, loaderVersion: '132' }
+    const script = toRuntimeSpec({ ...input, revision: onPaper }).entrypoint?.[2] ?? ''
+    const data = mkdtempSync(join(tmpdir(), 'paper-throttle-'))
+    const step = script.replaceAll('/data', data).replace('exec /image/scripts/start "$@"', 'true')
+    const run = () => Bun.spawnSync(['/bin/sh', '-c', step], { env: { VERSION: '1.21.11' } }).exitCode
+    // A first start: the setting alone, which Paper fills out with its defaults.
+    expect(run()).toBe(0)
+    expect(readFileSync(`${data}/bukkit.yml`, 'utf8')).toBe('settings:\n  connection-throttle: -1\n')
+    // A server that has run: Paper's own file, with only the throttle changed.
+    writeFileSync(
+      `${data}/bukkit.yml`,
+      'settings:\n  allow-end: true\n  connection-throttle: 4000\n  query-plugins: true\nspawn-limits:\n  monsters: 70\n',
+    )
+    expect(run()).toBe(0)
+    expect(readFileSync(`${data}/bukkit.yml`, 'utf8')).toBe(
+      'settings:\n  allow-end: true\n  connection-throttle: -1\n  query-plugins: true\nspawn-limits:\n  monsters: 70\n',
+    )
+    rmSync(data, { recursive: true })
+  })
+
   test('drift sees the entrypoint as it was before its first step', () => {
     const icon = 'http://control.test/grass.png'
     const withIcon = toRuntimeSpec({ ...input, revision, iconUrl: icon }).entrypoint
@@ -134,6 +158,58 @@ describe('plain Minecraft on Paper', () => {
         toRuntimeSpec({ ...input, revision: { ...revision, loaderVersion: '132' } }).entrypoint,
       ),
     ).toBeUndefined()
+  })
+})
+
+describe('Paper reading a PROXY header', () => {
+  test('a Paper server reads a PROXY header, which the image’s health check then sends too', () => {
+    const onPaper = { ...revision, loaderVersion: '132' }
+    expect(toRuntimeSpec({ ...input, revision: onPaper }).env[PROXY_ENV]).toBe('TRUE')
+    expect(toRuntimeSpec({ ...input, revision: { ...revision, loader: 'paper' } }).env[PROXY_ENV]).toBe(
+      'TRUE',
+    )
+    expect(toRuntimeSpec({ ...input, revision }).env[PROXY_ENV]).toBeUndefined()
+    expect(
+      toRuntimeSpec({ ...input, revision: { ...revision, loader: 'fabric' } }).env[PROXY_ENV],
+    ).toBeUndefined()
+
+    const script = toRuntimeSpec({ ...input, revision: onPaper }).entrypoint?.[2] ?? ''
+    const data = mkdtempSync(join(tmpdir(), 'paper-proxy-'))
+    const global = `${data}/config/paper-global.yml`
+    const step = script.replaceAll('/data', data).replace('exec /image/scripts/start "$@"', 'true')
+    const run = (proxied = 'TRUE') =>
+      Bun.spawnSync(['/bin/sh', '-c', step], { env: { VERSION: '1.21.11', [PROXY_ENV]: proxied } }).exitCode
+    // A first start: the setting alone, which Paper fills out with its defaults.
+    expect(run()).toBe(0)
+    expect(readFileSync(global, 'utf8')).toBe('proxies:\n  proxy-protocol: true\n')
+    // A server that has run: Paper's own file, with the setting first under `proxies:`.
+    const papers = (proxyProtocol: string) =>
+      `_version: 29\nproxies:\n  bungee-cord:\n    online-mode: true\n${proxyProtocol}  velocity:\n    enabled: false\n`
+    writeFileSync(global, papers('  proxy-protocol: false\n'))
+    expect(run()).toBe(0)
+    const read =
+      '_version: 29\nproxies:\n  proxy-protocol: true\n  bungee-cord:\n    online-mode: true\n  velocity:\n    enabled: false\n'
+    expect(readFileSync(global, 'utf8')).toBe(read)
+    expect(run()).toBe(0)
+    expect(readFileSync(global, 'utf8')).toBe(read)
+    // A file without it under `proxies:`, or without `proxies:` at all, gets it.
+    writeFileSync(global, papers(''))
+    expect(run()).toBe(0)
+    expect(readFileSync(global, 'utf8')).toBe(read)
+    writeFileSync(global, '_version: 29\n')
+    expect(run()).toBe(0)
+    expect(readFileSync(global, 'utf8')).toBe('_version: 29\nproxies:\n  proxy-protocol: true\n')
+    // Without the image's word for it, Paper reads none: as the benches run it, joined directly.
+    expect(run('')).toBe(0)
+    expect(readFileSync(global, 'utf8')).toBe('_version: 29\nproxies:\n  proxy-protocol: false\n')
+    rmSync(data, { recursive: true })
+  })
+
+  test('a Paper server running from before it read headers is not restarted for them', () => {
+    const paper = toRuntimeSpec({ ...input, revision: { ...revision, loader: 'paper' } })
+    const { [PROXY_ENV]: _, ...env } = paper.env
+    const before = { ...paper, env, entrypoint: withoutFilesStep(paper.entrypoint) }
+    expect(withoutPlanLimits(paper)).toEqual(withoutPlanLimits(before))
   })
 })
 

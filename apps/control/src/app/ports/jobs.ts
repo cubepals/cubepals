@@ -78,12 +78,21 @@ export interface JobAttempt {
  */
 export interface JobQueue {
   /**
-   * `priority`: across servers, a worker takes the highest first, and the oldest among equals; a
-   * server's own operations stay in the order they were asked. 0 when absent.
+   * `wakes`: a start or a wake, which someone is waiting on to play. It runs before anything else
+   * queued, on workers kept for it, but never before what its own server queued first. `paid`: a
+   * wake on a paid plan, ahead of other wakes. `creates`: a new server's first build, behind
+   * everything for the servers people already have.
    */
   enqueue(
     tx: Tx,
-    job: { operationId: string; serverId: string; retryLimit: number; priority?: number },
+    job: {
+      operationId: string
+      serverId: string
+      retryLimit: number
+      wakes: boolean
+      paid?: boolean
+      creates?: boolean
+    },
   ): Promise<void>
   /**
    * `artifact-mirror` (§9): copy a catalog jar into the store. One job per bytes: asking again

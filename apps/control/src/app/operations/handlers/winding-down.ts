@@ -9,7 +9,7 @@
  * through the console is `game-console.ts`'s; when a server is purged is the purge sweep's
  * (`schedules.ts`).
  */
-import { type Db, type Queryable, schema } from '@blockly/db'
+import { type AppliedConfigJson, type Db, type Queryable, schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
 import { entitlementsFor, grownDisk } from '../../../domain/account/entitlements.ts'
 import type { StopReason } from '../../../domain/server/lifecycle.ts'
@@ -37,6 +37,16 @@ import type { GameConsole } from './game-console.ts'
  * own, and takes a real stop.
  */
 const SLEEPS: ReadonlySet<StopReason> = new Set(['idle', 'user', 'daily'])
+
+/** A server's game port as the control plane pings it, and whether the run it is in reads a PROXY header. */
+const gameOf = (
+  runtime: Pick<Runtimes, 'endpoint'>,
+  handle: RuntimeHandle,
+  booted: AppliedConfigJson | null,
+) => ({
+  ...runtime.endpoint(handle, PORT_NAMES.game, 'control'),
+  proxyProtocol: booted?.proxyProtocol,
+})
 
 /** Whether a player was seen since the server's newest restore point: what a new one would hold. */
 async function playedSinceRestorePoint(q: Queryable, serverId: string): Promise<boolean> {
@@ -81,9 +91,9 @@ export function windingDown(deps: {
    * at least says goodbye), and its files written through to its storage, since the provider may
    * drop the memory it kept and boot from there.
    */
-  const mayDoze = async (handle: RuntimeHandle) => {
-    const endpoint = runtime.endpoint(handle, PORT_NAMES.game, 'control')
-    const status = await deps.probe.ping(endpoint, AbortSignal.timeout(5_000)).catch(() => null)
+  const mayDoze = async (handle: RuntimeHandle, booted: AppliedConfigJson | null) => {
+    const game = gameOf(runtime, handle, booted)
+    const status = await deps.probe.ping(game, AbortSignal.timeout(5_000)).catch(() => null)
     if (status === null || status.online > 0) return false
     const synced = await runtime.exec(handle, ['sync'], 60).catch(() => null)
     return synced?.exitCode === 0
@@ -95,7 +105,7 @@ export function windingDown(deps: {
     runsWhen: ['stopping'],
     async run(ctx) {
       const server = ctx.server
-      const { handle } = await bindingOf(server.id)
+      const { handle, applied } = await bindingOf(server.id)
       const reason = (ctx.op.input.reason as StopReason | undefined) ?? 'user'
       if (handle !== null) {
         await ctx.step('saving')
@@ -105,7 +115,7 @@ export function windingDown(deps: {
         await deps.players.snapshot(server, handle).catch(() => undefined)
         await ctx.step('stopping')
         // Asleep only once the world is saved: unsaved, a stop saves it on the way down.
-        if (SLEEPS.has(reason) && runtime.sleeps(handle) && saved && (await mayDoze(handle)))
+        if (SLEEPS.has(reason) && runtime.sleeps(handle) && saved && (await mayDoze(handle, applied)))
           await runtime.sleep(handle)
         else await runtime.stop(handle)
       }

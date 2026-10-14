@@ -5,7 +5,7 @@
 import { BLOCKLY_ICON } from '@blockly/contracts'
 import type { EdgeRoutes, SessionEvent, WakeResult } from '@blockly/contracts/edge'
 import { motdForGame } from '@blockly/contracts/server-list'
-import type { Db } from '@blockly/db'
+import type { AppliedConfigJson, Db } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { welcome } from '../../domain/revision/revision.ts'
 import { ROUTABLE, type ServerStatus } from '../../domain/server/lifecycle.ts'
@@ -23,7 +23,14 @@ import type { EventBus } from '../ports/events.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import type { Endpoint } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
-import { findLiveBySlug, heldByDeleted, listBindings, listLive, motdsOf } from '../servers/persistence.ts'
+import {
+  findLiveBySlug,
+  findRuntime,
+  heldByDeleted,
+  listBindings,
+  listLive,
+  motdsOf,
+} from '../servers/persistence.ts'
 import type { MinecraftServerService } from '../servers/service.ts'
 import { presenceFor, recordDomainJoin, recordEdgePresence, wakesInLastHour } from '../servers/usage.ts'
 import type { ServerWaiter } from '../servers/waiter.ts'
@@ -48,6 +55,10 @@ const REFUSED: Partial<Record<AppErrorCode, Extract<WakeResult, { outcome: 'deni
   not_entitled: 'quota',
   payment_due: 'quota',
 }
+
+/** A route's word that its server reads a PROXY header, where the run it is in does. */
+const headerRead = (applied: AppliedConfigJson | null | undefined): { proxyProtocol?: true } =>
+  applied?.proxyProtocol ? { proxyProtocol: true } : {}
 
 export class EdgeService {
   readonly #db: Db
@@ -84,8 +95,8 @@ export class EdgeService {
 
   /** Every hostname that should route, with where the edge sends it. Nothing is persisted. */
   async routes(): Promise<EdgeRoutes> {
-    const handles = new Map(
-      (await listBindings(this.#db, this.#runtime.providers)).map((b) => [b.serverId, b.handle]),
+    const bindings = new Map(
+      (await listBindings(this.#db, this.#runtime.providers)).map((b) => [b.serverId, b]),
     )
     const live = await listLive(this.#db)
     const restarting = await this.#restarting(live)
@@ -97,7 +108,8 @@ export class EdgeService {
     )
     const routes: EdgeRoutes['routes'] = []
     for (const server of live) {
-      const handle = handles.get(server.id)
+      const binding = bindings.get(server.id)
+      const handle = binding?.handle
       const { status } = server.lifecycle
       const state = status === 'running' ? null : restarting.has(server.id) ? 'restarting' : 'asleep'
       // A running server being restored is routed only so its players are told it is restarting:
@@ -115,6 +127,7 @@ export class EdgeService {
           destination,
           ...noticeOf(state, out.get(server.id)),
           ...this.#identityOf(server, state, motds),
+          ...headerRead(binding?.applied),
         })
       }
     }
@@ -176,14 +189,12 @@ export class EdgeService {
       if (unstarted !== null) return unstarted
     }
 
-    const handles = new Map(
-      (await listBindings(this.#db, this.#runtime.providers)).map((b) => [b.serverId, b.handle]),
-    )
-    const handle = handles.get(server.id)
-    if (!handle) return { outcome: 'starting' }
+    const binding = await findRuntime(this.#db, server.id, this.#runtime.providers)
+    if (!binding?.handle) return { outcome: 'starting' }
     return {
       outcome: 'ready',
-      destination: destinationOf(this.#runtime.endpoint(handle, PORT_NAMES.game, 'edge')),
+      destination: destinationOf(this.#runtime.endpoint(binding.handle, PORT_NAMES.game, 'edge')),
+      ...headerRead(binding.applied),
     }
   }
 

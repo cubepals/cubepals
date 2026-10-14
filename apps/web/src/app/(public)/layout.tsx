@@ -13,6 +13,7 @@ import { ApiProvider } from '../../lib/api'
 import { currentSession } from '../../lib/session'
 import { ViewerProvider } from '../../lib/viewer'
 import { Button } from '../../ui'
+import { WithBeta } from '../../ui/beta'
 import { guidesIndexLive } from './guides'
 import { GuideLinks } from './guides/links'
 import { Presses } from './presses'
@@ -23,9 +24,11 @@ export default async function PublicLayout({ children }: { children: ReactNode }
   return (
     <div className="bk-page" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
       <header className="bk-topnav">
-        <Link href="/" className="bk-wordmark">
-          Cubepals
-        </Link>
+        <WithBeta>
+          <Link href="/" className="bk-wordmark">
+            Cubepals
+          </Link>
+        </WithBeta>
         <nav className="bk-topnav__links" aria-label="Cubepals">
           <Link href="/browse" className="bk-topnav__link" {...ctaMark('header_browse')}>
             Browse servers

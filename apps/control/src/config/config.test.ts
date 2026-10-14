@@ -40,6 +40,18 @@ const tuned = {
   CAPACITY_TUNING: JSON.stringify(DEFAULT_CAPACITY_TUNING),
 }
 
+describe('server operations', () => {
+  test('run 32 at once, with 8 more for starts and wakes, unless told otherwise', () => {
+    expect(loadConfig(env).operations).toEqual({ concurrency: 32, wakeConcurrency: 8 })
+    expect(
+      loadConfig({ ...env, SERVER_OPERATIONS_CONCURRENCY: '64', SERVER_WAKES_CONCURRENCY: '12' }).operations,
+    ).toEqual({ concurrency: 64, wakeConcurrency: 12 })
+    for (const wrong of ['0', '-1', '2.5', 'many'])
+      expect(() => loadConfig({ ...env, SERVER_OPERATIONS_CONCURRENCY: wrong })).toThrow()
+    expect(() => loadConfig({ ...env, SERVER_WAKES_CONCURRENCY: '0' })).toThrow()
+  })
+})
+
 describe('configuration', () => {
   test('a local environment parses with defaults', () => {
     const config = loadConfig(env)
@@ -422,6 +434,13 @@ describe('private tuning', () => {
       createWaitSeconds: 30,
     })
     expect(() => loadConfig({ ...env, WAKE_RESERVE: '-1' })).toThrow(/wakeReserve/)
+  })
+
+  test('a deployment’s limits from before the invite cap existed take its default', () => {
+    const { inviteJoinsPerHour: _, ...older } = abuse
+    expect(loadConfig({ ...env, ABUSE_LIMITS: JSON.stringify(older) }).abuseLimits).toEqual(abuse)
+    const wider = { ...abuse, inviteJoinsPerHour: 40 }
+    expect(loadConfig({ ...env, ABUSE_LIMITS: JSON.stringify(wider) }).abuseLimits).toEqual(wider)
   })
 
   test('production refuses to start without it, and any deployment with it wrong', () => {

@@ -47,6 +47,11 @@ export interface AbuseLimits {
   wrongCodesPerHour: number
   /** Wakes the edge asks of one server an hour. */
   wakesPerHour: number
+  /**
+   * People one invite link may let in an hour. A link is meant for friends; a leaked one should
+   * cost its holder little and its owner nothing. A class or a club joining at once needs more.
+   */
+  inviteJoinsPerHour: number
 }
 
 /** How room is shared between plans when it runs short (`domain/policy/room.ts`). */
@@ -76,6 +81,7 @@ export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {
   giftsPerDay: 5,
   wrongCodesPerHour: 5,
   wakesPerHour: 20,
+  inviteJoinsPerHour: 10,
 }
 
 /** Nothing set aside for paid plans, and room never tight short of full. */

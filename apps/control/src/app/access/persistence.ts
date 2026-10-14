@@ -178,6 +178,7 @@ export async function liftedIpBans(
     .from(schema.auditLog)
     .where(
       and(
+        eq(schema.auditLog.subjectType, 'server'),
         eq(schema.auditLog.subjectId, serverId),
         eq(schema.auditLog.action, 'access.ip_ban_lifted'),
         gte(schema.auditLog.at, since),

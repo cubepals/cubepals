@@ -166,13 +166,13 @@ describe.skipIf(!hasDatabase)('the servers people already have, first', () => {
       )
     }
     expect(await line('Free')).toEqual([
-      ['provision', 0],
-      ['stop', 1],
+      ['provision', -1],
+      ['stop', 0],
       ['start', 1],
     ])
     expect(await line('Plus')).toEqual([
-      ['provision', 0],
-      ['stop', 1],
+      ['provision', -1],
+      ['stop', 0],
       ['start', 2],
     ])
   }, 60_000)

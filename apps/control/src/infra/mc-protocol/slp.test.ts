@@ -4,6 +4,7 @@
 
 import { afterEach, describe, expect, test } from 'bun:test'
 import { createServer, type Server, type Socket } from 'node:net'
+import { LOCAL_HEADER, readProxyHeader } from '@blockly/contracts/proxy-header'
 import { SlpProbe } from './slp.ts'
 
 function varInt(value: number): Buffer {
@@ -35,10 +36,13 @@ function fakeServer(behave: (socket: Socket) => void): Promise<Server> {
 let server: Server | null = null
 afterEach(() => server?.close())
 
-const ping = (s: Server, timeoutMs = 1000) => {
+const ping = (s: Server, timeoutMs = 1000, proxyProtocol = false) => {
   const address = s.address()
   if (address === null || typeof address === 'string') throw new Error('no address')
-  return new SlpProbe().ping({ host: '127.0.0.1', port: address.port }, AbortSignal.timeout(timeoutMs))
+  return new SlpProbe().ping(
+    { host: '127.0.0.1', port: address.port, proxyProtocol },
+    AbortSignal.timeout(timeoutMs),
+  )
 }
 
 describe('SlpProbe', () => {
@@ -75,6 +79,17 @@ describe('SlpProbe', () => {
     expect(Date.now() - started).toBeLessThan(500)
     expect(failure).toBeInstanceOf(Error)
     expect((failure as Error).message).toContain('closed the connection without answering')
+  })
+
+  test('a server that reads a PROXY header is sent a LOCAL one first, and any other none', async () => {
+    const opened: Buffer[] = []
+    server = await fakeServer((socket) => socket.write(statusReply(STATUS)))
+    server.on('connection', (socket) => socket.once('data', (chunk) => opened.push(chunk)))
+    await ping(server, 1000, true)
+    await ping(server)
+    const [proxied, plain] = opened.map((chunk) => readProxyHeader(new Uint8Array(chunk)))
+    expect(proxied).toEqual({ source: null, next: LOCAL_HEADER.length })
+    expect(plain).toBe('none')
   })
 
   test('a server that never answers fails at the deadline', async () => {

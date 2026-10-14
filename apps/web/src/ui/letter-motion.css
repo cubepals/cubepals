@@ -1,0 +1,33 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/* The fill into the beta letter (letter-motion.ts). With view transitions, the page that was there
+   stays still and the letter is revealed over it, its clip opening from the banner's strip or the
+   tag's box (`--letter-from`) to the whole screen. Only clip-path moves. */
+html[data-letter-fill]::view-transition-old(root) {
+  animation: none;
+}
+html[data-letter-fill]::view-transition-new(root) {
+  animation: letter-fill 500ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+@keyframes letter-fill {
+  from {
+    clip-path: var(--letter-from);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+/* The layer that stands in where there are no view transitions, and that fades off the page after
+   the letter. Above everything, and never in the way of a press. */
+[data-letter-layer] {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  background: var(--ember);
+  pointer-events: none;
+}

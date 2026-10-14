@@ -42,12 +42,8 @@ const RETRIES: Record<OperationKind, number> = {
   unstore: 0,
 }
 
-/**
- * Which operation a worker takes first when several servers wait (a server's own stay in order):
- * a start or wake on a paid plan, then everything else for servers people already have, and a new
- * server's first build last, so creates never hold up the servers people already have.
- */
-const AHEAD = { create: 0, existing: 1, paidWake: 2 }
+/** Operations a player waits on to play: they go ahead of everything else queued (ports/jobs.ts). */
+const WAKES: ReadonlySet<OperationKind> = new Set(['start', 'unstore'])
 
 export interface OperationRequest {
   requestedBy: string
@@ -141,7 +137,9 @@ export class ServerTransitions {
         operationId: record.id,
         serverId: server.id,
         retryLimit: RETRIES[kind],
-        priority: await ahead(tx, server, kind),
+        wakes: WAKES.has(kind),
+        paid: WAKES.has(kind) && (await paidPlan(tx, server)),
+        creates: kind === 'provision',
       })
       await this.#events.publish(tx, {
         type: 'operation_progress',
@@ -173,11 +171,8 @@ export class ServerTransitions {
   }
 }
 
-/** Where an operation goes in the line (`AHEAD`): a wake's place depends on its owner's plan. */
-async function ahead(tx: Tx, server: MinecraftServer, kind: OperationKind): Promise<number> {
-  if (kind === 'provision') return AHEAD.create
-  if (kind !== 'start' && kind !== 'unstore') return AHEAD.existing
+/** Whether a server's owner is on a paid plan, whose wakes go ahead of other wakes. */
+async function paidPlan(tx: Tx, server: MinecraftServer): Promise<boolean> {
   const standing = await loadStanding(tx, server.ownerId)
-  const paid = entitlementsFor(standing.plan, standing.limitOverrides).monthlyPriceCents > 0
-  return paid ? AHEAD.paidWake : AHEAD.existing
+  return entitlementsFor(standing.plan, standing.limitOverrides).monthlyPriceCents > 0
 }

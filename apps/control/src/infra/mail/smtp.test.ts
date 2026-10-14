@@ -109,3 +109,23 @@ test('no email carries a bulk-mail header, and a reply goes where it is told', a
       /^(List-Unsubscribe|List-Unsubscribe-Post|List-Id|Precedence|Auto-Submitted):/im,
     )
 })
+
+test('a server that never greets fails the send instead of holding it', async () => {
+  const silent = createServer(() => undefined)
+  await new Promise<void>((resolve) => silent.listen(0, '127.0.0.1', resolve))
+  const address = silent.address()
+  const silentPort = typeof address === 'object' && address !== null ? address.port : 0
+  const mailer = new SmtpMailer(
+    { smtpUrl: `smtp://127.0.0.1:${silentPort}`, from: 'Cubepals <hello@blockly.test>', subjectPrefix: '' },
+    { connectionTimeout: 200, greetingTimeout: 200, socketTimeout: 200 },
+  )
+  const started = Date.now()
+  try {
+    await expect(mailer.send({ to: 'player@example.test', subject: 'Hi', text: 'Hi.' })).rejects.toThrow(
+      /timeout/i,
+    )
+    expect(Date.now() - started).toBeLessThan(5_000)
+  } finally {
+    silent.close()
+  }
+})

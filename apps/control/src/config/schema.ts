@@ -4,6 +4,7 @@
 
 import { z } from 'zod'
 import { PAID_PLANS } from '../domain/account/entitlements.ts'
+import { DEFAULT_ABUSE_LIMITS } from '../domain/account/tuning.ts'
 
 /**
  * Everything a deployment can differ in. Parsed once at boot and consumed by the composition
@@ -182,6 +183,8 @@ const AbuseLimits = z
       giftsPerDay: Count,
       wrongCodesPerHour: Count,
       wakesPerHour: Count,
+      // Optional, so a deployment's ABUSE_LIMITS from before it existed still parses.
+      inviteJoinsPerHour: Count.default(DEFAULT_ABUSE_LIMITS.inviteJoinsPerHour),
     },
     { error: 'ABUSE_LIMITS is the deployment’s abuse limits, as JSON (docs/configuration.md)' },
   )
@@ -217,6 +220,18 @@ export const DeploymentConfig = z.object({
      * of the deployment shares its limit.
      */
     poolMax: z.number().int().positive(),
+  }),
+  /**
+   * Server operations each worker process runs at once. An operation spends nearly all its time
+   * waiting on the provider and on the server booting, holding no database connection while it
+   * waits, so many run side by side. Starts and wakes have a lane of their own on top, so a queue
+   * of new servers never keeps a player waiting to join.
+   */
+  operations: z.object({
+    /** Every kind of operation, starts and wakes first. */
+    concurrency: z.number().int().positive(),
+    /** Starts and wakes alone, however busy the rest is. */
+    wakeConcurrency: z.number().int().positive(),
   }),
   web: z.object({
     /** Where people reach the web app; auth's base URL is this plus /api/auth. */
@@ -464,9 +479,9 @@ export function inconsistencies(config: DeploymentConfig): string[] {
   if (web.protocol !== 'https:' && !isLocal(web.hostname))
     problems.push(`The web origin ${web.origin} must use https outside local development.`)
   for (const runtime of config.runtimes) {
-    // Two machines a server at their busiest (restore, export, relocate), beside the platform's own:
-    // the Fly runtime counts its ceiling the same way (MACHINES_PER_SERVER in infra/fly).
-    if (runtime.provider === 'fly' && runtime.machineLimit - runtime.platformMachines < 2)
+    // One machine a server, beside the platform's own and the two kept for helpers: the Fly runtime
+    // counts its ceiling the same way (HELPER_HEADROOM in infra/fly).
+    if (runtime.provider === 'fly' && runtime.machineLimit - runtime.platformMachines < 3)
       problems.push(
         `FLY_MACHINE_LIMIT (${runtime.machineLimit}) leaves no room for a server beside the platform's ${runtime.platformMachines} machines.`,
       )

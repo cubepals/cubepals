@@ -14,10 +14,12 @@ import type { Subprocess } from 'bun'
 // Copied into the image beside the agent (Dockerfile): the one place play coming back is worded.
 import { MINUTE_MS } from '../../packages/contracts/src/durations.ts'
 import { waitFor } from '../../packages/contracts/src/play-today.ts'
+import { LOCAL_HEADER } from '../../packages/contracts/src/proxy-header.ts'
 import { OWN_ICON_MAX_BYTES } from '../../packages/contracts/src/server-list.ts'
 import { GAME_PORT } from '../control/src/minecraft/ports.ts'
 import { asleepMessage } from './asleep.ts'
 import { front, pipe } from './front.ts'
+import { forServer, Unwrap } from './header.ts'
 import { Held, LOGIN_QUERIES, turnAway } from './hold.ts'
 import { Gate } from './limits.ts'
 import { mappings } from './mappings.ts'
@@ -103,6 +105,8 @@ let router: Subprocess | null = null
 let routes: EdgeRoutes['routes'] = []
 /** Every hostname those routes name. */
 let hostnames = new Set<string>()
+/** Hostnames of running servers that read no PROXY header: the front door sends them none. */
+let plain = new Set<string>()
 /**
  * Destinations of running servers that didn't answer: restarting without Blockly asking, as when
  * the provider brings a crashed one back. Their players are told so until they answer again.
@@ -128,6 +132,7 @@ async function syncRoutes(): Promise<void> {
     if (!response.ok) throw new Error(`routes answered ${response.status}`)
     routes = ((await response.json()) as EdgeRoutes).routes
     hostnames = new Set(routes.map((r) => r.hostname))
+    plain = new Set(routes.filter((r) => r.state === undefined && !r.proxyProtocol).map((r) => r.hostname))
     const running = new Set(routes.filter((r) => r.state === undefined).map((r) => r.destination))
     for (const destination of unreachable) if (!running.has(destination)) unreachable.delete(destination)
     for (const destination of asked.keys()) if (!running.has(destination)) asked.delete(destination)
@@ -174,8 +179,15 @@ function fetchIcons(): void {
 
 // ─── Running servers that don't answer, watched until they do ──────────────────────────────
 
-/** Whether the server at `destination` answers a status request, as a player's server list asks. */
-function answers(destination: string): Promise<boolean> {
+/** Whether the running server at `destination` reads a PROXY header, as its route says. */
+const readsHeader = (destination: string): boolean =>
+  routes.some((r) => r.state === undefined && r.destination === destination && r.proxyProtocol === true)
+
+/**
+ * Whether the server at `destination` answers a status request, as a player's server list asks.
+ * One that reads a PROXY header is sent a LOCAL one first: the request is the edge's own.
+ */
+function answers(destination: string, proxied = readsHeader(destination)): Promise<boolean> {
   const colon = destination.lastIndexOf(':')
   const host = destination.slice(0, colon).replace(/^\[|\]$/g, '')
   const port = Number(destination.slice(colon + 1))
@@ -188,7 +200,7 @@ function answers(destination: string): Promise<boolean> {
       socket.destroy()
       resolve(up)
     }
-    socket.once('connect', () => socket.write(statusRequest(host, port)))
+    socket.once('connect', () => socket.write(forServer(proxied, LOCAL_HEADER, statusRequest(host, port))))
     socket.once('data', () => done(true))
     socket.once('close', () => done(false))
     socket.once('timeout', () => done(false))
@@ -233,7 +245,10 @@ async function wake(serverAddress: string): Promise<Response> {
   if (result?.outcome !== 'ready') return Response.json({ backend: WAITING })
   // Running, as far as Blockly knows, but not answering: the join waits a while for it to come
   // back, and is otherwise told it is restarting. A join is rare enough to always ask.
-  if (!unreachable.has(result.destination) && !(await answers(result.destination))) {
+  if (
+    !unreachable.has(result.destination) &&
+    !(await answers(result.destination, result.proxyProtocol === true))
+  ) {
     unreachable.add(result.destination)
     writeRoutes()
   }
@@ -311,16 +326,19 @@ Bun.serve({
 
 // ─── The notice ─────────────────────────────────────────────────────────────────────────────
 
-Bun.listen<Notice>({
+Bun.listen<{ notice: Notice; unwrap: Unwrap }>({
   hostname: '127.0.0.1',
   port: Number(NOTICE.split(':')[1]),
   socket: {
     open(socket) {
-      socket.data = new Notice(RESTARTING)
+      socket.data = { notice: new Notice(RESTARTING), unwrap: new Unwrap() }
       socket.timeout(10)
     },
     data(socket, chunk) {
-      const { reply, close } = socket.data.receive(chunk)
+      const own = socket.data.unwrap.take(chunk)
+      if (own === 'bad') return void socket.end()
+      if (own === null) return
+      const { reply, close } = socket.data.notice.receive(own)
       for (const bytes of reply) socket.write(bytes)
       if (close) socket.end()
     },
@@ -339,13 +357,13 @@ Bun.listen<Notice>({
 // comes once the wake is over, and goes on to the server as it would have without this.
 
 /** Connects a join handed back by the notice to the server its address routes to. */
-function passOn(client: Socket, join: Join): void {
+function passOn(client: Socket, join: Join, header: Uint8Array | null): void {
   const route = routes.find((r) => r.hostname === hostnameOf(join))
   if (!route) {
     client.destroy()
     return
   }
-  pipe(client, route.destination, join.bytes)
+  pipe(client, route.destination, forServer(route.proxyProtocol === true, header, join.bytes))
 }
 
 /**
@@ -363,20 +381,30 @@ function asleep(address: string): NoticeText {
   return { ...ASLEEP, status, ...(icon ? { icon } : {}) }
 }
 
-/** Tells a ping at `address` that its server sleeps, and hands a join on to `then`. */
-function asleepAt(address: string, then: (client: Socket, join: Join) => void): void {
+/**
+ * Tells a ping at `address` that its server sleeps, and hands a join on to `then`, with the PROXY
+ * header it came with, if any.
+ */
+function asleepAt(
+  address: string,
+  then: (client: Socket, join: Join, header: Uint8Array | null) => void,
+): void {
   createServer((client) => {
     const notice = new Notice(asleep)
+    const unwrap = new Unwrap()
     client.setTimeout(10_000, () => client.destroy())
     client.on('error', () => client.destroy())
     const receive = (chunk: Buffer) => {
-      const { reply, close, join } = notice.receive(chunk)
+      const own = unwrap.take(chunk)
+      if (own === 'bad') return void client.destroy()
+      if (own === null) return
+      const { reply, close, join } = notice.receive(own)
       for (const bytes of reply) client.write(bytes)
       if (close) client.end()
       if (!join) return
       client.off('data', receive)
       client.setTimeout(0)
-      then(client, join)
+      then(client, join, unwrap.header)
     }
     client.on('data', receive)
   }).listen(Number(address.split(':')[1]), '127.0.0.1')
@@ -392,7 +420,7 @@ asleepAt(SLEEPING, passOn)
 // one that can't is turned away, with why.
 
 /** Holds `join` until its server is up, then passes it on; or turns it away, saying why. */
-async function hold(client: Socket, join: Join): Promise<void> {
+async function hold(client: Socket, join: Join, header: Uint8Array | null): Promise<void> {
   const held = new Held(join)
   client.on('data', (chunk: Buffer) => {
     if (!held.receive(chunk)) client.destroy()
@@ -406,7 +434,7 @@ async function hold(client: Socket, join: Join): Promise<void> {
   if (client.destroyed) return
   if (result?.outcome === 'ready' && (await settle(client, held))) {
     client.removeAllListeners('data')
-    pipe(client, result.destination, held.replay())
+    pipe(client, result.destination, forServer(result.proxyProtocol === true, header, held.replay()))
     return
   }
   const backAt = result?.outcome === 'denied' ? result.backAt : undefined
@@ -437,7 +465,7 @@ function whyNot(result: WakeResult | null): keyof typeof TURNED_AWAY {
   return result.outcome === 'restarting' ? 'restarting' : 'starting'
 }
 
-asleepAt(WAITING, (client, join) => void hold(client, join))
+asleepAt(WAITING, (client, join, header) => void hold(client, join, header))
 
 // ─── Supervise mc-router ────────────────────────────────────────────────────────────────────
 
@@ -452,6 +480,7 @@ front({
   proxied: env('PROXY_PROTOCOL', '') === '1',
   gate: new Gate(LIMITS),
   known: (name) => hostnames.has(name),
+  plain: (name) => plain.has(name),
   busy: env('BUSY_JOIN', 'This server is busy right now · join again in a moment'),
 })
 
@@ -460,8 +489,9 @@ const child = Bun.spawn(
     env('ROUTER_BIN', '/mc-router'),
     '-port',
     String(ROUTER_PORT),
-    // Only the front door connects, and says who it connects for.
-    '-receive-proxy-protocol',
+    // Only the front door connects, and says who it connects for in a PROXY header, which
+    // mc-router passes on to the server: every connection but one to a server that reads none.
+    '-dynamic-proxy-protocol',
     '-trusted-proxies',
     '127.0.0.1/32',
     '-routes-config',

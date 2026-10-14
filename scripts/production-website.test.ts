@@ -21,11 +21,16 @@ describe("production's website", () => {
       canonicalOrigin: 'https://cubepals.com',
       deploymentId: 'prod',
       indexable: true,
+      beta: true,
       proxySecret: 'stand-in-proxy-secret',
       posthogToken: example.settings.POSTHOG_TOKEN,
       sourceMaps: undefined,
       cloudflare: { token: 'stand-in-workers-token', accountId: '0123456789abcdef0123456789abcdef' },
     })
+  })
+
+  test('stops saying it is in beta once the environment turns it off', () => {
+    expect(productionSite(values, { ...example, web: { ...example.web, beta: false } }).beta).toBe(false)
   })
 
   test('uploads source maps only with both PostHog values', () => {

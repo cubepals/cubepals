@@ -1,0 +1,90 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/* The beta tag and the first-visit banner (beta.tsx). Neither shows unless the root layout marks
+   the page `data-beta`; the banner also needs `data-beta-unread`, set before paint (lib/beta.ts). */
+
+.with {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+/* The tag: the brand's own block made small. Square, a hairline edge in the colour of the text
+   around it, so it is ink on paper in the pages and paper on ink in the app's navigation, and
+   Geologica cut square like every label. It sits level with the word's lowercase letters. */
+.tag {
+  display: none;
+  padding: 2px 5px 3px;
+  border: 1.5px solid currentColor;
+  color: inherit;
+  font-family: var(--font-sans);
+  font-variation-settings: "SHRP" 100;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 11px;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  transform: translateY(1px);
+}
+.tag:hover,
+.tag:focus-visible {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+html[data-beta] .tag {
+  display: inline-block;
+}
+
+/* The banner, from the same family as the test account's bar: across the top in the warm yellow,
+   ink on it. It scrolls away with the page rather than following it. */
+.banner {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-48);
+  position: relative;
+  background: var(--ember);
+  color: #0d0d0d;
+  font-family: var(--font-sans);
+  font-variation-settings: "SHRP" 30;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: center;
+}
+html[data-beta-unread] .banner {
+  display: flex;
+}
+
+.line {
+  margin: 0;
+}
+
+.read {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.close {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--space-8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.close:focus-visible {
+  outline: 2px solid #0d0d0d;
+  outline-offset: -6px;
+}

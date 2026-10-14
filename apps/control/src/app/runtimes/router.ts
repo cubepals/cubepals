@@ -2,7 +2,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { ConsoleTarget, ReadinessProbe, ServerConsole, ServerStatusPing } from '../ports/minecraft.ts'
+import type {
+  ConsoleTarget,
+  GameEndpoint,
+  ReadinessProbe,
+  ServerConsole,
+  ServerStatusPing,
+} from '../ports/minecraft.ts'
 import type { LogLine, LogSource } from '../ports/platform.ts'
 import {
   type ArchiveTarget,
@@ -422,7 +428,7 @@ export class RoutedAdapters {
         forEndpoint(target.endpoint).console.runAll(target, commands),
     }
     this.probe = {
-      ping: (endpoint: Endpoint, signal: AbortSignal): Promise<ServerStatusPing> =>
+      ping: (endpoint: GameEndpoint, signal: AbortSignal): Promise<ServerStatusPing> =>
         forEndpoint(endpoint).probe.ping(endpoint, signal),
     }
     this.logs = {

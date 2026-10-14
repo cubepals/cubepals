@@ -6,8 +6,10 @@
  * The edge's front door: every player's connection arrives here first. It learns who is
  * connecting (from Fly's PROXY header when there is one) and which server they dialled (from the
  * handshake), asks the gate (`limits.ts`) whether that server and that address may have another
- * connection, and hands what it lets in to mc-router, with a PROXY header of its own so mc-router
- * still knows who it is talking to.
+ * connection, and hands what it lets in to mc-router, with a PROXY protocol v2 header of its own
+ * saying who is connecting. mc-router passes that header on to the server, which so sees each
+ * player's own address, not the edge's. A connection to a running server that reads no header
+ * goes without one, since one would break it; mc-router then passes none on.
  *
  * mc-router's own limit counts every connection to every server together, and only delays them,
  * so one flooded server used to slow every server's joins. Here a flood is refused at the server
@@ -17,6 +19,7 @@
  */
 
 import { connect, createServer, type Server, type Socket } from 'node:net'
+import { LOCAL_HEADER, proxyHeader, unmapped } from '../../packages/contracts/src/proxy-header.ts'
 import { turnAway } from './hold.ts'
 import type { Gate } from './limits.ts'
 import { hostnameOf, readVarInt } from './notice.ts'
@@ -30,6 +33,12 @@ export interface FrontOptions {
   gate: Gate
   /** Whether a hostname is a server's: every other hostname is counted as one server. */
   known: (hostname: string) => boolean
+  /**
+   * Whether a hostname's server is running and reads no PROXY header: its connections reach
+   * mc-router without one. Every other connection carries one, which mc-router passes on to the
+   * server, or to the agent's own listeners, which read it off (`header.ts`).
+   */
+  plain: (hostname: string) => boolean
   /** What a join is told when its server is taking no more connections just now. */
   busy: string
 }
@@ -80,13 +89,18 @@ export function readHandshake(bytes: Uint8Array): { hostname: string; joining: b
   return { hostname: hostnameOf({ address: dialled }), joining: intent.value !== 1 }
 }
 
-/** The PROXY v1 line mc-router reads `source` from. */
-function proxyLine(source: Source, port: number): Uint8Array {
-  const address = source.address.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '')
-  const line = address.includes(':')
-    ? `PROXY TCP6 ${address} ::1 ${source.port} ${port}\r\n`
-    : `PROXY TCP4 ${address} 127.0.0.1 ${source.port} ${port}\r\n`
-  return new TextEncoder().encode(line)
+/**
+ * The PROXY header saying `source` connected to the front door's `port`: mc-router reads who is
+ * connecting from it, and passes it on. A source with no address, which only a socket already
+ * gone has, gets a LOCAL header, as a connection of the edge's own.
+ */
+function headerFor(source: Source | null, port: number): Uint8Array {
+  if (source === null || source.address === '') return LOCAL_HEADER
+  const address = unmapped(source.address)
+  return proxyHeader(
+    { address, port: source.port },
+    { address: address.includes(':') ? '::1' : '127.0.0.1', port },
+  )
 }
 
 /** Connects `client` to the server at `destination`, which first gets what the client sent so far. */
@@ -165,7 +179,7 @@ class Arrival {
   }
 
   #admit(handshake: { hostname: string; joining: boolean }): void {
-    const { gate, known, busy, router, port } = this.#options
+    const { gate, known, plain, busy, router, port } = this.#options
     const admitted = gate.admit(known(handshake.hostname) ? handshake.hostname : '')
     if (!admitted) {
       // A ping just goes unanswered; a join hears why, in Cubepals' words.
@@ -174,8 +188,16 @@ class Arrival {
       return
     }
     this.#client.once('close', admitted)
-    const source = this.#source ?? { address: '', port: 0 }
-    pipe(this.#client, `127.0.0.1:${router}`, concat(proxyLine(source, port), this.#received))
+    let sent = this.#received
+    if (!plain(handshake.hostname)) {
+      try {
+        sent = concat(headerFor(this.#source, port), this.#received)
+      } catch {
+        // An address that can't be written in a header: no player's connection has one.
+        return void this.#client.destroy()
+      }
+    }
+    pipe(this.#client, `127.0.0.1:${router}`, sent)
   }
 }
 

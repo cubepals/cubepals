@@ -11,6 +11,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { schema } from '@blockly/db'
+import { and, desc, eq } from 'drizzle-orm'
 import { onLevel } from '../../domain/revision/carried.ts'
 import { DUELS_FILES } from '../../minecraft/duels.ts'
 import { WAITING_FILES } from '../../minecraft/duels-waiting.ts'
@@ -194,4 +196,68 @@ describe.skipIf(!hasDatabase)('duels', () => {
       joinsNewer: false,
     })
   }, 30_000)
+})
+
+describe.skipIf(!hasDatabase)('a Duels server asleep', () => {
+  beforeAll(async () => {
+    await cdn.start()
+    h = await startHarness()
+    h.runtime.sleeps.on = true
+    plugin('pZyHIvCK', 'Duels', ['1.21.11'])
+    plugin('hangar:2087', 'OldCombatMechanics', ['1.21.11'], 'hangar:31271')
+    plugin(LIBERTYBANS, 'LibertyBans', ['1.21.11'], '7WLjonzv')
+    plugin(LUCKPERMS, 'LuckPerms', ['1.21.11'], 'b0mk8uS6')
+    plugin(CHATSENTINEL, 'ChatSentinel', ['1.21.11'], 'uWt04znt')
+    plugin('LJNGWSvH', 'Grim Anticheat', ['1.21.11'], '1FIGlM6Q')
+  }, 30_000)
+
+  afterAll(async () => {
+    await h.close()
+    cdn.close()
+  })
+
+  // Production, 2026-10-14: Duels, put to sleep, was booted again at its wake rather than resumed.
+  test('asleep with nothing changed, it wakes as it slept, and a new message waits for its next boot', async () => {
+    const owner = await h.user('Ola', 'plus')
+    const server = await h.create(owner, { from: { kind: 'template', key: 'duels' } })
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+    const sleepAndWake = async (between = async () => {}) => {
+      await h.app.servers.stop(owner, server.id, randomUUID(), 'idle')
+      await h.until(server.id, 'stopped')
+      await h.settled(server.id)
+      expect(h.runtime.machine(server.id)?.state).toBe('suspended')
+      await between()
+      await h.app.servers.start(owner, server.id, randomUUID())
+      await h.until(server.id, 'running')
+      await h.settled(server.id)
+      const [start] = await h.db
+        .select({ steps: schema.serverOperations.steps })
+        .from(schema.serverOperations)
+        .where(
+          and(eq(schema.serverOperations.serverId, server.id), eq(schema.serverOperations.kind, 'start')),
+        )
+        .orderBy(desc(schema.serverOperations.createdAt))
+        .limit(1)
+      return (start?.steps ?? []).map((entry) => entry.step)
+    }
+    const booted = h.runtime.machine(server.id)?.spec.env.MOTD
+    expect(await sleepAndWake()).toContain('resuming')
+    expect(await sleepAndWake()).not.toContain('booting')
+
+    // Its message, changed while it slept: the server list shows it from the next boot, and the
+    // wake doesn't wait for one.
+    const steps = await sleepAndWake(async () => {
+      const settings = (await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)).settings
+      await h.app.revisions.changeSettings(owner, server.id, { ...settings, motd: 'Back soon' }, randomUUID())
+      await h.settled(server.id)
+    })
+    expect(steps).toContain('resuming')
+    expect(steps).not.toContain('booting')
+    expect(h.runtime.machine(server.id)?.spec.env.MOTD).toBe(booted)
+    await h.app.servers.restart(owner, server.id, randomUUID())
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+    expect(h.runtime.machine(server.id)?.spec.env.MOTD).toBe('Back soon')
+  }, 60_000)
 })

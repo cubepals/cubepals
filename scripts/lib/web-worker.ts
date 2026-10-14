@@ -47,6 +47,8 @@ export interface WorkerSite {
   deploymentId: string
   /** Whether search engines may index it: production's alone. */
   indexable: boolean
+  /** WEB_BETA: whether the site says it is in beta (apps/web/src/lib/beta.ts). On unless false. */
+  beta?: boolean
   /** WEB_PROXY_SECRET, the control plane's. Without it, a version keeps the one the Worker has. */
   proxySecret?: string
   /** NEXT_PUBLIC_POSTHOG_TOKEN; without it the browser sends PostHog nothing. */
@@ -82,6 +84,7 @@ function runtimeVars(site: WorkerSite): Record<string, string> {
     WEB_CLIENT_ADDRESS_HEADER: 'cf-connecting-ip',
     ...(site.forwardedHosts ? { WEB_FORWARDED_HOST: site.forwardedHosts.join(',') } : {}),
     ...(site.indexable ? { WEB_INDEXABLE: '1' } : {}),
+    ...(site.beta === false ? { WEB_BETA: '0' } : {}),
   }
 }
 

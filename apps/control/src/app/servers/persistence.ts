@@ -637,8 +637,19 @@ export async function loadRuntime(
   serverId: string,
   providers: readonly string[],
 ): Promise<RuntimeBinding> {
+  const binding = await findRuntime(q, serverId, providers)
+  if (binding === null) throw new Error(`Server ${serverId} has no runtime binding`)
+  return binding
+}
+
+/** A server's runtime binding, or null before it has one. */
+export async function findRuntime(
+  q: Queryable,
+  serverId: string,
+  providers: readonly string[],
+): Promise<RuntimeBinding | null> {
   const [row] = await q.select().from(runtimes).where(eq(runtimes.serverId, serverId))
-  if (!row) throw new Error(`Server ${serverId} has no runtime binding`)
+  if (!row) return null
   const foreign = !providers.includes(row.provider)
   return { ...row, handle: foreign ? null : (row.handle as RuntimeHandle | null), foreign }
 }

@@ -11,15 +11,26 @@ import type { Mailer } from '../../app/ports/platform.ts'
  * multipart/alternative, the text first, so a mail app that shows no HTML shows the text. No
  * email carries List-Unsubscribe or any other bulk-mail header: none of them is marketing.
  */
+/**
+ * How long a send waits on the SMTP server: to connect, for its greeting, and between any two
+ * answers. Sign-up and password reset wait on their email, so a server that hangs fails them in
+ * seconds instead of nodemailer's own minutes. A `?connectionTimeout=` (or the others) in
+ * SMTP_URL wins over these.
+ */
+export const SMTP_TIMEOUTS = { connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 30_000 }
+
 export class SmtpMailer implements Mailer {
   readonly #transport: Transporter
   readonly #from: string
   readonly #replyTo: string | undefined
   readonly #subjectPrefix: string
 
-  /** With `replyTo`, a reply goes there rather than to the sender. */
-  constructor(mail: { smtpUrl: string; from: string; replyTo?: string; subjectPrefix: string }) {
-    this.#transport = nodemailer.createTransport(mail.smtpUrl)
+  /** With `replyTo`, a reply goes there rather than to the sender. Tests pass shorter `timeouts`. */
+  constructor(
+    mail: { smtpUrl: string; from: string; replyTo?: string; subjectPrefix: string },
+    timeouts: typeof SMTP_TIMEOUTS = SMTP_TIMEOUTS,
+  ) {
+    this.#transport = nodemailer.createTransport({ url: mail.smtpUrl, ...timeouts })
     this.#from = mail.from
     this.#replyTo = mail.replyTo
     this.#subjectPrefix = mail.subjectPrefix

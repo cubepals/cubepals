@@ -1,5 +1,5 @@
 {
-  "id": "089cd70a-cc38-4e32-97dd-c1803bd16aa2",
+  "id": "c38bf6c9-d924-4d7c-be7f-ad79f0acb528",
   "prevId": "577a6b1f-d52e-49a4-bfe0-d309023c1141",
   "version": "7",
   "dialect": "postgresql",
@@ -638,24 +638,6 @@
         "fly_suspend": {
           "name": "fly_suspend",
           "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "creates_full_for": {
-          "name": "creates_full_for",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "creates_full_because": {
-          "name": "creates_full_because",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "creates_full_since": {
-          "name": "creates_full_since",
-          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -1907,6 +1889,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "backups_ready_expiry": {
+          "name": "backups_ready_expiry",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"backups\".\"status\" = 'ready'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -6386,6 +6384,37 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "servers_status": {
+          "name": "servers_status",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "servers_slug_deleted": {
+          "name": "servers_slug_deleted",
+          "columns": [
+            {
+              "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"minecraft_servers\".\"status\" = 'deleted'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -6653,6 +6682,33 @@
           "columns": [
             {
               "expression": "server_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "operations_server_kind": {
+          "name": "operations_server_kind",
+          "columns": [
+            {
+              "expression": "server_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -7331,6 +7387,21 @@
           "columns": [
             {
               "expression": "player_uuid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "server_players_confirmed": {
+          "name": "server_players_confirmed",
+          "columns": [
+            {
+              "expression": "confirmed_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

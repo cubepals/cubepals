@@ -6,6 +6,7 @@
 
 import { afterEach, expect, test } from 'bun:test'
 import { type AddressInfo, connect, createServer, type Server } from 'node:net'
+import { readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
 import { front, readHandshake, readProxyLine } from './front.ts'
 import { turnAway } from './hold.ts'
 import { Gate, type Limits } from './limits.ts'
@@ -86,6 +87,7 @@ async function frontDoor(limits: Limits, proxied: boolean) {
     proxied,
     gate: new Gate(limits),
     known: (hostname) => hostname.endsWith('.play.test'),
+    plain: (hostname) => hostname === 'vanilla.play.test',
     busy: 'Busy',
   })
   open.push(listener)
@@ -97,14 +99,50 @@ const ROOMY: Limits = {
   server: { connections: { perSecond: 100, burst: 100 }, open: 100 },
 }
 
-test('what the gate lets in reaches mc-router as it came, after a PROXY line naming the client', async () => {
+test('what the gate lets in reaches mc-router as it came, after a PROXY header naming the client', async () => {
   const { port, behind } = await frontDoor(ROOMY, true)
   const join = joinRequest('a.play.test')
   await dial(port, Uint8Array.from([...encode('PROXY TCP4 203.0.113.7 10.0.0.1 51234 25565\r\n'), ...join]))
   await Bun.sleep(50)
+  const received = new Uint8Array(Buffer.from(behind.received[0] ?? '', 'latin1'))
+  const header = readProxyHeader(received)
+  expect(header).toEqual({ source: { address: '203.0.113.7', port: 51234 }, next: 28 })
+  expect(Array.from(received.subarray(28))).toEqual(Array.from(join))
+})
+
+test('a running server that reads no PROXY header gets its connections without one', async () => {
+  const { port, behind } = await frontDoor(ROOMY, true)
+  const join = joinRequest('vanilla.play.test')
+  await dial(
+    port,
+    Uint8Array.from([...encode('PROXY TCP6 2001:db8::7 2001:db8::1 51234 25565\r\n'), ...join]),
+  )
+  await dial(
+    port,
+    Uint8Array.from([...encode('PROXY TCP6 2001:db8::7 2001:db8::1 51235 25565\r\n'), ...join]),
+  )
+  await Bun.sleep(50)
   expect(behind.received).toEqual([
-    `PROXY TCP4 203.0.113.7 127.0.0.1 51234 0\r\n${Buffer.from(join).toString('latin1')}`,
+    Buffer.from(join).toString('latin1'),
+    Buffer.from(join).toString('latin1'),
   ])
+})
+
+test('an IPv6 client is named in an IPv6 header, and one written in IPv6 form as IPv4', async () => {
+  const { port, behind } = await frontDoor(ROOMY, true)
+  const join = joinRequest('a.play.test')
+  await dial(
+    port,
+    Uint8Array.from([...encode('PROXY TCP6 2001:db8::7 2001:db8::1 51234 25565\r\n'), ...join]),
+  )
+  await Bun.sleep(50)
+  await dial(port, Uint8Array.from([...encode('PROXY TCP6 ::ffff:203.0.113.7 ::1 51235 25565\r\n'), ...join]))
+  await Bun.sleep(50)
+  const [six, four] = behind.received.map((got) =>
+    readProxyHeader(new Uint8Array(Buffer.from(got, 'latin1'))),
+  )
+  expect(six).toEqual({ source: { address: '2001:db8:0:0:0:0:0:7', port: 51234 }, next: 52 })
+  expect(four).toEqual({ source: { address: '203.0.113.7', port: 51235 }, next: 28 })
 })
 
 test('a flooded server turns joins away in words and leaves pings unanswered, while another still gets through', async () => {

@@ -104,22 +104,27 @@ describe.skipIf(!base)('the order of server operations across servers', () => {
     await database?.drop()
   })
 
-  test('a worker takes the highest first, and the oldest among equals', async () => {
+  test('a paid wake goes first, in either lane, and a new server’s build last', async () => {
     const jobs = new PgBossJobs(boss)
     const [create, freeWake, plusWake, freeStop] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()]
     // Each in a transaction of its own, so each is asked for after the one before.
     const asked = [
-      { operationId: create },
-      { operationId: freeWake, priority: 1 },
-      { operationId: plusWake, priority: 2 },
-      { operationId: freeStop, priority: 1 },
+      { operationId: create, wakes: false, creates: true },
+      { operationId: freeWake, wakes: true },
+      { operationId: plusWake, wakes: true, paid: true },
+      { operationId: freeStop, wakes: false },
     ]
     for (const job of asked)
       await createDb(pool).transaction((tx) =>
         jobs.enqueue(tx, { ...job, serverId: randomUUID(), retryLimit: 0 }),
       )
-    const taken: string[] = []
-    for (const _ of asked) for (const job of await boss.fetch('server-ops')) taken.push(job.id)
-    expect(taken).toEqual([plusWake, freeWake, freeStop, create])
+    const take = async (options: { minPriority?: number }) => {
+      const taken: string[] = []
+      for (const _ of asked) for (const job of await boss.fetch('server-ops', options)) taken.push(job.id)
+      return taken
+    }
+    // The wake lane's floor, as workServerOperations asks: starts and wakes only, the paid one first.
+    expect(await take({ minPriority: 1 })).toEqual([plusWake, freeWake])
+    expect(await take({})).toEqual([freeStop, create])
   }, 10_000)
 })

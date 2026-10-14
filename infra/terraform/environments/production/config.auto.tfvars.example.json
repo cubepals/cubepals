@@ -5,6 +5,7 @@
     "repository": "cubepals/cubepals",
     "redirects": ["www.cubepals.com"],
     "indexable": true,
+    "beta": true,
     "proxied": true
   },
   "settings": {

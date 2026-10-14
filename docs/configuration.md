@@ -88,6 +88,8 @@ Terraform stack.
 | `DATABASE_URL` | compose Postgres | Fly Managed Postgres, pooled | Fly Managed Postgres, pooled | secret | Queries go through it (Managed Postgres's PgBouncer URL) |
 | `DATABASE_DIRECT_URL` | — (`DATABASE_URL`) | Fly Managed Postgres, direct | Fly Managed Postgres, direct | secret | Past the pooler: the live-update listener's `LISTEN` and the release command's migrations. The pooler closes a client idle for ten minutes and breaks `LISTEN` in transaction mode (docs.fly.io/postgres) |
 | `DATABASE_POOL_MAX` | `10` | `10` | `10` | toml | Connections each of a process's two pools (queries, the job queue's) may hold. A session-mode pooler such as Supabase's gives each one a server connection, and every process shares its limit, so a deployment on one sizes it down. The pooler must be session mode: advisory locks hold a connection's session for the length of the work |
+| `SERVER_OPERATIONS_CONCURRENCY` | default `32` | default | default | — | Server operations each worker process runs at once, starts and wakes first. An operation spends nearly all its time waiting on the provider and a boot, holding no database connection while it waits; new Fly apps go out at one a second (`infra/fly/client.ts`). Each worker machine runs this many, so a rolling deploy briefly runs twice as many |
+| `SERVER_WAKES_CONCURRENCY` | default `8` | default | default | — | Starts and wakes each worker runs at once on top of the above, on a lane of their own, so a queue of new servers never delays a player joining. They still wait for what their own server queued first |
 
 ### Listeners
 
@@ -157,7 +159,7 @@ restart.
 | `FLY_ORG` | — | `blockly-staging` | `blockly-prod` | tf | One organization per environment |
 | `FLY_API_TOKEN` | — | secret | secret | secret | An organization token (`fly tokens create org <org>`): the runtime creates and destroys game machines with it |
 | `FLY_NATS_URL` | — | default `nats://[fdaa::3]:4223` | same | — | The organization's log stream, inside its network |
-| `FLY_MACHINE_LIMIT` | — | computed (`fly_machine_limit`) | computed (`fly_machine_limit`) | computed | The organization's machine limit, as Fly support set it. The Fly runtime reports `(limit − platform machines) / 2` as the most servers it holds, since restores, exports and moves briefly run a second machine per server, and the control plane holds `maxServers` to that (§19.12). Raise it with Fly first, then the `fly_machine_limit` variable |
+| `FLY_MACHINE_LIMIT` | — | computed (`fly_machine_limit`) | computed (`fly_machine_limit`) | computed | The organization's machine limit, as Fly support set it. The Fly runtime reports `limit − platform machines − 2` as the most servers it holds: one machine a server, and two kept for a restore's, an export's or a move's machine while it runs. The control plane holds `maxServers` to that (§19.12). Raise it with Fly first, then the `fly_machine_limit` variable |
 | `BOAT_API_TOKEN`, `BOAT_API_URL` | — | — | — | secret | Boat: the account's API key; the API's base (`https://boat.dev/api/v1`) |
 | `BOAT_RUN_TTL_SECONDS`, `BOAT_START_RESERVE` | — | — | — | — | Auto-stop for a running sandbox (unset on a paid plan; ≤ 7200 on the trial); the share of the day's starts kept for wakes (`0.1`) |
 | `FLY_SUSPEND` | — | default `true` | default `false` | — | Whether a server put to sleep (idle, nobody joined, its owner's stop) is suspended rather than stopped, so a join wakes it in about a second instead of 40. The default follows `DEPLOYMENT_ID`: on everywhere but `prod`, whose switch is turned on once staging has run it. `false` turns it off; nothing else changes. Admins switch it on the platform page without a deploy; this is the default while they haven't, and "Use the default" there returns to it |
@@ -233,7 +235,7 @@ deployment refuses a value that isn't the shape below. The values themselves are
 | Variable | Local | Staging | Production | Set by | Shape |
 |---|---|---|---|---|---|
 | `FREE_LINK_TUNING` | default | default | secret | secret | `{ "weights": { "mainPlayer", "inbox", "signedUpClose", "network" }, "link", "medium", "high", "signedUpCloseMs", "mainShare", "mainForS", "networkKeptMs" }`: the weights are non-negative; `link`, `medium`, `high` and `mainShare` are in [0, 1], with `link < medium < high`; the rest are positive whole numbers |
-| `ABUSE_LIMITS` | default | default | secret | secret | `{ "chipIn": { "payerDayCents", "serverDayCents" }, "extraCeiling": { "untilRenewed", "renewed" }, "giftsPerDay", "wrongCodesPerHour", "wakesPerHour" }`: whole numbers, positive but for `untilRenewed`, which is at most `renewed` |
+| `ABUSE_LIMITS` | default | default | secret | secret | `{ "chipIn": { "payerDayCents", "serverDayCents" }, "extraCeiling": { "untilRenewed", "renewed" }, "giftsPerDay", "wrongCodesPerHour", "wakesPerHour", "inviteJoinsPerHour" }`: whole numbers, positive but for `untilRenewed`, which is at most `renewed`; `inviteJoinsPerHour` may be left out for its default |
 | `CAPACITY_TUNING` | default | default | secret | secret | `{ "freeShare", "tightShare", "tightIdleMinutes" }`: the share of the room for new servers free plans may fill, the share of running room past which room is tight, and how long a free server nobody is on stays up while it is. The shares are in [0, 1]; the minutes a positive whole number |
 
 ### Product analytics (optional)
@@ -409,8 +411,8 @@ URL (`pgbouncer.<cluster>.flympg.net`) becomes the `DATABASE_URL` secret and its
    `TF_VAR_cloudflare_zone_id`, and `TF_VAR_hcloud_token` once `fleet-nodes.auto.tfvars.json`
    lists a fleet node. Secrets in `optional_secret_names` (billing, GitHub sign-in) may be left
    out. The plan refuses a missing secret, one with a name the environment doesn't use, billing
-   given in part, and an org machine limit below two machines per server plus the platform's
-   own (§19.12).
+   given in part, and an org machine limit that leaves no room for a server beside the platform's
+   machines and the two kept for helpers (§19.12).
 5. Deploy, from the repository root:
    `fly deploy . --config infra/fly/control.toml --dockerfile apps/control/Dockerfile --app bly-<id>-control`
    (migrations run first), then `realtime.toml` (and `fly scale count 1`), then `edge.toml`.
