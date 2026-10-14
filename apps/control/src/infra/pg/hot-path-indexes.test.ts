@@ -13,12 +13,12 @@ import { randomUUID } from 'node:crypto'
 import { schema } from '@blockly/db'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import pg from 'pg'
-import { freshDatabase, hasDatabase } from '../../testing/fleet.ts'
 import { liftedIpBans } from '../../app/access/persistence.ts'
 import { mainPlayerPairs } from '../../app/accounts/free-links.ts'
 import { pastExpiry } from '../../app/backups/persistence.ts'
 import { latestOfKind } from '../../app/operations/persistence.ts'
 import { heldByDeleted, listByStatus } from '../../app/servers/persistence.ts'
+import { freshDatabase, hasDatabase } from '../../testing/fleet.ts'
 
 describe.skipIf(!hasDatabase)('hot path indexes', () => {
   let drop: () => Promise<void>
