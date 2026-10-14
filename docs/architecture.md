@@ -1248,6 +1248,8 @@ export interface EdgeRoutes {
     destination: string /* host:port */
     state?: 'asleep' | 'restarting' // absent while it runs
     backAt?: string // asleep because the owner's day of play is used: when it is back (ISO)
+    motd?: string // asleep: the owner's own message, section-sign codes; absent while it is the welcome
+    icon?: string // asleep: a link to the owner's picture, a 64 square PNG; new link, new picture
   }[]
 }
 
@@ -1334,7 +1336,11 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   server. On Fly the server's Flycast address takes the connection even while the machine is
   stopped, so mc-router's asleep MOTD, shown only when a dial fails, never showed and a ping got
   no answer. The listener routes by the handshake's next state:
-  - A ping (1) is answered "Sleeping · join to wake it up", or, where the route carries `backAt`,
+  - A ping (1) is answered with the server's own message, cut to one line of the list, and
+    "Sleeping · join to wake it up" in grey under it, with its own picture, which the agent
+    fetches once per link (`apps/edge/asleep.ts`). A server whose route carries neither is
+    answered "Sleeping · join to wake it up" alone, with the list's default picture. Where the
+    route carries `backAt`, the message is
     "Today’s play is used up · back at midnight, in 3 h 12 min", counted down at the edge
     (`packages/contracts/src/play-today.ts`, compiled into the agent as it is). It never calls the
     wake webhook and is never reported as a session, so it never wakes a server or keeps one up.

@@ -6,10 +6,14 @@
 // Minecraft server would: the server list gets a status with the message, and a join is turned
 // away with it, or handed back to be connected elsewhere.
 
-/** What the server list shows, and what a join is told; null hands the join back instead. */
+/**
+ * What the server list shows, and what a join is told; null hands the join back instead. `icon` is
+ * the server's picture as the list takes it, a PNG data URL; without it the list draws its default.
+ */
 export interface NoticeText {
   status: string
   join: string | null
+  icon?: string
 }
 
 /**
@@ -129,12 +133,7 @@ export class Notice {
             close: true,
           }
       } else if (id.value === 0) {
-        const status = {
-          version: { name: this.#text.status, protocol: this.#protocol },
-          players: { max: 0, online: 0 },
-          description: { text: this.#text.status },
-        }
-        reply.push(packet(0, string(JSON.stringify(status))))
+        reply.push(packet(0, string(JSON.stringify(this.#status(this.#protocol)))))
       } else if (id.value === 1) {
         // The ping goes back as it came, so the list can show how far away the server is.
         return { reply: [...reply, received.slice(start, end)], close: true }
@@ -142,5 +141,15 @@ export class Notice {
     }
     this.#received = received.slice(offset)
     return { reply, close: false }
+  }
+
+  /** The status a server list is answered with, for a client speaking `protocol`. */
+  #status(protocol: number) {
+    return {
+      version: { name: this.#text.status, protocol },
+      players: { max: 0, online: 0 },
+      description: { text: this.#text.status },
+      ...(this.#text.icon === undefined ? {} : { favicon: this.#text.icon }),
+    }
   }
 }

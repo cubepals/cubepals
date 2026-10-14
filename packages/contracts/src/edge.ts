@@ -29,6 +29,16 @@ export const EdgeRoute = z.object({
    * their midnight. The edge says so to a ping, in `play-today.ts`'s words.
    */
   backAt: z.iso.datetime().optional(),
+  /**
+   * An asleep server's own message, as the game reads it (section-sign codes), which the edge
+   * shows a ping in place of its own notice. Absent while the message is still Blockly's welcome.
+   */
+  motd: z.string().optional(),
+  /**
+   * Where the edge fetches an asleep server's picture, a 64 square PNG, to show a ping. The link
+   * changes whenever the picture does, so the edge fetches each once. Absent while it has none.
+   */
+  icon: z.url().optional(),
 })
 export const EdgeRoutes = z.object({ routes: z.array(EdgeRoute) })
 export type EdgeRoutes = z.infer<typeof EdgeRoutes>

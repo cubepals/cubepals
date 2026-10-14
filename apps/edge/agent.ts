@@ -12,8 +12,11 @@ import { hostname } from 'node:os'
 import type { EdgeRoutes, SessionEvent, WakeResult } from '@blockly/contracts/edge'
 import type { Subprocess } from 'bun'
 // Copied into the image beside the agent (Dockerfile): the one place play coming back is worded.
+import { MINUTE_MS } from '../../packages/contracts/src/durations.ts'
 import { waitFor } from '../../packages/contracts/src/play-today.ts'
+import { OWN_ICON_MAX_BYTES } from '../../packages/contracts/src/server-list.ts'
 import { GAME_PORT } from '../control/src/minecraft/ports.ts'
+import { asleepMessage } from './asleep.ts'
 import { front, pipe } from './front.ts'
 import { Held, LOGIN_QUERIES, turnAway } from './hold.ts'
 import { Gate } from './limits.ts'
@@ -132,6 +135,40 @@ async function syncRoutes(): Promise<void> {
     etag = response.headers.get('etag')
   } catch (error) {
     console.error('route sync failed; keeping the last known routes', error)
+  }
+}
+
+// ─── Sleeping servers' pictures, fetched once each ──────────────────────────────────────────
+
+/**
+ * Each picture a route names, by its link, as the server list takes it; null while it is being
+ * fetched, or for a minute after it couldn't be. A link names one picture for good, so a picture
+ * fetched is never fetched again.
+ */
+const icons = new Map<string, string | null>()
+
+const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+
+/** Fetches the pictures of sleeping servers not fetched yet, and forgets those no route names. */
+function fetchIcons(): void {
+  const named = new Set(routes.flatMap((r) => (r.state === 'asleep' && r.icon ? [r.icon] : [])))
+  for (const link of icons.keys()) if (!named.has(link)) icons.delete(link)
+  for (const link of named) {
+    if (icons.has(link)) continue
+    icons.set(link, null)
+    void fetch(link, { signal: AbortSignal.timeout(10_000) })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`answered ${response.status}`)
+        const png = new Uint8Array(await response.arrayBuffer())
+        if (png.length > OWN_ICON_MAX_BYTES || !PNG.every((byte, i) => png[i] === byte))
+          throw new Error('not a picture the list takes')
+        if (icons.has(link)) icons.set(link, `data:image/png;base64,${Buffer.from(png).toString('base64')}`)
+      })
+      .catch((error) => {
+        // Until it is asked again, the list draws its default picture.
+        setTimeout(() => icons.delete(link), MINUTE_MS)
+        console.error('a sleeping server’s picture could not be fetched', error)
+      })
   }
 }
 
@@ -311,12 +348,19 @@ function passOn(client: Socket, join: Join): void {
   pipe(client, route.destination, join.bytes)
 }
 
-/** What a ping to a sleeping server is told: that it sleeps, or when its play is back. */
+/**
+ * What a ping to a sleeping server is told: its own message and picture, and that a join wakes it;
+ * or, while its owner's play for today is used up, when it is back.
+ */
 function asleep(address: string): NoticeText {
-  const backAt = routes.find((r) => r.hostname === hostnameOf({ address }))?.backAt
-  return backAt !== undefined && Date.parse(backAt) > Date.now()
-    ? { ...ASLEEP, status: usedToday(backAt) }
-    : ASLEEP
+  const route = routes.find((r) => r.hostname === hostnameOf({ address }))
+  const icon = route?.icon === undefined ? undefined : icons.get(route.icon)
+  const backAt = route?.backAt
+  const status =
+    backAt !== undefined && Date.parse(backAt) > Date.now()
+      ? usedToday(backAt)
+      : asleepMessage(route?.motd, ASLEEP.status)
+  return { ...ASLEEP, status, ...(icon ? { icon } : {}) }
 }
 
 /** Tells a ping at `address` that its server sleeps, and hands a join on to `then`. */
@@ -399,7 +443,8 @@ asleepAt(WAITING, (client, join) => void hold(client, join))
 
 writeRoutes()
 await syncRoutes()
-setInterval(syncRoutes, POLL_MS)
+fetchIcons()
+setInterval(() => void syncRoutes().then(fetchIcons), POLL_MS)
 
 front({
   port: MINECRAFT_PORT,

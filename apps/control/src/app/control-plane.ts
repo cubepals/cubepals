@@ -145,10 +145,8 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     archives: ports.capabilities.archives !== null,
   })
   const transitions = new ServerTransitions(events, ports.jobs)
-  const specs = new RuntimeSpecs(
-    settings.runtimeSecrets,
-    new ArtifactLinks(settings.artifactsRuntimeFacingUrl, settings.runtimeSecrets),
-  )
+  const links = new ArtifactLinks(settings.artifactsRuntimeFacingUrl, settings.runtimeSecrets)
+  const specs = new RuntimeSpecs(settings.runtimeSecrets, links)
   // Setups resolve mods through the catalog, which needs revisions, which need servers: the
   // server service reaches for setups only when a server is being made, so it takes a getter.
   let setups: SetupService
@@ -337,6 +335,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     waiter,
     schedules,
     events,
+    links,
     wakeWaitMs: settings.wakeWaitMs,
   })
 

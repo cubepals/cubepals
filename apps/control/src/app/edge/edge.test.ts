@@ -10,6 +10,7 @@ import { eq, sql } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { Actor } from '../actor.ts'
 import { IDLE_GRACE_MS, WAKE_PROBATION_MS } from '../operations/schedules.ts'
+import { loadRevision } from '../servers/persistence.ts'
 import { tuning } from '../tuning.ts'
 import { destinationOf, NOWHERE } from './service.ts'
 
@@ -421,5 +422,62 @@ describe.skipIf(!hasDatabase)('edge, where addresses move', () => {
     expect(after).not.toBe(before)
     expect(after).not.toBe(NOWHERE)
     expect((await h.server(created.id)).lifecycle.status).toBe('running')
+  }, 30_000)
+})
+
+// What the server list shows of a sleeping server: the edge answers its ping, with the message
+// and picture its owner gave it, which the routes carry.
+describe.skipIf(!hasDatabase)('edge, a sleeping server in the server list', () => {
+  let h: Harness
+
+  beforeAll(async () => {
+    h = await startHarness()
+  }, 30_000)
+
+  afterAll(async () => {
+    await h.close()
+  })
+
+  test('a sleeping server’s route carries its own message and picture, and none while they are Blockly’s', async () => {
+    const owner = await h.user()
+    const { id, slug } = await h.create(owner)
+    await h.until(id, 'running')
+    await h.settled(id)
+    await h.app.servers.stop(owner, id, randomUUID(), 'idle')
+    await h.until(id, 'stopped')
+    await h.settled(id)
+    const route = async () =>
+      (await h.app.edge.routes()).routes.find((r) => r.hostname === `${slug}.play.test`)
+    // Blockly's welcome and its own picture: the edge says only that it sleeps.
+    expect(await route()).not.toHaveProperty('motd')
+    expect(await route()).not.toHaveProperty('icon')
+
+    const settings = (await loadRevision(h.db, (await h.server(id)).desiredRevisionId)).settings
+    await h.app.revisions.changeSettings(owner, id, { ...settings, motd: '&6Sunset &lValley' }, randomUUID())
+    await h.settled(id)
+    await h.db
+      .update(schema.minecraftServers)
+      .set({ icon: 'grass' })
+      .where(eq(schema.minecraftServers.id, id))
+    expect(await route()).toMatchObject({
+      state: 'asleep',
+      motd: '§6Sunset §lValley',
+      icon: expect.stringMatching(/\/runtime\/v1\/icons\/grass\.png$/),
+    })
+
+    // A picture of the owner's own is named by its hash, so a new one is a new link.
+    const sha256 = 'a'.repeat(64)
+    await h.db
+      .update(schema.minecraftServers)
+      .set({ ownIcon: sha256 })
+      .where(eq(schema.minecraftServers.id, id))
+    expect((await route())?.icon).toContain(`/runtime/v1/icons/${id}/${sha256}.png?t=`)
+
+    // Running, the server answers for itself.
+    await h.app.servers.start(owner, id, randomUUID())
+    await h.until(id, 'running')
+    await h.settled(id)
+    expect(await route()).not.toHaveProperty('motd')
+    expect(await route()).not.toHaveProperty('icon')
   }, 30_000)
 })
