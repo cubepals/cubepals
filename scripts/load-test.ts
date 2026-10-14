@@ -55,7 +55,9 @@ import {
   type MachineRun,
   type Moment,
   markdown,
+  type PartStats,
   partStats,
+  type Report,
   runningMs,
   stepStats,
   took,
@@ -521,9 +523,42 @@ await shaken
 clearInterval(watching)
 say(await line())
 
+/** The report as it stands: written as soon as people are done, and again after the cleanup. */
+const reportNow = (extra: {
+  createParts?: PartStats[]
+  operationRetries?: Report['operationRetries']
+}): Report => {
+  const limit = firstLimit(records)
+  return {
+    run,
+    arrivals: arrivalTimes.length,
+    overMinutes,
+    plan: planChoice,
+    startedAt: new Date(started).toISOString(),
+    tookMs: Date.now() - started,
+    steps: stepStats(records),
+    failures: failuresOf(records),
+    chaos,
+    firstLimit: limit && { limit: limit.limit, step: limit.record.step, error: limit.record.error ?? '' },
+    timeline,
+    createParts: extra.createParts ?? [],
+    machineHours: hoursBySize(machines),
+    peak: {
+      ...peak,
+      'probe requests sent again (the test’s tunnel, not the product)': Probe.resent,
+      ...Object.fromEntries([...refused].map(([path, n]) => [`answers ${path}`, n])),
+    },
+    operationRetries: extra.operationRetries ?? [],
+    records,
+  }
+}
+// Whatever the cleanup meets, what the people met is kept first.
+write(out, reportNow({}))
+say(`people done: the report so far is in ${out}.md`)
+
 // ─── Everything the run made, gone ───────────────────────────────────────────────────────────
 
-for (const player of players) await player.tidy()
+await Promise.all(players.map((player) => player.tidy()))
 const made = players.flatMap((p) => p.servers.map((s) => s.id))
 const thrown = (await database.unsafe(
   `select id from minecraft_servers where create_idempotency_key like '${KEY_PREFIX}%' and status <> 'purged' and created_at > to_timestamp(${started / SECOND_MS})`,
@@ -574,29 +609,7 @@ machines.push(
 )
 await probesDown(probeApp)
 
-const limit = firstLimit(records)
-const report = {
-  run,
-  arrivals: arrivalTimes.length,
-  overMinutes,
-  plan: planChoice,
-  startedAt: new Date(started).toISOString(),
-  tookMs: Date.now() - started,
-  steps: stepStats(records),
-  failures: failuresOf(records),
-  chaos,
-  firstLimit: limit && { limit: limit.limit, step: limit.record.step, error: limit.record.error ?? '' },
-  timeline,
-  createParts: partStats(parts),
-  machineHours: hoursBySize(machines),
-  peak: {
-    ...peak,
-    'probe requests sent again (the test’s tunnel, not the product)': Probe.resent,
-    ...Object.fromEntries([...refused].map(([path, n]) => [`answers ${path}`, n])),
-  },
-  operationRetries: retries,
-  records,
-}
+const report = reportNow({ createParts: partStats(parts), operationRetries: retries })
 write(out, report)
 say(`\n${markdown(report)}`)
 say(`written to ${out}.json and ${out}.md`)
