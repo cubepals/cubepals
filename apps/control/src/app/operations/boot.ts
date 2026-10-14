@@ -34,7 +34,12 @@ import { type AccessReconciler, AccessReseedFailed } from '../access/reconciler.
 import type { ArtifactService } from '../artifacts/service.ts'
 import { DiagnosedFailure, inFull, PermanentFailure, PlainFailure } from '../errors.ts'
 import type { PackContents } from '../packs/contents.ts'
-import type { GameEndpoint, ReadinessProbe, ServerConsole } from '../ports/minecraft.ts'
+import {
+  AnswerUnreadable,
+  type GameEndpoint,
+  type ReadinessProbe,
+  type ServerConsole,
+} from '../ports/minecraft.ts'
 import type { LogLine, LogSource } from '../ports/platform.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
@@ -84,9 +89,28 @@ class Stuck extends PermanentFailure {
   }
 }
 
+/**
+ * A start that answered in a way the probe can't read. Final at once: every ping reads the same,
+ * and a Boat start on staging (2026-10-14) waited out ten minutes twice on one before it failed.
+ */
+class Unreadable extends PermanentFailure {
+  constructor(options?: ErrorOptions) {
+    super('It started, but Cubepals couldn’t read its answer.', options)
+    this.name = 'Unreadable'
+  }
+}
+
 /** A start that stopped answering, whether or not its output said why. */
 const stoppedAnswering = (error: unknown) =>
   error instanceof Stuck || (error instanceof Diagnosed && error.hung)
+
+/**
+ * A start that never came up for nothing its own output puts on the server: it stopped or hung
+ * saying nothing recognised, or answered in a way that can't be read. Another runtime may bring
+ * the same server up, where what the server runs would only fail the same way anywhere.
+ */
+export const notUpHere = (error: unknown): boolean =>
+  error instanceof Stuck || error instanceof NotReady || error instanceof Unreadable
 
 /** How many of its mods one start of a pack server may learn about before it gives up. */
 const LEARNED_PER_START = 3
@@ -205,9 +229,15 @@ export class BootSequence {
         options.startAgainOnHang ?? true,
       )
     } catch (error) {
-      // One that hung was started again already or said why it can't be, and one whose server
-      // moved on is over.
-      if (check === null || stoppedAnswering(error) || error instanceof NoLongerApplies) throw error
+      // One that hung was started again already or said why it can't be, one whose answer can't be
+      // read reads the same after, and one whose server moved on is over.
+      if (
+        check === null ||
+        stoppedAnswering(error) ||
+        error instanceof Unreadable ||
+        error instanceof NoLongerApplies
+      )
+        throw error
       await again()
     }
     // A modded server must have started what it was given: the pack's Minecraft and loader, or
@@ -509,6 +539,7 @@ export class BootSequence {
         await this.#probe.ping(endpoint, AbortSignal.timeout(5_000))
         return
       } catch (error) {
+        if (error instanceof AnswerUnreadable) throw new Unreadable({ cause: error })
         lastError = error
       }
       const observation = await this.#runtime.observe(handle)

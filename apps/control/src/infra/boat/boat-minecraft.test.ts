@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, test } from 'bun:test'
+import { AnswerUnreadable } from '../../app/ports/minecraft.ts'
 import { BoatProbe } from './boat-minecraft.ts'
 import { BoatRuntime } from './boat-runtime.ts'
 import { boatClient } from './client.ts'
@@ -69,6 +70,8 @@ describe('BoatProbe', () => {
         timedOut: false,
       }),
     )
-    await expect(probe.ping(endpoint, AbortSignal.timeout(1000))).rejects.toThrow(/couldn't be read/)
+    const pinged = probe.ping(endpoint, AbortSignal.timeout(1000))
+    await expect(pinged).rejects.toBeInstanceOf(AnswerUnreadable)
+    await expect(pinged).rejects.toThrow(/couldn't be read/)
   })
 })

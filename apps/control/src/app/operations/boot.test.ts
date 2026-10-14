@@ -10,10 +10,11 @@ import type { AccessReconciler } from '../access/reconciler.ts'
 import type { ArtifactService } from '../artifacts/service.ts'
 import { DiagnosedFailure, PermanentFailure } from '../errors.ts'
 import type { PackContents } from '../packs/contents.ts'
+import { AnswerUnreadable } from '../ports/minecraft.ts'
 import type { LogLine } from '../ports/platform.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
-import { BootSequence, followBoot, stoppedWhile, stuckWhile } from './boot.ts'
+import { BootSequence, followBoot, notUpHere, stoppedWhile, stuckWhile } from './boot.ts'
 import type { OperationRecord } from './persistence.ts'
 import { NoLongerApplies, type OperationContext } from './runner.ts'
 
@@ -101,6 +102,8 @@ const vanilla = { loader: 'vanilla' as const, mods: [], gameVersion: '1.21.4', l
  */
 function machine(options: {
   answers: (process: number) => boolean
+  /** Where it doesn't answer, it answers in a way the probe can't read rather than not at all. */
+  unreadable?: boolean
   printed?: (process: number) => readonly string[]
   readyMs?: number
   stillApplies?: () => boolean
@@ -140,6 +143,7 @@ function machine(options: {
     runtime,
     probe: {
       ping: async () => {
+        if (options.unreadable) throw new AnswerUnreadable("A status ping's answer couldn't be read")
         if (!options.answers(seen.process)) throw new Error('Connection refused')
         return { online: 0, max: 20, version: '1.21.4' }
       },
@@ -233,6 +237,21 @@ describe('a start that stops answering', () => {
     // Its rollback or its going back is the fresh start: nothing here stops or starts it.
     expect(seen).toMatchObject({ stops: 0, process: 1 })
   }, 15_000)
+
+  // A Boat start on staging (2026-10-14) answered every ping in a way the probe couldn't read, and
+  // waited out ten minutes twice before it failed.
+  test('one whose answer can’t be read fails at once, for another runtime to try', async () => {
+    const { boot, ctx, seen } = machine({ answers: () => false, unreadable: true, readyMs: 60_000 })
+    const asked = Date.now()
+    const failed = await boot.run(ctx, server, handle, vanilla).then(
+      () => null,
+      (error: unknown) => error,
+    )
+    expect(Date.now() - asked).toBeLessThan(1_000)
+    expect(failed).toBeInstanceOf(PermanentFailure)
+    expect(notUpHere(failed)).toBe(true)
+    expect(seen).toMatchObject({ stops: 0, process: 1 })
+  })
 
   test('a machine that won’t stop is stopped by force before it starts again', async () => {
     const { boot, ctx, seen } = machine({ answers: (process) => process > 1, stopFails: true })

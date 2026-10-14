@@ -49,6 +49,17 @@ export interface GameEndpoint extends Endpoint {
   proxyProtocol?: boolean
 }
 
+/**
+ * A status ping that got an answer the probe can't read. Unlike no answer, which a server still
+ * starting gives, pinging again only reads the same answer the same way.
+ */
+export class AnswerUnreadable extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
+    this.name = 'AnswerUnreadable'
+  }
+}
+
 /** "Ready" is a Minecraft protocol fact: the server answers a status ping. */
 export interface ReadinessProbe {
   ping(endpoint: GameEndpoint, signal: AbortSignal): Promise<ServerStatusPing>

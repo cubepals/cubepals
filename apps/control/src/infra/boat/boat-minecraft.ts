@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import {
+  AnswerUnreadable,
   type ConsoleTarget,
   ConsoleUnavailable,
   type GameEndpoint,
@@ -113,7 +114,8 @@ export class BoatProbe implements ReadinessProbe {
     // Paper server on Boat answers and is never heard (staging, 2026-10-14).
     const answer = / version=(.*?) online=(\d+) max=(\d+)/.exec(said)
     if (result.exitCode !== 0) throw new Error(`No answer to a status ping: ${said.slice(0, 200)}`)
-    if (answer === null) throw new Error(`A status ping's answer couldn't be read: ${said.slice(0, 200)}`)
+    if (answer === null)
+      throw new AnswerUnreadable(`A status ping's answer couldn't be read: ${said.slice(0, 200)}`)
     return { version: answer[1] ?? '', online: Number(answer[2]), max: Number(answer[3]) }
   }
 }
