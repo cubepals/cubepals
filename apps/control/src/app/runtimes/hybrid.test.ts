@@ -173,6 +173,19 @@ describe.skipIf(!hasDatabase)('several runtimes in one deployment', () => {
     )
   })
 
+  test('a rule names an account by its Better Auth id, which is no UUID', async () => {
+    const id = 'Kx7rT2mQ9vLp4sWn8bYc3dFh6jGz1aEu'
+    await h.db.insert(schema.users).values({ id, name: 'Named', email: `${id}@example.test`, emailVerified: true })
+    await h.db.insert(schema.accountStanding).values({ userId: id, plan: 'plus' })
+    const rule = await h.app.placement.addRule({ provider: 'canary', percent: 100, accounts: [id] }, OPERATOR)
+    const [stored] = await h.db
+      .select({ accounts: schema.runtimeRules.accounts })
+      .from(schema.runtimeRules)
+      .where(eq(schema.runtimeRules.id, rule.id))
+    expect(stored?.accounts).toEqual([id])
+    expect((await bound(await running({ kind: 'user', userId: id }))).provider).toBe('canary')
+  })
+
   test('a canary with no room at placement places the server on the default, and says so', async () => {
     const owner = await h.user('Full', 'plus')
     await h.app.placement.addRule({ provider: 'canary', percent: 100 }, OPERATOR)

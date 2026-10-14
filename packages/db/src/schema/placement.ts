@@ -28,8 +28,8 @@ export const runtimeRules = pgTable(
     enabled: boolean('enabled').notNull().default(true),
     /** The share of matching new servers it sends, 0 to 100, by server id so the answer is stable. */
     percent: integer('percent').notNull(),
-    /** Owners whose new servers it matches; empty matches every owner. */
-    accounts: uuid('accounts').array().notNull().default(sql`'{}'::uuid[]`),
+    /** Owners whose new servers it matches, by account id; empty matches every owner. */
+    accounts: text('accounts').array().notNull().default(sql`'{}'::text[]`),
     /** Product regions it matches; empty matches every region. */
     regions: text('regions').array().notNull().default(sql`'{}'::text[]`),
     /** Plans it matches; empty matches every plan. */

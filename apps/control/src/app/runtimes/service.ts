@@ -324,13 +324,16 @@ export class RuntimePlacement {
     return [...new Set(plans)]
   }
 
-  /** Accounts by id or email; one that names nobody is refused rather than matching nobody. */
+  /**
+   * Accounts by id or email; one that names nobody is refused rather than matching nobody. An id
+   * is Better Auth's, not a UUID, so anything without an @ is taken for one.
+   */
   async #accounts(given: readonly string[]): Promise<string[]> {
-    const emails = given.filter((value) => !UUID.test(value))
+    const emails = given.filter((value) => value.includes('@'))
     const found = await usersByEmail(this.#db, emails)
     const ids: string[] = []
     for (const value of given) {
-      if (UUID.test(value)) {
+      if (!value.includes('@')) {
         const [user] = await this.#db
           .select({ id: schema.users.id })
           .from(schema.users)
