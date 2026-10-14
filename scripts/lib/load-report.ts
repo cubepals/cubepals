@@ -125,15 +125,18 @@ export function failuresOf(records: readonly StepRecord[]): Failure[] {
  * that names one is the first limit met.
  */
 const LIMITS: Array<[string, RegExp]> = [
-  ['the deployment’s server ceiling (Fly machine limit)', /hosting provider's own limit|machine limit/i],
-  ['the platform’s server switches', /not taking new servers|paused|maxServers/i],
+  [
+    'servers on the platform (its max servers, or the ceiling Fly’s machine limit sets)',
+    /is full right now|hosting provider's own limit|machine limit/i,
+  ],
+  ['running servers on the platform (its max running servers)', /is busy right now/i],
+  ['the platform paused (an admin, or the daily spend watchdog)', /is paused for a moment/i],
   ['Fly capacity in the region', /no room|capacity|insufficient (memory|resources)/i],
   ['Fly volumes or IPs', /volume|ip address|allocate/i],
   ['database connections', /too many (clients|connections)|connection (pool|slots)|remaining connection/i],
-  ['the control plane’s queue', /queued|never .* within .* (queued|starting)/i],
   ['rate limits', /\b429\b|rate limit|too many requests|slow down|try again in/i],
   ['the mail catcher', /no email with/i],
-  ['the edge', /edge (said|closed)|ECONNREFUSED|ETIMEDOUT|ECONNRESET/i],
+  ['the edge', /edge (said|closed)|ECONNREFUSED|ETIMEDOUT|ECONNRESET|Connection throttled/i],
   ['memory', /out of memory|oom/i],
 ]
 

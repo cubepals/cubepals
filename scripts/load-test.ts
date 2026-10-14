@@ -301,7 +301,17 @@ async function line(): Promise<string> {
   )
   return `${took(Date.now() - started).padStart(7)}  ${mine} | ${health} | db connections ${connections} | probe load ${loads.join(' ')}`
 }
-const watching = setInterval(() => void line().then(say), 15 * SECOND_MS)
+// One line at a time: a slow answer skips a beat rather than printing two at once.
+let reading = false
+const watching = setInterval(() => {
+  if (reading) return
+  reading = true
+  void line()
+    .then(say)
+    .finally(() => {
+      reading = false
+    })
+}, 15 * SECOND_MS)
 
 // ─── People arrive, spread over the ramp ─────────────────────────────────────────────────────
 
