@@ -50,9 +50,9 @@ const mod = (projectId: string, name: string, sha512: string): PinnedMod => ({
 describe('settings', () => {
   test('a new server’s message is Blockly’s line, not its name again', () => {
     expect(welcome('testing')).toBe('"testing", a server created by Cubepals')
-    // One line of the server list holds 59 characters; a name that won't fit in quotes drops out.
-    expect(welcome('x'.repeat(27))).toHaveLength(59)
-    expect(welcome('x'.repeat(28))).toBe('A server created by Cubepals')
+    // A name the list can't show all of in quotes drops out.
+    expect(welcome('W'.repeat(60))).toBe(`"${'W'.repeat(60)}", a server created by Cubepals`)
+    expect(welcome('W'.repeat(80))).toBe('A server created by Cubepals')
     expect(
       settingsProblems(defaultSettings({ name: 'x'.repeat(40), gameMode: 'survival', maxPlayers: 4 }), 4),
     ).toEqual([])
@@ -76,11 +76,14 @@ describe('settings', () => {
       'Spawn protection goes from 0 to 64 blocks.',
       'This size holds up to 4 players. Pick a bigger size for more.',
     ])
-    expect(settingsProblems({ ...draft().settings, motd: 'x'.repeat(60) }, 4)).toHaveLength(1)
-    expect(settingsProblems({ ...draft().settings, motd: 'two\nlines' }, 4)).toHaveLength(1)
+    const motd = (text: string) => settingsProblems({ ...draft().settings, motd: text }, 4)
+    // What the list's two lines show is taken, and nothing past it.
+    expect(motd('W'.repeat(88))).toEqual([])
+    expect(motd('W'.repeat(89))).toEqual(['The last character won’t show in the server list.'])
+    expect(motd('two\nlines')).toEqual(['The server message is one line of text.'])
     // Formatting codes take no room in the list, so they don't count; codes alone say nothing.
-    expect(settingsProblems({ ...draft().settings, motd: `&a&l${'x'.repeat(59)}` }, 4)).toEqual([])
-    expect(settingsProblems({ ...draft().settings, motd: '&a&l' }, 4)).toHaveLength(1)
+    expect(motd(`&a${'W'.repeat(88)}`)).toEqual([])
+    expect(motd('&a&l')).toEqual(['Write something to show under the name.'])
   })
 })
 

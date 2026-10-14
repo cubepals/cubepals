@@ -19,7 +19,7 @@ type Layer = (typeof LAYERS)[number]
  * (`@blockly/contracts/limits`), and how Minecraft's server list reads a message
  * (`@blockly/contracts/server-list`). None imports anything itself.
  */
-const PURE_PACKAGES = /^@blockly\/contracts\/(durations|limits|server-list)$/
+const PURE_PACKAGES = /^@blockly\/contracts\/(durations|limits|motd-layout|server-list)$/
 const APP_PACKAGES = /^(@blockly\/(db|contracts)(\/.*)?|drizzle-orm(\/.*)?|zod|node:.*)$/
 
 /** A string literal holding a hostname, with or without a scheme (§17). */
@@ -64,6 +64,13 @@ function layerOf(path: string): Layer | null {
   if (rel === 'main.node.ts') return 'main'
   const top = rel.split('/')[0]
   return rel.includes('/') && LAYERS.includes(top as Layer) ? (top as Layer) : null
+}
+
+/** Whether `name` is an error class the port declares: one that extends Error, or another of its errors. */
+function declaresError(port: string, name: string): boolean {
+  const base = port.match(new RegExp(`export class ${name} extends (\\w+)\\b`))?.[1]
+  if (base === undefined) return false
+  return /Error$/.test(base) || (base !== name && declaresError(port, base))
 }
 
 /** Whether `name` is an `as const` list declared in the port, or in the module it re-exports it from. */
@@ -171,7 +178,7 @@ for (const file of files(CONTROL)) {
       if (layer === 'infra' && targetRel.startsWith('app/ports/') && !typeOnly && !isTest) {
         const port = readFileSync(target.endsWith('.ts') ? target : `${target}.ts`, 'utf8')
         for (const name of valueNames(source, spec)) {
-          const error = new RegExp(`export class ${name} extends \\w*Error\\b`).test(port)
+          const error = declaresError(port, name)
           const vocabulary = declaresVocabulary(target.endsWith('.ts') ? target : `${target}.ts`, port, name)
           if (!error && !vocabulary)
             fail(

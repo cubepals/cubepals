@@ -22,7 +22,7 @@ import { openInterval } from '../../servers/usage.ts'
 import { enqueuePrune } from '../../worlds/service.ts'
 import type { BootSequence } from '../boot.ts'
 import type { OperationContext } from '../runner.ts'
-import type { ServerBinding } from './binding.ts'
+import { bootedBack, type ServerBinding } from './binding.ts'
 
 export type GoingBack = ReturnType<typeof goingBack>
 
@@ -85,11 +85,7 @@ export function goingBack(deps: {
     }
     handle = await startCompute(server.id, handle)
     await boot.run(quiet, server, handle, back.revision, undefined, { startAgainOnHang: false })
-    await putBack(
-      server,
-      { ...previous, specDigest: back.digest, driftDigest: back.driftDigest },
-      { from, up: true },
-    )
+    await putBack(server, bootedBack(previous, back), { from, up: true })
   }
 
   /**

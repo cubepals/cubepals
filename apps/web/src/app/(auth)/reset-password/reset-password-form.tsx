@@ -14,7 +14,11 @@ import { useChecked } from '../../../lib/use-checked'
 import { Button, Note, TextField } from '../../../ui'
 import styles from '../auth.module.css'
 
-export function ResetPasswordForm({ token }: { token: string }) {
+/**
+ * `email`: the account's, kept in the form unseen so a password manager updates that login. A link
+ * from before the email came with it has none.
+ */
+export function ResetPasswordForm({ token, email }: { token: string; email: string | null }) {
   const router = useRouter()
   const [password, setPassword] = useState('')
   const [again, setAgain] = useState('')
@@ -57,9 +61,20 @@ export function ResetPasswordForm({ token }: { token: string }) {
     )
 
   return (
-    <form className={styles.email} onSubmit={submit} aria-label="Choose a new password">
+    <form
+      id="reset-password"
+      method="post"
+      className={styles.email}
+      onSubmit={submit}
+      aria-label="Choose a new password"
+    >
+      {email !== null && (
+        <input type="email" id="email" name="email" autoComplete="username" value={email} readOnly hidden />
+      )}
       <TextField
         label="New password"
+        id="new-password"
+        name="new-password"
         type="password"
         autoComplete="new-password"
         minLength={PASSWORD_MIN_LENGTH}
@@ -72,6 +87,8 @@ export function ResetPasswordForm({ token }: { token: string }) {
       />
       <TextField
         label="Type it again"
+        id="confirm-password"
+        name="confirm-password"
         type="password"
         autoComplete="new-password"
         required

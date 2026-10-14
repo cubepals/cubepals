@@ -111,3 +111,17 @@ test('one notice speaks for many servers, each by the address its client dialled
     text: 'Today’s play is used up · back at midnight, in 3 h 12 min',
   })
 })
+
+test('a sleeping server’s own message keeps its codes, and its picture goes with it', () => {
+  const own = {
+    status: '§6Sunset §lValley\n§r§7Sleeping · join to wake it up',
+    join: null,
+    icon: 'data:image/png;base64,iVBORw0KGgo=',
+  }
+  const notice = new Notice(own)
+  notice.receive(handshake(1))
+  const answer = JSON.parse(readString(notice.receive(packet(0, [])).reply[0] ?? new Uint8Array()).text)
+  expect(answer.description).toEqual({ text: own.status })
+  expect(answer.favicon).toBe(own.icon)
+  expect(answer.players).toEqual({ max: 0, online: 0 })
+})

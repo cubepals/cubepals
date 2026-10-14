@@ -36,6 +36,7 @@ const STEPS: Record<string, string> = {
   queued: 'Waiting in the queue',
   attempt: 'Began an attempt',
   allocating: 'Finding room',
+  waiting_for_room: 'Waiting for a machine',
   storage: 'Disk',
   compute: 'Machine',
   booting: 'Booting',

@@ -498,6 +498,13 @@
       "when": 1791990050642,
       "tag": "0070_own_icons",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1792013151839,
+      "tag": "0071_hot_path_indexes",
+      "breakpoints": true
     }
   ]
 }

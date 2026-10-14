@@ -44,13 +44,14 @@ locals {
   }
 }
 
-# Restores, exports and relocations briefly run a second machine beside a server's own, so
-# each server needs two. The limit must leave room for at least one.
+# A server holds one machine; two more are kept for the restores, exports and moves that run
+# one for a while, as the Fly runtime counts (HELPER_HEADROOM). The limit must leave room for a
+# server beside them.
 resource "terraform_data" "machine_headroom" {
-  input = floor((var.machine_limit - var.platform_machines) / 2)
+  input = max(0, var.machine_limit - var.platform_machines - 2)
   lifecycle {
     precondition {
-      condition     = var.machine_limit - var.platform_machines >= 2
+      condition     = var.machine_limit - var.platform_machines >= 3
       error_message = "The org's machine limit (${var.machine_limit}) leaves no room for a server beside the platform's ${var.platform_machines} machines. Ask Fly for a higher limit."
     }
   }

@@ -10,11 +10,15 @@
     "./durations": "./src/durations.ts",
     "./limits": "./src/limits.ts",
     "./server-list": "./src/server-list.ts",
+    "./motd-layout": "./src/motd-layout.ts",
     "./local": "./src/local.ts",
     "./play-today": "./src/play-today.ts",
-    "./meter": "./src/meter.ts"
+    "./meter": "./src/meter.ts",
+    "./names": "./src/names.ts",
+    "./proxy-header": "./src/proxy-header.ts"
   },
   "dependencies": {
+    "obscenity": "0.4.6",
     "transport-io": "0.13.2",
     "zod": "4.6.5"
   }

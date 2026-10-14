@@ -42,8 +42,8 @@ variable "settings" { type = map(string) }
 variable "secret_names" { type = list(string) }
 variable "optional_secret_names" { type = list(string) }
 
-# repository and indexable are production.ts's (the GitHub environment's secrets, the website's
-# build); Terraform reads the rest.
+# repository, indexable and beta are production.ts's (the GitHub environment's secrets, the
+# website's build); Terraform reads the rest.
 variable "web" {
   type = object({
     # As apps/web/wrangler.jsonc names production's Worker.
@@ -51,6 +51,8 @@ variable "web" {
     repository = string
     redirects  = list(string)
     indexable  = optional(bool, false)
+    # false takes the beta tag and banner off the site (WEB_BETA=0); /beta itself stays.
+    beta = optional(bool, true)
     # true sends cubepals.com and its redirects through Cloudflare's proxy to the Worker; false
     # leaves the records DNS-only, and nothing behind them serves the site.
     proxied = optional(bool, true)

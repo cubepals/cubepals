@@ -26,6 +26,7 @@ import {
   PLAYER_NAME_MIN_LENGTH,
   SEED_MAX_LENGTH,
 } from '@blockly/contracts'
+import { offensive, PICK_ANOTHER_NAME } from '@blockly/contracts/names'
 
 export type Rule = (value: string) => string | null
 
@@ -42,10 +43,11 @@ export const password: Rule = (value) =>
     ? null
     : `A password needs at least ${PASSWORD_MIN_LENGTH} characters.`
 
-export const serverName: Rule = (value) =>
-  blank(value) || value.trim().length <= NAME_MAX_LENGTH
-    ? null
-    : `A name can be up to ${NAME_MAX_LENGTH} characters.`
+export const serverName: Rule = (value) => {
+  if (blank(value)) return null
+  if (value.trim().length > NAME_MAX_LENGTH) return `A name can be up to ${NAME_MAX_LENGTH} characters.`
+  return offensive(value) ? PICK_ANOTHER_NAME : null
+}
 
 /** The address people type in Minecraft: a DNS label, which is what the slug becomes. */
 export const address: Rule = (value) => {
@@ -56,7 +58,7 @@ export const address: Rule = (value) => {
   if (!/^[a-z0-9-]+$/.test(wanted)) return 'Addresses use letters, numbers and hyphens.'
   if (wanted.startsWith('-') || wanted.endsWith('-') || wanted.includes('--'))
     return 'Hyphens go between words, not at either end.'
-  return null
+  return offensive(wanted) ? PICK_ANOTHER_NAME : null
 }
 
 /** A Minecraft name, as Mojang allows them. */

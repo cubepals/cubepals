@@ -2,9 +2,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { BLOCKLY_ICON } from '@blockly/contracts'
 import type { EdgeRoutes, SessionEvent, WakeResult } from '@blockly/contracts/edge'
-import type { Db } from '@blockly/db'
+import { motdForGame } from '@blockly/contracts/server-list'
+import type { AppliedConfigJson, Db } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { welcome } from '../../domain/revision/revision.ts'
 import { ROUTABLE, type ServerStatus } from '../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
@@ -12,6 +15,7 @@ import { PORT_NAMES } from '../../minecraft/runtime-spec.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { outForToday, playToday } from '../accounts/play-today.ts'
 import { playTotal } from '../accounts/play-total.ts'
+import type { ArtifactLinks } from '../artifacts/links.ts'
 import { AppError, type AppErrorCode } from '../errors.ts'
 import { openOfKinds } from '../operations/persistence.ts'
 import type { IdleDecision, Schedules } from '../operations/schedules.ts'
@@ -19,7 +23,14 @@ import type { EventBus } from '../ports/events.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import type { Endpoint } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
-import { findLiveBySlug, heldByDeleted, listBindings, listLive } from '../servers/persistence.ts'
+import {
+  findLiveBySlug,
+  findRuntime,
+  heldByDeleted,
+  listBindings,
+  listLive,
+  motdsOf,
+} from '../servers/persistence.ts'
 import type { MinecraftServerService } from '../servers/service.ts'
 import { presenceFor, recordDomainJoin, recordEdgePresence, wakesInLastHour } from '../servers/usage.ts'
 import type { ServerWaiter } from '../servers/waiter.ts'
@@ -45,6 +56,10 @@ const REFUSED: Partial<Record<AppErrorCode, Extract<WakeResult, { outcome: 'deni
   payment_due: 'quota',
 }
 
+/** A route's word that its server reads a PROXY header, where the run it is in does. */
+const headerRead = (applied: AppliedConfigJson | null | undefined): { proxyProtocol?: true } =>
+  applied?.proxyProtocol ? { proxyProtocol: true } : {}
+
 export class EdgeService {
   readonly #db: Db
   readonly #addressing: PlayAddressing
@@ -53,6 +68,7 @@ export class EdgeService {
   readonly #waiter: ServerWaiter
   readonly #schedules: Schedules
   readonly #events: EventBus
+  readonly #links: ArtifactLinks
   readonly #wakeWaitMs: number
 
   constructor(deps: {
@@ -63,6 +79,7 @@ export class EdgeService {
     waiter: ServerWaiter
     schedules: Schedules
     events: EventBus
+    links: ArtifactLinks
     wakeWaitMs: number
   }) {
     this.#db = deps.db
@@ -72,20 +89,27 @@ export class EdgeService {
     this.#waiter = deps.waiter
     this.#schedules = deps.schedules
     this.#events = deps.events
+    this.#links = deps.links
     this.#wakeWaitMs = deps.wakeWaitMs
   }
 
   /** Every hostname that should route, with where the edge sends it. Nothing is persisted. */
   async routes(): Promise<EdgeRoutes> {
-    const handles = new Map(
-      (await listBindings(this.#db, this.#runtime.providers)).map((b) => [b.serverId, b.handle]),
+    const bindings = new Map(
+      (await listBindings(this.#db, this.#runtime.providers)).map((b) => [b.serverId, b]),
     )
     const live = await listLive(this.#db)
     const restarting = await this.#restarting(live)
     const out = await outForToday(this.#db, new Date())
+    const asleep = live.filter((s) => s.lifecycle.status !== 'running' && !restarting.has(s.id))
+    const motds = await motdsOf(
+      this.#db,
+      asleep.map((s) => s.desiredRevisionId),
+    )
     const routes: EdgeRoutes['routes'] = []
     for (const server of live) {
-      const handle = handles.get(server.id)
+      const binding = bindings.get(server.id)
+      const handle = binding?.handle
       const { status } = server.lifecycle
       const state = status === 'running' ? null : restarting.has(server.id) ? 'restarting' : 'asleep'
       // A running server being restored is routed only so its players are told it is restarting:
@@ -98,11 +122,41 @@ export class EdgeService {
           ? destinationOf(this.#runtime.endpoint(handle, PORT_NAMES.game, 'edge'))
           : NOWHERE
       for (const address of this.#addressing.all(server.slug)) {
-        routes.push({ hostname: address.hostname, destination, ...noticeOf(state, out.get(server.id)) })
+        routes.push({
+          hostname: address.hostname,
+          destination,
+          ...noticeOf(state, out.get(server.id)),
+          ...this.#identityOf(server, state, motds),
+          ...headerRead(binding?.applied),
+        })
       }
     }
     routes.sort((a, b) => a.hostname.localeCompare(b.hostname))
     return { routes }
+  }
+
+  /**
+   * What the server list shows of an asleep server, where its owner made it their own: the message
+   * it starts with next, and its picture. Blockly's welcome and its default picture are left out,
+   * so the edge says only that it sleeps.
+   */
+  #identityOf(
+    server: MinecraftServer,
+    state: 'asleep' | 'restarting' | null,
+    motds: ReadonlyMap<string, string>,
+  ): Pick<EdgeRoutes['routes'][number], 'motd' | 'icon'> {
+    if (state !== 'asleep') return {}
+    const motd = motds.get(server.desiredRevisionId)
+    const icon =
+      server.ownIcon !== null
+        ? this.#links.ownIcon(server.id, server.ownIcon)
+        : server.icon !== null && server.icon !== BLOCKLY_ICON
+          ? this.#links.icon(server.icon)
+          : undefined
+    return {
+      ...(motd === undefined || motd === welcome(server.name) ? {} : { motd: motdForGame(motd) }),
+      ...(icon === undefined ? {} : { icon }),
+    }
   }
 
   /**
@@ -135,14 +189,12 @@ export class EdgeService {
       if (unstarted !== null) return unstarted
     }
 
-    const handles = new Map(
-      (await listBindings(this.#db, this.#runtime.providers)).map((b) => [b.serverId, b.handle]),
-    )
-    const handle = handles.get(server.id)
-    if (!handle) return { outcome: 'starting' }
+    const binding = await findRuntime(this.#db, server.id, this.#runtime.providers)
+    if (!binding?.handle) return { outcome: 'starting' }
     return {
       outcome: 'ready',
-      destination: destinationOf(this.#runtime.endpoint(handle, PORT_NAMES.game, 'edge')),
+      destination: destinationOf(this.#runtime.endpoint(binding.handle, PORT_NAMES.game, 'edge')),
+      ...headerRead(binding.applied),
     }
   }
 

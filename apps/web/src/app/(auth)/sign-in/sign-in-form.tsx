@@ -49,11 +49,19 @@ export function SignInForm({ next }: { next: string }) {
   }
 
   return (
-    <form className={styles.email} onSubmit={submit} aria-label="Sign in with email">
+    <form
+      id="sign-in"
+      method="post"
+      className={styles.email}
+      onSubmit={submit}
+      aria-label="Sign in with email"
+    >
       <TextField
         label="Email"
+        id="email"
+        name="email"
         type="email"
-        autoComplete="email"
+        autoComplete="username"
         required
         value={email}
         error={checked.error}
@@ -62,6 +70,8 @@ export function SignInForm({ next }: { next: string }) {
       />
       <TextField
         label="Password"
+        id="current-password"
+        name="password"
         type="password"
         autoComplete="current-password"
         required

@@ -99,8 +99,8 @@ describe.each(['staging', 'production'])('the %s environment', (name) => {
       expect(config.runtimes.map((r) => r.provider)).toEqual(['fly'])
     }
     expect(loadConfig({ ...shared, ...flyEnv('control', 'api') }).roles).toEqual(['api'])
-    // The org's machines hold maxServers down: two a server, beside the platform's seven, as the
-    // Fly runtime counts them from what this environment configures.
+    // The org's machines hold maxServers down: one a server, beside the platform's own and two kept
+    // for helpers, as the Fly runtime counts them from what this environment configures.
     const [runtime] = loadConfig({ ...shared, ...flyEnv('control', 'api') }).runtimes
     if (runtime?.provider !== 'fly') throw new Error('not fly')
     expect([runtime.machineLimit, runtime.platformMachines]).toEqual([env.fly_machine_limit, 4])

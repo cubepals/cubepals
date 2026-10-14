@@ -29,7 +29,7 @@ const spec: RuntimeSpec = {
 }
 
 /** `flipped` is the admin's switch, which a test flips between sleeps. */
-async function running(options: { suspend?: boolean; switchless?: boolean } = {}) {
+async function running(options: { suspend?: boolean; switchless?: boolean; spec?: RuntimeSpec } = {}) {
   const flipped = { on: options.suspend ?? true }
   const fake = new FakeFly()
   const client = flyClient('token', { fetch: fake.fetch as never, pace: { perSecond: 1000, burst: 1000 } })
@@ -45,7 +45,12 @@ async function running(options: { suspend?: boolean; switchless?: boolean } = {}
   })
   const steps: string[] = []
   const progress: ProgressSink = { step: async (step) => void steps.push(step), handle: async () => {} }
-  const handle = await runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, spec, progress)
+  const handle = await runtime.ensureProvisioned(
+    KEY,
+    { regionKey: 'eu-central' },
+    options.spec ?? spec,
+    progress,
+  )
   const machine = fake.machines.get(APP)?.[0]
   if (machine === undefined) throw new Error('no machine')
   steps.length = 0
@@ -235,6 +240,39 @@ describe('FlyRuntime with a server asleep: waking it, or stopping it', () => {
     const { runtime, handle, sleep } = await running()
     await sleep()
     expect((await runtime.observe(handle)).state).toBe('stopped')
+  })
+})
+
+describe('FlyRuntime waking a server asleep on a change only a start reads', () => {
+  // Production, 2026-10-14: a server's message changed while it slept, and its wake booted it.
+  test('a wake on a change only a start reads resumes it as it slept, and its next boot takes the change', async () => {
+    const labelled = { ...spec, resumesOn: 'as-before' }
+    const { fake, runtime, handle, machine, steps, progress, sleep } = await running({ spec: labelled })
+    await sleep()
+    fake.calls.length = 0
+    const message = { ...labelled, env: { ...spec.env, MOTD: 'Back soon' } }
+    await runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, message, progress)
+    expect(steps).toEqual(['resuming'])
+    expect(fake.startedFrom).toEqual(['suspended'])
+    expect(fake.calls.filter((call) => call.startsWith('POST'))).toEqual([
+      `POST /v1/apps/${APP}/machines/${machine.id}/start`,
+    ])
+    expect((machine.config.env as Record<string, string>).MOTD).toBeUndefined()
+
+    await runtime.stop(handle)
+    steps.length = 0
+    await runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, message, progress)
+    expect(steps).toEqual(['allocating', 'storage', 'compute', 'booting'])
+    expect((machine.config.env as Record<string, string>).MOTD).toBe('Back soon')
+  })
+
+  test('a machine asleep from before `resumesOn` resumes on the same configuration with it', async () => {
+    const { fake, runtime, steps, progress, sleep } = await running()
+    await sleep()
+    const labelled = { ...spec, resumesOn: 'as-before' }
+    await runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, labelled, progress)
+    expect(steps).toEqual(['resuming'])
+    expect(fake.startedFrom).toEqual(['suspended'])
   })
 })
 

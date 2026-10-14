@@ -27,7 +27,11 @@ export function ForgotPasswordForm() {
     if (!checked.check()) return
     setBusy(true)
     setError(null)
-    const { error: failure } = await authClient.requestPasswordReset({ email, redirectTo: '/reset-password' })
+    // The link comes back with the email, so the new password is saved to the right login.
+    const { error: failure } = await authClient.requestPasswordReset({
+      email,
+      redirectTo: `/reset-password?email=${encodeURIComponent(email)}`,
+    })
     setBusy(false)
     if (failure) {
       setError(
@@ -54,11 +58,19 @@ export function ForgotPasswordForm() {
     )
 
   return (
-    <form className={styles.email} onSubmit={submit} aria-label="Ask for a reset link">
+    <form
+      id="forgot-password"
+      method="post"
+      className={styles.email}
+      onSubmit={submit}
+      aria-label="Ask for a reset link"
+    >
       <TextField
         label="Email"
+        id="email"
+        name="email"
         type="email"
-        autoComplete="email"
+        autoComplete="username"
         required
         value={email}
         error={error ?? checked.error}

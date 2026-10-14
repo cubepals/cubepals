@@ -29,13 +29,35 @@ export const EdgeRoute = z.object({
    * their midnight. The edge says so to a ping, in `play-today.ts`'s words.
    */
   backAt: z.iso.datetime().optional(),
+  /**
+   * An asleep server's own message, as the game reads it (section-sign codes), which the edge
+   * shows a ping in place of its own notice. Absent while the message is still Blockly's welcome.
+   */
+  motd: z.string().optional(),
+  /**
+   * Where the edge fetches an asleep server's picture, a 64 square PNG, to show a ping. The link
+   * changes whenever the picture does, so the edge fetches each once. Absent while it has none.
+   */
+  icon: z.url().optional(),
+  /**
+   * The server reads a PROXY protocol header (`proxy-header.ts`) before each connection, which tells
+   * it the player's own address. Absent, it reads none, and a connection that opens with one fails.
+   * It is the run the server is in that counts: one started before it read headers reads none
+   * until its next start.
+   */
+  proxyProtocol: z.literal(true).optional(),
 })
 export const EdgeRoutes = z.object({ routes: z.array(EdgeRoute) })
 export type EdgeRoutes = z.infer<typeof EdgeRoutes>
 
 export const WakeRequest = z.object({ hostname: z.string() })
 export const WakeResult = z.discriminatedUnion('outcome', [
-  z.object({ outcome: z.literal('ready'), destination: z.string() }),
+  /** `proxyProtocol` as on the server's route, for the run it is in now. */
+  z.object({
+    outcome: z.literal('ready'),
+    destination: z.string(),
+    proxyProtocol: z.literal(true).optional(),
+  }),
   z.object({ outcome: z.literal('starting') }),
   /** Still on its way back from a restart after as long as a joining client waits. */
   z.object({ outcome: z.literal('restarting') }),

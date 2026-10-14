@@ -18,9 +18,10 @@
  *   bun scripts/suspend-bench.ts down                              both apps destroyed
  *
  * The Minecraft machines' configs are Cubepals' own: `toRuntimeSpec` for a new Free server of the
- * template, made a Fly machine by `machineConfig`, as `FlyRuntime` makes one. Two things differ,
- * both so a headless player can join: account checks are off (an owner's setting) and the version
- * is 1.21.11, the newest mineflayer speaks; the plain Paper template would pick 26.2. All of them
+ * template, made a Fly machine by `machineConfig`, as `FlyRuntime` makes one. Three things differ,
+ * all so a headless player can join: account checks are off (an owner's setting), the version is
+ * 1.21.11, the newest mineflayer speaks (the plain Paper template would pick 26.2), and Paper reads
+ * no PROXY header, since the players join it directly rather than through the edge. All of them
  * live in one app, `bly-suspend-bench-mc`. The probe (`lib/suspend-probe.ts`, bundled with this
  * checkout's control-plane code and run by bun) runs in an app of its own, `bly-suspend-bench-probe`,
  * since the game port can't be reached from here, and every time it reports is from its own clock.
@@ -41,7 +42,7 @@ import { defaultSettings, type ServerRevision } from '../apps/control/src/domain
 import type { MemoryTier } from '../apps/control/src/domain/server/size.ts'
 import { machineConfig } from '../apps/control/src/infra/fly/machine-config.ts'
 import { UpstreamLoaderBuilds } from '../apps/control/src/infra/loaders/loader-builds.ts'
-import { toRuntimeSpec } from '../apps/control/src/minecraft/runtime-spec.ts'
+import { PROXY_ENV, toRuntimeSpec } from '../apps/control/src/minecraft/runtime-spec.ts'
 
 const ORG = 'blockly-staging'
 const MC_APP = 'bly-suspend-bench-mc'
@@ -177,7 +178,7 @@ export async function configFor(key: BenchTemplate, tier: MemoryTier, volumeId: 
     basedOnRevisionId: null,
     createdBy: SERVER_ID,
   }
-  const spec = toRuntimeSpec({
+  const built = toRuntimeSpec({
     serverId: SERVER_ID,
     revision,
     world: {
@@ -197,6 +198,9 @@ export async function configFor(key: BenchTemplate, tier: MemoryTier, volumeId: 
     limits: { playerIdleKickMinutes: null, worldRadius: null, storageGb: 5 },
     iconUrl: null,
   })
+  // Its players join the server directly, not through the edge, so Paper reads no PROXY header.
+  const { [PROXY_ENV]: _, ...env } = built.env
+  const spec = { ...built, env }
   return { spec, config: machineConfig(spec, volumeId, { deployment: 'suspend-bench', server: SERVER_ID }) }
 }
 

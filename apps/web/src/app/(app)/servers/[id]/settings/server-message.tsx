@@ -5,102 +5,137 @@
 'use client'
 
 /**
- * The server list message, typed as plain text with Minecraft's `&` codes for colour, and beside
- * it the server as Minecraft's multiplayer list draws it: its icon, its name, and the message on
- * up to two lines. No pickers: what is typed is what the game reads.
+ * The server list message, typed as plain text with Minecraft's `&` codes for colour, a small bar
+ * under it that writes those codes around the selected words (`style-bar.tsx`), a hint for each
+ * code that won't do what it looks like (`message-hints.ts`), and the server as Minecraft's
+ * multiplayer list draws it (`list-entry.tsx`). What is typed is what the game reads; the bar only
+ * types for you.
  */
-import { type MotdRun, motdRuns, motdText, type ServerView } from '@blockly/contracts'
-import Image from 'next/image'
-import type { CSSProperties } from 'react'
-import { iconSrc } from '../../../../../lib/present'
+import {
+  type MotdRun,
+  motdCutSentence,
+  motdLayout,
+  motdRuns,
+  motdText,
+  type ServerView,
+} from '@blockly/contracts'
+import { type CSSProperties, useId, useLayoutEffect, useRef, useState } from 'react'
 import { TextField } from '../../../../../ui'
+import { GROUND, ListEntry, scrambled } from './list-entry'
+import { pressedCodes, withCode } from './message-codes'
+import { messageHints } from './message-hints'
+import { StyleBar } from './style-bar'
+
+/**
+ * Why a message can't be saved, as the control plane would refuse it (`settingsProblems`): it is
+ * kept without the spaces around it, needs some text, and all of it must show in the list.
+ */
+export function messageProblem(motd: string): string | null {
+  if (motdText(motd).trim() === '') return 'Write something to show under the name.'
+  const { cutCount } = motdLayout(motd.trim())
+  return cutCount > 0 ? motdCutSentence(cutCount) : null
+}
 
 export function ServerMessage({
   view,
   value,
-  limit,
+  maxPlayers,
   problem,
   onChange,
 }: {
   view: ServerView
   value: string
-  limit: number
+  /** For the player count beside it, as the list shows it. */
+  maxPlayers: number
+  /** Why it can't be saved: what the list would cut. */
   problem: string | null
   onChange: (motd: string) => void
 }) {
-  const left = Math.max(0, limit - motdText(value).length)
+  const field = useId()
+  const input = useRef<HTMLInputElement>(null)
+  const [selection, setSelection] = useState({ start: value.length, end: value.length })
+  // Where the selection goes once the message the bar wrote is in the field.
+  const placed = useRef<{ start: number; end: number } | null>(null)
+  useLayoutEffect(() => {
+    const at = placed.current
+    if (at === null || input.current === null) return
+    placed.current = null
+    input.current.focus()
+    input.current.setSelectionRange(at.start, at.end)
+  })
+  const start = Math.min(selection.start, value.length)
+  const end = Math.min(selection.end, value.length)
   return (
     <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
       <TextField
+        ref={input}
+        id={field}
         label="Server message"
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onSelect={(event) =>
+          setSelection({
+            start: event.currentTarget.selectionStart ?? 0,
+            end: event.currentTarget.selectionEnd ?? 0,
+          })
+        }
         error={problem}
-        help={`Shown under the name in your friends’ server list, from the server’s next start. Add colour with & and a code: &6 for gold, &l for bold. ${left} characters left.`}
+        help="Shown under the name in your friends’ server list, from the server’s next start. Select some words and pick a colour or style, or type & codes like &6 for gold."
       />
-      <ListEntry view={view} motd={value} />
+      <StyleBar
+        field={field}
+        pressed={pressedCodes(value, start, end)}
+        onCode={(code) => {
+          const next = withCode(value, start, end, code)
+          placed.current = { start: next.start, end: next.end }
+          setSelection(placed.current)
+          onChange(next.motd)
+        }}
+      />
+      {messageHints(value).map((hint) => (
+        <p key={hint} className="bk-field__help" style={{ margin: 0 }}>
+          {hint}
+        </p>
+      ))}
+      <figure style={{ margin: 0 }}>
+        {/* The server keeps the message without the spaces around it, so the list never shows them. */}
+        <ListEntry view={view} motd={value.trim()} maxPlayers={maxPlayers} />
+        <figcaption className="bk-field__help" style={{ marginTop: 'var(--space-4)' }}>
+          How it shows in Minecraft’s server list.
+        </figcaption>
+      </figure>
     </div>
   )
 }
 
-/** The game's own list is dark whatever the page's theme, and its text is the game's colours. */
-const ENTRY: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '32px minmax(0, 1fr)',
-  gap: 'var(--space-8)',
-  alignItems: 'start',
-  maxWidth: '100%',
-  width: 'fit-content',
-  padding: 'var(--space-8)',
-  borderRadius: 'var(--radius-8)',
-  background: '#1b1b1b',
-  // The product's monospace stands in for the game's font, which only the landing page loads.
+/**
+ * A message as the list draws it, for where a page shows one as words: on the list's own dark
+ * ground, in the game's colours, never as its codes.
+ */
+export function StyledMessage({ motd }: { motd: string }) {
+  return (
+    <span style={{ ...GAME_TEXT, display: 'inline', padding: '0 var(--space-4)', background: GROUND }}>
+      <Runs motd={motd} />
+    </span>
+  )
+}
+
+/** The product's monospace stands in for the game's font, which only the landing page loads. */
+const GAME_TEXT: CSSProperties = {
   fontFamily: 'var(--font-pixel, var(--font-plex-mono)), ui-monospace, monospace',
   fontSize: '15px',
   lineHeight: 1.2,
-}
-
-/** Two lines of the list's width: about as many characters as the game fits in one. */
-const LINES: CSSProperties = {
-  display: '-webkit-box',
-  WebkitBoxOrient: 'vertical',
-  WebkitLineClamp: 2,
-  overflow: 'hidden',
-  width: '45ch',
-  maxWidth: '100%',
   overflowWrap: 'anywhere',
   whiteSpace: 'pre-wrap',
 }
 
-function ListEntry({ view, motd }: { view: ServerView; motd: string }) {
-  return (
-    <figure style={{ margin: 0 }}>
-      <div style={ENTRY}>
-        <Image
-          src={iconSrc(view.icon, view.ownIcon)}
-          alt=""
-          width={32}
-          height={32}
-          unoptimized
-          style={{ imageRendering: 'pixelated' }}
-        />
-        <div style={{ minWidth: 0 }}>
-          <div style={{ color: '#FFFFFF' }}>{view.name}</div>
-          <div style={LINES}>
-            {motdRuns(motd).map((run, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: the runs are the message in order, told apart by place
-              <span key={i} style={runStyle(run)}>
-                {run.styles.includes('obfuscated') ? scrambled(run.text) : run.text}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-      <figcaption className="bk-field__help" style={{ marginTop: 'var(--space-4)' }}>
-        How it shows in Minecraft’s server list.
-      </figcaption>
-    </figure>
-  )
+function Runs({ motd }: { motd: string }) {
+  return motdRuns(motd).map((run, i) => (
+    // biome-ignore lint/suspicious/noArrayIndexKey: the runs are the message in order, told apart by place
+    <span key={i} style={runStyle(run)}>
+      {run.styles.includes('obfuscated') ? scrambled(run.text) : run.text}
+    </span>
+  ))
 }
 
 function runStyle(run: MotdRun): CSSProperties {
@@ -115,8 +150,3 @@ function runStyle(run: MotdRun): CSSProperties {
     textDecoration: lines.length > 0 ? lines.join(' ') : 'none',
   }
 }
-
-/** The game draws obfuscated text as ever-changing letters; the preview shows some, still. */
-const SCRAMBLE = 'Ξ#%&@?§¥ÆØ'
-const scrambled = (text: string) =>
-  [...text].map((c, i) => (c === ' ' ? c : (SCRAMBLE[(c.charCodeAt(0) + i) % SCRAMBLE.length] ?? c))).join('')

@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "type": "command.finished",
+  "success": true,
+  "exitCode": 0,
+  "signal": null,
+  "stdout": "localhost:25565 : version=Paper 1.21.11 online=0 max=5 motd='\"Boat Paper\", a server created by Cubepals'\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "timedOut": false,
+  "startedAt": "2026-10-14T21:51:30.287Z",
+  "finishedAt": "2026-10-14T21:51:30.532Z",
+  "launcherFailed": false,
+  "startMs": 15,
+  "noticedMs": 16,
+  "oomKilled": false,
+  "cwd": ".",
+  "commandId": "cmd_oixdpyt8vj5k"
+}

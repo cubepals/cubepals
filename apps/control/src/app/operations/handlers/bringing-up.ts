@@ -30,6 +30,7 @@ import {
   type OperationContext,
   type OperationHandler,
   type OperationResult,
+  type OperationStep,
 } from '../runner.ts'
 import { appliedConfig, type ServerBinding } from './binding.ts'
 import type { GameConsole } from './game-console.ts'
@@ -39,6 +40,20 @@ import type { WorldCopies } from './world-copies.ts'
 
 /** What `requestedBy()` writes for a start a connection asked for (`system:wake`). */
 export const WOKEN_BY = 'system:wake'
+
+/**
+ * What a server runs once its start `reached` a resume: what it booted with, even where `desired`
+ * differs in what only a start reads (`resumesOn`). Its digest stays that one's, so its next boot
+ * puts the change in place, as a change taken live keeps it (`takeLive`).
+ */
+const asItSlept = (
+  desired: DesiredRuntime,
+  applied: AppliedConfigJson | null,
+  reached: OperationStep | null,
+): DesiredRuntime =>
+  reached === 'resuming' && applied !== null && applied.specDigest !== desired.digest
+    ? { ...desired, digest: applied.specDigest }
+    : desired
 
 export function bringingUp(deps: {
   db: Db
@@ -124,15 +139,13 @@ export function bringingUp(deps: {
         progressSink(ctx, server),
         desired.install,
       )
-    let handle: RuntimeHandle
-    try {
-      handle = await provisioned(desired.spec)
-    } catch (error) {
+    const handle = await provisioned(desired.spec).catch(async (error: unknown) => {
       const fallback = await fallBack(server, binding, error)
       if (fallback === null) throw error
       provider = fallback
-      handle = await provisioned(desired.spec)
-    }
+      return provisioned(desired.spec)
+    })
+    desired = asItSlept(desired, binding.applied, ctx.reached())
     // A pack server whose start taught its pack something starts again on what it learned.
     await boot.run(
       ctx,

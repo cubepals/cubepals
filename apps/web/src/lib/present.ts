@@ -2,19 +2,21 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type {
-  ChangeKind,
-  Loader,
-  ModConflictView,
-  ModPlanView,
-  ModView,
-  OperationView,
-  RevisionChangeView,
-  RevisionView,
-  ServerView,
-  WorldView,
+import {
+  type ChangeKind,
+  type Loader,
+  type ModConflictView,
+  type ModPlanView,
+  type ModView,
+  motdText,
+  type OperationView,
+  type RevisionChangeView,
+  type RevisionView,
+  type ServerView,
+  type WorldView,
 } from '@blockly/contracts'
 import { DAY_MS, DAY_S, HOUR_S, MINUTE_S } from '@blockly/contracts/durations'
+import { PICK_ANOTHER_NAME } from '@blockly/contracts/names'
 import type { PillStatus, ProvisioningStep } from '../ui'
 
 /**
@@ -270,7 +272,7 @@ const JOURNEYS: Partial<Record<OperationView['kind'], Journey>> = {
     expectedSeconds: 60,
     steps: [
       { label: 'Keeping the world as it is now', covers: ['queued', 'saving'] },
-      { label: 'Bringing the backup back', covers: ['storage', 'compute', 'allocating'] },
+      { label: 'Bringing the backup back', covers: ['storage', 'compute', 'allocating', 'waiting_for_room'] },
       { label: 'Setting it up', covers: ['booting'] },
       { label: 'Starting it up', covers: ['starting'] },
       { label: 'Loading the world', covers: ['loading_world', 'verifying', 'access'] },
@@ -294,7 +296,7 @@ const JOURNEYS: Partial<Record<OperationView['kind'], Journey>> = {
     expectedSeconds: 90,
     steps: [
       { label: 'Saving the world', covers: ['queued', 'saving'] },
-      { label: 'Moving it', covers: ['storage', 'compute', 'allocating'] },
+      { label: 'Moving it', covers: ['storage', 'compute', 'allocating', 'waiting_for_room'] },
       { label: 'Setting it up there', covers: ['booting'] },
       { label: 'Starting it up', covers: ['starting'] },
       { label: 'Loading the world', covers: ['loading_world', 'verifying', 'access'] },
@@ -418,6 +420,8 @@ export function quietLine(
       return 'Putting it back how it was'
     case 'allocating':
       return 'Finding room for it'
+    case 'waiting_for_room':
+      return 'Waiting for room to do this'
     case 'storage':
       return 'Setting aside space for your world'
     case 'compute':
@@ -618,7 +622,8 @@ const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(
 function settingValue(field: string, value: string | number | boolean): string {
   if (typeof value === 'boolean') return value ? 'on' : 'off'
   if (field === 'loader') return LOADER_LABELS[value as Loader] ?? String(value)
-  if (field === 'motd') return `“${value}”`
+  // Words say the message without its codes; History draws it in its colours instead.
+  if (field === 'motd') return `“${motdText(String(value))}”`
   if (field === 'difficulty' || field === 'defaultGameMode') return capitalized(String(value))
   return String(value)
 }
@@ -784,6 +789,8 @@ export function presentIneligible(reason: { code: string; detail?: string }): st
       return 'Your plan doesn’t include public listing.'
     case 'server_deleted':
       return 'The server is deleted.'
+    case 'offensive_name':
+      return PICK_ANOTHER_NAME
     default:
       return 'It can’t be shown right now.'
   }

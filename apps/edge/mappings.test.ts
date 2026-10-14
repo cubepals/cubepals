@@ -18,6 +18,19 @@ test('a sleeping server goes to the sleeping notice, never to where it would run
   })
 })
 
+test('a sleeping server with its own message and picture still goes to the sleeping notice', () => {
+  const routes = [
+    {
+      hostname: 'lobby.play.test',
+      destination: 'bly-a.flycast:25565',
+      state: 'asleep' as const,
+      motd: '§6Sunset Valley',
+      icon: 'https://control.test/runtime/v1/icons/grass.png',
+    },
+  ]
+  expect(mappings(routes, new Set(), NOTICES)).toEqual({ 'lobby.play.test': NOTICES.asleep })
+})
+
 test('a running server goes to itself, or to the restarting notice while it doesn’t answer', () => {
   const routes = [
     { hostname: 'up.play.test', destination: 'bly-a.flycast:25565' },

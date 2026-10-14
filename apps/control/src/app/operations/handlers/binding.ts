@@ -30,6 +30,15 @@ export const appliedConfig = (server: MinecraftServer, desired: DesiredRuntime) 
   specDigest: desired.digest,
   driftDigest: desired.driftDigest,
   secretsVersion: desired.secretsVersion,
+  proxyProtocol: desired.proxyProtocol,
+})
+
+/** What a server runs once the configuration it ran before, `previous`, booted again as `back`. */
+export const bootedBack = (previous: AppliedConfigJson, back: DesiredRuntime): AppliedConfigJson => ({
+  ...previous,
+  specDigest: back.digest,
+  driftDigest: back.driftDigest,
+  proxyProtocol: back.proxyProtocol,
 })
 
 export function serverBinding(deps: {

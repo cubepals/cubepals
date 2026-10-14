@@ -28,6 +28,13 @@ describe('what Blockly says about what was typed', () => {
     expect(rules.address('sunset--valley')).toContain('between words')
   })
 
+  test('an offensive name or address is turned away without saying the word back', () => {
+    expect(rules.serverName('Sh1t Show')).toBe('Pick another name.')
+    expect(rules.address('f-u-c-k')).toBe('Pick another name.')
+    expect(rules.serverName('Scunthorpe')).toBeNull()
+    expect(rules.address('sussex-smp')).toBeNull()
+  })
+
   test('an email says what an email looks like, and an empty field says nothing yet', () => {
     expect(rules.email('')).toBeNull()
     expect(rules.email('  ')).toBeNull()

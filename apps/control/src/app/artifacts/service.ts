@@ -69,7 +69,11 @@ export interface LocatedArtifact {
 /** A presigned link stays valid for one download. */
 const DOWNLOAD_LINK_SECONDS = 10 * MINUTE_S
 
-/** A jar being copied elsewhere is waited for this long; mirroring is never urgent. */
+/**
+ * A jar being copied elsewhere is waited for this long by the mirror queue; mirroring is never
+ * urgent. A boot doesn't wait at all: the wait holds a database connection, and a rush of servers
+ * of one pack would hold them all while one copy runs. Its server fetches the published file.
+ */
 const MIRROR_WAIT_MS = 2 * MINUTE_MS
 
 /** How long a stored blob may go unused before `artifact-gc` deletes it. */
@@ -159,7 +163,7 @@ export class ArtifactService {
       if (ref.kind === 'stored') {
         if (this.#archive === null) throw new ArtifactUnavailable(mod, 'no_archive_store')
         if ((await this.#archive.head(ref.key)) === null) throw new ArtifactUnavailable(mod, 'not_stored')
-      } else if (this.#mirror) await this.mirror(mod.artifact).catch(() => undefined)
+      } else if (this.#mirror) await this.mirror(mod.artifact, 0).catch(() => undefined)
     }
     // A pack is one more file the server fetches: one built from an upload must be in the store.
     const pack = revision.modpack ?? null
@@ -169,19 +173,20 @@ export class ArtifactService {
       if (ref.kind === 'stored') {
         if (this.#archive === null) throw new ArtifactUnavailable(asMod, 'no_archive_store')
         if ((await this.#archive.head(ref.key)) === null) throw new ArtifactUnavailable(asMod, 'not_stored')
-      } else if (this.#mirror) await this.mirror(pack.artifact).catch(() => undefined)
+      } else if (this.#mirror) await this.mirror(pack.artifact, 0).catch(() => undefined)
     }
   }
 
   /**
    * Copies a catalog jar into the store, verified, unless a copy is already kept. The queue and a
-   * boot's preflight can ask at once; they take turns per jar, so it is fetched once.
+   * boot's preflight can ask at once; they take turns per jar, so it is fetched once. One that
+   * finds it being copied waits `waitMs` for that copy, then gives up with `LockBusy`.
    */
-  async mirror(artifact: ModArtifact): Promise<void> {
+  async mirror(artifact: ModArtifact, waitMs = MIRROR_WAIT_MS): Promise<void> {
     const store = this.#archive
     const { ref } = artifact
     if (store === null || ref.kind !== 'remote') return
-    await this.#locks.hold(`mirror:${artifact.sha512}`, MIRROR_WAIT_MS, async () => {
+    await this.#locks.hold(`mirror:${artifact.sha512}`, waitMs, async () => {
       if ((await storedArtifact(this.#db, artifact.sha512)) !== null) return
       const key = await store.ingestFromUrl(ref.url, artifact.sha512)
       await recordStored(this.#db, {

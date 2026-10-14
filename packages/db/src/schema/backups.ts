@@ -66,6 +66,8 @@ export const backups = pgTable(
   },
   (t) => [
     index('backups_server_recent').on(t.serverId, t.createdAt),
+    // Ready backups their provider has let go by now, swept every hour.
+    index('backups_ready_expiry').on(t.expiresAt).where(sql`${t.status} = 'ready'`),
     // Only snapshots have a provider handle, and every snapshot that was made has one; a failed
     // snapshot records the attempt without one (§9: backup `failed`, server unaffected).
     check('backups_handle_only_on_snapshots', sql`${t.tier} = 'snapshot' or ${t.snapshotHandle} is null`),

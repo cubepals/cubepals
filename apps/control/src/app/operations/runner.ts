@@ -23,6 +23,7 @@ import {
 export type OperationStep =
   | 'rolling_back'
   | 'allocating'
+  | 'waiting_for_room'
   | 'storage'
   | 'compute'
   | 'booting'

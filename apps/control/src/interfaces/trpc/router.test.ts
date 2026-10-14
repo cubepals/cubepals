@@ -102,6 +102,35 @@ describe('admin procedures', () => {
   })
 })
 
+describe('an address', () => {
+  const services = (admin: boolean, asked: unknown[]) =>
+    ({
+      accounts: { isAdmin: async () => admin },
+      queries: {
+        suggestAddress: async (actor: unknown) => {
+          asked.push(actor)
+          return { slug: 'duels', joinAddress: '', available: true }
+        },
+      },
+    }) as unknown as Services
+  const user = { kind: 'user' as const, userId: 'u-1' }
+
+  test('is asked for as `admin` by a platform admin, so one held for Cubepals’ servers can be theirs', async () => {
+    const asked: unknown[] = []
+    const admin = appRouter.createCaller({ actor: user, services: services(true, asked) })
+    await admin.servers.suggestAddress({ name: '', slug: 'duels' })
+    const owner = appRouter.createCaller({ actor: user, services: services(false, asked) })
+    await owner.servers.suggestAddress({ name: '', slug: 'duels' })
+    const using = appRouter.createCaller({
+      actor: user,
+      impersonatedBy: 'a-1',
+      services: services(true, asked),
+    })
+    await using.servers.suggestAddress({ name: '', slug: 'duels' })
+    expect(asked).toEqual([{ kind: 'admin', userId: 'u-1' }, user, user])
+  })
+})
+
 describe('coupons', () => {
   const asked: unknown[][] = []
   const services = (admin: boolean) =>

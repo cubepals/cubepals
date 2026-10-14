@@ -68,9 +68,17 @@ export class Sleeps {
     return machine.state === 'suspended'
   }
 
-  /** Whether a start of `machine` on `spec` resumes it: asleep on that very spec. */
+  /**
+   * Whether a start of `machine` on `spec` resumes it: asleep on that very spec, or on one its
+   * `resumesOn` says it may wake on as it slept, as Fly's runtime reads it.
+   */
   resumes(machine: Sleeper | undefined, spec: RuntimeSpec): machine is Sleeper {
-    return machine?.state === 'suspended' && this.#slept.get(machine.key) === JSON.stringify(spec)
+    if (machine?.state !== 'suspended') return false
+    const slept = this.#slept.get(machine.key)
+    if (slept === JSON.stringify(spec)) return true
+    return (
+      spec.resumesOn !== undefined && slept !== undefined && JSON.parse(slept).resumesOn === spec.resumesOn
+    )
   }
 
   /**

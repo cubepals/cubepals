@@ -1,0 +1,7 @@
+Subject: Confirm your email for Cubepals
+
+Confirm your email to start creating servers:
+
+https://cubepals.com/api/auth/verify-email?token=example&callbackURL=%2Fservers%2Fnew
+
+If you did not sign up, ignore this email.

@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "type": "command.finished",
+  "success": false,
+  "exitCode": 1,
+  "signal": null,
+  "stdout": "",
+  "stderr": "Error response from daemon: container 3dc442016c26ddbb16689b158714abd6eca0ea1a78441e5f83fcae047ed3de59 is not running\n",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "timedOut": false,
+  "startedAt": "2026-10-14T21:51:19.603Z",
+  "finishedAt": "2026-10-14T21:51:19.627Z",
+  "launcherFailed": false,
+  "startMs": 14,
+  "noticedMs": 14,
+  "oomKilled": false,
+  "cwd": ".",
+  "commandId": "cmd_sxxhndrbbxhm"
+}

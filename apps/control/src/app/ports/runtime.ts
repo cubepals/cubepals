@@ -79,6 +79,13 @@ export interface RuntimeSpec {
   ports: readonly PortSpec[]
   stop: { signal: 'SIGTERM' | 'SIGINT'; timeoutSeconds: number }
   labels: Readonly<Record<string, string>>
+  /**
+   * Which specs a workload asleep may wake on as it slept: two with the same value differ only in
+   * what the workload reads as it starts (a server's message, its picture, a plan's limits). A
+   * runtime that keeps a sleeping workload's memory resumes one asleep on either, and the other
+   * waits for its next boot. No digest sees it.
+   */
+  resumesOn?: string
 }
 
 /**
@@ -127,7 +134,7 @@ export interface RuntimeObservation {
 }
 
 /** `resuming`: compute asleep with its memory kept is started as it was, and nothing else is done. */
-type RuntimeStep = 'allocating' | 'storage' | 'compute' | 'booting' | 'resuming'
+type RuntimeStep = 'allocating' | 'waiting_for_room' | 'storage' | 'compute' | 'booting' | 'resuming'
 
 export interface ProgressSink {
   step(name: RuntimeStep): Promise<void>
@@ -477,5 +484,17 @@ export class RuntimeFull extends Error {
   constructor(provider: string, detail: string) {
     super(`The ${provider} runtime has no room: ${detail}`)
     this.name = 'RuntimeFull'
+  }
+}
+
+/**
+ * RuntimeFull for the provider's limit on how much one account holds, not a host's room. A
+ * machine frees as soon as another goes, so work that needs one more for a while (a restore, a
+ * move, an export) waits for it, and is refused with this only once nothing freed meanwhile.
+ */
+export class RuntimeAtLimit extends RuntimeFull {
+  constructor(provider: string, detail: string) {
+    super(provider, detail)
+    this.name = 'RuntimeAtLimit'
   }
 }

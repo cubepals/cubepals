@@ -24,6 +24,8 @@ export interface HangarClientOptions {
   fetch?: Send
   /** The longest a rate-limited request waits before its next try. */
   maxWaitMs?: number
+  /** How long one try may take, its body included, before it counts as a dropped connection. */
+  attemptMs?: number
 }
 
 /**
@@ -33,27 +35,36 @@ export interface HangarClientOptions {
 export function hangarClient(userAgent: string, options: HangarClientOptions = {}): HangarClient {
   const send: Send = options.fetch ?? ((request) => fetch(request))
   const maxWaitMs = options.maxWaitMs ?? 10_000
+  const attemptMs = options.attemptMs ?? ATTEMPT_MS
   return createClient<paths>({
     baseUrl: options.baseUrl ?? HANGAR_API,
     headers: { 'User-Agent': userAgent },
-    fetch: (request) => patient(request, send, maxWaitMs),
+    fetch: (request) => patient(request, send, maxWaitMs, attemptMs),
   })
 }
 
 const ATTEMPTS = 3
+/** A read Hangar has not answered in this long has hung; without it, the request would wait forever. */
+const ATTEMPT_MS = 15_000
 
 /**
  * Hangar allows 20 requests every 5 seconds, "with an initial overdraft for extra leniency", and
  * says no more about how it refuses one past that. Every call here is a read, so a 429, a 502–504
- * or a dropped connection is tried again: after the Retry-After it sends, or a pause that covers
+ * or a dropped or hung connection is tried again: after the Retry-After it sends, or a pause that covers
  * the window. Three tries in all; authoring would rather stop with CatalogUnavailable than hang.
  */
-async function patient(request: HangarRequest, send: Send, maxWaitMs: number): Promise<Response> {
+async function patient(
+  request: HangarRequest,
+  send: Send,
+  maxWaitMs: number,
+  attemptMs: number,
+): Promise<Response> {
   for (let attempt = 1; ; attempt++) {
     let response: Response
     try {
       // Bun's and Node's type packages each declare Request; clone() returns the other one's.
-      response = await send(request.clone() as HangarRequest)
+      const timed = new Request(request.clone() as Request, { signal: AbortSignal.timeout(attemptMs) })
+      response = await send(timed as HangarRequest)
     } catch (error) {
       if (attempt >= ATTEMPTS) throw error
       await sleep(Math.min(maxWaitMs, 1000 * attempt))

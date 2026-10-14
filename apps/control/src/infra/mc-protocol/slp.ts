@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Socket } from 'node:net'
-import type { ReadinessProbe, ServerStatusPing } from '../../app/ports/minecraft.ts'
-import type { Endpoint } from '../../app/ports/runtime.ts'
+import { LOCAL_HEADER } from '@blockly/contracts/proxy-header'
+import type { GameEndpoint, ReadinessProbe, ServerStatusPing } from '../../app/ports/minecraft.ts'
 
 /**
  * Minecraft's Server List Ping (1.7+): the same question the multiplayer screen asks. A server
@@ -46,7 +46,7 @@ function readVarInt(buffer: Buffer, offset: number): { value: number; size: numb
 }
 
 export class SlpProbe implements ReadinessProbe {
-  ping(endpoint: Endpoint, signal: AbortSignal): Promise<ServerStatusPing> {
+  ping(endpoint: GameEndpoint, signal: AbortSignal): Promise<ServerStatusPing> {
     return new Promise((resolve, reject) => {
       const socket = new Socket()
       let buffer = Buffer.alloc(0)
@@ -70,6 +70,8 @@ export class SlpProbe implements ReadinessProbe {
         const port = Buffer.alloc(2)
         port.writeUInt16BE(endpoint.port)
         const handshake = Buffer.concat([varInt(0xffffffff), varInt(host.length), host, port, varInt(1)])
+        // A ping is the control plane's own connection, not a player's: the server keeps its address.
+        if (endpoint.proxyProtocol) socket.write(LOCAL_HEADER)
         socket.write(frame(0x00, handshake))
         socket.write(frame(0x00, Buffer.alloc(0)))
       })

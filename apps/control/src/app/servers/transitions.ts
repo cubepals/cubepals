@@ -40,6 +40,9 @@ const RETRIES: Record<OperationKind, number> = {
   unstore: 0,
 }
 
+/** Operations a player waits on to play: they go ahead of everything else queued (ports/jobs.ts). */
+const WAKES: ReadonlySet<OperationKind> = new Set(['start', 'unstore'])
+
 export interface OperationRequest {
   requestedBy: string
   idempotencyKey: string
@@ -128,7 +131,12 @@ export class ServerTransitions {
       idempotencyKey: request.idempotencyKey,
     })
     if (created) {
-      await this.#jobs.enqueue(tx, { operationId: record.id, serverId: server.id, retryLimit: RETRIES[kind] })
+      await this.#jobs.enqueue(tx, {
+        operationId: record.id,
+        serverId: server.id,
+        retryLimit: RETRIES[kind],
+        wakes: WAKES.has(kind),
+      })
       await this.#events.publish(tx, {
         type: 'operation_progress',
         serverId: server.id,

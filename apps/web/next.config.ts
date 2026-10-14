@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The web app's build: the /api rewrite to the control plane, a phone's landing page, standalone output for self-hosting,
- * and what PostHog needs from the build (the environment, the version, source maps).
+ * The web app's build: the /api rewrite to the control plane, a phone's landing page, where
+ * password managers change a password, standalone output for self-hosting, and what PostHog needs
+ * from the build (the environment, the version, source maps).
  */
 import { join } from 'node:path'
 import type { NextConfig } from 'next'
@@ -66,6 +67,11 @@ export default {
   // the pages' own robots meta can't reach.
   async headers() {
     return indexable() ? [] : [{ source: '/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex' }] }]
+  },
+  // Where a password manager sends someone to change a saved password (w3c.github.io/
+  // webappsec-change-password-url). A password is changed by a reset link, so it is that page.
+  async redirects() {
+    return [{ source: '/.well-known/change-password', destination: '/forgot-password', permanent: false }]
   },
   async rewrites() {
     return {
