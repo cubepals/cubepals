@@ -67,10 +67,14 @@ beforeEach(() => {
   calls = []
 })
 
-/** The environment an operator's shell would give: where the API is, the token, and no one named. */
+/**
+ * The environment an operator's shell would give: where the API is, the token, and no one named.
+ * USER is blank, not left out, since the MCP SDK fills in the shell's own when it is missing.
+ */
 const env = (extra: Record<string, string> = {}): Record<string, string> => ({
   PATH: process.env.PATH ?? '',
   HOME: process.env.HOME ?? '',
+  USER: '',
   OPERATOR_API: `http://127.0.0.1:${api.port}`,
   OPERATOR_TOKEN: SECRET,
   ...extra,
@@ -121,14 +125,7 @@ describe('ops-mcp.ts', () => {
     let client: Client
     let stderr = ''
     beforeAll(async () => {
-      // The SDK fills in the shell's USER when the env leaves it out, and CI's runner has one: blank it,
-      // so nobody is named and the default is what's tested.
-      const transport = new StdioClientTransport({
-        command: 'bun',
-        args: [MCP],
-        env: env({ USER: '' }),
-        stderr: 'pipe',
-      })
+      const transport = new StdioClientTransport({ command: 'bun', args: [MCP], env: env(), stderr: 'pipe' })
       transport.stderr?.on('data', (chunk: Buffer) => {
         stderr += chunk.toString()
       })
