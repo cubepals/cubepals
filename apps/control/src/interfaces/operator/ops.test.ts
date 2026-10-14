@@ -10,7 +10,9 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { SERVER_ICONS } from '@blockly/contracts'
 import type { AccountDetail } from '../../app/accounts/queries.ts'
+import type { ControlPlane } from '../../app/control-plane.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
+import { operatorApis } from './mount.ts'
 import { createOpsApi, type OpsApiOptions } from './ops.ts'
 
 const OWNER = '6f1c0b9e-3c1e-4a51-9a39-0a3f2d5b7c11'
@@ -79,7 +81,9 @@ function recordingApi(calls: Array<[string, ...unknown[]]>) {
         entries: [{ list: 'ban', player: { uuid: PLAYER, name: 'Griefer' } }],
       }),
     } as unknown as OpsApiOptions['queries'],
-    console: { run: record('console.run', 'There are 0 of a max of 5 players online') },
+    console: {
+      run: record('console.run', 'There are 0 of a max of 5 players online'),
+    } as unknown as OpsApiOptions['console'],
     feed: {
       recent: record('feed.recent', [{ at: new Date(0), text: 'Done (2.1s)!', level: 'info' }]),
     } as unknown as OpsApiOptions['feed'],
@@ -156,29 +160,29 @@ function recordingApi(calls: Array<[string, ...unknown[]]>) {
   })
 }
 
-describe('the operators’ accounts and servers API', () => {
-  let calls: Array<[string, ...unknown[]]>
-  let api: ReturnType<typeof createOpsApi>
+let calls: Array<[string, ...unknown[]]>
+let api: ReturnType<typeof createOpsApi>
 
-  beforeEach(() => {
-    calls = []
-    api = recordingApi(calls)
-  })
+beforeEach(() => {
+  calls = []
+  api = recordingApi(calls)
+})
 
-  const call = (method: string, path: string, body?: object, token = 'operator-token') =>
-    api.fetch(
-      new Request(`http://internal/ops/v1${path}`, {
-        method,
-        headers: {
-          ...(token ? { authorization: `Bearer ${token}` } : {}),
-          'x-operator': 'ada',
-          'content-type': 'application/json',
-        },
-        ...(body ? { body: JSON.stringify(body) } : {}),
-      }),
-    )
-  const named = (name: string) => calls.filter(([called]) => called === name)
+const call = (method: string, path: string, body?: object, token = 'operator-token') =>
+  api.fetch(
+    new Request(`http://internal/ops/v1${path}`, {
+      method,
+      headers: {
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        'x-operator': 'ada',
+        'content-type': 'application/json',
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    }),
+  )
+const named = (name: string) => calls.filter(([called]) => called === name)
 
+describe('the operators’ API: accounts', () => {
   test('refuses a request without the token, or with another, before it reaches anything', async () => {
     for (const token of ['', 'not-the-token', 'operator-token-but-longer']) {
       expect((await call('GET', `/servers/${SERVER}`, undefined, token)).status).toBe(401)
@@ -216,6 +220,19 @@ describe('the operators’ accounts and servers API', () => {
     expect((await call('PUT', `/accounts/${OWNER}/limits`, { maxServers: 'many' })).status).toBe(400)
   })
 
+  test('makes an account for a person, by their address and name', async () => {
+    const made = await call('POST', '/accounts', { email: 'kid@example.test', name: 'Kid' })
+    expect(made.status).toBe(201)
+    expect(await made.json()).toMatchObject({ userId: OWNER, plan: 'free' })
+    expect(named('accounts.createAccount')).toEqual([
+      ['accounts.createAccount', ADA, 'kid@example.test', 'Kid'],
+    ])
+    expect((await call('POST', '/accounts', { email: 'not an address' })).status).toBe(400)
+    expect(named('accounts.createAccount')).toHaveLength(1)
+  })
+})
+
+describe('the operators’ API: servers and health', () => {
   test('makes a server for an owner as the web would: plain survival for five unless told', async () => {
     const response = await call('POST', '/servers', { owner: 'owner@example.test', name: 'Made For You' })
     expect(response.status).toBe(201)
@@ -281,18 +298,9 @@ describe('the operators’ accounts and servers API', () => {
     expect(named('health.operation')).toEqual([['health.operation', ADA, SERVER]])
     expect((await call('GET', '/operations/not-an-id')).status).toBe(400)
   })
+})
 
-  test('makes an account for a person, by their address and name', async () => {
-    const made = await call('POST', '/accounts', { email: 'kid@example.test', name: 'Kid' })
-    expect(made.status).toBe(201)
-    expect(await made.json()).toMatchObject({ userId: OWNER, plan: 'free' })
-    expect(named('accounts.createAccount')).toEqual([
-      ['accounts.createAccount', ADA, 'kid@example.test', 'Kid'],
-    ])
-    expect((await call('POST', '/accounts', { email: 'not an address' })).status).toBe(400)
-    expect(named('accounts.createAccount')).toHaveLength(1)
-  })
-
+describe('the operators’ API: a server’s console, identity and mods', () => {
   test('sends a console command, and reads back what the console printed lately', async () => {
     const sent = await call('POST', `/servers/${SERVER}/console`, { command: 'list' })
     expect(await sent.json()).toEqual({ output: 'There are 0 of a max of 5 players online' })
@@ -382,7 +390,9 @@ describe('the operators’ accounts and servers API', () => {
     })
     expect(named('mods.apply')).toHaveLength(2)
   })
+})
 
+describe('the operators’ API: players, Browse and the platform', () => {
   test('keeps the whitelist, operators, bans and helpers, and the moderation tools, as the players page does', async () => {
     expect((await call('GET', `/servers/${SERVER}/access`)).status).toBe(200)
     expect((await call('PUT', `/servers/${SERVER}/access/whitelist`, { enabled: true })).status).toBe(200)
@@ -446,4 +456,16 @@ describe('the operators’ accounts and servers API', () => {
     expect(await (await call('POST', '/platform/catalog-refresh')).json()).toEqual({ changed: 2 })
     expect(named('platform.refreshCatalog')).toEqual([['platform.refreshCatalog', ADA]])
   })
+})
+
+test('the mount keeps the control plane’s platform switches when the web’s services ride along', async () => {
+  const view = async () => ({ startsEnabled: true })
+  const app = { platform: { view }, servers: {} } as unknown as ControlPlane
+  // What main.node.ts passes is everything the web's API is given, `platform` included.
+  const api = { health: {}, flySuspend: {}, moderation: {}, platform: { capabilities: {} } }
+  const apis = operatorApis(app, api as unknown as Parameters<typeof operatorApis>[1], 'operator-token')
+  const answer = await apis.fetch(
+    new Request('http://internal/ops/v1/platform', { headers: { authorization: 'Bearer operator-token' } }),
+  )
+  expect(await answer.json()).toEqual({ startsEnabled: true })
 })

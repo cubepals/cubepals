@@ -4,8 +4,8 @@
 
 /**
  * What an owner does on a server's own pages, as operators do it under `/ops/v1/servers/:id`: the
- * console (a command, and the lines it printed lately), the identity settings (name, server list
- * message, icon, tags and address), the mods page (list, search, plan, add and remove) and the
+ * console (a command, and the lines it printed lately), the identity settings (name, description,
+ * icon, tags and address), the mods page (list, search, plan, add and remove) and the
  * players page (the whitelist, operators, bans and helpers, and the moderation tools). Each route
  * calls the service the web's own route calls, as the operator, so the audit log says
  * `operator:<name>`. The server's life itself (made, started, trashed) is `ops.ts`'s.

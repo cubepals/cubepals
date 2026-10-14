@@ -185,7 +185,15 @@ export class AccountService {
     if (actor.kind !== 'admin') throw new NotFound('Account')
     if (!PLANS.has(plan)) throw new AppError('invalid_choice', `There is no ${plan} plan.`)
     const taken = 'An account has that email already. Mark it as a test account on its page.'
-    return this.#make(actor, email, undefined, { plan, testAccount: true }, 'account.test_created', taken)
+    return makeAccount(
+      this.#db,
+      actor,
+      email,
+      undefined,
+      { plan, testAccount: true },
+      'account.test_created',
+      taken,
+    )
   }
 
   /**
@@ -195,7 +203,8 @@ export class AccountService {
    */
   async createAccount(actor: Actor, email: string, name?: string): Promise<{ userId: string }> {
     if (!runsThePlatform(actor)) throw new NotFound('Account')
-    const made = await this.#make(
+    const made = await makeAccount(
+      this.#db,
       actor,
       email,
       name,
@@ -205,33 +214,6 @@ export class AccountService {
     )
     await this.opened(made.userId)
     return made
-  }
-
-  async #make(
-    actor: Actor,
-    email: string,
-    name: string | undefined,
-    standing: { plan?: string; testAccount?: boolean },
-    action: string,
-    taken: string,
-  ): Promise<{ userId: string }> {
-    const address = email.trim().toLowerCase()
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address))
-      throw new AppError('invalid_choice', 'That doesn’t look like an email address.')
-    return this.#db.transaction(async (tx) => {
-      const userId = await insertTestUser(tx, address, name)
-      if (userId === null) throw new AppError('invalid_choice', taken)
-      await ensureStanding(tx, userId)
-      await saveStanding(tx, userId, standing)
-      await tx.insert(schema.auditLog).values({
-        actor: requestedBy(actor),
-        action,
-        subjectType: 'account',
-        subjectId: userId,
-        data: { email: address, ...(standing.plan === undefined ? {} : { plan: standing.plan }) },
-      })
-      return { userId }
-    })
   }
 
   /**
@@ -693,3 +675,32 @@ export class AccountService {
 /** Standing is enforced by the platform itself, not by the admin who changed it. */
 const SYSTEM: Actor = { kind: 'system', reason: 'policy' }
 const SYSTEM_ENTITLEMENT: Actor = { kind: 'system', reason: 'entitlement' }
+
+/** An account made outside sign-up: confirmed, no password, its standing as given, and audited. */
+async function makeAccount(
+  db: Db,
+  actor: Actor,
+  email: string,
+  name: string | undefined,
+  standing: { plan?: string; testAccount?: boolean },
+  action: string,
+  taken: string,
+): Promise<{ userId: string }> {
+  const address = email.trim().toLowerCase()
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address))
+    throw new AppError('invalid_choice', 'That doesn’t look like an email address.')
+  return db.transaction(async (tx) => {
+    const userId = await insertTestUser(tx, address, name)
+    if (userId === null) throw new AppError('invalid_choice', taken)
+    await ensureStanding(tx, userId)
+    await saveStanding(tx, userId, standing)
+    await tx.insert(schema.auditLog).values({
+      actor: requestedBy(actor),
+      action,
+      subjectType: 'account',
+      subjectId: userId,
+      data: { email: address, ...(standing.plan === undefined ? {} : { plan: standing.plan }) },
+    })
+    return { userId }
+  })
+}

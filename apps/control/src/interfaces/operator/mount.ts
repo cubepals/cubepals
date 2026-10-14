@@ -24,6 +24,17 @@ export function operatorApis(
 ): Hono {
   const apis = new Hono()
   apis.route('/', createRuntimesApi({ placement: app.placement, economics: app.economics, token }))
-  apis.route('/', createOpsApi({ ...app, ...api, upkeep: app.servers.upkeep, token }))
+  apis.route(
+    '/',
+    createOpsApi({
+      ...app,
+      // Only these: the API's other services share names with the control plane's (`platform`).
+      health: api.health,
+      flySuspend: api.flySuspend,
+      moderation: api.moderation,
+      upkeep: app.servers.upkeep,
+      token,
+    }),
+  )
   return apis
 }
