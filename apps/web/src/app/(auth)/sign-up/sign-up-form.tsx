@@ -92,11 +92,19 @@ export function SignUpForm({ next, turnstileSiteKey }: { next: string; turnstile
   }
 
   return (
-    <form className={styles.email} onSubmit={submit} aria-label="Create an account with email">
+    <form
+      id="sign-up"
+      method="post"
+      className={styles.email}
+      onSubmit={submit}
+      aria-label="Create an account with email"
+    >
       <TextField
         label="Email"
+        id="email"
+        name="email"
         type="email"
-        autoComplete="email"
+        autoComplete="username"
         required
         value={email}
         help="We send one email to confirm it's you."
@@ -106,6 +114,8 @@ export function SignUpForm({ next, turnstileSiteKey }: { next: string; turnstile
       />
       <TextField
         label="Password"
+        id="new-password"
+        name="new-password"
         type="password"
         autoComplete="new-password"
         minLength={PASSWORD_MIN_LENGTH}

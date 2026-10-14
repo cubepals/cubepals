@@ -13,7 +13,9 @@ export const metadata: Metadata = { title: 'Choose a new password' }
 
 /**
  * Where a reset email's link lands: Better Auth sends the browser here with `?token=`, or with
- * `?error=INVALID_TOKEN` when the link expired or was used already.
+ * `?error=INVALID_TOKEN` when the link expired or was used already. `?email=` is the address the
+ * link was asked for, which the form gives password managers; the token alone says whose password
+ * it sets.
  */
 export default async function ResetPasswordPage({
   searchParams,
@@ -36,7 +38,7 @@ export default async function ResetPasswordPage({
         </p>
       </header>
       {usable ? (
-        <ResetPasswordForm token={token} />
+        <ResetPasswordForm token={token} email={firstParam(params.email)} />
       ) : (
         <div className={styles.email}>
           <Note tone="danger">
