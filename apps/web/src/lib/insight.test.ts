@@ -2,9 +2,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** What a browser event carries on its way to PostHog: its environment, and addresses cut to path and campaign tags. */
-import { describe, expect, test } from 'bun:test'
-import { asCode, ENVIRONMENT, stamped } from './insight'
+/**
+ * What a browser event carries on its way to PostHog: its environment, addresses cut to path and
+ * campaign tags, and whether it is ours.
+ */
+import { afterEach, describe, expect, test } from 'bun:test'
+import { ownEmail } from '@blockly/contracts'
+import { asCode, ENVIRONMENT, rememberOurs, signedInAs, stamped } from './insight'
 
 // Every event the browser sends passes through `stamped` on its way out (posthog-js's
 // before_send): pageviews, web vitals, autocaptured errors and the ones boundaries report.
@@ -112,5 +116,56 @@ describe('browser events', () => {
     expect(out?.properties).not.toHaveProperty('ref')
     expect(out?.properties.utm_term).toBe(longest)
     expect(JSON.stringify(out)).not.toContain('steve')
+  })
+})
+
+// Our own visits are marked so every count can leave them out; a player's read as they always have.
+describe('our own traffic', () => {
+  const page = (): Record<string, unknown> | undefined =>
+    stamped({ event: '$pageview', properties: { $current_url: '/servers' } })?.properties
+  const kept = new Map<string, string>()
+  const storage = {
+    getItem: (key: string) => kept.get(key) ?? null,
+    setItem: (key: string, value: string) => void kept.set(key, value),
+  }
+
+  afterEach(() => {
+    signedInAs(false)
+    kept.clear()
+    Reflect.deleteProperty(globalThis, 'localStorage')
+  })
+
+  test('a player’s events carry no mark, not even false, with storage or without', () => {
+    expect(page()).not.toHaveProperty('internal')
+    Object.assign(globalThis, { localStorage: storage })
+    expect(page()).not.toHaveProperty('internal')
+  })
+
+  test('an account of ours marks what this page sends, and only while it is signed in', () => {
+    signedInAs(true)
+    expect(page()?.internal).toBe(true)
+    signedInAs(false)
+    expect(page()).not.toHaveProperty('internal')
+  })
+
+  test('a browser that opened an admin page stays ours after signing out, until its storage is cleared', () => {
+    Object.assign(globalThis, { localStorage: storage })
+    rememberOurs()
+    expect(page()?.internal).toBe(true)
+    kept.clear()
+    expect(page()).not.toHaveProperty('internal')
+  })
+
+  test('without storage, remembering does nothing and throws nothing', () => {
+    expect(() => rememberOurs()).not.toThrow()
+    expect(page()).not.toHaveProperty('internal')
+  })
+
+  test('our own domain is ours, under it too, and nobody else’s is', () => {
+    expect(ownEmail('sre-check-1@cubepals.com')).toBe(true)
+    expect(ownEmail('Someone@Staff.Cubepals.com')).toBe(true)
+    expect(ownEmail('steve@example.test')).toBe(false)
+    expect(ownEmail('steve@notcubepals.com')).toBe(false)
+    expect(ownEmail('cubepals.com@example.test')).toBe(false)
   })
 })

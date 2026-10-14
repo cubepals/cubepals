@@ -4,6 +4,7 @@
 
 'use client'
 
+import { ownEmail } from '@blockly/contracts'
 import { type DehydratedState, useMutation, useQuery } from '@tanstack/react-query'
 import {
   Archive,
@@ -19,10 +20,10 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { type ReactNode, Suspense, useEffect, useRef } from 'react'
+import { type ReactNode, Suspense, useEffect, useLayoutEffect, useRef } from 'react'
 import { SiteFooter } from '../../legal/footer'
 import { ApiProvider, useTRPC } from '../../lib/api'
-import { insightOn } from '../../lib/insight'
+import { insightOn, rememberOurs, signedInAs } from '../../lib/insight'
 import { presentStatus } from '../../lib/present'
 import { RealtimeProvider } from '../../lib/realtime'
 import type { Session } from '../../lib/session'
@@ -75,6 +76,15 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
   })
   const view = serverId ? server.data : undefined
   const me = useQuery(trpc.account.me.queryOptions())
+  // Our own activity is marked, so every count can leave it out: an admin's or one of our domain's
+  // pages, and every page from a browser that has opened an admin page as an admin. Before paint,
+  // so the page view PostHog sends as it starts is marked too.
+  const isAdmin = me.data?.admin === true
+  const atAdmin = pathname.startsWith('/admin')
+  useLayoutEffect(() => {
+    signedInAs(isAdmin || ownEmail(user.email))
+    if (isAdmin && atAdmin) rememberOurs()
+  }, [isAdmin, atAdmin, user.email])
   // The first page after sign-up carries where the account came from, with the link's campaign
   // tags; they are kept once, and the address goes back to what it was.
   const search = useSearchParams()

@@ -189,12 +189,19 @@ function sendVersion(
     const unsafe = args.find((arg) => !/^[\w.:/@=+,-]+$/.test(arg))
     if (unsafe !== undefined)
       throw new Error(`A ${command} argument a shell would misread: ${unsafe.split(':')[0]}`)
-    const sent = spawnSync(join(BIN, 'opennextjs-cloudflare'), args, {
-      cwd: WEB,
-      env: { ...wranglerEnv(site), ...extra.env },
-      stdio: 'inherit',
-    })
-    if (sent.status !== 0) throw new Error(`The website's ${command} stopped (exit ${sent.status}).`)
+    // Wrangler's upload sometimes drops with "fetch failed" on the runner. The same tag sent again
+    // replaces what a dropped attempt left, so two more tries, a little apart, ride that out.
+    for (let tries = 1; ; tries++) {
+      const sent = spawnSync(join(BIN, 'opennextjs-cloudflare'), args, {
+        cwd: WEB,
+        env: { ...wranglerEnv(site), ...extra.env },
+        stdio: 'inherit',
+      })
+      if (sent.status === 0) break
+      if (tries === 3) throw new Error(`The website's ${command} stopped (exit ${sent.status}).`)
+      console.log(`The website's ${command} stopped (exit ${sent.status}); trying again.`)
+      Bun.sleepSync(15_000)
+    }
   } finally {
     if (existsSync(secrets)) unlinkSync(secrets)
     rmdirSync(dir)

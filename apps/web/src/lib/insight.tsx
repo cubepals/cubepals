@@ -5,8 +5,9 @@
 'use client'
 
 /**
- * PostHog in the browser, cookieless: nothing is stored on the device (no cookie, no local or
- * session storage), so no consent banner is asked for. It counts pages,
+ * PostHog in the browser, cookieless: PostHog stores nothing on the device (no cookie, no local or
+ * session storage), so no consent banner is asked for. The one thing kept is Cubepals' own: a
+ * browser that has opened an admin page remembers it (`rememberOurs`). It counts pages,
  * web vitals and uncaught errors, each marked with the environment that built the page. It never
  * names anyone: no identify, no email, no address, no clicks or text read off the page, and no
  * recordings, which PostHog doesn't make without storage. With no token it does nothing at all.
@@ -75,6 +76,40 @@ function start(): boolean {
   return true
 }
 
+/**
+ * Where a browser that has opened an admin page remembers it: its own first-party storage, read
+ * only here, never sent anywhere and never a cookie. It stays until the browser's storage is
+ * cleared, so the people who run Cubepals stay out of the counts when signed out too.
+ */
+const OURS_KEY = 'blockly:internal'
+
+/** Whether the signed-in account is ours: a platform admin's, or on Cubepals' own domain. */
+let ourAccount = false
+
+/** The account signed in on this page is ours, or isn't; what is sent from now on says so. */
+export function signedInAs(ours: boolean): void {
+  ourAccount = ours
+}
+
+/** This browser has opened an admin page: everything it sends is ours, until its storage is cleared. */
+export function rememberOurs(): void {
+  try {
+    localStorage.setItem(OURS_KEY, '1')
+  } catch {
+    // No storage (private browsing, a server render): the account still marks this page's events.
+  }
+}
+
+/** Whether what this browser sends is Cubepals' own rather than a player's. */
+function ours(): boolean {
+  if (ourAccount) return true
+  try {
+    return localStorage.getItem(OURS_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 /** Page addresses an event carries; their query can hold an email or a token, so only tags leave. */
 const ADDRESSES = ['$current_url', '$referrer', '$initial_referrer', '$prev_pageview_url'] as const
 
@@ -99,7 +134,8 @@ function bare(address: unknown): unknown {
 }
 
 /**
- * An event on its way out: marked with this build's environment, with no IP address, and with page
+ * An event on its way out: marked with this build's environment, and `internal` when it is ours
+ * (nothing at all when it isn't, as before), with no IP address, and with page
  * addresses cut to their path and campaign tags (sign-up's `/check-email?email=...` leaves as
  * `/check-email`). The tags posthog-js reads off the query into their own properties are held to
  * the same rule: one whose value isn't a short plain code isn't sent.
@@ -111,7 +147,10 @@ export function stamped<T extends { properties: Record<string, unknown> }>(event
   for (const [key, value] of Object.entries(properties)) {
     if (TAG_KEY.test(key) && typeof value === 'string' && !TAG_VALUE.test(value)) delete properties[key]
   }
-  return { ...event, properties: { ...properties, environment: ENVIRONMENT } }
+  return {
+    ...event,
+    properties: { ...properties, environment: ENVIRONMENT, ...(ours() ? { internal: true } : {}) },
+  }
 }
 
 /** What an error boundary caught, sent with where it was caught; nothing when PostHog is off. */

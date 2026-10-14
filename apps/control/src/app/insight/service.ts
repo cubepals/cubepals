@@ -8,6 +8,7 @@
  * most once a fortnight. Each is about an account by its id; only feedback carries the sender's
  * email, so the operator can write back. With no analytics service, nothing here sends anything,
  * and nothing about a test account is ever sent: its events wait unsent, and it is asked nothing.
+ * Every event carries its account's marks (`about.ts`): whether it is ours, and where it came from.
  */
 import type { InsightSentView, MomentAskView, MomentKey } from '@blockly/contracts'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
@@ -23,6 +24,7 @@ import {
 import type { UserActor } from '../actor.ts'
 import { AppError } from '../errors.ts'
 import type { Insight } from '../ports/insight.ts'
+import { marksOf } from './about.ts'
 
 /** PostHog's "Feedback" survey and its one open question, "What's on your mind?". */
 export const FEEDBACK_SURVEY = {
@@ -75,12 +77,16 @@ export class InsightService {
       .where(and(isNull(events.sentAt), notTest(this.#db, events.userId)))
       .orderBy(asc(events.at))
       .limit(BATCH)
+    const marks = await marksOf(
+      this.#db,
+      waiting.map((row) => row.userId),
+    )
     let sent = 0
     for (const row of waiting) {
       const took = await insight.send({
         distinctId: row.userId,
         event: row.event,
-        properties: row.properties,
+        properties: { ...row.properties, ...marks.get(row.userId) },
         at: row.at,
       })
       // The service is away: the rest wait for the next pass, in order.
@@ -138,6 +144,7 @@ export class InsightService {
         plan,
         page: input.page,
         app_version: input.version,
+        ...(await this.#marks(actor.userId)),
       },
     })
     return { sent }
@@ -178,7 +185,7 @@ export class InsightService {
       .set({ shownAt: new Date(now) })
       .where(and(eq(asks.userId, actor.userId), eq(asks.moment, next.moment), isNull(asks.shownAt)))
       .returning({ moment: asks.moment })
-    if (shown.length > 0) this.#survey(actor.userId, 'survey shown', next.moment)
+    if (shown.length > 0) await this.#survey(actor.userId, 'survey shown', next.moment)
     return viewOf(next)
   }
 
@@ -226,6 +233,7 @@ export class InsightService {
         moment: input.moment,
         page: input.page,
         app_version: input.version,
+        ...(await this.#marks(actor.userId)),
       },
     })
     return { sent }
@@ -247,7 +255,7 @@ export class InsightService {
       )
       .returning({ moment: asks.moment })
     if (dismissed.length > 0 && !(await isTestAccount(this.#db, actor.userId)))
-      this.#survey(actor.userId, 'survey dismissed', moment)
+      await this.#survey(actor.userId, 'survey dismissed', moment)
   }
 
   /** A server of theirs still being made, or a checkout started within the hour and not yet paid. */
@@ -282,12 +290,23 @@ export class InsightService {
     return paid === undefined
   }
 
+  /** The account's marks (`about.ts`): whether it is ours, and where it came from. */
+  async #marks(userId: string) {
+    return (await marksOf(this.#db, [userId])).get(userId)
+  }
+
   /** Shown or dismissed: sent in the background, since nobody waits on it. */
-  #survey(userId: string, event: 'survey shown' | 'survey dismissed', moment: string): void {
-    this.#insight?.capture({
+  async #survey(userId: string, event: 'survey shown' | 'survey dismissed', moment: string): Promise<void> {
+    if (this.#insight === null) return
+    this.#insight.capture({
       distinctId: userId,
       event,
-      properties: { $survey_id: MOMENT_SURVEY.id, $survey_name: MOMENT_SURVEY.name, moment },
+      properties: {
+        $survey_id: MOMENT_SURVEY.id,
+        $survey_name: MOMENT_SURVEY.name,
+        moment,
+        ...(await this.#marks(userId)),
+      },
     })
   }
 }
