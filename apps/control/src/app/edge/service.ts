@@ -23,7 +23,14 @@ import type { EventBus } from '../ports/events.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import type { Endpoint } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
-import { findLiveBySlug, heldByDeleted, listBindings, listLive, motdsOf } from '../servers/persistence.ts'
+import {
+  findLiveBySlug,
+  findRuntime,
+  heldByDeleted,
+  listBindings,
+  listLive,
+  motdsOf,
+} from '../servers/persistence.ts'
 import type { MinecraftServerService } from '../servers/service.ts'
 import { presenceFor, recordDomainJoin, recordEdgePresence, wakesInLastHour } from '../servers/usage.ts'
 import type { ServerWaiter } from '../servers/waiter.ts'
@@ -176,10 +183,7 @@ export class EdgeService {
       if (unstarted !== null) return unstarted
     }
 
-    const handles = new Map(
-      (await listBindings(this.#db, this.#runtime.providers)).map((b) => [b.serverId, b.handle]),
-    )
-    const handle = handles.get(server.id)
+    const handle = (await findRuntime(this.#db, server.id, this.#runtime.providers))?.handle
     if (!handle) return { outcome: 'starting' }
     return {
       outcome: 'ready',
