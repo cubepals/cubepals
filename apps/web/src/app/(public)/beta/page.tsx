@@ -37,8 +37,8 @@ export default function BetaLetter() {
       </p>
       <ul className={styles.list}>
         <li>
-          When we’re full, making a new server waits until there’s room. Servers you already have still start
-          and wake.
+          When we’re full, we say so, and you can make your server a little later. Servers you already have
+          still start and wake.
         </li>
         <li>Some things will break. When they do, we fix them and tell you what happened.</li>
         <li>Your worlds are kept safe. We save a copy of each one every day it’s played.</li>
