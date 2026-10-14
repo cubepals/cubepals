@@ -90,4 +90,69 @@ describe('the datapack for waiting on a Duels server', () => {
     expect(tick).toContain('tag @a[scores={cubepals.died=1..}] remove cubepals.pit')
     expect(commands('load')).toContain('scoreboard objectives add cubepals.died deathCount')
   })
+
+  test('the pit is built closed: a glass lid over its inside at the rim, and a sign that says why', () => {
+    const build = commands('build')
+    expect(build).toContain('fill -6 -61 -26 8 -61 -12 minecraft:white_stained_glass')
+    // The lid comes after the inside is cleared, which stops below it.
+    expect(build.indexOf('fill -6 -61 -26 8 -61 -12 minecraft:white_stained_glass')).toBeGreaterThan(
+      build.findIndex((command) => command.endsWith('minecraft:air')),
+    )
+    expect(build.find((command) => command.endsWith('minecraft:air'))).toBe(
+      'fill -6 -63 -26 8 -62 -12 minecraft:air',
+    )
+    const sign = build.findIndex((command) => command.startsWith('setblock 2 -60 -11 minecraft:oak_sign'))
+    expect(build[sign + 1]).toContain('"the pit is closed:","it opens when","two can fight"')
+  })
+
+  test('the lid opens when two outside a duel can fight, and closes under two only over an empty pit', () => {
+    const tick = commands('tick')
+    expect(tick).toContain(
+      'execute as @a[gamemode=!spectator] unless items entity @s container.* minecraft:bow run scoreboard players add #waiting cubepals.waiting 1',
+    )
+    expect(commands('load')).toContain('scoreboard objectives add cubepals.waiting dummy')
+    // The count starts from nothing each tick, before anything reads it.
+    const counted = tick.indexOf('scoreboard players set #waiting cubepals.waiting 0')
+    const opening = tick.find((command) => command.endsWith('run function cubepals:open')) ?? ''
+    const closing = tick.find((command) => command.endsWith('run function cubepals:close')) ?? ''
+    expect(counted).toBeGreaterThanOrEqual(0)
+    expect(counted).toBeLessThan(tick.indexOf(opening))
+    expect(opening).toContain('if score #waiting cubepals.waiting matches 2.. ')
+    expect(closing).toContain('if score #waiting cubepals.waiting matches ..1 ')
+    expect(commands('open')).toEqual([
+      'fill -6 -61 -26 8 -61 -12 minecraft:air replace minecraft:white_stained_glass',
+      expect.stringContaining('"the pit:","everyone fights","everyone"'),
+    ])
+    expect(commands('close')).toEqual([
+      'fill -6 -61 -26 8 -61 -12 minecraft:white_stained_glass replace minecraft:air',
+      expect.stringContaining('"the pit is closed:","it opens when","two can fight"'),
+    ])
+    // Never over a player: nobody may be anywhere in the pit, the lid's own layer included.
+    const [, x = 0, y = 0, z = 0, dx = 0, dy = 0, dz = 0] = (
+      /unless entity @a\[x=(-?\d+),y=(-?\d+),z=(-?\d+),dx=(\d+),dy=(\d+),dz=(\d+)\]/.exec(closing) ?? []
+    ).map(Number)
+    expect([x, z, x + dx, z + dz]).toEqual([-6, -26, 8, -12])
+    expect(y).toBeLessThanOrEqual(-63)
+    // The box reaches from y to y + dy + 1, so through the top of the lid's layer, -61.
+    expect(y + dy + 1).toBeGreaterThanOrEqual(-60)
+  })
+
+  test('a player in the pit is told the way out, and leaves by it without the kit', () => {
+    const tick = commands('tick')
+    expect(commands('build')).toContain('fill 7 -64 -26 8 -64 -25 minecraft:lime_concrete')
+    const told = tick.find((command) => command.startsWith('tellraw @a[tag=!cubepals.pit,')) ?? ''
+    expect(told).toContain('green square')
+    // Told once, on the way in: before the player is marked as having the kit.
+    expect(tick.indexOf(told)).toBeLessThan(
+      tick.findIndex((command) => command.startsWith('tag @a[tag=!cubepals.pit,')),
+    )
+    expect(tick).toContain(
+      'execute as @a[x=-6,y=-64,z=-26,dx=14,dy=3,dz=14] at @s if block ~ ~-1 ~ minecraft:lime_concrete run function cubepals:leave',
+    )
+    const leave = commands('leave')
+    // The kit is taken before the player is moved, and they get it again next time they drop in.
+    expect(leave[0]).toBe('clear @s')
+    expect(leave).toContain('tag @s remove cubepals.pit')
+    expect(leave.at(-1)).toStartWith('tp @s ')
+  })
 })

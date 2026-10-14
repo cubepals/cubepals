@@ -12,12 +12,19 @@
  * on its own, so no plugin is added for it. As the world loads, it builds the course and the pit
  * beside the void world's platform (`duels.ts` says where that is); a world of another kind, whose
  * arena is a room underground, gets neither, and its welcome says only how to duel. Every tick it
- * welcomes a player it hasn't, gives whoever drops into the pit the pit's kit, and sends whoever
- * reaches the end of the parkour back to its start.
+ * welcomes a player it hasn't, opens or closes the pit, gives whoever drops into the pit the pit's
+ * kit and tells them the way out, lets out whoever takes it, and sends whoever reaches the end of
+ * the parkour back to its start.
  *
- * The pit is three blocks deep with no way up, so a player leaves it by losing, which drops what
- * they hold; what anyone drops in it is cleared. A player who joins a duel from the pit is put back
- * there afterwards with what they had, as the Duels plugin does for everyone.
+ * The pit is a fight, so it is open only while two can have one: while fewer than two players are
+ * outside a duel, a lid of glass covers it and the sign over it says why. A player is in a duel
+ * while they carry the duel kit's bow, which the pit's kit leaves out. The lid closes only over an
+ * empty pit, so it never shuts anyone in.
+ *
+ * The pit is three blocks deep, so a player leaves it by losing, which drops what they hold, or by
+ * the green square in its far corner, which takes back the pit's kit and puts them on the platform;
+ * what anyone drops in it is cleared. A player who joins a duel from the pit is put back there
+ * afterwards with what they had, as the Duels plugin does for everyone.
  *
  * Measured on Paper 1.21.11 with Duels 4.0.6 (data pack format 94.1): the platform is one block
  * thick, with nothing under it, so a void world is told by the air below its middle.
@@ -31,8 +38,27 @@ const PACK = `${RUNNING_LEVEL}/datapacks/cubepals-duels`
 /** The void world's platform is one block thick: below its middle there is nothing. */
 const ON_VOID = 'execute if block 8 -62 8 minecraft:air run'
 
-/** Where a player stands in the pit: on its floor, inside its walls. */
-const IN_PIT = 'x=-6,y=-64,z=-26,dx=14,dy=2,dz=14'
+/** Where a player is in the pit: inside its walls, from its floor up through its rim. */
+const IN_PIT = 'x=-6,y=-64,z=-26,dx=14,dy=3,dz=14'
+
+/** The pit's inside at its rim, where the lid lies while it is closed. */
+const LID = 'fill -6 -61 -26 8 -61 -12'
+
+/** The middle of the lid, which says whether the pit is open: air if it is, glass if it isn't. */
+const LID_MIDDLE = '1 -61 -19'
+
+/** The sign on the pit's wall beside the bridge, facing the platform. */
+const SIGN = '2 -60 -11'
+
+/** What the sign says, a line to a row, while the pit is closed and while it is open. */
+const CLOSED_SIGN = `data merge block ${SIGN} {front_text:{messages:["the pit is closed:","it opens when","two can fight",""]}}`
+const OPEN_SIGN = `data merge block ${SIGN} {front_text:{messages:["the pit:","everyone fights","everyone",""]}}`
+
+/** The way out: a green square in the corner across the pit from the bridge. */
+const EXIT = 'fill 7 -64 -26 8 -64 -25 minecraft:lime_concrete'
+
+/** Where the way out puts a player: on the platform by the bridge, facing away from the pit. */
+const OUTSIDE = '1.0 -60 -6.5 0 0'
 
 /** The gold block at the end of the parkour, which also says the course is there. */
 const FINISH = '-32 -55 0'
@@ -58,20 +84,36 @@ const PARKOUR = [
 
 /**
  * The pit, north of the platform, which ends at z -8: walls of stone bricks whose top is level
- * with the platform, a floor three blocks below it at the bottom of the world, and a bridge from
- * the platform to its rim. Its inside is cleared each time, so it is always empty.
+ * with the platform, a floor three blocks below it at the bottom of the world with the way out in
+ * a corner, a bridge from the platform to its rim, and the sign. Its inside is cleared each time,
+ * so it is always empty, and closed, since nobody is on a server as it loads.
  */
 const PIT = [
   'fill -7 -64 -27 9 -61 -11 minecraft:stone_bricks',
-  'fill -6 -63 -26 8 -61 -12 minecraft:air',
+  'fill -6 -63 -26 8 -62 -12 minecraft:air',
+  `${LID} minecraft:white_stained_glass`,
   'fill -6 -64 -26 8 -64 -12 minecraft:smooth_stone',
+  EXIT,
   'fill 0 -61 -10 1 -61 -9 minecraft:smooth_stone',
+  `setblock ${SIGN} minecraft:oak_sign[rotation=0]{is_waxed:1b}`,
+  CLOSED_SIGN,
 ]
 
-/** As the world loads: its chunks kept loaded, the scoreboard of deaths, and on void, the course and pit. */
+/** Opening the pit, and closing it. */
+const OPEN = [`${LID} minecraft:air replace minecraft:white_stained_glass`, OPEN_SIGN]
+const CLOSE = [`${LID} minecraft:white_stained_glass replace minecraft:air`, CLOSED_SIGN]
+
+/** Leaving by the way out: the pit's kit stays behind, and the player is on the platform again. */
+const LEAVE = ['clear @s', 'tag @s remove cubepals.pit', `tp @s ${OUTSIDE}`]
+
+/**
+ * As the world loads: its chunks kept loaded, the scoreboards of deaths and of who could fight in
+ * the pit, and on void, the course and pit.
+ */
 const LOAD = [
   'forceload add -34 -28 9 1',
   'scoreboard objectives add cubepals.died deathCount',
+  'scoreboard objectives add cubepals.waiting dummy',
   `${ON_VOID} function cubepals:build`,
 ]
 
@@ -92,15 +134,29 @@ const WELCOME = [
   'tag @a[tag=!cubepals.welcomed] add cubepals.welcomed',
 ]
 
-/** Every tick: the welcome, the pit and the end of the parkour. */
+/**
+ * Whether two can fight in the pit, counted as players outside a duel, and the pit opened or closed
+ * to match. Only where the pit is built: its floor is smooth stone, and its lid glass or air.
+ */
+const LID_TICK = [
+  'scoreboard players set #waiting cubepals.waiting 0',
+  'execute as @a[gamemode=!spectator] unless items entity @s container.* minecraft:bow run scoreboard players add #waiting cubepals.waiting 1',
+  `execute if score #waiting cubepals.waiting matches 2.. if block ${LID_MIDDLE} minecraft:white_stained_glass run function cubepals:open`,
+  `execute if score #waiting cubepals.waiting matches ..1 if block ${LID_MIDDLE} minecraft:air if block -6 -64 -26 minecraft:smooth_stone unless entity @a[${IN_PIT}] run function cubepals:close`,
+]
+
+/** Every tick: the welcome, the lid, the pit and its way out, and the end of the parkour. */
 const TICK = [
   ...WELCOME,
+  ...LID_TICK,
   // A player who lost, in the pit or anywhere, gets the pit's kit again next time they drop in.
   'tag @a[scores={cubepals.died=1..}] remove cubepals.pit',
   'scoreboard players reset @a[scores={cubepals.died=1..}] cubepals.died',
   `clear @a[tag=!cubepals.pit,${IN_PIT}]`,
   ...PIT_KIT,
+  `tellraw @a[tag=!cubepals.pit,${IN_PIT}] "To leave the pit, stand on the green square in its far corner. The kit stays here."`,
   `tag @a[tag=!cubepals.pit,${IN_PIT}] add cubepals.pit`,
+  `execute as @a[${IN_PIT}] at @s if block ~ ~-1 ~ minecraft:lime_concrete run function cubepals:leave`,
   `kill @e[type=minecraft:item,${IN_PIT}]`,
   `execute as @a at @s if block ~ ~-1 ~ minecraft:gold_block run tellraw @s "You finished the parkour."`,
   `execute as @a at @s if block ~ ~-1 ~ minecraft:gold_block run tp @s ${START}`,
@@ -122,4 +178,7 @@ export const WAITING_FILES: readonly CarriedFile[] = [
   { path: `${PACK}/data/cubepals/function/load.mcfunction`, content: lines(LOAD) },
   { path: `${PACK}/data/cubepals/function/build.mcfunction`, content: lines([...PARKOUR, ...PIT]) },
   { path: `${PACK}/data/cubepals/function/tick.mcfunction`, content: lines(TICK) },
+  { path: `${PACK}/data/cubepals/function/open.mcfunction`, content: lines(OPEN) },
+  { path: `${PACK}/data/cubepals/function/close.mcfunction`, content: lines(CLOSE) },
+  { path: `${PACK}/data/cubepals/function/leave.mcfunction`, content: lines(LEAVE) },
 ]
