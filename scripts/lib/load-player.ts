@@ -298,8 +298,9 @@ export class Player {
       const first = await this.#begin()
       if (first === undefined) return
       await this.#together(first)
-      if (this.#burst?.burst) return
       const sleptAs = await this.#sleeps(first)
+      // A burst's people come back once, a minute later, and the wake is timed; that is all.
+      if (this.#burst?.burst) return await this.#back(first, sleptAs, 1)
       await this.#chaos(ASLEEP, first)
       this.phase = 'away'
       const fate = weighted(FATES)
@@ -486,12 +487,31 @@ export class Player {
     return sleptAs === 'suspended' ? 'resumed from suspend' : 'a full boot'
   }
 
+  /**
+   * How the server came back, as its newest start says: resumed where it went through `resuming`
+   * and never `booting`, a full boot otherwise. It is the runtime's own record, so it holds on any
+   * runtime, where Fly's machine state holds only on Fly.
+   */
+  async #cameBack(serverId: string): Promise<string> {
+    const steps = await this.run.sql(
+      `select coalesce(steps::text, '') from server_operations where server_id = ${sqlText(serverId)} and kind = 'start' order by created_at desc limit 1`,
+    )
+    return this.#wakeKind(
+      steps.includes('"resuming"') && !steps.includes('"booting"') ? 'suspended' : 'stopped',
+    )
+  }
+
   /** A few minutes later, a player joins and wakes it, timed. */
-  async #back(server: Server, sleptAs: string): Promise<void> {
-    await Bun.sleep(between(2, 6) * MINUTE_MS)
+  async #back(server: Server, sleptAs: string, minutes = between(2, 6)): Promise<void> {
+    await Bun.sleep(minutes * MINUTE_MS)
     await this.#step(`wakes when a player joins (${this.#wakeKind(sleptAs)})`, async () => {
       const { result, retries } = await this.#join(server, `Load${this.index}`)
-      return { retries, note: `the player waited ${seconds(result.ms)}` }
+      const kind = await this.#cameBack(server.id).catch(() => this.#wakeKind(sleptAs))
+      return {
+        step: `wakes when a player joins (${kind})`,
+        retries,
+        note: `the player waited ${seconds(result.ms)}; it slept as ${sleptAs || 'unread'}`,
+      }
     })
   }
 
@@ -502,7 +522,9 @@ export class Player {
     const started = await this.#step(`starts from the website (${this.#wakeKind(sleptAs)})`, async () => {
       await this.#api('servers.start', { serverId: server.id, requestId: randomUUID() })
       await this.#ready(server.id, 600)
-      return undefined
+      return {
+        step: `starts from the website (${await this.#cameBack(server.id).catch(() => this.#wakeKind(sleptAs))})`,
+      }
     })
     if (!started) return
     await this.#step('a player joins after a start', async () => {

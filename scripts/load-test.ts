@@ -552,6 +552,14 @@ const reportNow = (extra: {
     records,
   }
 }
+// Where the run's servers were made, by runtime, read before the cleanup lets them go.
+const madeIds = players.flatMap((p) => p.servers.map((sv) => `'${sv.id}'`)).join(', ') || 'null'
+const byRuntime = (await database
+  .unsafe(
+    `select provider, count(*)::int as n from server_runtimes where server_id in (${madeIds}) group by provider`,
+  )
+  .catch(() => [])) as { provider: string; n: number }[]
+for (const { provider, n } of byRuntime) peak[`servers made on ${provider}`] = n
 // Whatever the cleanup meets, what the people met is kept first.
 write(out, reportNow({}))
 say(`people done: the report so far is in ${out}.md`)
