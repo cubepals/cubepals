@@ -38,7 +38,7 @@ whole way; the camera flies it in three dimensions. A gauge reads the depth as M
 | `landing/Landing.tsx` | What both routes share: the title, what the page reads, and the frame (the foot, the marks, the structured data) |
 | `landing/Layouts.tsx` | Which form a screen gets, by width, before anything runs and after |
 | `landing/film/` | The film: `FilmPage.tsx` (which beats, in which order, and each beat's proof), `Beat` (a screen with a shot and a caption) and `useBeat` (its cues, played on arrival on a clock that scrolling hurries, `clock.ts`), `Proof` (the section opened over a beat), `Film.tsx` (every beat, and what each tells the stage), `Nav.tsx` (the header, which the phone's page has too) |
-| `landing/phone/` | The phone's page: `Phone.tsx` (the page), `Still.tsx` and `still.ts` (the two pictures of the chunk, printed once each in a worker, `still.worker.ts`), `agent.ts` (how a phone is told apart) |
+| `landing/phone/` | The phone's page: `Phone.tsx` (the page), `Still.tsx` (the two pictures of the chunk) and `printer.ts` (what prints them, once each, in a worker, `still.worker.ts`), `agent.ts` (how a phone is told apart) |
 | `landing/landing.css` | The whole look: tones, type, frames, buttons, dither, the gauge, the cursor |
 | `landing/kit.tsx` | `Section`, `Demo`, `Facts`, `Strata`: what a section is built from |
 | `landing/stage.ts` | What the chunk is doing (asleep or awake, who is on the path, which room is lit, whether the pointer is on a block), shared between the canvas, the cursor and the demonstrations |
@@ -272,7 +272,7 @@ stops; the plans; the button again. Between the two places the page sets the but
 the reader in a bar at the foot of the screen (`Follow`).
 
 The chunk is two still pictures, printed once each by the film's own renderer in a worker
-(`phone/still.ts`), after the page has loaded and as each comes near the screen: nothing is held,
+(`phone/printer.ts`), after the page has loaded and as each comes near the screen: nothing is held,
 pinned, scrubbed or played by the scroll, and nothing is left drawing. Until a picture is printed,
 and on a device that can't print it, its frame is its own ground. A phone turned on its side gets
 the pictures printed again at the new width, and the night's beside the words.

@@ -12,7 +12,7 @@
  * shared by both.
  */
 import { useEffect, useRef, useState } from 'react'
-import type { Printed, Still as Which } from './still'
+import type { Printed, Still as Which } from './printer'
 
 /** What the worker answers: which picture, at what width, and the picture itself or null. */
 interface Answer {

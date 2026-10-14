@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
 
 /**
- * Where the phone's pictures are printed (still.ts), off the page's own thread: building the chunk
+ * Where the phone's pictures are printed (printer.ts), off the page's own thread: building the chunk
  * and drawing it never holds up a tap or a scroll. Asked for a picture and a size, it answers with
  * the picture, or with null where it can't draw.
  */
-import { print, type Still } from './still'
+import { print, type Still } from './printer'
 
 self.onmessage = (event: MessageEvent<{ still: Still; width: number; height: number }>) => {
   const { still, width, height } = event.data
