@@ -11,6 +11,7 @@
  * Not for: what a job does (`load-probe.ts`), or what the test does with the answers (`load-player.ts`).
  */
 import { spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -74,29 +75,47 @@ export interface JobAnswer {
 export class Probe {
   readonly id: string
   readonly port: number
+  /** Jobs handed to it and not done: where the next player goes is the probe with the fewest. */
+  active = 0
+  /** Requests sent again after the tunnel to it dropped them: the test's own, never the product's. */
+  static resent = 0
   constructor(id: string, port: number) {
     this.id = id
     this.port = port
   }
 
-  async #call(path: string, body?: unknown): Promise<unknown> {
-    const response = await fetch(`http://127.0.0.1:${this.port}${path}`, {
-      method: body === undefined ? 'GET' : 'POST',
-      ...(body === undefined
-        ? {}
-        : { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }),
-    })
-    if (!response.ok) throw new Error(`probe ${this.id} ${path}: ${response.status}`)
-    return response.json()
+  /** A request through the tunnel; one the tunnel drops is sent again, which a named job allows. */
+  async #call(path: string, body?: unknown, tries = 5): Promise<unknown> {
+    try {
+      const response = await fetch(`http://127.0.0.1:${this.port}${path}`, {
+        method: body === undefined ? 'GET' : 'PUT',
+        ...(body === undefined
+          ? {}
+          : { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }),
+      })
+      if (!response.ok) throw new Error(`probe ${this.id} ${path}: ${response.status}`)
+      return await response.json()
+    } catch (error) {
+      if (tries <= 1 || (error as Error).message.startsWith(`probe ${this.id}`)) throw error
+      Probe.resent++
+      await Bun.sleep(2000)
+      return this.#call(path, body, tries - 1)
+    }
   }
 
   /** A job handed to the probe, and its answer once it is done. */
   async run(job: Record<string, unknown>, pollMs = 3000): Promise<JobAnswer> {
-    const { id } = (await this.#call('/jobs', job)) as { id: string }
-    for (;;) {
-      await Bun.sleep(pollMs)
-      const answer = (await this.#call(`/jobs/${id}`).catch(() => ({ done: false }))) as JobAnswer
-      if (answer.done) return answer
+    const id = randomUUID()
+    this.active++
+    try {
+      await this.#call(`/jobs/${id}`, job)
+      for (;;) {
+        await Bun.sleep(pollMs)
+        const answer = (await this.#call(`/jobs/${id}`).catch(() => ({ done: false }))) as JobAnswer
+        if (answer.done) return answer
+      }
+    } finally {
+      this.active--
     }
   }
 
@@ -107,6 +126,13 @@ export class Probe {
   load(): Promise<{ load: number; players: number }> {
     return this.#call('/load') as Promise<{ load: number; players: number }>
   }
+}
+
+/** The probe with the fewest jobs on it now. */
+export const leastBusy = (probes: readonly Probe[]): Probe => {
+  const [first, ...rest] = probes
+  if (first === undefined) throw new Error('no probes')
+  return rest.reduce((best, probe) => (probe.active < best.active ? probe : best), first)
 }
 
 /** The probes' app and machines, each running the probe, and a tunnel to each. */

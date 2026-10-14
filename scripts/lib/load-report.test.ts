@@ -4,12 +4,20 @@
 
 /**
  * The load test's report: steps timed by the runs that worked, Fly's machine events turned into
- * hours, failures grouped, and the first limit a run met.
+ * hours, failures grouped, the first limit a run met, chaos worst first, and a wait's parts.
  */
 import { describe, expect, test } from 'bun:test'
 import { HOUR_MS } from '@blockly/contracts/durations'
 import type { StepRecord } from './load-player.ts'
-import { failuresOf, firstLimit, hoursBySize, runningMs, stepStats } from './load-report.ts'
+import {
+  failuresOf,
+  firstLimit,
+  hoursBySize,
+  partStats,
+  runningMs,
+  stepStats,
+  worstFirst,
+} from './load-report.ts'
 
 const step = (over: Partial<StepRecord>): StepRecord => ({
   player: 0,
@@ -78,5 +86,34 @@ describe('the load test report', () => {
       step({ ok: false, at: 10, error: 'signing up answered 429' }),
     ]
     expect(firstLimit(records)?.limit).toBe('rate limits')
+  })
+
+  test('puts what lost someone something before what only interrupted them', () => {
+    const finding = (verdict: 'fine' | 'stuck' | 'lost something' | 'interrupted', at: number) => ({
+      act: 'a',
+      player: 0,
+      did: '',
+      verdict,
+      at,
+    })
+    const sorted = worstFirst([
+      finding('fine', 1),
+      finding('interrupted', 2),
+      finding('lost something', 3),
+      finding('stuck', 4),
+    ])
+    expect(sorted.map((f) => f.verdict)).toEqual(['lost something', 'stuck', 'interrupted', 'fine'])
+  })
+
+  test('times each part of a wait over many', () => {
+    const parts = [
+      { part: 'queued', ms: 100 },
+      { part: 'booting', ms: 5000 },
+      { part: 'queued', ms: 300 },
+    ]
+    expect(partStats(parts).map((p) => [p.part, p.count, p.slowestMs])).toEqual([
+      ['queued', 2, 300],
+      ['booting', 1, 5000],
+    ])
   })
 })

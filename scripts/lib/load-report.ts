@@ -5,7 +5,9 @@
 /**
  * What the load test found, as numbers and words: each step's count, failures, median, p90 and
  * slowest; every distinct failure with how often and where in the code its words come from; the
- * first limit the run met, if it met one; and the machine hours Fly's own records give, by size.
+ * first limit the run met, if it met one; what careless people and a shaken platform met, worst
+ * first; the timeline of people, servers and players; the wakes apart; the first create's parts;
+ * and the machine hours Fly's own records give, by size.
  * Written as JSON and as Markdown to the run's `--out`.
  *
  * Not for: running anything (`load-test.ts`, `load-player.ts`).
@@ -13,6 +15,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { HOUR_MS, MINUTE_MS, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
+import { type ChaosFinding, VERDICTS } from './load-chaos.ts'
 import type { StepRecord } from './load-player.ts'
 
 /** A wait as people read it: "4.2s", "3m 10s". */
@@ -188,15 +191,67 @@ export function hoursBySize(
   return [...by.entries()].map(([size, { machines, ms }]) => ({ size, machines, hours: ms / HOUR_MS }))
 }
 
+/** The run at one moment, as the live line read it. */
+export interface Moment {
+  /** Ms since the run began. */
+  t: number
+  /** People arrived and not done with their lives. */
+  active: number
+  making: number
+  playing: number
+  /** Servers the platform's health counted running, asleep and busy, all of staging. */
+  running: number
+  asleep: number
+  busy: number
+  /** Headless players in a world now, as the probes count them. */
+  inWorld: number
+  queued: number
+}
+
+/** A part of a wait, timed over many: what the first create's time went on, say. */
+export interface PartStats {
+  part: string
+  count: number
+  medianMs: number
+  p90Ms: number
+  slowestMs: number
+}
+
+/** Each part's numbers, in the order parts first appear. */
+export function partStats(parts: ReadonlyArray<{ part: string; ms: number }>): PartStats[] {
+  return [...new Set(parts.map((p) => p.part))].map((part) => {
+    const times = parts
+      .filter((p) => p.part === part)
+      .map((p) => p.ms)
+      .sort((a, b) => a - b)
+    return {
+      part,
+      count: times.length,
+      medianMs: quantile(times, 0.5),
+      p90Ms: quantile(times, 0.9),
+      slowestMs: times.at(-1) ?? 0,
+    }
+  })
+}
+
+/** The chaos findings, worst for the person first. */
+export const worstFirst = (findings: readonly ChaosFinding[]): ChaosFinding[] =>
+  [...findings].sort((a, b) => VERDICTS.indexOf(a.verdict) - VERDICTS.indexOf(b.verdict) || a.at - b.at)
+
 export interface Report {
   run: string
-  people: number
+  arrivals: number
+  overMinutes: number
   plan: string
   startedAt: string
   tookMs: number
   steps: StepStats[]
   failures: Failure[]
+  chaos: ChaosFinding[]
   firstLimit: { limit: string; step: string; error: string } | null
+  timeline: Moment[]
+  /** The first server's create, from the click to running, by the parts its operation records. */
+  createParts: PartStats[]
   machineHours: Array<{ size: string; machines: number; hours: number }>
   /** The most the platform's own health counted at once while the run ran. */
   peak: Record<string, number>
@@ -205,19 +260,34 @@ export interface Report {
   records: StepRecord[]
 }
 
-/** The report as Markdown, for the PR and for people. */
+const stepRow = (s: StepStats) =>
+  `| ${s.step} | ${s.count} | ${s.failed} | ${took(s.medianMs)} | ${took(s.p90Ms)} | ${took(s.slowestMs)} | ${s.retries} |`
+const STEP_HEAD = [
+  '| Step | Runs | Failed | Median | p90 | Slowest | Join retries |',
+  '| --- | ---: | ---: | ---: | ---: | ---: | ---: |',
+]
+const isWake = (step: string) => /^(wakes when a player joins|starts from the website) \(/.test(step)
+
+/** The timeline, a row a minute: the last moment read in each. */
+function timelineRows(timeline: readonly Moment[]): string[] {
+  const byMinute = new Map<number, Moment>()
+  for (const moment of timeline) byMinute.set(Math.floor(moment.t / MINUTE_MS), moment)
+  return [
+    '| Minute | People active | Making | Playing | Running | Asleep | Busy | Players in a world | Queued |',
+    '| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+    ...[...byMinute.entries()].map(
+      ([minute, m]) =>
+        `| ${minute} | ${m.active} | ${m.making} | ${m.playing} | ${m.running} | ${m.asleep} | ${m.busy} | ${m.inWorld} | ${m.queued} |`,
+    ),
+  ]
+}
+
+/** The report as Markdown, for the PR and for people: what went wrong first. */
 export function markdown(report: Report): string {
   const lines = [
-    `# Load test ${report.run}: ${report.people} people, plan ${report.plan}`,
+    `# Load test ${report.run}: ${report.arrivals} people over ${report.overMinutes} min, plan ${report.plan}`,
     '',
     `Started ${report.startedAt}, took ${took(report.tookMs)}.`,
-    '',
-    '| Step | Runs | Failed | Median | p90 | Slowest | Join retries |',
-    '| --- | ---: | ---: | ---: | ---: | ---: | ---: |',
-    ...report.steps.map(
-      (s) =>
-        `| ${s.step} | ${s.count} | ${s.failed} | ${took(s.medianMs)} | ${took(s.p90Ms)} | ${took(s.slowestMs)} | ${s.retries} |`,
-    ),
     '',
     '## Failures',
     '',
@@ -229,11 +299,45 @@ export function markdown(report: Report): string {
           ...(f.where.length > 0 ? [`  - said at: ${f.where.join(', ')}`] : []),
         ])),
     '',
+    '## Chaos: what careless people and a shaken platform met, worst first',
+    '',
+    ...(report.chaos.length === 0
+      ? ['None.']
+      : [
+          '| Verdict | Act | Person | What the product did |',
+          '| --- | --- | ---: | --- |',
+          ...worstFirst(report.chaos).map(
+            (c) => `| ${c.verdict} | ${c.act} | ${c.player ?? '-'} | ${c.did.replaceAll('|', '/')} |`,
+          ),
+        ]),
+    '',
     '## First limit met',
     '',
     report.firstLimit === null
       ? 'None.'
       : `${report.firstLimit.limit}, in "${report.firstLimit.step}": ${report.firstLimit.error}`,
+    '',
+    '## Steps',
+    '',
+    ...STEP_HEAD,
+    ...report.steps.filter((s) => !isWake(s.step)).map(stepRow),
+    '',
+    '## Wakes: resumed from suspend against a full boot',
+    '',
+    ...STEP_HEAD,
+    ...report.steps.filter((s) => isWake(s.step)).map(stepRow),
+    '',
+    '## The first create, part by part',
+    '',
+    '| Part | Count | Median | p90 | Slowest |',
+    '| --- | ---: | ---: | ---: | ---: |',
+    ...report.createParts.map(
+      (p) => `| ${p.part} | ${p.count} | ${took(p.medianMs)} | ${took(p.p90Ms)} | ${took(p.slowestMs)} |`,
+    ),
+    '',
+    '## Timeline',
+    '',
+    ...timelineRows(report.timeline),
     '',
     '## Most at once, as the platform’s health counted',
     '',

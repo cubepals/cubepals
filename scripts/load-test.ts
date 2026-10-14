@@ -3,40 +3,47 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A load test of the whole product on staging: N people at once, each with their own account and
- * server, doing what a real one does through the same public paths the website uses
- * (`lib/load-player.ts`), with headless players (mineflayer) joining at each server's own address
- * from probe machines in a temporary app of their own (`lib/load-probe.ts`), since the game port
- * can't be reached from here.
+ * A load test of the whole product on staging that behaves like real people, who don't know about
+ * each other and don't wait for each other. They arrive at random, a Poisson stream, each with
+ * their own account and server, and live their own lives through the same public paths the
+ * website uses (`lib/load-player.ts`), their friends played by headless players (mineflayer)
+ * joining at each server's own address from probe machines in a temporary app of their own
+ * (`lib/load-probe.ts`), since the game port can't be reached from here. About a third of them are
+ * careless or impatient somewhere (`lib/load-chaos.ts`), and mid-run the platform is shaken once
+ * each way: the control plane's worker restarted, a running server's machine stopped from Fly
+ * behind the product's back, the edge restarted.
  *
- *   bun scripts/load-test.ts [--people 50] [--ramp 120] [--plan free|plus|mix] [--play 5]
- *                            [--idle 1] [--players 3-10] [--out local/load-test/<run>]
+ *   bun scripts/load-test.ts [--arrivals 60] [--over 20] [--plan free|plus|mix] [--friends 3-10]
+ *                            [--play 3-15] [--idle 1] [--aggression 0.33] [--probes n]
+ *                            [--out local/load-test/<run>]
  *   bun scripts/load-test.ts clean     what an earlier run left: its servers purged, its probes gone
  *
- * `--ramp` is the seconds over which people arrive, `--play` the minutes they play, `--idle` the
+ * About `--arrivals` people come over `--over` minutes; each server gets a random number of
+ * friends in `--friends`, each playing a random number of minutes in `--play`. `--idle` is the
  * minutes an empty server waits before the product puts it to sleep (an account's own idle time,
- * as the staging check sets it, rather than the plan's). With `--plan mix` every other person is
- * on Plus. `--players a-b` gives each server whose players can play (Plus: Free keeps account
- * checks on) between a and b headless players; without it, a friend joins every third. Every 15
- * seconds it prints a line: accounts made, servers making, ready, with players, asleep and failed, the platform's health as the admin health page reads it, the database's
- * connections and the probes' load. At the end every server it made is in the trash and purged,
- * the probes are destroyed, the accounts are kept (they are test-domain accounts), and the report
- * goes to `<out>.json` and `<out>.md` (`lib/load-report.ts`).
+ * as the staging check sets it, rather than the plan's). With `--plan mix` each person is on Plus
+ * or Free at even odds; Free keeps account checks on, so a headless player only reaches its
+ * server. Every 15 seconds it prints a line: people arrived and active, where they are, players in
+ * a world, the platform's health as the admin health page reads it, and the database's
+ * connections. At the end every server the run made is in the trash and purged, the probes are
+ * destroyed, the accounts are kept (they are test-domain accounts), and the report goes to
+ * `<out>.json` and `<out>.md` (`lib/load-report.ts`).
  *
  * Run `bun scripts/staging.ts start` first. The database is reached through the first probe,
  * which forwards it, since the session reaches only HTTP and Fly's own proxy.
  */
 import { createHash, randomUUID } from 'node:crypto'
-import { SECOND_MS } from '@blockly/contracts/durations'
+import { MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import { MAIL_PORT } from '@blockly/contracts/local'
 import { SQL } from 'bun'
 import { runScheduledNow } from '../apps/control/src/infra/pg/jobs.ts'
+import type { ChaosFinding } from './lib/load-chaos.ts'
 import { Player, type StepRecord } from './lib/load-player.ts'
 import {
   DATABASE_PORT,
   fly,
   PLAYERS_PER_PROBE,
-  type Probe,
+  Probe,
   probesDown,
   probesUp,
   tunnel,
@@ -46,7 +53,9 @@ import {
   firstLimit,
   hoursBySize,
   type MachineRun,
+  type Moment,
   markdown,
+  partStats,
   runningMs,
   stepStats,
   took,
@@ -200,52 +209,83 @@ if (process.argv[2] === 'clean') {
 
 // ─── The run ─────────────────────────────────────────────────────────────────────────────────
 
-const count = Number(option('people', '50'))
-const rampS = Number(option('ramp', '120'))
+const arrivals = Number(option('arrivals', '60'))
+const overMinutes = Number(option('over', '20'))
 const planChoice = option('plan', 'mix')
-const playMinutes = Number(option('play', '5'))
+const rangeOf = (name: string, fallback: string): [number, number] => {
+  const [, least = '0', most = least] = /^(\d+)(?:-(\d+))?$/.exec(option(name, fallback)) ?? []
+  return [Number(least), Number(most)]
+}
+const friends = rangeOf('friends', '3-10')
+const playMinutes = rangeOf('play', '3-15')
 const idleMinutes = Number(option('idle', '1'))
+const aggression = Number(option('aggression', '0.33'))
 const run = new Date().toISOString().slice(5, 16).replace(/[-T:]/g, '')
 const out = option('out', `local/load-test/${run}`)
-const planOf = (i: number): 'free' | 'plus' =>
-  planChoice === 'free' || planChoice === 'plus' ? planChoice : i % 2 === 0 ? 'plus' : 'free'
-// Headless players on each server where they can play: `--players a-b` gives each between a and
-// b, the same for the same server in every run; without it, a friend joins every third.
-const range = /^(\d+)-(\d+)$/.exec(option('players', ''))
-const playersOf = (i: number) => {
-  if (planOf(i) === 'free') return 1
-  if (range === null) return i % 3 === 2 ? 2 : 1
-  const [least, most] = [Number(range[1]), Number(range[2])]
-  return least + ((i * 7 + 3) % (most - least + 1))
+const planOf = (): 'free' | 'plus' =>
+  planChoice === 'free' || planChoice === 'plus' ? planChoice : Math.random() < 0.5 ? 'plus' : 'free'
+/**
+ * When each person arrives, ms from the start: a Poisson stream, each gap drawn from the
+ * exponential with the mean `--over` / `--arrivals`, so about `--arrivals` come in `--over`.
+ */
+const arrivalTimes: number[] = []
+for (let at = 0; ; ) {
+  at += -Math.log(1 - Math.random()) * ((overMinutes * MINUTE_MS) / arrivals)
+  if (at > overMinutes * MINUTE_MS) break
+  arrivalTimes.push(at)
 }
-const headless = Array.from({ length: count }, (_, i) => playersOf(i)).reduce((a, b) => a + b, 0)
+// Enough probes for the players likely in a world at once: half the people on Plus, each with
+// their friends, most of their play overlapping.
+const probeCount = Number(
+  option(
+    'probes',
+    String(Math.ceil((arrivals * 0.5 * (1 + (friends[0] + friends[1]) / 2) * 0.8) / PLAYERS_PER_PROBE)),
+  ),
+)
 const probeApp = `${PROBE_PREFIX}${run}`
 const started = Date.now()
 
 say(
-  `load test ${run}: ${count} people (${planChoice}), ${option('players', 'a friend on every third')} players a server, over ${rampS}s, ${playMinutes} min of play, at ${WEB}`,
+  `load test ${run}: ${arrivalTimes.length} people arriving over ${overMinutes} min (${planChoice}), ${friends.join('-')} friends, ${playMinutes.join('-')} min of play, a share of ${aggression} careless, at ${WEB}`,
 )
 tunnel(18025, MAIL_PORT, 'bly-staging-mail')
-const probeCount = Math.ceil(headless / PLAYERS_PER_PROBE)
-say(`${probeCount} probes for ${headless} headless players, in ${probeApp}`)
+say(`${probeCount} probes, in ${probeApp}`)
 const probes: Probe[] = await probesUp(probeApp, probeCount, databaseHost)
 const operator = await admin()
 const site = people(WEB, MAILPIT)
 
 const records: StepRecord[] = []
+const chaos: ChaosFinding[] = []
 const machines: MachineRun[] = []
+/** What Fly says a server's machine is, or `none`. */
+const machineState = async (serverId: string) =>
+  (
+    JSON.parse((await fly(['machines', 'list', '-a', appOf(serverId), '--json'])) || '[]') as {
+      state: string
+    }[]
+  )[0]?.state ?? 'none'
 const playerRun = {
   id: run,
   domain: DOMAIN,
   key: () => `${KEY_PREFIX}${randomUUID().slice(14)}`,
   signUp: (email: string) => site.person(email),
+  auth: (path: string, body: unknown) => site.auth(path, body, '', 1),
+  mailpit: MAILPIT,
   sql,
+  probes,
+  friends,
   playMinutes,
   idleMinutes,
+  aggression,
+  machineState,
   record: (step: StepRecord) => {
     records.push(step)
     if (!step.ok)
       say(`  FAIL ${step.player} ${step.step}: ${step.error}${step.operation ? ` | ${step.operation}` : ''}`)
+  },
+  chaos: (finding: ChaosFinding) => {
+    chaos.push(finding)
+    say(`  CHAOS ${finding.player ?? 'platform'} ${finding.act}: ${finding.verdict}: ${finding.did}`)
   },
   beforeTrash: async (serverId: string) => {
     machines.push(
@@ -256,53 +296,64 @@ const playerRun = {
     )
   },
 }
-// Each server's players spread over the probes, one after another, so none holds more than its share.
-let seat = 0
-const players = Array.from(
-  { length: count },
-  (_, i) =>
-    new Player(
-      i,
-      planOf(i),
-      playerRun,
-      Array.from({ length: playersOf(i) }, () => probes[seat++ % probes.length] as Probe),
-    ),
-)
+const players: Player[] = []
 
 // ─── Watching it run ─────────────────────────────────────────────────────────────────────────
 
+const timeline: Moment[] = []
 const peak: Record<string, number> = {}
 const atPeak = (what: string, n: number) => {
   peak[what] = Math.max(peak[what] ?? 0, n)
 }
 async function line(): Promise<string> {
   const of = (phase: string) => players.filter((p) => p.phase === phase).length
-  const mine = `accounts ${players.filter((p) => p.accountMade).length}/${count} · servers making ${of('making')}, ready ${of('ready') + of('waking')}, with players ${players.filter((p) => p.hasPlayers).length}, asleep ${of('asleep')}, failed ${players.filter((p) => p.failed).length}, done ${of('done')}`
-  const health = await operator('admin.health', {}, 'GET').then(
-    // biome-ignore lint/suspicious/noExplicitAny: HealthView, read for a line
-    (view: any) => {
-      const { running, asleep, busy, failed } = view.now.servers
-      const queued = view.now.operations.reduce((sum: number, o: { queued: number }) => sum + o.queued, 0)
-      const working = view.now.operations.reduce((sum: number, o: { running: number }) => sum + o.running, 0)
-      atPeak('running servers', running)
-      atPeak('busy servers', busy)
-      atPeak('operations queued', queued)
-      atPeak('operations running', working)
-      return `health: running ${running}, asleep ${asleep}, busy ${busy}, failed ${failed}; operations queued ${queued}, running ${working}`
-    },
-    (error: unknown) => `health unread: ${(error as Error).message}`,
-  )
-  const connections = Number(await sql('select count(*) from pg_stat_activity').catch(() => '0'))
-  atPeak('database connections', connections)
-  const loads = await Promise.all(
-    probes.map((p) =>
-      p.load().then(
-        (l) => l.load.toFixed(1),
-        () => '?',
+  const active = players.length - of('done')
+  const mine = `people ${players.length}/${arrivalTimes.length} arrived, ${active} active · making ${of('making')}, playing ${of('playing')}, asleep ${of('asleep')}, away ${of('away')}, done ${of('done')}, with a failure ${players.filter((p) => p.failed).length}`
+  // biome-ignore lint/suspicious/noExplicitAny: HealthView, read for a line
+  const view: any = await operator('admin.health', {}, 'GET').catch(() => null)
+  const counts = view?.now.servers ?? { running: 0, asleep: 0, busy: 0, failed: 0 }
+  const sum = (key: 'queued' | 'running') =>
+    (view?.now.operations ?? []).reduce(
+      (total: number, o: Record<string, number>) => total + (o[key] ?? 0),
+      0,
+    )
+  const inWorld = (
+    await Promise.all(
+      probes.map((p) =>
+        p.load().then(
+          (l) => l.players,
+          () => 0,
+        ),
       ),
-    ),
-  )
-  return `${took(Date.now() - started).padStart(7)}  ${mine} | ${health} | db connections ${connections} | probe load ${loads.join(' ')}`
+    )
+  ).reduce((a, b) => a + b, 0)
+  const connections = Number(await sql('select count(*) from pg_stat_activity').catch(() => '0'))
+  timeline.push({
+    t: Date.now() - started,
+    active,
+    making: of('making'),
+    playing: of('playing'),
+    running: counts.running,
+    asleep: counts.asleep,
+    busy: counts.busy,
+    inWorld,
+    queued: sum('queued'),
+  })
+  for (const [what, n] of Object.entries({
+    'people active': active,
+    'running servers': counts.running,
+    'busy servers': counts.busy,
+    'players in a world': inWorld,
+    'operations queued': sum('queued'),
+    'operations running': sum('running'),
+    'database connections': connections,
+  }))
+    atPeak(what, n)
+  const health =
+    view === null
+      ? 'health unread'
+      : `health: running ${counts.running}, asleep ${counts.asleep}, busy ${counts.busy}, failed ${counts.failed}; operations queued ${sum('queued')}, running ${sum('running')}`
+  return `${took(Date.now() - started).padStart(7)}  ${mine} | in a world ${inWorld} | ${health} | db connections ${connections}`
 }
 // One line at a time: a slow answer skips a beat rather than printing two at once.
 let reading = false
@@ -316,34 +367,172 @@ const watching = setInterval(() => {
     })
 }, 15 * SECOND_MS)
 
-// ─── People arrive, spread over the ramp ─────────────────────────────────────────────────────
+// ─── The platform shaken, once each, mid-run, on staging only ────────────────────────────────
+
+/** A step failure between `from` and `to`, ms since the epoch. */
+const failedBetween = (from: number, to: number) =>
+  records.filter((r) => !r.ok && r.at + r.ms >= from && r.at + r.ms <= to)
+
+/** The control plane's worker restarted: what was under way, and what became of it. */
+async function restartControl(): Promise<void> {
+  const app = 'bly-staging-control'
+  const all = JSON.parse(await fly(['machines', 'list', '-a', app, '--json'])) as {
+    id: string
+    config: { metadata?: Record<string, string> }
+  }[]
+  const machine = all.find((m) => m.config.metadata?.fly_process_group === 'worker') ?? all[0]
+  const at = Date.now()
+  const underWay = await sql(`select count(*) from server_operations where status in ('queued', 'running')`)
+  await fly(['machine', 'restart', machine?.id ?? '', '-a', app])
+  await Bun.sleep(10 * MINUTE_MS)
+  const after = (await database.unsafe(
+    `select status, count(*)::int as n from server_operations
+     where created_at < to_timestamp(${at / SECOND_MS}) and (finished_at is null or finished_at > to_timestamp(${at / SECOND_MS}))
+     group by status`,
+  )) as { status: string; n: number }[]
+  const of = (status: string) => after.find((a) => a.status === status)?.n ?? 0
+  const failed = failedBetween(at, at + 3 * MINUTE_MS).length
+  const did = `${underWay} operations under way; ten minutes on, of those: ${of('succeeded')} succeeded, ${of('failed')} failed, ${of('running') + of('queued')} still open; ${failed} people's steps failed in the 3 minutes after`
+  const verdict =
+    of('running') + of('queued') > 0 ? 'stuck' : of('failed') > 0 || failed > 0 ? 'interrupted' : 'fine'
+  playerRun.chaos({
+    act: `the control plane's ${machine?.config.metadata?.fly_process_group ?? ''} machine restarted`,
+    player: null,
+    at,
+    did,
+    verdict,
+  })
+}
+
+/** A running server's machine stopped from Fly behind the product's back: does it notice, and say so? */
+async function stopBehindItsBack(): Promise<void> {
+  const owner = players.find((p) => p.phase === 'playing' && p.servers[0] !== undefined)
+  const server = owner?.servers[0]
+  if (owner === undefined || server === undefined) return
+  const app = appOf(server.id)
+  const [machine] = JSON.parse(await fly(['machines', 'list', '-a', app, '--json'])) as { id: string }[]
+  const at = Date.now()
+  await fly(['machine', 'stop', machine?.id ?? '', '-a', app])
+  const seen: string[] = []
+  let last = ''
+  for (let i = 0; i < 30; i++) {
+    await Bun.sleep(10 * SECOND_MS)
+    const view = await owner.look(server.id).catch(() => null)
+    const now = `${view?.status ?? 'unread'}${view?.stopReason ? ` (${view.stopReason})` : ''}/${await machineState(server.id)}`
+    if (now !== last) seen.push(`${took(Date.now() - at)}: website ${now.replace('/', ', Fly ')}`)
+    last = now
+  }
+  const [website = '', onFly = ''] = last.split('/')
+  const lying = website.startsWith('running') && onFly !== 'started'
+  playerRun.chaos({
+    act: "a running server's machine stopped from Fly behind the product's back",
+    player: owner.index,
+    server: server.id,
+    at,
+    did: seen.join('; '),
+    // Saying it runs while Fly has it stopped is a wrong state; noticing, either way, only
+    // interrupts the people on it.
+    verdict: lying ? 'wrong state' : 'interrupted',
+  })
+}
+
+/** The edge restarted: who was dropped, and whether people get back in. */
+async function restartEdge(): Promise<void> {
+  const app = 'bly-staging-edge'
+  const all = JSON.parse(await fly(['machines', 'list', '-a', app, '--json'])) as { id: string }[]
+  const at = Date.now()
+  for (const machine of all) await fly(['machine', 'restart', machine.id, '-a', app])
+  await Bun.sleep(5 * MINUTE_MS)
+  const failed = failedBetween(at, at + 5 * MINUTE_MS)
+  const dropped = failed.filter((r) => /dropped mid-play/.test(r.error ?? '')).length
+  const joinsFailed = failed.length - dropped
+  const verdict = joinsFailed > 0 ? 'stuck' : dropped > 0 ? 'interrupted' : 'fine'
+  playerRun.chaos({
+    act: 'the edge restarted',
+    player: null,
+    at,
+    did: `${dropped} players dropped mid-play; ${joinsFailed} other steps failed in the 5 minutes after: ${[...new Set(failed.map((r) => r.error?.slice(0, 80)))].slice(0, 3).join(' | ')}`,
+    verdict,
+  })
+}
+
+const shaken = Promise.all(
+  (
+    [
+      [0.45, restartControl],
+      [0.6, stopBehindItsBack],
+      [0.75, restartEdge],
+    ] as const
+  ).map(async ([share, shake]) => {
+    await Bun.sleep(share * overMinutes * MINUTE_MS)
+    await shake().catch((error: unknown) =>
+      say(`  the platform shake ${shake.name} failed: ${(error as Error).message}`),
+    )
+  }),
+)
+
+// ─── People arrive at random, each living their own life ─────────────────────────────────────
 
 await Promise.all(
-  players.map(async (player, i) => {
-    await Bun.sleep((i * rampS * SECOND_MS) / Math.max(1, count))
-    await player.journey().catch((error: unknown) => {
-      say(`  player ${i} stopped: ${(error as Error).message}`)
+  arrivalTimes.map(async (at, i) => {
+    await Bun.sleep(at)
+    const player = new Player(i, planOf(), playerRun)
+    players.push(player)
+    await player.live().catch((error: unknown) => {
+      say(`  person ${i} stopped: ${(error as Error).message}`)
       player.failed = true
     })
   }),
 )
+await shaken
 clearInterval(watching)
 say(await line())
 
 // ─── Everything the run made, gone ───────────────────────────────────────────────────────────
 
+for (const player of players) await player.tidy()
 const made = players.flatMap((p) => p.servers.map((s) => s.id))
-say(`\npurging ${made.length} servers`)
-const stuck = await purge(made, 900)
+const thrown = (await database.unsafe(
+  `select id from minecraft_servers where create_idempotency_key like '${KEY_PREFIX}%' and status <> 'purged' and created_at > to_timestamp(${started / SECOND_MS})`,
+)) as { id: string }[]
+// What careless acts made and trashed themselves is the run's too.
+const ids = [...new Set([...made, ...thrown.map((s) => s.id)])]
+say(`\npurging ${ids.length} servers`)
+const stuck = await purge(ids, 900)
 const apps = new Set(await serverApps())
-const appsLeft = made.map(appOf).filter((app) => apps.has(app))
-say(`${made.length - stuck.length} purged; not purged: ${stuck.length}; Fly apps left: ${appsLeft.length}`)
+const appsLeft = ids.map(appOf).filter((app) => apps.has(app))
+say(`${ids.length - stuck.length} purged; not purged: ${stuck.length}; Fly apps left: ${appsLeft.length}`)
+const idList = ids.map((id) => `'${id}'`).join(', ') || 'null'
 const retries = (await database.unsafe(
   `select kind, count(*)::int as operations,
      count(*) filter (where (select count(*) from jsonb_array_elements(coalesce(steps, '[]'::jsonb)) s where s->>'step' = 'attempt') > 1)::int as retried,
      count(*) filter (where status = 'failed')::int as failed
-   from server_operations where server_id in (${made.map((id) => `'${id}'`).join(', ') || 'null'}) group by kind order by kind`,
+   from server_operations where server_id in (${idList}) group by kind order by kind`,
 )) as Array<{ kind: string; operations: number; retried: number; failed: number }>
+// The first create of each person, by the steps its operation records: the wait in the queue,
+// each step, and the wait from its end until the website showed it running.
+const provisions = (await database.unsafe(
+  `select server_id, created_at, finished_at, steps from server_operations
+   where kind = 'provision' and status = 'succeeded' and server_id in (${players.map((p) => (p.servers[0] ? `'${p.servers[0].id}'` : 'null')).join(', ') || 'null'})`,
+)) as {
+  server_id: string
+  created_at: Date
+  finished_at: Date
+  steps: { step: string; at: string }[] | null
+}[]
+const parts = provisions.flatMap((op) => {
+  const steps = (op.steps ?? []).map((s) => ({ step: s.step, at: Date.parse(s.at) }))
+  const created = new Date(op.created_at).getTime()
+  const finished = new Date(op.finished_at).getTime()
+  const shown = records.find(
+    (r) => r.ok && r.server === op.server_id && r.step === 'make a server, until it is running',
+  )
+  return [
+    { part: 'queued', ms: (steps[0]?.at ?? finished) - created },
+    ...steps.map((s, k) => ({ part: s.step, ms: (steps[k + 1]?.at ?? finished) - s.at })),
+    ...(shown ? [{ part: 'until the website showed it running', ms: shown.at + shown.ms - finished }] : []),
+  ]
+})
 machines.push(
   ...(await machineRuns(probeApp).catch((error: unknown) => {
     say(`machine hours of the probes unread: ${(error as Error).message}`)
@@ -355,15 +544,23 @@ await probesDown(probeApp)
 const limit = firstLimit(records)
 const report = {
   run,
-  people: count,
+  arrivals: arrivalTimes.length,
+  overMinutes,
   plan: planChoice,
   startedAt: new Date(started).toISOString(),
   tookMs: Date.now() - started,
   steps: stepStats(records),
   failures: failuresOf(records),
+  chaos,
   firstLimit: limit && { limit: limit.limit, step: limit.record.step, error: limit.record.error ?? '' },
+  timeline,
+  createParts: partStats(parts),
   machineHours: hoursBySize(machines),
-  peak: { ...peak, ...Object.fromEntries([...refused].map(([path, n]) => [`answers ${path}`, n])) },
+  peak: {
+    ...peak,
+    'probe requests sent again (the test’s tunnel, not the product)': Probe.resent,
+    ...Object.fromEntries([...refused].map(([path, n]) => [`answers ${path}`, n])),
+  },
   operationRetries: retries,
   records,
 }

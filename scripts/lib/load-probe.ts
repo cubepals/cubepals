@@ -7,10 +7,14 @@
  * `blockly-staging`, since the game port can't be reached from where the test is driven. It is a
  * small HTTP server the test reaches through `fly proxy`, and its jobs are players at the edge:
  *
- *   POST /jobs {kind: 'play', address, name, version, minutes}   a headless player (mineflayer) joins the
- *        server's own address, walks, chats, breaks and places blocks for `minutes`, and leaves
- *   POST /jobs {kind: 'join', address, name, version, timeoutMs} joins until it is in the world, timed, and leaves
- *   POST /jobs {kind: 'answer', address, name, timeoutMs}
+ *   PUT /jobs/<id> {kind: 'play', address, name, version, minutes}
+ *        a headless player (mineflayer) joins the server's own address, walks, chats, breaks and
+ *        places blocks for `minutes`, and leaves
+ *   PUT /jobs/<id> {kind: 'join', address, name, version, timeoutMs, againMs}
+ *        joins until it is in the world, timed, and leaves; `againMs` after each try turned away
+ *   PUT /jobs/<id> {kind: 'abandon', address, name, version, afterMs}
+ *        clicks Join and gives up `afterMs` later, as an impatient player does
+ *   PUT /jobs/<id> {kind: 'answer', address, name, timeoutMs}
  *        the game's handshake and login until the server answers (`minecraft.ts` `join`), for a
  *        server that checks accounts, which a headless player has none of
  *   GET /jobs/<id>   whether it is done, and what it found
@@ -99,6 +103,7 @@ async function enter(
   name: string,
   version: string,
   timeoutMs: number,
+  againMs = JOIN_AGAIN_MS,
 ): Promise<{ bot: Bot; ms: number; attempts: Attempt[] }> {
   const { createBot } = await mineflayer()
   const started = Date.now()
@@ -133,7 +138,7 @@ async function enter(
     bot.end()
     // A player reads why and clicks Join again a few seconds later; sooner, Bukkit's connection
     // throttle, which counts every join from the edge's one address, would turn each one away.
-    await Bun.sleep(JOIN_AGAIN_MS)
+    await Bun.sleep(againMs)
   }
   throw Object.assign(new Error(`never in the world within ${timeoutMs / 1000}s`), { attempts })
 }
@@ -219,8 +224,9 @@ async function breakAndPlace(
 
 type Job =
   | { kind: 'play'; address: string; name: string; version: string; minutes: number; timeoutMs: number }
-  | { kind: 'join'; address: string; name: string; version: string; timeoutMs: number }
+  | { kind: 'join'; address: string; name: string; version: string; timeoutMs: number; againMs?: number }
   | { kind: 'answer'; address: string; name: string; timeoutMs: number }
+  | { kind: 'abandon'; address: string; name: string; version: string; afterMs: number }
 
 const results = new Map<string, { done: boolean; result?: unknown; error?: string; attempts?: Attempt[] }>()
 let players = 0
@@ -228,7 +234,9 @@ let players = 0
 async function run(job: Job): Promise<unknown> {
   if (job.kind === 'answer')
     return { ms: await join({ host: job.address, port: GAME_PORT }, job.address, job.name, job.timeoutMs) }
-  const { bot, ms, attempts } = await enter(job.address, job.name, job.version, job.timeoutMs)
+  if (job.kind === 'abandon') return abandon(job.address, job.name, job.version, job.afterMs)
+  const againMs = job.kind === 'join' ? job.againMs : undefined
+  const { bot, ms, attempts } = await enter(job.address, job.name, job.version, job.timeoutMs, againMs)
   players++
   try {
     if (job.kind === 'join') return { ms, attempts }
@@ -237,6 +245,28 @@ async function run(job: Job): Promise<unknown> {
     players--
     bot.end()
   }
+}
+
+/** A player who clicks Join and gives up `afterMs` later, before or after they are in. */
+async function abandon(address: string, name: string, version: string, afterMs: number) {
+  const { createBot } = await mineflayer()
+  const bot = createBot({
+    host: address,
+    port: GAME_PORT,
+    username: name,
+    auth: 'offline',
+    hideErrors: true,
+    checkTimeoutInterval: MINUTE_MS,
+    version,
+  })
+  let spawned = false
+  bot.once('spawn', () => {
+    spawned = true
+  })
+  bot.on('error', () => {})
+  await Bun.sleep(afterMs)
+  bot.end()
+  return { left: spawned ? 'after getting in' : 'before getting in' }
 }
 
 /** Port 5432 forwarded to staging's database, for the test that reaches this machine. */
@@ -252,28 +282,30 @@ function forwardDatabase(host: string): void {
 if (process.argv[2] !== 'serve') throw new Error('usage: bun probe.js serve')
 const databaseHost = process.env.DATABASE_HOST
 if (databaseHost) forwardDatabase(databaseHost)
-let next = 0
 Bun.serve({
   port: 8080,
   hostname: '::',
   idleTimeout: 60,
   async fetch(request) {
     const path = new URL(request.url).pathname
-    if (request.method === 'POST' && path === '/jobs') {
-      const id = String(++next)
-      results.set(id, { done: false })
-      run((await request.json()) as Job).then(
-        (result) => results.set(id, { done: true, result }),
-        (error: unknown) =>
-          results.set(id, {
-            done: true,
-            error: messageOf(error),
-            attempts: (error as { attempts?: Attempt[] }).attempts ?? [],
-          }),
-      )
-      return Response.json({ id })
+    const job = /^\/jobs\/([\w-]+)$/.exec(path)?.[1]
+    // The caller names the job, so a request it sends again after its connection dropped starts
+    // nothing twice.
+    if (request.method === 'PUT' && job !== undefined) {
+      if (!results.has(job)) {
+        results.set(job, { done: false })
+        run((await request.json()) as Job).then(
+          (result) => results.set(job, { done: true, result }),
+          (error: unknown) =>
+            results.set(job, {
+              done: true,
+              error: messageOf(error),
+              attempts: (error as { attempts?: Attempt[] }).attempts ?? [],
+            }),
+        )
+      }
+      return Response.json({ id: job })
     }
-    const job = /^\/jobs\/(\d+)$/.exec(path)?.[1]
     if (job !== undefined) {
       const found = results.get(job)
       return found === undefined ? new Response('no such job', { status: 404 }) : Response.json(found)
