@@ -8,7 +8,7 @@
  * agent.
  *
  *   bun scripts/ops.ts accounts [search]            accounts whose email or name holds it
- *   bun scripts/ops.ts accounts create <email> [--name <name>]
+ *   bun scripts/ops.ts accounts create <email> --confirm <email> [--name <name>]
  *                                                   an account with no password, for a person to
  *                                                   run: its person signs in with the email link or
  *                                                   Google; nothing is sent until then
@@ -22,10 +22,10 @@
  *                                                   a server for that account, as the web makes one
  *   bun scripts/ops.ts server <server>              one server, as its owner's page reads it
  *   bun scripts/ops.ts start|stop <server>
- *   bun scripts/ops.ts trash <server> --name <its name>
+ *   bun scripts/ops.ts trash <server> --confirm <its name>
  *   bun scripts/ops.ts untrash <server>             back out of the trash, while its window lasts
  *   bun scripts/ops.ts rest <server>                a stopped server's world to the archive store now
- *   bun scripts/ops.ts purge <server> --name <its name>
+ *   bun scripts/ops.ts purge <server> --confirm <its name>
  *                                                   a server in the trash, gone for good now
  *   bun scripts/ops.ts console <server> [command] [--lines n]
  *                                                   a command sent and its answer, or without one
@@ -42,17 +42,18 @@
  *   bun scripts/ops.ts players <server>             its whitelist, operators, bans and helpers
  *   bun scripts/ops.ts whitelist <server> on|off
  *   bun scripts/ops.ts whitelist|operator|helper <server> add|remove <player>
- *   bun scripts/ops.ts ban <server> <player> [--reason <why>]
+ *   bun scripts/ops.ts ban <server> <player> --confirm <its name> [--reason <why>]
  *   bun scripts/ops.ts pardon <server> <player>
  *   bun scripts/ops.ts moderation <server> [on|off] [--chat-filter on|off]
  *                                                   the moderation tools, read or turned on or off
- *   bun scripts/ops.ts listing <server> [publish|unlist]
+ *   bun scripts/ops.ts listing <server> [publish | unlist --confirm <its name>]
  *                                                   where it stands in Browse, or put in or out
  *   bun scripts/ops.ts official <server> on|off --reason <why>
  *                                                   the "Run by Cubepals" mark
  *   bun scripts/ops.ts allowlist [add <project> [--note <text>] | remove <catalog> <project>]
- *   bun scripts/ops.ts platform [set <switch> <value>...] the admins' platform switches, as
- *                                                   `platform` names them: `set startsEnabled false`
+ *   bun scripts/ops.ts platform [set <switch> <value>... --confirm platform]
+ *                                                   the admins' platform switches, as `platform`
+ *                                                   names them: `set startsEnabled false`
  *   bun scripts/ops.ts platform fly-suspend [on|off|default]
  *   bun scripts/ops.ts platform refresh-catalog
  *   bun scripts/ops.ts health [--window 24h|7d|30d] [--json]
@@ -66,11 +67,15 @@
  * With --production, it reaches production through `fly proxy` with production's own values
  * (scripts/lib/production-reach.ts). Otherwise OPERATOR_API and OPERATOR_TOKEN say where, as for
  * `scripts/runtimes.ts`. OPERATOR (or USER) is who the audit log says acted, as `operator:<name>`.
+ * What takes something away from someone is named again with --confirm first, and a server, an
+ * operation and a console command are checked before anything is called (lib/operator-inputs.ts).
  */
 import type { HealthOperationView, HealthView, HealthWindow, OperationStepsView } from '@blockly/contracts'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
+import { z } from 'zod'
 import { healthReport, operationLine, stepsReport } from './lib/health-report.ts'
-import { flags, operatorCli } from './lib/operator-cli.ts'
+import { flags, operatorCli, withoutSecrets } from './lib/operator-cli.ts'
+import { ConsoleCommand, namesServer, PLATFORM } from './lib/operator-inputs.ts'
 import { reachProduction } from './lib/production-reach.ts'
 
 const [command = 'help', ...rest] = process.argv.slice(2).filter((arg) => arg !== '--production')
@@ -80,9 +85,19 @@ const option = (name: string) => options.get(name)?.at(-1)
 
 const { fail, api } = operatorCli('ops', '/ops/v1', 'docs/production.md')
 
-const say = (line: string) => process.stdout.write(`${line}\n`)
+const say = (line: string) => process.stdout.write(`${withoutSecrets(line)}\n`)
 const show = (value: unknown) => say(JSON.stringify(value, null, 2))
 const first = (what: string) => positional[0] ?? fail(`${command} needs ${what}`)
+const uuid = (what: string) => {
+  const given = first(what)
+  return z.uuid().safeParse(given).success ? given : fail(`${command} needs ${what}, a uuid`)
+}
+const serverId = () => uuid('a server id')
+/** Stops here unless --confirm names the server exactly. */
+async function confirmServer(id: string): Promise<void> {
+  const confirm = option('confirm') ?? fail(`${command} needs --confirm, the server's name exactly`)
+  if (!(await namesServer(api, id, confirm))) fail(`--confirm is not the server's name`)
+}
 const encoded = (ref: string) => encodeURIComponent(ref)
 const second = (what: string) => positional[1] ?? fail(`${command} needs ${what}`)
 const onOff = (given: string | undefined, what: string) =>
@@ -113,6 +128,7 @@ switch (command) {
   case 'accounts': {
     if (positional[0] === 'create') {
       const email = second('an email address')
+      if (option('confirm') !== email) fail('accounts create needs --confirm, the same address again')
       show(await api('POST', '/accounts', { email, ...(option('name') ? { name: option('name') } : {}) }))
       break
     }
@@ -164,23 +180,25 @@ switch (command) {
     break
   }
   case 'server':
-    show(await api('GET', `/servers/${first('a server id')}`))
+    show(await api('GET', `/servers/${serverId()}`))
     break
   case 'start':
   case 'stop':
   case 'untrash':
   case 'rest':
-    show(await api('POST', `/servers/${first('a server id')}/${command}`))
+    show(await api('POST', `/servers/${serverId()}/${command}`))
     break
   case 'trash':
   case 'purge': {
-    const confirmName = option('name') ?? fail(`${command} needs --name, the server's name exactly`)
-    show(await api('POST', `/servers/${first('a server id')}/${command}`, { confirmName }))
+    const confirmName = option('confirm') ?? fail(`${command} needs --confirm, the server's name exactly`)
+    show(await api('POST', `/servers/${serverId()}/${command}`, { confirmName }))
     break
   }
   case 'console': {
-    const server = `/servers/${first('a server id')}/console`
+    const server = `/servers/${serverId()}/console`
     const sent = positional.slice(1).join(' ')
+    if (sent && !ConsoleCommand.safeParse(sent).success)
+      fail('a console command is one line of plain text, without control characters')
     if (sent) say(((await api('POST', server, { command: sent })) as { output: string }).output)
     else {
       const lines = option('lines') ? `?lines=${option('lines')}` : ''
@@ -192,7 +210,7 @@ switch (command) {
     break
   }
   case 'identity': {
-    const server = first('a server id')
+    const server = serverId()
     const icon = option('icon')
     const identity = {
       ...(option('name') === undefined ? {} : { name: option('name') }),
@@ -208,12 +226,10 @@ switch (command) {
     break
   }
   case 'message':
-    show(
-      await api('PUT', `/servers/${first('a server id')}/message`, { motd: positional.slice(1).join(' ') }),
-    )
+    show(await api('PUT', `/servers/${serverId()}/message`, { motd: positional.slice(1).join(' ') }))
     break
   case 'mods': {
-    const mods = `/servers/${first('a server id')}/mods`
+    const mods = `/servers/${serverId()}/mods`
     const [, action, ...refs] = positional
     if (action === undefined) show(await api('GET', mods))
     else if (action === 'search') show(await api('GET', `${mods}/search?text=${encoded(refs.join(' '))}`))
@@ -242,12 +258,12 @@ switch (command) {
     break
   }
   case 'players':
-    show(await api('GET', `/servers/${first('a server id')}/access`))
+    show(await api('GET', `/servers/${serverId()}/access`))
     break
   case 'whitelist':
   case 'operator':
   case 'helper': {
-    const access = `/servers/${first('a server id')}/access`
+    const access = `/servers/${serverId()}/access`
     const action = second('add, remove, or for the whitelist on or off')
     if (command === 'whitelist' && (action === 'on' || action === 'off'))
       show(await api('PUT', `${access}/whitelist`, { enabled: action === 'on' }))
@@ -265,8 +281,9 @@ switch (command) {
   }
   case 'ban': {
     const name = second('a player')
+    await confirmServer(serverId())
     show(
-      await api('POST', `/servers/${first('a server id')}/access/ban`, {
+      await api('POST', `/servers/${serverId()}/access/ban`, {
         name,
         ...(option('reason') ? { reason: option('reason') } : {}),
       }),
@@ -274,10 +291,10 @@ switch (command) {
     break
   }
   case 'pardon':
-    show(await api('DELETE', `/servers/${first('a server id')}/access/ban/${encoded(second('a player'))}`))
+    show(await api('DELETE', `/servers/${serverId()}/access/ban/${encoded(second('a player'))}`))
     break
   case 'moderation': {
-    const moderation = `/servers/${first('a server id')}/moderation`
+    const moderation = `/servers/${serverId()}/moderation`
     if (positional[1] === undefined) show(await api('GET', moderation))
     else {
       const enabled = onOff(positional[1], 'moderation')
@@ -292,18 +309,19 @@ switch (command) {
     break
   }
   case 'listing': {
-    const listing = `/servers/${first('a server id')}/listing`
+    const listing = `/servers/${serverId()}/listing`
     const action = positional[1]
     if (action === undefined) show(await api('GET', listing))
-    else if (action === 'publish' || action === 'unlist')
+    else if (action === 'publish' || action === 'unlist') {
+      if (action === 'unlist') await confirmServer(serverId())
       show(await api('PUT', listing, { public: action === 'publish' }))
-    else fail('listing takes publish or unlist')
+    } else fail('listing takes publish or unlist')
     break
   }
   case 'official': {
     const official = onOff(positional[1], 'official')
     const reason = option('reason') ?? fail('official needs --reason, which the audit log keeps')
-    show(await api('PUT', `/servers/${first('a server id')}/official`, { official, reason }))
+    show(await api('PUT', `/servers/${serverId()}/official`, { official, reason }))
     break
   }
   case 'allowlist': {
@@ -330,6 +348,8 @@ switch (command) {
     else if (action === 'set') {
       if (rest.length === 0 || rest.length % 2 !== 0)
         fail('platform set takes a switch and its value, as many as you like')
+      if (option('confirm') !== PLATFORM)
+        fail(`platform set changes it for every player: confirm with --confirm ${PLATFORM}`)
       const change: Record<string, boolean | number> = {}
       for (let i = 0; i < rest.length; i += 2) {
         const value = rest[i + 1] ?? ''
@@ -374,7 +394,7 @@ switch (command) {
     break
   }
   case 'operation': {
-    const op = (await api('GET', `/operations/${first('an operation id')}`)) as OperationStepsView
+    const op = (await api('GET', `/operations/${uuid('an operation id')}`)) as OperationStepsView
     if (option('json')) show(op)
     else for (const line of stepsReport(op)) say(line)
     break

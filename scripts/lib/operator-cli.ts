@@ -9,6 +9,17 @@
  * after them. Which commands each has, and what they print, is its own.
  */
 
+/** The values that open the operator APIs and Fly: never printed, never answered with. */
+const SECRETS = ['OPERATOR_TOKEN', 'FLEET_OPERATOR_TOKEN', 'FLY_API_TOKEN', 'FLY_ACCESS_TOKEN'] as const
+
+/** `text` with every secret this process holds in its environment written as `[secret]`. */
+export function withoutSecrets(text: string): string {
+  return SECRETS.reduce((clean, name) => {
+    const value = process.env[name]
+    return value ? clean.replaceAll(value, '[secret]') : clean
+  }, text)
+}
+
 /** Arguments as positionals and `--name value` options; a bare `--flag` is `'true'`, and options repeat. */
 export function flags(args: string[]): { positional: string[]; options: Map<string, string[]> } {
   const positional: string[] = []
@@ -30,16 +41,23 @@ export function flags(args: string[]): { positional: string[]; options: Map<stri
 
 /**
  * A CLI's way out, `fail`, and its calls to the operator API under `part` (`/fleet/v1`). OPERATOR_API
- * and OPERATOR_TOKEN reach it, `docs` says how to get them, and OPERATOR (or USER) is who acted. A
- * call the API refuses exits, unless `refusals` is `throw`: then it throws, with the API's words.
+ * and OPERATOR_TOKEN reach it, `docs` says how to get them, and OPERATOR (or USER) is who acted,
+ * `unnamed` when neither is set. A call the API refuses exits, unless `refusals` is `throw`: then it
+ * throws, with the API's words. What it prints or throws never holds a secret (`withoutSecrets`).
  */
-export function operatorCli(name: string, part: string, docs: string, refusals: 'exit' | 'throw' = 'exit') {
+export function operatorCli(
+  name: string,
+  part: string,
+  docs: string,
+  refusals: 'exit' | 'throw' = 'exit',
+  unnamed = 'unnamed',
+) {
   function fail(message: string): never {
-    console.error(`${name}: ${message}`)
+    console.error(`${name}: ${withoutSecrets(message)}`)
     process.exit(1)
   }
   const refuse = (message: string): never => {
-    if (refusals === 'throw') throw new Error(message)
+    if (refusals === 'throw') throw new Error(withoutSecrets(message))
     return fail(message)
   }
 
@@ -55,7 +73,7 @@ export function operatorCli(name: string, part: string, docs: string, refusals: 
       method,
       headers: {
         authorization: `Bearer ${token}`,
-        'x-operator': process.env.OPERATOR ?? process.env.FLEET_OPERATOR ?? process.env.USER ?? 'unnamed',
+        'x-operator': process.env.OPERATOR ?? process.env.FLEET_OPERATOR ?? process.env.USER ?? unnamed,
         ...(body ? { 'content-type': 'application/json' } : {}),
       },
       ...(body ? { body: JSON.stringify(body) } : {}),

@@ -11,21 +11,26 @@
  * One tool for each `scripts/ops.ts` command: accounts, a server's life, its console, identity,
  * mods and players pages, Browse and its allowlist, the platform switches, and production's health.
  * Each calls the same `/ops/v1` route the command does, and answers with the API's JSON. Tools that
- * can't be undone, or take something away from a player, say so first in their description.
+ * can't be undone, or take something away from a player, say so first in their description, and
+ * take a `confirm` that names what they act on again (`lib/operator-inputs.ts`): nothing is called
+ * until it matches. Every input is checked against its schema before any call.
  *
- * It reaches the API as `ops.ts` does: OPERATOR_API and OPERATOR_TOKEN, or with --production
- * through `fly proxy` with production's own values (scripts/lib/production-reach.ts). OPERATOR (or
- * USER) is who the audit log says acted. Stdout carries the protocol and nothing else; the token is
- * never printed.
+ * It speaks over stdio only, and opens no port. It reaches the API as `ops.ts` does: OPERATOR_API
+ * and OPERATOR_TOKEN, or with --production through `fly proxy` with production's own values
+ * (scripts/lib/production-reach.ts), and won't start without them; there is no default token.
+ * OPERATOR (or USER) is who the audit log says acted, `operator:mcp` when neither is set. Stdout
+ * carries the protocol and nothing else; no secret is printed, or answered with in a tool's result
+ * or error (`withoutSecrets`).
  */
 import { join } from 'node:path'
 import { McpServer, type ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { operatorCli } from './lib/operator-cli.ts'
+import { operatorCli, withoutSecrets } from './lib/operator-cli.ts'
+import { ConsoleCommand, Line, namesServer, PLATFORM } from './lib/operator-inputs.ts'
 import { reachProduction } from './lib/production-reach.ts'
 
-const { api } = operatorCli('ops-mcp', '/ops/v1', 'docs/production.md', 'throw')
+const { api } = operatorCli('ops-mcp', '/ops/v1', 'docs/production.md', 'throw', 'mcp')
 
 // An MCP client starts it wherever it likes; production's values are found from the repository's root.
 process.chdir(join(import.meta.dir, '..'))
@@ -43,9 +48,16 @@ if (!process.env.OPERATOR_API || !process.env.OPERATOR_TOKEN) {
 const server = new McpServer({ name: 'cubepals-ops', version: '1.0.0' })
 
 const NOT_UNDONE = 'Destructive: '
-const account = z.string().describe('The account’s email address, or its id')
+const account = Line.min(1).describe('The account’s email address, or its id')
 const serverId = z.uuid().describe('The server’s id')
-const player = z.string().describe('A Minecraft name, or the player’s uuid as the players list shows it')
+const player = Line.min(1).describe('A Minecraft name, or the player’s uuid as the players list shows it')
+const confirmName = Line.describe('The server’s name exactly, as server_get gives it, to confirm')
+
+/** Throws, so nothing is called, unless `confirm` is the server's name. */
+async function confirmServer(id: string, confirm: string): Promise<void> {
+  if (!(await namesServer(api, id, confirm)))
+    throw new Error('Not done: confirm is not the server’s name. Read it with server_get.')
+}
 const at = (id: string, path = '') => `/servers/${encodeURIComponent(id)}${path}`
 const query = (values: Record<string, string | number | undefined>) => {
   const given = Object.entries(values).filter(
@@ -70,9 +82,12 @@ function tool<S extends Shape>(
   const run = async (args: z.infer<z.ZodObject<S>>) => {
     try {
       const answer = await api(...(await request(args)))
-      return { content: [{ type: 'text' as const, text: JSON.stringify(answer, null, 2) }] }
+      return { content: [{ type: 'text' as const, text: withoutSecrets(JSON.stringify(answer, null, 2)) }] }
     } catch (error) {
-      return { isError: true, content: [{ type: 'text' as const, text: (error as Error).message }] }
+      return {
+        isError: true,
+        content: [{ type: 'text' as const, text: withoutSecrets((error as Error).message) }],
+      }
     }
   }
   server.registerTool(
@@ -98,7 +113,7 @@ const gone = { destructive: true }
 tool(
   'accounts_search',
   'Accounts whose email or name holds the search, up to 50.',
-  { search: z.string().optional() },
+  { search: Line.optional() },
   ({ search }) => ['GET', `/accounts${query({ search })}`],
   read,
 )
@@ -114,15 +129,19 @@ tool(
   `${NOT_UNDONE}makes an account that can't be taken back, with no password, for a person who signs in to it with the email link or Google. Refused for an address that has an account. Nothing is sent until they sign in. Only when a person asks for it.`,
   {
     email: z.email(),
-    name: z.string().optional().describe('What to call them; their address’s name if left out'),
+    name: Line.optional().describe('What to call them; their address’s name if left out'),
+    confirm: Line.describe('The same address again, to confirm'),
   },
-  ({ email, name }) => ['POST', '/accounts', { email, ...(name ? { name } : {}) }],
+  ({ email, name, confirm }) => {
+    if (confirm !== email) throw new Error('Not done: confirm is not the same address.')
+    return ['POST', '/accounts', { email, ...(name ? { name } : {}) }]
+  },
   gone,
 )
 tool(
   'account_set_plan',
   'Comps an account onto a plan without payment, or back to Free.',
-  { account, plan: z.string().describe('plus or free') },
+  { account, plan: Line.describe('plus or free') },
   (a) => ['PUT', `/accounts/${encodeURIComponent(a.account)}/plan`, { plan: a.plan }],
 )
 tool(
@@ -158,11 +177,11 @@ tool(
   'Makes a server for an account, as the website does: plain survival for five unless told.',
   {
     owner: account,
-    name: z.string().min(1),
+    name: Line.min(1),
     playStyle: z.enum(['survival', 'creative']).optional(),
-    template: z.string().optional().describe('A template’s key, to make it from'),
+    template: Line.optional().describe('A template’s key, to make it from'),
     partySize: z.enum(['5', '10', '20', 'more']).optional(),
-    regionKey: z.string().optional(),
+    regionKey: Line.optional(),
   },
   ({ template, ...made }) => [
     'POST',
@@ -185,8 +204,8 @@ tool('server_stop', 'Stops a server; its world is kept.', { serverId }, (a) => [
 tool(
   'server_trash',
   `${NOT_UNDONE}sends a server to the trash, where it can be brought back while its window lasts. Its owner loses it until then.`,
-  { serverId, confirmName: z.string().describe('The server’s name, exactly') },
-  (a) => ['POST', at(a.serverId, '/trash'), { confirmName: a.confirmName }],
+  { serverId, confirm: confirmName },
+  (a) => ['POST', at(a.serverId, '/trash'), { confirmName: a.confirm }],
   gone,
 )
 tool(
@@ -202,8 +221,8 @@ tool('server_rest', 'Puts a stopped server’s world into the archive store now.
 tool(
   'server_purge',
   `${NOT_UNDONE}a server in the trash, gone for good now, world and all. It can't be undone.`,
-  { serverId, confirmName: z.string().describe('The server’s name, exactly') },
-  (a) => ['POST', at(a.serverId, '/purge'), { confirmName: a.confirmName }],
+  { serverId, confirm: confirmName },
+  (a) => ['POST', at(a.serverId, '/purge'), { confirmName: a.confirm }],
   gone,
 )
 
@@ -212,7 +231,7 @@ tool(
 tool(
   'console_send',
   'Sends one command to a running server’s console, and answers with what it said back.',
-  { serverId, command: z.string().min(1).describe('As typed in the console, without the slash') },
+  { serverId, command: ConsoleCommand.describe('One line, as typed in the console, without the slash') },
   (a) => ['POST', at(a.serverId, '/console'), { command: a.command }],
 )
 tool(
@@ -227,41 +246,38 @@ tool(
   'What the identity settings set: the name, the description its page and Browse show, the icon or a picture of its own, and the tags. Each left out stays.',
   {
     serverId,
-    name: z.string().optional(),
+    name: Line.optional(),
     description: z.string().optional().describe('What its page and Browse say about it'),
-    icon: z.string().nullable().optional().describe('One of Cubepals’ icons by key, or null for none'),
+    icon: Line.nullable().optional().describe('One of Cubepals’ icons by key, or null for none'),
     picture: z
       .string()
       .nullable()
       .optional()
       .describe('A 64 by 64 PNG in base64, its own icon; null goes back to the icon'),
-    tags: z.array(z.string()).optional(),
+    tags: z.array(Line).optional(),
   },
   ({ serverId: id, ...identity }) => ['PATCH', at(id, '/identity'), identity],
 )
 tool(
   'server_message_set',
   'Sets the message players see under the server’s name in their server list; it reaches the game at the server’s next start. Its other settings stay.',
-  { serverId, motd: z.string().max(200) },
+  { serverId, motd: Line.max(200) },
   (a) => ['PUT', at(a.serverId, '/message'), { motd: a.motd }],
 )
 tool(
   'server_address_set',
   'Moves a server to a new address; the old one stops working.',
-  { serverId, slug: z.string() },
+  { serverId, slug: Line.min(1) },
   (a) => ['PUT', at(a.serverId, '/address'), { slug: a.slug }],
 )
 
 const change = {
   serverId,
-  add: z.array(z.object({ projectId: z.string(), versionId: z.string().optional() })).optional(),
-  remove: z.array(z.string()).optional().describe('Mod ids, as mods_list gives them'),
-  moveTo: z
-    .string()
-    .optional()
-    .describe(
-      'A newer Minecraft a refused plan offered. Moving a world forward is one-way: only when its owner said so',
-    ),
+  add: z.array(z.object({ projectId: Line.min(1), versionId: Line.optional() })).optional(),
+  remove: z.array(Line).optional().describe('Mod ids, as mods_list gives them'),
+  moveTo: Line.optional().describe(
+    'A newer Minecraft a refused plan offered. Moving a world forward is one-way: only when its owner said so',
+  ),
 }
 tool(
   'mods_list',
@@ -273,7 +289,7 @@ tool(
 tool(
   'mods_search',
   'Finds mods or plugins for a server in the catalog.',
-  { serverId, text: z.string(), offset: z.number().int().min(0).optional() },
+  { serverId, text: Line, offset: z.number().int().min(0).optional() },
   (a) => ['GET', at(a.serverId, `/mods/search${query({ text: a.text, offset: a.offset })}`)],
   read,
 )
@@ -307,7 +323,7 @@ const list = z.enum(['whitelist', 'operator', 'helper'])
 tool(
   'player_add',
   'Puts a player on a server’s whitelist, or makes them an operator or a helper.',
-  { serverId, list, name: z.string() },
+  { serverId, list, name: Line.min(1) },
   (a) => ['POST', at(a.serverId, `/access/${a.list}`), { name: a.name }],
 )
 tool(
@@ -319,8 +335,15 @@ tool(
 tool(
   'player_ban',
   `${NOT_UNDONE}bans a player from a server until pardoned; they are kept out from then on.`,
-  { serverId, name: z.string(), reason: z.string().optional() },
-  (a) => ['POST', at(a.serverId, '/access/ban'), { name: a.name, ...(a.reason ? { reason: a.reason } : {}) }],
+  { serverId, name: Line.min(1), reason: Line.optional(), confirm: confirmName },
+  async (a) => {
+    await confirmServer(a.serverId, a.confirm)
+    return [
+      'POST',
+      at(a.serverId, '/access/ban'),
+      { name: a.name, ...(a.reason ? { reason: a.reason } : {}) },
+    ]
+  },
   gone,
 )
 tool('player_pardon', 'Lifts a player’s ban from a server.', { serverId, player }, (a) => [
@@ -358,14 +381,17 @@ tool('listing_publish', 'Publishes a server to Browse, as its owner does from Sh
 tool(
   'listing_unlist',
   `${NOT_UNDONE}takes a server out of Browse; its page closes to everyone but invited players.`,
-  { serverId },
-  (a) => ['PUT', at(a.serverId, '/listing'), { public: false }],
+  { serverId, confirm: confirmName },
+  async (a) => {
+    await confirmServer(a.serverId, a.confirm)
+    return ['PUT', at(a.serverId, '/listing'), { public: false }]
+  },
   gone,
 )
 tool(
   'official_set',
   'Sets or clears the "Run by Cubepals" mark on a server, with why for the audit log.',
-  { serverId, official: z.boolean(), reason: z.string().min(1) },
+  { serverId, official: z.boolean(), reason: Line.min(1) },
   (a) => ['PUT', at(a.serverId, '/official'), { official: a.official, reason: a.reason }],
 )
 tool(
@@ -378,13 +404,13 @@ tool(
 tool(
   'allowlist_add',
   'Allows a catalog project, by its id or slug, for servers listed in Browse.',
-  { projectId: z.string(), note: z.string().optional() },
+  { projectId: Line.min(1), note: Line.optional() },
   (a) => ['POST', '/allowlist', { projectId: a.projectId, ...(a.note ? { note: a.note } : {}) }],
 )
 tool(
   'allowlist_remove',
   'Disallows a catalog project; servers that run it may leave Browse.',
-  { catalog: z.string(), projectId: z.string() },
+  { catalog: Line.min(1), projectId: Line.min(1) },
   (a) => ['DELETE', `/allowlist/${encodeURIComponent(a.catalog)}/${encodeURIComponent(a.projectId)}`],
 )
 
@@ -399,8 +425,9 @@ tool(
 )
 tool(
   'platform_set',
-  'Sets the platform switches and caps it names; the rest stay. These are for every player at once.',
+  `${NOT_UNDONE}sets the platform switches and caps it names; the rest stay. These are for every player at once.`,
   {
+    confirm: z.literal(PLATFORM).describe(`The word ${PLATFORM}, to confirm a change for every player`),
     provisioningEnabled: z.boolean().optional(),
     startsEnabled: z.boolean().optional(),
     publicListingEnabled: z.boolean().optional(),
@@ -412,7 +439,8 @@ tool(
     maxFreeAccounts: z.number().int().optional(),
     dailySpendLimitCents: z.number().int().optional(),
   },
-  (switches) => ['PATCH', '/platform', switches],
+  ({ confirm: _, ...switches }) => ['PATCH', '/platform', switches],
+  gone,
 )
 tool(
   'fly_suspend_get',
@@ -445,10 +473,10 @@ tool(
   'operations_list',
   'Operations, the newest first, by kind, age, slowness and outcome.',
   {
-    kind: z.string().optional().describe('wake, start, stop and the like'),
-    since: z.string().optional().describe('An ISO moment'),
+    kind: Line.optional().describe('wake, start, stop and the like'),
+    since: Line.optional().describe('An ISO moment'),
     slow: z.number().optional().describe('Slower than this many seconds'),
-    status: z.string().optional().describe('succeeded or failed'),
+    status: Line.optional().describe('succeeded or failed'),
     limit: z.number().int().min(1).max(200).optional(),
   },
   (filters) => ['GET', `/operations${query(filters)}`],
