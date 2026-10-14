@@ -184,24 +184,51 @@ export class AccountService {
   async createTestAccount(actor: Actor, email: string, plan: string): Promise<{ userId: string }> {
     if (actor.kind !== 'admin') throw new NotFound('Account')
     if (!PLANS.has(plan)) throw new AppError('invalid_choice', `There is no ${plan} plan.`)
+    const taken = 'An account has that email already. Mark it as a test account on its page.'
+    return this.#make(actor, email, undefined, { plan, testAccount: true }, 'account.test_created', taken)
+  }
+
+  /**
+   * An account an operator makes for a person, the way a test account is made but on Free and
+   * counted like any other. Nothing is sent: the person signs in with Google or the email link
+   * a password reset sends, which is the sign-in mail anyone gets.
+   */
+  async createAccount(actor: Actor, email: string, name?: string): Promise<{ userId: string }> {
+    if (!runsThePlatform(actor)) throw new NotFound('Account')
+    const made = await this.#make(
+      actor,
+      email,
+      name,
+      {},
+      'account.created',
+      'An account has that email already.',
+    )
+    await this.opened(made.userId)
+    return made
+  }
+
+  async #make(
+    actor: Actor,
+    email: string,
+    name: string | undefined,
+    standing: { plan?: string; testAccount?: boolean },
+    action: string,
+    taken: string,
+  ): Promise<{ userId: string }> {
     const address = email.trim().toLowerCase()
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address))
       throw new AppError('invalid_choice', 'That doesn’t look like an email address.')
     return this.#db.transaction(async (tx) => {
-      const userId = await insertTestUser(tx, address)
-      if (userId === null)
-        throw new AppError(
-          'invalid_choice',
-          'An account has that email already. Mark it as a test account on its page.',
-        )
+      const userId = await insertTestUser(tx, address, name)
+      if (userId === null) throw new AppError('invalid_choice', taken)
       await ensureStanding(tx, userId)
-      await saveStanding(tx, userId, { plan, testAccount: true })
+      await saveStanding(tx, userId, standing)
       await tx.insert(schema.auditLog).values({
         actor: requestedBy(actor),
-        action: 'account.test_created',
+        action,
         subjectType: 'account',
         subjectId: userId,
-        data: { email: address, plan },
+        data: { email: address, ...(standing.plan === undefined ? {} : { plan: standing.plan }) },
       })
       return { userId }
     })

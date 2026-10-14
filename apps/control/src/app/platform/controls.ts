@@ -12,7 +12,7 @@ import {
   loadControls,
   lockCapacity,
 } from '../accounts/persistence.ts'
-import { type Actor, requestedBy } from '../actor.ts'
+import { type Actor, requestedBy, runsThePlatform } from '../actor.ts'
 import type { CatalogSync, CatalogTransition } from '../catalog/sync.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { CatalogUnavailable } from '../ports/catalog.ts'
@@ -53,7 +53,7 @@ export class PlatformControlsService {
   }
 
   async view(actor: Actor): Promise<PlatformControlsView> {
-    if (actor.kind !== 'admin') throw new NotFound('Platform')
+    if (!runsThePlatform(actor)) throw new NotFound('Platform')
     const controls = await loadControls(this.#db)
     const changed = await controlsChangedBy(this.#db)
     const heard = await this.#catalog.lastHeard()
@@ -115,7 +115,7 @@ export class PlatformControlsService {
    * a stale alert and apply what changed meanwhile. A catalog still down refuses it.
    */
   async refreshCatalog(actor: Actor): Promise<{ changed: number }> {
-    if (actor.kind !== 'admin') throw new NotFound('Platform')
+    if (!runsThePlatform(actor)) throw new NotFound('Platform')
     const transitions = await this.#refresh().catch((error: unknown) => {
       if (error instanceof CatalogUnavailable)
         throw new AppError('catalog_unavailable', "The mod catalog isn't answering yet. Nothing changed.")
@@ -132,7 +132,7 @@ export class PlatformControlsService {
   }
 
   async set(actor: Actor, next: PlatformControls): Promise<void> {
-    if (actor.kind !== 'admin') throw new NotFound('Platform')
+    if (!runsThePlatform(actor)) throw new NotFound('Platform')
     if (this.#serverCeiling !== null && next.maxServers > this.#serverCeiling)
       throw new AppError(
         'invalid_choice',

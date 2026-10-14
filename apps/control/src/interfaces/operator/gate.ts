@@ -11,8 +11,8 @@ import { AppError, NotFound } from '../../app/errors.ts'
 /**
  * What every operators' API on the internal listener shares (`runtimes.ts`, `ops.ts`): the
  * OPERATOR_TOKEN bearer, compared in constant time; errors as the JSON the operator CLIs read
- * (`scripts/lib/operator-cli.ts`); and the operator the `x-operator` header names, who the audit
- * log says acted. What each API offers is its own.
+ * (`scripts/lib/operator-cli.ts`); the operator the `x-operator` header names, who the audit
+ * log says acted; and a request's JSON body. What each API offers is its own.
  */
 export function gate(app: Hono, base: string, token: string): void {
   const expected = Buffer.from(`Bearer ${token}`)
@@ -32,8 +32,16 @@ export function gate(app: Hono, base: string, token: string): void {
   })
 }
 
+/** Where the accounts, servers and platform operators reach live (`ops.ts`). */
+export const OPS_BASE = '/ops/v1'
+
 /** The operator a request names in `x-operator`; a request that names nobody is `unnamed`'s. */
 export const operatorOf = (c: { req: { header: (name: string) => string | undefined } }): OperatorActor => ({
   kind: 'operator',
   name: (c.req.header('x-operator') ?? 'unnamed').slice(0, 64),
 })
+
+type Context = Parameters<typeof operatorOf>[0] & { req: { json: () => Promise<unknown> } }
+
+/** A request's JSON body; none is an empty one. */
+export const bodyOf = async (c: Context) => (await c.req.json().catch(() => ({}))) ?? {}

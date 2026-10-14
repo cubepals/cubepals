@@ -4,9 +4,11 @@
 
 /**
  * Accounts and their servers, acted on from the command line, on the internal listener with the
- * operator token (docs/production.md): an account found and read, its plan and limits set, and a
- * server made for it, started, stopped, sent to the trash and taken back out, rested in the archive
- * store now, or purged now. `scripts/ops.ts` is its command line, and `scripts/production-check.ts`
+ * operator token (docs/production.md): an account found, read, or made for a person, its plan and
+ * limits set, and a server made for it, started, stopped, sent to the trash and taken back out,
+ * rested in the archive store now, or purged now. What an owner does on a server's own pages is
+ * `server-pages.ts`'s; Browse and its allowlist are `listings.ts`'s; the admins' platform switches
+ * are `platform.ts`'s. All of it is under `/ops/v1`. `scripts/ops.ts` is its command line, and `scripts/production-check.ts`
  * runs a server's whole life through it. Production's health reads as the admin Health page
  * reads it (`app/platform/health.ts`): `/health`, `/operations` and one operation's steps. Every
  * route goes through the services the web app's own routes use, as the operator the `x-operator`
@@ -14,7 +16,12 @@
  * `infra/fleet/operator-api.ts`'s.
  */
 import { randomUUID } from 'node:crypto'
-import { CreateServerInput, HealthOperationsInput, PartySize } from '@blockly/contracts'
+import {
+  CreateServerInput,
+  CreateTestAccountInput,
+  HealthOperationsInput,
+  PartySize,
+} from '@blockly/contracts'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { AccountDetail, AccountQueries } from '../../app/accounts/queries.ts'
@@ -25,23 +32,30 @@ import type { PlatformHealth } from '../../app/platform/health.ts'
 import type { ServerQueries } from '../../app/servers/queries.ts'
 import type { MinecraftServerService } from '../../app/servers/service.ts'
 import type { UpkeepNow } from '../../app/servers/upkeep-now.ts'
-import { gate, operatorOf } from './gate.ts'
+import { bodyOf, gate, OPS_BASE, operatorOf } from './gate.ts'
+import { type ListingsOptions, listingRoutes } from './listings.ts'
+import { type PlatformOptions, platformRoutes } from './platform.ts'
+import { type ServerPagesOptions, serverPageRoutes } from './server-pages.ts'
 
-const OPS_BASE = '/ops/v1'
-
-export interface OpsApiOptions {
-  accounts: Pick<AccountService, 'setPlan' | 'setLimits'>
-  accountQueries: Pick<AccountQueries, 'list' | 'get'>
-  servers: Pick<MinecraftServerService, 'createFor' | 'start' | 'stop' | 'deleteServer' | 'undeleteServer'>
-  queries: Pick<ServerQueries, 'get'>
-  upkeep: Pick<UpkeepNow, 'rest' | 'purge'>
-  health: Pick<PlatformHealth, 'view' | 'operations' | 'operation'>
-  token: string
-}
+export type OpsApiOptions = ServerPagesOptions &
+  ListingsOptions &
+  PlatformOptions & {
+    accounts: Pick<AccountService, 'setPlan' | 'setLimits' | 'createAccount'>
+    accountQueries: Pick<AccountQueries, 'list' | 'get'>
+    servers: Pick<MinecraftServerService, 'createFor' | 'start' | 'stop' | 'deleteServer' | 'undeleteServer'>
+    queries: Pick<ServerQueries, 'get'>
+    upkeep: Pick<UpkeepNow, 'rest' | 'purge'>
+    health: Pick<PlatformHealth, 'view' | 'operations' | 'operation'>
+    token: string
+  }
 
 const ACCOUNT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const PlanBody = z.object({ plan: z.string().min(1) })
+/** A person's address, and what to call them; named after the address unless told. */
+const AccountBody = CreateTestAccountInput.pick({ email: true }).extend({
+  name: z.string().trim().min(1).max(100).optional(),
+})
 const LimitsBody = z.object({
   maxServers: z.number().int().nullable(),
   maxRunning: z.number().int().nullable(),
@@ -55,11 +69,6 @@ const CreateBody = CreateServerInput.omit({ idempotencyKey: true, partySize: tru
 })
 const RequestBody = z.object({ requestId: z.uuid().optional() })
 const ConfirmBody = z.object({ confirmName: z.string().min(1) })
-
-type Context = Parameters<typeof operatorOf>[0] & { req: { json: () => Promise<unknown> } }
-
-/** A request's JSON body; none is an empty one. */
-const bodyOf = async (c: Context) => (await c.req.json().catch(() => ({}))) ?? {}
 
 /** An account as an operator reads it: who, standing, plan, limits, servers and what was done to it. */
 const accountView = ({ standing, ...account }: AccountDetail) => ({
@@ -89,6 +98,9 @@ export function createOpsApi(options: OpsApiOptions): Hono {
   gate(app, OPS_BASE, options.token)
   accountRoutes(app, options)
   serverRoutes(app, options)
+  serverPageRoutes(app, options)
+  listingRoutes(app, options)
+  platformRoutes(app, options)
   healthRoutes(app, options)
   return app
 }
@@ -123,6 +135,13 @@ function accountRoutes(app: Hono, { accounts, accountQueries }: OpsApiOptions): 
         plan: standing.plan,
       })),
     })
+  })
+  // An account with no password, for a person who signs in to it with the email link or Google.
+  app.post(`${OPS_BASE}/accounts`, async (c) => {
+    const operator = operatorOf(c)
+    const { email, name } = AccountBody.parse(await bodyOf(c))
+    const { userId } = await accounts.createAccount(operator, email, name)
+    return c.json(accountView(await accountQueries.get(operator, userId)), 201)
   })
   app.get(`${OPS_BASE}/accounts/:account`, async (c) =>
     c.json(accountView(await accountOf(accountQueries, operatorOf(c), c.req.param('account')))),

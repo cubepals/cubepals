@@ -14,7 +14,7 @@ import { type Db, schema } from '@blockly/db'
 import { inArray } from 'drizzle-orm'
 import { formatJoinAddress } from '../../minecraft/address.ts'
 import { loadControls } from '../accounts/persistence.ts'
-import { type Actor, authorize } from '../actor.ts'
+import { type Actor, authorize, runsThePlatform } from '../actor.ts'
 import { NotFound } from '../errors.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import { findServer, loadRevision } from '../servers/persistence.ts'
@@ -148,7 +148,7 @@ export class ListingQueries {
   }
 
   async allowlist(actor: Actor): Promise<TrustedProjectView[]> {
-    if (actor.kind !== 'admin') throw new NotFound('Allowlist')
+    if (!runsThePlatform(actor)) throw new NotFound('Allowlist')
     return (await allowlist(this.#db)).map((p) => ({ ...p, createdAt: p.createdAt.toISOString() }))
   }
 

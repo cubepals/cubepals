@@ -5,7 +5,7 @@
 /**
  * Accounts Cubepals uses to test itself: made by an admin only, confirmed and on the plan picked
  * with no password and no payment, audited, and left out of the business's numbers, the billing
- * provider and analytics.
+ * provider and analytics. An operator makes an account for a person the same way, as an ordinary one.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -121,6 +121,34 @@ describe.skipIf(!hasDatabase)('test accounts', () => {
       { actor: `admin:${admin.userId}` },
     ])
     expect(await audited(person.userId, 'account.test_unmarked')).toHaveLength(1)
+  })
+})
+
+describe.skipIf(!hasDatabase)('accounts an operator makes for a person', () => {
+  test('confirmed, with no password, on Free, counted, audited, and nothing sent', async () => {
+    const ada = { kind: 'operator' as const, name: 'ada' }
+    await expect(h.app.accounts.createAccount(await h.user(), 'kid@example.test')).rejects.toThrow(
+      'not found',
+    )
+    const before = await countFreeAccounts(h.db)
+    const { userId } = await h.app.accounts.createAccount(ada, ' Kid@Example.test ', 'Kid')
+    const [user] = await h.db.select().from(schema.users).where(eq(schema.users.id, userId))
+    expect(user).toMatchObject({ email: 'kid@example.test', name: 'Kid', emailVerified: true })
+    const ways = await h.db.select().from(schema.authAccounts).where(eq(schema.authAccounts.userId, userId))
+    expect(ways).toHaveLength(0)
+    expect(await loadStanding(h.db, userId)).toMatchObject({
+      plan: 'free',
+      testAccount: false,
+      status: 'active',
+    })
+    expect(await countFreeAccounts(h.db)).toBe(before + 1)
+    expect(await audited(userId, 'account.created')).toMatchObject([
+      { actor: 'operator:ada', data: { email: 'kid@example.test' } },
+    ])
+    expect(h.mail.to('kid@example.test')).toEqual([])
+    await expect(h.app.accounts.createAccount(ada, 'KID@example.test')).rejects.toThrow(
+      'has that email already',
+    )
   })
 })
 

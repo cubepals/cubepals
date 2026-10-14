@@ -684,12 +684,13 @@ async function main(): Promise<void> {
   if (config.roles.includes('api')) {
     const auth = betterAuthenticator(authOptions(config, db, app))
     keepInboxes(app)
+    const services = apiServices(app, tickets, capabilities, config, db, suspend, events)
     const api = createApiApp({
       auth,
       methods: authMethods(config),
       addresses: { proxySecret: config.auth.proxySecret, hostHeader: config.auth.hostAddressHeader },
       origins: [config.web.canonicalOrigin, ...config.web.trustedOrigins],
-      services: apiServices(app, tickets, capabilities, config, db, suspend, events),
+      services,
     })
     // Game runtimes fetch their jars from the same public listener, under /runtime (§15.2).
     api.route('/', createRuntimeApp({ artifacts: app.artifacts }))
@@ -704,9 +705,8 @@ async function main(): Promise<void> {
     await app.waiter.start()
     const internal = createInternalApp({ edge: app.edge, token: config.edge.token })
     // Operators' APIs, beside the edge's, on the internal listener only: where servers run, and
-    // accounts and their servers.
-    if (config.operatorToken !== null)
-      internal.route('/', operatorApis(app, new PlatformHealth({ db }), config.operatorToken))
+    // accounts, their servers and the platform.
+    if (config.operatorToken !== null) internal.route('/', operatorApis(app, services, config.operatorToken))
     await serveFleet(provider, { config, db, internal, stops, app })
     const internalServer = serve({
       fetch: internal.fetch,

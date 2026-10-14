@@ -226,10 +226,11 @@ export async function ensureStanding(q: Queryable, userId: string): Promise<void
 // ─── Test accounts ──────────────────────────────────────────────────────────────────────────
 
 /**
- * A user an admin makes for testing, its email confirmed and no password set: whoever holds the
- * inbox signs in with Google, or sets a password through a reset. Null when the email is taken.
+ * A user made outside sign-up, for testing or by an operator for a person, its email confirmed and
+ * no password set: whoever holds the inbox signs in with Google, or sets a password through a
+ * reset. Named as given, or after its address. Null when the email is taken.
  */
-export async function insertTestUser(tx: Tx, email: string): Promise<string | null> {
+export async function insertTestUser(tx: Tx, email: string, name?: string): Promise<string | null> {
   const address = email.trim().toLowerCase()
   const users = schema.users
   const [taken] = await tx
@@ -241,7 +242,7 @@ export async function insertTestUser(tx: Tx, email: string): Promise<string | nu
     .insert(users)
     .values({
       id: crypto.randomUUID(),
-      name: address.split('@')[0] ?? '',
+      name: name?.trim() || (address.split('@')[0] ?? ''),
       email: address,
       emailVerified: true,
     })

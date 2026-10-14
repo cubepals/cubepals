@@ -7,7 +7,7 @@ import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { copying, eligibility, trust } from '../../domain/listing/trust.ts'
 import { catalogOfId } from '../../domain/mods/catalog.ts'
 import { emailOf, loadStanding } from '../accounts/persistence.ts'
-import { type Actor, authorize, requestedBy } from '../actor.ts'
+import { type Actor, authorize, requestedBy, runsThePlatform } from '../actor.ts'
 import type { CatalogSync, CatalogTransition } from '../catalog/sync.ts'
 import { listingRemoved } from '../emails/servers.ts'
 import { AppError, NotFound } from '../errors.ts'
@@ -173,7 +173,7 @@ export class ListingService {
    * and reports apply to it as to any other.
    */
   async markOfficial(actor: Actor, serverId: string, official: boolean, reason: string): Promise<void> {
-    if (actor.kind !== 'admin') throw new NotFound('Listing')
+    if (!runsThePlatform(actor)) throw new NotFound('Listing')
     const why = reason.trim()
     if (why.length === 0) throw new AppError('invalid_choice', 'Say why.')
     await this.#db.transaction(async (tx) => {
@@ -202,7 +202,7 @@ export class ListingService {
    * seen now is recorded and the project joins the tracked set.
    */
   async trustProject(actor: Actor, idOrSlug: string, note: string | null): Promise<void> {
-    if (actor.kind !== 'admin') throw new NotFound('Allowlist')
+    if (!runsThePlatform(actor)) throw new NotFound('Allowlist')
     let project: Awaited<ReturnType<ModCatalog['project']>>
     try {
       project = await this.#catalog.project(idOrSlug.trim())
@@ -233,7 +233,7 @@ export class ListingService {
   }
 
   async untrustProject(actor: Actor, catalog: string, projectId: string): Promise<void> {
-    if (actor.kind !== 'admin') throw new NotFound('Allowlist')
+    if (!runsThePlatform(actor)) throw new NotFound('Allowlist')
     await this.#db.transaction(async (tx) => {
       await untrustProject(tx, catalog, projectId)
       await this.#audit(tx, actor, 'allowlist.removed', `${catalog}:${projectId}`, {}, 'project')

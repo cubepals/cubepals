@@ -12,7 +12,7 @@
 import type { FlySuspendView } from '@blockly/contracts'
 import { type Db, schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
-import { type Actor, requestedBy } from '../actor.ts'
+import { type Actor, requestedBy, runsThePlatform } from '../actor.ts'
 import { AppError, NotFound } from '../errors.ts'
 
 /** How long an answer is kept: another process sees a change at its next sleep after this. */
@@ -53,7 +53,7 @@ export class SuspendSwitch {
 
   /** The switch as the platform page shows it; null where this deployment runs no Fly runtime. */
   async view(actor: Actor): Promise<FlySuspendView | null> {
-    if (actor.kind !== 'admin') throw new NotFound('Platform')
+    if (!runsThePlatform(actor)) throw new NotFound('Platform')
     if (this.#fallback === null) return null
     const stored = await this.#stored()
     return {
@@ -65,7 +65,7 @@ export class SuspendSwitch {
 
   /** On or off, or null to leave it to FLY_SUSPEND again; audited with what it was before. */
   async set(actor: Actor, on: boolean | null): Promise<void> {
-    if (actor.kind !== 'admin') throw new NotFound('Platform')
+    if (!runsThePlatform(actor)) throw new NotFound('Platform')
     if (this.#fallback === null)
       throw new AppError('invalid_choice', 'This deployment runs no servers on Fly.')
     await this.#db.transaction(async (tx) => {
