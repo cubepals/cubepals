@@ -346,7 +346,7 @@ export interface Environment {
   fly_org: string
   fly_machine_limit: number
   settings: Record<string, string>
-  web: { worker: string; repository: string; indexable?: boolean }
+  web: { worker: string; repository: string; indexable?: boolean; beta?: boolean }
 }
 
 export function environment(file = ENVIRONMENT_FILE): Environment {

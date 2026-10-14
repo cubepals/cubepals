@@ -28,6 +28,7 @@ export function productionSite(values: Record<string, string>, environment: Envi
     canonicalOrigin: settings.WEB_CANONICAL_ORIGIN ?? '',
     deploymentId: settings.DEPLOYMENT_ID ?? '',
     indexable: environment.web.indexable === true,
+    beta: environment.web.beta !== false,
     proxySecret: values.WEB_PROXY_SECRET ?? '',
     posthogToken: settings.POSTHOG_TOKEN || undefined,
     sourceMaps,
