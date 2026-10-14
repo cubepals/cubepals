@@ -2,12 +2,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * A server's own icon end to end: kept when its owner gives it, handed to the server at its next
+ * start with the server's own token, drawn by pages, and never found under another server.
+ */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { ownIconPath } from '@blockly/contracts'
 import { PNG } from 'pngjs'
-import { ownIcon } from '../../interfaces/trpc/own-icon.ts'
+import { ServerIcons } from '../../app/server-icons/service.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
-import { ServerIcons } from './service.ts'
+import { ownIcon } from '../trpc/own-icon.ts'
 
 /** A 64 square picture, one colour, as the page sends it. */
 const picture = (red: number) => {
@@ -16,10 +20,6 @@ const picture = (red: number) => {
   return ownIcon(PNG.sync.write(png))
 }
 
-/**
- * A server's own icon end to end: kept when its owner gives it, handed to the server at its next
- * start with the server's own token, drawn by pages, and never found under another server.
- */
 describe.skipIf(!hasDatabase)('a server’s own icon', () => {
   let h: Harness
   let icons: ServerIcons
@@ -52,7 +52,7 @@ describe.skipIf(!hasDatabase)('a server’s own icon', () => {
     const fetched = await fetch(link)
     expect(fetched.status).toBe(200)
     expect(fetched.headers.get('content-type')).toBe('image/png')
-    expect(Buffer.from(await fetched.arrayBuffer())).toEqual(own.png)
+    expect(Buffer.compare(Buffer.from(await fetched.arrayBuffer()), own.png)).toBe(0)
     expect(await icons.forPage(id, own.sha256)).toEqual(own.png)
   }, 40_000)
 

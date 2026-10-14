@@ -11,8 +11,12 @@ const COVERS = [
   '/imagery/cover-island.jpg',
 ] as const
 
-/** A server's own picture as the pages draw it: the one its owner picked, or Blockly's. */
-export const iconSrc = (icon: string | null): string => `/server-icons/${icon ?? BLOCKLY_ICON}.svg`
+/**
+ * A server's own picture as the pages draw it: the one its owner gave it, or the one they picked,
+ * or Blockly's.
+ */
+export const iconSrc = (icon: string | null, ownIcon: string | null = null): string =>
+  ownIcon ?? `/server-icons/${icon ?? BLOCKLY_ICON}.svg`
 
 /** A way to play's picture on the create page: an item, drawn by scripts/play-icons.py. */
 export const playIconSrc = (icon: PlayIcon): string => `/play-icons/${icon}.svg`

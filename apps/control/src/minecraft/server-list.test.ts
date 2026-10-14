@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test'
-import { MOTD_DEFAULT_COLOUR, motdForGame, motdRuns, motdText } from './server-list.ts'
+import { MOTD_DEFAULT_COLOUR, motdForGame, motdRuns, motdText } from '@blockly/contracts/server-list'
 
 describe('the server list message', () => {
   test('takes & codes as the game takes the section sign, and leaves any other & alone', () => {
