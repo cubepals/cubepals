@@ -138,5 +138,7 @@ export const serverPlayers = pgTable(
     primaryKey({ columns: [t.serverId, t.playerUuid] }),
     // Which other servers a server's players played on.
     index('server_players_player').on(t.playerUuid),
+    // The servers someone was seen on in the last day, which free-play links read every few minutes.
+    index('server_players_confirmed').on(t.confirmedAt),
   ],
 )
