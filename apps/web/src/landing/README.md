@@ -33,8 +33,12 @@ whole way; the camera flies it in three dimensions. A gauge reads the depth as M
 
 | | |
 |---|---|
-| `app/page.tsx` | The page: which beats, in which order, and each beat's proof |
-| `landing/film/` | The film: `Beat` (a screen with a shot and a caption) and `useBeat` (its cues, played on arrival on a clock that scrolling hurries, `clock.ts`), `Proof` (the section opened over a beat), `Film.tsx` (every beat, and what each tells the stage) |
+| `app/page.tsx` | The page at `/`: the film and the phone's page, for the screen to choose between |
+| `app/phone/page.tsx` | The page a phone is sent at `/` (`next.config.ts`): the phone's page alone |
+| `landing/Landing.tsx` | What both routes share: the title, what the page reads, and the frame (the foot, the marks, the structured data) |
+| `landing/Layouts.tsx` | Which form a screen gets, by width, before anything runs and after |
+| `landing/film/` | The film: `FilmPage.tsx` (which beats, in which order, and each beat's proof), `Beat` (a screen with a shot and a caption) and `useBeat` (its cues, played on arrival on a clock that scrolling hurries, `clock.ts`), `Proof` (the section opened over a beat), `Film.tsx` (every beat, and what each tells the stage), `Nav.tsx` (the header, which the phone's page has too) |
+| `landing/phone/` | The phone's page: `Phone.tsx` (the page), `Still.tsx` and `still.ts` (the two pictures of the chunk, printed once each in a worker, `still.worker.ts`), `agent.ts` (how a phone is told apart) |
 | `landing/landing.css` | The whole look: tones, type, frames, buttons, dither, the gauge, the cursor |
 | `landing/kit.tsx` | `Section`, `Demo`, `Facts`, `Strata`: what a section is built from |
 | `landing/stage.ts` | What the chunk is doing (asleep or awake, who is on the path, which room is lit, whether the pointer is on a block), shared between the canvas, the cursor and the demonstrations |
@@ -113,9 +117,7 @@ run at the same pace, up to eight times their own); scrolling up plays it backwa
 saying again how things stood, and leaves it once it is back at its start. Once it has
 finished a push rides to the next, the small arrow at the foot of the screen giving as the push
 is given, and the camera flies with it. A section taller than the screen (the plans) scrolls freely inside itself first. What
-scrolls by itself (an open proof) is left alone (`data-lenis-prevent`). A finger on a phone
-scrolls as the phone does: there the picture is a band pinned to the top and each beat is a
-screen under it.
+scrolls by itself (an open proof) is left alone (`data-lenis-prevent`).
 
 ## The camera
 
@@ -254,5 +256,30 @@ none of this, and a field you type in keeps the device's own cursor.
 With no WebGL 2 the canvas and the gauge are gone and the page is the same page: the words, the
 demonstrations and the sky that turns from night to day when someone joins. The scenes that hold
 the screen for the drawing become plain sections, and the one that is nothing without it (the
-other worlds) is left out. On a narrow screen the chunk is a band pinned to the top, the camera
-works inside the band, and the page scrolls under it.
+other worlds) is left out.
+
+## On a phone
+
+Under 1024 pixels wide the film is not shown at all: a phone gets a page made for it
+(`phone/Phone.tsx`), not the film made small. Every phone is narrower than that whichever way it
+is held, and so is a tablet held upright; a tablet on its side and a computer get the film. It is
+the width the film already changed its shape at.
+
+The page says what the film says, in the film's own words and in the same order, and is short:
+the headline and the button under the night sky, with the house asleep; the address shared and
+the friends joining; the day, with everyone in; what it asks; that it saves the world before it
+stops; the plans; the button again. Between the two places the page sets the button, it follows
+the reader in a bar at the foot of the screen (`Follow`).
+
+The chunk is two still pictures, printed once each by the film's own renderer in a worker
+(`phone/still.ts`), after the page has loaded and as each comes near the screen: nothing is held,
+pinned, scrubbed or played by the scroll, and nothing is left drawing. Until a picture is printed,
+and on a device that can't print it, its frame is its own ground. A phone turned on its side gets
+the pictures printed again at the new width, and the night's beside the words.
+
+A phone is told apart by what its browser says of itself (`phone/agent.ts`) and sent its page
+alone, from another route at the same address, so none of the film's code is loaded. Anything
+else is sent both forms and the width chooses (`Layouts.tsx`); narrow the window and the other
+form takes the place of the one shown. Every mark the funnels count is on the phone's page under
+the same name as in the film: its buttons (`hero_create`, `follow_create`, `plans_create`,
+`last_create`, the header's), the plans', and the beats whose sentences it says.
