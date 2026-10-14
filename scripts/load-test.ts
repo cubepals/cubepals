@@ -10,14 +10,15 @@
  * can't be reached from here.
  *
  *   bun scripts/load-test.ts [--people 50] [--ramp 120] [--plan free|plus|mix] [--play 5]
- *                            [--idle 1] [--out local/load-test/<run>]
+ *                            [--idle 1] [--players 3-10] [--out local/load-test/<run>]
  *   bun scripts/load-test.ts clean     what an earlier run left: its servers purged, its probes gone
  *
  * `--ramp` is the seconds over which people arrive, `--play` the minutes they play, `--idle` the
  * minutes an empty server waits before the product puts it to sleep (an account's own idle time,
  * as the staging check sets it, rather than the plan's). With `--plan mix` every other person is
- * on Plus. Every 15 seconds it prints a line: accounts made, servers making, ready, with players,
- * asleep and failed, the platform's health as the admin health page reads it, the database's
+ * on Plus. `--players a-b` gives each server whose players can play (Plus: Free keeps account
+ * checks on) between a and b headless players; without it, a friend joins every third. Every 15
+ * seconds it prints a line: accounts made, servers making, ready, with players, asleep and failed, the platform's health as the admin health page reads it, the database's
  * connections and the probes' load. At the end every server it made is in the trash and purged,
  * the probes are destroyed, the accounts are kept (they are test-domain accounts), and the report
  * goes to `<out>.json` and `<out>.md` (`lib/load-report.ts`).
@@ -208,13 +209,22 @@ const run = new Date().toISOString().slice(5, 16).replace(/[-T:]/g, '')
 const out = option('out', `local/load-test/${run}`)
 const planOf = (i: number): 'free' | 'plus' =>
   planChoice === 'free' || planChoice === 'plus' ? planChoice : i % 2 === 0 ? 'plus' : 'free'
-// A friend joins every third server, where its players can play.
-const friendOf = (i: number) => i % 3 === 2 && planOf(i) === 'plus'
-const headless = Array.from({ length: count }, (_, i) => (friendOf(i) ? 2 : 1)).reduce((a, b) => a + b, 0)
+// Headless players on each server where they can play: `--players a-b` gives each between a and
+// b, the same for the same server in every run; without it, a friend joins every third.
+const range = /^(\d+)-(\d+)$/.exec(option('players', ''))
+const playersOf = (i: number) => {
+  if (planOf(i) === 'free') return 1
+  if (range === null) return i % 3 === 2 ? 2 : 1
+  const [least, most] = [Number(range[1]), Number(range[2])]
+  return least + ((i * 7 + 3) % (most - least + 1))
+}
+const headless = Array.from({ length: count }, (_, i) => playersOf(i)).reduce((a, b) => a + b, 0)
 const probeApp = `${PROBE_PREFIX}${run}`
 const started = Date.now()
 
-say(`load test ${run}: ${count} people (${planChoice}) over ${rampS}s, ${playMinutes} min of play, at ${WEB}`)
+say(
+  `load test ${run}: ${count} people (${planChoice}), ${option('players', 'a friend on every third')} players a server, over ${rampS}s, ${playMinutes} min of play, at ${WEB}`,
+)
 tunnel(18025, MAIL_PORT, 'bly-staging-mail')
 const probeCount = Math.ceil(headless / PLAYERS_PER_PROBE)
 say(`${probeCount} probes for ${headless} headless players, in ${probeApp}`)
@@ -246,6 +256,8 @@ const playerRun = {
     )
   },
 }
+// Each server's players spread over the probes, one after another, so none holds more than its share.
+let seat = 0
 const players = Array.from(
   { length: count },
   (_, i) =>
@@ -253,8 +265,7 @@ const players = Array.from(
       i,
       planOf(i),
       playerRun,
-      probes[i % probes.length] as Probe,
-      friendOf(i) ? (probes[(i + 1) % probes.length] as Probe) : null,
+      Array.from({ length: playersOf(i) }, () => probes[seat++ % probes.length] as Probe),
     ),
 )
 

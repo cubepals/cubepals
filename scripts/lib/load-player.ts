@@ -6,7 +6,7 @@
  * One virtual player of the load test, start to end, through the same public paths the website
  * uses: signs up and confirms through the mail catcher, is put on its plan, makes a server of a
  * template picked the way players spread, opens it to its headless players, plays a few minutes
- * (with a friend on every third server), leaves it to sleep and wakes it with a join, stops and
+ * (as many headless players as the run gives it, each its own), leaves it to sleep and wakes it with a join, stops and
  * starts it from the website and joins again, makes a second server where its plan allows, and
  * puts what it made in the trash.
  *
@@ -106,15 +106,21 @@ export class Player {
   #plan: 'free' | 'plus'
   readonly index: number
   readonly run: Run
-  readonly probe: Probe
-  readonly friendProbe: Probe | null
+  /** Where each of its headless players runs, the first the one who made the server. */
+  readonly probes: readonly Probe[]
 
-  constructor(index: number, plan: 'free' | 'plus', run: Run, probe: Probe, friendProbe: Probe | null) {
+  constructor(index: number, plan: 'free' | 'plus', run: Run, probes: readonly Probe[]) {
     this.index = index
     this.#plan = plan
     this.run = run
-    this.probe = probe
-    this.friendProbe = friendProbe
+    this.probes = probes
+  }
+
+  /** The probe its owner plays from. */
+  #own(): Probe {
+    const probe = this.probes[0]
+    if (probe === undefined) throw new Error('a player needs a probe')
+    return probe
   }
 
   get servers(): readonly { id: string; name: string; slug: string }[] {
@@ -226,7 +232,7 @@ export class Player {
   /** A join timed at the probe: in the world where it plays, the server's answer where it can't. */
   #join(name: string, timeoutMs: number) {
     const kind = this.#plays() ? 'join' : 'answer'
-    return this.#job(this.probe, { kind, address: this.#address(), name, version: this.#version, timeoutMs })
+    return this.#job(this.#own(), { kind, address: this.#address(), name, version: this.#version, timeoutMs })
   }
 
   async journey(): Promise<void> {
@@ -274,7 +280,7 @@ export class Player {
         idempotencyKey: this.run.key(),
         name,
         from: { kind: 'template', key: this.#template, ...(gameVersion ? { gameVersion } : {}) },
-        partySize: this.#plan === 'plus' ? '10' : '5',
+        partySize: this.#plan === 'free' ? '5' : this.probes.length > 10 ? '20' : '10',
         regionKey: 'eu',
       })
       this.#servers.push({ id: created.id, name, slug: created.slug })
@@ -295,7 +301,7 @@ export class Player {
    */
   async #spokenVersion(template: string): Promise<string | undefined> {
     if (!this.#plays()) return undefined
-    const spoken = new Set(await this.probe.versions())
+    const spoken = new Set(await this.#own().versions())
     const releases = (await this.#api('servers.setupReleases', { key: template }, 'GET')) as {
       gameVersion: string
       runs: boolean
@@ -306,8 +312,10 @@ export class Player {
   async #middle(): Promise<void> {
     const server = this.#servers[0]
     if (server === undefined) return
-    const friend = this.friendProbe !== null && this.#plays()
-    const names = [`Load${this.index}`, ...(friend ? [`Load${this.index}F`] : [])]
+    // Its owner first, then the friends it plays with: only a server that lets them in has any.
+    const names = (this.#plays() ? this.probes : this.probes.slice(0, 1)).map((_, j) =>
+      j === 0 ? `Load${this.index}` : `Load${this.index}x${j}`,
+    )
     if (this.#plays()) {
       const open = await this.#step('open it to its players (account checks off, whitelist)', async () => {
         const view = await this.#view(server.id)
@@ -345,7 +353,7 @@ export class Player {
         })
       const sessions = names.map((name, i) =>
         this.#step(i === 0 ? 'play' : 'a friend plays', async () => {
-          const probe = i === 0 ? this.probe : (this.friendProbe ?? this.probe)
+          const probe = this.probes[i] ?? this.#own()
           const job = {
             kind: 'play',
             address: this.#address(),
