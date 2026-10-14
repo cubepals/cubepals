@@ -110,6 +110,15 @@ export const platformControls = pgTable(
      * null leaves it to FLY_SUSPEND.
      */
     flySuspend: boolean('fly_suspend'),
+    /**
+     * Creates the platform closed by itself when it found no room (`app/platform/room.ts`): for
+     * free plans only, or for everyone; null while they are open. Apart from
+     * `provisioningEnabled`, the operator's own switch, which reopening never touches.
+     */
+    createsFullFor: text('creates_full_for').$type<'free' | 'everyone'>(),
+    /** What ran out when they closed: `servers`, `running`, `runtimes` or `queue`. */
+    createsFullBecause: text('creates_full_because'),
+    createsFullSince: ts('creates_full_since'),
     updatedBy: text('updated_by'),
     updatedAt: updatedAt(),
   },

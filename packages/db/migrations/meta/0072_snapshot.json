@@ -1,5 +1,5 @@
 {
-  "id": "e2e7907e-7adf-4b68-a541-a305943709e2",
+  "id": "0e787162-7ef7-4bf6-a972-9fa527a29df9",
   "prevId": "c38bf6c9-d924-4d7c-be7f-ad79f0acb528",
   "version": "7",
   "dialect": "postgresql",
@@ -638,6 +638,24 @@
         "fly_suspend": {
           "name": "fly_suspend",
           "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creates_full_for": {
+          "name": "creates_full_for",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creates_full_because": {
+          "name": "creates_full_because",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creates_full_since": {
+          "name": "creates_full_since",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -5861,10 +5879,10 @@
         },
         "accounts": {
           "name": "accounts",
-          "type": "text[]",
+          "type": "uuid[]",
           "primaryKey": false,
           "notNull": true,
-          "default": "'{}'::text[]"
+          "default": "'{}'::uuid[]"
         },
         "regions": {
           "name": "regions",

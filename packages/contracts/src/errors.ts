@@ -16,6 +16,7 @@ export const DENIAL_CODES = [
   'limit_reached',
   'rate_limited',
   'payment_due',
+  'platform_full',
 ] as const
 export type DenialCode = (typeof DENIAL_CODES)[number]
 

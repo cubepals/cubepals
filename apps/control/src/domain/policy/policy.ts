@@ -13,6 +13,7 @@ import {
 } from '../account/entitlements.ts'
 import type { AccountStanding } from '../account/standing.ts'
 import type { MemoryTier } from '../server/size.ts'
+import { fullFor, type RoomFacts, type RoomRules } from './room.ts'
 import { dollars } from './spend.ts'
 
 /**
@@ -30,9 +31,11 @@ export type DenialCode =
   | 'limit_reached'
   | 'rate_limited'
   | 'payment_due'
+  | 'platform_full'
 
 export type Capability =
-  | { kind: 'create_server'; memoryTier: MemoryTier }
+  /** `where`: the place and size it would take, for a runtime's room; absent, its ceiling alone. */
+  | { kind: 'create_server'; memoryTier: MemoryTier; where?: NewServerRoom }
   /**
    * What the server boots, so a server the plan no longer runs waits, intact, rather than starts;
    * and which server, so one with hours chipped in left starts when the month's are used.
@@ -70,6 +73,13 @@ export type Capability =
   | { kind: 'leave_note' }
   | { kind: 'billing' }
 
+/** Where a new server would go and what it would take there. */
+export interface NewServerRoom {
+  regionKey: string
+  memoryMb: number
+  storageGb: number
+}
+
 interface DeploymentSupport {
   archives: boolean
   billing: boolean
@@ -103,6 +113,9 @@ export interface PolicyFacts {
   /** Live servers the account owns, and how many of them are running or on their way. */
   owned: { servers: number; running: number }
   global: { servers: number; running: number }
+  /** For a create: whether a runtime could take it, and how long creates already wait. */
+  room: Pick<RoomFacts, 'runtimes' | 'queuedCreateMs'>
+  roomRules: RoomRules
   createsInLastHour: number
   /**
    * Play this month in meter units (`domain/account/meter.ts`), open runs counted up to now,
@@ -313,22 +326,27 @@ export function evaluate(facts: PolicyFacts, capability: Capability): Decision {
   if (stop !== null) return stop
 
   // 6. Global caps: the platform's own guard against runaway provisioning. A cap, so
-  // `limit_reached` (§15.5: each step its own code); the kill switches are `platform_paused`.
+  // `limit_reached` (§15.5: each step its own code); a new server is admitted by room (`room.ts`).
   if (
-    (capability.kind === 'create_server' || capability.kind === 'undelete_server') &&
+    capability.kind === 'undelete_server' &&
     facts.global.servers >= Math.min(controls.maxServers, facts.serverCeiling ?? Number.POSITIVE_INFINITY)
   )
     return deny('limit_reached', 'Cubepals is full right now. Try again soon.')
-  if (
-    (capability.kind === 'create_server' || capability.kind === 'start_server') &&
-    facts.global.running >= controls.maxRunningServers
-  )
+  if (capability.kind === 'start_server' && facts.global.running >= controls.maxRunningServers)
     return deny('limit_reached', 'Cubepals is busy right now. Try again in a few minutes.')
+  if (capability.kind === 'create_server' && noRoom(facts)) return deny('platform_full', FULL)
 
   return OK
 }
 
 const plural = (n: number) => (n === 1 ? '' : 's')
+
+/** A create refused for room: it is refused before anything is made, so nothing was. */
+export const FULL = 'Cubepals is full right now, so nothing was made. Try again in a few minutes.'
+
+/** Whether a new server has no room, a free one only in its plans' share (`room.ts`). */
+const noRoom = (facts: PolicyFacts): boolean =>
+  fullFor({ ...facts, ...facts.room }, facts.roomRules, facts.entitlements.monthlyPriceCents > 0) !== null
 
 /** What stops a new server for the plan's server count, or its creates an hour. */
 function creating(entitlements: Entitlements, facts: PolicyFacts): Decision | null {

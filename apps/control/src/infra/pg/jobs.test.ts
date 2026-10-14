@@ -5,12 +5,14 @@
 /**
  * A scheduled job sent from outside the control plane, as the staging scripts run a sweep: it
  * reaches the queue's worker through pg-boss itself, and touches no database pg-boss isn't in.
+ * And the order a worker takes server operations in across servers.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
+import { createDb, createPool } from '@blockly/db'
 import pg from 'pg'
 import type { PgBoss } from 'pg-boss'
-import { asLibpq, runScheduledNow, startBoss } from './jobs.ts'
+import { asLibpq, PgBossJobs, runScheduledNow, startBoss } from './jobs.ts'
 
 // Needs a real Postgres: DATABASE_URL=postgres://… bun test
 const base = process.env.DATABASE_URL
@@ -82,5 +84,47 @@ describe.skipIf(!base)('runScheduledNow', () => {
     } finally {
       await empty.drop()
     }
+  }, 10_000)
+})
+
+describe.skipIf(!base)('the order of server operations across servers', () => {
+  let database: Awaited<ReturnType<typeof freshDatabase>>
+  let boss: PgBoss
+  let pool: ReturnType<typeof createPool>
+
+  beforeAll(async () => {
+    database = await freshDatabase()
+    boss = await startBoss(database.url)
+    pool = createPool(database.url)
+  }, 30_000)
+
+  afterAll(async () => {
+    await pool?.end()
+    await boss?.stop({ graceful: false })
+    await database?.drop()
+  })
+
+  test('a paid wake goes first, in either lane, and a new server’s build last', async () => {
+    const jobs = new PgBossJobs(boss)
+    const [create, freeWake, plusWake, freeStop] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()]
+    // Each in a transaction of its own, so each is asked for after the one before.
+    const asked = [
+      { operationId: create, wakes: false, creates: true },
+      { operationId: freeWake, wakes: true },
+      { operationId: plusWake, wakes: true, paid: true },
+      { operationId: freeStop, wakes: false },
+    ]
+    for (const job of asked)
+      await createDb(pool).transaction((tx) =>
+        jobs.enqueue(tx, { ...job, serverId: randomUUID(), retryLimit: 0 }),
+      )
+    const take = async (options: { minPriority?: number }) => {
+      const taken: string[] = []
+      for (const _ of asked) for (const job of await boss.fetch('server-ops', options)) taken.push(job.id)
+      return taken
+    }
+    // The wake lane's floor, as workServerOperations asks: starts and wakes only, the paid one first.
+    expect(await take({ minPriority: 1 })).toEqual([plusWake, freeWake])
+    expect(await take({})).toEqual([freeStop, create])
   }, 10_000)
 })

@@ -20,11 +20,15 @@ const SCHEMA = 'pgboss'
 /** One queue for every server operation: strict FIFO per server, parallel across servers. */
 const SERVER_OPS = 'server-ops'
 /**
- * The priority a start or a wake goes in at: fetched before everything else, and the only work the
- * wake lane takes. Everything else keeps pg-boss's default, 0. Priority orders the heads of the
+ * The priority a start or a wake goes in at: fetched before everything else, and the least the
+ * wake lane takes. Everything else keeps pg-boss's default, 0, but a new server's first build. Priority orders the heads of the
  * servers' queues; it never lets an operation pass one queued before it for the same server.
  */
 const WAKE_PRIORITY = 1
+/** A start or a wake on a paid plan: ahead of other wakes, in either lane. */
+const PAID_WAKE_PRIORITY = 2
+/** A new server's first build: behind everything for the servers people already have. */
+const CREATE_PRIORITY = -1
 /**
  * How often, in seconds, a worker's word that it still holds an operation may go unsaid before
  * the operation counts as cut off: pg-boss's floor. A worker says so every half of it.
@@ -135,7 +139,14 @@ export class PgBossJobs implements JobQueue {
 
   async enqueue(
     tx: Tx,
-    job: { operationId: string; serverId: string; retryLimit: number; wakes: boolean },
+    job: {
+      operationId: string
+      serverId: string
+      retryLimit: number
+      wakes: boolean
+      paid?: boolean
+      creates?: boolean
+    },
   ): Promise<void> {
     await this.#boss.send(
       SERVER_OPS,
@@ -144,7 +155,13 @@ export class PgBossJobs implements JobQueue {
         id: job.operationId,
         singletonKey: job.serverId,
         retryLimit: job.retryLimit,
-        ...(job.wakes ? { priority: WAKE_PRIORITY } : {}),
+        priority: job.wakes
+          ? job.paid
+            ? PAID_WAKE_PRIORITY
+            : WAKE_PRIORITY
+          : job.creates
+            ? CREATE_PRIORITY
+            : 0,
         db: fromDrizzle(tx, sql),
       },
     )
@@ -426,6 +443,8 @@ const CRON: Record<ScheduledJob, string> = {
   // A day's spend against its limit. At the most the platform runs at
   // once, ten minutes between passes is about 35 cents past the limit before it pauses.
   'spend-watchdog': '*/10 * * * *',
+  // Creates closed for want of room open again within a minute of room freeing.
+  'creates-room': '* * * * *',
   'usage-close': '*/10 * * * *',
   // Whose each server is and what it's called, at the provider: a rename shows there within minutes.
   'provider-tags': '*/10 * * * *',

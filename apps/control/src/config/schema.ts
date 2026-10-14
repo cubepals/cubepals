@@ -193,6 +193,16 @@ const AbuseLimits = z
     'ABUSE_LIMITS: extraCeiling.untilRenewed <= extraCeiling.renewed',
   )
 
+/** How room is shared when it runs short (`domain/account/tuning.ts`), from CAPACITY_TUNING: private too. */
+const CapacityTuning = z.strictObject(
+  {
+    freeShare: Share,
+    tightShare: Share,
+    tightIdleMinutes: Count,
+  },
+  { error: 'CAPACITY_TUNING is the deployment’s capacity tuning, as JSON (docs/configuration.md)' },
+)
+
 export const DeploymentConfig = z.object({
   deploymentId: z.string().regex(/^[a-z0-9-]{2,16}$/),
   roles: z.array(z.enum(['api', 'worker', 'realtime'])).min(1),
@@ -379,6 +389,16 @@ export const DeploymentConfig = z.object({
    */
   freeLinkTuning: FreeLinkTuning,
   abuseLimits: AbuseLimits,
+  capacityTuning: CapacityTuning,
+  /**
+   * Room for new servers (`app/platform/room.ts`): the running places and servers new creates
+   * leave for starts and wakes, and how long the oldest create may have waited for a worker
+   * before creates count as full.
+   */
+  room: z.object({
+    wakeReserve: z.number().int().nonnegative(),
+    createWaitSeconds: z.number().int().positive(),
+  }),
 })
 
 export type DeploymentConfig = z.infer<typeof DeploymentConfig>

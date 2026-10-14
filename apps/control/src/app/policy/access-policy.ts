@@ -32,6 +32,7 @@ import { chippedInLeft, meteredMonth } from '../billing/chip-in-meter.ts'
 import { extraPlayNow } from '../billing/persistence.ts'
 import { type DeploymentCapabilities, supportOf } from '../capabilities.ts'
 import { AppError } from '../errors.ts'
+import type { CreateRoom } from '../platform/room.ts'
 
 /** Decisions over the platform's and accounts' counts, taken under the capacity lock. */
 const SPENDS: ReadonlySet<Capability['kind']> = new Set([
@@ -69,12 +70,13 @@ async function freeFacts(
  */
 export class AccessPolicy {
   readonly #caps: DeploymentCapabilities
-  readonly #serverCeiling: number | null
+  /** What admits a new server beside the caps, and closes and reopens creates by itself. */
+  readonly room: CreateRoom
 
-  /** `serverCeiling`: the most servers the provider can hold, when it has a limit (§19.12). */
-  constructor(caps: DeploymentCapabilities, serverCeiling: number | null = null) {
+  /** `room` knows the most servers the provider can hold, when it has a limit (§19.12). */
+  constructor(caps: DeploymentCapabilities, room: CreateRoom) {
     this.#caps = caps
-    this.#serverCeiling = serverCeiling
+    this.room = room
   }
 
   /**
@@ -101,12 +103,14 @@ export class AccessPolicy {
       {
         deployment: supportOf(this.#caps),
         controls: await loadControls(tx),
-        serverCeiling: this.#serverCeiling,
+        serverCeiling: this.room.serverCeiling,
         standing,
         emailVerified: await emailVerified(tx, accountId),
         entitlements,
         owned: await countServers(tx, accountId),
         global: await countServers(tx),
+        room: await this.room.facts(tx, capability, now),
+        roomRules: this.room.rules(),
         createsInLastHour: await createsSince(tx, accountId, new Date(now.getTime() - HOUR_MS)),
         unitsThisMonth: month?.units ?? 0,
         carriedThisMonth: month?.carried ?? 0,

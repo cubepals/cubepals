@@ -3,7 +3,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test'
-import { DEFAULT_ABUSE_LIMITS, DEFAULT_FREE_LINK_TUNING } from '../domain/account/tuning.ts'
+import {
+  DEFAULT_ABUSE_LIMITS,
+  DEFAULT_CAPACITY_TUNING,
+  DEFAULT_FREE_LINK_TUNING,
+} from '../domain/account/tuning.ts'
+import { DEFAULT_ROOM } from '../domain/policy/room.ts'
 import { configFromEnv, loadConfig } from './load.ts'
 import { ConfiguredPlayAddressing } from './play-addressing.ts'
 
@@ -32,6 +37,7 @@ const deployed = { ...env, WEB_CANONICAL_ORIGIN: 'https://blockly.test' }
 const tuned = {
   FREE_LINK_TUNING: JSON.stringify(DEFAULT_FREE_LINK_TUNING),
   ABUSE_LIMITS: JSON.stringify(DEFAULT_ABUSE_LIMITS),
+  CAPACITY_TUNING: JSON.stringify(DEFAULT_CAPACITY_TUNING),
 }
 
 describe('server operations', () => {
@@ -416,6 +422,18 @@ describe('private tuning', () => {
     expect([config.freeLinkTuning, config.abuseLimits]).toEqual([free, abuse])
     expect(loadConfig(env).freeLinkTuning).toEqual(DEFAULT_FREE_LINK_TUNING)
     expect(loadConfig({ ...deployed, DEPLOYMENT_ID: 'staging' }).abuseLimits).toEqual(DEFAULT_ABUSE_LIMITS)
+    const capacity = { ...DEFAULT_CAPACITY_TUNING, tightIdleMinutes: 4 }
+    expect(loadConfig({ ...env, CAPACITY_TUNING: JSON.stringify(capacity) }).capacityTuning).toEqual(capacity)
+    expect(loadConfig(env).capacityTuning).toEqual(DEFAULT_CAPACITY_TUNING)
+  })
+
+  test('the room kept for wakes and the wait creates may have are the defaults unless set', () => {
+    expect(loadConfig(env).room).toEqual(DEFAULT_ROOM)
+    expect(loadConfig({ ...env, WAKE_RESERVE: '0', CREATE_WAIT_SECONDS: '30' }).room).toEqual({
+      wakeReserve: 0,
+      createWaitSeconds: 30,
+    })
+    expect(() => loadConfig({ ...env, WAKE_RESERVE: '-1' })).toThrow(/wakeReserve/)
   })
 
   test('a deployment’s limits from before the invite cap existed take its default', () => {
@@ -427,8 +445,15 @@ describe('private tuning', () => {
 
   test('production refuses to start without it, and any deployment with it wrong', () => {
     const prod = { ...deployed, DEPLOYMENT_ID: 'prod' }
-    expect(() => loadConfig({ ...prod, ABUSE_LIMITS: tuned.ABUSE_LIMITS })).toThrow(/FREE_LINK_TUNING/)
-    expect(() => loadConfig({ ...prod, FREE_LINK_TUNING: tuned.FREE_LINK_TUNING })).toThrow(/ABUSE_LIMITS/)
+    const { FREE_LINK_TUNING: _f, ...noLinks } = tuned
+    const { ABUSE_LIMITS: _a, ...noAbuse } = tuned
+    const { CAPACITY_TUNING: _c, ...noCapacity } = tuned
+    expect(() => loadConfig({ ...prod, ...noLinks })).toThrow(/FREE_LINK_TUNING/)
+    expect(() => loadConfig({ ...prod, ...noAbuse })).toThrow(/ABUSE_LIMITS/)
+    expect(() => loadConfig({ ...prod, ...noCapacity })).toThrow(/CAPACITY_TUNING/)
+    expect(() => loadConfig({ ...env, CAPACITY_TUNING: JSON.stringify({ freeShare: 2 }) })).toThrow(
+      /capacityTuning/,
+    )
     expect(() => loadConfig({ ...env, FREE_LINK_TUNING: '{not json' })).toThrow(/FREE_LINK_TUNING/)
     const disordered = { ...free, medium: free.high, high: free.medium }
     expect(() => loadConfig({ ...env, FREE_LINK_TUNING: JSON.stringify(disordered) })).toThrow(

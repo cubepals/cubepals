@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The numbers that tune how free accounts are linked and how far abuse and money can go, as types
- * and their defaults. A deployment's own come from private configuration, FREE_LINK_TUNING and
- * ABUSE_LIMITS (`config/load.ts`), installed at startup (`app/tuning.ts`). The defaults here are
+ * The numbers that tune how free accounts are linked, how far abuse and money can go, and how room
+ * is shared when it runs short, as types and their defaults. A deployment's own come from private
+ * configuration, FREE_LINK_TUNING, ABUSE_LIMITS and CAPACITY_TUNING (`config/load.ts`), installed
+ * at startup (`app/tuning.ts`). The defaults here are
  * round, harmless values for development and tests, not a deployment's. Pure.
  */
 import { DAY_MS, HOUR_S } from '@blockly/contracts/durations'
@@ -53,6 +54,16 @@ export interface AbuseLimits {
   inviteJoinsPerHour: number
 }
 
+/** How room is shared between plans when it runs short (`domain/policy/room.ts`). */
+export interface CapacityTuning {
+  /** The share of the room for new servers that free plans may fill; paid plans create in all of it. */
+  freeShare: number
+  /** The share of the running room past which room is tight. */
+  tightShare: number
+  /** How long a free server nobody is on stays up while room is tight, in minutes. */
+  tightIdleMinutes: number
+}
+
 export const DEFAULT_FREE_LINK_TUNING: FreeLinkTuning = {
   weights: { mainPlayer: 1, inbox: 1, signedUpClose: 0.1, network: 0.1 },
   link: 0.3,
@@ -71,4 +82,11 @@ export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {
   wrongCodesPerHour: 5,
   wakesPerHour: 20,
   inviteJoinsPerHour: 10,
+}
+
+/** Nothing set aside for paid plans, and room never tight short of full. */
+export const DEFAULT_CAPACITY_TUNING: CapacityTuning = {
+  freeShare: 1,
+  tightShare: 1,
+  tightIdleMinutes: 5,
 }

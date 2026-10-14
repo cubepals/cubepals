@@ -3,7 +3,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { API_PORT, INTERNAL_PORT } from '@blockly/contracts/local'
-import { DEFAULT_ABUSE_LIMITS, DEFAULT_FREE_LINK_TUNING } from '../domain/account/tuning.ts'
+import {
+  DEFAULT_ABUSE_LIMITS,
+  DEFAULT_CAPACITY_TUNING,
+  DEFAULT_FREE_LINK_TUNING,
+} from '../domain/account/tuning.ts'
+import { DEFAULT_ROOM } from '../domain/policy/room.ts'
 import { GAME_PORT } from '../minecraft/ports.ts'
 import { isLocalDeployment, localBilling, localNotes, localOnly } from './local.ts'
 import { DeploymentConfig, inconsistencies } from './schema.ts'
@@ -215,8 +220,9 @@ function billingFrom(env: NodeJS.ProcessEnv): { billing: unknown; local: { notes
 }
 
 /**
- * Private tuning, as JSON in one variable (FREE_LINK_TUNING, ABUSE_LIMITS). Production has to set
- * it, so unset there is left for the schema to refuse; elsewhere unset is the harmless default.
+ * Private tuning, as JSON in one variable (FREE_LINK_TUNING, ABUSE_LIMITS, CAPACITY_TUNING).
+ * Production has to set it, so unset there is left for the schema to refuse; elsewhere unset is
+ * the harmless default.
  * JSON that doesn't parse is left as text, which the schema refuses too.
  */
 function privateJson(env: NodeJS.ProcessEnv, name: string, fallback: unknown): unknown {
@@ -226,6 +232,14 @@ function privateJson(env: NodeJS.ProcessEnv, name: string, fallback: unknown): u
     return JSON.parse(value)
   } catch {
     return value
+  }
+}
+
+/** What new servers leave to the ones people have, and how long creates may wait (`DEFAULT_ROOM`). */
+function roomFrom(env: NodeJS.ProcessEnv) {
+  return {
+    wakeReserve: Number(env.WAKE_RESERVE ?? DEFAULT_ROOM.wakeReserve),
+    createWaitSeconds: Number(env.CREATE_WAIT_SECONDS ?? DEFAULT_ROOM.createWaitSeconds),
   }
 }
 
@@ -327,6 +341,8 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
     ...billingFrom(env),
     freeLinkTuning: privateJson(env, 'FREE_LINK_TUNING', DEFAULT_FREE_LINK_TUNING),
     abuseLimits: privateJson(env, 'ABUSE_LIMITS', DEFAULT_ABUSE_LIMITS),
+    capacityTuning: privateJson(env, 'CAPACITY_TUNING', DEFAULT_CAPACITY_TUNING),
+    room: roomFrom(env),
   }
 }
 

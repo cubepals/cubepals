@@ -113,6 +113,7 @@ const HTTP_CODES: Record<AppErrorCode, TRPCError['code']> = {
   limit_reached: 'FORBIDDEN',
   rate_limited: 'TOO_MANY_REQUESTS',
   payment_due: 'FORBIDDEN',
+  platform_full: 'SERVICE_UNAVAILABLE',
   invalid_transition: 'CONFLICT',
   slug_taken: 'CONFLICT',
   slug_invalid: 'BAD_REQUEST',

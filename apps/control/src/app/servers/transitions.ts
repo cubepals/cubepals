@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { Tx } from '@blockly/db'
+import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import {
   type Command,
   decide,
@@ -12,6 +13,7 @@ import {
   transition,
 } from '../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
+import { loadStanding } from '../accounts/persistence.ts'
 import { AppError } from '../errors.ts'
 import { insertOperation, type OperationRecord } from '../operations/persistence.ts'
 import type { EventBus } from '../ports/events.ts'
@@ -136,6 +138,8 @@ export class ServerTransitions {
         serverId: server.id,
         retryLimit: RETRIES[kind],
         wakes: WAKES.has(kind),
+        paid: WAKES.has(kind) && (await paidPlan(tx, server)),
+        creates: kind === 'provision',
       })
       await this.#events.publish(tx, {
         type: 'operation_progress',
@@ -165,4 +169,10 @@ export class ServerTransitions {
     })
     return saved
   }
+}
+
+/** Whether a server's owner is on a paid plan, whose wakes go ahead of other wakes. */
+async function paidPlan(tx: Tx, server: MinecraftServer): Promise<boolean> {
+  const standing = await loadStanding(tx, server.ownerId)
+  return entitlementsFor(standing.plan, standing.limitOverrides).monthlyPriceCents > 0
 }

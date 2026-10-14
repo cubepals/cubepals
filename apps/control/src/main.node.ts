@@ -628,7 +628,8 @@ async function connect(config: DeploymentConfig) {
 
 async function main(): Promise<void> {
   const config = loadConfig()
-  installTuning({ freeLinks: config.freeLinkTuning, abuse: config.abuseLimits })
+  const { freeLinkTuning: freeLinks, abuseLimits: abuse, capacityTuning: capacity } = config
+  installTuning({ freeLinks, abuse, capacity })
   for (const note of config.local?.notes ?? []) console.warn(`local: ${note}`)
   const { pool, db, events, boss } = await connect(config)
   const profiles = new MojangProfiles()
@@ -676,6 +677,7 @@ async function main(): Promise<void> {
       adminInbox: config.mail.adminInbox,
       webOrigin: config.web.canonicalOrigin,
       signupCap: config.local === null,
+      room: config.room,
     },
   )
   // The first admins come from configuration; ones it no longer lists stop being admins.

@@ -78,6 +78,7 @@ import {
   wakePathOf,
 } from '../operations/persistence.ts'
 import type { PackService } from '../packs/service.ts'
+import { idleMinutesFor } from '../platform/room.ts'
 import type { CatalogHit, ModCatalog } from '../ports/catalog.ts'
 import type { PlayAddressing, RegionCatalog } from '../ports/platform.ts'
 import { hasDatapacks, isModded } from '../revisions/caps.ts'
@@ -128,7 +129,6 @@ export class ServerQueries {
     catalog: ModCatalog
     packs: PackService
     curation: PackCuration
-    /** The runtime this deployment runs; what is applied is read from its bindings. */
     /** The runtimes this deployment runs: a binding to another is foreign. */
     providers: readonly string[]
   }) {
@@ -674,7 +674,7 @@ export class ServerQueries {
         sessionStart === null || plan.maxSessionMinutes === null
           ? null
           : new Date(sessionStart.getTime() + plan.maxSessionMinutes * MINUTE_MS).toISOString(),
-      sleepsAt: await this.#sleepsAt(server, online, played, plan.idleShutdownAfterMinutes),
+      sleepsAt: await this.#sleepsAt(server, online, played, await idleMinutesFor(this.#db, plan)),
       playToday: todayView(today, server.memoryTier),
       playTotal: totalView(total, server.memoryTier),
       movesToSize: movesTo === null ? null : { tier: movesTo, label: sizeLabel(movesTo) },

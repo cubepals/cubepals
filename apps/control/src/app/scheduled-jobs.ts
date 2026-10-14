@@ -23,6 +23,7 @@ export function scheduledJobs(
     { job: 'relocations', run: () => app.schedules.relocations(), says: (n) => `moved ${n}` },
     { job: 'presence-sync', run: () => app.schedules.presenceSync() },
     { job: 'idle-check', run: () => app.schedules.idleCheck() },
+    { job: 'creates-room', run: () => app.policy.room.settle() },
     {
       job: 'session-check',
       run: () => app.schedules.sessionCheck(),

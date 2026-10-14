@@ -49,7 +49,8 @@
     "ARCHIVE_S3_SECRET_ACCESS_KEY",
     "CLOUDFLARE_DNS_API_TOKEN",
     "FREE_LINK_TUNING",
-    "ABUSE_LIMITS"
+    "ABUSE_LIMITS",
+    "CAPACITY_TUNING"
   ],
   "optional_secret_names": [
     "POLAR_ACCESS_TOKEN",

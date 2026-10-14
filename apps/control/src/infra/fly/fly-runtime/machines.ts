@@ -12,7 +12,7 @@ import { z } from 'zod'
 import type { ExecResult } from '../../../app/ports/runtime.ts'
 import type { FlyClient, FlySchemas } from '../client.ts'
 import { META } from '../machine-config.ts'
-import { saysClaimed, saysNotYet } from '../refusals.ts'
+import { saysClaimed, saysNotYet, saysReplacing } from '../refusals.ts'
 import { idOf, launched, must, succeeded } from './responses.ts'
 
 type Machine = FlySchemas['Machine']
@@ -25,7 +25,9 @@ const MACHINE_GONE = new Set(['destroyed', 'destroying'])
  * asked to stop while it stops, and one asked to suspend while it writes its memory out; Fly
  * refuses to start it until it has settled: 412, "unable to start machine from current state".
  */
-const SETTLING = new Set(['created', 'replacing', 'stopping', 'suspending'])
+const SETTLING = new Set(['created', 'replacing', 'updating', 'stopping', 'suspending'])
+/** Fly putting an update in place: a new version of the machine made, the old one's run replaced. */
+const REPLACING = new Set(['replacing', 'updating'])
 /** Asleep with its memory kept, or on its way there. */
 const ASLEEP = new Set(['suspending', 'suspended'])
 /** A workload a stop ends: running, on its way up or down, or asleep with its memory kept. */
@@ -48,6 +50,11 @@ const DESTROY_SECONDS = 60
  * the helper is gone (`saysClaimed`), which failed a wake on production.
  */
 const CLAIM_SECONDS = 180
+/**
+ * How long a machine Fly answers for as gone, and lists nowhere either, is looked for before it
+ * counts as gone.
+ */
+const GONE_SECONDS = 30
 
 // The spec says a flat Lease; flyctl reads { status, data: Lease }. Accept either until a live
 // machine settles it (docs/dependency-audit.md).
@@ -68,6 +75,16 @@ export async function minecraftMachine(fly: FlyClient, app: string): Promise<Mac
   )
 }
 
+/** The server's machine on the volume, whatever its id; null if there is none. */
+export async function machineOnVolume(
+  fly: FlyClient,
+  app: string,
+  volumeId: string,
+): Promise<Machine | null> {
+  const machine = await minecraftMachine(fly, app)
+  return machine?.config?.mounts?.some((mount) => mount.volume === volumeId) ? machine : null
+}
+
 export async function readMachine(fly: FlyClient, app: string, machineId: string): Promise<Machine | null> {
   const found = await fly.GET('/v1/apps/{app_name}/machines/{machine_id}', {
     params: { path: { app_name: app, machine_id: machineId } },
@@ -75,6 +92,58 @@ export async function readMachine(fly: FlyClient, app: string, machineId: string
   if (found.response.status === 404) return null
   const machine = must(found, 'reading the machine')
   return MACHINE_GONE.has(machine.state ?? '') ? null : machine
+}
+
+/**
+ * The machine, unless it is gone for good. While Fly replaces a machine's run for an update, it
+ * can answer for the machine as gone, 404 or the replaced version's `destroyed` (staging,
+ * 2026-10-14: an apply read its machine gone mid-replace, and its going back was refused 409
+ * since the replace was still under way). So one read as gone is the one the app lists, while it
+ * lists it, and is looked for again for `GONE_SECONDS` while it lists it nowhere, unless the app
+ * lists another server machine instead.
+ */
+export async function readUnlessGone(
+  fly: FlyClient,
+  app: string,
+  machineId: string,
+): Promise<Machine | null> {
+  const deadline = Date.now() + GONE_SECONDS * 1000
+  for (;;) {
+    const machine = await readMachine(fly, app, machineId)
+    if (machine !== null) return machine
+    const listed = await fly.GET('/v1/apps/{app_name}/machines', { params: { path: { app_name: app } } })
+    if (listed.response.status === 404) return null
+    const live = must(listed, 'listing machines').filter((m) => !MACHINE_GONE.has(m.state ?? ''))
+    const found = live.find((m) => m.id === machineId)
+    if (found !== undefined) return found
+    // Another server machine in its place: this one is gone, replaced by that one.
+    const another = live.some((m) => m.config?.metadata?.[META.role] === 'minecraft')
+    if (another || Date.now() > deadline) return null
+    await sleep(1000)
+  }
+}
+
+/**
+ * The machine once Fly has put an update in place, or null if it is gone. Fly refuses another
+ * update meanwhile (`saysReplacing`), and the machine is neither running nor stopped.
+ */
+export async function afterReplace(
+  fly: FlyClient,
+  app: string,
+  machineId: string,
+  withinSeconds = SETTLE_SECONDS,
+): Promise<Machine | null> {
+  const deadline = Date.now() + withinSeconds * 1000
+  for (;;) {
+    const machine = await readUnlessGone(fly, app, machineId)
+    if (machine === null || !REPLACING.has(machine.state ?? '')) return machine
+    if (Date.now() > deadline) throw new Error('Fly took too long to put the update in place')
+    // A long poll, as `settled`'s: a replace ends with the machine started, or stopped.
+    const waited = await fly.GET('/v1/apps/{app_name}/machines/{machine_id}/wait', {
+      params: { path: { app_name: app, machine_id: machineId }, query: { state: 'started', timeout: 10 } },
+    })
+    if (!waited.response.ok && waited.response.status !== 408) await sleep(1000)
+  }
 }
 
 /**
@@ -138,6 +207,11 @@ async function clearClaim(
   return null
 }
 
+/**
+ * A new config for the machine, under its lease. One Fly refuses because an update before it is
+ * still being put in place is asked again once that one is, the lease held meanwhile, so no other
+ * worker's change comes between.
+ */
 export async function updateMachine(
   fly: FlyClient,
   deployment: string,
@@ -147,9 +221,11 @@ export async function updateMachine(
   secretsVersion: number | undefined,
   skipLaunch: boolean,
 ): Promise<Machine> {
-  return withLease(fly, deployment, app, machineId, async (nonce) =>
-    launched(
-      await fly.POST('/v1/apps/{app_name}/machines/{machine_id}', {
+  return withLease(fly, deployment, app, machineId, async (nonce) => {
+    // Within the lease's life, so the nonce still holds when it is asked again.
+    const deadline = Date.now() + (LEASE_TTL_SECONDS - 30) * 1000
+    for (;;) {
+      const updated = await fly.POST('/v1/apps/{app_name}/machines/{machine_id}', {
         params: { path: { app_name: app, machine_id: machineId } },
         headers: { 'fly-machine-lease-nonce': nonce },
         body: {
@@ -157,10 +233,13 @@ export async function updateMachine(
           skip_launch: skipLaunch,
           ...(secretsVersion === undefined ? {} : { min_secrets_version: secretsVersion }),
         },
-      }),
-      'updating the machine',
-    ),
-  )
+      })
+      const replacing = updated.response.status === 409 && saysReplacing(updated.error)
+      const left = (deadline - Date.now()) / 1000
+      if (!replacing || left <= 0) return launched(updated, 'updating the machine')
+      await afterReplace(fly, app, machineId, left)
+    }
+  })
 }
 
 /**
@@ -250,7 +329,7 @@ export async function startMachine(fly: FlyClient, app: string, machineId: strin
 async function settled(fly: FlyClient, app: string, machineId: string): Promise<Machine | null> {
   const deadline = Date.now() + SETTLE_SECONDS * 1000
   for (;;) {
-    const machine = await readMachine(fly, app, machineId)
+    const machine = await readUnlessGone(fly, app, machineId)
     if (machine === null || !SETTLING.has(machine.state ?? '')) return machine
     if (Date.now() > deadline) throw new Error('Fly took too long to settle the machine')
     // A long poll: answers when it is ready, or 408 after ten seconds. Anything else answers at

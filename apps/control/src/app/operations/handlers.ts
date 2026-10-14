@@ -117,7 +117,7 @@ export function createHandlers(deps: HandlerDeps): OperationHandler[] {
     backups: deps.backups,
   })
 
-  const { rollBack, putBack } = goingBack({
+  const back = goingBack({
     db,
     runtime,
     specs,
@@ -147,7 +147,7 @@ export function createHandlers(deps: HandlerDeps): OperationHandler[] {
     preflight,
     windDown,
     capture,
-    rollBack,
+    rollBack: back.rollBack,
   })
 
   const apply = updating({
@@ -166,8 +166,7 @@ export function createHandlers(deps: HandlerDeps): OperationHandler[] {
     mayBoot,
     consoleTarget,
     capture,
-    rollBack,
-    putBack,
+    ...back,
   })
 
   const { backup, archive } = backingUp({
@@ -199,7 +198,7 @@ export function createHandlers(deps: HandlerDeps): OperationHandler[] {
     preflight,
     windDown,
     capture,
-    putBack,
+    putBack: back.putBack,
   })
 
   const relocate = moving({

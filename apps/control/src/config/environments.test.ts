@@ -5,7 +5,11 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { parse } from 'smol-toml'
-import { DEFAULT_ABUSE_LIMITS, DEFAULT_FREE_LINK_TUNING } from '../domain/account/tuning.ts'
+import {
+  DEFAULT_ABUSE_LIMITS,
+  DEFAULT_CAPACITY_TUNING,
+  DEFAULT_FREE_LINK_TUNING,
+} from '../domain/account/tuning.ts'
 import { serverCeilingOf } from '../infra/fly/fly-runtime.ts'
 import { loadConfig } from './load.ts'
 
@@ -53,6 +57,7 @@ function standIns(names: readonly string[]): Record<string, string> {
     POLAR_WEBHOOK_SECRET: 'whsec_stand-in-for-the-webhook-secret',
     FREE_LINK_TUNING: JSON.stringify(DEFAULT_FREE_LINK_TUNING),
     ABUSE_LIMITS: JSON.stringify(DEFAULT_ABUSE_LIMITS),
+    CAPACITY_TUNING: JSON.stringify(DEFAULT_CAPACITY_TUNING),
   }
   return Object.fromEntries(
     names.map((name) => [name, shaped[name] ?? `stand-in-${name.toLowerCase()}-value`]),

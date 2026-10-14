@@ -66,7 +66,7 @@ yet and keeps the rest. Above each empty value it says where to get it. The same
 | `DUMP_S3_ACCESS_KEY_ID`, `DUMP_S3_SECRET_ACCESS_KEY` | **After the first apply**, the same way: Object Read & Write, `blockly-prod-database-dumps` only | The Database dump workflow only, as secrets of the repository's `production` environment |
 | `ADMIN_EMAILS` | Your own address; sign in with it and you are an admin | Control plane |
 | `ACME_EMAIL`, `ACME_AGREE_TOS` | An address for Let's Encrypt, and `true` once you accept its Subscriber Agreement (letsencrypt.org/repository) | Realtime role |
-| `FREE_LINK_TUNING`, `ABUSE_LIMITS` | The private records: production's own, one line of JSON each ([configuration.md](configuration.md#private-tuning)) | Control plane |
+| `FREE_LINK_TUNING`, `ABUSE_LIMITS`, `CAPACITY_TUNING` | The private records: production's own, one line of JSON each ([configuration.md](configuration.md#private-tuning)) | Control plane |
 
 Optional, and left out at launch: `POLAR_*` ([below](#billing-later)) and
 `AUTH_GITHUB_CLIENT_ID`/`_SECRET` (a GitHub OAuth app, callback

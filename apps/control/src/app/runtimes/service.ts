@@ -2,9 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { type Db, schema, type Tx } from '@blockly/db'
+import { type Db, type Queryable, schema, type Tx } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { PLAN_KEYS } from '../../domain/account/entitlements.ts'
+import type { NewServerRoom } from '../../domain/policy/policy.ts'
 import { AppError, NotFound } from '../errors.ts'
 import type { RegionCatalog } from '../ports/platform.ts'
 import { findServer, loadRuntime } from '../servers/persistence.ts'
@@ -102,6 +103,29 @@ export class RuntimePlacement {
       decidedBy: by,
     })
     return placed
+  }
+
+  /**
+   * Whether a new server could be placed now: on the default runtime, or, with the default at its
+   * provider's limit, on another, as `place` overflows. A runtime counts while it holds fewer than
+   * its ceiling and, when `where` is known, says it has room for it there. Rules aren't weighed:
+   * one that matches falls back to the default when its runtime is full.
+   */
+  async roomFor(q: Queryable, where: NewServerRoom | null): Promise<boolean> {
+    const held = await computeByProvider(q)
+    const takes = async (provider: string) => {
+      const ceiling = this.#runtimes.ceilingOf(provider)
+      if (ceiling !== null && (held.get(provider) ?? 0) >= ceiling) return false
+      if (where === null) return true
+      const size = { memoryMb: where.memoryMb, storageGb: where.storageGb }
+      return this.#runtimes.hasRoom(provider, { regionKey: where.regionKey }, size).catch(() => false)
+    }
+    const ceiling = this.#runtimes.ceilingOf(this.defaultProvider)
+    if (ceiling === null || (held.get(this.defaultProvider) ?? 0) < ceiling)
+      return takes(this.defaultProvider)
+    for (const provider of this.#runtimes.providers)
+      if (provider !== this.defaultProvider && (await takes(provider))) return true
+    return false
   }
 
   /**

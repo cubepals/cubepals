@@ -369,6 +369,8 @@ Entitlements are plan facts only. They never encode what a deployment supports.
 **PlatformControls** (singleton):
 - kill switches `provisioningEnabled`, `startsEnabled`, `publicListingEnabled`, `uploadsEnabled`
 - global caps `maxServers`, `maxRunningServers`
+- creates closed by themselves for want of room (`createsFullFor`, `createsFullBecause`,
+  `createsFullSince`), apart from `provisioningEnabled`, which they never change
 - changed by admins on Admin → Platform (under the capacity lock, audited with each field's
   before and after); the policy reads them on every check, the directory at read time.
 
@@ -974,6 +976,8 @@ waitRunning
   kept and logged for an operator: after a restore from a backup, that is every server made since.
 - `presence-sync`: RCON `list` for running servers every minute.
 - `idle-check`: running servers with no players for longer than `entitlements.idleShutdownAfter` → `stop{idle}`.
+  While running room is tight, a free server's idle time is shorter (`CAPACITY_TUNING`); a paid one's never is.
+- `creates-room`: closes creates by themselves when there is no room, and reopens them once there is.
 - `session-check`: a running server is told in game 10 and 2 minutes before its current run ends,
   each once, then stopped the ordinary way. A run ends where its plan's day of play runs out
   (`dailyUnits`, counted from the owner's local midnight in the time zone their browser reported,
@@ -2090,6 +2094,13 @@ overrides (self-hosting).
 - `AccessPolicy.check(tx, actor, capability)` checks, in order: deployment capability (§15.4)
   → kill switch → standing → restrictions → entitlements (incl. monthly run hours from
   `power_intervals`) → global caps. Each step has its own denial code.
+- A create is admitted last by room (`app/platform/room.ts`): the caps and the runtimes' ceilings
+  less a reserve for starts and wakes, whether a runtime has room for it now, and how long creates
+  already wait for a worker. Free plans fill only a share of it. With no room it is refused
+  (`platform_full`) before anything is written; creates close by themselves and reopen once room
+  frees, each change audited (`platform.creates_closed`, `platform.creates_reopened`).
+- Across servers, a worker takes a wake on a paid plan first, then the rest of the work on
+  servers people have, and a new server's first build last (`servers/transitions.ts`).
 - It runs under an advisory lock in the same transaction as the write, and is re-checked by
   workers.
 - Wake-on-join goes through the same `start`, so it inherits every check.

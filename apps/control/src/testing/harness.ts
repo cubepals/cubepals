@@ -31,6 +31,7 @@ import { type SecretKeyring, singleKey } from '../app/secrets.ts'
 import { findServer } from '../app/servers/persistence.ts'
 import type { CreateServerRequest } from '../app/servers/service.ts'
 import { ConfiguredPlayAddressing, ConfiguredRegionCatalog } from '../config/play-addressing.ts'
+import { DEFAULT_ROOM } from '../domain/policy/room.ts'
 import type { MinecraftServer } from '../domain/server/server.ts'
 import { CurseForgeLinks } from '../infra/curseforge/curseforge-links.ts'
 import { FakeCatalog } from '../infra/fake/fake-catalog.ts'
@@ -150,8 +151,14 @@ export interface HarnessOptions {
   controls?: Partial<typeof schema.platformControls.$inferInsert>
 }
 
-/** The caps the operation tests run under unless they ask otherwise. */
-const TEST_CONTROLS = { maxServers: 40, maxRunningServers: 15 }
+/**
+ * The caps the operation tests run under unless they ask otherwise: creates fill 40 servers and 15
+ * running, above the reserve they leave to starts and wakes.
+ */
+const TEST_CONTROLS = {
+  maxServers: 40 + DEFAULT_ROOM.wakeReserve,
+  maxRunningServers: 15 + DEFAULT_ROOM.wakeReserve,
+}
 
 /**
  * For @hono/node-server's listener: left to its default, it puts its own Response in the global's

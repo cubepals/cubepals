@@ -28,6 +28,11 @@ export interface PlatformControlsView {
   maxFreeAccounts: number
   /** What a day may cost, in US cents, before the spend watchdog pauses starts and creation. */
   dailySpendLimitCents: number
+  /**
+   * Creates the platform closed by itself for want of room, apart from `provisioningEnabled`: for
+   * free plans or everyone, what ran out, and since when. Null while they are open.
+   */
+  createsFull: { for: 'free' | 'everyone'; because: string; since: string } | null
   updatedBy: string | null
   /** Who that is, when it was a person. */
   updatedByEmail: string | null

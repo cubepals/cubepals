@@ -215,10 +215,20 @@ regions nodes enroll into (`RUNTIME_REGION_MAP` may, where the fleet is the defa
 | `POLAR_SERVER` | `sandbox` | `sandbox` | `production` | tf | Named explicitly |
 | `POLAR_PRODUCTS` | optional | op | optional (off at launch) | op | `plus:<product id>`, every paid plan. Production takes it with the two secrets above or none of them ([production.md](production.md#billing-later)) |
 
+### Room for new servers
+
+When there is no room, a create is refused at once rather than queued, and creates close by
+themselves until there is (`apps/control/src/app/platform/room.ts`).
+
+| Variable | Local | Staging | Production | Set by | Notes |
+|---|---|---|---|---|---|
+| `WAKE_RESERVE` | `2` | `2` | `2` | — | Servers and running places new servers leave to the servers people already have, so a start or a wake is never refused because creates filled the room |
+| `CREATE_WAIT_SECONDS` | `60` | `60` | `60` | — | How long the oldest create still waiting for a worker may have waited before creates count as full |
+
 ### Private tuning
 
-Numbers that belong to the business, not the code: how free accounts are linked, and caps on
-abuse and money. Each is one line of JSON in one variable. Production refuses to start without
+Numbers that belong to the business, not the code: how free accounts are linked, caps on
+abuse and money, and how room is shared when it runs short. Each is one line of JSON in one variable. Production refuses to start without
 them; elsewhere unset is a harmless default (`apps/control/src/domain/account/tuning.ts`). Any
 deployment refuses a value that isn't the shape below. The values themselves are kept privately.
 
@@ -226,6 +236,7 @@ deployment refuses a value that isn't the shape below. The values themselves are
 |---|---|---|---|---|---|
 | `FREE_LINK_TUNING` | default | default | secret | secret | `{ "weights": { "mainPlayer", "inbox", "signedUpClose", "network" }, "link", "medium", "high", "signedUpCloseMs", "mainShare", "mainForS", "networkKeptMs" }`: the weights are non-negative; `link`, `medium`, `high` and `mainShare` are in [0, 1], with `link < medium < high`; the rest are positive whole numbers |
 | `ABUSE_LIMITS` | default | default | secret | secret | `{ "chipIn": { "payerDayCents", "serverDayCents" }, "extraCeiling": { "untilRenewed", "renewed" }, "giftsPerDay", "wrongCodesPerHour", "wakesPerHour", "inviteJoinsPerHour" }`: whole numbers, positive but for `untilRenewed`, which is at most `renewed`; `inviteJoinsPerHour` may be left out for its default |
+| `CAPACITY_TUNING` | default | default | secret | secret | `{ "freeShare", "tightShare", "tightIdleMinutes" }`: the share of the room for new servers free plans may fill, the share of running room past which room is tight, and how long a free server nobody is on stays up while it is. The shares are in [0, 1]; the minutes a positive whole number |
 
 ### Product analytics (optional)
 

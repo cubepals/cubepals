@@ -289,13 +289,15 @@ const started = Date.now()
 const records: StepRecord[] = []
 const chaos: ChaosFinding[] = []
 const machines: MachineRun[] = []
-/** What Fly says a server's machine is, or `none`. */
-const machineState = async (serverId: string) =>
-  (
-    JSON.parse((await fly(['machines', 'list', '-a', appOf(serverId), '--json'])) || '[]') as {
-      state: string
-    }[]
-  )[0]?.state ?? 'none'
+/** What Fly says a server's machine is: `none` without one, `not on Fly` for a server on another runtime. */
+const machineState = async (serverId: string) => {
+  const listed = await fly(['machines', 'list', '-a', appOf(serverId), '--json']).catch((error: unknown) => {
+    if (/app not found/i.test((error as Error).message)) return null
+    throw error
+  })
+  if (listed === null) return 'not on Fly'
+  return (JSON.parse(listed || '[]') as { state: string }[])[0]?.state ?? 'none'
+}
 const playerRun = {
   id: run,
   domain: DOMAIN,
@@ -506,7 +508,11 @@ const shaken = Promise.all(
 
 // ─── People arrive at random, each living their own life ─────────────────────────────────────
 
-await Promise.all(
+// The last arrival, the longest play, and room for every wait a life can have: past it, the
+// report is written with whoever is still going counted as such.
+const lastArrival = arrivalTimes.at(-1) ?? 0
+const deadline = lastArrival + (playMinutes[1] + 45) * MINUTE_MS
+const lives = Promise.all(
   arrivalTimes.map(async (at, i) => {
     await Bun.sleep(at)
     const player = burst
@@ -519,6 +525,12 @@ await Promise.all(
     })
   }),
 )
+await Promise.race([
+  lives,
+  Bun.sleep(deadline).then(() =>
+    say(`  past the deadline: ${players.filter((p) => p.phase !== 'done').length} people still going`),
+  ),
+])
 await shaken
 clearInterval(watching)
 say(await line())
@@ -552,6 +564,14 @@ const reportNow = (extra: {
     records,
   }
 }
+// Where the run's servers were made, by runtime, read before the cleanup lets them go.
+const madeIds = players.flatMap((p) => p.servers.map((sv) => `'${sv.id}'`)).join(', ') || 'null'
+const byRuntime = (await database
+  .unsafe(
+    `select provider, count(*)::int as n from server_runtimes where server_id in (${madeIds}) group by provider`,
+  )
+  .catch(() => [])) as { provider: string; n: number }[]
+for (const { provider, n } of byRuntime) peak[`servers made on ${provider}`] = n
 // Whatever the cleanup meets, what the people met is kept first.
 write(out, reportNow({}))
 say(`people done: the report so far is in ${out}.md`)
