@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { offensive } from '@blockly/contracts/names'
 import { type Db, schema, type Tx } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { copying, eligibility, trust } from '../../domain/listing/trust.ts'
@@ -280,6 +281,7 @@ export class ListingService {
         standing,
         entitlements: entitlementsFor(standing.plan, standing.limitOverrides),
         deleted: server.deletedAt !== null,
+        offensiveName: [server.name, server.slug].some(offensive),
       })
       const changed = await saveEligibility(this.#db, serverId, {
         eligible: result.eligible,

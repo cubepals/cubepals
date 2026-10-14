@@ -82,7 +82,7 @@ import { chipIns } from './chip-ins.ts'
 import { gifts } from './gifts.ts'
 import { insight } from './insight.ts'
 import { ownIcon } from './own-icon.ts'
-import { authedProcedure, publicProcedure, router, sessionOf } from './trpc.ts'
+import { authedProcedure, ownerOrAdminProcedure, publicProcedure, router, sessionOf } from './trpc.ts'
 
 /** Each procedure: parse, get the actor, call one service method, return. Nothing else. */
 
@@ -110,7 +110,7 @@ const servers = router({
   setupReleases: authedProcedure
     .input(TemplateRef)
     .query(({ ctx, input }) => ctx.services.queries.setupReleases(input.key)),
-  suggestAddress: authedProcedure
+  suggestAddress: ownerOrAdminProcedure
     .input(SuggestAddressInput)
     .query(({ ctx, input }) => ctx.services.queries.suggestAddress(ctx.actor, input)),
   create: authedProcedure.input(CreateServerInput).mutation(async ({ ctx, input }) => {
@@ -162,7 +162,7 @@ const servers = router({
     await ctx.services.servers.resetInvite(ctx.actor, input.serverId)
     return ctx.services.sharingQueries.share(ctx.actor, input.serverId)
   }),
-  changeAddress: authedProcedure.input(ChangeAddressInput).mutation(async ({ ctx, input }) => {
+  changeAddress: ownerOrAdminProcedure.input(ChangeAddressInput).mutation(async ({ ctx, input }) => {
     await ctx.services.servers.changeAddress(ctx.actor, input.serverId, input.slug)
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),

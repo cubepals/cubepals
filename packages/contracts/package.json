@@ -12,9 +12,11 @@
     "./server-list": "./src/server-list.ts",
     "./local": "./src/local.ts",
     "./play-today": "./src/play-today.ts",
-    "./meter": "./src/meter.ts"
+    "./meter": "./src/meter.ts",
+    "./names": "./src/names.ts"
   },
   "dependencies": {
+    "obscenity": "0.4.6",
     "transport-io": "0.13.2",
     "zod": "4.6.5"
   }

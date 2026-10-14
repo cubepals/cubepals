@@ -94,6 +94,7 @@ type IneligibleCode =
   | 'restricted'
   | 'not_entitled'
   | 'server_deleted'
+  | 'offensive_name'
 
 export interface IneligibleReason {
   code: IneligibleCode
@@ -110,6 +111,8 @@ export function eligibility(input: {
   standing: Pick<AccountStanding, 'status' | 'restrictions'>
   entitlements: Pick<Entitlements, 'mayListPublicly'>
   deleted: boolean
+  /** Its name or address is offensive (`app/ports/names.ts`). */
+  offensiveName: boolean
 }): { eligible: boolean; reasons: IneligibleReason[] } {
   const reasons: IneligibleReason[] = []
   if (input.deleted) reasons.push({ code: 'server_deleted' })
@@ -120,5 +123,6 @@ export function eligibility(input: {
   if (input.standing.status !== 'active') reasons.push({ code: 'account_not_active' })
   if (input.standing.restrictions.publicListing) reasons.push({ code: 'restricted' })
   if (!input.entitlements.mayListPublicly) reasons.push({ code: 'not_entitled' })
+  if (input.offensiveName) reasons.push({ code: 'offensive_name' })
   return { eligible: reasons.length === 0, reasons }
 }

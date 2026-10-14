@@ -15,6 +15,7 @@ import type {
   WorldView,
 } from '@blockly/contracts'
 import { DAY_MS, DAY_S, HOUR_S, MINUTE_S } from '@blockly/contracts/durations'
+import { PICK_ANOTHER_NAME } from '@blockly/contracts/names'
 import type { PillStatus, ProvisioningStep } from '../ui'
 
 /**
@@ -784,6 +785,8 @@ export function presentIneligible(reason: { code: string; detail?: string }): st
       return 'Your plan doesn’t include public listing.'
     case 'server_deleted':
       return 'The server is deleted.'
+    case 'offensive_name':
+      return PICK_ANOTHER_NAME
     default:
       return 'It can’t be shown right now.'
   }

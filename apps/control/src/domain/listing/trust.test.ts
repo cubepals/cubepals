@@ -118,6 +118,7 @@ describe('eligibility', () => {
         standing: active,
         entitlements: { mayListPublicly: true },
         deleted: false,
+        offensiveName: false,
       }),
     ).toEqual({ eligible: true, reasons: [] })
   })
@@ -129,6 +130,7 @@ describe('eligibility', () => {
         standing: { status: 'suspended', restrictions: { publicListing: true } },
         entitlements: { mayListPublicly: false },
         deleted: true,
+        offensiveName: true,
       }),
     ).toEqual({
       eligible: false,
@@ -138,11 +140,17 @@ describe('eligibility', () => {
         { code: 'account_not_active' },
         { code: 'restricted' },
         { code: 'not_entitled' },
+        { code: 'offensive_name' },
       ],
     })
     expect(
-      eligibility({ trust: null, standing: active, entitlements: { mayListPublicly: true }, deleted: false })
-        .reasons,
+      eligibility({
+        trust: null,
+        standing: active,
+        entitlements: { mayListPublicly: true },
+        deleted: false,
+        offensiveName: false,
+      }).reasons,
     ).toEqual([{ code: 'not_running_yet' }])
   })
 })

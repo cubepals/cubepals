@@ -552,7 +552,7 @@ export class ServerQueries {
     input: { name: string; slug?: string | undefined; serverId?: string | undefined },
   ): Promise<AddressSuggestion> {
     const server = input.serverId ? authorize(actor, await findServer(this.#db, input.serverId)) : null
-    const suggestion = await this.#service.suggestAddress(input.name, input.slug, server?.id)
+    const suggestion = await this.#service.suggestAddress(actor, input.name, input.slug, server?.id)
     return {
       ...suggestion,
       joinAddress: suggestion.slug === '' ? '' : formatJoinAddress(this.#addressing.primary(suggestion.slug)),

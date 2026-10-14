@@ -29,6 +29,7 @@ import type { RuntimePlacement } from '../runtimes/service.ts'
 import { keepSentIcon, type OwnIcon } from '../server-icons/persistence.ts'
 import type { SetupService } from '../setups/service.ts'
 import { newInviteCode } from './invites.ts'
+import { checkNewServer, mayGive, refuseAddress, renamed } from './names.ts'
 import { type CreateServerRequest, draftNewServer } from './new-server.ts'
 import {
   createRuntimeBinding,
@@ -120,6 +121,7 @@ export class MinecraftServerService {
   async #create(owner: UserActor, madeBy: Actor, request: CreateServerRequest): Promise<MinecraftServer> {
     const existing = await findByCreateKey(this.#db, owner.userId, request.idempotencyKey)
     if (existing) return existing
+    checkNewServer(madeBy, request)
 
     const draft = await draftNewServer(
       {
@@ -145,7 +147,7 @@ export class MinecraftServerService {
       const replaced =
         request.replaces === undefined ? null : await this.#makeWay(tx, owner, request.replaces)
       await this.#policy.require(tx, owner.userId, { kind: 'create_server', memoryTier })
-      const slug = await this.#claimSlug(tx, request.name, replaced?.slug ?? request.slug)
+      const slug = await this.#claimSlug(tx, madeBy, request.name, replaced?.slug ?? request.slug)
       const created = await insertServer(
         tx,
         {
@@ -208,18 +210,14 @@ export class MinecraftServerService {
   }
 
   /** The address a name would get, for the create flow to show before anything exists. */
-  async suggestAddress(
-    name: string,
-    preferred?: string,
-    serverId?: string,
-  ): Promise<{ slug: string; joinAddress: string; available: boolean }> {
+  async suggestAddress(actor: Actor, name: string, preferred?: string, serverId?: string) {
     const now = new Date()
     if (preferred !== undefined && preferred.length > 0) {
-      const check = checkSlug(preferred)
-      const available = check.ok && (await slugAvailable(this.#db, preferred, now, serverId))
+      const usable = checkSlug(preferred).ok && mayGive(actor, preferred)
+      const available = usable && (await slugAvailable(this.#db, preferred, now, serverId))
       return { slug: preferred, joinAddress: this.#addressing.primary(preferred).hostname, available }
     }
-    for (const candidate of slugCandidates(name || 'world', Math.random)) {
+    for (const candidate of slugCandidates(name || 'world', Math.random).filter((s) => mayGive(actor, s))) {
       if (await slugAvailable(this.#db, candidate, now))
         return { slug: candidate, joinAddress: this.#addressing.primary(candidate).hostname, available: true }
     }
@@ -447,7 +445,7 @@ export class MinecraftServerService {
     const saved = await this.#db.transaction(async (tx) => {
       const server = authorize(actor, await lockServer(tx, serverId))
       const change = {
-        ...(name === undefined || name === server.name ? {} : { name }),
+        ...renamed(server.name, name),
         ...(description === undefined || description === server.description ? {} : { description }),
         ...(identity.icon === undefined || identity.icon === server.icon ? {} : { icon: identity.icon }),
         ...(await keepSentIcon(tx, server, identity.picture)),
@@ -533,6 +531,7 @@ export class MinecraftServerService {
       if (server.slug === check.slug) return server
       if (server.lifecycle.status === 'deleted' || server.lifecycle.status === 'purged')
         throw new AppError('invalid_transition', 'A deleted server keeps its address until it is restored.')
+      refuseAddress(actor, check.slug)
       const now = new Date()
       if (!(await slugAvailable(tx, check.slug, now, server.id)))
         throw new AppError('slug_taken', 'That address is taken — try adding a word.')
@@ -564,7 +563,7 @@ export class MinecraftServerService {
       // before it is live again beside that one.
       const back = (await slugAvailable(tx, restored.slug, new Date(), restored.id))
         ? restored
-        : await saveIdentity(tx, restored, { slug: await this.#claimSlug(tx, restored.name, undefined) })
+        : await saveIdentity(tx, restored, { slug: await this.#claimSlug(tx, actor, restored.name) })
       await markUndeleted(tx, back)
       await tx.delete(schema.retiredSlugs).where(eq(schema.retiredSlugs.slug, back.slug))
       await this.#audit(
@@ -626,7 +625,7 @@ export class MinecraftServerService {
     })
   }
 
-  async #claimSlug(tx: Tx, name: string, preferred: string | undefined): Promise<Slug> {
+  async #claimSlug(tx: Tx, actor: Actor, name: string, preferred?: string): Promise<Slug> {
     const now = new Date()
     if (preferred !== undefined) {
       const check = checkSlug(preferred)
@@ -636,7 +635,7 @@ export class MinecraftServerService {
         throw new AppError('slug_taken', 'That address is taken — try adding a word.')
       return check.slug
     }
-    for (const candidate of slugCandidates(name, Math.random)) {
+    for (const candidate of slugCandidates(name, Math.random).filter((s) => mayGive(actor, s))) {
       const check = checkSlug(candidate)
       if (check.ok && (await slugAvailable(tx, candidate, now))) return check.slug
     }

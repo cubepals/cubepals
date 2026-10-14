@@ -14,6 +14,8 @@ export type IneligibleCode =
   | 'restricted'
   | 'not_entitled'
   | 'server_deleted'
+  /** Its name or address is one Cubepals gives no server, so strangers aren't shown it. */
+  | 'offensive_name'
 
 /** A server as the directory shows it: the server's own identity, and how it is doing now. */
 export interface ListingCardView {

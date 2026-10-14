@@ -207,6 +207,17 @@ export const authedProcedure = publicProcedure.use(({ ctx, next }) => {
 })
 
 /**
+ * The caller's own procedures, run as `admin:<id>` for a platform admin signed in as themselves, so
+ * what an admin may do beyond an owner (an address held for Cubepals' own servers) works from the
+ * same pages. Anyone else, an admin using a test account included, acts as themselves.
+ */
+export const ownerOrAdminProcedure = authedProcedure.use(async ({ ctx, next }) => {
+  const admin = !ctx.impersonatedBy && (await ctx.services.accounts.isAdmin(ctx.actor.userId))
+  const actor = admin ? { kind: 'admin' as const, userId: ctx.actor.userId } : ctx.actor
+  return next({ ctx: { ...ctx, actor } })
+})
+
+/**
  * For platform admins only, acting as `admin:<id>`. Anyone else is told there is nothing here,
  * the way a server they don't own looks. So is an admin using a test account: that session is the
  * test account's, whatever it is later made.
