@@ -6,7 +6,8 @@
  * Plain Minecraft on Paper, as a container: the spec of a plain revision with a Paper build, the
  * step that starts a Paper jar already installed with no call to Paper's API, and the one that
  * gives any other server type back the Nether and End a Paper one kept beside the world, and the
- * world's state Paper 26 keeps in each dimension. Drift sees neither step. Whether a revision runs on Paper is `runsOnPaper`'s.
+ * world's state Paper 26 keeps in each dimension, and Bukkit's connection throttle off, since every
+ * player comes through the edge's one address. Drift sees none of these steps. Whether a revision runs on Paper is `runsOnPaper`'s.
  */
 import { describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -113,6 +114,27 @@ describe('plain Minecraft on Paper', () => {
     // Another build pinned is installed through the API.
     writeFileSync(`${data}/.paper.env`, `SERVER="${data}/paper-1.21.11-131.jar"\n`)
     expect(jar()).toBe('')
+    rmSync(data, { recursive: true })
+  })
+
+  test('a Paper server lets in every player the edge brings, however close together', () => {
+    const onPaper = { ...revision, loaderVersion: '132' }
+    const script = toRuntimeSpec({ ...input, revision: onPaper }).entrypoint?.[2] ?? ''
+    const data = mkdtempSync(join(tmpdir(), 'paper-throttle-'))
+    const step = script.replaceAll('/data', data).replace('exec /image/scripts/start "$@"', 'true')
+    const run = () => Bun.spawnSync(['/bin/sh', '-c', step], { env: { VERSION: '1.21.11' } }).exitCode
+    // A first start: the setting alone, which Paper fills out with its defaults.
+    expect(run()).toBe(0)
+    expect(readFileSync(`${data}/bukkit.yml`, 'utf8')).toBe('settings:\n  connection-throttle: -1\n')
+    // A server that has run: Paper's own file, with only the throttle changed.
+    writeFileSync(
+      `${data}/bukkit.yml`,
+      'settings:\n  allow-end: true\n  connection-throttle: 4000\n  query-plugins: true\nspawn-limits:\n  monsters: 70\n',
+    )
+    expect(run()).toBe(0)
+    expect(readFileSync(`${data}/bukkit.yml`, 'utf8')).toBe(
+      'settings:\n  allow-end: true\n  connection-throttle: -1\n  query-plugins: true\nspawn-limits:\n  monsters: 70\n',
+    )
     rmSync(data, { recursive: true })
   })
 

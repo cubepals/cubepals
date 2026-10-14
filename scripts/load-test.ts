@@ -178,18 +178,10 @@ async function purge(ids: readonly string[], limitS: number): Promise<string[]> 
 }
 
 if (process.argv[2] === 'clean') {
-  tunnel(18025, MAIL_PORT, 'bly-staging-mail')
+  // A probe a run left may be stopped, its forward with it: a helper of its own reaches the database.
   const probes = (await serverApps()).filter((app) => app.startsWith(PROBE_PREFIX))
-  const helper = probes[0] ?? `${PROBE_PREFIX}clean`
-  if (probes.length === 0) await probesUp(helper, 1, databaseHost)
-  else
-    tunnel(
-      DATABASE_PORT,
-      5432,
-      helper,
-      `${(JSON.parse(await fly(['machines', 'list', '-a', helper, '--json'])) as { id: string }[])[0]?.id}.vm.${helper}.internal`,
-    )
-  await Bun.sleep(5 * SECOND_MS)
+  const helper = `${PROBE_PREFIX}clean-${Date.now()}`
+  await probesUp(helper, 1, databaseHost)
   const left = (await database.unsafe(
     `select id from minecraft_servers where create_idempotency_key like '${KEY_PREFIX}%' and status <> 'purged'`,
   )) as { id: string }[]

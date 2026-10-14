@@ -361,13 +361,29 @@ const PAPER_JAR_STEP = [
   'then export PAPER_CUSTOM_JAR="$jar"; fi;',
 ].join(' ')
 
+/**
+ * Bukkit's connection throttle off on Paper. Every player reaches a server through the edge, so
+ * the server sees one address for all of them, and the throttle, which turns away a second join
+ * from an address within four seconds, turned away a friend joining just after someone else
+ * ("Connection throttled!"). The edge limits joins by each player's own address instead. Paper
+ * writes `bukkit.yml` at its first start and keeps it after: a server that has one gets the line
+ * changed, and a new one is given the setting alone, which Paper fills out with its defaults.
+ */
+const PAPER_THROTTLE_STEP = [
+  `if [ -f ${DATA_DIR}/bukkit.yml ]; then sed -i 's/^  connection-throttle: .*/  connection-throttle: -1/' ${DATA_DIR}/bukkit.yml;`,
+  `else printf 'settings:\n  connection-throttle: -1\n' > ${DATA_DIR}/bukkit.yml; fi;`,
+].join(' ')
+
+/** What a Paper server's start puts in place first: its jar, then the throttle off. */
+const PAPER_STEP = `${PAPER_JAR_STEP} ${PAPER_THROTTLE_STEP}`
+
 /** The image's own entrypoint, which a server's runs after Blockly's steps. */
 const IMAGE_ENTRYPOINT = '/image/scripts/start'
 const EXEC_IMAGE = `exec ${IMAGE_ENTRYPOINT} "$@"`
 
 /**
  * The image's own entrypoint, after Blockly's steps. The first puts the volume's files as the
- * server type reads them (`PAPER_JAR_STEP` on Paper, `DIMENSIONS_STEP` on any other), and the
+ * server type reads them (`PAPER_STEP` on Paper, `DIMENSIONS_STEP` on any other), and the
  * second the world's datapacks (`DATAPACKS_STEP`); the icon, the pack and the files Cubepals
  * places itself follow where a server has them, and last what spares the image work it would
  * redo (`WAKE_STEP`).
@@ -380,7 +396,7 @@ function entrypointFor(steps: {
 }): readonly string[] {
   // The files steps lead, so `withoutFilesStep` leaves the rest as it was before them.
   const script = [
-    steps.paper ? PAPER_JAR_STEP : DIMENSIONS_STEP,
+    steps.paper ? PAPER_STEP : DIMENSIONS_STEP,
     DATAPACKS_STEP,
     ...(steps.icon ? ICON_STEP : []),
     ...(steps.pack ? PACK_STEP : []),
@@ -401,7 +417,8 @@ export function withoutFilesStep(entrypoint: readonly string[] | undefined): rea
   const script = entrypoint?.[2]
   if (entrypoint === undefined || script === undefined) return entrypoint
   let rest = script.replace(`${WAKE_STEP} `, '')
-  for (const steps of [[PAPER_JAR_STEP, DIMENSIONS_STEP], [DATAPACKS_STEP]]) {
+  // A Paper server's step with the throttle first, then without it, as it ran before that existed.
+  for (const steps of [[PAPER_STEP, PAPER_JAR_STEP, DIMENSIONS_STEP], [DATAPACKS_STEP]]) {
     const step = steps.find((s) => rest.startsWith(`${s} `))
     if (step !== undefined) rest = rest.slice(step.length + 1)
   }
