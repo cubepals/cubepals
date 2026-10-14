@@ -11,14 +11,16 @@ import { ctaMark } from '../app/(public)/steps'
 /**
  * The one button, kept in reach. The dig is long, and whoever decides halfway down that they want
  * a server shouldn't have to climb back up for the button: once the hero has scrolled away this
- * stays in the corner, and steps aside again where the page's own button is on screen.
+ * stays in the corner, and steps aside again where the page's own button is on screen. On the
+ * phone's page it does the same as a bar along the foot of the screen.
  */
 export function Follow({ create }: { create: string }) {
   const marker = useRef<HTMLSpanElement>(null)
   const [shown, setShown] = useState(false)
 
   useEffect(() => {
-    const root = marker.current?.closest('[data-landing]')
+    // The nearest of the page's two forms: the phone's page, or the film it is a part of.
+    const root = marker.current?.closest('[data-phone], [data-landing]')
     const hero = root?.querySelector('[data-sky]')
     const closing = root?.querySelector('[data-closing]')
     if (!hero) return

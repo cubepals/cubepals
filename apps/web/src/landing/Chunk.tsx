@@ -63,10 +63,10 @@ const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
 ]
 
 // The same colours the stylesheet names (landing.css): ink, paper, the night field and the torch.
-const INK = rgb('#0d0d0d')
-const PAPER = rgb('#F8F7F5')
-const NIGHT = rgb('#8C86F2')
-const TORCH = rgb('#FFB01F')
+export const INK = rgb('#0d0d0d')
+export const PAPER = rgb('#F8F7F5')
+export const NIGHT = rgb('#8C86F2')
+export const TORCH = rgb('#FFB01F')
 const DEEP: Palette = { low: rgb('#0B0B0C'), high: rgb('#6E6E78'), line: rgb('#9A9AA6') }
 
 /** Which palette the print takes over each kind of ground: the hero's sky, light, dark, night. */
@@ -95,8 +95,8 @@ const MOST_DRAWN = 2_300_000
 const dawnOf = (day: number) => smooth(clamp((day - 0.45) / 0.55))
 
 /** The middle of the chunk, and how far from it anything of the chunk can be. */
-const MIDDLE = [SIZE / 2, (TOP + BOTTOM) / 2, SIZE / 2] as const
-const AROUND = 80
+export const MIDDLE = [SIZE / 2, (TOP + BOTTOM) / 2, SIZE / 2] as const
+export const AROUND = 80
 /** How far out the other worlds go, when they are there. */
 const AROUND_ALL = 330
 
@@ -136,7 +136,7 @@ const SAYS = {
 let built: { world: World; mesh: Mesh; fleet: Fleet; reach: number } | null = null
 
 /** The sun climbs from low over the right wall; shadows fall toward the viewer's left. */
-function sunAt(day: number): [number, number, number] {
+export function sunAt(day: number): [number, number, number] {
   const v: [number, number, number] = [0.62, 0.26 + day * 0.9, -0.5]
   const length = Math.hypot(...v)
   return [v[0] / length, v[1] / length, v[2] / length]

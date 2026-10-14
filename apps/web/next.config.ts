@@ -3,11 +3,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The web app's build: the /api rewrite to the control plane, standalone output for self-hosting,
+ * The web app's build: the /api rewrite to the control plane, a phone's landing page, standalone output for self-hosting,
  * and what PostHog needs from the build (the environment, the version, source maps).
  */
 import { join } from 'node:path'
 import type { NextConfig } from 'next'
+import { PHONE_AGENT, PHONE_HINT } from './src/landing/phone/agent'
 import { indexable } from './src/lib/site'
 import { apiUpstream } from './src/lib/upstream'
 
@@ -67,6 +68,23 @@ export default {
     return indexable() ? [] : [{ source: '/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex' }] }]
   },
   async rewrites() {
-    return [{ source: '/api/:path*', destination: `${apiUpstream()}/api/:path*` }]
+    return {
+      // A phone asking for the landing page is shown the phone's own (src/app/phone), at the same
+      // address: it never loads the film it would only hide.
+      beforeFiles: [
+        {
+          source: '/',
+          has: [{ type: 'header', key: 'user-agent', value: PHONE_AGENT }],
+          destination: '/phone',
+        },
+        {
+          source: '/',
+          has: [{ type: 'header', key: 'sec-ch-ua-mobile', value: PHONE_HINT }],
+          destination: '/phone',
+        },
+      ],
+      afterFiles: [{ source: '/api/:path*', destination: `${apiUpstream()}/api/:path*` }],
+      fallback: [],
+    }
   },
 } satisfies NextConfig

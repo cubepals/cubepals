@@ -1705,7 +1705,6 @@
       "apps/web/src/app/(public)/server-page.tsx",
       "apps/web/src/app/(public)/status.test.ts",
       "apps/web/src/app/design/page.tsx",
-      "apps/web/src/app/page.tsx",
       "apps/web/src/lib/api.tsx",
       "apps/web/src/lib/outcome.test.ts",
       "apps/web/src/lib/outcome.ts",

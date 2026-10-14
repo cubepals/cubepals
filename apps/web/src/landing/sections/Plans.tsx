@@ -36,7 +36,6 @@ export function Plans({
   /** Where a paid plan's button leads, by plan key. */
   getPlan: (key: string) => string
 }) {
-  const paid = plans.find((plan) => plan.monthlyPriceCents > 0)
   if (plans.length < 2) return null
   return (
     <Section
@@ -48,6 +47,27 @@ export function Plans({
       act="friends"
       className={styles.plans}
     >
+      <PlansSaid plans={plans} create={create} getPlan={getPlan} />
+    </Section>
+  )
+}
+
+/**
+ * What the plans section says, wherever it is set: the heading, a card to a plan, and the line
+ * under them. The film sets it in its section; the phone's page sets it in its own.
+ */
+export function PlansSaid({
+  plans,
+  create,
+  getPlan,
+}: {
+  plans: PublicPlan[]
+  create: string
+  getPlan: (key: string) => string
+}) {
+  const paid = plans.find((plan) => plan.monthlyPriceCents > 0)
+  return (
+    <>
       <h2 className="bl-h2">{paid ? `Free, or ${priceOf(paid.monthlyPriceCents)} for more` : 'Free'}</h2>
       <div className={styles.cards}>
         {plans.map((plan) => {
@@ -89,6 +109,6 @@ export function Plans({
           Full pricing
         </Link>
       </p>
-    </Section>
+    </>
   )
 }

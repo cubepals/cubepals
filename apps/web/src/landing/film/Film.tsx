@@ -13,7 +13,6 @@ import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
 import { type ReactNode, useId, useRef, useState } from 'react'
 import { ctaMark } from '../../app/(public)/steps'
-import { Lockup } from '../../ui/brand'
 import type { RoomKey } from '../engine/chunk'
 import type { Tone } from '../kit'
 import {
@@ -33,6 +32,7 @@ import { type Showing, stage } from '../stage'
 import { Beat, type Playing, useBeat } from './Beat'
 import { playing } from './clock'
 import styles from './film.module.css'
+import { Nav } from './Nav'
 
 /** The gate with the server asleep behind it and nobody at the door. */
 const SHUT = { power: 'stopped', route: 'notice', joining: false, held: false, asking: false }
@@ -88,23 +88,7 @@ export function Night({ create, signedIn }: { create: string; signedIn: boolean 
       <Stars className={styles.stars} />
       <span className="bl-moon" aria-hidden />
       <div className={styles.words} data-over>
-        <header className={styles.nav}>
-          <Link href="/" className={styles.wordmark} aria-label="Cubepals">
-            <Lockup />
-          </Link>
-          <nav className={styles.links} aria-label="Cubepals">
-            <Link href="/pricing" className={styles.link} {...ctaMark('nav_pricing')}>
-              Pricing
-            </Link>
-            <Link
-              href={signedIn ? '/servers' : '/sign-in'}
-              className={styles.link}
-              {...(signedIn ? {} : ctaMark('nav_sign_in'))}
-            >
-              {signedIn ? 'Your servers' : 'Sign in'}
-            </Link>
-          </nav>
-        </header>
+        <Nav signedIn={signedIn} />
         <h1 className={`bl-display ${styles.headline}`}>
           A Minecraft server that starts when your friends join
         </h1>

@@ -1,0 +1,162 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/* The landing page on a phone (Phone.tsx): one column, in the film's tones and type. The night
+   sky over the sleeping server, then the day, the plans and the button. Nothing is held, pinned or
+   played by the scroll: the page scrolls as the phone does. */
+
+.page > section {
+  position: relative;
+  padding-inline: var(--gutter);
+  background: var(--field);
+  color: var(--fg);
+}
+
+/* ─── The night: what it is, the button, and the address ──────────────────────────────────────── */
+
+.night {
+  padding-block-end: 64px;
+  overflow: clip;
+}
+.stars {
+  position: absolute;
+  inset: 0 0 auto;
+  width: 100%;
+  height: min(100svh, 46rem);
+  color: var(--paper);
+  pointer-events: none;
+}
+.headline {
+  position: relative;
+  max-width: 11em;
+  margin-top: 4px;
+  font-size: clamp(2.5rem, 11vw, 4.75rem);
+  text-wrap: balance;
+}
+
+/* A picture of the chunk, as wide as the screen and never taller than most of it. Until it is
+   printed the frame is the ground it stands on. */
+.still {
+  position: relative;
+  height: min(75vw, 64svh, 30rem);
+  margin-inline: calc(var(--gutter) * -1);
+}
+.still canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+.night .still {
+  margin-block: 8px 4px;
+}
+
+/* A phone on its side has a wide screen and little height: the picture stands beside the words,
+   so the button is still on the first screen. */
+@media (orientation: landscape) and (max-height: 540px) {
+  .night {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-content: start;
+    column-gap: var(--gutter);
+  }
+  .night > :not(.stars) {
+    grid-column: 1 / -1;
+  }
+  .night > .headline {
+    grid-column: 1;
+    font-size: clamp(1.75rem, 4.4vw, 2.75rem);
+  }
+  .night > .still {
+    grid-column: 2;
+    grid-row: 2 / span 2;
+    height: calc(100svh - 88px);
+    margin: 0 calc(var(--gutter) * -1) 0 0;
+  }
+  .night > .go {
+    grid-column: 1;
+    align-self: end;
+    gap: 8px 16px;
+    margin-block-end: 12px;
+  }
+}
+
+.go {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+.go p {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.35;
+}
+
+/* One of the film's sentences, set as its caption is: large, heavy, in the ground's own ink. */
+.line {
+  max-width: 10em;
+  margin: clamp(56px, 12vh, 96px) 0 0;
+  font-variation-settings: "SHRP" 100;
+  font-weight: 800;
+  font-size: clamp(2rem, 9.4vw, 3.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.055em;
+  text-wrap: balance;
+}
+
+/* The game's own field for an address, as the film types it, already typed. */
+.address {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  margin: 20px 0 0;
+}
+.address .label {
+  font-family: var(--game);
+  font-size: 1rem;
+}
+.address .field {
+  max-width: 100%;
+  padding: 0.24em 0.5em 0.3em;
+  overflow: hidden;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--game);
+  font-size: clamp(1rem, 5.2vw, 1.75rem);
+  line-height: 1.1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  outline: calc(var(--px) * 2) solid var(--paper);
+}
+
+/* ─── The day, the plans and the button ───────────────────────────────────────────────────────── */
+
+.day {
+  padding-block: 0 72px;
+  border-top: var(--px) solid var(--line);
+}
+.day .line:first-of-type {
+  margin-top: 32px;
+}
+
+.plans.plans {
+  padding-block: 72px;
+  border-top: var(--px) solid var(--line);
+}
+
+.last.last {
+  display: grid;
+  justify-items: start;
+  gap: 28px;
+  /* Room under the button for the one that follows the reader, which steps aside here. */
+  padding-block: 72px 96px;
+}
+.last h2 {
+  max-width: 10em;
+  font-size: clamp(2.5rem, 11vw, 4.75rem);
+}

@@ -133,6 +133,20 @@
 
 /* ─── Layout: the chunk on one side of the screen, the words on the other ───────────────────── */
 
+/* The page's two forms (Layouts.tsx). Before anything has run, a screen under 1024 pixels wide
+   shows the phone's page and a wider one the film; once it runs, only the one shown is there. A
+   phone is sent its page alone, and keeps it at any width. */
+@media (max-width: 1023px) {
+  .bl:has(> [data-phone]) > :not([data-phone], footer) {
+    display: none;
+  }
+}
+@media (min-width: 1024px) {
+  .bl:has(> main:not([data-phone])) > [data-phone] {
+    display: none;
+  }
+}
+
 .bl-dig {
   position: relative;
 }
@@ -169,7 +183,7 @@
 /* Whatever is brought into view on a narrow screen (a control given the focus, a link's target)
    clears the band, which is as tall as `--band` says: the page scrolls under it. */
 @media (max-width: 1023px) {
-  html:has(.bl:not([data-flat])) {
+  html:has(.bl:not([data-flat]):not(:has(> [data-phone]))) {
     scroll-padding-top: 36svh;
   }
 }
@@ -1048,6 +1062,18 @@
 }
 .bl-follow:active {
   translate: 0 var(--px);
+}
+/* On the phone's page it is a bar along the foot of the screen, where a thumb is. */
+.bl [data-phone] .bl-follow {
+  inset-block: auto max(14px, env(safe-area-inset-bottom));
+  inset-inline: var(--gutter);
+  justify-content: center;
+  min-height: 52px;
+  font-size: 1.0625rem;
+  translate: 0 calc(var(--px) * 4);
+}
+.bl [data-phone] .bl-follow[data-shown] {
+  translate: 0 0;
 }
 
 /* ─── What the chunk says ───────────────────────────────────────────────────────────────────── */

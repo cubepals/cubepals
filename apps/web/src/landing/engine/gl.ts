@@ -538,7 +538,7 @@ export class Renderer {
   width = 1
   height = 1
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement | OffscreenCanvas) {
     const gl = canvas.getContext('webgl2', {
       alpha: true,
       antialias: false,
