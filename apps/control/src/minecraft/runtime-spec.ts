@@ -72,6 +72,26 @@ export const PLAN_ENV: readonly string[] = ['PLAYER_IDLE_TIMEOUT', 'MAX_WORLD_SI
  */
 export const IDENTITY_ENV: readonly string[] = ['ICON', 'OVERRIDE_ICON', 'MOTD']
 
+/**
+ * The image's word that the server reads a PROXY protocol header, which its own health check then
+ * sends (`mc-monitor status --use-proxy`, from start-finalExec). Left out of what drift compares,
+ * with the step that turns it on in Paper (`PAPER_PROXY_STEP`): a server running from before it
+ * reads headers from its next start, and the edge knows which runs do from what each booted.
+ */
+export const PROXY_ENV = 'USES_PROXY_PROTOCOL'
+
+/**
+ * Whether a server of `revision` reads a PROXY protocol header before each connection: Paper does,
+ * so it sees each player's own address rather than the edge's. Minecraft itself and the mod
+ * loaders have no such setting, and a header sent to them breaks the connection.
+ */
+export function usesProxyProtocol(
+  revision: Pick<ServerRevision, 'loader'> &
+    Partial<Pick<ServerRevision, 'modpack' | 'loaderVersion' | 'mods'>>,
+): boolean {
+  return (revision.modpack ?? null) === null && (revision.loader === 'paper' || runsOnPaper(revision))
+}
+
 const TYPES: Record<Loader, string> = {
   vanilla: 'VANILLA',
   paper: 'PAPER',
@@ -361,13 +381,39 @@ const PAPER_JAR_STEP = [
   'then export PAPER_CUSTOM_JAR="$jar"; fi;',
 ].join(' ')
 
+/**
+ * Paper reads a PROXY protocol header before each connection (`proxies.proxy-protocol`, in its
+ * global configuration since 1.19, so on every Paper release Cubepals offers) where `PROXY_ENV`
+ * says so, which tells it the player's own address: in its log, its bans and its connection
+ * throttle. Paper writes `config/paper-global.yml` at its first start and keeps it after, so a
+ * server that has the file gets the setting as the first line under `proxies:`, in place of any it
+ * had, and a new one is given the setting alone, which Paper fills out with its defaults
+ * ("assuming latest").
+ *
+ * The step runs as root, before the image runs the server as the volume's owner, so what it writes
+ * is handed to that owner: a `config` directory left as root's keeps Paper from writing its world
+ * defaults there, and it stops at its first start (tried 2026-10-15 with Paper 1.21.1-133).
+ */
+const PAPER_PROXY_SETTING = 'print "proxies:"; print "  proxy-protocol: " v'
+const PAPER_PROXY_STEP = [
+  `v=false; if [ "$${PROXY_ENV}" = TRUE ]; then v=true; fi;`,
+  `g=${DATA_DIR}/config/paper-global.yml; mkdir -p ${DATA_DIR}/config; if [ -f "$g" ]; then`,
+  `awk -v v="$v" '/^  proxy-protocol:/ { next } /^proxies:/ { ${PAPER_PROXY_SETTING}; p = 1; next } { print }`,
+  `END { if (!p) { ${PAPER_PROXY_SETTING} } }' "$g" > "$g.new" && mv "$g.new" "$g";`,
+  `else printf 'proxies:\\n  proxy-protocol: %s\\n' "$v" > "$g"; fi;`,
+  `chown "$(ls -nd ${DATA_DIR} | awk '{ print $3 ":" $4 }')" ${DATA_DIR}/config "$g";`,
+].join(' ')
+
+/** What a Paper server's start puts in place first: its jar, then the PROXY header read. */
+const PAPER_STEP = `${PAPER_JAR_STEP} ${PAPER_PROXY_STEP}`
+
 /** The image's own entrypoint, which a server's runs after Blockly's steps. */
 const IMAGE_ENTRYPOINT = '/image/scripts/start'
 const EXEC_IMAGE = `exec ${IMAGE_ENTRYPOINT} "$@"`
 
 /**
  * The image's own entrypoint, after Blockly's steps. The first puts the volume's files as the
- * server type reads them (`PAPER_JAR_STEP` on Paper, `DIMENSIONS_STEP` on any other), and the
+ * server type reads them (`PAPER_STEP` on Paper, `DIMENSIONS_STEP` on any other), and the
  * second the world's datapacks (`DATAPACKS_STEP`); the icon, the pack and the files Cubepals
  * places itself follow where a server has them, and last what spares the image work it would
  * redo (`WAKE_STEP`).
@@ -380,7 +426,7 @@ function entrypointFor(steps: {
 }): readonly string[] {
   // The files steps lead, so `withoutFilesStep` leaves the rest as it was before them.
   const script = [
-    steps.paper ? PAPER_JAR_STEP : DIMENSIONS_STEP,
+    steps.paper ? PAPER_STEP : DIMENSIONS_STEP,
     DATAPACKS_STEP,
     ...(steps.icon ? ICON_STEP : []),
     ...(steps.pack ? PACK_STEP : []),
@@ -401,7 +447,8 @@ export function withoutFilesStep(entrypoint: readonly string[] | undefined): rea
   const script = entrypoint?.[2]
   if (entrypoint === undefined || script === undefined) return entrypoint
   let rest = script.replace(`${WAKE_STEP} `, '')
-  for (const steps of [[PAPER_JAR_STEP, DIMENSIONS_STEP], [DATAPACKS_STEP]]) {
+  // A Paper server's step with the header read first, then without it, as it ran before that existed.
+  for (const steps of [[PAPER_STEP, PAPER_JAR_STEP, DIMENSIONS_STEP], [DATAPACKS_STEP]]) {
     const step = steps.find((s) => rest.startsWith(`${s} `))
     if (step !== undefined) rest = rest.slice(step.length + 1)
   }
@@ -445,6 +492,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       ...limitsEnv(input.limits),
       // OVERRIDE_ICON, or the image keeps the first icon a world ever had.
       ...(input.iconUrl === null ? {} : { ICON: input.iconUrl, OVERRIDE_ICON: 'TRUE' }),
+      ...(usesProxyProtocol(revision) ? { [PROXY_ENV]: 'TRUE' } : {}),
       // Constants of how Blockly runs Minecraft, not settings anyone changes.
       ENFORCE_WHITELIST: 'TRUE',
       // Mojang's chat reporting stays on: a player's chat is signed, and a plugin may block a

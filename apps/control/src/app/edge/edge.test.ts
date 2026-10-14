@@ -438,6 +438,35 @@ describe.skipIf(!hasDatabase)('edge, a sleeping server in the server list', () =
     await h.close()
   })
 
+  test('only a server whose run reads a PROXY header is sent one, from its route and its wake', async () => {
+    const paper = await h.create(await h.user(), { loader: 'paper', gameVersion: '1.21.11' })
+    const plain = await h.create(await h.user())
+    for (const { id } of [paper, plain]) {
+      await h.until(id, 'running')
+      await h.settled(id)
+    }
+    const route = async (slug: string) =>
+      (await h.app.edge.routes()).routes.find((r) => r.hostname === `${slug}.play.test`)
+    expect((await route(paper.slug))?.proxyProtocol).toBe(true)
+    expect(await h.app.edge.wake(`${paper.slug}.play.test`)).toMatchObject({ proxyProtocol: true })
+    expect((await route(plain.slug))?.proxyProtocol).toBeUndefined()
+    expect(await h.app.edge.wake(`${plain.slug}.play.test`)).not.toHaveProperty('proxyProtocol')
+
+    // A run that began before Paper read headers reads none, until its next start.
+    const [binding] = await h.db
+      .select()
+      .from(schema.serverRuntimes)
+      .where(eq(schema.serverRuntimes.serverId, paper.id))
+    if (!binding?.applied) throw new Error('the Paper server booted nothing')
+    const { proxyProtocol: _, ...before } = binding.applied
+    await h.db
+      .update(schema.serverRuntimes)
+      .set({ applied: before })
+      .where(eq(schema.serverRuntimes.serverId, paper.id))
+    expect((await route(paper.slug))?.proxyProtocol).toBeUndefined()
+    expect(await h.app.edge.wake(`${paper.slug}.play.test`)).not.toHaveProperty('proxyProtocol')
+  }, 30_000)
+
   test('a sleeping server’s route carries its own message and picture, and none while they are Blockly’s', async () => {
     const owner = await h.user()
     const { id, slug } = await h.create(owner)

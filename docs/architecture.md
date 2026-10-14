@@ -1321,8 +1321,19 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   - **the server it dialled**: 100 new connections at once then 20 a second, and 300 open.
     Hostnames no route names count together as one server, so made-up ones share one limit.
 
-  What it lets in goes to mc-router on loopback (`ROUTER_PORT`), behind a PROXY line of the
-  agent's, so mc-router still sees the player's address. A refused ping goes unanswered; a refused
+  What it lets in goes to mc-router on loopback (`ROUTER_PORT`), behind a PROXY protocol v2
+  header of the agent's naming the player (`packages/contracts/src/proxy-header.ts`). mc-router
+  runs with `-dynamic-proxy-protocol` and passes that header on to the server, so a server that
+  reads one sees each player's own address. Which servers read one is the route's
+  `proxyProtocol`, from what the server last booted: Paper does (`proxies.proxy-protocol`, set
+  by its entry step, with the image's `USES_PROXY_PROTOCOL` for its health check); Minecraft
+  itself and the mod loaders can't, and a header breaks their connections. So a connection to a
+  running server that reads none goes to mc-router without one, and mc-router passes none on.
+  The agent's own listeners (the notices and the waiting room) read a header off when one comes,
+  and the waiting room hands it to the server with the join, or a LOCAL header when it has none.
+  The agent's and the control plane's own status pings send a LOCAL header to a server that
+  reads one. A server running from before it read headers reads none until its next start;
+  drift doesn't restart it for this. A refused ping goes unanswered; a refused
   join is told "This server is busy right now · join again in a moment". Refusals are logged every
   10 s by limit and by server. mc-router's own limit stays as the machine's last guard (1,000 a
   second). The defaults are the edge's own, each overridable by its environment.
@@ -1620,9 +1631,11 @@ never un-bans the griefer banned yesterday or re-ops an operator removed today. 
 undelete keep the same volume contents, so they stay continuous.
 
 **IP bans are not part of the model.**
-- Behind the shared edge, every connection reaches the server from the edge's address. The
-  Fly proxy or mc-router is the peer, and vanilla doesn't accept PROXY protocol. A Minecraft
-  IP ban would ban the edge and lock everyone out.
+- Behind the shared edge, every connection reaches the server from the edge's address. Paper
+  is told each player's own address in a PROXY header (§12), but Minecraft itself and the mod
+  loaders don't accept one, so on them a Minecraft IP ban would ban the edge and lock everyone
+  out. An address is a weak signal anyway: players share them behind carrier NAT, schools and
+  phones.
 - `ConsoleService` therefore refuses `ban-ip` and `pardon-ip`.
 - An in-game operator can still run them, so reconciliation clears any `banned-ips.json`
   entries it finds, writes an audit entry and tells the owner why.
@@ -2584,10 +2597,10 @@ not take:
       - any limit on the number of custom networks per org
     - Also keep the game process non-root (the itzg default is uid 1000), and never place Fly
       tokens or control-plane secrets in game machines.
-14. **Game servers see the edge's address, not the player's.** This is why IP bans are not
-    modelled (§15.1). If real client IPs are ever needed, the path is PROXY protocol end to
-    end: the Fly proxy handler → mc-router `-receive/-use-proxy-protocol` → a server type that
-    supports it. Vanilla does not.
+14. **Only Paper sees the player's address.** The edge passes it end to end in PROXY protocol:
+    Fly's `proxy_proto` handler → the agent's front door → mc-router `-dynamic-proxy-protocol` →
+    Paper's `proxies.proxy-protocol` (§12). Minecraft itself and the mod loaders see the edge's
+    address. IP bans stay out of the model either way (§15.1).
 15. **Modrinth moderation is invisible for malware.** A security takedown is publicly
     indistinguishable from an author deleting a version, and the CDN keeps serving the file.
     Blockly's allowlist is therefore the primary trust decision, catalog state a revocation

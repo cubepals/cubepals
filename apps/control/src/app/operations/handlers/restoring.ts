@@ -28,7 +28,7 @@ import { reopenWorlds, setWorldFacts } from '../../worlds/persistence.ts'
 import { enqueuePrune } from '../../worlds/service.ts'
 import type { BootSequence } from '../boot.ts'
 import { NoLongerApplies, type OperationContext, type OperationHandler } from '../runner.ts'
-import { appliedConfig, type ServerBinding } from './binding.ts'
+import { appliedConfig, bootedBack, type ServerBinding } from './binding.ts'
 import type { GameConsole } from './game-console.ts'
 import type { GoingBack } from './going-back.ts'
 import type { Rechecks } from './rechecks.ts'
@@ -164,11 +164,7 @@ export function restoring(deps: {
             memoryTier: previous.memoryTier as MinecraftServer['memoryTier'],
           })
           await bringBack(quiet, server, before, back, up)
-          await putBack(
-            server,
-            { ...previous, specDigest: back.digest, driftDigest: back.driftDigest },
-            { from: 'restoring', up },
-          )
+          await putBack(server, bootedBack(previous, back), { from: 'restoring', up })
         } catch (again) {
           if (again instanceof NoLongerApplies) throw again
           throw new PermanentFailure(

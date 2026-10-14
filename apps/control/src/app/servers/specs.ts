@@ -15,7 +15,9 @@ import {
   IDENTITY_ENV,
   installOf,
   PLAN_ENV,
+  PROXY_ENV,
   toRuntimeSpec,
+  usesProxyProtocol,
   withoutFilesStep,
 } from '../../minecraft/runtime-spec.ts'
 import { loadStanding } from '../accounts/persistence.ts'
@@ -40,6 +42,8 @@ export interface DesiredRuntime {
   secretsVersion: number
   /** What its install shares with other servers of its release, when a runtime can reuse it. */
   install: InstallSeed | null
+  /** Whether the server it boots reads a PROXY protocol header before each connection. */
+  proxyProtocol: boolean
 }
 
 /** The spec says which key its secrets come from, so a rotation changes every digest and drift applies it. */
@@ -59,11 +63,12 @@ export function specDigest(spec: RuntimeSpec): string {
 }
 
 /**
- * The spec as drift sees it: without what the owner's plan sets, the picture they chose, or the
- * step that moves a Paper world's Nether and End back for another server type.
+ * The spec as drift sees it: without what the owner's plan sets, the picture they chose, the
+ * step that moves a Paper world's Nether and End back for another server type, or Paper's reading
+ * a PROXY protocol header, which a server running from before it was asked takes at its next start.
  */
 export function withoutPlanLimits(spec: RuntimeSpec): RuntimeSpec {
-  const ignored = [...PLAN_ENV, ...IDENTITY_ENV]
+  const ignored = [...PLAN_ENV, ...IDENTITY_ENV, PROXY_ENV]
   const { entrypoint: _entrypoint, ...rest } = spec
   const entrypoint = withoutFilesStep(spec.entrypoint)
   return {
@@ -150,6 +155,7 @@ export class RuntimeSpecs {
       driftDigest: specDigest(withoutPlanLimits(spec)),
       secretsVersion: current.version,
       install: installOf(revision),
+      proxyProtocol: usesProxyProtocol(revision),
     }
   }
 }

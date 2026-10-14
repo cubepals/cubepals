@@ -41,9 +41,17 @@ export interface ServerStatusPing {
   version: string
 }
 
+/**
+ * A server's game port, and whether the server reads a PROXY protocol header before each
+ * connection: a ping to one opens with a LOCAL header, and to any other with none.
+ */
+export interface GameEndpoint extends Endpoint {
+  proxyProtocol?: boolean
+}
+
 /** "Ready" is a Minecraft protocol fact: the server answers a status ping. */
 export interface ReadinessProbe {
-  ping(endpoint: Endpoint, signal: AbortSignal): Promise<ServerStatusPing>
+  ping(endpoint: GameEndpoint, signal: AbortSignal): Promise<ServerStatusPing>
 }
 
 /** Mojang profile lookups. */

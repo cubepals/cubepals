@@ -5,6 +5,7 @@
 import {
   type ConsoleTarget,
   ConsoleUnavailable,
+  type GameEndpoint,
   type ReadinessProbe,
   type ServerConsole,
   type ServerStatusPing,
@@ -89,10 +90,18 @@ export class BoatProbe implements ReadinessProbe {
   }
 
   /** A status ping from inside the workload, as players' clients send one. */
-  async ping(endpoint: Endpoint, signal: AbortSignal): Promise<ServerStatusPing> {
+  async ping(endpoint: GameEndpoint, signal: AbortSignal): Promise<ServerStatusPing> {
     const pinged = this.#boat.execIn(
       sandboxOf(endpoint),
-      ['mc-monitor', 'status', '--host', 'localhost', '--port', String(endpoint.port)],
+      [
+        'mc-monitor',
+        'status',
+        ...(endpoint.proxyProtocol ? ['--use-proxy'] : []),
+        '--host',
+        'localhost',
+        '--port',
+        String(endpoint.port),
+      ],
       15,
     )
     const aborted = new Promise<never>((_, reject) =>

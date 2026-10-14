@@ -182,6 +182,11 @@ export interface AppliedConfigJson {
   driftDigest?: string
   /** The runtime key version its secrets came from; absent before keys had versions (1). */
   secretsVersion?: number
+  /**
+   * Whether the server it booted reads a PROXY protocol header before each connection, which the
+   * edge then sends. Absent before servers read one, and for every server that doesn't.
+   */
+  proxyProtocol?: boolean
 }
 
 export interface ObservedJson {

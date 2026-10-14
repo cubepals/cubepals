@@ -28,13 +28,13 @@ import {
   saysReady,
 } from '../../minecraft/logs.ts'
 import { modName } from '../../minecraft/pack-build.ts'
-import { PORT_NAMES } from '../../minecraft/runtime-spec.ts'
+import { PORT_NAMES, usesProxyProtocol } from '../../minecraft/runtime-spec.ts'
 import { bootCommands } from '../../minecraft/settings.ts'
 import { type AccessReconciler, AccessReseedFailed } from '../access/reconciler.ts'
 import type { ArtifactService } from '../artifacts/service.ts'
 import { DiagnosedFailure, inFull, PermanentFailure, PlainFailure } from '../errors.ts'
 import type { PackContents } from '../packs/contents.ts'
-import type { ReadinessProbe, ServerConsole } from '../ports/minecraft.ts'
+import type { GameEndpoint, ReadinessProbe, ServerConsole } from '../ports/minecraft.ts'
 import type { LogLine, LogSource } from '../ports/platform.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
@@ -172,11 +172,13 @@ export class BootSequence {
      */
     options: { startAgainOnHang?: boolean } = {},
   ): Promise<void> {
+    // Whether the server this boot runs reads a PROXY protocol header, which its pings then send.
+    const proxyProtocol = usesProxyProtocol(revision)
     // A server its runtime resumed as it was printed nothing and changed nothing: once it answers,
     // only who can join and the settings it keeps in its world are put back, which may have changed
     // while it slept.
-    if (ctx.reached() === 'resuming' && (await this.#resumed(started)))
-      return this.#letIn(ctx, server, started, revision, [])
+    if (ctx.reached() === 'resuming' && (await this.#resumed(started, proxyProtocol)))
+      return this.#letIn(ctx, server, started, revision, proxyProtocol, [])
     let handle = started
     const check = installCheck(revision)
     const pack = await this.#packCheckFor(revision.modpack ?? null)
@@ -187,7 +189,7 @@ export class BootSequence {
       downloadedAgain = true
       await this.#artifacts.refresh(server.id)
       await this.#runtime.restart(handle)
-      await this.#up(ctx, handle, [], leftOut)
+      await this.#up(ctx, handle, proxyProtocol, [], leftOut)
     }
 
     const heard: string[] = []
@@ -195,6 +197,7 @@ export class BootSequence {
       handle = await this.#upLearning(
         ctx,
         handle,
+        proxyProtocol,
         heard,
         leftOut,
         revision.modpack ?? null,
@@ -239,7 +242,7 @@ export class BootSequence {
         // Whatever is there in their place goes; the image fetches what is missing as it starts.
         await this.#runtime.exec(handle, packCleanup(wrong), 60)
         await this.#runtime.restart(handle)
-        await this.#up(ctx, handle, [], leftOut)
+        await this.#up(ctx, handle, proxyProtocol, [], leftOut)
         wrong = await this.#packWrong(handle, pack)
       }
       if (wrong.length > 0)
@@ -248,7 +251,7 @@ export class BootSequence {
         )
     }
 
-    await this.#letIn(ctx, server, handle, revision, leftOut)
+    await this.#letIn(ctx, server, handle, revision, proxyProtocol, leftOut)
 
     // Up, yet without all it was told to load: Paper goes on past a plugin it can't load, and the
     // server says so rather than passing for one that runs everything. A log followed from now
@@ -267,6 +270,7 @@ export class BootSequence {
     server: MinecraftServer,
     handle: RuntimeHandle,
     revision: Parameters<typeof startCommands>[0],
+    proxyProtocol: boolean,
     leftOut: string[],
   ): Promise<void> {
     await ctx.step('access')
@@ -276,7 +280,7 @@ export class BootSequence {
       const { restart } = await this.#access.reconcile(server, handle, 'full', { mayRestart: true })
       if (restart) {
         await this.#runtime.restart(handle)
-        await this.#up(ctx, handle, [], leftOut)
+        await this.#up(ctx, handle, proxyProtocol, [], leftOut)
         await ctx.step('access')
         await this.#access.reconcile(server, handle, 'full')
       }
@@ -299,15 +303,20 @@ export class BootSequence {
     }
   }
 
+  /** Where the server's status ping goes, and whether it opens with a PROXY protocol header. */
+  #game(handle: RuntimeHandle, proxyProtocol: boolean): GameEndpoint {
+    return { ...this.#runtime.endpoint(handle, PORT_NAMES.game, 'control'), proxyProtocol }
+  }
+
   /**
    * Whether a server its runtime resumed came back as it was: running, and answering a status ping
    * within `RESUME_MS`, which no boot does. False where the provider dropped the memory it kept
    * and boots it from its storage instead (a host move, maintenance): the start goes on as a boot,
    * whose output is then followed from here, a few seconds into it.
    */
-  async #resumed(handle: RuntimeHandle): Promise<boolean> {
+  async #resumed(handle: RuntimeHandle, proxyProtocol: boolean): Promise<boolean> {
     const deadline = Date.now() + RESUME_MS
-    const endpoint = this.#runtime.endpoint(handle, PORT_NAMES.game, 'control')
+    const endpoint = this.#game(handle, proxyProtocol)
     try {
       await this.#runtime.waitRunning(handle, AbortSignal.timeout(RESUME_MS))
       for (;;) {
@@ -339,6 +348,7 @@ export class BootSequence {
   async #upLearning(
     ctx: OperationContext,
     first: RuntimeHandle,
+    proxyProtocol: boolean,
     heard: string[],
     leftOut: string[],
     pack: ServerRevision['modpack'] | null,
@@ -349,7 +359,7 @@ export class BootSequence {
     let startedAgain = false
     for (let learned = 0; ; ) {
       try {
-        await this.#up(ctx, handle, heard, leftOut)
+        await this.#up(ctx, handle, proxyProtocol, heard, leftOut)
         return handle
       } catch (error) {
         if (stoppedAnswering(error)) {
@@ -403,6 +413,7 @@ export class BootSequence {
   async #up(
     ctx: OperationContext,
     handle: RuntimeHandle,
+    proxyProtocol: boolean,
     heard: string[] = [],
     leftOut: string[] = [],
   ): Promise<void> {
@@ -439,6 +450,7 @@ export class BootSequence {
       }
       await this.#waitReady(
         ctx,
+        this.#game(handle, proxyProtocol),
         handle,
         () => reached,
         started,
@@ -481,13 +493,13 @@ export class BootSequence {
    */
   async #waitReady(
     ctx: OperationContext,
+    endpoint: GameEndpoint,
     handle: RuntimeHandle,
     reached: () => Reached,
     since: Date,
     crashReports: () => number,
     ready: Nudge,
   ): Promise<void> {
-    const endpoint = this.#runtime.endpoint(handle, PORT_NAMES.game, 'control')
     const deadline = Date.now() + this.#timeouts.readyMs
     let lastError: unknown = null
     let failureRead = since.getTime()

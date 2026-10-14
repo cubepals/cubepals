@@ -14,7 +14,8 @@
     "./local": "./src/local.ts",
     "./play-today": "./src/play-today.ts",
     "./meter": "./src/meter.ts",
-    "./names": "./src/names.ts"
+    "./names": "./src/names.ts",
+    "./proxy-header": "./src/proxy-header.ts"
   },
   "dependencies": {
     "obscenity": "0.4.6",
