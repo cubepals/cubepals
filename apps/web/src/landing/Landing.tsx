@@ -18,7 +18,6 @@ import { currentSession } from '../lib/session'
 import { canonicalOrigin } from '../lib/site'
 import { sourceOf, withSource } from '../lib/source'
 import { appSchema, JsonLd, siteSchema } from '../lib/structured-data'
-import { BetaBanner } from '../ui/beta'
 import { aside, digits, display, pixel } from './fonts'
 import { Footer } from './sections/Footer'
 import './landing.css'
@@ -80,7 +79,6 @@ export function Frame({
       data-film={film || undefined}
     >
       <Presses />
-      <BetaBanner />
       {children}
       <Footer />
       <JsonLd schema={siteSchema(canonicalOrigin())} />

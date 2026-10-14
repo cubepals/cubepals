@@ -129,8 +129,8 @@ export function Scroll() {
         // A section that isn't laid out (the other worlds, without the drawing) is no place to rest.
         (section) => section.getClientRects().length > 0,
       )
-      stops = sections.map((section, index) => ({
-        ...stopOf(section, tall, index === 0),
+      stops = sections.map((section) => ({
+        ...stopOf(section, tall),
         name: section.dataset.name ?? '',
         cue: section.dataset.cue,
         id: section.id,

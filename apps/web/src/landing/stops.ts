@@ -11,11 +11,8 @@
  * A section's words are marked `data-stop`: they begin a little below the top of the screen and
  * end a little above its foot. `data-stop="tail"` marks words that begin with their section (the
  * first screen). A section with no mark is a scene that holds the screen for its whole length.
- *
- * The page's opening section is counted from the top of the page: what sits above the film (the
- * beta banner, ui/beta.tsx) is rested on with it, and one push still rides on to the next.
  */
-export function stopOf(section: HTMLElement, tall: number, opening = false): { start: number; end: number } {
+export function stopOf(section: HTMLElement, tall: number): { start: number; end: number } {
   const box = section.getBoundingClientRect()
   const top = box.top + window.scrollY
   const mark = section.querySelector<HTMLElement>('[data-stop]')
@@ -27,10 +24,6 @@ export function stopOf(section: HTMLElement, tall: number, opening = false): { s
     const first = mark.dataset.stop === 'tail'
     if (!first) start = wordsTop - tall * 0.08
     end = wordsTop + words.height - tall * (first ? 1 : 0.9)
-  }
-  if (opening) {
-    end -= start
-    start = 0
   }
   start = Math.max(0, Math.round(start))
   return { start, end: Math.max(start, Math.round(end)) }

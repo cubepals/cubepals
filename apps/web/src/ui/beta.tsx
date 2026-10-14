@@ -6,10 +6,11 @@
 
 /**
  * How Cubepals says it is in beta: a small tag beside the wordmark, and a banner across the top
- * on a browser's first visit. Both lead to the letter at `/beta`. Each shows only while the root
- * layout marks the page (lib/beta.ts), so the one switch takes them both away; the banner also
- * only until this browser closes it or opens the letter. Not the letter itself, which is its
- * page's (app/(public)/beta).
+ * of sign-in, sign-up and the app on a browser's first visit (not the landing page, whose film
+ * owns the top of the screen). Both lead to the letter at `/beta`. Each shows only while the
+ * root layout marks the page (lib/beta.ts), so the one switch takes them both away; the banner
+ * also only until this browser closes it or opens the letter. Not the letter itself, which is
+ * its page's (app/(public)/beta).
  */
 import { X } from 'lucide-react'
 import Link from 'next/link'
@@ -32,7 +33,7 @@ export function WithBeta({ children }: { children: ReactNode }) {
 /** The banner on a first visit: one line, the way to the letter, and a way to close it. */
 export function BetaBanner() {
   return (
-    <section className={styles.banner} aria-label="Beta" data-banner>
+    <section className={styles.banner} aria-label="Beta">
       <p className={styles.line}>
         Cubepals is in beta. Thanks for being here early.{' '}
         <Link href="/beta" className={styles.read} onClick={markBetaRead}>
