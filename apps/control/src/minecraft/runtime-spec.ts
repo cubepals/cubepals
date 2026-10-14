@@ -382,6 +382,22 @@ const PAPER_JAR_STEP = [
 ].join(' ')
 
 /**
+ * Bukkit's connection throttle off on Paper. Every player reaches a server through the edge, so
+ * the server sees one address for all of them, and the throttle, which turns away a second join
+ * from an address within four seconds, turned away a friend joining just after someone else
+ * ("Connection throttled!"). The edge limits joins by each player's own address instead. Paper
+ * writes `bukkit.yml` at its first start and keeps it after: a server that has one gets the line
+ * changed, and a new one is given the setting alone, which Paper fills out with its defaults.
+ */
+const PAPER_THROTTLE_STEP = [
+  `if [ -f ${DATA_DIR}/bukkit.yml ]; then sed -i 's/^  connection-throttle: .*/  connection-throttle: -1/' ${DATA_DIR}/bukkit.yml;`,
+  `else printf 'settings:\n  connection-throttle: -1\n' > ${DATA_DIR}/bukkit.yml; fi;`,
+].join(' ')
+
+/** What a Paper server's start put in place first before it read PROXY headers. */
+const PAPER_THROTTLE_ONLY_STEP = `${PAPER_JAR_STEP} ${PAPER_THROTTLE_STEP}`
+
+/**
  * Paper reads a PROXY protocol header before each connection (`proxies.proxy-protocol`, in its
  * global configuration since 1.19, so on every Paper release Cubepals offers) where `PROXY_ENV`
  * says so, which tells it the player's own address: in its log, its bans and its connection
@@ -390,9 +406,10 @@ const PAPER_JAR_STEP = [
  * had, and a new one is given the setting alone, which Paper fills out with its defaults
  * ("assuming latest").
  *
- * The step runs as root, before the image runs the server as the volume's owner, so what it writes
- * is handed to that owner: a `config` directory left as root's keeps Paper from writing its world
- * defaults there, and it stops at its first start (tried 2026-10-15 with Paper 1.21.1-133).
+ * The step runs as root, before the image runs the server as the volume's owner, so what it and the
+ * throttle step write is handed to that owner: a `config` directory left as root's keeps Paper from
+ * writing its world defaults there, and it stops at its first start, and a `bukkit.yml` left as
+ * root's can't be saved (tried 2026-10-15 with Paper 1.21.1-133).
  */
 const PAPER_PROXY_SETTING = 'print "proxies:"; print "  proxy-protocol: " v'
 const PAPER_PROXY_STEP = [
@@ -401,11 +418,11 @@ const PAPER_PROXY_STEP = [
   `awk -v v="$v" '/^  proxy-protocol:/ { next } /^proxies:/ { ${PAPER_PROXY_SETTING}; p = 1; next } { print }`,
   `END { if (!p) { ${PAPER_PROXY_SETTING} } }' "$g" > "$g.new" && mv "$g.new" "$g";`,
   `else printf 'proxies:\\n  proxy-protocol: %s\\n' "$v" > "$g"; fi;`,
-  `chown "$(ls -nd ${DATA_DIR} | awk '{ print $3 ":" $4 }')" ${DATA_DIR}/config "$g";`,
+  `chown "$(ls -nd ${DATA_DIR} | awk '{ print $3 ":" $4 }')" ${DATA_DIR}/config "$g" ${DATA_DIR}/bukkit.yml;`,
 ].join(' ')
 
-/** What a Paper server's start puts in place first: its jar, then the PROXY header read. */
-const PAPER_STEP = `${PAPER_JAR_STEP} ${PAPER_PROXY_STEP}`
+/** What a Paper server's start puts in place first: its jar, the throttle off, then the PROXY header read. */
+const PAPER_STEP = `${PAPER_THROTTLE_ONLY_STEP} ${PAPER_PROXY_STEP}`
 
 /** The image's own entrypoint, which a server's runs after Blockly's steps. */
 const IMAGE_ENTRYPOINT = '/image/scripts/start'
@@ -447,8 +464,12 @@ export function withoutFilesStep(entrypoint: readonly string[] | undefined): rea
   const script = entrypoint?.[2]
   if (entrypoint === undefined || script === undefined) return entrypoint
   let rest = script.replace(`${WAKE_STEP} `, '')
-  // A Paper server's step with the header read first, then without it, as it ran before that existed.
-  for (const steps of [[PAPER_STEP, PAPER_JAR_STEP, DIMENSIONS_STEP], [DATAPACKS_STEP]]) {
+  // A Paper server's whole step first, then each it ran before: without the PROXY header read, and
+  // without the throttle too.
+  for (const steps of [
+    [PAPER_STEP, PAPER_THROTTLE_ONLY_STEP, PAPER_JAR_STEP, DIMENSIONS_STEP],
+    [DATAPACKS_STEP],
+  ]) {
     const step = steps.find((s) => rest.startsWith(`${s} `))
     if (step !== undefined) rest = rest.slice(step.length + 1)
   }

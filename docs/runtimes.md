@@ -125,8 +125,11 @@ After that, a full runtime never moves a server. Once a server has started anywh
 means it waits for room, as every server always has. Owners read the same "no room just then"
 sentence. A server already on the default runtime has nowhere to fall back to.
 
-**A provider's own limit counts as full.** Fly holds at most `(machine limit − platform machines) / 2`
-servers. Once another runtime with no such limit runs beside it, the deployment-wide cap
+**A provider's own limit counts as full.** Fly holds at most `machine limit − platform machines − 2`
+servers: one machine each, and two kept for the machine a restore, a move or an export runs for a
+while. When more of those run at once than are kept, the next waits for a machine to free, saying
+so in its progress (`waiting_for_room`), and the server stays as it was meanwhile; Fly refusing a
+machine for the org's limit is waited on the same way, never a failed server. Once another runtime with no such limit runs beside it, the deployment-wide cap
 (`maxServers`) can't express that. So placement counts the servers holding compute on each runtime
 against its own ceiling (a resting world has let its machine go, and isn't counted):
 

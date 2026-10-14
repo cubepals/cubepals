@@ -418,6 +418,13 @@ describe('private tuning', () => {
     expect(loadConfig({ ...deployed, DEPLOYMENT_ID: 'staging' }).abuseLimits).toEqual(DEFAULT_ABUSE_LIMITS)
   })
 
+  test('a deployment’s limits from before the invite cap existed take its default', () => {
+    const { inviteJoinsPerHour: _, ...older } = abuse
+    expect(loadConfig({ ...env, ABUSE_LIMITS: JSON.stringify(older) }).abuseLimits).toEqual(abuse)
+    const wider = { ...abuse, inviteJoinsPerHour: 40 }
+    expect(loadConfig({ ...env, ABUSE_LIMITS: JSON.stringify(wider) }).abuseLimits).toEqual(wider)
+  })
+
   test('production refuses to start without it, and any deployment with it wrong', () => {
     const prod = { ...deployed, DEPLOYMENT_ID: 'prod' }
     expect(() => loadConfig({ ...prod, ABUSE_LIMITS: tuned.ABUSE_LIMITS })).toThrow(/FREE_LINK_TUNING/)

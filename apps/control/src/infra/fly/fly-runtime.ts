@@ -13,6 +13,7 @@
  * - `observation.ts`: a machine's state and exit events as the port's observation.
  * - `prices.ts`: an hour and a month of a server, at Fly's list prices.
  * - `regions.ts`: the product's regions on Fly's, and whether one has room.
+ * - `room.ts`: waiting for a machine while the organization is at its machine limit.
  * - `apps.ts`: a server's Fly app, its name, its Flycast address and its secrets.
  * - `volumes.ts`: the volumes a server's world lives on.
  * - `snapshots.ts`: a volume's snapshots, taken and accounted for.
@@ -77,6 +78,7 @@ import { lastExit, observationOf } from './fly-runtime/observation.ts'
 import { pricesOf } from './fly-runtime/prices.ts'
 import { checkRegions, flyRegion, placeable, requireCapacity } from './fly-runtime/regions.ts'
 import { idOf } from './fly-runtime/responses.ts'
+import { ROOM_WAIT, type RoomWait, whenRoom } from './fly-runtime/room.ts'
 import { goneSnapshots, takeSnapshot } from './fly-runtime/snapshots.ts'
 import { tagMachines } from './fly-runtime/tags.ts'
 import {
@@ -125,20 +127,23 @@ export interface FlyRuntimeOptions {
    * Without it, it has no `sleep`, and the control plane stops servers instead.
    */
   suspend?: () => Promise<boolean>
+  /** How work that needs one more machine waits for one at the limit; tests shorten it. */
+  roomWait?: RoomWait
 }
 
 /** Fly keeps a volume's snapshots for 1 to 60 days (fly.io/docs/volumes/snapshots). */
 const SNAPSHOT_RETENTION = { min: 1, max: 60 }
 
 /**
- * The machines one server holds at its busiest: its own, and the second a restore or a move makes
- * before the first goes (`#replace`), or an export's helper (`#helperJob`).
+ * Machines kept free beside one a server, for the few that run for a while at once: a restore's
+ * or a move's new machine before the old one goes (`#replace`), a helper's (`helperJob`). Work
+ * that finds none free waits for one (`whenRoom`).
  */
-const MACHINES_PER_SERVER = 2
+const HELPER_HEADROOM = 2
 
 /** The servers an organization's machine limit holds, beside the platform's own machines (§19.12). */
 export function serverCeilingOf(machineLimit: number, platformMachines: number): number {
-  return Math.floor((machineLimit - platformMachines) / MACHINES_PER_SERVER)
+  return Math.max(0, machineLimit - platformMachines - HELPER_HEADROOM)
 }
 
 export class FlyRuntime implements MinecraftRuntime {
@@ -153,6 +158,7 @@ export class FlyRuntime implements MinecraftRuntime {
   /** Set on every volume Blockly creates: Fly deletes its snapshots after this, and only then. */
   readonly snapshotLifetimeDays: number
   readonly sleep?: (handle: RuntimeHandle) => Promise<'suspended' | 'stopped'>
+  readonly #roomWait: RoomWait
 
   constructor(options: FlyRuntimeOptions) {
     this.#fly = options.client
@@ -164,6 +170,7 @@ export class FlyRuntime implements MinecraftRuntime {
       Math.max(SNAPSHOT_RETENTION.min, options.snapshotRetentionDays),
     )
     this.serverCeiling = serverCeilingOf(options.machineLimit, options.platformMachines)
+    this.#roomWait = options.roomWait ?? ROOM_WAIT
     const suspends = options.suspend
     if (suspends !== undefined) this.sleep = (handle) => this.#sleep(handle, suspends)
   }
@@ -433,13 +440,14 @@ export class FlyRuntime implements MinecraftRuntime {
       )
       const volumeId = idOf(volume, 'a volume')
       await volumeReady(this.#fly, ref.app, volumeId)
-      await helperJob(
-        this.#fly,
-        this.#deployment,
-        ref.app,
-        ref.region,
-        volumeId,
-        restoreJob(from.download.url),
+      const job = restoreJob(from.download.url)
+      await whenRoom(
+        this.#roomWait,
+        () => helperJob(this.#fly, this.#deployment, ref.app, ref.region, volumeId, job),
+        {
+          waiting: () => progress.step('waiting_for_room'),
+          refused: () => deleteVolume(this.#fly, ref.app, volumeId),
+        },
       )
     }
     const next = await this.#replace(ref, volume, ref.region, spec, progress)
@@ -520,17 +528,14 @@ export class FlyRuntime implements MinecraftRuntime {
       this.snapshotLifetimeDays,
     )
     const volumeId = idOf(volume, 'a volume')
+    const job = (script: string) =>
+      whenRoom(this.#roomWait, () =>
+        helperJob(this.#fly, this.#deployment, ref.app, ref.region, volumeId, script),
+      )
     try {
       await volumeReady(this.#fly, ref.app, volumeId)
       const [how = '', sha256 = '', size = '0'] = (
-        await helperJob(
-          this.#fly,
-          this.#deployment,
-          ref.app,
-          ref.region,
-          volumeId,
-          exportJob(target.put, target.maxPutBytes),
-        )
+        await job(exportJob(target.put, target.maxPutBytes))
       ).split(' ')
       const sizeBytes = Number(size)
       if (how === 'parts') {
@@ -538,18 +543,7 @@ export class FlyRuntime implements MinecraftRuntime {
         try {
           const put: PutPart[] = []
           for (const batch of partBatches(parts, sizeBytes, PARTS_PER_JOB))
-            put.push(
-              ...partsPut(
-                await helperJob(
-                  this.#fly,
-                  this.#deployment,
-                  ref.app,
-                  ref.region,
-                  volumeId,
-                  partsJob(parts, sizeBytes, batch),
-                ),
-              ),
-            )
+            put.push(...partsPut(await job(partsJob(parts, sizeBytes, batch))))
           await parts.complete(put)
         } catch (error) {
           await parts.abort().catch(() => undefined)
@@ -689,12 +683,11 @@ export class FlyRuntime implements MinecraftRuntime {
   }
 
   /**
-   * Restore and relocate: a new machine on the new volume, then the old machine and the old
-   * volume go. The Flycast address belongs to the app, so the edge's route does not change.
-   */
-  /**
-   * A new machine on `volume`, then the old one goes. With the old host lost there is nothing to
-   * stop, and clearing what it held is left to Fly when it can't be done now.
+   * Restore and relocate: a new machine on the new volume, made before the old one is stopped, so
+   * a server that waits for room to make it keeps running meanwhile; then the old machine and the
+   * old volume go. The Flycast address belongs to the app, so the edge's route does not change.
+   * With the old host lost there is nothing to stop, and clearing what it held is left to Fly when
+   * it can't be done now.
    */
   async #replace(
     ref: FlyRef,
@@ -715,16 +708,15 @@ export class FlyRuntime implements MinecraftRuntime {
             options.hostLost ? null : Promise.reject(error),
           )
     const wasRunning = !options.hostLost && old?.state === 'started'
-    if (!options.hostLost) await this.stop(encodeHandle(ref))
     const secretsVersion = await setSecrets(this.#fly, ref.app, spec.secrets)
-    const machine = await createMachine(
-      this.#fly,
-      ref.app,
-      region,
-      this.#config(ref.serverId, spec, volumeId, old),
-      secretsVersion,
-      `minecraft-${Date.now().toString(36)}`,
-    )
+    const config = this.#config(ref.serverId, spec, volumeId, old)
+    const name = `minecraft-${Date.now().toString(36)}`
+    const make = () => createMachine(this.#fly, ref.app, region, config, secretsVersion, name)
+    const machine = await whenRoom(this.#roomWait, make, {
+      waiting: () => progress.step('waiting_for_room'),
+      refused: () => deleteVolume(this.#fly, ref.app, volumeId),
+    })
+    if (!options.hostLost) await this.stop(encodeHandle(ref))
     const next = encodeHandle({
       ...ref,
       region,

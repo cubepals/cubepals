@@ -269,3 +269,24 @@ describe('HangarCatalog with the resolver', () => {
     ])
   })
 })
+
+test('a try Hangar never answers is given up on and tried again', async () => {
+  let tries = 0
+  const api = hangarClient('blockly-test', {
+    baseUrl: 'https://hangar.test',
+    maxWaitMs: 0,
+    attemptMs: 50,
+    fetch: (request) => {
+      tries++
+      if (tries > 1) return Promise.resolve(Response.json({ name: 'OldCombatMechanics' }))
+      return new Promise((_, reject) =>
+        request.signal.addEventListener('abort', () => reject(request.signal.reason)),
+      )
+    },
+  })
+  const { data } = await api.GET('/api/v1/projects/{slugOrId}', {
+    params: { path: { slugOrId: 'OldCombatMechanics' } },
+  })
+  expect(tries).toBe(2)
+  expect(data).toMatchObject({ name: 'OldCombatMechanics' })
+})

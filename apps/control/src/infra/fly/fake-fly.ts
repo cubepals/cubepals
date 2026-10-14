@@ -13,6 +13,7 @@
  */
 
 import {
+  AT_LIMIT_SAID,
   CURRENTLY_STOPPING_SAID,
   NO_MACHINE,
   STILL_ACTIVE_SAID,
@@ -136,6 +137,8 @@ export class FakeFly {
   paidPlan = false
   /** While set, the error body every start and every new machine is refused with, as by a full host. */
   refusal: Json | null = null
+  /** The organization's machine limit: a new machine past it is refused, as Fly refuses one. */
+  machineLimit = Number.POSITIVE_INFINITY
   /** What each placement simulation asked for. */
   readonly placements: Json[] = []
   /** Destroyed machines, which the org list shows when asked to include them. */
@@ -451,6 +454,8 @@ export class FakeFly {
 
   /** A new machine, unless Fly refuses it: its host is full, or its volume claimed. */
   #create(app: string, body: Json): Response {
+    const held = [...this.machines.values()].reduce((sum, machines) => sum + machines.length, 0)
+    if (held >= this.machineLimit) return Response.json({ error: AT_LIMIT_SAID }, { status: 422 })
     const refused = this.refusal ?? this.#claimed(app, body.config as Json)
     if (refused !== null) return Response.json(refused, { status: 412 })
     const machine: FakeMachine = {

@@ -58,3 +58,18 @@ test('a Minecraft handshake is no header, and a header cut short may still be on
   expect(readProxyHeader(header.subarray(0, 20))).toBe('more')
   expect(readProxyHeader(Uint8Array.from([...header.subarray(0, 12), 0x11, 0x11, 0, 0]))).toBe('bad')
 })
+
+test('an address no client has is refused at once, however long', () => {
+  const to = { address: '::1', port: 2 }
+  const started = performance.now()
+  for (const address of ['%'.repeat(100_000), `1${'9'.repeat(100_000)}`, `::${'9.'.repeat(50_000)}`, ':::'])
+    expect(() => proxyHeader({ address: `2001:db8::${address}`, port: 1 }, to)).toThrow()
+  expect(() =>
+    proxyHeader({ address: `${'9'.repeat(100_000)}.1.1.1`, port: 1 }, { address: '127.0.0.1', port: 2 }),
+  ).toThrow()
+  expect(performance.now() - started).toBeLessThan(100)
+  // A zone names the interface, and is left out.
+  expect(readProxyHeader(proxyHeader({ address: 'fe80::1%eth0', port: 1 }, to))).toMatchObject({
+    source: { address: 'fe80:0:0:0:0:0:0:1' },
+  })
+})

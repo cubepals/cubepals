@@ -75,30 +75,41 @@ export function readProxyHeader(
 
 const twoBytes = (value: number): number[] => [(value >> 8) & 0xff, value & 0xff]
 
-/** An IPv4 address an IPv6 socket reports in IPv6's form, written as IPv4 again. */
-const unmapped = (address: string): string => address.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '')
+/**
+ * The longest an address is written, an IPv6 one with an IPv4 tail (45 characters), with room for
+ * a zone. Anything longer is no address, and is refused before it is read.
+ */
+const LONGEST_ADDRESS = 64
+
+/** An IPv4 address an IPv6 socket reports in IPv6's form (`::ffff:203.0.113.7`), written as IPv4 again. */
+export function unmapped(address: string): string {
+  const tail = address.slice('::ffff:'.length)
+  return address.slice(0, '::ffff:'.length).toLowerCase() === '::ffff:' && tail.includes('.') ? tail : address
+}
 
 function ipv4Bytes(address: string): number[] {
-  const parts = address.split('.').map(Number)
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255))
-    throw new Error(`not an IPv4 address: ${address}`)
-  return parts
+  const parts = address.split('.')
+  if (parts.length !== 4 || parts.some((part) => !/^\d{1,3}$/.test(part) || Number(part) > 255))
+    throw new Error(`not an IPv4 address: ${address.slice(0, LONGEST_ADDRESS)}`)
+  return parts.map(Number)
 }
 
 function ipv6Bytes(address: string): number[] {
+  if (address.length > LONGEST_ADDRESS) throw new Error('not an IPv6 address: too long')
   // A zone (`%eth0`) names the interface, not the address; an IPv4 tail is two groups.
-  let text = address.replace(/%.*$/, '')
-  const tail = /(\d+\.\d+\.\d+\.\d+)$/.exec(text)?.[1]
-  if (tail !== undefined) {
+  const zone = address.indexOf('%')
+  let text = zone === -1 ? address : address.slice(0, zone)
+  const tail = text.slice(text.lastIndexOf(':') + 1)
+  if (tail.includes('.')) {
     const [a = 0, b = 0, c = 0, d = 0] = ipv4Bytes(tail)
     text = `${text.slice(0, -tail.length)}${((a << 8) + b).toString(16)}:${((c << 8) + d).toString(16)}`
   }
-  const [head = '', rest] = text.split('::')
+  const [head = '', rest, extra] = text.split('::')
   const before = head === '' ? [] : head.split(':')
   const after = rest === undefined || rest === '' ? [] : rest.split(':')
-  const groups =
-    rest === undefined ? before : [...before, ...Array(8 - before.length - after.length).fill('0'), ...after]
-  if (groups.length !== 8 || groups.some((group) => !/^[0-9a-f]{1,4}$/i.test(group)))
+  const missing = 8 - before.length - after.length
+  const groups = rest === undefined ? before : [...before, ...Array(Math.max(missing, 0)).fill('0'), ...after]
+  if (extra !== undefined || groups.length !== 8 || groups.some((group) => !/^[0-9a-f]{1,4}$/i.test(group)))
     throw new Error(`not an IPv6 address: ${address}`)
   return groups.flatMap((group) => twoBytes(Number.parseInt(group, 16)))
 }

@@ -66,6 +66,13 @@ function layerOf(path: string): Layer | null {
   return rel.includes('/') && LAYERS.includes(top as Layer) ? (top as Layer) : null
 }
 
+/** Whether `name` is an error class the port declares: one that extends Error, or another of its errors. */
+function declaresError(port: string, name: string): boolean {
+  const base = port.match(new RegExp(`export class ${name} extends (\\w+)\\b`))?.[1]
+  if (base === undefined) return false
+  return /Error$/.test(base) || (base !== name && declaresError(port, base))
+}
+
 /** Whether `name` is an `as const` list declared in the port, or in the module it re-exports it from. */
 function declaresVocabulary(path: string, source: string, name: string): boolean {
   if (new RegExp(`export const ${name} = \\[[^\\]]*\\] as const`).test(source)) return true
@@ -171,7 +178,7 @@ for (const file of files(CONTROL)) {
       if (layer === 'infra' && targetRel.startsWith('app/ports/') && !typeOnly && !isTest) {
         const port = readFileSync(target.endsWith('.ts') ? target : `${target}.ts`, 'utf8')
         for (const name of valueNames(source, spec)) {
-          const error = new RegExp(`export class ${name} extends \\w*Error\\b`).test(port)
+          const error = declaresError(port, name)
           const vocabulary = declaresVocabulary(target.endsWith('.ts') ? target : `${target}.ts`, port, name)
           if (!error && !vocabulary)
             fail(

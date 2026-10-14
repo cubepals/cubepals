@@ -14,6 +14,13 @@ import { iconOf } from '../../minecraft/item-models.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import type { ClientAssets, ClientFiles } from '../ports/minecraft.ts'
 
+/**
+ * Icons held at once: every item of the few releases players are on, and room to spare. The ids
+ * come from whoever asks, so without a bound made-up ones would grow it for good; the oldest goes
+ * first.
+ */
+const KEPT = 20_000
+
 export class ItemIcons {
   readonly #assets: ClientAssets
   readonly #icons = new Map<string, ItemIconView>()
@@ -34,6 +41,10 @@ export class ItemIcons {
           json: (path) => parseJson(files.read(path)),
           hasTexture: (texture) => files.read(`textures/${texture}.png`) !== null,
         })
+        if (this.#icons.size >= KEPT) {
+          const oldest = this.#icons.keys().next().value
+          if (oldest !== undefined) this.#icons.delete(oldest)
+        }
         this.#icons.set(key, icon)
       }
       icons[id] = icon ?? null

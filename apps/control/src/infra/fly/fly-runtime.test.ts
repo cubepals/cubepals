@@ -830,12 +830,12 @@ describe('Fly helpers', () => {
     expect(() => guestFor(256 * 1024)).toThrow()
   })
 
-  test('the organization holds two machines a server beside the platform’s own, and the runtime says how many', () => {
-    // A restore or a move makes its new machine before the old one goes; an export runs a helper.
-    expect(serverCeilingOf(50, 7)).toBe(21)
-    expect(serverCeilingOf(250, 7)).toBe(121)
+  test('the organization holds one machine a server beside the platform’s own and two for helpers', () => {
+    // Staging's org: 50 machines, 6 the platform's, 2 kept for a restore's, move's or export's.
+    expect(serverCeilingOf(50, 6)).toBe(44 - 2)
+    expect(serverCeilingOf(250, 7)).toBe(241)
     expect(serverCeilingOf(8, 7)).toBe(0)
-    expect(setup().runtime.serverCeiling).toBe(21)
+    expect(setup().runtime.serverCeiling).toBe(41)
   })
 
   test('app names map back to server ids, and only this deployment’s', () => {

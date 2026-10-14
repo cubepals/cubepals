@@ -13,16 +13,10 @@ import type { Actor } from '../actor.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { loadListing } from '../listings/persistence.ts'
 import { findByInvite, loadRevision } from '../servers/persistence.ts'
+import { tuning } from '../tuning.ts'
 
 /** Whoever holds the link acts for themselves, not for the owner. */
 const INVITEE: Actor = { kind: 'system', reason: 'invite' }
-
-/**
- * How many people one invite link may let in per hour. A link is meant for friends; a leaked one
- * should cost its holder little and its owner nothing, and resetting it ends the old one along
- * with its count, so the new link has a whole hour's worth of its own.
- */
-const JOINS_PER_HOUR = 10
 
 /**
  * Joining through an invite (§15.6). The link is the permission: its holder may put their own
@@ -64,11 +58,19 @@ export class SharingService {
     )
     if (listed !== undefined) return { playerName: listed.player.name, added: false, asleep }
 
-    // Joins through this link only: the ones since its owner last replaced it, within the hour.
+    // Joins through this link only (`AbuseLimits.inviteJoinsPerHour`): the ones since its owner last
+    // replaced it, within the hour. Resetting a link ends the old one along with its count, so the
+    // new link has a whole hour's worth of its own.
     const [reset] = await this.#db
       .select({ at: max(schema.auditLog.at) })
       .from(schema.auditLog)
-      .where(and(eq(schema.auditLog.subjectId, server.id), eq(schema.auditLog.action, 'server.invite_reset')))
+      .where(
+        and(
+          eq(schema.auditLog.subjectType, 'server'),
+          eq(schema.auditLog.subjectId, server.id),
+          eq(schema.auditLog.action, 'server.invite_reset'),
+        ),
+      )
     const hourAgo = new Date(Date.now() - HOUR_MS)
     const since = reset?.at && reset.at > hourAgo ? reset.at : hourAgo
     const [used] = await this.#db
@@ -76,12 +78,13 @@ export class SharingService {
       .from(schema.auditLog)
       .where(
         and(
+          eq(schema.auditLog.subjectType, 'server'),
           eq(schema.auditLog.subjectId, server.id),
           eq(schema.auditLog.action, 'access.invite_join'),
           gte(schema.auditLog.at, since),
         ),
       )
-    if ((used?.n ?? 0) >= JOINS_PER_HOUR)
+    if ((used?.n ?? 0) >= tuning().abuse.inviteJoinsPerHour)
       throw new AppError(
         'rate_limited',
         'This invite has let in a lot of people in the last hour. Ask its owner to add you.',

@@ -19,7 +19,7 @@
  */
 
 import { connect, createServer, type Server, type Socket } from 'node:net'
-import { LOCAL_HEADER, proxyHeader } from '../../packages/contracts/src/proxy-header.ts'
+import { LOCAL_HEADER, proxyHeader, unmapped } from '../../packages/contracts/src/proxy-header.ts'
 import { turnAway } from './hold.ts'
 import type { Gate } from './limits.ts'
 import { hostnameOf, readVarInt } from './notice.ts'
@@ -96,7 +96,7 @@ export function readHandshake(bytes: Uint8Array): { hostname: string; joining: b
  */
 function headerFor(source: Source | null, port: number): Uint8Array {
   if (source === null || source.address === '') return LOCAL_HEADER
-  const address = source.address.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '')
+  const address = unmapped(source.address)
   return proxyHeader(
     { address, port: source.port },
     { address: address.includes(':') ? '::1' : '127.0.0.1', port },

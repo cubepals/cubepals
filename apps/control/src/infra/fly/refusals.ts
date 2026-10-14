@@ -27,6 +27,17 @@ export const saysNoRoom = (said: string, status: unknown): boolean =>
   status === NO_ROOM_STATUS || NO_ROOM.test(said)
 
 /**
+ * A new machine refused because the organization holds as many machines as Fly lets it, stopped
+ * ones included. Fly's words, as flyctl prints them (community.fly.io/t/14701 and /t/18014); the
+ * API answers 422 (community.fly.io/t/10880). Fly documents neither the body nor a code, so the
+ * words are matched.
+ */
+const AT_LIMIT = 'reached the maximum number of machines'
+export const AT_LIMIT_SAID = `You have ${AT_LIMIT} for this app`
+const AT_LIMIT_MATCH = new RegExp(AT_LIMIT, 'i')
+export const saysAtLimit = (said: string): boolean => AT_LIMIT_MATCH.test(said)
+
+/**
  * A new machine refused, 412, because another machine holds the volume it mounts. Fly can go on
  * holding it for a machine it has destroyed, and then names `NO_MACHINE` (production, 2026-10-10).
  */

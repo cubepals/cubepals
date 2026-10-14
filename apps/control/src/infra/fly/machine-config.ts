@@ -17,6 +17,7 @@ export const META = {
   volume: 'blockly_volume',
   ports: 'blockly_ports',
   digest: 'blockly_spec_digest',
+  resumes: 'blockly_resumes_on',
 } as const
 
 const OWN_KEYS = new Set<string>(Object.values(META))
@@ -89,18 +90,25 @@ export function guestFor(memoryMb: number): MachineGuest {
   }
 }
 
-const specDigest = (spec: RuntimeSpec) =>
+/** The spec's, secrets included; not its `resumesOn`, which the machine keeps beside it. */
+const specDigest = ({ resumesOn: _resumesOn, ...spec }: RuntimeSpec) =>
   createHash('sha256').update(JSON.stringify(spec)).digest('hex').slice(0, 32)
 
 /**
- * The volume a machine asleep, or going to sleep, on exactly `spec` mounts, secrets included: a
- * start resumes it as it was, once it is asleep, with nothing to post or change first. Null for a
- * machine awake, or asleep on anything else, whose new configuration must boot.
+ * The volume a machine asleep, or going to sleep, on `spec` mounts: on exactly it, secrets
+ * included, or on one its `resumesOn` says it may wake on as it slept. A start resumes it as
+ * it was, once it is asleep, with nothing to post or change first; the rest of `spec` waits for
+ * its next boot. Null for a machine awake, or asleep on anything else, whose new configuration must
+ * boot.
  */
 export function asleepOn(machine: Machine | null, spec: RuntimeSpec): string | null {
   const asleep = machine?.state === 'suspended' || machine?.state === 'suspending'
-  if (!asleep || machine?.config?.metadata?.[META.digest] !== specDigest(spec)) return null
-  return machine.config.mounts?.[0]?.volume ?? null
+  const metadata = machine?.config?.metadata ?? {}
+  const same =
+    metadata[META.digest] === specDigest(spec) ||
+    (spec.resumesOn !== undefined && metadata[META.resumes] === spec.resumesOn)
+  if (!asleep || !same) return null
+  return machine?.config?.mounts?.[0]?.volume ?? null
 }
 
 /**
@@ -138,6 +146,7 @@ export function machineConfig(
       [META.volume]: volumeId,
       [META.ports]: portsValue(portsOf(spec)),
       [META.digest]: specDigest(spec),
+      ...(spec.resumesOn === undefined ? {} : { [META.resumes]: spec.resumesOn }),
     },
   }
 }

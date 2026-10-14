@@ -152,6 +152,11 @@ export const minecraftServers = pgTable(
     uniqueIndex('servers_invite_code').on(t.inviteCode),
     uniqueIndex('servers_create_idem').on(t.ownerId, t.createIdempotencyKey),
     index('servers_owner_live').on(t.ownerId).where(sql`${t.deletedAt} is null`),
+    // The servers in one state: what the sweeps read every minute (every running server, every
+    // owner with one running) and what the capacity check counts.
+    index('servers_status').on(t.status),
+    // A wake for an address no live server holds asks whether one in the trash still holds it.
+    index('servers_slug_deleted').on(t.slug).where(sql`${t.status} = 'deleted'`),
   ],
 )
 
@@ -330,6 +335,9 @@ export const serverOperations = pgTable(
   (t) => [
     uniqueIndex('operations_idem').on(t.serverId, t.idempotencyKey),
     index('operations_server_recent').on(t.serverId, t.createdAt),
+    // A server's newest operation of one kind (its last start, its last change), read for every
+    // server on its owner's list.
+    index('operations_server_kind').on(t.serverId, t.kind, t.createdAt),
     // How long operations took, and which failed, read by the window they ended in (platform health).
     index('operations_finished').on(t.finishedAt).where(sql`${t.finishedAt} is not null`),
     index('operations_open').on(t.createdAt).where(sql`${t.status} in ('queued', 'running')`),
