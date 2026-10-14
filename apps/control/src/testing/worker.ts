@@ -66,7 +66,12 @@ async function oneWorker(url: string, app: ControlPlane) {
   // back now, and again once the heartbeat it may have sent just before has lapsed.
   await app.stuck.takeBack()
   const again = setTimeout(() => void app.stuck.takeBack(), (OPERATION_HEARTBEAT_SECONDS + 1) * 1000)
-  await workServerOperations(boss, (attempt) => app.runner.run(attempt), 4, 0.5)
+  await workServerOperations(
+    boss,
+    (attempt) => app.runner.run(attempt),
+    { concurrency: 4, wakeConcurrency: 2 },
+    0.5,
+  )
   return {
     kill() {
       killed = true

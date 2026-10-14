@@ -34,6 +34,18 @@ const tuned = {
   ABUSE_LIMITS: JSON.stringify(DEFAULT_ABUSE_LIMITS),
 }
 
+describe('server operations', () => {
+  test('run 32 at once, with 8 more for starts and wakes, unless told otherwise', () => {
+    expect(loadConfig(env).operations).toEqual({ concurrency: 32, wakeConcurrency: 8 })
+    expect(
+      loadConfig({ ...env, SERVER_OPERATIONS_CONCURRENCY: '64', SERVER_WAKES_CONCURRENCY: '12' }).operations,
+    ).toEqual({ concurrency: 64, wakeConcurrency: 12 })
+    for (const wrong of ['0', '-1', '2.5', 'many'])
+      expect(() => loadConfig({ ...env, SERVER_OPERATIONS_CONCURRENCY: wrong })).toThrow()
+    expect(() => loadConfig({ ...env, SERVER_WAKES_CONCURRENCY: '0' })).toThrow()
+  })
+})
+
 describe('configuration', () => {
   test('a local environment parses with defaults', () => {
     const config = loadConfig(env)

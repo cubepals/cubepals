@@ -76,7 +76,14 @@ export interface JobAttempt {
  * exists only if the domain write that asked for it committed.
  */
 export interface JobQueue {
-  enqueue(tx: Tx, job: { operationId: string; serverId: string; retryLimit: number }): Promise<void>
+  /**
+   * `wakes`: a start or a wake, which someone is waiting on to play. It runs before anything else
+   * queued, on workers kept for it, but never before what its own server queued first.
+   */
+  enqueue(
+    tx: Tx,
+    job: { operationId: string; serverId: string; retryLimit: number; wakes: boolean },
+  ): Promise<void>
   /**
    * `artifact-mirror` (§9): copy a catalog jar into the store. One job per bytes: asking again
    * while one is queued or running asks for nothing more.

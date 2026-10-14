@@ -88,6 +88,8 @@ Terraform stack.
 | `DATABASE_URL` | compose Postgres | Fly Managed Postgres, pooled | Fly Managed Postgres, pooled | secret | Queries go through it (Managed Postgres's PgBouncer URL) |
 | `DATABASE_DIRECT_URL` | — (`DATABASE_URL`) | Fly Managed Postgres, direct | Fly Managed Postgres, direct | secret | Past the pooler: the live-update listener's `LISTEN` and the release command's migrations. The pooler closes a client idle for ten minutes and breaks `LISTEN` in transaction mode (docs.fly.io/postgres) |
 | `DATABASE_POOL_MAX` | `10` | `10` | `10` | toml | Connections each of a process's two pools (queries, the job queue's) may hold. A session-mode pooler such as Supabase's gives each one a server connection, and every process shares its limit, so a deployment on one sizes it down. The pooler must be session mode: advisory locks hold a connection's session for the length of the work |
+| `SERVER_OPERATIONS_CONCURRENCY` | default `32` | default | default | — | Server operations each worker process runs at once, starts and wakes first. An operation spends nearly all its time waiting on the provider and a boot, holding no database connection while it waits; new Fly apps go out at one a second (`infra/fly/client.ts`). Each worker machine runs this many, so a rolling deploy briefly runs twice as many |
+| `SERVER_WAKES_CONCURRENCY` | default `8` | default | default | — | Starts and wakes each worker runs at once on top of the above, on a lane of their own, so a queue of new servers never delays a player joining. They still wait for what their own server queued first |
 
 ### Listeners
 

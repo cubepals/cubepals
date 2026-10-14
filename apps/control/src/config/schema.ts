@@ -208,6 +208,18 @@ export const DeploymentConfig = z.object({
      */
     poolMax: z.number().int().positive(),
   }),
+  /**
+   * Server operations each worker process runs at once. An operation spends nearly all its time
+   * waiting on the provider and on the server booting, holding no database connection while it
+   * waits, so many run side by side. Starts and wakes have a lane of their own on top, so a queue
+   * of new servers never keeps a player waiting to join.
+   */
+  operations: z.object({
+    /** Every kind of operation, starts and wakes first. */
+    concurrency: z.number().int().positive(),
+    /** Starts and wakes alone, however busy the rest is. */
+    wakeConcurrency: z.number().int().positive(),
+  }),
   web: z.object({
     /** Where people reach the web app; auth's base URL is this plus /api/auth. */
     canonicalOrigin: Origin,
