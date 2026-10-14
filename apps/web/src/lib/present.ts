@@ -272,7 +272,7 @@ const JOURNEYS: Partial<Record<OperationView['kind'], Journey>> = {
     expectedSeconds: 60,
     steps: [
       { label: 'Keeping the world as it is now', covers: ['queued', 'saving'] },
-      { label: 'Bringing the backup back', covers: ['storage', 'compute', 'allocating'] },
+      { label: 'Bringing the backup back', covers: ['storage', 'compute', 'allocating', 'waiting_for_room'] },
       { label: 'Setting it up', covers: ['booting'] },
       { label: 'Starting it up', covers: ['starting'] },
       { label: 'Loading the world', covers: ['loading_world', 'verifying', 'access'] },
@@ -296,7 +296,7 @@ const JOURNEYS: Partial<Record<OperationView['kind'], Journey>> = {
     expectedSeconds: 90,
     steps: [
       { label: 'Saving the world', covers: ['queued', 'saving'] },
-      { label: 'Moving it', covers: ['storage', 'compute', 'allocating'] },
+      { label: 'Moving it', covers: ['storage', 'compute', 'allocating', 'waiting_for_room'] },
       { label: 'Setting it up there', covers: ['booting'] },
       { label: 'Starting it up', covers: ['starting'] },
       { label: 'Loading the world', covers: ['loading_world', 'verifying', 'access'] },
@@ -420,6 +420,8 @@ export function quietLine(
       return 'Putting it back how it was'
     case 'allocating':
       return 'Finding room for it'
+    case 'waiting_for_room':
+      return 'Waiting for room to do this'
     case 'storage':
       return 'Setting aside space for your world'
     case 'compute':

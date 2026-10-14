@@ -8,9 +8,9 @@
  * to make, and what a 404 means for it, belongs to the part that owns the resource.
  */
 
-import { RuntimeFull } from '../../../app/ports/runtime.ts'
+import { RuntimeAtLimit, RuntimeFull } from '../../../app/ports/runtime.ts'
 import { FlyApiError } from '../client.ts'
-import { saysNoRoom } from '../refusals.ts'
+import { saysAtLimit, saysNoRoom } from '../refusals.ts'
 
 export type Result<T> = { data?: T; error?: unknown; response: Response }
 
@@ -27,11 +27,13 @@ export function succeeded(result: Result<unknown>, what: string, ...alsoFine: nu
 
 /**
  * `must`, for starting, making or resizing a machine: a host with no room for it is the port's
- * RuntimeFull, which a wait passes, as on any full runtime. Anything else Fly says stays a Fly error.
+ * RuntimeFull, which a wait passes, as on any full runtime, and the organization at its machine
+ * limit is RuntimeAtLimit. Anything else Fly says stays a Fly error.
  */
 export function launched<T>(result: Result<T>, what: string): T {
   if (!result.response.ok) {
     const { said, status } = refusalOf(result.error)
+    if (saysAtLimit(said)) throw new RuntimeAtLimit('fly', `${what}: ${said}`)
     if (saysNoRoom(said, status)) throw new RuntimeFull('fly', `${what}: ${said}`)
   }
   return must(result, what)

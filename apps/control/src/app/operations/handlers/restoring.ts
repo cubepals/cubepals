@@ -18,7 +18,7 @@ import { type BackupRecord, loadBackup } from '../../backups/persistence.ts'
 import type { BackupService } from '../../backups/service.ts'
 import { aside, inFull, PermanentFailure } from '../../errors.ts'
 import type { ArchiveStore } from '../../ports/optional.ts'
-import type { RestoreSource } from '../../ports/runtime.ts'
+import { type RestoreSource, RuntimeAtLimit } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import { grownStorage, growStorage, lockServer, saveHandle } from '../../servers/persistence.ts'
 import type { DesiredRuntime, RuntimeSpecs } from '../../servers/specs.ts'
@@ -33,6 +33,14 @@ import type { GameConsole } from './game-console.ts'
 import type { GoingBack } from './going-back.ts'
 import type { Rechecks } from './rechecks.ts'
 import { IMPORT_LINK_SECONDS, type WorldCopies } from './world-copies.ts'
+
+/**
+ * A restore that ends with nothing to go back from: a server sent to the trash meanwhile, or one
+ * the provider had no machine for, after waiting, and so never touched, which the queue tries
+ * again later.
+ */
+const nothingToGoBackFrom = (error: unknown): boolean =>
+  error instanceof NoLongerApplies || error instanceof RuntimeAtLimit
 
 export function restoring(deps: {
   db: Db
@@ -153,8 +161,7 @@ export function restoring(deps: {
       try {
         await bringBack(ctx, server, chosen, desired, up)
       } catch (error) {
-        // A server sent to the trash meanwhile has nothing to go back to.
-        if (error instanceof NoLongerApplies) throw error
+        if (nothingToGoBackFrom(error)) throw error
         await ctx.step('rolling_back')
         const quiet: OperationContext = { ...ctx, step: async () => {} }
         try {

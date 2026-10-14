@@ -444,9 +444,9 @@ export function inconsistencies(config: DeploymentConfig): string[] {
   if (web.protocol !== 'https:' && !isLocal(web.hostname))
     problems.push(`The web origin ${web.origin} must use https outside local development.`)
   for (const runtime of config.runtimes) {
-    // Two machines a server at their busiest (restore, export, relocate), beside the platform's own:
-    // the Fly runtime counts its ceiling the same way (MACHINES_PER_SERVER in infra/fly).
-    if (runtime.provider === 'fly' && runtime.machineLimit - runtime.platformMachines < 2)
+    // One machine a server, beside the platform's own and the two kept for helpers: the Fly runtime
+    // counts its ceiling the same way (HELPER_HEADROOM in infra/fly).
+    if (runtime.provider === 'fly' && runtime.machineLimit - runtime.platformMachines < 3)
       problems.push(
         `FLY_MACHINE_LIMIT (${runtime.machineLimit}) leaves no room for a server beside the platform's ${runtime.platformMachines} machines.`,
       )

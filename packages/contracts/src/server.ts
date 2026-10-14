@@ -415,6 +415,8 @@ export const AdminUntrashInput = ServerRef.extend({ reason: adminReason })
 export const OPERATION_STEPS = [
   'queued',
   'allocating',
+  /** The provider holds as many machines as it may: the work waits for one to free. */
+  'waiting_for_room',
   'storage',
   'compute',
   'booting',

@@ -2556,9 +2556,10 @@ not take:
 11. **Caching and time limits on the rewrite.** `no-store` on every API response. No
     long-polling through the web origin. The wake wait happens on the internal edge path,
     not through the web tier.
-12. **Fly machine limit per org** must stay above `platform_controls.maxServers` +
-    per-server transient machines (restore, export and relocate briefly use extra machines).
-    Size caps with that headroom.
+12. **Fly machine limit per org** must stay above `platform_controls.maxServers` + the
+    platform's machines + two kept for helpers: a server holds one machine, and a restore, export
+    or move runs a second for a while. More of those at once than are kept wait for a machine to
+    free, with the server as it was, rather than fail.
 
 ### 19a. Untrusted code on a shared private network
 
