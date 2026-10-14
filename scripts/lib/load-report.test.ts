@@ -2,6 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * The load test's report: steps timed by the runs that worked, Fly's machine events turned into
+ * hours, failures grouped, and the first limit a run met.
+ */
 import { describe, expect, test } from 'bun:test'
 import { HOUR_MS } from '@blockly/contracts/durations'
 import type { StepRecord } from './load-player.ts'
