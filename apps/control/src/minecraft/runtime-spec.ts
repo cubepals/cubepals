@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { motdForGame } from '@blockly/contracts/server-list'
 import type { InstallSeed, RuntimeSpec } from '../app/ports/runtime.ts'
 import type { ModArtifact } from '../domain/mods/artifact.ts'
 import {
@@ -163,7 +164,8 @@ function settingsEnv(settings: ServerSettings): Record<string, string> {
     [SETTING_ENV.viewDistance]: String(settings.viewDistance),
     [SETTING_ENV.simulationDistance]: String(settings.simulationDistance),
     [SETTING_ENV.maxPlayers]: String(settings.maxPlayers),
-    [SETTING_ENV.motd]: settings.motd,
+    // The game reads its formatting codes after the section sign; owners type them with `&`.
+    [SETTING_ENV.motd]: motdForGame(settings.motd),
     [SETTING_ENV.spawnProtection]: String(settings.spawnProtection),
     [SETTING_ENV.onlineMode]: settings.onlineMode ? 'TRUE' : 'FALSE',
   }

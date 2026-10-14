@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { motdText } from '@blockly/contracts/server-list'
 import { isDatapack, type PinnedMod } from '../mods/artifact.ts'
 import { type PinnedModpack, samePack } from '../mods/modpack.ts'
 import { type CarriedFile, filesChanged, movesCarried } from './carried.ts'
@@ -134,7 +135,8 @@ export function settingsProblems(settings: ServerSettings, capacity: number): st
     problems.push(`Spawn protection goes from 0 to ${SETTING_BOUNDS.spawnProtection.max} blocks.`)
   if (!Number.isInteger(settings.maxPlayers) || settings.maxPlayers < 1 || settings.maxPlayers > capacity)
     problems.push(`This size holds up to ${capacity} players. Pick a bigger size for more.`)
-  const motd = settings.motd.trim()
+  // Counted as the list shows it: formatting codes take no room.
+  const motd = motdText(settings.motd).trim()
   if (motd.length === 0 || motd.length > SETTING_BOUNDS.motdLength || /\p{Cc}/u.test(settings.motd))
     problems.push(`The message of the day is one line of up to ${SETTING_BOUNDS.motdLength} characters.`)
   return problems

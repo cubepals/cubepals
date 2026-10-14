@@ -26,6 +26,7 @@ import type { PlayAddressing, RegionCatalog } from '../ports/platform.ts'
 import { runsOf } from '../revisions/caps.ts'
 import { draftOf } from '../revisions/service.ts'
 import type { RuntimePlacement } from '../runtimes/service.ts'
+import { keepSentIcon, type OwnIcon } from '../server-icons/persistence.ts'
 import type { SetupService } from '../setups/service.ts'
 import { newInviteCode } from './invites.ts'
 import { type CreateServerRequest, draftNewServer } from './new-server.ts'
@@ -413,7 +414,7 @@ export class MinecraftServerService {
   }
 
   /**
-   * What the owner calls their world, says about it, and picks for its picture. None of it
+   * What the owner calls their world, says about it, and picks or gives for its picture. None of it
    * restarts anything: the name is Blockly's, and the icon reaches the game at its next start.
    * A server list message still in Blockly's words quotes the old name, so it follows the new one,
    * as a revision of its own that also arrives at the next start; one the owner wrote stays.
@@ -425,6 +426,7 @@ export class MinecraftServerService {
       name?: string
       description?: string
       icon?: string | null
+      picture?: OwnIcon | null
       tags?: readonly string[]
     },
   ): Promise<MinecraftServer> {
@@ -448,6 +450,7 @@ export class MinecraftServerService {
         ...(name === undefined || name === server.name ? {} : { name }),
         ...(description === undefined || description === server.description ? {} : { description }),
         ...(identity.icon === undefined || identity.icon === server.icon ? {} : { icon: identity.icon }),
+        ...(await keepSentIcon(tx, server, identity.picture)),
         ...(tags === undefined || tags.join() === server.tags.join() ? {} : { tags }),
       }
       if (Object.keys(change).length === 0) return server

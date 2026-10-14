@@ -28,6 +28,15 @@ export class ArtifactLinks {
     return `${this.#base}/runtime/v1/icons/${encodeURIComponent(key)}.png`
   }
 
+  /**
+   * The picture an owner gave their server, by its hash. It is theirs alone, so the link carries
+   * the server's own token, as its jars' do.
+   */
+  ownIcon(serverId: string, sha256: string): string {
+    const token = deriveServerSecret(this.#secrets.current.key, serverId, 'artifacts')
+    return `${this.#base}/runtime/v1/icons/${serverId}/${sha256}.png?t=${token}`
+  }
+
   /** Links signed with the current key; links from earlier keys still work during a rotation. */
   forServer(serverId: string): (artifact: ModArtifact) => string {
     const token = deriveServerSecret(this.#secrets.current.key, serverId, 'artifacts')

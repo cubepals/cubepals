@@ -18,6 +18,7 @@ import {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const SHA512 = /^[0-9a-f]{128}$/
+const SHA256 = /^[0-9a-f]{64}$/
 
 /**
  * The only inbound path from game runtimes (§15.2): the image asks for each jar its `MODS` or
@@ -52,6 +53,25 @@ export function createRuntimeApp(deps: { artifacts: ArtifactService }): Hono {
       })
     } catch {
       return c.body(null, 404)
+    }
+  })
+
+  /**
+   * A picture the owner gave their server instead, fetched the same way. It is theirs, so it
+   * takes the server's own token, and is looked for under that server only.
+   */
+  app.get('/runtime/v1/icons/:serverId/:file', async (c) => {
+    const serverId = c.req.param('serverId') ?? ''
+    const sha256 = (c.req.param('file') ?? '').replace(/\.png$/, '')
+    c.header('Cache-Control', 'no-store')
+    if (!UUID.test(serverId) || !SHA256.test(sha256)) return c.body(null, 404)
+    try {
+      const png = await deps.artifacts.ownIcon(serverId, sha256, c.req.query('t') ?? '')
+      if (png === null) return c.body(null, 404)
+      return c.body(new Uint8Array(png), 200, { 'Content-Type': 'image/png' })
+    } catch (error) {
+      if (error instanceof ArtifactForbidden) return c.body(null, 403)
+      throw error
     }
   })
 

@@ -22,6 +22,8 @@ export interface ListingCardView {
   name: string
   description: string
   icon: string | null
+  /** Where its owner's own picture is fetched; it shows instead of `icon` when there is one. */
+  ownIcon: string | null
   tags: string[]
   joinAddress: string
   /** Players online now; a sleeping server wakes when someone joins. */

@@ -17,6 +17,7 @@ import { loadControls } from '../accounts/persistence.ts'
 import { type Actor, authorize } from '../actor.ts'
 import { NotFound } from '../errors.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
+import { pictureOf } from '../server-icons/view.ts'
 import { findServer, loadRevision } from '../servers/persistence.ts'
 import {
   allowlist,
@@ -160,7 +161,7 @@ export class ListingQueries {
       slug: row.server.slug,
       name: row.server.name,
       description: row.server.description,
-      icon: row.server.icon,
+      ...pictureOf(row.server),
       tags: row.server.tags,
       lastPlayedAt: row.lastPlayedAt?.toISOString() ?? null,
       joinAddress: formatJoinAddress(this.#addressing.primary(row.server.slug)),

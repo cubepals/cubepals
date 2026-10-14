@@ -14,6 +14,7 @@ import type { JobQueue } from '../ports/jobs.ts'
 import type { Locks } from '../ports/locks.ts'
 import type { ArchiveStore } from '../ports/optional.ts'
 import { acceptedSecrets, type SecretKeyring } from '../secrets.ts'
+import { loadOwnIcon } from '../server-icons/persistence.ts'
 import { deletePendingUpload, uploadsToClear } from '../uploads/persistence.ts'
 import {
   forgetStored,
@@ -197,13 +198,7 @@ export class ArtifactService {
    * bytes one of its revisions pins; everything a HEAD needs comes from the database.
    */
   async locate(serverId: string, sha512: string, token: string): Promise<LocatedArtifact> {
-    // During a rotation a server not yet moved onto the new key still asks with its old token.
-    const given = Buffer.from(token)
-    const accepted = acceptedSecrets(this.#secrets, serverId, 'artifacts').map((secret) =>
-      Buffer.from(secret),
-    )
-    if (!accepted.some((expected) => given.length === expected.length && timingSafeEqual(given, expected)))
-      throw new ArtifactForbidden()
+    this.#authorize(serverId, token)
     const found = await pinnedBy(this.#db, serverId, sha512)
     if (found === null) throw new ArtifactNotFound()
     const pinned = found
@@ -218,6 +213,25 @@ export class ArtifactService {
       name: diskName(pinned.artifact),
       lastModified,
     }
+  }
+
+  /**
+   * A game runtime asking for the picture its owner gave it, at a start. It is theirs alone, so it
+   * takes the server's own token too, and is looked for under that server only.
+   */
+  async ownIcon(serverId: string, sha256: string, token: string): Promise<Buffer | null> {
+    this.#authorize(serverId, token)
+    return loadOwnIcon(this.#db, serverId, sha256)
+  }
+
+  #authorize(serverId: string, token: string): void {
+    // During a rotation a server not yet moved onto the new key still asks with its old token.
+    const given = Buffer.from(token)
+    const accepted = acceptedSecrets(this.#secrets, serverId, 'artifacts').map((secret) =>
+      Buffer.from(secret),
+    )
+    if (!accepted.some((expected) => given.length === expected.length && timingSafeEqual(given, expected)))
+      throw new ArtifactForbidden()
   }
 
   /** Where the bytes are fetched: the store's copy when there is one, else where they were published. */

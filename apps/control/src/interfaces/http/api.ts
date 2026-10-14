@@ -62,6 +62,7 @@ export function createApiApp(deps: {
       sharing: deps.services.sharingQueries,
       faces: deps.services.faces,
       items: deps.services.items,
+      icons: deps.services.icons,
     }),
   )
 
