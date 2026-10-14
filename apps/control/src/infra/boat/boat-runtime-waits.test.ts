@@ -524,6 +524,17 @@ describe('BoatRuntime changes of size, storage on a sleeping server, and moves',
     expect(box.type).toBe('default')
   })
 
+  // A Boat server on staging (2026-10-14) was stopped by Boat ten minutes after a change that
+  // turned account checks off, with its players on: the change had parked its running sandbox.
+  test('apply on a running server leaves its sandbox’s time alone, whatever its workload reads', async () => {
+    const { boat, runtime } = setup()
+    const box = boat.box('ready')
+    boat.inspect = 'missing'
+    await runtime.apply(handleOf(box), { ...spec, env: { EULA: 'TRUE', ONLINE_MODE: 'FALSE' } })
+    expect(boat.seen.filter((call) => call.startsWith('PATCH'))).toEqual([])
+    expect(box.ttlSeconds).toBeNull()
+  })
+
   test('deleting a snapshot of a sleeping server wakes and parks it; one in another deployment is refused', async () => {
     const { boat, runtime } = setup()
     const box = boat.box('archived')

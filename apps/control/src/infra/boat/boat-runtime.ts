@@ -192,8 +192,12 @@ export class BoatRuntime implements MinecraftRuntime {
       if (found === null) throw new Error('The sandbox is gone')
     }
     // A stopped server has nowhere to hold a new configuration but its sandbox: it is woken and
-    // parked, so Boat stops it again unless a start follows.
-    const sandbox = await this.#sandboxes.up(ref.serverId, found, 'apply', running ? 'run' : 'park', type)
+    // parked, so Boat stops it again unless a start follows. One that is up and not parked keeps
+    // the time it has: a look at its workload can misread a running one, and parked on that, Boat
+    // stopped it ten minutes later with its players on (staging, 2026-10-14).
+    const sandbox = this.#runs(found)
+      ? found
+      : await this.#sandboxes.up(ref.serverId, found, 'apply', running ? 'run' : 'park', type)
     await this.#commands.configure(sandbox.id, ref.serverId, spec)
     const applied = this.#handleOf(ref.serverId, sandbox, spec)
     if (running) await this.#commands.run(sandbox.id, 'up', opened(applied))
@@ -335,7 +339,10 @@ export class BoatRuntime implements MinecraftRuntime {
       )
     }
     const running = UP.has(found.state) && (await this.#workloadRunning(found.id))
-    const sandbox = await this.#sandboxes.up(ref.serverId, found, 'restore', running ? 'run' : 'park', type)
+    // One that is up and not parked keeps the time it has, as in `apply`.
+    const sandbox = this.#runs(found)
+      ? found
+      : await this.#sandboxes.up(ref.serverId, found, 'restore', running ? 'run' : 'park', type)
     const restored = this.#handleOf(ref.serverId, sandbox, spec)
     await progress.handle(restored)
     // A new sandbox, as a released server gets, has nothing coming back to wait for.
@@ -576,6 +583,11 @@ export class BoatRuntime implements MinecraftRuntime {
       open: [],
       previous: null,
     })
+  }
+
+  /** A sandbox up for a server that runs, rather than parked for work on a sleeping one. */
+  #runs(sandbox: Sandbox): boolean {
+    return UP.has(sandbox.state) && !this.#sandboxes.parked(sandbox)
   }
 
   async #workloadRunning(id: string): Promise<boolean> {
