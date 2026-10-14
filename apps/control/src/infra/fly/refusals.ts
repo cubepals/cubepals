@@ -71,6 +71,15 @@ const NOT_YET = new RegExp(
 )
 export const saysNotYet = (error: unknown): boolean => NOT_YET.test(JSON.stringify(error ?? ''))
 
+/**
+ * An update refused, 409, while Fly still replaces the machine's run for an update before it
+ * (staging, 2026-10-14). The machine reads `replacing` meanwhile (fly.io/docs/machines/machine-states).
+ */
+const REPLACING = 'machine is replacing'
+export const REPLACING_SAID = `aborted: ${REPLACING}: concurrent update in progress`
+const REPLACING_MATCH = new RegExp(REPLACING, 'i')
+export const saysReplacing = (error: unknown): boolean => REPLACING_MATCH.test(JSON.stringify(error ?? ''))
+
 /** A snapshot refused, 412, while one is being written, saying when that one began. */
 const SCHEDULED = 'already scheduled at'
 export const snapshotScheduled = (at: string) => `failed_precondition: snapshot is ${SCHEDULED} ${at}`

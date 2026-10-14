@@ -7,8 +7,9 @@
  * Leases carry nonces and are required for changes; volumes filled from a snapshot or a fork
  * hydrate before they are ready; machines are made in `created` and can't start until Fly has
  * prepared them, then stay stopped; a stop, a suspend and a destroy can take a moment to finish, a
- * start resumes a suspended machine and a config update or a stop drops what it kept, and a volume
- * stays bound to its machine until the machine is gone; a first request can get a 429.
+ * start resumes a suspended machine and a config update or a stop drops what it kept, an update can
+ * take a moment to put in place, refusing another meanwhile, and a volume stays bound to its
+ * machine until the machine is gone; a first request can get a 429.
  * It holds no tests: FlyRuntime's tests against it live in `fly-runtime*.test.ts`.
  */
 
@@ -16,6 +17,7 @@ import {
   AT_LIMIT_SAID,
   CURRENTLY_STOPPING_SAID,
   NO_MACHINE,
+  REPLACING_SAID,
   STILL_ACTIVE_SAID,
   snapshotScheduled,
   unableToStart,
@@ -37,6 +39,9 @@ interface FakeMachine {
   prepareReadsLeft?: number
   /** Reads while an update replaces its run, showing the old run stopped. */
   replaceReadsLeft?: number
+  /** Requests while Fly still puts an update in place, and the state it ends in. */
+  replacingLeft?: number
+  replacedTo?: string
   /** Reads while it is still stopping, or still suspending, or still being destroyed. */
   stopReadsLeft?: number
   suspendReadsLeft?: number
@@ -95,6 +100,13 @@ export class FakeFly {
   prepareReads = 1
   /** Reads of an updated started machine that show its old run stopped, before the new one starts. */
   replaceReads = 0
+  /**
+   * Requests that find an update still being put in place: the machine reads `replacing`, and
+   * another update is refused 409, as Fly refused one (staging, 2026-10-14). While `replacingGone`
+   * is set, a read of the machine meanwhile answers 404 instead, though the app still lists it.
+   */
+  replacing = 0
+  replacingGone = false
   /** Reads of a machine still stopping after a stop, and the starts it refused meanwhile. */
   stopReads = 0
   /** Starts refused as the machine still active, though it reads stopped: Fly's stop not yet done. */
@@ -318,12 +330,20 @@ export class FakeFly {
         return json({ error: 'host unreachable' }, 503)
       switch (action) {
         case undefined:
-          if (method === 'GET') return json(this.#moment(app, prepared(replaced(machine))))
+          if (method === 'GET') {
+            if (this.#stillReplacing(machine) && this.replacingGone) return missing()
+            return json(this.#moment(app, prepared(replaced(machine))))
+          }
           if (method === 'DELETE') return json(this.#destroying(app, machine))
           if (!nonceOk(id)) return json({ error: 'lease required' }, 412)
           if (this.refusal !== null) return json(this.refusal, 412)
+          if (this.#stillReplacing(machine)) return json({ error: REPLACING_SAID }, 409)
           this.#reconfigure(machine, body.config as Json)
-          if (!body.skip_launch && machine.state === 'started' && this.replaceReads > 0) {
+          if (this.replacing > 0) {
+            machine.replacedTo = body.skip_launch ? machine.state : 'started'
+            machine.replacingLeft = this.replacing
+            machine.state = 'replacing'
+          } else if (!body.skip_launch && machine.state === 'started' && this.replaceReads > 0) {
             const now = Date.now()
             machine.state = 'stopped'
             machine.replaceReadsLeft = this.replaceReads
@@ -366,6 +386,7 @@ export class FakeFly {
           if (!nonceOk(id)) return json({ error: 'lease required' }, 412)
           return action === 'stop' ? this.#stop(app, machine, body) : this.#suspend(app, machine)
         case 'wait':
+          this.#stillReplacing(machine)
           return url.searchParams.get('state') === machine.state
             ? json({ ok: true, state: machine.state })
             : json({ error: 'timeout' }, 408)
@@ -551,6 +572,19 @@ export class FakeFly {
     this.#moment(app, machine)
     machine.updated_at = new Date().toISOString()
     return Response.json({ ok: true })
+  }
+
+  /**
+   * Whether Fly is still putting an update in place: each request that finds it so is a moment
+   * later, and once it is done the machine is in the state the update left it.
+   */
+  #stillReplacing(machine: FakeMachine): boolean {
+    if (machine.replacingLeft === undefined) return false
+    if (machine.replacingLeft-- > 0) return true
+    machine.state = machine.replacedTo ?? 'stopped'
+    delete machine.replacingLeft
+    delete machine.replacedTo
+    return false
   }
 
   /** A new config: a suspended machine's memory is dropped with the old one, and it boots on the new. */

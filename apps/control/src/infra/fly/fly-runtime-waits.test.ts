@@ -6,14 +6,15 @@
  * FlyRuntime against an in-memory Fly that takes a moment to finish a stop or a destroy, as the
  * real one did on staging (2026-10-07): a start waits for the stop, and a volume for its machine;
  * and a new machine for its volume, which Fly can hold after the machine on it is gone (2026-10-11).
- * A snapshot is said to be taken before Fly has finished writing it.
+ * A snapshot is said to be taken before Fly has finished writing it. An update takes a moment to
+ * put in place, reads gone meanwhile and refuses another (2026-10-14).
  */
 
 import { describe, expect, test } from 'bun:test'
 import type { ProgressSink, RuntimeKey, RuntimeSpec } from '../../app/ports/runtime.ts'
 import { flyClient } from './client.ts'
 import { FakeFly } from './fake-fly.ts'
-import { createMachine } from './fly-runtime/machines.ts'
+import { createMachine, updateMachine } from './fly-runtime/machines.ts'
 import { FlyRuntime } from './fly-runtime.ts'
 import { decodeHandle, encodeHandle } from './handle.ts'
 
@@ -169,5 +170,62 @@ describe('FlyRuntime making a machine on a volume Fly still holds', () => {
     expect(made.id).toBe(server.id)
     expect(fake.machines.get(APP)).toHaveLength(1)
     expect(fake.claimedCreates).toBe(1)
+  })
+})
+
+describe('FlyRuntime while Fly puts an update in place', () => {
+  test('an apply while Fly still puts the one before in place waits for it, then changes the machine', async () => {
+    const { fake, runtime, handle } = await provisioned()
+    fake.replacing = 3
+    const first = await runtime.apply(handle, { ...spec, env: { ...spec.env, VERSION: '26.4' } })
+    const second = await runtime.apply(first, { ...spec, env: { ...spec.env, VERSION: '26.5' } })
+    const machine = fake.machines.get(APP)?.[0]
+    expect(machine?.state).toBe('replacing')
+    await runtime.waitRunning(second, AbortSignal.timeout(5_000))
+    expect(machine?.state).toBe('started')
+    expect(machine?.config.env).toMatchObject({ VERSION: '26.5' })
+  })
+
+  test('a machine Fly answers for as gone while it puts an update in place is waited for, and goes back', async () => {
+    const { fake, runtime, handle } = await provisioned()
+    fake.replacing = 3
+    fake.replacingGone = true
+    const changed = await runtime.apply(handle, { ...spec, env: { ...spec.env, VERSION: '26.4' } })
+    // Fly's 404 mid-replace once failed this boot as a machine gone (staging, 2026-10-14).
+    await runtime.waitRunning(changed, AbortSignal.timeout(5_000))
+    // Going back, straight after the next update, as a rollback does.
+    const next = await runtime.apply(changed, { ...spec, env: { ...spec.env, VERSION: '26.5' } })
+    const back = await runtime.apply(next, spec)
+    await runtime.waitRunning(back, AbortSignal.timeout(5_000))
+    expect(decodeHandle(back).machineId).toBe(decodeHandle(handle).machineId)
+    const machine = fake.machines.get(APP)?.[0]
+    expect(machine?.config.env).toMatchObject({ VERSION: '26.3' })
+  })
+
+  test('an update Fly refuses while it puts the one before in place is asked again under the same lease', async () => {
+    const { fake, client } = await provisioned()
+    const machine = fake.machines.get(APP)?.[0]
+    if (machine === undefined) throw new Error('no machine')
+    // Another worker's update, its replace still under way, though reads came before it.
+    Object.assign(machine, { replacingLeft: 2, replacedTo: 'started' })
+    const leases = fake.count(`POST /v1/apps/${APP}/machines/${machine.id}/lease`)
+    const config = { ...machine.config, env: { VERSION: '26.4' } }
+    await updateMachine(client, 'test', APP, machine.id, config as never, undefined, false)
+    expect(fake.count(`POST /v1/apps/${APP}/machines/${machine.id}/lease`)).toBe(leases + 1)
+    expect(machine.config.env).toEqual({ VERSION: '26.4' })
+    expect(fake.leases.size).toBe(0)
+  })
+
+  test('an apply on a machine Fly replaced under a new id changes that one, and names it', async () => {
+    const { fake, runtime, handle } = await provisioned()
+    const machine = fake.machines.get(APP)?.[0]
+    if (machine === undefined) throw new Error('no machine')
+    machine.id = 'm_replaced'
+    const started = Date.now()
+    const changed = await runtime.apply(handle, { ...spec, env: { ...spec.env, VERSION: '26.4' } })
+    expect(decodeHandle(changed).machineId).toBe('m_replaced')
+    expect(machine.config.env).toMatchObject({ VERSION: '26.4' })
+    // Found at once: the app lists the machine in the old one's place.
+    expect(Date.now() - started).toBeLessThan(2_000)
   })
 })

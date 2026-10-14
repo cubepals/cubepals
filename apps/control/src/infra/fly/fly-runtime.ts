@@ -64,11 +64,13 @@ import {
 } from './fly-runtime/helper-jobs.ts'
 import { helperJob } from './fly-runtime/helper-machine.ts'
 import {
+  afterReplace,
   createMachine,
   destroyMachine,
   exec,
   minecraftMachine,
   readMachine,
+  readUnlessGone,
   sleepMachine,
   startMachine,
   stopMachine,
@@ -292,13 +294,21 @@ export class FlyRuntime implements MinecraftRuntime {
     return { machine, volumeId }
   }
 
+  /**
+   * Once an update before it is in place, as Fly refuses another meanwhile: an apply straight
+   * after one, or going back from one that didn't start. A machine Fly replaced under the handle,
+   * under a new id on the same volume, is the one changed, and the handle returned names it.
+   */
   async apply(handle: RuntimeHandle, spec: RuntimeSpec): Promise<RuntimeHandle> {
     const ref = decodeHandle(handle)
-    const machineId = requireMachine(ref)
     const volumeId = requireVolume(ref)
     const secretsVersion = await setSecrets(this.#fly, ref.app, spec.secrets)
     await fitVolume(this.#fly, ref.app, volumeId, spec.storage.sizeGb, this.snapshotLifetimeDays)
-    const machine = await readMachine(this.#fly, ref.app, machineId)
+    const machine =
+      (await afterReplace(this.#fly, ref.app, requireMachine(ref))) ??
+      (await this.#onVolume(ref.app, volumeId))
+    if (machine === null) throw new Error('The machine is gone')
+    const machineId = idOf(machine, 'a machine')
     // Updating a started machine restarts it on the new config; a stopped one stays stopped.
     await updateMachine(
       this.#fly,
@@ -307,9 +317,9 @@ export class FlyRuntime implements MinecraftRuntime {
       machineId,
       this.#config(ref.serverId, spec, volumeId, machine),
       secretsVersion,
-      machine?.state !== 'started',
+      machine.state !== 'started',
     )
-    return encodeHandle({ ...ref, ports: portsOf(spec) })
+    return encodeHandle({ ...ref, machineId, ports: portsOf(spec) })
   }
 
   /**
@@ -359,7 +369,7 @@ export class FlyRuntime implements MinecraftRuntime {
     const machineId = requireMachine(ref)
     const since = Date.now()
     while (!signal.aborted) {
-      const machine = await readMachine(this.#fly, ref.app, machineId)
+      const machine = await readUnlessGone(this.#fly, ref.app, machineId)
       if (machine === null) throw new Error('The machine is gone')
       if (machine.state === 'started') return
       const exit = lastExit(machine)
@@ -680,6 +690,12 @@ export class FlyRuntime implements MinecraftRuntime {
       server: key,
       tags: heldTags(from?.config?.metadata),
     })
+  }
+
+  /** The server's machine once it is on the volume, whatever its id; null if there is none. */
+  async #onVolume(app: string, volumeId: string): Promise<Machine | null> {
+    const machine = await minecraftMachine(this.#fly, app)
+    return machine?.config?.mounts?.some((mount) => mount.volume === volumeId) ? machine : null
   }
 
   /**
