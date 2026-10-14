@@ -195,7 +195,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/handlers/updating.ts › run": {
-      "n": 32,
+      "n": 25,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/runner.ts › run": {
@@ -439,7 +439,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fly/fake-fly.ts › class FakeFly › fetch": {
-      "n": 156,
+      "n": 144,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fly/fly-runtime/discovery.ts › function* changedSince": {
@@ -1017,7 +1017,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/handlers.ts › function createHandlers": {
-      "n": 151,
+      "n": 150,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/handlers/bringing-up.ts › function bringingUp": {
@@ -1209,7 +1209,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fly/fake-fly.ts › class FakeFly › fetch": {
-      "n": 197,
+      "n": 181,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fly/fly-runtime-calls.test.ts › describe FlyRuntime calls, in order": {

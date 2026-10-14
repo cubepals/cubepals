@@ -18,7 +18,7 @@ import type { Runtimes } from '../../runtimes/router.ts'
 import { lockServer, saveHandle, setDesired } from '../../servers/persistence.ts'
 import type { DesiredRuntime, RuntimeSpecs } from '../../servers/specs.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
-import { openInterval } from '../../servers/usage.ts'
+import { clearPresence, closeInterval, openInterval } from '../../servers/usage.ts'
 import { enqueuePrune } from '../../worlds/service.ts'
 import type { BootSequence } from '../boot.ts'
 import type { OperationContext } from '../runner.ts'
@@ -26,9 +26,23 @@ import { bootedBack, type ServerBinding } from './binding.ts'
 
 export type GoingBack = ReturnType<typeof goingBack>
 
+/**
+ * Going back the runtime refused before anything booted: the configuration before couldn't be put
+ * on the machine, or the machine couldn't start. The world is the one from before the change, so
+ * the server can rest, stopped, until a start puts that configuration back.
+ */
+export class NotPutBack extends Error {
+  constructor(cause: unknown) {
+    super('The runtime refused to go back', { cause })
+    this.name = 'NotPutBack'
+  }
+}
+
+const notPutBack = (error: unknown) => Promise.reject(new NotPutBack(error))
+
 export function goingBack(deps: {
   db: Db
-  runtime: Pick<Runtimes, 'restore' | 'apply'>
+  runtime: Pick<Runtimes, 'restore' | 'apply' | 'stop' | 'forceStop'>
   specs: Pick<RuntimeSpecs, 'forConfig'>
   access: Pick<AccessReconciler, 'reconcile'>
   boot: Pick<BootSequence, 'run'>
@@ -80,17 +94,18 @@ export function goingBack(deps: {
         progressSink(quiet, server),
       )
     } else {
-      handle = await runtime.apply(handle, back.spec)
+      handle = await runtime.apply(handle, back.spec).catch(notPutBack)
       await saveHandle(db, server.id, handle)
     }
-    handle = await startCompute(server.id, handle)
+    handle = await startCompute(server.id, handle).catch(notPutBack)
     await boot.run(quiet, server, handle, back.revision, undefined, { startAgainOnHang: false })
     await putBack(server, bootedBack(previous, back), { from, up: true })
   }
 
   /**
    * What the server should run goes back to what it runs, and the update is over. After a
-   * restore that went back, the server is as it was, running or stopped.
+   * restore that went back, the server is as it was, running or stopped; after an update the
+   * runtime refused to go back from, stopped, its next start putting that configuration back.
    */
   const putBack = (
     server: MinecraftServer,
@@ -117,10 +132,26 @@ export function goingBack(deps: {
         tx,
         reverted,
         after.from === 'updating'
-          ? { type: 'updated', running: true }
+          ? { type: 'updated', running: after.up, ...(after.up ? {} : { reason: 'maintenance' }) }
           : { type: 'restored', running: after.up },
       )
     })
 
-  return { rollBack, putBack }
+  /**
+   * An update the runtime refused to go back from (`NotPutBack`) is over, the server stopped on
+   * what it ran: whatever its machine holds now, its next start puts that configuration back.
+   */
+  const restBack = async (server: MinecraftServer, running: AppliedConfigJson) => {
+    const { handle } = await bindingOf(server.id)
+    if (handle !== null) await runtime.stop(handle).catch(() => runtime.forceStop(handle))
+    await putBack(server, running, { from: 'updating', up: false })
+    await db.transaction(async (tx) => {
+      // Off is off: its time stops counting and nobody is on it.
+      if ((await lockServer(tx, server.id))?.lifecycle.status !== 'stopped') return
+      await closeInterval(tx, server.id, new Date())
+      await clearPresence(tx, server.id)
+    })
+  }
+
+  return { rollBack, putBack, restBack }
 }

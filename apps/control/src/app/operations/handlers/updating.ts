@@ -25,10 +25,10 @@ import { closeInterval, openInterval } from '../../servers/usage.ts'
 import { enqueuePrune } from '../../worlds/service.ts'
 import type { BootSequence } from '../boot.ts'
 import { takeLive } from '../live-settings.ts'
-import { NoLongerApplies, type OperationHandler } from '../runner.ts'
+import { NoLongerApplies, type OperationHandler, type OperationResult } from '../runner.ts'
 import { appliedConfig, type ServerBinding } from './binding.ts'
 import type { GameConsole } from './game-console.ts'
-import type { GoingBack } from './going-back.ts'
+import { type GoingBack, NotPutBack } from './going-back.ts'
 import type { Rechecks } from './rechecks.ts'
 import type { WorldCopies } from './world-copies.ts'
 
@@ -50,6 +50,38 @@ async function forgetHearts(runtime: Pick<Runtimes, 'exec'>, handle: RuntimeHand
   if (reset.exitCode !== 0) throw new Error(`Resetting the hearts failed: ${reset.stderr.trim()}`)
 }
 
+/**
+ * What an update that didn't start ends as, once it went back: on the configuration before;
+ * stopped on it, where the runtime refused to go back before anything booted; else failed.
+ */
+async function wentBack(
+  error: unknown,
+  goBack: () => Promise<void>,
+  rest: () => Promise<void>,
+): Promise<OperationResult> {
+  try {
+    await goBack()
+  } catch (again) {
+    if (again instanceof NoLongerApplies) throw again
+    if (!(again instanceof NotPutBack))
+      throw new PermanentFailure(
+        `The new configuration didn't start${aside(error)}, and going back to the previous one failed too${aside(again)}.`,
+        { cause: new Error(`${inFull(error)}; going back: ${inFull(again)}`) },
+      )
+    await rest()
+    return {
+      status: 'failed',
+      reason: `Nothing changed: the new configuration didn't start${aside(error)}, and your server couldn't go straight back to the one before${aside(again.cause)}. It's stopped on the one before, and starts on it as usual.`,
+      detail: `${inFull(error)}; going back: ${inFull(again.cause)}`,
+    }
+  }
+  return {
+    status: 'failed',
+    reason: `The new configuration didn't start${aside(error)}. Your server is back on the one before.`,
+    detail: inFull(error),
+  }
+}
+
 export function updating(deps: {
   db: Db
   runtime: Pick<Runtimes, 'apply' | 'stop' | 'exec'>
@@ -69,6 +101,7 @@ export function updating(deps: {
   capture: WorldCopies['capture']
   rollBack: GoingBack['rollBack']
   putBack: GoingBack['putBack']
+  restBack: GoingBack['restBack']
 }) {
   const {
     db,
@@ -86,13 +119,16 @@ export function updating(deps: {
     capture,
     rollBack,
     putBack,
+    restBack,
   } = deps
 
   /**
    * A new configuration on a running server (§9): a snapshot first, then the provider applies
    * it and the server boots. If it doesn't come up, the configuration it ran before goes back
    * once, with the world from the snapshot when the change rewrote it, and what the server
-   * should run returns to what it runs. Only if going back fails too is the server failed.
+   * should run returns to what it runs. If the runtime refuses to go back before anything boots,
+   * the server rests stopped on what it ran, its world untouched. Only if going back fails
+   * otherwise is the server failed.
    */
   const apply: OperationHandler = {
     kind: 'apply',
@@ -172,20 +208,11 @@ export function updating(deps: {
         // A server sent to the trash meanwhile has nothing to go back to.
         if (error instanceof NoLongerApplies) throw error
         await ctx.step('rolling_back')
-        try {
-          await rollBack(ctx, server, previous, desired, snapshot, 'updating', input.resetHearts === true)
-        } catch (again) {
-          if (again instanceof NoLongerApplies) throw again
-          throw new PermanentFailure(
-            `The new configuration didn't start${aside(error)}, and going back to the previous one failed too${aside(again)}.`,
-            { cause: new Error(`${inFull(error)}; going back: ${inFull(again)}`) },
-          )
-        }
-        return {
-          status: 'failed',
-          reason: `The new configuration didn't start${aside(error)}. Your server is back on the one before.`,
-          detail: inFull(error),
-        }
+        return wentBack(
+          error,
+          () => rollBack(ctx, server, previous, desired, snapshot, 'updating', input.resetHearts === true),
+          () => restBack(server, previous),
+        )
       }
       await db.transaction(async (tx) => {
         const locked = await lockServer(tx, server.id)

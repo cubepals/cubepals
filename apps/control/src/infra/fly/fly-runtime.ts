@@ -68,6 +68,7 @@ import {
   createMachine,
   destroyMachine,
   exec,
+  machineOnVolume,
   minecraftMachine,
   readMachine,
   readUnlessGone,
@@ -306,7 +307,7 @@ export class FlyRuntime implements MinecraftRuntime {
     await fitVolume(this.#fly, ref.app, volumeId, spec.storage.sizeGb, this.snapshotLifetimeDays)
     const machine =
       (await afterReplace(this.#fly, ref.app, requireMachine(ref))) ??
-      (await this.#onVolume(ref.app, volumeId))
+      (await machineOnVolume(this.#fly, ref.app, volumeId))
     if (machine === null) throw new Error('The machine is gone')
     const machineId = idOf(machine, 'a machine')
     // Updating a started machine restarts it on the new config; a stopped one stays stopped.
@@ -690,12 +691,6 @@ export class FlyRuntime implements MinecraftRuntime {
       server: key,
       tags: heldTags(from?.config?.metadata),
     })
-  }
-
-  /** The server's machine once it is on the volume, whatever its id; null if there is none. */
-  async #onVolume(app: string, volumeId: string): Promise<Machine | null> {
-    const machine = await minecraftMachine(this.#fly, app)
-    return machine?.config?.mounts?.some((mount) => mount.volume === volumeId) ? machine : null
   }
 
   /**

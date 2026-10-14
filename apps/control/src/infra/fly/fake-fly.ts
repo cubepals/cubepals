@@ -330,37 +330,10 @@ export class FakeFly {
         return json({ error: 'host unreachable' }, 503)
       switch (action) {
         case undefined:
-          if (method === 'GET') {
-            if (this.#stillReplacing(machine) && this.replacingGone) return missing()
-            return json(this.#moment(app, prepared(replaced(machine))))
-          }
+          if (method === 'GET') return this.#read(app, machine)
           if (method === 'DELETE') return json(this.#destroying(app, machine))
           if (!nonceOk(id)) return json({ error: 'lease required' }, 412)
-          if (this.refusal !== null) return json(this.refusal, 412)
-          if (this.#stillReplacing(machine)) return json({ error: REPLACING_SAID }, 409)
-          this.#reconfigure(machine, body.config as Json)
-          if (this.replacing > 0) {
-            machine.replacedTo = body.skip_launch ? machine.state : 'started'
-            machine.replacingLeft = this.replacing
-            machine.state = 'replacing'
-          } else if (!body.skip_launch && machine.state === 'started' && this.replaceReads > 0) {
-            const now = Date.now()
-            machine.state = 'stopped'
-            machine.replaceReadsLeft = this.replaceReads
-            machine.events = [
-              {
-                type: 'exit',
-                status: 'stopped',
-                // The old run saves its world and exits a few seconds after the update.
-                timestamp: now + 5_000,
-                request: { exit_event: { exit_code: 0, requested_stop: false } },
-              },
-              { type: 'update', status: 'replacing', timestamp: now },
-              ...machine.events,
-            ]
-          } else if (!body.skip_launch) machine.state = 'started'
-          machine.updated_at = new Date().toISOString()
-          return json(machine)
+          return this.#update(machine, body)
         // Written straight to Fly's state: the machine neither restarts nor changes version.
         case 'metadata': {
           const metadata = { ...(machine.config.metadata as Record<string, string>) }
@@ -386,10 +359,7 @@ export class FakeFly {
           if (!nonceOk(id)) return json({ error: 'lease required' }, 412)
           return action === 'stop' ? this.#stop(app, machine, body) : this.#suspend(app, machine)
         case 'wait':
-          this.#stillReplacing(machine)
-          return url.searchParams.get('state') === machine.state
-            ? json({ ok: true, state: machine.state })
-            : json({ error: 'timeout' }, 408)
+          return this.#wait(machine, url.searchParams.get('state'))
         case 'exec': {
           // As Fly does: stdin is not passed on, so a script comes as the argument after `sh -c`.
           const [, , line = '', argument] = body.command as string[]
@@ -572,6 +542,53 @@ export class FakeFly {
     this.#moment(app, machine)
     machine.updated_at = new Date().toISOString()
     return Response.json({ ok: true })
+  }
+
+  /** A machine as a read finds it, or 404 while Fly puts an update in place, if it says so then. */
+  #read(app: string, machine: FakeMachine): Response {
+    if (this.#stillReplacing(machine) && this.replacingGone)
+      return Response.json({ error: 'not found' }, { status: 404 })
+    return Response.json(this.#moment(app, prepared(replaced(machine))))
+  }
+
+  /** A long poll answered at once: the machine in the state asked for, or a timeout. */
+  #wait(machine: FakeMachine, state: string | null): Response {
+    this.#stillReplacing(machine)
+    return state === machine.state
+      ? Response.json({ ok: true, state: machine.state })
+      : Response.json({ error: 'timeout' }, { status: 408 })
+  }
+
+  /**
+   * A new config, unless refused: a host with no room, or an update before it still being put in
+   * place. A started machine is replaced on it, at once or after a moment as a test says.
+   */
+  #update(machine: FakeMachine, body: Json): Response {
+    if (this.refusal !== null) return Response.json(this.refusal, { status: 412 })
+    if (this.#stillReplacing(machine)) return Response.json({ error: REPLACING_SAID }, { status: 409 })
+    this.#reconfigure(machine, body.config as Json)
+    if (this.replacing > 0) {
+      machine.replacedTo = body.skip_launch ? machine.state : 'started'
+      machine.replacingLeft = this.replacing
+      machine.state = 'replacing'
+    } else if (!body.skip_launch && machine.state === 'started' && this.replaceReads > 0) {
+      const now = Date.now()
+      machine.state = 'stopped'
+      machine.replaceReadsLeft = this.replaceReads
+      machine.events = [
+        {
+          type: 'exit',
+          status: 'stopped',
+          // The old run saves its world and exits a few seconds after the update.
+          timestamp: now + 5_000,
+          request: { exit_event: { exit_code: 0, requested_stop: false } },
+        },
+        { type: 'update', status: 'replacing', timestamp: now },
+        ...machine.events,
+      ]
+    } else if (!body.skip_launch) machine.state = 'started'
+    machine.updated_at = new Date().toISOString()
+    return Response.json(machine)
   }
 
   /**

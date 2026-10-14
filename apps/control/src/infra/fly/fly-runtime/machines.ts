@@ -75,6 +75,16 @@ export async function minecraftMachine(fly: FlyClient, app: string): Promise<Mac
   )
 }
 
+/** The server's machine on the volume, whatever its id; null if there is none. */
+export async function machineOnVolume(
+  fly: FlyClient,
+  app: string,
+  volumeId: string,
+): Promise<Machine | null> {
+  const machine = await minecraftMachine(fly, app)
+  return machine?.config?.mounts?.some((mount) => mount.volume === volumeId) ? machine : null
+}
+
 export async function readMachine(fly: FlyClient, app: string, machineId: string): Promise<Machine | null> {
   const found = await fly.GET('/v1/apps/{app_name}/machines/{machine_id}', {
     params: { path: { app_name: app, machine_id: machineId } },
