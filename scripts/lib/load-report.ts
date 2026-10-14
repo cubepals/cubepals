@@ -58,7 +58,7 @@ export function stepStats(records: readonly StepRecord[]): StepStats[] {
 }
 
 /** What a failure says, with what changes from one to the next (ids, numbers, names) taken out. */
-export const shapeOf = (error: string) =>
+const shapeOf = (error: string) =>
   error
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '<id>')
     .replace(/\b[0-9a-f]{14,}\b/g, '<id>')

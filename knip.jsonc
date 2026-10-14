@@ -13,8 +13,13 @@
   "workspaces": {
     ".": {
       // Every script at the top is run by hand, by package.json or by CI; and the probes
-      // suspend-bench.ts and players-bench.ts copy onto a Fly machine and run there.
-      "entry": ["scripts/*.ts", "scripts/lib/suspend-probe.ts", "scripts/lib/players-probe.ts"],
+      // suspend-bench.ts, players-bench.ts and load-test.ts copy onto a Fly machine and run there.
+      "entry": [
+        "scripts/*.ts",
+        "scripts/lib/suspend-probe.ts",
+        "scripts/lib/players-probe.ts",
+        "scripts/lib/load-probe.ts"
+      ],
       "project": ["scripts/**/*.ts"],
       // check-structure.ts runs it by its binary's path.
       "ignoreDependencies": ["jscpd"]

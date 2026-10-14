@@ -27,6 +27,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { createConnection, createServer } from 'node:net'
+import { MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import { GAME_PORT } from '../../apps/control/src/minecraft/ports.ts'
 import { join } from './minecraft.ts'
 
@@ -80,7 +81,7 @@ const mineflayer = async () => ((await import(MINEFLAYER)) as { default: Minefla
 const vec3 = async () => ((await import(VEC3)) as { Vec3: new (x: number, y: number, z: number) => Vec }).Vec3
 
 /** How long a player takes to join again after being turned away. */
-const JOIN_AGAIN_MS = 5000
+const JOIN_AGAIN_MS = 5 * SECOND_MS
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 /** A kick's reason as the game sends it, a chat component or text, as plain words. */
@@ -110,7 +111,7 @@ async function enter(
       username: name,
       auth: 'offline',
       hideErrors: true,
-      checkTimeoutInterval: 60_000,
+      checkTimeoutInterval: MINUTE_MS,
       // A player's game is the version it is: guessed from the edge's answer for a sleeping
       // server, it would be the edge's own.
       version,
@@ -162,7 +163,7 @@ async function play(bot: Bot, name: string, minutes: number): Promise<Played> {
     done.dropped ??= `ended: ${reasonOf(reason)}`
     over = true
   })
-  const until = Date.now() + minutes * 60_000
+  const until = Date.now() + minutes * MINUTE_MS
   for (let turn = 0; !over && Date.now() < until; turn++) {
     try {
       await bot.look(Math.random() * 2 * Math.PI, 0, true)

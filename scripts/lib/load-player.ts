@@ -77,7 +77,7 @@ function steady(seed: number): number {
 }
 
 /** A template as players pick one: by the spread, among those their plan runs. */
-export function pickTemplate(index: number, allowed: ReadonlySet<string>): string {
+function pickTemplate(index: number, allowed: ReadonlySet<string>): string {
   const choices = SPREAD.filter(([key]) => allowed.has(key))
   const total = choices.reduce((sum, [, weight]) => sum + weight, 0)
   let left = steady(index) * total
