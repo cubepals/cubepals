@@ -5,11 +5,13 @@
 /**
  * The Arcade's datapack, read the way Minecraft reads it: where it goes, which releases load it,
  * that every function it calls is one it has, that it builds only where its chunks are loaded and
- * each game in its own place, that the parkour can be jumped, and what it tells a new player.
+ * each game in its own place, that the parkour's stages run in order, what it tells a new player,
+ * and that the credits name every map.
  */
 import { describe, expect, test } from 'bun:test'
 import { onLevel } from '../domain/revision/carried.ts'
-import { COURSE } from './arcade/parkour.ts'
+import { PADS } from './arcade/hub.ts'
+import { ARCADE_MAPS } from './arcade/maps.ts'
 import { ARCADE_FILES } from './arcade.ts'
 import { placeablePath } from './carried.ts'
 
@@ -65,7 +67,7 @@ const inside = (a: Box, [x, y, z]: number[]) =>
 
 /** Each game's zone, as the command that puts the players in it on the game's team names it. */
 const zones = new Map(
-  commands('tick')
+  commands('play')
     .filter((command) => command.startsWith('team join '))
     .map((command) => [command.split(' ')[2] ?? '', boxOf(command)]),
 )
@@ -102,7 +104,10 @@ describe('the Arcade datapack as Minecraft loads it', () => {
   })
 
   test('the game rules are a function of their own, so a release that renames one fails only it', () => {
-    expect(commands('load')).toContain('function arcade:rules')
+    expect(commands('build').slice(0, 2)).toEqual([
+      'execute unless block 175 78 1438 minecraft:black_concrete run return run scoreboard players set #build arcade.tmp -2',
+      'function arcade:rules',
+    ])
     expect(everyCommand.filter((command) => command.startsWith('gamerule '))).toEqual(
       commands('rules').filter((command) => command.startsWith('gamerule ')),
     )
@@ -110,9 +115,10 @@ describe('the Arcade datapack as Minecraft loads it', () => {
 
   test('it builds a moment after the world loads, and only in chunks the load forces', () => {
     expect(commands('load').at(-1)).toBe('scoreboard players set #build arcade.tmp 40')
-    expect(commands('tick').slice(0, 2)).toEqual([
+    expect(commands('tick')).toEqual([
       'execute if score #build arcade.tmp matches 1.. run scoreboard players remove #build arcade.tmp 1',
       'execute if score #build arcade.tmp matches 0 run function arcade:build',
+      'execute if score #build arcade.tmp matches -1 run function arcade:play',
     ])
     const forced = commands('load')
       .filter((command) => command.startsWith('forceload add '))
@@ -121,7 +127,7 @@ describe('the Arcade datapack as Minecraft loads it', () => {
         return { x: [x1, x2], y: [-64, 320], z: [z1, z2] } as Box
       })
     const building = commands('build').filter((command) => /^(fill|setblock|summon) /.test(command))
-    expect(building.length).toBeGreaterThan(40)
+    expect(building.length).toBeGreaterThan(20)
     for (const command of building) {
       const numbers = (command.replace(/\{.*$/, '').match(/-?\d+(\.\d+)?/g) ?? []).map(Number)
       const corners = command.startsWith('fill ')
@@ -136,8 +142,8 @@ describe('the Arcade datapack as Minecraft loads it', () => {
 })
 
 describe('the Arcade as its players find it', () => {
-  test('no fill changes more blocks than one command may, as max_block_modifications allows', () => {
-    for (const command of everyCommand.filter((line) => line.startsWith('fill '))) {
+  test('no fill or clone changes more blocks than one command may, as max_block_modifications allows', () => {
+    for (const command of everyCommand.filter((line) => /^(fill|clone) /.test(line))) {
       const [x1 = 0, y1 = 0, z1 = 0, x2 = 0, y2 = 0, z2 = 0] = (command.match(/-?\d+/g) ?? []).map(Number)
       const blocks = (Math.abs(x2 - x1) + 1) * (Math.abs(y2 - y1) + 1) * (Math.abs(z2 - z1) + 1)
       expect(`${command}: ${blocks <= MAX_BLOCK_CHANGES}`).toBe(`${command}: true`)
@@ -150,60 +156,66 @@ describe('the Arcade as its players find it', () => {
     for (const [i, a] of all.entries()) for (const b of all.slice(i + 1)) expect(overlaps(a, b)).toBe(false)
   })
 
-  test('the hub sends a player to each game, onto its platform and off every pad', () => {
-    const pads = commands('tick').filter((command) => /^tp @a\[x=/.test(command))
-    expect(pads).toHaveLength(3)
-    const backPads = commands('tick')
-      .filter((command) => command.includes('run function arcade:hub/back') && command.includes('dx='))
-      .map(boxOf)
-    for (const pad of pads) {
-      const [x = 0, y = 0, z = 0] = (pad.split('] ')[1] ?? '').split(' ').map(Number)
-      const arrival = [Math.floor(x), Math.floor(y), Math.floor(z)]
-      const team = [...zones].find(([, zone]) => inside(zone, arrival))?.[0]
-      expect(team).toBeDefined()
-      expect(team).not.toBe('arcade.hub')
-      // Not straight back onto a pad, the hub's or the game's own way back.
-      for (const other of [...pads.map(boxOf), ...backPads]) expect(inside(other, arrival)).toBe(false)
-      // Standing on something the build makes: the block under the arrival is in a fill.
-      const under = [arrival[0] ?? 0, (arrival[1] ?? 0) - 1, arrival[2] ?? 0]
-      const floors = commands('build')
-        .filter((command) => command.startsWith('fill '))
-        .map((command) => {
-          const [x1 = 0, y1 = 0, z1 = 0, x2 = 0, y2 = 0, z2 = 0] = (command.match(/-?\d+/g) ?? []).map(Number)
-          return { x: [x1, x2], y: [y1, y2], z: [z1, z2] } as Box
-        })
-      expect(floors.some((floor) => inside(floor, under))).toBe(true)
+  test('the hub sends a player to each game, into its place and off every pad', () => {
+    const pads = PADS.map(({ middle: [x, y, z] }) => boxOf(`x=${x - 1},y=${y + 1},z=${z - 1},dx=2,dy=1,dz=2`))
+    const places = (sends: string) =>
+      sends.startsWith('tp @s ')
+        ? [sends]
+        : commands(sends.replace('function arcade:', '')).filter((command) => / run tp @s /.test(command))
+    for (const pad of PADS) {
+      const arrivals = places(pad.sends)
+      expect(arrivals.length).toBeGreaterThan(0)
+      for (const tp of arrivals) {
+        const [x = 0, y = 0, z = 0] = (tp.split('tp @s ')[1] ?? '').split(' ').map(Number)
+        const arrival = [Math.floor(x), Math.floor(y), Math.floor(z)]
+        const team = [...zones].find(([, zone]) => inside(zone, arrival))?.[0]
+        expect(team).toBeDefined()
+        expect(team).not.toBe('arcade.hub')
+        for (const other of pads) expect(inside(other, arrival)).toBe(false)
+      }
     }
   })
 
-  test('the parkour can be jumped, its checkpoints in order and its finish last', () => {
-    expect(COURSE.filter((step) => step.kind === 'checkpoint')).toHaveLength(3)
-    expect(COURSE.at(-1)?.kind).toBe('finish')
-    // From the start's west edge, each jump from the edge of one step to the next: two blocks
-    // across on the level, one going a block up, three going down, and never more than a block up.
-    let from: { at: readonly number[]; kind: string } = { at: [-36, 100, 0], kind: 'stone' }
-    for (const step of COURSE) {
-      const half = (kind: string) => (kind === 'stone' ? 0 : 1)
-      const gap = (axis: 0 | 2) =>
-        Math.max(
-          0,
-          Math.abs((step.at[axis] ?? 0) - (from.at[axis] ?? 0)) - half(step.kind) - half(from.kind) - 1,
-        )
-      const across = Math.hypot(gap(0), gap(2))
-      const up = (step.at[1] ?? 0) - (from.at[1] ?? 0)
-      expect(up).toBeLessThanOrEqual(1)
-      expect(across).toBeLessThanOrEqual(up === 1 ? 1.5 : up === 0 ? 2.3 : 3)
-      expect(across).toBeGreaterThan(0)
-      from = step
-    }
+  test("the parkour's checkpoints and stages are reached in order, and the finish only after all", () => {
+    const steps = commands('play')
+      .map((command) => command.match(/scores=\{arcade\.pk\.cp=(\d+)\}.* arcade\.pk\.cp (\d+)$/))
+      .filter((match) => match !== null)
+      .map((match) => [Number(match[1]), Number(match[2])])
+    expect(steps.length).toBeGreaterThan(4)
+    for (const [from = 0, to = 0] of steps) expect(to).toBe(from + 1)
+    const last = Math.max(...steps.map(([, to = 0]) => to))
+    const finishing = commands('play').filter((command) =>
+      command.endsWith('run function arcade:parkour/finish'),
+    )
+    expect(finishing).toHaveLength(1)
+    expect(finishing[0]).toContain(`scores={arcade.pk.cp=${last}}`)
   })
 
-  test('a new player is told in one sentence what to do, once', () => {
-    const welcome = commands('tick').filter((command) => command.includes('tag=!arcade.welcomed'))
-    expect(welcome).toEqual([
-      'tellraw @a[tag=!arcade.welcomed] "Step on a coloured pad to play a game, and see if you can get your name on the boards."',
-      'tag @a[tag=!arcade.welcomed] add arcade.welcomed',
-    ])
+  test('the credits name every map, who built it, and its licence', () => {
+    const credits = commands('hub/credits').join('\n')
+    for (const map of ARCADE_MAPS) {
+      expect(credits).toContain(map.title)
+      for (const builder of map.builders) expect(credits).toContain(builder)
+      expect(credits).toContain(map.licence)
+    }
+    expect(credits).toContain('CC BY-SA 4.0 too')
+  })
+
+  test('a new player is put at the hub and told in one sentence what to do, once', () => {
+    const welcome = commands('play').filter((command) => command.includes('tag=!arcade.welcomed'))
+    expect(welcome).toHaveLength(3)
+    expect(welcome[0]).toBe('execute as @a[tag=!arcade.welcomed] run function arcade:hub/back')
+    expect(welcome[1]).toContain(
+      'Step on a black pad to play a game, and see if you can get your name on the boards.',
+    )
+    expect(welcome[2]).toBe('tag @a[tag=!arcade.welcomed] add arcade.welcomed')
+  })
+
+  test('a player back from dying is put at the hub, since a spawn under a roof moves onto it', () => {
+    expect(commands('play')).toContain(
+      'execute as @e[type=minecraft:player,scores={arcade.died=1..}] run function arcade:hub/back',
+    )
+    expect(commands('hub/back')).toContain('scoreboard players reset @s arcade.died')
   })
 
   test('each board keeps a top ten, and a player once', () => {

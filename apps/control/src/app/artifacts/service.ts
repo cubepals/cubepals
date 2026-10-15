@@ -9,6 +9,7 @@ import type { ModArtifact, PinnedMod } from '../../domain/mods/artifact.ts'
 import type { PinnedModpack } from '../../domain/mods/modpack.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import { diskName } from '../../minecraft/jars.ts'
+import { starterOf, startersBySha512 } from '../../minecraft/starter.ts'
 import { revokedIn } from '../catalog/persistence.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { Locks } from '../ports/locks.ts'
@@ -17,6 +18,7 @@ import { acceptedSecrets, type SecretKeyring } from '../secrets.ts'
 import { loadOwnIcon } from '../server-icons/persistence.ts'
 import { deletePendingUpload, uploadsToClear } from '../uploads/persistence.ts'
 import {
+  firstWorldOfType,
   forgetStored,
   markArtifactsRefreshed,
   pinnedBy,
@@ -205,7 +207,7 @@ export class ArtifactService {
   async locate(serverId: string, sha512: string, token: string): Promise<LocatedArtifact> {
     this.#authorize(serverId, token)
     const found = await pinnedBy(this.#db, serverId, sha512)
-    if (found === null) throw new ArtifactNotFound()
+    if (found === null) return this.#starter(serverId, sha512)
     const pinned = found
     // An HTTP date holds whole seconds: a refresh rounds up, so it is newer than every file that
     // was on disk when the jars were found wrong, even one written the same second.
@@ -218,6 +220,15 @@ export class ArtifactService {
       name: diskName(pinned.artifact),
       lastModified,
     }
+  }
+
+  /** The archive a world of the server's starts on (`minecraft/starter.ts`), as of that world. */
+  async #starter(serverId: string, sha512: string): Promise<LocatedArtifact> {
+    const levelTypes = startersBySha512(sha512)
+    const artifact = levelTypes.length === 0 ? null : starterOf(levelTypes[0] ?? '')
+    const since = await firstWorldOfType(this.#db, serverId, levelTypes)
+    if (artifact === null || since === null) throw new ArtifactNotFound()
+    return { artifact, pinned: null, name: diskName(artifact), lastModified: since }
   }
 
   /**

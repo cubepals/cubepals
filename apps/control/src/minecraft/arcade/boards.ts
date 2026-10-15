@@ -5,7 +5,7 @@
 /**
  * The Arcade's leaderboards: the top ten of each, kept in the world's own storage with each
  * player's name, so they hold through restarts, sleep and players who have left, and drawn on a
- * board floating at the hub's south edge. Not what a score is or when it counts, which each game
+ * board floating before the hub's domes. Not what a score is or when it counts, which each game
  * decides; a game hands its board a score and the words to show for it.
  *
  * A board is a list in storage, best first, of `{uuid, name, score, shown}`: higher scores rank
@@ -14,7 +14,7 @@
  * The name comes from a player head the loot table fills with the player's profile, the one way a
  * datapack reads a player's name as text.
  */
-import { type Block, label, NS, type Part } from './datapack.ts'
+import { type Block, label, NS, PAPER, type Part } from './datapack.ts'
 
 /** The world storage that keeps each board, by its key. */
 const BOARDS = `${NS}:boards`
@@ -31,13 +31,20 @@ interface Board {
   at: Block
 }
 
-/** The boards, west to east along the hub's south edge, as a player at the spawn sees them. */
+/**
+ * The boards, west to east, one before each of the four domes along the hub's balcony, each
+ * beside its game's pad: the parkour's west of the middle, the pit's by the middle, the falling
+ * floor's two east of it.
+ */
 const BOARD_LIST: readonly Board[] = [
-  { key: 'pk', title: 'Parkour: fastest', at: [-9, 101, 9] },
-  { key: 'ff', title: 'Falling floor: longest', at: [-3, 101, 9] },
-  { key: 'wins', title: 'Falling floor: wins', at: [3, 101, 9] },
-  { key: 'kills', title: 'The pit: kills', at: [9, 101, 9] },
+  { key: 'pk', title: 'Parkour: fastest', at: [123.5, 83.5, 1434.5] },
+  { key: 'kills', title: 'The pit: kills', at: [151.5, 83.5, 1434.5] },
+  { key: 'ff', title: 'Falling floor: longest', at: [199.5, 83.5, 1434.5] },
+  { key: 'wins', title: 'Falling floor: wins', at: [227.5, 83.5, 1434.5] },
 ]
+
+/** How much larger a board's text is than the game's, to be read from across the balcony. */
+const BOARD_SCALE = 1.6
 
 /**
  * Hands the player's entry in `WORK new` to a board, which keeps it if it is in the top ten. Run as
@@ -134,7 +141,7 @@ export const BOARDS_PART: Part = {
     'boards/append': [
       `$data modify storage ${WORK} text append value {text:"\\n$(rank). ",color:"gray"}`,
       `$data modify storage ${WORK} text append value {text:"$(name)",color:"white"}`,
-      `$data modify storage ${WORK} text append value {text:"  $(shown)",color:"gold"}`,
+      `$data modify storage ${WORK} text append value {text:"  $(shown)",color:"${PAPER}",bold:true}`,
     ],
     'boards/seconds': [
       `scoreboard players operation #sec ${TMP} = #ticks ${TMP}`,
@@ -156,11 +163,11 @@ export const BOARDS_PART: Part = {
     `scoreboard players set #2 ${TMP} 2`,
     ...BOARD_LIST.flatMap(({ key, title }) => [
       `execute unless data storage ${BOARDS} ${key} run data modify storage ${BOARDS} ${key} set value []`,
-      `data modify storage ${NS}:titles ${key} set value ["",{text:"${title}",color:"gold",bold:true}]`,
+      `data modify storage ${NS}:titles ${key} set value ["",{text:"${title}",color:"${PAPER}",bold:true}]`,
     ]),
   ],
   build: BOARD_LIST.flatMap(({ key, at }) => [
-    label(at.join(' '), `${NS}.board.${key}`, '""'),
+    label(at.join(' '), `${NS}.board.${key}`, '""', BOARD_SCALE),
     `function ${NS}:boards/render {board:"${key}"}`,
   ]),
   tick: [],

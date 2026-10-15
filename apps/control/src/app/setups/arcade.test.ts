@@ -5,13 +5,14 @@
 /**
  * The Arcade template: Paper on the newest release the moderation tools run on, with them, the
  * chat filter and the Grim anticheat, and ViaVersion when that release isn't the newest; offered
- * with Plus; and a server of it starting on a void world with the games' datapack and the
- * moderation files, the datapack following the server onto a fresh world.
+ * with Plus; and a server of it starting on the Arcade's world, fetched through its own link,
+ * with the games' datapack and the moderation files, the datapack following the server onto a fresh world.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { onLevel } from '../../domain/revision/carried.ts'
+import { ARCADE_WORLD } from '../../minecraft/arcade/maps.ts'
 import { ARCADE_FILES } from '../../minecraft/arcade.ts'
 import {
   CHATSENTINEL,
@@ -22,8 +23,8 @@ import {
   runsModeration,
 } from '../../minecraft/moderation.ts'
 import { VIAVERSION } from '../../minecraft/mods.ts'
+import { ARCADE_LEVEL, STARTER_STEP } from '../../minecraft/starter.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
-import { VOID_LEVEL } from '../../minecraft/worlds.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { CHAT_FILTER } from '../moderation/service.ts'
@@ -102,7 +103,7 @@ describe.skipIf(!hasDatabase)('arcade', () => {
     })
   }, 30_000)
 
-  test('its server starts on a void world with the games, the boards and the moderation tools', async () => {
+  test("its server starts on the Arcade's world with the games, the boards and the moderation tools", async () => {
     const owner = await h.user('Kai', 'plus')
     const server = await h.create(owner, { from: { kind: 'template', key: 'arcade' } })
     await h.until(server.id, 'running')
@@ -121,13 +122,24 @@ describe.skipIf(!hasDatabase)('arcade', () => {
     })
     expect([runsModeration(revision.mods), filtersChat(revision.mods)]).toEqual([true, true])
     expect((await listWorlds(h.db, server.id)).map((w) => [w.levelName, w.levelType])).toEqual([
-      ['world', VOID_LEVEL],
+      ['world', ARCADE_LEVEL],
     ])
+    // The world's archive comes through the server's own link, as its jars do, checked by its hash.
+    const { spec } = await h.app.specs.desired(h.db, await h.server(server.id))
+    const [sha512, link = ''] = (spec.env.BLOCKLY_STARTER ?? '').split(' ')
+    expect(sha512).toBe(ARCADE_WORLD.sha512)
+    expect(spec.entrypoint?.[2]).toContain(STARTER_STEP)
+    const head = await fetch(link, { method: 'HEAD' })
+    expect([head.status, head.headers.get('content-length')]).toEqual([200, String(ARCADE_WORLD.sizeBytes)])
+    // Only the archive its worlds start on.
+    expect((await fetch(link.replace(ARCADE_WORLD.sha512, 'a'.repeat(128)), { method: 'HEAD' })).status).toBe(
+      404,
+    )
     const volume = h.runtime.machine(server.id)?.dir ?? ''
     for (const file of revision.files.map((carried) => onLevel(carried, 'world')))
       expect(readFileSync(`${volume}/${file.path}`, 'utf8')).toBe(file.content)
 
-    // A fresh world is void like the one it left, and the games go into it.
+    // A fresh world starts on the Arcade's world again, and the games go into it.
     await h.app.worlds.freshStart(owner, server.id, randomUUID())
     await h.until(
       server.id,
@@ -135,8 +147,8 @@ describe.skipIf(!hasDatabase)('arcade', () => {
     )
     await h.settled(server.id)
     expect((await listWorlds(h.db, server.id)).map((w) => [w.levelName, w.levelType])).toEqual([
-      ['world', VOID_LEVEL],
-      ['world-2', VOID_LEVEL],
+      ['world', ARCADE_LEVEL],
+      ['world-2', ARCADE_LEVEL],
     ])
     expect(readFileSync(`${volume}/world-2/datapacks/cubepals-arcade/pack.mcmeta`, 'utf8')).toContain(
       'Arcade',

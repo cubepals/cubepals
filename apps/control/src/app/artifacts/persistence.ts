@@ -3,13 +3,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { type Queryable, schema, type Tx } from '@blockly/db'
-import { and, asc, eq, lt, ne, or, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, lt, ne, or, sql } from 'drizzle-orm'
 import type { ModArtifact, PinnedMod } from '../../domain/mods/artifact.ts'
 
 const revisions = schema.serverRevisions
 const servers = schema.minecraftServers
 const runtimes = schema.serverRuntimes
 const stored = schema.storedArtifacts
+const worlds = schema.worlds
 
 /**
  * What a server may fetch under a hash: a jar one of its revisions pins, or the modpack a
@@ -62,6 +63,32 @@ export async function pinnedBy(
     pinnedAt: row.createdAt,
     refreshedAt: row.refreshedAt,
   }
+}
+
+/**
+ * When a server first had a world of one of these types, which start on an archive: what lets the
+ * server fetch that archive. A deleted world counts, as a restore may bring it back.
+ */
+export async function firstWorldOfType(
+  q: Queryable,
+  serverId: string,
+  levelTypes: readonly string[],
+): Promise<Date | null> {
+  if (levelTypes.length === 0) return null
+  const [row] = await q
+    .select({ createdAt: worlds.createdAt })
+    .from(worlds)
+    .innerJoin(servers, eq(servers.id, worlds.serverId))
+    .where(
+      and(
+        eq(worlds.serverId, serverId),
+        ne(servers.status, 'purged'),
+        inArray(worlds.levelType, [...levelTypes]),
+      ),
+    )
+    .orderBy(asc(worlds.createdAt))
+    .limit(1)
+  return row?.createdAt ?? null
 }
 
 export async function storedArtifact(q: Queryable, sha512: string): Promise<{ key: string } | null> {

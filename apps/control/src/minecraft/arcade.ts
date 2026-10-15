@@ -3,32 +3,31 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The Arcade template's games: timed parkour, a falling floor and a pit, around a hub in the sky
- * whose boards keep the top ten of each. Fun alone against your own best, and with two or three
- * friends against each other.
+ * The Arcade template's games: timed parkour, a falling floor and a pit, around a hub whose boards
+ * keep the top ten of each. Fun alone against your own best, and with two or three friends against
+ * each other.
  *
- * All of it is one datapack Cubepals writes into the world the server runs, which Minecraft reads
- * on its own, so no plugin is added for any game, and it runs on whichever release the server
- * does. Scores and boards live in the world's own scoreboard and storage, so they hold through
- * restarts and sleep, and start again on a fresh world, as the world's own things do.
- *
- * Everything is built at fixed places from y 100 up, with the void below, and built again each time
- * the world loads: a block knocked out is back by the next start. On a world of another kind, made
- * with "Make your own world", the room around each place is cleared first, so it stands the same.
+ * The world is made of published maps (`arcade/maps.ts`), built once into one world by
+ * `scripts/arcade-world.ts`, which reaches a server as an archive (`ARCADE_WORLD`). The games are
+ * one datapack Cubepals writes into that world, which Minecraft reads on its own, so no plugin is
+ * added for any game. Scores and boards live in the world's own scoreboard and storage, so they
+ * hold through restarts and sleep. On any other world, such as one made with "Make your own
+ * world", it does nothing.
  *
  * Parts (`arcade/`):
- * - `datapack.ts`: the shape of a part, the hub's place, and how a place is named in a selector.
+ * - `datapack.ts`: the shape of a part, the hub's place, a place in a selector, and labels.
+ * - `maps.ts`: the published maps, their builders, licences and places in the world.
  * - `boards.ts`: the leaderboards: keeping each top ten in storage and drawing it in the hub.
- * - `hub.ts`: the hub, its pads, the welcome, the ways back to it, and the world's rules.
- * - `parkour.ts`: the timed parkour, its checkpoints and best times.
+ * - `hub.ts`: the hub, its pads, the welcome, the credits, the ways back, and the world's rules.
+ * - `parkour.ts`: the timed parkour over three courses, its checkpoints and best times.
  * - `floor.ts`: the falling floor, its rounds, longest times and wins.
- * - `pit.ts`: the pit, its kit and kills.
+ * - `pit.ts`: the pit, its spawn points, kit and kills.
  */
 import { type CarriedFile, RUNNING_LEVEL } from '../domain/revision/carried.ts'
 import { BOARDS_PART, TMP } from './arcade/boards.ts'
 import { NS, type Part } from './arcade/datapack.ts'
 import { FLOOR_PART } from './arcade/floor.ts'
-import { HUB_PART } from './arcade/hub.ts'
+import { HUB_PART, PADS } from './arcade/hub.ts'
 import { PARKOUR_PART } from './arcade/parkour.ts'
 import { PIT_PART } from './arcade/pit.ts'
 
@@ -48,14 +47,19 @@ const PARTS: readonly Part[] = [BOARDS_PART, PARKOUR_PART, FLOOR_PART, PIT_PART,
  */
 const BUILD_AFTER = 40
 
-const LOAD = [
-  ...PARTS.flatMap((part) => part.load),
-  `function ${NS}:rules`,
-  `scoreboard players set #build ${TMP} ${BUILD_AFTER}`,
-]
+const LOAD = [...PARTS.flatMap((part) => part.load), `scoreboard players set #build ${TMP} ${BUILD_AFTER}`]
+
+/**
+ * The hub's middle pad, which only the Arcade's world has: on any other, such as one made with
+ * "Make your own world", the datapack builds nothing, sets no rules and runs no game.
+ */
+const [px, py, pz] = PADS[1]?.middle ?? [0, 0, 0]
+const ARCADE_WORLD_HERE = `block ${px} ${py} ${pz} minecraft:black_concrete`
 
 const BUILD = [
-  `kill @e[type=minecraft:text_display,tag=${NS}.display]`,
+  `execute unless ${ARCADE_WORLD_HERE} run return run scoreboard players set #build ${TMP} -2`,
+  `function ${NS}:rules`,
+  `kill @e[type=!minecraft:player,tag=${NS}.display]`,
   ...PARTS.flatMap((part) => part.build),
   `scoreboard players set #build ${TMP} -1`,
 ]
@@ -63,7 +67,7 @@ const BUILD = [
 const TICK = [
   `execute if score #build ${TMP} matches 1.. run scoreboard players remove #build ${TMP} 1`,
   `execute if score #build ${TMP} matches 0 run function ${NS}:build`,
-  ...PARTS.flatMap((part) => part.tick),
+  `execute if score #build ${TMP} matches -1 run function ${NS}:play`,
 ]
 
 const lines = (commands: readonly string[]) => `${commands.join('\n')}\n`
@@ -72,6 +76,7 @@ const FUNCTIONS: Record<string, readonly string[]> = {
   load: LOAD,
   build: BUILD,
   tick: TICK,
+  play: PARTS.flatMap((part) => part.tick),
   ...Object.assign({}, ...PARTS.map((part) => part.functions)),
 }
 

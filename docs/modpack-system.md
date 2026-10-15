@@ -98,6 +98,16 @@ advanced feature.
 - **Paths.** Relative, letters, digits and `.`, `_`, `+`, `-` only, and never a file Blockly keeps
   itself (`server.properties`, the access lists, `.blockly-` marks). A wrong one fails building the
   spec: it is a mistake in a template, never skipped.
+- **A world to start on.** A template whose world is made beforehand, such as the Arcade's, names a
+  world type of its own (`blockly:arcade`, `minecraft/starter.ts`) whose archive is an artifact
+  like a jar: a sha512, a size and a link. A world of that type has `BLOCKLY_STARTER` (sha512,
+  link) and a step that, only while the world has no `level.dat`, fetches the archive through the
+  server's own artifact link, refuses other bytes, and unpacks it into the world's folder; a
+  world that has begun is never touched again. The link serves an archive to a server only when
+  one of its worlds is of that type (`firstWorldOfType`), from the archive store, where it is kept
+  under its bytes (`artifacts/<sha512>`, as `ingestFile` keeps a pack Blockly builds). Beyond the
+  archive the world generates as the void does. The archive is built by a script
+  (`scripts/arcade-world.ts`) and put in the store; map files never go into the repository.
 - **The diff and the undo.** The diff before apply and the history list files the way they list
   mods, named by the plugin they set up: "Set by Cubepals: updated LifeStealZ settings". A change
   to a carried file or a placed jar counts as rewriting the world (`rewritesWorld`), so it gets a

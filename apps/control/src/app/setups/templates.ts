@@ -9,6 +9,7 @@ import { ARCADE_FILES } from '../../minecraft/arcade.ts'
 import { DUELS_FILES } from '../../minecraft/duels.ts'
 import { WAITING_FILES } from '../../minecraft/duels-waiting.ts'
 import { CHATSENTINEL, LIBERTYBANS, LUCKPERMS, moderationFiles } from '../../minecraft/moderation.ts'
+import { ARCADE_LEVEL } from '../../minecraft/starter.ts'
 import { VOID_LEVEL } from '../../minecraft/worlds.ts'
 import { CHAT_FILTER } from '../moderation/service.ts'
 
@@ -161,8 +162,9 @@ const SETUPS: Record<TemplateKey, Template['setup']> = {
   },
   arcade: {
     loader: 'paper',
-    // Every game and board is Cubepals' own datapack (`minecraft/arcade.ts`), so it runs on the
-    // newest release the moderation tools do, and an older one gets ViaVersion as Duels does.
+    // Every game and board is Cubepals' own datapack (`minecraft/arcade.ts`), on a world made of
+    // published maps (`ARCADE_LEVEL`), so it runs on the newest release the moderation tools do,
+    // and an older one gets ViaVersion as Duels does.
     mods: FOR_STRANGERS,
     files: [...ARCADE_FILES, ...moderationFiles(CHAT_FILTER)],
     // Adventure, so nobody breaks the games; Easy, for the pit's fights, as on Duels.
@@ -172,7 +174,7 @@ const SETUPS: Record<TemplateKey, Template['setup']> = {
       pvp: true,
       motd: 'Arcade: parkour, falling floor and a pit, with high scores',
     },
-    world: { levelType: VOID_LEVEL, hardcore: false },
+    world: { levelType: ARCADE_LEVEL, hardcore: false },
   },
   fabric: { loader: 'fabric', mods: [], settings: { defaultGameMode: 'survival' }, world: WORLD },
   neoforge: { loader: 'neoforge', mods: [], settings: { defaultGameMode: 'survival' }, world: WORLD },

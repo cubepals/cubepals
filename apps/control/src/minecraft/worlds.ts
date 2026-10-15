@@ -7,6 +7,7 @@
  * so, the level names it runs, and the one command that removes worlds it no longer keeps.
  */
 import { DATA_DIR } from './jars.ts'
+import { starterOf } from './starter.ts'
 
 /**
  * A world of nothing but the small stone platform Minecraft puts at spawn: a base for islands and
@@ -37,10 +38,11 @@ const VOID_SETTINGS = {
 
 /**
  * The image's variables for a world's type. Minecraft reads them only when it makes the world;
- * after that its `level.dat` says how it generates.
+ * after that its `level.dat` says how it generates. A world that starts on an archive
+ * (`starter.ts`) is the void wherever the archive has nothing.
  */
 export function levelTypeEnv(levelType: string): Record<string, string> {
-  if (levelType !== VOID_LEVEL) return { LEVEL_TYPE: levelType }
+  if (levelType !== VOID_LEVEL && starterOf(levelType) === null) return { LEVEL_TYPE: levelType }
   return { LEVEL_TYPE: 'minecraft:flat', GENERATOR_SETTINGS: JSON.stringify(VOID_SETTINGS) }
 }
 

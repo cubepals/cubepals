@@ -2268,17 +2268,26 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   a move it can't believe and tells helpers. Its server list message names the mode.
   ViaVersion comes along, as with any template held to an older release, so the newest Minecraft
   joins too.
-- Arcade is short games with leaderboards, fun alone or with two or three friends, on a void world:
-  timed parkour with checkpoints, a falling floor (the blocks you step on drop away; last one
-  standing wins, and alone it is how long you last) and a pit where everyone fights everyone,
-  around a hub whose pads lead to each and whose boards show each game's top ten. All of it is one
+- Arcade is short games with leaderboards, fun alone or with two or three friends, on a world made
+  of published maps: a parkour of three Overcast courses (Jungle, Ice and Debris) against one
+  clock, with their builders' checkpoints; a falling floor on NetherGames' MD-Meltdown (its snow
+  turns to ice under you and drops; last one standing wins, and alone it is how long you last);
+  and a pit on Overcast's Frozen Market where everyone fights everyone. They sit around a hub
+  built from NetherGames' ArcadeLobby, branded Cubepals (the mark on its screens, the lockup as
+  map art, Ink and Paper pads and boards), whose pads lead to each game and whose boards show
+  each game's top ten. The world is built once by `scripts/arcade-world.ts` (Chunker converts the
+  Bedrock and old Java maps, Paper clones them into one world) and a server starts on it as an
+  archive (`minecraft/starter.ts`, docs/modpack-system.md § Carried files). The games are one
   datapack Cubepals carries into the running world (`minecraft/arcade.ts`, with its parts in
-  `minecraft/arcade/`), so no plugin is added for a game, and it runs on whatever release the
-  server does. Scores and boards are the world's own scoreboard and storage, so they hold through
-  restarts and sleep; a board names each player, read from a player head the datapack fills with
-  their profile. The player in a game sees its board in the sidebar, by the team colour the game
-  puts them on. It comes with the same moderation tools, chat filter and Grim as Duels, so it is
-  Paper on the newest release those run on, with ViaVersion for the newer ones.
+  `minecraft/arcade/`), so no plugin is added for a game; on any other world it does nothing.
+  Scores and boards are the world's own scoreboard and storage, so they hold through restarts
+  and sleep; a board names each player, read from a player head the datapack fills with their
+  profile. The player in a game sees its board in the sidebar, by the team colour the game puts
+  them on. Every map keeps its licence: NetherGames' are CC BY 4.0 and Overcast's CC BY-SA 4.0,
+  so Cubepals' changes to those are CC BY-SA 4.0 too; `/trigger credits` names each map's
+  builders and licence (`minecraft/arcade/maps.ts`). It comes with the same moderation tools,
+  chat filter and Grim as Duels, so it is Paper on the newest release those run on, with
+  ViaVersion for the newer ones.
 - A curated pack can stand for a way to play (`CuratedPack.way`): its card carries the way's name
   and picture, with the pack's own name and authors under it. The card is the pack's, so it shows
   only while a release is published, and picking it is picking the pack. None does today: SkyBlock
