@@ -17,8 +17,8 @@
   justify-content: center;
   gap: var(--space-8);
   padding: var(--space-8) var(--space-16);
-  background: var(--ember);
-  color: #0d0d0d;
+  background: var(--accent);
+  color: var(--ink-on-accent);
   font-size: 14px;
   line-height: 20px;
   text-align: center;

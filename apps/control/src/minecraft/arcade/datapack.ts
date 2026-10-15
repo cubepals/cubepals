@@ -54,10 +54,11 @@ export const FALLEN = box([-3000, -128, -3000], [3000, 39, 3000])
 
 /**
  * Cubepals' colours: the brand's Paper as text and Ink (#0D0D0D) as a display's ARGB
- * (`brand/README.md`), and the site's warm yellow for headings (`--ember`, apps/web tokens).
+ * (`brand/README.md`), and the site's indigo for headings (`--accent-on-dark`, apps/web tokens):
+ * the lighter step, since every label and chat line is on the dark, where the deep one sinks.
  */
 export const PAPER = '#F8F7F5'
-export const YELLOW = '#FFB01F'
+export const INDIGO = '#6A5CD3'
 const INK_ARGB = -15921907
 
 /**
@@ -73,6 +74,6 @@ export function label(at: string, tag: string, text: string, scale = 1): string 
   return `summon minecraft:text_display ${at} {Tags:["${NS}.display","${tag}"],billboard:"vertical",brightness:{block:15,sky:15},background:${INK_ARGB},line_width:240,text:${text}${size}}`
 }
 
-/** A label's heading, in the warm yellow, and its words below, in Paper. */
+/** A label's heading, in the indigo, and its words below, in Paper. */
 export const titled = (title: string, words: string): string =>
-  `["",{text:"${title}",color:"${YELLOW}",bold:true},{text:"\\n${words}",color:"${PAPER}"}]`
+  `["",{text:"${title}",color:"${INDIGO}",bold:true},{text:"\\n${words}",color:"${PAPER}"}]`

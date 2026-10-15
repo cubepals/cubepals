@@ -14,7 +14,7 @@
  * and a map's source, never a deployment's, which the boundary check allows in this file alone.
  */
 import { MAP_PUBLISHERS } from '@blockly/contracts/published-maps'
-import { PAPER, YELLOW } from './datapack.ts'
+import { INDIGO, PAPER } from './datapack.ts'
 import { ARCADE_MAPS, type ArcadeMap, type Licence } from './maps.ts'
 
 /** Each licence by its full name, as Creative Commons gives it, and its address. */
@@ -68,7 +68,7 @@ export const CREDIT_LINES: readonly string[] = [
   ...ARCADE_MAPS.map((map) => {
     const changes = JSON.stringify(`Changed by Cubepals:\n- ${map.changes.join('\n- ')}`)
     const link = (text: string, url: string) =>
-      `{text:"${text}",color:"${YELLOW}",underlined:true,click_event:{action:"open_url",url:"${url}"}}`
+      `{text:"${text}",color:"${INDIGO}",underlined:true,click_event:{action:"open_url",url:"${url}"}}`
     return `["",{text:"${map.title}",bold:true,hover_event:{action:"show_text",value:${changes}}},{text:" (${map.role}) by ${byWhom(map)}, ${map.licence}: ",color:"gray"},${link('licence', LICENCES[map.licence].url)},{text:" · ",color:"gray"},${link('source', sourceUrl(map))}]`
   }),
   `{text:"${SHARE_ALIKE} Hover a map's name for what changed.",color:"gray"}`,

@@ -10,8 +10,8 @@ import { FILL_MS, fadeFromLetter, letterArrived } from '../../../ui/letter-motio
 
 /**
  * The letter on screen. Opening it, however someone got here, puts the first-visit banner away
- * for good. Arriving by the fill, its parts wait for the yellow to finish growing before they come
- * in; leaving, its yellow fades off the next page. Before paint, so neither shows a wrong frame.
+ * for good. Arriving by the fill, its parts wait for the indigo to finish growing before they come
+ * in; leaving, its indigo fades off the next page. Before paint, so neither shows a wrong frame.
  */
 export function Read() {
   useLayoutEffect(() => {

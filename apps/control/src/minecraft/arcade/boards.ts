@@ -14,7 +14,7 @@
  * The name comes from a player head the loot table fills with the player's profile, the one way a
  * datapack reads a player's name as text.
  */
-import { type Block, label, NS, PAPER, type Part, YELLOW } from './datapack.ts'
+import { type Block, INDIGO, label, NS, PAPER, type Part } from './datapack.ts'
 
 /** The world storage that keeps each board, by its key. */
 const BOARDS = `${NS}:boards`
@@ -59,7 +59,8 @@ export const SECONDS = `function ${NS}:boards/seconds`
  * A time written by `SECONDS`, from its path in `WORK`, as a chat message shows it. Read as text,
  * since the storage holds it as a string and would show its quotes; `41.3s` reads as itself.
  */
-export const shown = (path: string): string => `{storage:"${WORK}",nbt:"${path}",interpret:true,color:"gold"}`
+export const shown = (path: string): string =>
+  `{storage:"${WORK}",nbt:"${path}",interpret:true,color:"${INDIGO}"}`
 
 /** Writes `WORK new.score` into `WORK new.shown` as it is: `12`. */
 export const AS_COUNT = `function ${NS}:boards/count with storage ${WORK} new`
@@ -163,7 +164,7 @@ export const BOARDS_PART: Part = {
     `scoreboard players set #2 ${TMP} 2`,
     ...BOARD_LIST.flatMap(({ key, title }) => [
       `execute unless data storage ${BOARDS} ${key} run data modify storage ${BOARDS} ${key} set value []`,
-      `data modify storage ${NS}:titles ${key} set value ["",{text:"${title}",color:"${YELLOW}",bold:true}]`,
+      `data modify storage ${NS}:titles ${key} set value ["",{text:"${title}",color:"${INDIGO}",bold:true}]`,
     ]),
   ],
   build: BOARD_LIST.flatMap(({ key, at }) => [

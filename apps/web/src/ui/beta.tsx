@@ -7,7 +7,7 @@
 /**
  * How Cubepals says it is in beta: a small tag beside the wordmark, and a banner across the top
  * of sign-in, sign-up and the app on a browser's first visit (not the landing page, whose film
- * owns the top of the screen). Both lead to the letter at `/beta`, its yellow growing from them
+ * owns the top of the screen). Both lead to the letter at `/beta`, its indigo growing from them
  * (letter-motion.ts). Each shows only while the root layout marks the page (lib/beta.ts), so the
  * one switch takes them both away; the banner also only until this browser closes it or opens
  * the letter. Not the letter itself, which is its page's (app/(public)/beta).

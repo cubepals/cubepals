@@ -87,7 +87,7 @@
   inset-block-end: 0;
   z-index: 6;
   height: calc(var(--px) * 2);
-  background: var(--torch);
+  background: var(--accent);
   transform-origin: 0 50%;
   scale: 0 1;
   pointer-events: none;

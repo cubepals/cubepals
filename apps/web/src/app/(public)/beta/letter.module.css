@@ -46,12 +46,19 @@
   line-height: 28px;
 }
 
-/* The whole screen in the banner's yellow while the letter is on it, header and foot included.
-   Ink on it reads at about 10.6 to 1 and the muted ink at 6.4; the faintest ink would fall under
-   4.5, so it takes the muted one here. The links stay ink. */
+/* The whole screen in the banner's indigo while the letter is on it, header and foot included,
+   with the Paper letter on it in either theme: about 10 to 1 on the light theme's indigo, 4.8 on
+   the dark theme's lighter step, where no muted Paper would reach 4.5. So every ink here is the
+   one Paper, and so is the edge of a button and the focus ring; a button's own fill is the page's,
+   so its Paper label stays on indigo. */
 html:has(.letter) body {
-  --ink-subtle: var(--ink-muted);
-  background: var(--ember);
+  --surface: var(--accent);
+  --ink: var(--ink-on-accent);
+  --ink-muted: var(--ink-on-accent);
+  --ink-subtle: var(--ink-on-accent);
+  --border-strong: var(--ink-on-accent);
+  --focus-ring: var(--ink-on-accent);
+  background: var(--accent);
 }
 
 /* Each part fades in and rises a few pixels, one after another; after the fill, when there was one

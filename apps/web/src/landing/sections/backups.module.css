@@ -119,7 +119,7 @@
   color: var(--muted);
   font-weight: 400;
 }
-/* The torch: this is running. */
+/* The accent: this is running. */
 .backups .lamp {
   display: block;
   width: calc(var(--px) * 5);
@@ -128,7 +128,7 @@
 }
 .backups .lamp[data-on] {
   border-color: var(--ink);
-  background: var(--torch);
+  background: var(--accent);
 }
 
 /* Two to a row when narrow, so what joins them in the trash takes the place already there. */
@@ -308,11 +308,11 @@
   color: var(--muted);
   font-size: 0.8125rem;
 }
-/* Being said now is the torch; already said is ink. */
+/* Being said now is the accent; already said is ink. */
 .backups .cmd[data-state="now"] {
   border-color: var(--ink);
-  background: var(--torch);
-  color: var(--ink);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 .backups .cmd[data-state="done"] {
   border-color: var(--fg);
@@ -427,7 +427,7 @@
   width: fit-content;
   padding: 0 calc(var(--px) * 2);
 }
-/* A step not reached yet is grey; one already passed is ink; the one running now is the torch. */
+/* A step not reached yet is grey; one already passed is ink; the one running now is the accent. */
 .backups .step[data-state="todo"] {
   color: var(--muted);
 }
@@ -435,17 +435,17 @@
   background: var(--fg);
 }
 .backups .step[data-state="now"] .mark {
-  background: var(--torch);
+  background: var(--accent);
   outline: var(--px) solid var(--ink);
   animation: working 0.7s steps(2, jump-none) infinite;
 }
 .backups .step[data-state="now"] .words {
-  background: var(--torch);
-  color: var(--ink);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 @keyframes working {
   from {
-    background: var(--torch);
+    background: var(--accent);
   }
   to {
     background: var(--field);

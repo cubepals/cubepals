@@ -121,7 +121,7 @@
   color: var(--line);
 }
 .fleet .sw[data-kind="running"] {
-  background: var(--torch);
+  background: var(--accent);
 }
 .fleet .sw[data-kind="unknown"] {
   border: var(--px) solid var(--fg);
@@ -224,7 +224,7 @@
   background: var(--panel);
 }
 .fleet .lit[data-state="running"] i {
-  background: var(--torch);
+  background: var(--accent);
 }
 .fleet .lit[data-state="unknown"] i {
   border: var(--px) solid var(--fg);
@@ -331,7 +331,7 @@
   background: var(--dim);
 }
 .fleet .tile[data-word="running"] .slab {
-  background: var(--torch);
+  background: var(--accent);
 }
 .fleet .tile[data-word="unknown"] .slab {
   border: var(--px) solid var(--line);

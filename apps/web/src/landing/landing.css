@@ -9,8 +9,10 @@
  * cross-section of a Minecraft world, printed in ink on paper, that gets darker as it digs.
  *
  * Three colours and a light. Ink and paper are the brand's (brand/README.md). The night field is
- * the sky over a sleeping server. The torch is the only warm colour, and it only ever means one
- * thing: this is on.
+ * the sky over a sleeping server. The accent, indigo, is the only other colour, and it only ever
+ * means one thing: this is on. It carries Paper, never Ink, and underground, and on any ink, it
+ * takes a lighter step of its hue, so it still stands off the dark. The lamplight drawn in the
+ * chunk stays warm (Chunk.tsx): it is light, not the accent.
  *
  * Three voices. Geologica says what a player needs to know. The pixel face is the game talking
  * (the server list, the gauge). The mono face is the machine talking, and it is never used above
@@ -24,7 +26,9 @@
   --paper: #f8f7f5;
   --ink: #0d0d0d;
   --night: #8c86f2;
-  --torch: #ffb01f;
+  --accent: #3a2e8f;
+  --accent-on-dark: #6a5cd3;
+  --on-accent: var(--paper);
   --stone: #e6e3dc;
   --slate: #1c1c20;
   --bedrock: #0e0e0f;
@@ -125,6 +129,7 @@
   --muted: #a9a8b3;
   --panel: #111113;
   --on-fg: var(--ink);
+  --accent: var(--accent-on-dark);
 }
 .bl [data-tone="bedrock"] {
   --field: var(--bedrock);
@@ -679,15 +684,17 @@
 .bl-frame--bare {
   --frame-fill: var(--field);
 }
+/* Above ground a solid frame is ink, where the deep indigo sinks, so it takes the lighter step. */
 .bl-frame--solid {
   --frame-fill: var(--fg);
   --frame-line: var(--fg);
+  --accent: var(--accent-on-dark);
   color: var(--on-fg);
 }
 .bl-frame--lit {
-  --frame-fill: var(--torch);
+  --frame-fill: var(--accent);
   --frame-line: var(--ink);
-  color: var(--ink);
+  color: var(--on-accent);
 }
 
 /* A button is a block you push: it sits a pixel proud of its shadow and goes down when pressed. */
@@ -793,8 +800,8 @@
     var(--fg);
 }
 .bl-btn--lit {
-  color: var(--ink);
-  --btn-fill: var(--torch);
+  color: var(--on-accent);
+  --btn-fill: var(--accent);
   --btn-shadow: var(--ink);
 }
 
@@ -844,8 +851,8 @@
   line-height: 1.3;
 }
 .bl-tag--lit {
-  background: var(--torch);
-  color: var(--ink);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 /* ─── Dither: the print's greys, for bars, fills and the edges between strata ───────────────── */

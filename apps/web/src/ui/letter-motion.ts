@@ -4,16 +4,16 @@
 
 /**
  * The way into the beta letter and out of it. Opened from the banner or the tag, the letter's
- * yellow grows from what was pressed until it fills the screen: the banner slides down over the
+ * indigo grows from what was pressed until it fills the screen: the banner slides down over the
  * page, the tag's box opens out. A browser with view transitions does it around the navigation
- * itself; one without gets a yellow layer that grows the same way, then the navigation. Leaving,
- * the yellow fades off whatever comes next. Someone who asked for less motion gets none of it,
+ * itself; one without gets an indigo layer that grows the same way, then the navigation. Leaving,
+ * the indigo fades off whatever comes next. Someone who asked for less motion gets none of it,
  * only the page. The timings and curve are `letter-motion.css`'s; the letter's own entrance is
  * its page's (app/(public)/beta).
  */
 import type { MouseEvent } from 'react'
 
-/** What a press came from, and so where the yellow grows from. */
+/** What a press came from, and so where the indigo grows from. */
 type From = 'banner' | 'tag'
 
 /** How long the fill takes, as letter-motion.css has it: the letter's parts wait this long for it. */
@@ -30,7 +30,7 @@ let arrived: (() => void) | null = null
 
 const stillness = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-/** The clip that shows only the box the yellow grows from, as `inset()` from the screen's edges. */
+/** The clip that shows only the box the indigo grows from, as `inset()` from the screen's edges. */
 function clipFrom(target: Element, from: From): string {
   const tall = window.innerHeight
   const wide = window.innerWidth
@@ -79,7 +79,7 @@ export function openLetter(event: MouseEvent<HTMLAnchorElement>, from: From, go:
     })
     return
   }
-  // No view transitions: a layer of the letter's yellow grows over the page, then the page goes.
+  // No view transitions: a layer of the letter's indigo grows over the page, then the page goes.
   const layer = document.createElement('div')
   layer.setAttribute('data-letter-layer', '')
   document.body.append(layer)
@@ -97,7 +97,7 @@ export function letterArrived(): void {
 }
 
 /**
- * The letter has gone, by a link or by going back: its yellow fades off the page that replaced
+ * The letter has gone, by a link or by going back: its indigo fades off the page that replaced
  * it, rather than vanishing in one frame.
  */
 export function fadeFromLetter(): void {

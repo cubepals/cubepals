@@ -9,7 +9,7 @@
  * after play and each day it plays on (operations/handlers/winding-down.ts,
  * operations/schedules/scheduled-backups.ts). The tag and the banner lead here (ui/beta.tsx), and
  * opening it puts the banner away; the page stays when the beta switch is off. It is set on the
- * banner's yellow, the whole screen of it, and its parts come in one by one, after the fill when
+ * banner's indigo, the whole screen of it, and its parts come in one by one, after the fill when
  * the letter was opened from the banner or the tag (ui/letter-motion.ts).
  */
 import type { Metadata } from 'next'

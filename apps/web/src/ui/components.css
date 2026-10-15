@@ -93,6 +93,10 @@ img {
 .bk-on-image :focus-visible {
   outline-color: var(--focus-ring-inverse);
 }
+/* The light theme's deep indigo sinks into a dark block, so the accent there is the lighter step. */
+.bk-on-dark {
+  --accent: var(--accent-on-dark);
+}
 
 .bk-mono {
   font-family: var(--font-mono);

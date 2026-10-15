@@ -165,8 +165,8 @@
   padding: 0 calc(var(--px) * 3);
 }
 .machine .status[data-on] .says {
-  background: var(--torch);
-  color: var(--ink);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .machine .steps {
@@ -291,7 +291,7 @@
   padding-inline: calc(var(--px) * 3);
 }
 
-/* A step not reached yet is grey; one already passed is ink; the one running now is the torch. */
+/* A step not reached yet is grey; one already passed is ink; the one running now is the accent. */
 .machine .row[data-state="todo"],
 .machine .row[data-state="todo"] .v {
   color: var(--muted);
@@ -301,7 +301,7 @@
 }
 .machine .row[data-state="active"] .mark,
 .machine .row[data-state="lit"] .mark {
-  background: var(--torch);
+  background: var(--accent);
   outline: var(--px) solid var(--ink);
 }
 .machine .row[data-state="active"] .mark {
@@ -311,8 +311,8 @@
 .machine .row[data-state="active"] .id,
 .machine .row[data-state="lit"] .words,
 .machine .row[data-state="lit"] .id {
-  background: var(--torch);
-  color: var(--ink);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 .machine .row[data-state="stopped"] .mark {
   outline: var(--px) solid var(--fg);
@@ -323,7 +323,7 @@
 }
 @keyframes working {
   from {
-    background: var(--torch);
+    background: var(--accent);
   }
   to {
     background: var(--panel);
