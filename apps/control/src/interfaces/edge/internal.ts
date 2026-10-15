@@ -24,7 +24,7 @@ export function createInternalApp(deps: { edge: EdgeService; token: string }): H
   })
 
   app.get(`${EDGE_PROTOCOL_BASE}/routes`, async (c) => {
-    const { routes, from } = await deps.edge.listed()
+    const { routes, from, unrouted } = await deps.edge.listed()
     const etag = `"${createHash('sha256').update(JSON.stringify(routes)).digest('hex').slice(0, 32)}"`
     const unchanged = c.req.header('if-none-match') === etag
     // An edge that names itself is counted: the version it holds decides when a server reads as
@@ -32,7 +32,7 @@ export function createInternalApp(deps: { edge: EdgeService; token: string }): H
     const edgeId = c.req.header(EDGE_ID_HEADER)
     const said = Number(c.req.header(ROUTES_HELD_HEADER))
     const held = unchanged ? from : Number.isFinite(said) && said > 0 ? new Date(Math.min(said, +from)) : null
-    if (edgeId) await deps.edge.seen(edgeId, held)
+    if (edgeId) await deps.edge.seen(edgeId, held, unrouted)
     c.header(ROUTES_VERSION_HEADER, String(+from))
     if (unchanged) return c.body(null, 304)
     c.header('ETag', etag)

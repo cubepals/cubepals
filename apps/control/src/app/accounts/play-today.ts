@@ -10,9 +10,9 @@
  * `domain/account/play-day.ts`'s; stopping a run when the day's play is used is the session check's.
  */
 import type { ServerView } from '@blockly/contracts'
-import { DAY_MS, MINUTE_MS } from '@blockly/contracts/durations'
+import { DAY_MS, MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import { type Queryable, schema } from '@blockly/db'
-import { and, eq, gt, isNull, max } from 'drizzle-orm'
+import { and, eq, gt, isNull, max, sql } from 'drizzle-orm'
 import type { Entitlements } from '../../domain/account/entitlements.ts'
 import { METER_UNITS } from '../../domain/account/meter.ts'
 import { DEFAULT_TIME_ZONE, dayStart, nextDayStart } from '../../domain/account/play-day.ts'
@@ -72,15 +72,16 @@ export const todayView = (today: PlayToday | null, tier: MemoryTier): ServerView
       }
 
 /**
- * Servers asleep because their owner's day of play ran out, with when it is back: the next local
- * midnight after the stop, while that is still to come. One read for every server, for the edge's
- * routes, which are asked for every second.
+ * Each live server stopped because its owner's day of play ran out, with its owner's time zone and
+ * when it stopped, as `outOf` reads them; unrun, so the edge's routes can fold it into their
+ * fingerprint (`edge/inputs.ts`). A day is at most 26 hours, so a stop longer ago than two days,
+ * by the database's clock, is past its midnight and left out.
  */
-export async function outForToday(q: Queryable, now: Date): Promise<Map<string, Date>> {
+export function dailyStops(q: Queryable) {
   const servers = schema.minecraftServers
   const intervals = schema.powerIntervals
   const standing = schema.accountStanding
-  const rows = await q
+  return q
     .select({ id: servers.id, zone: standing.timeZone, stoppedAt: max(intervals.stoppedAt) })
     .from(servers)
     .innerJoin(intervals, eq(intervals.serverId, servers.id))
@@ -90,13 +91,22 @@ export async function outForToday(q: Queryable, now: Date): Promise<Map<string, 
         isNull(servers.deletedAt),
         eq(servers.status, 'stopped'),
         eq(servers.stopReason, 'daily'),
-        // A day is at most 26 hours, so a stop longer ago than two days is past its midnight.
-        gt(intervals.stoppedAt, new Date(now.getTime() - 2 * DAY_MS)),
+        gt(intervals.stoppedAt, sql`now() - make_interval(secs => ${(2 * DAY_MS) / SECOND_MS})`),
       ),
     )
     .groupBy(servers.id, standing.timeZone)
+}
+
+/**
+ * Of `dailyStops`, the servers still asleep for the day at `now`, with when they are back: the next
+ * local midnight after the stop, while that is still to come.
+ */
+export function outOf(
+  stops: ReadonlyArray<{ id: string; zone: string | null; stoppedAt: Date | null }>,
+  now: Date,
+): Map<string, Date> {
   const out = new Map<string, Date>()
-  for (const row of rows) {
+  for (const row of stops) {
     if (row.stoppedAt === null) continue
     const backAt = nextDayStart(row.stoppedAt, row.zone ?? DEFAULT_TIME_ZONE)
     if (backAt > now) out.set(row.id, backAt)

@@ -6,7 +6,7 @@
  * Whether every edge holds a running server's route, so that it may read as running: a player
  * who joins the moment it does is let in, never closed by an edge that hasn't heard yet.
  *
- * Route lists are versioned by the database's time as their read began. An edge says which version
+ * Route lists are versioned by the database's time as their read began (`inputs.ts`). An edge says which version
  * it holds every route of (`edges.synced_to`). A server's `route_listed_at` is the version that
  * first named it running, taken after the read that did, so an edge holding that version or a
  * later one holds its route. It reads as running once every counted edge does, and is told so
@@ -60,17 +60,6 @@ const routed = sql`${servers.status} = 'running' and (
       and ${edges.firstSeenAt} <= coalesce(${servers.readyAt}, 'epoch'::timestamptz)
       and (${servers.routeListedAt} is null or ${edges.syncedTo} is null or ${edges.syncedTo} < ${servers.routeListedAt})
   ))`
-
-/** The database's own clock, as a route version: every time here is read from it. */
-export async function databaseNow(q: Queryable): Promise<Date> {
-  // To the millisecond below, which only ever makes an edge's word cover a little less.
-  const { rows } = await q.execute<{ ms: number }>(
-    sql`select floor(extract(epoch from clock_timestamp()) * 1000)::float8 as ms`,
-  )
-  const ms = rows[0]?.ms
-  if (ms === undefined) throw new Error('The database told no time')
-  return new Date(ms)
-}
 
 /**
  * The status each server is shown with, by id, in one read: running only once every edge holds
@@ -133,6 +122,13 @@ export async function markListed(q: Queryable, serverIds: readonly string[]): Pr
  * as any does, reads as running: its version moves, and its page is told.
  */
 export async function seen(db: Db, events: EventBus, edgeId: string, syncedTo: Date | null): Promise<void> {
+  await sawEdge(db, edgeId, syncedTo)
+  await forgetQuietEdges(db)
+  await tellRouted(db, events)
+}
+
+/** Edge `edgeId` asked for its routes, holding every route of version `syncedTo`, or of none yet. */
+export async function sawEdge(db: Db, edgeId: string, syncedTo: Date | null): Promise<void> {
   await db
     .insert(edges)
     .values({ edgeId, syncedTo, seenAt: sql`clock_timestamp()` })
@@ -144,7 +140,15 @@ export async function seen(db: Db, events: EventBus, edgeId: string, syncedTo: D
         ...(syncedTo === null ? {} : { syncedTo: sql`greatest(${edges.syncedTo}, ${syncedTo})` }),
       },
     })
+}
+
+/** Lets go of the edges that stopped asking long ago, as ones a deploy replaced. */
+export async function forgetQuietEdges(db: Db): Promise<void> {
   await db.delete(edges).where(lt(edges.seenAt, ago(EDGE_KEPT_MS)))
+}
+
+/** Each server every counted edge now holds, or that has waited as long as any does, is told so. */
+async function tellRouted(db: Db, events: EventBus): Promise<void> {
   await db.transaction(async (tx) => {
     const told = await tx
       .update(servers)

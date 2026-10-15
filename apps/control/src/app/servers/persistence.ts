@@ -485,10 +485,10 @@ export async function loadRevision(q: Queryable, id: string): Promise<ServerRevi
 export async function motdsOf(q: Queryable, revisionIds: readonly string[]): Promise<Map<string, string>> {
   if (revisionIds.length === 0) return new Map()
   const rows = await q
-    .select({ id: revisions.id, settings: revisions.settings })
+    .select({ id: revisions.id, motd: sql<string>`${revisions.settings}->>'motd'` })
     .from(revisions)
     .where(inArray(revisions.id, [...revisionIds]))
-  return new Map(rows.map((row) => [row.id, row.settings.motd]))
+  return new Map(rows.map((row) => [row.id, row.motd]))
 }
 
 /** Revisions are never edited; every change is a new one, numbered after the latest. */

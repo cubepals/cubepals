@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { BLOCKLY_ICON } from '@blockly/contracts'
+import { HOUR_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { EdgeRoutes, SessionEvent, WakeResult } from '@blockly/contracts/edge'
 import { motdForGame } from '@blockly/contracts/server-list'
 import type { AppliedConfigJson, Db } from '@blockly/db'
@@ -13,7 +14,7 @@ import type { MinecraftServer } from '../../domain/server/server.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { PORT_NAMES } from '../../minecraft/runtime-spec.ts'
 import { loadStanding } from '../accounts/persistence.ts'
-import { outForToday, playToday } from '../accounts/play-today.ts'
+import { outOf, playToday } from '../accounts/play-today.ts'
 import { playTotal } from '../accounts/play-total.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
 import { AppError, type AppErrorCode } from '../errors.ts'
@@ -23,19 +24,13 @@ import type { EventBus } from '../ports/events.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import type { Endpoint } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
-import {
-  findLiveBySlug,
-  findRuntime,
-  heldByDeleted,
-  listBindings,
-  listLive,
-  motdsOf,
-} from '../servers/persistence.ts'
+import { findLiveBySlug, findRuntime, heldByDeleted } from '../servers/persistence.ts'
 import type { MinecraftServerService } from '../servers/service.ts'
 import { presenceFor, recordDomainJoin, recordEdgePresence, wakesInLastHour } from '../servers/usage.ts'
 import type { ServerWaiter } from '../servers/waiter.ts'
 import { tuning } from '../tuning.ts'
-import { databaseNow, markListed, seen } from './routed.ts'
+import { fingerprint, type RouteInputs, type RouteServer, readInputs } from './inputs.ts'
+import { forgetQuietEdges, markListed, sawEdge, seen } from './routed.ts'
 
 /**
  * The application side of the edge protocol. It resolves hostnames and destinations; the edge
@@ -57,6 +52,12 @@ const REFUSED: Partial<Record<AppErrorCode, Extract<WakeResult, { outcome: 'deni
   payment_due: 'quota',
 }
 
+/**
+ * How often an edge's word is written while no server waits on the edges: well inside the time
+ * it counts for after it last asked, and the time its version may fall behind (`routed.ts`).
+ */
+const SAID_EVERY_MS = 3 * SECOND_MS
+
 /** A route's word that its server reads a PROXY header, where the run it is in does. */
 const headerRead = (applied: AppliedConfigJson | null | undefined): { proxyProtocol?: true } =>
   applied?.proxyProtocol ? { proxyProtocol: true } : {}
@@ -71,6 +72,12 @@ export class EdgeService {
   readonly #events: EventBus
   readonly #links: ArtifactLinks
   readonly #wakeWaitMs: number
+  /** The route inputs last read, and the fingerprint they were read under. */
+  #read: { digest: string; inputs: RouteInputs } | null = null
+  /** When each edge's word was last written, by this process. */
+  readonly #saidAt = new Map<string, number>()
+  /** When this process last let go of edges gone quiet. */
+  #forgotAt = 0
 
   constructor(deps: {
     db: Db
@@ -102,26 +109,30 @@ export class EdgeService {
   /**
    * The routes, and the database's time as their read began: an edge that holds this very list
    * holds the route of every server named running before then (`routed.ts`). The first list to
-   * name a server running says so on it; nothing else is written.
+   * name a server running says so on it; nothing else is written. `unrouted` says whether a
+   * running server still waits on the edges to hold it.
+   *
+   * What they are read from is read again only when its fingerprint moves (`inputs.ts`); what
+   * they are built from beside it, the runtimes' endpoints and the time, is asked every time.
    */
-  async listed(): Promise<{ routes: EdgeRoutes; from: Date }> {
-    const from = await databaseNow(this.#db)
-    const bindings = new Map(
-      (await listBindings(this.#db, this.#runtime.providers)).map((b) => [b.serverId, b]),
-    )
-    const live = await listLive(this.#db)
-    const restarting = await this.#restarting(live)
-    const out = await outForToday(this.#db, new Date())
-    const asleep = live.filter((s) => s.lifecycle.status !== 'running' && !restarting.has(s.id))
-    const motds = await motdsOf(
-      this.#db,
-      asleep.map((s) => s.desiredRevisionId),
-    )
+  async listed(): Promise<{ routes: EdgeRoutes; from: Date; unrouted: boolean }> {
+    const providers = this.#runtime.providers
+    let print = await fingerprint(this.#db, providers)
+    let read = this.#read
+    if (read?.digest !== print.digest) {
+      const fresh = await readInputs(this.#db, providers)
+      print = fresh.fingerprint
+      read = { digest: print.digest, inputs: fresh.inputs }
+      this.#read = read
+    }
+    const { servers: live, bindings, comingBack, stops, motds } = read.inputs
+    const restarting = restartingOf(live, comingBack)
+    const out = outOf(stops, new Date())
     const routes: EdgeRoutes['routes'] = []
     for (const server of live) {
       const binding = bindings.get(server.id)
       const handle = binding?.handle
-      const { status } = server.lifecycle
+      const { status } = server
       const state = status === 'running' ? null : restarting.has(server.id) ? 'restarting' : 'asleep'
       // A running server being restored is routed only so its players are told it is restarting:
       // the edge dials nothing while it is.
@@ -138,25 +149,39 @@ export class EdgeService {
           destination,
           ...noticeOf(state, out.get(server.id)),
           ...this.#identityOf(server, state, motds),
-          ...headerRead(binding?.applied),
+          ...(binding?.proxyProtocol ? { proxyProtocol: true as const } : {}),
         })
       }
     }
     routes.sort((a, b) => a.hostname.localeCompare(b.hostname))
     // Each running server with a handle is routed to, above.
-    await markListed(
-      this.#db,
-      live.filter((s) => s.lifecycle.status === 'running' && bindings.get(s.id)?.handle).map((s) => s.id),
-    )
-    return { routes: { routes }, from }
+    if (print.unlisted)
+      await markListed(
+        this.#db,
+        live.filter((s) => s.status === 'running' && bindings.get(s.id)?.handle).map((s) => s.id),
+      )
+    return { routes: { routes }, from: print.from, unrouted: print.unrouted }
   }
 
   /**
    * Edge `edgeId` asked for its routes, holding the list read from `syncedTo` on, or a list it
-   * would not be handed now (null).
+   * would not be handed now (null). While no server waits on the edges (`unrouted` false), its
+   * word is written only every `SAID_EVERY_MS`, which keeps it counted: nothing reads its
+   * version but a server that waits.
    */
-  async seen(edgeId: string, syncedTo: Date | null): Promise<void> {
-    await seen(this.#db, this.#events, edgeId, syncedTo)
+  async seen(edgeId: string, syncedTo: Date | null, unrouted = true): Promise<void> {
+    const now = Date.now()
+    if (unrouted) {
+      this.#saidAt.set(edgeId, now)
+      await seen(this.#db, this.#events, edgeId, syncedTo)
+      return
+    }
+    if (now - (this.#saidAt.get(edgeId) ?? 0) < SAID_EVERY_MS) return
+    this.#saidAt.set(edgeId, now)
+    await sawEdge(this.#db, edgeId, syncedTo)
+    if (now - this.#forgotAt < HOUR_MS) return
+    this.#forgotAt = now
+    await forgetQuietEdges(this.#db)
   }
 
   /**
@@ -165,12 +190,12 @@ export class EdgeService {
    * so the edge says only that it sleeps.
    */
   #identityOf(
-    server: MinecraftServer,
+    server: RouteServer,
     state: 'asleep' | 'restarting' | null,
     motds: ReadonlyMap<string, string>,
   ): Pick<EdgeRoutes['routes'][number], 'motd' | 'icon'> {
     if (state !== 'asleep') return {}
-    const motd = motds.get(server.desiredRevisionId)
+    const motd = server.desiredRevisionId === null ? undefined : motds.get(server.desiredRevisionId)
     const icon =
       server.ownIcon !== null
         ? this.#links.ownIcon(server.id, server.ownIcon)
@@ -279,13 +304,12 @@ export class EdgeService {
    * (settings, versions, packs, worlds, a rollback), or a restore or a move of a running server.
    */
   async #restarting(servers: readonly MinecraftServer[]): Promise<Set<string>> {
-    const restarting = new Set(servers.filter((s) => s.lifecycle.status === 'updating').map((s) => s.id))
     const between = servers.filter((s) => BETWEEN_RUNS.includes(s.lifecycle.status)).map((s) => s.id)
-    for (const operation of await openOfKinds(this.#db, between, ['restart', 'restore', 'relocate'])) {
-      // A restore or a move comes back running only when it began on a running server.
-      if (operation.kind === 'restart' || operation.input.running === true) restarting.add(operation.serverId)
-    }
-    return restarting
+    const open = await openOfKinds(this.#db, between, ['restart', 'restore', 'relocate'])
+    return restartingOf(
+      servers.map((s) => ({ id: s.id, status: s.lifecycle.status })),
+      open.map((o) => ({ serverId: o.serverId, kind: o.kind, running: o.input.running === true })),
+    )
   }
 
   /** The edge saw no players for a while. Only the idle policy decides whether to stop. */
@@ -321,6 +345,23 @@ export class EdgeService {
       })
     })
   }
+}
+
+/**
+ * Which of `servers` are on their way back from a restart, by `open`, the open restarts, restores
+ * and moves among them: a restore or a move comes back running only when it began on a running
+ * server.
+ */
+function restartingOf(
+  servers: ReadonlyArray<{ id: string; status: ServerStatus }>,
+  open: ReadonlyArray<{ serverId: string; kind: string; running: boolean }>,
+): Set<string> {
+  const restarting = new Set(servers.filter((s) => s.status === 'updating').map((s) => s.id))
+  const between = new Set(servers.filter((s) => BETWEEN_RUNS.includes(s.status)).map((s) => s.id))
+  for (const operation of open)
+    if (between.has(operation.serverId) && (operation.kind === 'restart' || operation.running))
+      restarting.add(operation.serverId)
+  return restarting
 }
 
 /**
