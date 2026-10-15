@@ -28,10 +28,10 @@ export interface Part {
 export const NS = 'arcade'
 
 /**
- * Where everyone starts, comes back to and respawns: inside the house outside the hub's hall,
- * facing its door, which opens onto the path to the hall (`scripts/lib/arcade-house.ts`).
+ * Where everyone starts, comes back to and respawns: inside the house on the grass over the hub's
+ * hall, on the rug, facing the stairs down to it (`scripts/lib/arcade-house.ts`).
  */
-export const HUB_SPAWN = '138.5 78 1468.5 180 0'
+export const HUB_SPAWN = '182.5 122 1458.5 90 0'
 
 /** The function that sends a player back to the hub, from anywhere, leaving whatever they played. */
 export const TO_HUB = `${NS}:hub/back`

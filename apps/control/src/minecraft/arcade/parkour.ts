@@ -27,6 +27,13 @@ interface Spot {
   yaw: number
 }
 
+/**
+ * The Jungle's finish: a small mossy pad where its last jumps land, in the map's own terms. The
+ * course ended on top of a statue of a player, which the build takes out and puts this in place of
+ * (`scripts/lib/arcade-likeness.ts`).
+ */
+export const JUNGLE_PAD: { from: Block; to: Block } = { from: [-3, 23, -27], to: [-1, 23, -25] }
+
 /** Each stage: its start, the checkpoints its builders set, in order, and its finish. */
 const STAGES: ReadonlyArray<{
   name: string
@@ -41,7 +48,10 @@ const STAGES: ReadonlyArray<{
       { map: 'jungle', from: [3, 14, -2], to: [6, 16, 1], stand: [4.5, 14, -0.5], yaw: 90 },
       { map: 'jungle', from: [-21, 17, 16], to: [-18, 19, 19], stand: [-19.5, 17, 17.5], yaw: -90 },
     ],
-    finish: { from: placed('jungle', [-10, 32, -30]), to: placed('jungle', [-8, 33, -28]) },
+    finish: {
+      from: placed('jungle', [JUNGLE_PAD.from[0], JUNGLE_PAD.from[1] + 1, JUNGLE_PAD.from[2]]),
+      to: placed('jungle', [JUNGLE_PAD.to[0], JUNGLE_PAD.to[1] + 2, JUNGLE_PAD.to[2]]),
+    },
   },
   {
     name: 'Ice',

@@ -5,14 +5,14 @@
 /**
  * No real person in the Arcade's world: what `arcade-world.ts` takes out of the maps once they are
  * placed, as console commands. The maps' player heads become skeleton skulls of the same shape,
- * since some are jumps in the courses. The statue of a player at the Jungle course's finish goes:
- * its legs and body come out, and its shoulders and head become plain mossy stone, keeping the
- * ladder up it and the finish on top. The four figures in the hub's display case under the balcony
- * come out, leaving their plinths. The maps' armor stands, item frames and other entities never
- * come along, since cloning takes blocks only. Each change is in the map's credits (`maps.ts`).
+ * since some are jumps in the courses. The statue of a player at the Jungle course's finish goes,
+ * all of it, and a small pad where the last jumps land is the finish instead. The four figures in
+ * the hub's display case under the balcony come out, leaving their plinths. The maps' armor
+ * stands, item frames and other entities never come along, since cloning takes blocks only. Each change is in the map's credits (`maps.ts`).
  */
 import type { Block } from '../../apps/control/src/minecraft/arcade/datapack.ts'
 import { ARCADE_MAPS, placed } from '../../apps/control/src/minecraft/arcade/maps.ts'
+import { JUNGLE_PAD } from '../../apps/control/src/minecraft/arcade/parkour.ts'
 
 const fill = (from: Block, to: Block, block: string, replace?: string) =>
   `fill ${from.join(' ')} ${to.join(' ')} minecraft:${block}${replace === undefined ? '' : ` replace minecraft:${replace}`}`
@@ -30,18 +30,15 @@ const HEADS = ARCADE_MAPS.flatMap((map) => {
   ]
 })
 
-/** In the Jungle course, as the map has them: the statue's legs and body, its shoulders, its head. */
+/**
+ * The statue in the Jungle course, all of it: its legs and body, its shoulders, its head with its
+ * face, and the ladders up it. The course's last jumps led onto its shoulder; they end on a small
+ * mossy pad there now, which is the stage's finish (`JUNGLE_PAD`).
+ */
 const jungle = (b: Block) => placed('jungle', b)
 const STATUE = [
-  fill(jungle([-18, 0, -31]), jungle([-1, 22, -26]), 'air'),
-  ...['pink_wool', 'white_wool', 'white_terracotta'].map((was) =>
-    fill(jungle([-18, 23, -31]), jungle([-1, 23, -26]), 'mossy_stone_bricks', was),
-  ),
-  ...['white_terracotta', 'spruce_planks', 'snow_block', 'black_wool', 'brown_stained_glass'].map((was) =>
-    fill(jungle([-13, 24, -33]), jungle([-6, 32, -24]), 'mossy_stone_bricks', was),
-  ),
-  fill(jungle([-13, 24, -33]), jungle([-6, 32, -24]), 'mossy_stone_brick_slab', 'spruce_slab'),
-  fill(jungle([-13, 24, -33]), jungle([-6, 32, -24]), 'mossy_stone_brick_stairs', 'spruce_stairs'),
+  fill(jungle([-18, 0, -33]), jungle([-1, 32, -24]), 'air'),
+  fill(jungle(JUNGLE_PAD.from), jungle(JUNGLE_PAD.to), 'mossy_stone_bricks'),
 ]
 
 /**

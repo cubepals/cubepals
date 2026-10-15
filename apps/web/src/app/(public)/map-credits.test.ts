@@ -2,30 +2,59 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * The line a server's public page says about the published maps its world is built on: read from
+ * the elements `MapCredits` renders, its words and its links, never from markup.
+ */
 import { describe, expect, test } from 'bun:test'
 import { TEMPLATE_CARDS, type TemplateCredits } from '@blockly/contracts'
-import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
+import { isValidElement, type ReactNode } from 'react'
 import { MapCredits } from './map-credits'
 
-const line = (credits: TemplateCredits) =>
-  renderToStaticMarkup(createElement(MapCredits, { credits }))
-    .replace(/<[^>]+>/g, '')
-    .trim()
+interface Node {
+  type: unknown
+  props: { children?: ReactNode; href?: string; className?: string }
+}
+
+/** The line's text and its links, read from the elements it renders, not from markup. */
+function read(credits: TemplateCredits) {
+  const root = MapCredits({ credits }) as unknown as Node
+  const links: Array<{ text: string; href: string | undefined }> = []
+  const text = (node: ReactNode): string => {
+    if (typeof node === 'string' || typeof node === 'number') return String(node)
+    if (Array.isArray(node)) return node.map(text).join('')
+    if (!isValidElement(node)) return ''
+    const element = node as unknown as Node
+    const inside = text(element.props.children)
+    if (element.type === 'a') links.push({ text: inside, href: element.props.href })
+    return inside
+  }
+  return { root, text: text(root.props.children), links }
+}
+const line = (credits: TemplateCredits) => read(credits).text
 
 describe('a server page crediting the maps its world is built on', () => {
   test('the Arcade names NetherGames and the Overcast Community, each linked to its published maps', () => {
     const credits = TEMPLATE_CARDS.find((card) => card.key === 'arcade')?.credits
     if (credits === undefined) throw new Error('The Arcade card carries its credits')
-    expect(line(credits)).toBe('Built on maps by NetherGames and the Overcast Community.')
-    const html = renderToStaticMarkup(createElement(MapCredits, { credits }))
-    expect([...html.matchAll(/href="([^"]+)"/g)].map((link) => link[1])).toEqual([
-      expect.stringMatching(
-        /^https:\/\/github\.com\/NetherGamesMC\/assets\/tree\/[0-9a-f]{40}\/Lobby\/worlds\/ArcadeLobby$/,
-      ),
-      expect.stringMatching(/^https:\/\/github\.com\/OvercastCommunity\/PublicMaps\/tree\/[0-9a-f]{40}$/),
+    const { root, text, links } = read(credits)
+    expect(text).toBe('Built on maps by NetherGames and the Overcast Community.')
+    expect(links).toEqual([
+      {
+        text: 'NetherGames',
+        href: expect.stringMatching(
+          /^https:\/\/github\.com\/NetherGamesMC\/assets\/tree\/[0-9a-f]{40}\/Lobby\/worlds\/ArcadeLobby$/,
+        ),
+      },
+      {
+        text: 'Overcast Community',
+        href: expect.stringMatching(
+          /^https:\/\/github\.com\/OvercastCommunity\/PublicMaps\/tree\/[0-9a-f]{40}$/,
+        ),
+      },
     ])
-    expect(html).toContain('class="type-body-sm"')
+    expect(root.type).toBe('p')
+    expect(root.props.className).toBe('type-body-sm')
   })
 
   test('one maker, or three, read as a sentence', () => {

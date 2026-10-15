@@ -54,9 +54,9 @@ export const ARCADE_MAPS: readonly ArcadeMap[] = [
     role: 'the hub',
     changes: [
       'Converted to Java Edition 26.2 with Chunker and moved into one world with the others (it was a Bedrock Edition world)',
-      'Recoloured in Cubepals’ sand, paper, ink and yellow: the hall’s walls, ceiling, floor and trims; the cabinets and the shape of the build are as built',
+      'Recoloured in Cubepals’ sand, paper, ink and yellow: the hall’s walls, ceiling, floor and trims, the backs and rings of the balcony’s four domes, and the wall under the balcony; the cabinets and the shape of the build are as built',
       'The four figures in the display case under the balcony taken out',
-      'A doorway opened at the end of the west corridor, onto a house added outside, which is Cubepals’ own',
+      'Buried in earth, with grass over it, so nothing of its outside shows; a house stands on the grass, which is Cubepals’ own, and stairs lead down from it to a doorway opened at the end of the west corridor',
       'Cubepals’ mark on its two big screens, its lockup over the ARCADE cabinet, a pad for each game, and light through the hall',
       'Its concrete powder placed as concrete of the same colour, so it stays where it was built',
     ],
@@ -92,7 +92,7 @@ export const ARCADE_MAPS: readonly ArcadeMap[] = [
     changes: [
       'Converted to Java Edition 26.2 with Chunker and moved into one world with the others',
       'Run as the first of three stages against one clock',
-      'The statue of a player beside the finish taken out: its legs and body removed, and its shoulders and head made plain mossy stone, keeping the ladder and the finish',
+      'The statue of a player at the finish taken out, with the ladders up it; the last jumps end on a small mossy pad, which is the finish now',
       'Its player heads replaced by skeleton skulls of the same shape, so no player’s head is shown',
       'A Cubepals sign over the start',
     ],
@@ -158,7 +158,7 @@ export function placed(key: string, [x, y, z]: Block): Block {
 }
 
 const ARCADE_WORLD_SHA512 =
-  '390b9903e5d7269598cc69c7cf62969b8c34131265b9cdedc6695b6385d3b159834367c4fb9c1dbf3b533e0604c8c677c60c589b75d021da59ceca75fb6ce4ef'
+  '6e77b74899c1949b727551ee4515b90104457a8781c5f23199f99e8861bad79209f031d81bfbed610bf7734f0d69264e947425df637e484b864162d899006ce6'
 
 /**
  * The Arcade's world, as `scripts/arcade-world.ts` builds it from these maps: its overworld,
@@ -168,6 +168,6 @@ const ARCADE_WORLD_SHA512 =
 export const ARCADE_WORLD: ModArtifact = {
   ref: { kind: 'stored', key: `artifacts/${ARCADE_WORLD_SHA512}` },
   sha512: ARCADE_WORLD_SHA512,
-  sizeBytes: 3263785,
+  sizeBytes: 3250742,
   fileName: 'arcade-world.tar.gz',
 }

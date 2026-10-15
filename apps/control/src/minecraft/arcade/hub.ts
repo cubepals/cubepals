@@ -3,12 +3,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The Arcade's hub: NetherGames' ArcadeLobby, a hall of arcade cabinets in Cubepals' colours, and
- * the house from cubepals.com's landing page outside it, where everyone starts; its door leads
- * down the west corridor onto the balcony. There, a black pad for each game sends a player to it,
- * its name over it, with the boards in front of the balcony's domes, the Cubepals sign over the
- * ARCADE cabinet, the welcome and the credits. It is also the way back:
- * the "Back to the hub" item every player carries, `/trigger hub`, a fall, dying, and coming back
+ * The Arcade's hub: NetherGames' ArcadeLobby, a hall of arcade cabinets in Cubepals' colours,
+ * buried in the ground, and the house from cubepals.com's landing page on the grass over it, where
+ * everyone starts; stairs in its floor lead down to the hall's west corridor and onto the balcony,
+ * with a sign over the top step saying where they go. There, a black pad for each game sends a
+ * player to it, its name over it, with the boards in front of the balcony's domes, the Cubepals
+ * sign over the ARCADE cabinet, the welcome and the credits. It is also the way back: the "Back to
+ * the hub" item every player carries, `/trigger hub`, a fall, dying, and coming back
  * after leaving. Not the games or what their boards hold, which are their own.
  *
  * It also holds the world's rules for an arcade, in a function of their own (`arcade:rules`): no
@@ -65,8 +66,11 @@ export const PADS: ReadonlyArray<{ middle: Block; sends: string; name: string }>
   },
 ]
 
-/** The hall and the house outside it. */
-const ZONE = box([100, 40, 1340], [256, 125, 1473])
+/** The top step of the stairs from the house down to the hall, which a sign floats over. */
+export const STAIRS_TOP: Block = [183, 121, 1459]
+
+/** The hall, the ground it is buried in, and the house and garden on the grass. */
+const ZONE = box([96, 40, 1336], [260, 140, 1470])
 
 /** Standing on a pad; a moderator flying past in spectator mode isn't. */
 const onPad = ([x, y, z]: Block) => `${box([x - 1, y + 1, z - 1], [x + 1, y + 2, z + 1])},gamemode=!spectator`
@@ -101,11 +105,11 @@ export const HUB_PART: Part = {
       'time set noon',
       'weather clear',
       // The block of `HUB_SPAWN`, facing the same way.
-      'setworldspawn 138 78 1468 180 0',
+      'setworldspawn 182 122 1458 90 0',
     ],
   },
   load: [
-    'forceload add 100 1340 256 1473',
+    'forceload add 96 1336 260 1470',
     `scoreboard objectives add ${BACK} trigger`,
     `scoreboard objectives add ${CREDITS} trigger`,
     `scoreboard objectives add ${NS}.left minecraft.custom:minecraft.leave_game`,
@@ -125,6 +129,11 @@ export const HUB_PART: Part = {
       '160.5 79.5 1430.5',
       `${NS}.label`,
       `["",{text:"Made of maps by NetherGames and the Overcast community.",color:"${PAPER}"},{text:"\\nType /trigger credits for who built each one.",color:"gray"}]`,
+    ),
+    label(
+      `${STAIRS_TOP[0] + 0.5} ${STAIRS_TOP[1] + 3} ${STAIRS_TOP[2] + 1}`,
+      `${NS}.label`,
+      titled('The Arcade', 'Down the stairs'),
     ),
     ...hangSign(HUB_SIGN),
     // Nothing in the hub can be hurt: whatever the maps brought along, and what the build made.
