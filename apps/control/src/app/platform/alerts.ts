@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { AlertKey, AlertView } from '@blockly/contracts'
-import { HOUR_MS, SECOND_MS } from '@blockly/contracts/durations'
+import { DAY_MS, HOUR_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
 import { entitlementsFor, PLAN_KEYS } from '../../domain/account/entitlements.ts'
 import { unreviewedLinks } from '../accounts/free-play.ts'
@@ -15,6 +15,7 @@ import type { CatalogSync } from '../catalog/sync.ts'
 import { EDGE_BEHIND_MS, edgesBehind } from '../edge/routed.ts'
 import { adminAlert } from '../emails/admins.ts'
 import { NotFound } from '../errors.ts'
+import { markedSince } from '../operations/persistence.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { Mailer } from '../ports/platform.ts'
 import {
@@ -39,6 +40,7 @@ const WHERE: Record<AlertKey, string> = {
   billing_order_unknown: '/admin/accounts',
   free_accounts_linked: '/admin',
   edge_behind: '/admin/platform',
+  resumes_hung: '/admin/health',
 }
 
 interface Condition {
@@ -157,6 +159,7 @@ export class PlatformAlerts {
       })
     conditions.push(
       ...(await edgeCondition(this.#db)),
+      ...(await hungCondition(this.#db, now)),
       ...(await unsentCondition(this.#db)),
       ...(await waitingCondition(this.#db, now)),
       ...(await unknownCondition(this.#db)),
@@ -192,6 +195,23 @@ async function edgeCondition(db: Db): Promise<Condition[]> {
     {
       key: 'edge_behind',
       summary: `${one ? 'An edge keeps' : `${behind.length} edges keep`} asking for routes without holding the newest for over ${EDGE_BEHIND_MS / SECOND_MS} s (${behind.join(', ')}). Servers no longer wait on ${one ? 'it' : 'them'}, and players who reach ${one ? 'it' : 'them'} may find no route.`,
+    },
+  ]
+}
+
+/**
+ * Wakes in the last day whose resume never got its machine running, so its server was started
+ * fresh from its disk (`boot.ts`). Each one cost a player a cold boot; several mean the provider's
+ * suspend is failing, and switching it off (`platform/suspend-switch.ts`) stops them.
+ */
+async function hungCondition(db: Db, now: Date): Promise<Condition[]> {
+  const { count, newest } = await markedSince(db, 'resume_hung', new Date(now.getTime() - DAY_MS))
+  if (newest === null) return []
+  const one = count === 1
+  return [
+    {
+      key: 'resumes_hung',
+      summary: `${count} ${one ? 'wake' : 'wakes'} in the last day gave up on a resume that never got ${one ? 'its server' : 'their servers'} running, and started ${one ? 'it' : 'them'} fresh from disk instead, with nothing lost. Newest: operation ${newest.operationId} on server ${newest.serverId}.`,
     },
   ]
 }

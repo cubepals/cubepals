@@ -50,6 +50,8 @@ export interface BootTimeouts {
   runningMs: number
   /** From up to answering a status ping: world generation can take minutes on first boot. */
   readyMs: number
+  /** From a resume asked for to the machine running again (`RESUME_HUNG_MS`); tests shorten it. */
+  resumeMs?: number
 }
 
 export class NotReady extends PlainFailure {
@@ -201,7 +203,7 @@ export class BootSequence {
     // A server its runtime resumed as it was printed nothing and changed nothing: once it answers,
     // only who can join and the settings it keeps in its world are put back, which may have changed
     // while it slept.
-    if (ctx.reached() === 'resuming' && (await this.#resumed(started, proxyProtocol)))
+    if (ctx.reached() === 'resuming' && (await this.#resumed(ctx, started, proxyProtocol)))
       return this.#letIn(ctx, server, started, revision, proxyProtocol, [])
     let handle = started
     const check = installCheck(revision)
@@ -339,16 +341,23 @@ export class BootSequence {
   }
 
   /**
-   * Whether a server its runtime resumed came back as it was: running, and answering a status ping
-   * within `RESUME_MS`, which no boot does. False where the provider dropped the memory it kept
-   * and boots it from its storage instead (a host move, maintenance): the start goes on as a boot,
-   * whose output is then followed from here, a few seconds into it.
+   * Whether a server its runtime resumed came back as it was: running within `RESUME_HUNG_MS`,
+   * and answering a status ping within `RESUME_MS` of running, which no boot does. False where the
+   * provider dropped the memory it kept and boots it from its storage instead (a host move,
+   * maintenance): the start goes on as a boot, whose output is then followed from here, a few
+   * seconds into it. False too where the resume hung, once the machine is started fresh.
    */
-  async #resumed(handle: RuntimeHandle, proxyProtocol: boolean): Promise<boolean> {
-    const deadline = Date.now() + RESUME_MS
-    const endpoint = this.#game(handle, proxyProtocol)
+  async #resumed(ctx: OperationContext, handle: RuntimeHandle, proxyProtocol: boolean): Promise<boolean> {
+    const running = AbortSignal.timeout(this.#timeouts.resumeMs ?? RESUME_HUNG_MS)
     try {
-      await this.#runtime.waitRunning(handle, AbortSignal.timeout(RESUME_MS))
+      await this.#runtime.waitRunning(handle, running)
+    } catch (error) {
+      if (running.aborted) await this.#startFresh(ctx, handle, error)
+      return false
+    }
+    const deadline = Date.now() + RESUME_MS
+    try {
+      const endpoint = this.#game(handle, proxyProtocol)
       for (;;) {
         const left = deadline - Date.now()
         if (left <= 0) return false
@@ -362,6 +371,22 @@ export class BootSequence {
     } catch {
       return false
     }
+  }
+
+  /**
+   * A resume that never got its machine running again: the memory its provider kept is given up
+   * on, and the machine is killed and started from its storage. Nothing played is lost: a server
+   * sleeps only once its world is saved and written through to its disk (`winding-down.ts`), and
+   * nobody plays on it while it sleeps. The operation keeps it for the platform's alert
+   * (`resumes_hung`); a kill that fails fails the attempt, as any start's does.
+   */
+  async #startFresh(ctx: OperationContext, handle: RuntimeHandle, error: unknown): Promise<void> {
+    console.warn(
+      `operation ${ctx.op.kind} ${ctx.op.id}: its resume didn't run in time, starting it fresh (${inFull(error)})`,
+    )
+    await ctx.mark('resume_hung')
+    await this.#runtime.forceStop(handle)
+    await this.#runtime.start(handle)
   }
 
   /**
@@ -610,10 +635,18 @@ export class BootSequence {
 }
 
 /**
- * How long a resumed server has to answer before it counts as booting instead. A resume answers
- * in 0.4 to 2.4 s, and a boot takes 40 s or more.
+ * How long a resumed server has to answer once it runs, before it counts as booting instead. A
+ * resume answers within about 50 ms of running again, and a boot takes 40 s or more.
  */
 const RESUME_MS = 10_000
+/**
+ * How long a resume has to get its machine running again before the memory kept for it is given
+ * up on (`#startFresh`). Fly's resumes on staging (2026-10-15, 3 to 8 GB, 60 wakes) all reached a
+ * player within 3.2 s, 2.3 s at p95: 30 s is over nine times the slowest and thirteen times p95,
+ * so a slow resume is never cut off, and still short of a cold boot (35 to 45 s), so waiting on a
+ * hung one costs less than the boot that replaces it.
+ */
+const RESUME_HUNG_MS = 30_000
 /** How often a resuming server is pinged: it answers within about 50 ms of running again. */
 const RESUME_PAUSE_MS = 200
 

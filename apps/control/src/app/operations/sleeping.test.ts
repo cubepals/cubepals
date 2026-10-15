@@ -10,6 +10,7 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
+import { writeFile } from 'node:fs/promises'
 import { DAY_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { and, desc, eq } from 'drizzle-orm'
@@ -280,6 +281,39 @@ describe.skipIf(!hasDatabase)('a sleep or a wake that doesn’t go as planned', 
     await h.until(id, 'running', 20_000)
     await h.settled(id)
     expect(resumed(await stepsOfLast(h, id))).toBe(false)
+  }, 60_000)
+
+  test('a resume that never runs is given up on: a join waits, then plays the same world', async () => {
+    const { owner, id, slug } = await running()
+    // Played and saved before it slept: what a fresh start must find on its disk.
+    await writeFile(h.minecraft.path(id, 'world/built.txt'), 'built before the sleep')
+    await h.app.access.add(owner, id, 'operator', 'Steve')
+    await h.settled(id)
+    await stop(owner, id, 'idle')
+    expect(h.runtime.machine(id)?.state).toBe('suspended')
+
+    // A provider whose resume hangs, as a machine left starting: the join asks, and is told to wait.
+    h.runtime.sleeps.hang(id)
+    const asked = Date.now()
+    const first = await h.app.edge.wake(`${slug}.play.test`)
+    expect(['ready', 'starting']).toContain(first.outcome)
+    await h.until(id, 'running', 20_000)
+    await h.settled(id)
+    // Given up on at the bound, then a boot: not a boot's whole wait first.
+    expect(Date.now() - asked).toBeLessThan(15_000)
+    expect(await h.app.edge.wake(`${slug}.play.test`)).toMatchObject({ outcome: 'ready' })
+
+    const steps = await stepsOfLast(h, id)
+    expect(steps.slice(0, 3)).toEqual(['resuming', 'resume_hung', 'booting'])
+    expect(resumed(steps)).toBe(false)
+    expect(h.runtime.machine(id)?.state).toBe('running')
+    expect(await h.minecraft.file(id, 'world/built.txt')).toBe('built before the sleep')
+    expect(await h.minecraft.login(id, 'Steve')).toBe('joined')
+
+    // Counted where operators look.
+    const admin = { kind: 'admin' as const, userId: (await h.user('Admin')).userId }
+    const alerts = await h.app.alerts.active(admin)
+    expect(alerts.find((a) => a.key === 'resumes_hung')?.summary).toContain('1 wake in the last day')
   }, 60_000)
 
   test('a first resume counts down from what resumes take, not from a boot', async () => {

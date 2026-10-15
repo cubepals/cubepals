@@ -723,6 +723,8 @@ export class FakeRuntime implements MinecraftRuntime {
   // ─── Inside ────────────────────────────────────────────────────────────────────────────────
 
   async #start(box: Box): Promise<void> {
+    // On its way back from a resume, as a provider's starting machine is: a start leaves it so.
+    if (box.state === 'resuming') return
     box.changedAt = new Date()
     // Asleep, it runs on as it was, unless the memory it kept is gone: then it boots.
     if (await this.sleeps.wake(box, this.#workload, this.#machine(box))) return
@@ -751,7 +753,8 @@ export class FakeRuntime implements MinecraftRuntime {
 
   #observation(box: Box): RuntimeObservation {
     if (box.hostLost) return { state: 'unknown', at: box.changedAt, hostLost: true }
-    const state: ObservedState = box.state === 'suspended' ? 'stopped' : box.state
+    const state: ObservedState =
+      box.state === 'suspended' ? 'stopped' : box.state === 'resuming' ? 'starting' : box.state
     return { state, at: box.changedAt, ...(box.exit && box.state === 'crashed' ? { exit: box.exit } : {}) }
   }
 

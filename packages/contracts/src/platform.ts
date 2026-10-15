@@ -112,6 +112,7 @@ export const ALERT_KEYS = [
   'billing_order_unknown',
   'free_accounts_linked',
   'edge_behind',
+  'resumes_hung',
 ] as const
 export type AlertKey = (typeof ALERT_KEYS)[number]
 

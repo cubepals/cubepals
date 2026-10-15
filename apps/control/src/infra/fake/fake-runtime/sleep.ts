@@ -11,8 +11,11 @@
 import type { RuntimeSpec } from '../../../app/ports/runtime.ts'
 import { Hold } from './hold.ts'
 
-/** `suspended`: asleep with its memory kept; the port reads it stopped. */
-export type MachineState = 'stopped' | 'running' | 'crashed' | 'suspended'
+/**
+ * `suspended`: asleep with its memory kept; the port reads it stopped. `resuming`: on its way back
+ * from it, where a hung resume stays until it is stopped; the port reads it starting.
+ */
+export type MachineState = 'stopped' | 'running' | 'crashed' | 'suspended' | 'resuming'
 
 interface Sleeper {
   key: string
@@ -28,9 +31,9 @@ interface Workload<M> {
   resume?(machine: M): Promise<void>
 }
 
-/** A workload a stop ends: running, or asleep with its memory kept. */
+/** A workload a stop ends: running, asleep with its memory kept, or on its way back from it. */
 export const holds = (machine: { state: MachineState }) =>
-  machine.state === 'running' || machine.state === 'suspended'
+  machine.state === 'running' || machine.state === 'suspended' || machine.state === 'resuming'
 
 export class Sleeps {
   /** Whether a sleep suspends, as FLY_SUSPEND switches Fly's; off, the runtime has no `sleep`. */
@@ -39,6 +42,8 @@ export class Sleeps {
   refused = false
   /** Machines asleep whose memory the provider dropped: their next start boots from storage. */
   readonly #dropped = new Set<string>()
+  /** Machines asleep whose next resume never finishes. */
+  readonly #hung = new Set<string>()
   /** The spec each machine asleep went to sleep on: a start on another drops what it kept. */
   readonly #slept = new Map<string, string>()
   readonly #held = new Hold()
@@ -54,6 +59,14 @@ export class Sleeps {
   /** The provider drops the memory a machine asleep kept, as on a host move: its next start boots. */
   drop(key: string): void {
     this.#dropped.add(key)
+  }
+
+  /**
+   * The provider's next resume of this machine never finishes: it stays on its way back, running
+   * nothing, until it is stopped, which drops what it kept.
+   */
+  hang(key: string): void {
+    this.#hung.add(key)
   }
 
   /** Puts a running machine to sleep, freezing what runs on it, unless refused: whether it is asleep. */
@@ -82,12 +95,17 @@ export class Sleeps {
   }
 
   /**
-   * Wakes a machine asleep as it was, thawing what runs on it: whether it did. One whose memory was
-   * dropped, or whose spec changed while it slept, is let go instead, and the caller boots it.
+   * Wakes a machine asleep as it was, thawing what runs on it: whether it did, or is on its way
+   * back from a resume that hangs (`hang`). One whose memory was dropped, or whose spec changed
+   * while it slept, is let go instead, and the caller boots it.
    */
   async wake<M>(machine: Sleeper, workload: Workload<M>, running: M): Promise<boolean> {
     if (machine.state !== 'suspended') return false
     await this.#held.take()
+    if (this.#hung.delete(machine.key)) {
+      machine.state = 'resuming'
+      return true
+    }
     const dropped = this.#dropped.delete(machine.key) || !this.resumes(machine, machine.spec)
     if (dropped) await workload.stop(running)
     else await workload.resume?.(running)
