@@ -13,7 +13,7 @@ import type { MinecraftServer } from '../../domain/server/server.ts'
 import { memoryMb } from '../../domain/server/size.ts'
 import { checkSlug, type Slug, slugCandidates } from '../../domain/server/slug.ts'
 import { createAccess } from '../access/persistence.ts'
-import { loadStanding, lockCapacity } from '../accounts/persistence.ts'
+import { loadStanding, lockOwnerCapacity } from '../accounts/persistence.ts'
 import { type Actor, authorize, type OperatorActor, requestedBy, type UserActor } from '../actor.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { FUNNEL, noteOnce } from '../insight/record.ts'
@@ -136,10 +136,10 @@ export class MinecraftServerService {
     const { regionKey, memoryTier, createdFrom, revision, world, plan, storageGb, origin } = draft
 
     const server = await this.#db.transaction(async (tx) => {
-      // Creates take turns under the capacity lock. A second press, or a retry sent while the
-      // first was still on its way, finds the server the first wrote while it waited, and answers
-      // with it rather than with a plan's limit that server now fills.
-      await lockCapacity(tx)
+      // An owner's creates take turns under their own capacity lock. A second press, or a retry
+      // sent while the first was still on its way, finds the server the first wrote while it
+      // waited, and answers with it rather than with a plan's limit that server now fills.
+      await lockOwnerCapacity(tx, owner.userId)
       const raced = await findByCreateKey(tx, owner.userId, request.idempotencyKey)
       if (raced) return raced
       // The server this one replaces makes way first, so it counts against nothing, and hands

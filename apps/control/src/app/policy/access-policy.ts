@@ -25,6 +25,7 @@ import {
   loadStanding,
   lockAccountActions,
   lockCapacity,
+  lockOwnerCapacity,
 } from '../accounts/persistence.ts'
 import { playToday } from '../accounts/play-today.ts'
 import { playTotalLeft } from '../accounts/play-total.ts'
@@ -34,11 +35,21 @@ import { type DeploymentCapabilities, supportOf } from '../capabilities.ts'
 import { AppError } from '../errors.ts'
 import type { CreateRoom } from '../platform/room.ts'
 
-/** Decisions over the platform's and accounts' counts, taken under the capacity lock. */
+/** Decisions over an account's counts, taken under its own capacity lock. */
 const SPENDS: ReadonlySet<Capability['kind']> = new Set([
   'create_server',
   'start_server',
   'resize_server',
+  'undelete_server',
+])
+
+/**
+ * The spending decisions that read the platform's counts, room or caps, taken under the platform's
+ * capacity lock too: a resize reads none of them.
+ */
+const PLATFORM_WIDE: ReadonlySet<Capability['kind']> = new Set([
+  'create_server',
+  'start_server',
   'undelete_server',
 ])
 
@@ -61,6 +72,49 @@ async function freeFacts(
   return {
     freeHeld: await freeHeld(tx, accountId),
     freeSharedBecause: (await freeSharers(tx, accountId, now)).why,
+  }
+}
+
+/**
+ * What the decision reads of the account itself, read under the account's own locks: its standing
+ * and plan, its servers and creates, its play, what it owes, and its rate-limited `counted` actions.
+ */
+async function accountFacts(
+  tx: Tx,
+  accountId: string,
+  capability: Capability,
+  counted: string | null,
+  now: Date,
+): Promise<Omit<PolicyFacts, 'deployment' | 'controls' | 'serverCeiling' | 'global' | 'room' | 'roomRules'>> {
+  const standing = await loadStanding(tx, accountId)
+  const extra = await extraPlayNow(tx, standing)
+  const entitlements = entitlementsFor(standing.plan, standing.limitOverrides)
+  const today = await playToday(tx, standing, entitlements, now)
+  const month = await meteredMonth(tx, standing, entitlements, now)
+  return {
+    standing,
+    emailVerified: await emailVerified(tx, accountId),
+    entitlements,
+    owned: await countServers(tx, accountId),
+    createsInLastHour: await createsSince(tx, accountId, new Date(now.getTime() - HOUR_MS)),
+    unitsThisMonth: month?.units ?? 0,
+    carriedThisMonth: month?.carried ?? 0,
+    chippedInLeft:
+      (capability.kind === 'start_server' || capability.kind === 'restart_server') &&
+      capability.serverId !== undefined
+        ? ((await chippedInLeft(tx, accountId, now)).get(capability.serverId) ?? 0)
+        : 0,
+    today: today === null ? null : { left: today.left, back: backAtMidnight(now, today.backAt) },
+    totalLeft: await playTotalLeft(tx, standing, entitlements, now),
+    extraUnitsAllowed: extraUnits(extra.decision),
+    extraOffBecause: extra.decision.may ? null : extra.decision.why,
+    extraMayRise: extra.decision.may && extra.decision.units < extra.decision.ceiling,
+    owedCents: extra.owedCents,
+    actionsInLastMinute:
+      counted === null
+        ? 0
+        : await actionsSince(tx, `user:${accountId}`, counted, new Date(now.getTime() - MINUTE_MS)),
+    ...(await freeFacts(tx, accountId, now)),
   }
 }
 
@@ -90,46 +144,25 @@ export class AccessPolicy {
     now = new Date(),
     options: { lock?: boolean } = {},
   ): Promise<Decision> {
-    if (SPENDS.has(capability.kind) && options.lock !== false) await lockCapacity(tx)
+    const locks = options.lock !== false
+    // The account's own facts are read under its own lock, which others' decisions don't wait on;
+    // the platform's lock is taken last, for the few reads only it guards, and held to commit.
+    if (SPENDS.has(capability.kind) && locks) await lockOwnerCapacity(tx, accountId)
     // Counted and written in one transaction per account, so a burst can't slip past the count.
     const counted = rateLimited(capability.kind) ? COUNTED_AS[capability.kind] : null
-    if (counted !== null && options.lock !== false) await lockAccountActions(tx, accountId)
-    const standing = await loadStanding(tx, accountId)
-    const extra = await extraPlayNow(tx, standing)
-    const entitlements = entitlementsFor(standing.plan, standing.limitOverrides)
-    const today = await playToday(tx, standing, entitlements, now)
-    const month = await meteredMonth(tx, standing, entitlements, now)
+    if (counted !== null && locks) await lockAccountActions(tx, accountId)
+    const account = await accountFacts(tx, accountId, capability, counted, now)
+    const answers = await this.room.ask(tx, capability)
+    if (PLATFORM_WIDE.has(capability.kind) && locks) await lockCapacity(tx)
     return evaluate(
       {
+        ...account,
         deployment: supportOf(this.#caps),
         controls: await loadControls(tx),
         serverCeiling: this.room.serverCeiling,
-        standing,
-        emailVerified: await emailVerified(tx, accountId),
-        entitlements,
-        owned: await countServers(tx, accountId),
         global: await countServers(tx),
-        room: await this.room.facts(tx, capability, now),
+        room: await this.room.facts(tx, capability, now, answers),
         roomRules: this.room.rules(),
-        createsInLastHour: await createsSince(tx, accountId, new Date(now.getTime() - HOUR_MS)),
-        unitsThisMonth: month?.units ?? 0,
-        carriedThisMonth: month?.carried ?? 0,
-        chippedInLeft:
-          (capability.kind === 'start_server' || capability.kind === 'restart_server') &&
-          capability.serverId !== undefined
-            ? ((await chippedInLeft(tx, accountId, now)).get(capability.serverId) ?? 0)
-            : 0,
-        today: today === null ? null : { left: today.left, back: backAtMidnight(now, today.backAt) },
-        totalLeft: await playTotalLeft(tx, standing, entitlements, now),
-        extraUnitsAllowed: extraUnits(extra.decision),
-        extraOffBecause: extra.decision.may ? null : extra.decision.why,
-        extraMayRise: extra.decision.may && extra.decision.units < extra.decision.ceiling,
-        owedCents: extra.owedCents,
-        actionsInLastMinute:
-          counted === null
-            ? 0
-            : await actionsSince(tx, `user:${accountId}`, counted, new Date(now.getTime() - MINUTE_MS)),
-        ...(await freeFacts(tx, accountId, now)),
       },
       capability,
     )
