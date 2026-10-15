@@ -15,6 +15,7 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import pg from 'pg'
 import { liftedIpBans } from '../../app/access/persistence.ts'
 import { mainPlayerPairs } from '../../app/accounts/free-links.ts'
+import { countServers } from '../../app/accounts/persistence.ts'
 import { pastExpiry } from '../../app/backups/persistence.ts'
 import { latestOfKind } from '../../app/operations/persistence.ts'
 import { heldByDeleted, listByStatus } from '../../app/servers/persistence.ts'
@@ -60,6 +61,10 @@ describe.skipIf(!hasDatabase)('hot path indexes', () => {
 
   test('every running server, read by each minute’s sweeps', async () => {
     expect(await planOf(() => listByStatus(db, 'running'))).toContain('servers_status')
+  })
+
+  test('the platform’s servers and running ones, counted by every create, start and undelete', async () => {
+    expect(await planOf(() => countServers(db))).toContain('servers_live_status')
   })
 
   test('whether a server in the trash holds an address, asked by wakes for unknown ones', async () => {

@@ -81,14 +81,29 @@ export class CreateRoom {
     q: Queryable,
     capability: Capability,
     now: Date,
+    answers?: Map<string, boolean>,
   ): Promise<Pick<RoomFacts, 'runtimes' | 'queuedCreateMs'>> {
-    return capability.kind === 'create_server' ? this.#facts(q, capability.where ?? null, now) : NOT_A_CREATE
+    return capability.kind === 'create_server'
+      ? this.#facts(q, capability.where ?? null, now, answers)
+      : NOT_A_CREATE
   }
 
-  async #facts(q: Queryable, where: NewServerRoom | null, now: Date) {
+  /**
+   * For a create, what the runtimes say about room for it, asked before the capacity lock: `facts`
+   * under the lock decides from these answers rather than waiting on a provider there. Nothing for
+   * anything else, or a create that doesn't say where it goes.
+   */
+  async ask(q: Queryable, capability: Capability): Promise<Map<string, boolean>> {
+    const answers = new Map<string, boolean>()
+    if (capability.kind === 'create_server' && capability.where !== undefined)
+      await this.#placement.roomFor(q, capability.where, answers)
+    return answers
+  }
+
+  async #facts(q: Queryable, where: NewServerRoom | null, now: Date, answers?: Map<string, boolean>) {
     const oldest = await oldestWaitingCreate(q)
     return {
-      runtimes: await this.#placement.roomFor(q, where),
+      runtimes: await this.#placement.roomFor(q, where, answers),
       queuedCreateMs: oldest === null ? 0 : Math.max(0, now.getTime() - oldest.getTime()),
     }
   }

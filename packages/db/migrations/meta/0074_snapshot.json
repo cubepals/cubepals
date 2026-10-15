@@ -1,5 +1,5 @@
 {
-  "id": "3c12a39e-0028-4d7d-a3d1-143b416b06d9",
+  "id": "384a841f-2c5c-4ff3-b7d4-e5dafc8e40c4",
   "prevId": "b326eb0e-1bfc-448e-8aee-31e11e80b6a6",
   "version": "7",
   "dialect": "postgresql",
@@ -3583,44 +3583,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.edges": {
-      "name": "edges",
-      "schema": "",
-      "columns": {
-        "edge_id": {
-          "name": "edge_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "first_seen_at": {
-          "name": "first_seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "clock_timestamp()"
-        },
-        "synced_to": {
-          "name": "synced_to",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "seen_at": {
-          "name": "seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.fleet_archives": {
       "name": "fleet_archives",
       "schema": "",
@@ -6339,24 +6301,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "ready_at": {
-          "name": "ready_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "route_listed_at": {
-          "name": "route_listed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "routed_at": {
-          "name": "routed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "deletion_warned": {
           "name": "deletion_warned",
           "type": "text",
@@ -6470,6 +6414,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "servers_live_status": {
+          "name": "servers_live_status",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"minecraft_servers\".\"deleted_at\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}

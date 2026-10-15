@@ -110,15 +110,29 @@ export class RuntimePlacement {
    * provider's limit, on another, as `place` overflows. A runtime counts while it holds fewer than
    * its ceiling and, when `where` is known, says it has room for it there. Rules aren't weighed:
    * one that matches falls back to the default when its runtime is full.
+   *
+   * `answers` keeps what each runtime said about room, by provider, and is asked before the runtime
+   * is: a check asks once before the capacity lock and decides under it from the same answers, with
+   * the counts read again, so no call to a provider is waited on under the lock.
    */
-  async roomFor(q: Queryable, where: NewServerRoom | null): Promise<boolean> {
+  async roomFor(
+    q: Queryable,
+    where: NewServerRoom | null,
+    answers: Map<string, boolean> = new Map(),
+  ): Promise<boolean> {
     const held = await computeByProvider(q)
     const takes = async (provider: string) => {
       const ceiling = this.#runtimes.ceilingOf(provider)
       if (ceiling !== null && (held.get(provider) ?? 0) >= ceiling) return false
       if (where === null) return true
+      const known = answers.get(provider)
+      if (known !== undefined) return known
       const size = { memoryMb: where.memoryMb, storageGb: where.storageGb }
-      return this.#runtimes.hasRoom(provider, { regionKey: where.regionKey }, size).catch(() => false)
+      const room = await this.#runtimes
+        .hasRoom(provider, { regionKey: where.regionKey }, size)
+        .catch(() => false)
+      answers.set(provider, room)
+      return room
     }
     const ceiling = this.#runtimes.ceilingOf(this.defaultProvider)
     if (ceiling === null || (held.get(this.defaultProvider) ?? 0) < ceiling)
