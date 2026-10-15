@@ -44,15 +44,9 @@ export class Lanes {
 
   /** A lane of up to `size` workers, each working one job at a time with `handle`. */
   async open(options: WorkOptions, size: number, handle: (job: Job) => Promise<void>): Promise<void> {
-    const lane = new Lane(this.#boss, this.#queue, options, size, async (job) => {
-      try {
-        await handle(job)
-      } catch (error) {
-        this.#retried(job.id)
-        throw error
-      } finally {
-        setTimeout(() => this.#askAll(), SETTLE_MS).unref()
-      }
+    const lane = new Lane(this.#boss, this.#queue, options, size, handle, (job, failed) => {
+      if (failed) this.#retried(job.id)
+      setTimeout(() => this.#askAll(), SETTLE_MS).unref()
     })
     this.#lanes.push(lane)
     await lane.add()
@@ -87,6 +81,7 @@ class Lane {
   readonly #options: WorkOptions
   readonly #size: number
   readonly #handle: (job: Job) => Promise<void>
+  readonly #ended: (job: Job, failed: boolean) => void
   /** Workers waiting for work. */
   readonly #waiting = new Set<Worker>()
   /** Workers running a job or waiting for one. */
@@ -98,12 +93,14 @@ class Lane {
     options: WorkOptions,
     size: number,
     handle: (job: Job) => Promise<void>,
+    ended: (job: Job, failed: boolean) => void,
   ) {
     this.#boss = boss
     this.#queue = queue
     this.#options = options
     this.#size = size
     this.#handle = handle
+    this.#ended = ended
   }
 
   async add(): Promise<void> {
@@ -130,25 +127,46 @@ class Lane {
     for (const worker of this.#waiting) if (worker.id !== undefined) this.#boss.notifyWorker(worker.id)
   }
 
-  async #run(worker: Worker, job: Job): Promise<void> {
+  /**
+   * Runs `job`, and hands pg-boss the run as it is. The worker is free again once pg-boss is done
+   * with it, which it says by aborting the job's signal: when the run ends, or when it gives up
+   * on one past its deadline, which may still be running here.
+   */
+  #run(worker: Worker, job: Job): Promise<void> {
     // One let go as it took this job counts again while it runs it.
     if (worker.letGo) this.#count++
     this.#waiting.delete(worker)
     // None waits now: another does, unless the lane is full.
     if (this.#waiting.size === 0 && this.#count < this.#size)
       this.add().catch((error: unknown) => console.error('pg-boss: a worker could not be added', error))
-    try {
-      await this.#handle(job)
-    } finally {
-      if (worker.letGo) this.#count--
-      else {
-        const spare = [...this.#waiting].find((w) => w.id !== undefined)
-        if (spare !== undefined) this.#letGoOf(spare)
-        this.#waiting.add(worker)
-        // Asks again as soon as this job is settled, rather than after its pause.
-        if (worker.id !== undefined) this.#boss.notifyWorker(worker.id)
-      }
+    const run = this.#handle(job)
+    const given = new Promise<boolean>((resolve) => {
+      if (job.signal.aborted) resolve(true)
+      job.signal.addEventListener('abort', () => resolve(true), { once: true })
+    })
+    void Promise.race([
+      run.then(
+        () => false,
+        () => true,
+      ),
+      given,
+    ]).then((failed) => {
+      this.#freed(worker)
+      this.#ended(job, failed)
+    })
+    return run
+  }
+
+  #freed(worker: Worker): void {
+    if (worker.letGo) {
+      this.#count--
+      return
     }
+    const spare = [...this.#waiting].find((w) => w.id !== undefined)
+    if (spare !== undefined) this.#letGoOf(spare)
+    this.#waiting.add(worker)
+    // Asks again as soon as this job is settled, rather than after its pause.
+    if (worker.id !== undefined) this.#boss.notifyWorker(worker.id)
   }
 
   #letGoOf(worker: Worker): void {
