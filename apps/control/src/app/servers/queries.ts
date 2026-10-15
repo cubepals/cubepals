@@ -59,7 +59,7 @@ import { playToday, todayView } from '../accounts/play-today.ts'
 import { playTotal, totalView } from '../accounts/play-total.ts'
 import { type Actor, authorize } from '../actor.ts'
 import type { PackCuration } from '../curation/service.ts'
-import { shownStatus } from '../edge/routed.ts'
+import { type Shown, shownOf } from '../edge/routed.ts'
 import { packView } from '../mods/pack.ts'
 import {
   activeOperation,
@@ -92,6 +92,9 @@ import {
 import { partySizesFor, planFit, usableFirst } from './plan-fit.ts'
 import type { MinecraftServerService } from './service.ts'
 import { knownPlayers, lastActivity, openIntervalStart, openRun, presenceFor } from './usage.ts'
+
+/** Who is on a running server, as presence has it; null while it isn't running. */
+type Online = { uuid: string; name: string }[] | null
 
 /** Read models for people. Derived facts — addresses, labels, who is online — are joined here. */
 export class ServerQueries {
@@ -213,7 +216,8 @@ export class ServerQueries {
       this.#db,
       servers.map((s) => s.id),
     )
-    return Promise.all(servers.map((s) => this.#view(s, presence.get(s.id) ?? null)))
+    const shown = await shownOf(this.#db, servers)
+    return Promise.all(servers.map((s) => this.#view(s, presence.get(s.id) ?? null, shown)))
   }
 
   /** The account's trash: what can still be restored, and until when. */
@@ -252,7 +256,7 @@ export class ServerQueries {
   async get(actor: Actor, serverId: string): Promise<ServerView> {
     const server = authorize(actor, await findServer(this.#db, serverId))
     const presence = await presenceFor(this.#db, [server.id])
-    return this.#view(server, presence.get(server.id) ?? null)
+    return this.#view(server, presence.get(server.id) ?? null, await shownOf(this.#db, [server]))
   }
 
   async access(actor: Actor, serverId: string): Promise<AccessView> {
@@ -595,7 +599,7 @@ export class ServerQueries {
     return bedtime(await openRun(this.#db, server.id), played, idleMinutes)?.at.toISOString() ?? null
   }
 
-  async #view(server: MinecraftServer, online: { uuid: string; name: string }[] | null): Promise<ServerView> {
+  async #view(server: MinecraftServer, online: Online, shown: Shown): Promise<ServerView> {
     const revision = await loadRevision(this.#db, server.desiredRevisionId)
     const operation = await activeOperation(this.#db, server.id)
     const binding = await loadRuntime(this.#db, server.id, this.#providers)
@@ -627,7 +631,7 @@ export class ServerQueries {
       tags: [...server.tags],
       slug: server.slug,
       joinAddress: formatJoinAddress(this.#addressing.primary(server.slug)),
-      status: await shownStatus(this.#db, server.id, server.lifecycle.status),
+      status: shown(server),
       stopReason: server.lifecycle.stopReason,
       crash:
         server.lifecycle.status === 'stopped' && server.lifecycle.stopReason === 'crash'

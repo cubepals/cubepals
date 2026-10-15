@@ -111,6 +111,7 @@ export const ALERT_KEYS = [
   'extra_play_waiting',
   'billing_order_unknown',
   'free_accounts_linked',
+  'edge_behind',
 ] as const
 export type AlertKey = (typeof ALERT_KEYS)[number]
 

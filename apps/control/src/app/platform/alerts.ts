@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { AlertKey, AlertView } from '@blockly/contracts'
-import { HOUR_MS } from '@blockly/contracts/durations'
+import { HOUR_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
 import { entitlementsFor, PLAN_KEYS } from '../../domain/account/entitlements.ts'
 import { unreviewedLinks } from '../accounts/free-play.ts'
@@ -12,6 +12,7 @@ import type { Actor } from '../actor.ts'
 import { unsentExtra, waitingExtra } from '../billing/extra-usage.ts'
 import { unknownOrders } from '../billing/persistence.ts'
 import type { CatalogSync } from '../catalog/sync.ts'
+import { EDGE_BEHIND_MS, edgesBehind } from '../edge/routed.ts'
 import { adminAlert } from '../emails/admins.ts'
 import { NotFound } from '../errors.ts'
 import type { JobQueue } from '../ports/jobs.ts'
@@ -37,6 +38,7 @@ const WHERE: Record<AlertKey, string> = {
   extra_play_waiting: '/admin/platform',
   billing_order_unknown: '/admin/accounts',
   free_accounts_linked: '/admin',
+  edge_behind: '/admin/platform',
 }
 
 interface Condition {
@@ -154,6 +156,7 @@ export class PlatformAlerts {
         summary: `${outgrown} ${outgrown === 1 ? 'account keeps' : 'accounts keep'} more world data than ${outgrown === 1 ? 'its plan covers' : 'their plans cover'}, and ${outgrown === 1 ? 'costs' : 'cost'} more than ${outgrown === 1 ? 'it pays' : 'they pay'}.`,
       })
     conditions.push(
+      ...(await edgeCondition(this.#db)),
       ...(await unsentCondition(this.#db)),
       ...(await waitingCondition(this.#db, now)),
       ...(await unknownCondition(this.#db)),
@@ -178,6 +181,19 @@ export class PlatformAlerts {
     }
     return told
   }
+}
+
+/** Edges that keep asking for routes without keeping up: servers no longer wait on them. */
+async function edgeCondition(db: Db): Promise<Condition[]> {
+  const behind = await edgesBehind(db)
+  if (behind.length === 0) return []
+  const one = behind.length === 1
+  return [
+    {
+      key: 'edge_behind',
+      summary: `${one ? 'An edge keeps' : `${behind.length} edges keep`} asking for routes without holding the newest for over ${EDGE_BEHIND_MS / SECOND_MS} s (${behind.join(', ')}). Servers no longer wait on ${one ? 'it' : 'them'}, and players who reach ${one ? 'it' : 'them'} may find no route.`,
+    },
+  ]
 }
 
 /**

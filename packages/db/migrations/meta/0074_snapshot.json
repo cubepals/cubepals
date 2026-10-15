@@ -1,5 +1,5 @@
 {
-  "id": "cfde3cfc-69ad-43f5-97b9-e782b6352668",
+  "id": "3c12a39e-0028-4d7d-a3d1-143b416b06d9",
   "prevId": "b326eb0e-1bfc-448e-8aee-31e11e80b6a6",
   "version": "7",
   "dialect": "postgresql",
@@ -3593,6 +3593,13 @@
           "primaryKey": true,
           "notNull": true
         },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "clock_timestamp()"
+        },
         "synced_to": {
           "name": "synced_to",
           "type": "timestamp with time zone",
@@ -6332,8 +6339,20 @@
           "primaryKey": false,
           "notNull": false
         },
+        "ready_at": {
+          "name": "ready_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "route_listed_at": {
           "name": "route_listed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "routed_at": {
+          "name": "routed_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

@@ -5,6 +5,7 @@
 /**
  * The edges: each machine that routes players to servers, and how far its routes are known to go.
  */
+import { sql } from 'drizzle-orm'
 import { pgTable, text } from 'drizzle-orm/pg-core'
 import { ts } from './columns.ts'
 
@@ -16,9 +17,11 @@ import { ts } from './columns.ts'
  */
 export const edges = pgTable('edges', {
   edgeId: text('edge_id').primaryKey(),
+  /** When it first asked: it holds back only servers that became running after this. */
+  firstSeenAt: ts('first_seen_at').notNull().default(sql`clock_timestamp()`),
   /**
-   * The database's time when the newest route list this edge says it holds began to be read: it
-   * holds the route of every server named running before then. Null until it has said so once.
+   * The newest route version it holds every route of: the database's time as that route list's
+   * read began. Null until it has said so once.
    */
   syncedTo: ts('synced_to'),
   /** When it last asked; an edge not seen for a while no longer counts. */

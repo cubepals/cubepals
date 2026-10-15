@@ -1346,14 +1346,19 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   through mc-router's API (`apps/edge/router.ts`): a route added, replaced or removed on its own,
   so a hostname that routes keeps routing while others change. A routes file read whole emptied
   mc-router's table on every reload, and a player who arrived in that moment was closed.
-- **No early "running".** The edge sends back the ETag of the list it holds, every route of it
-  applied, and asks again at once after applying a new one. A list read from the database at a
-  time T covers every server named running before T, and the first list to name a server running
-  stamps it (`route_listed_at`). A server reads as running, in its view and in the events its page
-  hears, only once every edge seen in the last 10 s is synced past that stamp
-  (`apps/control/src/app/edge/routed.ts`, the `edges` table); until then it reads as starting.
-  With no edge seen, as where a deployment runs none, nothing waits. The agent opens its front
-  door only once mc-router holds the first list.
+- **No early "running".** Every route list has a version, the database's time as its read began,
+  sent with it (`x-routes-version`). The edge says the version it holds every route of, applied
+  (`x-routes-held`), and asks again at once after applying a new list, so it keeps up however often
+  the list changes. The first list to name a server running stamps it with that list's version,
+  read after the list's read (`route_listed_at`). A server reads as running, in its view, the events
+  its page hears, its invite page and the directory, only once every edge that counts holds that
+  version (`apps/control/src/app/edge/routed.ts`, the `edges` table); until then it reads as
+  starting. An edge counts while it was seen in the last 10 s and its version is no older than
+  15 s; one that falls further behind stops counting, and the `edge_behind` admin alert says so. An
+  edge first seen after a server became running doesn't hold that server back, and no server waits
+  more than 15 s from becoming running. With no edge counted, nothing waits. When the last edge
+  catches up, the server's version moves and its page is told (`routed_at`). Rows for edges not seen
+  for a day are pruned. The agent opens its front door only once mc-router holds the first list.
 - **The notice** (`apps/edge/notice.ts`). A `restarting` route maps to a listener in the agent,
   not to the server. It answers the server list with "Restarting · back in a moment" and turns a
   join away with "Restarting · join again in a moment". mc-router has one asleep MOTD for every

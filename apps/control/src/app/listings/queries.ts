@@ -15,7 +15,7 @@ import { inArray } from 'drizzle-orm'
 import { formatJoinAddress } from '../../minecraft/address.ts'
 import { loadControls } from '../accounts/persistence.ts'
 import { type Actor, authorize, runsThePlatform } from '../actor.ts'
-import { shownStatus } from '../edge/routed.ts'
+import { shownStatus, shownStatuses } from '../edge/routed.ts'
 import { NotFound } from '../errors.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import { pictureOf } from '../server-icons/view.ts'
@@ -58,8 +58,14 @@ export class ListingQueries {
     if (!(await loadControls(this.#db)).publicListingEnabled) return { listings: [], total: 0, paused: true }
     const viewerId = readerOf(viewer)
     const found = await directory(this.#db, { ...query, limit: PAGE, viewerId })
+    const shown = await shownStatuses(
+      this.#db,
+      found.rows.map((row) => row.server),
+    )
     return {
-      listings: await Promise.all(found.rows.map((row) => this.#card(row, viewerId))),
+      listings: await Promise.all(
+        found.rows.map((row) => this.#card(row, viewerId, shown.get(row.server.id) === 'running')),
+      ),
       total: found.total,
       paused: false,
     }
@@ -79,7 +85,11 @@ export class ListingQueries {
     })
     const [row] = found.rows
     if (row === undefined) throw new NotFound('Listing')
-    return this.#card(row, viewerId)
+    return this.#card(
+      row,
+      viewerId,
+      (await shownStatus(this.#db, row.server.id, row.server.status)) === 'running',
+    )
   }
 
   /** Where a server stands in the directory, as its owner sees it. */
@@ -155,7 +165,8 @@ export class ListingQueries {
   }
 
   /** A server as a card: its own identity, the booted revision for what it runs, presence for who is on. */
-  async #card(row: DirectoryRow, viewerId: string | null): Promise<ListingCardView> {
+  /** `awake` is whether it is shown running (`edge/routed.ts`). */
+  async #card(row: DirectoryRow, viewerId: string | null, awake: boolean): Promise<ListingCardView> {
     const revision = row.revisionId === null ? null : await loadRevision(this.#db, row.revisionId)
     return {
       serverId: row.server.id,
@@ -167,7 +178,7 @@ export class ListingQueries {
       lastPlayedAt: row.lastPlayedAt?.toISOString() ?? null,
       joinAddress: formatJoinAddress(this.#addressing.primary(row.server.slug)),
       online: row.online,
-      awake: (await shownStatus(this.#db, row.server.id, row.server.status)) === 'running',
+      awake,
       whitelistOnly: row.whitelistEnabled,
       gameVersion: revision?.gameVersion ?? null,
       loader: revision?.loader ?? null,
