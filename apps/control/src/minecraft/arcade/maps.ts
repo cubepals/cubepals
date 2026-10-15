@@ -56,7 +56,7 @@ export const ARCADE_MAPS: readonly ArcadeMap[] = [
       'Converted to Java Edition 26.2 with Chunker and moved into one world with the others (it was a Bedrock Edition world)',
       'Recoloured in Cubepals’ sand, paper, ink and yellow: the hall’s walls, ceiling, floor and trims, the backs and rings of the balcony’s four domes, and the wall under the balcony; the cabinets and the shape of the build are as built',
       'The four figures in the display case under the balcony taken out',
-      'Buried in earth, with grass over it, so nothing of its outside shows; a house stands on the grass, which is Cubepals’ own, and stairs lead down from it to a doorway opened at the end of the west corridor',
+      'Buried in earth, with grass over it, so nothing of its outside shows; a house stands on the grass, which is Cubepals’ own, and a few steps down from it lead on through a doorway to a small room opened off the end of the west corridor',
       'Cubepals’ mark on its two big screens, its lockup over the ARCADE cabinet, a pad for each game, and light through the hall',
       'Its concrete powder placed as concrete of the same colour, so it stays where it was built',
     ],
@@ -158,7 +158,7 @@ export function placed(key: string, [x, y, z]: Block): Block {
 }
 
 const ARCADE_WORLD_SHA512 =
-  '6e77b74899c1949b727551ee4515b90104457a8781c5f23199f99e8861bad79209f031d81bfbed610bf7734f0d69264e947425df637e484b864162d899006ce6'
+  '98506635d022b525ba43702f8b12be25916ea4b6ae1c0b254b19e0afdb8102eb9a483f47e6a1c3516e4b28fc88f069b717bef18ec263632a470d028a6605f0c3'
 
 /**
  * The Arcade's world, as `scripts/arcade-world.ts` builds it from these maps: its overworld,
@@ -168,6 +168,6 @@ const ARCADE_WORLD_SHA512 =
 export const ARCADE_WORLD: ModArtifact = {
   ref: { kind: 'stored', key: `artifacts/${ARCADE_WORLD_SHA512}` },
   sha512: ARCADE_WORLD_SHA512,
-  sizeBytes: 3250742,
+  sizeBytes: 3324511,
   fileName: 'arcade-world.tar.gz',
 }

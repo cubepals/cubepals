@@ -12,12 +12,16 @@
  * and there on it.
  *
  * Inside, the page draws nothing but its light, so the house is furnished simply (a bed, a table,
- * a shelf with a lamp, a rug, a lantern overhead) round a staircase in the floor. The stairs run
- * down through the ground, lit, to the doorway at the end of the hall's west corridor
- * (`arcade-hall.ts`).
+ * a shelf with a lamp, a rug, a lantern overhead) round a few steps down in the floor. They lead
+ * to a small room in the site's sand, birch and warm yellow, lit by lanterns, with a doorway at
+ * its end; a room like it opens off the end of the hall's west corridor (`arcade-hall.ts`). The
+ * hall lies far deeper than a few steps, so walking on through either doorway arrives at the other
+ * (`PASSAGE` in `hub.ts`).
  *
  * The house is Cubepals' own, as the landing page is, and is under none of the maps' licences.
  */
+
+import { PASSAGE, STAIRS_TOP } from '../../apps/control/src/minecraft/arcade/hub.ts'
 import { buildChunk } from '../../apps/web/src/landing/engine/chunk.ts'
 import { hash3, Kind } from '../../apps/web/src/landing/engine/world.ts'
 import { GROUND, SURFACE } from './arcade-ground.ts'
@@ -26,19 +30,10 @@ import { DOORWAY } from './arcade-hall.ts'
 type Block = [number, number, number]
 
 /**
- * The staircase: two wide, one step up for each block east, from the doorway's floor to the
- * house's. Its last step is level with the floor, so the three before it are a hole in the floor.
- */
-const DOOR_FLOOR = DOORWAY.from[1] - 1
-const STEPS = SURFACE - DOOR_FLOOR
-const LANE = [DOORWAY.to[2] + 3, DOORWAY.to[2] + 4] as const
-const step = (i: number): Block => [DOORWAY.to[0] + i, DOOR_FLOOR + i, LANE[0]]
-
-/**
  * Where a cell of the chunk goes in the world: its +x, the way the door and the path face, is
  * east; its +z is south. The house's back corner, two cells in, holds the top of the stairs.
  */
-const [OX, OZ] = [step(STEPS)[0] - 6, LANE[0] - 5]
+const [OX, OZ] = [STAIRS_TOP[0] - 6, STAIRS_TOP[2] - 5]
 const at = (x: number, y: number, z: number): Block => [OX + x, SURFACE + y, OZ + z]
 
 /** Each kind as a block, by eye: the page prints planks palest, the roof a middle grey, the door dark. */
@@ -88,30 +83,59 @@ const lights = world.lights
       `${set(at(Math.floor(light.x), Math.floor(light.y), Math.floor(light.z)), 'light[level=15]')} keep`,
   )
 
-/** The staircase's walls, floor and ceiling in stone brick, under the grass; then its air and steps. */
-const [landingFrom, landingTo]: [Block, Block] = [
-  [DOORWAY.from[0], DOOR_FLOOR, DOORWAY.to[2] + 1],
-  [DOORWAY.to[0], DOOR_FLOOR + 3, LANE[1]],
-]
-const stairs: string[] = [
-  fill(
-    [landingFrom[0] - 1, DOOR_FLOOR - 1, landingFrom[2]],
-    [landingTo[0], DOOR_FLOOR + 4, LANE[1] + 1],
-    'stone_bricks',
-  ),
-  fill([landingFrom[0], DOOR_FLOOR + 1, landingFrom[2]], landingTo, 'air'),
+/**
+ * The way down, two wide: five steps from the house's floor, the first level with it, so the three
+ * after it are a hole in the floor; then a room four wide, its floor birch with a warm-yellow strip
+ * down the middle that leads on through a doorway framed in birch, three steps more, to where
+ * walking on arrives in the hall. Smooth sandstone walls, a birch ceiling, lanterns.
+ */
+const LANE = [STAIRS_TOP[2], STAIRS_TOP[2] + 1] as const
+const STEPS = 5
+const FLOOR = SURFACE - STEPS
+const END = PASSAGE.house.through[0][0]
+const DOOR = END + 3
+const FOOT = STAIRS_TOP[0] - STEPS
+const [north, south] = [LANE[0] - 1, LANE[1] + 1]
+
+const houseWay: string[] = [
+  fill([END - 1, FLOOR - 1, north - 1], [STAIRS_TOP[0] - 1, SURFACE - 1, south + 1], 'smooth_sandstone'),
+  fill([DOOR + 1, FLOOR + 1, north], [FOOT, FLOOR + 3, south], 'air'),
+  fill([END, FLOOR + 1, LANE[0]], [DOOR, FLOOR + 3, LANE[1]], 'air'),
+  fill([DOOR + 1, FLOOR, north], [FOOT, FLOOR, south], 'birch_planks'),
+  fill([END, FLOOR, LANE[0]], [FOOT, FLOOR, LANE[1]], 'yellow_concrete'),
+  fill([END, SURFACE - 1, north], [FOOT, SURFACE - 1, south], 'birch_planks'),
+  fill([DOOR, FLOOR + 1, north], [DOOR, FLOOR + 3, north], 'stripped_birch_log'),
+  fill([DOOR, FLOOR + 1, south], [DOOR, FLOOR + 3, south], 'stripped_birch_log'),
+  set([FOOT - 3, FLOOR + 3, north], 'lantern[hanging=true]'),
+  set([FOOT - 3, FLOOR + 3, south], 'lantern[hanging=true]'),
+  set([END + 1, FLOOR + 3, LANE[0]], 'lantern[hanging=true]'),
 ]
 const steps: string[] = []
-for (let i = 1; i <= STEPS; i++) {
-  const [x, y] = step(i)
-  stairs.push(fill([x, y - 1, LANE[0] - 1], [x, Math.min(y + 4, SURFACE - 1), LANE[1] + 1], 'stone_bricks'))
+for (let k = 0; k < STEPS; k++) {
+  const [x, y] = [STAIRS_TOP[0] - k, SURFACE - k]
   steps.push(
     fill([x, y + 1, LANE[0]], [x, y + 3, LANE[1]], 'air'),
-    fill([x, y, LANE[0]], [x, y, LANE[1]], 'stone_brick_stairs[facing=east]'),
+    fill([x, y, LANE[0]], [x, y, LANE[1]], 'birch_stairs[facing=east]'),
   )
-  // A lantern every six steps, hung from the ceiling, over the walker's head.
-  if (i % 6 === 3 && y + 4 < SURFACE) steps.push(set([x, y + 3, LANE[0]], 'lantern[hanging=true]'))
 }
+
+/**
+ * The room off the end of the hall's west corridor, past its doorway: the same floor, strip,
+ * walls, ceiling and lanterns, as deep as the doorway's box (`PASSAGE.hall`).
+ */
+const HALL_FLOOR = DOORWAY.from[1] - 1
+const [hallIn, hallEnd] = [DOORWAY.to[2] + 1, PASSAGE.hall.through[0][2]]
+const [west, east] = [DOORWAY.from[0], DOORWAY.to[0]]
+const middle = (west + east) / 2
+const hallWay: string[] = [
+  fill([west - 1, HALL_FLOOR - 1, hallIn], [east + 1, HALL_FLOOR + 4, hallEnd + 1], 'smooth_sandstone'),
+  fill([west, HALL_FLOOR + 1, hallIn], [east, HALL_FLOOR + 3, hallEnd], 'air'),
+  fill([west, HALL_FLOOR, hallIn], [east, HALL_FLOOR, hallEnd], 'birch_planks'),
+  fill([middle, HALL_FLOOR, hallIn], [middle, HALL_FLOOR, hallEnd], 'yellow_concrete'),
+  fill([west, HALL_FLOOR + 4, hallIn], [east, HALL_FLOOR + 4, hallEnd], 'birch_planks'),
+  set([west, HALL_FLOOR + 3, hallIn + 1], 'lantern[hanging=true]'),
+  set([east, HALL_FLOOR + 3, hallIn + 1], 'lantern[hanging=true]'),
+]
 
 /** Inside the house, in the chunk's cells: its floor, then what stands on it. */
 const furnishing: string[] = [
@@ -167,11 +191,9 @@ for (let gx = GROUND.from[0] + 6; gx <= GROUND.to[0] - 6; gx += 16)
 /** Where a player stands inside, on the rug by the stairs, as the hub's spawn says it (`HUB_SPAWN`). */
 export const INSIDE = at(5, 1, 4)
 
-/** The top step, where the hub's sign saying where the stairs go stands (`STAIRS_TOP` in `hub.ts`). */
-export const STAIRS_TOP = at(6, 0, 5)
-
 export const HOUSE_COMMANDS: readonly string[] = [
-  ...stairs,
+  ...houseWay,
+  ...hallWay,
   ...surface,
   ...furnishing,
   ...steps,

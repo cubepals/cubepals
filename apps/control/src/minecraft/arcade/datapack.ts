@@ -29,7 +29,7 @@ export const NS = 'arcade'
 
 /**
  * Where everyone starts, comes back to and respawns: inside the house on the grass over the hub's
- * hall, on the rug, facing the stairs down to it (`scripts/lib/arcade-house.ts`).
+ * hall, on the rug, facing the steps down to it (`scripts/lib/arcade-house.ts`).
  */
 export const HUB_SPAWN = '182.5 122 1458.5 90 0'
 

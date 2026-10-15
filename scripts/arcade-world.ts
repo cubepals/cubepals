@@ -17,7 +17,7 @@
  *    overworld at its place, and Minecraft writes every block as 26.2 has it, lit.
  * 3. The world's own changes are made: no real person's likeness (`arcade-likeness.ts`); the hall
  *    in Cubepals' colours, lit, with a doorway (`arcade-hall.ts`), buried in the ground
- *    (`arcade-ground.ts`) under the landing page's house, whose stairs lead down to the doorway
+ *    (`arcade-ground.ts`) under the landing page's house, a few steps from a doorway to it
  *    (`arcade-house.ts`); a copy of the falling floor's floors to put them back from
  *    (`arcade-additions.ts`); and Cubepals: the mark on the hall's screens, the pads, and every
  *    sign's backing and its lockup as map art (`arcade-brand.ts`).
@@ -34,14 +34,13 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, write
 import { join, resolve } from 'node:path'
 import { creditsText, MAP_SOURCES } from '../apps/control/src/minecraft/arcade/credits.ts'
 import { HUB_SPAWN } from '../apps/control/src/minecraft/arcade/datapack.ts'
-import { STAIRS_TOP as STAIRS_SIGN } from '../apps/control/src/minecraft/arcade/hub.ts'
 import { ARCADE_MAPS, type ArcadeMap } from '../apps/control/src/minecraft/arcade/maps.ts'
 import { RCON_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { ADDITIONS } from './lib/arcade-additions.ts'
 import { BRAND_COMMANDS, writeSignMaps } from './lib/arcade-brand.ts'
 import { GROUND, GROUND_COMMANDS } from './lib/arcade-ground.ts'
 import { HALL_COMMANDS, HALL_LIGHTS } from './lib/arcade-hall.ts'
-import { HOUSE_COMMANDS, INSIDE, STAIRS_TOP } from './lib/arcade-house.ts'
+import { HOUSE_COMMANDS, INSIDE } from './lib/arcade-house.ts'
 import { LIKENESS_COMMANDS } from './lib/arcade-likeness.ts'
 import { rcon } from './lib/rcon.ts'
 
@@ -296,10 +295,6 @@ async function main(): Promise<void> {
   // Everyone starts inside the house: the datapack's spawn is where the house is built.
   if (!HUB_SPAWN.startsWith(`${INSIDE[0] + 0.5} ${INSIDE[1]} ${INSIDE[2] + 0.5} `))
     throw new Error(`HUB_SPAWN (${HUB_SPAWN}) is not inside the house (${INSIDE.join(' ')})`)
-  if (STAIRS_SIGN.join(' ') !== STAIRS_TOP.join(' '))
-    throw new Error(
-      `The hub's stairs sign (${STAIRS_SIGN.join(' ')}) is not over the stairs (${STAIRS_TOP.join(' ')})`,
-    )
   mkdirSync(WORK, { recursive: true })
   const converter = chunker()
   const worlds = new Map(ARCADE_MAPS.map((map) => [map.key, convert(converter, map)]))

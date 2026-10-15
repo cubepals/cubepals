@@ -5,8 +5,8 @@
 /**
  * The Arcade's hub: NetherGames' ArcadeLobby, a hall of arcade cabinets in Cubepals' colours,
  * buried in the ground, and the house from cubepals.com's landing page on the grass over it, where
- * everyone starts; stairs in its floor lead down to the hall's west corridor and onto the balcony,
- * with a sign over the top step saying where they go. There, a black pad for each game sends a
+ * everyone starts; a few steps down from its floor and on through a doorway is the end of the
+ * hall's west corridor, which leads onto the balcony. There, a black pad for each game sends a
  * player to it, its name over it, with the boards in front of the balcony's domes, the Cubepals
  * sign over the ARCADE cabinet, the welcome and the credits. It is also the way back: the "Back to
  * the hub" item every player carries, `/trigger hub`, a fall, dying, and coming back
@@ -66,8 +66,31 @@ export const PADS: ReadonlyArray<{ middle: Block; sends: string; name: string }>
   },
 ]
 
-/** The top step of the stairs from the house down to the hall, which a sign floats over. */
+/** The top step of the stairs from the house's floor, which a sign floats over. */
 export const STAIRS_TOP: Block = [183, 121, 1459]
+
+/**
+ * The way between the house and the hall, which lies far deeper than a few steps: at the foot of
+ * the house's stairs, a doorway; at the end of the hall's west corridor, another. Walking on
+ * through one (into the box at its far side) arrives just past the other, facing on. Both are
+ * built as rooms of their own (`scripts/lib/arcade-house.ts`).
+ */
+export const PASSAGE = {
+  house: {
+    through: [
+      [168, 117, 1459],
+      [168, 118, 1460],
+    ] as [Block, Block],
+    arrive: '176.5 117 1460 -90 0',
+  },
+  hall: {
+    through: [
+      [137, 78, 1460],
+      [139, 79, 1460],
+    ] as [Block, Block],
+    arrive: '138.5 78 1452.5 180 0',
+  },
+} as const
 
 /** The hall, the ground it is buried in, and the house and garden on the grass. */
 const ZONE = box([96, 40, 1336], [260, 140, 1470])
@@ -135,6 +158,16 @@ export const HUB_PART: Part = {
       `${NS}.label`,
       titled('The Arcade', 'Down the stairs'),
     ),
+    label(
+      `${PASSAGE.house.through[0][0] + 4} ${PASSAGE.house.through[0][1] + 1.9} ${PASSAGE.house.through[1][2]}`,
+      `${NS}.label`,
+      titled('The Arcade', 'Walk on through'),
+    ),
+    label(
+      `${PASSAGE.hall.through[0][0] + 1.5} ${PASSAGE.hall.through[0][1] + 1.9} ${PASSAGE.hall.through[0][2] - 1.5}`,
+      `${NS}.label`,
+      titled('The house', 'Walk on through'),
+    ),
     ...hangSign(HUB_SIGN),
     // Nothing in the hub can be hurt: whatever the maps brought along, and what the build made.
     `execute as @e[type=!minecraft:player] run data merge entity @s {Invulnerable:1b}`,
@@ -146,6 +179,8 @@ export const HUB_PART: Part = {
     `tag @a[tag=!${NS}.welcomed] add ${NS}.welcomed`,
     `team join ${HUB} @a[team=!${HUB},${ZONE}]`,
     ...PADS.map((pad) => `execute as @a[${onPad(pad.middle)}] run ${pad.sends}`),
+    `execute as @a[${box(...PASSAGE.house.through)},gamemode=!spectator] run tp @s ${PASSAGE.hall.arrive}`,
+    `execute as @a[${box(...PASSAGE.hall.through)},gamemode=!spectator] run tp @s ${PASSAGE.house.arrive}`,
     `scoreboard players enable @a ${BACK}`,
     `scoreboard players enable @a ${CREDITS}`,
     `execute as @a unless items entity @s hotbar.8 minecraft:carrot_on_a_stick[custom_data~{${NS}_back:1b}] run item replace entity @s hotbar.8 with ${BACK_ITEM}`,

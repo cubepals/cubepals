@@ -2275,7 +2275,8 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   and a pit on Overcast's Frozen Market where everyone fights everyone. Players start in the house
   from cubepals.com's landing page, built from the page's own chunk and furnished, standing on the
   grass over a hall built from NetherGames' ArcadeLobby in Cubepals' sand, paper, ink and yellow;
-  the hall is buried, as the page's rooms are, and stairs in the house's floor lead down to it. There the Cubepals
+  the hall is buried, as the page's rooms are, and a few steps down from the house's floor lead to a
+  doorway; walking on through it arrives in a room off the hall's west corridor, and back. There the Cubepals
   mark is on its screens and its lockup over the ARCADE cabinet, pads lead to each game, and the
   boards show each game's top ten; each game has a small Cubepals sign at its start. No real
   person's likeness stays in any map: player heads become skeleton skulls, and a statue and four

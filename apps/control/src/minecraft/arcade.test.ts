@@ -10,7 +10,7 @@
  */
 import { describe, expect, test } from 'bun:test'
 import { onLevel } from '../domain/revision/carried.ts'
-import { PADS } from './arcade/hub.ts'
+import { PADS, PASSAGE } from './arcade/hub.ts'
 import { ARCADE_MAPS } from './arcade/maps.ts'
 import { ARCADE_FILES } from './arcade.ts'
 import { placeablePath } from './carried.ts'
@@ -173,6 +173,19 @@ describe('the Arcade as its players find it', () => {
         expect(team).not.toBe('arcade.hub')
         for (const other of pads) expect(inside(other, arrival)).toBe(false)
       }
+    }
+  })
+
+  test('walking on through either doorway between the house and the hall arrives past the other, in the hub', () => {
+    const arrivals = [PASSAGE.house.arrive, PASSAGE.hall.arrive]
+    const ways = commands('play').filter((command) => arrivals.some((at) => command.endsWith(`tp @s ${at}`)))
+    expect(ways).toHaveLength(2)
+    const boxes = ways.map((command) => boxOf(command))
+    for (const way of ways) {
+      const [x = 0, y = 0, z = 0] = (way.split('tp @s ')[1] ?? '').split(' ').map(Number)
+      const arrival = [Math.floor(x), Math.floor(y), Math.floor(z)]
+      expect(inside(zones.get('arcade.hub') ?? boxOf(''), arrival)).toBe(true)
+      for (const through of boxes) expect(inside(through, arrival)).toBe(false)
     }
   })
 
