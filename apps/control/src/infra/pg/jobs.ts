@@ -57,7 +57,7 @@ const WORLD_DOWNLOAD = 'world-download'
 const CURATION_INGEST = 'curation-ingest'
 /**
  * The tries after the first that a pack import, a world copy and a release check get: each moves
- * gigabytes, so one, then whose it is is told. Their jobs keep their queue's.
+ * gigabytes, so one, then its owner is told. Their jobs keep their queue's.
  */
 const HEAVY_RETRIES = 1
 
@@ -75,15 +75,16 @@ const SCHEDULED_BACKSTOP_SECONDS = 5 * MINUTE_S
 
 /**
  * pg-boss's own upkeep, at the pace its users need rather than its defaults (pg-boss 12.36,
- * `ConstructorOptions` in its types and https://pgboss.io/api/constructor). Each of its passes reads
+ * `ConstructorOptions` in its types and https://pgboss.io/api/constructor). Most of its passes read
  * every queue's definition and counts, about 10 kB; the defaults ran them every minute in every
- * process, which was most of what the database sent.
+ * process, and the flow resolver's every 5 s.
  *
  * - `queueCacheIntervalSeconds`: a queue's definition changes only as a deploy starts a process,
  *   which reads them all then, so an hour.
  * - `superviseIntervalSeconds` and `monitorIntervalSeconds`: expiring jobs past their deadline and
- *   failing those whose heartbeat lapsed. A worker that restarts takes back its own at once
- *   (`takeBack`), so five minutes is soon enough for one that never comes back.
+ *   failing those whose heartbeat lapsed. A worker gives up on a job at its deadline itself, and
+ *   one that restarts takes back its own at once (`takeBack`), so five minutes is soon enough for
+ *   one that never comes back.
  * - `maintenanceIntervalSeconds`: deleting finished jobs past their queue's `deleteAfterSeconds`,
  *   hourly rather than daily, so the scheduled jobs' hour is kept to about that.
  * - `cronMonitorIntervalSeconds`: each pass reads every schedule. 45 s, the most pg-boss allows,
