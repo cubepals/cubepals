@@ -15,6 +15,7 @@ import {
   type Audience,
   type Endpoint,
   type ExecResult,
+  type HeldStorage,
   type InstallSeed,
   type MinecraftRuntime,
   type Placement,
@@ -100,6 +101,7 @@ export interface Runtimes extends Pick<MinecraftRuntime, HandleVerbs> {
     spec: RuntimeSpec,
     progress: ProgressSink,
     install?: InstallSeed | null,
+    storage?: HeldStorage,
   ): Promise<RuntimeHandle>
   adopt(provider: string, key: RuntimeKey, placement: Placement, spec: RuntimeSpec): Promise<RuntimeHandle>
   destroy(provider: string, target: RuntimeKey | RuntimeHandle): Promise<void>
@@ -207,8 +209,9 @@ export class RuntimeRouter implements Runtimes {
     spec: RuntimeSpec,
     progress: ProgressSink,
     install?: InstallSeed | null,
+    storage?: HeldStorage,
   ): Promise<RuntimeHandle> {
-    return this.member(provider).ensureProvisioned(key, placement, spec, progress, install)
+    return this.member(provider).ensureProvisioned(key, placement, spec, progress, install, storage)
   }
 
   adopt(provider: string, key: RuntimeKey, placement: Placement, spec: RuntimeSpec): Promise<RuntimeHandle> {

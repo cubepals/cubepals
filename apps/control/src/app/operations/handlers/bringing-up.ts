@@ -21,6 +21,7 @@ import { runsOf } from '../../revisions/caps.ts'
 import { switchNeverBooted, switchUnstarted } from '../../runtimes/persistence.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import type { RuntimePlacement } from '../../runtimes/service.ts'
+import { heldStorage } from '../../servers/kept-storage.ts'
 import { loadRevision, lockServer, type RuntimeBinding, saveHandle } from '../../servers/persistence.ts'
 import type { DesiredRuntime, RuntimeSpecs } from '../../servers/specs.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
@@ -159,7 +160,6 @@ export function bringingUp(deps: {
     capture,
     rollBack,
   } = deps
-  const { refusedHere } = hostRefused(deps)
 
   /**
    * Brings compute up matching the desired spec, then boots. Shared by provision and start;
@@ -186,8 +186,9 @@ export function bringingUp(deps: {
         spec,
         progressSink(ctx, server),
         desired.install,
+        storage,
       )
-    const askedAt = new Date()
+    const [askedAt, storage] = [new Date(), await heldStorage(db, server.id, binding.handle)]
     const handle = await provisioned(desired.spec).catch(async (error: unknown) => {
       const fallback = await fallBack(deps, server, binding, error)
       if (fallback === null) throw error
@@ -319,7 +320,7 @@ export function bringingUp(deps: {
           desired = installed
         }
       } catch (error) {
-        return await refusedHere(ctx, error)
+        return await hostRefused(deps).refusedHere(ctx, error)
       }
       await db.transaction(async (tx) => {
         const server = await lockServer(tx, ctx.server.id)

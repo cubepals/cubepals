@@ -28,8 +28,12 @@ const VOLUME_GONE = new Set([
 const UNBIND_SECONDS = 120
 
 /**
- * The app's world volume, grown to `sizeGb`, or a new one. The one the server's machine mounts
- * (`mounted`) comes first: a rebuild that kept the old storage leaves two world volumes in the app.
+ * The app's world volume, grown to `sizeGb`, or a new one. Known volumes come first: the one the
+ * server's machine mounts, then the one its handle names (`held`). A rebuild that kept the old
+ * storage leaves two world volumes in the app, and a volume it kept (`kept`) is never taken: it
+ * holds the world as it was before the rebuild, and booting it would hide what was played since.
+ * Where only kept storage is left, nothing is made either, which would boot no world at all: the
+ * start fails, for an admin to decide.
  */
 export async function ensureVolume(
   fly: FlyClient,
@@ -37,32 +41,51 @@ export async function ensureVolume(
   region: string,
   sizeGb: number,
   retentionDays: number,
-  mounted?: string,
+  known: { mounted?: string; held?: string | null; kept?: readonly string[] } = {},
 ): Promise<Volume> {
-  const inUse = mounted === undefined ? null : await readVolume(fly, app, mounted)
-  const existing = inUse !== null && !VOLUME_GONE.has(inUse.state ?? '') ? inUse : await dataVolume(fly, app)
+  const kept = new Set(known.kept ?? [])
+  const existing =
+    (await liveVolume(fly, app, known.mounted)) ??
+    (await liveVolume(fly, app, known.held ?? undefined)) ??
+    (await dataVolume(fly, app, kept))
   if (existing) {
     await fitVolume(fly, app, idOf(existing, 'a volume'), sizeGb, retentionDays)
     return existing
   }
+  if (kept.size > 0 && (await dataVolume(fly, app)) !== null)
+    throw new Error(`${app} holds only the storage kept from before a rebuild, which it doesn't boot`)
   return createVolume(fly, app, { name: VOLUME_NAME, region, size_gb: sizeGb }, retentionDays)
 }
 
+/** The volume, where it is there and not going away. */
+async function liveVolume(fly: FlyClient, app: string, volumeId: string | undefined): Promise<Volume | null> {
+  const volume = volumeId === undefined ? null : await readVolume(fly, app, volumeId)
+  return volume !== null && !VOLUME_GONE.has(volume.state ?? '') ? volume : null
+}
+
 /**
- * The app's world volume, if it has one that isn't going away. `deleted` names volumes a delete
- * already answered for: Fly's listing still calls one `created` for a moment after (staging,
- * 2026-10-08), and it must not read as a volume left behind.
+ * The app's world volumes that aren't going away, as Fly lists them: one, but for a rebuild that
+ * kept the old storage, or a restore that failed partway.
+ */
+export async function worldVolumes(fly: FlyClient, app: string): Promise<Volume[]> {
+  const listed = await fly.GET('/v1/apps/{app_name}/volumes', { params: { path: { app_name: app } } })
+  if (listed.response.status === 404) return []
+  return must(listed, 'listing volumes').filter(
+    (v) => v.name === VOLUME_NAME && !VOLUME_GONE.has(v.state ?? ''),
+  )
+}
+
+/**
+ * The app's world volume, if it has one that isn't going away, but none `skip` names: volumes a
+ * delete already answered for, which Fly's listing still calls `created` for a moment after
+ * (staging, 2026-10-08) and must not read as left behind, or volumes a rebuild kept.
  */
 export async function dataVolume(
   fly: FlyClient,
   app: string,
-  deleted: ReadonlySet<string> = new Set(),
+  skip: ReadonlySet<string> = new Set(),
 ): Promise<Volume | null> {
-  const listed = await fly.GET('/v1/apps/{app_name}/volumes', { params: { path: { app_name: app } } })
-  if (listed.response.status === 404) return null
-  const live = (v: Volume) =>
-    v.name === VOLUME_NAME && !VOLUME_GONE.has(v.state ?? '') && !deleted.has(v.id ?? '')
-  return must(listed, 'listing volumes').find(live) ?? null
+  return (await worldVolumes(fly, app)).find((v) => !skip.has(v.id ?? '')) ?? null
 }
 
 /**

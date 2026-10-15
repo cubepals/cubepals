@@ -29,6 +29,8 @@ import type {
   Audience,
   Endpoint,
   ExecResult,
+  HeldStorage,
+  InstallSeed,
   MinecraftRuntime,
   Placement,
   ProgressSink,
@@ -223,6 +225,8 @@ export class FlyRuntime implements MinecraftRuntime {
     placement: Placement,
     spec: RuntimeSpec,
     progress: ProgressSink,
+    _install?: InstallSeed | null,
+    storage: HeldStorage = {},
   ): Promise<RuntimeHandle> {
     const region = flyRegion(this.#regions, placement)
     const app = appName(this.#deployment, key)
@@ -233,7 +237,7 @@ export class FlyRuntime implements MinecraftRuntime {
     const { machine, volumeId } =
       existing !== null && asleep !== null
         ? { machine: existing, volumeId: asleep }
-        : await this.#provision(key, app, region, spec, progress, existing)
+        : await this.#provision(key, app, region, spec, progress, existing, storage)
     const handle = encodeHandle({
       deployment: this.#deployment,
       serverId: key,
@@ -258,6 +262,7 @@ export class FlyRuntime implements MinecraftRuntime {
     spec: RuntimeSpec,
     progress: ProgressSink,
     existing: Machine | null,
+    storage: HeldStorage,
   ): Promise<{ machine: Machine; volumeId: string }> {
     await progress.step('allocating')
     // Nothing made yet: ask for room first, so a full region leaves no app or volume behind.
@@ -273,7 +278,7 @@ export class FlyRuntime implements MinecraftRuntime {
       region,
       spec.storage.sizeGb,
       this.snapshotLifetimeDays,
-      existing?.config?.mounts?.[0]?.volume,
+      { mounted: existing?.config?.mounts?.[0]?.volume, ...volumesOf(storage) },
     )
     const volumeId = idOf(volume, 'a volume')
 
@@ -742,6 +747,15 @@ export class FlyRuntime implements MinecraftRuntime {
 function requireMachine(ref: FlyRef): string {
   if (ref.machineId === null) throw new Error('This server has no machine; it was decommissioned')
   return ref.machineId
+}
+
+/** The volumes the storage a server holds names, by id: what its handle names, and what is kept. */
+function volumesOf(storage: HeldStorage): { held: string | null; kept: string[] } {
+  const volume = (handle: RuntimeHandle) => (isFlyHandle(handle) ? decodeHandle(handle).volumeId : null)
+  return {
+    held: storage.held == null ? null : volume(storage.held),
+    kept: (storage.kept ?? []).flatMap((handle) => volume(handle) ?? []),
+  }
 }
 
 function requireVolume(ref: FlyRef): string {

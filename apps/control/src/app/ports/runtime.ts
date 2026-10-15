@@ -222,13 +222,18 @@ export interface MinecraftRuntime {
    */
   hasRoom(placement: Placement, size: { memoryMb: number; storageGb: number }): Promise<boolean>
 
-  /** Idempotent and convergent: creates whatever is missing for `key`, and leaves it started. */
+  /**
+   * Idempotent and convergent: creates whatever is missing for `key`, and leaves it started.
+   * `storage`: the handle the server holds now, whose storage is its world, and storage a rebuild
+   * kept (`relocate`'s `keepStorage`), which is never booted.
+   */
   ensureProvisioned(
     key: RuntimeKey,
     placement: Placement,
     spec: RuntimeSpec,
     progress: ProgressSink,
     install?: InstallSeed | null,
+    storage?: HeldStorage,
   ): Promise<RuntimeHandle>
   /** New configuration; restarts the workload if it is running. May return a new handle. */
   apply(handle: RuntimeHandle, spec: RuntimeSpec): Promise<RuntimeHandle>
@@ -494,6 +499,12 @@ export class RuntimeFull extends Error {
     super(`The ${provider} runtime has no room: ${detail}`)
     this.name = 'RuntimeFull'
   }
+}
+
+/** The storage a server holds, as `ensureProvisioned` is told of it. */
+export interface HeldStorage {
+  held?: RuntimeHandle | null
+  kept?: readonly RuntimeHandle[]
 }
 
 /**

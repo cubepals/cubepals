@@ -11,7 +11,7 @@
 import { DAY_MS } from '@blockly/contracts/durations'
 import { type Queryable, schema } from '@blockly/db'
 import { eq, isNotNull, sql } from 'drizzle-orm'
-import type { RuntimeHandle } from '../ports/runtime.ts'
+import type { HeldStorage, RuntimeHandle } from '../ports/runtime.ts'
 
 const runtimes = schema.serverRuntimes
 
@@ -49,6 +49,18 @@ export async function keptStorage(q: Queryable, serverId: string, now: Date): Pr
       .set({ keptStorage: still.length === 0 ? null : still })
       .where(eq(runtimes.serverId, serverId))
   return still.map((k) => k.handle as RuntimeHandle)
+}
+
+/**
+ * The storage a server holds, as provisioning is told of it: its world is on what `held` names,
+ * never on what a rebuild kept.
+ */
+export async function heldStorage(
+  q: Queryable,
+  serverId: string,
+  held: RuntimeHandle | null,
+): Promise<HeldStorage> {
+  return { held, kept: await keptStorage(q, serverId, new Date()) }
 }
 
 /** The servers that keep a rebuild's old storage now. */

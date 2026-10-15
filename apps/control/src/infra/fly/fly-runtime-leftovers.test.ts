@@ -207,3 +207,49 @@ describe('FlyRuntime rebuilding a server elsewhere, keeping its old storage', ()
     expect(again.volumeId).toBe(next.volumeId)
   })
 })
+
+// The rebuild's new machine gone within the week: nothing mounts either volume, and the kept one
+// is listed first. Booting it would bring back the world from before the rebuild.
+describe('FlyRuntime starting a server whose machine is gone, beside storage a rebuild kept', () => {
+  const rebuiltThenLost = async () => {
+    const setup = await provisioned()
+    const { fake, runtime, handle, progress } = setup
+    const { snapshot } = await runtime.snapshot(handle)
+    const next = await runtime.relocate(handle, { regionKey: 'eu-central' }, spec, progress, snapshot, {
+      keepStorage: true,
+    })
+    fake.machines.set(APP, [])
+    expect(volumeIds(fake)[0]).toBe(decodeHandle(handle).volumeId ?? '')
+    return { ...setup, old: handle, next }
+  }
+
+  test('boots the volume its handle names, never the kept one', async () => {
+    const { runtime, progress, old, next } = await rebuiltThenLost()
+    const started = await runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, spec, progress, null, {
+      held: next,
+      kept: [old],
+    })
+    expect(decodeHandle(started).volumeId).toBe(decodeHandle(next).volumeId)
+  })
+
+  test('with only the kept volume left, boots nothing, and makes no empty one', async () => {
+    const { fake, runtime, progress, old, next } = await rebuiltThenLost()
+    const held = decodeHandle(next).volumeId
+    fake.volumes.set(
+      APP,
+      (fake.volumes.get(APP) ?? []).filter((v) => v.id !== held),
+    )
+    const before = volumeIds(fake)
+    const start = runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, spec, progress, null, {
+      held: next,
+      kept: [old],
+    })
+    await expect(start).rejects.toThrow('kept from before a rebuild')
+    expect(volumeIds(fake)).toEqual(before)
+  })
+
+  test('the inventory names neither volume as the world', async () => {
+    const { runtime } = await rebuiltThenLost()
+    for await (const item of runtime.inventory()) expect(decodeHandle(item.handle).volumeId).toBeNull()
+  })
+})

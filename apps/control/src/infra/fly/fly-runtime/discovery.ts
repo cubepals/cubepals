@@ -17,7 +17,7 @@ import { appPrefix, keyFromApp } from './apps.ts'
 import { minecraftMachine } from './machines.ts'
 import { stateOf } from './observation.ts'
 import { must } from './responses.ts'
-import { dataVolume } from './volumes.ts'
+import { worldVolumes } from './volumes.ts'
 
 export async function* inventory(fly: FlyClient, org: string, deployment: string) {
   const apps = must(await fly.GET('/v1/apps', { params: { query: { org_slug: org } } }), 'listing apps')
@@ -26,14 +26,17 @@ export async function* inventory(fly: FlyClient, org: string, deployment: string
     const key = keyFromApp(name, appPrefix(deployment))
     if (key === null) continue
     const machine = await minecraftMachine(fly, name)
-    const volume = machine ? null : await dataVolume(fly, name)
+    // With no machine, the world is the app's one world volume; with two (a rebuild kept the old
+    // storage), which holds it is the database's to say, and this names neither.
+    const volumes = machine ? [] : await worldVolumes(fly, name)
+    const volume = volumes.length === 1 ? volumes[0] : null
     yield {
       key,
       handle: encodeHandle({
         deployment: deployment,
         serverId: key,
         app: name,
-        region: machine?.region ?? volume?.region ?? '',
+        region: machine?.region ?? volumes[0]?.region ?? '',
         volumeId: machine?.config?.metadata?.[META.volume] ?? volume?.id ?? null,
         machineId: machine?.id ?? null,
         ports: parsePorts(machine?.config?.metadata?.[META.ports]),
