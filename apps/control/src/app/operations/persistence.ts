@@ -246,8 +246,22 @@ export type WakePath = 'resumed' | 'booted'
 const resumedWake = sql<boolean>`coalesce(${operations.steps} @> '[{"step":"resuming"}]'::jsonb and not ${operations.steps} @> '[{"step":"booting"}]'::jsonb, false)`
 
 /**
- * Starts since `since` that carry `mark` (`OperationMark`), and the newest of them: what the
- * platform's alerts count.
+ * Whether the operation failed in waking its server rather than over what the server runs: it
+ * gave up on a resume, or its server's host couldn't run it (`OperationMark`).
+ */
+export async function failedWaking(q: Queryable, operationId: string): Promise<boolean> {
+  const marked = (mark: string) => sql`${operations.steps} @> ${JSON.stringify([{ step: mark }])}::jsonb`
+  const [row] = await q
+    .select({ id: operations.id })
+    .from(operations)
+    .where(and(eq(operations.id, operationId), or(marked('resume_hung'), marked('host_refused'))))
+  return row !== undefined
+}
+
+/**
+ * How many servers had a start since `since` carry `mark` (`OperationMark`), and the newest such
+ * start: what the platform's alerts count. Servers, not starts, so one server's starts asked again
+ * and again count once.
  */
 export async function markedSince(
   q: Queryable,
@@ -266,7 +280,8 @@ export async function markedSince(
     )
     .orderBy(desc(operations.createdAt))
   const [first] = rows
-  return { count: rows.length, newest: first ? { operationId: first.id, serverId: first.serverId } : null }
+  const servers = new Set(rows.map((row) => row.serverId)).size
+  return { count: servers, newest: first ? { operationId: first.id, serverId: first.serverId } : null }
 }
 
 /**

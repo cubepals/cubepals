@@ -18,6 +18,7 @@ import { NotFound } from '../errors.ts'
 import { markedSince } from '../operations/persistence.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { Mailer } from '../ports/platform.ts'
+import { KEEP_MS, serversKeepingStorage } from '../servers/kept-storage.ts'
 import {
   alertNotified,
   clearAlert,
@@ -42,6 +43,7 @@ const WHERE: Record<AlertKey, string> = {
   edge_behind: '/admin/platform',
   resumes_hung: '/admin/health',
   hosts_refused: '/admin/health',
+  storage_kept: '/admin/health',
 }
 
 interface Condition {
@@ -201,30 +203,37 @@ async function edgeCondition(db: Db): Promise<Condition[]> {
 }
 
 /**
- * Wakes in the last day that went wrong on the provider's side. `resumes_hung`: a resume that
- * never came back, so its server was started fresh from its disk (`boot.ts`); each cost a player a
- * cold boot, and several mean the provider's suspend is failing, which switching it off
- * (`platform/suspend-switch.ts`) stops. `hosts_refused`: a server's own host couldn't run it
- * (`handlers/bringing-up.ts`); it was rebuilt elsewhere where a snapshot held all its play, and
- * otherwise waits for an admin.
+ * Wakes in the last day that went wrong on the provider's side, by server. `resumes_hung`: a
+ * resume that never came back, so its server was started fresh from its disk (`resume.ts`); each
+ * cost a player a cold boot, and several mean the provider's suspend is failing, which switching it
+ * off (`platform/suspend-switch.ts`) stops. `hosts_refused`: a server's own host couldn't run it
+ * (`handlers/host-refused.ts`); it was rebuilt elsewhere where a sleep's snapshot held all its
+ * play, and otherwise its start failed for an admin to decide. `storage_kept`: what such a rebuild
+ * kept of the old storage (`servers/kept-storage.ts`), until it goes by itself.
  */
 async function wakeConditions(db: Db, now: Date): Promise<Condition[]> {
   const since = new Date(now.getTime() - DAY_MS)
-  const [hung, refused] = [
+  const [hung, refused, keeping] = [
     await markedSince(db, 'resume_hung', since),
     await markedSince(db, 'host_refused', since),
+    await serversKeepingStorage(db),
   ]
   const conditions: Condition[] = []
-  const wakes = (count: number) => `${count} ${count === 1 ? 'wake' : 'wakes'} in the last day`
+  const servers = (count: number) => `${count} ${count === 1 ? 'server' : 'servers'}`
   if (hung.newest !== null)
     conditions.push({
       key: 'resumes_hung',
-      summary: `${wakes(hung.count)} gave up on a resume that never came back, and started the server fresh from its disk instead, with nothing lost. Newest: operation ${hung.newest.operationId} on server ${hung.newest.serverId}.`,
+      summary: `${servers(hung.count)} woke in the last day from a resume that never came back, and started fresh from disk instead, with nothing lost. Newest: operation ${hung.newest.operationId} on server ${hung.newest.serverId}.`,
     })
   if (refused.newest !== null)
     conditions.push({
       key: 'hosts_refused',
-      summary: `${wakes(refused.count)} found the server's own host unable to run it. Where a snapshot held all its play it was rebuilt elsewhere; the rest stay stopped until an admin moves them. Newest: operation ${refused.newest.operationId} on server ${refused.newest.serverId}.`,
+      summary: `${servers(refused.count)} found their own host unable to run them in the last day. Where a sleep's snapshot held all its play the server was rebuilt elsewhere; otherwise its start failed, for an admin to move it. Newest: operation ${refused.newest.operationId} on server ${refused.newest.serverId}.`,
+    })
+  if (keeping.length > 0)
+    conditions.push({
+      key: 'storage_kept',
+      summary: `${servers(keeping.length)} keep the storage a rebuild moved them off, a full copy of the world, for ${KEEP_MS / DAY_MS} days before it goes by itself (${keeping.join(', ')}).`,
     })
   return conditions
 }

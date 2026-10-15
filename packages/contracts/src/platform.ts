@@ -114,6 +114,7 @@ export const ALERT_KEYS = [
   'edge_behind',
   'resumes_hung',
   'hosts_refused',
+  'storage_kept',
 ] as const
 export type AlertKey = (typeof ALERT_KEYS)[number]
 
