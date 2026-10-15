@@ -190,13 +190,13 @@
   left: calc(var(--m) - var(--px) * 3.5);
   width: calc(var(--px) * 7);
   height: calc(var(--px) * 7);
-  background: var(--accent);
+  background: var(--torch);
   outline: 0;
   animation: reading 0.65s steps(2, jump-none) infinite;
 }
 @keyframes reading {
   from {
-    background: var(--accent);
+    background: var(--torch);
   }
   to {
     background: var(--panel);

@@ -59,8 +59,7 @@ export const SECONDS = `function ${NS}:boards/seconds`
  * A time written by `SECONDS`, from its path in `WORK`, as a chat message shows it. Read as text,
  * since the storage holds it as a string and would show its quotes; `41.3s` reads as itself.
  */
-export const shown = (path: string): string =>
-  `{storage:"${WORK}",nbt:"${path}",interpret:true,color:"${INDIGO}"}`
+export const shown = (path: string): string => `{storage:"${WORK}",nbt:"${path}",interpret:true,color:"gold"}`
 
 /** Writes `WORK new.score` into `WORK new.shown` as it is: `12`. */
 export const AS_COUNT = `function ${NS}:boards/count with storage ${WORK} new`

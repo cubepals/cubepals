@@ -117,7 +117,7 @@
 }
 /* Lit only when the running server itself answered. */
 .address .bars i[data-on] {
-  background: var(--accent);
+  background: var(--torch);
 }
 /* Room for two lines, as Minecraft gives a message, so the wire below never moves. */
 .address .motd {
@@ -249,12 +249,12 @@
   background: var(--panel);
 }
 
-/* The accent: this is running. */
+/* The torch: this is running. */
 .address .lamp {
   display: block;
   width: 8px;
   height: 8px;
-  background: var(--accent);
+  background: var(--torch);
 }
 
 /* What is on the wire: one block, moved from place to place by name, in steps. */

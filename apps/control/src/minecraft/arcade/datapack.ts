@@ -54,8 +54,8 @@ export const FALLEN = box([-3000, -128, -3000], [3000, 39, 3000])
 
 /**
  * Cubepals' colours: the brand's Paper as text and Ink (#0D0D0D) as a display's ARGB
- * (`brand/README.md`), and the site's indigo for headings (`--accent-on-dark`, apps/web tokens):
- * the lighter step, since every label and chat line is on the dark, where the deep one sinks.
+ * (`brand/README.md`), and the site's indigo for headings (`--accent`, apps/web tokens), in
+ * its dark theme's lighter step, since every label and chat line is on the dark.
  */
 export const PAPER = '#F8F7F5'
 export const INDIGO = '#6A5CD3'

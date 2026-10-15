@@ -13,38 +13,29 @@
   gap: 0.5em;
 }
 
-/* The tag: the brand's own block made small, filled in the beta's indigo with Paper on it, in
-   Figtree bold like the site's words. On a dark block (the app's navigation, in either theme) the
-   accent is the lighter step (`bk-on-dark`), which stands off the dark where the deep indigo
-   would sink into it. It sits level with the word's lowercase letters. */
+/* The tag: the brand's own block made small. Square, a hairline edge in the colour of the text
+   around it, so it is ink on paper in the pages and paper on ink in the app's navigation, and
+   Geologica cut square like every label. It sits level with the word's lowercase letters. */
 .tag {
   display: none;
-  padding: 0 var(--space-4);
-  border: 1.5px solid var(--accent);
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--ink-on-accent);
-  font-family: var(--font-figtree), system-ui, sans-serif;
+  padding: 2px 5px 3px;
+  border: 1.5px solid currentColor;
+  color: inherit;
+  font-family: var(--font-sans);
+  font-variation-settings: "SHRP" 100;
   font-size: 11px;
   font-weight: 700;
-  line-height: 16px;
+  line-height: 11px;
   letter-spacing: 0.02em;
   text-decoration: none;
   transform: translateY(1px);
 }
 .tag:hover,
 .tag:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 82%, #000000);
-  background: color-mix(in srgb, var(--accent) 82%, #000000);
+  background: color-mix(in srgb, currentColor 14%, transparent);
 }
 html[data-beta] .tag {
   display: inline-block;
-}
-/* On the letter, the whole page is the indigo, so the tag is drawn as an edge in its Paper. */
-html:has([data-letter]) .tag {
-  border-color: currentColor;
-  background: none;
-  color: inherit;
 }
 
 /* The banner, from the same family as the test account's bar: across the top in the indigo,

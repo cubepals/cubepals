@@ -14,7 +14,7 @@
  * A round is `#state` in its objective: 0 nobody waiting, 1 counting down, 2 under way.
  */
 import { AS_COUNT, onSidebar, SECONDS, shown, submit, TMP, WORK } from './boards.ts'
-import { type Block, box, INDIGO, label, NS, PAPER, type Part, titled } from './datapack.ts'
+import { type Block, box, label, NS, PAPER, type Part, titled } from './datapack.ts'
 import { type BrandSign, hangSign } from './signs.ts'
 
 const FF = `${NS}.ff`
@@ -147,14 +147,14 @@ export const FLOOR_PART: Part = {
     `forceload add ${x0 + sx} ${z0 + sz} ${x1 + sx} ${z1 + sz}`,
     `scoreboard objectives add ${FF} dummy`,
     ...['time', 'age', 'wins'].map((name) => `scoreboard objectives add ${FF}.${name} dummy`),
-    `scoreboard objectives add ${FF}.best dummy {text:"Falling floor: longest",color:"${INDIGO}",bold:true}`,
+    `scoreboard objectives add ${FF}.best dummy {text:"Falling floor: longest",color:"yellow",bold:true}`,
     `scoreboard players set #state ${FF} 0`,
     `tag @a remove ${FF}.alive`,
     `team add ${NS}.floor`,
-    `team modify ${NS}.floor color blue`,
+    `team modify ${NS}.floor color yellow`,
     `team modify ${NS}.floor friendlyFire false`,
     `team modify ${NS}.floor collisionRule never`,
-    `scoreboard objectives setdisplay sidebar.team.blue ${FF}.best`,
+    `scoreboard objectives setdisplay sidebar.team.yellow ${FF}.best`,
   ],
   build: [
     ...hangSign(FLOOR_SIGN),

@@ -62,7 +62,7 @@ const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
   a[2] + (b[2] - a[2]) * t,
 ]
 
-// Ink, paper and the night field, as landing.css names them; the torch is lamplight, not its accent.
+// Ink, paper and the night field, as landing.css names them; the torch here is lamplight, kept warm.
 export const INK = rgb('#0d0d0d')
 export const PAPER = rgb('#F8F7F5')
 export const NIGHT = rgb('#8C86F2')

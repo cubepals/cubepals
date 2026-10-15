@@ -152,7 +152,7 @@
   line-height: 1;
 }
 
-/* An hour: a button a fingertip tall. Solid accent while someone plays in it, dither while not. */
+/* An hour: a button a fingertip tall. Solid torch while someone plays in it, dither while not. */
 .sleep .hour,
 .sleep .after {
   position: relative;
@@ -171,7 +171,7 @@
   -webkit-tap-highlight-color: transparent;
 }
 .sleep .hour[aria-pressed="true"] {
-  background: var(--accent);
+  background: var(--torch);
 }
 /* The keyboard's ring sits close, so it marks one hour and not its neighbours. */
 .sleep .hour:focus-visible {
@@ -189,7 +189,7 @@
   position: absolute;
   inset: 0 auto 0 0;
   background:
-    linear-gradient(var(--accent), var(--accent)) bottom / 100% 50% no-repeat,
+    linear-gradient(var(--torch), var(--torch)) bottom / 100% 50% no-repeat,
     var(--panel);
 }
 
@@ -216,10 +216,10 @@
   color: var(--fg);
 }
 .sleep .swatch[data-kind="on"] {
-  background: var(--accent);
+  background: var(--torch);
 }
 .sleep .swatch[data-kind="tail"] {
-  background: linear-gradient(var(--accent), var(--accent)) bottom / 100% 50% no-repeat;
+  background: linear-gradient(var(--torch), var(--torch)) bottom / 100% 50% no-repeat;
 }
 
 /* ─── What the week comes to: a name, its number, and a bar ─────────────────────────────────── */
@@ -267,7 +267,7 @@
   visibility: hidden;
 }
 
-/* A week to scale: seven days side by side, each 24 hours wide, awake where it is the accent. */
+/* A week to scale: seven days side by side, each 24 hours wide, awake where it is torch. */
 .sleep .strip {
   grid-column: 1 / -1;
   display: grid;
@@ -282,7 +282,7 @@
   overflow: hidden;
 }
 .sleep .stripDay[data-always] {
-  background: var(--accent);
+  background: var(--torch);
 }
 .sleep .stripAsleep {
   position: absolute;
@@ -293,7 +293,7 @@
   top: 0;
   bottom: 0;
   min-width: 1px;
-  background: var(--accent);
+  background: var(--torch);
 }
 
 /* A month against the plan's hours: solid for what runs, a mark at what the plan includes, and
@@ -589,12 +589,12 @@
   gap: 6px;
   font-weight: 400;
 }
-/* The accent: this is running. */
+/* The torch: this is running. */
 .sleep .lamp {
   display: block;
   width: 8px;
   height: 8px;
-  background: var(--accent);
+  background: var(--torch);
 }
 .sleep .said {
   max-width: 38rem;
