@@ -10,7 +10,8 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
-import { EDGE_PROTOCOL_BASE, NEWER_REASONS } from '@blockly/contracts/edge'
+import { EDGE_PROTOCOL_BASE } from '@blockly/contracts/edge'
+import { NEWER_REASONS } from '@blockly/contracts/edge-poll'
 import { schema } from '@blockly/db'
 import { createInternalApp, forEdge } from '../../interfaces/edge/internal.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'

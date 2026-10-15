@@ -6,12 +6,16 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import {
   EDGE_PROTOCOL_BASE,
   IdleHint,
-  NEWER_REASONS,
   SessionEvent,
   WakeRequest,
   type WakeResult,
 } from '@blockly/contracts/edge'
-import { EDGE_ID_HEADER, ROUTES_HELD_HEADER, ROUTES_VERSION_HEADER } from '@blockly/contracts/edge-poll'
+import {
+  EDGE_ID_HEADER,
+  NEWER_REASONS,
+  ROUTES_HELD_HEADER,
+  ROUTES_VERSION_HEADER,
+} from '@blockly/contracts/edge-poll'
 import { Hono } from 'hono'
 import type { EdgeService } from '../../app/edge/service.ts'
 

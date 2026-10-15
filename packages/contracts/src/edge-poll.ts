@@ -16,3 +16,9 @@
 export const EDGE_ID_HEADER = 'x-edge-id'
 export const ROUTES_VERSION_HEADER = 'x-routes-version'
 export const ROUTES_HELD_HEADER = 'x-routes-held'
+
+/**
+ * The reasons a wake is denied for that an edge names in its wake request's `understands` once it
+ * words them for a player (`edge.ts`); an edge from before them names neither.
+ */
+export const NEWER_REASONS = ['failed', 'broken'] as const

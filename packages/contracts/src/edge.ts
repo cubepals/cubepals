@@ -52,11 +52,10 @@ export type EdgeRoutes = z.infer<typeof EdgeRoutes>
 
 /**
  * `understands`: answers newer than the edge protocol's first that this edge can word for a
- * player. An edge that doesn't name one is answered as before it was added.
+ * player (`NEWER_REASONS`, in `edge-poll.ts`). An edge that doesn't name one is answered as before
+ * it was added.
  */
 export const WakeRequest = z.object({ hostname: z.string(), understands: z.array(z.string()).optional() })
-/** The reasons an edge names in `understands` once it words them; older edges word neither. */
-export const NEWER_REASONS = ['failed', 'broken'] as const
 export const WakeResult = z.discriminatedUnion('outcome', [
   /** `proxyProtocol` as on the server's route, for the run it is in now. */
   z.object({

@@ -8,10 +8,10 @@
 
 import { connect, createServer, type Socket } from 'node:net'
 import { hostname } from 'node:os'
-import { type EdgeRoutes, NEWER_REASONS, type SessionEvent, type WakeResult } from '@blockly/contracts/edge'
+import type { EdgeRoutes, SessionEvent, WakeResult } from '@blockly/contracts/edge'
 // Copied into the image beside the agent (Dockerfile): the one place play coming back is worded.
 import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
-import { EDGE_ID_HEADER } from '../../packages/contracts/src/edge-poll.ts'
+import { EDGE_ID_HEADER, NEWER_REASONS } from '../../packages/contracts/src/edge-poll.ts'
 import { waitFor } from '../../packages/contracts/src/play-today.ts'
 import { LOCAL_HEADER } from '../../packages/contracts/src/proxy-header.ts'
 import { OWN_ICON_MAX_BYTES } from '../../packages/contracts/src/server-list.ts'
