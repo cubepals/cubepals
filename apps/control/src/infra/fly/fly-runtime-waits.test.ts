@@ -229,3 +229,20 @@ describe('FlyRuntime while Fly puts an update in place', () => {
     expect(Date.now() - started).toBeLessThan(2_000)
   })
 })
+
+// A resume Fly left starting: the boot's bound on it was up to ten seconds late, while the long
+// poll it was in ran out.
+describe('FlyRuntime waiting on a machine that never starts', () => {
+  test('gives up when its signal says, mid long poll, not when the poll runs out', async () => {
+    const { fake, runtime, handle } = await provisioned()
+    const machine = fake.machines.get(APP)?.[0]
+    if (machine === undefined) throw new Error('no machine')
+    machine.state = 'starting'
+    fake.holdWaits = true
+    const asked = Date.now()
+    await expect(runtime.waitRunning(handle, AbortSignal.timeout(300))).rejects.toThrow(
+      'did not start in time',
+    )
+    expect(Date.now() - asked).toBeLessThan(2_000)
+  })
+})

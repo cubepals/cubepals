@@ -115,7 +115,7 @@ function machine(options: {
   /** What it prints as it goes, where that takes time; else `printed`, all at once. */
   tail?: () => AsyncIterable<LogLine>
   /** The start before the boot was a resume, and whether that one ever runs. */
-  resumed?: { runs: boolean }
+  resumed?: { runs: boolean; afterMs?: number }
   /** No stop or kill ends it, as a machine wedged by a resume that hung. */
   wedged?: boolean
 }) {
@@ -123,6 +123,9 @@ function machine(options: {
   const lines = () => (options.printed?.(seen.process) ?? []).map((text) => ({ at: new Date(), text }))
   const runtime = {
     waitRunning: async (_handle: RuntimeHandle, signal: AbortSignal) => {
+      // Running after a while, as a boot from disk Fly took long to get going.
+      if (seen.process === 1 && options.resumed?.afterMs !== undefined)
+        await Bun.sleep(options.resumed.afterMs)
       if (seen.process > 1 || options.resumed?.runs !== false) return
       // A resume that hangs: Fly's machine never leaves `starting`.
       await new Promise((resolve) => signal.addEventListener('abort', resolve))
@@ -502,7 +505,24 @@ describe('a resume', () => {
     })
     await boot.run(ctx, server, handle, vanilla)
     expect(seen).toMatchObject({ process: 2, forceStops: 1, marks: ['resume_hung'] })
-  })
+  }, 30_000)
+
+  test('that runs only near its bound, its output slow to show, is given the time to show it boots', async () => {
+    const shown = Date.now() + 1_000
+    const { boot, ctx, seen } = machine({
+      answers: () => false,
+      // Its boot's first lines reach the log a second after it runs: past the bound (200 ms).
+      printed: () => (Date.now() >= shown ? ['[init] Starting the Minecraft server...'] : []),
+      resumed: { runs: true, afterMs: 180 },
+      readyMs: 300,
+    })
+    await expect(
+      boot.run(ctx, server, handle, vanilla, undefined, { startAgainOnHang: false }),
+    ).rejects.toThrow()
+    // Gone on to boot as it was, never killed as a hung resume, nor counted as one.
+    expect(seen.marks).toEqual([])
+    expect(seen.forceStops).toBe(0)
+  }, 30_000)
 
   test('that never runs, on a machine no kill ends, is stuck on its host', async () => {
     const { boot, ctx, seen } = machine({ answers: () => false, resumed: { runs: false }, wedged: true })

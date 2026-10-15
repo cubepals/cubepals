@@ -35,10 +35,12 @@ export class StuckOnHost extends PlainFailure {
 const RESUME_MS = 10_000
 /**
  * How long a resume has to come back before the memory kept for it is given up on (`#startFresh`).
- * Fly's resumes on staging (2026-10-15, 3 to 8 GB, 60 wakes) all reached a player within 3.2 s,
- * 2.3 s at p95: 30 s is over nine times the slowest and thirteen times p95, so a slow resume is
- * never cut off, and still short of a cold boot (35 to 45 s), so waiting on a hung one costs less
- * than the boot that replaces it.
+ * Fly's resumes on staging all reached a player within 3.2 s, 2.3 s at p95, at 3 to 8 GB (60
+ * wakes), and at 16 GB (5 wakes, 2026-10-15) were running within 0.95 s and answering within 1 s:
+ * a resume doesn't take longer for more memory, so one bound serves every size. 30 s is over nine
+ * times the slowest, so a slow resume is never cut off, and still short of a cold boot's answer
+ * (35 to 45 s; 23 s at 16 GB, running after 3.3 s). A machine that got running at all has
+ * `RESUME_MS` past it besides (`cameBack`), so one that boots from its disk isn't taken for hung.
  */
 const RESUME_HUNG_MS = 30_000
 /** The least a resuming server's ping is given to answer, once a verdict on it is due. */
@@ -86,7 +88,9 @@ export class Resume {
     let came: 'answered' | 'booting' | 'hung'
     try {
       await this.#runtime.waitRunning(handle, running)
-      came = await this.#answer(endpoint(), handle, since, hungAt)
+      // Running at last, it has `RESUME_MS` to answer or print: a boot from its disk that got
+      // running late in the bound is never cut off before its output could show it boots.
+      came = await this.#answer(endpoint(), handle, since, Math.max(hungAt, Date.now() + RESUME_MS))
     } catch (error) {
       // Not running in time is a hung resume; a machine that stopped is the boot's to explain.
       if (!running.aborted) return false
