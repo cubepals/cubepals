@@ -62,11 +62,11 @@ export const GUIDES: readonly Guide[] = [
   },
   {
     slug: 'minecraft-server-that-sleeps',
-    title: 'A Minecraft server that sleeps when nobody plays',
+    title: 'A Minecraft server that starts when someone joins',
     description:
-      'Why a Minecraft server should sleep when nobody’s on, what your friends see when they join a sleeping one, and what happens to the world.',
+      'How to make a Minecraft server start when someone joins: the free self-host tools, and Cubepals, where every server wakes on a join. Java Edition.',
     published: '2026-10-10',
-    modified: '2026-10-11',
+    modified: '2026-10-15',
     approved: true,
   },
   {
