@@ -156,6 +156,78 @@ describe.skipIf(!base)('server operation lanes', () => {
   }, 30_000)
 })
 
+describe.skipIf(!base)('server operation lanes at rest', () => {
+  test('keep one worker each, however many they may run, and grow as they take work', async () => {
+    const database = await freshDatabase()
+    const boss = await startBoss(database.url, { retryDelaySeconds: 0 })
+    const pool = createPool(database.url, 2)
+    const workers = () => boss.getWipData().filter((w) => w.name === 'server-ops').length
+    try {
+      const held = gate()
+      const began: string[] = []
+      await workServerOperations(
+        boss,
+        async ({ operationId }) => {
+          began.push(operationId)
+          await held.opened
+        },
+        { concurrency: 32, wakeConcurrency: 8 },
+        0.5,
+      )
+      expect(workers()).toBe(2)
+      const jobs = new PgBossJobs(boss)
+      const ops = Array.from({ length: 5 }, () => ({ id: randomUUID(), serverId: randomUUID() }))
+      await createDb(pool).transaction(async (tx) => {
+        for (const op of ops)
+          await jobs.enqueue(tx, { operationId: op.id, serverId: op.serverId, retryLimit: 0, wakes: false })
+      })
+      await until(() => began.length === 5)
+      // Five run, and one waits in each lane.
+      expect(workers()).toBe(7)
+      held.open()
+      await until(() => workers() === 2)
+    } finally {
+      await boss.stop({ graceful: false })
+      await pool.end()
+      await database.drop()
+    }
+  }, 30_000)
+
+  test('an operation run past its deadline leaves its lane working the rest', async () => {
+    const database = await freshDatabase()
+    const boss = await startBoss(database.url, { retryDelaySeconds: 0, operationDeadlineSeconds: 1 })
+    const pool = createPool(database.url, 2)
+    try {
+      const hung = randomUUID()
+      const finished: string[] = []
+      await workServerOperations(
+        boss,
+        async ({ operationId }) => {
+          // The first never answers, as a provider call that hangs.
+          if (operationId === hung) await new Promise(() => {})
+          finished.push(operationId)
+        },
+        { concurrency: 1, wakeConcurrency: 1 },
+        0.5,
+      )
+      const jobs = new PgBossJobs(boss)
+      const send = (operationId: string) =>
+        createDb(pool).transaction((tx) =>
+          jobs.enqueue(tx, { operationId, serverId: randomUUID(), retryLimit: 0, wakes: false }),
+        )
+      await send(hung)
+      await Bun.sleep(1500)
+      const after = [randomUUID(), randomUUID()]
+      for (const id of after) await send(id)
+      await until(() => after.every((id) => finished.includes(id)), 10_000)
+    } finally {
+      await boss.stop({ graceful: false })
+      await pool.end()
+      await database.drop()
+    }
+  }, 30_000)
+})
+
 describe.skipIf(!base)('a server operation refused for now', () => {
   test('is tried again after a pause, not failed', async () => {
     const database = await freshDatabase()
