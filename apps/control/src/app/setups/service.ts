@@ -34,7 +34,8 @@ import { CatalogUnavailable, type ModCatalog } from '../ports/catalog.ts'
 import { UnreadableFile } from '../ports/formats.ts'
 import { findByInvite, findLiveBySlug, loadRevision, loadRuntime, loadWorld } from '../servers/persistence.ts'
 import { loadPackChecks, savePackCheck } from './persistence.ts'
-import { templateOf } from './templates.ts'
+import { StarterWorlds } from './starters.ts'
+import { TEMPLATES, type Template, templateOf } from './templates.ts'
 
 /** Where a new server's setup comes from. */
 export type SetupSource =
@@ -97,6 +98,7 @@ export class SetupService {
   readonly #contents: PackContents
   readonly #packs: PackService
   readonly #curation: () => PackCuration
+  readonly #starters: StarterWorlds
 
   constructor(deps: {
     db: Db
@@ -116,6 +118,21 @@ export class SetupService {
     this.#contents = deps.contents
     this.#packs = deps.packs
     this.#curation = deps.curation
+    this.#starters = new StarterWorlds(deps.packs.archiveStore)
+  }
+
+  /** A template, as offered: one whose world can't start here yet isn't, as if it weren't there. */
+  async #offered(key: string): Promise<Template> {
+    const template = templateOf(key)
+    if (template === null || !(await this.#starters.ready(template.setup.world.levelType)))
+      throw new NotFound('Template')
+    return template
+  }
+
+  /** The templates whose world can start here, by key: the ones offered. */
+  async readyTemplates(): Promise<ReadonlySet<string>> {
+    const ready = await Promise.all(TEMPLATES.map((t) => this.#starters.ready(t.setup.world.levelType)))
+    return new Set(TEMPLATES.filter((_, i) => ready[i]).map((t) => t.key))
   }
 
   /** The setup behind a source, with nothing resolved yet. */
@@ -124,8 +141,7 @@ export class SetupService {
     viewer: Actor | null,
   ): Promise<{ setup: ServerSetup; from: string; copying: Copying | null }> {
     if (source.kind === 'template') {
-      const template = templateOf(source.key)
-      if (template === null) throw new NotFound('Template')
+      const template = await this.#offered(source.key)
       const asked = source.gameVersion
       if (asked !== undefined) refuseUnoffered(template.setup.loader, asked)
       return {

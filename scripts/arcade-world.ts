@@ -15,25 +15,31 @@
  * 2. A Paper 26.2 server is started on a void world, with each map as a dimension of its own
  *    (a datapack of this build's, `arcadebuild:<key>`). Each map is cloned, slab by slab, into the
  *    overworld at its place, and Minecraft writes every block as 26.2 has it, lit.
- * 3. The world's own additions are built: a copy of the falling floor's floors to put them back
- *    from (`arcade-additions.ts`), and Cubepals in the hub: the mark on its two screens and the
- *    lockup as map art (`arcade-brand.ts`).
- * 4. The overworld alone is packed as `arcade-world.tar.gz`, and its SHA-512 and size printed for
- *    `ARCADE_WORLD`. The archive is published where `ARCADE_WORLD` says; the maps never go into
- *    this repository.
+ * 3. The world's own changes are made: no real person's likeness (`arcade-likeness.ts`); the hall
+ *    in Cubepals' colours, lit, with a doorway (`arcade-hall.ts`) onto the landing page's house
+ *    (`arcade-house.ts`); a copy of the falling floor's floors to put them back from
+ *    (`arcade-additions.ts`); and Cubepals: the mark on the hall's screens, the pads, and every
+ *    sign's backing and its lockup as map art (`arcade-brand.ts`).
+ * 4. The overworld alone is packed as `arcade-world.tar.gz`, with `CREDITS.txt`, and its SHA-512
+ *    and size printed for `ARCADE_WORLD`. `bun scripts/arcade-upload.ts` puts it in a
+ *    deployment's archive store; the maps never go into this repository.
  *
  * Everything is kept under `local/arcade-world/`, so a second run reuses what the first fetched.
  * Not the games: those are the datapack every Arcade server carries (`minecraft/arcade.ts`).
  */
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { creditsText, MAP_SOURCES } from '../apps/control/src/minecraft/arcade/credits.ts'
+import { HUB_SPAWN } from '../apps/control/src/minecraft/arcade/datapack.ts'
 import { ARCADE_MAPS, type ArcadeMap } from '../apps/control/src/minecraft/arcade/maps.ts'
 import { RCON_PORT } from '../apps/control/src/minecraft/ports.ts'
-import { ADDITIONS, LIGHTS } from './lib/arcade-additions.ts'
-import { BRAND_COMMANDS, writeWordmarkMaps } from './lib/arcade-brand.ts'
-import { MAP_SOURCES } from './lib/arcade-sources.ts'
+import { ADDITIONS } from './lib/arcade-additions.ts'
+import { BRAND_COMMANDS, writeSignMaps } from './lib/arcade-brand.ts'
+import { HALL_COMMANDS, HALL_LIGHTS } from './lib/arcade-hall.ts'
+import { HOUSE_COMMANDS, INSIDE } from './lib/arcade-house.ts'
+import { LIKENESS_COMMANDS } from './lib/arcade-likeness.ts'
 import { rcon } from './lib/rcon.ts'
 
 const WORK = resolve('local/arcade-world')
@@ -83,9 +89,9 @@ function chunker(): string {
   }
   const jar = join(dir, 'build/libs')
   if (!existsSync(jar)) run('./gradlew', ['-q', ':cli:shadowJar', '--no-daemon'], dir)
-  const built = spawnSync('sh', ['-c', `ls ${jar}/chunker-cli-*.jar`], { encoding: 'utf8' }).stdout.trim()
-  if (built === '') throw new Error('Chunker built no CLI jar')
-  return built
+  const built = readdirSync(jar).find((name) => name.startsWith('chunker-cli-') && name.endsWith('.jar'))
+  if (built === undefined) throw new Error('Chunker built no CLI jar')
+  return join(jar, built)
 }
 
 /** Each map as a Java 26.2 world of its own. */
@@ -195,6 +201,19 @@ async function must(command: string): Promise<string> {
   return said
 }
 
+/**
+ * Runs a command once the chunks it reaches are in: forcing chunks to load returns before they
+ * are, and a command run on one not yet loaded does nothing.
+ */
+async function onceLoaded(command: string): Promise<string> {
+  for (let tries = 0; ; tries++) {
+    const said = await console_(command)
+    if (!said.includes('not loaded')) return said
+    if (tries === 120) throw new Error(`${command}: the chunks never loaded`)
+    await new Promise((done) => setTimeout(done, 500))
+  }
+}
+
 /** Keeps the chunks of a box loaded in a dimension, in pieces of at most 256 chunks. */
 async function forceload(
   dimension: string,
@@ -209,6 +228,12 @@ async function forceload(
       )
 }
 
+/** Minecraft's sixteen dye colours, as its concrete and powder are named. */
+const COLOURS =
+  'white orange magenta light_blue yellow lime pink gray light_gray cyan purple blue brown green red black'.split(
+    ' ',
+  )
+
 /** Clones a map from its dimension into the overworld at its place, a few layers at a time. */
 async function place(map: ArcadeMap): Promise<void> {
   const [ox, oy, oz] = map.offset
@@ -217,6 +242,16 @@ async function place(map: ArcadeMap): Promise<void> {
   await forceload('minecraft:overworld', target(map.from), target(map.to), true)
   const [x0, y0, z0] = map.from
   const [x1, y1, z1] = map.to
+  // Concrete powder a map floats would fall as it is cloned, and what stands on it with it: it
+  // goes in as concrete of its colour. Game rules are each dimension's own, so the map's dimension
+  // takes a whole map in one fill too.
+  await must(`execute in arcadebuild:${map.key} run gamerule max_block_modifications 2147483647`)
+  for (const colour of COLOURS) {
+    const said = await onceLoaded(
+      `execute in arcadebuild:${map.key} run fill ${x0} ${y0} ${z0} ${x1} ${y1} ${z1} minecraft:${colour}_concrete replace minecraft:${colour}_concrete_powder`,
+    )
+    if (!/filled|No blocks/.test(said)) throw new Error(`${map.title}'s ${colour} concrete powder: ${said}`)
+  }
   const step = Math.max(1, Math.floor(400_000 / ((x1 - x0 + 1) * (z1 - z0 + 1))))
   for (let y = y0; y <= y1; y += step) {
     const top = Math.min(y + step - 1, y1)
@@ -231,7 +266,10 @@ async function place(map: ArcadeMap): Promise<void> {
 function pack(): string {
   const level = join(WORK, 'server', LEVEL)
   const out = join(WORK, 'arcade-world.tar.gz')
-  // The overworld alone: not the build's dimensions, its datapack, players or Paper's own files.
+  // The overworld alone: not the build's dimensions, its datapack, players or Paper's own files,
+  // nor its entities, which are only what the build dropped: cloning brings blocks alone. With it,
+  // who made each map and what changed, as their licences ask.
+  writeFileSync(join(level, 'CREDITS.txt'), creditsText())
   run('tar', [
     '--sort=name',
     '--owner=0',
@@ -246,11 +284,15 @@ function pack(): string {
     'data/minecraft',
     'dimensions/minecraft/overworld/region',
     'dimensions/minecraft/overworld/data',
+    'CREDITS.txt',
   ])
   return out
 }
 
 async function main(): Promise<void> {
+  // Everyone starts inside the house: the datapack's spawn is where the house is built.
+  if (!HUB_SPAWN.startsWith(`${INSIDE[0] + 0.5} ${INSIDE[1]} ${INSIDE[2] + 0.5} `))
+    throw new Error(`HUB_SPAWN (${HUB_SPAWN}) is not inside the house (${INSIDE.join(' ')})`)
   mkdirSync(WORK, { recursive: true })
   const converter = chunker()
   const worlds = new Map(ARCADE_MAPS.map((map) => [map.key, convert(converter, map)]))
@@ -262,9 +304,13 @@ async function main(): Promise<void> {
   try {
     await must('gamerule max_block_modifications 2147483647')
     for (const map of ARCADE_MAPS) await place(map)
+    // The house's island, beside the hall, loaded like the maps.
+    await forceload('minecraft:overworld', [130, 0, 1455], [155, 0, 1475], true)
     for (const command of ADDITIONS) await must(command)
-    for (const command of LIGHTS) await console_(command)
-    // A fill that finds nothing to replace says so, which is no failure here.
+    // A fill that finds nothing to replace says so, which is no failure here; nor is a light block
+    // kept out by something already there.
+    for (const command of [...LIKENESS_COMMANDS, ...HALL_COMMANDS, ...HALL_LIGHTS]) await onceLoaded(command)
+    for (const command of HOUSE_COMMANDS) await onceLoaded(command)
     for (const command of BRAND_COMMANDS) await console_(command)
     await console_('forceload remove all')
     // Back to the game's own limit, which the world keeps.
@@ -274,7 +320,7 @@ async function main(): Promise<void> {
   } finally {
     await stop()
   }
-  writeWordmarkMaps(join(WORK, 'server', LEVEL), resolve('brand/png/lockup-horizontal.png'))
+  writeSignMaps(join(WORK, 'server', LEVEL), resolve('brand/png/lockup-horizontal.png'))
   const out = pack()
   const bytes = readFileSync(out)
   say(`${out}: sha512 ${createHash('sha512').update(bytes).digest('hex')}, ${bytes.length} bytes`)

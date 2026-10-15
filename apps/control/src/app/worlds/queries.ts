@@ -2,13 +2,23 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { FreshStartView, WorldView } from '@blockly/contracts'
+/**
+ * A server's worlds as its owner's page lists them, and what starting a fresh one would do. Not
+ * making, switching or deleting worlds (`service.ts`).
+ */
+import { type FreshStartView, isLevelType, type LevelType, type WorldView } from '@blockly/contracts'
 import type { Db } from '@blockly/db'
 import { type Actor, authorize } from '../actor.ts'
 import { listBackups } from '../backups/persistence.ts'
 import { findServer, loadRuntime } from '../servers/persistence.ts'
 import { freshStartOf } from './fresh-start.ts'
 import { listWorlds } from './persistence.ts'
+
+/** A world's stored type, as the page names it; one Blockly never makes is a bug, not a world. */
+function knownType(type: string): LevelType {
+  if (!isLevelType(type)) throw new Error(`A world of a type Blockly doesn't make: ${type}`)
+  return type
+}
 
 export class WorldQueries {
   readonly #db: Db
@@ -29,7 +39,7 @@ export class WorldQueries {
       .map((world) => ({
         id: world.id,
         name: world.name,
-        levelType: world.levelType as WorldView['levelType'],
+        levelType: knownType(world.levelType),
         seed: world.seed,
         hardcore: world.hardcore,
         generatedOnVersion: world.generatedOnVersion,

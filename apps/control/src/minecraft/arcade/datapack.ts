@@ -28,11 +28,10 @@ export interface Part {
 export const NS = 'arcade'
 
 /**
- * Where everyone starts, comes back to and respawns: the balcony of the hub's hall (ArcadeLobby),
- * facing the hall: its cabinets, the Cubepals lockup over them and the mark on the big one; the
- * domes, the pads and the boards are behind, along the balcony.
+ * Where everyone starts, comes back to and respawns: inside the house outside the hub's hall,
+ * facing its door, which opens onto the path to the hall (`scripts/lib/arcade-house.ts`).
  */
-export const HUB_SPAWN = '175.5 78 1431.5 180 0'
+export const HUB_SPAWN = '138.5 78 1468.5 180 0'
 
 /** The function that sends a player back to the hub, from anywhere, leaving whatever they played. */
 export const TO_HUB = `${NS}:hub/back`
@@ -53,8 +52,12 @@ export function box(from: Block, to: Block): string {
  */
 export const FALLEN = box([-3000, -128, -3000], [3000, 39, 3000])
 
-/** Cubepals' two colours (`brand/README.md`): Paper as text, and Ink (#0D0D0D) as a display's ARGB. */
+/**
+ * Cubepals' colours: the brand's Paper as text and Ink (#0D0D0D) as a display's ARGB
+ * (`brand/README.md`), and the site's warm yellow for headings (`--ember`, apps/web tokens).
+ */
 export const PAPER = '#F8F7F5'
+export const YELLOW = '#FFB01F'
 const INK_ARGB = -15921907
 
 /**
@@ -70,6 +73,6 @@ export function label(at: string, tag: string, text: string, scale = 1): string 
   return `summon minecraft:text_display ${at} {Tags:["${NS}.display","${tag}"],billboard:"vertical",brightness:{block:15,sky:15},background:${INK_ARGB},line_width:240,text:${text}${size}}`
 }
 
-/** A label's heading and its words below, in Paper. */
+/** A label's heading, in the warm yellow, and its words below, in Paper. */
 export const titled = (title: string, words: string): string =>
-  `["",{text:"${title}",color:"${PAPER}",bold:true},{text:"\\n${words}",color:"${PAPER}"}]`
+  `["",{text:"${title}",color:"${YELLOW}",bold:true},{text:"\\n${words}",color:"${PAPER}"}]`

@@ -23,6 +23,7 @@ import type { ModCatalog } from '../ports/catalog.ts'
 import type { CurseForge } from '../ports/curseforge.ts'
 import { HostileArchive, type PackArchives } from '../ports/formats.ts'
 import type { JobQueue } from '../ports/jobs.ts'
+import type { ArchiveStore } from '../ports/optional.ts'
 import { findServer } from '../servers/persistence.ts'
 import {
   deletePendingUpload,
@@ -81,6 +82,11 @@ export class PackService {
     this.#archives = deps.archives
     this.#catalog = deps.catalog
     this.#curseforge = deps.curseforge
+  }
+
+  /** The archive store packs are kept in, which also keeps the worlds templates start on. */
+  get archiveStore(): ArchiveStore | null {
+    return this.#caps.archives
   }
 
   // ─── Uploads ───────────────────────────────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ const page = (change: Partial<PublicServerView> = {}): PublicServerView => ({
   slug: 'sunset',
   name: 'Sunset Valley',
   description: '',
+  credits: null,
   icon: null,
   ownIcon: null,
   tags: [],

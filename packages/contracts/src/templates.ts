@@ -7,6 +7,7 @@
  * line and picture. Whether a plan runs one is the account's own answer (`TemplateView`), and what
  * each one sets up is the control plane's (`app/setups/templates.ts`).
  */
+import { MAP_PUBLISHERS } from './published-maps.ts'
 import type { PlayIcon } from './server.ts'
 
 /**
@@ -26,7 +27,19 @@ export interface TemplateCard {
   advanced: boolean
   /** Played in an evening: a server of it starts out as one that lasts a day, which its owner can undo. */
   forADay: boolean
+  /** Who made the published maps its world is built on, for a server's page; absent for none. */
+  credits?: TemplateCredits
 }
+
+/**
+ * The makers of a template's published maps, in the order a sentence names them, each linked to
+ * where it publishes them: "Built on maps by NetherGames and the Overcast Community."
+ */
+export interface TemplateCredits {
+  makers: ReadonlyArray<{ name: string; article?: 'the'; url: string }>
+}
+
+const { netherGames, overcast } = MAP_PUBLISHERS
 
 /**
  * What Blockly offers when it asks "what do you want to play?", in the order the page lists them:
@@ -122,6 +135,15 @@ export const TEMPLATE_CARDS = [
     icon: 'arcade',
     advanced: false,
     forADay: false,
+    credits: {
+      makers: [
+        {
+          name: 'NetherGames',
+          url: `${netherGames.repo}/tree/${netherGames.commit}/Lobby/worlds/ArcadeLobby`,
+        },
+        { name: 'Overcast Community', article: 'the', url: `${overcast.repo}/tree/${overcast.commit}` },
+      ],
+    },
   },
   {
     key: 'create',

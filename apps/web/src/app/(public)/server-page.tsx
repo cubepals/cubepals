@@ -17,6 +17,7 @@ import { useChecked } from '../../lib/use-checked'
 import { behindSignUp, useSignedIn } from '../../lib/viewer'
 import { Badge, Button, CopyField, FormSection, GetPack, Note, TextField } from '../../ui'
 import styles from './like-this.module.css'
+import { MapCredits } from './map-credits'
 import { inviteAnswered } from './presses'
 import { Reactions } from './reactions'
 import { ReportServer, reportable } from './report'
@@ -76,6 +77,7 @@ export function ServerPage({ view, invitedBy }: { view: PublicServerView; invite
           {view.description}
         </p>
       )}
+      {view.credits && <MapCredits credits={view.credits} />}
 
       <FormSection
         title="Join"

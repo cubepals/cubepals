@@ -16,10 +16,11 @@ type Layer = (typeof LAYERS)[number]
 /**
  * Domain and minecraft import no packages, but for the units of time (`@blockly/contracts/durations`),
  * written once for every workspace, the bounds the API holds what people type to
- * (`@blockly/contracts/limits`), and how Minecraft's server list reads a message
- * (`@blockly/contracts/server-list`). None imports anything itself.
+ * (`@blockly/contracts/limits`), how Minecraft's server list reads a message
+ * (`@blockly/contracts/server-list`), and where published maps are (`@blockly/contracts/published-maps`).
+ * None imports anything itself.
  */
-const PURE_PACKAGES = /^@blockly\/contracts\/(durations|limits|motd-layout|server-list)$/
+const PURE_PACKAGES = /^@blockly\/contracts\/(durations|limits|motd-layout|published-maps|server-list)$/
 const APP_PACKAGES = /^(@blockly\/(db|contracts)(\/.*)?|drizzle-orm(\/.*)?|zod|node:.*)$/
 
 /** A string literal holding a hostname, with or without a scheme (§17). */
@@ -30,6 +31,13 @@ const HOSTNAME =
  * them, and a document is invalid without them.
  */
 const FORMAT_NAMESPACES = /^www\.w3\.org$/
+
+/**
+ * Addresses a licence asks to be linked: the Creative Commons licences and where each published
+ * map is, which the Arcade's credits link to (CC BY 4.0, 3(a)(1)). Never a deployment's. Only the
+ * credits may name them.
+ */
+const ATTRIBUTION = { file: 'minecraft/arcade/credits.ts', hosts: /^(creativecommons\.org|github\.com)$/ }
 
 /** Each provider's hosts, which only its own adapter may name. */
 const PROVIDER_HOSTS: Record<string, RegExp> = {
@@ -226,6 +234,7 @@ for (const file of files(CONTROL)) {
     for (const match of source.matchAll(HOSTNAME)) {
       const host = match[1] ?? ''
       if (FORMAT_NAMESPACES.test(host)) continue
+      if (relative(CONTROL, file) === ATTRIBUTION.file && ATTRIBUTION.hosts.test(host)) continue
       if (adapter !== null && PROVIDER_HOSTS[adapter]?.test(host)) continue
       fail(
         file,
@@ -287,6 +296,7 @@ if (PROVIDER_ID !== null)
 // codes, the edge's image copies Minecraft's ports alone. Each stays a file that imports nothing.
 for (const path of [
   'packages/contracts/src/limits.ts',
+  'packages/contracts/src/published-maps.ts',
   'packages/contracts/src/server-list.ts',
   'apps/control/src/minecraft/ports.ts',
 ])

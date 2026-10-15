@@ -16,6 +16,7 @@
 import { onSidebar, SECONDS, shown, submit, TMP, WORK } from './boards.ts'
 import { type Block, box, label, NS, PAPER, type Part, titled } from './datapack.ts'
 import { placed } from './maps.ts'
+import { type BrandSign, hangSign } from './signs.ts'
 
 /** A box in a map, both corners included, and where a player stands when sent there, facing on. */
 interface Spot {
@@ -115,6 +116,9 @@ const finishTicks = STAGES.flatMap((stage, s) => {
   ]
 })
 
+/** The small Cubepals sign over the first course, ahead of a player arriving, facing them. */
+export const PARKOUR_SIGN: BrandSign = { art: 'small', at: [995, 71, 2], facing: 'east', credit: 'jungle' }
+
 export const PARKOUR_PART: Part = {
   functions: {
     'parkour/clock': [
@@ -172,6 +176,7 @@ export const PARKOUR_PART: Part = {
         'Three courses, one clock. It starts as you step off. A fall takes you back to your last checkpoint.',
       ),
     ),
+    ...hangSign(PARKOUR_SIGN),
     'forceload remove 960 -40 1410 40',
   ],
   tick: [

@@ -191,14 +191,35 @@ describe('the Arcade as its players find it', () => {
     expect(finishing[0]).toContain(`scores={arcade.pk.cp=${last}}`)
   })
 
-  test('the credits name every map, who built it, and its licence', () => {
-    const credits = commands('hub/credits').join('\n')
+  test('the credits name every map, who built it, its licence and source as links, and what changed', () => {
+    const lines = commands('hub/credits').filter((line) => line.startsWith('tellraw '))
     for (const map of ARCADE_MAPS) {
-      expect(credits).toContain(map.title)
-      for (const builder of map.builders) expect(credits).toContain(builder)
-      expect(credits).toContain(map.licence)
+      const line = lines.find((candidate) => candidate.includes(`text:"${map.title}"`)) ?? ''
+      for (const builder of map.builders) expect(line).toContain(builder)
+      expect(line).toContain(map.licence)
+      const links = [...line.matchAll(/open_url",url:"([^"]+)"/g)].map((link) => link[1])
+      expect(links).toEqual([
+        `https://creativecommons.org/licenses/${map.licence === 'CC BY 4.0' ? 'by' : 'by-sa'}/4.0/`,
+        expect.stringMatching(/^https:\/\/github\.com\/[^/]+\/[^/]+\/tree\/[0-9a-f]{40}\//),
+      ])
+      expect(map.changes.length).toBeGreaterThan(0)
+      for (const change of map.changes) expect(line).toContain(change)
     }
-    expect(credits).toContain('CC BY-SA 4.0 too')
+    expect(lines.join('\n')).toContain('CC BY-SA 4.0 too')
+  })
+
+  test("each game's Cubepals sign names its map and who built it, in one line under it", () => {
+    const lines = everyCommand.filter(
+      (c) => c.startsWith('summon minecraft:text_display') && c.includes(', by '),
+    )
+    expect(lines.map((c) => c.match(/text:\{text:"([^"]+)"/)?.[1])).toEqual([
+      'Jungle, by Crazy_, ViceTechnicolour and Tywnis',
+      'Meltdown, by NetherGames',
+      'Frozen Market, by _3Each',
+    ])
+    // Each sign hangs every frame of its lockup: twenty by four over the hub, five across at each game.
+    const frames = everyCommand.filter((c) => c.startsWith('summon minecraft:glow_item_frame'))
+    expect(frames).toHaveLength(80 + 5 * 4)
   })
 
   test('a new player is put at the hub and told in one sentence what to do, once', () => {

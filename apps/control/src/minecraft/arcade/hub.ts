@@ -3,17 +3,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The Arcade's hub: NetherGames' ArcadeLobby, a hall of arcade cabinets whose balcony is where
- * everyone starts, with a black pad for each game that sends a player there, its name over it, the
- * boards in front of the balcony's domes, the welcome and the credits. It is also the way back:
+ * The Arcade's hub: NetherGames' ArcadeLobby, a hall of arcade cabinets in Cubepals' colours, and
+ * the house from cubepals.com's landing page outside it, where everyone starts; its door leads
+ * down the west corridor onto the balcony. There, a black pad for each game sends a player to it,
+ * its name over it, with the boards in front of the balcony's domes, the Cubepals sign over the
+ * ARCADE cabinet, the welcome and the credits. It is also the way back:
  * the "Back to the hub" item every player carries, `/trigger hub`, a fall, dying, and coming back
  * after leaving. Not the games or what their boards hold, which are their own.
  *
  * It also holds the world's rules for an arcade, in a function of their own (`arcade:rules`): no
- * monsters, no night or rain, no fall damage, no chat about advancements, and everyone spawning on
- * the balcony. Game rules are renamed between releases, so a release that knows them by other
+ * monsters, no night or rain, no fall damage, no chat about advancements, and everyone spawning in
+ * the house. Game rules are renamed between releases, so a release that knows them by other
  * names fails that function alone.
  */
+
+import { CREDIT_LINES } from './credits.ts'
 import {
   type Block,
   box,
@@ -27,17 +31,13 @@ import {
   titled,
 } from './datapack.ts'
 import { FLOOR_ARRIVAL } from './floor.ts'
-import { ARCADE_MAPS, type ArcadeMap, LICENCE_NAMES } from './maps.ts'
 import { PARKOUR_ARRIVAL } from './parkour.ts'
+import { type BrandSign, hangSign } from './signs.ts'
 
 const HUB = `${NS}.hub`
 
-/**
- * The Cubepals lockup over the big ARCADE cabinet, as map art in glow item frames: its maps are in
- * the world (`scripts/lib/arcade-brand.ts` draws them), numbered from `firstMap`, left to right and
- * top to bottom as a player in the hall sees them, the frames' top left at `at`, facing south.
- */
-export const WORDMARK_FRAMES = { columns: 10, rows: 2, firstMap: 9000, at: [171, 110, 1359] as Block }
+/** The large Cubepals sign, over the big ARCADE cabinet, facing the hall. */
+export const HUB_SIGN: BrandSign = { art: 'large', at: [165, 110, 1359], facing: 'south' }
 
 /** What a player types after `/trigger` to come back, or to read who made the maps. */
 const BACK = 'hub'
@@ -49,7 +49,7 @@ const CREDITS = 'credits'
  */
 export const PADS: ReadonlyArray<{ middle: Block; sends: string; name: string }> = [
   {
-    middle: [138, 77, 1436],
+    middle: [126, 77, 1431],
     sends: `tp @s ${PARKOUR_ARRIVAL}`,
     name: titled('Parkour', 'Three courses against the clock'),
   },
@@ -59,13 +59,14 @@ export const PADS: ReadonlyArray<{ middle: Block; sends: string; name: string }>
     name: titled('The pit', 'Everyone fights everyone'),
   },
   {
-    middle: [214, 77, 1436],
+    middle: [224, 77, 1431],
     sends: `tp @s ${FLOOR_ARRIVAL}`,
     name: titled('Falling floor', 'Last one standing'),
   },
 ]
 
-const ZONE = box([100, 40, 1340], [256, 125, 1460])
+/** The hall and the house outside it. */
+const ZONE = box([100, 40, 1340], [256, 125, 1473])
 
 /** Standing on a pad; a moderator flying past in spectator mode isn't. */
 const onPad = ([x, y, z]: Block) => `${box([x - 1, y + 1, z - 1], [x + 1, y + 2, z + 1])},gamemode=!spectator`
@@ -74,20 +75,6 @@ const welcome = `["",{text:"Welcome to the Cubepals Arcade. ",color:"${PAPER}",b
 
 /** The item every player keeps in their last slot: using it is going back to the hub. */
 const BACK_ITEM = `minecraft:carrot_on_a_stick[custom_name={text:"Back to the hub",color:"${PAPER}",italic:false},item_model="minecraft:oak_door",custom_data={${NS}_back:1b}]`
-
-/** Who built a map, and who published it where that is someone else. */
-const byWhom = (map: ArcadeMap) =>
-  map.builders.join(', ') + (map.builders.join() === map.publisher ? '' : `, from ${map.publisher}`)
-
-/** Who made each map, and under which licence, as the credits say it. */
-const credits = [
-  `{text:"The Cubepals Arcade is made of these maps, each under its own licence:",color:"${PAPER}",bold:true}`,
-  ...ARCADE_MAPS.map(
-    (map) =>
-      `["",{text:"${map.title}",bold:true},{text:" (${map.role}) by ${byWhom(map)}, under the ${LICENCE_NAMES[map.licence]} licence (${map.licence})",color:"gray"}]`,
-  ),
-  '{text:"Cubepals changed them to fit together. Its changes to the CC BY-SA maps are CC BY-SA 4.0 too. Each licence is on Creative Commons’ website.",color:"gray"}',
-]
 
 export const HUB_PART: Part = {
   functions: {
@@ -98,7 +85,10 @@ export const HUB_PART: Part = {
       `scoreboard players reset @s ${NS}.died`,
       `tp @s ${HUB_SPAWN}`,
     ],
-    'hub/credits': [`scoreboard players reset @s ${CREDITS}`, ...credits.map((line) => `tellraw @s ${line}`)],
+    'hub/credits': [
+      `scoreboard players reset @s ${CREDITS}`,
+      ...CREDIT_LINES.map((line) => `tellraw @s ${line}`),
+    ],
     rules: [
       'gamerule advance_time false',
       'gamerule advance_weather false',
@@ -111,11 +101,11 @@ export const HUB_PART: Part = {
       'time set noon',
       'weather clear',
       // The block of `HUB_SPAWN`, facing the same way.
-      'setworldspawn 175 78 1431 180 0',
+      'setworldspawn 138 78 1468 180 0',
     ],
   },
   load: [
-    'forceload add 100 1340 256 1460',
+    'forceload add 100 1340 256 1473',
     `scoreboard objectives add ${BACK} trigger`,
     `scoreboard objectives add ${CREDITS} trigger`,
     `scoreboard objectives add ${NS}.left minecraft.custom:minecraft.leave_game`,
@@ -136,11 +126,7 @@ export const HUB_PART: Part = {
       `${NS}.label`,
       `["",{text:"Made of maps by NetherGames and the Overcast community.",color:"${PAPER}"},{text:"\\nType /trigger credits for who built each one.",color:"gray"}]`,
     ),
-    ...Array.from({ length: WORDMARK_FRAMES.rows * WORDMARK_FRAMES.columns }, (_, i) => {
-      const [x, y, z] = WORDMARK_FRAMES.at
-      const [col, row] = [i % WORDMARK_FRAMES.columns, Math.floor(i / WORDMARK_FRAMES.columns)]
-      return `summon minecraft:glow_item_frame ${x + col} ${y - row} ${z} {Tags:["${NS}.display"],Facing:3b,Fixed:1b,Invisible:1b,Invulnerable:1b,Item:{id:"minecraft:filled_map",count:1,components:{"minecraft:map_id":${WORDMARK_FRAMES.firstMap + i}}}}`
-    }),
+    ...hangSign(HUB_SIGN),
     // Nothing in the hub can be hurt: whatever the maps brought along, and what the build made.
     `execute as @e[type=!minecraft:player] run data merge entity @s {Invulnerable:1b}`,
   ],

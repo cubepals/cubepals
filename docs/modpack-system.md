@@ -107,7 +107,11 @@ advanced feature.
   one of its worlds is of that type (`firstWorldOfType`), from the archive store, where it is kept
   under its bytes (`artifacts/<sha512>`, as `ingestFile` keeps a pack Blockly builds). Beyond the
   archive the world generates as the void does. The archive is built by a script
-  (`scripts/arcade-world.ts`) and put in the store; map files never go into the repository.
+  (`scripts/arcade-world.ts`) and put in a deployment's store by another, idempotent
+  (`bun scripts/arcade-upload.ts <archive>`, with the deployment's `ARCHIVE_S3_*`); map files never
+  go into the repository. Until the store has it, the control plane doesn't offer the template:
+  it asks the store itself (`app/setups/starters.ts`), and creating from it is refused as from a
+  template that isn't there. The sweep for unused blobs never takes a starter archive.
 - **The diff and the undo.** The diff before apply and the history list files the way they list
   mods, named by the plugin they set up: "Set by Cubepals: updated LifeStealZ settings". A change
   to a carried file or a placed jar counts as rewriting the world (`rewritesWorld`), so it gets a

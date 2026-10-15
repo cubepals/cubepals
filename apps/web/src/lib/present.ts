@@ -756,6 +756,7 @@ const LEVEL_TYPE_LABELS: Record<WorldView['levelType'], string> = {
   'minecraft:large_biomes': 'Large biomes',
   'minecraft:amplified': 'Amplified',
   'blockly:void': 'Void',
+  'blockly:arcade': 'Arcade',
 }
 
 export const levelTypeLabel = (type: WorldView['levelType']): string => LEVEL_TYPE_LABELS[type]

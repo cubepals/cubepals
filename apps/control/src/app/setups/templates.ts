@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { readFileSync } from 'node:fs'
-import { TEMPLATE_CARDS, type TemplateCard, type TemplateKey } from '@blockly/contracts'
+import { TEMPLATE_CARDS, type TemplateCard, type TemplateCredits, type TemplateKey } from '@blockly/contracts'
 import type { ServerSetup } from '../../domain/setup/setup.ts'
 import { ARCADE_FILES } from '../../minecraft/arcade.ts'
 import { DUELS_FILES } from '../../minecraft/duels.ts'
@@ -188,3 +188,11 @@ export const TEMPLATES: readonly Template[] = TEMPLATE_CARDS.map((card) => ({
 
 export const templateOf = (key: string): Template | null =>
   TEMPLATES.find((template) => template.key === key) ?? null
+
+/**
+ * Who made the published maps a world of this type is built on, from the template that makes
+ * such worlds: what a server's page credits while it runs one.
+ */
+export const creditsOf = (levelType: string): TemplateCredits | null =>
+  TEMPLATES.find((template) => template.credits !== undefined && template.setup.world.levelType === levelType)
+    ?.credits ?? null

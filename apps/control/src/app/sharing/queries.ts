@@ -34,6 +34,8 @@ import {
   loadRuntime,
 } from '../servers/persistence.ts'
 import { presenceFor } from '../servers/usage.ts'
+import { creditsOf } from '../setups/templates.ts'
+import { listWorlds } from '../worlds/persistence.ts'
 
 /**
  * What one minute of honest use looks like on each public read. The page people open is counted
@@ -222,11 +224,13 @@ export class SharingQueries {
     const access = await readAccess(this.#db, server.id)
     const online = (await presenceFor(this.#db, [server.id])).get(server.id) ?? []
     const listing = await loadListing(this.#db, server.id)
+    const world = (await listWorlds(this.#db, server.id)).find((w) => w.id === server.activeWorldId)
     const awake = server.lifecycle.status === 'running'
     return {
       slug: server.slug,
       name: server.name,
       description: server.description,
+      credits: world === undefined ? null : creditsOf(world.levelType),
       ...pictureOf(server),
       tags: [...server.tags],
       joinAddress: formatJoinAddress(this.#addressing.primary(server.slug)),

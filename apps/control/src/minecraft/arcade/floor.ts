@@ -15,6 +15,7 @@
  */
 import { AS_COUNT, onSidebar, SECONDS, shown, submit, TMP, WORK } from './boards.ts'
 import { type Block, box, label, NS, PAPER, type Part, titled } from './datapack.ts'
+import { type BrandSign, hangSign } from './signs.ts'
 
 const FF = `${NS}.ff`
 
@@ -57,6 +58,9 @@ const CORNERS = ['0.3 ~-0.5 ~0.3', '-0.3 ~-0.5 ~0.3', '0.3 ~-0.5 ~-0.3', '-0.3 ~
 const [x0, , z0] = FLOOR_DISC.from
 const [x1, , z1] = FLOOR_DISC.to
 const [sx, , sz] = FLOOR_STORE
+
+/** The small Cubepals sign between the pad and the floors, facing a player on the pad. */
+export const FLOOR_SIGN: BrandSign = { art: 'small', at: [-2, 66, 48], facing: 'south', credit: 'meltdown' }
 
 export const FLOOR_PART: Part = {
   functions: {
@@ -153,6 +157,7 @@ export const FLOOR_PART: Part = {
     `scoreboard objectives setdisplay sidebar.team.yellow ${FF}.best`,
   ],
   build: [
+    ...hangSign(FLOOR_SIGN),
     `function ${NS}:floor/rebuild`,
     `kill @e[type=minecraft:marker,tag=${FF}.drop]`,
     label(

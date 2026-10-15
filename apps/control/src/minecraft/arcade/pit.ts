@@ -15,6 +15,7 @@
 import { AS_COUNT, submit, TMP, WORK } from './boards.ts'
 import { type Block, box, NS, type Part } from './datapack.ts'
 import { placed } from './maps.ts'
+import { type BrandSign, hangSign } from './signs.ts'
 
 const PIT = `${NS}.pit`
 
@@ -42,6 +43,17 @@ const ARMOUR: Readonly<Record<'head' | 'chest' | 'legs' | 'feet', string>> = {
   legs: 'iron_leggings',
   feet: 'iron_boots',
 }
+
+/**
+ * The small Cubepals sign over the middle of the market, both ways, so the spawn points on either
+ * side see it, on one backing between the two.
+ */
+export const PIT_SIGNS: readonly BrandSign[] = [
+  { art: 'small', at: [-1044, 92, 0], facing: 'north' },
+  // One credit line under the two: it turns to whoever reads it, from either side.
+  { art: 'small', at: [-1048, 92, 2], facing: 'south', credit: 'market' },
+]
+const SIGN_CHUNKS = 'forceload add -1048 0 -1044 2'
 
 export const PIT_PART: Part = {
   functions: {
@@ -72,13 +84,15 @@ export const PIT_PART: Part = {
     'pit/leave': [`clear @s`, `tag @s remove ${PIT}`],
   },
   load: [
+    // Only while the signs are hung: the market needs nothing loaded when nobody is in it.
+    SIGN_CHUNKS,
     `scoreboard objectives add ${PIT}.raw playerKillCount`,
     `scoreboard objectives add ${PIT}.kills dummy {text:"The pit: kills",color:"red",bold:true}`,
     `team add ${PIT}`,
     `team modify ${PIT} color red`,
     `scoreboard objectives setdisplay sidebar.team.red ${PIT}.kills`,
   ],
-  build: [],
+  build: [...PIT_SIGNS.flatMap(hangSign), SIGN_CHUNKS.replace('add', 'remove')],
   tick: [
     `team join ${PIT} @a[team=!${PIT},${ZONE}]`,
     `execute as @a[scores={${PIT}.raw=1..}] at @s run function ${NS}:pit/kill`,

@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { type Queryable, schema, type Tx } from '@blockly/db'
-import { and, asc, eq, inArray, lt, ne, or, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, lt, ne, notInArray, or, sql } from 'drizzle-orm'
 import type { ModArtifact, PinnedMod } from '../../domain/mods/artifact.ts'
+import { STARTER_SHA512S } from '../../minecraft/starter.ts'
 
 const revisions = schema.serverRevisions
 const servers = schema.minecraftServers
@@ -126,7 +127,8 @@ const IMPORT_KEPT = sql`interval '30 days'`
  * `before`: the grace period lets an upload wait to be added, and a mirror to be pinned, before it
  * counts as unused. A pack built from an upload waits for its owner a month. Blockly's copy of a
  * curated release is kept for as long as the release was ever checked: withdrawn ones can be
- * offered again, and rolled back to.
+ * offered again, and rolled back to. An archive a world starts on (`minecraft/starter.ts`) is
+ * never unused: no revision pins it, and a new server fetches it.
  */
 export async function unreferencedStored(
   q: Queryable,
@@ -139,6 +141,7 @@ export async function unreferencedStored(
     .where(
       and(
         lt(stored.createdAt, before),
+        notInArray(stored.sha512, [...STARTER_SHA512S]),
         sql`not exists (
           select 1 from ${revisions}
           join ${servers} on ${servers.id} = ${revisions.serverId}

@@ -11,6 +11,7 @@ import {
   PLAYER_NAME_MIN_LENGTH,
 } from './limits.ts'
 import { InviteCode, type Loader, type PackView, type ServerIcon, ServerId } from './server.ts'
+import type { TemplateCredits } from './templates.ts'
 
 /**
  * Sharing a server (§15.6). One model behind all of it: a public page at `/server/<slug>`, an
@@ -56,6 +57,8 @@ export interface PublicServerView {
   slug: string
   name: string
   description: string
+  /** Who made the published maps its world is built on, from the template that world came from; null for none. */
+  credits: TemplateCredits | null
   icon: ServerIcon | null
   /** Where its owner's own picture is fetched; it shows instead of `icon` when there is one. */
   ownIcon: string | null

@@ -22,6 +22,11 @@ const STARTER_WORLDS: Readonly<Record<string, ModArtifact>> = { [ARCADE_LEVEL]: 
 /** The archive a world of this type starts on, or null for a type Minecraft generates. */
 export const starterOf = (levelType: string): ModArtifact | null => STARTER_WORLDS[levelType] ?? null
 
+/** Every archive a world starts on, by its bytes: what the store keeps whatever pins it. */
+export const STARTER_SHA512S: readonly string[] = Object.values(STARTER_WORLDS).map(
+  (artifact) => artifact.sha512,
+)
+
 /** Every world type that starts on an archive, by the archive's bytes. */
 export const startersBySha512 = (sha512: string): string[] =>
   Object.entries(STARTER_WORLDS)

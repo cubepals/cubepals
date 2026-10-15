@@ -16,9 +16,11 @@
  *
  * Parts (`arcade/`):
  * - `datapack.ts`: the shape of a part, the hub's place, a place in a selector, and labels.
- * - `maps.ts`: the published maps, their builders, licences and places in the world.
+ * - `maps.ts`: the published maps, their builders, licences, changes and places in the world.
+ * - `credits.ts`: who made each map, its licence and source as links, in the game and the archive.
+ * - `signs.ts`: the Cubepals signs, the lockup as map art in frames, over the hub and each game.
  * - `boards.ts`: the leaderboards: keeping each top ten in storage and drawing it in the hub.
- * - `hub.ts`: the hub, its pads, the welcome, the credits, the ways back, and the world's rules.
+ * - `hub.ts`: the hub, its pads, the welcome, the ways back, and the world's rules.
  * - `parkour.ts`: the timed parkour over three courses, its checkpoints and best times.
  * - `floor.ts`: the falling floor, its rounds, longest times and wins.
  * - `pit.ts`: the pit, its spawn points, kit and kills.

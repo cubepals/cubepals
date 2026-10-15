@@ -14,7 +14,7 @@
  * The name comes from a player head the loot table fills with the player's profile, the one way a
  * datapack reads a player's name as text.
  */
-import { type Block, label, NS, PAPER, type Part } from './datapack.ts'
+import { type Block, label, NS, PAPER, type Part, YELLOW } from './datapack.ts'
 
 /** The world storage that keeps each board, by its key. */
 const BOARDS = `${NS}:boards`
@@ -163,7 +163,7 @@ export const BOARDS_PART: Part = {
     `scoreboard players set #2 ${TMP} 2`,
     ...BOARD_LIST.flatMap(({ key, title }) => [
       `execute unless data storage ${BOARDS} ${key} run data modify storage ${BOARDS} ${key} set value []`,
-      `data modify storage ${NS}:titles ${key} set value ["",{text:"${title}",color:"${PAPER}",bold:true}]`,
+      `data modify storage ${NS}:titles ${key} set value ["",{text:"${title}",color:"${YELLOW}",bold:true}]`,
     ]),
   ],
   build: BOARD_LIST.flatMap(({ key, at }) => [

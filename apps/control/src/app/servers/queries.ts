@@ -294,8 +294,8 @@ export class ServerQueries {
     // Each template judged as a preview judges it: its size at the smallest party against this
     // plan. A template whose size isn't known yet (just started, or the catalogue away) is
     // offered as usual, and the preview on picking it is the answer.
-    const sizes = this.#knownTemplateSizes()
-    const templates = TEMPLATES.map((template): TemplateView => {
+    const [sizes, ready] = [this.#knownTemplateSizes(), await this.#setups.readyTemplates()]
+    const templates = TEMPLATES.filter((t) => ready.has(t.key)).map((template): TemplateView => {
       const size = sizes.get(template.key)
       return {
         key: template.key,

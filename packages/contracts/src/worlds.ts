@@ -90,10 +90,15 @@ export const LEVEL_TYPES = [
 ] as const
 
 /**
- * Every type a world can have: those, and the void, which only a template makes, as the base for
- * islands and arenas.
+ * Every type a world can have: those; the void, which only a template makes, as the base for
+ * islands and arenas; and the Arcade's world, which a server starts on rather than generates.
  */
-export type LevelType = (typeof LEVEL_TYPES)[number] | 'blockly:void'
+export const ALL_LEVEL_TYPES = [...LEVEL_TYPES, 'blockly:void', 'blockly:arcade'] as const
+export type LevelType = (typeof ALL_LEVEL_TYPES)[number]
+
+/** Whether a world's stored type is one a world can have. */
+export const isLevelType = (type: string): type is LevelType =>
+  (ALL_LEVEL_TYPES as readonly string[]).includes(type)
 
 export interface WorldView {
   id: string
