@@ -218,14 +218,17 @@ async function probeBundle(): Promise<string> {
 }
 
 /**
- * A probe machine: bun, mineflayer, the bundle, and the files the template code in it reads beside
- * itself. Ready once `/bench/ready` is there.
+ * A probe machine: bun, mineflayer, the bundle, and the files the template and moderation code in
+ * it reads beside itself. Ready once `/bench/ready` is there.
  */
 async function startProbe(): Promise<string> {
-  const setups = join(import.meta.dir, '..', 'apps', 'control', 'src', 'app', 'setups')
+  const app = join(import.meta.dir, '..', 'apps', 'control', 'src', 'app')
   const files = [
     `/bench/probe.js=${await probeBundle()}`,
-    ...['aoneblock-config.yml', 'bskyblock-config.yml'].map((file) => `/bench/${file}=${join(setups, file)}`),
+    ...['aoneblock-config.yml', 'bskyblock-config.yml'].map(
+      (file) => `/bench/${file}=${join(app, 'setups', file)}`,
+    ),
+    `/bench/chatsentinel-config.yml=${join(app, 'moderation', 'chatsentinel-config.yml')}`,
   ]
   const machine = ['-a', PROBE_APP, '-r', REGION, '--name', 'probe', '--vm-size', 'shared-cpu-2x']
   return fly([

@@ -296,7 +296,7 @@ async function flow(template: BenchTemplate, tier: MemoryTier, cycles: number) {
     snapshotRetentionDays: 1,
     machineLimit: 50,
     platformMachines: 7,
-    suspend: true,
+    suspend: async () => true,
   })
   const key = runtimeKey(randomUUID())
   const password = randomBytes(16).toString('hex')
