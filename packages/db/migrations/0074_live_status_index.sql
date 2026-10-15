@@ -1,0 +1,1 @@
+CREATE INDEX "servers_live_status" ON "minecraft_servers" USING btree ("status") WHERE "minecraft_servers"."deleted_at" is null;

@@ -155,6 +155,10 @@ export const minecraftServers = pgTable(
     // The servers in one state: what the sweeps read every minute (every running server, every
     // owner with one running) and what the capacity check counts.
     index('servers_status').on(t.status),
+    // The live servers by state, which every create, start and undelete counts under the capacity
+    // lock: read from the index alone, never the table. Not `status <> 'stored'` in the predicate:
+    // a fresh database migrates in one transaction, and an enum value added in it can't be used.
+    index('servers_live_status').on(t.status).where(sql`${t.deletedAt} is null`),
     // A wake for an address no live server holds asks whether one in the trash still holds it.
     index('servers_slug_deleted').on(t.slug).where(sql`${t.status} = 'deleted'`),
   ],

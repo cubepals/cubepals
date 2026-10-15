@@ -519,6 +519,13 @@
       "when": 1792022354982,
       "tag": "0073_runtime_rule_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1792077834545,
+      "tag": "0074_live_status_index",
+      "breakpoints": true
     }
   ]
 }

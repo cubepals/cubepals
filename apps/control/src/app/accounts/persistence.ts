@@ -19,7 +19,6 @@ import {
   lte,
   ne,
   notExists,
-  notInArray,
   or,
   sql,
 } from 'drizzle-orm'
@@ -291,17 +290,18 @@ export async function countServers(
 ): Promise<{ servers: number; running: number }> {
   const live = isNull(servers.deletedAt)
   // The platform's own count is of what holds compute: a resting world holds none, and doesn't
-  // count against the runtime's server ceiling. An account's count is of the servers it has.
+  // count against the runtime's server ceiling. An account's count is of the servers it has. The
+  // platform's is read from the live servers' statuses (`servers_live_status`) alone, not the table.
   const scope =
-    ownerId === undefined
-      ? and(live, notInArray(servers.status, ['stored']))
-      : and(live, eq(servers.ownerId, ownerId))
-  const [all] = await q.select({ n: count() }).from(servers).where(scope)
-  const [active] = await q
-    .select({ n: count() })
+    ownerId === undefined ? and(live, ne(servers.status, 'stored')) : and(live, eq(servers.ownerId, ownerId))
+  const [row] = await q
+    .select({
+      servers: count(),
+      running: sql<number>`count(*) filter (where ${inArray(servers.status, ACTIVE_STATUSES)})::int`,
+    })
     .from(servers)
-    .where(and(scope, inArray(servers.status, ACTIVE_STATUSES)))
-  return { servers: all?.n ?? 0, running: active?.n ?? 0 }
+    .where(scope)
+  return { servers: row?.servers ?? 0, running: row?.running ?? 0 }
 }
 
 export async function createsSince(q: Queryable, ownerId: string, since: Date): Promise<number> {
@@ -410,9 +410,21 @@ export async function runHoursSince(q: Queryable, ownerId: string, since: Date, 
   return Number(row?.seconds ?? 0) / HOUR_S
 }
 
-/** Serializes capacity decisions: count-then-write races become impossible. */
+/**
+ * Serializes the platform's capacity decisions, held to commit: count-then-write races on the
+ * platform's counts, the room for new servers and the caps become impossible. Taken after
+ * `lockOwnerCapacity` when both are, never before it.
+ */
 export async function lockCapacity(tx: Tx): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('blockly:capacity'))`)
+}
+
+/**
+ * Serializes one account's capacity decisions, held to commit: its count of servers and running
+ * ones, and its creates an hour, each count the decisions before it. Other accounts don't wait.
+ */
+export async function lockOwnerCapacity(tx: Tx, ownerId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`blockly:capacity:${ownerId}`}))`)
 }
 
 /** Serializes an account's rate-limited actions, so each counts the ones before it. */
