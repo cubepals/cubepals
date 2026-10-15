@@ -38,10 +38,11 @@ export type OperationStep =
 
 /**
  * What an operation's record keeps for the platform beside its steps, never shown as one:
- * `resume_hung`, a resume given up on and started fresh (`boot.ts`); `host_refused`, a start its
- * server's own host couldn't serve (`handlers/bringing-up.ts`).
+ * `resume_hung`, a resume given up on and started fresh (`resume.ts`); `host_refused`, a start its
+ * server's own host couldn't serve; `no_room`, one its runtime had no room for, which went back to
+ * sleep (both `handlers/host-refused.ts`).
  */
-type OperationMark = 'resume_hung' | 'host_refused'
+type OperationMark = 'resume_hung' | 'host_refused' | 'no_room'
 
 export interface OperationContext {
   op: OperationRecord

@@ -114,6 +114,8 @@ export function hostRefused(deps: {
   const refusedHere = async (ctx: OperationContext, error: unknown): Promise<OperationResult> => {
     if (error instanceof HostFull || error instanceof StuckOnHost) return hostCantRun(ctx, error)
     if (!(error instanceof RuntimeFull)) throw error
+    // Not a wake that cost anything: a join asking again while there is no room is no flood.
+    await ctx.mark('no_room')
     await backToSleep(ctx)
     return { status: 'failed', reason: inPlainWords(error), detail: inFull(error) }
   }

@@ -87,7 +87,9 @@ in a moment", and a plain message ends the hold.
    - **A start that failed over what the server runs**, such as a crash or a broken mod. It would
      only fail again, so a join is told "This server can't start right now · its owner can see
      why on Cubepals", and nothing starts it.
-   - **The hourly wake cap** counts every start a join asked for, whether it came up or not.
+   - **The hourly wake cap** counts every start a join asked for, whether it came up or not, but
+     not one its runtime had no room for (a Boat plan's starts spent), which a waiting join asks
+     again every few seconds at no cost.
    - **Rollout.** An edge names the newer answers it can word. Control deploys before the edges,
      so until an edge names them it hears what it did before: "starting" for the first case, and
      the suspended wording for the second.
@@ -113,5 +115,7 @@ in a moment", and a plain message ends the hold.
   started once more. That is harmless, because nothing has loaded the world yet.
 - Recovering a world whose snapshot is older than the last play needs a fork of the volume off the
   wedged host. That is the operators' call today, raised by the alert.
-- A rebuild's kept volume can't be renamed on Fly. Blockly mounts the volume its machine mounts,
-  never just the first by name, so the two can't be mixed up.
+- A rebuild's kept volume can't be renamed or marked on Fly, so Fly can't tell it apart by
+  itself. A start takes the volume the server's machine mounts, then the one its handle names,
+  and never one recorded as kept. With only kept storage left it boots nothing and makes nothing,
+  for an admin to decide. The inventory names no world volume when an app holds two.

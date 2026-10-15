@@ -108,6 +108,21 @@ describe.skipIf(!hasDatabase)('a join after a start that failed for good', () =>
     await h.settled(id)
   }, 60_000)
 
+  test('never counts a start there was no room for, as a waiting join asks again and again', async () => {
+    const { id, slug } = await sleeping()
+    // On Boat, the plan's starts for the hour are spent: each ask goes back to sleep at once.
+    h.runtime.full("the plan's starts for this hour are used up")
+    try {
+      for (let ask = 0; ask <= tuning().abuse.wakesPerHour; ask++)
+        expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({ outcome: 'starting' })
+      await h.settled(id)
+    } finally {
+      h.runtime.full(null)
+    }
+    // Room again: the next join wakes it, its hour's wakes untouched by the asking.
+    expect(await h.app.edge.wake(`${slug}.play.test`)).toMatchObject({ outcome: 'ready' })
+  }, 120_000)
+
   test('counts every start a join asked for in the hourly cap, whether it came up or not', async () => {
     const { id, slug } = await sleeping()
     for (let i = 0; i < tuning().abuse.wakesPerHour; i++)

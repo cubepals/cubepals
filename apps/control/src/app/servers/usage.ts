@@ -252,8 +252,10 @@ export async function lastRunEnded(q: Queryable, serverId: string): Promise<Date
 /**
  * How many times a connection woke this server in the last hour: the runs one woke, or the starts
  * one asked for, whichever is more, so starts that never came up count too (a wake its host
- * refuses, a failed start a join asked again). It bounds what a flood can cost when every other
- * defence is off — a public server with no whitelist, waking for anyone.
+ * refuses, a failed start a join asked again). A start its runtime had no room for (`no_room`, a
+ * Boat plan's starts spent) cost nothing and doesn't count: a waiting join asks again every few
+ * seconds while there is none. It bounds what a flood can cost when every other defence is off — a
+ * public server with no whitelist, waking for anyone.
  */
 export async function wakesInLastHour(q: Queryable, serverId: string, now: Date): Promise<number> {
   const since = new Date(now.getTime() - HOUR_MS)
@@ -270,6 +272,7 @@ export async function wakesInLastHour(q: Queryable, serverId: string, now: Date)
         eq(operations.kind, 'start'),
         eq(operations.requestedBy, WAKE_ACTOR),
         gte(operations.createdAt, since),
+        sql`not coalesce(${operations.steps} @> '[{"step":"no_room"}]'::jsonb, false)`,
       ),
     )
   return Math.max(runs?.count ?? 0, asked?.count ?? 0)
