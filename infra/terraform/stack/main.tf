@@ -25,6 +25,16 @@ terraform {
 variable "fly_org" { type = string }
 variable "fly_machine_limit" { type = number }
 
+variable "edge_regions" {
+  description = "The Fly regions the edge runs a machine in (scripts/production-edge.ts puts them there). Its addresses are anycast, so a player reaches the nearest."
+  type        = list(string)
+  default     = ["fra"]
+  validation {
+    condition     = length(var.edge_regions) > 0 && length(distinct(var.edge_regions)) == length(var.edge_regions)
+    error_message = "edge_regions lists at least one region, each once."
+  }
+}
+
 variable "settings" {
   description = "Non-secret DeploymentConfig values decided in the repository, by variable name."
   type        = map(string)
@@ -107,6 +117,8 @@ module "org" {
   org           = var.fly_org
   deployment_id = var.settings["DEPLOYMENT_ID"]
   machine_limit = var.fly_machine_limit
+  # api, worker and realtime, and an edge in each of its regions.
+  platform_machines = 3 + length(var.edge_regions)
 }
 
 locals {

@@ -1,6 +1,7 @@
 {
   "fly_org": "blockly-prod",
   "fly_machine_limit": 10,
+  "edge_regions": ["fra"],
   "web": {
     "repository": "cubepals/cubepals",
     "redirects": ["www.cubepals.com"],

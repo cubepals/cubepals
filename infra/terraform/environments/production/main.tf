@@ -38,6 +38,13 @@ provider "hcloud" {
 
 variable "fly_org" { type = string }
 variable "fly_machine_limit" { type = number }
+
+variable "edge_regions" {
+  description = "Where the edge runs a machine; fra alone unless config.auto.tfvars.json says otherwise."
+  type        = list(string)
+  default     = ["fra"]
+}
+
 variable "settings" { type = map(string) }
 variable "secret_names" { type = list(string) }
 variable "optional_secret_names" { type = list(string) }
@@ -113,6 +120,7 @@ module "environment" {
   source                = "../../stack"
   fly_org               = var.fly_org
   fly_machine_limit     = var.fly_machine_limit
+  edge_regions          = var.edge_regions
   settings              = var.settings
   operator_settings     = var.operator_settings
   secret_names          = var.secret_names
