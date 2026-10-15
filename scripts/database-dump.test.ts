@@ -8,7 +8,17 @@
  * The dump itself runs against the dev stack (docs/production.md § Database dumps).
  */
 import { describe, expect, test } from 'bun:test'
-import { configOf, dumpKey, entriesIn, majorOf, megabytes, overLimit, redact } from './database-dump.ts'
+import {
+  configOf,
+  dumpKey,
+  entriesIn,
+  jobsKey,
+  jobsSql,
+  majorOf,
+  megabytes,
+  overLimit,
+  redact,
+} from './database-dump.ts'
 
 const values = {
   DATABASE_URL: 'postgresql://blockly.projectref:p%40ss@aws-0-eu-central-1.pooler.supabase.com:5432/postgres',
@@ -45,6 +55,21 @@ describe('the dump', () => {
     const later = dumpKey(new Date('2026-10-10T03:30:05Z'))
     const earlier = dumpKey(new Date('2026-09-30T23:59:59Z'))
     expect([later, earlier].sort()).toEqual([earlier, later])
+  })
+
+  test('the jobs kept beside it are named after it, and listed right after it', () => {
+    const key = dumpKey(new Date('2026-10-10T03:30:05Z'))
+    expect(jobsKey(key)).toBe('blockly-2026-10-10T03-30-05Z.jobs.sql')
+    expect([jobsKey(key), key, dumpKey(new Date('2026-10-11T03:30:05Z'))].sort()[1]).toBe(jobsKey(key))
+  })
+
+  test('the jobs travel as base64, which no quote in them can break', () => {
+    const json = JSON.stringify([{ id: 'a', data: { note: "it's $$ done" } }])
+    const encoded = /decode\('([A-Za-z0-9+/=]+)', 'base64'\)/.exec(jobsSql(json))?.[1] ?? ''
+    expect(Buffer.from(encoded, 'base64').toString()).toBe(json)
+    expect(jobsSql(json)).toContain(
+      'insert into pgboss.job select * from json_populate_recordset(null::pgboss.job,',
+    )
   })
 
   test("pg_dump's major version is read from its version line", () => {

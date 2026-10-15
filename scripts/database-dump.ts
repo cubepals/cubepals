@@ -15,7 +15,9 @@
  * server's major version or newer.
  *
  * It takes the dump, has pg_restore read it, uploads it under a dated key and checks the bucket holds
- * it whole. Then it fails if the database is past DUMP_SIZE_LIMIT_MB, so that a database nearing
+ * it whole. The job queue's finished jobs are left out: the jobs still to run, or holding their
+ * server's queue, go beside it as `<key>.jobs.sql`, read in the same snapshot, which a restore runs
+ * after the dump. Copying every finished job each night was most of what the dump read. Then it fails if the database is past DUMP_SIZE_LIMIT_MB, so that a database nearing
  * Supabase Free's 500 MB is noticed before it fills. The dump is kept either way.
  *
  * The repository is public, and so are the workflow's logs: this prints sizes, the key and whether
@@ -69,6 +71,30 @@ export function configOf(env: Record<string, string | undefined>): DumpConfig | 
 
 /** The dump's key: the UTC time it was taken, so the bucket lists oldest first. */
 export const dumpKey = (now: Date) => `blockly-${now.toISOString().slice(0, 19).replaceAll(':', '-')}Z.dump`
+
+/** The key of the jobs kept beside a dump, listed right after it. */
+export const jobsKey = (dumpKey: string) => dumpKey.replace(/\.dump$/, '.jobs.sql')
+
+/** The job queue's tables whose rows the dump leaves out: pg-boss's jobs, and what links them. */
+const JOB_TABLES = ['pgboss.job*']
+
+/**
+ * The jobs a restore puts back: all but those that completed or were cancelled. A failed one is
+ * kept, as a failed server operation holds its server's queue until an admin moves it.
+ */
+const KEPT_JOBS = "j.state not in ('completed', 'cancelled')"
+
+/**
+ * The SQL that puts `json`, the kept jobs as one JSON array, back into the job queue. It travels as
+ * base64, which no quoting can break.
+ */
+export const jobsSql = (json: string) =>
+  [
+    "-- The job queue's jobs still to run, or holding their server's queue, as the dump was taken.",
+    'insert into pgboss.job select * from json_populate_recordset(null::pgboss.job,',
+    `  convert_from(decode('${Buffer.from(json).toString('base64')}', 'base64'), 'UTF8')::json);`,
+    '',
+  ].join('\n')
 
 /** The major version in `pg_dump --version`'s answer, as `pg_dump (PostgreSQL) 17.6 (Ubuntu …)`. */
 export function majorOf(versionLine: string): number | null {
@@ -132,50 +158,89 @@ function tool(command: string, args: string[]): string {
   return result.stdout
 }
 
-async function serverFacts(url: string): Promise<{ major: number; bytes: number }> {
-  // Bun's client doesn't read `sslrootcert` from the URL as pg_dump does, so it is given the root.
+/** A client of the database. Bun's doesn't read `sslrootcert` from the URL as pg_dump does, so it is given the root. */
+async function connect(url: string): Promise<SQL> {
   const root = new URL(url).searchParams.get('sslrootcert')
-  const database = new SQL(root ? { url, tls: { ca: await Bun.file(root).text() } } : url)
-  try {
-    const [row] = (await database`
-      select current_setting('server_version_num')::int / 10000 as major,
-             pg_database_size(current_database()) as bytes`) as { major: number; bytes: string | number }[]
-    return { major: Number(row?.major), bytes: Number(row?.bytes) }
-  } finally {
-    await database.close()
-  }
+  return new SQL(root ? { url, tls: { ca: await Bun.file(root).text() } } : url)
+}
+
+async function serverFacts(database: SQL): Promise<{ major: number; bytes: number }> {
+  const [row] = (await database`
+    select current_setting('server_version_num')::int / 10000 as major,
+           pg_database_size(current_database()) as bytes`) as { major: number; bytes: string | number }[]
+  return { major: Number(row?.major), bytes: Number(row?.bytes) }
+}
+
+/**
+ * The dump and the jobs kept beside it, written to `file` and `jobsKey(file)`, both read in one
+ * snapshot: what one holds, the other was taken with. Returns how many entries pg_restore reads in
+ * the dump, and how many jobs were kept.
+ */
+export async function takeDump(
+  database: SQL,
+  url: string,
+  file: string,
+): Promise<{ entries: number; jobs: number }> {
+  let jobs = 0
+  await database.begin('isolation level repeatable read read only', async (tx) => {
+    const [{ snapshot }] = (await tx`select pg_export_snapshot() as snapshot`) as { snapshot: string }[]
+    tool('pg_dump', [
+      '--format=custom',
+      '--no-owner',
+      '--no-privileges',
+      `--snapshot=${snapshot}`,
+      ...JOB_TABLES.map((table) => `--exclude-table-data=${table}`),
+      `--file=${file}`,
+      `--dbname=${url}`,
+    ])
+    const [kept] = (await tx.unsafe(`
+      select count(*)::int as n, coalesce(json_agg(j), '[]')::text as json
+      from pgboss.job j where ${KEPT_JOBS}`)) as { n: number; json: string }[]
+    jobs = kept?.n ?? 0
+    await Bun.write(jobsKey(file), jobsSql(kept?.json ?? '[]'))
+  })
+  return { entries: entriesIn(tool('pg_restore', ['--list', file])), jobs }
+}
+
+/** Uploads `path` under `key`, and checks the bucket holds all of it. */
+async function upload(store: S3Client, key: string, path: string): Promise<number> {
+  const bytes = statSync(path).size
+  await store.write(key, Bun.file(path), { type: 'application/octet-stream' })
+  const stored = await store.stat(key)
+  if (stored.size !== bytes) throw new Error(`The bucket holds ${stored.size} bytes of ${key}, not ${bytes}.`)
+  return bytes
 }
 
 async function dump(config: DumpConfig, work: string): Promise<void> {
-  const server = await serverFacts(config.databaseUrl)
-  const client = majorOf(tool('pg_dump', ['--version']))
-  if (client === null || client < server.major)
-    throw new Error(`pg_dump is ${client ?? 'unknown'}, older than the server's ${server.major}.`)
-  say(`Database: ${megabytes(server.bytes)}, Postgres ${server.major}, dumped with pg_dump ${client}.`)
+  const database = await connect(config.databaseUrl)
+  try {
+    const server = await serverFacts(database)
+    const client = majorOf(tool('pg_dump', ['--version']))
+    if (client === null || client < server.major)
+      throw new Error(`pg_dump is ${client ?? 'unknown'}, older than the server's ${server.major}.`)
+    say(`Database: ${megabytes(server.bytes)}, Postgres ${server.major}, dumped with pg_dump ${client}.`)
 
-  const key = dumpKey(new Date())
-  const file = join(work, key)
-  tool('pg_dump', [
-    '--format=custom',
-    '--no-owner',
-    '--no-privileges',
-    `--file=${file}`,
-    `--dbname=${config.databaseUrl}`,
-  ])
-  const entries = entriesIn(tool('pg_restore', ['--list', file]))
-  if (entries === 0) throw new Error('pg_restore reads the dump, and it holds nothing.')
-  const bytes = statSync(file).size
-  say(`Dumped: ${megabytes(bytes)}, ${entries} entries pg_restore can read.`)
+    const key = dumpKey(new Date())
+    const file = join(work, key)
+    const { entries, jobs } = await takeDump(database, config.databaseUrl, file)
+    if (entries === 0) throw new Error('pg_restore reads the dump, and it holds nothing.')
+    say(
+      `Dumped: ${megabytes(statSync(file).size)}, ${entries} entries pg_restore can read, and ${jobs} jobs beside it.`,
+    )
 
-  const store = new S3Client(config.store)
-  await store.write(key, Bun.file(file), { type: 'application/octet-stream' })
-  const stored = await store.stat(key)
-  if (stored.size !== bytes) throw new Error(`The bucket holds ${stored.size} bytes of ${key}, not ${bytes}.`)
-  say(`Uploaded ${key}, and the bucket holds all ${bytes} bytes of it.`)
+    const store = new S3Client(config.store)
+    const bytes = await upload(store, key, file)
+    const jobBytes = await upload(store, jobsKey(key), jobsKey(file))
+    say(
+      `Uploaded ${key} and ${jobsKey(key)}, and the bucket holds all ${bytes} and ${jobBytes} bytes of them.`,
+    )
 
-  const over = overLimit(server.bytes, config.limitBytes)
-  if (over) throw new Error(over)
-  say(`Size: under the ${megabytes(config.limitBytes)} line.`)
+    const over = overLimit(server.bytes, config.limitBytes)
+    if (over) throw new Error(over)
+    say(`Size: under the ${megabytes(config.limitBytes)} line.`)
+  } finally {
+    await database.close()
+  }
 }
 
 if (import.meta.main) {

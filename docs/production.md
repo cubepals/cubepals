@@ -267,7 +267,9 @@ account's plan like any server: a Free account that already has one needs
 Every night at 03:37 UTC, the Database dump workflow (`.github/workflows/database-dump.yml`, running
 `scripts/database-dump.ts`) dumps the database with `pg_dump --format=custom`, has `pg_restore`
 read the dump back, and uploads it to `blockly-prod-database-dumps` as
-`blockly-<UTC time>.dump`. The bucket is private, and deletes each dump after 30 days. The run
+`blockly-<UTC time>.dump`. The job queue's finished jobs, completed or cancelled, are left out of
+it: the jobs still to run, running or failed go beside it as `blockly-<UTC time>.jobs.sql`, read in
+the same snapshot. The bucket is private, and deletes each dump after 30 days. The run
 fails, and GitHub emails, when any step does, and when the database is past 400 MB of Supabase
 Free's 500: the dump is still taken, and it's time to make room or move to a bigger plan.
 
@@ -281,8 +283,9 @@ sizes, the key and whether each step passed, nothing else.
 
 ### Restoring one
 
-1. Download the dump: Cloudflare → R2 → `blockly-prod-database-dumps` → the dump → Download.
-   Check it reads: `pg_restore --list <file> | head`.
+1. Download the dump and the jobs beside it: Cloudflare → R2 → `blockly-prod-database-dumps` →
+   `blockly-<time>.dump` and `blockly-<time>.jobs.sql` → Download. Check the dump reads:
+   `pg_restore --list <file> | head`.
 2. Stop what writes to the database, so nothing changes under the restore:
    `fly machine stop $(fly machine list -a bly-prod-control -q) -a bly-prod-control`, and the same
    for `bly-prod-realtime`.
@@ -293,15 +296,19 @@ sizes, the key and whether each step passed, nothing else.
    pg_restore --no-owner --no-privileges --file=restore.sql <file>
    psql "$DATABASE_DIRECT_URL" --single-transaction -v ON_ERROR_STOP=1 \
      -c 'drop schema if exists drizzle, pgboss cascade' -c 'drop schema public cascade' \
-     -c 'create schema public' -f restore.sql
+     -c 'create schema public' -f restore.sql -f <jobs file>
    ```
+
+   A dump taken before the jobs went beside it holds them all, and has no jobs file: leave out its
+   `-f`.
 
    The same works into a new, empty database (another Supabase project, say); then point
    `DATABASE_URL` and `DATABASE_DIRECT_URL` at it and `apply`. `pg_restore --clean` would drop
    each object in turn instead, and fails on the job queue's partitioned tables.
 4. Start the machines again (`fly machine start`, as in step 2), and delete `restore.sql` and the
-   dump: they hold everyone's data. Everything after the dump's time is gone. Servers' worlds are
-   not in it: they live in their own backups.
+   dump: they hold everyone's data. Everything after the dump's time is gone, and so are the jobs
+   that had finished by then, which nothing reads again. Servers' worlds are not in it: they live
+   in their own backups.
 
 ## Billing, later
 
