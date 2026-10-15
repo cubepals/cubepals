@@ -180,7 +180,7 @@ export function Wake({ proof }: { proof: ReactNode }) {
       shot={{ span: 8.4, drop: 0.6 }}
       line={
         awake
-          ? 'Asleep, it’s back in a second or two. The first start, or one after a change, takes longer.'
+          ? 'Asleep, it’s usually back in a couple of seconds. The first start, or one after a change, can take up to a minute.'
           : 'They join like any server.'
       }
       place="top"

@@ -55,8 +55,8 @@ export default async function PricingPage() {
             : 'Free to play with friends.'}
         </h1>
         <p className="type-body" style={{ color: 'var(--ink-muted)' }}>
-          Hours only count while your server is running, and it sleeps when nobody’s on. Joining wakes it in a
-          second or two; the first start, or one after a change, takes longer.
+          Hours only count while your server is running, and it sleeps when nobody’s on. Joining wakes it,
+          usually in a couple of seconds; the first start, or one after a change, can take up to a minute.
         </p>
       </header>
       <div className="bk-plans">

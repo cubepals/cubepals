@@ -97,8 +97,9 @@ export default async function Guide() {
           one that is.
         </p>
         <p>
-          They join like any server. A sleeping server is back in a second or two. The first start, or one
-          after a change, takes longer, and one resting in storage a couple of minutes.
+          They join like any server. A sleeping server is usually back in a couple of seconds. The first
+          start, or one after a change, can take up to a minute, and one resting in storage a couple of
+          minutes.
         </p>
         <Shot
           src={`${PICTURES}/address.png`}

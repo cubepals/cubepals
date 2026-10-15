@@ -67,7 +67,7 @@ export default function Guide() {
           On Cubepals there’s no port and no IP address to share. Your server gets one address made from its
           name, and your friends type it in. In Minecraft: Java Edition they open <strong>Multiplayer</strong>
           , then <strong>Add Server</strong>, and paste it. They join like any server. If it’s asleep, joining
-          wakes it in a second or two.
+          wakes it, usually in a couple of seconds.
         </p>
         <Shot
           src="/guides/minecraft-server-for-friends/address.png"

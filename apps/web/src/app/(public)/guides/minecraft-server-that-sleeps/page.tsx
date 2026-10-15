@@ -10,11 +10,11 @@
  *
  * The timers come from the plan table. The list's line is the edge's sleeping notice (ASLEEP_MOTD,
  * apps/edge/agent.ts); the waiting join is its waiting room. Going to sleep, saving first and waking
- * on a join were watched on a local stack. A wake is said as "usually back within a minute": a cold
- * start, since a server kept in memory while asleep (FLY_SUSPEND, apps/control/src/config/load.ts) is
- * off in production, and no page promises seconds. How long a world resting in storage takes is not
- * measured, so it is only said to take longer. The self-host tools are described from their own
- * pages, and quoted where it matters.
+ * on a join were watched on a local stack. A wake is said as it measures, never as a fixed number: a
+ * server kept in memory while asleep (FLY_SUSPEND, apps/control/src/config/load.ts) is usually back
+ * in a couple of seconds; a cold start, after a change or when the kept copy is gone, takes up to a
+ * minute; a world resting in storage a couple of minutes. The self-host tools are described from
+ * their own pages, and quoted where it matters.
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -47,8 +47,9 @@ export default async function Guide() {
           own message and picture.
         </p>
         <p>
-          They join like any server. The join waits while it wakes, and it’s usually back within a minute,
-          with the world as they left it. One resting in storage takes longer.
+          They join like any server. The join waits while it wakes, and it’s usually back in a couple of
+          seconds, with the world as they left it. Sometimes, such as the first join after a change, it takes
+          up to a minute. One resting in storage after weeks without play takes a couple of minutes.
         </p>
         <Shot
           src={`${PICTURES}/asleep.png`}
@@ -127,8 +128,8 @@ export default async function Guide() {
           {free
             ? ` After ${daysSaid(free.restsAfterDays)} without play${
                 paid ? ` (${daysSaid(paid.restsAfterDays)} on ${paid.name})` : ''
-              } it rests in storage: joining still wakes it, it just takes longer.`
-            : ' After a while without play it rests in storage: joining still wakes it, it just takes longer.'}
+              } it rests in storage: joining still wakes it, it just takes a couple of minutes.`
+            : ' After a while without play it rests in storage: joining still wakes it, it just takes a couple of minutes.'}
           {free?.deletedAfterDays
             ? ` A free world nobody has played for ${daysSaid(free.deletedAfterDays)} is deleted, and you’re emailed twice before, with a way to keep it and a download.`
             : ''}
