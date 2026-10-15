@@ -18,7 +18,7 @@ import type { RuntimePlacement } from '../../runtimes/service.ts'
 import {
   findServer,
   HOST_LOST,
-  listByStatus,
+  listByStatuses,
   loadRuntime,
   lockServer,
   saveObserved,
@@ -28,6 +28,7 @@ import type { RuntimeSpecs } from '../../servers/specs.ts'
 import { presenceFor } from '../../servers/usage.ts'
 import { activeOperation, relocationFailures } from '../persistence.ts'
 import { observedJson } from './observations.ts'
+import { placementsOf } from './placements.ts'
 
 /** How long a host may stay unreachable before its server is rebuilt elsewhere (§9): hosts come back. */
 export const HOST_LOSS_GRACE_MS = 10 * MINUTE_MS
@@ -69,20 +70,21 @@ export function relocating(deps: {
     let moved = 0
     // Asked once a sweep for each runtime, region and size: a lost host's servers ask once.
     const full = new Set<string>()
-    const candidates = [
-      ...(await listByStatus(db, 'running')),
-      ...(await listByStatus(db, 'stopped')),
-      ...(await listByStatus(db, 'failed')),
-    ]
+    const candidates = await listByStatuses(db, ['running', 'stopped', 'failed'])
     const online = await presenceFor(
       db,
       candidates.map((s) => s.id),
+    )
+    const placementOf = await placementsOf(
+      db,
+      candidates.map((s) => s.id),
+      runtime.providers,
     )
     for (const server of candidates) {
       if (moved >= limit) break
       // A move the platform made that failed is its owner's to try again, not the sweep's.
       if (server.lifecycle.failure?.during === 'relocating') continue
-      const binding = await loadRuntime(db, server.id, runtime.providers)
+      const binding = placementOf(server.id)
       if (binding.handle === null) continue
       const observed = binding.observed
       const lost =

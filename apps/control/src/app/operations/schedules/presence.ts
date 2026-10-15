@@ -20,11 +20,12 @@ import type { EventBus } from '../../ports/events.ts'
 import type { ServerConsole } from '../../ports/minecraft.ts'
 import type { RuntimeHandle } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
-import { HOST_LOST, listByStatus, loadRuntime, saveObserved } from '../../servers/persistence.ts'
+import { HOST_LOST, listByStatus, saveObserved } from '../../servers/persistence.ts'
 import type { RuntimeSpecs } from '../../servers/specs.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { type PresentPlayer, recordPlay, replacePresence } from '../../servers/usage.ts'
 import { observedJson, recordHostLost } from './observations.ts'
+import { placementsOf } from './placements.ts'
 
 export function readingPresence(deps: {
   db: Db
@@ -49,8 +50,14 @@ export function readingPresence(deps: {
 
   /** Who is online, read from each running server itself. */
   const presenceSync = async (): Promise<void> => {
-    for (const server of await listByStatus(db, 'running')) {
-      const { handle, observed, provider } = await loadRuntime(db, server.id, runtime.providers)
+    const running = await listByStatus(db, 'running')
+    const placementOf = await placementsOf(
+      db,
+      running.map((s) => s.id),
+      runtime.providers,
+    )
+    for (const server of running) {
+      const { handle, observed, provider } = placementOf(server.id)
       if (handle === null) continue
       const target = {
         endpoint: runtime.endpoint(handle, PORT_NAMES.rcon, 'control'),
