@@ -79,7 +79,7 @@ function dial(port: number, bytes: Uint8Array): Promise<Uint8Array> {
   })
 }
 
-async function frontDoor(limits: Limits, proxied: boolean) {
+async function frontDoor(limits: Limits, proxied: boolean, timeouts = { connectMs: 1_000, idleMs: 60_000 }) {
   const behind = await router()
   const listener = front({
     port: 0,
@@ -89,6 +89,7 @@ async function frontDoor(limits: Limits, proxied: boolean) {
     known: (hostname) => hostname.endsWith('.play.test'),
     plain: (hostname) => hostname === 'vanilla.play.test',
     busy: 'Busy',
+    timeouts,
   })
   open.push(listener)
   return { port: await listening(listener), behind }
@@ -176,4 +177,30 @@ test('a connection with no PROXY line, where one is expected, gets nowhere', asy
   await dial(port, joinRequest('a.play.test'))
   await Bun.sleep(50)
   expect(behind.received).toEqual([])
+})
+
+/** Opens a connection that sends `bytes`, then whatever `every` sends at that pace; when it closed. */
+function hold(port: number, bytes: Uint8Array, everyMs: number | null): Promise<number> {
+  return new Promise((resolve) => {
+    const opened = Date.now()
+    const socket = connect({ host: '127.0.0.1', port }, () => socket.write(bytes))
+    const talking =
+      everyMs === null ? undefined : setInterval(() => socket.write(Uint8Array.of(1, 0)), everyMs)
+    socket.on('error', () => undefined)
+    socket.on('close', () => {
+      clearInterval(talking)
+      resolve(Date.now() - opened)
+    })
+    setTimeout(() => socket.destroy(), 1_500)
+  })
+}
+
+test('a connection that goes quiet both ways is closed once its idle time is up', async () => {
+  const { port } = await frontDoor(ROOMY, false, { connectMs: 1_000, idleMs: 300 })
+  expect(await hold(port, joinRequest('a.play.test'), null)).toBeLessThan(1_000)
+})
+
+test('a connection still talking, as a keep-alive does, stays open past its idle time', async () => {
+  const { port } = await frontDoor(ROOMY, false, { connectMs: 1_000, idleMs: 300 })
+  expect(await hold(port, joinRequest('a.play.test'), 100)).toBeGreaterThanOrEqual(1_500)
 })

@@ -10,7 +10,7 @@ import { connect, createServer, type Socket } from 'node:net'
 import { hostname } from 'node:os'
 import type { EdgeRoutes, SessionEvent, WakeResult } from '@blockly/contracts/edge'
 // Copied into the image beside the agent (Dockerfile): the one place play coming back is worded.
-import { MINUTE_MS } from '../../packages/contracts/src/durations.ts'
+import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { EDGE_ID_HEADER } from '../../packages/contracts/src/edge-poll.ts'
 import { waitFor } from '../../packages/contracts/src/play-today.ts'
 import { LOCAL_HEADER } from '../../packages/contracts/src/proxy-header.ts'
@@ -74,6 +74,11 @@ const MINECRAFT_PORT = Number(env('MINECRAFT_PORT', String(GAME_PORT)))
 const ROUTER_PORT = Number(env('ROUTER_PORT', '25561'))
 /** Where mc-router's API listens, on this machine only: how its routes change (router.ts). */
 const ROUTER_API = `127.0.0.1:${env('ROUTER_API_PORT', '25560')}`
+/** How long a connection to a server may wait to connect, and then go quiet (front.ts). */
+const TIMEOUTS = {
+  connectMs: Number(env('CONNECT_TIMEOUT_MS', String(10 * SECOND_MS))),
+  idleMs: Number(env('IDLE_TIMEOUT_MS', String(MINUTE_MS))),
+}
 /** How much one address, and one server, may ask of the edge (limits.ts). */
 const LIMITS = {
   address: {
@@ -377,7 +382,7 @@ function passOn(client: Socket, join: Join, header: Uint8Array | null): void {
     client.destroy()
     return
   }
-  pipe(client, route.destination, forServer(route.proxyProtocol === true, header, join.bytes))
+  pipe(client, route.destination, forServer(route.proxyProtocol === true, header, join.bytes), TIMEOUTS)
 }
 
 /**
@@ -448,7 +453,12 @@ async function hold(client: Socket, join: Join, header: Uint8Array | null): Prom
   if (client.destroyed) return
   if (result?.outcome === 'ready' && (await settle(client, held))) {
     client.removeAllListeners('data')
-    pipe(client, result.destination, forServer(result.proxyProtocol === true, header, held.replay()))
+    pipe(
+      client,
+      result.destination,
+      forServer(result.proxyProtocol === true, header, held.replay()),
+      TIMEOUTS,
+    )
     return
   }
   const backAt = result?.outcome === 'denied' ? result.backAt : undefined
@@ -539,6 +549,7 @@ front({
   known: (name) => hostnames.has(name),
   plain: (name) => plain.has(name),
   busy: env('BUSY_JOIN', 'This server is busy right now · join again in a moment'),
+  timeouts: TIMEOUTS,
 })
 
 const code = await child.exited

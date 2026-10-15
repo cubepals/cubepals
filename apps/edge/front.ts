@@ -41,6 +41,18 @@ export interface FrontOptions {
   plain: (hostname: string) => boolean
   /** What a join is told when its server is taking no more connections just now. */
   busy: string
+  timeouts: Timeouts
+}
+
+/** How long a connection the edge makes may wait, to connect and then with nothing said. */
+export interface Timeouts {
+  /** For the server to take the connection: one that hasn't by then isn't coming. */
+  connectMs: number
+  /**
+   * For anything to pass either way. Minecraft keeps a quiet player's connection going with a
+   * keep-alive every 15 s, and drops one that goes 30 s without, so this is longer than that.
+   */
+  idleMs: number
 }
 
 /** How long a connection has to say where it is going, as mc-router allows. */
@@ -103,13 +115,21 @@ function headerFor(source: Source | null, port: number): Uint8Array {
   )
 }
 
-/** Connects `client` to the server at `destination`, which first gets what the client sent so far. */
-export function pipe(client: Socket, destination: string, sent: Uint8Array): void {
+/**
+ * Connects `client` to the server at `destination`, which first gets what the client sent so far.
+ * A server that doesn't take it in time, or a connection gone quiet both ways, is closed.
+ */
+export function pipe(client: Socket, destination: string, sent: Uint8Array, timeouts: Timeouts): void {
   const colon = destination.lastIndexOf(':')
   const server = connect({
     host: destination.slice(0, colon).replace(/^\[|\]$/g, ''),
     port: Number(destination.slice(colon + 1)),
   })
+  server.on('timeout', () => server.destroy())
+  client.on('timeout', () => client.destroy())
+  server.setTimeout(timeouts.connectMs)
+  server.once('connect', () => server.setTimeout(timeouts.idleMs))
+  client.setTimeout(timeouts.idleMs)
   server.write(sent)
   client.pipe(server).pipe(client)
   client.once('close', () => server.destroy())
@@ -179,7 +199,7 @@ class Arrival {
   }
 
   #admit(handshake: { hostname: string; joining: boolean }): void {
-    const { gate, known, plain, busy, router, port } = this.#options
+    const { gate, known, plain, busy, router, port, timeouts } = this.#options
     const admitted = gate.admit(known(handshake.hostname) ? handshake.hostname : '')
     if (!admitted) {
       // A ping just goes unanswered; a join hears why, in Cubepals' words.
@@ -197,7 +217,7 @@ class Arrival {
         return void this.#client.destroy()
       }
     }
-    pipe(this.#client, `127.0.0.1:${router}`, sent)
+    pipe(this.#client, `127.0.0.1:${router}`, sent, timeouts)
   }
 }
 

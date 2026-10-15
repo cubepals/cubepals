@@ -268,6 +268,7 @@ which the project's charts leave out.
 | `PROXY_PROTOCOL` | empty | `1`: Fly's proxy opens each connection with a PROXY line | toml |
 | `ROUTER_PORT` | `25561` (mc-router, behind the agent's front door) | same | — |
 | `ROUTER_API_PORT` | `25560` (mc-router's API, on the machine only: how routes change) | same | — |
+| `CONNECT_TIMEOUT_MS`, `IDLE_TIMEOUT_MS` | `10000`, `60000` (a connection the edge makes: to connect, then with nothing passing either way) | same | — |
 | `ADDRESS_CONNECTIONS_PER_SECOND`, `ADDRESS_CONNECTIONS_BURST`, `ADDRESS_GREETING` | `5`, `30`, `10` (per address, an IPv6 one by its /64) | same | — |
 | `SERVER_CONNECTIONS_PER_SECOND`, `SERVER_CONNECTIONS_BURST`, `SERVER_OPEN_CONNECTIONS` | `20`, `100`, `300` (per server) | same | — |
 | `BUSY_JOIN` | `This server is busy right now · join again in a moment` | same | — |
