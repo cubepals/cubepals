@@ -1,0 +1,1 @@
+ALTER TABLE "server_runtimes" ADD COLUMN "kept_storage" jsonb;

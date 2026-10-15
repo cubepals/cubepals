@@ -104,7 +104,11 @@ export interface Runtimes extends Pick<MinecraftRuntime, HandleVerbs> {
   adopt(provider: string, key: RuntimeKey, placement: Placement, spec: RuntimeSpec): Promise<RuntimeHandle>
   destroy(provider: string, target: RuntimeKey | RuntimeHandle): Promise<void>
   /** `MinecraftRuntime.clearLeftovers`, by the runtime that issued `handle`; none where it has none. */
-  clearLeftovers(handle: RuntimeHandle, worldElsewhere: boolean): Promise<readonly string[]>
+  clearLeftovers(
+    handle: RuntimeHandle,
+    worldElsewhere: boolean,
+    kept?: readonly RuntimeHandle[],
+  ): Promise<readonly string[]>
 
   /**
    * Whether a stopped server's endpoint still reaches it and nothing else, on the runtime that
@@ -299,13 +303,14 @@ export class RuntimeRouter implements Runtimes {
     spec: RuntimeSpec,
     progress: ProgressSink,
     from?: SnapshotHandle,
+    options?: { keepStorage?: boolean },
   ): Promise<RuntimeHandle> {
     const member = this.#of(handle)
     if (from !== undefined && !member.ownsSnapshot(from))
       return Promise.reject(
         new RuntimeUnsupported(member.provider, 'rebuilding from a snapshot another runtime took'),
       )
-    return member.relocate(handle, to, spec, progress, from)
+    return member.relocate(handle, to, spec, progress, from, options)
   }
 
   exportSnapshot(
@@ -330,8 +335,12 @@ export class RuntimeRouter implements Runtimes {
     return this.#of(handle).release(handle)
   }
 
-  async clearLeftovers(handle: RuntimeHandle, worldElsewhere: boolean): Promise<readonly string[]> {
-    return (await this.#of(handle).clearLeftovers?.(handle, worldElsewhere)) ?? []
+  async clearLeftovers(
+    handle: RuntimeHandle,
+    worldElsewhere: boolean,
+    kept: readonly RuntimeHandle[] = [],
+  ): Promise<readonly string[]> {
+    return (await this.#of(handle).clearLeftovers?.(handle, worldElsewhere, kept)) ?? []
   }
 
   observe(handle: RuntimeHandle): Promise<RuntimeObservation> {

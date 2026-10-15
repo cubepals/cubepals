@@ -195,6 +195,15 @@ export interface ObservedJson {
   detail?: string
 }
 
+/**
+ * Storage a rebuild elsewhere left in place rather than deleting (`server_runtimes.kept_storage`):
+ * the handle that named it, and when it was kept. The leftovers sweep lets it go once it is old.
+ */
+export interface KeptStorageJson {
+  handle: string
+  at: string
+}
+
 export interface OperationProgressJson {
   step: string
   at: string

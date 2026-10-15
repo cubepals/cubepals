@@ -29,6 +29,7 @@ import {
 import { rebind, setMoveTo } from '../../runtimes/persistence.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import type { RuntimePlacement } from '../../runtimes/service.ts'
+import { keepStorage } from '../../servers/kept-storage.ts'
 import {
   loadRuntime,
   lockServer,
@@ -52,6 +53,36 @@ import { appliedConfig, type ServerBinding } from './binding.ts'
 import type { GameConsole } from './game-console.ts'
 import type { Rechecks } from './rechecks.ts'
 import { IMPORT_LINK_SECONDS, KEPT_AFTER_WAKING_MS, type WorldCopies } from './world-copies.ts'
+
+/**
+ * A rebuild from a backup loses what was played since: the owner is told, and it is audited. One
+ * that kept its old storage (`keepStorage`) started from a snapshot holding all its play, and lost
+ * nothing: the old storage is kept for a while (`kept-storage.ts`), and the owner has nothing to
+ * be told.
+ */
+async function rebuilt(
+  deps: { db: Db; mailer: Pick<Mailer, 'send'>; webOrigin: string },
+  server: MinecraftServer,
+  from: BackupRecord,
+  input: { keepStorage?: boolean },
+  old: RuntimeHandle,
+): Promise<void> {
+  const { db } = deps
+  await db.insert(schema.auditLog).values({
+    actor: 'system:reconcile',
+    action: 'server.rebuilt_from_backup',
+    subjectType: 'server',
+    subjectId: server.id,
+    data: { backupId: from.id, takenAt: from.createdAt.toISOString(), kept: input.keepStorage === true },
+  })
+  if (input.keepStorage) return keepStorage(db, server.id, old, new Date())
+  const to = await emailOf(db, server.ownerId)
+  if (to === null) return
+  await deps.mailer.send({
+    to,
+    ...serverRebuilt({ server, backupAt: from.createdAt.toUTCString(), origin: deps.webOrigin }),
+  })
+}
 
 export function moving(deps: {
   db: Db
@@ -112,6 +143,10 @@ export function moving(deps: {
         fromFailure?: boolean
         /** The host it was on was lost (§9): rebuilt from its newest snapshot, elsewhere in its region. */
         hostLost?: boolean
+        /** The snapshot a rebuild starts from, rather than the newest (`host-refused.ts`). */
+        fromBackup?: string
+        /** The old storage stays beside the new rather than going (`kept-storage.ts`). */
+        keepStorage?: boolean
         /** Another runtime an operator asked it to move to (docs/runtimes.md). */
         toProvider?: string
       }
@@ -123,7 +158,7 @@ export function moving(deps: {
       if (input.toProvider !== undefined && input.toProvider !== binding.provider)
         return rehost(ctx, server, binding, binding.handle, desired, input.toProvider, { up, refusal })
       // A lost host can't be asked anything: no in-game changes to bring in, no snapshot to take.
-      const rebuildFrom = input.hostLost ? await newestSnapshot(server) : null
+      const rebuildFrom = input.hostLost ? await newestSnapshot(server, input.fromBackup) : null
       if (input.hostLost && rebuildFrom === null)
         throw new PermanentFailure("This server's host was lost, and it has no snapshot to rebuild from.")
       if (!input.hostLost && binding.applied !== null) {
@@ -142,6 +177,7 @@ export function moving(deps: {
           desired.spec,
           progressSink(ctx, there),
           rebuildFrom?.snapshotHandle ?? undefined,
+          { keepStorage: input.keepStorage === true },
         )
       } catch (error) {
         // No room there, or a runtime that can't move this server at all (a world too big to
@@ -183,7 +219,7 @@ export function moving(deps: {
         if (up) await enqueuePrune(tx, transitions, relocated)
       })
       await deps.backups.enforceRetention(server)
-      if (rebuildFrom !== null) await rebuilt(server, rebuildFrom)
+      if (rebuildFrom !== null) await rebuilt(deps, server, rebuildFrom, input, binding.handle)
       if (refusal !== null)
         return { status: 'failed', reason: `The server moved, but stayed off: ${refusal}` }
       return { status: 'succeeded' }
@@ -350,34 +386,21 @@ export function moving(deps: {
     return { status: 'succeeded' }
   }
 
-  /** The newest snapshot of the world the server plays, the one a lost host is rebuilt from. */
-  const newestSnapshot = async (server: MinecraftServer) =>
+  /**
+   * The newest snapshot of the world the server plays, the one a lost host is rebuilt from; or
+   * the one `id` names, where a rebuild chose its own.
+   */
+  const newestSnapshot = async (server: MinecraftServer, id?: string) =>
     (await listBackups(db, server.id))
       .filter(
         (b) =>
           b.tier === 'snapshot' &&
           b.status === 'ready' &&
           b.snapshotHandle !== null &&
-          b.worldId === server.activeWorldId,
+          b.worldId === server.activeWorldId &&
+          (id === undefined || b.id === id),
       )
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null
-
-  /** A rebuild from a backup loses what was played since: the owner is told, and it is audited. */
-  const rebuilt = async (server: MinecraftServer, from: BackupRecord) => {
-    await db.insert(schema.auditLog).values({
-      actor: 'system:reconcile',
-      action: 'server.rebuilt_from_backup',
-      subjectType: 'server',
-      subjectId: server.id,
-      data: { backupId: from.id, takenAt: from.createdAt.toISOString() },
-    })
-    const to = await emailOf(db, server.ownerId)
-    if (to === null) return
-    await deps.mailer.send({
-      to,
-      ...serverRebuilt({ server, backupAt: from.createdAt.toUTCString(), origin: deps.webOrigin }),
-    })
-  }
 
   return relocate
 }

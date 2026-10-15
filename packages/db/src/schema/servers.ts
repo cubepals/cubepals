@@ -27,6 +27,7 @@ import type {
   AppliedConfigJson,
   CarriedFileJson,
   FailureJson,
+  KeptStorageJson,
   ObservedJson,
   OperationProgressJson,
   OperationStepJson,
@@ -286,6 +287,11 @@ export const serverRuntimes = pgTable('server_runtimes', {
    * moves at its next quiet moment, as a misplaced server does. Null when it stays where it is.
    */
   moveTo: text('move_to'),
+  /**
+   * Storage a rebuild on another host left in place (`KeptStorageJson`): until it goes, a full copy
+   * of a world its server no longer runs on.
+   */
+  keptStorage: jsonb('kept_storage').$type<KeptStorageJson[]>(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })

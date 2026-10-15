@@ -27,14 +27,20 @@ const VOLUME_GONE = new Set([
 ])
 const UNBIND_SECONDS = 120
 
+/**
+ * The app's world volume, grown to `sizeGb`, or a new one. The one the server's machine mounts
+ * (`mounted`) comes first: a rebuild that kept the old storage leaves two world volumes in the app.
+ */
 export async function ensureVolume(
   fly: FlyClient,
   app: string,
   region: string,
   sizeGb: number,
   retentionDays: number,
+  mounted?: string,
 ): Promise<Volume> {
-  const existing = await dataVolume(fly, app)
+  const inUse = mounted === undefined ? null : await readVolume(fly, app, mounted)
+  const existing = inUse !== null && !VOLUME_GONE.has(inUse.state ?? '') ? inUse : await dataVolume(fly, app)
   if (existing) {
     await fitVolume(fly, app, idOf(existing, 'a volume'), sizeGb, retentionDays)
     return existing
@@ -146,7 +152,7 @@ export async function deleteVolume(fly: FlyClient, app: string, volumeId: string
 }
 
 /**
- * The app's world volumes that nothing uses, deleted: not `keep`, not going already, and neither
+ * The app's world volumes that nothing uses, deleted: none in `keep`, not going already, and neither
  * mounted by a machine Fly lists nor attached to one. An attachment to a machine Fly no longer
  * lists counts for nothing: Fly went on claiming a wake's volume for a helper it had destroyed,
  * naming no machine (2026-10-10), and only a delete finds out whether it still does. What a wake,
@@ -158,12 +164,12 @@ export async function deleteVolume(fly: FlyClient, app: string, volumeId: string
 export async function deleteLeftoverVolumes(
   fly: FlyClient,
   app: string,
-  keep: string | null,
+  keep: readonly (string | null)[],
 ): Promise<string[]> {
   const listed = await fly.GET('/v1/apps/{app_name}/volumes', { params: { path: { app_name: app } } })
   if (listed.response.status === 404) return []
   const unused = must(listed, 'listing volumes').filter(
-    (v) => v.name === VOLUME_NAME && v.id !== keep && !VOLUME_GONE.has(v.state ?? ''),
+    (v) => v.name === VOLUME_NAME && !keep.includes(v.id ?? null) && !VOLUME_GONE.has(v.state ?? ''),
   )
   if (unused.length === 0) return []
   const machines = must(
@@ -191,7 +197,7 @@ export async function deleteLeftoverVolumes(
  * and never fails the wake that worked.
  */
 export async function clearEarlierWakes(fly: FlyClient, app: string, volumeId: string): Promise<void> {
-  const deleted = await deleteLeftoverVolumes(fly, app, volumeId).catch((error: unknown) => {
+  const deleted = await deleteLeftoverVolumes(fly, app, [volumeId]).catch((error: unknown) => {
     console.warn(
       `fly: clearing what earlier wakes left in ${app} failed; the orphan sweep tries again`,
       error,
