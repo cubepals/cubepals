@@ -113,6 +113,7 @@ export const ALERT_KEYS = [
   'free_accounts_linked',
   'edge_behind',
   'resumes_hung',
+  'hosts_refused',
 ] as const
 export type AlertKey = (typeof ALERT_KEYS)[number]
 

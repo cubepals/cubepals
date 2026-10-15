@@ -41,6 +41,7 @@ const WHERE: Record<AlertKey, string> = {
   free_accounts_linked: '/admin',
   edge_behind: '/admin/platform',
   resumes_hung: '/admin/health',
+  hosts_refused: '/admin/health',
 }
 
 interface Condition {
@@ -159,7 +160,7 @@ export class PlatformAlerts {
       })
     conditions.push(
       ...(await edgeCondition(this.#db)),
-      ...(await hungCondition(this.#db, now)),
+      ...(await wakeConditions(this.#db, now)),
       ...(await unsentCondition(this.#db)),
       ...(await waitingCondition(this.#db, now)),
       ...(await unknownCondition(this.#db)),
@@ -200,20 +201,32 @@ async function edgeCondition(db: Db): Promise<Condition[]> {
 }
 
 /**
- * Wakes in the last day whose resume never got its machine running, so its server was started
- * fresh from its disk (`boot.ts`). Each one cost a player a cold boot; several mean the provider's
- * suspend is failing, and switching it off (`platform/suspend-switch.ts`) stops them.
+ * Wakes in the last day that went wrong on the provider's side. `resumes_hung`: a resume that
+ * never came back, so its server was started fresh from its disk (`boot.ts`); each cost a player a
+ * cold boot, and several mean the provider's suspend is failing, which switching it off
+ * (`platform/suspend-switch.ts`) stops. `hosts_refused`: a server's own host couldn't run it
+ * (`handlers/bringing-up.ts`); it was rebuilt elsewhere where a snapshot held all its play, and
+ * otherwise waits for an admin.
  */
-async function hungCondition(db: Db, now: Date): Promise<Condition[]> {
-  const { count, newest } = await markedSince(db, 'resume_hung', new Date(now.getTime() - DAY_MS))
-  if (newest === null) return []
-  const one = count === 1
-  return [
-    {
-      key: 'resumes_hung',
-      summary: `${count} ${one ? 'wake' : 'wakes'} in the last day gave up on a resume that never got ${one ? 'its server' : 'their servers'} running, and started ${one ? 'it' : 'them'} fresh from disk instead, with nothing lost. Newest: operation ${newest.operationId} on server ${newest.serverId}.`,
-    },
+async function wakeConditions(db: Db, now: Date): Promise<Condition[]> {
+  const since = new Date(now.getTime() - DAY_MS)
+  const [hung, refused] = [
+    await markedSince(db, 'resume_hung', since),
+    await markedSince(db, 'host_refused', since),
   ]
+  const conditions: Condition[] = []
+  const wakes = (count: number) => `${count} ${count === 1 ? 'wake' : 'wakes'} in the last day`
+  if (hung.newest !== null)
+    conditions.push({
+      key: 'resumes_hung',
+      summary: `${wakes(hung.count)} gave up on a resume that never came back, and started the server fresh from its disk instead, with nothing lost. Newest: operation ${hung.newest.operationId} on server ${hung.newest.serverId}.`,
+    })
+  if (refused.newest !== null)
+    conditions.push({
+      key: 'hosts_refused',
+      summary: `${wakes(refused.count)} found the server's own host unable to run it. Where a snapshot held all its play it was rebuilt elsewhere; the rest stay stopped until an admin moves them. Newest: operation ${refused.newest.operationId} on server ${refused.newest.serverId}.`,
+    })
+  return conditions
 }
 
 /**

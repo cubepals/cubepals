@@ -324,7 +324,7 @@ export class FlyRuntime implements MinecraftRuntime {
   }
 
   /**
-   * The Flycast address never moves, so the handle it returns is the one it was given. RuntimeFull
+   * The Flycast address never moves, so the handle it returns is the one it was given. HostFull
    * when the machine's host has no room to run it now.
    */
   async start(handle: RuntimeHandle): Promise<RuntimeHandle> {

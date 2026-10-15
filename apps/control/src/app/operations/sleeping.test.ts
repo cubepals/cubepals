@@ -313,7 +313,9 @@ describe.skipIf(!hasDatabase)('a sleep or a wake that doesn’t go as planned', 
     // Counted where operators look.
     const admin = { kind: 'admin' as const, userId: (await h.user('Admin')).userId }
     const alerts = await h.app.alerts.active(admin)
-    expect(alerts.find((a) => a.key === 'resumes_hung')?.summary).toContain('1 wake in the last day')
+    expect(alerts.find((a) => a.key === 'resumes_hung')?.summary).toMatch(
+      /wakes? in the last day gave up on a resume/,
+    )
   }, 60_000)
 
   test('a first resume counts down from what resumes take, not from a boot', async () => {
@@ -334,6 +336,83 @@ describe.skipIf(!hasDatabase)('a sleep or a wake that doesn’t go as planned', 
     await h.until(id, 'running')
     await h.settled(id)
   }, 30_000)
+})
+
+describe.skipIf(!hasDatabase)('a wake that only another computer can serve', () => {
+  // Each to the trash after, so the shared harness keeps room for the next.
+  const made: { owner: UserActor; id: string }[] = []
+  afterEach(async () => {
+    for (const { owner, id } of made.splice(0)) {
+      await h.app.servers.deleteServer(owner, id, (await h.server(id)).name)
+      await h.settled(id)
+    }
+  })
+
+  /** Asleep with something built in its world, and a snapshot of it taken since. */
+  const asleepWithSnapshot = async () => {
+    const server = await running()
+    made.push(server)
+    await writeFile(h.minecraft.path(server.id, 'world/built.txt'), 'built before the sleep')
+    await stop(server.owner, server.id, 'idle')
+    await h.app.backups.createBackup(server.owner, server.id, randomUUID())
+    await h.settled(server.id)
+    expect(h.runtime.machine(server.id)?.state).toBe('suspended')
+    return server
+  }
+  const kinds = async (id: string) => (await h.operations(id)).map((op) => op.kind)
+  const admin = async () => ({ kind: 'admin' as const, userId: (await h.user('Admin')).userId })
+  const alert = async (key: string) =>
+    (await h.app.alerts.active(await admin())).find((a) => a.key === key)?.summary
+
+  test('a resume that runs frozen, saying nothing, is started fresh from its disk', async () => {
+    const { owner, id } = await asleepWithSnapshot()
+    h.runtime.sleeps.freeze(id)
+    const steps = await start(owner, id)
+    expect(steps.slice(0, 3)).toEqual(['resuming', 'resume_hung', 'booting'])
+    expect(await h.minecraft.file(id, 'world/built.txt')).toBe('built before the sleep')
+    expect(await kinds(id)).not.toContain('relocate')
+  }, 60_000)
+
+  test('a machine wedged by a hung resume is rebuilt elsewhere from the snapshot, and plays', async () => {
+    const { id, slug } = await asleepWithSnapshot()
+    h.runtime.sleeps.hang(id, { wedged: true })
+    const first = await h.app.edge.wake(`${slug}.play.test`)
+    // Let in, or told to wait while it moves: never turned away.
+    expect(['ready', 'starting']).toContain(first.outcome)
+    await h.until(id, 'running', 30_000)
+    await h.settled(id, 30_000)
+    expect(await h.app.edge.wake(`${slug}.play.test`)).toMatchObject({ outcome: 'ready' })
+    expect(await kinds(id)).toContain('relocate')
+    expect(await h.minecraft.file(id, 'world/built.txt')).toBe('built before the sleep')
+    expect(await alert('hosts_refused')).toContain('rebuilt elsewhere')
+  }, 60_000)
+
+  test('a host with no room left for it rebuilds it elsewhere from the snapshot', async () => {
+    const { owner, id } = await asleepWithSnapshot()
+    h.runtime.sleeps.fillHost(id)
+    await h.app.servers.start(owner, id, randomUUID())
+    await h.until(id, 'relocating', 20_000)
+    await h.until(id, 'running', 30_000)
+    await h.settled(id, 30_000)
+    expect(await h.minecraft.file(id, 'world/built.txt')).toBe('built before the sleep')
+  }, 60_000)
+
+  test('played since its snapshot, it is never rebuilt by itself: it waits, and admins are told', async () => {
+    const { owner, id, slug } = await asleepWithSnapshot()
+    await h.db
+      .insert(schema.serverActivity)
+      .values({ serverId: id, lastPlayerAt: new Date() })
+      .onConflictDoUpdate({ target: schema.serverActivity.serverId, set: { lastPlayerAt: new Date() } })
+    h.runtime.sleeps.fillHost(id)
+    await h.app.servers.start(owner, id, randomUUID())
+    await h.until(id, 'stopped', 20_000)
+    await h.settled(id)
+    expect(await kinds(id)).not.toContain('relocate')
+    expect(await h.minecraft.file(id, 'world/built.txt')).toBe('built before the sleep')
+    expect(await alert('hosts_refused')).toBeDefined()
+    // The host has room again: the next join wakes it where it is.
+    expect(await h.app.edge.wake(`${slug}.play.test`)).toMatchObject({ outcome: 'ready' })
+  }, 60_000)
 })
 
 describe.skipIf(!hasDatabase)('a server asleep with its memory kept, put to rest', () => {

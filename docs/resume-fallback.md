@@ -1,8 +1,9 @@
 # When a resume hangs
 
 How Blockly wakes a server that Fly suspended, and the fallbacks it takes in turn when the resume
-doesn't come back. The code is `apps/control/src/app/operations/boot.ts` (`#resumed`,
-`#startFresh`), `handlers/host-refused.ts`, and the edge's wake in `app/edge/service.ts`.
+doesn't come back. The code is in `apps/control/src/app/`: `operations/resume.ts` (the resume and
+its bounds), `operations/handlers/host-refused.ts` (the rebuild elsewhere) and the edge's wake in
+`edge/service.ts`.
 
 ## What Fly promises, and what it doesn't
 

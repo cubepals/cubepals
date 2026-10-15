@@ -488,6 +488,17 @@ export class RuntimeFull extends Error {
 }
 
 /**
+ * RuntimeFull for the one host a server's storage is tied to, refusing to run it there: the rest
+ * of its region may have room, which only new storage made from a snapshot reaches.
+ */
+export class HostFull extends RuntimeFull {
+  constructor(provider: string, detail: string) {
+    super(provider, detail)
+    this.name = 'HostFull'
+  }
+}
+
+/**
  * RuntimeFull for the provider's limit on how much one account holds, not a host's room. A
  * machine frees as soon as another goes, so work that needs one more for a while (a restore, a
  * move, an export) waits for it, and is refused with this only once nothing freed meanwhile.

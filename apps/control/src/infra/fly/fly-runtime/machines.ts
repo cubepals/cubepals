@@ -318,7 +318,7 @@ export async function startMachine(fly: FlyClient, app: string, machineId: strin
     const refused = started.response.status === 412 || started.response.status === 409
     const notYet = refused && saysNotYet(started.error)
     if (!notYet || Date.now() > deadline) {
-      launched(started, 'starting the machine')
+      launched(started, 'starting the machine', true)
       return
     }
     await sleep(1000)

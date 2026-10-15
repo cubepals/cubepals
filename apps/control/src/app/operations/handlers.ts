@@ -19,6 +19,7 @@
  * - `bringing-up.ts`: brings a server's compute up and boots it, as provision, start and restart do.
  * - `game-console.ts`: what operations ask of the running game through its console.
  * - `going-back.ts`: puts a server back on the configuration it last ran.
+ * - `host-refused.ts`: a start refused where the server is (`bringing-up.ts`'s), rebuilt elsewhere when only its host can't run it.
  * - `moving.ts`: moves a server to another region, off a lost host, or onto another runtime.
  * - `prune-worlds.ts`: removes the directories of a server's deleted worlds while it runs.
  * - `rechecks.ts`: what a worker checks again before it boots a server.

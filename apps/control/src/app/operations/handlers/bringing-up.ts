@@ -6,14 +6,15 @@
  * Brings a server's compute up and boots it, as provision, start and restart do. A first start
  * with no room falls back to another runtime here, as does a new server that can't come up where
  * it is, and a start onto a change that rewrites the world goes the way an update does, with a
- * snapshot to go back to. Updating a running server is `updating.ts`; waking a resting world is
+ * snapshot to go back to; one refused where it is goes the way `host-refused.ts` takes it.
+ * Updating a running server is `updating.ts`; waking a resting world is
  * `stored-worlds.ts`, which imports `WOKEN_BY` from here: the one import between families, a
  * constant naming who asked for a run.
  */
 import type { AppliedConfigJson, Db } from '@blockly/db'
 import { rewritesWorld } from '../../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
-import { aside, inFull, inPlainWords, PermanentFailure } from '../../errors.ts'
+import { aside, inFull, PermanentFailure } from '../../errors.ts'
 import type { AccessPolicy } from '../../policy/access-policy.ts'
 import { RuntimeFull, type RuntimeHandle, type RuntimeSpec, runtimeKey } from '../../ports/runtime.ts'
 import { runsOf } from '../../revisions/caps.ts'
@@ -36,6 +37,7 @@ import {
 import { appliedConfig, type ServerBinding } from './binding.ts'
 import type { GameConsole } from './game-console.ts'
 import type { GoingBack } from './going-back.ts'
+import { hostRefused } from './host-refused.ts'
 import type { Rechecks } from './rechecks.ts'
 import type { WorldCopies } from './world-copies.ts'
 
@@ -123,7 +125,7 @@ async function moveOn(
 
 export function bringingUp(deps: {
   db: Db
-  runtime: Pick<Runtimes, 'providers' | 'ensureProvisioned' | 'apply' | 'stop' | 'destroy'>
+  runtime: Pick<Runtimes, 'providers' | 'ensureProvisioned' | 'apply' | 'stop' | 'destroy' | 'hasRoom'>
   placement: Pick<RuntimePlacement, 'fallbackFor' | 'fellBack' | 'nextFor'>
   policy: Pick<AccessPolicy, 'check'>
   specs: Pick<RuntimeSpecs, 'desired'>
@@ -157,6 +159,7 @@ export function bringingUp(deps: {
     capture,
     rollBack,
   } = deps
+  const { refusedHere } = hostRefused(deps)
 
   /**
    * Brings compute up matching the desired spec, then boots. Shared by provision and start;
@@ -184,6 +187,7 @@ export function bringingUp(deps: {
         progressSink(ctx, server),
         desired.install,
       )
+    const askedAt = new Date()
     const handle = await provisioned(desired.spec).catch(async (error: unknown) => {
       const fallback = await fallBack(deps, server, binding, error)
       if (fallback === null) throw error
@@ -205,7 +209,7 @@ export function bringingUp(deps: {
           desired = await specs.desired(db, server)
           return provisioned(desired.spec)
         },
-        elsewhere ? { startAgainOnHang: false } : options,
+        { ...(elsewhere ? { startAgainOnHang: false } : options), askedAt },
       )
     await booting(handle).catch(async (error: unknown) => {
       const next = elsewhere && notUpHere(error) ? await moveOn(deps, ctx, provider, desired, error) : null
@@ -315,16 +319,7 @@ export function bringingUp(deps: {
           desired = installed
         }
       } catch (error) {
-        if (!(error instanceof RuntimeFull)) throw error
-        // No room where it runs just now (on Boat, the plan's starts for the hour or day are
-        // spent): it goes back to sleep rather than failing, so the next join or press tries
-        // again, and asking again sooner can't make room.
-        await db.transaction(async (tx) => {
-          const server = await lockServer(tx, ctx.server.id)
-          if (server?.lifecycle.status === 'starting')
-            await transitions.outcome(tx, server, { type: 'refused', reason: 'idle' })
-        })
-        return { status: 'failed', reason: inPlainWords(error), detail: inFull(error) }
+        return await refusedHere(ctx, error)
       }
       await db.transaction(async (tx) => {
         const server = await lockServer(tx, ctx.server.id)

@@ -16,6 +16,7 @@ import type { RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
 import { BootSequence, followBoot, notUpHere, stoppedWhile, stuckWhile } from './boot.ts'
 import type { OperationRecord } from './persistence.ts'
+import { StuckOnHost } from './resume.ts'
 import { NoLongerApplies, type OperationContext } from './runner.ts'
 
 async function* printed(texts: readonly string[]): AsyncIterable<LogLine> {
@@ -115,6 +116,8 @@ function machine(options: {
   tail?: () => AsyncIterable<LogLine>
   /** The start before the boot was a resume, and whether that one ever runs. */
   resumed?: { runs: boolean }
+  /** No stop or kill ends it, as a machine wedged by a resume that hung. */
+  wedged?: boolean
 }) {
   const seen = { process: 1, stops: 0, forceStops: 0, reprovisions: 0, marks: [] as string[] }
   const lines = () => (options.printed?.(seen.process) ?? []).map((text) => ({ at: new Date(), text }))
@@ -136,6 +139,7 @@ function machine(options: {
     },
     forceStop: async () => {
       seen.forceStops++
+      if (options.wedged) throw new Error('unable to stop machine, current state invalid, starting')
     },
     start: async () => {
       seen.process++
@@ -475,17 +479,36 @@ describe('a resume', () => {
     expect(seen).toMatchObject({ process: 1, stops: 0, forceStops: 0, marks: [] })
   })
 
-  test('that runs without answering goes on as the boot it is, from its disk', async () => {
+  test('that runs without answering, printing a boot, goes on as the boot it is, from its disk', async () => {
     const { boot, ctx, seen } = machine({
       answers: () => false,
+      printed: () => ['[init] Starting the Minecraft server...'],
       resumed: { runs: true },
       readyMs: 300,
     })
-    await expect(boot.run(ctx, server, handle, vanilla, undefined, { startAgainOnHang: false })).rejects.toThrow()
+    await expect(
+      boot.run(ctx, server, handle, vanilla, undefined, { startAgainOnHang: false }),
+    ).rejects.toThrow()
     // Waited on as a boot, never killed as a hung resume.
     expect(seen.marks).toEqual([])
     expect(seen.forceStops).toBe(0)
   }, 30_000)
+
+  test('that runs, frozen, answering and printing nothing, is killed and started fresh', async () => {
+    const { boot, ctx, seen } = machine({
+      answers: (process) => process > 1,
+      printed: (process) => (process > 1 ? ['[init] Starting the Minecraft server...'] : []),
+      resumed: { runs: true },
+    })
+    await boot.run(ctx, server, handle, vanilla)
+    expect(seen).toMatchObject({ process: 2, forceStops: 1, marks: ['resume_hung'] })
+  })
+
+  test('that never runs, on a machine no kill ends, is stuck on its host', async () => {
+    const { boot, ctx, seen } = machine({ answers: () => false, resumed: { runs: false }, wedged: true })
+    await expect(boot.run(ctx, server, handle, vanilla)).rejects.toBeInstanceOf(StuckOnHost)
+    expect(seen).toMatchObject({ process: 1, marks: ['resume_hung'] })
+  })
 
   test('that never runs is given up on: killed, started fresh, and up from its disk', async () => {
     const { boot, ctx, seen } = machine({ answers: (process) => process > 1, resumed: { runs: false } })
