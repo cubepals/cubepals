@@ -4,15 +4,23 @@
 
 /**
  * Machines asleep with their memory kept, as Fly suspends one: the switches tests flip (whether a
- * sleep suspends at all, the provider refusing one, the provider dropping what one kept), and what
- * a sleep and a wake do to one machine. Which verbs sleep or wake a machine, and that a stop ends
+ * sleep suspends at all, the provider refusing one, dropping what one kept, or a wake that hangs,
+ * freezes, wedges or finds no room on its host), and what a sleep and a wake do to one machine. Which verbs sleep or wake a machine, and that a stop ends
  * one asleep, are `fake-runtime.ts`'s; what its workload does meanwhile is the workload's.
  */
-import type { RuntimeSpec } from '../../../app/ports/runtime.ts'
+import { HostFull, type ObservedState, type RuntimeSpec } from '../../../app/ports/runtime.ts'
 import { Hold } from './hold.ts'
 
-/** `suspended`: asleep with its memory kept; the port reads it stopped. */
-export type MachineState = 'stopped' | 'running' | 'crashed' | 'suspended'
+/**
+ * `suspended`: asleep with its memory kept; the port reads it stopped. `resuming`: on its way back
+ * from it, where a hung resume stays until it is stopped, and `wedged`, one no stop ends either;
+ * the port reads both starting.
+ */
+export type MachineState = 'stopped' | 'running' | 'crashed' | 'suspended' | 'resuming' | 'wedged'
+
+/** A machine's state as the port reads it. */
+export const observedAs = (state: MachineState): ObservedState =>
+  state === 'suspended' ? 'stopped' : state === 'resuming' || state === 'wedged' ? 'starting' : state
 
 interface Sleeper {
   key: string
@@ -28,9 +36,14 @@ interface Workload<M> {
   resume?(machine: M): Promise<void>
 }
 
-/** A workload a stop ends: running, or asleep with its memory kept. */
-export const holds = (machine: { state: MachineState }) =>
-  machine.state === 'running' || machine.state === 'suspended'
+/**
+ * A workload a stop ends: running, asleep with its memory kept, or on its way back from it. Asked
+ * of a wedged one, it throws what Fly answers a stop of it (community.fly.io/t/28766).
+ */
+export function holds(machine: { state: MachineState }): boolean {
+  if (machine.state === 'wedged') throw new Error('unable to stop machine, current state invalid, starting')
+  return machine.state === 'running' || machine.state === 'suspended' || machine.state === 'resuming'
+}
 
 export class Sleeps {
   /** Whether a sleep suspends, as FLY_SUSPEND switches Fly's; off, the runtime has no `sleep`. */
@@ -39,6 +52,8 @@ export class Sleeps {
   refused = false
   /** Machines asleep whose memory the provider dropped: their next start boots from storage. */
   readonly #dropped = new Set<string>()
+  /** How the next wake of each machine goes wrong, as a test says (`hang`, `freeze`, `fillHost`). */
+  readonly #stalls = new Map<string, 'hang' | 'wedge' | 'freeze' | 'full'>()
   /** The spec each machine asleep went to sleep on: a start on another drops what it kept. */
   readonly #slept = new Map<string, string>()
   readonly #held = new Hold()
@@ -54,6 +69,27 @@ export class Sleeps {
   /** The provider drops the memory a machine asleep kept, as on a host move: its next start boots. */
   drop(key: string): void {
     this.#dropped.add(key)
+  }
+
+  /**
+   * The provider's next resume of this machine never finishes: it stays on its way back, running
+   * nothing, until it is stopped, which drops what it kept; `wedged`, not even a stop ends it.
+   */
+  hang(key: string, options: { wedged?: boolean } = {}): void {
+    this.#stalls.set(key, options.wedged ? 'wedge' : 'hang')
+  }
+
+  /** The provider's next resume of this machine runs it, but what runs on it stays frozen. */
+  freeze(key: string): void {
+    this.#stalls.set(key, 'freeze')
+  }
+
+  /**
+   * The next start of this machine, asleep or not, is refused for want of room on the host its
+   * storage is on (HostFull), as Fly's "insufficient resources … with existing volume".
+   */
+  fillHost(key: string): void {
+    this.#stalls.set(key, 'full')
   }
 
   /** Puts a running machine to sleep, freezing what runs on it, unless refused: whether it is asleep. */
@@ -82,12 +118,25 @@ export class Sleeps {
   }
 
   /**
-   * Wakes a machine asleep as it was, thawing what runs on it: whether it did. One whose memory was
-   * dropped, or whose spec changed while it slept, is let go instead, and the caller boots it.
+   * Wakes a machine asleep as it was, thawing what runs on it: whether it did, or is on its way
+   * back from a resume that hangs (`hang`), which a start leaves so. One whose memory was dropped,
+   * or whose spec changed while it slept, is let go instead, and the caller boots it.
    */
   async wake<M>(machine: Sleeper, workload: Workload<M>, running: M): Promise<boolean> {
+    const stall = this.#stalls.get(machine.key)
+    if (stall === 'full') {
+      this.#stalls.delete(machine.key)
+      throw new HostFull('fake', `no room on the host of ${machine.key}`)
+    }
+    if (machine.state === 'resuming' || machine.state === 'wedged') return true
     if (machine.state !== 'suspended') return false
     await this.#held.take()
+    this.#stalls.delete(machine.key)
+    if (stall !== undefined) {
+      // Frozen, it reads running and is not: what ran on it was never thawed.
+      machine.state = stall === 'freeze' ? 'running' : stall === 'wedge' ? 'wedged' : 'resuming'
+      return true
+    }
     const dropped = this.#dropped.delete(machine.key) || !this.resumes(machine, machine.spec)
     if (dropped) await workload.stop(running)
     else await workload.resume?.(running)

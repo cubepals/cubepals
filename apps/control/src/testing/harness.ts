@@ -128,7 +128,7 @@ export interface HarnessOptions {
     console: ServerConsole
     probe: ReadinessProbe
     logs: LogSource
-    bootTimeouts: { runningMs: number; readyMs: number }
+    bootTimeouts: { runningMs: number; readyMs: number; resumeMs?: number }
     wakeWaitMs: number
   }
   /**
@@ -302,7 +302,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       webOrigin: 'http://localhost:3000',
       curatedPacks: options.curatedPacks ?? [],
       ownPacks: options.ownPacks ?? [],
-      bootTimeouts: options.provider?.bootTimeouts ?? { runningMs: 5_000, readyMs: 3_000 },
+      bootTimeouts: options.provider?.bootTimeouts ?? { runningMs: 5_000, readyMs: 3_000, resumeMs: 1_000 },
       wakeWaitMs: options.provider?.wakeWaitMs ?? 5_000,
     },
   )

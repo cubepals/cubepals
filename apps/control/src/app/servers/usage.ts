@@ -6,6 +6,7 @@ import { HOUR_MS, MINUTE_MS, MINUTE_S } from '@blockly/contracts/durations'
 import { type Queryable, schema } from '@blockly/db'
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, or, sql } from 'drizzle-orm'
 import { loadStanding } from '../accounts/persistence.ts'
+import { requestedBy } from '../actor.ts'
 import { serverRan } from '../insight/record.ts'
 import { markActive } from './persistence.ts'
 
@@ -13,6 +14,9 @@ const intervals = schema.powerIntervals
 const presence = schema.serverPresence
 const activity = schema.serverActivity
 const played = schema.serverPlayers
+const operations = schema.serverOperations
+/** Who a start a connection asked for is requested by. */
+const WAKE_ACTOR = requestedBy({ kind: 'system', reason: 'wake' })
 
 /** Power intervals are facts: when a server started running and when it stopped. */
 export async function openInterval(
@@ -233,22 +237,45 @@ export async function openRun(
   return row ?? null
 }
 
+/** When the server's last run ended; null while one is open, or before it ever ran. */
+export async function lastRunEnded(q: Queryable, serverId: string): Promise<Date | null> {
+  if ((await openRun(q, serverId)) !== null) return null
+  const [row] = await q
+    .select({ stoppedAt: intervals.stoppedAt })
+    .from(intervals)
+    .where(eq(intervals.serverId, serverId))
+    .orderBy(desc(intervals.startedAt))
+    .limit(1)
+  return row?.stoppedAt ?? null
+}
+
 /**
- * How many times a connection woke this server in the last hour. It bounds what a flood can
- * cost when every other defence is off — a public server with no whitelist, waking for anyone.
+ * How many times a connection woke this server in the last hour: the runs one woke, or the starts
+ * one asked for, whichever is more, so starts that never came up count too (a wake its host
+ * refuses, a failed start a join asked again). A start its runtime had no room for (`no_room`, a
+ * Boat plan's starts spent) cost nothing and doesn't count: a waiting join asks again every few
+ * seconds while there is none. It bounds what a flood can cost when every other defence is off — a
+ * public server with no whitelist, waking for anyone.
  */
 export async function wakesInLastHour(q: Queryable, serverId: string, now: Date): Promise<number> {
-  const [row] = await q
+  const since = new Date(now.getTime() - HOUR_MS)
+  const [runs] = await q
     .select({ count: count() })
     .from(intervals)
+    .where(and(eq(intervals.serverId, serverId), eq(intervals.woken, true), gte(intervals.startedAt, since)))
+  const [asked] = await q
+    .select({ count: count() })
+    .from(operations)
     .where(
       and(
-        eq(intervals.serverId, serverId),
-        eq(intervals.woken, true),
-        gte(intervals.startedAt, new Date(now.getTime() - HOUR_MS)),
+        eq(operations.serverId, serverId),
+        eq(operations.kind, 'start'),
+        eq(operations.requestedBy, WAKE_ACTOR),
+        gte(operations.createdAt, since),
+        sql`not coalesce(${operations.steps} @> '[{"step":"no_room"}]'::jsonb, false)`,
       ),
     )
-  return row?.count ?? 0
+  return Math.max(runs?.count ?? 0, asked?.count ?? 0)
 }
 
 /** The server's current session (its open power interval), and the last cap warning it got. */

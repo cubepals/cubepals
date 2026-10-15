@@ -29,6 +29,8 @@ import type {
   Audience,
   Endpoint,
   ExecResult,
+  HeldStorage,
+  InstallSeed,
   MinecraftRuntime,
   Placement,
   ProgressSink,
@@ -71,13 +73,13 @@ import {
   machineOnVolume,
   minecraftMachine,
   readMachine,
-  readUnlessGone,
   sleepMachine,
   startMachine,
   stopMachine,
+  untilStarted,
   updateMachine,
 } from './fly-runtime/machines.ts'
-import { lastExit, observationOf } from './fly-runtime/observation.ts'
+import { observationOf } from './fly-runtime/observation.ts'
 import { pricesOf } from './fly-runtime/prices.ts'
 import { checkRegions, flyRegion, placeable, requireCapacity } from './fly-runtime/regions.ts'
 import { idOf } from './fly-runtime/responses.ts'
@@ -223,6 +225,8 @@ export class FlyRuntime implements MinecraftRuntime {
     placement: Placement,
     spec: RuntimeSpec,
     progress: ProgressSink,
+    _install?: InstallSeed | null,
+    storage: HeldStorage = {},
   ): Promise<RuntimeHandle> {
     const region = flyRegion(this.#regions, placement)
     const app = appName(this.#deployment, key)
@@ -233,7 +237,7 @@ export class FlyRuntime implements MinecraftRuntime {
     const { machine, volumeId } =
       existing !== null && asleep !== null
         ? { machine: existing, volumeId: asleep }
-        : await this.#provision(key, app, region, spec, progress, existing)
+        : await this.#provision(key, app, region, spec, progress, existing, storage)
     const handle = encodeHandle({
       deployment: this.#deployment,
       serverId: key,
@@ -258,6 +262,7 @@ export class FlyRuntime implements MinecraftRuntime {
     spec: RuntimeSpec,
     progress: ProgressSink,
     existing: Machine | null,
+    storage: HeldStorage,
   ): Promise<{ machine: Machine; volumeId: string }> {
     await progress.step('allocating')
     // Nothing made yet: ask for room first, so a full region leaves no app or volume behind.
@@ -267,7 +272,14 @@ export class FlyRuntime implements MinecraftRuntime {
     const secretsVersion = await setSecrets(this.#fly, app, spec.secrets)
 
     await progress.step('storage')
-    const volume = await ensureVolume(this.#fly, app, region, spec.storage.sizeGb, this.snapshotLifetimeDays)
+    const volume = await ensureVolume(
+      this.#fly,
+      app,
+      region,
+      spec.storage.sizeGb,
+      this.snapshotLifetimeDays,
+      { mounted: existing?.config?.mounts?.[0]?.volume, ...volumesOf(storage) },
+    )
     const volumeId = idOf(volume, 'a volume')
 
     await progress.step('compute')
@@ -324,7 +336,7 @@ export class FlyRuntime implements MinecraftRuntime {
   }
 
   /**
-   * The Flycast address never moves, so the handle it returns is the one it was given. RuntimeFull
+   * The Flycast address never moves, so the handle it returns is the one it was given. HostFull
    * when the machine's host has no room to run it now.
    */
   async start(handle: RuntimeHandle): Promise<RuntimeHandle> {
@@ -367,29 +379,7 @@ export class FlyRuntime implements MinecraftRuntime {
 
   async waitRunning(handle: RuntimeHandle, signal: AbortSignal): Promise<void> {
     const ref = decodeHandle(handle)
-    const machineId = requireMachine(ref)
-    const since = Date.now()
-    while (!signal.aborted) {
-      const machine = await readUnlessGone(this.#fly, ref.app, machineId)
-      if (machine === null) throw new Error('The machine is gone')
-      if (machine.state === 'started') return
-      const exit = lastExit(machine)
-      if (
-        (machine.state === 'stopped' || machine.state === 'failed') &&
-        exit &&
-        !exit.requested &&
-        exit.at >= since
-      )
-        throw new Error(`The machine exited with code ${exit.code}${exit.oom ? ', out of memory' : ''}`)
-      // A long poll: returns when the machine starts, or after ten seconds.
-      await this.#fly.GET('/v1/apps/{app_name}/machines/{machine_id}/wait', {
-        params: {
-          path: { app_name: ref.app, machine_id: machineId },
-          query: { state: 'started', timeout: 10 },
-        },
-      })
-    }
-    throw new Error('The machine did not start in time')
+    await untilStarted(this.#fly, ref.app, requireMachine(ref), signal)
   }
 
   async snapshot(handle: RuntimeHandle, taken?: () => void) {
@@ -472,6 +462,7 @@ export class FlyRuntime implements MinecraftRuntime {
     spec: RuntimeSpec,
     progress: ProgressSink,
     from?: SnapshotHandle,
+    options: { keepStorage?: boolean } = {},
   ): Promise<RuntimeHandle> {
     const ref = decodeHandle(handle)
     const region = flyRegion(this.#regions, to)
@@ -493,7 +484,7 @@ export class FlyRuntime implements MinecraftRuntime {
         },
         this.snapshotLifetimeDays,
       )
-      return this.#replace(ref, volume, region, spec, progress, { hostLost: true })
+      return this.#replace(ref, volume, region, spec, progress, { hostLost: true, ...options })
     }
     if (region === ref.region) return handle
     const volumeId = requireVolume(ref)
@@ -609,13 +600,18 @@ export class FlyRuntime implements MinecraftRuntime {
   }
 
   /**
-   * World volumes in the server's app that no machine mounts, beside the one the handle names; or
-   * beside none, for a world resting in the archive store.
+   * World volumes in the server's app that no machine mounts, beside the one the handle names (or
+   * none, for a world resting in the archive store) and those `kept` handles name.
    */
-  async clearLeftovers(handle: RuntimeHandle, worldElsewhere: boolean): Promise<readonly string[]> {
+  async clearLeftovers(
+    handle: RuntimeHandle,
+    worldElsewhere: boolean,
+    kept: readonly RuntimeHandle[] = [],
+  ): Promise<readonly string[]> {
     const ref = decodeHandle(handle)
     requireOwnApp(ref.app, this.#deployment)
-    return deleteLeftoverVolumes(this.#fly, ref.app, worldElsewhere ? null : ref.volumeId)
+    const keep = [...(worldElsewhere ? [] : [ref.volumeId]), ...kept.map((k) => decodeHandle(k).volumeId)]
+    return deleteLeftoverVolumes(this.#fly, ref.app, keep)
   }
 
   async destroy(target: RuntimeKey | RuntimeHandle): Promise<void> {
@@ -698,7 +694,7 @@ export class FlyRuntime implements MinecraftRuntime {
    * a server that waits for room to make it keeps running meanwhile; then the old machine and the
    * old volume go. The Flycast address belongs to the app, so the edge's route does not change.
    * With the old host lost there is nothing to stop, and clearing what it held is left to Fly when
-   * it can't be done now.
+   * it can't be done now. `keepStorage`: the old volume stays, a full copy of the world.
    */
   async #replace(
     ref: FlyRef,
@@ -706,7 +702,7 @@ export class FlyRuntime implements MinecraftRuntime {
     region: string,
     spec: RuntimeSpec,
     progress: ProgressSink,
-    options: { hostLost?: boolean } = {},
+    options: { hostLost?: boolean; keepStorage?: boolean } = {},
   ): Promise<RuntimeHandle> {
     await progress.step('compute')
     const volumeId = idOf(volume, 'a volume')
@@ -739,7 +735,8 @@ export class FlyRuntime implements MinecraftRuntime {
     await volumeReady(this.#fly, ref.app, volumeId)
     const leftBehind = options.hostLost ? () => undefined : (error: unknown) => Promise.reject(error)
     if (ref.machineId !== null) await destroyMachine(this.#fly, ref.app, ref.machineId).catch(leftBehind)
-    if (ref.volumeId !== null) await deleteVolume(this.#fly, ref.app, ref.volumeId).catch(leftBehind)
+    if (ref.volumeId !== null && !options.keepStorage)
+      await deleteVolume(this.#fly, ref.app, ref.volumeId).catch(leftBehind)
     if (wasRunning) await this.start(next)
     return next
   }
@@ -750,6 +747,15 @@ export class FlyRuntime implements MinecraftRuntime {
 function requireMachine(ref: FlyRef): string {
   if (ref.machineId === null) throw new Error('This server has no machine; it was decommissioned')
   return ref.machineId
+}
+
+/** The volumes the storage a server holds names, by id: what its handle names, and what is kept. */
+function volumesOf(storage: HeldStorage): { held: string | null; kept: string[] } {
+  const volume = (handle: RuntimeHandle) => (isFlyHandle(handle) ? decodeHandle(handle).volumeId : null)
+  return {
+    held: storage.held == null ? null : volume(storage.held),
+    kept: (storage.kept ?? []).flatMap((handle) => volume(handle) ?? []),
+  }
 }
 
 function requireVolume(ref: FlyRef): string {

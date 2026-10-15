@@ -351,6 +351,8 @@ function wrongValues(values: Record<string, string>): string[] {
 export interface Environment {
   fly_org: string
   fly_machine_limit: number
+  /** Where the edge runs, a machine in each (production-edge.ts); fra alone when absent. */
+  edge_regions?: string[]
   settings: Record<string, string>
   web: { worker: string; repository: string; indexable?: boolean; beta?: boolean }
 }

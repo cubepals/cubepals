@@ -43,6 +43,7 @@ import {
 import type { LogLine, LogSource } from '../ports/platform.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
+import { Resume } from './resume.ts'
 import { NoLongerApplies, type OperationContext } from './runner.ts'
 
 export interface BootTimeouts {
@@ -50,6 +51,8 @@ export interface BootTimeouts {
   runningMs: number
   /** From up to answering a status ping: world generation can take minutes on first boot. */
   readyMs: number
+  /** From a resume asked for to the machine running again (`resume.ts`); tests shorten it. */
+  resumeMs?: number
 }
 
 export class NotReady extends PlainFailure {
@@ -135,6 +138,7 @@ export class BootSequence {
   readonly #artifacts: ArtifactService
   readonly #logs: LogSource
   readonly #timeouts: BootTimeouts
+  readonly #resume: Resume
   readonly #packs: Pick<PackContents, 'load' | 'leaveOutAfterCrash' | 'keepAfterCrash'> | null
   readonly #console: ServerConsole
   readonly #passwords: (serverId: string) => string[]
@@ -165,6 +169,7 @@ export class BootSequence {
     this.#artifacts = deps.artifacts
     this.#logs = deps.logs
     this.#timeouts = deps.timeouts
+    this.#resume = new Resume({ ...deps, resumeMs: deps.timeouts.resumeMs })
     this.#packs = deps.packs ?? null
     this.#console = deps.console
     this.#passwords = deps.rconPasswords
@@ -193,15 +198,20 @@ export class BootSequence {
      * rollback boots what ran before; a restore, whose going back does), nor in that way back:
      * each boot would get its own second wait, and together they outlast the half hour the queue
      * gives an operation, which then runs a second attempt on the same machine at once.
+     * `askedAt`: when the start that may have resumed it was asked for, from which what it printed
+     * says it boots rather than hangs; now, by default.
      */
-    options: { startAgainOnHang?: boolean } = {},
+    options: { startAgainOnHang?: boolean; askedAt?: Date } = {},
   ): Promise<void> {
     // Whether the server this boot runs reads a PROXY protocol header, which its pings then send.
     const proxyProtocol = usesProxyProtocol(revision)
     // A server its runtime resumed as it was printed nothing and changed nothing: once it answers,
     // only who can join and the settings it keeps in its world are put back, which may have changed
     // while it slept.
-    if (ctx.reached() === 'resuming' && (await this.#resumed(started, proxyProtocol)))
+    if (
+      ctx.reached() === 'resuming' &&
+      (await this.#resume.cameBack(ctx, started, () => this.#game(started, proxyProtocol), options.askedAt))
+    )
       return this.#letIn(ctx, server, started, revision, proxyProtocol, [])
     let handle = started
     const check = installCheck(revision)
@@ -336,32 +346,6 @@ export class BootSequence {
   /** Where the server's status ping goes, and whether it opens with a PROXY protocol header. */
   #game(handle: RuntimeHandle, proxyProtocol: boolean): GameEndpoint {
     return { ...this.#runtime.endpoint(handle, PORT_NAMES.game, 'control'), proxyProtocol }
-  }
-
-  /**
-   * Whether a server its runtime resumed came back as it was: running, and answering a status ping
-   * within `RESUME_MS`, which no boot does. False where the provider dropped the memory it kept
-   * and boots it from its storage instead (a host move, maintenance): the start goes on as a boot,
-   * whose output is then followed from here, a few seconds into it.
-   */
-  async #resumed(handle: RuntimeHandle, proxyProtocol: boolean): Promise<boolean> {
-    const deadline = Date.now() + RESUME_MS
-    const endpoint = this.#game(handle, proxyProtocol)
-    try {
-      await this.#runtime.waitRunning(handle, AbortSignal.timeout(RESUME_MS))
-      for (;;) {
-        const left = deadline - Date.now()
-        if (left <= 0) return false
-        const answered = await this.#probe.ping(endpoint, AbortSignal.timeout(left)).then(
-          () => true,
-          () => false,
-        )
-        if (answered) return true
-        await new Promise((resolve) => setTimeout(resolve, RESUME_PAUSE_MS))
-      }
-    } catch {
-      return false
-    }
   }
 
   /**
@@ -608,14 +592,6 @@ export class BootSequence {
     return found.remedy === 'retry' ? new NotReady(found.summary) : new Diagnosed(found, hung)
   }
 }
-
-/**
- * How long a resumed server has to answer before it counts as booting instead. A resume answers
- * in 0.4 to 2.4 s, and a boot takes 40 s or more.
- */
-const RESUME_MS = 10_000
-/** How often a resuming server is pinged: it answers within about 50 ms of running again. */
-const RESUME_PAUSE_MS = 200
 
 const MILESTONES = ['starting', 'loading_world'] as const
 

@@ -172,3 +172,84 @@ describe('FlyRuntime clearing leftover volumes', () => {
     await expect(runtime.clearLeftovers(encodeHandle(other), true)).rejects.toThrow('does not belong')
   })
 })
+
+// A host that still answers but has no room left for its server's volume: the rebuild elsewhere
+// starts from a sleep's snapshot, and the old volume is the full copy until it has run a while.
+describe('FlyRuntime rebuilding a server elsewhere, keeping its old storage', () => {
+  test('the old volume stays through the rebuild and the sweep while kept, and goes after', async () => {
+    const { fake, runtime, handle, progress } = await provisioned()
+    const { snapshot } = await runtime.snapshot(handle)
+    const old = decodeHandle(handle).volumeId ?? ''
+    const next = await runtime.relocate(handle, { regionKey: 'eu-central' }, spec, progress, snapshot, {
+      keepStorage: true,
+    })
+    expect(volumeIds(fake)).toContain(old)
+    expect(await runtime.clearLeftovers(next, false, [handle])).toEqual([])
+    expect(volumeIds(fake)).toContain(old)
+    // Once it is no longer kept, it is a leftover like any other.
+    expect(await runtime.clearLeftovers(next, false)).toEqual([old])
+  })
+
+  test('a start after the rebuild mounts the new volume, never the kept one beside it', async () => {
+    const { fake, runtime, handle, progress } = await provisioned()
+    const { snapshot } = await runtime.snapshot(handle)
+    const next = decodeHandle(
+      await runtime.relocate(handle, { regionKey: 'eu-central' }, spec, progress, snapshot, {
+        keepStorage: true,
+      }),
+    )
+    // The kept volume is listed first, as the older of the two.
+    expect(volumeIds(fake)[0]).toBe(decodeHandle(handle).volumeId ?? '')
+    const changed = { ...spec, env: { ...spec.env, VERSION: '26.4' } }
+    const again = decodeHandle(
+      await runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, changed, progress),
+    )
+    expect(again.volumeId).toBe(next.volumeId)
+  })
+})
+
+// The rebuild's new machine gone within the week: nothing mounts either volume, and the kept one
+// is listed first. Booting it would bring back the world from before the rebuild.
+describe('FlyRuntime starting a server whose machine is gone, beside storage a rebuild kept', () => {
+  const rebuiltThenLost = async () => {
+    const setup = await provisioned()
+    const { fake, runtime, handle, progress } = setup
+    const { snapshot } = await runtime.snapshot(handle)
+    const next = await runtime.relocate(handle, { regionKey: 'eu-central' }, spec, progress, snapshot, {
+      keepStorage: true,
+    })
+    fake.machines.set(APP, [])
+    expect(volumeIds(fake)[0]).toBe(decodeHandle(handle).volumeId ?? '')
+    return { ...setup, old: handle, next }
+  }
+
+  test('boots the volume its handle names, never the kept one', async () => {
+    const { runtime, progress, old, next } = await rebuiltThenLost()
+    const started = await runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, spec, progress, null, {
+      held: next,
+      kept: [old],
+    })
+    expect(decodeHandle(started).volumeId).toBe(decodeHandle(next).volumeId)
+  })
+
+  test('with only the kept volume left, boots nothing, and makes no empty one', async () => {
+    const { fake, runtime, progress, old, next } = await rebuiltThenLost()
+    const held = decodeHandle(next).volumeId
+    fake.volumes.set(
+      APP,
+      (fake.volumes.get(APP) ?? []).filter((v) => v.id !== held),
+    )
+    const before = volumeIds(fake)
+    const start = runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, spec, progress, null, {
+      held: next,
+      kept: [old],
+    })
+    await expect(start).rejects.toThrow('kept from before a rebuild')
+    expect(volumeIds(fake)).toEqual(before)
+  })
+
+  test('the inventory names neither volume as the world', async () => {
+    const { runtime } = await rebuiltThenLost()
+    for await (const item of runtime.inventory()) expect(decodeHandle(item.handle).volumeId).toBeNull()
+  })
+})

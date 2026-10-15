@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { type Queryable, schema, type Tx } from '@blockly/db'
-import { and, desc, eq, inArray, isNotNull, ne, notInArray, or, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNotNull, ne, notInArray, or, sql } from 'drizzle-orm'
 import type { OperationKind } from '../../domain/server/lifecycle.ts'
 
 const operations = schema.serverOperations
@@ -107,6 +107,14 @@ export async function recordStep(q: Queryable, id: string, step: string): Promis
   await q
     .update(operations)
     .set({ progress: { step, at: at.toISOString() }, steps: withStep(step, at) })
+    .where(eq(operations.id, id))
+}
+
+/** A mark in `steps` (`OperationMark`): kept on the record, and not the operation's step. */
+export async function recordMark(q: Queryable, id: string, mark: string): Promise<void> {
+  await q
+    .update(operations)
+    .set({ steps: withStep(mark, new Date()) })
     .where(eq(operations.id, id))
 }
 
@@ -236,6 +244,45 @@ export async function latestOfKind(
 export type WakePath = 'resumed' | 'booted'
 
 const resumedWake = sql<boolean>`coalesce(${operations.steps} @> '[{"step":"resuming"}]'::jsonb and not ${operations.steps} @> '[{"step":"booting"}]'::jsonb, false)`
+
+/**
+ * Whether the operation failed in waking its server rather than over what the server runs: it
+ * gave up on a resume, or its server's host couldn't run it (`OperationMark`).
+ */
+export async function failedWaking(q: Queryable, operationId: string): Promise<boolean> {
+  const marked = (mark: string) => sql`${operations.steps} @> ${JSON.stringify([{ step: mark }])}::jsonb`
+  const [row] = await q
+    .select({ id: operations.id })
+    .from(operations)
+    .where(and(eq(operations.id, operationId), or(marked('resume_hung'), marked('host_refused'))))
+  return row !== undefined
+}
+
+/**
+ * How many servers had a start since `since` carry `mark` (`OperationMark`), and the newest such
+ * start: what the platform's alerts count. Servers, not starts, so one server's starts asked again
+ * and again count once.
+ */
+export async function markedSince(
+  q: Queryable,
+  mark: string,
+  since: Date,
+): Promise<{ count: number; newest: { operationId: string; serverId: string } | null }> {
+  const rows = await q
+    .select({ id: operations.id, serverId: operations.serverId })
+    .from(operations)
+    .where(
+      and(
+        eq(operations.kind, 'start'),
+        gte(operations.createdAt, since),
+        sql`${operations.steps} @> ${JSON.stringify([{ step: mark }])}::jsonb`,
+      ),
+    )
+    .orderBy(desc(operations.createdAt))
+  const [first] = rows
+  const servers = new Set(rows.map((row) => row.serverId)).size
+  return { count: servers, newest: first ? { operationId: first.id, serverId: first.serverId } : null }
+}
 
 /**
  * How long the server's last wake by `path` took, from the press to running, in seconds: what its

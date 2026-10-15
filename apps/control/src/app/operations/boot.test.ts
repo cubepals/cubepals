@@ -16,6 +16,7 @@ import type { RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
 import { BootSequence, followBoot, notUpHere, stoppedWhile, stuckWhile } from './boot.ts'
 import type { OperationRecord } from './persistence.ts'
+import { StuckOnHost } from './resume.ts'
 import { NoLongerApplies, type OperationContext } from './runner.ts'
 
 async function* printed(texts: readonly string[]): AsyncIterable<LogLine> {
@@ -113,11 +114,23 @@ function machine(options: {
   pack?: Pick<PackContents, 'load' | 'leaveOutAfterCrash' | 'keepAfterCrash'>
   /** What it prints as it goes, where that takes time; else `printed`, all at once. */
   tail?: () => AsyncIterable<LogLine>
+  /** The start before the boot was a resume, and whether that one ever runs. */
+  resumed?: { runs: boolean; afterMs?: number }
+  /** No stop or kill ends it, as a machine wedged by a resume that hung. */
+  wedged?: boolean
 }) {
-  const seen = { process: 1, stops: 0, forceStops: 0, reprovisions: 0 }
+  const seen = { process: 1, stops: 0, forceStops: 0, reprovisions: 0, marks: [] as string[] }
   const lines = () => (options.printed?.(seen.process) ?? []).map((text) => ({ at: new Date(), text }))
   const runtime = {
-    waitRunning: async () => {},
+    waitRunning: async (_handle: RuntimeHandle, signal: AbortSignal) => {
+      // Running after a while, as a boot from disk Fly took long to get going.
+      if (seen.process === 1 && options.resumed?.afterMs !== undefined)
+        await Bun.sleep(options.resumed.afterMs)
+      if (seen.process > 1 || options.resumed?.runs !== false) return
+      // A resume that hangs: Fly's machine never leaves `starting`.
+      await new Promise((resolve) => signal.addEventListener('abort', resolve))
+      throw new Error('The machine did not start in time')
+    },
     endpoint: () => ({ host: 'server-1.test', port: 25565 }),
     observe: async () => {
       const failedAt = options.failedAt?.(seen.process)
@@ -129,6 +142,7 @@ function machine(options: {
     },
     forceStop: async () => {
       seen.forceStops++
+      if (options.wedged) throw new Error('unable to stop machine, current state invalid, starting')
     },
     start: async () => {
       seen.process++
@@ -156,7 +170,7 @@ function machine(options: {
         yield* options.tail?.() ?? lines()
       },
     },
-    timeouts: { runningMs: 1_000, readyMs: options.readyMs ?? 0 },
+    timeouts: { runningMs: 1_000, readyMs: options.readyMs ?? 0, resumeMs: 200 },
     packs: options.pack ?? null,
     console: { run: async () => '', runAll: async () => [] },
     rconPasswords: () => [],
@@ -165,7 +179,10 @@ function machine(options: {
     op: { id: 'operation-1', kind: 'provision' } as OperationRecord,
     server,
     step: async () => {},
-    reached: () => null,
+    mark: async (mark) => {
+      seen.marks.push(mark)
+    },
+    reached: () => (options.resumed ? 'resuming' : null),
     stillApplies: async () => options.stillApplies?.() ?? true,
   }
   const reprovision = async () => {
@@ -453,5 +470,72 @@ describe('a server sent to the trash while it starts', () => {
     })
     await boot.run(ctx, server, handle, vanilla)
     expect(seen).toMatchObject({ stops: 1, process: 2 })
+  })
+})
+
+// Fly's suspend on staging (2026-10-15): every resume reached a player within 3.2 s. One that
+// never runs again used to wait out a boot's ten minutes before anything started it fresh.
+describe('a resume', () => {
+  test('that runs and answers is the whole start: nothing is stopped or started again', async () => {
+    const { boot, ctx, seen } = machine({ answers: () => true, resumed: { runs: true } })
+    await boot.run(ctx, server, handle, vanilla)
+    expect(seen).toMatchObject({ process: 1, stops: 0, forceStops: 0, marks: [] })
+  })
+
+  test('that runs without answering, printing a boot, goes on as the boot it is, from its disk', async () => {
+    const { boot, ctx, seen } = machine({
+      answers: () => false,
+      printed: () => ['[init] Starting the Minecraft server...'],
+      resumed: { runs: true },
+      readyMs: 300,
+    })
+    await expect(
+      boot.run(ctx, server, handle, vanilla, undefined, { startAgainOnHang: false }),
+    ).rejects.toThrow()
+    // Waited on as a boot, never killed as a hung resume.
+    expect(seen.marks).toEqual([])
+    expect(seen.forceStops).toBe(0)
+  }, 30_000)
+
+  test('that runs, frozen, answering and printing nothing, is killed and started fresh', async () => {
+    const { boot, ctx, seen } = machine({
+      answers: (process) => process > 1,
+      printed: (process) => (process > 1 ? ['[init] Starting the Minecraft server...'] : []),
+      resumed: { runs: true },
+    })
+    await boot.run(ctx, server, handle, vanilla)
+    expect(seen).toMatchObject({ process: 2, forceStops: 1, marks: ['resume_hung'] })
+  }, 30_000)
+
+  test('that runs only near its bound, its output slow to show, is given the time to show it boots', async () => {
+    const shown = Date.now() + 1_000
+    const { boot, ctx, seen } = machine({
+      answers: () => false,
+      // Its boot's first lines reach the log a second after it runs: past the bound (200 ms).
+      printed: () => (Date.now() >= shown ? ['[init] Starting the Minecraft server...'] : []),
+      resumed: { runs: true, afterMs: 180 },
+      readyMs: 300,
+    })
+    await expect(
+      boot.run(ctx, server, handle, vanilla, undefined, { startAgainOnHang: false }),
+    ).rejects.toThrow()
+    // Gone on to boot as it was, never killed as a hung resume, nor counted as one.
+    expect(seen.marks).toEqual([])
+    expect(seen.forceStops).toBe(0)
+  }, 30_000)
+
+  test('that never runs, on a machine no kill ends, is stuck on its host', async () => {
+    const { boot, ctx, seen } = machine({ answers: () => false, resumed: { runs: false }, wedged: true })
+    await expect(boot.run(ctx, server, handle, vanilla)).rejects.toBeInstanceOf(StuckOnHost)
+    expect(seen).toMatchObject({ process: 1, marks: ['resume_hung'] })
+  })
+
+  test('that never runs is given up on: killed, started fresh, and up from its disk', async () => {
+    const { boot, ctx, seen } = machine({ answers: (process) => process > 1, resumed: { runs: false } })
+    const asked = Date.now()
+    await boot.run(ctx, server, handle, vanilla)
+    // Within the bound the test gives it, not the boot's wait.
+    expect(Date.now() - asked).toBeLessThan(5_000)
+    expect(seen).toMatchObject({ process: 2, forceStops: 1, marks: ['resume_hung'] })
   })
 })

@@ -50,6 +50,7 @@ import { dirname, resolve } from 'node:path'
 import { authWorks } from './lib/auth-through-website.ts'
 import { pingIndexNow } from './lib/indexnow.ts'
 import { buildWorker, deployWorker } from './lib/web-worker.ts'
+import { edgePlacement, edgeRegions } from './production-edge.ts'
 import { bringUpToDate } from './production-tfvars.ts'
 import {
   backendConfig,
@@ -145,13 +146,27 @@ const DOCKERFILES: Record<FlyApp, string> = {
 
 /**
  * One Fly app deployed from this checkout, or from an image a release of it already ran (a
- * rollback). One machine a role, as FLY_PLATFORM_MACHINES counts them; a second machine each comes
- * once a blip matters.
+ * rollback). One machine a role, and the edge one in each of `edge_regions`, as
+ * FLY_PLATFORM_MACHINES counts them; a second machine each comes once a blip matters.
  */
 function deployApp(app: FlyApp, env: NodeJS.ProcessEnv, image?: string): void {
   const source = image ? ['--image', image] : ['.', '--dockerfile', DOCKERFILES[app], '--remote-only']
   const config = ['--config', `infra/fly/${app}.toml`, '--app', `bly-prod-${app}`]
   run('fly', ['deploy', ...source, ...config, '--yes', '--ha=false'], env)
+  if (app === 'edge') placeEdge(env)
+}
+
+/** The edge's machines, one in each region `edge_regions` lists (production-edge.ts). */
+function placeEdge(env: NodeJS.ProcessEnv): void {
+  const app = 'bly-prod-edge'
+  const listed = spawnSync('fly', ['machines', 'list', '--app', app, '--json'], { encoding: 'utf8', env })
+  if (listed.status !== 0) {
+    say(`fly machines list stopped (exit ${listed.status}). Fix what it says, then run apply again.`)
+    process.exit(1)
+  }
+  const present = (JSON.parse(listed.stdout || '[]') as { region: string }[]).map((m) => m.region)
+  for (const call of edgePlacement(app, edgeRegions(environment().edge_regions), present))
+    run('fly', call, env)
 }
 
 /** This commit as the `production` branch, which names what is live, wherever it was before. */

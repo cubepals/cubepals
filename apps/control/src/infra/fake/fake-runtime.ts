@@ -29,7 +29,6 @@ import type {
   Endpoint,
   ExecResult,
   MinecraftRuntime,
-  ObservedState,
   Placement,
   ProgressSink,
   RestoreSource,
@@ -48,7 +47,7 @@ import { exportArchive, unpackArchive } from './fake-runtime/archive.ts'
 import { run } from './fake-runtime/command.ts'
 import { FakeHandles } from './fake-runtime/handle.ts'
 import { Hold } from './fake-runtime/hold.ts'
-import { holds, type MachineState, Sleeps } from './fake-runtime/sleep.ts'
+import { holds, type MachineState, observedAs, Sleeps } from './fake-runtime/sleep.ts'
 import { Volumes } from './fake-runtime/volumes.ts'
 
 export { fakeHandleKey } from './fake-runtime/handle.ts'
@@ -751,7 +750,7 @@ export class FakeRuntime implements MinecraftRuntime {
 
   #observation(box: Box): RuntimeObservation {
     if (box.hostLost) return { state: 'unknown', at: box.changedAt, hostLost: true }
-    const state: ObservedState = box.state === 'suspended' ? 'stopped' : box.state
+    const state = observedAs(box.state)
     return { state, at: box.changedAt, ...(box.exit && box.state === 'crashed' ? { exit: box.exit } : {}) }
   }
 

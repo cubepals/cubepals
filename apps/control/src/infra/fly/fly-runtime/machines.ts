@@ -13,6 +13,7 @@ import type { ExecResult } from '../../../app/ports/runtime.ts'
 import type { FlyClient, FlySchemas } from '../client.ts'
 import { META } from '../machine-config.ts'
 import { saysClaimed, saysNotYet, saysReplacing } from '../refusals.ts'
+import { lastExit } from './observation.ts'
 import { idOf, launched, must, succeeded } from './responses.ts'
 
 type Machine = FlySchemas['Machine']
@@ -102,11 +103,7 @@ export async function readMachine(fly: FlyClient, app: string, machineId: string
  * lists it, and is looked for again for `GONE_SECONDS` while it lists it nowhere, unless the app
  * lists another server machine instead.
  */
-export async function readUnlessGone(
-  fly: FlyClient,
-  app: string,
-  machineId: string,
-): Promise<Machine | null> {
+async function readUnlessGone(fly: FlyClient, app: string, machineId: string): Promise<Machine | null> {
   const deadline = Date.now() + GONE_SECONDS * 1000
   for (;;) {
     const machine = await readMachine(fly, app, machineId)
@@ -318,7 +315,7 @@ export async function startMachine(fly: FlyClient, app: string, machineId: strin
     const refused = started.response.status === 412 || started.response.status === 409
     const notYet = refused && saysNotYet(started.error)
     if (!notYet || Date.now() > deadline) {
-      launched(started, 'starting the machine')
+      launched(started, 'starting the machine', true)
       return
     }
     await sleep(1000)
@@ -476,6 +473,42 @@ export async function waitFor(
     })
   }
   throw new Error(`The machine did not reach ${state} in time`)
+}
+
+/**
+ * Returns once the machine is started; throws once it exited by itself after this began, is gone,
+ * or `signal` ends the wait, which is over when it says rather than when a long poll next returns.
+ */
+export async function untilStarted(
+  fly: FlyClient,
+  app: string,
+  machineId: string,
+  signal: AbortSignal,
+): Promise<void> {
+  const since = Date.now()
+  while (!signal.aborted) {
+    const machine = await readUnlessGone(fly, app, machineId)
+    if (machine === null) throw new Error('The machine is gone')
+    if (machine.state === 'started') return
+    const exit = lastExit(machine)
+    if (
+      (machine.state === 'stopped' || machine.state === 'failed') &&
+      exit &&
+      !exit.requested &&
+      exit.at >= since
+    )
+      throw new Error(`The machine exited with code ${exit.code}${exit.oom ? ', out of memory' : ''}`)
+    // A long poll: returns when the machine starts, after ten seconds, or as `signal` ends it.
+    await fly
+      .GET('/v1/apps/{app_name}/machines/{machine_id}/wait', {
+        params: { path: { app_name: app, machine_id: machineId }, query: { state: 'started', timeout: 10 } },
+        signal,
+      })
+      .catch((error: unknown) => {
+        if (!signal.aborted) throw error
+      })
+  }
+  throw new Error('The machine did not start in time')
 }
 
 export async function exec(

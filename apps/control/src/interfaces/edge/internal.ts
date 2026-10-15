@@ -3,8 +3,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { createHash, timingSafeEqual } from 'node:crypto'
-import { EDGE_PROTOCOL_BASE, IdleHint, SessionEvent, WakeRequest } from '@blockly/contracts/edge'
-import { EDGE_ID_HEADER, ROUTES_HELD_HEADER, ROUTES_VERSION_HEADER } from '@blockly/contracts/edge-poll'
+import {
+  EDGE_PROTOCOL_BASE,
+  IdleHint,
+  SessionEvent,
+  WakeRequest,
+  type WakeResult,
+} from '@blockly/contracts/edge'
+import {
+  EDGE_ID_HEADER,
+  NEWER_REASONS,
+  ROUTES_HELD_HEADER,
+  ROUTES_VERSION_HEADER,
+} from '@blockly/contracts/edge-poll'
 import { Hono } from 'hono'
 import type { EdgeService } from '../../app/edge/service.ts'
 
@@ -42,7 +53,9 @@ export function createInternalApp(deps: { edge: EdgeService; token: string }): H
   app.post(`${EDGE_PROTOCOL_BASE}/wake`, async (c) => {
     const request = WakeRequest.safeParse(await c.req.json().catch(() => null))
     if (!request.success) return c.json({ error: 'bad request' }, 400)
-    return c.json(await deps.edge.wake(request.data.hostname))
+    const understands = request.data.understands ?? []
+    const woken = await deps.edge.wake(request.data.hostname, understands.includes('failed'))
+    return c.json(forEdge(woken, understands))
   })
 
   app.post(`${EDGE_PROTOCOL_BASE}/idle`, async (c) => {
@@ -61,4 +74,16 @@ export function createInternalApp(deps: { edge: EdgeService; token: string }): H
   })
 
   return app
+}
+
+/**
+ * A wake's answer in words the asking edge has. An edge from before a reason had words would turn
+ * the player away with none, so it hears what it did then: a start that failed for good in waking
+ * is still starting, and one that failed over what the server runs can't start right now, which is
+ * how it words a suspended server.
+ */
+export function forEdge(woken: WakeResult, understands: readonly string[]): WakeResult {
+  if (woken.outcome !== 'denied' || !NEWER_REASONS.some((r) => r === woken.reason)) return woken
+  if (understands.includes(woken.reason)) return woken
+  return woken.reason === 'failed' ? { outcome: 'starting' } : { outcome: 'denied', reason: 'suspended' }
 }

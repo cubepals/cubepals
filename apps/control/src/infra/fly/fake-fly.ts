@@ -144,6 +144,8 @@ export class FakeFly {
   partsFail = false
   refusedStarts = 0
   throttleOnce = false
+  /** Long polls that don't find the state asked for hold for their timeout, as the live API's do. */
+  holdWaits = false
   /** Regions with no room left; and whether the org may use paid-only regions. */
   readonly full = new Set<string>()
   paidPlan = false
@@ -359,7 +361,7 @@ export class FakeFly {
           if (!nonceOk(id)) return json({ error: 'lease required' }, 412)
           return action === 'stop' ? this.#stop(app, machine, body) : this.#suspend(app, machine)
         case 'wait':
-          return this.#wait(machine, url.searchParams.get('state'))
+          return this.#longPoll(machine, url.searchParams, request.signal)
         case 'exec': {
           // As Fly does: stdin is not passed on, so a script comes as the argument after `sh -c`.
           const [, , line = '', argument] = body.command as string[]
@@ -551,6 +553,13 @@ export class FakeFly {
     return Response.json(this.#moment(app, prepared(replaced(machine))))
   }
 
+  /** A long poll, held for its timeout first where `holdWaits` says, unless its state is there. */
+  async #longPoll(machine: FakeMachine, query: URLSearchParams, signal: AbortSignal): Promise<Response> {
+    if (this.holdWaits && query.get('state') !== machine.state)
+      await held(Number(query.get('timeout') ?? 60), signal)
+    return this.#wait(machine, query.get('state'))
+  }
+
   /** A long poll answered at once: the machine in the state asked for, or a timeout. */
   #wait(machine: FakeMachine, state: string | null): Response {
     this.#stillReplacing(machine)
@@ -654,4 +663,16 @@ export class FakeFly {
       updated_at: new Date().toISOString(),
     })
   }
+}
+
+/** A long poll's hold: its timeout, or until the request is aborted, which then throws as fetch does. */
+async function held(timeoutSeconds: number, signal: AbortSignal): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, timeoutSeconds * 1000)
+    signal.addEventListener('abort', () => {
+      clearTimeout(timer)
+      resolve()
+    })
+  })
+  signal.throwIfAborted()
 }

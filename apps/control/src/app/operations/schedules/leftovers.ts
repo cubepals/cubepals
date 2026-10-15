@@ -12,6 +12,7 @@
  */
 import { type Db, schema } from '@blockly/db'
 import type { Runtimes } from '../../runtimes/router.ts'
+import { keptStorage } from '../../servers/kept-storage.ts'
 import { listBindings, loadRuntime, lockServer } from '../../servers/persistence.ts'
 import { activeOperation } from '../persistence.ts'
 
@@ -29,7 +30,9 @@ export function clearingLeftovers(deps: { db: Db; runtime: Pick<Runtimes, 'provi
       if ((await activeOperation(tx, serverId)) !== null) return []
       const { handle } = await loadRuntime(tx, serverId, runtime.providers)
       if (handle === null) return []
-      const deleted = await runtime.clearLeftovers(handle, server.lifecycle.status === 'stored')
+      // A rebuild's old storage stays its while (`kept-storage.ts`), then goes as any leftover does.
+      const kept = await keptStorage(tx, serverId, new Date())
+      const deleted = await runtime.clearLeftovers(handle, server.lifecycle.status === 'stored', kept)
       if (deleted.length > 0)
         await tx.insert(schema.auditLog).values({
           actor: 'system:orphans',

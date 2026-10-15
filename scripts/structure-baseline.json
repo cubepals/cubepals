@@ -9,7 +9,7 @@
       "reason": "The tests of one class with the in-memory Boat they run on; the fake couldn't move out because check:boundaries keeps port 25565 in minecraft/."
     },
     "apps/control/src/infra/fake/fake-runtime.ts": {
-      "n": 842,
+      "n": 841,
       "reason": "Decomposed into five parts in fake-runtime/; what is left is the port's verbs over one in-memory machine table, one job."
     },
     "apps/control/src/infra/fake/fake-runtime.ts › class FakeRuntime": {
@@ -1021,11 +1021,11 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/handlers/bringing-up.ts › function bringingUp": {
-      "n": 201,
+      "n": 197,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/handlers/moving.ts › function moving": {
-      "n": 220,
+      "n": 211,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/handlers/restoring.ts › function restoring": {

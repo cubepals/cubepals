@@ -9,10 +9,11 @@
  */
 
 import { describe, expect, test } from 'bun:test'
-import type { ProgressSink, RuntimeKey, RuntimeSpec } from '../../app/ports/runtime.ts'
+import { HostFull, type ProgressSink, type RuntimeKey, type RuntimeSpec } from '../../app/ports/runtime.ts'
 import { flyClient } from './client.ts'
 import { FakeFly } from './fake-fly.ts'
 import { FlyRuntime } from './fly-runtime.ts'
+import { NO_MEMORY_SAID } from './refusals.ts'
 
 const KEY = '6276d3d7-5c80-4bd4-9d00-12818b8a4d38' as RuntimeKey
 const APP = 'bly-test-6276d3d75c804bd49d0012818b8a4d38'
@@ -297,5 +298,19 @@ describe('FlyRuntime with the switch flipped while a server sleeps', () => {
     expect(steps).not.toContain('resuming')
     expect(fake.startedFrom).toEqual(['stopped'])
     expect(machine.state).toBe('started')
+  })
+})
+
+// A host that filled while its server slept (community.fly.io/t/28766): the volume ties the
+// machine to it, and only new storage made elsewhere from a snapshot gets it running.
+describe('FlyRuntime waking a server whose host has no room left', () => {
+  test('is HostFull, for its own host, not the region', async () => {
+    const { fake, runtime, machine, progress, sleep } = await running()
+    await sleep()
+    fake.refusal = { error: NO_MEMORY_SAID }
+    const woken = runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, spec, progress)
+    await expect(woken).rejects.toBeInstanceOf(HostFull)
+    await expect(woken).rejects.toThrow(NO_MEMORY_SAID)
+    expect(machine.state).toBe('suspended')
   })
 })

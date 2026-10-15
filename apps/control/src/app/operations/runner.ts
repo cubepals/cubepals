@@ -17,6 +17,7 @@ import {
   type OperationRecord,
   type OperationStatus,
   recordAttemptError,
+  recordMark,
   recordStep,
 } from './persistence.ts'
 
@@ -35,10 +36,19 @@ export type OperationStep =
   | 'saving'
   | 'stopping'
 
+/**
+ * What an operation's record keeps for the platform beside its steps, never shown as one:
+ * `resume_hung`, a resume given up on and started fresh (`resume.ts`); `host_refused`, a start its
+ * server's own host couldn't serve; `no_room`, one its runtime had no room for, which went back to
+ * sleep (both `handlers/host-refused.ts`).
+ */
+type OperationMark = 'resume_hung' | 'host_refused' | 'no_room'
+
 export interface OperationContext {
   op: OperationRecord
   server: MinecraftServer
   step(step: OperationStep): Promise<void>
+  mark(mark: OperationMark): Promise<void>
   /** The step this attempt last went through, or null before its first. */
   reached(): OperationStep | null
   /**
@@ -136,6 +146,7 @@ export class OperationRunner {
         await recordStep(this.#db, op.id, step)
         await this.#progress(op, server, step, 'running')
       },
+      mark: (mark) => recordMark(this.#db, op.id, mark),
       stillApplies: async () => {
         const latest = await findServer(this.#db, server.id)
         return latest !== null && handler.runsWhen.includes(latest.lifecycle.status)

@@ -222,13 +222,18 @@ export interface MinecraftRuntime {
    */
   hasRoom(placement: Placement, size: { memoryMb: number; storageGb: number }): Promise<boolean>
 
-  /** Idempotent and convergent: creates whatever is missing for `key`, and leaves it started. */
+  /**
+   * Idempotent and convergent: creates whatever is missing for `key`, and leaves it started.
+   * `storage`: the handle the server holds now, whose storage is its world, and storage a rebuild
+   * kept (`relocate`'s `keepStorage`), which is never booted.
+   */
   ensureProvisioned(
     key: RuntimeKey,
     placement: Placement,
     spec: RuntimeSpec,
     progress: ProgressSink,
     install?: InstallSeed | null,
+    storage?: HeldStorage,
   ): Promise<RuntimeHandle>
   /** New configuration; restarts the workload if it is running. May return a new handle. */
   apply(handle: RuntimeHandle, spec: RuntimeSpec): Promise<RuntimeHandle>
@@ -300,9 +305,11 @@ export interface MinecraftRuntime {
     progress: ProgressSink,
   ): Promise<RuntimeHandle>
   /**
-   * Moves compute and storage to where `to` maps now. `from`: the host is lost, and the volume
-   * with it; the new storage comes from this snapshot instead, and the old compute is left for
-   * the provider to clear.
+   * Moves compute and storage to where `to` maps now. `from`: the host is lost, or can't run the
+   * server, and the volume with it; the new storage comes from this snapshot instead, and the old
+   * compute is left for the provider to clear. `keepStorage`: the old storage stays where it is
+   * rather than going, a full copy of the world beside the new one, until `clearLeftovers` is no
+   * longer told to keep it.
    */
   relocate(
     handle: RuntimeHandle,
@@ -310,6 +317,7 @@ export interface MinecraftRuntime {
     spec: RuntimeSpec,
     progress: ProgressSink,
     from?: SnapshotHandle,
+    options?: { keepStorage?: boolean },
   ): Promise<RuntimeHandle>
   /**
    * Packs a snapshot's world into the archive store, at `target`: in one PUT, or in parts when it
@@ -340,8 +348,14 @@ export interface MinecraftRuntime {
    * makes storage before any handle names it; a runtime may clear the same as its own restore
    * ends. One attempt at each, no waiting: what can't go yet stays for the next call. Returns what
    * it deleted, by the provider's names. A runtime that never leaves storage behind has no need of it.
+   * `kept`: storage a rebuild kept (`relocate`'s `keepStorage`), by the handles that named it, which
+   * stays too.
    */
-  clearLeftovers?(handle: RuntimeHandle, worldElsewhere: boolean): Promise<readonly string[]>
+  clearLeftovers?(
+    handle: RuntimeHandle,
+    worldElsewhere: boolean,
+    kept?: readonly RuntimeHandle[],
+  ): Promise<readonly string[]>
   /**
    * A handle for a server this runtime holds nothing for, as `release` leaves one: it serves
    * `endpoint`, `restore` from an archive, which makes storage and compute, and `destroy`. How a
@@ -484,6 +498,23 @@ export class RuntimeFull extends Error {
   constructor(provider: string, detail: string) {
     super(`The ${provider} runtime has no room: ${detail}`)
     this.name = 'RuntimeFull'
+  }
+}
+
+/** The storage a server holds, as `ensureProvisioned` is told of it. */
+export interface HeldStorage {
+  held?: RuntimeHandle | null
+  kept?: readonly RuntimeHandle[]
+}
+
+/**
+ * RuntimeFull for the one host a server's storage is tied to, refusing to run it there: the rest
+ * of its region may have room, which only new storage made from a snapshot reaches.
+ */
+export class HostFull extends RuntimeFull {
+  constructor(provider: string, detail: string) {
+    super(provider, detail)
+    this.name = 'HostFull'
   }
 }
 

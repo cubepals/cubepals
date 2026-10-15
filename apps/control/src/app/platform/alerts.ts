@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { AlertKey, AlertView } from '@blockly/contracts'
-import { HOUR_MS, SECOND_MS } from '@blockly/contracts/durations'
+import { DAY_MS, HOUR_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
 import { entitlementsFor, PLAN_KEYS } from '../../domain/account/entitlements.ts'
 import { unreviewedLinks } from '../accounts/free-play.ts'
@@ -15,8 +15,10 @@ import type { CatalogSync } from '../catalog/sync.ts'
 import { EDGE_BEHIND_MS, edgesBehind } from '../edge/routed.ts'
 import { adminAlert } from '../emails/admins.ts'
 import { NotFound } from '../errors.ts'
+import { markedSince } from '../operations/persistence.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { Mailer } from '../ports/platform.ts'
+import { KEEP_MS, serversKeepingStorage } from '../servers/kept-storage.ts'
 import {
   alertNotified,
   clearAlert,
@@ -39,6 +41,9 @@ const WHERE: Record<AlertKey, string> = {
   billing_order_unknown: '/admin/accounts',
   free_accounts_linked: '/admin',
   edge_behind: '/admin/platform',
+  resumes_hung: '/admin/health',
+  hosts_refused: '/admin/health',
+  storage_kept: '/admin/health',
 }
 
 interface Condition {
@@ -157,6 +162,7 @@ export class PlatformAlerts {
       })
     conditions.push(
       ...(await edgeCondition(this.#db)),
+      ...(await wakeConditions(this.#db, now)),
       ...(await unsentCondition(this.#db)),
       ...(await waitingCondition(this.#db, now)),
       ...(await unknownCondition(this.#db)),
@@ -194,6 +200,42 @@ async function edgeCondition(db: Db): Promise<Condition[]> {
       summary: `${one ? 'An edge keeps' : `${behind.length} edges keep`} asking for routes without holding the newest for over ${EDGE_BEHIND_MS / SECOND_MS} s (${behind.join(', ')}). Servers no longer wait on ${one ? 'it' : 'them'}, and players who reach ${one ? 'it' : 'them'} may find no route.`,
     },
   ]
+}
+
+/**
+ * Wakes in the last day that went wrong on the provider's side, by server. `resumes_hung`: a
+ * resume that never came back, so its server was started fresh from its disk (`resume.ts`); each
+ * cost a player a cold boot, and several mean the provider's suspend is failing, which switching it
+ * off (`platform/suspend-switch.ts`) stops. `hosts_refused`: a server's own host couldn't run it
+ * (`handlers/host-refused.ts`); it was rebuilt elsewhere where a sleep's snapshot held all its
+ * play, and otherwise its start failed for an admin to decide. `storage_kept`: what such a rebuild
+ * kept of the old storage (`servers/kept-storage.ts`), until it goes by itself.
+ */
+async function wakeConditions(db: Db, now: Date): Promise<Condition[]> {
+  const since = new Date(now.getTime() - DAY_MS)
+  const [hung, refused, keeping] = [
+    await markedSince(db, 'resume_hung', since),
+    await markedSince(db, 'host_refused', since),
+    await serversKeepingStorage(db),
+  ]
+  const conditions: Condition[] = []
+  const servers = (count: number) => `${count} ${count === 1 ? 'server' : 'servers'}`
+  if (hung.newest !== null)
+    conditions.push({
+      key: 'resumes_hung',
+      summary: `${servers(hung.count)} woke in the last day from a resume that never came back, and started fresh from disk instead, with nothing lost. Newest: operation ${hung.newest.operationId} on server ${hung.newest.serverId}.`,
+    })
+  if (refused.newest !== null)
+    conditions.push({
+      key: 'hosts_refused',
+      summary: `${servers(refused.count)} found their own host unable to run them in the last day. Where a sleep's snapshot held all its play the server was rebuilt elsewhere; otherwise its start failed, for an admin to move it. Newest: operation ${refused.newest.operationId} on server ${refused.newest.serverId}.`,
+    })
+  if (keeping.length > 0)
+    conditions.push({
+      key: 'storage_kept',
+      summary: `${servers(keeping.length)} keep the storage a rebuild moved them off, a full copy of the world, for ${KEEP_MS / DAY_MS} days before it goes by itself (${keeping.join(', ')}).`,
+    })
+  return conditions
 }
 
 /**
