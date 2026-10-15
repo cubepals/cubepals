@@ -199,10 +199,6 @@ export async function readyBackupCounts(
   return counts
 }
 
-export async function listLive(q: Queryable): Promise<MinecraftServer[]> {
-  return (await q.select().from(servers).where(isNull(servers.deletedAt))).map(toServer)
-}
-
 /**
  * Someone played, or its owner started it. Presence reads every minute, so `everyMinutes` keeps
  * that to a write now and then; an owner's own start writes at once.
@@ -279,6 +275,20 @@ export async function idleSince(q: Queryable, before: Date, limit: number): Prom
 
 export async function listByStatus(q: Queryable, status: Lifecycle['status']): Promise<MinecraftServer[]> {
   return (await q.select().from(servers).where(eq(servers.status, status))).map(toServer)
+}
+
+/** The servers in each of `statuses`, in one read: those in the first, then the next, and on. */
+export async function listByStatuses(
+  q: Queryable,
+  statuses: ReadonlyArray<Lifecycle['status']>,
+): Promise<MinecraftServer[]> {
+  const rows = (
+    await q
+      .select()
+      .from(servers)
+      .where(inArray(servers.status, [...statuses]))
+  ).map(toServer)
+  return statuses.flatMap((status) => rows.filter((s) => s.lifecycle.status === status))
 }
 
 /**

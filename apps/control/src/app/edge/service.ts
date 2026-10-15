@@ -22,14 +22,14 @@ import { openOfKinds } from '../operations/persistence.ts'
 import type { IdleDecision, Schedules } from '../operations/schedules.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
-import type { Endpoint } from '../ports/runtime.ts'
+import type { Endpoint, RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
 import { findLiveBySlug, findRuntime, heldByDeleted } from '../servers/persistence.ts'
 import type { MinecraftServerService } from '../servers/service.ts'
 import { presenceFor, recordDomainJoin, recordEdgePresence, wakesInLastHour } from '../servers/usage.ts'
 import type { ServerWaiter } from '../servers/waiter.ts'
 import { tuning } from '../tuning.ts'
-import { fingerprint, type RouteInputs, type RouteServer, readInputs } from './inputs.ts'
+import { type Fingerprint, fingerprint, type RouteInputs, type RouteServer, readInputs } from './inputs.ts'
 import { forgetQuietEdges, markListed, sawEdge, seen } from './routed.ts'
 
 /**
@@ -116,33 +116,16 @@ export class EdgeService {
    * they are built from beside it, the runtimes' endpoints and the time, is asked every time.
    */
   async listed(): Promise<{ routes: EdgeRoutes; from: Date; unrouted: boolean }> {
-    const providers = this.#runtime.providers
-    let print = await fingerprint(this.#db, providers)
-    let read = this.#read
-    if (read?.digest !== print.digest) {
-      const fresh = await readInputs(this.#db, providers)
-      print = fresh.fingerprint
-      read = { digest: print.digest, inputs: fresh.inputs }
-      this.#read = read
-    }
-    const { servers: live, bindings, comingBack, stops, motds } = read.inputs
+    const { print, inputs } = await this.#inputs()
+    const { servers: live, bindings, comingBack, stops, motds } = inputs
     const restarting = restartingOf(live, comingBack)
     const out = outOf(stops, new Date())
     const routes: EdgeRoutes['routes'] = []
     for (const server of live) {
+      const state = server.status === 'running' ? null : restarting.has(server.id) ? 'restarting' : 'asleep'
       const binding = bindings.get(server.id)
-      const handle = binding?.handle
-      const { status } = server
-      const state = status === 'running' ? null : restarting.has(server.id) ? 'restarting' : 'asleep'
-      // A running server being restored is routed only so its players are told it is restarting:
-      // the edge dials nothing while it is.
-      if (!handle || !(ROUTABLE.includes(status) || state === 'restarting')) continue
-      // An address the provider may give to other compute once this server stops is only its own
-      // while it runs: until then the route names nothing at all.
-      const destination =
-        this.#runtime.stableEndpoint(handle) || state === null
-          ? destinationOf(this.#runtime.endpoint(handle, PORT_NAMES.game, 'edge'))
-          : NOWHERE
+      const destination = this.#destinationOf(server.status, state, binding?.handle)
+      if (destination === null) continue
       for (const address of this.#addressing.all(server.slug)) {
         routes.push({
           hostname: address.hostname,
@@ -161,6 +144,32 @@ export class EdgeService {
         live.filter((s) => s.status === 'running' && bindings.get(s.id)?.handle).map((s) => s.id),
       )
     return { routes: { routes }, from: print.from, unrouted: print.unrouted }
+  }
+
+  /** The route inputs, read again only when their fingerprint has moved since they last were. */
+  async #inputs(): Promise<{ print: Fingerprint; inputs: RouteInputs }> {
+    const providers = this.#runtime.providers
+    const print = await fingerprint(this.#db, providers)
+    if (this.#read?.digest === print.digest) return { print, inputs: this.#read.inputs }
+    const fresh = await readInputs(this.#db, providers)
+    this.#read = { digest: fresh.fingerprint.digest, inputs: fresh.inputs }
+    return { print: fresh.fingerprint, inputs: fresh.inputs }
+  }
+
+  /** Where a server's route sends a player; null for a server that has no route. */
+  #destinationOf(
+    status: ServerStatus,
+    state: 'asleep' | 'restarting' | null,
+    handle: RuntimeHandle | null | undefined,
+  ): string | null {
+    // A running server being restored is routed only so its players are told it is restarting:
+    // the edge dials nothing while it is.
+    if (!handle || !(ROUTABLE.includes(status) || state === 'restarting')) return null
+    // An address the provider may give to other compute once this server stops is only its own
+    // while it runs: until then the route names nothing at all.
+    return this.#runtime.stableEndpoint(handle) || state === null
+      ? destinationOf(this.#runtime.endpoint(handle, PORT_NAMES.game, 'edge'))
+      : NOWHERE
   }
 
   /**
