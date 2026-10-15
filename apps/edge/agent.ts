@@ -8,7 +8,7 @@
 
 import { connect, createServer, type Socket } from 'node:net'
 import { hostname } from 'node:os'
-import type { EdgeRoutes, SessionEvent, WakeResult } from '@blockly/contracts/edge'
+import { type EdgeRoutes, NEWER_REASONS, type SessionEvent, type WakeResult } from '@blockly/contracts/edge'
 // Copied into the image beside the agent (Dockerfile): the one place play coming back is worded.
 import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { EDGE_ID_HEADER } from '../../packages/contracts/src/edge-poll.ts'
@@ -62,6 +62,7 @@ const TURNED_AWAY = {
   restarting: RESTARTING.join,
   unreachable: env('UNREACHABLE_JOIN', 'Couldn’t start this server just now · join again in a moment'),
   failed: env('FAILED_JOIN', 'Couldn’t start this server just now · try again in a minute'),
+  broken: env('REFUSED_JOIN', 'This server can’t start right now · its owner can see why on Cubepals'),
   unknown: env('UNKNOWN_JOIN', 'There’s no Cubepals server at this address'),
   deleted: env('DELETED_JOIN', 'This server was deleted'),
   paused: env('PAUSED_JOIN', 'Cubepals isn’t starting servers right now · try again soon'),
@@ -284,7 +285,8 @@ const waking = new Map<string, Promise<WakeResult>>()
 function wakeOnce(hostname: string): Promise<WakeResult> {
   const inFlight = waking.get(hostname)
   if (inFlight) return inFlight
-  const asked = control('/wake', { method: 'POST', body: JSON.stringify({ hostname }) })
+  const body = JSON.stringify({ hostname, understands: NEWER_REASONS })
+  const asked = control('/wake', { method: 'POST', body })
     .then(async (response) => {
       if (!response.ok) throw new Error(`wake answered ${response.status}`)
       return (await response.json()) as WakeResult

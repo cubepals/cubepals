@@ -50,7 +50,13 @@ export const EdgeRoute = z.object({
 export const EdgeRoutes = z.object({ routes: z.array(EdgeRoute) })
 export type EdgeRoutes = z.infer<typeof EdgeRoutes>
 
-export const WakeRequest = z.object({ hostname: z.string() })
+/**
+ * `understands`: answers newer than the edge protocol's first that this edge can word for a
+ * player. An edge that doesn't name one is answered as before it was added.
+ */
+export const WakeRequest = z.object({ hostname: z.string(), understands: z.array(z.string()).optional() })
+/** The reasons an edge names in `understands` once it words them; older edges word neither. */
+export const NEWER_REASONS = ['failed', 'broken'] as const
 export const WakeResult = z.discriminatedUnion('outcome', [
   /** `proxyProtocol` as on the server's route, for the run it is in now. */
   z.object({
@@ -63,8 +69,11 @@ export const WakeResult = z.discriminatedUnion('outcome', [
   z.object({ outcome: z.literal('restarting') }),
   z.object({
     outcome: z.literal('denied'),
-    /** `failed`: its start failed for good; the next join tries it again. */
-    reason: z.enum(['unknown', 'suspended', 'paused', 'quota', 'deleted', 'failed']),
+    /**
+     * `failed`: its start failed for good in waking it, and the next join tries it again;
+     * `broken`: it failed over what the server runs, which its owner sees and has to change.
+     */
+    reason: z.enum(['unknown', 'suspended', 'paused', 'quota', 'deleted', 'failed', 'broken']),
     /** Refused because the day's play is used: when it is back, as on the route. */
     backAt: z.iso.datetime().optional(),
   }),

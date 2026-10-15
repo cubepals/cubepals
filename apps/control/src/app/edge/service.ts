@@ -17,7 +17,7 @@ import { outForToday, playToday } from '../accounts/play-today.ts'
 import { playTotal } from '../accounts/play-total.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
 import { AppError, type AppErrorCode } from '../errors.ts'
-import { openOfKinds } from '../operations/persistence.ts'
+import { failedWaking, openOfKinds } from '../operations/persistence.ts'
 import type { IdleDecision, Schedules } from '../operations/schedules.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
@@ -190,9 +190,12 @@ export class EdgeService {
   /**
    * Someone is joining a server that is not running: start it through the same checks as the UI.
    * Whatever it waits for, a restart, a rest or the start itself, comes out of one wait of
-   * `wakeWaitMs`, which the edge outlasts: it gives up on its request after 30 s.
+   * `wakeWaitMs`, which the edge outlasts: it gives up on its request after 30 s. `retries`: a
+   * start that failed for good in waking is tried again, which only an edge that words such a
+   * failure asks for; an older one, told the server still starts, would ask again every few
+   * seconds, and start it again each time.
    */
-  async wake(hostname: string): Promise<WakeResult> {
+  async wake(hostname: string, retries = true): Promise<WakeResult> {
     const deadline = Date.now() + this.#wakeWaitMs
     const left = () => Math.max(0, deadline - Date.now())
     const slug = this.#addressing.slugFor(hostname)
@@ -213,7 +216,7 @@ export class EdgeService {
       // what a flood of connections can wake.
       if ((await wakesInLastHour(this.#db, server.id, new Date())) >= tuning().abuse.wakesPerHour)
         return { outcome: 'denied', reason: 'quota' }
-      const unstarted = await this.#start(server, left)
+      const unstarted = await this.#start(server, left, retries)
       if (unstarted !== null) return unstarted
     }
 
@@ -252,24 +255,45 @@ export class EdgeService {
    * Starts the server through the same checks as the UI, and waits for it to run: null once it
    * does, or what the join is told when it was refused or hasn't by the time `left` runs out.
    */
-  async #start(server: MinecraftServer, left: () => number): Promise<WakeResult | null> {
+  async #start(server: MinecraftServer, left: () => number, retries: boolean): Promise<WakeResult | null> {
     const actor = { kind: 'system', reason: 'wake' } as const
-    // A start that failed for good is tried again by the next join. Read now: what the join
-    // waited through may have ended in one.
-    const { lifecycle } = (await findServer(this.#db, server.id)) ?? server
-    const retrying = lifecycle.status === 'failed' && lifecycle.failure?.during === 'starting'
+    const failed = await this.#failed(server)
+    const retrying = retries && failed === 'waking'
+    if (failed !== null && !retrying)
+      return { outcome: 'denied', reason: failed === 'waking' ? 'failed' : 'broken' }
     try {
       if (retrying) await this.#service.retry(actor, server.id, crypto.randomUUID())
       else await this.#service.start(actor, server.id, crypto.randomUUID())
     } catch (error) {
       if (!(error instanceof AppError)) throw error
-      const reason = REFUSED[error.code] ?? 'unknown'
-      const backAt = error.code === 'limit_reached' ? await this.#backAt(server) : null
-      return { outcome: 'denied', reason, ...(backAt === null ? {} : { backAt: backAt.toISOString() }) }
+      // A join at another edge asked first, and the start it asked for runs: this one waits on it.
+      const starting = (await findServer(this.#db, server.id))?.lifecycle.status === 'starting'
+      if (error.code !== 'invalid_transition' || !starting) return this.#refused(server, error)
     }
     const status = await this.#waiter.waitFor(server.id, ['running', 'failed', 'stopped', 'stored'], left())
     if (status === 'failed') return { outcome: 'denied', reason: 'failed' }
     return status === 'running' ? null : { outcome: 'starting' }
+  }
+
+  /**
+   * How the server's last start failed for good, where it did: `waking`, in waking it (a resume
+   * that hung, a host that couldn't run it), which the next join tries again within the hourly
+   * cap; `running`, over what the server runs (a broken mod, a crash), which would only fail again
+   * and is its owner's. Read now: what the join waited through may have ended in one.
+   */
+  async #failed(server: MinecraftServer): Promise<'waking' | 'running' | null> {
+    const { lifecycle } = (await findServer(this.#db, server.id)) ?? server
+    if (lifecycle.status !== 'failed') return null
+    const { failure } = lifecycle
+    const waking = failure?.during === 'starting' && (await failedWaking(this.#db, failure.operationId))
+    return waking ? 'waking' : 'running'
+  }
+
+  /** What a join is told when its start was refused. */
+  async #refused(server: MinecraftServer, error: AppError): Promise<WakeResult> {
+    const reason = REFUSED[error.code] ?? 'unknown'
+    const backAt = error.code === 'limit_reached' ? await this.#backAt(server) : null
+    return { outcome: 'denied', reason, ...(backAt === null ? {} : { backAt: backAt.toISOString() }) }
   }
 
   /**
