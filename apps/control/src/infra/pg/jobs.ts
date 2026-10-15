@@ -2,9 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { HOUR_S, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
 import type { Tx } from '@blockly/db'
 import { sql } from 'drizzle-orm'
-import { fromDrizzle, type JobWithMetadata, PgBoss } from 'pg-boss'
+import { fromDrizzle, type Job, PgBoss, type QueueOptions } from 'pg-boss'
 import type {
   BlockedOperation,
   CurationJob,
@@ -14,6 +15,7 @@ import type {
   Schedule,
   ScheduledJob,
 } from '../../app/ports/jobs.ts'
+import { Lanes } from './lanes.ts'
 
 /** The Postgres schema pg-boss keeps its tables in. */
 const SCHEMA = 'pgboss'
@@ -53,6 +55,75 @@ const PACK_IMPORT = 'pack-import'
 const WORLD_DOWNLOAD = 'world-download'
 /** Reviewed releases of curated packs to fetch and check: one job per release at a time. */
 const CURATION_INGEST = 'curation-ingest'
+/**
+ * The tries after the first that a pack import, a world copy and a release check get: each moves
+ * gigabytes, so one, then whose it is is told. Their jobs keep their queue's.
+ */
+const HEAVY_RETRIES = 1
+
+/**
+ * How often a worker asks for work while the database tells it of each job sent (LISTEN/NOTIFY):
+ * only to catch what it wasn't told of, such as a retry coming due. What decides how soon user
+ * actions run is the telling, not this. Where LISTEN can't be held, each worker asks at its
+ * own `pollingIntervalSeconds`, as before.
+ */
+const BACKSTOP_SECONDS = 30
+/** The same, for queues that run in the background: imports, copies, checks, listings. */
+const BACKGROUND_BACKSTOP_SECONDS = MINUTE_S
+/** The same, for the scheduled jobs: each is sent by the schedule, which always tells. */
+const SCHEDULED_BACKSTOP_SECONDS = 5 * MINUTE_S
+
+/**
+ * pg-boss's own upkeep, at the pace its users need rather than its defaults (pg-boss 12.36,
+ * `ConstructorOptions` in its types and https://pgboss.io/api/constructor). Each of its passes reads
+ * every queue's definition and counts, about 10 kB; the defaults ran them every minute in every
+ * process, which was most of what the database sent.
+ *
+ * - `queueCacheIntervalSeconds`: a queue's definition changes only as a deploy starts a process,
+ *   which reads them all then, so an hour.
+ * - `superviseIntervalSeconds` and `monitorIntervalSeconds`: expiring jobs past their deadline and
+ *   failing those whose heartbeat lapsed. A worker that restarts takes back its own at once
+ *   (`takeBack`), so five minutes is soon enough for one that never comes back.
+ * - `maintenanceIntervalSeconds`: deleting finished jobs past their queue's `deleteAfterSeconds`,
+ *   hourly rather than daily, so the scheduled jobs' hour is kept to about that.
+ * - `cronMonitorIntervalSeconds`: each pass reads every schedule. 45 s, the most pg-boss allows,
+ *   still sends each schedule once a minute: a pass sends what came due in the last minute.
+ * - `cronWorkerIntervalSeconds`: the internal queue a pass puts what is due in, asked every 10 s.
+ * - `flowIntervalSeconds`: resolving jobs that wait on others (flows), whose every pass reads every
+ *   queue's definition; it ran every 5 s. No job here waits on another, so an hour.
+ * - `notifyHeartbeatIntervalMs`: checking the listening connection is alive, every 30 s rather
+ *   than 10: one that dies unnoticed costs only the backstop's wait.
+ * - `registerInstance`: nothing here reads pg-boss's registry of instances.
+ */
+const UPKEEP = {
+  queueCacheIntervalSeconds: HOUR_S,
+  superviseIntervalSeconds: 5 * MINUTE_S,
+  monitorIntervalSeconds: 5 * MINUTE_S,
+  maintenanceIntervalSeconds: HOUR_S,
+  cronMonitorIntervalSeconds: 45,
+  cronWorkerIntervalSeconds: 10,
+  flowIntervalSeconds: HOUR_S,
+  notifyHeartbeatIntervalMs: 30 * SECOND_MS,
+  registerInstance: false,
+} as const
+
+/** How long a scheduled job is kept once it has run: an hour of them, for looking into a sweep. */
+const SCHEDULED_KEPT_SECONDS = HOUR_S
+
+/**
+ * A queue as it is asked for, made when missing and, where it was made before, given what was
+ * added since: each job sent tells the workers waiting on it (`notify`), and whatever `kept` names.
+ */
+async function ensureQueue(
+  boss: PgBoss,
+  name: string,
+  options: QueueOptions & { policy: string },
+  kept: Partial<QueueOptions> = {},
+): Promise<void> {
+  await boss.createQueue(name, { ...options, ...kept, notify: true })
+  // createQueue leaves a queue that exists as it is.
+  await boss.updateQueue(name, { ...kept, notify: true })
+}
 
 /**
  * Tests shorten the wait between an operation's attempts, and some the deadline of each; everything
@@ -78,49 +149,55 @@ export async function startBoss(
     application_name: 'blockly-jobs',
     supervise: maintains,
     schedule: maintains,
+    // One connection of its own listens, and wakes this process's workers as each job is sent.
+    useListenNotify: true,
+    ...UPKEEP,
   })
   boss.on('error', (error: unknown) => console.error('pg-boss', error))
   await boss.start()
-  await boss.createQueue(SERVER_OPS, {
-    policy: 'key_strict_fifo',
-    ...((options.retryDelaySeconds ?? 5) > 0
-      ? { retryDelay: options.retryDelaySeconds ?? 5, retryBackoff: true, retryDelayMax: 120 }
-      : { retryDelay: 0, retryBackoff: false }),
-    // First boots generate a world; give an operation half an hour before it counts as stuck.
-    expireInSeconds: options.operationDeadlineSeconds ?? 1800,
-    heartbeatSeconds: OPERATION_HEARTBEAT_SECONDS,
-  })
-  // createQueue leaves a queue that exists as it is: one made before heartbeats gains them here.
-  await boss.updateQueue(SERVER_OPS, { heartbeatSeconds: OPERATION_HEARTBEAT_SECONDS })
-  await boss.createQueue(LISTING_ELIGIBILITY, {
+  await ensureQueue(
+    boss,
+    SERVER_OPS,
+    {
+      policy: 'key_strict_fifo',
+      ...((options.retryDelaySeconds ?? 5) > 0
+        ? { retryDelay: options.retryDelaySeconds ?? 5, retryBackoff: true, retryDelayMax: 120 }
+        : { retryDelay: 0, retryBackoff: false }),
+      // First boots generate a world; give an operation half an hour before it counts as stuck.
+      expireInSeconds: options.operationDeadlineSeconds ?? 1800,
+    },
+    // One made before heartbeats gains them here.
+    { heartbeatSeconds: OPERATION_HEARTBEAT_SECONDS },
+  )
+  await ensureQueue(boss, LISTING_ELIGIBILITY, {
     policy: 'standard',
     retryLimit: 3,
     retryDelay: 10,
     expireInSeconds: 300,
   })
   // Reading a pack downloads and rewrites up to a few gigabytes: one try more, then its owner is told.
-  await boss.createQueue(PACK_IMPORT, {
+  await ensureQueue(boss, PACK_IMPORT, {
     policy: 'standard',
-    retryLimit: 1,
+    retryLimit: HEAVY_RETRIES,
     retryDelay: 30,
     expireInSeconds: 1800,
   })
   // A copy reads and writes a world of up to a few gigabytes, as a pack import does.
-  await boss.createQueue(WORLD_DOWNLOAD, {
+  await ensureQueue(boss, WORLD_DOWNLOAD, {
     policy: 'standard',
-    retryLimit: 1,
+    retryLimit: HEAVY_RETRIES,
     retryDelay: 30,
     expireInSeconds: 1800,
   })
   // Checking a release fetches every file it installs, a few hundred megabytes for a big pack, so
   // it gets as long as an upload; a check that fails twice is refused, for an admin to look at.
-  await boss.createQueue(CURATION_INGEST, {
+  await ensureQueue(boss, CURATION_INGEST, {
     policy: 'exclusive',
-    retryLimit: 1,
+    retryLimit: HEAVY_RETRIES,
     retryDelay: 60,
     expireInSeconds: 1800,
   })
-  await boss.createQueue(ARTIFACT_MIRROR, {
+  await ensureQueue(boss, ARTIFACT_MIRROR, {
     policy: 'exclusive',
     retryLimit: 5,
     retryDelay: 60,
@@ -150,7 +227,8 @@ export class PgBossJobs implements JobQueue {
   ): Promise<void> {
     await this.#boss.send(
       SERVER_OPS,
-      { operationId: job.operationId },
+      // Its tries ride with it, so a worker needn't fetch every column of the job to know them.
+      { operationId: job.operationId, retryLimit: job.retryLimit },
       {
         id: job.operationId,
         singletonKey: job.serverId,
@@ -264,13 +342,20 @@ function failureOf(output: unknown): string {
   return typeof nested === 'string' ? nested : ''
 }
 
+/** How a background queue's workers ask: at `pollingIntervalSeconds` only where nothing tells them. */
+const background = (pollingIntervalSeconds: number) => ({
+  batchSize: 1,
+  pollingIntervalSeconds,
+  notifyPollingIntervalSeconds: Math.max(pollingIntervalSeconds, BACKGROUND_BACKSTOP_SECONDS),
+})
+
 /** Re-evaluates listings as their inputs change (§15.3). */
 export async function workListingEligibility(
   boss: PgBoss,
   reevaluate: (serverIds: string[]) => Promise<void>,
   pollingIntervalSeconds = 1,
 ): Promise<void> {
-  await boss.work(LISTING_ELIGIBILITY, { batchSize: 1, pollingIntervalSeconds }, async ([job]) => {
+  await boss.work(LISTING_ELIGIBILITY, background(pollingIntervalSeconds), async ([job]) => {
     if (job) await reevaluate((job.data as { serverIds: string[] }).serverIds)
   })
 }
@@ -289,14 +374,14 @@ export async function workPackImports(
 ): Promise<void> {
   await boss.work(
     PACK_IMPORT,
-    { batchSize: 1, localConcurrency: 1, pollingIntervalSeconds, includeMetadata: true },
+    { ...background(pollingIntervalSeconds), localConcurrency: 1 },
     async ([job]) => {
       if (!job) return
       const { importId } = job.data as { importId: string }
       try {
         await handlers.run(importId)
       } catch (error) {
-        if (job.retryCount >= job.retryLimit)
+        if (job.retryCount >= HEAVY_RETRIES)
           await handlers.gaveUp(importId, error instanceof Error ? error.message : String(error))
         throw error
       }
@@ -318,14 +403,14 @@ export async function workWorldDownloads(
 ): Promise<void> {
   await boss.work(
     WORLD_DOWNLOAD,
-    { batchSize: 1, localConcurrency: 1, pollingIntervalSeconds, includeMetadata: true },
+    { ...background(pollingIntervalSeconds), localConcurrency: 1 },
     async ([job]) => {
       if (!job) return
       const { downloadId } = job.data as { downloadId: string }
       try {
         await downloads.make(downloadId)
       } catch (error) {
-        if (job.retryCount >= job.retryLimit)
+        if (job.retryCount >= HEAVY_RETRIES)
           await downloads.gaveUp(downloadId, error instanceof Error ? error.message : String(error))
         throw error
       }
@@ -347,14 +432,14 @@ export async function workCuration(
 ): Promise<void> {
   await boss.work(
     CURATION_INGEST,
-    { batchSize: 1, localConcurrency: 1, pollingIntervalSeconds, includeMetadata: true },
+    { ...background(pollingIntervalSeconds), localConcurrency: 1 },
     async ([job]) => {
       if (!job) return
       const release = job.data as CurationJob
       try {
         await handlers.run(release)
       } catch (error) {
-        if (job.retryCount >= job.retryLimit)
+        if (job.retryCount >= HEAVY_RETRIES)
           await handlers.gaveUp(release, error instanceof Error ? error.message : String(error))
         throw error
       }
@@ -370,7 +455,7 @@ export async function workArtifactMirror(
 ): Promise<void> {
   await boss.work(
     ARTIFACT_MIRROR,
-    { batchSize: 1, localConcurrency: 2, pollingIntervalSeconds },
+    { ...background(pollingIntervalSeconds), localConcurrency: 2 },
     async ([job]) => {
       if (job) await mirror(job.data as MirrorJob)
     },
@@ -381,7 +466,7 @@ export async function workArtifactMirror(
  * Works server operations in two lanes on the one queue, so each server's operations still run in
  * the order they were asked for. The main lane takes anything, starts and wakes first; the wake
  * lane takes only starts and wakes, so a player joining never waits behind new servers being made,
- * however many there are.
+ * however many there are. Each lane keeps one worker waiting, however many it may run (lanes.ts).
  */
 export async function workServerOperations(
   boss: PgBoss,
@@ -389,25 +474,32 @@ export async function workServerOperations(
   lanes: { concurrency: number; wakeConcurrency: number },
   pollingIntervalSeconds = 1,
 ): Promise<void> {
-  const handle = async ([job]: JobWithMetadata[]) => {
-    if (!job) return
-    const { operationId } = job.data as { operationId: string }
+  const handle = async (job: Job) => {
+    const { operationId, retryLimit } = job.data as { operationId: string; retryLimit?: number }
     // pg-boss keeps the error as JSON, which can't hold a NUL: a message quoting raw bytes from
     // a provider's stream would leave the job unrecorded until it expired.
-    await run({ operationId, retryCount: job.retryCount, retryLimit: job.retryLimit }).catch(
-      (error: unknown) => {
-        if (!(error instanceof Error) || !error.message.includes('\u0000')) throw error
-        throw new Error(error.message.replaceAll('\u0000', ''))
-      },
-    )
+    await run({
+      operationId,
+      retryCount: job.retryCount,
+      retryLimit: retryLimit ?? (await retryLimitOf(boss, job.id)),
+    }).catch((error: unknown) => {
+      if (!(error instanceof Error) || !error.message.includes('\u0000')) throw error
+      throw new Error(error.message.replaceAll('\u0000', ''))
+    })
   }
-  const lane = { batchSize: 1, includeMetadata: true, pollingIntervalSeconds } as const
-  await boss.work(SERVER_OPS, { ...lane, localConcurrency: lanes.concurrency }, handle)
-  await boss.work(
-    SERVER_OPS,
-    { ...lane, localConcurrency: lanes.wakeConcurrency, minPriority: WAKE_PRIORITY },
-    handle,
-  )
+  const lane = {
+    pollingIntervalSeconds,
+    notifyPollingIntervalSeconds: Math.max(pollingIntervalSeconds, BACKSTOP_SECONDS),
+  }
+  const working = new Lanes(boss, SERVER_OPS)
+  await working.open(lane, lanes.concurrency, handle)
+  await working.open({ ...lane, minPriority: WAKE_PRIORITY }, lanes.wakeConcurrency, handle)
+}
+
+/** The tries a job sent before its data carried them may have, as its row says. */
+async function retryLimitOf(boss: PgBoss, jobId: string): Promise<number> {
+  const [job] = await boss.findJobs(SERVER_OPS, { id: jobId })
+  return job?.retryLimit ?? 0
 }
 
 const CRON: Record<ScheduledJob, string> = {
@@ -455,17 +547,27 @@ const CRON: Record<ScheduledJob, string> = {
 }
 
 /**
- * Periodic work. Each runs as a singleton, so two workers never sweep at once. The most frequent
- * fires once a minute, so looking for it every ten seconds is soon enough, and spares the database
- * a query every two seconds for each of them.
+ * Periodic work. Each runs as a singleton, so two workers never sweep at once. Each job the
+ * schedule sends tells its worker at once (LISTEN/NOTIFY), which otherwise asks every ten seconds
+ * only where nothing can tell it. A job that has run is kept an hour.
  */
 export async function workSchedules(boss: PgBoss, schedules: readonly Schedule[]): Promise<void> {
   for (const [name, cron] of Object.entries(CRON) as Array<[ScheduledJob, string]>) {
     const schedule = schedules.find((s) => s.job === name)
     if (schedule === undefined) throw new Error(`Nothing runs the scheduled job ${name}`)
-    await boss.createQueue(name, { policy: 'singleton', retryLimit: 0, expireInSeconds: 300 })
+    await ensureQueue(
+      boss,
+      name,
+      { policy: 'singleton', retryLimit: 0, expireInSeconds: 300 },
+      { deleteAfterSeconds: SCHEDULED_KEPT_SECONDS },
+    )
     await boss.schedule(name, cron)
-    await boss.work(name, { batchSize: 1, pollingIntervalSeconds: 10 }, async () => {
+    const asks = {
+      batchSize: 1,
+      pollingIntervalSeconds: 10,
+      notifyPollingIntervalSeconds: SCHEDULED_BACKSTOP_SECONDS,
+    }
+    await boss.work(name, asks, async () => {
       if (schedule.says === undefined) {
         await schedule.run()
         return
