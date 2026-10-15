@@ -59,6 +59,7 @@ import { playToday, todayView } from '../accounts/play-today.ts'
 import { playTotal, totalView } from '../accounts/play-total.ts'
 import { type Actor, authorize } from '../actor.ts'
 import type { PackCuration } from '../curation/service.ts'
+import { shownStatus } from '../edge/routed.ts'
 import { packView } from '../mods/pack.ts'
 import {
   activeOperation,
@@ -626,7 +627,7 @@ export class ServerQueries {
       tags: [...server.tags],
       slug: server.slug,
       joinAddress: formatJoinAddress(this.#addressing.primary(server.slug)),
-      status: server.lifecycle.status,
+      status: await shownStatus(this.#db, server.id, server.lifecycle.status),
       stopReason: server.lifecycle.stopReason,
       crash:
         server.lifecycle.status === 'stopped' && server.lifecycle.stopReason === 'crash'

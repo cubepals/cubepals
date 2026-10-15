@@ -15,6 +15,7 @@ import { inArray } from 'drizzle-orm'
 import { formatJoinAddress } from '../../minecraft/address.ts'
 import { loadControls } from '../accounts/persistence.ts'
 import { type Actor, authorize, runsThePlatform } from '../actor.ts'
+import { shownStatus } from '../edge/routed.ts'
 import { NotFound } from '../errors.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import { pictureOf } from '../server-icons/view.ts'
@@ -166,7 +167,7 @@ export class ListingQueries {
       lastPlayedAt: row.lastPlayedAt?.toISOString() ?? null,
       joinAddress: formatJoinAddress(this.#addressing.primary(row.server.slug)),
       online: row.online,
-      awake: row.server.status === 'running',
+      awake: (await shownStatus(this.#db, row.server.id, row.server.status)) === 'running',
       whitelistOnly: row.whitelistEnabled,
       gameVersion: revision?.gameVersion ?? null,
       loader: revision?.loader ?? null,

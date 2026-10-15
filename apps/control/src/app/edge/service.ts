@@ -35,6 +35,7 @@ import type { MinecraftServerService } from '../servers/service.ts'
 import { presenceFor, recordDomainJoin, recordEdgePresence, wakesInLastHour } from '../servers/usage.ts'
 import type { ServerWaiter } from '../servers/waiter.ts'
 import { tuning } from '../tuning.ts'
+import { databaseNow, markListed, seen } from './routed.ts'
 
 /**
  * The application side of the edge protocol. It resolves hostnames and destinations; the edge
@@ -93,8 +94,18 @@ export class EdgeService {
     this.#wakeWaitMs = deps.wakeWaitMs
   }
 
-  /** Every hostname that should route, with where the edge sends it. Nothing is persisted. */
+  /** Every hostname that should route, with where the edge sends it. */
   async routes(): Promise<EdgeRoutes> {
+    return (await this.listed()).routes
+  }
+
+  /**
+   * The routes, and the database's time as their read began: an edge that holds this very list
+   * holds the route of every server named running before then (`routed.ts`). The first list to
+   * name a server running says so on it; nothing else is written.
+   */
+  async listed(): Promise<{ routes: EdgeRoutes; from: Date }> {
+    const from = await databaseNow(this.#db)
     const bindings = new Map(
       (await listBindings(this.#db, this.#runtime.providers)).map((b) => [b.serverId, b]),
     )
@@ -132,7 +143,20 @@ export class EdgeService {
       }
     }
     routes.sort((a, b) => a.hostname.localeCompare(b.hostname))
-    return { routes }
+    // Each running server with a handle is routed to, above.
+    await markListed(
+      this.#db,
+      live.filter((s) => s.lifecycle.status === 'running' && bindings.get(s.id)?.handle).map((s) => s.id),
+    )
+    return { routes: { routes }, from }
+  }
+
+  /**
+   * Edge `edgeId` asked for its routes, holding the list read from `syncedTo` on, or a list it
+   * would not be handed now (null).
+   */
+  async seen(edgeId: string, syncedTo: Date | null): Promise<void> {
+    await seen(this.#db, this.#events, edgeId, syncedTo)
   }
 
   /**

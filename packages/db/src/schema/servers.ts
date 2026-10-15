@@ -137,6 +137,12 @@ export const minecraftServers = pgTable(
     /** When its world was stored away; null while it has storage of its own. */
     storedAt: ts('stored_at'),
     /**
+     * The database's time once a route list first named it running, which every edge then has to
+     * hold before it reads as running (`app/edge/routed.ts`). Null until then, and again each time
+     * its status changes.
+     */
+    routeListedAt: ts('route_listed_at'),
+    /**
      * The warnings sent before its world is deleted for going unplayed, as
      * `<last active, ISO>:<days before>:<sent at, ISO>`; null before any. Tied to when it was
      * last played, so playing again starts it over.

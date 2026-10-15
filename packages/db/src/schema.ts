@@ -28,6 +28,7 @@
  * - `placement.ts`: where servers run when a deployment has several runtimes.
  * - `realtime.ts`: the realtime endpoint's pinned certificate.
  * - `fleet.ts`: the fleet runtime's own state.
+ * - `edge.ts`: the edges that route players, and how far each one's routes go.
  */
 
 export * from './schema/access.ts'
@@ -39,6 +40,7 @@ export * from './schema/backups.ts'
 export * from './schema/billing.ts'
 export * from './schema/catalog.ts'
 export * from './schema/chip-ins.ts'
+export * from './schema/edge.ts'
 export * from './schema/fleet.ts'
 export * from './schema/free-play.ts'
 export * from './schema/gifts.ts'

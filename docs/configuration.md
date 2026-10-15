@@ -258,7 +258,6 @@ which the project's charts leave out.
 | `IDLE_HINT_AFTER` | `10m` (compose knob) | `10m` | toml |
 | `MINECRAFT_PORT` | `25565` | `25565` | toml |
 | `EDGE_ID` | `local-edge` | the machine's hostname | — |
-| `ROUTES_FILE` | `/tmp/routes.json` | same | — |
 | `ROUTES_POLL_MS` | `1000` | same | — |
 | `AGENT_PORT` | `8090` (mc-router's webhooks) | same | — |
 | `NOTICE_PORT`, `SLEEPING_PORT` | `25564`, `25563` (the restarting and sleeping notices) | same | — |
@@ -268,6 +267,7 @@ which the project's charts leave out.
 | `CONNECTION_RATE_LIMIT` | `1000` (mc-router's `-connection-rate-limit`, every server together) | same | — |
 | `PROXY_PROTOCOL` | empty | `1`: Fly's proxy opens each connection with a PROXY line | toml |
 | `ROUTER_PORT` | `25561` (mc-router, behind the agent's front door) | same | — |
+| `ROUTER_API_PORT` | `25560` (mc-router's API, on the machine only: how routes change) | same | — |
 | `ADDRESS_CONNECTIONS_PER_SECOND`, `ADDRESS_CONNECTIONS_BURST`, `ADDRESS_GREETING` | `5`, `30`, `10` (per address, an IPv6 one by its /64) | same | — |
 | `SERVER_CONNECTIONS_PER_SECOND`, `SERVER_CONNECTIONS_BURST`, `SERVER_OPEN_CONNECTIONS` | `20`, `100`, `300` (per server) | same | — |
 | `BUSY_JOIN` | `This server is busy right now · join again in a moment` | same | — |

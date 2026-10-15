@@ -116,7 +116,7 @@ edge destinations are written so that nothing depends on machine identity (§8, 
 | Logs: NATS `logs.<app>.<region>.<machine>` (live, experimental) and HTTP (7-day history, unofficial). | `LogSource` port; the Fly impl combines both. | https://fly.io/docs/monitoring/logs-api-options/ |
 | Separate orgs per environment are recommended; 6PN and billing are per org. | One Fly org per deployment. Everything a deployment runs lives in its org. | https://fly.io/docs/blueprints/staging-prod-isolation/ |
 | Fly never exposes TLS keys. UDP needs a dedicated IPv4 bound to `fly-global-services`; WebTransport on UDP 443 works. | The realtime process terminates its own TLS: a pinned self-signed cert, or ACME DNS-01 on an A-only hostname. | https://fly.io/docs/networking/udp-and-tcp/ · community.fly.io/t/…/8753 |
-| mc-router: routes file JSON (`mappings`, `default-server`) with watch mode. The webhook scaler applies to file *and* API routes, and its reply may override the backend. Connect/disconnect webhooks carry the client-claimed `player{name,uuid}`. Hostnames are lowercased, with trailing dot and Forge `\0FML` stripped. | Edge agent writes the routes file. Edge player identity is a *hint*; RCON `list` is authoritative. | https://github.com/itzg/mc-router (source at a9d1d96) |
+| mc-router: routes file JSON (`mappings`, `default-server`) with watch mode. The webhook scaler applies to file *and* API routes, and its reply may override the backend. Connect/disconnect webhooks carry the client-claimed `player{name,uuid}`. Hostnames are lowercased, with trailing dot and Forge `\0FML` stripped. | Edge agent changes routes one at a time through the API. Edge player identity is a *hint*; RCON `list` is authoritative. | https://github.com/itzg/mc-router (source at a9d1d96) |
 | Better Auth: `trustedOrigins` supports wildcards and functions; `oAuthProxy` handles previews with one registered callback; its docs recommend a reverse proxy for cross-domain setups. OpenNext's Cloudflare adapter proxies an external rewrite from the Worker with `fetch`. | Same-origin proxy for all browser→API traffic. `Cache-Control: no-store` on API responses. | https://www.better-auth.com/docs/concepts/cookies · https://www.better-auth.com/docs/plugins/oauth-proxy · https://opennext.js.org/cloudflare |
 | `*.localhost` resolves via the macOS system resolver and systemd-resolved. nip.io (`x.127.0.0.1.nip.io`) is the portable fallback. The handshake carries the typed hostname. | Local play domain `play.localhost`, fallback `127.0.0.1.nip.io`. | https://nip.io/ · minecraft.wiki SLP |
 | Transport.io: rooms are per process ("two machines is a silent split"). A cert rotation restarts the process and drops sessions. WebTransport requests carry no cookies. | Realtime is a **singleton process role**. Events travel between processes via Postgres `NOTIFY`. Tickets in the query string. | transport-io `guides/deploy.md`, `guides/certificates.md` |
@@ -1341,8 +1341,19 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   join is told "This server is busy right now · join again in a moment". Refusals are logged every
   10 s by limit and by server. mc-router's own limit stays as the machine's last guard (1,000 a
   second). The defaults are the edge's own, each overridable by its environment.
-- The agent polls `/edge/v1/routes` every second. It renders
-  `{"default-server": null, "mappings": {…}}` to a file and sends mc-router SIGHUP to reread it.
+- The agent polls `/edge/v1/routes` every second, naming itself in `x-edge-id`
+  (`packages/contracts/src/edge-poll.ts`). It changes mc-router's routes one hostname at a time
+  through mc-router's API (`apps/edge/router.ts`): a route added, replaced or removed on its own,
+  so a hostname that routes keeps routing while others change. A routes file read whole emptied
+  mc-router's table on every reload, and a player who arrived in that moment was closed.
+- **No early "running".** The edge sends back the ETag of the list it holds, every route of it
+  applied, and asks again at once after applying a new one. A list read from the database at a
+  time T covers every server named running before T, and the first list to name a server running
+  stamps it (`route_listed_at`). A server reads as running, in its view and in the events its page
+  hears, only once every edge seen in the last 10 s is synced past that stamp
+  (`apps/control/src/app/edge/routed.ts`, the `edges` table); until then it reads as starting.
+  With no edge seen, as where a deployment runs none, nothing waits. The agent opens its front
+  door only once mc-router holds the first list.
 - **The notice** (`apps/edge/notice.ts`). A `restarting` route maps to a listener in the agent,
   not to the server. It answers the server list with "Restarting · back in a moment" and turns a
   join away with "Restarting · join again in a moment". mc-router has one asleep MOTD for every

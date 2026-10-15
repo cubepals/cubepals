@@ -14,6 +14,7 @@ import {
 } from '../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { loadStanding } from '../accounts/persistence.ts'
+import { shownStatus } from '../edge/routed.ts'
 import { AppError } from '../errors.ts'
 import { insertOperation, type OperationRecord } from '../operations/persistence.ts'
 import type { EventBus } from '../ports/events.ts'
@@ -164,7 +165,8 @@ export class ServerTransitions {
       type: 'server_changed',
       serverId: saved.id,
       ownerId: saved.ownerId,
-      status: saved.lifecycle.status,
+      // Running, to anyone told, once every edge holds its route, which then says so again.
+      status: await shownStatus(tx, saved.id, saved.lifecycle.status),
       version: saved.version,
     })
     return saved

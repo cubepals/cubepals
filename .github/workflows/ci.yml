@@ -226,6 +226,20 @@ jobs:
           done
           docker tag mirror.gcr.io/library/alpine:3.22 alpine:3.22
           docker tag quay.io/curl/curl:8.22.0 curlimages/curl:8.22.0
+      # The edge's tests run a real mc-router: the one the edge's image is built with, copied out
+      # of the image apps/edge/Dockerfile names.
+      - name: Fetch mc-router
+        if: matrix.group == 'Web app, edge and scripts'
+        run: |
+          image=$(sed -n 's/^FROM \(ghcr\.io\/itzg\/mc-router[^ ]*\) AS router$/\1/p' apps/edge/Dockerfile)
+          for wait in 2 5 10 20 40 0; do
+            docker pull -q "$image" && break
+            [ "$wait" = 0 ] && exit 1
+            sleep "$wait"
+          done
+          docker create --name mc-router "$image"
+          docker cp mc-router:/mc-router "$RUNNER_TEMP/mc-router"
+          echo "MC_ROUTER_BIN=$RUNNER_TEMP/mc-router" >> "$GITHUB_ENV"
       - name: Start NATS
         run: docker run -d --name nats -p 4222:4222 mirror.gcr.io/library/nats:2.15.0 --user blockly-test --pass fm2_blockly_test
       - name: Start an S3 store

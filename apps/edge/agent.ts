@@ -3,16 +3,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // The edge agent: the only code that knows mc-router exists. It turns the control plane's edge
-// protocol (routes, wake, idle, sessions) into mc-router's routes file and webhooks, and
-// supervises mc-router itself. Replacing mc-router means rewriting this file, nothing else.
+// protocol (routes, wake, idle, sessions) into mc-router's routes (router.ts) and webhooks, and
+// supervises mc-router itself. Replacing mc-router means rewriting this file and router.ts.
 
-import { renameSync, writeFileSync } from 'node:fs'
 import { connect, createServer, type Socket } from 'node:net'
 import { hostname } from 'node:os'
 import type { EdgeRoutes, SessionEvent, WakeResult } from '@blockly/contracts/edge'
-import type { Subprocess } from 'bun'
 // Copied into the image beside the agent (Dockerfile): the one place play coming back is worded.
 import { MINUTE_MS } from '../../packages/contracts/src/durations.ts'
+import { EDGE_ID_HEADER } from '../../packages/contracts/src/edge-poll.ts'
 import { waitFor } from '../../packages/contracts/src/play-today.ts'
 import { LOCAL_HEADER } from '../../packages/contracts/src/proxy-header.ts'
 import { OWN_ICON_MAX_BYTES } from '../../packages/contracts/src/server-list.ts'
@@ -24,6 +23,8 @@ import { Held, LOGIN_QUERIES, turnAway } from './hold.ts'
 import { Gate } from './limits.ts'
 import { mappings } from './mappings.ts'
 import { hostnameOf, type Join, Notice, type NoticeText, statusRequest } from './notice.ts'
+import { RoutesPoll } from './poll.ts'
+import { RouterRoutes } from './router.ts'
 
 const env = (name: string, fallback?: string): string => {
   const value = process.env[name] ?? fallback
@@ -34,10 +35,10 @@ const env = (name: string, fallback?: string): string => {
 const CONTROL_URL = env('CONTROL_URL').replace(/\/$/, '')
 const TOKEN = env('EDGE_TOKEN')
 const EDGE_ID = env('EDGE_ID', hostname())
-const ROUTES_FILE = env('ROUTES_FILE', '/tmp/routes.json')
 const AGENT_PORT = Number(env('AGENT_PORT', '8090'))
-// Routes are what the router knows about a hostname, and a player joins a world the moment it
-// comes up, so this is short on purpose: every poll but the first is an ETag 304.
+// Routes are what the router knows about a hostname, and a server reads as running only once
+// every edge holds its route, so this is short on purpose: every poll but the first after a
+// change is an ETag 304.
 const POLL_MS = Number(env('ROUTES_POLL_MS', '1000'))
 /** Where a restarting server's hostname goes instead of to the server: this agent's own notice. */
 const NOTICE = `127.0.0.1:${env('NOTICE_PORT', '25564')}`
@@ -71,6 +72,8 @@ const TURNED_AWAY = {
 const MINECRAFT_PORT = Number(env('MINECRAFT_PORT', String(GAME_PORT)))
 /** Where mc-router listens instead, reached only through the front door. */
 const ROUTER_PORT = Number(env('ROUTER_PORT', '25561'))
+/** Where mc-router's API listens, on this machine only: how its routes change (router.ts). */
+const ROUTER_API = `127.0.0.1:${env('ROUTER_API_PORT', '25560')}`
 /** How much one address, and one server, may ask of the edge (limits.ts). */
 const LIMITS = {
   address: {
@@ -92,15 +95,18 @@ const LIMITS = {
 const control = (path: string, init: RequestInit = {}) =>
   fetch(`${CONTROL_URL}/edge/v1${path}`, {
     ...init,
-    headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json', ...init.headers },
+    headers: {
+      authorization: `Bearer ${TOKEN}`,
+      'content-type': 'application/json',
+      [EDGE_ID_HEADER]: EDGE_ID,
+      ...init.headers,
+    },
     signal: AbortSignal.timeout(30_000),
   })
 
 // ─── Routes: pulled, so every edge machine converges and a restart loses nothing ────────────
 
-let etag: string | null = null
-/** mc-router, once it runs. */
-let router: Subprocess | null = null
+const router = new RouterRoutes(`http://${ROUTER_API}`)
 /** What the control plane last said. */
 let routes: EdgeRoutes['routes'] = []
 /** Every hostname those routes name. */
@@ -115,31 +121,39 @@ const unreachable = new Set<string>()
 /** When each running server was last asked whether it answers. */
 const asked = new Map<string, number>()
 
-function writeRoutes(): void {
-  const table = mappings(routes, unreachable, { restarting: NOTICE, asleep: SLEEPING })
-  const temporary = `${ROUTES_FILE}.tmp`
-  writeFileSync(temporary, JSON.stringify({ 'default-server': null, mappings: table }, null, 2))
-  renameSync(temporary, ROUTES_FILE)
-  // mc-router's own file watch follows the inode this rename replaces, so it stops after the first
-  // update, and it only ever adds routes. SIGHUP rereads the file by path and replaces them all.
-  router?.kill('SIGHUP')
+/** Has mc-router hold the routes, changing only what differs; whether it holds them all. */
+async function applyRoutes(): Promise<boolean> {
+  try {
+    await router.apply(mappings(routes, unreachable, { restarting: NOTICE, asleep: SLEEPING }))
+    return true
+  } catch (error) {
+    // Not held, so not said to be: the next poll fetches the list again, and applies it again.
+    poll.forget()
+    console.error('mc-router refused a route; trying again at the next poll', error)
+    return false
+  }
 }
 
-async function syncRoutes(): Promise<void> {
-  try {
-    const response = await control('/routes', { headers: etag ? { 'if-none-match': etag } : {} })
-    if (response.status === 304) return
-    if (!response.ok) throw new Error(`routes answered ${response.status}`)
-    routes = ((await response.json()) as EdgeRoutes).routes
+const poll = new RoutesPoll(
+  (headers) => control('/routes', { headers }),
+  (next) => {
+    routes = next
     hostnames = new Set(routes.map((r) => r.hostname))
     plain = new Set(routes.filter((r) => r.state === undefined && !r.proxyProtocol).map((r) => r.hostname))
     const running = new Set(routes.filter((r) => r.state === undefined).map((r) => r.destination))
     for (const destination of unreachable) if (!running.has(destination)) unreachable.delete(destination)
     for (const destination of asked.keys()) if (!running.has(destination)) asked.delete(destination)
-    writeRoutes()
-    etag = response.headers.get('etag')
+    return applyRoutes()
+  },
+)
+
+/** Asks for the routes, and applies them if they changed; whether they did. */
+async function syncRoutes(): Promise<boolean> {
+  try {
+    return await poll.sync()
   } catch (error) {
     console.error('route sync failed; keeping the last known routes', error)
+    return false
   }
 }
 
@@ -214,7 +228,7 @@ async function check(destination: string): Promise<void> {
   if (!routes.some((r) => r.state === undefined && r.destination === destination)) return
   if (await answers(destination)) return
   unreachable.add(destination)
-  writeRoutes()
+  await applyRoutes()
 }
 
 setInterval(async () => {
@@ -224,7 +238,7 @@ setInterval(async () => {
     unreachable.delete(destination)
     changed = true
   }
-  if (changed) writeRoutes()
+  if (changed) await applyRoutes()
 }, 2_000)
 
 // ─── mc-router's webhooks, translated ───────────────────────────────────────────────────────
@@ -250,7 +264,7 @@ async function wake(serverAddress: string): Promise<Response> {
     !(await answers(result.destination, result.proxyProtocol === true))
   ) {
     unreachable.add(result.destination)
-    writeRoutes()
+    await applyRoutes()
   }
   const deadline = Date.now() + 20_000
   while (unreachable.has(result.destination) && Date.now() < deadline) await Bun.sleep(1_000)
@@ -469,21 +483,6 @@ asleepAt(WAITING, (client, join, header) => void hold(client, join, header))
 
 // ─── Supervise mc-router ────────────────────────────────────────────────────────────────────
 
-writeRoutes()
-await syncRoutes()
-fetchIcons()
-setInterval(() => void syncRoutes().then(fetchIcons), POLL_MS)
-
-front({
-  port: MINECRAFT_PORT,
-  router: ROUTER_PORT,
-  proxied: env('PROXY_PROTOCOL', '') === '1',
-  gate: new Gate(LIMITS),
-  known: (name) => hostnames.has(name),
-  plain: (name) => plain.has(name),
-  busy: env('BUSY_JOIN', 'This server is busy right now · join again in a moment'),
-})
-
 const child = Bun.spawn(
   [
     env('ROUTER_BIN', '/mc-router'),
@@ -494,8 +493,9 @@ const child = Bun.spawn(
     '-dynamic-proxy-protocol',
     '-trusted-proxies',
     '127.0.0.1/32',
-    '-routes-config',
-    ROUTES_FILE,
+    // Routes come and go one at a time through the API (router.ts), never from a file read whole.
+    '-api-binding',
+    ROUTER_API,
     '-auto-scale-webhook-url',
     `http://127.0.0.1:${AGENT_PORT}/scale`,
     '-auto-scale-webhook-timeout',
@@ -516,9 +516,31 @@ const child = Bun.spawn(
   { stdout: 'inherit', stderr: 'inherit' },
 )
 
-router = child
-
 for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => child.kill(signal))
+
+/** Polls for routes for good. A list just applied is said to be held at once, by asking again. */
+async function pollRoutes(): Promise<never> {
+  for (;;) {
+    if (!(await syncRoutes())) await Bun.sleep(POLL_MS)
+    fetchIcons()
+  }
+}
+
+// Players are let in only once mc-router holds every route: until then, one would be closed.
+await router.ready(30_000)
+while (!(await syncRoutes())) await Bun.sleep(POLL_MS)
+void pollRoutes()
+
+front({
+  port: MINECRAFT_PORT,
+  router: ROUTER_PORT,
+  proxied: env('PROXY_PROTOCOL', '') === '1',
+  gate: new Gate(LIMITS),
+  known: (name) => hostnames.has(name),
+  plain: (name) => plain.has(name),
+  busy: env('BUSY_JOIN', 'This server is busy right now · join again in a moment'),
+})
+
 const code = await child.exited
 console.error(`mc-router exited with ${code}`)
 process.exit(code || 1)

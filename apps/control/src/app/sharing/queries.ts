@@ -17,6 +17,7 @@ import { loadControls, loadStanding } from '../accounts/persistence.ts'
 import type { Actor } from '../actor.ts'
 import { offersChipIn } from '../billing/chip-ins.ts'
 import type { DeploymentCapabilities } from '../capabilities.ts'
+import { shownStatus } from '../edge/routed.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { tally } from '../guestbook/persistence.ts'
 import { trustOf } from '../listings/judge.ts'
@@ -225,7 +226,8 @@ export class SharingQueries {
     const online = (await presenceFor(this.#db, [server.id])).get(server.id) ?? []
     const listing = await loadListing(this.#db, server.id)
     const world = (await listWorlds(this.#db, server.id)).find((w) => w.id === server.activeWorldId)
-    const awake = server.lifecycle.status === 'running'
+    // Awake once every edge routes to it, as its owner's view has it (edge/routed.ts).
+    const awake = (await shownStatus(this.#db, server.id, server.lifecycle.status)) === 'running'
     return {
       slug: server.slug,
       name: server.name,
