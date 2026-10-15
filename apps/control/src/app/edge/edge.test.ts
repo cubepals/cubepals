@@ -304,6 +304,23 @@ describe.skipIf(!hasDatabase)('edge', () => {
     expect(after.get('play.old.test')?.lastJoinAt).not.toBeNull()
   }, 30_000)
 
+  test('a start that failed for good is said plainly, and the next join tries it again', async () => {
+    const { id, slug } = await sleeping()
+    h.runtime.failBootWhen(() => 'the machine would not boot')
+    try {
+      await h.app.edge.wake(`${slug}.play.test`)
+      await h.until(id, 'failed', 30_000)
+      await h.settled(id)
+      // Never "no server at this address": a join is told to try again, and its try starts it.
+      expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({ outcome: 'denied', reason: 'failed' })
+      await h.settled(id)
+    } finally {
+      h.runtime.failBootWhen(() => null)
+    }
+    expect(await h.app.edge.wake(`${slug}.play.test`)).toMatchObject({ outcome: 'ready' })
+    expect((await h.server(id)).lifecycle.status).toBe('running')
+  }, 60_000)
+
   test('an idle server stops once its plan’s idle time passes, but not in the grace after a restart', async () => {
     const { owner, id } = await sleeping()
     await h.app.servers.start(owner, id, randomUUID())

@@ -26,6 +26,7 @@ import type { Runtimes } from '../runtimes/router.ts'
 import {
   findLiveBySlug,
   findRuntime,
+  findServer,
   heldByDeleted,
   listBindings,
   listLive,
@@ -56,6 +57,9 @@ const REFUSED: Partial<Record<AppErrorCode, Extract<WakeResult, { outcome: 'deni
   not_entitled: 'quota',
   payment_due: 'quota',
 }
+
+/** On its way to a rest, to sleep, or onto another host: a join waits for it, then wakes it. */
+const MOVING_ON: ReadonlySet<ServerStatus> = new Set(['storing', 'stopping', 'relocating'])
 
 /** A route's word that its server reads a PROXY header, where the run it is in does. */
 const headerRead = (applied: AppliedConfigJson | null | undefined): { proxyProtocol?: true } =>
@@ -234,9 +238,10 @@ export class EdgeService {
       return back ?? { outcome: 'restarting' }
     }
     // Being put to rest or to sleep right now, which takes seconds (a sleep writes the server's
-    // memory out): the join waits for that to finish, then wakes it, rather than being turned away
-    // for arriving at the wrong moment. Whatever it came to, the start goes on.
-    if (server.lifecycle.status === 'storing' || server.lifecycle.status === 'stopping') {
+    // memory out), or rebuilt on another host its wake asked for: the join waits for that to
+    // finish, then wakes it, rather than being turned away for arriving at the wrong moment.
+    // Whatever it came to, the start goes on.
+    if (MOVING_ON.has(server.lifecycle.status)) {
       const rested = await this.#waiter.waitFor(server.id, ['stored', 'stopped', 'running', 'failed'], left())
       return rested === null ? { outcome: 'starting' } : server.lifecycle.status
     }
@@ -248,8 +253,14 @@ export class EdgeService {
    * does, or what the join is told when it was refused or hasn't by the time `left` runs out.
    */
   async #start(server: MinecraftServer, left: () => number): Promise<WakeResult | null> {
+    const actor = { kind: 'system', reason: 'wake' } as const
+    // A start that failed for good is tried again by the next join. Read now: what the join
+    // waited through may have ended in one.
+    const { lifecycle } = (await findServer(this.#db, server.id)) ?? server
+    const retrying = lifecycle.status === 'failed' && lifecycle.failure?.during === 'starting'
     try {
-      await this.#service.start({ kind: 'system', reason: 'wake' }, server.id, crypto.randomUUID())
+      if (retrying) await this.#service.retry(actor, server.id, crypto.randomUUID())
+      else await this.#service.start(actor, server.id, crypto.randomUUID())
     } catch (error) {
       if (!(error instanceof AppError)) throw error
       const reason = REFUSED[error.code] ?? 'unknown'
@@ -257,6 +268,7 @@ export class EdgeService {
       return { outcome: 'denied', reason, ...(backAt === null ? {} : { backAt: backAt.toISOString() }) }
     }
     const status = await this.#waiter.waitFor(server.id, ['running', 'failed', 'stopped', 'stored'], left())
+    if (status === 'failed') return { outcome: 'denied', reason: 'failed' }
     return status === 'running' ? null : { outcome: 'starting' }
   }
 

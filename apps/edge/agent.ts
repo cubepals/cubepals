@@ -61,6 +61,7 @@ const TURNED_AWAY = {
   starting: env('STILL_STARTING_JOIN', 'Still starting · join again in a moment'),
   restarting: RESTARTING.join,
   unreachable: env('UNREACHABLE_JOIN', 'Couldn’t start this server just now · join again in a moment'),
+  failed: env('FAILED_JOIN', 'Couldn’t start this server just now · try again in a minute'),
   unknown: env('UNKNOWN_JOIN', 'There’s no Cubepals server at this address'),
   deleted: env('DELETED_JOIN', 'This server was deleted'),
   paused: env('PAUSED_JOIN', 'Cubepals isn’t starting servers right now · try again soon'),

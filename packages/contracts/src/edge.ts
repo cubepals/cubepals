@@ -63,7 +63,8 @@ export const WakeResult = z.discriminatedUnion('outcome', [
   z.object({ outcome: z.literal('restarting') }),
   z.object({
     outcome: z.literal('denied'),
-    reason: z.enum(['unknown', 'suspended', 'paused', 'quota', 'deleted']),
+    /** `failed`: its start failed for good; the next join tries it again. */
+    reason: z.enum(['unknown', 'suspended', 'paused', 'quota', 'deleted', 'failed']),
     /** Refused because the day's play is used: when it is back, as on the route. */
     backAt: z.iso.datetime().optional(),
   }),
