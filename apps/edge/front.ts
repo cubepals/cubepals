@@ -125,10 +125,15 @@ export function pipe(client: Socket, destination: string, sent: Uint8Array, time
     host: destination.slice(0, colon).replace(/^\[|\]$/g, ''),
     port: Number(destination.slice(colon + 1)),
   })
+  // A timer of its own: a socket's timeout doesn't run while what is written before it connects waits.
+  const connecting = setTimeout(() => server.destroy(), timeouts.connectMs)
+  server.once('close', () => clearTimeout(connecting))
+  server.once('connect', () => {
+    clearTimeout(connecting)
+    server.setTimeout(timeouts.idleMs)
+  })
   server.on('timeout', () => server.destroy())
   client.on('timeout', () => client.destroy())
-  server.setTimeout(timeouts.connectMs)
-  server.once('connect', () => server.setTimeout(timeouts.idleMs))
   client.setTimeout(timeouts.idleMs)
   server.write(sent)
   client.pipe(server).pipe(client)
