@@ -17,6 +17,7 @@ import { LOCAL_HEADER } from '../../packages/contracts/src/proxy-header.ts'
 import { OWN_ICON_MAX_BYTES } from '../../packages/contracts/src/server-list.ts'
 import { GAME_PORT } from '../control/src/minecraft/ports.ts'
 import { asleepMessage } from './asleep.ts'
+import { takes, wrongGame } from './clients.ts'
 import { front, pipe } from './front.ts'
 import { forServer, Unwrap } from './header.ts'
 import { Held, LOGIN_QUERIES, turnAway } from './hold.ts'
@@ -59,6 +60,10 @@ const HOLD_MS = Number(env('WAKE_HOLD_MS', '180000'))
 /** What a held join is told when it can't go on, by why. Every one of them reaches a player. */
 const TURNED_AWAY = {
   starting: env('STILL_STARTING_JOIN', 'Still starting · join again in a moment'),
+  // A start that waited on other work on the server, which a login screen has no room to say.
+  rest: env('STILL_RESTING_JOIN', 'Still saving this server’s world · join again in a moment'),
+  stop: env('STILL_STOPPING_JOIN', 'Still going to sleep · join again in a moment'),
+  backup: env('STILL_BACKING_UP_JOIN', 'Still taking a backup · join again in a moment'),
   restarting: RESTARTING.join,
   unreachable: env('UNREACHABLE_JOIN', 'Couldn’t start this server just now · join again in a moment'),
   failed: env('FAILED_JOIN', 'Couldn’t start this server just now · try again in a minute'),
@@ -116,6 +121,8 @@ const control = (path: string, init: RequestInit = {}) =>
 const router = new RouterRoutes(`http://${ROUTER_API}`)
 /** What the control plane last said. */
 let routes: EdgeRoutes['routes'] = []
+/** Each Minecraft release and its client's protocol number, as the control plane last said. */
+let releases: NonNullable<EdgeRoutes['releases']> = []
 /** Every hostname those routes name. */
 let hostnames = new Set<string>()
 /** Hostnames of running servers that read no PROXY header: the front door sends them none. */
@@ -144,7 +151,8 @@ async function applyRoutes(): Promise<boolean> {
 const poll = new RoutesPoll(
   (headers) => control('/routes', { headers }),
   (next) => {
-    routes = next
+    routes = next.routes
+    releases = next.releases ?? []
     hostnames = new Set(routes.map((r) => r.hostname))
     plain = new Set(routes.filter((r) => r.state === undefined && !r.proxyProtocol).map((r) => r.hostname))
     const running = new Set(routes.filter((r) => r.state === undefined).map((r) => r.destination))
@@ -400,7 +408,7 @@ function asleep(address: string): NoticeText {
     backAt !== undefined && Date.parse(backAt) > Date.now()
       ? usedToday(backAt)
       : asleepMessage(route?.motd, ASLEEP.status)
-  return { ...ASLEEP, status, ...(icon ? { icon } : {}) }
+  return { ...ASLEEP, status, ...(icon ? { icon } : {}), ...(route?.joins ? { joins: route.joins } : {}) }
 }
 
 /**
@@ -489,6 +497,7 @@ async function settle(client: Socket, held: Held): Promise<boolean> {
 function whyNot(result: WakeResult | null): keyof typeof TURNED_AWAY {
   if (result === null) return 'unreachable'
   if (result.outcome === 'denied') return result.reason
+  if (result.outcome === 'starting') return result.behind ?? 'starting'
   return result.outcome === 'restarting' ? 'restarting' : 'starting'
 }
 
@@ -552,6 +561,10 @@ front({
   known: (name) => hostnames.has(name),
   plain: (name) => plain.has(name),
   busy: env('BUSY_JOIN', 'This server is busy right now · join again in a moment'),
+  refuse: (name, protocol) => {
+    const joins = routes.find((r) => r.hostname === name)?.joins
+    return joins === undefined || takes(joins, protocol) ? null : wrongGame(joins, protocol, releases)
+  },
   timeouts: TIMEOUTS,
 })
 

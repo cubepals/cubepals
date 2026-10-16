@@ -46,8 +46,31 @@ export const EdgeRoute = z.object({
    * until its next start.
    */
   proxyProtocol: z.literal(true).optional(),
+  /**
+   * The players' games the server takes, by the protocol number a client names in its handshake:
+   * from `oldest` to `newest`, or to any newer one where `newest` is absent. A join from outside
+   * is turned away at once, naming `release`, the Minecraft the server runs, and nothing is woken;
+   * a sleeping server's ping is answered with `release`'s number, so the list marks it as another
+   * version. Absent, the edge takes every client, as before it was added.
+   */
+  joins: z
+    .object({
+      release: z.string(),
+      protocol: z.number().int(),
+      oldest: z.number().int(),
+      newest: z.number().int().optional(),
+    })
+    .optional(),
 })
-export const EdgeRoutes = z.object({ routes: z.array(EdgeRoute) })
+export type EdgeRoute = z.infer<typeof EdgeRoute>
+export const EdgeRoutes = z.object({
+  routes: z.array(EdgeRoute),
+  /**
+   * Each Minecraft release and the protocol number its client speaks, newest first: how the edge
+   * names a player's game when it can't join.
+   */
+  releases: z.array(z.object({ name: z.string(), protocol: z.number().int() })).optional(),
+})
 export type EdgeRoutes = z.infer<typeof EdgeRoutes>
 
 /**
@@ -63,7 +86,12 @@ export const WakeResult = z.discriminatedUnion('outcome', [
     destination: z.string(),
     proxyProtocol: z.literal(true).optional(),
   }),
-  z.object({ outcome: z.literal('starting') }),
+  /**
+   * `behind`: the start waits for other work on the server to finish first, which the player is
+   * told when the join can't wait any longer: its world being put to rest (`rest`), the server
+   * going to sleep (`stop`), or a backup.
+   */
+  z.object({ outcome: z.literal('starting'), behind: z.enum(['rest', 'stop', 'backup']).optional() }),
   /** Still on its way back from a restart after as long as a joining client waits. */
   z.object({ outcome: z.literal('restarting') }),
   z.object({

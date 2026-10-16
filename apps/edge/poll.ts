@@ -16,7 +16,7 @@ export class RoutesPoll {
   /** Asks for the routes with these headers. */
   readonly #ask: (headers: Record<string, string>) => Promise<Response>
   /** Applies a list the control plane sent; whether every route of it is held. */
-  readonly #take: (routes: EdgeRoutes['routes']) => Promise<boolean>
+  readonly #take: (list: EdgeRoutes) => Promise<boolean>
   /** The ETag of the list every route of which is held, if one is: it spares sending it again. */
   #etag: string | null = null
   /** The version of the newest list every route of which was held. */
@@ -24,7 +24,7 @@ export class RoutesPoll {
 
   constructor(
     ask: (headers: Record<string, string>) => Promise<Response>,
-    take: (routes: EdgeRoutes['routes']) => Promise<boolean>,
+    take: (list: EdgeRoutes) => Promise<boolean>,
   ) {
     this.#ask = ask
     this.#take = take
@@ -38,8 +38,7 @@ export class RoutesPoll {
     })
     if (response.status === 304) return false
     if (!response.ok) throw new Error(`routes answered ${response.status}`)
-    const { routes } = (await response.json()) as EdgeRoutes
-    if (!(await this.#take(routes))) return false
+    if (!(await this.#take((await response.json()) as EdgeRoutes))) return false
     this.#etag = response.headers.get('etag')
     this.#version = response.headers.get(ROUTES_VERSION_HEADER)
     return true

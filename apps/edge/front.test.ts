@@ -15,8 +15,8 @@ import { packet, statusRequest, string, varInt } from './notice.ts'
 const encode = (text: string) => new TextEncoder().encode(text)
 
 /** A join's first bytes: the handshake and the start of login. */
-function joinRequest(address: string): Uint8Array {
-  const handshake = packet(0, [...varInt(767), ...string(address), 0x63, 0xdd, 2])
+function joinRequest(address: string, protocol = 767): Uint8Array {
+  const handshake = packet(0, [...varInt(protocol), ...string(address), 0x63, 0xdd, 2])
   return Uint8Array.from([...handshake, ...packet(0, string('Alex'))])
 }
 
@@ -31,14 +31,16 @@ test('a PROXY line gives the client, and where the rest begins', () => {
 test('a handshake gives the hostname as routes name it, and whether it is a join', () => {
   expect(readHandshake(statusRequest('Lobby.Play.Test.', 25565))).toEqual({
     hostname: 'lobby.play.test',
+    protocol: 767,
     joining: false,
   })
   expect(readHandshake(joinRequest('lobby.play.test\0FML3\0'))).toEqual({
     hostname: 'lobby.play.test',
+    protocol: 767,
     joining: true,
   })
   expect(readHandshake(joinRequest('lobby.play.test').subarray(0, 8))).toBe('more')
-  expect(readHandshake(Uint8Array.from([0xfe, 0x01]))).toEqual({ hostname: '', joining: false })
+  expect(readHandshake(Uint8Array.from([0xfe, 0x01]))).toEqual({ hostname: '', protocol: -1, joining: false })
   expect(readHandshake(encode('GET / HTTP/1.1\r\n'))).toBe('bad')
 })
 
@@ -89,6 +91,9 @@ async function frontDoor(limits: Limits, proxied: boolean, timeouts = { connectM
     known: (hostname) => hostname.endsWith('.play.test'),
     plain: (hostname) => hostname === 'vanilla.play.test',
     busy: 'Busy',
+    // The arcade takes 26.2's clients alone.
+    refuse: (hostname, protocol) =>
+      hostname === 'arcade.play.test' && protocol !== 776 ? 'Wrong game' : null,
     timeouts,
   })
   open.push(listener)
@@ -109,6 +114,19 @@ test('what the gate lets in reaches mc-router as it came, after a PROXY header n
   const header = readProxyHeader(received)
   expect(header).toEqual({ source: { address: '203.0.113.7', port: 51234 }, next: 28 })
   expect(Array.from(received.subarray(28))).toEqual(Array.from(join))
+})
+
+test('a join from a game the server can’t take is turned away at once, and mc-router never sees it', async () => {
+  const { port, behind } = await frontDoor(ROOMY, false)
+  expect(await dial(port, joinRequest('arcade.play.test', 774))).toEqual(turnAway('Wrong game'))
+  // A ping from that game still goes on, for the server's own answer to say which it runs.
+  await dial(port, statusRequest('arcade.play.test', 25565))
+  // And a game it takes joins as ever.
+  const join = joinRequest('arcade.play.test', 776)
+  await dial(port, join)
+  await Bun.sleep(50)
+  expect(behind.received).toHaveLength(2)
+  expect(behind.received[1]?.endsWith(Buffer.from(join).toString('latin1'))).toBe(true)
 })
 
 test('a running server that reads no PROXY header gets its connections without one', async () => {
@@ -243,6 +261,7 @@ test('a server that never takes the connection is given up on once its connect t
       known: () => true,
       plain: () => true,
       busy: 'Busy',
+      refuse: () => null,
       timeouts: { connectMs: 300, idleMs: 60_000 },
     })
     open.push(listener)

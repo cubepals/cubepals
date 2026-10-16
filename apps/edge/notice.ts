@@ -2,9 +2,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// What a player's client is told about a server that can't be joined as it is, spoken as a
-// Minecraft server would: the server list gets a status with the message, and a join is turned
-// away with it, or handed back to be connected elsewhere.
+/**
+ * What a player's client is told about a server that can't be joined as it is, spoken as a
+ * Minecraft server would: the server list gets a status with the message, and a join is turned
+ * away with it, or handed back to be connected elsewhere.
+ */
+
+import { type Joins, takes } from './clients.ts'
 
 /**
  * What the server list shows, and what a join is told; null hands the join back instead. `icon` is
@@ -14,6 +18,11 @@ export interface NoticeText {
   status: string
   join: string | null
   icon?: string
+  /**
+   * The games the server takes. A ping from one it doesn't is answered with the server's own
+   * release and number, so the list shows that release and marks it as another version.
+   */
+  joins?: Joins
 }
 
 /**
@@ -145,8 +154,12 @@ export class Notice {
 
   /** The status a server list is answered with, for a client speaking `protocol`. */
   #status(protocol: number) {
+    const { joins } = this.#text
     return {
-      version: { name: this.#text.status, protocol },
+      version:
+        joins === undefined || takes(joins, protocol)
+          ? { name: this.#text.status, protocol }
+          : { name: joins.release, protocol: joins.protocol },
       players: { max: 0, online: 0 },
       description: { text: this.#text.status },
       ...(this.#text.icon === undefined ? {} : { favicon: this.#text.icon }),

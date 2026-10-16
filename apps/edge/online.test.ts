@@ -46,7 +46,7 @@ describe.skipIf(!hasDatabase || ROUTER_BIN === '')('a server that reads as runni
         })
       },
       async (list) => {
-        const here = list.map((r) => (r.state === undefined ? { ...r, destination: server } : r))
+        const here = list.routes.map((r) => (r.state === undefined ? { ...r, destination: server } : r))
         await routes.apply(mappings(here, new Set(), { restarting: notice, asleep: notice }))
         return true
       },

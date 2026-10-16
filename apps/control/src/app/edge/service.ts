@@ -9,8 +9,9 @@ import { motdForGame } from '@blockly/contracts/server-list'
 import type { AppliedConfigJson, Db } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { welcome } from '../../domain/revision/revision.ts'
-import { ROUTABLE, type ServerStatus } from '../../domain/server/lifecycle.ts'
+import { type OperationKind, ROUTABLE, type ServerStatus } from '../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
+import { clientRange, RELEASES } from '../../minecraft/clients.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { PORT_NAMES } from '../../minecraft/runtime-spec.ts'
 import { loadStanding } from '../accounts/persistence.ts'
@@ -57,6 +58,16 @@ const REFUSED: Partial<Record<AppErrorCode, Extract<WakeResult, { outcome: 'deni
  * it counts for after it last asked, and the time its version may fall behind (`routed.ts`).
  */
 const SAID_EVERY_MS = 3 * SECOND_MS
+
+/** The work a start waits behind that a join is told of, by kind, as the edge words it. */
+const BEHIND: ReadonlyMap<
+  OperationKind,
+  NonNullable<Extract<WakeResult, { outcome: 'starting' }>['behind']>
+> = new Map([
+  ['store', 'rest'],
+  ['stop', 'stop'],
+  ['backup', 'backup'],
+])
 
 /** On its way to a rest, to sleep, or onto another host: a join waits for it, then wakes it. */
 const MOVING_ON: ReadonlySet<ServerStatus> = new Set(['storing', 'stopping', 'relocating'])
@@ -120,7 +131,7 @@ export class EdgeService {
    */
   async listed(): Promise<{ routes: EdgeRoutes; from: Date; unrouted: boolean }> {
     const { print, inputs } = await this.#inputs()
-    const { servers: live, bindings, comingBack, stops, motds } = inputs
+    const { servers: live, bindings, comingBack, stops, motds, plays } = inputs
     const restarting = restartingOf(live, comingBack)
     const out = outOf(stops, new Date())
     const routes: EdgeRoutes['routes'] = []
@@ -136,6 +147,7 @@ export class EdgeService {
           ...noticeOf(state, out.get(server.id)),
           ...this.#identityOf(server, state, motds),
           ...(binding?.proxyProtocol ? { proxyProtocol: true as const } : {}),
+          ...joinsOf(plays, server.desiredRevisionId),
         })
       }
     }
@@ -146,7 +158,7 @@ export class EdgeService {
         this.#db,
         live.filter((s) => s.status === 'running' && bindings.get(s.id)?.handle).map((s) => s.id),
       )
-    return { routes: { routes }, from: print.from, unrouted: print.unrouted }
+    return { routes: { routes, releases: [...RELEASES] }, from: print.from, unrouted: print.unrouted }
   }
 
   /** The route inputs, read again only when their fingerprint has moved since they last were. */
@@ -279,7 +291,7 @@ export class EdgeService {
     // Whatever it came to, the start goes on.
     if (MOVING_ON.has(server.lifecycle.status)) {
       const rested = await this.#waiter.waitFor(server.id, ['stored', 'stopped', 'running', 'failed'], left())
-      return rested === null ? { outcome: 'starting' } : server.lifecycle.status
+      return rested === null ? await this.#stillStarting(server.id) : server.lifecycle.status
     }
     return server.lifecycle.status
   }
@@ -305,7 +317,18 @@ export class EdgeService {
     }
     const status = await this.#waiter.waitFor(server.id, ['running', 'failed', 'stopped', 'stored'], left())
     if (status === 'failed') return { outcome: 'denied', reason: 'failed' }
-    return status === 'running' ? null : { outcome: 'starting' }
+    return status === 'running' ? null : this.#stillStarting(server.id)
+  }
+
+  /**
+   * A join told the server still starts, and what the start waits behind, where it waits on other
+   * work on the server: its world being put to rest, its going to sleep, or a backup. The player
+   * hears it when the join can't wait any longer.
+   */
+  async #stillStarting(serverId: string): Promise<WakeResult> {
+    const [first] = await openOfKinds(this.#db, [serverId], [...BEHIND.keys()])
+    const behind = first === undefined ? undefined : BEHIND.get(first.kind)
+    return { outcome: 'starting', ...(behind === undefined ? {} : { behind }) }
   }
 
   /**
@@ -406,6 +429,21 @@ function restartingOf(
     if (between.has(operation.serverId) && (operation.kind === 'restart' || operation.running))
       restarting.add(operation.serverId)
   return restarting
+}
+
+/**
+ * Which players' games a route's server takes, from what its revision runs (`clientRange`): what
+ * the edge turns other joins away by. Nothing for a server whose release the table doesn't know.
+ */
+function joinsOf(
+  plays: RouteInputs['plays'],
+  revisionId: string | null,
+): Pick<EdgeRoutes['routes'][number], 'joins'> {
+  const runs = revisionId === null ? undefined : plays.get(revisionId)
+  const range = runs === undefined ? null : clientRange(runs.gameVersion, runs.loader, runs.mods)
+  if (range === null) return {}
+  const { release, protocol, oldest, newest } = range
+  return { joins: { release, protocol, oldest, ...(newest === null ? {} : { newest }) } }
 }
 
 /**

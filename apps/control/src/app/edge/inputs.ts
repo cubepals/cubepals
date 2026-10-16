@@ -10,17 +10,24 @@
  *
  * The fingerprint is a digest of the very rows the input queries return, computed by the
  * database, so nothing can be read here that it leaves out. Revisions are never edited, so their
- * messages go by the revision a server names. Not for building the routes (`service.ts`), or for
+ * messages, and what they run, go by the revision a server names. Not for building the routes (`service.ts`), or for
  * what the flags lead to (`routed.ts`).
  */
 import { type Db, type Queryable, schema } from '@blockly/db'
 import { and, inArray, isNull, type SQL, type SQLWrapper, sql } from 'drizzle-orm'
+import type { PinnedMod } from '../../domain/mods/artifact.ts'
+import type { Loader } from '../../domain/revision/revision.ts'
 import type { ServerStatus } from '../../domain/server/lifecycle.ts'
 import { dailyStops } from '../accounts/play-today.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import { motdsOf } from '../servers/persistence.ts'
 
-const { minecraftServers: servers, serverRuntimes: runtimes, serverOperations: operations } = schema
+const {
+  minecraftServers: servers,
+  serverRuntimes: runtimes,
+  serverOperations: operations,
+  serverRevisions: revisions,
+} = schema
 
 /** The kinds of operation that bring a running server back by themselves: it is restarting. */
 const COMES_BACK = ['restart', 'restore', 'relocate'] as const
@@ -45,6 +52,18 @@ export interface RouteInputs {
   stops: Array<{ id: string; zone: string | null; stoppedAt: Date | null }>
   /** The message of the day each asleep server's revision sets. */
   motds: Map<string, string>
+  /**
+   * What each server's revision runs, by revision: its release and server type, and of its mods
+   * only those named like the Via plugins, which are all that decide which clients it takes.
+   */
+  plays: Map<string, Plays>
+}
+
+/** What a revision runs, as far as which clients it takes. */
+interface Plays {
+  gameVersion: string
+  loader: Loader
+  mods: PinnedMod[]
 }
 
 export interface Fingerprint {
@@ -97,6 +116,23 @@ const comingBackRows = (q: Queryable) =>
     .from(operations)
     .where(and(inArray(operations.kind, [...COMES_BACK]), inArray(operations.status, ['queued', 'running'])))
 
+/** What the revisions `ids` run, as `RouteInputs.plays` holds it. */
+async function playsOf(q: Queryable, ids: readonly string[]): Promise<RouteInputs['plays']> {
+  if (ids.length === 0) return new Map()
+  const rows = await q
+    .select({
+      id: revisions.id,
+      gameVersion: revisions.gameVersion,
+      loader: revisions.loader,
+      mods: sql<
+        PinnedMod[]
+      >`jsonb_path_query_array(${revisions.mods}, '$[*] ? (@.name like_regex "^via" flag "i")')`,
+    })
+    .from(revisions)
+    .where(inArray(revisions.id, [...ids]))
+  return new Map(rows.map(({ id, ...plays }) => [id, plays]))
+}
+
 /** The rows of `query`, digested in a fixed order; an empty one digests to its place alone. */
 const digestOf = (query: SQLWrapper): SQL =>
   sql`coalesce((select string_agg(t::text, ';' order by t::text) from (${query}) t), '')`
@@ -145,6 +181,10 @@ export async function readInputs(
           motds: await motdsOf(
             tx,
             asleep.flatMap((s) => (s.desiredRevisionId === null ? [] : [s.desiredRevisionId])),
+          ),
+          plays: await playsOf(
+            tx,
+            live.flatMap((s) => (s.desiredRevisionId === null ? [] : [s.desiredRevisionId])),
           ),
         },
       }

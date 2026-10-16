@@ -7,6 +7,8 @@ import { randomUUID } from 'node:crypto'
 import { HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq, sql } from 'drizzle-orm'
+import { protocolOf } from '../../minecraft/clients.ts'
+import { VIABACKWARDS, VIAVERSION } from '../../minecraft/mods.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { Actor } from '../actor.ts'
 import { IDLE_GRACE_MS, WAKE_PROBATION_MS } from '../operations/schedules.ts'
@@ -508,5 +510,75 @@ describe.skipIf(!hasDatabase)('edge, a sleeping server in the server list', () =
     await h.settled(id)
     expect(await route()).not.toHaveProperty('motd')
     expect(await route()).not.toHaveProperty('icon')
+  }, 30_000)
+})
+
+// Which players' games a server takes rides on its route, for the edge to turn the rest away at
+// once; and a join told the server still starts hears what the start waits behind.
+describe.skipIf(!hasDatabase)('edge, the games a server takes and why a wait is long', () => {
+  let h: Harness
+
+  beforeAll(async () => {
+    h = await startHarness()
+  }, 30_000)
+
+  afterAll(async () => {
+    await h.close()
+  })
+
+  test('a wake behind other work on the server says which, for the player to be told why it is long', async () => {
+    const owner = await h.user()
+    const { id, slug } = await h.create(owner)
+    await h.until(id, 'running')
+    await h.settled(id)
+    // Going to sleep, and held there longer than a join waits: the wake is behind the stop.
+    const release = h.runtime.holdStops(1)
+    try {
+      await h.app.servers.stop(owner, id, randomUUID(), 'idle')
+      await h.until(id, 'stopping')
+      expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({ outcome: 'starting', behind: 'stop' })
+    } finally {
+      release()
+    }
+    expect(await h.app.edge.wake(`${slug}.play.test`)).toMatchObject({ outcome: 'ready' })
+    await h.settled(id)
+  }, 30_000)
+
+  test('a route says which players’ games its server takes, from the release and plugins it runs', async () => {
+    const { id, slug } = await h.create(await h.user())
+    await h.until(id, 'running')
+    await h.settled(id)
+    const route = async () =>
+      (await h.app.edge.routes()).routes.find((r) => r.hostname === `${slug}.play.test`)
+    const { gameVersion } = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
+    const protocol = protocolOf(gameVersion) ?? -1
+    expect((await route())?.joins).toEqual({
+      release: gameVersion,
+      protocol,
+      oldest: protocol,
+      newest: protocol,
+    })
+    // Names for the players' own games come with the list.
+    expect((await h.app.edge.routes()).releases).toContainEqual({ name: '1.21.11', protocol: 774 })
+
+    // On Paper with ViaVersion and ViaBackwards: newer games, and older ones down to 1.9.
+    const via = (name: string, projectId: string) => ({
+      source: { catalog: 'modrinth', projectId, versionId: `${name}-1` },
+      name,
+    })
+    await h.db
+      .update(schema.serverRevisions)
+      .set({
+        loader: 'paper',
+        mods: [via('ViaVersion', VIAVERSION), via('ViaBackwards', VIABACKWARDS)] as never,
+      })
+      .where(eq(schema.serverRevisions.id, (await h.server(id)).desiredRevisionId ?? ''))
+    // Revisions are never edited, so the list is read again only once something it reads moves.
+    await h.db.update(schema.minecraftServers).set({ name: 'Via' }).where(eq(schema.minecraftServers.id, id))
+    expect((await route())?.joins).toEqual({
+      release: gameVersion,
+      protocol,
+      oldest: protocolOf('1.9') ?? -1,
+    })
   }, 30_000)
 })

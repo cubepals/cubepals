@@ -15,6 +15,9 @@
  * so one flooded server used to slow every server's joins. Here a flood is refused at the server
  * it was aimed at, before mc-router or the server sees it.
  *
+ * A join from a game the server can't take, by the range on its route, is turned away here too,
+ * at once, saying which Minecraft it runs (`clients.ts`).
+ *
  * Not for routing: which server a hostname reaches is mc-router's, and the agent's.
  */
 
@@ -41,6 +44,11 @@ export interface FrontOptions {
   plain: (hostname: string) => boolean
   /** What a join is told when its server is taking no more connections just now. */
   busy: string
+  /**
+   * What a join to `hostname` from a client speaking `protocol` is told when that game can't join
+   * the server (`clients.ts`); null when it can, or when the edge can't tell.
+   */
+  refuse: (hostname: string, protocol: number) => string | null
   timeouts: Timeouts
 }
 
@@ -81,10 +89,17 @@ export function readProxyLine(bytes: Uint8Array): { source: Source | null; next:
   return { source: { address, port: Number(port) }, next: end + 1 }
 }
 
-/** Reads the handshake at the front of `bytes`: the hostname and whether it is a join. */
-export function readHandshake(bytes: Uint8Array): { hostname: string; joining: boolean } | 'more' | 'bad' {
-  // A server list from before 1.7 pings in a format of its own, which names no server.
-  if (bytes[0] === 0xfe) return { hostname: '', joining: false }
+/** What a handshake says: the server dialled, the client's protocol number, and whether it is a join. */
+interface Handshake {
+  hostname: string
+  protocol: number
+  joining: boolean
+}
+
+/** Reads the handshake at the front of `bytes`. */
+export function readHandshake(bytes: Uint8Array): Handshake | 'more' | 'bad' {
+  // A server list from before 1.7 pings in a format of its own, which names no server or number.
+  if (bytes[0] === 0xfe) return { hostname: '', protocol: -1, joining: false }
   const length = readVarInt(bytes, 0)
   if (length === null) return bytes.length < 5 ? 'more' : 'bad'
   if (length.value <= 0 || length.value > 1024) return 'bad'
@@ -98,7 +113,7 @@ export function readHandshake(bytes: Uint8Array): { hostname: string; joining: b
   const intent = readVarInt(bytes, address.next + address.value + 2)
   if (intent === null || intent.next > length.next + length.value) return 'bad'
   const dialled = new TextDecoder().decode(bytes.subarray(address.next, address.next + address.value))
-  return { hostname: hostnameOf({ address: dialled }), joining: intent.value !== 1 }
+  return { hostname: hostnameOf({ address: dialled }), protocol: protocol.value, joining: intent.value !== 1 }
 }
 
 /**
@@ -203,8 +218,12 @@ class Arrival {
     return this.#greet(read.source)
   }
 
-  #admit(handshake: { hostname: string; joining: boolean }): void {
-    const { gate, known, plain, busy, router, port, timeouts } = this.#options
+  #admit(handshake: Handshake): void {
+    const { gate, known, plain, busy, refuse, router, port, timeouts } = this.#options
+    // A game the server can't take hears so now, before it is counted, dialled or woken. A ping
+    // goes on: what answers it says which Minecraft the server runs, and the list marks it.
+    const refused = handshake.joining ? refuse(handshake.hostname, handshake.protocol) : null
+    if (refused !== null) return void this.#client.end(turnAway(refused))
     const admitted = gate.admit(known(handshake.hostname) ? handshake.hostname : '')
     if (!admitted) {
       // A ping just goes unanswered; a join hears why, in Cubepals' words.

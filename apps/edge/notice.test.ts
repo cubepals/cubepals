@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { expect, test } from 'bun:test'
-import { Notice, packet, statusRequest } from './notice.ts'
+import { Notice, type NoticeText, packet, statusRequest } from './notice.ts'
+
+type NoticeTextJoins = NoticeText['joins']
 
 const TEXT = { status: 'Restarting · back in a moment', join: 'Restarting · join again in a moment' }
 
@@ -49,6 +51,23 @@ test('the server list is told the server is restarting, and its ping comes back'
 
   const ping = packet(1, [1, 2, 3, 4, 5, 6, 7, 8])
   expect(notice.receive(ping)).toEqual({ reply: [ping], close: true })
+})
+
+test('a ping from a game the server can’t take is told the server’s own release, so the list marks it', () => {
+  const answered = (joins: NonNullable<NoticeTextJoins>) => {
+    const notice = new Notice({ ...TEXT, joins })
+    notice.receive(handshake(1))
+    return JSON.parse(readString(notice.receive(packet(0, [])).reply[0] ?? new Uint8Array()).text)
+  }
+  // The 1.21 client is older than 26.2.
+  expect(answered({ release: '26.2', protocol: 776, oldest: 776, newest: 776 })).toMatchObject({
+    version: { name: '26.2', protocol: 776 },
+    description: { text: TEXT.status },
+  })
+  // With ViaBackwards it joins, and the list says so.
+  expect(answered({ release: '26.2', protocol: 776, oldest: 107 })).toMatchObject({
+    version: { name: TEXT.status, protocol: 767 },
+  })
 })
 
 test('a join is turned away with the message, and nothing else', () => {
