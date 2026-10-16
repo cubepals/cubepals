@@ -1362,7 +1362,8 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
 - **A game the server can't take** is turned away at the front door, before the gate counts it
   or anything is woken (`apps/edge/clients.ts`). Each route carries `joins`: the protocol numbers
   of the clients its server takes, which the control plane works out from the release and server
-  type its revision runs and its Via plugins (`apps/control/src/minecraft/clients.ts`): its own
+  type its revision runs, its Via plugins and the server's choice of other versions
+  (`apps/control/src/minecraft/clients.ts`): its own
   release; any newer one with ViaVersion; older ones down to 1.9 with ViaBackwards beside it, and
   to 1.7 with ViaRewind too. Only Paper runs them. The numbers are minecraft-data's
   (`minecraft/protocol-versions.json`, copied by `scripts/protocols.ts`), sent with the list as
@@ -2349,8 +2350,8 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   Duels server is made for strangers, so it also comes with the moderation tools and chat filter on,
   which the Players page can turn off, and the Grim anticheat, which by its own defaults only undoes
   a move it can't believe and tells helpers. Its server list message names the mode.
-  ViaVersion and ViaBackwards come along, as with every plugin template, so newer and older
-  Minecraft join too.
+  It lets in Minecraft 1.8 and 1.7 too (`otherVersions: 'oldest'`), since 1.8 PvP players
+  play on 1.8 itself.
 - Arcade is short games with leaderboards, fun alone or with two or three friends, on a world made
   of published maps: a parkour of three Overcast courses (Jungle, Ice and Debris) against one
   clock, with their builders' checkpoints; a falling floor on NetherGames' MD-Meltdown (its snow
@@ -2378,13 +2379,21 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   builders; and the server's public page says, in one line after its description, whose maps it
   is built on, linked to where they are published, from the template card's `credits`
   (`TemplateCredits`), for any server running a world of that template's type. It comes with the same moderation tools,
-  chat filter and Grim as Duels, so it is Paper on the newest release those run on, with
-  ViaVersion for the newer ones and ViaBackwards for the older.
-- Every Paper template with plugins gets ViaVersion and ViaBackwards beside them, shown among the
-  server's plugins and removed the same way (`SetupService`). Grim warns that ViaBackwards' older
-  clients misbehave in vehicles on 1.21.2 and later, so beside Grim it comes only on a template
-  whose game rides nothing (`RIDES_NOTHING`: Duels and Arcade); elsewhere ViaVersion comes alone,
-  on a release older than the newest offered.
+  chat filter and Grim as Duels, so it is Paper on the newest release those run on.
+- **Other versions.** Every Paper server, with plugins or none, starts with ViaVersion and
+  ViaBackwards, so players on newer and older Minecraft join it, and ViaRewind too where its owner
+  lets in 1.8 and 1.7 (`ServerSettings.otherVersions`: `on` by default, `off`, or `oldest`). They
+  are Cubepals' compatibility layer (`app/compat/`), not the owner's plugins: they are in no
+  revision, so no plan rule, limit or price that counts plugins counts them, a Free server keeps
+  them, and the plugin list never shows them. Each release's jars are pinned once from the catalog
+  (`compat_plugins`, the daily `compat-pins` job and every worker's start), placed in `plugins/` by
+  Cubepals' own start step (`carried.ts`), and fetched over the server's artifact link like any
+  pinned jar. A Via plugin the owner runs as their own isn't placed again. They arrive at a start,
+  never through drift: the drift digest leaves them out, so no running server restarts for them.
+  The settings page says who joins in one line ("Players on Minecraft 1.9 to 26.2 and newer can
+  join") with the switch, and a second one for 1.8 and 1.7; turned off, the step takes the jars
+  away at the next start. Grim warns that ViaBackwards' older clients misbehave in vehicles on
+  1.21.2 and later: Grim comes only on Duels and Arcade, whose games ride nothing.
 - A curated pack can stand for a way to play (`CuratedPack.way`): its card carries the way's name
   and picture, with the pack's own name and authors under it. The card is the pack's, so it shows
   only while a release is published, and picking it is picking the pack. None does today: SkyBlock
