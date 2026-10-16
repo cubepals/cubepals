@@ -34,6 +34,7 @@ import {
   type SnapshotHandle,
 } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
+import { NoLongerApplies } from '../runner.ts'
 import type { GameConsole } from './game-console.ts'
 
 /** Packing a large world comes before its upload starts, so an export's link lasts a while. */
@@ -116,11 +117,28 @@ export function worldCopies(deps: {
     handle: RuntimeHandle,
     config: AppliedConfigJson,
     trigger: 'stored' | 'pre_relocate',
+    /**
+     * Asked once the snapshot is taken, before the long part, packing it: false ends the copy
+     * there, as `NoLongerApplies`. The world is untouched and the snapshot stays as a backup.
+     */
+    stillApplies: () => Promise<boolean> = async () => true,
   ): Promise<BackupRecord> => {
     const archives = deps.archives
     if (archives === null) throw new PermanentFailure('This deployment keeps no archives.')
     const snapshot = await capture(server, handle, config, trigger, false)
     if (snapshot.snapshotHandle === null) throw new Error('The snapshot has no handle')
+    if (!(await stillApplies())) throw new NoLongerApplies()
+    return packed(archives, server, config, trigger, snapshot.snapshotHandle)
+  }
+
+  /** `snapshot` packed into `archives` and read back, recorded as the copy it makes. */
+  const packed = async (
+    archives: ArchiveStore,
+    server: MinecraftServer,
+    config: AppliedConfigJson,
+    trigger: 'stored' | 'pre_relocate',
+    snapshot: SnapshotHandle,
+  ): Promise<BackupRecord> => {
     const id = randomUUID()
     const key = archives.newKey('archive', { serverId: server.id, id })
     const copy = await insertArchive(db, {
@@ -132,10 +150,7 @@ export function worldCopies(deps: {
       archiveKey: key,
     })
     try {
-      const exported = await pack(
-        snapshot.snapshotHandle,
-        await archives.archiveTarget(key, EXPORT_LINK_SECONDS, 'runtime'),
-      )
+      const exported = await pack(snapshot, await archives.archiveTarget(key, EXPORT_LINK_SECONDS, 'runtime'))
       const held = await archives.head(key)
       if (held?.sizeBytes !== exported.sizeBytes)
         throw new Error(

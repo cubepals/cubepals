@@ -28,7 +28,7 @@ import { openInterval } from '../../servers/usage.ts'
 import { enqueuePrune } from '../../worlds/service.ts'
 import type { BootSequence } from '../boot.ts'
 import { openOfKinds, otherWork } from '../persistence.ts'
-import { NoLongerApplies, type OperationHandler } from '../runner.ts'
+import { NoLongerApplies, type OperationContext, type OperationHandler } from '../runner.ts'
 import { appliedConfig, type ServerBinding } from './binding.ts'
 import { WOKEN_BY } from './bringing-up.ts'
 import type { Rechecks } from './rechecks.ts'
@@ -84,17 +84,17 @@ export function storedWorlds(deps: {
   /**
    * The copy a world rests in. One made since anyone last played is the world as it is, and is
    * used again, which also makes a wake nobody joined cheap to undo. Otherwise a snapshot of the
-   * stopped server is packed into the store, and read back before it counts as made.
+   * stopped server is packed into the store, unless a join has woken it by then (`stillApplies`).
    */
   const storedCopyFor = async (
-    server: MinecraftServer,
+    { server, stillApplies }: OperationContext,
     handle: RuntimeHandle,
     config: AppliedConfigJson,
   ): Promise<BackupRecord> => {
     const existing = await storedCopy(db, server.id)
     if (existing !== null && existing.createdAt >= server.lastActiveAt) return existing
     // Only a server asleep rests, its world saved; one whose memory was kept stops for real first.
-    return runtime.stop(handle).then(() => archiveCopy(server, handle, config, 'stored'))
+    return runtime.stop(handle).then(() => archiveCopy(server, handle, config, 'stored', stillApplies))
   }
 
   const store: OperationHandler = {
@@ -113,7 +113,7 @@ export function storedWorlds(deps: {
         const why = await whyNotStore(server, new Date(), ctx.op.input.now === true)
         if (why !== null) return { status: 'cancelled', reason: why }
         await ctx.step('saving')
-        copy = await storedCopyFor(server, binding.handle, binding.applied)
+        copy = await storedCopyFor(ctx, binding.handle, binding.applied)
         const refusal = await db.transaction(async (tx) => {
           const locked = await lockServer(tx, server.id)
           if (locked === null || locked.lifecycle.status !== 'stopped') return 'It isn’t asleep any more.'
