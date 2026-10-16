@@ -44,7 +44,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: 1.94.1
 
 jobs:
   pin:
@@ -101,11 +100,13 @@ jobs:
           ref: v${{ steps.pin.outputs.version }}
           path: .blocklyd
           persist-credentials: false
-      - name: Rust ${{ env.RUST_VERSION }}
+      # The Rust the release builds with: rustup installs what its rust-toolchain.toml names.
+      - name: Rust from the release's rust-toolchain.toml
+        id: rust
         working-directory: .blocklyd
         run: |
-          rustup toolchain install "$RUST_VERSION" --profile minimal
-          rustup override set "$RUST_VERSION"
+          rustup toolchain install
+          echo "version=$(rustc --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
       # Keyed on the toolchain and the release: a release's tag never moves, so its build is cached
       # for good, and the next one starts from it.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -114,8 +115,8 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             .blocklyd/target
-          key: blocklyd-e2e-${{ env.RUST_VERSION }}-${{ steps.pin.outputs.version }}
-          restore-keys: blocklyd-e2e-${{ env.RUST_VERSION }}-
+          key: blocklyd-e2e-${{ steps.rust.outputs.version }}-${{ steps.pin.outputs.version }}
+          restore-keys: blocklyd-e2e-${{ steps.rust.outputs.version }}-
       - run: cargo build --locked
         working-directory: .blocklyd
       # Mirrors refuse bursts when parallel jobs pull at once, so each pull retries.
