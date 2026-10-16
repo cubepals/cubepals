@@ -21,6 +21,9 @@ const HELPER_SCRIPT_BYTES = 16_384
 /** A helper copies and packs files for a while and plays no game: the smallest shared machine. */
 const HELPER_GUEST = { cpu_kind: 'shared', cpus: 1, memory_mb: 1024 }
 
+/** How long a job's result is read every second, before every five. */
+const QUICK_READS_MS = 20_000
+
 /** A background job that leaves "ok <output>" or "failed <status>" in /tmp/job.result. */
 export function job(body: string): string {
   return [
@@ -85,7 +88,8 @@ export async function helperJob(
       ],
       30,
     )
-    const deadline = Date.now() + 6 * HOUR_MS
+    const began = Date.now()
+    const deadline = began + 6 * HOUR_MS
     while (Date.now() < deadline) {
       // Its result; else whether it still runs; else, read once more, since it may have just
       // finished. A job that ended without a result fails now, not at the deadline.
@@ -111,7 +115,9 @@ export async function helperJob(
             : `The helper job failed (${line}): ${log.stdout}`,
         )
       }
-      await sleep(5000)
+      // A small world's copy is done in seconds, while a server waits on it to wake: read it each
+      // second at first. A long job is read less often, since every read is a call to Fly.
+      await sleep(Date.now() - began < QUICK_READS_MS ? 1000 : 5000)
     }
     throw new Error('The helper job did not finish in six hours')
   } finally {
