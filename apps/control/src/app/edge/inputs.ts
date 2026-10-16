@@ -46,14 +46,15 @@ export interface RouteServer {
 export interface RouteInputs {
   servers: RouteServer[]
   /** Each live server's binding to a runtime this deployment runs, by server. */
-  bindings: Map<string, { handle: RuntimeHandle | null; proxyProtocol: boolean }>
+  bindings: Map<string, { handle: RuntimeHandle | null; proxyProtocol: boolean; revisionId: string | null }>
   /** Open operations that bring a server back by themselves, and whether it was running. */
   comingBack: Array<{ serverId: string; kind: (typeof COMES_BACK)[number]; running: boolean }>
   stops: Array<{ id: string; zone: string | null; stoppedAt: Date | null }>
   /** The message of the day each asleep server's revision sets. */
   motds: Map<string, string>
   /**
-   * What each server's revision runs, by revision: its release and server type, and of its mods
+   * What each server's revision runs, by revision, for the revision it starts with and the one
+   * its run booted: its release and server type, and of its mods
    * only those named like the Via plugins, which are all that decide which clients it takes.
    */
   plays: Map<string, Plays>
@@ -97,6 +98,7 @@ const bindingRows = (q: Queryable, providers: readonly string[]) =>
       serverId: runtimes.serverId,
       handle: runtimes.handle,
       proxyProtocol: sql<boolean>`coalesce((${runtimes.applied}->>'proxyProtocol')::boolean, false)`,
+      revisionId: sql<string | null>`${runtimes.applied}->>'revisionId'`,
     })
     .from(runtimes)
     .where(
@@ -170,7 +172,11 @@ export async function readInputs(
           bindings: new Map(
             bindings.map((b) => [
               b.serverId,
-              { handle: b.handle as RuntimeHandle | null, proxyProtocol: b.proxyProtocol },
+              {
+                handle: b.handle as RuntimeHandle | null,
+                proxyProtocol: b.proxyProtocol,
+                revisionId: b.revisionId,
+              },
             ]),
           ),
           comingBack: (await comingBackRows(tx)).map((row) => ({
@@ -182,10 +188,10 @@ export async function readInputs(
             tx,
             asleep.flatMap((s) => (s.desiredRevisionId === null ? [] : [s.desiredRevisionId])),
           ),
-          plays: await playsOf(
-            tx,
-            live.flatMap((s) => (s.desiredRevisionId === null ? [] : [s.desiredRevisionId])),
-          ),
+          plays: await playsOf(tx, [
+            ...live.flatMap((s) => (s.desiredRevisionId === null ? [] : [s.desiredRevisionId])),
+            ...bindings.flatMap((b) => (b.revisionId === null ? [] : [b.revisionId])),
+          ]),
         },
       }
     },

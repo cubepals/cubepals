@@ -147,7 +147,7 @@ export class EdgeService {
           ...noticeOf(state, out.get(server.id)),
           ...this.#identityOf(server, state, motds),
           ...(binding?.proxyProtocol ? { proxyProtocol: true as const } : {}),
-          ...joinsOf(plays, server.desiredRevisionId),
+          ...joinsOf(plays, state, binding?.revisionId, server.desiredRevisionId),
         })
       }
     }
@@ -433,12 +433,17 @@ function restartingOf(
 
 /**
  * Which players' games a route's server takes, from what its revision runs (`clientRange`): what
- * the edge turns other joins away by. Nothing for a server whose release the table doesn't know.
+ * the edge turns other joins away by. A running server takes what the run it is in booted, which a
+ * change saved since doesn't move until it boots; any other, what it starts with next. Nothing for
+ * a server whose release the table doesn't know.
  */
 function joinsOf(
   plays: RouteInputs['plays'],
-  revisionId: string | null,
+  state: 'asleep' | 'restarting' | null,
+  booted: string | null | undefined,
+  desired: string | null,
 ): Pick<EdgeRoutes['routes'][number], 'joins'> {
+  const revisionId = state === null ? (booted ?? desired) : desired
   const runs = revisionId === null ? undefined : plays.get(revisionId)
   const range = runs === undefined ? null : clientRange(runs.gameVersion, runs.loader, runs.mods)
   if (range === null) return {}

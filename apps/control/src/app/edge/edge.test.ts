@@ -12,7 +12,7 @@ import { VIABACKWARDS, VIAVERSION } from '../../minecraft/mods.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { Actor } from '../actor.ts'
 import { IDLE_GRACE_MS, WAKE_PROBATION_MS } from '../operations/schedules.ts'
-import { loadRevision } from '../servers/persistence.ts'
+import { insertRevision, loadRevision } from '../servers/persistence.ts'
 import { tuning } from '../tuning.ts'
 import { destinationOf, NOWHERE } from './service.ts'
 
@@ -580,5 +580,31 @@ describe.skipIf(!hasDatabase)('edge, the games a server takes and why a wait is 
       protocol,
       oldest: protocolOf('1.9') ?? -1,
     })
+  }, 30_000)
+
+  test('a running server takes the games of the run it booted, until a change saved since boots', async () => {
+    const owner = await h.user()
+    const { id, slug } = await h.create(owner)
+    await h.until(id, 'running')
+    await h.settled(id)
+    const route = async () =>
+      (await h.app.edge.routes()).routes.find((r) => r.hostname === `${slug}.play.test`)
+    const booted = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
+    const protocol = protocolOf(booted.gameVersion) ?? -1
+    // A revision on another release, saved as the one it starts with next, without booting it.
+    const { id: _id, serverId: _server, number: _number, createdBy: _by, ...draft } = booted
+    const next = await h.db.transaction((tx) =>
+      insertRevision(tx, id, { ...draft, gameVersion: '1.21.11' }, owner.userId),
+    )
+    await h.db
+      .update(schema.minecraftServers)
+      .set({ desiredRevisionId: next.id })
+      .where(eq(schema.minecraftServers.id, id))
+    // Players on the release it runs still join; the next start is another matter.
+    expect((await route())?.joins).toMatchObject({ release: booted.gameVersion, oldest: protocol })
+    await h.app.servers.stop(owner, id, randomUUID(), 'idle')
+    await h.until(id, 'stopped')
+    await h.settled(id)
+    expect((await route())?.joins).toMatchObject({ release: '1.21.11', oldest: 774 })
   }, 30_000)
 })
