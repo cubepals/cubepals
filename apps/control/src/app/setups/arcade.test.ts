@@ -24,7 +24,7 @@ import {
   moderationFiles,
   runsModeration,
 } from '../../minecraft/moderation.ts'
-import { VIAVERSION } from '../../minecraft/mods.ts'
+import { VIABACKWARDS, VIAVERSION } from '../../minecraft/mods.ts'
 import { ARCADE_LEVEL, STARTER_STEP } from '../../minecraft/starter.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
@@ -79,12 +79,9 @@ describe.skipIf(!hasDatabase)('arcade', () => {
     plugin(LUCKPERMS, 'LuckPerms', ['1.21.11', '26.2', '26.3'], 'luckperms-1')
     plugin(CHATSENTINEL, 'ChatSentinel', ['1.21.11', '26.2'], 'chatsentinel-1')
     plugin('LJNGWSvH', 'Grim Anticheat', ['1.21.11', '26.2'], 'grim-1')
-    plugin(
-      VIAVERSION,
-      'ViaVersion',
-      offeredVersions().map((offered) => offered.id),
-      'viaversion-1',
-    )
+    const offered = offeredVersions().map((version) => version.id)
+    plugin(VIAVERSION, 'ViaVersion', offered, 'viaversion-1')
+    plugin(VIABACKWARDS, 'ViaBackwards', offered, 'viabackwards-1')
   }, 30_000)
 
   afterAll(async () => {
@@ -114,14 +111,14 @@ describe.skipIf(!hasDatabase)('arcade', () => {
     expect(await store.head(ARCADE_WORLD.ref.key)).not.toBeNull()
   }, 30_000)
 
-  test('it runs on the newest Paper the moderation tools do, with ViaVersion so newer Minecraft joins', async () => {
+  test('it runs on the newest Paper the moderation tools do, with the Via plugins so other Minecraft joins', async () => {
     const owner = await h.user('Ana', 'plus')
     expect(await h.app.queries.setupPreview(owner, { kind: 'template', key: 'arcade' })).toMatchObject({
       from: 'Arcade',
       loader: 'paper',
       gameVersion: '26.2',
       joinsNewer: true,
-      mods: ['ChatSentinel', 'Grim Anticheat', 'LibertyBans', 'LuckPerms', 'ViaVersion'],
+      mods: ['ChatSentinel', 'Grim Anticheat', 'LibertyBans', 'LuckPerms', 'ViaBackwards', 'ViaVersion'],
     })
     const { templates } = await h.app.queries.createOptions(await h.user('Lee'))
     expect(templates.find((template) => template.key === 'arcade')?.fits).toEqual({
@@ -137,9 +134,9 @@ describe.skipIf(!hasDatabase)('arcade', () => {
     await h.until(server.id, 'running')
     await h.settled(server.id)
     const revision = await loadRevision(h.db, server.desiredRevisionId)
-    // Every game is the datapack, so the only plugins are the ones for strangers, and ViaVersion.
+    // Every game is the datapack, so the only plugins are the ones for strangers, and the Via ones.
     expect(revision.mods.map((m) => ('projectId' in m.source ? m.source.projectId : '')).sort()).toEqual(
-      [CHATSENTINEL, 'LJNGWSvH', LIBERTYBANS, LUCKPERMS, VIAVERSION].sort(),
+      [CHATSENTINEL, 'LJNGWSvH', LIBERTYBANS, LUCKPERMS, VIABACKWARDS, VIAVERSION].sort(),
     )
     expect(revision.files).toEqual([...ARCADE_FILES, ...moderationFiles(CHAT_FILTER)])
     expect(revision.settings).toMatchObject({

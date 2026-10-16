@@ -11,7 +11,7 @@ import type { ModConflict } from '../../domain/mods/resolve.ts'
 import type { Loader } from '../../domain/revision/revision.ts'
 import { type MemoryTier, memoryMb, PARTY, type PartySize } from '../../domain/server/size.ts'
 import { type ServerSetup, setupOf } from '../../domain/setup/setup.ts'
-import { loaderOfPack, serverEnvironment, VIAVERSION } from '../../minecraft/mods.ts'
+import { loaderOfPack, serverEnvironment, VIABACKWARDS, VIAVERSION } from '../../minecraft/mods.ts'
 import { packNotes, packTierFor } from '../../minecraft/pack-build.ts'
 import { packEnvironment, packTier, suggestedForServers } from '../../minecraft/packs.ts'
 import {
@@ -35,7 +35,7 @@ import { UnreadableFile } from '../ports/formats.ts'
 import { findByInvite, findLiveBySlug, loadRevision, loadRuntime, loadWorld } from '../servers/persistence.ts'
 import { loadPackChecks, savePackCheck } from './persistence.ts'
 import { StarterWorlds } from './starters.ts'
-import { TEMPLATES, type Template, templateOf } from './templates.ts'
+import { GRIM, RIDES_NOTHING, TEMPLATES, type Template, templateOf } from './templates.ts'
 
 /** Where a new server's setup comes from. */
 export type SetupSource =
@@ -353,7 +353,10 @@ export class SetupService {
           setup: { ...setup, gameVersion },
           gameVersion,
           loader: setup.loader,
-          mods: source.kind === 'template' ? await this.#joinedByNewer(target, wanted, plan.mods) : plan.mods,
+          mods:
+            source.kind === 'template'
+              ? await this.#withVia(source.key, target, wanted, plan.mods)
+              : plan.mods,
           modpack: null,
           tier: tierFor(plan.mods),
           from,
@@ -366,21 +369,35 @@ export class SetupService {
   }
 
   /**
-   * A template's plugins, with ViaVersion beside them when they hold the server to an older
-   * release than the newest Cubepals offers, so a friend on the newest Minecraft still joins. It
-   * shows among the server's plugins like any other, and removing it is the way back. A server
-   * without plugins is left as it is: one plugin makes it a plugin server, which plans judge
-   * apart. Where ViaVersion doesn't resolve, the server comes without it.
+   * A template's plugins, with ViaVersion and ViaBackwards beside them, so friends on newer and
+   * older Minecraft than the server runs still join. They show among the server's plugins like any
+   * other, and removing them is the way back. A server without plugins is left as it is: one
+   * plugin makes it a plugin server, which plans judge apart.
+   *
+   * Grim, on the templates made for strangers, warns that ViaBackwards' players misbehave in
+   * vehicles, so beside Grim it comes only where nothing is ridden (`RIDES_NOTHING`); elsewhere,
+   * as where ViaBackwards doesn't resolve, ViaVersion comes alone, and only on a release older
+   * than the newest Cubepals offers, where it is what lets the newest Minecraft in.
    */
-  async #joinedByNewer(
+  async #withVia(
+    key: string,
     target: { gameVersion: string; loader: Loader },
     wanted: ReadonlyArray<{ projectId: string; dir?: string }>,
     mods: PinnedMod[],
   ): Promise<PinnedMod[]> {
+    if (target.loader !== 'paper' || mods.length === 0) return mods
+    const backwards = !wanted.some((mod) => mod.projectId === GRIM) || RIDES_NOTHING.has(key)
+    if (backwards) {
+      const both = await this.#mods.resolveNew(target, [
+        ...wanted,
+        { projectId: VIAVERSION },
+        { projectId: VIABACKWARDS },
+      ])
+      if (both.kind === 'ok') return both.mods
+    }
     const [newest] = offeredVersions()
       .map((offered) => offered.id)
       .sort((a, b) => compareVersions(b, a))
-    if (target.loader !== 'paper' || mods.length === 0) return mods
     if (newest === undefined || compareVersions(target.gameVersion, newest) >= 0) return mods
     const plan = await this.#mods.resolveNew(target, [...wanted, { projectId: VIAVERSION }])
     return plan.kind === 'ok' ? plan.mods : mods

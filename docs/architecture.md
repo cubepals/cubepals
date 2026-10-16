@@ -1341,6 +1341,18 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   join is told "This server is busy right now · join again in a moment". Refusals are logged every
   10 s by limit and by server. mc-router's own limit stays as the machine's last guard (1,000 a
   second). The defaults are the edge's own, each overridable by its environment.
+- **A game the server can't take** is turned away at the front door, before the gate counts it
+  or anything is woken (`apps/edge/clients.ts`). Each route carries `joins`: the protocol numbers
+  of the clients its server takes, which the control plane works out from the release and server
+  type its revision runs and its Via plugins (`apps/control/src/minecraft/clients.ts`): its own
+  release; any newer one with ViaVersion; older ones down to 1.9 with ViaBackwards beside it, and
+  to 1.7 with ViaRewind too. Only Paper runs them. The numbers are minecraft-data's
+  (`minecraft/protocol-versions.json`, copied by `scripts/protocols.ts`), sent with the list as
+  `releases` so the edge can name the player's game: "This server runs Minecraft 26.2. Your game
+  is 1.21.11: switch to 26.2 in the launcher, then join." A ping goes on as ever; a sleeping
+  server's is answered with its release and number to a game outside the range, so the list marks
+  it as another version, as a running server's own answer does. A route without `joins` (a release
+  the table doesn't know) takes every game.
 - The agent polls `/edge/v1/routes` every second, naming itself in `x-edge-id`
   (`packages/contracts/src/edge-poll.ts`). It changes mc-router's routes one hostname at a time
   through mc-router's API (`apps/edge/router.ts`): a route added, replaced or removed on its own,
@@ -1398,6 +1410,12 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
     the join goes on as if it had just dialled. The player's first click gets them in.
   - Otherwise the player is told why, in a login disconnect: still starting (join again),
     restarting, refused (the owner can see why), paused, deleted, or no server at that address.
+    A start that waited behind other work on the server says which, from the wake's `behind`:
+    its world still being saved for a rest, the server still going to sleep, or a backup. The
+    login screen has no room for words of the server's while it holds, so the reason comes then.
+  - A rest still making its copy when a join wakes the server ends once the snapshot is taken,
+    before packing it into the archive store, the long part (`stored-worlds.ts`): nothing has been
+    let go yet, so the world is as it was, and the snapshot stays as a backup.
   - A client from before 1.13 can't be spoken to, so it is held only through one wake ask
     (25 s), then told it's still starting.
 - **Restarts Blockly doesn't see.** When Fly brings back a crashed server, the control plane
@@ -2293,8 +2311,8 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   Duels server is made for strangers, so it also comes with the moderation tools and chat filter on,
   which the Players page can turn off, and the Grim anticheat, which by its own defaults only undoes
   a move it can't believe and tells helpers. Its server list message names the mode.
-  ViaVersion comes along, as with any template held to an older release, so the newest Minecraft
-  joins too.
+  ViaVersion and ViaBackwards come along, as with every plugin template, so newer and older
+  Minecraft join too.
 - Arcade is short games with leaderboards, fun alone or with two or three friends, on a world made
   of published maps: a parkour of three Overcast courses (Jungle, Ice and Debris) against one
   clock, with their builders' checkpoints; a falling floor on NetherGames' MD-Meltdown (its snow
@@ -2323,7 +2341,12 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   is built on, linked to where they are published, from the template card's `credits`
   (`TemplateCredits`), for any server running a world of that template's type. It comes with the same moderation tools,
   chat filter and Grim as Duels, so it is Paper on the newest release those run on, with
-  ViaVersion for the newer ones.
+  ViaVersion for the newer ones and ViaBackwards for the older.
+- Every Paper template with plugins gets ViaVersion and ViaBackwards beside them, shown among the
+  server's plugins and removed the same way (`SetupService`). Grim warns that ViaBackwards' older
+  clients misbehave in vehicles on 1.21.2 and later, so beside Grim it comes only on a template
+  whose game rides nothing (`RIDES_NOTHING`: Duels and Arcade); elsewhere ViaVersion comes alone,
+  on a release older than the newest offered.
 - A curated pack can stand for a way to play (`CuratedPack.way`): its card carries the way's name
   and picture, with the pack's own name and authors under it. The card is the pack's, so it shows
   only while a release is published, and picking it is picking the pack. None does today: SkyBlock

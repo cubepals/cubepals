@@ -24,7 +24,7 @@ import {
   moderationFiles,
   runsModeration,
 } from '../../minecraft/moderation.ts'
-import { VIAVERSION } from '../../minecraft/mods.ts'
+import { VIABACKWARDS, VIAVERSION } from '../../minecraft/mods.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { VOID_LEVEL } from '../../minecraft/worlds.ts'
 import { Cdn } from '../../testing/cdn.ts'
@@ -163,10 +163,11 @@ describe.skipIf(!hasDatabase)('duels', () => {
     )
   }, 30_000)
 
-  test('on its older release, ViaVersion comes along so newer Minecraft joins too', async () => {
-    // As Modrinth listed ViaVersion 5.12.1 on 2026-10-12: Paper, from 1.8.9 to 26.3.
+  test('ViaVersion and ViaBackwards come along so newer and older Minecraft join too', async () => {
+    // As Modrinth listed ViaVersion 5.12.1 on 2026-10-12, Paper 1.8.9 to 26.3, and ViaBackwards.
     const releases = offeredVersions().map((offered) => offered.id)
     plugin(VIAVERSION, 'ViaVersion', releases, '5WgnasGG')
+    plugin(VIABACKWARDS, 'ViaBackwards', releases, 'viabackwards-1')
     const owner = await h.user('Noa', 'plus')
     expect(await h.app.queries.setupPreview(owner, { kind: 'template', key: 'duels' })).toMatchObject({
       gameVersion: '1.21.11',
@@ -178,6 +179,7 @@ describe.skipIf(!hasDatabase)('duels', () => {
         'LibertyBans',
         'LuckPerms',
         'OldCombatMechanics',
+        'ViaBackwards',
         'ViaVersion',
       ],
     })
