@@ -16,7 +16,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTRPC } from '../../../../../lib/api'
 import { type Outcome, useOutcome } from '../../../../../lib/outcome'
-import { Card, FormRow, Toggle } from '../../../../../ui'
+import { FormRow, FormSection, Toggle } from '../../../../../ui'
 import { joinsLine } from './joins-line'
 import { ConfirmChange, changeable, useChanged, whatHappens } from './shared'
 
@@ -30,11 +30,7 @@ export function OtherVersionsSetting({ view }: { view: ServerView }) {
   const outcome = useOutcome(view)
   const choice = view.joins?.otherVersions
   if (choice === null || choice === undefined) return null
-  return (
-    <Card>
-      <OtherVersionsForm key={choice} view={view} choice={choice} outcome={outcome} />
-    </Card>
-  )
+  return <OtherVersionsForm key={choice} view={view} choice={choice} outcome={outcome} />
 }
 
 function OtherVersionsForm({
@@ -70,10 +66,10 @@ function OtherVersionsForm({
           : line
 
   return (
-    <>
+    <FormSection title="Other versions" description={said}>
       <FormRow
-        label="Other Minecraft versions"
-        description={said}
+        label="Newer and older versions"
+        description="Players don’t need your exact version."
         control={
           <Toggle
             checked={choice !== 'off'}
@@ -124,6 +120,6 @@ function OtherVersionsForm({
           {whatHappens(view)}
         </p>
       </ConfirmChange>
-    </>
+    </FormSection>
   )
 }

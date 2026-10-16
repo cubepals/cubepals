@@ -109,7 +109,11 @@ function VersionForm({
     <form onSubmit={submit}>
       <FormSection
         title="Version"
-        description="Your friends need the same Minecraft version to join."
+        description={
+          view.joins?.otherVersions === 'on' || view.joins?.otherVersions === 'oldest'
+            ? 'The Minecraft version your world runs.'
+            : 'Your friends need the same Minecraft version to join.'
+        }
         actions={
           <Button
             type="submit"
