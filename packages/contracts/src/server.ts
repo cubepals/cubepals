@@ -103,8 +103,8 @@ export const PLAY_ICONS = [
 export type PlayIcon = (typeof PLAY_ICONS)[number]
 /**
  * What a server shows until its owner picks a picture, in the game's list and on its pages:
- * Blockly's own, the mark in Ink on a square of Paper, which Cubepals' own servers show too. It
- * isn't one of the choices; a server without one shows it, and going back to it is picking none.
+ * Blockly's own, the mark over the word. It isn't one of the choices; a server without one
+ * shows it, and going back to it is picking none. Cubepals' own servers carry their own picture.
  */
 export const BLOCKLY_ICON = 'blockly'
 
