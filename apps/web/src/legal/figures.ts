@@ -90,6 +90,13 @@ export const FULL_REFUND_UNDER_HOURS = 30
 /** Minutes a player may stand still in game before the server kicks them, by default. */
 export const AFK_KICK_MINUTES = 15
 
+/**
+ * Days a server keeps the scrambled network a player joined it from, after their last visit, so a
+ * server-list ping from it may wake the server early (`app/edge/known-addresses.ts`). The policy
+ * states it, so private tuning may set it lower but never higher.
+ */
+export const KNOWN_NETWORK_DAYS = 7
+
 /** Days before a year paid at once ends that its owner is emailed (`billing/years.ts`). */
 export const YEAR_REMINDER_DAYS = [14, 3] as const
 

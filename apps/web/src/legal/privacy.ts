@@ -7,7 +7,7 @@
  * why, who else handles it, how long it is kept and how to use your rights. Every line matches
  * what the code does; nothing here is aspiration.
  */
-import { DELETION_WARNINGS_DAYS, FREE, PLUS } from './figures'
+import { DELETION_WARNINGS_DAYS, FREE, KNOWN_NETWORK_DAYS, PLUS } from './figures'
 import type { Policy } from './policy'
 
 export const PRIVACY: Policy = {
@@ -139,6 +139,7 @@ export const PRIVACY: Policy = {
       blocks: [
         'You don’t need a {brand} account to join a server. When you join one, we process your Minecraft username and player ID, when you were on, and anything the server’s owner adds about you (for example a ban reason). The server’s own files and logs keep what Minecraft records, such as your position and chat. If the server is published, its public page shows your Minecraft name while you are on it, if the server checks accounts.',
         'If you join with an invite link, we check the name you type with Mojang so the owner can add you.',
+        `When you leave a server, we keep a scrambled code made from the network you joined it from (your IP address, or the first half of an IPv6 address), not the address itself. It lets that server start as soon as your game’s server list checks it, before you press Join. The code is different on every server, can’t be turned back into your address, and is deleted ${KNOWN_NETWORK_DAYS} days after your last visit.`,
         'You can use the rights in section 9 for this data too: email {privacy} with your Minecraft name. The server’s owner controls who plays and what happens on their server, so we may pass your request on to them.',
       ],
     },
@@ -227,6 +228,7 @@ export const PRIVACY: Policy = {
             `**Backups:** Free keeps the latest ${FREE.backupsKept} backups taken after play and ${PLUS.name} the latest ${PLUS.backupsKept}; older ones are deleted. Our hosting provider removes old backup copies after at most 60 days.`,
             '**Sign-in sessions** last 7 days from when you last used {brand}. Session records, with the IP address and browser they came from, are kept with your account.',
             '**The network you signed up from** is deleted after two days.',
+            `**The networks players joined a server from** are kept, as a scrambled code, for ${KNOWN_NETWORK_DAYS} days after each player’s last visit to that server.`,
             '**Server console output** is streamed from our hosting provider’s logs, which keep it for a short time; we don’t store it. The game’s own log files stay inside the world until you delete them or the server.',
             '**Usage counts, errors and feedback** sent to PostHog are kept for one year.',
             '**Billing and order records** are kept for as long as tax and accounting law requires, which can be up to 10 years under the law where we are, even after an account is deleted.',

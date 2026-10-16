@@ -13,10 +13,12 @@ import { PAST_DUE_GRACE_MS } from '../apps/control/src/app/billing/persistence.t
 import { YEAR_REMINDER_DAYS as REMINDED } from '../apps/control/src/app/billing/years.ts'
 import { entitlementsFor } from '../apps/control/src/domain/account/entitlements.ts'
 import { UNIT_CENTS } from '../apps/control/src/domain/account/meter.ts'
+import { DEFAULT_ABUSE_LIMITS } from '../apps/control/src/domain/account/tuning.ts'
 import {
   EXTRA_HOUR_CENTS,
   FREE,
   FULL_REFUND_UNDER_HOURS,
+  KNOWN_NETWORK_DAYS,
   PAST_DUE_GRACE_DAYS,
   PLUS,
   type PlanFigures,
@@ -54,6 +56,10 @@ describe('what the policies say about the plans', () => {
 
   test('a year ending is emailed about when they say', () => {
     expect(YEAR_REMINDER_DAYS).toEqual(REMINDED)
+  })
+
+  test('a player network is kept as long as they say', () => {
+    expect(DEFAULT_ABUSE_LIMITS.knownAddressDays).toBe(KNOWN_NETWORK_DAYS)
   })
 
   test('a failed renewal keeps the plan as long as they say', () => {
