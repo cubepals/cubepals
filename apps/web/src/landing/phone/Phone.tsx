@@ -26,9 +26,12 @@ export function Phone({ create, signedIn, plans, getPlan }: Landed) {
       <section className={styles.night} data-tone="night" data-sky {...seenMark('top')}>
         <Stars className={styles.stars} />
         <Nav signedIn={signedIn} />
-        <h1 className={`bl-display ${styles.headline}`}>
-          A Minecraft server that starts when your friends join
-        </h1>
+        <p className={styles.kicker}>Minecraft server hosting for friends</p>
+        <h1 className={`bl-display ${styles.headline}`}>Send your friends the address. They’re in.</h1>
+        <p className={`bl-lede ${styles.support}`}>
+          Make a server in three decisions. Your friends join from the normal game, whenever they like, and
+          nobody has to start it first.
+        </p>
         <Still still="night" className={styles.still} />
         <div className={styles.go}>
           <Link href={create} className="bl-btn bl-btn--lg" {...ctaMark('hero_create')}>

@@ -27,7 +27,7 @@ import './landing.css'
 // it was sent in.
 const TITLE = 'Cubepals · Minecraft server hosting for friends'
 const DESCRIPTION =
-  'A Minecraft server that starts when your friends join. Start with a free trial, no card needed. For Minecraft: Java Edition.'
+  'Minecraft server hosting for friends. Send them the address and they’re in, whenever they like. Start with a free trial, no card needed. For Minecraft: Java Edition.'
 export const LANDING_METADATA: Metadata = {
   title: { absolute: TITLE },
   description: DESCRIPTION,

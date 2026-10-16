@@ -7,7 +7,7 @@
   </a>
 </p>
 
-<p align="center"><strong>A Minecraft server that starts when your friends join.</strong></p>
+<p align="center"><strong>Minecraft server hosting for friends. Send them the address and they’re in.</strong></p>
 
 <p align="center">
   <a href="https://cubepals.com">Website</a> ·

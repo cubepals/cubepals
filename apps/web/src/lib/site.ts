@@ -30,7 +30,7 @@ const SHARE_IMAGE = {
   url: '/opengraph-image.png',
   width: 1200,
   height: 630,
-  alt: 'Cubepals: a Minecraft server that starts when your friends join',
+  alt: 'Cubepals: Minecraft server hosting for friends',
 }
 
 /**

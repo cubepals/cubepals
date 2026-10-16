@@ -13,7 +13,8 @@ import { planPoints } from '../ui/plans'
 /** The official profiles that resolved when the markup last changed: Modrinth's. */
 const PROFILES = ['https://modrinth.com/user/cubepals']
 
-const DESCRIPTION = 'A Minecraft server that starts when your friends join. For Minecraft: Java Edition.'
+const DESCRIPTION =
+  'Minecraft server hosting for friends. Send them the address and they’re in. For Minecraft: Java Edition.'
 
 /** Who Cubepals is, and the site: on the home page. */
 export function siteSchema(origin: string) {

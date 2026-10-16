@@ -24,7 +24,8 @@ const mono = IBM_Plex_Mono({
   display: 'swap',
 })
 
-const DESCRIPTION = 'A Minecraft server that starts when your friends join. Start with a free trial.'
+const DESCRIPTION =
+  'Minecraft server hosting for friends. Send them the address and they’re in. Start with a free trial.'
 
 // The icons and the link preview come from the files beside this one — `icon.svg`, `apple-icon.png`
 // and `opengraph-image.png` — which are the brand's own (brand/README.md). Links resolve against the
