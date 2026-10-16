@@ -11,7 +11,7 @@ import type { ModConflict } from '../../domain/mods/resolve.ts'
 import type { Loader } from '../../domain/revision/revision.ts'
 import { type MemoryTier, memoryMb, PARTY, type PartySize } from '../../domain/server/size.ts'
 import { type ServerSetup, setupOf } from '../../domain/setup/setup.ts'
-import { loaderOfPack, serverEnvironment, VIABACKWARDS, VIAVERSION } from '../../minecraft/mods.ts'
+import { loaderOfPack, serverEnvironment } from '../../minecraft/mods.ts'
 import { packNotes, packTierFor } from '../../minecraft/pack-build.ts'
 import { packEnvironment, packTier, suggestedForServers } from '../../minecraft/packs.ts'
 import {
@@ -23,6 +23,7 @@ import {
   supports,
 } from '../../minecraft/versions.ts'
 import type { Actor } from '../actor.ts'
+import { CompatPlugins } from '../compat/service.ts'
 import type { PackCuration } from '../curation/service.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { trustOf } from '../listings/judge.ts'
@@ -35,7 +36,7 @@ import { UnreadableFile } from '../ports/formats.ts'
 import { findByInvite, findLiveBySlug, loadRevision, loadRuntime, loadWorld } from '../servers/persistence.ts'
 import { loadPackChecks, savePackCheck } from './persistence.ts'
 import { StarterWorlds } from './starters.ts'
-import { GRIM, RIDES_NOTHING, TEMPLATES, type Template, templateOf } from './templates.ts'
+import { TEMPLATES, type Template, templateOf } from './templates.ts'
 
 /** Where a new server's setup comes from. */
 export type SetupSource =
@@ -99,6 +100,8 @@ export class SetupService {
   readonly #packs: PackService
   readonly #curation: () => PackCuration
   readonly #starters: StarterWorlds
+  /** The Via plugins every Paper server starts with, pinned per release (`compat/`). */
+  readonly compat: CompatPlugins
 
   constructor(deps: {
     db: Db
@@ -119,6 +122,7 @@ export class SetupService {
     this.#packs = deps.packs
     this.#curation = deps.curation
     this.#starters = new StarterWorlds(deps.packs.archiveStore)
+    this.compat = new CompatPlugins({ db: deps.db, mods: deps.mods })
   }
 
   /** A template, as offered: one whose world can't start here yet isn't, as if it weren't there. */
@@ -353,10 +357,7 @@ export class SetupService {
           setup: { ...setup, gameVersion },
           gameVersion,
           loader: setup.loader,
-          mods:
-            source.kind === 'template'
-              ? await this.#withVia(source.key, target, wanted, plan.mods)
-              : plan.mods,
+          mods: plan.mods,
           modpack: null,
           tier: tierFor(plan.mods),
           from,
@@ -366,41 +367,6 @@ export class SetupService {
       conflicts = plan.conflicts
     }
     throw await this.#refusal(source, viewer, setup.gameVersion, from, conflicts)
-  }
-
-  /**
-   * A template's plugins, with ViaVersion and ViaBackwards beside them, so friends on newer and
-   * older Minecraft than the server runs still join. They show among the server's plugins like any
-   * other, and removing them is the way back. A server without plugins is left as it is: one
-   * plugin makes it a plugin server, which plans judge apart.
-   *
-   * Grim, on the templates made for strangers, warns that ViaBackwards' players misbehave in
-   * vehicles, so beside Grim it comes only where nothing is ridden (`RIDES_NOTHING`); elsewhere,
-   * as where ViaBackwards doesn't resolve, ViaVersion comes alone, and only on a release older
-   * than the newest Cubepals offers, where it is what lets the newest Minecraft in.
-   */
-  async #withVia(
-    key: string,
-    target: { gameVersion: string; loader: Loader },
-    wanted: ReadonlyArray<{ projectId: string; dir?: string }>,
-    mods: PinnedMod[],
-  ): Promise<PinnedMod[]> {
-    if (target.loader !== 'paper' || mods.length === 0) return mods
-    const backwards = !wanted.some((mod) => mod.projectId === GRIM) || RIDES_NOTHING.has(key)
-    if (backwards) {
-      const both = await this.#mods.resolveNew(target, [
-        ...wanted,
-        { projectId: VIAVERSION },
-        { projectId: VIABACKWARDS },
-      ])
-      if (both.kind === 'ok') return both.mods
-    }
-    const [newest] = offeredVersions()
-      .map((offered) => offered.id)
-      .sort((a, b) => compareVersions(b, a))
-    if (newest === undefined || compareVersions(target.gameVersion, newest) >= 0) return mods
-    const plan = await this.#mods.resolveNew(target, [...wanted, { projectId: VIAVERSION }])
-    return plan.kind === 'ok' ? plan.mods : mods
   }
 
   /**

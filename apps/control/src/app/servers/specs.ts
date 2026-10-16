@@ -23,6 +23,7 @@ import {
 import { loadStanding } from '../accounts/persistence.ts'
 import type { BuiltPack } from '../artifacts/brand-pack.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
+import { compatFor, projectsOf } from '../compat/service.ts'
 import { loadListing } from '../listings/persistence.ts'
 import { quarantinedOf } from '../mods/jar-check-records.ts'
 import { loadPackContents } from '../packs/persistence.ts'
@@ -47,6 +48,8 @@ export interface DesiredRuntime {
   install: InstallSeed | null
   /** Whether the server it boots reads a PROXY protocol header before each connection. */
   proxyProtocol: boolean
+  /** Which of Cubepals' Via plugins its boot places, by Modrinth project id (`app/compat/`). */
+  compat: string[]
 }
 
 /** The spec says which key its secrets come from, so a rotation changes every digest and drift applies it. */
@@ -143,7 +146,7 @@ export class RuntimeSpecs {
     const official = (await loadListing(q, server.id))?.official === true
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
     const { current } = this.#secrets
-    const built = toRuntimeSpec({
+    const input = {
       serverId: server.id,
       revision,
       world,
@@ -161,14 +164,28 @@ export class RuntimeSpecs {
           ? this.#links.icon(server.icon ?? BLOCKLY_ICON)
           : this.#links.ownIcon(server.id, server.ownIcon),
       brandPack: official ? this.brandPack : null,
-    })
-    const labelled = {
-      ...built,
-      labels: { ...built.labels, [SECRETS_VERSION_LABEL]: String(current.version) },
     }
-    const driftDigest = specDigest(withoutPlanLimits(labelled))
+    const label = (spec: RuntimeSpec) => ({
+      ...spec,
+      labels: { ...spec.labels, [SECRETS_VERSION_LABEL]: String(current.version) },
+    })
+    const placed = await compatFor(q, revision)
+    const labelled = label(toRuntimeSpec({ ...input, compat: placed }))
+    // The Via plugins arrive at a start, never through drift: a running server isn't restarted
+    // for Cubepals' compatibility layer, or for a newer pin of it.
+    const driftDigest = specDigest(withoutPlanLimits(label(toRuntimeSpec(input))))
+    const compat = projectsOf(placed)
     // What drift leaves for the next start, a machine asleep can leave too: it wakes as it slept.
-    const spec = { ...labelled, resumesOn: driftDigest }
+    // But not without the Via plugins it should have, or with ones turned off: a sleeping server
+    // may never stop, so its wake boots once to place them. A newer pin of the same ones waits
+    // for its next boot. One that places none wakes on the drift digest alone, as before them.
+    const resumesOn =
+      compat.length === 0
+        ? driftDigest
+        : createHash('sha256')
+            .update(`${driftDigest} ${compat.join(',')}`)
+            .digest('hex')
+    const spec = { ...labelled, resumesOn }
     return {
       revision,
       world,
@@ -178,6 +195,7 @@ export class RuntimeSpecs {
       secretsVersion: current.version,
       install: installOf(revision),
       proxyProtocol: usesProxyProtocol(revision),
+      compat,
     }
   }
 }

@@ -86,8 +86,10 @@ export function carriedEnv(
   revision: Pick<ServerRevision, 'files' | 'mods' | 'modpack'>,
   levelName: string,
   artifactUrl: (artifact: ModArtifact) => string,
+  /** The step runs though nothing is placed, so what an earlier start placed goes. */
+  always = false,
 ): Record<string, string> {
-  if (!placesFiles(revision)) return {}
+  if (!always && !placesFiles(revision)) return {}
   const jars = placedMods(revision.mods).map((mod) => ({
     path: `${mod.dir}/${diskName(mod.artifact)}`,
     sha512: mod.artifact.sha512,

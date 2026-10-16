@@ -11,4 +11,5 @@ CREATE TRIGGER "routes_changed" AFTER INSERT OR UPDATE OR DELETE ON "minecraft_s
 CREATE TRIGGER "routes_changed" AFTER INSERT OR UPDATE OR DELETE ON "server_runtimes" FOR EACH ROW EXECUTE FUNCTION "blockly_routes_changed"();--> statement-breakpoint
 CREATE TRIGGER "routes_changed" AFTER INSERT OR UPDATE OR DELETE ON "server_operations" FOR EACH ROW EXECUTE FUNCTION "blockly_routes_changed"();--> statement-breakpoint
 CREATE TRIGGER "routes_changed" AFTER INSERT OR UPDATE OR DELETE ON "power_intervals" FOR EACH ROW EXECUTE FUNCTION "blockly_routes_changed"();--> statement-breakpoint
-CREATE TRIGGER "routes_changed" AFTER INSERT OR UPDATE OR DELETE ON "account_standing" FOR EACH ROW EXECUTE FUNCTION "blockly_routes_changed"();
+CREATE TRIGGER "routes_changed" AFTER INSERT OR UPDATE OR DELETE ON "account_standing" FOR EACH ROW EXECUTE FUNCTION "blockly_routes_changed"();--> statement-breakpoint
+CREATE TRIGGER "routes_changed" AFTER INSERT OR UPDATE OR DELETE ON "compat_plugins" FOR EACH ROW EXECUTE FUNCTION "blockly_routes_changed"();

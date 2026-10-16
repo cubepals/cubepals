@@ -187,6 +187,11 @@ export interface AppliedConfigJson {
    * edge then sends. Absent before servers read one, and for every server that doesn't.
    */
   proxyProtocol?: boolean
+  /**
+   * Which of Cubepals' Via plugins its boot placed, by Modrinth project id, which decide which
+   * other versions' players the edge lets in. Absent before a boot said so.
+   */
+  compat?: string[]
 }
 
 export interface ObservedJson {

@@ -24,7 +24,7 @@ import {
   moderationFiles,
   runsModeration,
 } from '../../minecraft/moderation.ts'
-import { VIABACKWARDS, VIAVERSION } from '../../minecraft/mods.ts'
+import { VIABACKWARDS, VIAREWIND, VIAVERSION } from '../../minecraft/mods.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { VOID_LEVEL } from '../../minecraft/worlds.ts'
 import { Cdn } from '../../testing/cdn.ts'
@@ -163,39 +163,30 @@ describe.skipIf(!hasDatabase)('duels', () => {
     )
   }, 30_000)
 
-  test('ViaVersion and ViaBackwards come along so newer and older Minecraft join too', async () => {
-    // As Modrinth listed ViaVersion 5.12.1 on 2026-10-12, Paper 1.8.9 to 26.3, and ViaBackwards.
+  test('its server starts with the Via plugins, ViaRewind too, none of them among its plugins', async () => {
+    // As Modrinth listed them on 2026-10-12: Paper, from 1.8.9 to 26.3.
     const releases = offeredVersions().map((offered) => offered.id)
     plugin(VIAVERSION, 'ViaVersion', releases, '5WgnasGG')
-    plugin(VIABACKWARDS, 'ViaBackwards', releases, 'viabackwards-1')
+    plugin(VIABACKWARDS, 'ViaBackwards', releases)
+    plugin(VIAREWIND, 'ViaRewind', releases)
+    await h.app.setups.compat.refresh()
     const owner = await h.user('Noa', 'plus')
     expect(await h.app.queries.setupPreview(owner, { kind: 'template', key: 'duels' })).toMatchObject({
       gameVersion: '1.21.11',
       joinsNewer: true,
-      mods: [
-        'ChatSentinel',
-        'Duels',
-        'Grim Anticheat',
-        'LibertyBans',
-        'LuckPerms',
-        'OldCombatMechanics',
-        'ViaBackwards',
-        'ViaVersion',
-      ],
+      mods: ['ChatSentinel', 'Duels', 'Grim Anticheat', 'LibertyBans', 'LuckPerms', 'OldCombatMechanics'],
     })
     const server = await h.create(owner, { from: { kind: 'template', key: 'duels' } })
-    const revision = await loadRevision(h.db, server.desiredRevisionId)
-    expect(revision.mods.map((m) => m.source)).toContainEqual({
-      catalog: 'modrinth',
-      projectId: VIAVERSION,
-      versionId: '5WgnasGG',
-    })
-    expect((await h.app.queries.get(owner, server.id)).joinsNewer).toBe(true)
-
-    // Plain Paper has no plugins, and one would make it a plugin server, which plans judge apart.
-    expect(await h.app.queries.setupPreview(owner, { kind: 'template', key: 'smooth' })).toMatchObject({
-      mods: [],
-      joinsNewer: false,
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+    const { spec } = await h.app.specs.desired(h.db, await h.server(server.id))
+    // ViaVersion, ViaBackwards and ViaRewind, placed by Cubepals' own step.
+    expect(spec.env.BLOCKLY_JARS?.split('\n').filter((line) => line.startsWith('plugins/'))).toHaveLength(3)
+    // 1.8 PvP players get in: down to 1.7.
+    expect((await h.app.queries.get(owner, server.id)).joins).toEqual({
+      oldest: '1.7.2',
+      newer: true,
+      otherVersions: 'oldest',
     })
   }, 30_000)
 })

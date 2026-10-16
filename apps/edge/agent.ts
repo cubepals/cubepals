@@ -13,7 +13,7 @@ import type { EdgeRoutes, PingWakeResult, SessionEvent, WakeResult } from '@bloc
 import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { EDGE_ID_HEADER, NEWER_REASONS } from '../../packages/contracts/src/edge-poll.ts'
 import { waitFor } from '../../packages/contracts/src/play-today.ts'
-import { LOCAL_HEADER } from '../../packages/contracts/src/proxy-header.ts'
+import { LOCAL_HEADER, readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
 import { OWN_ICON_MAX_BYTES } from '../../packages/contracts/src/server-list.ts'
 import { GAME_PORT } from '../control/src/minecraft/ports.ts'
 import { asleepMessage } from './asleep.ts'
@@ -319,6 +319,8 @@ interface RouterSession {
   status?: string
   server?: string
   player?: { name?: string; uuid?: string }
+  /** Where the client connected from: the front door's PROXY header, which mc-router trusts. */
+  client?: { host?: string }
   backend?: string
 }
 
@@ -335,6 +337,7 @@ async function session(body: RouterSession): Promise<void> {
     hostname: body.server,
     event,
     player: { name: body.player.name, uuid: body.player.uuid },
+    ...(body.client?.host ? { address: body.client.host } : {}),
     at: body.timestamp ? new Date(body.timestamp).toISOString() : new Date().toISOString(),
   }
   await control('/sessions', { method: 'POST', body: JSON.stringify(payload) })
@@ -407,8 +410,11 @@ function passOn(client: Socket, join: Join, header: Uint8Array | null): void {
 
 /** Sleeping servers a ping asked to wake early, so each is asked once a while (`ping-wake.ts`). */
 const pingWakes = new PingWakes(
-  (hostname) =>
-    control('/ping-wake', { method: 'POST', body: JSON.stringify({ hostname }) }).then(
+  (hostname, address) =>
+    control('/ping-wake', {
+      method: 'POST',
+      body: JSON.stringify({ hostname, ...(address === null ? {} : { address }) }),
+    }).then(
       // A control plane from before it took these answers 404: the server stays asleep.
       async (response) => response.ok && ((await response.json()) as PingWakeResult).waking,
     ),
@@ -437,12 +443,19 @@ function asleep(address: string): NoticeText {
 /**
  * A ping is often the moment before a join: for a sleeping server that isn't waking yet, the
  * control plane may start it now, and the ping, answered once it has said or a moment has passed,
- * says it is waking. Which servers it starts is the control plane's to decide.
+ * says it is waking. Which servers it starts, by where the ping came from (`address`, null when no
+ * PROXY header said), is the control plane's to decide.
  */
-async function pinged(hostname: string): Promise<void> {
+async function pinged(hostname: string, address: string | null): Promise<void> {
   const route = routes.find((r) => r.hostname === hostname)
   if (route?.state !== 'asleep' || route.waking === true || usedUp(route) !== null) return
-  await Promise.race([pingWakes.ask(hostname), Bun.sleep(PING_WAKE_WAIT_MS)])
+  await Promise.race([pingWakes.ask(hostname, address), Bun.sleep(PING_WAKE_WAIT_MS)])
+}
+
+/** Who a connection is from, by the PROXY header it came with; null without one. */
+function sourceOf(header: Uint8Array | null): string | null {
+  const read = header === null ? null : readProxyHeader(header)
+  return read !== null && typeof read === 'object' ? (read.source?.address ?? null) : null
 }
 
 /**
@@ -474,7 +487,7 @@ function asleepAt(
       held = null
       if (ping === null) return answer(sent)
       client.pause()
-      void pinged(hostnameOf({ address: ping })).finally(() => {
+      void pinged(hostnameOf({ address: ping }), sourceOf(unwrap.header)).finally(() => {
         answer(sent)
         client.resume()
       })

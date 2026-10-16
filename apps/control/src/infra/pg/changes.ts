@@ -5,7 +5,7 @@
 /**
  * A change signal over Postgres LISTEN: one connection, held from the first time the mark is
  * asked for. What sends on its channel is the database's own triggers (the route inputs' are in
- * migration 0080). While the connection is down the mark is null, and once it is back the mark
+ * migration 0082). While the connection is down the mark is null, and once it is back the mark
  * moves, for whatever was said meanwhile. Not for domain events, which are `events.ts`'s.
  */
 import { SECOND_MS } from '@blockly/contracts/durations'

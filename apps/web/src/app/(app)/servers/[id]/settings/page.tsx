@@ -27,6 +27,7 @@ import { GameSettings } from './game'
 import { History } from './history'
 import { Identity } from './identity'
 import { Location } from './location'
+import { OtherVersionsSetting } from './other-versions'
 import { ChangeState } from './shared'
 import { SizeSettings, VersionSettings } from './version'
 
@@ -60,6 +61,7 @@ export default function SettingsPage() {
         <>
           <GameSettings view={view} options={options.data} />
           <VersionSettings view={view} options={options.data} />
+          <OtherVersionsSetting view={view} />
           <SizeSettings view={view} options={options.data} />
         </>
       )}

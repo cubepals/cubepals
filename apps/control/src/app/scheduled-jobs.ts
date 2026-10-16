@@ -92,6 +92,11 @@ export function scheduledJobs(
       },
     },
     {
+      job: 'compat-pins',
+      run: () => app.setups.compat.refresh(),
+      says: (n) => `pinned the Via plugins for ${n} releases`,
+    },
+    {
       job: 'malware-lists',
       run: () => app.jarChecks.refresh(),
       says: (n) => `quarantined ${n} uploaded jars a list now names`,
@@ -130,6 +135,11 @@ export function scheduledJobs(
       job: 'free-play-links',
       run: () => app.accounts.freePlay.relink(),
       says: (n) => `${n} free accounts now share another's free hours`,
+    },
+    {
+      job: 'known-addresses',
+      run: () => app.edge.forgetAddresses(),
+      says: (n) => `forgot ${n} networks that no longer wake a server with a ping`,
     },
     {
       job: 'admin-alerts',

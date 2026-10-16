@@ -4,43 +4,57 @@
 
 /**
  * The sleeping servers a server-list ping has asked the control plane to wake early, and what it
- * answered. Each server is asked at most once a while however often it is pinged, and pings
- * meanwhile hear that answer. Not for what a ping is told (`agent.ts`), or for whether a server is
- * woken, which is the control plane's to decide.
+ * answered. The control plane answers by where the ping came from, so each server is asked at most
+ * once a while from each network however often it is pinged, and pings meanwhile hear that answer:
+ * a stranger told no never stands in for a player of the server's own. Not for what a ping is told
+ * (`agent.ts`), or for whether a server is woken, which is the control plane's to decide.
  */
+import { addressKey } from './limits.ts'
+
 export class PingWakes {
-  readonly #ask: (hostname: string) => Promise<boolean>
+  readonly #ask: (hostname: string, address: string | null) => Promise<boolean>
   readonly #everyMs: number
   readonly #now: () => number
-  readonly #asks = new Map<string, { at: number; waking: Promise<boolean>; woke: boolean }>()
+  /** By hostname and network. */
+  readonly #asks = new Map<string, { at: number; waking: Promise<boolean> }>()
+  /** When an ask was last answered that each hostname is waking. */
+  readonly #woke = new Map<string, number>()
 
-  /** `ask` asks the control plane, and says whether the server is waking; a failed ask says it isn't. */
-  constructor(ask: (hostname: string) => Promise<boolean>, everyMs: number, now: () => number = Date.now) {
+  /**
+   * `ask` asks the control plane for a ping from `address` (null when the edge doesn't know it), and
+   * says whether the server is waking; a failed ask says it isn't.
+   */
+  constructor(
+    ask: (hostname: string, address: string | null) => Promise<boolean>,
+    everyMs: number,
+    now: () => number = Date.now,
+  ) {
     this.#ask = ask
     this.#everyMs = everyMs
     this.#now = now
   }
 
-  /** Asks for `hostname`, or hears the ask already made within the while. */
-  ask(hostname: string): Promise<boolean> {
+  /** Asks for `hostname` pinged from `address`, or hears the ask already made within the while. */
+  ask(hostname: string, address: string | null): Promise<boolean> {
     const now = this.#now()
-    const last = this.#asks.get(hostname)
+    const key = `${hostname} ${address === null ? '' : addressKey(address)}`
+    const last = this.#asks.get(key)
     if (last !== undefined && now - last.at < this.#everyMs) return last.waking
     for (const [name, asked] of this.#asks) if (now - asked.at >= this.#everyMs) this.#asks.delete(name)
-    const asked = { at: now, woke: false, waking: Promise.resolve(false) }
-    asked.waking = this.#ask(hostname)
+    for (const [name, at] of this.#woke) if (now - at >= this.#everyMs) this.#woke.delete(name)
+    const waking = this.#ask(hostname, address)
       .catch(() => false)
-      .then((waking) => {
-        asked.woke = waking
-        return waking
+      .then((woke) => {
+        if (woke) this.#woke.set(hostname, now)
+        return woke
       })
-    this.#asks.set(hostname, asked)
-    return asked.waking
+    this.#asks.set(key, { at: now, waking })
+    return waking
   }
 
-  /** Whether an ask within the while was answered that `hostname` is waking. */
+  /** Whether an ask within the while, from anywhere, was answered that `hostname` is waking. */
   waking(hostname: string): boolean {
-    const last = this.#asks.get(hostname)
-    return last?.woke === true && this.#now() - last.at < this.#everyMs
+    const at = this.#woke.get(hostname)
+    return at !== undefined && this.#now() - at < this.#everyMs
   }
 }

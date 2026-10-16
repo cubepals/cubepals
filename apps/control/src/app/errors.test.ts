@@ -9,6 +9,7 @@ import type { DenialCode } from '../domain/policy/policy.ts'
 import { AccessReseedFailed } from './access/reconciler.ts'
 import { AppError, DiagnosedFailure, inFull, inPlainWords, ownersWords, PermanentFailure } from './errors.ts'
 import { NotReady } from './operations/boot.ts'
+import { ConsoleUnavailable } from './ports/minecraft.ts'
 import { RuntimeFull } from './ports/runtime.ts'
 
 describe('what owners read about an error', () => {
@@ -30,9 +31,12 @@ describe('what owners read about an error', () => {
     )
   })
 
-  test('a provider with no room is told as that, and anything else as whose side it was on', () => {
+  test('a provider with no room or a console that didn’t answer is told as that, and anything else as whose side it was on', () => {
     expect(inPlainWords(new RuntimeFull('fly', 'nothing placeable for 4096 MB in fra'))).toBe(
       'There was no room for it where it runs just then. Try again in a few minutes.',
+    )
+    expect(inPlainWords(new ConsoleUnavailable('The console connection closed'))).toBe(
+      'The server’s console didn’t answer just then. Try again in a moment.',
     )
     const raw = new Error('Fly: creating a machine failed with 500: {"error":"internal"}')
     expect(ownersWords(raw)).toBeNull()

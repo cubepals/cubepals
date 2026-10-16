@@ -172,6 +172,16 @@ describe.skipIf(!hasDatabase)('the route inputs, while the database says none mo
       const asked = reads()
       await h.app.edge.listed()
       expect(reads()).toBe(asked + 1)
+
+      // So does a Via plugin pinned for a release, which the routes also go by.
+      await h.app.edge.listed()
+      await h.db.execute(
+        sql`insert into compat_plugins (game_version, project_id, pinned, pinned_at) values ('0.0-test', 'via-test', '{}', now())`,
+      )
+      await Bun.sleep(100)
+      const pinned = reads()
+      await h.app.edge.listed()
+      expect(reads()).toBe(pinned + 1)
     } finally {
       execute.mockRestore()
     }

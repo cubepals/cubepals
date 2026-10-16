@@ -32,10 +32,26 @@ export interface ServerSettings {
    * (§15.1): everything keyed by a player moves with it.
    */
   onlineMode: boolean
+  /**
+   * Which other Minecraft versions' players a Paper server lets in beside its own, through the
+   * Via plugins Cubepals adds as it starts (`app/compat/`): none (`off`), newer and older ones
+   * (`on`), or also 1.8 and 1.7 (`oldest`). Absent is `on`. Its own change, like `onlineMode`.
+   */
+  otherVersions?: OtherVersions
 }
 
-/** The settings the game form edits: everything but how players are checked. */
-export type GameSettings = Omit<ServerSettings, 'onlineMode'>
+export type OtherVersions = 'off' | 'on' | 'oldest'
+
+/** A server's choice of other versions, with the default for one that never made it. */
+export const otherVersionsOf = (settings: Pick<ServerSettings, 'otherVersions'>): OtherVersions =>
+  settings.otherVersions ?? 'on'
+
+/** One setting as the server has it, a choice it never made at its default. */
+const settingOf = (settings: ServerSettings, key: keyof ServerSettings): string | number | boolean =>
+  key === 'otherVersions' ? otherVersionsOf(settings) : settings[key]
+
+/** The settings the game form edits: everything but how players are checked and which versions join. */
+export type GameSettings = Omit<ServerSettings, 'onlineMode' | 'otherVersions'>
 
 type RevisionReason =
   | 'created'
@@ -148,8 +164,8 @@ export function settingsProblems(settings: ServerSettings, capacity: number): st
 export type RevisionChange =
   | {
       field: keyof ServerSettings
-      from: ServerSettings[keyof ServerSettings]
-      to: ServerSettings[keyof ServerSettings]
+      from: string | number | boolean
+      to: string | number | boolean
     }
   | { field: 'gameVersion' | 'loader' | 'loaderVersion'; from: string; to: string }
   /** Plain Minecraft moved onto Paper, or back to Mojang's own server. */
@@ -174,9 +190,12 @@ export function describeChanges(from: RevisionDraft, to: RevisionDraft): Revisio
     changes.push({ field: 'loaderVersion', from: from.loaderVersion, to: to.loaderVersion })
   if (from.loader === to.loader && runsOnPaper(from) !== runsOnPaper(to))
     changes.push({ field: 'onPaper', from: runsOnPaper(from), to: runsOnPaper(to) })
-  for (const key of Object.keys(to.settings) as (keyof ServerSettings)[])
-    if (from.settings[key] !== to.settings[key])
-      changes.push({ field: key, from: from.settings[key], to: to.settings[key] })
+  const keys = new Set([...Object.keys(from.settings), ...Object.keys(to.settings)]) as Set<
+    keyof ServerSettings
+  >
+  for (const key of keys)
+    if (settingOf(from.settings, key) !== settingOf(to.settings, key))
+      changes.push({ field: key, from: settingOf(from.settings, key), to: settingOf(to.settings, key) })
   const identity = ({ source }: PinnedMod) =>
     'uploadId' in source ? `upload:${source.uploadId}` : `${source.catalog}:${source.projectId}`
   const before = new Map(from.mods.map((m) => [identity(m), m]))

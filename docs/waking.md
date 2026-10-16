@@ -59,21 +59,49 @@ whole life and an image pull onto the volume's host.
 
 ## What Blockly does about it
 
-- **A ping starts the wake.** Opening the multiplayer screen pings every saved server, so a ping
-  of a sleeping server is often seconds before the click. The edge asks the control plane to wake
-  a sleeping server it is pinged for (`POST /edge/v1/ping-wake`), waits up to 1.5 s for the
-  answer, and the list shows "Waking up · join in a few seconds" when one started. The join then
-  waits only for what is left of the boot. The control plane wakes only a server whose wake is a
-  boot: one that rests, or whose sleep stopped it. It wakes it as a join's wake would, through the
-  same checks. It never wakes:
-  - a server whose owner can't start it now;
-  - one past the hourly cap on wakes from connections;
-  - one whose owner has used their included hours, where an unjoined run would be paid for;
-  - one whose last ping wake went unjoined, until `AbuseLimits.pingWakeHoldHours` have passed or
-    someone has played since (`app/edge/ping-wake.ts`).
+- **A ping from a player starts the wake.** Opening the multiplayer screen pings the saved servers
+  it shows, so a ping of a sleeping server is often seconds before the click. The edge asks the
+  control plane to wake a sleeping server it is pinged for (`POST /edge/v1/ping-wake`), with the
+  address the ping came from, waits up to 1.5 s for the answer, and the list shows "Waking up ·
+  join in a few seconds" when one started. The join then waits only for what is left of the boot.
+  Anything on the internet can ping: scanners, sites that list servers, bots. So the control plane
+  wakes a server for a ping only when:
+  - the ping comes from a network one of the server's own players joined it from, within
+    `AbuseLimits.knownAddressDays` (`app/edge/known-addresses.ts`). Every other ping hears it
+    sleeps, and a join from anywhere wakes it as always;
+  - its wake is a boot from a sleep: one whose sleep stopped it. One that kept its memory resumes
+    about as fast as the click, and a world at rest never comes back for a ping (below);
+  - its owner can start it now, through the same checks as a join's wake;
+  - it is under the hourly cap on wakes from connections;
+  - its owner has included hours left;
+  - its last ping wake was joined, or `AbuseLimits.pingWakeHoldHours` have passed, or someone has
+    played since (`app/edge/ping-wake.ts`).
 
-  Nobody joining puts it back to sleep after the probation. The edge asks once per server every
-  30 s however often it is pinged (`apps/edge/ping-wake.ts`).
+  Nobody joining puts it back to sleep after the probation, and that run counts toward no hours:
+  a run a ping woke counts from the first player the server itself sees on it, on the meter and in
+  the app alike (`countedFrom`, `app/accounts/persistence.ts`). The edge asks once every 30 s per
+  server and network however often it is pinged (`apps/edge/ping-wake.ts`), so a stranger told no
+  never stands in for a player.
+
+  **What is kept.** A network counts once a join from it ends and the server's own reading had
+  that player on in the minutes before; a client the server turned away leaves nothing. It is kept
+  as one row per server and network: an HMAC of the network (an IPv4 address, or an IPv6 one's
+  /64, which one home or phone keeps while its address changes daily) under a key derived for the
+  server from the runtime key, and when that join ended. Not the address, not who joined. The
+  hourly `known-addresses` job deletes a row once it no longer counts, `knownAddressDays` after
+  the last join from it. Rotating the runtime key forgets them all.
+
+  **A world at rest stays at rest for a ping.** It rests because nobody has played for weeks, so
+  no join is recent enough to count, and its players' lists keep pinging it on the way to other
+  servers. A restore brings the whole world back from storage, the slowest wake there is, and
+  nobody would be there to play; the ping would save a few seconds of its 74. A join wakes it as
+  always.
+
+  **How much it hides.** The list pings a server as it first draws it, so the boot starts when the
+  player opens the screen, and a click a few seconds later waits that much less of the 35 to 37 s
+  of a stopped wake; a player who opens the list while friends gather may find it up. The ping's
+  handshake is the first the edge hears of a player, and it asks at once, before the status
+  request is read, so the edge can't start it sooner.
 - **Every edge says a server is waking.** A server on its way up, by a join or a ping, is routed
   as asleep with `waking`, so every ping gets "Waking up" while it boots. That includes a world
   coming back from rest, which used to have no route at all until it was back.

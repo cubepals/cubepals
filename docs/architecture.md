@@ -1309,18 +1309,21 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
     `app/edge/service.ts`); past that the wake is `denied: quota`. Nothing about a connection
     proves who sent it, and each wake costs the owner a run.
   - A deleted server's address answers `denied: deleted`, so its players are told.
-- **`pingWake(hostname)`** (`app/edge/ping-wake.ts`). A server list pinged an asleep server,
-  often just before a join. It starts the server as a wake would, without waiting for it, where its
-  start is a boot: one at rest, or one whose sleep stopped it (`server_runtimes.memory_kept_at` is
-  null), since a resume is about as quick as the click. It answers `{ waking }`. It starts nothing:
+- **`pingWake(hostname, address)`** (`app/edge/ping-wake.ts`). A server list pinged an asleep
+  server, often just before a join. It starts the server as a wake would, without waiting for it,
+  where its start is a boot from a sleep: one whose sleep stopped it
+  (`server_runtimes.memory_kept_at` is null), since a resume is about as quick as the click, and
+  never a world at rest. It answers `{ waking }`. It starts nothing:
+  - for a ping from anywhere the server's own players haven't joined it from within
+    `AbuseLimits.knownAddressDays` (`app/edge/known-addresses.ts`), or with no address;
   - for a server its owner can't start (the same policy);
   - past `wakesPerHour`;
   - once the owner's included hours are used;
   - for `AbuseLimits.pingWakeHoldHours` after a ping wake nobody joined, unless someone played
     since.
 
-  Its run is a woken one, so the probation puts it back to sleep unjoined. The times are in
-  [waking.md](waking.md).
+  Its run is a woken one, so the probation puts it back to sleep unjoined, and it counts toward no
+  hours until the server itself sees a player on it. The times are in [waking.md](waking.md).
 - **`idleHint(hostname)`.** Triggers an immediate idle evaluation. Only the idle policy
   (`Schedules.evaluateIdle`, entitlement-aware: some plans never idle-stop) decides whether to
   stop. The edge timer is
@@ -1328,7 +1331,9 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
 - **`recordSession`.** Upserts presence with `source = 'edge'` and bumps
   `server_activity.last_player_at`. This identity is **client-claimed**, so it's used for
   display and activity only, never for authorization. `presence-sync` (RCON `list`) is
-  authoritative and overwrites it.
+  authoritative and overwrites it. A disconnect carries the client's address: its network becomes
+  one the server's pings may wake it from where the server's own reading had that player on
+  (`known-addresses.ts`), kept only as a hash keyed to the server.
 
 ### Edge side (`apps/edge`): the only mc-router-aware code
 
@@ -1362,7 +1367,8 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
 - **A game the server can't take** is turned away at the front door, before the gate counts it
   or anything is woken (`apps/edge/clients.ts`). Each route carries `joins`: the protocol numbers
   of the clients its server takes, which the control plane works out from the release and server
-  type its revision runs and its Via plugins (`apps/control/src/minecraft/clients.ts`): its own
+  type its revision runs, its own Via plugins and those Cubepals placed beside them (see Other
+  versions) (`apps/control/src/minecraft/clients.ts`): its own
   release; any newer one with ViaVersion; older ones down to 1.9 with ViaBackwards beside it, and
   to 1.7 with ViaRewind too. Only Paper runs them. The numbers are minecraft-data's
   (`minecraft/protocol-versions.json`, copied by `scripts/protocols.ts`), sent with the list as
@@ -2349,8 +2355,8 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   Duels server is made for strangers, so it also comes with the moderation tools and chat filter on,
   which the Players page can turn off, and the Grim anticheat, which by its own defaults only undoes
   a move it can't believe and tells helpers. Its server list message names the mode.
-  ViaVersion and ViaBackwards come along, as with every plugin template, so newer and older
-  Minecraft join too.
+  It lets in Minecraft 1.8 and 1.7 too (`otherVersions: 'oldest'`), since 1.8 PvP players
+  play on 1.8 itself.
 - Arcade is short games with leaderboards, fun alone or with two or three friends, on a world made
   of published maps: a parkour of three Overcast courses (Jungle, Ice and Debris) against one
   clock, with their builders' checkpoints; a falling floor on NetherGames' MD-Meltdown (its snow
@@ -2378,13 +2384,27 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   builders; and the server's public page says, in one line after its description, whose maps it
   is built on, linked to where they are published, from the template card's `credits`
   (`TemplateCredits`), for any server running a world of that template's type. It comes with the same moderation tools,
-  chat filter and Grim as Duels, so it is Paper on the newest release those run on, with
-  ViaVersion for the newer ones and ViaBackwards for the older.
-- Every Paper template with plugins gets ViaVersion and ViaBackwards beside them, shown among the
-  server's plugins and removed the same way (`SetupService`). Grim warns that ViaBackwards' older
-  clients misbehave in vehicles on 1.21.2 and later, so beside Grim it comes only on a template
-  whose game rides nothing (`RIDES_NOTHING`: Duels and Arcade); elsewhere ViaVersion comes alone,
-  on a release older than the newest offered.
+  chat filter and Grim as Duels, so it is Paper on the newest release those run on.
+- **Other versions.** Every Paper server, with plugins or none, starts with ViaVersion and
+  ViaBackwards, so players on newer and older Minecraft join it, and ViaRewind too where its owner
+  lets in 1.8 and 1.7 (`ServerSettings.otherVersions`: `on` by default, `off`, or `oldest`). They
+  are Cubepals' compatibility layer (`app/compat/`), not the owner's plugins: they are in no
+  revision, so no plan rule, limit or price that counts plugins counts them, a Free server keeps
+  them, and the plugin list never shows them. Each release's jars are pinned once from the catalog
+  (`compat_plugins`, the daily `compat-pins` job and every worker's start), placed in `plugins/` by
+  Cubepals' own start step (`carried.ts`), and fetched over the server's artifact link like any
+  pinned jar. A Via plugin the owner runs as their own isn't placed again. They arrive at a boot,
+  never through drift: the drift digest leaves them out, so no running server restarts for them.
+  A server that sleeps may never stop, so which Via plugins it places is part of what a machine
+  asleep may wake on as it slept (`resumesOn`): asleep without the ones it should have, or with
+  ones turned off, its next wake boots once to place them; a newer pin of the same ones waits for
+  its next boot. A boot records the ones it placed (`server_runtimes.applied.compat`), and the
+  edge and the settings page say who joins from those while it runs, and from those pinned for its
+  release that its choice asks for otherwise, so neither says more than its disk holds.
+  The settings page says who joins in one line ("Players on Minecraft 1.9 to 26.2 and newer can
+  join") with the switch, and a second one for 1.8 and 1.7; turned off, the step takes the jars
+  away at the next boot. Grim warns that ViaBackwards' older clients misbehave in vehicles on
+  1.21.2 and later: Grim comes only on Duels and Arcade, whose games ride nothing.
 - A curated pack can stand for a way to play (`CuratedPack.way`): its card carries the way's name
   and picture, with the pack's own name and authors under it. The card is the pack's, so it shows
   only while a release is published, and picking it is picking the pack. None does today: SkyBlock

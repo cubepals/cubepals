@@ -50,6 +50,14 @@ export function VersionSettings({ view, options }: { view: ServerView; options: 
   )
 }
 
+/** Friends need the same version only where Cubepals isn't letting other versions in. */
+function versionNote(view: ServerView): string {
+  const others = view.joins?.otherVersions
+  return others === 'on' || others === 'oldest'
+    ? 'The Minecraft version your world runs.'
+    : 'Your friends need the same Minecraft version to join.'
+}
+
 function VersionForm({
   view,
   options,
@@ -109,7 +117,7 @@ function VersionForm({
     <form onSubmit={submit}>
       <FormSection
         title="Version"
-        description="Your friends need the same Minecraft version to join."
+        description={versionNote(view)}
         actions={
           <Button
             type="submit"

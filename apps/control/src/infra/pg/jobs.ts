@@ -585,6 +585,9 @@ const CRON: Record<ScheduledJob, string> = {
   'retention-sweep': '13 6 * * *',
   orphans: '17 * * * *',
   'catalog-refresh': '41 * * * *',
+  // The Via plugins Paper servers start with, pinned again per release: a new build reaches them
+  // within a day, at their next start.
+  'compat-pins': '23 4 * * *',
   // The lists of known malware, fetched again where they are published: a few times a day.
   'malware-lists': '7 */6 * * *',
   // The default modpack list's packs, checked before anybody picks one (§15.6).
@@ -600,6 +603,8 @@ const CRON: Record<ScheduledJob, string> = {
   'admin-alerts': '*/5 * * * *',
   // Free accounts their players show are one group's, linked before the next alert sweep reads them.
   'free-play-links': '*/5 * * * *',
+  // Networks that no longer wake a server with a ping, forgotten: counted by the day, so hourly.
+  'known-addresses': '31 * * * *',
   // A day's spend against its limit. At the most the platform runs at
   // once, ten minutes between passes is about 35 cents past the limit before it pauses.
   'spend-watchdog': '*/10 * * * *',

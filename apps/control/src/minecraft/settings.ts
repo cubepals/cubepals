@@ -33,6 +33,7 @@ export function settingTakes(setting: keyof ServerSettings, gameVersion: string)
     case 'maxPlayers':
     case 'spawnProtection':
     case 'onlineMode':
+    case 'otherVersions':
       return 'restart'
   }
 }

@@ -4,7 +4,7 @@
 
 import { motdForGame } from '@blockly/contracts/server-list'
 import type { InstallSeed, RuntimeSpec } from '../app/ports/runtime.ts'
-import type { ModArtifact } from '../domain/mods/artifact.ts'
+import type { ModArtifact, PinnedMod } from '../domain/mods/artifact.ts'
 import {
   type Loader,
   runsOnPaper,
@@ -57,6 +57,12 @@ export interface RuntimeSpecInput {
    * and on any server Cubepals doesn't run itself.
    */
   brandPack: { url: string; sha1: string } | null
+  /**
+   * The Via plugins Cubepals adds as the server starts (`app/compat/`), placed by its own step.
+   * They are none of the revision's: nothing else about the spec, its heap and image included,
+   * reads them.
+   */
+  compat?: readonly PinnedMod[]
 }
 
 interface PlanLimits {
@@ -172,8 +178,11 @@ export function imageFor(
   return `${IMAGE}:${IMAGE_RELEASE}-java${java}${plain && ALPINE_JAVA.has(java) ? '-alpine' : ''}`
 }
 
-/** The image's variable for each setting, which writes it into `server.properties` at every start. */
-export const SETTING_ENV: Record<keyof ServerSettings, string> = {
+/**
+ * The image's variable for each setting, which writes it into `server.properties` at every start;
+ * which other versions join is Cubepals' own, and no property.
+ */
+export const SETTING_ENV: Record<Exclude<keyof ServerSettings, 'otherVersions'>, string> = {
   difficulty: 'DIFFICULTY',
   defaultGameMode: 'MODE',
   pvp: 'PVP',
@@ -514,6 +523,11 @@ export function withoutFilesStep(entrypoint: readonly string[] | undefined): rea
 
 export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
   const { revision, world, memoryTier } = input
+  // What Cubepals' own step places: the revision's files and placed jars, and the Via plugins. A
+  // Paper server told which Via plugins it starts with runs the step even with none, so the ones
+  // an earlier start placed go when they are turned off.
+  const placing = { ...revision, mods: [...revision.mods, ...(input.compat ?? [])] }
+  const viaPlaced = input.compat !== undefined && revision.loader === 'paper' && revision.modpack === null
   const totalMb = memoryMb(memoryTier)
   const onPaper = runsOnPaper(revision)
   const loaderVersionVar = onPaper ? LOADER_VERSION_VARS.paper : LOADER_VERSION_VARS[revision.loader]
@@ -525,7 +539,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
     starter: starterOf(world.levelType) !== null,
     icon: input.iconUrl !== null,
     pack: pack !== null,
-    carried: placesFiles(revision),
+    carried: viaPlaced || placesFiles(placing),
   })
   const reconstructible = reconstructibleOf(revision)
 
@@ -546,7 +560,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       ...settingsEnv(revision.settings),
       ...modsEnv(input),
       ...datapacksEnv(revision, input.artifactUrl),
-      ...carriedEnv(revision, world.levelName, input.artifactUrl),
+      ...carriedEnv(placing, world.levelName, input.artifactUrl, viaPlaced),
       ...limitsEnv(input.limits),
       ...brandPackEnv(input),
       // OVERRIDE_ICON, or the image keeps the first icon a world ever had.

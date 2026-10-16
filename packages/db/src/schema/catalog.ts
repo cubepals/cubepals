@@ -4,7 +4,8 @@
 
 /**
  * Blockly's cache of the mod catalogs and its trust in them: projects and versions as last read,
- * the refreshes that read them, checked and curated packs, and the projects trusted outright.
+ * the refreshes that read them, checked and curated packs, the projects trusted outright, and the
+ * Via plugins pinned for Paper servers.
  * Joins counted per play domain live here too, beside the other things refreshed from outside.
  */
 import { sql } from 'drizzle-orm'
@@ -19,7 +20,7 @@ import {
   smallint,
   text,
 } from 'drizzle-orm/pg-core'
-import type { CuratedFactsJson, PinnedModpackJson } from '../json.ts'
+import type { CuratedFactsJson, PinnedModJson, PinnedModpackJson } from '../json.ts'
 import { createdAt, ts, updatedAt } from './columns.ts'
 
 // ─── Catalog cache and trust ────────────────────────────────────────────────────────────────
@@ -49,6 +50,22 @@ export const catalogVersions = pgTable(
     stateChangedAt: ts('state_changed_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.catalog, t.versionId] })],
+)
+
+/**
+ * The Via plugins Cubepals adds to Paper servers as they start, pinned once per Minecraft release
+ * from the catalog (`app/compat/`): every server on a release starts with the same jars, and a
+ * newer build arrives with the next pin, never in the middle of a start.
+ */
+export const compatPlugins = pgTable(
+  'compat_plugins',
+  {
+    gameVersion: text('game_version').notNull(),
+    projectId: text('project_id').notNull(),
+    pinned: jsonb('pinned').$type<PinnedModJson>().notNull(),
+    pinnedAt: ts('pinned_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.gameVersion, t.projectId] })],
 )
 
 /**

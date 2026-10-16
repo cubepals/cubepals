@@ -67,6 +67,23 @@ export async function pinnedBy(
 }
 
 /**
+ * A Via plugin Cubepals pinned for its compatibility layer (`compat/`), which any server may fetch
+ * under its hash: it is none of a revision's, and the same jar for every server on its release.
+ */
+export async function compatPinned(
+  q: Queryable,
+  sha512: string,
+): Promise<{ mod: PinnedMod; pinnedAt: Date } | null> {
+  const [row] = await q
+    .select({ pinned: schema.compatPlugins.pinned, pinnedAt: schema.compatPlugins.pinnedAt })
+    .from(schema.compatPlugins)
+    .where(sql`${schema.compatPlugins.pinned} @> ${JSON.stringify({ artifact: { sha512 } })}::jsonb`)
+    .orderBy(asc(schema.compatPlugins.pinnedAt))
+    .limit(1)
+  return row === undefined ? null : { mod: row.pinned as PinnedMod, pinnedAt: row.pinnedAt }
+}
+
+/**
  * When a server first had a world of one of these types, which start on an archive: what lets the
  * server fetch that archive. A deleted world counts, as a restore may bring it back.
  */

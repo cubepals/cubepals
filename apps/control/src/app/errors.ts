@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { AppErrorCode } from '@blockly/contracts'
+import { ConsoleUnavailable } from './ports/minecraft.ts'
 import { RuntimeFull } from './ports/runtime.ts'
 
 /**
@@ -65,14 +66,17 @@ export class DiagnosedFailure extends PermanentFailure {
 
 /**
  * An error's words for owners, where it has some: Blockly's own refusals and failures are written
- * for them, and a provider with no room is told as that. What a provider, the database or anything
- * else said is not for them, and is null here; it stays on the operation's record (`inFull`).
+ * for them, and a provider with no room or a console that didn't answer is told as that. What a
+ * provider, the database or anything else said is not for them, and is null here; it stays on the
+ * operation's record (`inFull`).
  */
 export function ownersWords(error: unknown): string | null {
   if (error instanceof AppError || error instanceof PermanentFailure || error instanceof PlainFailure)
     return error.message
   if (error instanceof RuntimeFull)
     return 'There was no room for it where it runs just then. Try again in a few minutes.'
+  if (error instanceof ConsoleUnavailable)
+    return 'The server’s console didn’t answer just then. Try again in a moment.'
   return null
 }
 

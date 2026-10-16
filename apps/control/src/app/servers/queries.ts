@@ -42,7 +42,8 @@ import {
   sizeLabel,
 } from '../../domain/server/size.ts'
 import { formatJoinAddress } from '../../minecraft/address.ts'
-import { joinsNewer, loaderOfPack } from '../../minecraft/mods.ts'
+import { joinsNewer } from '../../minecraft/clients.ts'
+import { loaderOfPack } from '../../minecraft/mods.ts'
 import { packEnvironment, packTier, suggestedForServers } from '../../minecraft/packs.ts'
 import { settingTakes } from '../../minecraft/settings.ts'
 import {
@@ -58,6 +59,7 @@ import { loadControls, loadStanding } from '../accounts/persistence.ts'
 import { playToday, todayView } from '../accounts/play-today.ts'
 import { playTotal, totalView } from '../accounts/play-total.ts'
 import { type Actor, authorize } from '../actor.ts'
+import { joinsNow } from '../compat/service.ts'
 import type { PackCuration } from '../curation/service.ts'
 import { type Shown, shownOf } from '../edge/routed.ts'
 import { packView } from '../mods/pack.ts'
@@ -527,7 +529,10 @@ export class ServerQueries {
       gameVersion: resolved.gameVersion,
       loader: resolved.loader,
       loaderLabel: LOADER_LABELS[resolved.loader],
-      joinsNewer: joinsNewer(resolved.mods),
+      joinsNewer: joinsNewer({
+        ...resolved,
+        settings: { otherVersions: resolved.setup.settings.otherVersions },
+      }),
       mods: resolved.mods.map((mod) => mod.name),
       modpack:
         resolved.modpack === null
@@ -650,7 +655,7 @@ export class ServerQueries {
         : null,
       notLoaded: [...server.notLoaded],
       gameVersion: revision.gameVersion,
-      joinsNewer: joinsNewer(revision.mods),
+      ...(await joinsNow(this.#db, revision, { running, applied })),
       loader: revision.loader,
       loaderVersion: revision.loaderVersion,
       maxPlayers: revision.settings.maxPlayers,

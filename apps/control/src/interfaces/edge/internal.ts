@@ -62,7 +62,7 @@ export function createInternalApp(deps: { edge: EdgeService; token: string }): H
   app.post(`${EDGE_PROTOCOL_BASE}/ping-wake`, async (c) => {
     const request = PingWakeRequest.safeParse(await c.req.json().catch(() => null))
     if (!request.success) return c.json({ error: 'bad request' }, 400)
-    return c.json(await deps.edge.pingWake(request.data.hostname))
+    return c.json(await deps.edge.pingWake(request.data.hostname, request.data.address))
   })
 
   app.post(`${EDGE_PROTOCOL_BASE}/idle`, async (c) => {

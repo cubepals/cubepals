@@ -13,6 +13,7 @@ import { type OperationKind, ROUTABLE, type ServerStatus } from '../../domain/se
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { clientRange, RELEASES } from '../../minecraft/clients.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
+import { COMPAT } from '../../minecraft/mods.ts'
 import { PORT_NAMES } from '../../minecraft/runtime-spec.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { outOf, playToday } from '../accounts/play-today.ts'
@@ -26,12 +27,14 @@ import type { EventBus } from '../ports/events.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import type { Endpoint, RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
+import type { SecretKeyring } from '../secrets.ts'
 import { findLiveBySlug, findRuntime, findServer, heldByDeleted } from '../servers/persistence.ts'
 import type { MinecraftServerService } from '../servers/service.ts'
 import { presenceFor, recordDomainJoin, recordEdgePresence, wakesInLastHour } from '../servers/usage.ts'
 import type { ServerWaiter } from '../servers/waiter.ts'
 import { tuning } from '../tuning.ts'
 import { type Fingerprint, fingerprint, type RouteInputs, type RouteServer, readInputs } from './inputs.ts'
+import { forgetAddresses, joinEnded } from './known-addresses.ts'
 import { pingWake } from './ping-wake.ts'
 import { forgetQuietEdges, markListed, sawEdge, seen } from './routed.ts'
 
@@ -94,6 +97,7 @@ export class EdgeService {
   readonly #schedules: Schedules
   readonly #events: EventBus
   readonly #links: ArtifactLinks
+  readonly #keyring: SecretKeyring
   readonly #wakeWaitMs: number
   /**
    * The route inputs last read and the fingerprint they were read under; the change mark taken
@@ -123,6 +127,8 @@ export class EdgeService {
     schedules: Schedules
     events: EventBus
     links: ArtifactLinks
+    /** The runtime keyring, which keys the hashes known addresses are kept as (`known-addresses.ts`). */
+    runtimeSecrets: SecretKeyring
     wakeWaitMs: number
     routeChanges?: ChangeSignal
   }) {
@@ -134,6 +140,7 @@ export class EdgeService {
     this.#schedules = deps.schedules
     this.#events = deps.events
     this.#links = deps.links
+    this.#keyring = deps.runtimeSecrets
     this.#wakeWaitMs = deps.wakeWaitMs
     this.#changes = deps.routeChanges ?? null
   }
@@ -176,7 +183,7 @@ export class EdgeService {
           ...(waking ? { waking: true as const } : {}),
           ...this.#identityOf(server, state, motds),
           ...(binding?.proxyProtocol ? { proxyProtocol: true as const } : {}),
-          ...joinsOf(plays, state, binding?.revisionId, server.desiredRevisionId),
+          ...joinsOf(plays, state, binding, server.desiredRevisionId),
         })
       }
     }
@@ -434,11 +441,22 @@ export class EdgeService {
   }
 
   /**
-   * A server list asked how an asleep server is: the server may start now, before anyone joins
-   * (`ping-wake.ts`). Answers at once, whether or not it started it.
+   * A server list at `address` asked how an asleep server is: the server may start now, before
+   * anyone joins (`ping-wake.ts`). Answers at once, whether or not it started it.
    */
-  pingWake(hostname: string): Promise<PingWakeResult> {
-    return pingWake({ db: this.#db, addressing: this.#addressing, service: this.#service }, hostname)
+  pingWake(hostname: string, address?: string): Promise<PingWakeResult> {
+    const deps = {
+      db: this.#db,
+      addressing: this.#addressing,
+      service: this.#service,
+      keyring: this.#keyring,
+    }
+    return pingWake(deps, hostname, address)
+  }
+
+  /** `known-addresses`: forgets the networks that no longer wake a server with a ping. */
+  forgetAddresses(): Promise<number> {
+    return forgetAddresses(this.#db, new Date())
   }
 
   /** The edge saw no players for a while. Only the idle policy decides whether to stop. */
@@ -451,7 +469,10 @@ export class EdgeService {
     return this.#schedules.evaluateIdle(server)
   }
 
-  /** A connect or disconnect the edge saw. The identity is claimed by the client: display only. */
+  /**
+   * A connect or disconnect the edge saw. The identity is claimed by the client: display only, and
+   * a join's network is kept only where the server itself saw that player (`known-addresses.ts`).
+   */
   async recordSession(event: SessionEvent): Promise<void> {
     if (!event.player) return
     const slug = this.#addressing.slugFor(event.hostname)
@@ -465,6 +486,8 @@ export class EdgeService {
       // Which address people join through: an alias left from a domain move can go once it's quiet.
       const domain = this.#addressing.domainFor(event.hostname)
       if (event.event === 'connect' && domain !== null) await recordDomainJoin(tx, domain, new Date(event.at))
+      if (event.event === 'disconnect')
+        await joinEnded(tx, this.#keyring, server.id, event.address, player, new Date(event.at))
       const online = (await presenceFor(tx, [server.id])).get(server.id) ?? []
       await this.#events.publish(tx, {
         type: 'presence',
@@ -494,20 +517,27 @@ function restartingOf(
 }
 
 /**
- * Which players' games a route's server takes, from what its revision runs (`clientRange`): what
- * the edge turns other joins away by. A running server takes what the run it is in booted, which a
- * change saved since doesn't move until it boots; any other, what it starts with next. Nothing for
- * a server whose release the table doesn't know.
+ * Which players' games a route's server takes, from what its revision runs and the Via plugins
+ * Cubepals placed beside it (`clientRange`): what the edge turns other joins away by. A running
+ * server takes what the run it is in booted, which a change saved since doesn't move until it
+ * boots, with only the Via plugins that boot placed (none, for a boot from before one said); any
+ * other, what it starts with next, with those pinned for its release that its choice asks for.
+ * Nothing for a server whose release the table doesn't know.
  */
 function joinsOf(
   plays: RouteInputs['plays'],
   state: 'asleep' | 'restarting' | null,
-  booted: string | null | undefined,
+  binding: { revisionId: string | null; compat: string[] | null } | undefined,
   desired: string | null,
 ): Pick<EdgeRoutes['routes'][number], 'joins'> {
-  const revisionId = state === null ? (booted ?? desired) : desired
+  const booted = state === null ? (binding?.revisionId ?? null) : null
+  const revisionId = booted ?? desired
   const runs = revisionId === null ? undefined : plays.get(revisionId)
-  const range = runs === undefined ? null : clientRange(runs.gameVersion, runs.loader, runs.mods)
+  const adds =
+    booted === null
+      ? COMPAT[runs?.otherVersions ?? 'off'].filter((id) => runs?.pinned.includes(id))
+      : (binding?.compat ?? [])
+  const range = runs === undefined ? null : clientRange(runs.gameVersion, runs.loader, runs.mods, adds)
   if (range === null) return {}
   const { release, protocol, oldest, newest } = range
   return { joins: { release, protocol, oldest, ...(newest === null ? {} : { newest }) } }

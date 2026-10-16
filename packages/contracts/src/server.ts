@@ -508,6 +508,25 @@ const change = {
 
 export const ChangeSettingsInput = z.object({ ...change, settings: ServerSettingsInput })
 export const ChangeAuthenticationInput = z.object({ ...change, onlineMode: z.boolean() })
+
+/**
+ * Which other Minecraft versions' players a Paper server lets in, through the Via plugins Cubepals
+ * adds as it starts: none, newer and older ones, or also 1.8 and 1.7.
+ */
+export const OTHER_VERSIONS = ['off', 'on', 'oldest'] as const
+export type OtherVersions = (typeof OTHER_VERSIONS)[number]
+export const ChangeOtherVersionsInput = z.object({ ...change, otherVersions: z.enum(OTHER_VERSIONS) })
+
+/**
+ * Which players' games join a server, as its settings say it: from `oldest`, the oldest release
+ * whose players join, to the one it runs, and any newer one where `newer`. `otherVersions` is the
+ * choice behind it, on a server that has one (Paper); null on any other.
+ */
+export interface JoinsView {
+  oldest: string
+  newer: boolean
+  otherVersions: OtherVersions | null
+}
 export const ChangeVersionInput = z.object({
   ...change,
   gameVersion: z.string().trim().min(1).max(20),
@@ -645,6 +664,8 @@ export interface ServerView {
   gameVersion: string
   /** Whether players on newer Minecraft than `gameVersion` join too, by a plugin it carries. */
   joinsNewer: boolean
+  /** Which players' games join it; null for a release Cubepals can't tell of. */
+  joins: JoinsView | null
   loader: Loader
   /** The loader build the configuration pins; null for vanilla, and for revisions made before pins. */
   loaderVersion: string | null

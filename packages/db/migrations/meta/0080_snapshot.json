@@ -1,5 +1,5 @@
 {
-  "id": "d5459f75-d888-47aa-bbe0-68257abea39f",
+  "id": "4b391222-53b9-4054-a9ab-0928b6283198",
   "prevId": "1d787813-4a3a-4834-b2e6-5b1bfdd04f7e",
   "version": "7",
   "dialect": "postgresql",
@@ -65,15 +65,15 @@
         "server_access_server_id_minecraft_servers_id_fk": {
           "name": "server_access_server_id_minecraft_servers_id_fk",
           "tableFrom": "server_access",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -157,15 +157,15 @@
         "server_access_entries_server_id_minecraft_servers_id_fk": {
           "name": "server_access_entries_server_id_minecraft_servers_id_fk",
           "tableFrom": "server_access_entries",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -289,24 +289,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "server_moderation_actions_server_id_minecraft_servers_id_fk": {
           "name": "server_moderation_actions_server_id_minecraft_servers_id_fk",
           "tableFrom": "server_moderation_actions",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -448,15 +448,15 @@
         "account_standing_user_id_users_id_fk": {
           "name": "account_standing_user_id_users_id_fk",
           "tableFrom": "account_standing",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -494,15 +494,15 @@
         "platform_admins_user_id_users_id_fk": {
           "name": "platform_admins_user_id_users_id_fk",
           "tableFrom": "platform_admins",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -859,28 +859,28 @@
         "mod_uploads_owner_id_users_id_fk": {
           "name": "mod_uploads_owner_id_users_id_fk",
           "tableFrom": "mod_uploads",
+          "tableTo": "users",
           "columnsFrom": [
             "owner_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "mod_uploads_sha512_stored_artifacts_sha512_fk": {
           "name": "mod_uploads_sha512_stored_artifacts_sha512_fk",
           "tableFrom": "mod_uploads",
+          "tableTo": "stored_artifacts",
           "columnsFrom": [
             "sha512"
           ],
-          "tableTo": "stored_artifacts",
           "columnsTo": [
             "sha512"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1063,37 +1063,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "pack_imports_owner_id_users_id_fk": {
           "name": "pack_imports_owner_id_users_id_fk",
           "tableFrom": "pack_imports",
+          "tableTo": "users",
           "columnsFrom": [
             "owner_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "pack_imports_pack_sha512_stored_artifacts_sha512_fk": {
           "name": "pack_imports_pack_sha512_stored_artifacts_sha512_fk",
           "tableFrom": "pack_imports",
+          "tableTo": "stored_artifacts",
           "columnsFrom": [
             "pack_sha512"
           ],
-          "tableTo": "stored_artifacts",
           "columnsTo": [
             "sha512"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1182,37 +1182,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "pending_uploads_owner_id_users_id_fk": {
           "name": "pending_uploads_owner_id_users_id_fk",
           "tableFrom": "pending_uploads",
+          "tableTo": "users",
           "columnsFrom": [
             "owner_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "pending_uploads_server_id_minecraft_servers_id_fk": {
           "name": "pending_uploads_server_id_minecraft_servers_id_fk",
           "tableFrom": "pending_uploads",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1346,9 +1346,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "audit_log_actor": {
           "name": "audit_log_actor",
@@ -1373,9 +1373,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "audit_log_at": {
           "name": "audit_log_at",
@@ -1388,9 +1388,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1497,24 +1497,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "auth_accounts_user_id_users_id_fk": {
           "name": "auth_accounts_user_id_users_id_fk",
           "tableFrom": "auth_accounts",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1596,34 +1596,34 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "auth_sessions_user_id_users_id_fk": {
           "name": "auth_sessions_user_id_users_id_fk",
           "tableFrom": "auth_sessions",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "auth_sessions_token_unique": {
           "name": "auth_sessions_token_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "token"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1685,9 +1685,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1778,10 +1778,10 @@
       "uniqueConstraints": {
         "users_email_unique": {
           "name": "users_email_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "email"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1907,9 +1907,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "backups_ready_expiry": {
           "name": "backups_ready_expiry",
@@ -1922,51 +1922,51 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"backups\".\"status\" = 'ready'",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "backups_server_id_minecraft_servers_id_fk": {
           "name": "backups_server_id_minecraft_servers_id_fk",
           "tableFrom": "backups",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "backups_world_id_worlds_id_fk": {
           "name": "backups_world_id_worlds_id_fk",
           "tableFrom": "backups",
+          "tableTo": "worlds",
           "columnsFrom": [
             "world_id"
           ],
-          "tableTo": "worlds",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "backups_revision_id_server_revisions_id_fk": {
           "name": "backups_revision_id_server_revisions_id_fk",
           "tableFrom": "backups",
+          "tableTo": "server_revisions",
           "columnsFrom": [
             "revision_id"
           ],
-          "tableTo": "server_revisions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2053,25 +2053,25 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"world_downloads\".\"status\" in ('pending', 'ready')",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "world_downloads_backup_id_backups_id_fk": {
           "name": "world_downloads_backup_id_backups_id_fk",
           "tableFrom": "world_downloads",
+          "tableTo": "backups",
           "columnsFrom": [
             "backup_id"
           ],
-          "tableTo": "backups",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2239,9 +2239,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "billing_orders_ordered": {
           "name": "billing_orders_ordered",
@@ -2254,24 +2254,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "billing_orders_user_id_users_id_fk": {
           "name": "billing_orders_user_id_users_id_fk",
           "tableFrom": "billing_orders",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2393,9 +2393,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "billing_subscriptions_user": {
           "name": "billing_subscriptions_user",
@@ -2408,24 +2408,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "billing_subscriptions_user_id_users_id_fk": {
           "name": "billing_subscriptions_user_id_users_id_fk",
           "tableFrom": "billing_subscriptions",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2489,15 +2489,15 @@
         "extra_play_months_user_id_users_id_fk": {
           "name": "extra_play_months_user_id_users_id_fk",
           "tableFrom": "extra_play_months",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2592,9 +2592,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "extra_play_reports_user": {
           "name": "extra_play_reports_user",
@@ -2613,24 +2613,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "extra_play_reports_user_id_users_id_fk": {
           "name": "extra_play_reports_user_id_users_id_fk",
           "tableFrom": "extra_play_reports",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2724,24 +2724,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "plan_years_user_id_users_id_fk": {
           "name": "plan_years_user_id_users_id_fk",
           "tableFrom": "plan_years",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2978,6 +2978,51 @@
           "columns": [
             "catalog",
             "version_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.compat_plugins": {
+      "name": "compat_plugins",
+      "schema": "",
+      "columns": {
+        "game_version": {
+          "name": "game_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pinned": {
+          "name": "pinned",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pinned_at": {
+          "name": "pinned_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "compat_plugins_game_version_project_id_pk": {
+          "name": "compat_plugins_game_version_project_id_pk",
+          "columns": [
+            "game_version",
+            "project_id"
           ]
         }
       },
@@ -3265,15 +3310,15 @@
         "chip_in_closed_server_id_minecraft_servers_id_fk": {
           "name": "chip_in_closed_server_id_minecraft_servers_id_fk",
           "tableFrom": "chip_in_closed",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3342,9 +3387,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "chip_in_draws_server": {
           "name": "chip_in_draws_server",
@@ -3357,37 +3402,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "chip_in_draws_server_id_minecraft_servers_id_fk": {
           "name": "chip_in_draws_server_id_minecraft_servers_id_fk",
           "tableFrom": "chip_in_draws",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "chip_in_draws_owner_id_users_id_fk": {
           "name": "chip_in_draws_owner_id_users_id_fk",
           "tableFrom": "chip_in_draws",
+          "tableTo": "users",
           "columnsFrom": [
             "owner_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3418,15 +3463,15 @@
         "chip_in_marks_user_id_users_id_fk": {
           "name": "chip_in_marks_user_id_users_id_fk",
           "tableFrom": "chip_in_marks",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3515,9 +3560,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "chip_ins_payer": {
           "name": "chip_ins_payer",
@@ -3536,37 +3581,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "chip_ins_server_id_minecraft_servers_id_fk": {
           "name": "chip_ins_server_id_minecraft_servers_id_fk",
           "tableFrom": "chip_ins",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "chip_ins_payer_id_users_id_fk": {
           "name": "chip_ins_payer_id_users_id_fk",
           "tableFrom": "chip_ins",
+          "tableTo": "users",
           "columnsFrom": [
             "payer_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -3760,34 +3805,34 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "fleet_archives_node_id_fleet_nodes_id_fk": {
           "name": "fleet_archives_node_id_fleet_nodes_id_fk",
           "tableFrom": "fleet_archives",
+          "tableTo": "fleet_nodes",
           "columnsFrom": [
             "node_id"
           ],
-          "tableTo": "fleet_nodes",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "fleet_archives_object_key_unique": {
           "name": "fleet_archives_object_key_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "object_key"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -3835,15 +3880,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "fleet_events_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "at": {
@@ -3897,9 +3942,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "fleet_events_node": {
           "name": "fleet_events_node",
@@ -3918,9 +3963,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "fleet_events_workload": {
           "name": "fleet_events_workload",
@@ -3939,9 +3984,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -4029,38 +4074,38 @@
         "fleet_node_tokens_used_by_fleet_nodes_id_fk": {
           "name": "fleet_node_tokens_used_by_fleet_nodes_id_fk",
           "tableFrom": "fleet_node_tokens",
+          "tableTo": "fleet_nodes",
           "columnsFrom": [
             "used_by"
           ],
-          "tableTo": "fleet_nodes",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "fleet_node_tokens_node_id_fleet_nodes_id_fk": {
           "name": "fleet_node_tokens_node_id_fleet_nodes_id_fk",
           "tableFrom": "fleet_node_tokens",
+          "tableTo": "fleet_nodes",
           "columnsFrom": [
             "node_id"
           ],
-          "tableTo": "fleet_nodes",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "fleet_node_tokens_token_sha256_unique": {
           "name": "fleet_node_tokens_token_sha256_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "token_sha256"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -4332,9 +4377,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -4417,24 +4462,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "fleet_observations_node_id_fleet_nodes_id_fk": {
           "name": "fleet_observations_node_id_fleet_nodes_id_fk",
           "tableFrom": "fleet_observations",
+          "tableTo": "fleet_nodes",
           "columnsFrom": [
             "node_id"
           ],
-          "tableTo": "fleet_nodes",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -4504,15 +4549,15 @@
         "fleet_placement_history_node_id_fleet_nodes_id_fk": {
           "name": "fleet_placement_history_node_id_fleet_nodes_id_fk",
           "tableFrom": "fleet_placement_history",
+          "tableTo": "fleet_nodes",
           "columnsFrom": [
             "node_id"
           ],
-          "tableTo": "fleet_nodes",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -4666,50 +4711,50 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "fleet_placements_node_id_fleet_nodes_id_fk": {
           "name": "fleet_placements_node_id_fleet_nodes_id_fk",
           "tableFrom": "fleet_placements",
+          "tableTo": "fleet_nodes",
           "columnsFrom": [
             "node_id"
           ],
-          "tableTo": "fleet_nodes",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "fleet_placements_restore_from_fleet_archives_id_fk": {
           "name": "fleet_placements_restore_from_fleet_archives_id_fk",
           "tableFrom": "fleet_placements",
+          "tableTo": "fleet_archives",
           "columnsFrom": [
             "restore_from"
           ],
-          "tableTo": "fleet_archives",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "fleet_placements_move_to_fleet_nodes_id_fk": {
           "name": "fleet_placements_move_to_fleet_nodes_id_fk",
           "tableFrom": "fleet_placements",
+          "tableTo": "fleet_nodes",
           "columnsFrom": [
             "move_to"
           ],
-          "tableTo": "fleet_nodes",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4778,37 +4823,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "free_links_account_id_users_id_fk": {
           "name": "free_links_account_id_users_id_fk",
           "tableFrom": "free_links",
+          "tableTo": "users",
           "columnsFrom": [
             "account_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "free_links_linked_id_users_id_fk": {
           "name": "free_links_linked_id_users_id_fk",
           "tableFrom": "free_links",
+          "tableTo": "users",
           "columnsFrom": [
             "linked_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -4885,9 +4930,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "free_play_group": {
           "name": "free_play_group",
@@ -4900,9 +4945,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "free_play_signup_network": {
           "name": "free_play_signup_network",
@@ -4915,24 +4960,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "free_play_user_id_users_id_fk": {
           "name": "free_play_user_id_users_id_fk",
           "tableFrom": "free_play",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5069,9 +5114,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "plan_gifts_code": {
           "name": "plan_gifts_code",
@@ -5084,9 +5129,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "plan_gifts_buyer": {
           "name": "plan_gifts_buyer",
@@ -5105,9 +5150,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "plan_gifts_redeemed_by": {
           "name": "plan_gifts_redeemed_by",
@@ -5120,37 +5165,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "plan_gifts_buyer_id_users_id_fk": {
           "name": "plan_gifts_buyer_id_users_id_fk",
           "tableFrom": "plan_gifts",
+          "tableTo": "users",
           "columnsFrom": [
             "buyer_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "plan_gifts_redeemed_by_users_id_fk": {
           "name": "plan_gifts_redeemed_by_users_id_fk",
           "tableFrom": "plan_gifts",
+          "tableTo": "users",
           "columnsFrom": [
             "redeemed_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5290,9 +5335,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "insight_events_unsent": {
           "name": "insight_events_unsent",
@@ -5305,10 +5350,10 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"insight_events\".\"sent_at\" is null",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -5393,9 +5438,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -5452,9 +5497,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -5573,38 +5618,38 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"listing_reports\".\"status\" = 'open'",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "listing_reports_server_id_minecraft_servers_id_fk": {
           "name": "listing_reports_server_id_minecraft_servers_id_fk",
           "tableFrom": "listing_reports",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "listing_reports_reporter_id_users_id_fk": {
           "name": "listing_reports_reporter_id_users_id_fk",
           "tableFrom": "listing_reports",
+          "tableTo": "users",
           "columnsFrom": [
             "reporter_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5712,25 +5757,25 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"public_listings\".\"visibility\" = 'published' and \"public_listings\".\"moderation\" = 'clear' and \"public_listings\".\"eligible\"",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "public_listings_server_id_minecraft_servers_id_fk": {
           "name": "public_listings_server_id_minecraft_servers_id_fk",
           "tableFrom": "public_listings",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5794,9 +5839,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "server_notes_author": {
           "name": "server_notes_author",
@@ -5815,37 +5860,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "server_notes_server_id_minecraft_servers_id_fk": {
           "name": "server_notes_server_id_minecraft_servers_id_fk",
           "tableFrom": "server_notes",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "server_notes_author_id_users_id_fk": {
           "name": "server_notes_author_id_users_id_fk",
           "tableFrom": "server_notes",
+          "tableTo": "users",
           "columnsFrom": [
             "author_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5895,37 +5940,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "server_stars_server_id_minecraft_servers_id_fk": {
           "name": "server_stars_server_id_minecraft_servers_id_fk",
           "tableFrom": "server_stars",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "server_stars_user_id_users_id_fk": {
           "name": "server_stars_user_id_users_id_fk",
           "tableFrom": "server_stars",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -6029,9 +6074,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "runtime_decisions_at": {
           "name": "runtime_decisions_at",
@@ -6044,37 +6089,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "runtime_decisions_server_id_minecraft_servers_id_fk": {
           "name": "runtime_decisions_server_id_minecraft_servers_id_fk",
           "tableFrom": "runtime_decisions",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "runtime_decisions_rule_id_runtime_rules_id_fk": {
           "name": "runtime_decisions_rule_id_runtime_rules_id_fk",
           "tableFrom": "runtime_decisions",
+          "tableTo": "runtime_rules",
           "columnsFrom": [
             "rule_id"
           ],
-          "tableTo": "runtime_rules",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -6234,15 +6279,15 @@
         "player_actions_waiting_server_id_minecraft_servers_id_fk": {
           "name": "player_actions_waiting_server_id_minecraft_servers_id_fk",
           "tableFrom": "player_actions_waiting",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -6294,15 +6339,15 @@
         "server_player_snapshots_server_id_minecraft_servers_id_fk": {
           "name": "server_player_snapshots_server_id_minecraft_servers_id_fk",
           "tableFrom": "server_player_snapshots",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -6600,10 +6645,10 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"minecraft_servers\".\"deleted_at\" is null",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "servers_invite_code": {
           "name": "servers_invite_code",
@@ -6616,9 +6661,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "servers_create_idem": {
           "name": "servers_create_idem",
@@ -6637,9 +6682,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "servers_owner_live": {
           "name": "servers_owner_live",
@@ -6652,10 +6697,10 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"minecraft_servers\".\"deleted_at\" is null",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "servers_status": {
           "name": "servers_status",
@@ -6668,9 +6713,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "servers_live_status": {
           "name": "servers_live_status",
@@ -6683,10 +6728,10 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"minecraft_servers\".\"deleted_at\" is null",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "servers_slug_deleted": {
           "name": "servers_slug_deleted",
@@ -6699,51 +6744,51 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"minecraft_servers\".\"status\" = 'deleted'",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "minecraft_servers_owner_id_users_id_fk": {
           "name": "minecraft_servers_owner_id_users_id_fk",
           "tableFrom": "minecraft_servers",
+          "tableTo": "users",
           "columnsFrom": [
             "owner_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "minecraft_servers_desired_revision_id_server_revisions_id_fk": {
           "name": "minecraft_servers_desired_revision_id_server_revisions_id_fk",
           "tableFrom": "minecraft_servers",
+          "tableTo": "server_revisions",
           "columnsFrom": [
             "desired_revision_id"
           ],
-          "tableTo": "server_revisions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "minecraft_servers_active_world_id_worlds_id_fk": {
           "name": "minecraft_servers_active_world_id_worlds_id_fk",
           "tableFrom": "minecraft_servers",
+          "tableTo": "worlds",
           "columnsFrom": [
             "active_world_id"
           ],
-          "tableTo": "worlds",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -6824,15 +6869,15 @@
         "server_icons_server_id_minecraft_servers_id_fk": {
           "name": "server_icons_server_id_minecraft_servers_id_fk",
           "tableFrom": "server_icons",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -6961,9 +7006,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "operations_server_recent": {
           "name": "operations_server_recent",
@@ -6982,9 +7027,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "operations_server_kind": {
           "name": "operations_server_kind",
@@ -7009,9 +7054,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "operations_finished": {
           "name": "operations_finished",
@@ -7024,10 +7069,10 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"server_operations\".\"finished_at\" is not null",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "operations_open": {
           "name": "operations_open",
@@ -7040,10 +7085,10 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"server_operations\".\"status\" in ('queued', 'running')",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "operations_one_queued_access_sync": {
           "name": "operations_one_queued_access_sync",
@@ -7056,25 +7101,25 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"server_operations\".\"kind\" = 'access_sync' and \"server_operations\".\"status\" = 'queued'",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "server_operations_server_id_minecraft_servers_id_fk": {
           "name": "server_operations_server_id_minecraft_servers_id_fk",
           "tableFrom": "server_operations",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -7202,39 +7247,39 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "revisions_mods_gin": {
           "name": "revisions_mods_gin",
           "columns": [
             {
               "expression": "\"mods\" jsonb_path_ops",
-              "isExpression": true,
               "asc": true,
+              "isExpression": true,
               "nulls": "last"
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "gin",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "server_revisions_server_id_minecraft_servers_id_fk": {
           "name": "server_revisions_server_id_minecraft_servers_id_fk",
           "tableFrom": "server_revisions",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -7345,15 +7390,15 @@
         "server_runtimes_server_id_minecraft_servers_id_fk": {
           "name": "server_runtimes_server_id_minecraft_servers_id_fk",
           "tableFrom": "server_runtimes",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -7455,24 +7500,24 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "worlds_server_id_minecraft_servers_id_fk": {
           "name": "worlds_server_id_minecraft_servers_id_fk",
           "tableFrom": "worlds",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -7579,9 +7624,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "power_intervals_one_open": {
           "name": "power_intervals_one_open",
@@ -7594,25 +7639,25 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"power_intervals\".\"stopped_at\" is null",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "power_intervals_server_id_minecraft_servers_id_fk": {
           "name": "power_intervals_server_id_minecraft_servers_id_fk",
           "tableFrom": "power_intervals",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -7706,9 +7751,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "server_players_confirmed": {
           "name": "server_players_confirmed",
@@ -7721,24 +7766,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "server_players_server_id_minecraft_servers_id_fk": {
           "name": "server_players_server_id_minecraft_servers_id_fk",
           "tableFrom": "server_players",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -7868,24 +7913,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "server_usage_days_server_id_minecraft_servers_id_fk": {
           "name": "server_usage_days_server_id_minecraft_servers_id_fk",
           "tableFrom": "server_usage_days",
+          "tableTo": "minecraft_servers",
           "columnsFrom": [
             "server_id"
           ],
-          "tableTo": "minecraft_servers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -8191,10 +8236,10 @@
     }
   },
   "schemas": {},
-  "views": {},
   "sequences": {},
   "roles": {},
   "policies": {},
+  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},

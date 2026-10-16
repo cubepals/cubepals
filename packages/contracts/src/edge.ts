@@ -118,7 +118,11 @@ export type WakeResult = z.infer<typeof WakeResult>
  * plane may start it now, so the join finds it nearly up. It answers at once, without waiting for
  * the start; `waking` says whether the server is on its way up, by this ask or an earlier one.
  */
-export const PingWakeRequest = z.object({ hostname: z.string() })
+/**
+ * `address`: where the ping came from, as the edge's front door read it; a ping wakes a server only
+ * from its own players' network. An edge from before it sent one wakes nothing with a ping.
+ */
+export const PingWakeRequest = z.object({ hostname: z.string(), address: z.string().optional() })
 export const PingWakeResult = z.object({ waking: z.boolean() })
 export type PingWakeResult = z.infer<typeof PingWakeResult>
 
@@ -130,6 +134,8 @@ export const SessionEvent = z.object({
   event: z.enum(['connect', 'disconnect']),
   /** Claimed by the client; never used for authorization. */
   player: z.object({ name: z.string(), uuid: z.string() }).optional(),
+  /** Where the client connected from, as the edge's front door read it. */
+  address: z.string().optional(),
   at: z.iso.datetime(),
 })
 export type SessionEvent = z.infer<typeof SessionEvent>
