@@ -29,6 +29,23 @@ primary_region = "fra"
   auto_stop_machines = "off"
   auto_start_machines = false
 
+  # Counted in connections, since a player holds one for as long as they play. On this machine
+  # the CPU runs out long before memory: with the agent's front door and mc-router each copying
+  # every packet, a player sending and receiving 20 a second costs about 0.2% of the CPU, and about
+  # 75 KB (30 KB in the agent, 35 in mc-router, 10 in the kernel's buffers), so 400 players need
+  # about 30 MB beyond the edge's own 60. A shared CPU runs at that rate only while its burst
+  # lasts: on staging, an edge carried 400 players with replies in under 80 ms, then after a few
+  # minutes above its baseline it was held to that baseline, about 50 players' worth, and replies
+  # took up to a second and connections dropped.
+  # Past the soft limit, Fly's proxy sends new connections to another edge still under its own, so
+  # players beyond what one edge keeps up with go to the next nearest instead of slowing everyone
+  # on this one. With a single edge it changes nothing. The hard limit is where even a full burst
+  # is used up: new connections wait at the proxy rather than slow every player already in.
+  [services.concurrency]
+    type = "connections"
+    soft_limit = 50
+    hard_limit = 400
+
   [[services.ports]]
     port = 25565
     handlers = ["proxy_proto"]

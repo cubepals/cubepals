@@ -50,7 +50,7 @@ import { dirname, resolve } from 'node:path'
 import { authWorks } from './lib/auth-through-website.ts'
 import { pingIndexNow } from './lib/indexnow.ts'
 import { buildWorker, deployWorker } from './lib/web-worker.ts'
-import { edgePlacement, edgeRegions } from './production-edge.ts'
+import { edgePlacement, edgeRegions, edgeSourceGaps, type FlyAddress } from './production-edge.ts'
 import { bringUpToDate } from './production-tfvars.ts'
 import {
   backendConfig,
@@ -169,6 +169,28 @@ function placeEdge(env: NodeJS.ProcessEnv): void {
     run('fly', call, env)
 }
 
+/**
+ * Stops the apply while a fleet node on the internet wouldn't let every edge region in
+ * (production-edge.ts): before Terraform, so a region is never added to the edge ahead of its
+ * addresses reaching the nodes' firewalls.
+ */
+function requireEdgeSources(env: NodeJS.ProcessEnv): void {
+  const sources = environment().fleet_hetzner?.edge_sources ?? []
+  if (sources.length === 0) return
+  const app = 'bly-prod-edge'
+  const listed = spawnSync('fly', ['ips', 'list', '--app', app, '--json'], { encoding: 'utf8', env })
+  if (listed.status !== 0) {
+    say(`fly ips list stopped (exit ${listed.status}). Fix what it says, then run apply again.`)
+    process.exit(1)
+  }
+  const addresses = JSON.parse(listed.stdout || '[]') as FlyAddress[]
+  const gaps = edgeSourceGaps(app, edgeRegions(environment().edge_regions), addresses, sources)
+  if (gaps.length === 0) return
+  say('Fleet nodes wouldn’t let every edge in (docs/fleet-operations.md § 2). Fix this, then apply again:')
+  for (const gap of gaps) say(`  ${gap}`)
+  process.exit(1)
+}
+
 /** This commit as the `production` branch, which names what is live, wherever it was before. */
 function moveProduction(env: NodeJS.ProcessEnv): void {
   git('fetch', '--quiet', 'origin', 'production')
@@ -263,6 +285,7 @@ async function apply(): Promise<void> {
     return
   }
 
+  requireEdgeSources(env)
   // Built before anything changes, so a build that fails stops the apply here.
   const site = productionSite(values, environment())
   const head = git('rev-parse', 'HEAD')

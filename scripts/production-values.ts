@@ -353,6 +353,8 @@ export interface Environment {
   fly_machine_limit: number
   /** Where the edge runs, a machine in each (production-edge.ts); fra alone when absent. */
   edge_regions?: string[]
+  /** Where fleet nodes go on Hetzner; `edge_sources`, when listed, has every edge region's egress addresses. */
+  fleet_hetzner?: { edge_sources?: string[] }
   settings: Record<string, string>
   web: { worker: string; repository: string; indexable?: boolean; beta?: boolean }
 }

@@ -75,6 +75,22 @@ behind a firewall that admits nothing from the internet (`fleet_hetzner.edge_sou
 game ports to an edge out there), and runs the line below at first boot. `add` waits until the
 node beats `healthy` and says so. Commit the tfvars change.
 
+**An edge on Fly reaching Hetzner nodes over the internet.** Every edge machine dials a node from
+its region's egress addresses, and the firewall lets in only what `edge_sources` lists. Without
+egress addresses of its own, a Fly machine dials out from its host's address, which changes when
+the machine moves, so give the edge app a pair in every region `edge_regions` lists, and list them
+all:
+
+```sh
+fly ips allocate-egress --app bly-prod-edge --region fra   # and again for iad, and each region
+fly ips list --app bly-prod-edge                             # the egress addresses, by region
+```
+
+In `config.auto.tfvars.json`, `"fleet_hetzner": { "edge_sources": [...] }` holds each of them as
+`<v4>/32` and `<v6>/128`. New egress addresses take a few minutes to reach machines already running. A region added to `edge_regions` later needs its own pair listed before
+the apply that adds it: `production.ts apply` checks, and stops before Terraform with what is
+missing, whenever `edge_sources` lists anything.
+
 The Hetzner location is the region's name when that is one (`--location` otherwise). The join
 line is spent at first boot, so later applies need it no more and never rebuild the host for it.
 
