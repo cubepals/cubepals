@@ -9,6 +9,7 @@ import { type DehydratedState, useMutation, useQuery } from '@tanstack/react-que
 import {
   Archive,
   Box,
+  Compass,
   Globe,
   LayoutGrid,
   Puzzle,
@@ -172,6 +173,7 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
   )
 
   const servers: NavEntry = { href: '/servers', label: 'Servers', icon: Box }
+  const browse: NavEntry = { href: '/browse', label: 'Browse', icon: Compass }
   const admin: NavEntry = {
     href: '/admin',
     label: 'Admin',
@@ -190,6 +192,7 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
         </WithBeta>
         <div className="bk-appnav__group">
           {item(servers)}
+          {item(browse)}
           {item(account)}
           {me.data?.admin && item(admin)}
         </div>
