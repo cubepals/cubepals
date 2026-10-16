@@ -12,7 +12,8 @@
  * a server only from a network its own players joined it from lately (`known-addresses.ts`); every
  * other ping hears it sleeps, and a join wakes it as always. A world at rest never comes back for a
  * ping: it rests because its players stopped coming, so a ping is mostly their list refreshing on
- * the way to another server, and a restore that nobody joins is the dearest wake there is.
+ * the way to another server, and a restore brings the whole world back from storage, the slowest
+ * wake there is, with nobody there to play.
  *
  * Bounded besides: the same policy as any start (its owner must be able to start it), a woken run
  * nobody joins sleeps after the probation (`domain/server/idle.ts`) and counts toward no hours

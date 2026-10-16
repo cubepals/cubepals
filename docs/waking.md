@@ -93,8 +93,9 @@ whole life and an image pull onto the volume's host.
 
   **A world at rest stays at rest for a ping.** It rests because nobody has played for weeks, so
   no join is recent enough to count, and its players' lists keep pinging it on the way to other
-  servers. A restore nobody joins is the dearest wake there is and puts the world back to rest
-  within the hour; the ping would save a few seconds of its 74. A join wakes it as always.
+  servers. A restore brings the whole world back from storage, the slowest wake there is, and
+  nobody would be there to play; the ping would save a few seconds of its 74. A join wakes it as
+  always.
 
   **How much it hides.** The list pings a server as it first draws it, so the boot starts when the
   player opens the screen, and a click a few seconds later waits that much less of the 35 to 37 s
