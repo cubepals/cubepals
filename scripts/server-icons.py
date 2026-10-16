@@ -15,16 +15,19 @@ One source, two outputs, so they can never drift:
 The art is ours: sixteen-by-sixteen pixels in Blockly's palette, drawn here rather than taken
 from Minecraft, whose textures belong to Mojang. Blockly's own picture is drawn on the full
 64x64, since the mark's circles and curve need the finer grid: the mark alone, Ink on a square
-of Paper, the app-icon tile's mark (brand/png/app-icon.png) brought down to 64x64 by eye. It is
-the one icon every Cubepals server shows until its owner picks another, Cubepals' own included,
-so it is drawn once, here. Square, as the brand draws a block, with no rounding. No word: the wordmark is only ever set as the brand draws it (brand/README.md),
-and never the codename. Run after changing a map:
+of Paper, nearly filling it with a thin margin, drawn on a grid of two-pixel cells. It is the one
+icon every Cubepals server shows until its owner picks another, Cubepals' own included, so it is
+drawn once, here, and the PNG it writes is byte for byte the one Duels shows. Square, as the brand
+draws a block, with no rounding. No word: the wordmark is only ever set as the brand draws it
+(brand/README.md), and never the codename. Run after changing a map:
 
     python3 scripts/server-icons.py
 """
 
+import math
 import struct
 import zlib
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -233,54 +236,54 @@ ICONS: dict[str, tuple[dict[str, str], list[str]]] = {
             "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
             "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
             "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
-            "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
-            "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
-            "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
-            "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
-            "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
-            "ppppppppppppppppppppppppppppppppppppppppiipppppppppppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiippppppiiiiiiiiipppppppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiippppiiiiiiiiiiiippppppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiipppiiiiiiiiiiiiiipppppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiipppiiiiiiiiiiiiiiippppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiipppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiipppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiipiiiiiiiiiiiiiiiiiipppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiipiiiiiiiiiiiiiiiiiipppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiipiiiiiiiiiiiiiiiiiiippppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiipiiiiiiiiiiiiiiiiiiippppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiipiiiiiiiiiiiiiiiiiipppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiipiiiiiiiiiiiiiiiiiipppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiipppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiippppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiipppiiiiiiiiiiiiiiippppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiippppiiiiiiiiiiiiipppppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiipppppiiiiiiiiiipppppppppppppppppp",
-            "ppppppppppppppppppppppppppppppppppppppiiiiiipppppppppppppppppppp",
-            "ppppppppppppppppppppiiiiiippppppiiippppppppppppppppppppppppppppp",
-            "ppppppppppppppppppiiiiiiiiiippppiiiiippppppppppppppppppppppppppp",
-            "ppppppppppppppppiiiiiiiiiiiiipppiiiiiipppppppppppppppppppppppppp",
-            "pppppppppppppppiiiiiiiiiiiiiiippiiiiiiippppppppppppppppppppppppp",
-            "pppppppppppppppiiiiiiiiiiiiiiiipiiiiiiippppppppppppppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiipiiiiiiiipppppppppppppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiiiiiiiiiiiippppppppppppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiipppppppppppppp",
-            "pppppppppppppiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiipppppppppppppp",
-            "pppppppppppppiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiipppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiipppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiipppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiipiiiiiiiiiiiiiiiiiipppppppppppppp",
-            "ppppppppppppppiiiiiiiiiiiiiiiiipiiiiiiiiiiiiiiiiiipppppppppppppp",
-            "pppppppppppppppiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiiipppppppppppppp",
-            "ppppppppppppppppiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiiipppppppppppppp",
-            "pppppppppppppppppiiiiiiiiiiiipppiiiiiiiiiiiiiiiiiipppppppppppppp",
-            "ppppppppppppppppppiiiiiiiiipppppiiiiiiiiiiiiiiiiiipppppppppppppp",
-            "ppppppppppppppppppppppiipppppppppppppppppppppppppppppppppppppppp",
-            "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
-            "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
-            "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
-            "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
-            "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+            "ppppppppppppppppppppppppppppppppppppppiiiiiiiiiiiipppppppppppppp",
+            "ppppppppppppppppppppppppppppppppppppppiiiiiiiiiiiipppppppppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippppppiiiiiiiiiiiiiiiipppppppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippppppiiiiiiiiiiiiiiiipppppppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippppiiiiiiiiiiiiiiiiiiiipppppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippppiiiiiiiiiiiiiiiiiiiipppppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippppiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippppiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippppiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippppiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippppiiiiiiiiiiiiiiiiiiiipppppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippppiiiiiiiiiiiiiiiiiiiipppppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippppppiiiiiiiiiiiiiiiipppppppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippppppiiiiiiiiiiiiiiiipppppppppppp",
+            "ppppppppppppppppppppppppppppppppppppppppiiiiiiiipppppppppppppppp",
+            "ppppppppppppppppppppppppppppppppppppppppiiiiiiiipppppppppppppppp",
+            "ppppppppppppppppiiiiiiiippppppppppiipppppppppppppppppppppppppppp",
+            "ppppppppppppppppiiiiiiiippppppppppiipppppppppppppppppppppppppppp",
+            "ppppppppppppiiiiiiiiiiiiiiiippppiiiiiiiipppppppppppppppppppppppp",
+            "ppppppppppppiiiiiiiiiiiiiiiippppiiiiiiiipppppppppppppppppppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippiiiiiiiiiipppppppppppppppppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippiiiiiiiiiipppppppppppppppppppppp",
+            "ppppppppiiiiiiiiiiiiiiiiiiiiiippiiiiiiiiiiiipppppppppppppppppppp",
+            "ppppppppiiiiiiiiiiiiiiiiiiiiiippiiiiiiiiiiiipppppppppppppppppppp",
+            "ppppppppiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppiiiiiiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppiiiiiiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppiiiiiiiiiiiiiiiiiiiippiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppppiiiiiiiiiiiiiiiippppiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppppiiiiiiiiiiiiiiiippppiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppppppiiiiiiiiiiiippppppiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
+            "ppppppppppppppiiiiiiiiiiiippppppiiiiiiiiiiiiiiiiiiiiiiiipppppppp",
             "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
             "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
             "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
@@ -328,22 +331,66 @@ def svg(key: str) -> str:
     return "".join(parts) + "\n"
 
 
+def filtered(kind: int, line: bytes, above: bytes) -> bytes:
+    """A row under one of PNG's five filters, four bytes a pixel."""
+    out = bytearray(len(line))
+    for i, value in enumerate(line):
+        a = line[i - 4] if i >= 4 else 0
+        b = above[i]
+        c = above[i - 4] if i >= 4 else 0
+        if kind == 0:
+            guess = 0
+        elif kind == 1:
+            guess = a
+        elif kind == 2:
+            guess = b
+        elif kind == 3:
+            guess = (a + b) // 2
+        else:
+            p = a + b - c
+            pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+            guess = a if pa <= pb and pa <= pc else b if pb <= pc else c
+        out[i] = (value - guess) & 0xFF
+    return bytes(out)
+
+
+def entropy(data: bytes) -> float:
+    counts = Counter(data)
+    return -sum(n / len(data) * math.log2(n / len(data)) for n in counts.values())
+
+
+def deflated(data: bytes) -> bytes:
+    """zlib at its smallest, run-length only: what every icon's IDAT holds."""
+    packer = zlib.compressobj(9, zlib.DEFLATED, 15, 9, zlib.Z_RLE)
+    return packer.compress(data) + packer.flush()
+
+
 def png(key: str) -> bytes:
     """A 64x64 PNG: the size Minecraft wants for a server icon, drawn pixel for pixel."""
     palette, rows = rows_of(key)
     side = 64
     scale = side // len(rows)
     raw = bytearray()
+    above = bytes(side * 4)
     for y in range(side):
-        raw.append(0)  # no filter for this row
+        line = bytearray()
         row = rows[y // scale]
         for x in range(side):
             ch = row[x // scale]
             if ch == ".":
-                raw.extend((0, 0, 0, 0))
+                line.extend((0, 0, 0, 0))
             else:
                 colour = palette[ch].lstrip("#")
-                raw.extend((int(colour[0:2], 16), int(colour[2:4], 16), int(colour[4:6], 16), 255))
+                line.extend((int(colour[0:2], 16), int(colour[2:4], 16), int(colour[4:6], 16), 255))
+        # Each row takes the filter whose bytes vary least, the lowest first on a tie: with the
+        # compression below, the same pixels always give the same file.
+        kind, body = min(
+            ((kind, filtered(kind, bytes(line), above)) for kind in range(5)),
+            key=lambda pair: (entropy(pair[1]), pair[0]),
+        )
+        raw.append(kind)
+        raw.extend(body)
+        above = bytes(line)
 
     def chunk(kind: bytes, body: bytes) -> bytes:
         return (
@@ -357,7 +404,7 @@ def png(key: str) -> bytes:
     return (
         b"\x89PNG\r\n\x1a\n"
         + chunk(b"IHDR", header)
-        + chunk(b"IDAT", zlib.compress(bytes(raw), 9))
+        + chunk(b"IDAT", deflated(bytes(raw)))
         + chunk(b"IEND", b"")
     )
 
