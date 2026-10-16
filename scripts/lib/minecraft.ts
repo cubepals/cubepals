@@ -40,9 +40,10 @@ export const mcString = (text: string) => Buffer.concat([varInt(Buffer.byteLengt
 /**
  * What the multiplayer screen does when someone clicks Join: a handshake for the address they
  * typed, then a login start. Answers how long the edge took to have a server for them, which is
- * the wait a player actually feels when a sleeping world wakes up. Any answer counts: this client
- * sends a placeholder protocol number, so the server's first packet is usually its polite "your
- * client is the wrong version" — which still only comes from a server that is up and reachable.
+ * the wait a player actually feels when a sleeping world wakes up. It speaks a protocol number the
+ * server takes, read from a status ping first as the multiplayer screen's list does: the edge turns
+ * away a game the server can't take before waking anything. Any answer from the server counts
+ * (asking for an account, or letting the player in), since only a server that is up gives one.
  */
 export async function join(
   edge: Edge,
@@ -67,7 +68,7 @@ export async function join(
   throw new Error(`${last} within ${timeoutMs / 1000}s`)
 }
 
-/** One connection: the handshake, the login, and whatever the server says back. */
+/** One connection: the status ping, the handshake, the login, and whatever the server says back. */
 function attempt(edge: Edge, address: string, name: string, timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const socket = new Socket()
@@ -76,12 +77,15 @@ function attempt(edge: Edge, address: string, name: string, timeoutMs: number): 
       reject(new Error(why))
     }
     socket.setTimeout(timeoutMs, () => fail(`no answer in ${Math.round(timeoutMs / 1000)}s`))
-    socket.connect(edge.port, edge.host, () => {
-      const port = Buffer.alloc(2)
-      port.writeUInt16BE(GAME_PORT)
-      socket.write(packet(0x00, Buffer.concat([varInt(770), mcString(address), port, varInt(2)])))
-      socket.write(packet(0x00, Buffer.concat([mcString(name), Buffer.alloc(16)])))
-    })
+    // A sleeping server's ping is the edge's own answer, which wakes nothing.
+    status(edge, address).then(
+      ({ version }) =>
+        socket.connect(edge.port, edge.host, () => {
+          socket.write(handshake(address, version.protocol, 2))
+          socket.write(hello(name, version.protocol))
+        }),
+      (error: Error) => fail(`the status ping failed: ${error.message}`),
+    )
     let bytes = Buffer.alloc(0)
     socket.on('data', (chunk) => {
       bytes = Buffer.concat([bytes, chunk])
@@ -89,7 +93,8 @@ function attempt(edge: Edge, address: string, name: string, timeoutMs: number): 
         // The edge's own notice turning a join away (restarting, still starting) is not the
         // server's answer: the player joins again, and so does this.
         const said = next.id === 0x00 ? next.body.toString('utf8') : ''
-        if (said.includes('join again')) {
+        // Nor is its word that the server can't take this game, which no server ever said.
+        if (/join again|Your game is/.test(said)) {
           fail(`the edge said ${said.replace(/^[^{"]*/, '')}`)
           return
         }
