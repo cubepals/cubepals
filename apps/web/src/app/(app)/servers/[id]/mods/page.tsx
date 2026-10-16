@@ -11,8 +11,7 @@ import Image from 'next/image'
 import { useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
 import { useDebounced } from '../../../../../lib/hooks'
-import { bytes, datapacksSaid, loaderLabel, presentConflict, presentPlan } from '../../../../../lib/present'
-import { putFile, sha512Of } from '../../../../../lib/upload'
+import { datapacksSaid, loaderLabel, presentConflict, presentPlan } from '../../../../../lib/present'
 import {
   Badge,
   Button,
@@ -25,7 +24,6 @@ import {
   LoadFailed,
   Note,
   PageSkeleton,
-  ProgressBar,
   Skeleton,
   TextField,
 } from '../../../../../ui'
@@ -40,6 +38,8 @@ import {
   whatHappens,
 } from '../settings/shared'
 import { useServer } from '../use-server'
+import { OwnDatapacks } from './own-datapacks'
+import { UploadRow, useOwnUploads } from './own-uploads'
 
 type Change = Omit<ModChangeInput, 'serverId'>
 
@@ -248,8 +248,9 @@ export default function ModsPage() {
           <ChangeState view={view} />
           <Installed view={view} list={list} onChange={setPending} />
           <Search view={view} list={list} onChange={setPending} />
-          {/* Uploads are jars; a server that takes only datapacks has nowhere to run one. */}
+          {/* Jars need a server type that runs them; a datapack goes into any world. */}
           {list.kind !== 'datapacks' && <Uploads view={view} list={list} onChange={setPending} />}
+          <OwnDatapacks view={view} list={list} onChange={setPending} />
           {pending && (
             <PlanChange
               view={view}
@@ -495,47 +496,12 @@ function Uploads({
   list: ModsView
   onChange: (pending: { title: string; change: Change }) => void
 }) {
-  const trpc = useTRPC()
-  const queries = useQueryClient()
-  const uploads = useQuery(trpc.mods.uploads.queryOptions({ serverId: view.id }))
-  const begin = useMutation(trpc.mods.beginUpload.mutationOptions())
-  const finish = useMutation(trpc.mods.finishUpload.mutationOptions())
-  const refresh = () =>
-    queries.invalidateQueries({ queryKey: trpc.mods.uploads.queryKey({ serverId: view.id }) })
-  const remove = useMutation(trpc.mods.deleteUpload.mutationOptions({ onSuccess: refresh }))
-  const [sending, setSending] = useState<{ name: string; stage: string; done: number } | null>(null)
-  const [failure, setFailure] = useState<string | null>(null)
+  const own = useOwnUploads(view, 'mod', (done) =>
+    onChange({ title: `Add ${done.fileName}?`, change: { addUploads: [done.uploadId] } }),
+  )
   const allowed = changeable(view)
   const noun = list.kind === 'plugins' ? 'plugin' : 'mod'
   const installed = new Set(list.mods.map((m) => m.id))
-
-  const upload = async (file: File) => {
-    setFailure(null)
-    try {
-      setSending({ name: file.name, stage: 'Reading the file…', done: 0 })
-      const sha512 = await sha512Of(file)
-      const start = await begin.mutateAsync({
-        serverId: view.id,
-        fileName: file.name,
-        sizeBytes: file.size,
-        sha512,
-      })
-      let uploadId: string
-      if (start.kind === 'upload') {
-        await putFile(start.url, start.headers, file, (sent) =>
-          setSending({ name: file.name, stage: 'Uploading…', done: (sent / file.size) * 100 }),
-        )
-        setSending({ name: file.name, stage: 'Checking it…', done: 100 })
-        uploadId = (await finish.mutateAsync({ serverId: view.id, ticket: start.ticket })).uploadId
-      } else uploadId = start.uploadId
-      await refresh()
-      onChange({ title: `Add ${file.name}?`, change: { addUploads: [uploadId] } })
-    } catch (error) {
-      setFailure(messageOf(error))
-    } finally {
-      setSending(null)
-    }
-  }
 
   if (!list.uploads.available && list.uploads.code === 'deployment_unsupported') return null
   return (
@@ -546,72 +512,30 @@ function Uploads({
         <FileButton
           accept=".jar,application/java-archive"
           icon={<Upload {...ICON} aria-hidden />}
-          disabled={!list.uploads.available || !allowed.ok || sending !== null}
-          onFile={(file) => void upload(file)}
+          disabled={!list.uploads.available || !allowed.ok || own.sending !== null}
+          onFile={(file) => void own.send(file)}
         >
           Upload a {noun}
         </FileButton>
       }
     >
       {!list.uploads.available && <Note tone="info">{list.uploads.message}</Note>}
-      {sending && (
-        <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
-          <span className="type-body-sm">
-            {sending.name}: {sending.stage}
-          </span>
-          <ProgressBar value={sending.done} label={`Uploading ${sending.name}`} />
-        </div>
-      )}
-      {failure && <Note tone="danger">{failure}</Note>}
-      {remove.isError && <Note tone="danger">{messageOf(remove.error)}</Note>}
-      {uploads.isError && <Note tone="danger">{messageOf(uploads.error)}</Note>}
-      {uploads.data?.length === 0 && (
+      {own.status}
+      {own.uploads?.length === 0 && (
         <p className="type-body" style={{ color: 'var(--ink-muted)' }}>
           Nothing uploaded yet.
         </p>
       )}
-      {uploads.data?.map((upload) => (
-        <FormRow
+      {own.uploads?.map((upload) => (
+        <UploadRow
           key={upload.id}
-          label={
-            <span className="bk-row bk-wrap" style={{ gap: 'var(--space-8)' }}>
-              {upload.name}
-              <span className="type-mono-sm" style={{ color: 'var(--ink-muted)' }}>
-                {upload.version}
-              </span>
-              {!upload.fits && <Badge tone="outline">For another version or server type</Badge>}
-            </span>
-          }
-          description={[upload.fileName, bytes(upload.sizeBytes)].filter(Boolean).join(' · ')}
-          control={
-            <div className="bk-row" style={{ gap: 'var(--space-8)' }}>
-              {!upload.inUse && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={remove.isPending}
-                  onClick={() => remove.mutate({ serverId: view.id, uploadId: upload.id })}
-                >
-                  Delete
-                </Button>
-              )}
-              {installed.has(`upload:${upload.id}`) ? (
-                <Badge tone="grass">Added</Badge>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  icon={<Plus {...ICON} aria-hidden />}
-                  disabled={!allowed.ok || !upload.fits}
-                  onClick={() =>
-                    onChange({ title: `Add ${upload.name}?`, change: { addUploads: [upload.id] } })
-                  }
-                >
-                  Add
-                </Button>
-              )}
-            </div>
-          }
+          upload={upload}
+          added={installed.has(`upload:${upload.id}`)}
+          allowed={allowed.ok}
+          misfit="For another version or server type"
+          deleting={own.remove.isPending}
+          onDelete={() => own.remove.mutate({ serverId: view.id, uploadId: upload.id })}
+          onAdd={() => onChange({ title: `Add ${upload.name}?`, change: { addUploads: [upload.id] } })}
         />
       ))}
     </FormSection>

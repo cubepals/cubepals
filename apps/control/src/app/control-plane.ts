@@ -202,7 +202,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     revisions,
     policy,
     capabilities: ports.capabilities,
-    formats: ports.formats,
+    files: ports,
     catalogMoved: (moved) => listings.catalogMoved(moved),
     loaderBuilds: ports.loaderBuilds,
   })

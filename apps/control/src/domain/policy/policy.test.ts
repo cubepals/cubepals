@@ -428,7 +428,7 @@ describe('money guards at their trip points', () => {
     })
     expect(evaluate(off('startsEnabled'), create)).toEqual({ ok: true })
     const plus = { deployment: { archives: true, billing: false }, entitlements: entitlementsFor('plus') }
-    for (const kind of ['upload_mod', 'upload_pack'] as const) {
+    for (const kind of ['upload_mod', 'upload_datapack', 'upload_pack'] as const) {
       expect(
         evaluate(facts({ ...plus, controls: { ...launch, uploadsEnabled: false } }), { kind }),
       ).toMatchObject({

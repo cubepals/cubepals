@@ -62,6 +62,8 @@ export type Capability =
   | { kind: 'download_archive' }
   | { kind: 'restore_archive' }
   | { kind: 'upload_mod' }
+  /** An owner's own datapack, which the plan that runs datapacks takes, as it takes them from a catalog. */
+  | { kind: 'upload_datapack' }
   /**
    * A pack file read and built into one a server can run. Every plan may: a pack is looked at
    * before it is chosen, and choosing one meets the plan that runs modpacks when the server is made.
@@ -185,8 +187,18 @@ const NEEDS_ARCHIVES: ReadonlySet<Capability['kind']> = new Set([
   'download_archive',
   'restore_archive',
   'upload_mod',
+  'upload_datapack',
   'upload_pack',
 ])
+
+/** What the uploads kill switch pauses. */
+const UPLOADS: ReadonlySet<Capability['kind']> = new Set(['upload_mod', 'upload_datapack', 'upload_pack'])
+
+/** What an owner's own jar or datapack needs of their plan, and what a plan without it says. */
+const OWN = {
+  upload_mod: { needs: 'mayUploadCustomMods', not: 'Your plan does not include uploading mods.' },
+  upload_datapack: { needs: 'mayUseDatapacks', not: 'Your plan does not include datapacks.' },
+} as const satisfies Record<string, { needs: keyof Entitlements; not: string }>
 
 /** What a server waits for when its plan doesn't run it, as a refused start says it. */
 const WAITS_FOR: Record<Exclude<PlanGap, 'size'>, string> = {
@@ -217,7 +229,7 @@ export function evaluate(facts: PolicyFacts, capability: Capability): Decision {
     return deny('platform_paused', 'Starting servers is paused for a moment. Try again soon.')
   if (capability.kind === 'list_publicly' && !controls.publicListingEnabled)
     return deny('platform_paused', 'The public directory is paused for a moment.')
-  if ((capability.kind === 'upload_mod' || capability.kind === 'upload_pack') && !controls.uploadsEnabled)
+  if (UPLOADS.has(capability.kind) && !controls.uploadsEnabled)
     return deny('platform_paused', 'Uploads are paused for a moment.')
 
   // 3. Account standing. A suspended owner can still say who may join (§15.1: "standing not
@@ -280,8 +292,8 @@ export function evaluate(facts: PolicyFacts, capability: Capability): Decision {
       break
     // Every plan downloads its own world; how many a day is the service's to count (§ backups).
     case 'upload_mod':
-      if (!entitlements.mayUploadCustomMods)
-        return deny('not_entitled', 'Your plan does not include uploading mods.')
+    case 'upload_datapack':
+      if (!entitlements[OWN[capability.kind].needs]) return deny('not_entitled', OWN[capability.kind].not)
       break
   }
 

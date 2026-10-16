@@ -698,6 +698,10 @@ export function presentConflict(
     case 'incompatible':
       return `${conflict.mod} can't run alongside ${conflict.with}.`
     case 'upload_does_not_fit':
+      if (conflict.madeFor === null)
+        return `${conflict.mod}, your datapack, was made for a newer Minecraft than Cubepals knows.`
+      if (conflict.madeFor !== undefined)
+        return `${conflict.mod}, your datapack, was made for Minecraft ${conflict.madeFor}, not ${server.gameVersion}.`
       return `${conflict.mod}, your upload, was made for another Minecraft version or server type.`
   }
 }

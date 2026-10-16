@@ -19,6 +19,7 @@ import { DATAPACKS_STEP, datapackName } from '../../minecraft/datapacks.ts'
 import { installCheck } from '../../minecraft/install-check.ts'
 import { toRuntimeSpec, withoutFilesStep } from '../../minecraft/runtime-spec.ts'
 import { levelTypeEnv, VOID_LEVEL } from '../../minecraft/worlds.ts'
+import { pinUpload } from '../mods/uploads.ts'
 
 const sha512 = (bytes: string) => createHash('sha512').update(bytes).digest('hex')
 
@@ -43,6 +44,22 @@ function pin(name: string, loaders: string[], bytes = name): PinnedMod {
 
 const manhunt = pin('Manhunt', ['datapack'])
 const lithium = pin('Lithium', ['fabric'])
+/** An owner's own datapack, pinned as an upload is. */
+const minigame = pinUpload({
+  id: 'u-1',
+  ownerId: 'o',
+  sha512: sha512('minigame bytes'),
+  fileName: 'minigame.zip',
+  metadata: {
+    format: 'pack.mcmeta',
+    name: 'Minigame',
+    formats: { from: [101, 0], to: [101, null] },
+    leftOut: false,
+  },
+  key: `artifacts/${sha512('minigame bytes')}`,
+  sizeBytes: 14,
+  createdAt: new Date(),
+})
 
 const input = {
   serverId: 's-1',
@@ -125,6 +142,20 @@ describe('datapacks in a revision', () => {
     expect(installCheck({ ...revision, mods: [manhunt] })).toBeNull()
   })
 
+  test('an uploaded datapack is listed like a catalog one, from the store, with its own hash', () => {
+    expect(minigame).toMatchObject({
+      loaders: ['datapack'],
+      environment: 'server',
+      gameVersions: ['26.1.2', '26.1.1', '26.1'],
+    })
+    const spec = toRuntimeSpec({ ...input, revision: { ...revision, mods: [manhunt, minigame] } })
+    expect(spec.env.BLOCKLY_DATAPACKS?.split('\n')).toEqual([
+      `${manhunt.artifact.sha512} ${datapackName(manhunt.artifact)} https://control.test/a/Manhunt%20v1.zip`,
+      `${minigame.artifact.sha512} ${datapackName(minigame.artifact)} https://control.test/a/minigame.zip`,
+    ])
+    expect(spec.env.TYPE).toBe('PAPER')
+  })
+
   test('every server runs the step, which drift leaves out: a running server never restarts for it', () => {
     const plain = toRuntimeSpec({ ...input, revision })
     expect(plain.entrypoint?.[2]).toContain(DATAPACKS_STEP)
@@ -154,7 +185,11 @@ describe('the void', () => {
 })
 
 describe('the datapacks step', () => {
-  const files: Record<string, string> = { '/manhunt': 'manhunt bytes', '/counter': 'counter bytes' }
+  const files: Record<string, string> = {
+    '/manhunt': 'manhunt bytes',
+    '/counter': 'counter bytes',
+    '/minigame': 'minigame bytes',
+  }
   let fetched: string[] = []
   let server: ReturnType<typeof Bun.serve>
   let volume = ''
@@ -234,5 +269,24 @@ describe('the datapacks step', () => {
     expect((await run('world', [])).exitCode).toBe(0)
     expect(await packs('world')).toEqual(['castle-loot.zip'])
     expect(await packs('world-2')).toEqual(['aa-manhunt.zip'])
+  })
+
+  test('an uploaded one goes in checked and comes out on a revision without it, and nothing else does', async () => {
+    await Bun.write(join(volume, 'uploads', 'datapacks', 'castle-loot.zip'), 'the owner’s own')
+    const modrinth = line('/manhunt', 'aa-manhunt.zip')
+    const own = line('/minigame', datapackName(minigame.artifact))
+    expect(own.startsWith(`${minigame.artifact.sha512} `)).toBe(true)
+    expect((await run('uploads', [modrinth, own])).exitCode).toBe(0)
+    expect(
+      await readFile(join(volume, 'uploads', 'datapacks', datapackName(minigame.artifact)), 'utf8'),
+    ).toBe('minigame bytes')
+    // Bytes other than the uploaded ones stop the start.
+    const swapped = line('/counter', datapackName(minigame.artifact), 'minigame bytes')
+    await rm(join(volume, 'uploads', 'datapacks', datapackName(minigame.artifact)))
+    expect((await run('uploads', [modrinth, swapped])).exitCode).not.toBe(0)
+    expect((await run('uploads', [modrinth, own])).exitCode).toBe(0)
+    // The revision without it: the Modrinth datapack and the world's own stay.
+    expect((await run('uploads', [modrinth])).exitCode).toBe(0)
+    expect((await packs('uploads')).sort()).toEqual(['aa-manhunt.zip', 'castle-loot.zip'])
   })
 })

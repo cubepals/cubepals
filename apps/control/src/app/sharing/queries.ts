@@ -307,6 +307,7 @@ export class SharingQueries {
 function keptFromCopies(verdict: Trust): string {
   const reasons = verdict.kind === 'untrusted' ? verdict.mods.map((mod) => mod.reason) : []
   if (reasons.includes('upload')) return 'It runs a mod you uploaded, which is yours alone.'
+  if (reasons.includes('uploaded_datapack')) return 'It runs a datapack you uploaded, which is yours alone.'
   if (reasons.includes('project_revoked') || reasons.includes('version_revoked'))
     return 'It runs a mod that was taken down where it was published.'
   if (reasons.includes('modpack')) return 'It plays a modpack, and Cubepals hasn’t checked every mod in it.'

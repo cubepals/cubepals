@@ -15,8 +15,10 @@ import type { Db } from '@blockly/db'
 import { forPlayers, type PinnedMod } from '../../domain/mods/artifact.ts'
 import type { ModConflict } from '../../domain/mods/resolve.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
+import { datapackFits, madeFor } from '../../minecraft/datapack-files.ts'
 import { catalogLoadersFor, installsAsDatapack, projectTypesFor } from '../../minecraft/mods.ts'
 import { modName } from '../../minecraft/pack-build.ts'
+import { releaseId } from '../../minecraft/plain-data.ts'
 import { fits } from '../../minecraft/uploads.ts'
 import { compareVersions, LOADER_LABELS, loaderForMods, oldestReleaseOn } from '../../minecraft/versions.ts'
 import { type Actor, authorize } from '../actor.ts'
@@ -29,7 +31,7 @@ import type { ModCatalog } from '../ports/catalog.ts'
 import { findServer, loadRevision } from '../servers/persistence.ts'
 import { packView } from './pack.ts'
 import { identity, type ModPlan } from './service.ts'
-import { listModUploads, type ModUploadRecord, uploadInUse } from './uploads.ts'
+import { isDatapackUpload, listModUploads, type ModUploadRecord, uploadInUse } from './uploads.ts'
 
 export class ModQueries {
   readonly #db: Db
@@ -101,13 +103,19 @@ export class ModQueries {
       packUpdate: await this.#packUpdate(revision).catch(() => null),
       packUploaded: revision.modpack?.catalog === 'upload',
       packLeftOut: revision.modpack === null ? [] : await this.#leftOut(revision.modpack.artifact.sha512),
-      uploads: await this.#db.transaction(async (tx): Promise<Availability> => {
-        const decision = await this.#policy.check(tx, server.ownerId, { kind: 'upload_mod' })
-        return decision.ok
-          ? { available: true }
-          : { available: false, code: decision.code, message: decision.message }
-      }),
+      uploads: await this.#availability(server.ownerId, 'upload_mod'),
+      datapackUploads: await this.#availability(server.ownerId, 'upload_datapack'),
     }
+  }
+
+  /** Whether the owner can upload here: the policy's own answer. */
+  #availability(ownerId: string, kind: 'upload_mod' | 'upload_datapack'): Promise<Availability> {
+    return this.#db.transaction(async (tx) => {
+      const decision = await this.#policy.check(tx, ownerId, { kind })
+      return decision.ok
+        ? { available: true }
+        : { available: false, code: decision.code, message: decision.message }
+    })
   }
 
   /**
@@ -157,22 +165,32 @@ export class ModQueries {
       all.map(async (upload) =>
         uploadView(upload, {
           inUse: await uploadInUse(this.#db, upload.id),
-          fits:
-            upload.metadata.loaders.some((l) => loaders.includes(l)) &&
-            fits(upload.metadata.gameVersions, revision.gameVersion),
+          fits: isDatapackUpload(upload.metadata)
+            ? datapackFits(upload.metadata.formats, revision.gameVersion)
+            : upload.metadata.loaders.some((l) => loaders.includes(l)) &&
+              fits(upload.metadata.gameVersions, revision.gameVersion),
         }),
       ),
     )
   }
 }
 
+/** What Cubepals did with an upload that the owner should know: the resource-pack files it left out. */
+export const uploadNote = (upload: ModUploadRecord): string | null =>
+  isDatapackUpload(upload.metadata) && upload.metadata.leftOut ? 'Resource-pack files are left out.' : null
+
 function uploadView(upload: ModUploadRecord, facts: { inUse: boolean; fits: boolean }): ModUploadView {
+  const { metadata } = upload
+  const datapack = isDatapackUpload(metadata)
   return {
     id: upload.id,
+    kind: datapack ? 'datapack' : 'mod',
     fileName: upload.fileName,
-    name: upload.metadata.name,
-    version: upload.metadata.version,
-    loaders: upload.metadata.loaders,
+    name: metadata.name,
+    // A datapack has no version of its own, so it is told apart by its bytes.
+    version: datapack ? upload.sha512.slice(0, 12) : metadata.version,
+    loaders: datapack ? [] : metadata.loaders,
+    note: uploadNote(upload),
     sizeBytes: upload.sizeBytes,
     createdAt: upload.createdAt.toISOString(),
     inUse: facts.inUse,
@@ -202,8 +220,17 @@ function modView(
   }
 }
 
-/** A conflict as players read it: a jar built for a newer Java is a jar for a newer Minecraft. */
+/**
+ * A conflict as players read it: a jar built for a newer Java is a jar for a newer Minecraft, and a
+ * datapack's releases are said as a span.
+ */
 function conflictView(conflict: ModConflict): ModConflictView {
+  if (conflict.kind === 'upload_does_not_fit') {
+    const { madeFor: releases, ...rest } = conflict
+    return releases === undefined
+      ? rest
+      : { ...rest, madeFor: madeFor(releases.filter((v) => releaseId(v) !== null)) }
+  }
   if (conflict.kind !== 'needs_newer_java') return conflict
   const { java, ...rest } = conflict
   return { ...rest, kind: 'needs_newer_release', from: oldestReleaseOn(java) }

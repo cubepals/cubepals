@@ -97,6 +97,8 @@ export interface ModsView {
   packLeftOut: string[]
   /** Whether the owner can upload their own jars here: the policy's own answer. */
   uploads: Availability
+  /** Whether the owner can upload their own datapacks here, as the plan that runs datapacks allows. */
+  datapackUploads: Availability
 }
 
 export interface ModSearchHit {
@@ -128,7 +130,11 @@ export type ModConflictView =
   | { kind: 'client_only'; mod: string; projectId: string }
   | { kind: 'missing_dependency'; mod: string; projectId: string; dependency: string }
   | { kind: 'incompatible'; mod: string; projectId: string; with: string }
-  | { kind: 'upload_does_not_fit'; mod: string }
+  /**
+   * `madeFor`, for an uploaded datapack: the releases it was made for, as `1.21–1.21.1`, or null
+   * when it was made for a Minecraft newer than Cubepals knows.
+   */
+  | { kind: 'upload_does_not_fit'; mod: string; madeFor?: string | null }
 
 export type ModPlanView =
   | {
@@ -166,14 +172,18 @@ export const ModUploadRef = z.object({ serverId: ServerId, uploadId: z.uuid() })
 /** The upload a `ticket` from `beginUpload` stands for, sent: check it and keep it. */
 export const FinishModUploadInput = z.object({ serverId: ServerId, ticket: z.uuid() })
 
-/** A jar the owner uploaded; it can go on any of their servers it fits. */
+/** A jar or datapack the owner uploaded; it can go on any of their servers it fits. */
 export interface ModUploadView {
   id: string
+  kind: 'mod' | 'datapack'
   fileName: string
   name: string
+  /** A jar's own version; for a datapack, which has none, the start of its SHA-512. */
   version: string
-  /** The server types it declares, as the catalog names them. */
+  /** The server types it declares, as the catalog names them; none for a datapack. */
   loaders: string[]
+  /** What Cubepals left out of it, said to the owner; null when nothing. */
+  note: string | null
   sizeBytes: number
   createdAt: string
   /** A server still has it, so it can't be deleted. */

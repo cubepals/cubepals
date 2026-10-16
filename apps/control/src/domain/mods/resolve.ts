@@ -75,7 +75,8 @@ export type ModConflict =
   | { kind: 'client_only'; mod: string; projectId: string }
   | { kind: 'missing_dependency'; mod: string; projectId: string; dependency: string }
   | { kind: 'incompatible'; mod: string; projectId: string; with: string }
-  | { kind: 'upload_does_not_fit'; mod: string }
+  /** `madeFor`, for an uploaded datapack: the releases its formats cover, newest first. */
+  | { kind: 'upload_does_not_fit'; mod: string; madeFor?: string[] }
 
 export type Resolution =
   /** `jars`: versions whose jars must be read for what they ask of the server. */
@@ -286,12 +287,7 @@ export function resolve(request: ResolveRequest, data: CatalogData): Resolution 
   }
 
   const uploads = request.current.filter((m) => !('versionId' in m.source))
-  for (const upload of uploads) {
-    const gameVersionFits =
-      upload.gameVersions.length === 0 || upload.gameVersions.includes(target.gameVersion)
-    const loaderFits = upload.loaders.length === 0 || upload.loaders.some((l) => target.loaders.includes(l))
-    if (!gameVersionFits || !loaderFits) conflicts.push({ kind: 'upload_does_not_fit', mod: upload.name })
-  }
+  conflicts.push(...uploads.flatMap((upload) => misfit(upload, target)))
 
   conflicts.push(...jarsHeld(picked, jarTarget(target, data, need, picked), request, data))
   if (need.projects.size > 0 || need.versions.size > 0 || need.jars.size > 0)
@@ -311,6 +307,15 @@ function refusal(held: Held | null, mod: { mod: string; projectId: string }): Mo
 }
 
 /** What this resolution holds jars to: the target's Java, and the versions picked so far. */
+/** An upload pinned as it is, held to what it declares; a datapack says which releases it was made for. */
+function misfit(upload: PinnedMod, target: ResolveRequest['target']): ModConflict[] {
+  const gameVersionFits = upload.gameVersions.length === 0 || upload.gameVersions.includes(target.gameVersion)
+  const loaderFits = upload.loaders.length === 0 || upload.loaders.some((l) => target.loaders.includes(l))
+  if (gameVersionFits && loaderFits) return []
+  const madeFor = isDatapack(upload) ? { madeFor: upload.gameVersions } : {}
+  return [{ kind: 'upload_does_not_fit', mod: upload.name, ...madeFor }]
+}
+
 function jarTarget(
   target: ResolveRequest['target'],
   data: CatalogData,
@@ -405,7 +410,8 @@ function modsMissing(
   })
 }
 
-const isDatapack = (version: CatalogVersion) => version.loaders.every((loader) => loader === DATAPACK)
+const isDatapack = (version: { loaders: readonly string[] }) =>
+  version.loaders.every((loader) => loader === DATAPACK)
 
 const testedIds = (request: ResolveRequest): ReadonlySet<string> =>
   new Set((request.tested ?? []).map((entry) => entry.versionId))

@@ -177,7 +177,7 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('uploads', () => {
       expect(
         await refusal(
           h.app.mods.beginUpload(owner, id, {
-            fileName: 'world.zip',
+            fileName: 'world.tar.gz',
             sizeBytes: 10,
             sha512: 'a'.repeat(128),
           }),

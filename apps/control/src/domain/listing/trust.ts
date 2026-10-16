@@ -4,7 +4,7 @@
 
 import type { Entitlements } from '../account/entitlements.ts'
 import type { AccountStanding } from '../account/standing.ts'
-import type { PinnedMod } from '../mods/artifact.ts'
+import { isDatapack, type PinnedMod } from '../mods/artifact.ts'
 import type { ProjectState, VersionState } from '../mods/catalog.ts'
 import type { PinnedModpack } from '../mods/modpack.ts'
 
@@ -16,6 +16,8 @@ import type { PinnedModpack } from '../mods/modpack.ts'
 
 type UntrustedReason =
   | 'upload'
+  /** A datapack its owner uploaded: commands nobody but its owner has read. */
+  | 'uploaded_datapack'
   /** Not a project Blockly has vouched for. */
   | 'not_allowlisted'
   /** Its project was taken down, hidden or withheld where it was published. */
@@ -61,7 +63,7 @@ export function trust(
 }
 
 function untrustedBecause(mod: PinnedMod, catalog: CatalogView): UntrustedReason | null {
-  if (!('versionId' in mod.source)) return 'upload'
+  if (!('versionId' in mod.source)) return isDatapack(mod) ? 'uploaded_datapack' : 'upload'
   const { catalog: name, projectId, versionId } = mod.source
   if (!catalog.allowlisted.has(`${name}:${projectId}`)) return 'not_allowlisted'
   const project = catalog.project(name, projectId)
@@ -77,7 +79,7 @@ function untrustedBecause(mod: PinnedMod, catalog: CatalogView): UntrustedReason
 /**
  * Whether someone else may make a server like this one (§15.6). A copy hands a stranger the same
  * mods, so it is offered only for a setup Blockly vouches for, judged as the directory judges it:
- * an uploaded jar, a mod Blockly hasn't checked or a modpack keeps copying off, and the owner can't
+ * an uploaded jar or datapack, a mod Blockly hasn't checked or a modpack keeps copying off, and the owner can't
  * turn it on (`locked`). A setup Blockly vouches for is its owner's to offer or keep.
  */
 export function copying(verdict: Trust, ownerOffers: boolean): { allowed: boolean; locked: boolean } {

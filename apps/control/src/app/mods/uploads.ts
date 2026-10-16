@@ -4,7 +4,8 @@
 
 import { type Queryable, schema } from '@blockly/db'
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm'
-import type { PinnedMod } from '../../domain/mods/artifact.ts'
+import { DATAPACK, type PinnedMod } from '../../domain/mods/artifact.ts'
+import { type DatapackMetadata, releasesFor } from '../../minecraft/datapack-files.ts'
 import { fits, type ModMetadata, type VersionRange } from '../../minecraft/uploads.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { AppError } from '../errors.ts'
@@ -12,13 +13,16 @@ import { AppError } from '../errors.ts'
 const uploads = schema.modUploads
 const stored = schema.storedArtifacts
 
-/** A jar someone uploaded, with what it says about itself and where its bytes are kept. */
+/** What an upload says about itself: a jar's loader metadata, or a datapack's `pack.mcmeta`. */
+type UploadMetadata = ModMetadata | DatapackMetadata
+
+/** A jar or datapack someone uploaded, with what it says about itself and where its bytes are kept. */
 export interface ModUploadRecord {
   id: string
   ownerId: string
   sha512: string
   fileName: string
-  metadata: ModMetadata
+  metadata: UploadMetadata
   /** The stored artifact's key and size. */
   key: string
   sizeBytes: number
@@ -40,13 +44,13 @@ const toRecord = (
   row: Omit<ModUploadRecord, 'metadata'> & { metadata: Record<string, unknown> },
 ): ModUploadRecord => ({
   ...row,
-  // Written by insertModUpload, from minecraft/'s reading of the jar.
-  metadata: row.metadata as unknown as ModMetadata,
+  // Written by insertModUpload, from minecraft/'s reading of the jar or datapack.
+  metadata: row.metadata as unknown as UploadMetadata,
 })
 
 export async function insertModUpload(
   q: Queryable,
-  upload: { ownerId: string; sha512: string; fileName: string; metadata: ModMetadata },
+  upload: { ownerId: string; sha512: string; fileName: string; metadata: UploadMetadata },
 ): Promise<string> {
   const [row] = await q
     .insert(uploads)
@@ -117,32 +121,50 @@ export async function uploadInUse(q: Queryable, uploadId: string): Promise<boole
   return row !== undefined
 }
 
-/** An upload, pinned as it is: its own bytes from the store, and the facts its jar declares. */
+export const isDatapackUpload = (metadata: UploadMetadata): metadata is DatapackMetadata =>
+  metadata.format === 'pack.mcmeta'
+
+/**
+ * An upload, pinned as it is: its own bytes from the store, and the facts its jar declares. A
+ * datapack is labelled by its bytes, having no version of its own, and runs on the server alone.
+ */
 export function pinUpload(upload: ModUploadRecord): PinnedMod {
   const { metadata } = upload
+  const datapack = isDatapackUpload(metadata)
   return {
     source: { catalog: 'upload', uploadId: upload.id },
     name: metadata.name,
-    versionLabel: metadata.version || upload.fileName,
+    versionLabel: datapack ? upload.sha512.slice(0, 12) : metadata.version || upload.fileName,
     artifact: {
       ref: { kind: 'stored', key: upload.key },
       sha512: upload.sha512,
       sizeBytes: upload.sizeBytes,
       fileName: upload.fileName,
     },
-    environment: metadata.environment === 'server' ? 'server' : 'both',
-    loaders: metadata.loaders,
-    gameVersions: gameVersionsOf(metadata.gameVersions),
+    environment: datapack || metadata.environment === 'server' ? 'server' : 'both',
+    loaders: datapack ? [DATAPACK] : metadata.loaders,
+    gameVersions: uploadGameVersions(metadata),
     origin: 'user',
     requiredBy: [],
   }
 }
 
 /**
- * The releases Blockly offers that a declared range allows. Empty means "any", so a range that
+ * The releases an upload runs on, read again at every plan from what it declares. A datapack's
+ * are every release its formats cover; one that names formats no release reads lists the format,
+ * which no server offers.
+ */
+export function uploadGameVersions(metadata: UploadMetadata): string[] {
+  if (!isDatapackUpload(metadata)) return gameVersionsOf(metadata.gameVersions)
+  const releases = releasesFor(metadata.formats)
+  return releases.length > 0 ? releases : [`format ${metadata.formats.from[0]}`]
+}
+
+/**
+ * The releases Blockly offers that a jar's declared range allows. Empty means "any", so a range that
  * allows none of them lists what it names instead, which no server offers.
  */
-export function gameVersionsOf(range: VersionRange): string[] {
+function gameVersionsOf(range: VersionRange): string[] {
   if (range.length === 0) return []
   const offered = offeredVersions()
     .map((v) => v.id)
