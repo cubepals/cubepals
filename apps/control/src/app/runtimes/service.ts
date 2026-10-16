@@ -26,7 +26,13 @@ import {
   updateRule,
   usersByEmail,
 } from './persistence.ts'
-import { decidePlacement, type NewServer, type Placed, type PlacementRule } from './placement.ts'
+import {
+  decidePlacement,
+  type NewServer,
+  type Placed,
+  type PlacementRule,
+  type PlacementTargets,
+} from './placement.ts'
 import type { Runtimes } from './router.ts'
 
 /** A rule as an operator writes it: owners by email or id. */
@@ -76,26 +82,49 @@ export class RuntimePlacement {
   }
 
   /**
+   * What the runtimes `place` would weigh say about room for `server`, asked before the platform's
+   * lock and kept in `answers`, by provider, beside what `roomFor` asked: the same place and size.
+   * It weighs `rules` as `place` will, by each runtime's count read now, and asks only a runtime
+   * not yet answered.
+   */
+  async askRoom(
+    q: Queryable,
+    server: NewServer,
+    rules: readonly StoredRule[],
+    answers: Map<string, boolean>,
+  ): Promise<void> {
+    await decidePlacement(
+      server,
+      rules,
+      this.#targets(await computeByProvider(q), async (provider, placement, size) => {
+        const known = answers.get(provider)
+        if (known !== undefined) return known
+        const room = await this.#runtimes.hasRoom(provider, placement, size).catch(() => false)
+        answers.set(provider, room)
+        return room
+      }),
+    )
+  }
+
+  /**
    * Where a new server goes by `rules`, decided once and recorded in the transaction that makes
    * it. The create reads its rules before the platform's lock, which doesn't guard them, and places
-   * under it, where each runtime's count is.
+   * under it, where each runtime's count is. Room is read from `answers` alone (`askRoom`), so no
+   * provider is waited on under the lock; a runtime that wasn't asked, one that only came to
+   * matter as the counts moved, has no room this time.
    */
-  async place(tx: Tx, server: NewServer, rules: readonly StoredRule[], by: string): Promise<Placed> {
-    // A runtime whose provider caps the servers it holds (Fly's machine limit) is full at its cap:
-    // the deployment's own cap can't see that once another runtime has none. Only servers holding
-    // compute there count against it.
-    const held = await computeByProvider(tx)
-    const placed = await decidePlacement(server, rules, {
-      defaultProvider: this.defaultProvider,
-      providers: this.#runtimes.providers,
-      runs: (provider) => this.#runtimes.runs(provider),
-      atLimit: (provider) => {
-        const ceiling = this.#runtimes.runs(provider) ? this.#runtimes.ceilingOf(provider) : null
-        return ceiling !== null && (held.get(provider) ?? 0) >= ceiling
-      },
-      hasRoom: (provider, placement, size) =>
-        this.#runtimes.hasRoom(provider, placement, size).catch(() => false),
-    })
+  async place(
+    tx: Tx,
+    server: NewServer,
+    rules: readonly StoredRule[],
+    by: string,
+    answers: ReadonlyMap<string, boolean>,
+  ): Promise<Placed> {
+    const placed = await decidePlacement(
+      server,
+      rules,
+      this.#targets(await computeByProvider(tx), async (provider) => answers.get(provider) ?? false),
+    )
     await recordDecision(tx, {
       serverId: server.serverId,
       kind: 'placed',
@@ -107,6 +136,23 @@ export class RuntimePlacement {
       decidedBy: by,
     })
     return placed
+  }
+
+  /** The runtimes a placement weighs, by `held`, each runtime's count, and room as `hasRoom` says. */
+  #targets(held: Map<string, number>, hasRoom: PlacementTargets['hasRoom']): PlacementTargets {
+    return {
+      defaultProvider: this.defaultProvider,
+      providers: this.#runtimes.providers,
+      runs: (provider) => this.#runtimes.runs(provider),
+      // A runtime whose provider caps the servers it holds (Fly's machine limit) is full at its
+      // cap: the deployment's own cap can't see that once another runtime has none. Only servers
+      // holding compute there count against it.
+      atLimit: (provider) => {
+        const ceiling = this.#runtimes.runs(provider) ? this.#runtimes.ceilingOf(provider) : null
+        return ceiling !== null && (held.get(provider) ?? 0) >= ceiling
+      },
+      hasRoom,
+    }
   }
 
   /**

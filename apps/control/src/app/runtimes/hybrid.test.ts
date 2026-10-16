@@ -500,3 +500,42 @@ describe.skipIf(!hasDatabase)('a default runtime at its provider’s limit', () 
     expect((await h.app.placement.where(id)).decisions[0]?.reason).toBe('the default runtime')
   })
 })
+
+describe.skipIf(!hasDatabase)('placing a new server by a rule', () => {
+  let h: Harness
+
+  beforeAll(async () => {
+    h = await startHarness({ otherRuntimes: [{ provider: 'canary' }] })
+  }, 30_000)
+
+  afterAll(() => h.close())
+
+  test('a rule’s runtime is asked about room before the platform’s lock, never under it', async () => {
+    const owner = await h.user('Unhurried', 'plus')
+    await h.app.placement.addRule({ provider: 'canary', percent: 100 }, OPERATOR)
+    const runtime = h.runtimes.get('canary')
+    if (runtime === undefined) throw new Error('no canary runtime')
+    const own = runtime.hasRoom.bind(runtime)
+    // Whether the platform's lock was held each time the runtime was asked: another session can't
+    // take it while a create holds it.
+    const underLock: boolean[] = []
+    runtime.hasRoom = async (placement) => {
+      const free = await h.db.transaction(async (tx) => {
+        const { rows } = await tx.execute<{ got: boolean }>(
+          sql`select pg_try_advisory_xact_lock(hashtext('blockly:capacity')) as got`,
+        )
+        return rows[0]?.got === true
+      })
+      underLock.push(!free)
+      return own(placement)
+    }
+    try {
+      const { id } = await h.create(owner)
+      expect((await loadRuntime(h.db, id, [...h.runtimes.keys()])).provider).toBe('canary')
+      expect(underLock).toContain(false)
+      expect(underLock).not.toContain(true)
+    } finally {
+      runtime.hasRoom = own
+    }
+  })
+})

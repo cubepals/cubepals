@@ -159,14 +159,18 @@ export class AccessPolicy {
    * platform's lock and decides again on the platform's counts, read afresh, less the server and
    * its create. Every admission still counts each one before it, since the lock is held from that
    * count to commit.
+   *
+   * `answers` keeps what the runtimes said about room for it, for the create's placement to read
+   * under the same lock.
    */
   async requireThenAdmit(
     tx: Tx,
     accountId: string,
     capability: Extract<Capability, { kind: 'create_server' }>,
+    answers: Map<string, boolean>,
   ): Promise<(serverId: string) => Promise<void>> {
     const now = new Date()
-    const { account, answers } = await this.#ownFacts(tx, accountId, capability, now, true)
+    const { account } = await this.#ownFacts(tx, accountId, capability, now, true, answers)
     refuseUnless(
       evaluate({ ...account, ...(await this.#platformFacts(tx, capability, now, answers)) }, capability),
     )
@@ -183,13 +187,21 @@ export class AccessPolicy {
    * The account's own facts, read under its own locks, which others' decisions don't wait on; and,
    * for a create, what the runtimes say about room for it, asked before the platform's lock.
    */
-  async #ownFacts(tx: Tx, accountId: string, capability: Capability, now: Date, locks: boolean) {
+  async #ownFacts(
+    tx: Tx,
+    accountId: string,
+    capability: Capability,
+    now: Date,
+    locks: boolean,
+    answers = new Map<string, boolean>(),
+  ) {
     if (SPENDS.has(capability.kind) && locks) await lockOwnerCapacity(tx, accountId)
     // Counted and written in one transaction per account, so a burst can't slip past the count.
     const counted = rateLimited(capability.kind) ? COUNTED_AS[capability.kind] : null
     if (counted !== null && locks) await lockAccountActions(tx, accountId)
     const account = await accountFacts(tx, accountId, capability, counted, now)
-    return { account, answers: await this.room.ask(tx, capability) }
+    await this.room.ask(tx, capability, answers)
+    return { account, answers }
   }
 
   /**

@@ -92,13 +92,11 @@ export class CreateRoom {
   /**
    * For a create, what the runtimes say about room for it, asked before the capacity lock: `facts`
    * under the lock decides from these answers rather than waiting on a provider there. Nothing for
-   * anything else, or a create that doesn't say where it goes.
+   * anything else, or a create that doesn't say where it goes. Kept in `answers`, by provider.
    */
-  async ask(q: Queryable, capability: Capability): Promise<Map<string, boolean>> {
-    const answers = new Map<string, boolean>()
+  async ask(q: Queryable, capability: Capability, answers: Map<string, boolean>): Promise<void> {
     if (capability.kind === 'create_server' && capability.where !== undefined)
       await this.#placement.roomFor(q, capability.where, answers)
-    return answers
   }
 
   async #facts(

@@ -152,7 +152,8 @@ export class MinecraftServerService {
       // under the platform's lock last: nobody else's create waits on this one's writes.
       const where = { regionKey, memoryMb: memoryMb(memoryTier), storageGb }
       const asked = { kind: 'create_server', memoryTier, where } as const
-      const admit = await this.#policy.requireThenAdmit(tx, owner.userId, asked)
+      const answers = new Map<string, boolean>()
+      const admit = await this.#policy.requireThenAdmit(tx, owner.userId, asked, answers)
       const slug = await this.#claimSlug(tx, madeBy, request.name, replaced?.slug ?? request.slug)
       const created = await insertServer(
         tx,
@@ -198,14 +199,11 @@ export class MinecraftServerService {
         idempotencyKey: 'provision',
       })
       const rules = await loadRules(tx)
+      const placing = { serverId: created.server.id, ownerId: owner.userId, plan, ...where }
+      await this.#placement.askRoom(tx, placing, rules, answers)
       // Under the platform's lock to commit: the count, and placing by each runtime's count.
       await admit(created.server.id)
-      const placed = await this.#placement.place(
-        tx,
-        { serverId: created.server.id, ownerId: owner.userId, plan, ...where },
-        rules,
-        requestedBy(madeBy),
-      )
+      const placed = await this.#placement.place(tx, placing, rules, requestedBy(madeBy), answers)
       await createRuntimeBinding(tx, created.server.id, placed.provider)
       return created.server
     })
