@@ -1253,6 +1253,7 @@ export interface EdgeRoutes {
     destination: string /* host:port */
     state?: 'asleep' | 'restarting' // absent while it runs
     backAt?: string // asleep because the owner's day of play is used: when it is back (ISO)
+    waking?: true // asleep, and on its way up: woken by a join or a ping
     motd?: string // asleep: the owner's own message, section-sign codes; absent while it is the welcome
     icon?: string // asleep: a link to the owner's picture, a 64 square PNG; new link, new picture
   }[]
@@ -1265,6 +1266,7 @@ export type WakeResult =
   | { outcome: 'restarting' }                            // still on its way back from a restart
   | { outcome: 'denied'; reason: 'unknown' | 'suspended' | 'paused' | 'quota' | 'deleted'; backAt?: string }
 
+// POST /edge/v1/ping-wake { hostname }                 → { waking: boolean } (at once; may start it)
 // POST /edge/v1/idle      { hostname }                 → 204      (a hint; the control plane decides)
 // POST /edge/v1/sessions  { edgeId, hostname, event: 'connect' | 'disconnect', player?: { name, uuid }, at } → 204
 ```
@@ -1280,12 +1282,15 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   - A `stored` server's handle is the one `release` returned: a join is what wakes a resting
     world, so its route stays, and every runtime answers `endpoint` for it (§8).
   - Servers in `provisioning` and `restoring` are omitted. Their access record is being
-    reseeded (§15.1), so nobody can join before it's in force. The exception is a restore of a
-    running server: it's routed as `restarting`, which the edge never dials.
+    reseeded (§15.1), so nobody can join before it's in force. Two exceptions:
+    - A restore of a running server is routed as `restarting`, which the edge never dials.
+    - A world coming back from rest (`unstore`) is routed `asleep` to `NOWHERE` (below), so a
+      ping hears it waking and a join waits in the waiting room.
   - `state` is absent for `running`. It's `restarting` for a server on its way back from a
     restart Blockly began: any `updating` (settings, versions, packs, worlds, a rollback), a
     `restart` operation in either half, and a `restore` or `relocate` of a running server. Every
-    other routed status is `asleep`.
+    other routed status is `asleep`. An asleep server that is `starting`, or back from rest, also
+    carries `waking`.
   - Servers in `failed`, `deleted` and `purged` are omitted too.
   - Suspended accounts keep their routes, so players see the asleep message instead of
     "unknown host".
@@ -1304,6 +1309,18 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
     `app/edge/service.ts`); past that the wake is `denied: quota`. Nothing about a connection
     proves who sent it, and each wake costs the owner a run.
   - A deleted server's address answers `denied: deleted`, so its players are told.
+- **`pingWake(hostname)`** (`app/edge/ping-wake.ts`). A server list pinged an asleep server,
+  often just before a join. It starts the server as a wake would, without waiting for it, where its
+  start is a boot: one at rest, or one whose sleep stopped it (`server_runtimes.memory_kept_at` is
+  null), since a resume is about as quick as the click. It answers `{ waking }`. It starts nothing:
+  - for a server its owner can't start (the same policy);
+  - past `wakesPerHour`;
+  - once the owner's included hours are used;
+  - for `AbuseLimits.pingWakeHoldHours` after a ping wake nobody joined, unless someone played
+    since.
+
+  Its run is a woken one, so the probation puts it back to sleep unjoined. The times are in
+  [waking.md](waking.md).
 - **`idleHint(hostname)`.** Triggers an immediate idle evaluation. Only the idle policy
   (`Schedules.evaluateIdle`, entitlement-aware: some plans never idle-stop) decides whether to
   stop. The edge timer is
@@ -1393,6 +1410,11 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
     mc-router connects it (the waiting room, below), so a join reaches this listener only when it
     arrived in the moment another join was asking. mc-router holds it until that ask is over, and
     the listener connects it to the server, as dialling the server directly would have.
+  - A ping to a server that isn't waking yet first asks `POST /edge/v1/ping-wake`, at most once
+    per server every 30 s (`apps/edge/ping-wake.ts`). It waits up to 1.5 s for the answer before
+    it is answered. While the server wakes, by that ask, a join, or a route that says `waking`, a
+    ping is told "Waking up · join in a few seconds" (`WAKING_MOTD`) in place of the sleeping
+    notice. A server whose day of play is used is never asked for.
   - While a join is waking a server, a ping still gets this listener's answer: the control plane
     routes a starting server as `asleep` until it runs, and the wake webhook hands every join to
     the waiting room at once, so mc-router never has a wake in flight to show its loading MOTD for.
