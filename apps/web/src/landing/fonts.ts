@@ -29,6 +29,9 @@ export const aside = Instrument_Serif({
   style: 'italic',
   variable: '--font-aside',
   display: 'swap',
+  // Its notes are all far down the page: the first screen's scripts, the drawing's among them, come
+  // before it.
+  preload: false,
 })
 
 export const pixel = Pixelify_Sans({

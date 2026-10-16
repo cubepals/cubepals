@@ -24,6 +24,8 @@
   "r2_buckets": [{ "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "blockly-web-cache" }],
   // next/image through Cloudflare Images: unique transformations, 5,000 a month free.
   "images": { "binding": "IMAGES" },
+  // Which deploy this is: the pages kept at the edge are kept per version (src/lib/edge-cache.ts).
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
   "observability": { "enabled": true },
   "env": {
     // Worker blockly-web-staging, at staging.cubepals.com, and each pull request's preview version
@@ -36,7 +38,8 @@
       "preview_urls": true,
       "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "blockly-web-staging" }],
       "r2_buckets": [{ "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "blockly-web-staging-cache" }],
-      "images": { "binding": "IMAGES" }
+      "images": { "binding": "IMAGES" },
+      "version_metadata": { "binding": "CF_VERSION_METADATA" }
     }
   }
 }
