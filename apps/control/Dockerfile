@@ -11,7 +11,7 @@
 # blocklyd, which the node endpoint hands to hosts as they join (FLEET_BLOCKLYD_BIN): one release
 # of cubepals/blocklyd, static (musl), pinned by digest. `bun scripts/blocklyd.ts bump <version>`
 # moves this line and the copies of the release's files beside the fleet adapter together.
-FROM ghcr.io/cubepals/blocklyd:0.3.1@sha256:1e07dd58a291391d4e687af31060e56aae274bf8fe0c6477c43aed92a44eca38 AS blocklyd
+FROM ghcr.io/cubepals/blocklyd:0.3.2@sha256:acd8883aeb6bfb6625468183620d99beaff8dadaaafcb7356fbbe815f48edaac AS blocklyd
 
 FROM mirror.gcr.io/library/node:22.23.2-trixie-slim@sha256:c5849ff9c9ebcd66615412f0b548ca5b8ecaef84003dc9ac2e077ebe46aaa3f6 AS deps
 COPY --from=mirror.gcr.io/oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 /usr/local/bin/bun /usr/local/bin/bun
