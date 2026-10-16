@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { fileURLToPath } from 'node:url'
+import { MINUTE_MS } from '@blockly/contracts/durations'
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres'
 import pg from 'pg'
 import * as schema from './schema.ts'
@@ -17,11 +18,18 @@ export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 export type Queryable = Db | Tx
 
 /**
+ * How long a connection may rest in a pool before it is closed. node-postgres's default, 10 s,
+ * closed and reopened connections all day between the control plane's passes, and each opening
+ * costs a TLS handshake and a login, several kilobytes from the database each time.
+ */
+export const POOL_IDLE_MS = 10 * MINUTE_MS
+
+/**
  * `max` is how many connections the pool may hold at once. Behind a session-mode pooler each one
  * holds a server connection for as long as it is open, so a deployment sizes it (DATABASE_POOL_MAX).
  */
 export function createPool(connectionString: string, max = 10): pg.Pool {
-  const pool = new pg.Pool({ connectionString, max })
+  const pool = new pg.Pool({ connectionString, max, idleTimeoutMillis: POOL_IDLE_MS })
   // A connection resting in the pool can be cut (a restart, a failover, a pooler going down), and
   // node-postgres reports it as the pool's `error`, which Node turns into the end of the process
   // when nobody listens. The pool has already let that client go; the next query opens another.

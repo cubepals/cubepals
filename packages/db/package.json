@@ -12,6 +12,7 @@
     "migrate": "node src/migrate.ts"
   },
   "dependencies": {
+    "@blockly/contracts": "workspace:*",
     "drizzle-orm": "0.45.3",
     "pg": "8.23.1"
   },

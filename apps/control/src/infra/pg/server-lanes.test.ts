@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { createDb, createPool } from '@blockly/db'
+import { sql } from 'drizzle-orm'
 import pg from 'pg'
 import type { PgBoss } from 'pg-boss'
 import type { JobAttempt } from '../../app/ports/jobs.ts'
@@ -16,7 +17,7 @@ import type { RuntimeHandle, RuntimeKey, RuntimeSpec } from '../../app/ports/run
 import { flyClient } from '../fly/client.ts'
 import { FakeFly } from '../fly/fake-fly.ts'
 import { FlyRuntime } from '../fly/fly-runtime.ts'
-import { PgBossJobs, startBoss, workServerOperations } from './jobs.ts'
+import { OPERATION_HEARTBEAT_SECONDS, PgBossJobs, startBoss, workServerOperations } from './jobs.ts'
 
 // Needs a real Postgres: DATABASE_URL=postgres://… bun test
 const base = process.env.DATABASE_URL
@@ -50,9 +51,9 @@ function gate() {
   return { opened, open }
 }
 
-async function until(check: () => boolean, ms = 5000): Promise<void> {
+async function until(check: () => boolean | Promise<boolean>, ms = 5000): Promise<void> {
   const deadline = Date.now() + ms
-  while (!check()) {
+  while (!(await check())) {
     if (Date.now() > deadline) throw new Error('timed out')
     await Bun.sleep(20)
   }
@@ -226,6 +227,81 @@ describe.skipIf(!base)('server operation lanes at rest', () => {
       await database.drop()
     }
   }, 30_000)
+})
+
+describe.skipIf(!base)('server operation lanes when a claim goes', () => {
+  test('an operation whose claim is lost while it runs on leaves its lane working the rest', async () => {
+    const database = await freshDatabase()
+    const boss = await startBoss(database.url, { retryDelaySeconds: 0 })
+    const pool = createPool(database.url, 2)
+    try {
+      const stuck = randomUUID()
+      const finished: string[] = []
+      await workServerOperations(
+        boss,
+        async ({ operationId }) => {
+          // Its claim goes (an admin settles it, or its heartbeat is judged lapsed), and it runs on.
+          if (operationId === stuck) await new Promise(() => {})
+          finished.push(operationId)
+        },
+        { concurrency: 2, wakeConcurrency: 1 },
+        0.5,
+      )
+      const jobs = new PgBossJobs(boss)
+      const send = (operationId: string) =>
+        createDb(pool).transaction((tx) =>
+          jobs.enqueue(tx, { operationId, serverId: randomUUID(), retryLimit: 0, wakes: false }),
+        )
+      await send(stuck)
+      await until(async () => (await boss.findJobs('server-ops', { id: stuck }))[0]?.state === 'active')
+      await boss.fail('server-ops', { id: stuck, retryCount: 0 }, { message: 'settled elsewhere' })
+      // The worker's next heartbeat finds the claim gone, and aborts the job's signal.
+      await Bun.sleep(OPERATION_HEARTBEAT_SECONDS * 600)
+      const after = [randomUUID(), randomUUID()]
+      for (const id of after) await send(id)
+      await until(() => after.every((id) => finished.includes(id)), 10_000)
+    } finally {
+      await boss.stop({ graceful: false })
+      await pool.end()
+      await database.drop()
+    }
+  }, 40_000)
+
+  test('an operation taken back from a worker that stopped runs again within seconds', async () => {
+    const database = await freshDatabase()
+    const boss = await startBoss(database.url, { retryDelaySeconds: 1 })
+    const pool = createPool(database.url, 2)
+    try {
+      const jobs = new PgBossJobs(boss)
+      const id = randomUUID()
+      await createDb(pool).transaction((tx) =>
+        jobs.enqueue(tx, { operationId: id, serverId: randomUUID(), retryLimit: 2, wakes: true }),
+      )
+      // Claimed by a worker that went away: its heartbeat stopped long ago.
+      await boss.fetch('server-ops')
+      await createDb(pool).execute(
+        sql`update pgboss.job set heartbeat_on = now() - interval '1 minute' where id = ${id}`,
+      )
+      const runs: Array<{ retryCount: number; at: number }> = []
+      await workServerOperations(
+        boss,
+        async ({ retryCount }) => {
+          runs.push({ retryCount, at: Date.now() })
+        },
+        { concurrency: 2, wakeConcurrency: 1 },
+      )
+      const taken = Date.now()
+      await jobs.takeBack([id])
+      await until(() => runs.length === 1, 10_000)
+      // Its retry is due a second or two on; the workers are told then, not at their next backstop.
+      expect(runs[0]?.retryCount).toBe(1)
+      expect((runs[0]?.at ?? 0) - taken).toBeLessThan(6000)
+    } finally {
+      await boss.stop({ graceful: false })
+      await pool.end()
+      await database.drop()
+    }
+  }, 40_000)
 })
 
 describe.skipIf(!base)('a server operation refused for now', () => {

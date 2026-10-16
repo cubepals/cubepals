@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { HOUR_S, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
-import type { Tx } from '@blockly/db'
+import { POOL_IDLE_MS, type Tx } from '@blockly/db'
 import { sql } from 'drizzle-orm'
 import { fromDrizzle, type Job, PgBoss, type QueueOptions } from 'pg-boss'
+import { notifyQueue } from 'pg-boss/dist/plans.js'
 import type {
   BlockedOperation,
   CurationJob,
@@ -16,6 +17,7 @@ import type {
   ScheduledJob,
 } from '../../app/ports/jobs.ts'
 import { Lanes } from './lanes.ts'
+import { everyMinute } from './ticker.ts'
 
 /** The Postgres schema pg-boss keeps its tables in. */
 const SCHEMA = 'pgboss'
@@ -87,9 +89,6 @@ const SCHEDULED_BACKSTOP_SECONDS = 5 * MINUTE_S
  *   one that never comes back.
  * - `maintenanceIntervalSeconds`: deleting finished jobs past their queue's `deleteAfterSeconds`,
  *   hourly rather than daily, so the scheduled jobs' hour is kept to about that.
- * - `cronMonitorIntervalSeconds`: each pass reads every schedule. 45 s, the most pg-boss allows,
- *   still sends each schedule once a minute: a pass sends what came due in the last minute.
- * - `cronWorkerIntervalSeconds`: the internal queue a pass puts what is due in, asked every 10 s.
  * - `flowIntervalSeconds`: resolving jobs that wait on others (flows), whose every pass reads every
  *   queue's definition; it ran every 5 s. No job here waits on another, so an hour.
  * - `notifyHeartbeatIntervalMs`: checking the listening connection is alive, every 30 s rather
@@ -101,12 +100,19 @@ const UPKEEP = {
   superviseIntervalSeconds: 5 * MINUTE_S,
   monitorIntervalSeconds: 5 * MINUTE_S,
   maintenanceIntervalSeconds: HOUR_S,
-  cronMonitorIntervalSeconds: 45,
-  cronWorkerIntervalSeconds: 10,
   flowIntervalSeconds: HOUR_S,
   notifyHeartbeatIntervalMs: 30 * SECOND_MS,
   registerInstance: false,
 } as const
+
+/** How long after a retry comes due its workers are woken: past a moment's difference in clocks. */
+const RETRY_DUE_MARGIN_MS = SECOND_MS / 4
+
+/**
+ * pg-boss hands its options to the pool it opens (`new pg.Pool(this.config)` in its db.js), which
+ * its types don't say: its connections are kept as the query pool's are (`POOL_IDLE_MS`).
+ */
+const KEPT_CONNECTIONS = { idleTimeoutMillis: POOL_IDLE_MS }
 
 /** How long a scheduled job is kept once it has run: an hour of them, for looking into a sweep. */
 const SCHEDULED_KEPT_SECONDS = HOUR_S
@@ -129,7 +135,7 @@ async function ensureQueue(
 /**
  * Tests shorten the wait between an operation's attempts, and some the deadline of each; everything
  * else keeps the defaults. Only a process that works the queues keeps them (`maintains`): expiring,
- * archiving and sending what the schedules owe. A process that only sends jobs leaves that to it,
+ * deleting, and listening for jobs sent. A process that only sends jobs leaves that to it,
  * rather than every process repeating the same upkeep against the one database.
  */
 export async function startBoss(
@@ -146,12 +152,15 @@ export async function startBoss(
   const boss = new PgBoss({
     connectionString,
     max: options.poolMax ?? 10,
+    ...KEPT_CONNECTIONS,
     schema: SCHEMA,
     application_name: 'blockly-jobs',
     supervise: maintains,
-    schedule: maintains,
-    // One connection of its own listens, and wakes this process's workers as each job is sent.
-    useListenNotify: true,
+    // Scheduled jobs are sent as their minutes come, by the workers (ticker.ts).
+    schedule: false,
+    // Where queues are worked, one connection of its own listens, and wakes this process's workers
+    // as each job is sent. A process that only sends jobs still tells: the NOTIFY rides the send.
+    useListenNotify: maintains,
     ...UPKEEP,
   })
   boss.on('error', (error: unknown) => console.error('pg-boss', error))
@@ -316,6 +325,7 @@ export class PgBossJobs implements JobQueue {
           { message: 'cut off: its worker stopped' },
         )
         ;[job] = await this.#boss.findJobs(SERVER_OPS, { id })
+        if (job?.state === 'retry') this.#wakeAt(job.startAfter)
       }
       if (job?.state === 'failed' && CUT_OFF.has(failureOf(job.output))) lastAttempts.push(id)
     }
@@ -324,10 +334,29 @@ export class PgBossJobs implements JobQueue {
 
   async retryBlocked(operationId: string): Promise<void> {
     await this.#boss.retry(SERVER_OPS, operationId)
+    await this.#wake()
   }
 
+  /** Its server's queue moves again: what waited behind it is ready. */
   async discardBlocked(operationId: string): Promise<void> {
     await this.#boss.deleteJob(SERVER_OPS, operationId)
+    await this.#wake()
+  }
+
+  /**
+   * Tells every worker on server operations, in whichever process, that a job is ready, as pg-boss
+   * does when one is sent: it doesn't when one is retried, failed into a retry or deleted. The
+   * statement is pg-boss's own (`notifyQueue`), so the channel is the one its listeners hear.
+   */
+  async #wake(): Promise<void> {
+    await this.#boss.getDb().executeSql(notifyQueue(SCHEMA, SERVER_OPS))
+  }
+
+  /** The same, once a retry comes due, a little after, as the database's clock and this one may differ. */
+  #wakeAt(due: Date): void {
+    const wake = () =>
+      this.#wake().catch((error: unknown) => console.error('pg-boss: workers not woken', error))
+    setTimeout(wake, Math.max(0, due.getTime() - Date.now()) + RETRY_DUE_MARGIN_MS).unref()
   }
 }
 
@@ -548,12 +577,12 @@ const CRON: Record<ScheduledJob, string> = {
 }
 
 /**
- * Periodic work. Each runs as a singleton, so two workers never sweep at once. Each job the
- * schedule sends tells its worker at once (LISTEN/NOTIFY), which otherwise asks every ten seconds
- * only where nothing can tell it. A job that has run is kept an hour.
+ * Periodic work. Each runs as a singleton, so two workers never sweep at once. Each is sent as its
+ * minute comes (`ticker.ts`), which tells its worker at once (LISTEN/NOTIFY); the worker otherwise
+ * asks every ten seconds only where nothing can tell it. A job that has run is kept an hour.
  */
 export async function workSchedules(boss: PgBoss, schedules: readonly Schedule[]): Promise<void> {
-  for (const [name, cron] of Object.entries(CRON) as Array<[ScheduledJob, string]>) {
+  for (const name of Object.keys(CRON) as ScheduledJob[]) {
     const schedule = schedules.find((s) => s.job === name)
     if (schedule === undefined) throw new Error(`Nothing runs the scheduled job ${name}`)
     await ensureQueue(
@@ -562,7 +591,8 @@ export async function workSchedules(boss: PgBoss, schedules: readonly Schedule[]
       { policy: 'singleton', retryLimit: 0, expireInSeconds: 300 },
       { deleteAfterSeconds: SCHEDULED_KEPT_SECONDS },
     )
-    await boss.schedule(name, cron)
+    // pg-boss's own scheduler sent them before, from what it kept of each: that goes.
+    await boss.unschedule(name)
     const asks = {
       batchSize: 1,
       pollingIntervalSeconds: 10,
@@ -577,6 +607,8 @@ export async function workSchedules(boss: PgBoss, schedules: readonly Schedule[]
       if (count > 0) console.warn(`${name}: ${schedule.says(count)}`)
     })
   }
+  const stop = everyMinute(boss, Object.entries(CRON))
+  boss.once('stopped', stop)
 }
 
 /**
