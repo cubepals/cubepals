@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { fileURLToPath } from 'node:url'
-import { MINUTE_MS } from '@blockly/contracts/durations'
+import { SECOND_MS } from '@blockly/contracts/durations'
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres'
 import pg from 'pg'
 import * as schema from './schema.ts'
@@ -19,10 +19,13 @@ export type Queryable = Db | Tx
 
 /**
  * How long a connection may rest in a pool before it is closed. node-postgres's default, 10 s,
- * closed and reopened connections all day between the control plane's passes, and each opening
- * costs a TLS handshake and a login, several kilobytes from the database each time.
+ * closed and reopened connections between the control plane's once-a-minute passes, and each
+ * opening costs a TLS handshake and a login, several kilobytes from the database each time. A
+ * little over a minute keeps the connections those passes use, and no longer: behind a
+ * session-mode pooler each one held is a server connection, and a burst's connections held for
+ * minutes after it would crowd out migrations, the dump and operators' sessions.
  */
-export const POOL_IDLE_MS = 10 * MINUTE_MS
+export const POOL_IDLE_MS = 70 * SECOND_MS
 
 /**
  * `max` is how many connections the pool may hold at once. Behind a session-mode pooler each one
