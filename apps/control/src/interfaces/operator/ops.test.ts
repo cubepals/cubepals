@@ -162,6 +162,11 @@ function recordingApi(calls: Array<[string, ...unknown[]]>) {
       view: record('flySuspend.view', { on: true, source: 'default', default: true }),
       set: record('flySuspend.set'),
     } as unknown as OpsApiOptions['flySuspend'],
+    jarChecks: {
+      list: record('jarChecks.list', [{ sha512: JAR, state: 'quarantined' }]),
+      refresh: record('jarChecks.refresh', 1),
+      release: record('jarChecks.release'),
+    } as unknown as OpsApiOptions['jarChecks'],
     upkeep: {
       rest: record('upkeep.rest'),
       purge: record('upkeep.purge'),
@@ -489,6 +494,21 @@ describe('the operators’ API: players, Browse and the platform', () => {
     expect(await (await call('POST', '/platform/catalog-refresh')).json()).toEqual({ changed: 2 })
     expect(named('platform.refreshCatalog')).toEqual([['platform.refreshCatalog', ADA]])
   })
+})
+
+test('lists uploaded jars’ checks, fetches the lists now, and releases a jar by its sha512', async () => {
+  expect(await (await call('GET', '/jar-checks?state=quarantined')).json()).toEqual({
+    checks: [{ sha512: JAR, state: 'quarantined' }],
+  })
+  expect((await call('GET', '/jar-checks?state=gone')).status).toBe(400)
+  expect(await (await call('POST', '/jar-checks/refresh')).json()).toEqual({ quarantined: 1 })
+  expect((await call('POST', `/jar-checks/${JAR}/release`)).status).toBe(200)
+  expect((await call('POST', '/jar-checks/not-a-digest/release')).status).toBe(400)
+  expect(calls.filter(([name]) => name.startsWith('jarChecks.'))).toEqual([
+    ['jarChecks.list', ['quarantined']],
+    ['jarChecks.refresh'],
+    ['jarChecks.release', ADA, JAR],
+  ])
 })
 
 test('the mount keeps the control plane’s platform switches when the web’s services ride along', async () => {

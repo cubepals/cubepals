@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { MINUTE_S } from '@blockly/contracts/durations'
 import { type Db, schema } from '@blockly/db'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
@@ -71,6 +71,8 @@ import {
   insertPendingUpload,
   loadPendingUpload,
 } from '../uploads/persistence.ts'
+import { digestsOf, quarantinedOf, refusalOf, requireInstallable } from './jar-check-records.ts'
+import type { JarChecks } from './jar-checks.ts'
 import { JarNeedsReader } from './jar-needs.ts'
 import {
   deleteModUpload,
@@ -161,9 +163,11 @@ export class ModService {
   readonly #catalogMoved: (transitions: readonly CatalogTransition[]) => Promise<void>
   readonly #builds: LoaderBuilds
   readonly #jars: JarNeedsReader
+  readonly #checks: JarChecks
 
   constructor(deps: {
     db: Db
+    jarChecks: JarChecks
     catalog: ModCatalog
     sync: CatalogSync
     revisions: RevisionService
@@ -184,6 +188,7 @@ export class ModService {
     this.#catalogMoved = deps.catalogMoved
     this.#builds = deps.loaderBuilds
     this.#jars = new JarNeedsReader({ db: deps.db, formats: deps.formats })
+    this.#checks = deps.jarChecks
   }
 
   /**
@@ -227,8 +232,9 @@ export class ModService {
 
   /**
    * The second half: the jar is read back and checked (whole, the bytes the browser hashed, a mod
-   * or plugin a server can run), copied under its hash, and recorded as the owner's upload.
-   * Uploads are never trusted, whatever they say about themselves (§15.3).
+   * or plugin a server can run, not known malware), copied under its hash, and recorded as the
+   * owner's upload, its classes queued to be read (`jar-checks.ts`). Uploads are never trusted,
+   * whatever they say about themselves (§15.3).
    */
   async finishUpload(actor: Actor, serverId: string, ticket: string): Promise<ModUploadRecord> {
     const server = authorize(actor, await findServer(this.#db, serverId))
@@ -248,9 +254,12 @@ export class ModService {
       throw new AppError('invalid_upload', 'The file didn’t arrive whole. Upload it again.')
     const link = await store.presignGet(pending.key, READ_LINK_SECONDS, 'browser')
     const bytes = await readAll(link.url, pending.sizeBytes)
-    const sha512 = createHash('sha512').update(bytes).digest('hex')
+    const digests = digestsOf(bytes)
+    const { sha512 } = digests
     if (sha512 !== pending.sha512)
       throw new AppError('invalid_upload', 'The file changed on its way here. Upload it again.')
+    const check = await this.#checks.screen(digests)
+    if (check !== null) throw new AppError('invalid_upload', refusalOf(pending.fileName, check) ?? '')
     const metadata = this.#readJar(bytes)
     // A jar the catalog publishes is judged by where the catalog says it runs, which is right more
     // often than the jar's own word (docs/modpack-system.md § Sides). An outage leaves the jar's.
@@ -265,6 +274,7 @@ export class ModService {
 
     const upload = await this.#db.transaction(async (tx) => {
       await recordStored(tx, { sha512, key, sizeBytes: bytes.length, source: 'upload' })
+      await this.#checks.start(tx, digests)
       const id =
         (await findModUpload(tx, pending.ownerId, sha512))?.id ??
         (await insertModUpload(tx, {
@@ -541,7 +551,15 @@ export class ModService {
     loader: Loader,
     change: ModChange,
   ): Promise<ModPlan> {
-    const removed = new Set(change.remove ?? [])
+    // A jar found to be malware since it was pinned leaves with this change, as with any start.
+    const malware = await quarantinedOf(
+      this.#db,
+      desired.mods.map((m) => m.artifact.sha512),
+    )
+    const removed = new Set([
+      ...(change.remove ?? []),
+      ...desired.mods.filter((m) => malware.has(m.artifact.sha512)).map(identity),
+    ])
     const uploaded = await this.#published(desired, change.addUploads ?? [])
     const current = await this.#withUploads(
       desired,
@@ -611,6 +629,7 @@ export class ModService {
     const server = await findServer(this.#db, desired.serverId)
     if (records.length !== new Set(added).size || records.some((u) => u.ownerId !== server?.ownerId))
       throw new NotFound('Upload')
+    await requireInstallable(this.#db, records)
     const found = await this.#reading(() => this.#catalog.filesByHash(records.map((u) => u.sha512)))
     const own: string[] = []
     const catalog: Array<{ projectId: string; versionId: string }> = []

@@ -74,6 +74,7 @@ import { UpstreamLoaderBuilds } from './infra/loaders/loader-builds.ts'
 import { localCheckoutPages } from './infra/local-billing/checkout-pages.ts'
 import { LocalBilling } from './infra/local-billing/local-billing.ts'
 import { SmtpMailer } from './infra/mail/smtp.ts'
+import { PublishedMalwareLists } from './infra/malware/mcantimalware.ts'
 import { RconConsole } from './infra/mc-protocol/rcon.ts'
 import { SlpProbe } from './infra/mc-protocol/slp.ts'
 import { modrinthClient } from './infra/modrinth/client.ts'
@@ -87,6 +88,7 @@ import {
   startBoss,
   workArtifactMirror,
   workCuration,
+  workJarChecks,
   workListingEligibility,
   workPackImports,
   workSchedules,
@@ -483,6 +485,7 @@ async function startWorker(
   setTimeout(() => void takeBack(), (OPERATION_HEARTBEAT_SECONDS + 1) * 1000).unref()
   await workServerOperations(boss, (attempt) => app.runner.run(attempt), operations)
   await workArtifactMirror(boss, (artifact) => app.artifacts.mirror(artifact))
+  await workJarChecks(boss, (sha512) => app.jarChecks.run(sha512))
   await workPackImports(boss, {
     run: (id) => app.packs.runImport(id),
     gaveUp: (id, error) => app.packs.importGaveUp(id, error),
@@ -499,6 +502,8 @@ async function startWorker(
   if (await app.catalog.missedRefresh()) await boss.send('catalog-refresh', {})
   // The default modpack list is checked as a worker starts too, not an hour after a deploy.
   await boss.send('pack-checks', {})
+  // The lists of known malware too: a worker starts holding uploads to them as they are now.
+  await boss.send('malware-lists', {})
   // So are the reviewed releases a deploy brought: checked now, offered once an admin says so.
   await boss.send('curation', {})
   console.warn('worker running')
@@ -568,6 +573,7 @@ function capabilitiesFor(config: DeploymentConfig, db: Db): DeploymentCapabiliti
   const billing = config.billing
   return {
     insight: insightFor(config),
+    malware: new PublishedMalwareLists(),
     archives: config.archive === null ? null : new S3ArchiveStore(config.archive),
     billing:
       billing?.provider === 'polar'

@@ -66,6 +66,8 @@ export interface ModView {
   url: string | null
   /** Taken down where it was published. */
   revoked: boolean
+  /** Found to be known malware since it was added: it comes off at the server's next start. */
+  malware: boolean
   /** It goes into the world as a datapack, and leaves plain Minecraft plain. */
   datapack: boolean
 }
@@ -180,6 +182,10 @@ export interface ModUploadView {
   inUse: boolean
   /** It would run on this server as the server is now. */
   fits: boolean
+  /** Cubepals is still checking it, and it can be added once that's done. */
+  checking: boolean
+  /** Why Cubepals won't install it, in one sentence; null when it may. */
+  refusal: string | null
 }
 
 /**

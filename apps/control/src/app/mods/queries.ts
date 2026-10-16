@@ -27,6 +27,7 @@ import type { PackService } from '../packs/service.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { ModCatalog } from '../ports/catalog.ts'
 import { findServer, loadRevision } from '../servers/persistence.ts'
+import { checksOf, quarantinedOf, refusalOf } from './jar-check-records.ts'
 import { packView } from './pack.ts'
 import { identity, type ModPlan } from './service.ts'
 import { listModUploads, type ModUploadRecord, uploadInUse } from './uploads.ts'
@@ -85,6 +86,10 @@ export class ModQueries {
     const revision = await loadRevision(this.#db, server.desiredRevisionId)
     const revoked = new Set((await revokedIn(this.#db, revision.mods)).map(identity))
     const players = new Set(forPlayers(revision.mods).map(identity))
+    const malware = await quarantinedOf(
+      this.#db,
+      revision.mods.map((m) => m.artifact.sha512),
+    )
     // A vanilla world can still be given a mod: Blockly moves it to a server type that runs one,
     // so the page offers what that type takes rather than an empty page and a decision.
     const switchesTo = revision.loader === 'vanilla' ? loaderForMods(revision.gameVersion) : null
@@ -95,7 +100,10 @@ export class ModQueries {
       gameVersion: revision.gameVersion,
       loader: revision.loader,
       switchesTo: switchesTo === null ? null : { loader: switchesTo, label: LOADER_LABELS[switchesTo] },
-      mods: revision.mods.map((mod) => modView(mod, revision.loader, revoked, this.#page(mod), players)),
+      mods: revision.mods.map((mod) => ({
+        ...modView(mod, revision.loader, revoked, this.#page(mod), players),
+        malware: malware.has(mod.artifact.sha512),
+      })),
       modpack: packView(this.#catalog, revision),
       // A catalog that can't be asked now just shows no update; the pack runs as it is.
       packUpdate: await this.#packUpdate(revision).catch(() => null),
@@ -153,20 +161,30 @@ export class ModQueries {
       (revision.loader === 'vanilla' ? loaderForMods(revision.gameVersion) : null) ?? revision.loader,
     )
     const all = await listModUploads(this.#db, server.ownerId)
+    const checks = await checksOf(
+      this.#db,
+      all.map((u) => u.sha512),
+    )
     return Promise.all(
-      all.map(async (upload) =>
-        uploadView(upload, {
+      all.map(async (upload) => {
+        const check = checks.get(upload.sha512)
+        return uploadView(upload, {
           inUse: await uploadInUse(this.#db, upload.id),
           fits:
             upload.metadata.loaders.some((l) => loaders.includes(l)) &&
             fits(upload.metadata.gameVersions, revision.gameVersion),
-        }),
-      ),
+          checking: check?.state === 'checking',
+          refusal: refusalOf(upload.fileName, check),
+        })
+      }),
     )
   }
 }
 
-function uploadView(upload: ModUploadRecord, facts: { inUse: boolean; fits: boolean }): ModUploadView {
+function uploadView(
+  upload: ModUploadRecord,
+  facts: Pick<ModUploadView, 'inUse' | 'fits' | 'checking' | 'refusal'>,
+): ModUploadView {
   return {
     id: upload.id,
     fileName: upload.fileName,
@@ -175,8 +193,7 @@ function uploadView(upload: ModUploadRecord, facts: { inUse: boolean; fits: bool
     loaders: upload.metadata.loaders,
     sizeBytes: upload.sizeBytes,
     createdAt: upload.createdAt.toISOString(),
-    inUse: facts.inUse,
-    fits: facts.fits,
+    ...facts,
   }
 }
 
@@ -198,6 +215,7 @@ function modView(
     source: 'projectId' in mod.source ? 'catalog' : 'upload',
     url: page,
     revoked: revoked.has(identity(mod)),
+    malware: false,
     datapack: installsAsDatapack(mod, loader),
   }
 }

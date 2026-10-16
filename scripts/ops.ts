@@ -56,6 +56,11 @@
  *                                                   names them: `set startsEnabled false`
  *   bun scripts/ops.ts platform fly-suspend [on|off|default]
  *   bun scripts/ops.ts platform refresh-catalog
+ *   bun scripts/ops.ts jars [quarantined|flagged|checking|clean] | jars refresh
+ *                    | jars release <sha512> --confirm <sha512>
+ *                                                   uploaded jars' malware checks: what each matched
+ *                                                   or does, the lists fetched now, or a jar that
+ *                                                   isn't malware let run again
  *   bun scripts/ops.ts health [--window 24h|7d|30d] [--json]
  *                                                   servers now, how long work takes, what failed,
  *                                                   the slowest, and the money
@@ -369,6 +374,17 @@ switch (command) {
     else fail('platform takes set, fly-suspend or refresh-catalog')
     break
   }
+  case 'jars': {
+    const [action, sha512] = positional
+    if (action === 'refresh') show(await api('POST', '/jar-checks/refresh'))
+    else if (action === 'release') {
+      if (sha512 === undefined || !/^[0-9a-f]{128}$/.test(sha512)) fail('jars release takes a jar’s sha512')
+      if (option('confirm') !== sha512)
+        fail('jars release lets it run on every server again: confirm with --confirm <its sha512>')
+      show(await api('POST', `/jar-checks/${sha512}/release`))
+    } else show(await api('GET', `/jar-checks${action === undefined ? '' : `?state=${encoded(action)}`}`))
+    break
+  }
   case 'health': {
     const window = (option('window') ?? '24h') as HealthWindow
     if (!['24h', '7d', '30d'].includes(window)) fail('--window is 24h, 7d or 30d')
@@ -401,7 +417,7 @@ switch (command) {
   }
   default:
     say(
-      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|trash|untrash|rest|purge|console|identity|message|mods|players|whitelist|operator|helper|ban|pardon|moderation|listing|official|allowlist|platform|health|operations|operation',
+      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|trash|untrash|rest|purge|console|identity|message|mods|players|whitelist|operator|helper|ban|pardon|moderation|listing|official|allowlist|platform|jars|health|operations|operation',
     )
     say('See the top of scripts/ops.ts, and docs/production.md.')
     if (command !== 'help') process.exit(1)

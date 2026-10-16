@@ -49,6 +49,8 @@ const PROVIDER_HOSTS: Record<string, RegExp> = {
   curseforge: /(^|\.)(curseforge\.com|forgecdn\.net)$/,
   mojang: /(^|\.)(minecraftservices\.com|mojang\.com|minecraft\.net)$/,
   loaders: /(^|\.)(fabricmc\.net|quiltmc\.org|papermc\.io|minecraftforge\.net|neoforged\.net)$/,
+  // MCAntiMalware's database, published in its own repository.
+  malware: /^raw\.githubusercontent\.com$/,
 }
 /**
  * Minecraft's access files and console commands (§17): minecraft/ alone speaks them. A command is

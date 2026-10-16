@@ -12,6 +12,19 @@ export interface FileFormats {
    * that isn't a whole zip is an UnreadableFile.
    */
   unzip(bytes: Uint8Array, names: readonly string[]): Record<string, string>
+  /**
+   * Each entry of a zip that `wanted` picks, as bytes, handed to `visit` and let go after; one past
+   * `maxEntryBytes` is not inflated, and is named in `skipped`. Anything that isn't a whole zip is
+   * an UnreadableFile.
+   */
+  eachZipEntry(
+    bytes: Uint8Array,
+    options: {
+      wanted(name: string): boolean
+      maxEntryBytes: number
+      visit(name: string, data: Uint8Array): void
+    },
+  ): { skipped: string[] }
   /** One text in a structured format, as plain data. Java properties come back as strings. */
   decode(format: 'json' | 'toml' | 'yaml' | 'properties', text: string): unknown
   /** A gzipped NBT file, such as a world's level.dat, as plain data. */

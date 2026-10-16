@@ -9,7 +9,8 @@
  *   bun scripts/ops-mcp.ts [--production]
  *
  * One tool for each `scripts/ops.ts` command: accounts, a server's life, its console, identity,
- * mods and players pages, Browse and its allowlist, the platform switches, and production's health.
+ * mods and players pages, Browse and its allowlist, the platform switches, uploaded jars' malware
+ * checks, and production's health.
  * Each calls the same `/ops/v1` route the command does, and answers with the API's JSON. Tools that
  * can't be undone, or take something away from a player, say so first in their description, and
  * take a `confirm` that names what they act on again (`lib/operator-inputs.ts`): nothing is called
@@ -459,6 +460,35 @@ tool('catalog_refresh', 'Refreshes the mod catalog now rather than at the next h
   'POST',
   '/platform/catalog-refresh',
 ])
+
+// ─── Uploaded jars ──────────────────────────────────────────────────────────────────────────────
+
+const sha512 = z
+  .string()
+  .regex(/^[0-9a-f]{128}$/)
+  .describe('The jar’s sha512, as jar_checks gives it')
+tool(
+  'jar_checks',
+  'Uploaded jars’ malware checks: quarantined, flagged and unread jars unless a state is named, each with what it matched or what its code does, and who uploaded it.',
+  { state: z.enum(['quarantined', 'flagged', 'checking', 'clean']).optional() },
+  (a) => ['GET', `/jar-checks${query({ state: a.state })}`],
+  { readOnly: true },
+)
+tool(
+  'jar_checks_refresh',
+  'Fetches the lists of known malware now, and holds every upload to them.',
+  {},
+  () => ['POST', '/jar-checks/refresh'],
+)
+tool(
+  'jar_release',
+  'Lets a quarantined jar run again, on every server whose owner adds it: only for a jar found not to be malware. Its sha512 is named again as confirm.',
+  { sha512, confirm: sha512.describe('The same sha512 again, to confirm') },
+  (a) => {
+    if (a.confirm !== a.sha512) throw new Error('Not done: confirm is not the jar’s sha512.')
+    return ['POST', `/jar-checks/${a.sha512}/release`]
+  },
+)
 
 // ─── Health ─────────────────────────────────────────────────────────────────────────────────────
 

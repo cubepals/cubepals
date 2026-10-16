@@ -11,6 +11,7 @@ import type { ServerRevision } from '../../domain/revision/revision.ts'
 import { diskName } from '../../minecraft/jars.ts'
 import { starterOf, startersBySha512 } from '../../minecraft/starter.ts'
 import { revokedIn } from '../catalog/persistence.ts'
+import { quarantinedOf } from '../mods/jar-check-records.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { Locks } from '../ports/locks.ts'
 import type { ArchiveStore } from '../ports/optional.ts'
@@ -206,6 +207,8 @@ export class ArtifactService {
    */
   async locate(serverId: string, sha512: string, token: string): Promise<LocatedArtifact> {
     this.#authorize(serverId, token)
+    // Malware is handed to no server, whatever pins it (`mods/jar-checks.ts`).
+    if ((await quarantinedOf(this.#db, [sha512])).size > 0) throw new ArtifactNotFound()
     const found = await pinnedBy(this.#db, serverId, sha512)
     if (found === null) return this.#starter(serverId, sha512)
     const pinned = found

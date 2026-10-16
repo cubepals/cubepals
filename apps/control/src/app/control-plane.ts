@@ -25,6 +25,7 @@ import { GuestbookService } from './guestbook/service.ts'
 import { InsightService } from './insight/service.ts'
 import { ListingQueries } from './listings/queries.ts'
 import { ListingService } from './listings/service.ts'
+import { JarChecks } from './mods/jar-checks.ts'
 import { ModQueries } from './mods/queries.ts'
 import { ModService } from './mods/service.ts'
 import { BootSequence, type BootTimeouts } from './operations/boot.ts'
@@ -195,16 +196,14 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     mailer: ports.mailer,
     webOrigin: settings.webOrigin,
   })
+  const jarChecks = new JarChecks({ ...ports, webOrigin: settings.webOrigin })
   const mods = new ModService({
-    db,
-    catalog: ports.catalog,
+    ...ports,
+    jarChecks,
     sync: catalog,
     revisions,
     policy,
-    capabilities: ports.capabilities,
-    formats: ports.formats,
     catalogMoved: (moved) => listings.catalogMoved(moved),
-    loaderBuilds: ports.loaderBuilds,
   })
   const contents = new PackContents({ db, formats: ports.formats, catalog: ports.catalog })
   const packs = new PackService({
@@ -364,6 +363,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     revisions,
     catalog,
     mods,
+    jarChecks,
     modQueries: new ModQueries({ db, policy, catalog: ports.catalog, packs, contents, curation }),
     queries,
     setups,

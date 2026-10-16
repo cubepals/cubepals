@@ -8,7 +8,7 @@ import type { ModChangeInput, ModsView, ModView, ServerView } from '@blockly/con
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, ExternalLink, Plus, RefreshCw, Upload } from 'lucide-react'
 import Image from 'next/image'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
 import { useDebounced } from '../../../../../lib/hooks'
 import { bytes, datapacksSaid, loaderLabel, presentConflict, presentPlan } from '../../../../../lib/present'
@@ -315,6 +315,7 @@ function Installed({
                 {mod.datapack && <Badge tone="neutral">Datapack</Badge>}
                 {mod.environment === 'both' && <Badge tone="info">For players too</Badge>}
                 {mod.revoked && <Badge tone="danger">Taken down</Badge>}
+                {mod.malware && <Badge tone="danger">Malware</Badge>}
               </span>
             }
             description={describe(mod)}
@@ -351,6 +352,7 @@ function Installed({
 }
 
 function describe(mod: ModView): string {
+  if (mod.malware) return 'It matches known malware, so Cubepals leaves it off whenever the server starts.'
   if (mod.origin === 'dependency') return `Needed by ${mod.requiredBy.join(', ')}.`
   if (mod.source === 'upload') return 'Your upload.'
   return 'You added it.'
@@ -497,7 +499,13 @@ function Uploads({
 }) {
   const trpc = useTRPC()
   const queries = useQueryClient()
-  const uploads = useQuery(trpc.mods.uploads.queryOptions({ serverId: view.id }))
+  // An upload is read for malware after it arrives; the list is asked again until that's done.
+  const uploads = useQuery(
+    trpc.mods.uploads.queryOptions(
+      { serverId: view.id },
+      { refetchInterval: (query) => (query.state.data?.some((u) => u.checking) ? 2000 : false) },
+    ),
+  )
   const begin = useMutation(trpc.mods.beginUpload.mutationOptions())
   const finish = useMutation(trpc.mods.finishUpload.mutationOptions())
   const refresh = () =>
@@ -505,6 +513,8 @@ function Uploads({
   const remove = useMutation(trpc.mods.deleteUpload.mutationOptions({ onSuccess: refresh }))
   const [sending, setSending] = useState<{ name: string; stage: string; done: number } | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
+  // The upload just sent, offered to add once Cubepals has checked it.
+  const [waiting, setWaiting] = useState<{ uploadId: string; name: string } | null>(null)
   const allowed = changeable(view)
   const noun = list.kind === 'plugins' ? 'plugin' : 'mod'
   const installed = new Set(list.mods.map((m) => m.id))
@@ -529,7 +539,7 @@ function Uploads({
         uploadId = (await finish.mutateAsync({ serverId: view.id, ticket: start.ticket })).uploadId
       } else uploadId = start.uploadId
       await refresh()
-      onChange({ title: `Add ${file.name}?`, change: { addUploads: [uploadId] } })
+      setWaiting({ uploadId, name: file.name })
     } catch (error) {
       setFailure(messageOf(error))
     } finally {
@@ -537,11 +547,19 @@ function Uploads({
     }
   }
 
+  useEffect(() => {
+    const sent = waiting === null ? undefined : uploads.data?.find((u) => u.id === waiting.uploadId)
+    if (waiting === null || sent === undefined || sent.checking) return
+    setWaiting(null)
+    if (sent.refusal !== null) setFailure(sent.refusal)
+    else onChange({ title: `Add ${waiting.name}?`, change: { addUploads: [sent.id] } })
+  }, [waiting, uploads.data, onChange])
+
   if (!list.uploads.available && list.uploads.code === 'deployment_unsupported') return null
   return (
     <FormSection
       title={`Your own ${noun}s`}
-      description={`Upload a ${noun} you have as a .jar. Cubepals checks it runs on servers; it doesn't add what it needs, so add those from the search above.`}
+      description={`Upload a ${noun} you have as a .jar. Cubepals checks it runs on servers and isn't known malware; it doesn't add what it needs, so add those from the search above.`}
       actions={
         <FileButton
           accept=".jar,application/java-archive"
@@ -562,6 +580,7 @@ function Uploads({
           <ProgressBar value={sending.done} label={`Uploading ${sending.name}`} />
         </div>
       )}
+      {waiting && <span className="type-body-sm">{waiting.name}: Checking…</span>}
       {failure && <Note tone="danger">{failure}</Note>}
       {remove.isError && <Note tone="danger">{messageOf(remove.error)}</Note>}
       {uploads.isError && <Note tone="danger">{messageOf(uploads.error)}</Note>}
@@ -580,9 +599,14 @@ function Uploads({
                 {upload.version}
               </span>
               {!upload.fits && <Badge tone="outline">For another version or server type</Badge>}
+              {upload.checking && <Badge tone="neutral">Checking…</Badge>}
             </span>
           }
-          description={[upload.fileName, bytes(upload.sizeBytes)].filter(Boolean).join(' · ')}
+          description={
+            upload.refusal !== null && !upload.checking
+              ? upload.refusal
+              : [upload.fileName, bytes(upload.sizeBytes)].filter(Boolean).join(' · ')
+          }
           control={
             <div className="bk-row" style={{ gap: 'var(--space-8)' }}>
               {!upload.inUse && (
@@ -602,7 +626,7 @@ function Uploads({
                   variant="outline"
                   size="sm"
                   icon={<Plus {...ICON} aria-hidden />}
-                  disabled={!allowed.ok || !upload.fits}
+                  disabled={!allowed.ok || !upload.fits || upload.refusal !== null}
                   onClick={() =>
                     onChange({ title: `Add ${upload.name}?`, change: { addUploads: [upload.id] } })
                   }

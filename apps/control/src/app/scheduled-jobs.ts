@@ -92,6 +92,11 @@ export function scheduledJobs(
       },
     },
     {
+      job: 'malware-lists',
+      run: () => app.jarChecks.refresh(),
+      says: (n) => `quarantined ${n} uploaded jars a list now names`,
+    },
+    {
       job: 'pack-checks',
       run: () => app.setups.checkBrowsed(),
       says: (n) => `checked ${n} packs of the default list`,

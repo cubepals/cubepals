@@ -33,6 +33,67 @@ export const pluginJar = (name: string, java: number): Uint8Array =>
     [`net/example/${name}/Plugin.class`]: new Uint8Array([0xca, 0xfe, 0xba, 0xbe, 0, 0, 0, java + 44]),
   })
 
+/**
+ * A class file holding what a test needs in its constant pool: its own name, the classes and
+ * members (`owner.name`) it refers to, and its string constants. It has no methods: what a check
+ * reads is the pool.
+ */
+export function classFile(spec: {
+  name: string
+  classes?: readonly string[]
+  members?: readonly string[]
+  strings?: readonly string[]
+}): Uint8Array {
+  const pool: number[][] = []
+  const add = (entry: number[]) => pool.push(entry)
+  const utf8 = (text: string) => {
+    const bytes = strToU8(text)
+    add([1, bytes.length >> 8, bytes.length & 0xff, ...bytes])
+    return pool.length
+  }
+  const u2 = (n: number) => [n >> 8, n & 0xff]
+  const classOf = (name: string) => {
+    const at = utf8(name)
+    add([7, ...u2(at)])
+    return pool.length
+  }
+  const self = classOf(spec.name)
+  const object = classOf('java/lang/Object')
+  for (const name of spec.classes ?? []) classOf(name)
+  for (const text of spec.strings ?? []) add([8, ...u2(utf8(text))])
+  for (const member of spec.members ?? []) {
+    const [owner = '', name = ''] = member.split('.')
+    const ownerAt = classOf(owner)
+    const nameAt = utf8(name)
+    const typeAt = utf8('()V')
+    add([12, ...u2(nameAt), ...u2(typeAt)])
+    add([10, ...u2(ownerAt), ...u2(pool.length)])
+  }
+  return new Uint8Array([
+    0xca,
+    0xfe,
+    0xba,
+    0xbe,
+    0,
+    0,
+    0,
+    65,
+    ...u2(pool.length + 1),
+    ...pool.flat(),
+    ...u2(0x21),
+    ...u2(self),
+    ...u2(object),
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ])
+}
+
 /** A zip holding the given text files: a jar with whatever metadata a test needs. */
 export const zipOf = (files: Record<string, string>): Uint8Array =>
   zipSync(Object.fromEntries(Object.entries(files).map(([name, text]) => [name, strToU8(text)])))

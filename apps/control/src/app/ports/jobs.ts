@@ -21,6 +21,7 @@ export type ScheduledJob =
   | 'store-sweep'
   | 'retention-sweep'
   | 'catalog-refresh'
+  | 'malware-lists'
   | 'pack-checks'
   | 'curation'
   | 'backup-schedule'
@@ -99,6 +100,11 @@ export interface JobQueue {
    * while one is queued or running asks for nothing more.
    */
   enqueueMirror(tx: Tx, artifact: MirrorJob): Promise<void>
+  /**
+   * `jar-check`: an uploaded jar read for malware, off the request that sent it. One job per
+   * bytes: asking again while one is queued or running asks for nothing more.
+   */
+  enqueueJarCheck(tx: Tx, sha512: string): Promise<void>
   /** `pack-import`: an uploaded pack read and built, once, off the request that sent it. */
   enqueuePackImport(tx: Tx, importId: string): Promise<void>
   /** `world-download`: an archive's world copied for its owner to download, once, on a worker. */
