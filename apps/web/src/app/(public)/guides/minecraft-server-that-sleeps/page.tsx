@@ -154,7 +154,7 @@ export default async function Guide() {
           {
             question: 'Does it work on Bedrock?',
             answer:
-              'Not on Cubepals: its servers are for Java Edition, so a friend on a phone or a console can’t join. Sleeping Server Starter has an option for Bedrock if you host your own.',
+              'Not yet. Cubepals servers are for Java Edition, so a friend on a phone or a console can’t join. Bedrock support is coming soon, so friends on phones and tablets can join too. Sleeping Server Starter has an option for Bedrock if you host your own.',
           },
           {
             question: 'Does sleeping lose anything?',

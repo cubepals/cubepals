@@ -107,7 +107,7 @@ export default function Guide() {
           {
             question: 'Can my friends on Bedrock join?',
             answer:
-              'Not on a Java server. Java Edition and Bedrock Edition don’t play together, so a friend on a phone or a console can’t join.',
+              'Not yet. Java Edition and Bedrock Edition don’t play together, so a friend on a phone or a console can’t join a Java server. Bedrock support is coming soon, so friends on phones and tablets can join too.',
           },
           {
             question: 'Do we all need the same version?',

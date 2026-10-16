@@ -41,6 +41,8 @@ export function Phone({ create, signedIn, plans, getPlan }: Landed) {
             Start with a free trial, no card needed.
             <br />
             For Minecraft: Java Edition.
+            <br />
+            Bedrock is coming soon.
           </p>
         </div>
         <p className={styles.line} {...seenMark('the-address')}>

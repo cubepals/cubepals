@@ -102,7 +102,7 @@ export function Night({ create, signedIn }: { create: string; signedIn: boolean 
           <p>
             Start with a free trial, no card needed.
             <br />
-            For Minecraft: Java Edition.
+            For Minecraft: Java Edition. Bedrock is coming soon.
           </p>
         </div>
       </div>

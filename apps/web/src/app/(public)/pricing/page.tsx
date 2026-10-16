@@ -135,7 +135,8 @@ export default async function PricingPage() {
           </Question>
         )}
         <Question which="bedrock" title="Bedrock or consoles?">
-          Not yet. Cubepals runs Minecraft: Java Edition.
+          Not yet. Cubepals runs Minecraft: Java Edition. Bedrock support is coming soon, so friends on phones
+          and tablets can join too.
         </Question>
         <Question which="modpacks" title="Which modpacks?">
           Modrinth packs, from a search or a link. A pack from CurseForge or a launcher runs from its file:

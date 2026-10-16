@@ -153,7 +153,7 @@ export default async function Guide() {
           {
             question: 'Does it work on Bedrock or consoles?',
             answer:
-              'Not yet. Cubepals runs Minecraft: Java Edition, and Bedrock players can’t join a Java server.',
+              'Not yet. Cubepals runs Minecraft: Java Edition, and Bedrock players can’t join a Java server. Bedrock support is coming soon, so friends on phones and tablets can join too.',
           },
           {
             question: 'Where do I start?',
