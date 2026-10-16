@@ -74,8 +74,12 @@ const HEAVY_RETRIES = 1
 const BACKSTOP_SECONDS = 30
 /** The same, for queues that run in the background: imports, copies, checks, listings. */
 const BACKGROUND_BACKSTOP_SECONDS = MINUTE_S
-/** The same, for the scheduled jobs: each is sent by the schedule, which always tells. */
-const SCHEDULED_BACKSTOP_SECONDS = 5 * MINUTE_S
+/**
+ * The same, for the scheduled jobs: each is sent by the ticker, which always tells, and a
+ * listener that reconnects has every worker ask at once for what it missed. So this only
+ * catches a word lost some other way.
+ */
+const SCHEDULED_BACKSTOP_SECONDS = 15 * MINUTE_S
 
 /**
  * pg-boss's own upkeep, at the pace its users need rather than its defaults (pg-boss 12.36,
@@ -166,6 +170,9 @@ export async function startBoss(
     ...UPKEEP,
   })
   boss.on('error', (error: unknown) => console.error('pg-boss', error))
+  // A listener that can't be opened is only a warning to pg-boss, whose workers then ask at their
+  // `pollingIntervalSeconds` until the process restarts: said here, or nothing would say it.
+  boss.on('warning', (warning: { message?: string }) => console.warn('pg-boss', warning.message ?? warning))
   await boss.start()
   await ensureQueue(
     boss,
