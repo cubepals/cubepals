@@ -6,13 +6,15 @@
  * The Arcade template: Paper on the newest release the moderation tools run on, with them, the
  * chat filter and the Grim anticheat, and ViaVersion when that release isn't the newest; offered
  * with Plus; and a server of it starting on the Arcade's world, fetched through its own link,
- * with the games' datapack and the moderation files, the datapack following the server onto a fresh world.
+ * with the games' datapack and the moderation files, the datapack following the server onto a fresh world,
+ * and Cubepals' resource pack offered only where Cubepals runs it itself.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { TEMPLATE_CARDS } from '@blockly/contracts'
 import { DAY_MS } from '@blockly/contracts/durations'
+import { schema } from '@blockly/db'
 import { onLevel } from '../../domain/revision/carried.ts'
 import { ARCADE_WORLD } from '../../minecraft/arcade/maps.ts'
 import { ARCADE_FILES } from '../../minecraft/arcade.ts'
@@ -30,14 +32,15 @@ import { offeredVersions } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
+import type { Actor } from '../actor.ts'
 import { recordStored } from '../artifacts/persistence.ts'
 import { CHAT_FILTER } from '../moderation/service.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import { listWorlds } from '../worlds/persistence.ts'
 
 let h: Harness
-const cdn = new Cdn()
-const store = new MemoryStore()
+let cdn: Cdn
+let store: MemoryStore
 
 /** A Paper plugin on the catalog, under its real project id, at one version for these releases. */
 const plugin = (projectId: string, name: string, gameVersions: string[], versionId: string) =>
@@ -68,27 +71,33 @@ const plugin = (projectId: string, name: string, gameVersions: string[], version
     ],
   )
 
-describe.skipIf(!hasDatabase)('arcade', () => {
-  beforeAll(async () => {
-    await cdn.start()
-    await store.start()
-    h = await startHarness({ capabilities: { archives: store, billing: null } })
-    // As Modrinth listed them on 2026-10-14: ChatSentinel 2.0.3 and Grim 2.3.74 stop at 26.2,
-    // LibertyBans and LuckPerms run on 26.3 too, and ViaVersion on every release offered.
-    plugin(LIBERTYBANS, 'LibertyBans', ['1.21.11', '26.2', '26.3'], 'libertybans-1')
-    plugin(LUCKPERMS, 'LuckPerms', ['1.21.11', '26.2', '26.3'], 'luckperms-1')
-    plugin(CHATSENTINEL, 'ChatSentinel', ['1.21.11', '26.2'], 'chatsentinel-1')
-    plugin('LJNGWSvH', 'Grim Anticheat', ['1.21.11', '26.2'], 'grim-1')
-    const offered = offeredVersions().map((version) => version.id)
-    plugin(VIAVERSION, 'ViaVersion', offered, 'viaversion-1')
-    plugin(VIABACKWARDS, 'ViaBackwards', offered, 'viabackwards-1')
-  }, 30_000)
+/** A deployment with an archive store, and the plugins the Arcade brings on its catalog. */
+async function begin(): Promise<void> {
+  cdn = new Cdn()
+  store = new MemoryStore()
+  await cdn.start()
+  await store.start()
+  h = await startHarness({ capabilities: { archives: store, billing: null } })
+  // As Modrinth listed them on 2026-10-14: ChatSentinel 2.0.3 and Grim 2.3.74 stop at 26.2,
+  // LibertyBans and LuckPerms run on 26.3 too, and ViaVersion on every release offered.
+  plugin(LIBERTYBANS, 'LibertyBans', ['1.21.11', '26.2', '26.3'], 'libertybans-1')
+  plugin(LUCKPERMS, 'LuckPerms', ['1.21.11', '26.2', '26.3'], 'luckperms-1')
+  plugin(CHATSENTINEL, 'ChatSentinel', ['1.21.11', '26.2'], 'chatsentinel-1')
+  plugin('LJNGWSvH', 'Grim Anticheat', ['1.21.11', '26.2'], 'grim-1')
+  const offered = offeredVersions().map((version) => version.id)
+  plugin(VIAVERSION, 'ViaVersion', offered, 'viaversion-1')
+  plugin(VIABACKWARDS, 'ViaBackwards', offered, 'viabackwards-1')
+}
 
-  afterAll(async () => {
-    await h.close()
-    store.close()
-    cdn.close()
-  })
+async function end(): Promise<void> {
+  await h.close()
+  store.close()
+  cdn.close()
+}
+
+describe.skipIf(!hasDatabase)('arcade', () => {
+  beforeAll(begin, 30_000)
+  afterAll(end)
 
   test("it isn't offered until its world's archive is in the store, and the store keeps it", async () => {
     const owner = await h.user('Mo', 'plus')
@@ -185,5 +194,34 @@ describe.skipIf(!hasDatabase)('arcade', () => {
     expect(readFileSync(`${volume}/world-2/datapacks/cubepals-arcade/pack.mcmeta`, 'utf8')).toContain(
       'Arcade',
     )
+  }, 30_000)
+})
+
+describe.skipIf(!hasDatabase)("Cubepals' resource pack on an Arcade", () => {
+  beforeAll(begin, 30_000)
+  afterAll(end)
+
+  test("only a server Cubepals runs itself offers Cubepals' resource pack; a player's Arcade never does", async () => {
+    const admin: Actor = { kind: 'admin', userId: (await h.user('Admin')).userId }
+    await h.db.insert(schema.platformAdmins).values({ userId: admin.userId, grantedBy: 'test' })
+    const owner = await h.user('Noor', 'plus')
+    if (ARCADE_WORLD.ref.kind !== 'stored') throw new Error('The Arcade world is kept in the store')
+    store.objects.set(ARCADE_WORLD.ref.key, Buffer.from('the arcade world'))
+    const server = await h.create(owner, { from: { kind: 'template', key: 'arcade' } })
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+    const env = async () => (await h.app.specs.desired(h.db, await h.server(server.id))).spec.env
+    // A player's server from the template: the games and labels, and no Cubepals look.
+    expect((await loadRevision(h.db, server.desiredRevisionId)).files).toEqual(
+      expect.arrayContaining([...ARCADE_FILES]),
+    )
+    expect((await env()).RESOURCE_PACK).toBeUndefined()
+    expect((await env()).RESOURCE_PACK_SHA1).toBeUndefined()
+    // Marked official, as `ops.ts official on` marks it: the pack, by its link and hash.
+    await h.app.listings.markOfficial(admin, server.id, true, 'Cubepals runs it')
+    expect((await env()).RESOURCE_PACK).toBe(h.app.specs.brandPack.url)
+    expect((await env()).RESOURCE_PACK_SHA1).toBe(h.app.specs.brandPack.sha1)
+    await h.app.listings.markOfficial(admin, server.id, false, 'Not ours any more')
+    expect((await env()).RESOURCE_PACK).toBeUndefined()
   }, 30_000)
 })

@@ -52,7 +52,10 @@ export interface RuntimeSpecInput {
   limits: PlanLimits
   /** Where the image fetches the server's icon; null when the owner picked none. */
   iconUrl: string | null
-  /** Where players' games download Cubepals' resource pack, and its SHA-1; null where none is served. */
+  /**
+   * Where players' games download Cubepals' resource pack, and its SHA-1; null where none is served,
+   * and on any server Cubepals doesn't run itself.
+   */
   brandPack: { url: string; sha1: string } | null
 }
 
