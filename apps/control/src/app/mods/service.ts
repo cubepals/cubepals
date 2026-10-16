@@ -36,14 +36,7 @@ import {
   projectTypesFor,
   serverEnvironment,
 } from '../../minecraft/mods.ts'
-import {
-  JAR_MANIFEST,
-  JAR_METADATA,
-  type JarMetadataFile,
-  jarFileName,
-  type ModMetadata,
-  modMetadata,
-} from '../../minecraft/uploads.ts'
+import { jarFileName } from '../../minecraft/uploads.ts'
 import {
   compareVersions,
   javaFor,
@@ -61,7 +54,7 @@ import { TESTED, testedOn } from '../curation/tested.ts'
 import { AppError, NotFound } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import { CatalogUnavailable, type ModCatalog } from '../ports/catalog.ts'
-import { type FileFormats, type PackArchives, UnreadableFile } from '../ports/formats.ts'
+import type { FileFormats, PackArchives } from '../ports/formats.ts'
 import type { LoaderBuilds } from '../ports/loaders.ts'
 import { loaderPin, paperPin } from '../revisions/pins.ts'
 import { type ChangeOptions, playsNoPack, type RevisionService } from '../revisions/service.ts'
@@ -76,6 +69,7 @@ import { DATAPACK_LIMITS, DatapackUploads } from './datapack-uploads.ts'
 import { digestsOf, quarantinedOf, refusalOf, requireInstallable } from './jar-check-records.ts'
 import type { JarChecks } from './jar-checks.ts'
 import { JarNeedsReader } from './jar-needs.ts'
+import { readUploadedJar } from './jar-uploads.ts'
 import {
   deleteModUpload,
   findModUpload,
@@ -273,7 +267,9 @@ export class ModService {
     if (check !== null) throw new AppError('invalid_upload', refusalOf(pending.fileName, check) ?? '')
     const { gameVersion } = await loadRevision(this.#db, server.desiredRevisionId)
     const file = { url: link.url, bytes, sha512, fileName: pending.fileName, gameVersion }
-    const jar = datapack ? null : await this.#readJar(bytes, sha512)
+    const jar = datapack
+      ? null
+      : await readUploadedJar({ formats: this.#formats, catalog: this.#catalog }, bytes, sha512)
     const { key, metadata, ...kept } =
       jar === null
         ? await this.#datapacks.keep(store, file)
@@ -318,52 +314,6 @@ export class ModService {
     if (await uploadInUse(this.#db, uploadId))
       throw new AppError('invalid_choice', 'A server still has this upload. Remove it from its mods first.')
     await deleteModUpload(this.#db, uploadId)
-  }
-
-  /**
-   * What a jar says about itself, or why a server can't run it. One the catalog publishes is judged
-   * by where the catalog says it runs, which is right more often than the jar's own word
-   * (docs/modpack-system.md § Sides). An outage leaves the jar's.
-   */
-  async #readJar(bytes: Uint8Array, sha512: string): Promise<ModMetadata> {
-    const names = [...(Object.keys(JAR_METADATA) as JarMetadataFile[]), JAR_MANIFEST]
-    let files: Record<string, string>
-    try {
-      files = this.#formats.unzip(bytes, names)
-    } catch (error) {
-      if (error instanceof UnreadableFile)
-        throw new AppError('invalid_upload', 'This file isn’t a whole jar.')
-      throw error
-    }
-    const decoded: Partial<Record<JarMetadataFile, unknown>> = {}
-    for (const [name, format] of Object.entries(JAR_METADATA) as Array<
-      [JarMetadataFile, (typeof JAR_METADATA)[JarMetadataFile]]
-    >) {
-      const text = files[name]
-      if (text === undefined) continue
-      try {
-        decoded[name] = this.#formats.decode(format, text)
-      } catch (error) {
-        if (error instanceof UnreadableFile)
-          throw new AppError('invalid_upload', `The jar’s ${name} can’t be read: ${error.message}`)
-        throw error
-      }
-    }
-    const metadata = modMetadata(decoded, files[JAR_MANIFEST])
-    if (metadata === null)
-      throw new AppError(
-        'invalid_upload',
-        'This jar isn’t a mod or plugin Cubepals can read: it has no fabric.mod.json, mods.toml or plugin.yml.',
-      )
-    const published = (await this.#catalog.filesByHash([sha512]).catch(() => null))?.get(sha512)
-    if (
-      metadata.environment === 'client' ||
-      (published !== undefined &&
-        published.version.environment !== 'unknown' &&
-        serverEnvironment(published.version.environment) === null)
-    )
-      throw new AppError('invalid_upload', `${metadata.name} only runs in players’ games, not on a server.`)
-    return metadata
   }
 
   /**
