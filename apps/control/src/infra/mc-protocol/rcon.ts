@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Socket } from 'node:net'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { LockBusy, type Locks } from '../../app/ports/locks.ts'
 import { type ConsoleTarget, ConsoleUnavailable, type ServerConsole } from '../../app/ports/minecraft.ts'
 
@@ -24,6 +25,8 @@ const AUTH = 3
 const EXEC = 2
 /** Long enough for another session's batch to finish. */
 const LOCK_WAIT_MS = 15_000
+/** Between tries at a console that refused or dropped the connection. */
+const TRY_AGAIN_MS = 500
 /** Vanilla reads each packet with one read of at most 1460 bytes; 14 of them are framing. */
 const MAX_COMMAND_BYTES = 1446
 
@@ -31,9 +34,11 @@ export interface RconTimings {
   /** Connecting, and then the password's answer: a server that accepts and never answers is hung. */
   connectMs: number
   commandMs: number
+  /** How long a console that refuses or drops the connection is tried again: one just coming up. */
+  comingUpMs: number
 }
 
-const TIMINGS: RconTimings = { connectMs: 5_000, commandMs: 10_000 }
+const TIMINGS: RconTimings = { connectMs: 5_000, commandMs: 10_000, comingUpMs: 10_000 }
 
 type Reply = { id: number; body: string }
 
@@ -43,6 +48,13 @@ class PasswordRefused extends ConsoleUnavailable {
     super('The console refused the password')
   }
 }
+/**
+ * The connection was refused, or closed or broken before an answer. Through Flycast every
+ * connection is accepted, by Fly's proxy, and closed when the machine's port doesn't take it: a
+ * console not listening yet, as just after a server comes up, reads as closed rather than refused.
+ */
+class Dropped extends ConsoleUnavailable {}
+
 type Waiter = { resolve: (reply: Reply) => void; reject: (error: Error) => void }
 
 function packet(id: number, type: number, body: string): Buffer {
@@ -69,10 +81,8 @@ class Connection {
     this.#socket = socket
     this.#timings = timings
     socket.on('data', (chunk) => this.#receive(chunk))
-    socket.on('error', (error) =>
-      this.#fail(new ConsoleUnavailable('The console connection failed', { cause: error })),
-    )
-    socket.on('close', () => this.#fail(new ConsoleUnavailable('The console connection closed')))
+    socket.on('error', (error) => this.#fail(new Dropped('The console connection failed', { cause: error })))
+    socket.on('close', () => this.#fail(new Dropped('The console connection closed')))
   }
 
   static async open(
@@ -88,7 +98,7 @@ class Connection {
       }, timings.connectMs)
       socket.once('error', (error) => {
         clearTimeout(timer)
-        reject(new ConsoleUnavailable('The console is not reachable', { cause: error }))
+        reject(new Dropped('The console is not reachable', { cause: error }))
       })
       socket.connect(endpoint.port, endpoint.host, () => {
         clearTimeout(timer)
@@ -218,10 +228,27 @@ export class RconConsole implements ServerConsole {
   }
 
   /**
+   * Signs in, trying again for a while when the connection is refused or dropped before the
+   * password's answer: nothing has run yet, and a server that just came up may not have its console
+   * listening. A console that accepts and stays silent is not tried again; it is hung.
+   */
+  async #open(target: ConsoleTarget): Promise<Connection> {
+    const deadline = Date.now() + this.#timings.comingUpMs
+    for (;;) {
+      try {
+        return await this.#signIn(target)
+      } catch (error) {
+        if (!(error instanceof Dropped) || Date.now() + TRY_AGAIN_MS > deadline) throw error
+        await sleep(TRY_AGAIN_MS)
+      }
+    }
+  }
+
+  /**
    * Signs in with each password in turn: during a key rotation a server has the old one until it
    * is applied again. Anything but a refusal ends the attempt at once.
    */
-  async #open(target: ConsoleTarget): Promise<Connection> {
+  async #signIn(target: ConsoleTarget): Promise<Connection> {
     let refused: PasswordRefused | null = null
     for (const password of target.passwords) {
       try {

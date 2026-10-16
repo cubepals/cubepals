@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { afterEach, describe, expect, test } from 'bun:test'
-import { createServer, type Server, type Socket } from 'node:net'
+import { connect, createServer, type Server, type Socket } from 'node:net'
 import type { Locks } from '../../app/ports/locks.ts'
 import { RconConsole } from './rcon.ts'
 
@@ -21,7 +21,7 @@ class LocalLocks implements Locks {
   }
 }
 
-const rcon = () => new RconConsole(new LocalLocks(), { connectMs: 300, commandMs: 300 })
+const rcon = () => new RconConsole(new LocalLocks(), { connectMs: 300, commandMs: 300, comingUpMs: 1500 })
 
 /**
  * A stand-in for vanilla's RCON: it parses one packet per read and drops the rest, splits long
@@ -66,8 +66,31 @@ function vanillaRcon(
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server)))
 }
 
+/**
+ * A stand-in for Flycast: Fly's proxy accepts every connection, and closes it when the machine's
+ * port doesn't take it. The first `closed` connections are closed so; the rest reach `console`.
+ */
+function flycast(console: Server, closed: number): Promise<Server> {
+  const address = console.address()
+  if (address === null || typeof address === 'string') throw new Error('no address')
+  let connections = 0
+  const proxy = createServer((socket) => {
+    if (connections++ < closed) return socket.end()
+    const upstream = connect(address.port, '127.0.0.1')
+    socket.pipe(upstream).pipe(socket)
+    socket.on('close', () => upstream.destroy())
+    upstream.on('close', () => socket.destroy())
+  })
+  return new Promise((resolve) => proxy.listen(0, '127.0.0.1', () => resolve(proxy)))
+}
+
 let server: Server | null = null
-afterEach(() => server?.close())
+let proxy: Server | null = null
+afterEach(() => {
+  server?.close()
+  proxy?.close()
+  proxy = null
+})
 
 const target = (s: Server, ...passwords: string[]) => {
   const address = s.address()
@@ -133,6 +156,21 @@ describe('RconConsole', () => {
     const started = Date.now()
     await expect(rcon().run(target(silent), 'list')).rejects.toThrow('The console did not answer')
     expect(Date.now() - started).toBeLessThan(2000)
+  })
+
+  test('a console that just came up and closes the first connection answers the next', async () => {
+    server = await vanillaRcon('secret', (command) => `ran ${command}`)
+    proxy = await flycast(server, 2)
+    expect(await rcon().run(target(proxy), 'seed')).toBe('ran seed')
+  })
+
+  test('a console that keeps closing the connection is given up on after a while', async () => {
+    server = await vanillaRcon('secret', (command) => `ran ${command}`)
+    proxy = await flycast(server, Number.POSITIVE_INFINITY)
+    const started = Date.now()
+    await expect(rcon().run(target(proxy), 'seed')).rejects.toThrow('The console connection closed')
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1000)
+    expect(Date.now() - started).toBeLessThan(3000)
   })
 
   test('a command too long for one packet is refused without costing the connection', async () => {
