@@ -59,7 +59,7 @@ export const NOOR: Look = {
 }
 export const WORKER: Look = { skin: 250, shirt: 225, sleeves: true, trousers: 190, shoes: 60, helmet: true }
 
-const INK = [0x18, 0x18, 0x18]
+const INK = [0x0d, 0x0d, 0x0d]
 const PAPER = [0xf8, 0xf7, 0xf5]
 const TORCH = [0xff, 0xb0, 0x1f]
 const TORCH_TONE = -1

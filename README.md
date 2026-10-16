@@ -19,8 +19,8 @@
 
 <p align="center">
   <a href="https://github.com/cubepals/cubepals/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/cubepals/cubepals/ci.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-181818?style=flat-square" alt="License: AGPL-3.0"></a>
-  <img src="https://img.shields.io/badge/Minecraft-Java_Edition-181818?style=flat-square" alt="Minecraft: Java Edition">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-0D0D0D?style=flat-square" alt="License: AGPL-3.0"></a>
+  <img src="https://img.shields.io/badge/Minecraft-Java_Edition-0D0D0D?style=flat-square" alt="Minecraft: Java Edition">
 </p>
 
 ---
