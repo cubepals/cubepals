@@ -42,6 +42,7 @@ import { FakeRuntime, fakeHandleKey } from '../infra/fake/fake-runtime.ts'
 import { LibraryFileFormats } from '../infra/formats/file-formats.ts'
 import { LibraryPackArchives } from '../infra/formats/pack-archives.ts'
 import { MemoryLimits } from '../infra/limits/memory-limits.ts'
+import { PgChangeSignal, ROUTES_CHANNEL } from '../infra/pg/changes.ts'
 import { PgNotifyEventBus } from '../infra/pg/events.ts'
 import {
   PgBossJobs,
@@ -206,6 +207,14 @@ const timingsAndRoom = ({ provider, room }: HarnessOptions) => ({
 /** Operation tests need Postgres; like the lock tests, they run where DATABASE_URL is set. */
 export const hasDatabase = Boolean(process.env.DATABASE_URL)
 
+/**
+ * What the harness hears from Postgres, as a deployment does: domain events, and word that what
+ * the edge's routes are read from moved (`edge/service.ts`).
+ */
+function listening(url: string) {
+  return { events: new PgNotifyEventBus(url), routeChanges: new PgChangeSignal(url, ROUTES_CHANNEL) }
+}
+
 export async function startHarness(options: HarnessOptions = {}): Promise<Harness> {
   const base = process.env.DATABASE_URL
   if (!base) throw new Error('DATABASE_URL is not set')
@@ -220,7 +229,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
   const pool = createPool(url.toString())
   const db = createDb(pool)
   await migrated(db, options.controls)
-  const events = new PgNotifyEventBus(url.toString())
+  const heard = listening(url.toString())
   const boss: PgBoss = await startBoss(url.toString(), {
     retryDelaySeconds: 0,
     ...(options.operationDeadlineSeconds
@@ -280,7 +289,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
   const app = composeControlPlane(
     {
       db,
-      events,
+      ...heard,
       jobs,
       locks: new PgAdvisoryLocks(pool),
       limits: new MemoryLimits(),
@@ -336,7 +345,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
     app,
     db,
     jobs,
-    events,
+    events: heard.events,
     runtime,
     runtimes,
     minecraft,
@@ -403,7 +412,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       await new Promise((resolve) => artifactsServer.close(resolve))
       await Promise.all([app.waiter.stop(), worker.stop()])
       await boss.stop({ graceful: false })
-      await events.close()
+      await Promise.all([heard.events.close(), heard.routeChanges.close()])
       await pool.end()
       await rm(root, { recursive: true, force: true })
       const cleanup = new pg.Client({ connectionString: base })

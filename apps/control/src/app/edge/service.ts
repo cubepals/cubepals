@@ -21,6 +21,7 @@ import type { ArtifactLinks } from '../artifacts/links.ts'
 import { AppError, type AppErrorCode } from '../errors.ts'
 import { failedWaking, openOfKinds } from '../operations/persistence.ts'
 import type { IdleDecision, Schedules } from '../operations/schedules.ts'
+import type { ChangeSignal } from '../ports/changes.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import type { Endpoint, RuntimeHandle } from '../ports/runtime.ts'
@@ -60,6 +61,13 @@ const REFUSED: Partial<Record<AppErrorCode, Extract<WakeResult, { outcome: 'deni
  */
 const SAID_EVERY_MS = 3 * SECOND_MS
 
+/**
+ * The longest the route inputs' fingerprint goes unread while the database says none of them
+ * moved: a net for a write it never announced. How soon a change reaches the edges is the
+ * announcement's doing, not this.
+ */
+const FINGERPRINT_BACKSTOP_MS = 30 * SECOND_MS
+
 /** The work a start waits behind that a join is told of, by kind, as the edge words it. */
 const BEHIND: ReadonlyMap<
   OperationKind,
@@ -87,8 +95,20 @@ export class EdgeService {
   readonly #events: EventBus
   readonly #links: ArtifactLinks
   readonly #wakeWaitMs: number
-  /** The route inputs last read, and the fingerprint they were read under. */
-  #read: { digest: string; inputs: RouteInputs } | null = null
+  /**
+   * The route inputs last read and the fingerprint they were read under; the change mark taken
+   * just before (null where none could be heard); when the read ended, by this clock; and how far
+   * the database's clock was ahead of this one then.
+   */
+  #read: {
+    inputs: RouteInputs
+    print: Fingerprint
+    mark: number | null
+    at: number
+    offset: number
+  } | null = null
+  /** Word that the route inputs moved; without it, the fingerprint is read on every ask. */
+  readonly #changes: ChangeSignal | null
   /** When each edge's word was last written, by this process. */
   readonly #saidAt = new Map<string, number>()
   /** When this process last let go of edges gone quiet. */
@@ -104,6 +124,7 @@ export class EdgeService {
     events: EventBus
     links: ArtifactLinks
     wakeWaitMs: number
+    routeChanges?: ChangeSignal
   }) {
     this.#db = deps.db
     this.#addressing = deps.addressing
@@ -114,6 +135,7 @@ export class EdgeService {
     this.#events = deps.events
     this.#links = deps.links
     this.#wakeWaitMs = deps.wakeWaitMs
+    this.#changes = deps.routeChanges ?? null
   }
 
   /** Every hostname that should route, with where the edge sends it. */
@@ -168,14 +190,39 @@ export class EdgeService {
     return { routes: { routes, releases: [...RELEASES] }, from: print.from, unrouted: print.unrouted }
   }
 
-  /** The route inputs, read again only when their fingerprint has moved since they last were. */
+  /**
+   * The route inputs, read again only when their fingerprint has moved since they last were. The
+   * fingerprint itself is read again only when the database said something it is made of moved,
+   * a server waits on the edges, or `FINGERPRINT_BACKSTOP_MS` has passed. Meanwhile the version
+   * is the database's time now, reckoned from this clock as the last read measured it, so never
+   * later than the database's own: nothing the list is made of has moved since, so it still
+   * holds as of then. Word of a write comes a moment after it, which only delays the next read:
+   * a server is marked listed by a read, never by this.
+   */
   async #inputs(): Promise<{ print: Fingerprint; inputs: RouteInputs }> {
     const providers = this.#runtime.providers
-    const print = await fingerprint(this.#db, providers)
-    if (this.#read?.digest === print.digest) return { print, inputs: this.#read.inputs }
-    const fresh = await readInputs(this.#db, providers)
-    this.#read = { digest: fresh.fingerprint.digest, inputs: fresh.inputs }
-    return { print: fresh.fingerprint, inputs: fresh.inputs }
+    // Taken before the read, so a write the read misses moves it after.
+    const mark = this.#changes?.mark() ?? null
+    const kept = this.#read
+    if (
+      kept !== null &&
+      mark !== null &&
+      mark === kept.mark &&
+      !kept.print.unrouted &&
+      !kept.print.unlisted &&
+      Date.now() - kept.at < FINGERPRINT_BACKSTOP_MS
+    )
+      return { print: { ...kept.print, from: new Date(Date.now() + kept.offset) }, inputs: kept.inputs }
+    let print = await fingerprint(this.#db, providers)
+    let inputs = kept?.print.digest === print.digest ? kept.inputs : null
+    if (inputs === null) {
+      const fresh = await readInputs(this.#db, providers)
+      print = fresh.fingerprint
+      inputs = fresh.inputs
+    }
+    const at = Date.now()
+    this.#read = { inputs, print, mark, at, offset: +print.from - at }
+    return { print, inputs }
   }
 
   /** Where a server's route sends a player; null for a server that has no route. */

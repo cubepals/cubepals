@@ -46,6 +46,7 @@ import { StuckWork } from './platform/stuck.ts'
 import { PlayerService } from './players/service.ts'
 import { AccessPolicy } from './policy/access-policy.ts'
 import type { ModCatalog } from './ports/catalog.ts'
+import type { ChangeSignal } from './ports/changes.ts'
 import type { CurseForge } from './ports/curseforge.ts'
 import type { EventBus } from './ports/events.ts'
 import type { FileFormats, PackArchives } from './ports/formats.ts'
@@ -76,6 +77,8 @@ import { WorldService } from './worlds/service.ts'
 export interface ControlPlanePorts {
   db: Db
   events: EventBus
+  /** Word that what the edge's routes are read from moved; without it, each ask reads (`edge/service.ts`). */
+  routeChanges?: ChangeSignal
   jobs: JobQueue
   /** Mutual exclusion across every control-plane process. */
   locks: Locks
@@ -334,13 +337,10 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
   const alerts = new PlatformAlerts({ ...ports, ...settings, catalog })
   const waiter = new ServerWaiter(db, events)
   const edge = new EdgeService({
-    db,
-    addressing: ports.addressing,
-    runtime,
+    ...ports,
     service: servers,
     waiter,
     schedules,
-    events,
     links,
     wakeWaitMs: settings.wakeWaitMs,
   })

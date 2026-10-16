@@ -4,9 +4,11 @@
 
 /**
  * What the edge's route list is read from, and its fingerprint. The edge asks for its routes every
- * second and nearly always nothing has changed, so each ask reads one short row: the database's
- * time, the fingerprint and two flags. The inputs themselves are read again only when the
- * fingerprint moves, in one snapshot with the fingerprint they then go by.
+ * second and nearly always nothing has changed, so an ask reads at most one short row: the
+ * database's time, the fingerprint and two flags; and none while the database has said nothing
+ * changed (`EdgeService`, migration 0080's triggers, which cover every table read here). The
+ * inputs themselves are read again only when the fingerprint moves, in one snapshot with the
+ * fingerprint they then go by.
  *
  * The fingerprint is a digest of the very rows the input queries return, computed by the
  * database, so nothing can be read here that it leaves out. Revisions are never edited, so their

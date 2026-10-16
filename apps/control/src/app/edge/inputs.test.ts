@@ -4,10 +4,11 @@
 
 /**
  * The route inputs' fingerprint moves with every input the routes are read from, and with nothing
- * else; and an edge's word is written seldom while no server waits on the edges.
+ * else; it is read again only once the database says one of them moved; and an edge's word is
+ * written seldom while no server waits on the edges.
  */
 
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { schema } from '@blockly/db'
 import { eq, sql } from 'drizzle-orm'
@@ -117,5 +118,62 @@ describe.skipIf(!hasDatabase)('the route inputs', () => {
     // A server waits: every ask is written, as it is told.
     await h.app.edge.seen(edgeId, new Date(), true)
     expect((await seenAt())?.getTime()).toBeGreaterThan(first?.getTime() ?? 0)
+  }, 30_000)
+})
+
+describe.skipIf(!hasDatabase)('the route inputs, while the database says none moved', () => {
+  let h: Harness
+
+  beforeAll(async () => {
+    h = await startHarness()
+  }, 30_000)
+  afterAll(async () => {
+    await h.close()
+  })
+
+  test('are not read again, with a version that keeps up, until a write says so', async () => {
+    const owner = await h.user()
+    const created = await h.create(owner)
+    await h.until(created.id, 'running')
+    await h.settled(created.id)
+    // Listed and told, so no server waits on the edges.
+    await h.app.edge.listed()
+    await h.app.edge.seen(`edge-${randomUUID()}`, null)
+    // The fingerprint is read on the database itself; the inputs, in a transaction of their own.
+    const execute = spyOn(h.db, 'execute')
+    const reads = () => execute.mock.calls.length
+    try {
+      // Once the writes of its start are all heard, asking reads nothing.
+      const deadline = Date.now() + 10_000
+      for (let quiet = 0; quiet < 3 && Date.now() < deadline; ) {
+        const before = reads()
+        await Bun.sleep(200)
+        await h.app.edge.listed()
+        quiet = reads() === before ? quiet + 1 : 0
+      }
+      const before = reads()
+      const first = await h.app.edge.listed()
+      await Bun.sleep(300)
+      const second = await h.app.edge.listed()
+      expect(reads()).toBe(before)
+      expect(second.from.getTime()).toBeGreaterThan(first.from.getTime())
+      // Never later than the database's own clock, and close behind it.
+      const [row] = (await h.db.execute<{ now: string }>(sql`select clock_timestamp() as now`)).rows
+      const now = new Date(row?.now ?? 0).getTime()
+      expect(second.from.getTime()).toBeLessThanOrEqual(now)
+      expect(now - second.from.getTime()).toBeLessThan(1000)
+
+      // A write says so, and the next ask reads.
+      await h.db
+        .update(schema.minecraftServers)
+        .set({ name: 'Moved' })
+        .where(eq(schema.minecraftServers.id, created.id))
+      await Bun.sleep(100)
+      const asked = reads()
+      await h.app.edge.listed()
+      expect(reads()).toBe(asked + 1)
+    } finally {
+      execute.mockRestore()
+    }
   }, 30_000)
 })

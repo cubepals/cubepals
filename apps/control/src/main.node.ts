@@ -81,6 +81,7 @@ import { modrinthClient } from './infra/modrinth/client.ts'
 import { ModrinthCatalog } from './infra/modrinth/modrinth-catalog.ts'
 import { MojangClientAssets } from './infra/mojang/client-assets.ts'
 import { MojangProfiles } from './infra/mojang/profiles.ts'
+import { PgChangeSignal, ROUTES_CHANNEL } from './infra/pg/changes.ts'
 import { PgNotifyEventBus } from './infra/pg/events.ts'
 import {
   OPERATION_HEARTBEAT_SECONDS,
@@ -621,15 +622,25 @@ function billingRoutes(billing: BillingService, provider: BillingProvider | null
   return routes
 }
 
-/** What a process holds open to Postgres: the query pool, the live-update listener, the job queue. */
+/**
+ * What a process holds open to Postgres: the query pool, the live-update listener, the job queue,
+ * and the application's ports that are Postgres's alone (`ports`).
+ */
 async function connect(config: DeploymentConfig) {
   const { url, directUrl, poolMax } = config.database
   const pool = createPool(url, poolMax)
+  const boss = await startBoss(url, { maintains: config.roles.includes('worker'), poolMax })
   return {
     pool,
     db: createDb(pool),
     events: new PgNotifyEventBus(directUrl),
-    boss: await startBoss(url, { maintains: config.roles.includes('worker'), poolMax }),
+    boss,
+    ports: {
+      jobs: new PgBossJobs(boss),
+      locks: new PgAdvisoryLocks(pool),
+      // Heard only where the edges ask for routes (`app/edge/service.ts`).
+      routeChanges: new PgChangeSignal(directUrl, ROUTES_CHANNEL),
+    },
   }
 }
 
@@ -638,7 +649,7 @@ async function main(): Promise<void> {
   const { freeLinkTuning: freeLinks, abuseLimits: abuse, capacityTuning: capacity } = config
   installTuning({ freeLinks, abuse, capacity })
   for (const note of config.local?.notes ?? []) console.warn(`local: ${note}`)
-  const { pool, db, events, boss } = await connect(config)
+  const { pool, db, events, boss, ports } = await connect(config)
   const profiles = new MojangProfiles()
   // Asked at each sleep on Fly, and switched from the platform page; FLY_SUSPEND while unset.
   const fly = config.runtimes.find((runtime) => runtime.provider === 'fly')
@@ -655,9 +666,8 @@ async function main(): Promise<void> {
     {
       db,
       events,
-      jobs: new PgBossJobs(boss),
+      ...ports,
       limits: new MemoryLimits(),
-      locks: new PgAdvisoryLocks(pool),
       runtime: provider.runtime,
       console: provider.console,
       probe: provider.probe,
