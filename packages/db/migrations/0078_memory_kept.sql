@@ -1,0 +1,1 @@
+ALTER TABLE "server_runtimes" ADD COLUMN "memory_kept_at" timestamp with time zone;

@@ -292,6 +292,11 @@ export const serverRuntimes = pgTable('server_runtimes', {
    * of a world its server no longer runs on.
    */
   keptStorage: jsonb('kept_storage').$type<KeptStorageJson[]>(),
+  /**
+   * When its last sleep kept its memory (Fly's suspend), so its next start is a resume; null when
+   * that sleep stopped it, and once a run has started since.
+   */
+  memoryKeptAt: ts('memory_kept_at'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })

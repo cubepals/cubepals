@@ -726,6 +726,26 @@ export async function saveHandle(
     .where(eq(runtimes.serverId, serverId))
 }
 
+/**
+ * Whether its sleep kept its memory, so its next start is a resume: a ping wakes early only a
+ * server whose start is a boot (`edge/ping-wake.ts`). Every run's start spends it (`openInterval`).
+ */
+export async function saveMemoryKept(q: Queryable, serverId: string, kept: boolean): Promise<void> {
+  await q
+    .update(runtimes)
+    .set({ memoryKeptAt: kept ? new Date() : null })
+    .where(eq(runtimes.serverId, serverId))
+}
+
+/** Whether its last sleep kept its memory: its next start is a resume, not a boot. */
+export async function memoryKept(q: Queryable, serverId: string): Promise<boolean> {
+  const [row] = await q
+    .select({ at: runtimes.memoryKeptAt })
+    .from(runtimes)
+    .where(eq(runtimes.serverId, serverId))
+  return row?.at != null
+}
+
 export async function saveApplied(q: Queryable, serverId: string, applied: AppliedConfigJson): Promise<void> {
   await q.update(runtimes).set({ applied, updatedAt: new Date() }).where(eq(runtimes.serverId, serverId))
 }

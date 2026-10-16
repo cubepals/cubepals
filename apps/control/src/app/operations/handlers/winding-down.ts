@@ -23,7 +23,13 @@ import type { PlayerService } from '../../players/service.ts'
 import type { ReadinessProbe } from '../../ports/minecraft.ts'
 import { type RuntimeHandle, runtimeKey } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
-import { grownStorage, lockServer, recordDisk, saveHandle } from '../../servers/persistence.ts'
+import {
+  grownStorage,
+  lockServer,
+  recordDisk,
+  saveHandle,
+  saveMemoryKept,
+} from '../../servers/persistence.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { clearPresence, closeInterval, lastActivity } from '../../servers/usage.ts'
 import type { OperationHandler } from '../runner.ts'
@@ -116,7 +122,7 @@ export function windingDown(deps: {
         await ctx.step('stopping')
         // Asleep only once the world is saved: unsaved, a stop saves it on the way down.
         if (SLEEPS.has(reason) && runtime.sleeps(handle) && saved && (await mayDoze(handle, applied)))
-          await runtime.sleep(handle)
+          await saveMemoryKept(db, server.id, (await runtime.sleep(handle)) === 'suspended')
         else await runtime.stop(handle)
       }
       await db.transaction(async (tx) => {
