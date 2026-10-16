@@ -99,6 +99,13 @@ export interface Label {
   widest?: readonly Run[]
 }
 
+/**
+ * A place for an entity, as a command writes it: each number with its decimal point, since the game
+ * moves a whole x or z to the middle of its block, half a block from where it was meant.
+ */
+export const exactly = (at: readonly number[]): string =>
+  at.map((n) => (Number.isInteger(n) ? n.toFixed(1) : String(n))).join(' ')
+
 /** How wide a label's line may be, in the game's text pixels, before its words wrap. */
 export const LINE_WIDTH = 240
 
@@ -119,7 +126,7 @@ export function label(shown: Label): string {
     shown.facing === undefined
       ? 'billboard:"vertical"'
       : `billboard:"fixed",Rotation:[${YAW[shown.facing]}f,0f]`
-  return `summon minecraft:text_display ${shown.at.join(' ')} {Tags:["${NS}.display","${shown.tag}"],${turn},brightness:{block:15,sky:15},background:${INK_ARGB},default_background:false,see_through:false,shadow:true,line_width:${LINE_WIDTH},text:${textOf(shown.text)}${size}}`
+  return `summon minecraft:text_display ${exactly(shown.at)} {Tags:["${NS}.display","${shown.tag}"],${turn},brightness:{block:15,sky:15},background:${INK_ARGB},default_background:false,see_through:false,shadow:true,line_width:${LINE_WIDTH},text:${textOf(shown.text)}${size}}`
 }
 
 /** A label's heading, in the indigo, and its words below, in Paper. */

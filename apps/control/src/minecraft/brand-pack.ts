@@ -14,7 +14,7 @@
  * never required: a player who turns it down sees a plain oak door where a marker is, still a way
  * through, and every label's words are the same.
  */
-import { type Facing, YAW } from './arcade/datapack.ts'
+import { exactly, type Facing, YAW } from './arcade/datapack.ts'
 import { backToHub, type Picture, portal, wayOut } from './brand-art.ts'
 
 /** The pack's names for its markers, as an item's `custom_model_data` carries them. */
@@ -53,7 +53,7 @@ export function showMarker(shown: ShownMarker, tags: readonly string[]): string 
     shown.facing === undefined
       ? 'billboard:"vertical"'
       : `billboard:"fixed",Rotation:[${YAW[shown.facing]}f,0f]`
-  return `summon minecraft:item_display ${shown.at.join(' ')} {Tags:[${tags.map((tag) => `"${tag}"`).join(',')}],item:{id:"${MARKER_ITEM}",count:1,components:{"minecraft:custom_model_data":{strings:["${shown.marker}"]}}},item_display:"none",${turn},brightness:{block:15,sky:15},transformation:{left_rotation:[0f,0f,0f,1f],right_rotation:[0f,0f,0f,1f],translation:[0f,0f,0f],scale:[${scale}f,${scale}f,${scale}f]}}`
+  return `summon minecraft:item_display ${exactly(shown.at)} {Tags:[${tags.map((tag) => `"${tag}"`).join(',')}],item:{id:"${MARKER_ITEM}",count:1,components:{"minecraft:custom_model_data":{strings:["${shown.marker}"]}}},item_display:"none",${turn},brightness:{block:15,sky:15},transformation:{left_rotation:[0f,0f,0f,1f],right_rotation:[0f,0f,0f,1f],translation:[0f,0f,0f],scale:[${scale}f,${scale}f,${scale}f]}}`
 }
 
 /**

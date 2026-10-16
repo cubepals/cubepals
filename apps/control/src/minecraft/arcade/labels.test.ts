@@ -50,6 +50,21 @@ describe('the floating words on the Arcade and Duels', () => {
     }
   })
 
+  test('each display stands where it is written: no x or z is a whole number, which the game would move half a block', () => {
+    const summons = everyCommand.filter((command) =>
+      /^(execute .* run )?summon minecraft:(text|item)_display -?\d/.test(command),
+    )
+    expect(summons.length).toBeGreaterThan(0)
+    for (const command of summons) {
+      const [x, , z] = command
+        .replace(/^.* summon /, 'summon ')
+        .split(' ')
+        .slice(2, 5)
+      expect(x, command).toContain('.')
+      expect(z, command).toContain('.')
+    }
+  })
+
   test('a label turns to its reader only in the open; one by a wall, or a board before its dome, is flat on it', () => {
     const flat = ARCADE_LABELS.filter((shown) => shown.facing !== undefined)
     // The boards, the three credit lines under the games' signs, the stairs and both passages.
