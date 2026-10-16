@@ -69,6 +69,27 @@ export async function loadStanding(q: Queryable, userId: string, now = new Date(
   return billed === null ? found : { ...found, plan: billed }
 }
 
+/** `loadStanding` for each of `userIds`, their rows read in one go, for a sweep over many accounts. */
+export async function loadStandings(
+  q: Queryable,
+  userIds: readonly string[],
+  now = new Date(),
+): Promise<Map<string, AccountStanding>> {
+  if (userIds.length === 0) return new Map()
+  const rows = await q
+    .select()
+    .from(standing)
+    .where(inArray(standing.userId, [...userIds]))
+  const found = new Map(rows.map((row) => [row.userId, toStanding(row)]))
+  const standings = new Map<string, AccountStanding>()
+  for (const userId of userIds) {
+    const read = found.get(userId) ?? newStanding(userId)
+    const billed = await billedPlan(q, userId, now)
+    standings.set(userId, billed === null ? read : { ...read, plan: billed })
+  }
+  return standings
+}
+
 /** An account's standing, locked for a change; null when there is no such account. */
 export async function lockStanding(tx: Tx, userId: string): Promise<AccountStanding | null> {
   const [user] = await tx

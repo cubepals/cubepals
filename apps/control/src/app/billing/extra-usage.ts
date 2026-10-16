@@ -30,7 +30,7 @@ import {
   startOfMonth,
 } from '../../domain/account/play-day.ts'
 import type { AccountStanding } from '../../domain/account/standing.ts'
-import { loadStanding, notTest } from '../accounts/persistence.ts'
+import { loadStanding, loadStandings, notTest } from '../accounts/persistence.ts'
 import {
   type BillingOrder,
   type BillingProvider,
@@ -105,7 +105,8 @@ export class ExtraUsage {
   /** `extra-play-report`: count, cut events from what was counted, and send what waits. */
   async report(now = new Date()): Promise<void> {
     const accounts = new Set([...(await this.#playing(now)), ...(await this.#unfinished(now))])
-    for (const userId of accounts) await this.count(userId, now)
+    const standings = await loadStandings(this.#db, [...accounts], now)
+    for (const userId of accounts) await this.count(userId, now, standings.get(userId))
     await this.cut(now)
     const { sent, failed } = await this.send(now)
     if (failed > 0) console.warn(`extra-play: ${failed} events not taken yet, ${sent} sent`)
@@ -120,8 +121,8 @@ export class ExtraUsage {
    * and nothing that ran in it still runs; it is counted for the last time then. True when
    * something new was counted.
    */
-  async count(userId: string, now = new Date()): Promise<boolean> {
-    const standing = await loadStanding(this.#db, userId, now)
+  async count(userId: string, now = new Date(), read?: AccountStanding): Promise<boolean> {
+    const standing = read ?? (await loadStanding(this.#db, userId, now))
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
     if (plan.includedUnits === null) return false
     const zone = standing.timeZone ?? DEFAULT_TIME_ZONE

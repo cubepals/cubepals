@@ -79,10 +79,11 @@ export interface SubscriptionRecord {
 
 /**
  * The plan a paying subscription gives the account now, or else a year paid for, or else a
- * redeemed gift (`giftedPlan`); null when none does.
+ * redeemed gift (`giftedPlan`); null when none does. One statement asks all three in that order:
+ * every entitlement is read through here, sweeps every minute included.
  */
 export async function billedPlan(q: Queryable, userId: string, now = new Date()): Promise<string | null> {
-  const [row] = await q
+  const paying = q
     .select({ planKey: subscriptions.planKey })
     .from(subscriptions)
     .where(
@@ -105,9 +106,8 @@ export async function billedPlan(q: Queryable, userId: string, now = new Date())
     )
     .orderBy(...NEWEST)
     .limit(1)
-  if (row) return row.planKey
   // A year paid at once, running now (`plan_years`).
-  const [year] = await q
+  const year = q
     .select({ planKey: schema.planYears.planKey })
     .from(schema.planYears)
     .where(
@@ -118,8 +118,28 @@ export async function billedPlan(q: Queryable, userId: string, now = new Date())
       ),
     )
     .limit(1)
-  return year?.planKey ?? (await giftedPlan(q, userId, now))?.planKey ?? null
+  const { rows } = await q.execute<{ plan: string | null }>(
+    sql`select coalesce((${paying}), (${year}), (${giftRunning(q, userId, now)})) as plan`,
+  )
+  return rows[0]?.plan ?? null
 }
+
+/** The redeemed gift running now that began first, as `giftedPlan` reads it. */
+const giftRunning = (q: Queryable, userId: string, now: Date) =>
+  q
+    .select({ planKey: gifts.planKey })
+    .from(gifts)
+    .where(
+      and(
+        eq(gifts.redeemedBy, userId),
+        isNull(gifts.voidedAt),
+        isNotNull(gifts.planKey),
+        lte(gifts.startsAt, now),
+        gt(gifts.endsAt, now),
+      ),
+    )
+    .orderBy(gifts.startsAt)
+    .limit(1)
 
 /** The plan a redeemed gift gives the account now, and until when; null when none does. */
 export async function giftedPlan(

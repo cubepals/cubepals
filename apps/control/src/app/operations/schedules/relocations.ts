@@ -15,20 +15,13 @@ import { runtimeKey } from '../../ports/runtime.ts'
 import { pendingMoves, rebind } from '../../runtimes/persistence.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import type { RuntimePlacement } from '../../runtimes/service.ts'
-import {
-  findServer,
-  HOST_LOST,
-  listByStatuses,
-  loadRuntime,
-  lockServer,
-  saveObserved,
-} from '../../servers/persistence.ts'
+import { findServer, HOST_LOST, loadRuntime, lockServer, saveObserved } from '../../servers/persistence.ts'
 import type { MinecraftServerService } from '../../servers/service.ts'
 import type { RuntimeSpecs } from '../../servers/specs.ts'
 import { presenceFor } from '../../servers/usage.ts'
 import { activeOperation, relocationFailures } from '../persistence.ts'
 import { observedJson } from './observations.ts'
-import { placementsOf } from './placements.ts'
+import { placementsOf, sweptServers, wholeServer } from './placements.ts'
 
 /** How long a host may stay unreachable before its server is rebuilt elsewhere (§9): hosts come back. */
 export const HOST_LOSS_GRACE_MS = 10 * MINUTE_MS
@@ -70,7 +63,7 @@ export function relocating(deps: {
     let moved = 0
     // Asked once a sweep for each runtime, region and size: a lost host's servers ask once.
     const full = new Set<string>()
-    const candidates = await listByStatuses(db, ['running', 'stopped', 'failed'])
+    const candidates = await sweptServers(db, ['running', 'stopped', 'failed'])
     const online = await presenceFor(
       db,
       candidates.map((s) => s.id),
@@ -83,7 +76,7 @@ export function relocating(deps: {
     for (const server of candidates) {
       if (moved >= limit) break
       // A move the platform made that failed is its owner's to try again, not the sweep's.
-      if (server.lifecycle.failure?.during === 'relocating') continue
+      if (server.failedDuring === 'relocating') continue
       const binding = placementOf(server.id)
       if (binding.handle === null) continue
       const observed = binding.observed
@@ -94,13 +87,13 @@ export function relocating(deps: {
         binding.moveTo !== null &&
         binding.moveTo !== binding.provider &&
         runtime.runs(binding.moveTo) &&
-        server.lifecycle.status !== 'failed'
+        server.status !== 'failed'
           ? binding.moveTo
           : null
       const misplaced =
         toRuntime !== null || !runtime.isPlaced(binding.handle, { regionKey: server.regionKey })
       if (!lost && !misplaced) continue
-      if (!lost && server.lifecycle.status === 'running' && (online.get(server.id)?.length ?? 0) > 0) continue
+      if (!lost && server.status === 'running' && (online.get(server.id)?.length ?? 0) > 0) continue
       if ((await activeOperation(db, server.id)) !== null) continue
       // A move refused or failed lately waits before the sweep asks again, longer each time in a row:
       // what refused it (a world too big to move, room that went meanwhile) seldom changes by the
@@ -118,15 +111,15 @@ export function relocating(deps: {
       }
       // A move or a rebuild with nowhere to go would only be refused: it waits for room instead.
       const to = toRuntime ?? binding.provider
-      const { spec } = await specs.desired(db, server)
-      const size = { memoryMb: spec.resources.memoryMb, storageGb: spec.storage.sizeGb }
-      const where = `${to} ${server.regionKey} ${size.memoryMb} ${size.storageGb}`
-      if (full.has(where)) continue
-      if (!(await runtime.hasRoom(to, { regionKey: server.regionKey }, size).catch(() => false))) {
-        full.add(where)
-        continue
-      }
       try {
+        const { spec } = await specs.desired(db, await wholeServer(db, server.id))
+        const size = { memoryMb: spec.resources.memoryMb, storageGb: spec.storage.sizeGb }
+        const where = `${to} ${server.regionKey} ${size.memoryMb} ${size.storageGb}`
+        if (full.has(where)) continue
+        if (!(await runtime.hasRoom(to, { regionKey: server.regionKey }, size).catch(() => false))) {
+          full.add(where)
+          continue
+        }
         if (lost) await service.relocateForPlatform(server.id, 'host')
         else if (toRuntime !== null) await service.relocateForPlatform(server.id, 'runtime', toRuntime)
         else await service.relocateForPlatform(server.id, 'region')

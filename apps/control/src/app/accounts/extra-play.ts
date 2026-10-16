@@ -12,6 +12,7 @@ import type { Db } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { UNIT_CENTS } from '../../domain/account/meter.ts'
 import { DEFAULT_TIME_ZONE, monthOf } from '../../domain/account/play-day.ts'
+import type { AccountStanding } from '../../domain/account/standing.ts'
 import { meteredMonth } from '../billing/chip-in-meter.ts'
 import { extraPlayNow } from '../billing/persistence.ts'
 import { extraWarning } from '../emails/play.ts'
@@ -26,8 +27,9 @@ export async function warnAboutExtra(
   deps: { db: Db; mailer: Mailer; origin: string },
   userId: string,
   now = new Date(),
+  read?: AccountStanding,
 ): Promise<number | null> {
-  const standing = await loadStanding(deps.db, userId, now)
+  const standing = read ?? (await loadStanding(deps.db, userId, now))
   const plan = entitlementsFor(standing.plan, standing.limitOverrides)
   const { decision } = await extraPlayNow(deps.db, standing)
   if (!decision.may || decision.units === 0) return null

@@ -7,13 +7,16 @@
  * `apply` as any change. What a server's spec should be is `servers/specs.ts`'s; applying it is the
  * `apply` operation's (`handlers/updating.ts`).
  */
+import { HOUR_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
+import type { MinecraftServer } from '../../../domain/server/server.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
-import { listByStatus, loadRuntime, lockServer } from '../../servers/persistence.ts'
+import { listByStatus, lockServer } from '../../servers/persistence.ts'
 import type { RuntimeSpecs } from '../../servers/specs.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { presenceFor } from '../../servers/usage.ts'
 import { activeOperation } from '../persistence.ts'
+import { appliedDigests } from './placements.ts'
 
 export function drifting(deps: {
   db: Db
@@ -22,6 +25,33 @@ export function drifting(deps: {
   transitions: Pick<ServerTransitions, 'command'>
 }) {
   const { db, runtime, specs, transitions } = deps
+  /** Each running server whose spec last matched what was applied, and from what, and when. */
+  const matches = new Map<string, { inputs: string; at: number }>()
+
+  /**
+   * The drift digest a running server should be on, where it has drifted from what was applied;
+   * null where it hasn't, or was never applied. What it should run is worked out again only once
+   * something it is worked out from has moved, or an hour on: what moves without a request (a
+   * deploy's image, a key) comes with a new process, which has matched nothing yet.
+   */
+  const driftedTo = async (
+    server: MinecraftServer,
+    binding: { handle: unknown; digest: string | null } | undefined,
+  ): Promise<string | null> => {
+    if (binding === undefined) throw new Error(`Server ${server.id} has no runtime binding`)
+    if (binding.handle === null || binding.digest === null) return null
+    const inputs = `${server.version}:${server.desiredRevisionId}:${server.activeWorldId}:${binding.digest}`
+    const matched = matches.get(server.id)
+    if (matched?.inputs === inputs && Date.now() - matched.at < HOUR_MS) return null
+    const desired = await specs.desired(db, server)
+    // Drift is a change to what a server runs, not to its owner's plan: that waits for a start.
+    if (binding.digest === desired.driftDigest) {
+      matches.set(server.id, { inputs, at: Date.now() })
+      return null
+    }
+    matches.delete(server.id)
+    return desired.driftDigest
+  }
 
   /**
    * A running server whose spec no longer matches what it should run drifted: a key rotation, a
@@ -35,16 +65,19 @@ export function drifting(deps: {
       db,
       running.map((s) => s.id),
     )
-    let applied = 0
+    const applied = await appliedDigests(
+      db,
+      running.map((s) => s.id),
+      runtime.providers,
+    )
+    // Servers that stopped are forgotten.
+    for (const id of matches.keys()) if (!applied.has(id)) matches.delete(id)
+    let drifted = 0
     for (const server of running) {
-      if (applied >= limit) break
+      if (drifted >= limit) break
       if ((online.get(server.id)?.length ?? 0) > 0) continue
-      const binding = await loadRuntime(db, server.id, runtime.providers)
-      if (binding.handle === null || binding.applied === null) continue
-      const desired = await specs.desired(db, server)
-      // Drift is a change to what a server runs, not to its owner's plan: that waits for a start.
-      if ((binding.applied.driftDigest ?? binding.applied.specDigest) === desired.driftDigest) continue
-      if ((await activeOperation(db, server.id)) !== null) continue
+      const digest = await driftedTo(server, applied.get(server.id))
+      if (digest === null || (await activeOperation(db, server.id)) !== null) continue
       await db.transaction(async (tx) => {
         const locked = await lockServer(tx, server.id)
         if (locked?.lifecycle.status !== 'running') return
@@ -52,12 +85,12 @@ export function drifting(deps: {
           tx,
           locked,
           { type: 'apply' },
-          { requestedBy: 'system:reconcile', idempotencyKey: `drift:${desired.driftDigest}` },
+          { requestedBy: 'system:reconcile', idempotencyKey: `drift:${digest}` },
         )
       })
-      applied++
+      drifted++
     }
-    return applied
+    return drifted
   }
 
   return drift

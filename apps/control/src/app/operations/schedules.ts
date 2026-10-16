@@ -17,7 +17,7 @@
  * - `leftovers.ts`: deletes storage a failed wake, restore or move left beside a server's world.
  * - `observations.ts`: writes what a runtime said about a server's compute into its `observed` record.
  * - `orphans.ts`: stops compute no running server accounts for; destroys what no binding holds.
- * - `placements.ts`: reads where many servers run and what was last seen of them, in one read.
+ * - `placements.ts`: reads what a sweep looks at of many servers, in one read: where each runs, and its status.
  * - `presence.ts`: records who is online on each running server, read from its console.
  * - `purge-sweep.ts`: queues again the decommission or purge a deleted server still owes.
  * - `reconcile.ts`: brings what is recorded in line with what the provider lists since the last pass.

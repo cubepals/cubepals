@@ -493,11 +493,19 @@ export class AccountService {
       else closed += await this.closeServersOf(owner.userId, true)
     }
     // A plan that shrank, or limits an admin lowered: what no longer fits stops.
+    // The standing is read once for the three: the warnings write only what each said.
     for (const userId of await ownersRunning(this.#db))
       if (!inactive.has(userId)) {
-        await this.warnAboutPlay(userId)
-        await warnAboutExtra({ db: this.#db, mailer: this.#mailer, origin: this.#webOrigin }, userId)
-        stopped += await this.enforceLimits(userId)
+        const now = new Date()
+        const standing = await loadStanding(this.#db, userId, now)
+        await this.warnAboutPlay(userId, now, standing)
+        await warnAboutExtra(
+          { db: this.#db, mailer: this.#mailer, origin: this.#webOrigin },
+          userId,
+          now,
+          standing,
+        )
+        stopped += await this.enforceLimits(userId, standing)
       }
     return { stopped, closed }
   }
@@ -509,8 +517,8 @@ export class AccountService {
    * recently started beyond the plan's running limit, all with reason `entitlement`. Nothing is
    * deleted or changed.
    */
-  async enforceLimits(userId: string): Promise<number> {
-    const standing = await loadStanding(this.#db, userId)
+  async enforceLimits(userId: string, read?: AccountStanding): Promise<number> {
+    const standing = read ?? (await loadStanding(this.#db, userId))
     const allowed = entitlementsFor(standing.plan, standing.limitOverrides)
     // Money owed from a payment that didn't go through stops everything until it is paid.
     const { decision, owedCents } = await extraPlayNow(this.#db, standing)
@@ -557,8 +565,8 @@ export class AccountService {
    * same words the account page uses. The record of what was said lives on the standing, so a
    * restarted control plane never repeats one and a new month starts quiet.
    */
-  async warnAboutPlay(userId: string, now = new Date()): Promise<number | null> {
-    const standing = await loadStanding(this.#db, userId)
+  async warnAboutPlay(userId: string, now = new Date(), read?: AccountStanding): Promise<number | null> {
+    const standing = read ?? (await loadStanding(this.#db, userId))
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
     if (plan.totalUnits !== null) return await this.#warnAboutTotal(standing, plan, now)
     if (plan.includedUnits === null || plan.includedUnits === 0) return null

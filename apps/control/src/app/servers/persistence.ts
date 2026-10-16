@@ -277,20 +277,6 @@ export async function listByStatus(q: Queryable, status: Lifecycle['status']): P
   return (await q.select().from(servers).where(eq(servers.status, status))).map(toServer)
 }
 
-/** The servers in each of `statuses`, in one read: those in the first, then the next, and on. */
-export async function listByStatuses(
-  q: Queryable,
-  statuses: ReadonlyArray<Lifecycle['status']>,
-): Promise<MinecraftServer[]> {
-  const rows = (
-    await q
-      .select()
-      .from(servers)
-      .where(inArray(servers.status, [...statuses]))
-  ).map(toServer)
-  return statuses.flatMap((status) => rows.filter((s) => s.lifecycle.status === status))
-}
-
 /**
  * Free for a new server: no live server holds it, and it is not in quarantine, unless
  * `serverId` itself retired it; a server may take its own old address back.
