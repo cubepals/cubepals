@@ -90,7 +90,7 @@ export function presentStatus(
             ? { pill: 'sleeping', detail: 'Asleep until someone joins, or you wake it here' }
             : {
                 pill: 'stopped',
-                detail: 'The free hours are played. Its world is kept, and Plus starts it again',
+                detail: 'The free trial is over. Its world is kept, and Plus starts it again',
               }
         case 'unpaid':
           return {

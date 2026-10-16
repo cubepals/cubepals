@@ -75,7 +75,7 @@ export default async function Guide() {
         <p>
           Hours only count while it’s running. A server for friends spends most of the week with nobody on it,
           and a sleeping one uses none of your hours in that time. That’s what lets{' '}
-          {free ? `${free.name} include ${hoursSaid(free)}` : 'the free plan work'} with nothing to pay.{' '}
+          {free ? `the free trial include ${hoursSaid(free)}` : 'the free trial work'} with nothing to pay.{' '}
           <GuideLink to="minecraft-server-cost">What a server costs</GuideLink> goes through the plans.
         </p>
       </Part>
@@ -131,7 +131,7 @@ export default async function Guide() {
               } it rests in storage: joining still wakes it, it just takes a couple of minutes.`
             : ' After a while without play it rests in storage: joining still wakes it, it just takes a couple of minutes.'}
           {free?.deletedAfterDays
-            ? ` A free world nobody has played for ${daysSaid(free.deletedAfterDays)} is deleted, and you’re emailed twice before, with a way to keep it and a download.`
+            ? ` On the trial, a world nobody has played for ${daysSaid(free.deletedAfterDays)} is deleted, and you’re emailed twice before, with a way to keep it and a download.`
             : ''}
         </p>
       </Part>

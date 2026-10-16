@@ -45,9 +45,9 @@ export default function PayingForOthersPage() {
     {
       heading: 'What happens to the world',
       lines: [
-        `When the gift ends, their account moves to Free. Nothing is deleted.`,
-        `A server that needs ${PLUS.name} (mods, plugins or modpacks, a larger size, or more than ${FREE.maxServers} server) stops and waits, whole, until they have ${PLUS.name} again or change it to fit Free.`,
-        `From then on Free’s rules apply: what is left of its ${FREE.totalHours} hours, at most ${FREE.hours} a day, and a world nobody plays for ${FREE.restsAfterDays} days rests in storage until someone joins, and one nobody plays for a year can be deleted, after two emails. They can download their world any time.`,
+        `When the gift ends, their account moves to the free trial. Nothing is deleted, and nothing is charged.`,
+        `A server that needs ${PLUS.name} (mods, plugins or modpacks, a larger size, or more than ${FREE.maxServers} server) stops and waits, whole, until they have ${PLUS.name} again or change it to fit the free trial.`,
+        `From then on the free trial’s rules apply: what is left of its ${FREE.totalHours} hours, at most ${FREE.hours} a day, and a world nobody plays for ${FREE.restsAfterDays} days rests in storage until someone joins, and one nobody plays for a year can be deleted, after two emails. They can download their world any time.`,
       ],
     },
   ]

@@ -14,6 +14,7 @@
  */
 import type { PublicPlan } from '@blockly/contracts'
 import type { ReactNode } from 'react'
+import { planSaid } from '../../ui/plans'
 import { Demo, Facts, Section } from '../kit'
 import { BackupsDemo, type Shelf } from './BackupsDemo'
 import styles from './backups.module.css'
@@ -25,7 +26,7 @@ import styles from './backups.module.css'
  * apps/control/src/domain/account/entitlements.ts
  */
 const KEEPS = [
-  { key: 'free', kept: 3, trashDays: 7, label: 'Free plan', said: 'the free plan' },
+  { key: 'free', kept: 3, trashDays: 7, label: 'Free trial', said: 'the free trial' },
   { key: 'plus', kept: 14, trashDays: 30, label: 'Paid plan', said: 'the paid plan' },
 ] as const
 
@@ -50,11 +51,11 @@ function Aside({ children }: { children: ReactNode }) {
 
 export function Backups({ plans, bare }: { plans: PublicPlan[]; bare?: boolean }) {
   const shelves: Shelf[] = KEEPS.map((keep) => {
-    const name = plans.find((plan) => plan.key === keep.key)?.name
+    const plan = plans.find((each) => each.key === keep.key)
     return {
       key: keep.key,
-      label: name ?? keep.label,
-      said: name ?? keep.said,
+      label: plan?.name ?? keep.label,
+      said: plan ? planSaid(plan) : keep.said,
       kept: keep.kept,
       trashDays: keep.trashDays,
     }

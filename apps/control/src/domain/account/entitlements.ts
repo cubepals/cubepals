@@ -320,8 +320,12 @@ export function planThatRuns(runs: Runs): string | null {
   return PAID_PLANS.find((plan) => planGap(entitlementsFor(plan), runs, 'offered') === null) ?? null
 }
 
-/** "Plus", for a plan key: how a plan is named wherever Blockly says what one includes. */
-export const planName = (key: string): string => `${key.charAt(0).toUpperCase()}${key.slice(1)}`
+/**
+ * "Plus", for a plan key: how a plan is named wherever Blockly says what one includes. Free is a
+ * trial: its hours come once, so it is never called a plan that lasts.
+ */
+export const planName = (key: string): string =>
+  key === 'free' ? 'Free trial' : `${key.charAt(0).toUpperCase()}${key.slice(1)}`
 
 /**
  * What comes with which plan, said once: "Mods, plugins and modpacks come with Plus." A plan table

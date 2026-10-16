@@ -63,7 +63,7 @@ export default async function Guide() {
           </li>
           <li>
             <strong>Who’s playing.</strong> How many friends play at once. Bigger groups get a bigger server.
-            On Free there’s one size, so this question doesn’t appear.
+            On the free trial there’s one size, so this question doesn’t appear.
           </li>
           <li>
             <strong>Name it.</strong> Type a server name. Under it you’ll see the address your friends will
@@ -144,15 +144,15 @@ export default async function Guide() {
       <Part id="cost" title="What it costs">
         {free ? (
           <p>
-            {free.name} includes {hoursSaid(free)} for up to {free.maxPlayers} players, with no card. Hours
-            only count while the server is running, and it sleeps when nobody’s on.
+            It starts with a free trial: {hoursSaid(free)}, for up to {free.maxPlayers} players, with no card.
+            Hours only count while the server is running, and it sleeps when nobody’s on.
             {paid ? ` ${paid.name} adds modpacks, bigger groups and more hours.` : ''}{' '}
             <GuideLink to="minecraft-server-cost">What a server costs</GuideLink> goes through it, and{' '}
             <Link href="/pricing">Pricing</Link> has the plans side by side.
           </p>
         ) : (
           <p>
-            It’s free to start, with no card. <Link href="/pricing">Pricing</Link> has the plans, and{' '}
+            It starts with a free trial, with no card. <Link href="/pricing">Pricing</Link> has the plans, and{' '}
             <GuideLink to="minecraft-server-cost">what a server costs</GuideLink> goes through them.
           </p>
         )}
@@ -173,7 +173,7 @@ export default async function Guide() {
             question: 'How many friends can join?',
             answer:
               free && paid
-                ? `Up to ${free.maxPlayers} at once on ${free.name}, and up to ${paid.maxPlayers} on ${paid.name}.`
+                ? `Up to ${free.maxPlayers} at once on the trial, and up to ${paid.maxPlayers} on ${paid.name}.`
                 : 'It depends on the plan: see Pricing.',
           },
         ]}

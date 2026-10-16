@@ -585,7 +585,7 @@ export interface RevisionView {
  * have it turned off: what the settings page shows, and the refusal if it is asked anyway.
  */
 export const ONLINE_MODE_KEPT =
-  'Free servers check every player with Minecraft’s account servers. Plus lets you turn this off.'
+  'On the free trial, servers check every player with Minecraft’s account servers. Plus lets you turn this off.'
 
 export interface SettingsOptions {
   bounds: {

@@ -68,7 +68,9 @@ export function PlansSaid({
   const paid = plans.find((plan) => plan.monthlyPriceCents > 0)
   return (
     <>
-      <h2 className="bl-h2">{paid ? `Free, or ${priceOf(paid.monthlyPriceCents)} for more` : 'Free'}</h2>
+      <h2 className="bl-h2">
+        {paid ? `A free trial, or ${priceOf(paid.monthlyPriceCents)} for more` : 'A free trial'}
+      </h2>
       <div className={styles.cards}>
         {plans.map((plan) => {
           const isPaid = plan.monthlyPriceCents > 0

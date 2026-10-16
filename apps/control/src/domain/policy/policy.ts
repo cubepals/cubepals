@@ -369,7 +369,7 @@ function freePlayStops(entitlements: Entitlements, facts: PolicyFacts): Decision
   if (entitlements.monthlyPriceCents === 0 && facts.freeHeld)
     return deny(
       'restricted',
-      'Free play is paused on this account while we check something. Your worlds are safe. Contact support if this looks wrong.',
+      'Your free trial is paused on this account while we check something. Your worlds are safe. Contact support if this looks wrong.',
     )
   const used = playUsedUp(entitlements, facts)
   return used === null ? null : deny('limit_reached', used)
@@ -390,7 +390,7 @@ function playUsedUp(entitlements: Entitlements, facts: PolicyFacts): string | nu
   if (facts.totalLeft !== null && facts.totalLeft <= 0) {
     const total = entitlements.totalUnits ?? 0
     const paid = PAID_PLANS[0]
-    return `You’ve played your ${total} free hours. Your worlds are kept${paid === undefined ? '' : `, and ${planName(paid)} starts them again`}.${SHARED[facts.freeSharedBecause ?? 'none']}`
+    return `You’ve played the ${total} hours of your free trial. Your worlds are kept${paid === undefined ? '' : `, and ${planName(paid)} starts them again`}.${SHARED[facts.freeSharedBecause ?? 'none']}`
   }
   if (facts.today === null || facts.today.left > 0) return null
   const hours = entitlements.dailyUnits ?? 0
@@ -399,8 +399,8 @@ function playUsedUp(entitlements: Entitlements, facts: PolicyFacts): string | nu
 
 /** Why free hours ran out sooner than this account's own play, said after the refusal. */
 const SHARED: Record<'email' | 'players' | 'none', string> = {
-  email: ' Your free hours are shared with your other Cubepals account at this email.',
-  players: ' Your free hours are shared with another Cubepals account the same player plays on.',
+  email: ' Your free trial is shared with your other Cubepals account at this email.',
+  players: ' Your free trial is shared with another Cubepals account the same player plays on.',
   none: '',
 }
 

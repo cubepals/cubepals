@@ -77,8 +77,8 @@ export async function GuideArticle({ slug, children }: { slug: string; children:
           Start a world with your friends
         </h2>
         <p className="type-body">
-          <Link href="/">A Minecraft server that starts when your friends join</Link>. Free to start, no card
-          needed.
+          <Link href="/">A Minecraft server that starts when your friends join</Link>. Start with a free
+          trial, no card needed.
         </p>
         <Button
           variant="primary"

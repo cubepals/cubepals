@@ -51,7 +51,7 @@ export default async function SignUpPage({
     <AuthEntry
       flow="signup"
       title="Create your account"
-      description="Free to start. No card needed."
+      description="Start with a free trial. No card needed."
       methods={methods}
       // Someone who already has an account and continues with a provider here is simply signed in.
       redirects={{

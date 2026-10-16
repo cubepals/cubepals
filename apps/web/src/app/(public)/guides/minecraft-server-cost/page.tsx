@@ -29,7 +29,7 @@ const covers = (hours: number) =>
  */
 function howFar(plan: PublicPlan): string {
   if (plan.totalHours !== null)
-    return `${plan.name} has ${plan.totalHours} hours in all, at most ${plan.includedHours} a day: enough for a group to find out whether it plays.`
+    return `The trial’s ${plan.totalHours} hours, at most ${plan.includedHours} a day, are enough for a group to find out whether it plays.`
   if (plan.per === 'day')
     return `${plan.name} covers a group that plays up to ${plan.includedHours} hours a day, every day.`
   const covered = covers(plan.includedHours)
@@ -46,8 +46,8 @@ export default async function Guide() {
   return (
     <GuideArticle slug={SLUG}>
       <p className="type-body">
-        A Minecraft server for a group of friends can cost nothing. What decides it is how much you play, how
-        many of you there are, and whether you want mods. This guide is for Minecraft: Java Edition.
+        What a Minecraft server for a group of friends costs comes down to how much you play, how many of you
+        there are, and whether you want mods. This guide is for Minecraft: Java Edition.
       </p>
 
       <Part id="paying-for" title="What you’re paying for">
@@ -62,8 +62,8 @@ export default async function Guide() {
         <p>
           No.
           {free
-            ? ` ${free.name} is ${priceOf(free.monthlyPriceCents)}, with no card, for as long as you like.`
-            : ' There’s a free plan, with no card.'}
+            ? ` There’s a free trial of ${hoursSaid(free)}, with no card, and nothing is charged when it ends.`
+            : ' There’s a free trial, with no card.'}
           {paid ? ` ${paid.name} is ${priceOf(paid.monthlyPriceCents)}, and you can cancel any time.` : ''}{' '}
           Here’s what each one includes:
         </p>
@@ -127,12 +127,12 @@ export default async function Guide() {
           {
             question: 'Is it free?',
             answer: free
-              ? `${free.name} is: ${hoursSaid(free)} for up to ${free.maxPlayers} players, plain Minecraft or Paper.`
-              : 'There’s a free plan: see Pricing.',
+              ? `To try, yes: the free trial is ${hoursSaid(free)}, for up to ${free.maxPlayers} players, plain Minecraft or Paper.`
+              : 'To try, yes: see Pricing.',
           },
           {
             question: 'Do I need a card?',
-            answer: free ? `Not for ${free.name}.` : 'Not for the free plan.',
+            answer: 'Not for the free trial.',
           },
           {
             question: 'What if a big modpack needs more?',

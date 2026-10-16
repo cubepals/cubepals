@@ -12,7 +12,7 @@ import { appSchema, guideSchema, jsonLd, siteSchema } from './structured-data.ts
 
 const plan = (over: Partial<PublicPlan>): PublicPlan => ({
   key: 'free',
-  name: 'Free',
+  name: 'Free trial',
   monthlyPriceCents: 0,
   yearlyPriceCents: null,
   includedHours: 2,
@@ -67,7 +67,12 @@ describe('structured data', () => {
     expect(app).toMatchObject({ '@type': 'SoftwareApplication', applicationCategory: 'GameApplication' })
     expect(app).not.toHaveProperty('aggregateRating')
     const [free, plus] = (app as { offers: Record<string, unknown>[] }).offers
-    expect(free).toMatchObject({ name: 'Free', price: '0', priceCurrency: 'USD', url: `${ORIGIN}/pricing` })
+    expect(free).toMatchObject({
+      name: 'Free trial',
+      price: '0',
+      priceCurrency: 'USD',
+      url: `${ORIGIN}/pricing`,
+    })
     expect(free).not.toHaveProperty('priceSpecification')
     expect(free?.description).toBe(
       '1 server, up to 5 players. 20 hours of play, at most 2 a day. Vanilla or Paper. Go back to any of your last 3 sessions, and download your world.',

@@ -69,7 +69,7 @@ export function yearEnding(input: {
   const lines = [
     `Your year of ${input.plan} ends on ${DAY.format(input.endsAt)}, in ${input.days} days. It doesn’t renew on its own, so nothing will be charged.`,
     `To keep ${input.plan}, renew it on your account: another year is ${dollars(input.yearlyCents)}, and it starts the day this one ends.`,
-    `If you let it end, your account moves to Free. Your worlds stay, and anything that needs ${input.plan} waits until you have it again.`,
+    `If you let it end, your account moves to the free trial. Your worlds stay, and anything that needs ${input.plan} waits until you have it again.`,
   ]
   const subject = `Your year of Cubepals ${input.plan} ends in ${input.days} days`
   return {

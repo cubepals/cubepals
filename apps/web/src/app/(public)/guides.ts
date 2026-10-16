@@ -37,7 +37,7 @@ export const GUIDES: readonly Guide[] = [
     slug: 'minecraft-server-for-friends',
     title: 'How to make a Minecraft server for friends',
     description:
-      'Make a Minecraft server for you and your friends in three decisions: what to play, who’s playing, and a name. Free to start. For Java Edition.',
+      'Make a Minecraft server for you and your friends in three decisions: what to play, who’s playing, and a name. Start with a free trial. For Java Edition.',
     published: '2026-10-10',
     modified: '2026-10-11',
     approved: true,
@@ -55,7 +55,7 @@ export const GUIDES: readonly Guide[] = [
     slug: 'minecraft-server-cost',
     title: 'How much does a Minecraft server cost?',
     description:
-      'What a Minecraft server for friends costs, and why you shouldn’t pay for hours nobody plays. Cubepals is free to start.',
+      'What a Minecraft server for friends costs, and why you shouldn’t pay for hours nobody plays. Cubepals starts with a free trial.',
     published: '2026-10-10',
     modified: '2026-10-10',
     approved: true,

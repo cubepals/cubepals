@@ -9,7 +9,7 @@ import { daysSaid, hoursAgainSaid, hoursSaid } from './plans.ts'
 
 const free: PublicPlan = {
   key: 'free',
-  name: 'Free',
+  name: 'Free trial',
   monthlyPriceCents: 0,
   yearlyPriceCents: null,
   includedHours: 2,
@@ -48,7 +48,7 @@ const plus: PublicPlan = {
 // What the pricing, landing and account pages say about a plan: what people choose on, in their
 // words, and never a machine's.
 describe('plans as people read them', () => {
-  test('Free says what it is, with nothing crossed out', () => {
+  test('The free trial says what it is, with nothing crossed out', () => {
     expect(priceOf(free.monthlyPriceCents)).toBe('$0')
     expect(planPoints(free)).toEqual([
       '1 server, up to 5 players',
@@ -81,7 +81,7 @@ describe('plans as people read them', () => {
       '120 hours a month',
     ])
     expect(hoursAgainSaid([free, plus])).toBe(
-      'the hours start again: Free’s at midnight where you are, until its 20 are played; Plus’s on the 1st',
+      'the hours start again: the free trial’s at midnight where you are, until its 20 are played; Plus’s on the 1st',
     )
     expect(hoursAgainSaid([])).toBe('the hours start again')
   })

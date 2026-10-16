@@ -528,11 +528,11 @@ describe('free play', () => {
     const back = 'Back at midnight, in 3 h 12 min'
     expect(evaluate(facts({ today: { left: 0, back }, freeSharedBecause: 'email' }), start)).toMatchObject({
       message:
-        'You’ve played today’s 2 hours. Back at midnight, in 3 h 12 min. Your free hours are shared with your other Cubepals account at this email.',
+        'You’ve played today’s 2 hours. Back at midnight, in 3 h 12 min. Your free trial is shared with your other Cubepals account at this email.',
     })
     expect(evaluate(facts({ totalLeft: 0, freeSharedBecause: 'players' }), start)).toMatchObject({
       message:
-        'You’ve played your 20 free hours. Your worlds are kept, and Plus starts them again. Your free hours are shared with another Cubepals account the same player plays on.',
+        'You’ve played the 20 hours of your free trial. Your worlds are kept, and Plus starts them again. Your free trial is shared with another Cubepals account the same player plays on.',
     })
   })
 })
@@ -546,7 +546,8 @@ describe('Free’s 20 hours in all', () => {
     expect(evaluate(facts({ entitlements: free, totalLeft: 0, today }), start)).toEqual({
       ok: false,
       code: 'limit_reached',
-      message: 'You’ve played your 20 free hours. Your worlds are kept, and Plus starts them again.',
+      message:
+        'You’ve played the 20 hours of your free trial. Your worlds are kept, and Plus starts them again.',
     })
   })
 })

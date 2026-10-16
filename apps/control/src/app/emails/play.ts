@@ -181,17 +181,17 @@ export function freeHoursWarning(input: {
     input.paid === null ? '' : `${input.paid.name} starts them again, with ${input.paid.hours} hours a month.`
   const lines = done
     ? [
-        `You’ve played your ${input.included} free hours, so your servers have stopped. Your worlds are kept, and you can still download them.`,
+        `You’ve played the ${input.included} hours of your free trial, so your servers have stopped. Nothing is charged. Your worlds are kept, and you can still download them.`,
         again,
       ]
     : [
-        `You have ${leftSaid(left)} left of your ${input.included} free hours. They come once, not every month.`,
+        `You have ${leftSaid(left)} left of your free trial. Its ${input.included} hours come once, not every month.`,
         `When they’re played, your worlds are kept and you can still download them. ${again}`,
       ]
   const leftWords = leftSaid(left)
   const subject = done
-    ? 'Your Cubepals free hours are played'
-    : `${leftWords.slice(0, 1).toUpperCase()}${leftWords.slice(1)} of free play left`
+    ? 'Your Cubepals free trial is over'
+    : `${leftWords.slice(0, 1).toUpperCase()}${leftWords.slice(1)} of your free trial left`
   const preheader = done ? 'Your worlds are kept.' : 'Just so the end is never a surprise.'
   const said = lines.filter((line) => line !== '')
   return {
@@ -201,7 +201,7 @@ export function freeHoursWarning(input: {
     html: layout({
       origin: input.origin,
       preheader,
-      heading: done ? 'Your free hours are played' : 'Your free hours are running low',
+      heading: done ? 'Your free trial is over' : 'Your free trial is running low',
       body: meter(Math.round(left * 10) / 10, input.included, 'left') + said.map(p).join(''),
       action: { label: 'Open your account', url: account },
       why: ACCOUNT,

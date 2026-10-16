@@ -7,6 +7,7 @@
  * in words. Not for the account's own plan, which the signed-in pages read through the API.
  */
 import type { PublicPlan, PublicSize } from '@blockly/contracts'
+import { planSaid } from '../ui/plans'
 import { apiUpstream, RENDER_READ_MS } from './upstream'
 
 /**
@@ -65,12 +66,12 @@ export const hoursSaid = (plan: Pick<PublicPlan, 'includedHours' | 'per' | 'tota
 
 /**
  * When the plans' hours start again, as a sentence about running out says it: "the hours start
- * again: Free’s at midnight where you are, until its 20 are played; Plus’s on the 1st".
+ * again: the free trial’s at midnight where you are, until its 20 are played; Plus’s on the 1st".
  */
 export function hoursAgainSaid(plans: readonly PublicPlan[]): string {
   const each = plans.map((plan) => {
     const when = plan.per === 'day' ? 'at midnight where you are' : 'on the 1st'
-    return `${plan.name}’s ${when}${plan.totalHours === null ? '' : `, until its ${plan.totalHours} are played`}`
+    return `${planSaid(plan)}’s ${when}${plan.totalHours === null ? '' : `, until its ${plan.totalHours} are played`}`
   })
   return each.length > 0 ? `the hours start again: ${each.join('; ')}` : 'the hours start again'
 }

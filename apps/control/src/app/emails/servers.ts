@@ -67,7 +67,7 @@ export function keepingWorld(input: {
   return {
     subject,
     text: [
-      `Nobody has played ${input.server.name} since ${input.lastPlayed}. Free worlds are kept for a year after they were last played, so on ${input.goes} it will be deleted.`,
+      `Nobody has played ${input.server.name} since ${input.lastPlayed}. Worlds on the free trial are kept for a year after they were last played, so on ${input.goes} it will be deleted.`,
       '',
       `To keep it, play on it, or press Keep it on its page: ${page}`,
       `You can download it there too: ${page}/backups`,
@@ -76,7 +76,7 @@ export function keepingWorld(input: {
       subject,
       body:
         p(
-          `Nobody has played <strong style="color:${INK}">${name}</strong> since ${esc(input.lastPlayed)}. Free worlds are kept for a year after they were last played, so on ${esc(input.goes)} it will be deleted.`,
+          `Nobody has played <strong style="color:${INK}">${name}</strong> since ${esc(input.lastPlayed)}. Worlds on the free trial are kept for a year after they were last played, so on ${esc(input.goes)} it will be deleted.`,
         ) +
         p(
           `To keep it, play on it, or press Keep it on ${link({ label: 'its page', url: page })}. You can download it there too.`,

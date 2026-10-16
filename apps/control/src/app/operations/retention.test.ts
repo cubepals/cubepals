@@ -63,7 +63,7 @@ describe.skipIf(!hasDatabase)('retention', () => {
     expect(mailFor(id)).toHaveLength(1)
     const first = mailFor(id)[0]
     expect(first?.subject).toMatch(/^We’re keeping Ada's World until /)
-    expect(first?.text).toContain('Free worlds are kept for a year after they were last played')
+    expect(first?.text).toContain('Worlds on the free trial are kept for a year after they were last played')
     expect(first?.text).toContain('Keep it')
     expect(first?.text).toContain(`/servers/${id}/backups`)
     // A deletion has to be seen: the plain letter, which Gmail leaves in the inbox.

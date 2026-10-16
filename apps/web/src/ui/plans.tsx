@@ -17,7 +17,7 @@ const PITCH: Record<string, string> = {
 
 /**
  * A plan in the four things people choose on, in their words: no gigabytes, units or minutes.
- * Free says what it is rather than what it lacks, so nothing on it is crossed out. Starting when
+ * The free trial says what it is rather than what it lacks, so nothing on it is crossed out. Starting when
  * someone joins is every plan's and the page's headline, so no card repeats it.
  */
 export function planPoints(plan: PublicPlan): string[] {
@@ -32,6 +32,13 @@ export function planPoints(plan: PublicPlan): string[] {
       : `Go back to any of your last ${plan.sessionsKept} sessions, and download your world`,
   ]
 }
+
+/**
+ * A plan's name inside a sentence: "Plus", or "the free trial" for the one whose hours come once,
+ * which is a trial and not a plan that lasts.
+ */
+export const planSaid = (plan: Pick<PublicPlan, 'name' | 'totalHours'>): string =>
+  plan.totalHours === null ? plan.name : `the ${plan.name.toLowerCase()}`
 
 /** What a server may run past plain Minecraft, or that it is plain. */
 function addOns(plan: PublicPlan): string {
@@ -105,8 +112,8 @@ export function PlayHours({
             ) : (
               <p>
                 They come once, not every month: {total} in all, at most {hours} a day from midnight where you
-                are. Once they’re played, your world is kept and you can still download it. Plus starts it
-                again.
+                are. Once they’re played, the trial ends and nothing is charged. Your world is kept and you
+                can still download it, and Plus starts it again.
               </p>
             )}
           </>

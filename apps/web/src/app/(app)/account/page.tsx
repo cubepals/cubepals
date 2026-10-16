@@ -231,11 +231,11 @@ function PlayTotal({ overview }: { overview: AccountOverviewView }) {
   if (total === null) return null
   const share = Math.round(Math.min(1, total.units / total.included) * 100)
   return (
-    <FormSection title="Free hours" description="They come once, not every month.">
+    <FormSection title="Free trial hours" description="They come once, not every month.">
       <BlockMeter
         left={Math.max(0, total.included - total.units)}
         included={total.included}
-        label="Your free hours"
+        label="Your free trial hours"
       />
       {share >= 100 && <FreeHoursUsed hours={total.included} next="/account" />}
     </FormSection>
@@ -444,7 +444,7 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
   const failure = portal.error ?? refresh.error
   return (
     <FormSection
-      title={`${title(overview.plan.key)} plan`}
+      title={overview.plan.key === 'free' ? 'Free trial' : `${title(overview.plan.key)} plan`}
       description={planSummary(overview)}
       actions={
         billing?.available ? billingActions(overview, portal.isPending, () => portal.mutate()) : undefined
@@ -474,10 +474,13 @@ function planSummary(overview: AccountOverviewView): string {
     return `Your last payment didn’t go through. Update your card in Manage billing by ${dayOf(billed.pastDueUntil)} to keep ${title(key)}.`
   if (paying && billed.periodEnd)
     return billed.cancelAtPeriodEnd
-      ? `Ends on ${dayOf(billed.periodEnd)}; then you're on Free.`
+      ? `Ends on ${dayOf(billed.periodEnd)}; then you're on the free trial.`
       : `Renews on ${dayOf(billed.periodEnd)}.`
-  if (gifted !== null) return `A gift, until ${dayOf(gifted.until)}. It doesn’t renew; then you’re on Free.`
-  return key !== 'free' ? 'Given to this account by Cubepals.' : 'Free, for as long as you like. No card.'
+  if (gifted !== null)
+    return `A gift, until ${dayOf(gifted.until)}. It doesn’t renew; then you’re on the free trial.`
+  return key !== 'free'
+    ? 'Given to this account by Cubepals.'
+    : 'No card, and nothing is charged when it ends.'
 }
 
 /**

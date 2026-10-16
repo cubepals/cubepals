@@ -99,7 +99,7 @@ describe.skipIf(!hasDatabase)('plan limits on configurations', () => {
         () => null,
         (error: Error) => error.message,
       )
-    expect(moved).toBe('Free servers run Vanilla and Paper. Fabric comes with Plus.')
+    expect(moved).toBe('Free trial servers run Vanilla and Paper. Fabric comes with Plus.')
     // Paper is fine.
     await h.app.mods.changeVersion(free, id, { gameVersion: '26.2', loader: 'paper' }, [], randomUUID())
     await h.until(id, 'running', MINUTE_MS)
@@ -110,7 +110,7 @@ describe.skipIf(!hasDatabase)('plan limits on configurations', () => {
       () => null,
       (error: Error) => error.message,
     )
-    expect(made).toBe('Free servers run Vanilla and Paper. Fabric comes with Plus.')
+    expect(made).toBe('Free trial servers run Vanilla and Paper. Fabric comes with Plus.')
   }, 60_000)
 
   test('Plus runs every server type', async () => {

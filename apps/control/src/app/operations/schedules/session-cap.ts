@@ -47,7 +47,7 @@ const WARNING: Record<SessionEnd['reason'], (minutes: number) => string> = {
   daily: (minutes) =>
     `Today’s play ends in ${minutes} minutes. The world is saved, and play is back at midnight.`,
   free_hours: (minutes) =>
-    `The free hours end in ${minutes} minutes. The world is saved and kept, and Plus starts it again.`,
+    `The free trial ends in ${minutes} minutes. The world is saved and kept, and Plus starts it again.`,
 }
 
 /** What a stop for each end is keyed by, with the session's start: one stop each. */

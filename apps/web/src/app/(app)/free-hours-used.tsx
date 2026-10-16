@@ -23,7 +23,8 @@ export function FreeHoursUsed({ hours, next }: { hours: number; next?: string })
   return (
     <>
       <Note tone="info">
-        You’ve played your {hours} free hours. Your worlds are kept, and you can still download them.
+        You’ve played the {hours} hours of your free trial. Nothing is charged. Your worlds are kept, and you
+        can still download them.
       </Note>
       {monthly && (
         <PlusOffer

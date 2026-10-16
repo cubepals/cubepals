@@ -20,18 +20,18 @@ export async function generateMetadata(): Promise<Metadata> {
   const free = plans.find((plan) => plan.monthlyPriceCents === 0)
   const paid = plans.find((plan) => plan.monthlyPriceCents > 0)
   return pageMetadata({
-    title: paid ? `Pricing: Free, or ${paid.name} for ${priceOf(paid.monthlyPriceCents)}` : 'Pricing',
+    title: paid ? `Pricing: a free trial, or ${paid.name} for ${priceOf(paid.monthlyPriceCents)}` : 'Pricing',
     description: free
-      ? `Free to play with friends: ${hoursSaid(free)} for up to ${free.maxPlayers} players.${paid ? ` ${paid.name} for modpacks, more play and bigger groups.` : ''}`
-      : 'Free to play Minecraft with friends. Plus for modpacks, more play and bigger groups.',
+      ? `A free trial of ${hoursSaid(free)}, for up to ${free.maxPlayers} players.${paid ? ` ${paid.name} for modpacks, more play and bigger groups.` : ''}`
+      : 'Start with a free trial. Plus for modpacks, more play and bigger groups.',
     path: '/pricing',
   })
 }
 
-/** What happens once a plan's hours in all are played, where one has them: "Free’s 20 come once…". */
+/** What happens once the trial's hours are played, where it has them: "When the trial’s 20 hours…". */
 function onceSaid(free: PublicPlan | undefined, paid: PublicPlan | undefined): string {
   if (!free?.totalHours || !paid) return ''
-  return ` ${free.name}’s ${free.totalHours} come once: when they’re played, your world is kept and you can still download it, and ${paid.name} starts it again.`
+  return ` When the trial’s ${free.totalHours} hours are played, it ends and nothing is charged. Your world is kept and you can still download it, and ${paid.name} starts it again.`
 }
 
 /**
@@ -50,9 +50,7 @@ export default async function PricingPage() {
       <JsonLd schema={appSchema(plans, canonicalOrigin())} />
       <header className="bk-stack" style={{ gap: 'var(--space-8)' }}>
         <h1 className="type-display-md" style={{ color: 'var(--ink)' }}>
-          {paid
-            ? `Free to play with friends. ${paid.name} when you want more.`
-            : 'Free to play with friends.'}
+          {paid ? `Start with a free trial. ${paid.name} when you want more.` : 'Start with a free trial.'}
         </h1>
         <p className="type-body" style={{ color: 'var(--ink-muted)' }}>
           Hours only count while your server is running, and it sleeps when nobody’s on. Joining wakes it,
@@ -118,7 +116,7 @@ export default async function PricingPage() {
           {paid ? ` (${daysSaid(paid.restsAfterDays)} on ${paid.name})` : ''} it rests in storage: joining
           still wakes it, it just takes a couple of minutes.
           {free?.deletedAfterDays
-            ? ` A free world nobody has played for ${daysSaid(free.deletedAfterDays)} is deleted, and we email you twice before, with a way to keep it and a download.`
+            ? ` On the trial, a world nobody has played for ${daysSaid(free.deletedAfterDays)} is deleted, and we email you twice before, with a way to keep it and a download.`
             : ''}
           {paid ? ` ${paid.name} worlds are kept for as long as you have ${paid.name}.` : ''}
         </Question>

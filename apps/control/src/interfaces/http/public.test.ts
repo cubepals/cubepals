@@ -50,7 +50,7 @@ describe('public plans', () => {
     expect(plans).toEqual([
       {
         key: 'free',
-        name: 'Free',
+        name: 'Free trial',
         monthlyPriceCents: 0,
         yearlyPriceCents: null,
         // 20 hours in all, at most 2 a day from the player's midnight, and no monthly total.

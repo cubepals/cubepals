@@ -10,6 +10,7 @@
  */
 import type { PublicPlan } from '@blockly/contracts'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { planSaid } from '../../ui/plans'
 import { useInView, useReducedMotion } from '../hooks'
 import { stage } from '../stage'
 import { TourBar, useTour } from '../tour'
@@ -371,7 +372,7 @@ export function LedgerDemo({ plans }: { plans: PublicPlan[] }) {
   // the group has one size and the second isn't asked; here it is a row like the others, and
   // the count says what the rows show.)
   const made = 3
-  const runsOn = fit.why ?? (fit.plan ? `Runs on ${fit.plan.name}.` : null)
+  const runsOn = fit.why ?? (fit.plan ? `Runs on ${planSaid(fit.plan)}.` : null)
 
   // The tour's next stop is read off the choice as it stands, never off what the tour did last.
   // On the round it is the stop after this one. Off it, where a person left the choice or the

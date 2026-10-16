@@ -343,7 +343,7 @@ function Today({ server }: { server: ServerView }) {
   if (total !== null && total.hoursLeft < today.hoursLeft)
     return (
       <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-        {hoursAndMinutes(total.hoursLeft * 60)} left of your {total.hours} free hours.
+        {hoursAndMinutes(total.hoursLeft * 60)} left of your free trial.
       </p>
     )
   if (today.hoursLeft <= 0) return null
@@ -374,9 +374,9 @@ function Unplayed({ server, at }: { server: ServerView; at: string }) {
   return (
     <Note tone="info">
       <span>
-        Nobody has played {server.name} for almost a year. Free worlds are kept for a year after they were
-        last played, so Cubepals deletes it on {dayOf(at)}, into the trash for a week after. Keep it, and it
-        stays another year.
+        Nobody has played {server.name} for almost a year. Worlds on the free trial are kept for a year after
+        they were last played, so Cubepals deletes it on {dayOf(at)}, into the trash for a week after. Keep
+        it, and it stays another year.
       </span>
       <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)', marginBlockStart: 'var(--space-12)' }}>
         <Button

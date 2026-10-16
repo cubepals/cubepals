@@ -35,7 +35,7 @@ export function Phone({ create, signedIn, plans, getPlan }: Landed) {
             Create a server
           </Link>
           <p>
-            Free to start, no card needed.
+            Start with a free trial, no card needed.
             <br />
             For Minecraft: Java Edition.
           </p>
