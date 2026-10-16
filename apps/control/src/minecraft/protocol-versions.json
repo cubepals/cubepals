@@ -1,0 +1,337 @@
+{
+  "source": "minecraft-data 3.117.0",
+  "releases": [
+    {
+      "name": "26.3",
+      "protocol": 777
+    },
+    {
+      "name": "26.2",
+      "protocol": 776
+    },
+    {
+      "name": "26.1.2",
+      "protocol": 775
+    },
+    {
+      "name": "26.1.1",
+      "protocol": 775
+    },
+    {
+      "name": "26.1",
+      "protocol": 775
+    },
+    {
+      "name": "1.21.11",
+      "protocol": 774
+    },
+    {
+      "name": "1.21.10",
+      "protocol": 773
+    },
+    {
+      "name": "1.21.9",
+      "protocol": 773
+    },
+    {
+      "name": "1.21.8",
+      "protocol": 772
+    },
+    {
+      "name": "1.21.7",
+      "protocol": 772
+    },
+    {
+      "name": "1.21.6",
+      "protocol": 771
+    },
+    {
+      "name": "1.21.5",
+      "protocol": 770
+    },
+    {
+      "name": "1.21.4",
+      "protocol": 769
+    },
+    {
+      "name": "1.21.3",
+      "protocol": 768
+    },
+    {
+      "name": "1.21.2",
+      "protocol": 768
+    },
+    {
+      "name": "1.21.1",
+      "protocol": 767
+    },
+    {
+      "name": "1.21",
+      "protocol": 767
+    },
+    {
+      "name": "1.20.6",
+      "protocol": 766
+    },
+    {
+      "name": "1.20.5",
+      "protocol": 766
+    },
+    {
+      "name": "1.20.4",
+      "protocol": 765
+    },
+    {
+      "name": "1.20.3",
+      "protocol": 765
+    },
+    {
+      "name": "1.20.2",
+      "protocol": 764
+    },
+    {
+      "name": "1.20.1",
+      "protocol": 763
+    },
+    {
+      "name": "1.20",
+      "protocol": 763
+    },
+    {
+      "name": "1.19.4",
+      "protocol": 762
+    },
+    {
+      "name": "1.19.3",
+      "protocol": 761
+    },
+    {
+      "name": "1.19.2",
+      "protocol": 760
+    },
+    {
+      "name": "1.19.1",
+      "protocol": 760
+    },
+    {
+      "name": "1.19",
+      "protocol": 759
+    },
+    {
+      "name": "1.18.2",
+      "protocol": 758
+    },
+    {
+      "name": "1.18.1",
+      "protocol": 757
+    },
+    {
+      "name": "1.18",
+      "protocol": 757
+    },
+    {
+      "name": "1.17.1",
+      "protocol": 756
+    },
+    {
+      "name": "1.17",
+      "protocol": 755
+    },
+    {
+      "name": "1.16.5",
+      "protocol": 754
+    },
+    {
+      "name": "1.16.4",
+      "protocol": 754
+    },
+    {
+      "name": "1.16.3",
+      "protocol": 753
+    },
+    {
+      "name": "1.16.2",
+      "protocol": 751
+    },
+    {
+      "name": "1.16.1",
+      "protocol": 736
+    },
+    {
+      "name": "1.16",
+      "protocol": 735
+    },
+    {
+      "name": "1.15.2",
+      "protocol": 578
+    },
+    {
+      "name": "1.15.1",
+      "protocol": 575
+    },
+    {
+      "name": "1.15",
+      "protocol": 573
+    },
+    {
+      "name": "1.14.4",
+      "protocol": 498
+    },
+    {
+      "name": "1.14.3",
+      "protocol": 490
+    },
+    {
+      "name": "1.14.2",
+      "protocol": 485
+    },
+    {
+      "name": "1.14.1",
+      "protocol": 480
+    },
+    {
+      "name": "1.14",
+      "protocol": 477
+    },
+    {
+      "name": "1.13.2",
+      "protocol": 404
+    },
+    {
+      "name": "1.13.1",
+      "protocol": 401
+    },
+    {
+      "name": "1.13",
+      "protocol": 393
+    },
+    {
+      "name": "1.12.2",
+      "protocol": 340
+    },
+    {
+      "name": "1.12.1",
+      "protocol": 338
+    },
+    {
+      "name": "1.12",
+      "protocol": 335
+    },
+    {
+      "name": "1.11.2",
+      "protocol": 316
+    },
+    {
+      "name": "1.11.1",
+      "protocol": 316
+    },
+    {
+      "name": "1.11",
+      "protocol": 315
+    },
+    {
+      "name": "1.10.2",
+      "protocol": 210
+    },
+    {
+      "name": "1.10.1",
+      "protocol": 210
+    },
+    {
+      "name": "1.10",
+      "protocol": 210
+    },
+    {
+      "name": "1.9.4",
+      "protocol": 110
+    },
+    {
+      "name": "1.9.3",
+      "protocol": 110
+    },
+    {
+      "name": "1.9.2",
+      "protocol": 109
+    },
+    {
+      "name": "1.9.1",
+      "protocol": 108
+    },
+    {
+      "name": "1.9",
+      "protocol": 107
+    },
+    {
+      "name": "1.8.9",
+      "protocol": 47
+    },
+    {
+      "name": "1.8.8",
+      "protocol": 47
+    },
+    {
+      "name": "1.8.7",
+      "protocol": 47
+    },
+    {
+      "name": "1.8.6",
+      "protocol": 47
+    },
+    {
+      "name": "1.8.5",
+      "protocol": 47
+    },
+    {
+      "name": "1.8.4",
+      "protocol": 47
+    },
+    {
+      "name": "1.8.3",
+      "protocol": 47
+    },
+    {
+      "name": "1.8.2",
+      "protocol": 47
+    },
+    {
+      "name": "1.8.1",
+      "protocol": 47
+    },
+    {
+      "name": "1.8",
+      "protocol": 47
+    },
+    {
+      "name": "1.7.10",
+      "protocol": 5
+    },
+    {
+      "name": "1.7.9",
+      "protocol": 5
+    },
+    {
+      "name": "1.7.8",
+      "protocol": 5
+    },
+    {
+      "name": "1.7.7",
+      "protocol": 5
+    },
+    {
+      "name": "1.7.6",
+      "protocol": 5
+    },
+    {
+      "name": "1.7.5",
+      "protocol": 4
+    },
+    {
+      "name": "1.7.4",
+      "protocol": 4
+    },
+    {
+      "name": "1.7.2",
+      "protocol": 4
+    }
+  ]
+}

@@ -102,7 +102,25 @@ export function fabricModProvider(
  * join a server on an older release. Its builds run on every release Cubepals offers Paper on.
  */
 export const VIAVERSION = 'P1OZGk5p'
+/** ViaBackwards on Modrinth (GPL-3.0-only): ViaVersion's addon for players on older Minecraft. */
+export const VIABACKWARDS = 'NpvuJQoq'
+/** ViaRewind on Modrinth (GPL-3.0-or-later): ViaBackwards' addon for players on 1.8 and 1.7. */
+export const VIAREWIND = 'TbHIxhx5'
+
+/** The Via plugins' names, by their Modrinth projects: the same plugin from Hangar or an upload. */
+const VIA_NAMES: Readonly<Record<string, string>> = {
+  [VIAVERSION]: 'viaversion',
+  [VIABACKWARDS]: 'viabackwards',
+  [VIAREWIND]: 'viarewind',
+}
+
+/** Whether `mods` hold the Via plugin that is Modrinth's `projectId`, from wherever it came. */
+export const runsPlugin = (mods: readonly PinnedMod[], projectId: string): boolean =>
+  mods.some(
+    (mod) =>
+      ('projectId' in mod.source && mod.source.projectId === projectId) ||
+      mod.name.toLowerCase() === VIA_NAMES[projectId],
+  )
 
 /** Whether a server's plugins let players on newer Minecraft than it runs join it. */
-export const joinsNewer = (mods: readonly PinnedMod[]): boolean =>
-  mods.some((mod) => 'projectId' in mod.source && mod.source.projectId === VIAVERSION)
+export const joinsNewer = (mods: readonly PinnedMod[]): boolean => runsPlugin(mods, VIAVERSION)

@@ -91,6 +91,13 @@ precedence = "closest"
 SPDX-FileCopyrightText = "The Boat authors (docs.boat.dev)"
 SPDX-License-Identifier = "LicenseRef-Upstream-Terms"
 
+# Minecraft's protocol numbers, copied from minecraft-data's releases (scripts/protocols.ts).
+[[annotations]]
+path = "apps/control/src/minecraft/protocol-versions.json"
+precedence = "closest"
+SPDX-FileCopyrightText = "2015 PrismarineJS"
+SPDX-License-Identifier = "MIT"
+
 # Hangar's answers, recorded for tests: the projects' text is their authors'.
 [[annotations]]
 path = "apps/control/src/infra/hangar/fixtures/**"
