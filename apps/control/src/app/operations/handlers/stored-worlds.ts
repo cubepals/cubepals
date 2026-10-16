@@ -6,8 +6,7 @@
  * Rests a world nobody plays in the archive store, and wakes it from there (§15.5 stored worlds):
  * store and unstore share the copy a world rests in and the way back to resting. Making and
  * checking that copy is `world-copies.ts`; deciding which servers rest is the store sweep's
- * (`schedules.ts`). `WOKEN_BY` comes from `bringing-up.ts`: the one import between families, since
- * a wake is a start a connection asked for.
+ * (`schedules.ts`).
  */
 import { DAY_MS } from '@blockly/contracts/durations'
 import { type AppliedConfigJson, type Db, schema, type Tx } from '@blockly/db'
@@ -30,7 +29,6 @@ import type { BootSequence } from '../boot.ts'
 import { openOfKinds, otherWork } from '../persistence.ts'
 import { NoLongerApplies, type OperationContext, type OperationHandler } from '../runner.ts'
 import { appliedConfig, type ServerBinding } from './binding.ts'
-import { WOKEN_BY } from './bringing-up.ts'
 import type { Rechecks } from './rechecks.ts'
 import { IMPORT_LINK_SECONDS, KEPT_AFTER_WAKING_MS, type WorldCopies } from './world-copies.ts'
 
@@ -259,7 +257,7 @@ export function storedWorlds(deps: {
         const locked = await lockServer(tx, server.id)
         if (locked === null || locked.lifecycle.status !== 'restoring') return
         await booted(tx, server.id, appliedConfig(locked, desired))
-        await openInterval(tx, server.id, locked.memoryTier, new Date(), ctx.op.requestedBy === WOKEN_BY)
+        await openInterval(tx, server.id, locked.memoryTier, new Date(), ctx.op)
         await markStored(tx, server.id, null)
         await setExpiry(tx, copy.id, new Date(Date.now() + KEPT_AFTER_WAKING_MS))
         const woke = await transitions.outcome(tx, locked, { type: 'restored', running: true })

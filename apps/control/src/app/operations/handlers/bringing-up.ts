@@ -7,9 +7,7 @@
  * with no room falls back to another runtime here, as does a new server that can't come up where
  * it is, and a start onto a change that rewrites the world goes the way an update does, with a
  * snapshot to go back to; one refused where it is goes the way `host-refused.ts` takes it.
- * Updating a running server is `updating.ts`; waking a resting world is
- * `stored-worlds.ts`, which imports `WOKEN_BY` from here: the one import between families, a
- * constant naming who asked for a run.
+ * Updating a running server is `updating.ts`; waking a resting world is `stored-worlds.ts`.
  */
 import type { AppliedConfigJson, Db } from '@blockly/db'
 import { rewritesWorld } from '../../../domain/revision/revision.ts'
@@ -327,7 +325,7 @@ export function bringingUp(deps: {
         if (server === null || server.lifecycle.status !== 'starting') return
         await booted(tx, server.id, appliedConfig(server, desired))
         // A run nobody asked for in the app is one a connection woke; it runs on probation.
-        await openInterval(tx, server.id, server.memoryTier, new Date(), ctx.op.requestedBy === WOKEN_BY)
+        await openInterval(tx, server.id, server.memoryTier, new Date(), ctx.op)
         const started = await transitions.outcome(tx, server, { type: 'started' })
         await enqueuePrune(tx, transitions, started)
       })

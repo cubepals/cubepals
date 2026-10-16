@@ -9,8 +9,8 @@
  * sequence the handlers share is `boot.ts`. Shared steps (binding, rechecks, game console, world
  * copies, going back) each own one piece of state; families (the rest) each own their handlers'
  * phase and what a failure leaves. Families take the steps' functions from here, importing only
- * their types, the pure `appliedConfig` and the link and copy lifetimes; the one import between
- * families is `WOKEN_BY`, from `bringing-up.ts` into `stored-worlds.ts`.
+ * their types, the pure `appliedConfig` and the link and copy lifetimes, and never import from
+ * one another.
  *
  * Parts (`handlers/`):
  * - `access-sync.ts`: brings a running server's access files in line with Blockly's record.

@@ -11,11 +11,12 @@ import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull, sql } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { runHoursSince } from '../accounts/persistence.ts'
 import type { Actor } from '../actor.ts'
 import * as metered from '../billing/chip-in-meter.ts'
-import { PING_WAKE_KEY } from '../servers/usage.ts'
+import { PING_WAKE_KEY, replacePresence } from '../servers/usage.ts'
 import { tuning } from '../tuning.ts'
 import { NOWHERE } from './service.ts'
 
@@ -71,6 +72,39 @@ async function lastRunWoken(h: Harness, id: string) {
     .where(eq(schema.powerIntervals.serverId, id))
     .orderBy(schema.powerIntervals.startedAt)
   return runs.at(-1)?.woken
+}
+
+/** The server's open run, moved back so it began an hour ago, and its join, where one was, half an hour ago. */
+async function anHourIn(h: Harness, id: string) {
+  const runs = schema.powerIntervals
+  const now = Date.now()
+  const [run] = await h.db
+    .update(runs)
+    .set({
+      startedAt: new Date(now - HOUR_MS),
+      joinedAt: sql`case when ${runs.joinedAt} is null then null else ${new Date(now - HOUR_MS / 2)}::timestamptz end`,
+    })
+    .where(and(eq(runs.serverId, id), isNull(runs.stoppedAt)))
+    .returning({ pinged: runs.pinged, joinedAt: runs.joinedAt })
+  return run
+}
+
+/**
+ * A run a ping woke, an hour long, with a player the server itself saw half an hour in where
+ * `joined`; what it added to its owner's hours.
+ */
+async function hourOfPingRun(h: Harness, joined: boolean) {
+  const { owner, id, hostname } = await sleeping(h)
+  const before = await runHoursSince(h.db, owner.userId, new Date(0), new Date())
+  expect(await h.app.edge.pingWake(hostname)).toEqual({ waking: true })
+  await h.until(id, 'running')
+  await h.settled(id)
+  if (joined) await replacePresence(h.db, id, [{ uuid: randomUUID(), name: 'Steve' }], new Date())
+  const run = await anHourIn(h, id)
+  await h.app.servers.stop(owner, id, randomUUID(), 'idle')
+  await h.until(id, 'stopped')
+  await h.settled(id)
+  return { run, hours: (await runHoursSince(h.db, owner.userId, new Date(0), new Date())) - before }
 }
 
 describe.skipIf(!hasDatabase)('a ping wakes a server early', () => {
@@ -164,6 +198,19 @@ describe.skipIf(!hasDatabase)('a ping wakes a server early', () => {
     } finally {
       month.mockRestore()
     }
+  }, 30_000)
+
+  test('a run a ping woke counts toward the owner’s hours from the first join, not from its start', async () => {
+    const { run, hours } = await hourOfPingRun(h, true)
+    expect(run).toMatchObject({ pinged: true, joinedAt: expect.any(Date) })
+    // Half an hour, from the join: not the hour since it started.
+    expect(hours).toBeCloseTo(0.5, 1)
+  }, 30_000)
+
+  test('a run a ping woke that nobody joined counts nothing toward the owner’s hours', async () => {
+    const { run, hours } = await hourOfPingRun(h, false)
+    expect(run).toEqual({ pinged: true, joinedAt: null })
+    expect(hours).toBeCloseTo(0, 4)
   }, 30_000)
 
   test('a server on its way up is routed as waking: starting, or its world back from rest', async () => {

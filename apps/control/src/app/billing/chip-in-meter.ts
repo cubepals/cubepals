@@ -16,13 +16,13 @@
  */
 import { HOUR_S } from '@blockly/contracts/durations'
 import { type Queryable, schema } from '@blockly/db'
-import { and, eq, inArray, lt, lte, sql } from 'drizzle-orm'
+import { and, eq, inArray, lte, sql } from 'drizzle-orm'
 import { draw, heldMilli, type Span, unitsWithin } from '../../domain/account/chip-in.ts'
 import { type Entitlements, entitlementsFor } from '../../domain/account/entitlements.ts'
 import { METER_UNITS } from '../../domain/account/meter.ts'
 import { DEFAULT_TIME_ZONE, nextMonthStart } from '../../domain/account/play-day.ts'
 import type { AccountStanding } from '../../domain/account/standing.ts'
-import { loadStanding, runUnitsIn } from '../accounts/persistence.ts'
+import { countedFrom, loadStanding, runUnitsIn } from '../accounts/persistence.ts'
 import { monthSpans, type PlayMonth, playOf } from '../accounts/play-month.ts'
 
 const chipIns = schema.chipIns
@@ -239,7 +239,7 @@ async function runsBetween(q: Queryable, ownerId: string, from: Date, to: Date):
   const rows = await q
     .select({
       serverId: intervals.serverId,
-      start: intervals.startedAt,
+      start: countedFrom(intervals),
       end: intervals.stoppedAt,
       tier: intervals.memoryTier,
     })
@@ -247,13 +247,13 @@ async function runsBetween(q: Queryable, ownerId: string, from: Date, to: Date):
     .where(
       and(
         inArray(intervals.serverId, owned),
-        lt(intervals.startedAt, to),
+        sql`${countedFrom(intervals)} < ${to}`,
         sql`coalesce(${intervals.stoppedAt}, ${to}) > ${from}`,
       ),
     )
   return rows.map((row) => ({
     serverId: row.serverId,
-    start: Math.max(row.start.getTime(), from.getTime()),
+    start: Math.max(new Date(row.start ?? to).getTime(), from.getTime()),
     end: Math.min((row.end ?? to).getTime(), to.getTime()),
     // As `runUnitsSince` counts it: a size the meter doesn't know is one unit an hour.
     rate: METER_UNITS[row.tier as keyof typeof METER_UNITS] ?? 1,

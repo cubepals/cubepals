@@ -58,6 +58,13 @@ export const powerIntervals = pgTable(
      * probation until somebody actually joins it (§15.1): a wake has to lead to play.
      */
     woken: boolean('woken').notNull().default(false),
+    /**
+     * Woken by a server-list ping, before anyone joined. Such a run counts toward no plan's hours
+     * until somebody joins it, from `joinedAt`; one nobody joined counts nothing.
+     */
+    pinged: boolean('pinged').notNull().default(false),
+    /** When the server itself first saw a player on a `pinged` run; null until then, and on any other. */
+    joinedAt: ts('joined_at'),
   },
   (t) => [
     index('power_intervals_server').on(t.serverId, t.startedAt),

@@ -15,7 +15,6 @@ import {
   ilike,
   inArray,
   isNull,
-  lt,
   lte,
   ne,
   notExists,
@@ -354,6 +353,14 @@ function unitWeight() {
 }
 
 /**
+ * When a run starts counting toward its owner's plan hours: as it starts, or, for one a
+ * server-list ping woke, once someone joins it. Null for such a run nobody has joined, which
+ * counts nothing: every count below leaves out a run that doesn't start counting before its end.
+ */
+export const countedFrom = (intervals: typeof schema.powerIntervals) =>
+  sql<Date | null>`(case when ${intervals.pinged} then ${intervals.joinedAt} else ${intervals.startedAt} end)`
+
+/**
  * Play since `since`, in meter units: every run weighted by the size it ran on, open ones
  * counted up to now. This is the number a plan's included block is measured against, and the
  * one a meter would bill. Several owners count together, as accounts sharing free hours do.
@@ -369,7 +376,7 @@ export async function runUnitsSince(
   const intervals = schema.powerIntervals
   const [row] = await q
     .select({
-      units: sql<string>`coalesce(sum(extract(epoch from (least(coalesce(${intervals.stoppedAt}, ${now}), ${now}) - greatest(${intervals.startedAt}, ${since}))) * (${unitWeight()})), 0)`,
+      units: sql<string>`coalesce(sum(extract(epoch from (least(coalesce(${intervals.stoppedAt}, ${now}), ${now}) - greatest(${countedFrom(intervals)}, ${since}))) * (${unitWeight()})), 0)`,
     })
     .from(intervals)
     .innerJoin(servers, eq(servers.id, intervals.serverId))
@@ -378,7 +385,7 @@ export async function runUnitsSince(
       and(
         typeof ownerId === 'string' ? eq(servers.ownerId, ownerId) : inArray(servers.ownerId, [...ownerId]),
         sql`coalesce(${intervals.stoppedAt}, ${now}) > ${since}`,
-        lt(intervals.startedAt, now),
+        sql`${countedFrom(intervals)} < ${now}`,
         onPlan === undefined ? undefined : eq(intervals.plan, onPlan),
       ),
     )
@@ -403,13 +410,13 @@ export async function runUnitsIn(
   const rows = await q
     .select({
       span: sql<number>`span.i`,
-      units: sql<string>`sum(extract(epoch from (least(coalesce(${intervals.stoppedAt}, span.e), span.e) - greatest(${intervals.startedAt}, span.s))) * (${unitWeight()}))`,
+      units: sql<string>`sum(extract(epoch from (least(coalesce(${intervals.stoppedAt}, span.e), span.e) - greatest(${countedFrom(intervals)}, span.s))) * (${unitWeight()}))`,
     })
     .from(intervals)
     .innerJoin(servers, eq(servers.id, intervals.serverId))
     .innerJoin(
       sql`(values ${bounds}) as span(i, s, e)`,
-      sql`coalesce(${intervals.stoppedAt}, span.e) > span.s and ${intervals.startedAt} < span.e`,
+      sql`coalesce(${intervals.stoppedAt}, span.e) > span.s and ${countedFrom(intervals)} < span.e`,
     )
     .where(eq(servers.ownerId, ownerId))
     .groupBy(sql`span.i`)
@@ -423,11 +430,17 @@ export async function runHoursSince(q: Queryable, ownerId: string, since: Date, 
   const intervals = schema.powerIntervals
   const [row] = await q
     .select({
-      seconds: sql<string>`coalesce(sum(extract(epoch from (least(coalesce(${intervals.stoppedAt}, ${now}), ${now}) - greatest(${intervals.startedAt}, ${since})))), 0)`,
+      seconds: sql<string>`coalesce(sum(extract(epoch from (least(coalesce(${intervals.stoppedAt}, ${now}), ${now}) - greatest(${countedFrom(intervals)}, ${since})))), 0)`,
     })
     .from(intervals)
     .innerJoin(servers, eq(servers.id, intervals.serverId))
-    .where(and(eq(servers.ownerId, ownerId), sql`coalesce(${intervals.stoppedAt}, ${now}) > ${since}`))
+    .where(
+      and(
+        eq(servers.ownerId, ownerId),
+        sql`coalesce(${intervals.stoppedAt}, ${now}) > ${since}`,
+        sql`${countedFrom(intervals)} < ${now}`,
+      ),
+    )
   return Number(row?.seconds ?? 0) / HOUR_S
 }
 
