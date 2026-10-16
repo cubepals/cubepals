@@ -48,35 +48,66 @@ export function due(cron: string, at: Date): boolean {
 }
 
 /**
- * Sends each of `schedules` (job name and cron) as its minute comes, until the returned function
- * is called. Every expression is read once first, so one that can't be refuses at once.
+ * The longest one minute's sends may take before the next minute is waited for regardless: a pool
+ * with no free connection waits without end, and the ticker must not wait with it.
  */
-export function everyMinute(boss: PgBoss, schedules: ReadonlyArray<readonly [string, string]>): () => void {
-  for (const [, cron] of schedules) due(cron, new Date(0))
-  const send = async (at: Date) => {
+const TICK_BOUND_MS = 30 * SECOND_MS
+
+/** What the ticker needs of pg-boss: sending a job. */
+type Sender = Pick<PgBoss, 'send'>
+
+/**
+ * Sends each of `schedules` due in `at`'s minute, and settles once they are sent, or after
+ * `boundMs` while any still hangs: the hung send goes on by itself.
+ */
+export async function tick(
+  boss: Sender,
+  schedules: ReadonlyArray<readonly [string, string]>,
+  at: Date,
+  boundMs = TICK_BOUND_MS,
+): Promise<void> {
+  const sends = (async () => {
     for (const [name, cron] of schedules) {
       if (!due(cron, at)) continue
       await boss
         .send(name, {}, { singletonSeconds: MINUTE_S })
         .catch((error: unknown) => console.error(`schedule: ${name} not sent`, error))
     }
-  }
+  })()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const bound = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      console.error(`schedule: the sends for ${at.toISOString()} still wait after ${boundMs} ms`)
+      resolve()
+    }, boundMs)
+  })
+  await Promise.race([sends, bound])
+  clearTimeout(timer)
+}
+
+/**
+ * Sends each of `schedules` (job name and cron) as its minute comes, until the returned function
+ * is called. Every expression is read once first, so one that can't be refuses at once. The minute
+ * the worker starts in is sent at once too: a restart in a daily job's minute would otherwise
+ * lose that day's run. Where another worker sent it already, its singleton slot drops this one.
+ */
+export function everyMinute(boss: Sender, schedules: ReadonlyArray<readonly [string, string]>): () => void {
+  for (const [, cron] of schedules) due(cron, new Date(0))
   let timer: ReturnType<typeof setTimeout> | undefined
   let stopped = false
   const next = () => {
     if (stopped) return
     const now = Date.now()
-    const minute = Math.floor(now / MINUTE_MS) * MINUTE_MS
-    const at = minute + INTO_MINUTE_MS > now ? minute : minute + MINUTE_MS
+    const at = Math.floor(now / MINUTE_MS) * MINUTE_MS + MINUTE_MS
     timer = setTimeout(
       () => {
-        void send(new Date(at)).finally(next)
+        void tick(boss, schedules, new Date(at)).finally(next)
       },
       at + INTO_MINUTE_MS - now,
     )
     timer.unref()
   }
-  next()
+  void tick(boss, schedules, new Date(Math.floor(Date.now() / MINUTE_MS) * MINUTE_MS)).finally(next)
   return () => {
     stopped = true
     clearTimeout(timer)

@@ -11,7 +11,7 @@ import { randomBytes } from 'node:crypto'
 import { MINUTE_S } from '@blockly/contracts/durations'
 import pg from 'pg'
 import { startBoss } from './jobs.ts'
-import { due } from './ticker.ts'
+import { due, everyMinute, tick } from './ticker.ts'
 
 const at = (iso: string) => new Date(iso)
 
@@ -32,6 +32,43 @@ describe('a cron expression', () => {
     expect(() => due('* * * *', at('2026-10-15T00:00:00Z'))).toThrow('five-field')
     expect(() => due('1-5 * * * *', at('2026-10-15T00:00:00Z'))).toThrow('not read here')
     expect(() => due('61 * * * *', at('2026-10-15T00:00:00Z'))).toThrow('not read here')
+  })
+})
+
+describe('the ticker', () => {
+  test('sends what is due in the minute a worker starts in, at once', async () => {
+    const sent: string[] = []
+    const boss = {
+      send: async (name: string) => {
+        sent.push(name)
+        return null
+      },
+    } as never
+    // Every minute is due for one; the other is due a minute that is never now.
+    const stop = everyMinute(boss, [
+      ['each-minute', '* * * * *'],
+      ['never-now', `0 0 1 1 ${(new Date().getUTCDay() + 1) % 7}`],
+    ])
+    try {
+      await Bun.sleep(50)
+      expect(sent).toEqual(['each-minute'])
+    } finally {
+      stop()
+    }
+  })
+
+  test('goes on to the next minute when a send hangs', async () => {
+    let asked = 0
+    const boss = {
+      send: () => {
+        asked++
+        return new Promise(() => {})
+      },
+    } as never
+    const started = Date.now()
+    await tick(boss, [['hangs', '* * * * *']], new Date(), 100)
+    expect(asked).toBe(1)
+    expect(Date.now() - started).toBeLessThan(1000)
   })
 })
 
