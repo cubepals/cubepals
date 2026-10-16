@@ -12,13 +12,15 @@
  *
  * Each release's jars are pinned once from the catalog (`refresh`, a scheduled job), so every
  * server on it starts with the same ones, and a start never waits on the catalog. A release with
- * none pinned yet starts without them. Not for which clients a server takes, which
- * `minecraft/clients.ts` works out from the same choice.
+ * none pinned yet starts without them. A sleeping server's wake boots once where it slept without
+ * the ones it now places (`servers/specs.ts`). Which clients a server takes is
+ * `minecraft/clients.ts`'s, from the ones a boot placed or the next will (`joinsNow`).
  */
-import { type Db, type Queryable, schema } from '@blockly/db'
+import { type AppliedConfigJson, type Db, type Queryable, schema } from '@blockly/db'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import { otherVersionsOf, type ServerRevision } from '../../domain/revision/revision.ts'
+import { joinsOf } from '../../minecraft/clients.ts'
 import { COMPAT, runsPlugin, VIABACKWARDS, VIAREWIND, VIAVERSION } from '../../minecraft/mods.ts'
 import { offeredVersions, supports } from '../../minecraft/versions.ts'
 import type { ModService } from '../mods/service.ts'
@@ -118,4 +120,24 @@ export async function compatFor(
   )
   if (!runsPlugin([...revision.mods, ...pins], VIAVERSION)) return []
   return pins.map((mod) => ({ ...mod, dir: PLUGINS_DIR }))
+}
+
+/** Which Via plugins `placed` holds, by Modrinth project id, as a boot's record and the edge name them. */
+export const projectsOf = (placed: readonly PinnedMod[]): string[] =>
+  placed.flatMap((mod) => ('projectId' in mod.source ? [mod.source.projectId] : []))
+
+/**
+ * Which players' games a server on `revision` takes, as its page says it and the edge lets them in:
+ * running on a boot of it (`applied`), with the Via plugins that boot placed, none for a boot from
+ * before one said; otherwise with those its next boot places.
+ */
+export async function joinsNow(
+  q: Queryable,
+  revision: ServerRevision,
+  run: { running: boolean; applied: Pick<AppliedConfigJson, 'revisionId' | 'compat'> | null },
+): Promise<{ joins: ReturnType<typeof joinsOf>; joinsNewer: boolean }> {
+  const booted = run.running && run.applied?.revisionId === revision.id
+  const placed = booted ? (run.applied?.compat ?? []) : projectsOf(await compatFor(q, revision))
+  const joins = joinsOf(revision, placed)
+  return { joins, joinsNewer: joins?.newer ?? false }
 }

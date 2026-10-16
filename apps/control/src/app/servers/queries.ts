@@ -42,7 +42,7 @@ import {
   sizeLabel,
 } from '../../domain/server/size.ts'
 import { formatJoinAddress } from '../../minecraft/address.ts'
-import { joinsNewer, joinsOf } from '../../minecraft/clients.ts'
+import { joinsNewer } from '../../minecraft/clients.ts'
 import { loaderOfPack } from '../../minecraft/mods.ts'
 import { packEnvironment, packTier, suggestedForServers } from '../../minecraft/packs.ts'
 import { settingTakes } from '../../minecraft/settings.ts'
@@ -59,6 +59,7 @@ import { loadControls, loadStanding } from '../accounts/persistence.ts'
 import { playToday, todayView } from '../accounts/play-today.ts'
 import { playTotal, totalView } from '../accounts/play-total.ts'
 import { type Actor, authorize } from '../actor.ts'
+import { joinsNow } from '../compat/service.ts'
 import type { PackCuration } from '../curation/service.ts'
 import { type Shown, shownOf } from '../edge/routed.ts'
 import { packView } from '../mods/pack.ts'
@@ -654,8 +655,7 @@ export class ServerQueries {
         : null,
       notLoaded: [...server.notLoaded],
       gameVersion: revision.gameVersion,
-      joinsNewer: joinsNewer(revision),
-      joins: joinsOf(revision),
+      ...(await joinsNow(this.#db, revision, { running, applied })),
       loader: revision.loader,
       loaderVersion: revision.loaderVersion,
       maxPlayers: revision.settings.maxPlayers,

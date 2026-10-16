@@ -50,16 +50,16 @@ export const protocolOf = (release: string): number | null =>
   RELEASES.find((known) => known.name === release)?.protocol ?? null
 
 /**
- * The clients a server on `gameVersion` with `mods` takes, with the Via plugins Cubepals adds for
- * `otherVersions` counted as its own. Only Paper runs them; on any other server type a client must
- * speak the server's own number. Null for a release the table doesn't know, which takes whatever
- * it takes.
+ * The clients a server on `gameVersion` with `mods` takes, with the Via plugins Cubepals adds,
+ * `adds` by Modrinth project id, counted as its own. Only Paper runs them; on any other server type
+ * a client must speak the server's own number. Null for a release the table doesn't know, which
+ * takes whatever it takes.
  */
 export function clientRange(
   gameVersion: string,
   loader: Loader,
   mods: readonly PinnedMod[],
-  otherVersions: OtherVersions = 'off',
+  adds: readonly string[] = [],
 ): ClientRange | null {
   const protocol = protocolOf(gameVersion)
   if (protocol === null) return null
@@ -70,7 +70,7 @@ export function clientRange(
     oldestRelease: gameVersion,
     newest: protocol,
   }
-  const runs = (projectId: string) => runsPlugin(mods, projectId) || COMPAT[otherVersions].includes(projectId)
+  const runs = (projectId: string) => runsPlugin(mods, projectId) || adds.includes(projectId)
   // ViaBackwards and ViaRewind are ViaVersion's addons, and load only beside it.
   if (loader !== 'paper' || !runs(VIAVERSION)) return own
   const floor = runs(VIABACKWARDS) ? (runs(VIAREWIND) ? VIAREWIND_OLDEST : VIABACKWARDS_OLDEST) : gameVersion
@@ -81,16 +81,20 @@ export function clientRange(
 /**
  * Which players' games a revision's server takes, as its pages say it: from `oldest` to the release
  * it runs, and every newer one where `newer`, with the choice behind it on a server that has one
- * (Paper, playing no pack). Null for a release the table doesn't know.
+ * (Paper, playing no pack). With `adds`, the Via plugins Cubepals places for it, as a boot placed
+ * them or the next will; without, those its choice asks for. Null for a release the table doesn't
+ * know.
  */
 export function joinsOf(
   revision: Pick<ServerRevision, 'gameVersion' | 'loader' | 'mods' | 'modpack'> & {
     settings: Pick<ServerSettings, 'otherVersions'>
   },
+  adds?: readonly string[],
 ): { oldest: string; newer: boolean; otherVersions: OtherVersions | null } | null {
   const chooses = revision.loader === 'paper' && revision.modpack === null
   const otherVersions = chooses ? otherVersionsOf(revision.settings) : null
-  const range = clientRange(revision.gameVersion, revision.loader, revision.mods, otherVersions ?? 'off')
+  const placed = otherVersions === null ? [] : (adds ?? COMPAT[otherVersions])
+  const range = clientRange(revision.gameVersion, revision.loader, revision.mods, placed)
   return range === null ? null : { oldest: range.oldestRelease, newer: range.newest === null, otherVersions }
 }
 

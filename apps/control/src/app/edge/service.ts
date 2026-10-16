@@ -13,6 +13,7 @@ import { type OperationKind, ROUTABLE, type ServerStatus } from '../../domain/se
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { clientRange, RELEASES } from '../../minecraft/clients.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
+import { COMPAT } from '../../minecraft/mods.ts'
 import { PORT_NAMES } from '../../minecraft/runtime-spec.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { outOf, playToday } from '../accounts/play-today.ts'
@@ -154,7 +155,7 @@ export class EdgeService {
           ...(waking ? { waking: true as const } : {}),
           ...this.#identityOf(server, state, motds),
           ...(binding?.proxyProtocol ? { proxyProtocol: true as const } : {}),
-          ...joinsOf(plays, state, binding?.revisionId, server.desiredRevisionId),
+          ...joinsOf(plays, state, binding, server.desiredRevisionId),
         })
       }
     }
@@ -447,21 +448,27 @@ function restartingOf(
 }
 
 /**
- * Which players' games a route's server takes, from what its revision runs (`clientRange`): what
- * the edge turns other joins away by. A running server takes what the run it is in booted, which a
- * change saved since doesn't move until it boots; any other, what it starts with next. Nothing for
- * a server whose release the table doesn't know.
+ * Which players' games a route's server takes, from what its revision runs and the Via plugins
+ * Cubepals placed beside it (`clientRange`): what the edge turns other joins away by. A running
+ * server takes what the run it is in booted, which a change saved since doesn't move until it
+ * boots, with only the Via plugins that boot placed (none, for a boot from before one said); any
+ * other, what it starts with next, with those pinned for its release that its choice asks for.
+ * Nothing for a server whose release the table doesn't know.
  */
 function joinsOf(
   plays: RouteInputs['plays'],
   state: 'asleep' | 'restarting' | null,
-  booted: string | null | undefined,
+  binding: { revisionId: string | null; compat: string[] | null } | undefined,
   desired: string | null,
 ): Pick<EdgeRoutes['routes'][number], 'joins'> {
-  const revisionId = state === null ? (booted ?? desired) : desired
+  const booted = state === null ? (binding?.revisionId ?? null) : null
+  const revisionId = booted ?? desired
   const runs = revisionId === null ? undefined : plays.get(revisionId)
-  const range =
-    runs === undefined ? null : clientRange(runs.gameVersion, runs.loader, runs.mods, runs.otherVersions)
+  const adds =
+    booted === null
+      ? COMPAT[runs?.otherVersions ?? 'off'].filter((id) => runs?.pinned.includes(id))
+      : (binding?.compat ?? [])
+  const range = runs === undefined ? null : clientRange(runs.gameVersion, runs.loader, runs.mods, adds)
   if (range === null) return {}
   const { release, protocol, oldest, newest } = range
   return { joins: { release, protocol, oldest, ...(newest === null ? {} : { newest }) } }

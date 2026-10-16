@@ -1362,8 +1362,8 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
 - **A game the server can't take** is turned away at the front door, before the gate counts it
   or anything is woken (`apps/edge/clients.ts`). Each route carries `joins`: the protocol numbers
   of the clients its server takes, which the control plane works out from the release and server
-  type its revision runs, its Via plugins and the server's choice of other versions
-  (`apps/control/src/minecraft/clients.ts`): its own
+  type its revision runs, its own Via plugins and those Cubepals placed beside them (see Other
+  versions) (`apps/control/src/minecraft/clients.ts`): its own
   release; any newer one with ViaVersion; older ones down to 1.9 with ViaBackwards beside it, and
   to 1.7 with ViaRewind too. Only Paper runs them. The numbers are minecraft-data's
   (`minecraft/protocol-versions.json`, copied by `scripts/protocols.ts`), sent with the list as
@@ -2388,11 +2388,17 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   them, and the plugin list never shows them. Each release's jars are pinned once from the catalog
   (`compat_plugins`, the daily `compat-pins` job and every worker's start), placed in `plugins/` by
   Cubepals' own start step (`carried.ts`), and fetched over the server's artifact link like any
-  pinned jar. A Via plugin the owner runs as their own isn't placed again. They arrive at a start,
+  pinned jar. A Via plugin the owner runs as their own isn't placed again. They arrive at a boot,
   never through drift: the drift digest leaves them out, so no running server restarts for them.
+  A server that sleeps may never stop, so which Via plugins it places is part of what a machine
+  asleep may wake on as it slept (`resumesOn`): asleep without the ones it should have, or with
+  ones turned off, its next wake boots once to place them; a newer pin of the same ones waits for
+  its next boot. A boot records the ones it placed (`server_runtimes.applied.compat`), and the
+  edge and the settings page say who joins from those while it runs, and from those pinned for its
+  release that its choice asks for otherwise, so neither says more than its disk holds.
   The settings page says who joins in one line ("Players on Minecraft 1.9 to 26.2 and newer can
   join") with the switch, and a second one for 1.8 and 1.7; turned off, the step takes the jars
-  away at the next start. Grim warns that ViaBackwards' older clients misbehave in vehicles on
+  away at the next boot. Grim warns that ViaBackwards' older clients misbehave in vehicles on
   1.21.2 and later: Grim comes only on Duels and Arcade, whose games ride nothing.
 - A curated pack can stand for a way to play (`CuratedPack.way`): its card carries the way's name
   and picture, with the pack's own name and authors under it. The card is the pack's, so it shows

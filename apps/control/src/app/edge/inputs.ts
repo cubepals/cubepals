@@ -23,6 +23,7 @@ import type { RuntimeHandle } from '../ports/runtime.ts'
 import { motdsOf } from '../servers/persistence.ts'
 
 const {
+  compatPlugins,
   minecraftServers: servers,
   serverRuntimes: runtimes,
   serverOperations: operations,
@@ -49,7 +50,7 @@ export interface RouteServer {
 export interface RouteInputs {
   servers: RouteServer[]
   /** Each live server's binding to a runtime this deployment runs, by server. */
-  bindings: Map<string, { handle: RuntimeHandle | null; proxyProtocol: boolean; revisionId: string | null }>
+  bindings: Map<string, Binding>
   /** Open operations that bring a server back by themselves, and whether it was running. */
   comingBack: Array<{ serverId: string; kind: (typeof COMES_BACK)[number]; running: boolean }>
   stops: Array<{ id: string; zone: string | null; stoppedAt: Date | null }>
@@ -63,13 +64,25 @@ export interface RouteInputs {
   plays: Map<string, Plays>
 }
 
+/** A live server's binding, as far as its routes go. */
+interface Binding {
+  handle: RuntimeHandle | null
+  proxyProtocol: boolean
+  /** The revision its run booted. */
+  revisionId: string | null
+  /** Which of Cubepals' Via plugins that boot placed; null for a boot from before one said. */
+  compat: string[] | null
+}
+
 /** What a revision runs, as far as which clients it takes. */
 interface Plays {
   gameVersion: string
   loader: Loader
   mods: PinnedMod[]
-  /** Which other versions' players Cubepals' own Via plugins let in. */
+  /** Which other versions' players Cubepals' own Via plugins let in; off for a pack server. */
   otherVersions: OtherVersions
+  /** The Via plugins pinned for its release (`app/compat/`), which its next boot can place. */
+  pinned: string[]
 }
 
 export interface Fingerprint {
@@ -104,6 +117,7 @@ const bindingRows = (q: Queryable, providers: readonly string[]) =>
       handle: runtimes.handle,
       proxyProtocol: sql<boolean>`coalesce((${runtimes.applied}->>'proxyProtocol')::boolean, false)`,
       revisionId: sql<string | null>`${runtimes.applied}->>'revisionId'`,
+      compat: sql<string[] | null>`${runtimes.applied}->'compat'`,
     })
     .from(runtimes)
     .where(
@@ -123,6 +137,10 @@ const comingBackRows = (q: Queryable) =>
     .from(operations)
     .where(and(inArray(operations.kind, [...COMES_BACK]), inArray(operations.status, ['queued', 'running'])))
 
+/** Which Via plugins are pinned for which release: a pin or its removal moves what a next boot places. */
+const pinRows = (q: Queryable) =>
+  q.select({ gameVersion: compatPlugins.gameVersion, projectId: compatPlugins.projectId }).from(compatPlugins)
+
 /** What the revisions `ids` run, as `RouteInputs.plays` holds it. */
 async function playsOf(q: Queryable, ids: readonly string[]): Promise<RouteInputs['plays']> {
   if (ids.length === 0) return new Map()
@@ -132,6 +150,10 @@ async function playsOf(q: Queryable, ids: readonly string[]): Promise<RouteInput
       gameVersion: revisions.gameVersion,
       loader: revisions.loader,
       otherVersions: sql<OtherVersions | null>`${revisions.settings}->>'otherVersions'`,
+      pack: sql<boolean>`${revisions.modpack} is not null`,
+      pinned: sql<
+        string[]
+      >`array(select ${compatPlugins.projectId} from ${compatPlugins} where ${compatPlugins.gameVersion} = ${revisions.gameVersion})`,
       mods: sql<
         PinnedMod[]
       >`jsonb_path_query_array(${revisions.mods}, '$[*] ? (@.name like_regex "^via" flag "i")')`,
@@ -139,9 +161,12 @@ async function playsOf(q: Queryable, ids: readonly string[]): Promise<RouteInput
     .from(revisions)
     .where(inArray(revisions.id, [...ids]))
   return new Map(
-    rows.map(({ id, otherVersions, ...plays }) => [
+    rows.map(({ id, otherVersions, pack, ...plays }) => [
       id,
-      { ...plays, otherVersions: otherVersionsOf({ otherVersions: otherVersions ?? undefined }) },
+      {
+        ...plays,
+        otherVersions: pack ? 'off' : otherVersionsOf({ otherVersions: otherVersions ?? undefined }),
+      },
     ]),
   )
 }
@@ -157,7 +182,7 @@ export async function fingerprint(q: Queryable, providers: readonly string[]): P
   const { rows } = await q.execute<{ v: string }>(sql`select concat_ws(' ',
     floor(extract(epoch from statement_timestamp()) * 1000)::bigint,
     left(md5(concat_ws('|', ${digestOf(serverRows(q))}, ${digestOf(bindingRows(q, providers))},
-      ${digestOf(comingBackRows(q))}, ${digestOf(dailyStops(q))})), 16),
+      ${digestOf(comingBackRows(q))}, ${digestOf(dailyStops(q))}, ${digestOf(pinRows(q))})), 16),
     ${waiting(sql`${servers.routedAt}`)},
     ${waiting(sql`${servers.routeListedAt}`)}) as v`)
   const [ms, digest, unrouted, unlisted] = (rows[0]?.v ?? '').split(' ')
@@ -187,6 +212,7 @@ export async function readInputs(
                 handle: b.handle as RuntimeHandle | null,
                 proxyProtocol: b.proxyProtocol,
                 revisionId: b.revisionId,
+                compat: b.compat,
               },
             ]),
           ),
