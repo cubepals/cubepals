@@ -12,6 +12,8 @@ import {
   describeChanges,
   type GameSettings,
   type Loader,
+  type OtherVersions,
+  otherVersionsOf,
   type RevisionDraft,
   runsOnPaper,
   type ServerRevision,
@@ -114,6 +116,9 @@ export class RevisionService {
         ...game,
         motd: game.motd.trim(),
         onlineMode: desired.settings.onlineMode,
+        ...(desired.settings.otherVersions === undefined
+          ? {}
+          : { otherVersions: desired.settings.otherVersions }),
       }
       const problems = settingsProblems(settings, playerCapacity(server.memoryTier))
       if (problems.length > 0) throw new AppError('invalid_settings', problems.join(' '))
@@ -158,6 +163,33 @@ export class RevisionService {
         draft,
         audit: { action: 'server.authentication_changed', data: { onlineMode } },
       }
+    })
+  }
+
+  /**
+   * Which other Minecraft versions' players the server lets in (`ServerSettings.otherVersions`):
+   * the Via plugins Cubepals adds as it starts, or none. Only Paper runs them, so another server
+   * type has no such choice. They are Cubepals' own, never the owner's plugins, so no plan counts
+   * them; they come and go with the server's next start.
+   */
+  changeOtherVersions(
+    actor: Actor,
+    serverId: string,
+    otherVersions: OtherVersions,
+    requestId: string,
+    options: ChangeOptions = {},
+  ) {
+    return this.#change(actor, serverId, requestId, 'apply', options, async (_tx, _server, desired) => {
+      if (desired.loader !== 'paper' || desired.modpack !== null)
+        throw new AppError('invalid_choice', 'Only a Paper server lets players on other versions in.')
+      if (otherVersionsOf(desired.settings) === otherVersions) return null
+      const draft: RevisionDraft = {
+        ...draftOf(desired),
+        settings: { ...desired.settings, otherVersions },
+        reason: 'settings_changed',
+        basedOnRevisionId: desired.id,
+      }
+      return { draft, audit: { action: 'server.other_versions_changed', data: { otherVersions } } }
     })
   }
 

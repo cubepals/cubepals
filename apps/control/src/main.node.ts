@@ -505,6 +505,8 @@ async function startWorker(
   await boss.send('pack-checks', {})
   // The lists of known malware too: a worker starts holding uploads to them as they are now.
   await boss.send('malware-lists', {})
+  // And the Via plugins Paper servers start with, so a deploy's new release has them at once.
+  await boss.send('compat-pins', {})
   // So are the reviewed releases a deploy brought: checked now, offered once an admin says so.
   await boss.send('curation', {})
   console.warn('worker running')

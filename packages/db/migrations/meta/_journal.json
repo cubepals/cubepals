@@ -561,6 +561,13 @@
       "when": 1792183530993,
       "tag": "0079_pinged_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1792185836776,
+      "tag": "0080_compat_plugins",
+      "breakpoints": true
     }
   ]
 }

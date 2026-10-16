@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { DATAPACK, isDatapack, type PinnedMod } from '../domain/mods/artifact.ts'
-import type { Loader } from '../domain/revision/revision.ts'
+import type { Loader, OtherVersions } from '../domain/revision/revision.ts'
 
 /**
  * Which catalog versions a server can run: Minecraft knowledge the catalog port receives as plain
@@ -122,5 +122,13 @@ export const runsPlugin = (mods: readonly PinnedMod[], projectId: string): boole
       mod.name.toLowerCase() === VIA_NAMES[projectId],
   )
 
-/** Whether a server's plugins let players on newer Minecraft than it runs join it. */
-export const joinsNewer = (mods: readonly PinnedMod[]): boolean => runsPlugin(mods, VIAVERSION)
+/**
+ * The Via plugins Cubepals adds to a Paper server as it starts, by which other versions' players
+ * its owner lets in (`ServerSettings.otherVersions`). They are Cubepals', never among the owner's
+ * plugins, so nothing a plan says of plugins counts them.
+ */
+export const COMPAT: Readonly<Record<OtherVersions, readonly string[]>> = {
+  off: [],
+  on: [VIAVERSION, VIABACKWARDS],
+  oldest: [VIAVERSION, VIABACKWARDS, VIAREWIND],
+}

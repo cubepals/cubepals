@@ -10,7 +10,7 @@ import { forPlayers, type PinnedMod } from '../../domain/mods/artifact.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { formatJoinAddress } from '../../minecraft/address.ts'
-import { joinsNewer } from '../../minecraft/mods.ts'
+import { joinsNewer } from '../../minecraft/clients.ts'
 import { LOADER_LABELS } from '../../minecraft/versions.ts'
 import { readAccess } from '../access/persistence.ts'
 import { loadControls, loadStanding } from '../accounts/persistence.ts'
@@ -287,7 +287,7 @@ export class SharingQueries {
     const loaderNeeded = theirs.length > 0 && revision.loader !== 'vanilla' && revision.loader !== 'paper'
     return {
       gameVersion: revision.gameVersion,
-      joinsNewer: joinsNewer(revision.mods),
+      joinsNewer: joinsNewer(revision),
       modpack: null,
       loader: loaderNeeded
         ? { label: LOADER_LABELS[revision.loader], version: revision.loaderVersion }

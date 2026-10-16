@@ -460,7 +460,8 @@ function joinsOf(
 ): Pick<EdgeRoutes['routes'][number], 'joins'> {
   const revisionId = state === null ? (booted ?? desired) : desired
   const runs = revisionId === null ? undefined : plays.get(revisionId)
-  const range = runs === undefined ? null : clientRange(runs.gameVersion, runs.loader, runs.mods)
+  const range =
+    runs === undefined ? null : clientRange(runs.gameVersion, runs.loader, runs.mods, runs.otherVersions)
   if (range === null) return {}
   const { release, protocol, oldest, newest } = range
   return { joins: { release, protocol, oldest, ...(newest === null ? {} : { newest }) } }

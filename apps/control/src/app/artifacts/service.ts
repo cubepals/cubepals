@@ -19,6 +19,7 @@ import { acceptedSecrets, type SecretKeyring } from '../secrets.ts'
 import { loadOwnIcon } from '../server-icons/persistence.ts'
 import { deletePendingUpload, uploadsToClear } from '../uploads/persistence.ts'
 import {
+  compatPinned,
   firstWorldOfType,
   forgetStored,
   markArtifactsRefreshed,
@@ -210,7 +211,7 @@ export class ArtifactService {
     // Malware is handed to no server, whatever pins it (`mods/jar-checks.ts`).
     if ((await quarantinedOf(this.#db, [sha512])).size > 0) throw new ArtifactNotFound()
     const found = await pinnedBy(this.#db, serverId, sha512)
-    if (found === null) return this.#starter(serverId, sha512)
+    if (found === null) return this.#compat(serverId, sha512)
     const pinned = found
     // An HTTP date holds whole seconds: a refresh rounds up, so it is newer than every file that
     // was on disk when the jars were found wrong, even one written the same second.
@@ -222,6 +223,18 @@ export class ArtifactService {
       pinned: pinned.mod,
       name: diskName(pinned.artifact),
       lastModified,
+    }
+  }
+
+  /** A Via plugin of Cubepals' compatibility layer, or else the archive a world starts on. */
+  async #compat(serverId: string, sha512: string): Promise<LocatedArtifact> {
+    const via = await compatPinned(this.#db, sha512)
+    if (via === null) return this.#starter(serverId, sha512)
+    return {
+      artifact: via.mod.artifact,
+      pinned: via.mod,
+      name: diskName(via.mod.artifact),
+      lastModified: via.pinnedAt,
     }
   }
 

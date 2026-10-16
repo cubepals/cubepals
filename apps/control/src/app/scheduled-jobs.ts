@@ -92,6 +92,11 @@ export function scheduledJobs(
       },
     },
     {
+      job: 'compat-pins',
+      run: () => app.setups.compat.refresh(),
+      says: (n) => `pinned the Via plugins for ${n} releases`,
+    },
+    {
       job: 'malware-lists',
       run: () => app.jarChecks.refresh(),
       says: (n) => `quarantined ${n} uploaded jars a list now names`,

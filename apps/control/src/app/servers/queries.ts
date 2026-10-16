@@ -42,7 +42,8 @@ import {
   sizeLabel,
 } from '../../domain/server/size.ts'
 import { formatJoinAddress } from '../../minecraft/address.ts'
-import { joinsNewer, loaderOfPack } from '../../minecraft/mods.ts'
+import { joinsNewer, joinsOf } from '../../minecraft/clients.ts'
+import { loaderOfPack } from '../../minecraft/mods.ts'
 import { packEnvironment, packTier, suggestedForServers } from '../../minecraft/packs.ts'
 import { settingTakes } from '../../minecraft/settings.ts'
 import {
@@ -527,7 +528,10 @@ export class ServerQueries {
       gameVersion: resolved.gameVersion,
       loader: resolved.loader,
       loaderLabel: LOADER_LABELS[resolved.loader],
-      joinsNewer: joinsNewer(resolved.mods),
+      joinsNewer: joinsNewer({
+        ...resolved,
+        settings: { otherVersions: resolved.setup.settings.otherVersions },
+      }),
       mods: resolved.mods.map((mod) => mod.name),
       modpack:
         resolved.modpack === null
@@ -650,7 +654,8 @@ export class ServerQueries {
         : null,
       notLoaded: [...server.notLoaded],
       gameVersion: revision.gameVersion,
-      joinsNewer: joinsNewer(revision.mods),
+      joinsNewer: joinsNewer(revision),
+      joins: joinsOf(revision),
       loader: revision.loader,
       loaderVersion: revision.loaderVersion,
       maxPlayers: revision.settings.maxPlayers,

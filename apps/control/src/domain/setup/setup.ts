@@ -86,6 +86,7 @@ type SetupSettings = Partial<
     | 'viewDistance'
     | 'simulationDistance'
     | 'motd'
+    | 'otherVersions'
   >
 >
 
@@ -126,6 +127,9 @@ export function setupOf(
       spawnProtection: revision.settings.spawnProtection,
       viewDistance: revision.settings.viewDistance,
       simulationDistance: revision.settings.simulationDistance,
+      ...(revision.settings.otherVersions === undefined
+        ? {}
+        : { otherVersions: revision.settings.otherVersions }),
     },
     world: { levelType: world.levelType, hardcore: world.hardcore },
     party,

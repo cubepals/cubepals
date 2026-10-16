@@ -17,6 +17,7 @@ import {
   BrowseInput,
   ChangeAddressInput,
   ChangeAuthenticationInput,
+  ChangeOtherVersionsInput,
   ChangePackInput,
   ChangeSettingsInput,
   ChangeVersionInput,
@@ -185,6 +186,17 @@ const servers = router({
       ctx.actor,
       input.serverId,
       input.onlineMode,
+      input.requestId,
+      { version: input.version },
+    )
+    return ctx.services.queries.get(ctx.actor, input.serverId)
+  }),
+  /** Which other versions' players a Paper server lets in, through Cubepals' Via plugins. */
+  changeOtherVersions: authedProcedure.input(ChangeOtherVersionsInput).mutation(async ({ ctx, input }) => {
+    await ctx.services.revisions.changeOtherVersions(
+      ctx.actor,
+      input.serverId,
+      input.otherVersions,
       input.requestId,
       { version: input.version },
     )

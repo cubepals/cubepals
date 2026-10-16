@@ -39,9 +39,6 @@ export interface Template extends Omit<TemplateCard, 'advanced' | 'forADay'> {
 
 const WORLD = { levelType: 'minecraft:normal', hardcore: false }
 
-/** The Grim anticheat on Modrinth. */
-export const GRIM = 'LJNGWSvH'
-
 /**
  * What a template made to have strangers on it comes with: the moderation tools and the chat
  * filter, on as the Players page turns them on, and off again there, and the Grim anticheat
@@ -52,16 +49,8 @@ const FOR_STRANGERS: Template['setup']['mods'] = [
   { catalog: 'modrinth', projectId: LIBERTYBANS },
   { catalog: 'modrinth', projectId: LUCKPERMS },
   { catalog: 'modrinth', projectId: CHATSENTINEL },
-  { catalog: 'modrinth', projectId: GRIM },
+  { catalog: 'modrinth', projectId: 'LJNGWSvH' },
 ]
-
-/**
- * The templates whose games nobody rides anything in: no boat, minecart or horse in the Duels
- * arena or the Arcade's games. Grim warns that players on older Minecraft, let in by ViaBackwards,
- * misbehave in vehicles on 1.21.2 and later; where nothing is ridden that never comes up, so these
- * get ViaBackwards beside Grim (`SetupService`).
- */
-export const RIDES_NOTHING: ReadonlySet<string> = new Set<TemplateKey>(['duels', 'arcade'])
 
 const BENTOBOX_ADDONS = 'plugins/BentoBox/addons'
 const AONEBLOCK_CONFIG = readFileSync(new URL('./aoneblock-config.yml', import.meta.url), 'utf8')
@@ -168,14 +157,15 @@ const SETUPS: Record<TemplateKey, Template['setup']> = {
       difficulty: 'easy',
       pvp: true,
       motd: 'Duels: one on one, with parkour and a pit while you wait',
+      // 1.8 PvP players come on 1.8 itself, so it lets in 1.8 and 1.7 too.
+      otherVersions: 'oldest',
     },
     world: { levelType: VOID_LEVEL, hardcore: false },
   },
   arcade: {
     loader: 'paper',
     // Every game and board is Cubepals' own datapack (`minecraft/arcade.ts`), on a world made of
-    // published maps (`ARCADE_LEVEL`), so it runs on the newest release the moderation tools do,
-    // with ViaVersion and ViaBackwards as every plugin template has.
+    // published maps (`ARCADE_LEVEL`), so it runs on the newest release the moderation tools do.
     mods: FOR_STRANGERS,
     files: [...ARCADE_FILES, ...moderationFiles(CHAT_FILTER)],
     // Adventure, so nobody breaks the games; Easy, for the pit's fights, as on Duels.

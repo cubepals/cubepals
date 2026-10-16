@@ -16,7 +16,7 @@
 import { type Db, type Queryable, schema } from '@blockly/db'
 import { and, inArray, isNull, type SQL, type SQLWrapper, sql } from 'drizzle-orm'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
-import type { Loader } from '../../domain/revision/revision.ts'
+import { type Loader, type OtherVersions, otherVersionsOf } from '../../domain/revision/revision.ts'
 import type { ServerStatus } from '../../domain/server/lifecycle.ts'
 import { dailyStops } from '../accounts/play-today.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
@@ -68,6 +68,8 @@ interface Plays {
   gameVersion: string
   loader: Loader
   mods: PinnedMod[]
+  /** Which other versions' players Cubepals' own Via plugins let in. */
+  otherVersions: OtherVersions
 }
 
 export interface Fingerprint {
@@ -129,13 +131,19 @@ async function playsOf(q: Queryable, ids: readonly string[]): Promise<RouteInput
       id: revisions.id,
       gameVersion: revisions.gameVersion,
       loader: revisions.loader,
+      otherVersions: sql<OtherVersions | null>`${revisions.settings}->>'otherVersions'`,
       mods: sql<
         PinnedMod[]
       >`jsonb_path_query_array(${revisions.mods}, '$[*] ? (@.name like_regex "^via" flag "i")')`,
     })
     .from(revisions)
     .where(inArray(revisions.id, [...ids]))
-  return new Map(rows.map(({ id, ...plays }) => [id, plays]))
+  return new Map(
+    rows.map(({ id, otherVersions, ...plays }) => [
+      id,
+      { ...plays, otherVersions: otherVersionsOf({ otherVersions: otherVersions ?? undefined }) },
+    ]),
+  )
 }
 
 /** The rows of `query`, digested in a fixed order; an empty one digests to its place alone. */

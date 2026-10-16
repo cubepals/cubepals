@@ -4,7 +4,7 @@
 
 /**
  * The Arcade template: Paper on the newest release the moderation tools run on, with them, the
- * chat filter and the Grim anticheat, and ViaVersion when that release isn't the newest; offered
+ * chat filter and the Grim anticheat, and Cubepals' Via plugins beside them, never among them; offered
  * with Plus; and a server of it starting on the Arcade's world, fetched through its own link,
  * with the games' datapack and the moderation files, the datapack following the server onto a fresh world,
  * and Cubepals' resource pack offered only where Cubepals runs it itself.
@@ -26,9 +26,7 @@ import {
   moderationFiles,
   runsModeration,
 } from '../../minecraft/moderation.ts'
-import { VIABACKWARDS, VIAVERSION } from '../../minecraft/mods.ts'
 import { ARCADE_LEVEL, STARTER_STEP } from '../../minecraft/starter.ts'
-import { offeredVersions } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
@@ -79,14 +77,11 @@ async function begin(): Promise<void> {
   await store.start()
   h = await startHarness({ capabilities: { archives: store, billing: null } })
   // As Modrinth listed them on 2026-10-14: ChatSentinel 2.0.3 and Grim 2.3.74 stop at 26.2,
-  // LibertyBans and LuckPerms run on 26.3 too, and ViaVersion on every release offered.
+  // LibertyBans and LuckPerms run on 26.3 too.
   plugin(LIBERTYBANS, 'LibertyBans', ['1.21.11', '26.2', '26.3'], 'libertybans-1')
   plugin(LUCKPERMS, 'LuckPerms', ['1.21.11', '26.2', '26.3'], 'luckperms-1')
   plugin(CHATSENTINEL, 'ChatSentinel', ['1.21.11', '26.2'], 'chatsentinel-1')
   plugin('LJNGWSvH', 'Grim Anticheat', ['1.21.11', '26.2'], 'grim-1')
-  const offered = offeredVersions().map((version) => version.id)
-  plugin(VIAVERSION, 'ViaVersion', offered, 'viaversion-1')
-  plugin(VIABACKWARDS, 'ViaBackwards', offered, 'viabackwards-1')
 }
 
 async function end(): Promise<void> {
@@ -127,7 +122,7 @@ describe.skipIf(!hasDatabase)('arcade', () => {
       loader: 'paper',
       gameVersion: '26.2',
       joinsNewer: true,
-      mods: ['ChatSentinel', 'Grim Anticheat', 'LibertyBans', 'LuckPerms', 'ViaBackwards', 'ViaVersion'],
+      mods: ['ChatSentinel', 'Grim Anticheat', 'LibertyBans', 'LuckPerms'],
     })
     const { templates } = await h.app.queries.createOptions(await h.user('Lee'))
     expect(templates.find((template) => template.key === 'arcade')?.fits).toEqual({
@@ -143,9 +138,9 @@ describe.skipIf(!hasDatabase)('arcade', () => {
     await h.until(server.id, 'running')
     await h.settled(server.id)
     const revision = await loadRevision(h.db, server.desiredRevisionId)
-    // Every game is the datapack, so the only plugins are the ones for strangers, and the Via ones.
+    // Every game is the datapack, so the only plugins are the ones for strangers.
     expect(revision.mods.map((m) => ('projectId' in m.source ? m.source.projectId : '')).sort()).toEqual(
-      [CHATSENTINEL, 'LJNGWSvH', LIBERTYBANS, LUCKPERMS, VIABACKWARDS, VIAVERSION].sort(),
+      [CHATSENTINEL, 'LJNGWSvH', LIBERTYBANS, LUCKPERMS].sort(),
     )
     expect(revision.files).toEqual([...ARCADE_FILES, ...moderationFiles(CHAT_FILTER)])
     expect(revision.settings).toMatchObject({

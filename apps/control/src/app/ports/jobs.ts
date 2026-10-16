@@ -21,6 +21,7 @@ export type ScheduledJob =
   | 'store-sweep'
   | 'retention-sweep'
   | 'catalog-refresh'
+  | 'compat-pins'
   | 'malware-lists'
   | 'pack-checks'
   | 'curation'

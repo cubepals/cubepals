@@ -23,6 +23,7 @@ import {
 import { loadStanding } from '../accounts/persistence.ts'
 import type { BuiltPack } from '../artifacts/brand-pack.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
+import { compatFor } from '../compat/service.ts'
 import { loadListing } from '../listings/persistence.ts'
 import { quarantinedOf } from '../mods/jar-check-records.ts'
 import { loadPackContents } from '../packs/persistence.ts'
@@ -143,7 +144,7 @@ export class RuntimeSpecs {
     const official = (await loadListing(q, server.id))?.official === true
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
     const { current } = this.#secrets
-    const built = toRuntimeSpec({
+    const input = {
       serverId: server.id,
       revision,
       world,
@@ -161,12 +162,15 @@ export class RuntimeSpecs {
           ? this.#links.icon(server.icon ?? BLOCKLY_ICON)
           : this.#links.ownIcon(server.id, server.ownIcon),
       brandPack: official ? this.brandPack : null,
-    })
-    const labelled = {
-      ...built,
-      labels: { ...built.labels, [SECRETS_VERSION_LABEL]: String(current.version) },
     }
-    const driftDigest = specDigest(withoutPlanLimits(labelled))
+    const label = (spec: RuntimeSpec) => ({
+      ...spec,
+      labels: { ...spec.labels, [SECRETS_VERSION_LABEL]: String(current.version) },
+    })
+    const labelled = label(toRuntimeSpec({ ...input, compat: await compatFor(q, revision) }))
+    // The Via plugins arrive at a start, never through drift: a running server isn't restarted
+    // for Cubepals' compatibility layer, or for a newer pin of it.
+    const driftDigest = specDigest(withoutPlanLimits(label(toRuntimeSpec(input))))
     // What drift leaves for the next start, a machine asleep can leave too: it wakes as it slept.
     const spec = { ...labelled, resumesOn: driftDigest }
     return {

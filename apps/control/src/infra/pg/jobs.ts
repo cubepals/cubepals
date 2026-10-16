@@ -578,6 +578,9 @@ const CRON: Record<ScheduledJob, string> = {
   'retention-sweep': '13 6 * * *',
   orphans: '17 * * * *',
   'catalog-refresh': '41 * * * *',
+  // The Via plugins Paper servers start with, pinned again per release: a new build reaches them
+  // within a day, at their next start.
+  'compat-pins': '23 4 * * *',
   // The lists of known malware, fetched again where they are published: a few times a day.
   'malware-lists': '7 */6 * * *',
   // The default modpack list's packs, checked before anybody picks one (§15.6).
