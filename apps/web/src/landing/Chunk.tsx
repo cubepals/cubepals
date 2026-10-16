@@ -10,7 +10,7 @@
  * steps the cast and the room scenes, prints it all, and answers the pointer (the crosshair's
  * block, digging). The drawing itself is engine/gl.ts; who moves is engine/cast.ts.
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useReducer, useRef } from 'react'
 import {
   type Camera,
   cameraOf,
@@ -46,6 +46,7 @@ import { hash3, Kind, Mesh, relight, type Taken, type World } from './engine/wor
 import { playing } from './film/clock'
 import { choice } from './sections/choice'
 import { type Aim, stage } from './stage'
+import { FIRST_CANVAS, nextCanvas, RESTORED_WITHIN_MS, withoutDrawing } from './start'
 import { stopOf } from './stops'
 
 /** How close the camera stands, by name: the section says which, the screen decides the rest. */
@@ -185,6 +186,8 @@ interface Piece {
 export function Chunk() {
   const ref = useRef<HTMLCanvasElement>(null)
   const snore = useRef<HTMLSpanElement>(null)
+  // A context that fails to start, or is lost and never given back, gets a new canvas (start.ts).
+  const [drawnOn, renew] = useReducer(nextCanvas, FIRST_CANVAS)
 
   useEffect(() => {
     const canvas = ref.current
@@ -194,17 +197,7 @@ export function Chunk() {
     try {
       renderer = new Renderer(canvas)
     } catch {
-      // No WebGL 2: the page reads the same without the drawing. The sky still turns from night to
-      // day when someone joins, since that much is only a colour.
-      root.dataset.flat = 'true'
-      const skies = root.querySelectorAll<HTMLElement>('[data-sky]')
-      const sky = () => {
-        const power = stage.get().power
-        const day = power === 'awake' || power === 'saving' ? '1' : '0'
-        for (const element of skies) element.style.setProperty('--day', day)
-      }
-      sky()
-      return stage.subscribe(sky)
+      return withoutDrawing(root, drawnOn, () => renew(true))
     }
 
     const still = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -1351,19 +1344,16 @@ export function Chunk() {
       event.preventDefault()
       strike(performance.now())
     }
-    // A phone may take the drawing context away while the page is in the background, and give it
-    // back later with nothing in it: everything is made again, and the page carries on.
+    // The drawing context can be taken away (a phone with the page in the background, a busy
+    // graphics card) and given back with nothing in it, or not at all: the chunk is drawn again on
+    // a new canvas when it comes back, or when it hasn't come back soon (start.ts).
+    let lostFor = 0
     const gone = (event: Event) => {
       event.preventDefault()
       lost = true
+      lostFor = window.setTimeout(() => renew(false), RESTORED_WITHIN_MS)
     }
-    const back = () => {
-      renderer = new Renderer(canvas)
-      renderer.setWorld(mesh, world.lights)
-      renderer.setFar(fleet)
-      lost = false
-      measure()
-    }
+    const back = () => renew(false)
     measure()
     raf = requestAnimationFrame(frame)
     const unsubscribe = stage.subscribe(wake)
@@ -1387,6 +1377,7 @@ export function Chunk() {
 
     return () => {
       cancelAnimationFrame(raf)
+      clearTimeout(lostFor)
       unsubscribe()
       unchoose()
       canvas.removeEventListener('webglcontextlost', gone)
@@ -1411,11 +1402,11 @@ export function Chunk() {
         mesh.around(grow.taken.x, grow.taken.y, grow.taken.z, sunAt(Math.max(0, shadedAt) / 6))
       renderer.dispose()
     }
-  }, [])
+  }, [drawnOn])
 
   return (
     <>
-      <canvas ref={ref} className="bl-chunk" aria-hidden />
+      <canvas key={drawnOn.key} ref={ref} className="bl-chunk" aria-hidden />
       <span ref={snore} className="bl-snore bl-game" aria-hidden>
         <i>z</i>
         <i>z</i>
