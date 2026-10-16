@@ -8,6 +8,7 @@
  */
 import Link from 'next/link'
 import type { ReactNode } from 'react'
+import { OutLink } from '../ui/out-link'
 import { type Piece, piecesOf, plainOf, type Token } from './inline'
 import styles from './legal.module.css'
 import { OPERATOR, PLACEHOLDERS } from './operator'
@@ -89,9 +90,7 @@ function PieceOf({ piece }: { piece: Piece }): ReactNode {
       return piece.href.startsWith('/') ? (
         <Link href={piece.href}>{piece.text}</Link>
       ) : (
-        <a href={piece.href} rel="noopener noreferrer">
-          {piece.text}
-        </a>
+        <OutLink href={piece.href}>{piece.text}</OutLink>
       )
     case 'token':
       return <TokenOf token={piece.token} />

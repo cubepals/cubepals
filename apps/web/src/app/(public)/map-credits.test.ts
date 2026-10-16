@@ -9,6 +9,7 @@
 import { describe, expect, test } from 'bun:test'
 import { TEMPLATE_CARDS, type TemplateCredits } from '@blockly/contracts'
 import { isValidElement, type ReactNode } from 'react'
+import { OutLink } from '../../ui/out-link'
 import { MapCredits } from './map-credits'
 
 interface Node {
@@ -26,7 +27,7 @@ function read(credits: TemplateCredits) {
     if (!isValidElement(node)) return ''
     const element = node as unknown as Node
     const inside = text(element.props.children)
-    if (element.type === 'a') links.push({ text: inside, href: element.props.href })
+    if (element.type === OutLink) links.push({ text: inside, href: element.props.href })
     return inside
   }
   return { root, text: text(root.props.children), links }

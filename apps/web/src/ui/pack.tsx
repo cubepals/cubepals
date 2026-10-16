@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { Button } from './Button'
 import { ICON } from './index'
 import { CopyField } from './interactive'
+import { OutLink } from './out-link'
 
 /** How long a launcher is given to open before the page says what to do if it didn't. */
 const OPENS_WITHIN_MS = 1_500
@@ -79,10 +80,7 @@ export function GetPack({
         )
       ) : pack.file === null || pack.environment === 'server' ? (
         <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-          <a href={pack.page} target="_blank" rel="noreferrer">
-            See this version on {siteOf(pack.page)}
-          </a>
-          .
+          <OutLink href={pack.page}>See this version on {siteOf(pack.page)}</OutLink>.
         </p>
       ) : (
         <div className="bk-getpack__launch">
@@ -110,11 +108,8 @@ export function GetPack({
           </div>
           {late && pressed === 'app' && (
             <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-              Nothing opened?{' '}
-              <a href="https://modrinth.com/app" target="_blank" rel="noreferrer">
-                Get the Modrinth App
-              </a>
-              , it’s free, then press again.
+              Nothing opened? <OutLink href="https://modrinth.com/app">Get the Modrinth App</OutLink>, it’s
+              free, then press again.
             </p>
           )}
           {late && pressed === 'prism' && (
@@ -148,11 +143,8 @@ export function GetPack({
                 </div>
               </li>
               <li>
-                <strong>Any other:</strong> <a href={pack.file}>download the pack</a> and import it, or{' '}
-                <a href={pack.page} target="_blank" rel="noreferrer">
-                  see this version on {siteOf(pack.page)}
-                </a>
-                .
+                <strong>Any other:</strong> <OutLink href={pack.file}>download the pack</OutLink> and import
+                it, or <OutLink href={pack.page}>see this version on {siteOf(pack.page)}</OutLink>.
               </li>
             </ul>
           </details>
@@ -161,10 +153,7 @@ export function GetPack({
       {pack.file !== null && pack.page !== null && pack.environment === 'both' && (
         <p className="bk-getpack__elsewhere type-body-sm" style={{ color: 'var(--ink-muted)' }}>
           Java Edition runs on a computer: open this page there to install it in one press, or{' '}
-          <a href={pack.page} target="_blank" rel="noreferrer">
-            see this version on {siteOf(pack.page)}
-          </a>
-          .
+          <OutLink href={pack.page}>see this version on {siteOf(pack.page)}</OutLink>.
         </p>
       )}
     </div>

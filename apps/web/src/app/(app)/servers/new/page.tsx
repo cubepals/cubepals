@@ -30,7 +30,7 @@ import { useDebounced } from '../../../../lib/hooks'
 import { iconSrc } from '../../../../lib/present'
 import * as rules from '../../../../lib/rules'
 import { useChecked } from '../../../../lib/use-checked'
-import { Button, Note, Skeleton, TextField, Toggle } from '../../../../ui'
+import { Button, Note, OutLink, Skeleton, TextField, Toggle } from '../../../../ui'
 import { PackDrop, type ReadPack } from '../../pack-drop'
 import { PlusOffer } from '../../plus-offer'
 import styles from './create.module.css'
@@ -606,9 +606,9 @@ function CreateServer() {
       </div>
       <p className={`type-caption ${styles.quiet}`}>
         Every server runs Minecraft under Mojang’s{' '}
-        <a className="bk-link" href="https://www.minecraft.net/eula" target="_blank" rel="noreferrer">
+        <OutLink className="bk-link" href="https://www.minecraft.net/eula">
           End User License Agreement
-        </a>
+        </OutLink>
         .
       </p>
     </form>

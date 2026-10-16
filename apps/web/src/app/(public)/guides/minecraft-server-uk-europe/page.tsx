@@ -10,6 +10,7 @@
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { OutLink } from '../../../../ui/out-link'
 import { GuideArticle, GuideLink, guideMetadata, Part, Questions, Shot } from '../article'
 
 const SLUG = 'minecraft-server-uk-europe'
@@ -40,9 +41,10 @@ export default function Guide() {
           alt="The bar at the bottom of the create page: Maple Hollow, Survival, Minecraft 26.3, Europe, closest to you, Up to 5 players, and the Create server button."
         />
         <p>
-          The regions are run on <a href="https://docs.fly.io/reference/regions">Fly.io</a>, whose region list
-          puts Europe’s, “fra”, in Frankfurt, Germany, and North America’s, “iad”, in Ashburn, Virginia. For a
-          group spread around Europe, Frankfurt is central: closer to your players means less lag.
+          The regions are run on <OutLink href="https://docs.fly.io/reference/regions">Fly.io</OutLink>, whose
+          region list puts Europe’s, “fra”, in Frankfurt, Germany, and North America’s, “iad”, in Ashburn,
+          Virginia. For a group spread around Europe, Frankfurt is central: closer to your players means less
+          lag.
         </p>
       </Part>
 

@@ -10,6 +10,7 @@
 import type { PartySize } from '@blockly/contracts'
 import type { Metadata } from 'next'
 import { publicSizes } from '../../../../lib/plans'
+import { OutLink } from '../../../../ui/out-link'
 import { FactTable, GuideArticle, GuideLink, guideMetadata, Part, Questions, Shot } from '../article'
 
 const SLUG = 'minecraft-server-ram'
@@ -58,7 +59,10 @@ export default async function Guide() {
           </li>
         </ul>
         <p>
-          The <a href="https://minecraft.wiki/w/Server.properties">Minecraft Wiki’s server.properties page</a>{' '}
+          The{' '}
+          <OutLink href="https://minecraft.wiki/w/Server.properties">
+            Minecraft Wiki’s server.properties page
+          </OutLink>{' '}
           explains both distances, and its server tutorial suggests at least 2 GB of memory to start, and
           possibly 4 GB for larger servers.
         </p>

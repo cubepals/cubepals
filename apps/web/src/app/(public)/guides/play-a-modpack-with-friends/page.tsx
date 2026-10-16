@@ -9,6 +9,7 @@
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { OutLink } from '../../../../ui/out-link'
 import { GuideArticle, GuideLink, guideMetadata, guidePlans, Part, Questions, Shot } from '../article'
 
 const SLUG = 'play-a-modpack-with-friends'
@@ -64,9 +65,9 @@ export default async function Guide() {
         <p>
           For machines and contraptions, there’s a ready setup: <strong>Create</strong>, “Machines, gears and
           contraptions, with the Create mod ready to go.” The{' '}
-          <a href="https://modrinth.com/mod/create">Create mod</a> calls itself “a mod offering a variety of
-          tools and blocks for Building, Decoration and Aesthetic Automation.” Skyblock has a card of its own,
-          and friends join it with plain Minecraft:{' '}
+          <OutLink href="https://modrinth.com/mod/create">Create mod</OutLink> calls itself “a mod offering a
+          variety of tools and blocks for Building, Decoration and Aesthetic Automation.” Skyblock has a card
+          of its own, and friends join it with plain Minecraft:{' '}
           <GuideLink to="lifesteal-manhunt-skyblock-with-friends">
             how to play Skyblock with friends
           </GuideLink>
@@ -99,9 +100,9 @@ export default async function Guide() {
           Cubepals can’t install straight from CurseForge. A pack from CurseForge or a launcher runs from its
           file instead: download its server pack, or export it, and drop it in with{' '}
           <strong>A pack you have</strong>. On CurseForge, a pack’s server files are among its{' '}
-          <a href="https://support.curseforge.com/support/solutions/articles/9000197242-file-project-types-and-additional-fields">
+          <OutLink href="https://support.curseforge.com/support/solutions/articles/9000197242-file-project-types-and-additional-fields">
             additional files
-          </a>
+          </OutLink>
           .
         </p>
       </Part>

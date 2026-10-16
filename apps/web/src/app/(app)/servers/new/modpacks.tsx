@@ -13,7 +13,7 @@ import { Search } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../lib/api'
 import { useDebounced } from '../../../../lib/hooks'
-import { Note, Select, Skeleton, TextField } from '../../../../ui'
+import { Note, OutLink, Select, Skeleton, TextField } from '../../../../ui'
 import styles from './create.module.css'
 import { createMark, useSearchSteps } from './steps'
 import { packPicture, Thumb } from './thumb'
@@ -183,10 +183,7 @@ function LinkRefused({
       {refused.message}{' '}
       {refused.page !== null && (
         <>
-          <a href={refused.page} target="_blank" rel="noreferrer">
-            Open its files
-          </a>{' '}
-          ·{' '}
+          <OutLink href={refused.page}>Open its files</OutLink> ·{' '}
         </>
       )}
       <button type="button" className="bk-linkbutton" onClick={onHaveFile} {...createMark('upload_opened')}>

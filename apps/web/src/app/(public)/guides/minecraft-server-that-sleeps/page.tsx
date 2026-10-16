@@ -19,6 +19,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { daysSaid, hoursSaid } from '../../../../lib/plans'
+import { OutLink } from '../../../../ui/out-link'
 import { GuideArticle, GuideLink, guideMetadata, guidePlans, Part, Questions, Shot } from '../article'
 
 const SLUG = 'minecraft-server-that-sleeps'
@@ -84,14 +85,16 @@ export default async function Guide() {
         <p>If you run your own server, two free programs make it start on a join:</p>
         <ul>
           <li>
-            <a href="https://github.com/timvisee/lazymc">lazymc</a>, which says it puts “your Minecraft server
-            to rest when idle”. It sits in front of the server, answers the list while it’s off, and starts it
-            when someone joins. It can hold that join until the server is up.
+            <OutLink href="https://github.com/timvisee/lazymc">lazymc</OutLink>, which says it puts “your
+            Minecraft server to rest when idle”. It sits in front of the server, answers the list while it’s
+            off, and starts it when someone joins. It can hold that join until the server is up.
           </li>
           <li>
-            <a href="https://github.com/vincss/mcsleepingserverstarter">Sleeping Server Starter</a> does the
-            same, and by default tells whoever joins “Waking server up, come back in a minute”, so they join
-            again.
+            <OutLink href="https://github.com/vincss/mcsleepingserverstarter">
+              Sleeping Server Starter
+            </OutLink>{' '}
+            does the same, and by default tells whoever joins “Waking server up, come back in a minute”, so
+            they join again.
           </li>
         </ul>
         <p>

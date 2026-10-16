@@ -13,7 +13,7 @@ import type { FleetServerView } from '@blockly/contracts'
 import Link from 'next/link'
 import { useState } from 'react'
 import { whenTaken } from '../../../../lib/present'
-import { Badge, StatusPill } from '../../../../ui'
+import { Badge, OutLink, StatusPill } from '../../../../ui'
 import { ServerActions } from '../server-actions'
 import { dollars, placeName, stateOf } from './words'
 
@@ -101,9 +101,7 @@ function Facts({ server }: { server: FleetServerView }) {
             {server.provider.link && (
               <>
                 {' '}
-                <a href={server.provider.link} target="_blank" rel="noreferrer">
-                  Open there
-                </a>
+                <OutLink href={server.provider.link}>Open there</OutLink>
               </>
             )}
           </>

@@ -15,7 +15,7 @@ import { iconSrc, joinLine, loaderLabel } from '../../lib/present'
 import * as rules from '../../lib/rules'
 import { useChecked } from '../../lib/use-checked'
 import { behindSignUp, useSignedIn } from '../../lib/viewer'
-import { Badge, Button, CopyField, FormSection, GetPack, Note, TextField } from '../../ui'
+import { Badge, Button, CopyField, FormSection, GetPack, Note, OutLink, TextField } from '../../ui'
 import styles from './like-this.module.css'
 import { MapCredits } from './map-credits'
 import { inviteAnswered } from './presses'
@@ -136,9 +136,9 @@ function Needs({ view }: { view: PublicServerView }) {
         {mods.map((mod) => (
           <li key={mod.name}>
             {mod.url ? (
-              <a href={mod.url} target="_blank" rel="noreferrer">
+              <OutLink href={mod.url}>
                 {mod.name} <ExternalLink size={12} aria-hidden />
-              </a>
+              </OutLink>
             ) : (
               <>{mod.name} — ask the owner for it</>
             )}

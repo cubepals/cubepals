@@ -595,7 +595,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/ui/Button.tsx › function Button": {
-      "n": 34,
+      "n": 32,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/ui/action-button.tsx › function ActionButton": {

@@ -9,6 +9,7 @@
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { OutLink } from '../../../../ui/out-link'
 import { GuideArticle, GuideLink, guideMetadata, Part, Questions, Shot } from '../article'
 
 const SLUG = 'play-minecraft-java-with-friends'
@@ -40,14 +41,14 @@ export default function Guide() {
         </p>
         <ul>
           <li>
-            <a href="https://essential.gg/wiki/start-hosting">Essential</a> offers free world hosting: you
-            invite friends into your world from inside the game. Its own guide is plain about the catch: “The
-            host needs to be online because they act as the server.”
+            <OutLink href="https://essential.gg/wiki/start-hosting">Essential</OutLink> offers free world
+            hosting: you invite friends into your world from inside the game. Its own guide is plain about the
+            catch: “The host needs to be online because they act as the server.”
           </li>
           <li>
-            <a href="https://modrinth.com/mod/e4mc">e4mc</a> gives a world you’ve opened to LAN a public
-            address that friends can join from anywhere. It describes itself as “a reverse tunneling reverse
-            proxy for Minecraft”.
+            <OutLink href="https://modrinth.com/mod/e4mc">e4mc</OutLink> gives a world you’ve opened to LAN a
+            public address that friends can join from anywhere. It describes itself as “a reverse tunneling
+            reverse proxy for Minecraft”.
           </li>
         </ul>
         <p>

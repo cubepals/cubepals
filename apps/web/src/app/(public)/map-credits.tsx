@@ -4,6 +4,7 @@
 
 import type { TemplateCredits } from '@blockly/contracts'
 import { Fragment } from 'react'
+import { OutLink } from '../../ui/out-link'
 
 /**
  * Who made the published maps a server's world is built on, as its page says it after the
@@ -19,9 +20,7 @@ export function MapCredits({ credits }: { credits: TemplateCredits }) {
         <Fragment key={maker.name}>
           {i === 0 ? '' : i === last ? ' and ' : ', '}
           {maker.article === undefined ? '' : `${maker.article} `}
-          <a href={maker.url} target="_blank" rel="noreferrer">
-            {maker.name}
-          </a>
+          <OutLink href={maker.url}>{maker.name}</OutLink>
         </Fragment>
       ))}
       .

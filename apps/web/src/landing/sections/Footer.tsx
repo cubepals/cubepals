@@ -8,6 +8,7 @@ import { footerGuides } from '../../app/(public)/guides'
 import { GuideLinks } from '../../app/(public)/guides/links'
 import { MOJANG_DISCLAIMER, OperatorLine, PolicyLinks } from '../../legal/footer'
 import { Lockup, SOURCE_URL } from '../../ui/brand'
+import { OutLink } from '../../ui/out-link'
 import styles from './surface.module.css'
 
 /**
@@ -25,7 +26,7 @@ export function Footer() {
             <p className={styles.groupName}>Cubepals</p>
             <Link href="/pricing">Pricing</Link>
             <Link href="/browse">Browse servers</Link>
-            <a href={SOURCE_URL}>Source code</a>
+            <OutLink href={SOURCE_URL}>Source code</OutLink>
           </div>
           {footerGuides().length > 0 && (
             <div className={styles.footerGroup}>

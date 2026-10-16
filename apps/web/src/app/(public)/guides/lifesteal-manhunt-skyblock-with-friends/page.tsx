@@ -13,7 +13,7 @@
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { priceOf } from '../../../../ui'
+import { OutLink, priceOf } from '../../../../ui'
 import { GuideArticle, GuideLink, guideMetadata, guidePlans, Part, Questions, Shot } from '../article'
 
 const SLUG = 'lifesteal-manhunt-skyblock-with-friends'
@@ -52,8 +52,8 @@ export default async function Guide() {
         <p>
           Everyone starts with 10 hearts. Kill another player and you take one of theirs; die any other way
           and you lose one. Run out and you’re eliminated: the server won’t let you back in. It runs{' '}
-          <a href="https://modrinth.com/plugin/lifestealz">LifeStealZ</a> on its own settings, where nobody
-          holds more than 20 hearts.
+          <OutLink href="https://modrinth.com/plugin/lifestealz">LifeStealZ</OutLink> on its own settings,
+          where nobody holds more than 20 hearts.
         </p>
         <ul>
           <li>
@@ -78,9 +78,10 @@ export default async function Guide() {
       <Part id="manhunt" title="Manhunt">
         <p>
           One of you is the speedrunner, who tries to beat the{' '}
-          <a href="https://minecraft.wiki/w/Ender_Dragon">Ender Dragon</a>. Everyone else hunts them, with a
-          compass that points to the runner. The runner wins when the dragon dies, and the hunters win when
-          the runner does. It runs <a href="https://modrinth.com/plugin/manhunt+">Manhunt+</a>.
+          <OutLink href="https://minecraft.wiki/w/Ender_Dragon">Ender Dragon</OutLink>. Everyone else hunts
+          them, with a compass that points to the runner. The runner wins when the dragon dies, and the
+          hunters win when the runner does. It runs{' '}
+          <OutLink href="https://modrinth.com/plugin/manhunt+">Manhunt+</OutLink>.
         </p>
         <p>A hunt takes an evening, so a Manhunt server starts out as one that lasts a day.</p>
         <Shot
@@ -123,8 +124,10 @@ export default async function Guide() {
         <p>
           You start on a small island over the void: some dirt and grass, an oak tree, and a chest with a
           bucket of lava, two blocks of ice, and seeds, a sapling and a few plants to start a farm. Everything
-          else you make from that. It runs <a href="https://modrinth.com/plugin/bskyblock">BSkyBlock</a> on{' '}
-          <a href="https://modrinth.com/plugin/bentobox">BentoBox</a>, with island levels and warps.
+          else you make from that. It runs{' '}
+          <OutLink href="https://modrinth.com/plugin/bskyblock">BSkyBlock</OutLink> on{' '}
+          <OutLink href="https://modrinth.com/plugin/bentobox">BentoBox</OutLink>, with island levels and
+          warps.
         </p>
         <p>
           Each friend gets an island of their own the first time they join, and there’s one waiting in the
@@ -132,9 +135,9 @@ export default async function Guide() {
           with <code>/island team invite</code> and their name; up to four play on one island.
         </p>
         <p>
-          <a href="https://modrinth.com/modpack/skyblock-plus">SkyBlock Plus</a>, where everyone shares one
-          island and the advancements hint at what to try next, is under <strong>Modpacks</strong> on the
-          create page.
+          <OutLink href="https://modrinth.com/modpack/skyblock-plus">SkyBlock Plus</OutLink>, where everyone
+          shares one island and the advancements hint at what to try next, is under <strong>Modpacks</strong>{' '}
+          on the create page.
         </p>
       </Part>
 

@@ -5,6 +5,7 @@
 import { AlertTriangle, Check, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import type { ButtonHTMLAttributes, MouseEventHandler, ReactNode } from 'react'
+import { OutLink } from './out-link'
 
 export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
   /** `primary` is the one grass fill on a screen. `danger` only inside a DangerZone or its confirmation. */
@@ -100,25 +101,18 @@ export function Button(props: ButtonProps) {
       {iconEnd && said === undefined && <span className="bk-btn__icon">{iconEnd}</span>}
     </>
   )
-  // Another site opens beside Blockly rather than instead of it.
-  if (href !== undefined && /^https?:\/\//.test(href))
-    return (
-      <a href={href} className={classes} target="_blank" rel="noreferrer" aria-label={rest['aria-label']}>
-        {content}
-      </a>
-    )
-  // An app on this computer, by a link of its own (`modrinth://`): the browser hands it over, and
-  // the page stays where it is.
+  // Another site opens beside Blockly rather than instead of it. An app on this computer, by a
+  // link of its own (`modrinth://`), is handed over by the browser, and the page stays where it is.
   if (href !== undefined && /^[a-z][a-z\d+.-]*:/i.test(href))
     return (
-      <a
+      <OutLink
         href={href}
         className={classes}
         aria-label={rest['aria-label']}
         onClick={rest.onClick as MouseEventHandler<HTMLAnchorElement> | undefined}
       >
         {content}
-      </a>
+      </OutLink>
     )
   if (href !== undefined)
     return (

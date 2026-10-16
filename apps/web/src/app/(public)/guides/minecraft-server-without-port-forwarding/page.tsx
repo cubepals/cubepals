@@ -8,6 +8,7 @@
  * page, all linked; the joining was done on a local stack.
  */
 import type { Metadata } from 'next'
+import { OutLink } from '../../../../ui/out-link'
 import { GuideArticle, GuideLink, guideMetadata, Part, Questions, Shot } from '../article'
 
 const SLUG = 'minecraft-server-without-port-forwarding'
@@ -26,9 +27,9 @@ export default function Guide() {
         <p>
           Your router lets your computer reach the internet, but it doesn’t let the internet reach your
           computer unless you tell it to. For a Minecraft server that means forwarding a port: the{' '}
-          <a href="https://minecraft.wiki/w/Tutorial:Setting_up_a_Java_Edition_server">
+          <OutLink href="https://minecraft.wiki/w/Tutorial:Setting_up_a_Java_Edition_server">
             Minecraft Wiki’s server tutorial
-          </a>{' '}
+          </OutLink>{' '}
           says you “must port forward for someone outside your network to connect to the server”, and a Java
           server listens on port 25565 by default. Every router hides the setting somewhere different.
         </p>
@@ -36,19 +37,19 @@ export default function Guide() {
           Sometimes it can’t work at all. Many internet providers share one public address between lots of
           homes, which is called carrier-grade NAT, or CGNAT. Then the router you can change isn’t the one
           facing the internet. The standard that set aside addresses for it,{' '}
-          <a href="https://www.rfc-editor.org/rfc/rfc6598.txt">RFC 6598</a>, notes that some applications
-          “cannot seed content due to the inability to open incoming ports through the CGN”. If your router
-          shows an internet address starting with 100.64 to 100.127, this is probably you.
+          <OutLink href="https://www.rfc-editor.org/rfc/rfc6598.txt">RFC 6598</OutLink>, notes that some
+          applications “cannot seed content due to the inability to open incoming ports through the CGN”. If
+          your router shows an internet address starting with 100.64 to 100.127, this is probably you.
         </p>
       </Part>
 
       <Part id="ways-around" title="The ways around it">
         <ul>
           <li>
-            <strong>A tunnel.</strong> <a href="https://playit.gg/">playit.gg</a> calls itself “a global proxy
-            that lets you host a server without port forwarding”. You run its program next to your server, and
-            friends join an address it gives you. It has a free tier. Your computer still has to be on for
-            anyone to play.
+            <strong>A tunnel.</strong> <OutLink href="https://playit.gg/">playit.gg</OutLink> calls itself “a
+            global proxy that lets you host a server without port forwarding”. You run its program next to
+            your server, and friends join an address it gives you. It has a free tier. Your computer still has
+            to be on for anyone to play.
           </li>
           <li>
             <strong>A private network between you.</strong> Everyone installs the same app, which puts your
