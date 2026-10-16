@@ -129,28 +129,33 @@ class Lane {
 
   /**
    * Runs `job`, and hands pg-boss the run as it is. The worker is free again once pg-boss is done
-   * with it, which it says by aborting the job's signal: when the run ends, or when it gives up
-   * on one past its deadline, which may still be running here.
+   * with it: when the run ends, or when pg-boss gives up on one past its deadline, which may still
+   * be running here. pg-boss's own wait is `expireInSeconds`, at least a second
+   * (`resolveWithinSeconds` in its tools.js), and this one is the same. The job's signal is no
+   * guide: it is aborted too when the job's claim is lost (a lapsed heartbeat, `takeBack`, an
+   * admin settling it), while pg-boss's worker still waits on the handler.
    */
   #run(worker: Worker, job: Job): Promise<void> {
-    // One let go as it took this job counts again while it runs it.
+    // One let go as it took this job counts again while it runs it, and needs no worker added: the
+    // one whose finishing let it go waits.
     if (worker.letGo) this.#count++
     this.#waiting.delete(worker)
     // None waits now: another does, unless the lane is full.
-    if (this.#waiting.size === 0 && this.#count < this.#size)
+    if (!worker.letGo && this.#waiting.size === 0 && this.#count < this.#size)
       this.add().catch((error: unknown) => console.error('pg-boss: a worker could not be added', error))
     const run = this.#handle(job)
-    const given = new Promise<boolean>((resolve) => {
-      if (job.signal.aborted) resolve(true)
-      job.signal.addEventListener('abort', () => resolve(true), { once: true })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(true), Math.max(1, job.expireInSeconds) * SECOND_MS)
     })
     void Promise.race([
       run.then(
         () => false,
         () => true,
       ),
-      given,
+      deadline,
     ]).then((failed) => {
+      clearTimeout(timer)
       this.#freed(worker)
       this.#ended(job, failed)
     })
