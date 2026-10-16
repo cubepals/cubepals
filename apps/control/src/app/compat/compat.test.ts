@@ -18,6 +18,7 @@ import { offeredVersions } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
+import type { ModChange } from '../mods/service.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import { templateOf } from '../setups/templates.ts'
 import { compatFor } from './service.ts'
@@ -88,6 +89,17 @@ const smooth = async (name: string) => {
   await h.until(server.id, 'running')
   await h.settled(server.id)
   return { owner, id: server.id }
+}
+
+/** The Via plugins in the server's plugins folder on its disk, by name. */
+const onDisk = (id: string) => {
+  const dir = `${h.runtime.machine(id)?.dir ?? ''}/plugins`
+  const files = existsSync(dir) ? readdirSync(dir) : []
+  const names = { [VIAVERSION]: 'ViaVersion', [VIABACKWARDS]: 'ViaBackwards', [VIAREWIND]: 'ViaRewind' }
+  return Object.entries(names)
+    .filter(([projectId]) => files.some((file) => file.includes(projectId)))
+    .map(([, name]) => name)
+    .sort()
 }
 
 describe.skipIf(!hasDatabase)('the Via plugins every Paper server starts with', () => {
@@ -221,17 +233,6 @@ describe.skipIf(!hasDatabase)('the Via plugins on a server that sleeps instead o
     return (last?.steps ?? []).some((entry) => entry.step === 'booting')
   }
 
-  /** The Via plugins in the server's plugins folder on its disk, by name. */
-  const onDisk = (id: string) => {
-    const dir = `${h.runtime.machine(id)?.dir ?? ''}/plugins`
-    const files = existsSync(dir) ? readdirSync(dir) : []
-    const names = { [VIAVERSION]: 'ViaVersion', [VIABACKWARDS]: 'ViaBackwards', [VIAREWIND]: 'ViaRewind' }
-    return Object.entries(names)
-      .filter(([projectId]) => files.some((file) => file.includes(projectId)))
-      .map(([, name]) => name)
-      .sort()
-  }
-
   test('one made before the Via plugins existed has them on disk once it wakes, then wakes fast', async () => {
     const { owner, id } = await madeBefore('Kit')
     await sleep(owner, id)
@@ -298,5 +299,49 @@ describe.skipIf(!hasDatabase)('the Via plugins on a server that sleeps instead o
       page: { oldest: gameVersion, newer: false, otherVersions: 'on' },
     })
     expect(await wake(owner, id)).toBe(false)
+  }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('the Via plugins on a server whose owner ran them as their own', () => {
+  /** Changes the server's own plugins, and waits for the boot that takes the change. */
+  const change = async (owner: UserActor, id: string, mods: ModChange) => {
+    const plan = await h.app.mods.plan(owner, id, mods)
+    if (plan.kind !== 'ok') throw new Error(`Conflicts: ${JSON.stringify(plan.conflicts)}`)
+    const before = await h.server(id)
+    await h.app.mods.apply(
+      owner,
+      id,
+      mods,
+      plan.mods.map((mod) => mod.artifact.sha512),
+      randomUUID(),
+    )
+    await h.until(id, (s) => s.lifecycle.status === 'running' && s.version > before.version + 1, 20_000)
+    await h.settled(id, 20_000)
+  }
+
+  test('taken off their own list, they are on disk from the next boot: the image never removes them', async () => {
+    const owner = await h.user('Nell', 'plus')
+    const created = await h.create(owner, { from: { kind: 'template', key: 'smooth' } })
+    await h.until(created.id, 'running')
+    await h.settled(created.id)
+    const id = created.id
+
+    // Their own ViaVersion and ViaBackwards, as the image installs a server's own plugins.
+    await change(owner, id, { add: [{ projectId: VIAVERSION }, { projectId: VIABACKWARDS }] })
+    expect(await placed(id)).toEqual([])
+    expect(onDisk(id)).toEqual(['ViaBackwards', 'ViaVersion'])
+
+    // Off their list, Cubepals places the same jars: the image's clean-up of its own must leave them.
+    await change(owner, id, { remove: [VIAVERSION, VIABACKWARDS] })
+    expect(await placed(id)).toHaveLength(2)
+    expect(onDisk(id)).toEqual(['ViaBackwards', 'ViaVersion'])
+
+    // And back on their list, theirs alone, once.
+    await change(owner, id, { add: [{ projectId: VIAVERSION }] })
+    expect(onDisk(id)).toEqual(['ViaBackwards', 'ViaVersion'])
+    const jars = readdirSync(`${h.runtime.machine(id)?.dir ?? ''}/plugins`).filter((file) =>
+      file.endsWith('.jar'),
+    )
+    expect(jars.filter((file) => file.includes(VIAVERSION))).toHaveLength(1)
   }, 60_000)
 })
