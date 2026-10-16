@@ -560,7 +560,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       ...settingsEnv(revision.settings),
       ...modsEnv(input),
       ...datapacksEnv(revision, input.artifactUrl),
-      ...carriedEnv(placing, world.levelName, input.artifactUrl, viaPlaced),
+      ...carriedEnv(revision, world.levelName, input.artifactUrl, viaPlaced ? input.compat : undefined),
       ...limitsEnv(input.limits),
       ...brandPackEnv(input),
       // OVERRIDE_ICON, or the image keeps the first icon a world ever had.

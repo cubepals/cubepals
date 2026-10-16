@@ -10,6 +10,7 @@ import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import type { MemoryTier } from '../../domain/server/size.ts'
 import type { World } from '../../domain/world/world.ts'
+import { COMPAT_PREFIX } from '../../minecraft/carried.ts'
 import { leaveOutNow } from '../../minecraft/pack-build.ts'
 import {
   IDENTITY_ENV,
@@ -179,11 +180,13 @@ export class RuntimeSpecs {
     // But not without the Via plugins it should have, or with ones turned off: a sleeping server
     // may never stop, so its wake boots once to place them. A newer pin of the same ones waits
     // for its next boot. One that places none wakes on the drift digest alone, as before them.
+    // How they are named on disk is in it too: one asleep on jars named as the image names its
+    // own, which the image could remove as it started (`carried.ts`), boots once to have them.
     const resumesOn =
       compat.length === 0
         ? driftDigest
         : createHash('sha256')
-            .update(`${driftDigest} ${compat.join(',')}`)
+            .update(`${driftDigest} ${compat.join(',')} ${COMPAT_PREFIX}`)
             .digest('hex')
     const spec = { ...labelled, resumesOn }
     return {
