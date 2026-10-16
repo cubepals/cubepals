@@ -16,6 +16,7 @@
  *
  * Parts (`arcade/`):
  * - `datapack.ts`: the shape of a part, the hub's place, a place in a selector, and labels.
+ * - `label-space.ts`: the room a label takes in the world, which nothing may stand in.
  * - `maps.ts`: the published maps, their builders, licences, changes and places in the world.
  * - `credits.ts`: who made each map, its licence and source as links, in the game and the archive.
  * - `signs.ts`: the Cubepals signs, the lockup as map art in frames, over the hub and each game.
@@ -27,20 +28,23 @@
  */
 import { type CarriedFile, RUNNING_LEVEL } from '../domain/revision/carried.ts'
 import { BOARDS_PART, TMP } from './arcade/boards.ts'
-import { NS, type Part } from './arcade/datapack.ts'
+import { label, NS, type Part } from './arcade/datapack.ts'
 import { FLOOR_PART } from './arcade/floor.ts'
 import { HUB_PART, PADS } from './arcade/hub.ts'
 import { PARKOUR_PART } from './arcade/parkour.ts'
 import { PIT_PART } from './arcade/pit.ts'
 
 /** The datapack's folder in the running world, and the name Minecraft lists it by. */
-const PACK = `${RUNNING_LEVEL}/datapacks/cubepals-arcade`
+export const ARCADE_DATAPACK = `${RUNNING_LEVEL}/datapacks/cubepals-arcade`
 
 /**
  * In the order each tick runs them: the boards' scratch objective is made before anyone uses it,
  * and a game catches its own falls before the hub catches anyone else's.
  */
 const PARTS: readonly Part[] = [BOARDS_PART, PARKOUR_PART, FLOOR_PART, PIT_PART, HUB_PART]
+
+/** Every label the datapack makes, in every part. */
+export const ARCADE_LABELS = PARTS.flatMap((part) => part.labels ?? [])
 
 /**
  * How long after the world loads its chunks are built in, in ticks. Forcing a chunk to load
@@ -62,6 +66,7 @@ const BUILD = [
   `execute unless ${ARCADE_WORLD_HERE} run return run scoreboard players set #build ${TMP} -2`,
   `function ${NS}:rules`,
   `kill @e[type=!minecraft:player,tag=${NS}.display]`,
+  ...ARCADE_LABELS.map(label),
   ...PARTS.flatMap((part) => part.build),
   `scoreboard players set #build ${TMP} -1`,
 ]
@@ -88,19 +93,25 @@ const FUNCTIONS: Record<string, readonly string[]> = {
  */
 export const ARCADE_FILES: readonly CarriedFile[] = [
   {
-    path: `${PACK}/pack.mcmeta`,
+    path: `${ARCADE_DATAPACK}/pack.mcmeta`,
     content: `${JSON.stringify({ pack: { description: 'Written by Cubepals: the Arcade’s games and boards.', min_format: 88, max_format: 1000 } }, null, 2)}\n`,
   },
-  { path: `${PACK}/data/minecraft/tags/function/load.json`, content: `{ "values": ["${NS}:load"] }\n` },
-  { path: `${PACK}/data/minecraft/tags/function/tick.json`, content: `{ "values": ["${NS}:tick"] }\n` },
+  {
+    path: `${ARCADE_DATAPACK}/data/minecraft/tags/function/load.json`,
+    content: `{ "values": ["${NS}:load"] }\n`,
+  },
+  {
+    path: `${ARCADE_DATAPACK}/data/minecraft/tags/function/tick.json`,
+    content: `{ "values": ["${NS}:tick"] }\n`,
+  },
   ...PARTS.flatMap((part) =>
     Object.entries(part.data ?? {}).map(([name, json]) => ({
-      path: `${PACK}/data/${NS}/${name}`,
+      path: `${ARCADE_DATAPACK}/data/${NS}/${name}`,
       content: `${JSON.stringify(json, null, 2)}\n`,
     })),
   ),
   ...Object.entries(FUNCTIONS).map(([name, commands]) => ({
-    path: `${PACK}/data/${NS}/function/${name}.mcfunction`,
+    path: `${ARCADE_DATAPACK}/data/${NS}/function/${name}.mcfunction`,
     content: lines(commands),
   })),
 ]

@@ -444,6 +444,7 @@ function apiServices(
     }),
     faces: app.faces,
     icons: new ServerIcons({ db }),
+    brandPack: app.specs.brandPack,
     console: app.console,
     tickets,
     platform: { capabilities: supportOf(capabilities) },

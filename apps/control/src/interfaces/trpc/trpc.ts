@@ -11,6 +11,7 @@ import type { Impersonation } from '../../app/accounts/impersonation.ts'
 import type { AccountQueries } from '../../app/accounts/queries.ts'
 import type { AccountService } from '../../app/accounts/service.ts'
 import type { UserActor } from '../../app/actor.ts'
+import type { BuiltPack } from '../../app/artifacts/brand-pack.ts'
 import type { BackupQueries } from '../../app/backups/queries.ts'
 import type { BackupService } from '../../app/backups/service.ts'
 import type { BillingService } from '../../app/billing/service.ts'
@@ -77,6 +78,8 @@ export interface Services {
   items: ItemIcons
   faces: PlayerFaces
   icons: ServerIcons
+  /** Cubepals' resource pack, which players' games download. */
+  brandPack: BuiltPack
   console: ConsoleService
   tickets: RealtimeTickets
   realtime: { url: string; fallbackUrl: string; certificateSha256(): Promise<string | null> }

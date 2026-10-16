@@ -14,9 +14,9 @@
  * the Arcade's world (`maps.ts`).
  */
 import { onSidebar, SECONDS, shown, submit, TMP, WORK } from './boards.ts'
-import { type Block, box, label, NS, PAPER, type Part, titled } from './datapack.ts'
+import { type Block, box, NS, PAPER, type Part, titled } from './datapack.ts'
 import { placed } from './maps.ts'
-import { type BrandSign, hangSign } from './signs.ts'
+import { type BrandSign, creditLabel, hangSign } from './signs.ts'
 
 /** A box in a map, both corners included, and where a player stands when sent there, facing on. */
 interface Spot {
@@ -177,18 +177,18 @@ export const PARKOUR_PART: Part = {
     `team modify ${NS}.parkour nametagVisibility hideForOtherTeams`,
     `scoreboard objectives setdisplay sidebar.team.aqua ${PK}.side`,
   ],
-  build: [
-    label(
-      `${ARRIVAL[0]} ${ARRIVAL[1] + 2.6} ${ARRIVAL[2]}`,
-      `${NS}.label`,
-      titled(
+  labels: [
+    {
+      at: [ARRIVAL[0], ARRIVAL[1] + 2.6, ARRIVAL[2]],
+      tag: `${NS}.label`,
+      text: titled(
         'Parkour',
         'Three courses, one clock. It starts as you step off. A fall takes you back to your last checkpoint.',
       ),
-    ),
-    ...hangSign(PARKOUR_SIGN),
-    'forceload remove 960 -40 1410 40',
+    },
+    ...[creditLabel(PARKOUR_SIGN)].filter((credit) => credit !== null),
   ],
+  build: [...hangSign(PARKOUR_SIGN), 'forceload remove 960 -40 1410 40'],
   tick: [
     `team join ${NS}.parkour @a[team=!${NS}.parkour,${ZONE}]`,
     `execute as @a[${RUNNING}] unless entity @s[${ZONE}] run tag @s remove ${NS}.pk.run`,

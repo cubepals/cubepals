@@ -10,6 +10,7 @@ import { Hono } from 'hono'
 import type { Authenticator } from '../../app/ports/auth.ts'
 import { appRouter } from '../trpc/router.ts'
 import type { Services } from '../trpc/trpc.ts'
+import { brandPackRoutes } from './brand-pack.ts'
 import { type AddressTrust, withClientAddress } from './client-address.ts'
 import { ownPagesOnly } from './origins.ts'
 import { createPublicApp } from './public.ts'
@@ -65,6 +66,9 @@ export function createApiApp(deps: {
       icons: deps.services.icons,
     }),
   )
+
+  // Cubepals' resource pack, which players' games download through the site's /api.
+  app.route('/', brandPackRoutes(deps.services.brandPack))
 
   // Which buttons the sign-in and sign-up pages show. Outside /api/auth, which Better Auth owns.
   app.get('/api/auth-methods', (c) => c.json(deps.methods))

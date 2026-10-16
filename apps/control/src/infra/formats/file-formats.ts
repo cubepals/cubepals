@@ -6,7 +6,8 @@ import { PassThrough, Readable } from 'node:stream'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import { configure } from '@zip.js/zip.js'
 import { parse as parseProperties } from 'dot-properties'
-import { strFromU8, unzipSync } from 'fflate'
+import { strFromU8, unzipSync, zipSync } from 'fflate'
+import { PNG } from 'pngjs'
 import nbt from 'prismarine-nbt'
 import { parse as parseToml } from 'smol-toml'
 import { Header, Pack, Parser, ReadEntry } from 'tar'
@@ -15,10 +16,10 @@ import { type FileFormats, UnreadableFile } from '../../app/ports/formats.ts'
 import { readRemoteZip } from './remote-zip.ts'
 
 /**
- * Formats through maintained libraries (docs/dependency-audit.md): fflate for zips, zip.js for a
- * zip read by byte ranges (`remote-zip.ts`), smol-toml, yaml, dot-properties for Java properties, prismarine-nbt for
- * level.dat, and node-tar to stream an archive without unpacking it, and to rewrite one as it
- * streams.
+ * Formats through maintained libraries (docs/dependency-audit.md): fflate for zips, pngjs for
+ * pictures, zip.js for a zip read by byte ranges (`remote-zip.ts`), smol-toml, yaml,
+ * dot-properties for Java properties, prismarine-nbt for level.dat, and node-tar to stream an
+ * archive without unpacking it, and to rewrite one as it streams.
  */
 
 // zip.js inflates on the calling thread here: the entries read this way are a few kilobytes.
@@ -232,7 +233,28 @@ export class LibraryFileFormats implements FileFormats {
     input.pipe(parser)
     return Readable.toWeb(output) as ReadableStream<Uint8Array>
   }
+
+  png(picture: { width: number; height: number; rgba: Uint8Array }): Uint8Array {
+    const png = new PNG({ width: picture.width, height: picture.height })
+    png.data = Buffer.from(picture.rgba)
+    return new Uint8Array(PNG.sync.write(png))
+  }
+
+  zipped(entries: ReadonlyArray<{ name: string; data: Uint8Array }>): Uint8Array {
+    return zipSync(
+      Object.fromEntries(entries.map(({ name, data }) => [name, [data, { mtime: ZIPPED_ON }]])),
+      {
+        level: 9,
+      },
+    )
+  }
 }
+
+/**
+ * The date every entry `zipped` writes carries. A zip keeps the time of day as the clock where it
+ * is made reads it, so it is given as a local time, and reads the same wherever it is made.
+ */
+const ZIPPED_ON = new Date(1980, 0, 1)
 
 /** Entry types that hold a file's bytes. */
 const FILES = new Set(['File', 'OldFile', 'ContiguousFile'])

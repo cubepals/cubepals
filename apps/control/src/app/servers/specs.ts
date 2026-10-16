@@ -21,6 +21,7 @@ import {
   withoutFilesStep,
 } from '../../minecraft/runtime-spec.ts'
 import { loadStanding } from '../accounts/persistence.ts'
+import type { BuiltPack } from '../artifacts/brand-pack.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
 import { quarantinedOf } from '../mods/jar-check-records.ts'
 import { loadPackContents } from '../packs/persistence.ts'
@@ -96,10 +97,13 @@ function canonical(value: unknown): string {
 export class RuntimeSpecs {
   readonly #secrets: SecretKeyring
   readonly #links: ArtifactLinks
+  /** Cubepals' resource pack, which a server running Cubepals' own games offers, and the site serves. */
+  readonly brandPack: BuiltPack
 
-  constructor(secrets: SecretKeyring, links: ArtifactLinks) {
+  constructor(secrets: SecretKeyring, links: ArtifactLinks, brandPack: BuiltPack) {
     this.#secrets = secrets
     this.#links = links
+    this.brandPack = brandPack
   }
 
   /**
@@ -150,6 +154,7 @@ export class RuntimeSpecs {
         server.ownIcon === null
           ? this.#links.icon(server.icon ?? BLOCKLY_ICON)
           : this.#links.ownIcon(server.id, server.ownIcon),
+      brandPack: this.brandPack,
     })
     const labelled = {
       ...built,

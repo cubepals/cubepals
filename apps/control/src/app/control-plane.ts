@@ -8,6 +8,7 @@ import { AccessReconciler } from './access/reconciler.ts'
 import { AccessService } from './access/service.ts'
 import { AccountQueries } from './accounts/queries.ts'
 import { AccountService } from './accounts/service.ts'
+import { buildBrandPack } from './artifacts/brand-pack.ts'
 import { ArtifactLinks } from './artifacts/links.ts'
 import { ArtifactService } from './artifacts/service.ts'
 import { BackupQueries } from './backups/queries.ts'
@@ -121,7 +122,10 @@ export interface ControlPlaneSettings {
   adminEmails?: readonly string[]
   /** Where admin mail goes (ADMIN_ALERT_EMAILS); empty or absent, each admin's own email. */
   adminInbox?: readonly string[]
-  /** Where people reach the web app: billing sends them back to its account page. */
+  /**
+   * Where people reach the web app: billing sends them back to its account page, and players' games
+   * download Cubepals' resource pack from it (`artifacts/brand-pack.ts`).
+   */
   webOrigin: string
   /** Whether sign-up stops at the free-account cap; true unless this is local development. */
   signupCap?: boolean
@@ -139,7 +143,7 @@ export interface ControlPlaneSettings {
  * wiring that runs.
  */
 export function composeControlPlane(ports: ControlPlanePorts, settings: ControlPlaneSettings) {
-  const { db, events, runtime, profiles } = ports
+  const { db, events, runtime, profiles, formats } = ports
   const placement = new RuntimePlacement({
     db,
     runtimes: runtime,
@@ -150,7 +154,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
   const policy = new AccessPolicy(ports.capabilities, new CreateRoom({ db, placement, runtime, settings }))
   const transitions = new ServerTransitions(events, ports.jobs)
   const links = new ArtifactLinks(settings.artifactsRuntimeFacingUrl, settings.runtimeSecrets)
-  const specs = new RuntimeSpecs(settings.runtimeSecrets, links)
+  const specs = new RuntimeSpecs(settings.runtimeSecrets, links, buildBrandPack(formats, settings.webOrigin))
   // Setups resolve mods through the catalog, which needs revisions, which need servers: the
   // server service reaches for setups only when a server is being made, so it takes a getter.
   let setups: SetupService

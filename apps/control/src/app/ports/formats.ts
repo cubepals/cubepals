@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Reading what people upload: containers and text formats, decoded into plain data. It knows
- * nothing about Minecraft; `minecraft/` says what the data means (§15.2).
+ * Reading what people upload: containers and text formats, decoded into plain data; and writing the
+ * few files Cubepals makes in memory, a picture or a zip. It knows nothing about Minecraft;
+ * `minecraft/` says what the data means (§15.2).
  */
 export interface FileFormats {
   /**
@@ -62,6 +63,13 @@ export interface FileFormats {
     url: string,
     options: { wanted(name: string): boolean; maxEntryBytes: number },
   ): Promise<{ names: string[]; entries: Map<string, Uint8Array> }>
+  /** A picture, rows of RGBA from the top, as a PNG. */
+  png(picture: { width: number; height: number; rgba: Uint8Array }): Uint8Array
+  /**
+   * A zip of `entries`, in order, every one dated alike: the same entries always make the same
+   * bytes, wherever and whenever they are zipped.
+   */
+  zipped(entries: ReadonlyArray<{ name: string; data: Uint8Array }>): Uint8Array
 }
 
 /**

@@ -13,8 +13,8 @@
  * beside the void world's platform (`duels.ts` says where that is); a world of another kind, whose
  * arena is a room underground, gets neither, and its welcome says only how to duel. Every tick it
  * welcomes a player it hasn't, opens or closes the pit, gives whoever drops into the pit the pit's
- * kit and tells them the way out, lets out whoever takes it, and sends whoever reaches the end of
- * the parkour back to its start.
+ * kit and tells them the way out, lets out whoever takes it, shows an open door over the way out,
+ * and sends whoever reaches the end of the parkour back to its start.
  *
  * The pit is a fight, so it is open only while two can have one: while fewer than two players are
  * outside a duel, a lid of glass covers it and the sign over it says why. A player is in a duel
@@ -31,9 +31,10 @@
  */
 
 import { type CarriedFile, RUNNING_LEVEL } from '../domain/revision/carried.ts'
+import { MARKERS, type ShownMarker, showMarker } from './brand-pack.ts'
 
 /** The datapack's folder in the running world, and the name Minecraft lists it by. */
-const PACK = `${RUNNING_LEVEL}/datapacks/cubepals-duels`
+export const WAITING_DATAPACK = `${RUNNING_LEVEL}/datapacks/cubepals-duels`
 
 /** The void world's platform is one block thick: below its middle there is nothing. */
 const ON_VOID = 'execute if block 8 -62 8 minecraft:air run'
@@ -56,6 +57,18 @@ const OPEN_SIGN = `data merge block ${SIGN} {front_text:{messages:["the pit:","e
 
 /** The way out: a green square in the corner across the pit from the bridge. */
 const EXIT = 'fill 7 -64 -26 8 -64 -25 minecraft:lime_concrete'
+
+/**
+ * Over the way out, on the pit's wall beside it at eye height, an open door (`brand-pack.ts`). It
+ * is shown while someone is on the server, once the world's entities are surely in, and only once.
+ */
+export const EXIT_MARKER: ShownMarker = {
+  marker: MARKERS.wayOut,
+  at: [8.97, -62, -25],
+  facing: 'west',
+  scale: 0.8,
+}
+const SHOW_EXIT = `execute if entity @a if block 7 -64 -26 minecraft:lime_concrete unless entity @e[type=minecraft:item_display,tag=cubepals.exit] run ${showMarker(EXIT_MARKER, ['cubepals.exit'])}`
 
 /** Where the way out puts a player: on the platform by the bridge, facing away from the pit. */
 const OUTSIDE = '1.0 -60 -6.5 0 0'
@@ -145,7 +158,7 @@ const LID_TICK = [
   `execute if score #waiting cubepals.waiting matches ..1 if block ${LID_MIDDLE} minecraft:air if block -6 -64 -26 minecraft:smooth_stone unless entity @a[${IN_PIT}] run function cubepals:close`,
 ]
 
-/** Every tick: the welcome, the lid, the pit and its way out, and the end of the parkour. */
+/** Every tick: the welcome, the lid, the pit, its way out and the marker over it, and the end of the parkour. */
 const TICK = [
   ...WELCOME,
   ...LID_TICK,
@@ -157,6 +170,7 @@ const TICK = [
   `tellraw @a[tag=!cubepals.pit,${IN_PIT}] "To leave the pit, stand on the green square in its far corner. The kit stays here."`,
   `tag @a[tag=!cubepals.pit,${IN_PIT}] add cubepals.pit`,
   `execute as @a[${IN_PIT}] at @s if block ~ ~-1 ~ minecraft:lime_concrete run function cubepals:leave`,
+  SHOW_EXIT,
   `kill @e[type=minecraft:item,${IN_PIT}]`,
   `execute as @a at @s if block ~ ~-1 ~ minecraft:gold_block run tellraw @s "You finished the parkour."`,
   `execute as @a at @s if block ~ ~-1 ~ minecraft:gold_block run tp @s ${START}`,
@@ -170,15 +184,24 @@ const lines = (commands: readonly string[]) => `${commands.join('\n')}\n`
  */
 export const WAITING_FILES: readonly CarriedFile[] = [
   {
-    path: `${PACK}/pack.mcmeta`,
+    path: `${WAITING_DATAPACK}/pack.mcmeta`,
     content: `${JSON.stringify({ pack: { description: 'Written by Cubepals: parkour and a pit while you wait for a duel.', min_format: 88, max_format: 1000 } }, null, 2)}\n`,
   },
-  { path: `${PACK}/data/minecraft/tags/function/load.json`, content: '{ "values": ["cubepals:load"] }\n' },
-  { path: `${PACK}/data/minecraft/tags/function/tick.json`, content: '{ "values": ["cubepals:tick"] }\n' },
-  { path: `${PACK}/data/cubepals/function/load.mcfunction`, content: lines(LOAD) },
-  { path: `${PACK}/data/cubepals/function/build.mcfunction`, content: lines([...PARKOUR, ...PIT]) },
-  { path: `${PACK}/data/cubepals/function/tick.mcfunction`, content: lines(TICK) },
-  { path: `${PACK}/data/cubepals/function/open.mcfunction`, content: lines(OPEN) },
-  { path: `${PACK}/data/cubepals/function/close.mcfunction`, content: lines(CLOSE) },
-  { path: `${PACK}/data/cubepals/function/leave.mcfunction`, content: lines(LEAVE) },
+  {
+    path: `${WAITING_DATAPACK}/data/minecraft/tags/function/load.json`,
+    content: '{ "values": ["cubepals:load"] }\n',
+  },
+  {
+    path: `${WAITING_DATAPACK}/data/minecraft/tags/function/tick.json`,
+    content: '{ "values": ["cubepals:tick"] }\n',
+  },
+  { path: `${WAITING_DATAPACK}/data/cubepals/function/load.mcfunction`, content: lines(LOAD) },
+  {
+    path: `${WAITING_DATAPACK}/data/cubepals/function/build.mcfunction`,
+    content: lines([...PARKOUR, ...PIT]),
+  },
+  { path: `${WAITING_DATAPACK}/data/cubepals/function/tick.mcfunction`, content: lines(TICK) },
+  { path: `${WAITING_DATAPACK}/data/cubepals/function/open.mcfunction`, content: lines(OPEN) },
+  { path: `${WAITING_DATAPACK}/data/cubepals/function/close.mcfunction`, content: lines(CLOSE) },
+  { path: `${WAITING_DATAPACK}/data/cubepals/function/leave.mcfunction`, content: lines(LEAVE) },
 ]

@@ -8,8 +8,9 @@
  */
 import { describe, expect, test } from 'bun:test'
 import { onLevel } from '../domain/revision/carried.ts'
+import { inRoom, markerRoom } from './arcade/label-space.ts'
 import { placeablePath } from './carried.ts'
-import { WAITING_FILES } from './duels-waiting.ts'
+import { EXIT_MARKER, WAITING_FILES } from './duels-waiting.ts'
 
 const PACK = 'world-2/datapacks/cubepals-duels'
 
@@ -27,6 +28,26 @@ function positions(command: string): Array<[number, number, number]> {
   const at: Array<[number, number, number]> = [[numbers[0] ?? 0, numbers[1] ?? 0, numbers[2] ?? 0]]
   if (command.startsWith('fill ')) at.push([numbers[3] ?? 0, numbers[4] ?? 0, numbers[5] ?? 0])
   return at
+}
+
+/** Every block a building command sets, by `x y z`. */
+function cellsOf(command: string): string[] {
+  const [from = [0, 0, 0], to = from] = positions(command)
+  const span = (axis: 0 | 1 | 2) =>
+    Array.from({ length: Math.abs(to[axis] - from[axis]) + 1 }, (_, i) => Math.min(from[axis], to[axis]) + i)
+  return span(0).flatMap((x) => span(1).flatMap((y) => span(2).map((z) => `${x} ${y} ${z}`)))
+}
+
+/** The blocks the build leaves, the pit's lid shut: each fill or setblock in turn, air taking a block away. */
+function builtBlocks(): Set<string> {
+  const solid = new Set<string>()
+  for (const command of commands('build').filter((line) => /^(fill|setblock) /.test(line))) {
+    const block = command.split(' ')[command.startsWith('fill ') ? 7 : 4] ?? ''
+    for (const cell of cellsOf(command))
+      if (block.startsWith('minecraft:air')) solid.delete(cell)
+      else solid.add(cell)
+  }
+  return solid
 }
 
 describe('the datapack for waiting on a Duels server', () => {
@@ -154,5 +175,22 @@ describe('the datapack for waiting on a Duels server', () => {
     expect(leave[0]).toBe('clear @s')
     expect(leave).toContain('tag @s remove cubepals.pit')
     expect(leave.at(-1)).toStartWith('tp @s ')
+  })
+})
+
+describe('the way out of the pit, marked', () => {
+  test('an open door over the way out stands on the pit wall beside it, clear of every block the pit is built of, once', () => {
+    const solid = builtBlocks()
+    const room = markerRoom(EXIT_MARKER)
+    const inside = [...solid].filter((at) =>
+      inRoom(room, at.split(' ').map(Number) as [number, number, number]),
+    )
+    expect(inside).toEqual([])
+    // On the wall: the block behind it, east, is the pit's, and the way out is under it.
+    expect(solid.has('9 -62 -25')).toBe(true)
+    expect(commands('build')).toContain('fill 7 -64 -26 8 -64 -25 minecraft:lime_concrete')
+    const shows = commands('tick').filter((command) => command.includes('summon minecraft:item_display'))
+    expect(shows).toHaveLength(1)
+    expect(shows[0]).toContain('unless entity @e[type=minecraft:item_display,tag=cubepals.exit]')
   })
 })

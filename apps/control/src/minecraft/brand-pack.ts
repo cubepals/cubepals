@@ -1,0 +1,124 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * Cubepals' resource pack: the look of the ways in and out on Cubepals' own games, the Arcade and
+ * Duels, as one family. Its files are described here, as JSON and pictures (`brand-art.ts`); the
+ * zip is put together and hashed where files are written (`infra/formats/brand-pack-zip.ts`), and
+ * offered by the server as it starts (`runtime-spec.ts`).
+ *
+ * The pack changes nothing a player sees anywhere else. Every marker is an oak door item, which
+ * the games show as an item, never placed, so the pack retextures only an oak door marked with one
+ * of its own names (`custom_model_data`), and any other oak door draws as vanilla's. The pack is
+ * never required: a player who turns it down sees a plain oak door where a marker is, still a way
+ * through, and every label's words are the same.
+ */
+import { type Facing, YAW } from './arcade/datapack.ts'
+import { backToHub, type Picture, portal, wayOut } from './brand-art.ts'
+
+/** The pack's names for its markers, as an item's `custom_model_data` carries them. */
+export const MARKERS = {
+  /** The item every Arcade player keeps, that takes them back to the hub. */
+  backToHub: 'cubepals:back_to_hub',
+  /** Over a way through, out of where a player is: an open door. */
+  wayOut: 'cubepals:way_out',
+  /** Over a way into a game: the app icon's tile. */
+  portal: 'cubepals:portal',
+} as const
+
+type Marker = (typeof MARKERS)[keyof typeof MARKERS]
+
+/** The item a marker is drawn on, and what it draws as without the pack. */
+export const MARKER_ITEM = 'minecraft:oak_door'
+
+/** A marker's item, as an item component in a command names it. */
+export const markerData = (marker: Marker): string => `custom_model_data={strings:["${marker}"]}`
+
+/** A marker shown in the world, over a way in or out. */
+export interface ShownMarker {
+  marker: Marker
+  /** Its middle. */
+  at: readonly [number, number, number]
+  /** Flat on a wall, facing out from it; without, it turns to whoever looks. */
+  facing?: Facing
+  /** Its side, in blocks. */
+  scale?: number
+}
+
+/** The command that shows a marker, as an item display lit as by day, with the tags it is found by. */
+export function showMarker(shown: ShownMarker, tags: readonly string[]): string {
+  const scale = shown.scale ?? 1
+  const turn =
+    shown.facing === undefined
+      ? 'billboard:"vertical"'
+      : `billboard:"fixed",Rotation:[${YAW[shown.facing]}f,0f]`
+  return `summon minecraft:item_display ${shown.at.join(' ')} {Tags:[${tags.map((tag) => `"${tag}"`).join(',')}],item:{id:"${MARKER_ITEM}",count:1,components:{"minecraft:custom_model_data":{strings:["${shown.marker}"]}}},item_display:"none",${turn},brightness:{block:15,sky:15},transformation:{left_rotation:[0f,0f,0f,1f],right_rotation:[0f,0f,0f,1f],translation:[0f,0f,0f],scale:[${scale}f,${scale}f,${scale}f]}}`
+}
+
+/**
+ * The resource formats the pack is for: from 1.21.11, the release Duels runs on, which declares 75
+ * (Mojang's server jar, `version.json`, `pack_version.resource_major`), and every one after. It
+ * names them as a range, which releases from 1.21.9 read, and uses the item definitions of 1.21.4
+ * and after.
+ */
+export const RESOURCE_FORMATS = { min: 75, max: 1000 } as const
+
+/** What the game's screen asks each player as they join, under its own words: whether to take it. */
+export const PROMPT = 'Cubepals’ own look for doors and markers. Without it, everything works just the same.'
+
+/**
+ * The pack's id, the same for every server that offers it, so a player's game keeps one copy for
+ * the Arcade and Duels both.
+ */
+export const PACK_ID = '834b276d-e113-41cd-934d-e06766c308a7'
+
+export type PackFile = { path: string; json: unknown } | { path: string; picture: Picture }
+
+const PICTURES: Record<Marker, Picture> = {
+  [MARKERS.backToHub]: backToHub(),
+  [MARKERS.wayOut]: wayOut(),
+  [MARKERS.portal]: portal(),
+}
+
+/** A marker's own name, without its namespace: `way_out`. */
+const nameOf = (marker: Marker) => marker.slice('cubepals:'.length)
+
+/**
+ * The oak door's item, as vanilla defines it, unless it carries a marker's name: then the marker's
+ * model. A marker drawn as an item is flat, as vanilla's oak door is, a sixteenth thick.
+ */
+const OAK_DOOR = {
+  model: {
+    type: 'minecraft:select',
+    property: 'minecraft:custom_model_data',
+    index: 0,
+    cases: Object.values(MARKERS).map((marker) => ({
+      when: marker,
+      model: { type: 'minecraft:model', model: `cubepals:item/${nameOf(marker)}` },
+    })),
+    fallback: { type: 'minecraft:model', model: 'minecraft:item/oak_door' },
+  },
+}
+
+export const BRAND_PACK: readonly PackFile[] = [
+  {
+    path: 'pack.mcmeta',
+    json: {
+      pack: {
+        description: 'Cubepals: doors and markers on our own servers',
+        min_format: RESOURCE_FORMATS.min,
+        max_format: RESOURCE_FORMATS.max,
+      },
+    },
+  },
+  { path: 'pack.png', picture: portal(64) },
+  { path: 'assets/minecraft/items/oak_door.json', json: OAK_DOOR },
+  ...Object.values(MARKERS).flatMap((marker): PackFile[] => [
+    {
+      path: `assets/cubepals/models/item/${nameOf(marker)}.json`,
+      json: { parent: 'minecraft:item/generated', textures: { layer0: `cubepals:item/${nameOf(marker)}` } },
+    },
+    { path: `assets/cubepals/textures/item/${nameOf(marker)}.png`, picture: PICTURES[marker] },
+  ]),
+]

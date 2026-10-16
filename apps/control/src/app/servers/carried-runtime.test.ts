@@ -87,6 +87,7 @@ const input = {
   artifactUrl: linkOf,
   limits: { playerIdleKickMinutes: null, worldRadius: null, storageGb: 5 },
   iconUrl: null,
+  brandPack: null,
 }
 
 beforeAll(() => {

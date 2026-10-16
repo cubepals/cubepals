@@ -15,7 +15,7 @@
 import { AS_COUNT, submit, TMP, WORK } from './boards.ts'
 import { type Block, box, NS, type Part } from './datapack.ts'
 import { placed } from './maps.ts'
-import { type BrandSign, hangSign } from './signs.ts'
+import { type BrandSign, creditLabel, hangSign } from './signs.ts'
 
 const PIT = `${NS}.pit`
 
@@ -50,7 +50,7 @@ const ARMOUR: Readonly<Record<'head' | 'chest' | 'legs' | 'feet', string>> = {
  */
 export const PIT_SIGNS: readonly BrandSign[] = [
   { art: 'small', at: [-1044, 92, 0], facing: 'north' },
-  // One credit line under the two: it turns to whoever reads it, from either side.
+  // One credit line, under this one.
   { art: 'small', at: [-1048, 92, 2], facing: 'south', credit: 'market' },
 ]
 const SIGN_CHUNKS = 'forceload add -1048 0 -1044 2'
@@ -92,6 +92,7 @@ export const PIT_PART: Part = {
     `team modify ${PIT} color red`,
     `scoreboard objectives setdisplay sidebar.team.red ${PIT}.kills`,
   ],
+  labels: PIT_SIGNS.map(creditLabel).filter((credit) => credit !== null),
   build: [...PIT_SIGNS.flatMap(hangSign), SIGN_CHUNKS.replace('add', 'remove')],
   tick: [
     `team join ${PIT} @a[team=!${PIT},${ZONE}]`,

@@ -12,6 +12,7 @@
     "./limits": "./src/limits.ts",
     "./server-list": "./src/server-list.ts",
     "./motd-layout": "./src/motd-layout.ts",
+    "./minecraft-font": "./src/minecraft-font.ts",
     "./published-maps": "./src/published-maps.ts",
     "./local": "./src/local.ts",
     "./play-today": "./src/play-today.ts",

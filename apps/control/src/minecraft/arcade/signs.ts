@@ -7,10 +7,11 @@
  * map art in glow item frames on a Paper backing. A large one over the hub's ARCADE cabinet, and a
  * small one at each game's start. The maps are in the world (`scripts/lib/arcade-brand.ts` draws
  * them, and builds each backing); each part of the datapack hangs its own sign's frames as it
- * builds, with a line under a game's sign naming its map and who built it. Every small sign shows
+ * builds, with a line under a game's sign naming its map and who built it, flat on the sign's wall
+ * so that it never turns into it (`creditLabel`). Every small sign shows
  * the same maps. Not where the games are (`maps.ts`).
  */
-import { type Block, label, NS, PAPER } from './datapack.ts'
+import { type Block, type Facing, type Label, NS, PAPER } from './datapack.ts'
 import { ARCADE_MAPS } from './maps.ts'
 
 /** The two sizes of sign, by the frames across and down, and the first of their maps. */
@@ -18,8 +19,6 @@ export const SIGN_ART = {
   large: { columns: 20, rows: 4, firstMap: 9000 },
   small: { columns: 5, rows: 1, firstMap: 9100 },
 } as const
-
-type Facing = 'north' | 'south' | 'east' | 'west'
 
 export interface BrandSign {
   art: keyof typeof SIGN_ART
@@ -69,24 +68,31 @@ function creditLine(key: string): string {
   return `${map.name}, by ${inWords(map.builders)}`
 }
 
-/** Under the middle of a sign, just in front of it: where its credit line floats. */
-function under(sign: BrandSign): string {
+/**
+ * Under the middle of a sign, just in front of its wall: where its credit line stands, flat, as the
+ * sign hangs, its words up from there.
+ */
+function under(sign: BrandSign): Label['at'] {
   const frames = signFrames(sign)
   const [first, last] = [frames[0]?.at ?? sign.at, frames.at(-1)?.at ?? sign.at]
   const { back } = FACING[sign.facing]
-  const middle = (a: number, b: number, toward: number) => (a + b) / 2 + 0.5 - toward * 0.4
-  return `${middle(first[0], last[0], back[0])} ${last[1] - 0.45} ${middle(first[2], last[2], back[2])}`
+  const middle = (a: number, b: number, toward: number) => (a + b) / 2 + 0.5 + toward * 0.45
+  return [middle(first[0], last[0], back[0]), last[1] - 0.3, middle(first[2], last[2], back[2])]
 }
 
-/** The commands that hang a sign: a fixed, unbreakable glow frame for each of its maps, and its credit line. */
-export const hangSign = (sign: BrandSign): string[] => [
-  ...frameCommands(sign),
-  ...(sign.credit === undefined
-    ? []
-    : [label(under(sign), `${NS}.label`, `{text:"${creditLine(sign.credit)}",color:"${PAPER}"}`)]),
-]
+/** A sign's credit line, the map it stands at and who built it, or null for the hub's, which has none. */
+export const creditLabel = (sign: BrandSign): Label | null =>
+  sign.credit === undefined
+    ? null
+    : {
+        at: under(sign),
+        tag: `${NS}.label`,
+        text: [{ text: creditLine(sign.credit), color: PAPER }],
+        facing: sign.facing,
+      }
 
-const frameCommands = (sign: BrandSign): string[] =>
+/** The commands that hang a sign: a fixed, unbreakable glow frame for each of its maps. */
+export const hangSign = (sign: BrandSign): string[] =>
   signFrames(sign).map(
     ({ at: [x, y, z], map }) =>
       `summon minecraft:glow_item_frame ${x} ${y} ${z} {Tags:["${NS}.display"],Facing:${FACING[sign.facing].code}b,Fixed:1b,Invisible:1b,Invulnerable:1b,Item:{id:"minecraft:filled_map",count:1,components:{"minecraft:map_id":${map}}}}`,

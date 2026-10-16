@@ -18,13 +18,15 @@
  * names fails that function alone.
  */
 
+import { MARKER_ITEM, MARKERS, markerData, type ShownMarker, showMarker } from '../brand-pack.ts'
 import { CREDIT_LINES } from './credits.ts'
 import {
   type Block,
   box,
   FALLEN,
+  type Facing,
   HUB_SPAWN,
-  label,
+  type Label,
   NS,
   PAPER,
   type Part,
@@ -48,7 +50,7 @@ const CREDITS = 'credits'
  * Each game's pad on the balcony, by the block at its middle: Ink in a ring of Paper, built into
  * the world (`scripts/lib/arcade-brand.ts`), and what standing on it does.
  */
-export const PADS: ReadonlyArray<{ middle: Block; sends: string; name: string }> = [
+export const PADS: ReadonlyArray<{ middle: Block; sends: string; name: Label['text'] }> = [
   {
     middle: [126, 77, 1431],
     sends: `tp @s ${PARKOUR_ARRIVAL}`,
@@ -100,8 +102,76 @@ const onPad = ([x, y, z]: Block) => `${box([x - 1, y + 1, z - 1], [x + 1, y + 2,
 
 const welcome = `["",{text:"Welcome to the Cubepals Arcade. ",color:"${PAPER}",bold:true},"Step on a black pad to play a game, and see if you can get your name on the boards."]`
 
-/** The item every player keeps in their last slot: using it is going back to the hub. */
-const BACK_ITEM = `minecraft:carrot_on_a_stick[custom_name={text:"Back to the hub",color:"${PAPER}",italic:false},item_model="minecraft:oak_door",custom_data={${NS}_back:1b}]`
+/**
+ * The item every player keeps in their last slot: using it is going back to the hub. It is drawn
+ * as an oak door, Cubepals' own with the pack (`brand-pack.ts`). A player carrying it as it was
+ * before it was marked for the pack gets it again.
+ */
+const BACK_ITEM = `minecraft:carrot_on_a_stick[custom_name={text:"Back to the hub",color:"${PAPER}",italic:false},item_model="${MARKER_ITEM}",${markerData(MARKERS.backToHub)},custom_data={${NS}_back:1b}]`
+const HAS_BACK_ITEM = `items entity @s hotbar.8 minecraft:carrot_on_a_stick[custom_data~{${NS}_back:1b},${markerData(MARKERS.backToHub)}]`
+
+/**
+ * Each doorway between the house and the hall ends at a wall: walking up to it is walking on
+ * through (`PASSAGE`). Flat on that wall, just off it, are an open door and where it goes.
+ */
+const ENDS: ReadonlyArray<{ x: number; floor: number; z: number; facing: Facing; to: string }> = [
+  { x: 168.03, floor: PASSAGE.house.through[0][1], z: 1460, facing: 'east', to: 'The Arcade' },
+  { x: 138.5, floor: PASSAGE.hall.through[0][1], z: 1460.97, facing: 'north', to: 'The house' },
+]
+
+/** The markers over the ways in and out: the app icon's tile over each game's pad, above its name, and an open door at each passage's end. */
+export const HUB_MARKERS: readonly ShownMarker[] = [
+  ...PADS.map(({ middle: [x, y, z] }) => ({
+    marker: MARKERS.portal,
+    at: [x + 0.5, y + 4.6, z + 0.5] as const,
+  })),
+  ...ENDS.map(({ x, floor, z, facing }) => ({
+    marker: MARKERS.wayOut,
+    at: [x, floor + 1, z] as const,
+    facing,
+    scale: 0.8,
+  })),
+]
+
+/** Every label in the hub: each game's name over its pad, the hub's name, the credits and the ways between the house and the hall. */
+const HUB_LABELS: readonly Label[] = [
+  ...PADS.map((pad) => ({
+    at: [pad.middle[0] + 0.5, pad.middle[1] + 3.2, pad.middle[2] + 0.5] as const,
+    tag: `${NS}.label`,
+    text: pad.name,
+  })),
+  {
+    at: [175.5, 98.2, 1444.5],
+    tag: `${NS}.label`,
+    text: [{ text: 'Cubepals Arcade', color: PAPER, bold: true }],
+    scale: 4,
+  },
+  {
+    at: [160.5, 79.5, 1430.5],
+    tag: `${NS}.label`,
+    text: [
+      { text: 'Made of maps by NetherGames and the Overcast community.', color: PAPER },
+      { text: '\nType /trigger credits for who built each one.', color: 'gray' },
+    ],
+  },
+  // On the house's west wall, over the top of the stairs, facing a player as they start. The
+  // house is two blocks across there, as the passages are, so it is the passages' size.
+  {
+    at: [STAIRS_TOP[0] - 2.97, STAIRS_TOP[1] + 2, STAIRS_TOP[2] + 1],
+    tag: `${NS}.label`,
+    text: titled('The Arcade', 'Down the stairs'),
+    scale: 0.9,
+    facing: 'east',
+  },
+  ...ENDS.map(({ x, floor, z, facing, to }) => ({
+    at: [x, floor + 1.7, z] as const,
+    tag: `${NS}.label`,
+    text: titled(to, 'Walk on through'),
+    // A little under the game's size, to fit the house's end, two blocks across.
+    scale: 0.9,
+    facing,
+  })),
+]
 
 export const HUB_PART: Part = {
   functions: {
@@ -143,31 +213,9 @@ export const HUB_PART: Part = {
     `team modify ${HUB} friendlyFire false`,
     `team modify ${HUB} collisionRule never`,
   ],
+  labels: HUB_LABELS,
   build: [
-    ...PADS.map((pad) =>
-      label(`${pad.middle[0] + 0.5} ${pad.middle[1] + 3.2} ${pad.middle[2] + 0.5}`, `${NS}.label`, pad.name),
-    ),
-    label('175.5 98.2 1444.5', `${NS}.label`, `{text:"Cubepals Arcade",color:"${PAPER}",bold:true}`, 4),
-    label(
-      '160.5 79.5 1430.5',
-      `${NS}.label`,
-      `["",{text:"Made of maps by NetherGames and the Overcast community.",color:"${PAPER}"},{text:"\\nType /trigger credits for who built each one.",color:"gray"}]`,
-    ),
-    label(
-      `${STAIRS_TOP[0] + 0.5} ${STAIRS_TOP[1] + 3} ${STAIRS_TOP[2] + 1}`,
-      `${NS}.label`,
-      titled('The Arcade', 'Down the stairs'),
-    ),
-    label(
-      `${PASSAGE.house.through[0][0] + 4} ${PASSAGE.house.through[0][1] + 1.9} ${PASSAGE.house.through[1][2]}`,
-      `${NS}.label`,
-      titled('The Arcade', 'Walk on through'),
-    ),
-    label(
-      `${PASSAGE.hall.through[0][0] + 1.5} ${PASSAGE.hall.through[0][1] + 1.9} ${PASSAGE.hall.through[0][2] - 1.5}`,
-      `${NS}.label`,
-      titled('The house', 'Walk on through'),
-    ),
+    ...HUB_MARKERS.map((marker) => showMarker(marker, [`${NS}.display`])),
     ...hangSign(HUB_SIGN),
     // Nothing in the hub can be hurt: whatever the maps brought along, and what the build made.
     `execute as @e[type=!minecraft:player] run data merge entity @s {Invulnerable:1b}`,
@@ -183,7 +231,7 @@ export const HUB_PART: Part = {
     `execute as @a[${box(...PASSAGE.hall.through)},gamemode=!spectator] run tp @s ${PASSAGE.house.arrive}`,
     `scoreboard players enable @a ${BACK}`,
     `scoreboard players enable @a ${CREDITS}`,
-    `execute as @a unless items entity @s hotbar.8 minecraft:carrot_on_a_stick[custom_data~{${NS}_back:1b}] run item replace entity @s hotbar.8 with ${BACK_ITEM}`,
+    `execute as @a unless ${HAS_BACK_ITEM} run item replace entity @s hotbar.8 with ${BACK_ITEM}`,
     `execute as @a[scores={${BACK}=1..}] run function ${TO_HUB}`,
     `execute as @a[scores={${NS}.back=1..}] run function ${TO_HUB}`,
     `execute as @a[scores={${CREDITS}=1..}] run function ${NS}:hub/credits`,

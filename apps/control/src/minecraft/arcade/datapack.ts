@@ -13,13 +13,16 @@ export type Block = readonly [number, number, number]
 
 /**
  * One part of the datapack. Its functions go under `arcade:`, by the name given; `load` runs as
- * the world loads, `build` once its chunks are in, a moment later, and `tick` every tick. `data`
- * is any other file it needs under `data/arcade/`, as JSON: `loot_table/head.json`.
+ * the world loads, `build` once its chunks are in, a moment later, after its `labels` are made, and
+ * `tick` every tick. `data` is any other file it needs under `data/arcade/`, as JSON:
+ * `loot_table/head.json`.
  */
 export interface Part {
   functions: Readonly<Record<string, readonly string[]>>
   data?: Readonly<Record<string, unknown>>
   load: readonly string[]
+  /** Made as the build starts, before `build` runs. */
+  labels?: readonly Label[]
   build: readonly string[]
   tick: readonly string[]
 }
@@ -53,27 +56,74 @@ export function box(from: Block, to: Block): string {
 export const FALLEN = box([-3000, -128, -3000], [3000, 39, 3000])
 
 /**
- * Cubepals' colours: the brand's Paper as text and Ink (#0D0D0D) as a display's ARGB
+ * Cubepals' colours: the brand's Paper as text and Ink as a display's background
  * (`brand/README.md`), and the site's indigo for headings (`--accent`, apps/web tokens), in
  * its dark theme's lighter step, since every label and chat line is on the dark.
  */
 export const PAPER = '#F8F7F5'
+export const INK = '#0D0D0D'
 export const INDIGO = '#6A5CD3'
-const INK_ARGB = -15921907
+
+/** Ink, opaque, as a display's background takes a colour: one signed ARGB number. */
+const INK_ARGB = 0xff000000 | Number.parseInt(INK.slice(1), 16)
+
+/** A way a thing faces: toward whoever reads it. */
+export type Facing = 'north' | 'south' | 'east' | 'west'
+
+/** The rotation that turns a display's front, or a sign's, to face that way. */
+export const YAW: Record<Facing, number> = { south: 0, west: 90, north: 180, east: -90 }
+
+/** A run of a label's words in one colour, bold or not. */
+export interface Run {
+  text: string
+  color: string
+  bold?: boolean
+}
 
 /**
- * A label floating over a place, as a text display in Cubepals' colours: Paper on Ink, lit as by
- * day, turned to whoever reads it, `scale` times the game's text. Every one is tagged, so each
- * build removes the last build's before making its own.
+ * A label floating over a place: words on Ink, lit as by day, never drawn through what stands in
+ * front of them, the way a sign's are. One that faces a way stays flat, like a sign on a wall;
+ * one that doesn't turns about its middle to whoever reads it, so nothing may stand within its
+ * half width of it (`label-space.ts`).
  */
-export function label(at: string, tag: string, text: string, scale = 1): string {
+export interface Label {
+  /** The bottom of the middle of its words. */
+  at: readonly [number, number, number]
+  /** Every label carries `${NS}.display`, so each build removes the last build's; this is its own. */
+  tag: string
+  text: readonly Run[]
+  /** How many times the game's text it is. */
+  scale?: number
+  facing?: Facing
+  /** For a label whose words change, a board: the most it ever shows, which its room is measured by. */
+  widest?: readonly Run[]
+}
+
+/** How wide a label's line may be, in the game's text pixels, before its words wrap. */
+export const LINE_WIDTH = 240
+
+/** A label's words as a command writes text: a list of runs after an empty one. */
+const textOf = (runs: readonly Run[]): string =>
+  runs.length === 0
+    ? '""'
+    : `["",${runs.map((run) => `{text:${JSON.stringify(run.text)},color:"${run.color}"${run.bold ? ',bold:true' : ''}}`).join(',')}]`
+
+/** The command that makes a label, as a text display. */
+export function label(shown: Label): string {
+  const scale = shown.scale ?? 1
   const size =
     scale === 1
       ? ''
       : `,transformation:{left_rotation:[0f,0f,0f,1f],right_rotation:[0f,0f,0f,1f],translation:[0f,0f,0f],scale:[${scale}f,${scale}f,${scale}f]}`
-  return `summon minecraft:text_display ${at} {Tags:["${NS}.display","${tag}"],billboard:"vertical",brightness:{block:15,sky:15},background:${INK_ARGB},line_width:240,text:${text}${size}}`
+  const turn =
+    shown.facing === undefined
+      ? 'billboard:"vertical"'
+      : `billboard:"fixed",Rotation:[${YAW[shown.facing]}f,0f]`
+  return `summon minecraft:text_display ${shown.at.join(' ')} {Tags:["${NS}.display","${shown.tag}"],${turn},brightness:{block:15,sky:15},background:${INK_ARGB},default_background:false,see_through:false,shadow:true,line_width:${LINE_WIDTH},text:${textOf(shown.text)}${size}}`
 }
 
 /** A label's heading, in the indigo, and its words below, in Paper. */
-export const titled = (title: string, words: string): string =>
-  `["",{text:"${title}",color:"${INDIGO}",bold:true},{text:"\\n${words}",color:"${PAPER}"}]`
+export const titled = (title: string, words: string): Run[] => [
+  { text: title, color: INDIGO, bold: true },
+  { text: `\n${words}`, color: PAPER },
+]

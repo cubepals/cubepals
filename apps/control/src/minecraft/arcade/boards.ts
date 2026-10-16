@@ -14,7 +14,7 @@
  * The name comes from a player head the loot table fills with the player's profile, the one way a
  * datapack reads a player's name as text.
  */
-import { type Block, INDIGO, label, NS, PAPER, type Part } from './datapack.ts'
+import { type Block, INDIGO, type Label, NS, PAPER, type Part, type Run } from './datapack.ts'
 
 /** The world storage that keeps each board, by its key. */
 const BOARDS = `${NS}:boards`
@@ -45,6 +45,30 @@ const BOARD_LIST: readonly Board[] = [
 
 /** How much larger a board's text is than the game's, to be read from across the balcony. */
 const BOARD_SCALE = 1.6
+
+/**
+ * The most a board shows, which its room is measured by: its title over ten lines, each the
+ * widest name the game allows (sixteen characters) and a long score.
+ */
+const widest = (title: string): Run[] => [
+  { text: title, color: INDIGO, bold: true },
+  ...Array.from({ length: 10 }, (): Run[] => [
+    { text: '\n10. ', color: 'gray' },
+    { text: 'W'.repeat(16), color: 'white' },
+    { text: '  9999.9s', color: PAPER, bold: true },
+  ]).flat(),
+]
+
+/** Each board's text display, empty until its first drawing. */
+const boardLabels: Label[] = BOARD_LIST.map(({ key, title, at }) => ({
+  at,
+  tag: `${NS}.board.${key}`,
+  text: [],
+  scale: BOARD_SCALE,
+  // Flat before its dome, facing the balcony: turning, it would sweep into the dome behind it.
+  facing: 'north',
+  widest: widest(title),
+}))
 
 /**
  * Hands the player's entry in `WORK new` to a board, which keeps it if it is in the top ten. Run as
@@ -166,10 +190,8 @@ export const BOARDS_PART: Part = {
       `data modify storage ${NS}:titles ${key} set value ["",{text:"${title}",color:"${INDIGO}",bold:true}]`,
     ]),
   ],
-  build: BOARD_LIST.flatMap(({ key, at }) => [
-    label(at.join(' '), `${NS}.board.${key}`, '""', BOARD_SCALE),
-    `function ${NS}:boards/render {board:"${key}"}`,
-  ]),
+  labels: boardLabels,
+  build: BOARD_LIST.map(({ key }) => `function ${NS}:boards/render {board:"${key}"}`),
   tick: [],
   data: { 'loot_table/head.json': HEAD_LOOT },
 }

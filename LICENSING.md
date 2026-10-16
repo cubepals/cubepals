@@ -9,7 +9,7 @@ License. A few files are other people's and stay under their own licences.
 | What | Where | Licence |
 | --- | --- | --- |
 | The code: the control plane, the web app, the edge, the packages, the scripts and the infrastructure | everything not listed below | [AGPL-3.0-only](LICENSE) |
-| The brand: the Cubepals name, mark and wordmark | [`brand/`](brand/), and the copies the app serves: `apps/web/src/app/icon.svg`, `apple-icon.png`, `apps/web/public/logo.png`, the server icon `blockly` | All rights reserved, [`brand/LICENSE.md`](brand/LICENSE.md) |
+| The brand: the Cubepals name, mark and wordmark | [`brand/`](brand/), and the copies the app serves: `apps/web/src/app/icon.svg`, `apple-icon.png`, `apps/web/public/logo.png`, the server icon `blockly`, and the resource pack's pictures, drawn by `apps/control/src/minecraft/brand-art.ts` | All rights reserved, [`brand/LICENSE.md`](brand/LICENSE.md) |
 | The site: the landing page, the site's pictures and the guides' words | `apps/web/src/app/page.tsx`, `apps/web/src/landing/` (except `type/` and `fonts.ts`), `apps/web/public/imagery/`, `apps/web/public/guides/`, the pictures in `apps/web/public/email/`, the site's preview image, and each guide's `page.tsx` | All rights reserved, [`brand/LICENSE.md`](brand/LICENSE.md) |
 | Typefaces: Press Start 2P, IBM Plex | `apps/web/src/landing/type/`, `docs/architecture/fonts/` | [OFL-1.1](LICENSES/OFL-1.1.txt), their authors' |
 | API descriptions and the types generated from them: Fly's Machines API, Hangar, Modrinth | `apps/control/src/infra/{fly,hangar,modrinth}/` | Apache-2.0, MIT and CC0-1.0, their authors' |

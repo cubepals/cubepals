@@ -17,10 +17,12 @@ type Layer = (typeof LAYERS)[number]
  * Domain and minecraft import no packages, but for the units of time (`@blockly/contracts/durations`),
  * written once for every workspace, the bounds the API holds what people type to
  * (`@blockly/contracts/limits`), how Minecraft's server list reads a message
- * (`@blockly/contracts/server-list`), and where published maps are (`@blockly/contracts/published-maps`).
- * None imports anything itself.
+ * (`@blockly/contracts/server-list`), how wide its font draws each character
+ * (`@blockly/contracts/minecraft-font`), and where published maps are
+ * (`@blockly/contracts/published-maps`). None imports anything itself.
  */
-const PURE_PACKAGES = /^@blockly\/contracts\/(durations|limits|motd-layout|published-maps|server-list)$/
+const PURE_PACKAGES =
+  /^@blockly\/contracts\/(durations|limits|minecraft-font|motd-layout|published-maps|server-list)$/
 const APP_PACKAGES = /^(@blockly\/(db|contracts)(\/.*)?|drizzle-orm(\/.*)?|zod|node:.*)$/
 
 /** A string literal holding a hostname, with or without a scheme (§17). */

@@ -14,8 +14,8 @@
  * A round is `#state` in its objective: 0 nobody waiting, 1 counting down, 2 under way.
  */
 import { AS_COUNT, onSidebar, SECONDS, shown, submit, TMP, WORK } from './boards.ts'
-import { type Block, box, label, NS, PAPER, type Part, titled } from './datapack.ts'
-import { type BrandSign, hangSign } from './signs.ts'
+import { type Block, box, NS, PAPER, type Part, titled } from './datapack.ts'
+import { type BrandSign, creditLabel, hangSign } from './signs.ts'
 
 const FF = `${NS}.ff`
 
@@ -156,18 +156,21 @@ export const FLOOR_PART: Part = {
     `team modify ${NS}.floor collisionRule never`,
     `scoreboard objectives setdisplay sidebar.team.yellow ${FF}.best`,
   ],
+  labels: [
+    {
+      at: [FLOOR_PAD[0] + 0.5, FLOOR_PAD[1] + 3.6, FLOOR_PAD[2] + 0.5],
+      tag: `${NS}.label`,
+      text: titled(
+        'Falling floor',
+        'The snow drops away under your feet. Last one standing wins. Wait on this pad for the next round.',
+      ),
+    },
+    ...[creditLabel(FLOOR_SIGN)].filter((credit) => credit !== null),
+  ],
   build: [
     ...hangSign(FLOOR_SIGN),
     `function ${NS}:floor/rebuild`,
     `kill @e[type=minecraft:marker,tag=${FF}.drop]`,
-    label(
-      `${FLOOR_PAD[0] + 0.5} ${FLOOR_PAD[1] + 3.6} ${FLOOR_PAD[2] + 0.5}`,
-      `${NS}.label`,
-      titled(
-        'Falling floor',
-        'The snow drops away under your feet. Last one standing wins. Wait on this pad for the next round.',
-      ),
-    ),
   ],
   tick: [
     `team join ${NS}.floor @a[team=!${NS}.floor,${ZONE}]`,

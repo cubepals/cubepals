@@ -225,7 +225,7 @@ describe('the Arcade as its players find it', () => {
     const lines = everyCommand.filter(
       (c) => c.startsWith('summon minecraft:text_display') && c.includes(', by '),
     )
-    expect(lines.map((c) => c.match(/text:\{text:"([^"]+)"/)?.[1])).toEqual([
+    expect(lines.map((c) => c.match(/text:\["",\{text:"([^"]+)"/)?.[1])).toEqual([
       'Jungle, by Crazy_, ViceTechnicolour and Tywnis',
       'Meltdown, by NetherGames',
       'Frozen Market, by _3Each',

@@ -13,8 +13,11 @@ import {
 } from '../domain/revision/revision.ts'
 import { type MemoryTier, memoryMb } from '../domain/server/size.ts'
 import type { World } from '../domain/world/world.ts'
+import { ARCADE_DATAPACK } from './arcade.ts'
+import { PACK_ID, PROMPT } from './brand-pack.ts'
 import { CARRIED_STEP, carriedEnv, placesFiles } from './carried.ts'
 import { DATAPACKS_STEP, datapacksEnv, datapacksOf } from './datapacks.ts'
+import { WAITING_DATAPACK } from './duels-waiting.ts'
 import { DATA_DIR, jarsOf } from './jars.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
 import { STARTER_STEP, starterEnv, starterOf } from './starter.ts'
@@ -49,6 +52,8 @@ export interface RuntimeSpecInput {
   limits: PlanLimits
   /** Where the image fetches the server's icon; null when the owner picked none. */
   iconUrl: string | null
+  /** Where players' games download Cubepals' resource pack, and its SHA-1; null where none is served. */
+  brandPack: { url: string; sha1: string } | null
 }
 
 interface PlanLimits {
@@ -197,6 +202,29 @@ function settingsEnv(settings: ServerSettings): Record<string, string> {
  * server's idle stop fire; max-world-size caps the world border's radius, which bounds the disk a
  * world can take (about 10.4 KB a chunk explored).
  */
+/** The datapacks of Cubepals' own games, whose ways in and out Cubepals' resource pack draws. */
+const OWN_GAMES = [ARCADE_DATAPACK, WAITING_DATAPACK]
+
+/**
+ * Cubepals' resource pack, on a server running one of Cubepals' own games: offered as a player
+ * joins, in Cubepals' words, never required (`brand-pack.ts`). The game reads the prompt as JSON,
+ * kept to ASCII with JSON's own escapes, so it reads the same however the properties are decoded.
+ */
+function brandPackEnv(input: Pick<RuntimeSpecInput, 'revision' | 'brandPack'>): Record<string, string> {
+  const ours = input.revision.files.some((file) => OWN_GAMES.some((pack) => file.path.startsWith(`${pack}/`)))
+  if (input.brandPack === null || !ours) return {}
+  return {
+    RESOURCE_PACK: input.brandPack.url,
+    RESOURCE_PACK_SHA1: input.brandPack.sha1,
+    RESOURCE_PACK_ID: PACK_ID,
+    RESOURCE_PACK_PROMPT: JSON.stringify(PROMPT).replace(
+      /[^\x20-\x7e]/g,
+      (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
+    ),
+    RESOURCE_PACK_ENFORCE: 'FALSE',
+  }
+}
+
 function limitsEnv(limits: PlanLimits): Record<string, string> {
   return {
     PLAYER_IDLE_TIMEOUT: String(limits.playerIdleKickMinutes ?? 0),
@@ -517,6 +545,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       ...datapacksEnv(revision, input.artifactUrl),
       ...carriedEnv(revision, world.levelName, input.artifactUrl),
       ...limitsEnv(input.limits),
+      ...brandPackEnv(input),
       // OVERRIDE_ICON, or the image keeps the first icon a world ever had.
       ...(input.iconUrl === null ? {} : { ICON: input.iconUrl, OVERRIDE_ICON: 'TRUE' }),
       ...(usesProxyProtocol(revision) ? { [PROXY_ENV]: 'TRUE' } : {}),
