@@ -28,11 +28,9 @@ export function OwnDatapacks({
   onChange: (pending: { title: string; change: Omit<ModChangeInput, 'serverId'> }) => void
 }) {
   const [over, setOver] = useState(false)
-  const [note, setNote] = useState<string | null>(null)
-  const own = useOwnUploads(view, 'datapack', (done) => {
-    setNote(done.note)
-    onChange({ title: `Add ${done.fileName}?`, change: { addUploads: [done.uploadId] } })
-  })
+  const own = useOwnUploads(view, 'datapack', (done) =>
+    onChange({ title: `Add ${done.fileName}?`, change: { addUploads: [done.uploadId] } }),
+  )
   const allowed = changeable(view)
   const installed = new Set(list.mods.map((m) => m.id))
   const available = list.datapackUploads
@@ -82,7 +80,6 @@ export function OwnDatapacks({
         </div>
       )}
       {own.status}
-      {note && <Note tone="info">{note}</Note>}
       {own.uploads?.map((upload) => (
         <UploadRow
           key={upload.id}

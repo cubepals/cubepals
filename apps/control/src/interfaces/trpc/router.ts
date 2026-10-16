@@ -77,7 +77,6 @@ import {
 import type { RealtimeConnectInfo } from '@blockly/contracts/realtime'
 import { z } from 'zod'
 import { publicPlans } from '../../app/accounts/queries.ts'
-import { uploadNote } from '../../app/mods/queries.ts'
 import { admin } from './admin.ts'
 import { chipIns } from './chip-ins.ts'
 import { gifts } from './gifts.ts'
@@ -364,7 +363,7 @@ const mods = router({
     }),
   finishUpload: authedProcedure.input(FinishModUploadInput).mutation(async ({ ctx, input }) => {
     const upload = await ctx.services.mods.finishUpload(ctx.actor, input.serverId, input.ticket)
-    return { uploadId: upload.id, note: uploadNote(upload) }
+    return { uploadId: upload.id }
   }),
   deleteUpload: authedProcedure
     .input(ModUploadRef)

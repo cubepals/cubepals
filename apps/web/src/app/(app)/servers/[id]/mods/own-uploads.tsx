@@ -19,11 +19,10 @@ import { bytes } from '../../../../../lib/present'
 import { putFile, sha512Of } from '../../../../../lib/upload'
 import { Badge, Button, FormRow, ICON, Note, ProgressBar } from '../../../../../ui'
 
-/** A file that passed: the upload it became, and what Cubepals left out of it, if anything. */
+/** A file that passed, and the upload it became. */
 interface Uploaded {
   uploadId: string
   fileName: string
-  note: string | null
 }
 
 /** Sending one file, with where it has got to, and the owner's uploads of one kind. */
@@ -61,8 +60,8 @@ export function useOwnUploads(
         )
         setSending({ name: file.name, stage: 'Checking it…', done: 100 })
         const finished = await finish.mutateAsync({ serverId: view.id, ticket: start.ticket })
-        done = { ...finished, fileName: file.name }
-      } else done = { uploadId: start.uploadId, fileName: file.name, note: null }
+        done = { uploadId: finished.uploadId, fileName: file.name }
+      } else done = { uploadId: start.uploadId, fileName: file.name }
       await refresh()
       onUploaded(done)
     } catch (error) {
