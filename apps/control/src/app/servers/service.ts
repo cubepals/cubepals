@@ -8,7 +8,7 @@ import { type Db, schema, type Tx } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { type RevisionDraft, welcome } from '../../domain/revision/revision.ts'
-import { type Command, decide, type StopReason } from '../../domain/server/lifecycle.ts'
+import { type Command, decide, type OperationKind, type StopReason } from '../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { memoryMb } from '../../domain/server/size.ts'
 import { checkSlug, type Slug, slugCandidates } from '../../domain/server/slug.ts'
@@ -591,7 +591,7 @@ export class MinecraftServerService {
       const server = authorize(actor, await lockServer(tx, serverId))
       const decision = decide(server.lifecycle, command)
       // Only work that brings compute up is policy-checked; stopping is always allowed.
-      if (decision.kind === 'accept' && (decision.operation === 'start' || decision.operation === 'unstore'))
+      if (decision.kind === 'accept' && BOOTS.has(decision.operation))
         await this.#policy.require(tx, server.ownerId, await booting(tx, server, 'start_server'))
       if (decision.kind === 'accept' && decision.operation === 'restart')
         await this.#policy.require(tx, server.ownerId, await booting(tx, server, 'restart_server'))
@@ -659,6 +659,12 @@ export class MinecraftServerService {
       .values({ actor: requestedBy(actor), action, subjectType: 'server', subjectId: serverId, data })
   }
 }
+
+/**
+ * The work that boots a server that isn't running, checked as a start: under the platform's lock
+ * and the running caps. A first build tried again is one, `provisioning` and so running once more.
+ */
+const BOOTS: ReadonlySet<OperationKind | null> = new Set(['start', 'unstore', 'provision'])
 
 /** What the platform does on its own, found by reconciling what the provider reports. */
 const PLATFORM: Actor = { kind: 'system', reason: 'reconcile' }

@@ -149,6 +149,8 @@ export interface HarnessOptions {
    * servers running; `{}` keeps the defaults, for tests of the caps themselves.
    */
   controls?: Partial<typeof schema.platformControls.$inferInsert>
+  /** What new servers leave to the ones people have, and how long creates may wait; `DEFAULT_ROOM` by default. */
+  room?: { wakeReserve: number; createWaitSeconds: number }
 }
 
 /**
@@ -192,6 +194,13 @@ class OfflineFileFormats extends LibraryFileFormats {
     return super.readRemoteZip(url, options)
   }
 }
+
+/** The settings a test's options decide: how long boots and wakes take, and the room creates leave. */
+const timingsAndRoom = ({ provider, room }: HarnessOptions) => ({
+  bootTimeouts: provider?.bootTimeouts ?? { runningMs: 5_000, readyMs: 3_000, resumeMs: 1_000 },
+  wakeWaitMs: provider?.wakeWaitMs ?? 5_000,
+  ...(room === undefined ? {} : { room }),
+})
 
 /** Operation tests need Postgres; like the lock tests, they run where DATABASE_URL is set. */
 export const hasDatabase = Boolean(process.env.DATABASE_URL)
@@ -302,8 +311,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       webOrigin: 'http://localhost:3000',
       curatedPacks: options.curatedPacks ?? [],
       ownPacks: options.ownPacks ?? [],
-      bootTimeouts: options.provider?.bootTimeouts ?? { runningMs: 5_000, readyMs: 3_000, resumeMs: 1_000 },
-      wakeWaitMs: options.provider?.wakeWaitMs ?? 5_000,
+      ...timingsAndRoom(options),
     },
   )
   runtimeFacing = createRuntimeApp({ artifacts: app.artifacts })

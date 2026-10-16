@@ -10,7 +10,8 @@
  * platform's counts under the platform's, so this is what proves the two locks together still
  * count every decision before the next. Every test of a cap fails with one of the two taken out.
  * A create writes its server before it takes the platform's lock, so fifty after one address
- * each get one of their own.
+ * each get one of their own. A failed first build tried again is held to the running caps as a
+ * start is.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -18,6 +19,7 @@ import { schema } from '@blockly/db'
 import { and, count, eq, inArray, isNull, ne } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { DEFAULT_ROOM } from '../../domain/policy/room.ts'
+import { welcome } from '../../domain/revision/revision.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { countServers } from '../accounts/persistence.ts'
 import type { UserActor } from '../actor.ts'
@@ -91,6 +93,14 @@ describe.skipIf(!hasDatabase)('fifty creates at once', () => {
       .where(and(isNull(schema.minecraftServers.deletedAt), ne(schema.minecraftServers.status, 'stored')))
     expect((await countServers(h.db)).servers).toBe(table?.n ?? -1)
     expect((await countServers(h.db)).servers).toBe(ROOM)
+    // A refused create leaves nothing behind: one first build and one runtime for each one made.
+    const [provisions] = await h.db
+      .select({ n: count() })
+      .from(schema.serverOperations)
+      .where(eq(schema.serverOperations.kind, 'provision'))
+    const [bindings] = await h.db.select({ n: count() }).from(schema.serverRuntimes)
+    expect(provisions?.n).toBe(ROOM)
+    expect(bindings?.n).toBe(ROOM)
   }, 60_000)
 
   test('by one person stop at their plan’s limit', async () => {
@@ -112,6 +122,22 @@ describe.skipIf(!hasDatabase)('fifty creates at once', () => {
       .where(eq(schema.minecraftServers.ownerId, person.userId))
     expect(owned[0]?.n).toBe(limit)
   }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('creates with no wait allowed', () => {
+  let h: Harness
+
+  beforeAll(async () => {
+    h = await startHarness({ room: { ...DEFAULT_ROOM, createWaitSeconds: 0 } })
+  }, 30_000)
+
+  afterAll(() => h.close())
+
+  test('make a lone one: its own first build is not a create it waits behind', async () => {
+    const person = await h.user('Alone', 'plus')
+    const { id } = await h.create(person, { name: 'Alone' })
+    await h.until(id, 'running')
+  }, 30_000)
 })
 
 describe.skipIf(!hasDatabase)('fifty creates of one name at once', () => {
@@ -172,6 +198,58 @@ describe.skipIf(!hasDatabase)('starts at once', () => {
     expect(Object.fromEntries(tally)).toEqual({ made: 2, limit_reached: 6 })
     expect((await countServers(h.db, person.userId)).running).toBe(2)
   }, 120_000)
+})
+
+describe.skipIf(!hasDatabase)('a failed first build tried again', () => {
+  let h: Harness
+
+  beforeAll(async () => {
+    h = await startHarness({ controls: ROOMY })
+  }, 30_000)
+
+  afterAll(() => h.close())
+
+  test('is refused at the platform’s running cap and its owner’s, as a start is', async () => {
+    const owner = await h.user('Second Try', 'plus')
+    const other = await h.user('Already Up', 'plus')
+    const up = await h.create(other, { name: 'Already Up' })
+    await h.until(up.id, 'running')
+    const mine = await h.create(owner, { name: 'Already Mine' })
+    await h.until(mine.id, 'running')
+    h.runtime.failBootWhen((spec) => (spec.env.MOTD === welcome('Second Try') ? 'bad world' : null))
+    const { id } = await h.create(owner, { name: 'Second Try' })
+    await h.until(id, 'failed', 30_000)
+    h.runtime.failBootWhen(() => null)
+    const refusal = (requestId: string) =>
+      h.app.servers.retry(owner, id, requestId).then(
+        () => null,
+        (error: unknown) =>
+          error instanceof AppError ? { code: error.code, message: error.message } : error,
+      )
+
+    await setControls(h, { maxRunningServers: 2 })
+    expect(await refusal(randomUUID())).toEqual({
+      code: 'limit_reached',
+      message: 'Cubepals is busy right now. Try again in a few minutes.',
+    })
+    await setControls(h, ROOMY)
+    await h.db
+      .update(schema.accountStanding)
+      .set({ limitOverrides: { maxRunning: 1 } })
+      .where(eq(schema.accountStanding.userId, owner.userId))
+    expect(await refusal(randomUUID())).toEqual({
+      code: 'limit_reached',
+      message: 'Your plan runs 1 server at a time. Stop another one first.',
+    })
+    expect((await h.server(id)).lifecycle.status).toBe('failed')
+
+    await h.db
+      .update(schema.accountStanding)
+      .set({ limitOverrides: {} })
+      .where(eq(schema.accountStanding.userId, owner.userId))
+    expect(await refusal(randomUUID())).toBeNull()
+    await h.until(id, 'running')
+  }, 60_000)
 })
 
 describe.skipIf(!hasDatabase)('undeletes at once', () => {
