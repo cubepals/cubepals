@@ -57,9 +57,11 @@ describe.skipIf(!hasDatabase)('plan limits on configurations', () => {
     const before = await settingsOf(id)
     // On the free size, max players is capped by the size itself, which holds the same 5.
     await expect(change(owner, id, { maxPlayers: 6 })).rejects.toThrow(/holds up to 5 players/)
-    await expect(change(owner, id, { viewDistance: 9 })).rejects.toThrow('Free servers see up to 8 chunks')
+    await expect(change(owner, id, { viewDistance: 9 })).rejects.toThrow(
+      'Free trial servers see up to 8 chunks',
+    )
     await expect(change(owner, id, { simulationDistance: 7 })).rejects.toThrow(
-      'Free servers simulate up to 6 chunks',
+      'Free trial servers simulate up to 6 chunks',
     )
     expect(await settingsOf(id)).toEqual(before)
     // What fits still saves.
@@ -138,7 +140,9 @@ describe.skipIf(!hasDatabase)('plan limits on configurations', () => {
     await h.settled(id)
 
     // The size holds 10, and the plan 5: the plan's cap is what refuses.
-    await expect(change(owner, id, { maxPlayers: 8 })).rejects.toThrow('Free servers hold up to 5 players.')
+    await expect(change(owner, id, { maxPlayers: 8 })).rejects.toThrow(
+      'Free trial servers hold up to 5 players.',
+    )
 
     // It still starts: a plan change breaks nothing.
     const view = await h.app.queries.get(owner, id)

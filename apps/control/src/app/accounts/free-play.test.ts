@@ -318,7 +318,7 @@ describe.skipIf(!hasDatabase)('an admin’s hold', () => {
     await h.app.accounts.freePlay.hold(staff, free.userId)
     await expect(h.app.servers.start(free, server.id, randomUUID())).rejects.toMatchObject({
       code: 'restricted',
-      message: expect.stringContaining('Free play is paused on this account'),
+      message: expect.stringContaining('Your free trial is paused on this account'),
     })
     expect((await h.server(server.id)).lifecycle.status).toBe('stopped')
     expect(await logged(free.userId, 'account.free_held')).toHaveLength(1)
