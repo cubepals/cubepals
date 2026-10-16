@@ -47,6 +47,7 @@ import {
   PgBossJobs,
   startBoss,
   workArtifactMirror,
+  workJarChecks,
   workListingEligibility,
   workPackImports,
   workWorldDownloads,
@@ -419,6 +420,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
  */
 async function workQueues(boss: PgBoss, app: ControlPlane, url: string): Promise<OperationsWorker> {
   await workArtifactMirror(boss, (artifact) => app.artifacts.mirror(artifact), 0.5)
+  await workJarChecks(boss, (sha512) => app.jarChecks.run(sha512), 0.5)
   await workPackImports(
     boss,
     { run: (id) => app.packs.runImport(id), gaveUp: (id, error) => app.packs.importGaveUp(id, error) },

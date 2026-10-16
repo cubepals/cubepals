@@ -25,6 +25,24 @@ import { loadRevision } from '../servers/persistence.ts'
 import { listWorlds } from '../worlds/persistence.ts'
 
 const run = promisify(execFile)
+
+/**
+ * An upload once the jar-check job has read it, as the mods page waits on "Checking…": a jar
+ * can't be added before then.
+ */
+async function checked<U extends { id: string; fileName: string }>(
+  h: Harness,
+  owner: UserActor,
+  serverId: string,
+  upload: U,
+): Promise<U> {
+  for (let tries = 0; tries < 100; tries++) {
+    const view = (await h.app.modQueries.uploads(owner, serverId)).find((u) => u.id === upload.id)
+    if (view !== undefined && !view.checking) return upload
+    await Bun.sleep(100)
+  }
+  throw new Error(`${upload.fileName} was never checked`)
+}
 const sha512 = (bytes: Uint8Array) => createHash('sha512').update(bytes).digest('hex')
 
 // Uploads end to end (§15.2, §15.4): jars and world downloads through presigned PUTs into a
@@ -71,19 +89,19 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('uploads', () => {
     return { owner, id: created.id }
   }
 
-  /** What a browser does: ask, put the bytes where it was told, then say it is done. */
+  /** What a browser does: ask, put the bytes where it was told, say it is done, then wait while it's checked. */
   const uploadJar = async (owner: UserActor, id: string, bytes: Uint8Array, fileName = 'my-mod.jar') => {
     const start = await h.app.mods.beginUpload(owner, id, {
       fileName,
       sizeBytes: bytes.length,
       sha512: sha512(bytes),
     })
-    if (start.kind === 'known') return start.upload
+    if (start.kind === 'known') return checked(h, owner, id, start.upload)
     const put = await fetch(start.url, { method: 'PUT', body: bytes, headers: start.headers })
     expect(put.status).toBe(200)
     const upload = await h.app.mods.finishUpload(owner, id, start.ticket)
     written.push(upload.key)
-    return upload
+    return checked(h, owner, id, upload)
   }
   const refusal = (promise: Promise<unknown>) =>
     promise.then(

@@ -599,7 +599,8 @@ tRPC procedure (parse input, get actor, call ONE method, return)
 |---|---|
 | `MinecraftServerService` | `createMinecraftServer`, `suggestAddress`, `start`, `stop`, `stopForMaintenance` (admin), `restart`, `retry`, `relocate`, `relocateForPlatform`, `deleteServer`, `terminate`, `undeleteServer`; `saveIdentity` (name, description, icon, tags), `changeAddress`, `resetInvite`, `keep` (a server made for a while, §15.6), `keepWorld` (§15.5 retention) |
 | `SetupService` | `setupFrom`, `resolve` (what a new server runs, §15.6), `checkPacks`, `unchecked`, `checkBrowsed` (`pack-checks`), `pinnedPack` |
-| `ModService` | `search`, `versions`, `plan` / `apply` (a mod change, resolved as one set by `domain/mods/resolve.ts`, the catalog states it saw written through to the cache), `planVersion` / `changeVersion`, `resolveNew` (for a server not made yet); `beginUpload` / `finishUpload` (presigned PUT → verify sha512 and jar → `StoredArtifact` + `ModUpload`), `deleteUpload` |
+| `ModService` | `search`, `versions`, `plan` / `apply` (a mod change, resolved as one set by `domain/mods/resolve.ts`, the catalog states it saw written through to the cache), `planVersion` / `changeVersion`, `resolveNew` (for a server not made yet); `beginUpload` / `finishUpload` (presigned PUT → verify sha512 and jar, refuse known malware → `StoredArtifact` + `ModUpload`, `jar-check` queued), `deleteUpload` |
+| `JarChecks` | uploaded jars against the lists of known malware (§15.2): `screen` / `start` at upload, `run` (the `jar-check` job), `refresh` (`malware-lists`), `list` / `release` for operators |
 | `PackService` | packs people bring (docs/modpack-system.md): `beginUpload` / `finishUpload`, `runImport` / `importGaveUp` (the `pack-import` job), `view`, `pinnedFrom`, `linkOf`, `versions`, `updateFor`, `server` |
 | `RevisionService` | `changeSettings`, `changeAuthentication`, `changeVersion`, `changeMods`, `changePack`, `resize`, `rollback` (each refuses taken-down artifacts without an explicit acknowledgement, §15.3) |
 | `WorldService` | `createWorld`, `switchWorld`, `freshStart`, `deleteWorld` (its directories go by `prune_worlds`) |
@@ -1846,7 +1847,22 @@ PaperMC's catalog, and not on Modrinth: OldCombatMechanics and VaultUnlocked amo
    nobody finishes is deleted by `artifact-gc`.
 2. `finishUpload` verifies size, sha512 and jar sanity. Loader metadata is parsed by
    `minecraft/` from what the `FileFormats` port decodes (zip, TOML, YAML).
-3. It then records a `StoredArtifact` and a `ModUpload`.
+3. Before anything is kept, the jar's SHA-1, SHA-256 and SHA-512 are looked up in the lists of
+   known malware (`malware_signatures`); a match is refused there and then.
+4. It then records a `StoredArtifact` and a `ModUpload`, and a `jar_checks` row in `checking`,
+   with a `jar-check` job queued. Until that job has run the upload can't be added.
+5. `jar-check` reads every class, nested jars to three deep (`minecraft/class-constants.ts`,
+   `minecraft/jar-scan.ts`). A class name or string constant a list names quarantines it;
+   bytecode flags (network class loading, `Runtime.exec`/`ProcessBuilder`, `sun.misc.Unsafe`,
+   writes outside the server folder, obfuscation) only mark it `flagged` for operators.
+
+The lists are fetched by `malware-lists` every six hours and at each worker start, from where
+each is published (`infra/malware/`: MCAntiMalware's `database.db`, GPL-3.0 scanner, data read
+in place). A list that changed re-reads every jar, and a jar a list now names by digest is
+quarantined, its owners emailed. A quarantined jar is never pinned, is left out of every
+start's spec (`servers/specs.ts`), so it comes off at the next start, and `locate` never hands
+it to a runtime; the world and other files stay. Operators read and release checks with
+`ops.ts jars` or the `jar_checks` MCP tools.
 
 Uploads are entitlement- and capability-gated and always `untrusted`. An upload referenced by
 a revision of a non-purged server can't be deleted.

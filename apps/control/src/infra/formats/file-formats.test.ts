@@ -206,3 +206,29 @@ describe('file formats', () => {
     })
   })
 })
+
+describe('a jar read whole', () => {
+  test('every entry asked for is handed over as bytes, and one too large is named instead', () => {
+    const big = new Uint8Array(4096)
+    const jar = zipSync({
+      'a/One.class': new Uint8Array([1, 2, 3]),
+      'a/Two.class': new Uint8Array([4, 5]),
+      'META-INF/jars/inner.jar': big,
+      'fabric.mod.json': strToU8('{}'),
+    })
+    const seen: Array<[string, number[]]> = []
+    const { skipped } = formats.eachZipEntry(jar, {
+      wanted: (name) => name.endsWith('.class') || name.endsWith('.jar'),
+      maxEntryBytes: 1024,
+      visit: (name, data) => seen.push([name, [...data]]),
+    })
+    expect(seen.sort()).toEqual([
+      ['a/One.class', [1, 2, 3]],
+      ['a/Two.class', [4, 5]],
+    ])
+    expect(skipped).toEqual(['META-INF/jars/inner.jar'])
+    expect(() =>
+      formats.eachZipEntry(jar.subarray(0, 40), { wanted: () => true, maxEntryBytes: 1024, visit: () => {} }),
+    ).toThrow(UnreadableFile)
+  })
+})

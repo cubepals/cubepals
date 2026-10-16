@@ -540,6 +540,13 @@
       "when": 1792101003607,
       "tag": "0076_kept_storage",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1792165465240,
+      "tag": "0077_jar_checks",
+      "breakpoints": true
     }
   ]
 }

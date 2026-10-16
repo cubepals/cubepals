@@ -316,6 +316,7 @@ function Installed({
                 {mod.datapack && <Badge tone="neutral">Datapack</Badge>}
                 {mod.environment === 'both' && <Badge tone="info">For players too</Badge>}
                 {mod.revoked && <Badge tone="danger">Taken down</Badge>}
+                {mod.malware && <Badge tone="danger">Malware</Badge>}
               </span>
             }
             description={describe(mod)}
@@ -352,6 +353,7 @@ function Installed({
 }
 
 function describe(mod: ModView): string {
+  if (mod.malware) return 'It matches known malware, so Cubepals leaves it off whenever the server starts.'
   if (mod.origin === 'dependency') return `Needed by ${mod.requiredBy.join(', ')}.`
   if (mod.source === 'upload') return 'Your upload.'
   return 'You added it.'
@@ -507,7 +509,7 @@ function Uploads({
   return (
     <FormSection
       title={`Your own ${noun}s`}
-      description={`Upload a ${noun} you have as a .jar. Cubepals checks it runs on servers; it doesn't add what it needs, so add those from the search above.`}
+      description={`Upload a ${noun} you have as a .jar. Cubepals checks it runs on servers and isn't known malware; it doesn't add what it needs, so add those from the search above.`}
       actions={
         <FileButton
           accept=".jar,application/java-archive"

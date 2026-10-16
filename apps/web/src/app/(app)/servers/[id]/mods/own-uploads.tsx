@@ -13,7 +13,7 @@
 import type { ModUploadView, ServerView } from '@blockly/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
 import { bytes } from '../../../../../lib/present'
 import { putFile, sha512Of } from '../../../../../lib/upload'
@@ -33,7 +33,13 @@ export function useOwnUploads(
 ) {
   const trpc = useTRPC()
   const queries = useQueryClient()
-  const uploads = useQuery(trpc.mods.uploads.queryOptions({ serverId: view.id }))
+  // A jar is read for malware after it arrives; the list is asked again until that's done.
+  const uploads = useQuery(
+    trpc.mods.uploads.queryOptions(
+      { serverId: view.id },
+      { refetchInterval: (query) => (query.state.data?.some((u) => u.checking) ? 2000 : false) },
+    ),
+  )
   const begin = useMutation(trpc.mods.beginUpload.mutationOptions())
   const finish = useMutation(trpc.mods.finishUpload.mutationOptions())
   const refresh = () =>
@@ -41,6 +47,8 @@ export function useOwnUploads(
   const remove = useMutation(trpc.mods.deleteUpload.mutationOptions({ onSuccess: refresh }))
   const [sending, setSending] = useState<{ name: string; stage: string; done: number } | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
+  // The upload just sent, offered once Cubepals has checked it.
+  const [waiting, setWaiting] = useState<Uploaded | null>(null)
 
   const send = async (file: File) => {
     setFailure(null)
@@ -63,13 +71,21 @@ export function useOwnUploads(
         done = { uploadId: finished.uploadId, fileName: file.name }
       } else done = { uploadId: start.uploadId, fileName: file.name }
       await refresh()
-      onUploaded(done)
+      setWaiting(done)
     } catch (error) {
       setFailure(messageOf(error))
     } finally {
       setSending(null)
     }
   }
+
+  useEffect(() => {
+    const sent = waiting === null ? undefined : uploads.data?.find((u) => u.id === waiting.uploadId)
+    if (waiting === null || sent === undefined || sent.checking) return
+    setWaiting(null)
+    if (sent.refusal !== null) setFailure(sent.refusal)
+    else onUploaded(waiting)
+  }, [waiting, uploads.data, onUploaded])
 
   return {
     send,
@@ -88,6 +104,7 @@ export function useOwnUploads(
             <ProgressBar value={sending.done} label={`Uploading ${sending.name}`} />
           </div>
         )}
+        {waiting && <span className="type-body-sm">{waiting.fileName}: Checking…</span>}
         {failure && <Note tone="danger">{failure}</Note>}
         {remove.isError && <Note tone="danger">{messageOf(remove.error)}</Note>}
         {uploads.isError && <Note tone="danger">{messageOf(uploads.error)}</Note>}
@@ -124,9 +141,14 @@ export function UploadRow({
             {upload.version}
           </span>
           {!upload.fits && <Badge tone="outline">{misfit}</Badge>}
+          {upload.checking && <Badge tone="neutral">Checking…</Badge>}
         </span>
       }
-      description={[upload.fileName, bytes(upload.sizeBytes), upload.note].filter(Boolean).join(' · ')}
+      description={
+        upload.refusal !== null && !upload.checking
+          ? upload.refusal
+          : [upload.fileName, bytes(upload.sizeBytes), upload.note].filter(Boolean).join(' · ')
+      }
       control={
         <div className="bk-row" style={{ gap: 'var(--space-8)' }}>
           {!upload.inUse && (
@@ -141,7 +163,7 @@ export function UploadRow({
               variant="outline"
               size="sm"
               icon={<Plus {...ICON} aria-hidden />}
-              disabled={!allowed || !upload.fits}
+              disabled={!allowed || !upload.fits || upload.refusal !== null}
               onClick={onAdd}
             >
               Add

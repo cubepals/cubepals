@@ -54,6 +54,54 @@ export class LibraryFileFormats implements FileFormats {
     }
   }
 
+  /**
+   * The zip's directory is read once for every entry's name and size, then the entries wanted are
+   * inflated a batch at a time from it, so a jar of many megabytes of classes is never held
+   * inflated whole. The directory is what a JVM reads, so nothing a local header hides is missed.
+   */
+  eachZipEntry(
+    bytes: Uint8Array,
+    options: {
+      wanted(name: string): boolean
+      maxEntryBytes: number
+      visit(name: string, data: Uint8Array): void
+    },
+  ): { skipped: string[] } {
+    const sizes = new Map<string, number>()
+    try {
+      unzipSync(bytes, {
+        filter: (file) => {
+          if (sizes.size >= MAX_SCANNED_RECORDS)
+            throw new UnreadableFile(`More than ${MAX_SCANNED_RECORDS} entries, more than a jar holds`)
+          if (options.wanted(file.name)) sizes.set(file.name, file.originalSize)
+          return false
+        },
+      })
+      const skipped = [...sizes].filter(([, size]) => size > options.maxEntryBytes).map(([name]) => name)
+      const batches: string[][] = [[]]
+      let batchBytes = 0
+      for (const [name, size] of sizes) {
+        if (size > options.maxEntryBytes) continue
+        if (batchBytes + size > BATCH_BYTES && (batches.at(-1)?.length ?? 0) > 0) {
+          batches.push([])
+          batchBytes = 0
+        }
+        batches.at(-1)?.push(name)
+        batchBytes += size
+      }
+      for (const batch of batches) {
+        if (batch.length === 0) continue
+        const names = new Set(batch)
+        const entries = unzipSync(bytes, { filter: (file) => names.has(file.name) })
+        for (const [name, data] of Object.entries(entries)) options.visit(name, data)
+      }
+      return { skipped }
+    } catch (error) {
+      if (error instanceof UnreadableFile) throw error
+      throw new UnreadableFile(`Not a whole zip file: ${messageOf(error)}`)
+    }
+  }
+
   decode(format: 'json' | 'toml' | 'yaml' | 'properties', text: string): unknown {
     try {
       switch (format) {
@@ -193,5 +241,8 @@ const FILES = new Set(['File', 'OldFile', 'ContiguousFile'])
 const MAX_JAR_ENTRY_BYTES = 1024 * 1024
 const MAX_MANIFEST_BYTES = 8 * 1024 * 1024
 const MAX_JAR_RECORDS = 20_000
+/** Reading every class of a jar: more files than any jar holds, inflated this much at a time. */
+const MAX_SCANNED_RECORDS = 150_000
+const BATCH_BYTES = 64 * 1024 * 1024
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))

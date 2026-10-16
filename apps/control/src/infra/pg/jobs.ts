@@ -57,6 +57,8 @@ const PACK_IMPORT = 'pack-import'
 const WORLD_DOWNLOAD = 'world-download'
 /** Reviewed releases of curated packs to fetch and check: one job per release at a time. */
 const CURATION_INGEST = 'curation-ingest'
+/** Uploaded jars to read for malware: one job per bytes queued or running at a time. */
+const JAR_CHECK = 'jar-check'
 /**
  * The tries after the first that a pack import, a world copy and a release check get: each moves
  * gigabytes, so one, then its owner is told. Their jobs keep their queue's.
@@ -207,6 +209,14 @@ export async function startBoss(
     retryDelay: 60,
     expireInSeconds: 1800,
   })
+  // Reading a jar takes seconds; one that can't be read stays unchecked, for an operator to see.
+  await ensureQueue(boss, JAR_CHECK, {
+    policy: 'exclusive',
+    retryLimit: 3,
+    retryDelay: 30,
+    retryBackoff: true,
+    expireInSeconds: 600,
+  })
   await ensureQueue(boss, ARTIFACT_MIRROR, {
     policy: 'exclusive',
     retryLimit: 5,
@@ -269,6 +279,10 @@ export class PgBossJobs implements JobQueue {
       singletonKey: artifact.sha512,
       db: fromDrizzle(tx, sql),
     })
+  }
+
+  async enqueueJarCheck(tx: Tx, sha512: string): Promise<void> {
+    await this.#boss.send(JAR_CHECK, { sha512 }, { singletonKey: sha512, db: fromDrizzle(tx, sql) })
   }
 
   async enqueuePackImport(tx: Tx, importId: string): Promise<void> {
@@ -477,6 +491,21 @@ export async function workCuration(
   )
 }
 
+/** Reads uploaded jars for malware as they arrive (`app/mods/jar-checks.ts`); a failed read is retried. */
+export async function workJarChecks(
+  boss: PgBoss,
+  check: (sha512: string) => Promise<void>,
+  pollingIntervalSeconds = 2,
+): Promise<void> {
+  await boss.work(
+    JAR_CHECK,
+    { ...background(pollingIntervalSeconds), localConcurrency: 1 },
+    async ([job]) => {
+      if (job) await check((job.data as { sha512: string }).sha512)
+    },
+  )
+}
+
 /** Copies catalog jars into the store as revisions pin them; a failed copy is retried. */
 export async function workArtifactMirror(
   boss: PgBoss,
@@ -549,6 +578,8 @@ const CRON: Record<ScheduledJob, string> = {
   'retention-sweep': '13 6 * * *',
   orphans: '17 * * * *',
   'catalog-refresh': '41 * * * *',
+  // The lists of known malware, fetched again where they are published: a few times a day.
+  'malware-lists': '7 */6 * * *',
   // The default modpack list's packs, checked before anybody picks one (§15.6).
   'pack-checks': '29 * * * *',
   // Reviewed releases of curated packs a deploy brought, queued to be checked.

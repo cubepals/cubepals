@@ -32,7 +32,8 @@ const routes = createOpsApi({ token: TOKEN } as unknown as OpsApiOptions)
       .replace(':list', 'ban')
       .replace(':player', 'Griefer')
       .replace(':catalog', 'modrinth')
-      .replace(':project', 'P7dR8mSH'),
+      .replace(':project', 'P7dR8mSH')
+      .replace(':sha512', 'a'.repeat(128)),
   }))
 
 const request = (method: string, path: string, token?: string) =>
@@ -61,6 +62,7 @@ test('the list covers the routes this API was given, the new ones included', () 
     'DELETE /ops/v1/allowlist/modrinth/P7dR8mSH',
     'PATCH /ops/v1/platform',
     'PUT /ops/v1/platform/fly-suspend',
+    `POST /ops/v1/jar-checks/${'a'.repeat(128)}/release`,
   ])
     expect(listed).toContain(route)
   expect(routes.every(({ path }) => !path.includes(':'))).toBe(true)

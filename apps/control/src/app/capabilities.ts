@@ -6,6 +6,7 @@ import type { Queryable } from '@blockly/db'
 import { schema } from '@blockly/db'
 import { and, count, eq, inArray } from 'drizzle-orm'
 import type { Insight } from './ports/insight.ts'
+import type { MalwareLists } from './ports/malware.ts'
 import type { ArchiveStore, BillingProvider } from './ports/optional.ts'
 
 /**
@@ -17,6 +18,11 @@ export interface DeploymentCapabilities {
   readonly billing: BillingProvider | null
   /** Product analytics (PostHog): funnel events, feedback and errors. Absent sends nothing. */
   readonly insight?: Insight | null
+  /**
+   * The lists of known malicious jars uploads are checked against (`mods/jar-checks.ts`). Absent
+   * holds them to none; their classes are still read for what operators should see.
+   */
+  readonly malware?: MalwareLists | null
 }
 
 export type DeploymentCapability = keyof DeploymentCapabilities

@@ -22,6 +22,7 @@ import {
 } from '../../minecraft/runtime-spec.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
+import { quarantinedOf } from '../mods/jar-check-records.ts'
 import { loadPackContents } from '../packs/persistence.ts'
 import type { InstallSeed, RuntimeSpec } from '../ports/runtime.ts'
 import { acceptedSecrets, deriveServerSecret, type SecretKeyring } from '../secrets.ts'
@@ -124,7 +125,10 @@ export class RuntimeSpecs {
     server: MinecraftServer,
     config: { revisionId: string; worldId: string; memoryTier: MemoryTier },
   ): Promise<DesiredRuntime> {
-    const revision = await withWhatItsPackLearned(q, await loadRevision(q, config.revisionId))
+    const revision = await withoutMalware(
+      q,
+      await withWhatItsPackLearned(q, await loadRevision(q, config.revisionId)),
+    )
     const world = await loadWorld(q, config.worldId)
     const standing = await loadStanding(q, server.ownerId)
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
@@ -165,6 +169,19 @@ export class RuntimeSpecs {
       proxyProtocol: usesProxyProtocol(revision),
     }
   }
+}
+
+/**
+ * A revision without the jars found to be malware since it was pinned (`mods/jar-checks.ts`): each
+ * comes off at the server's next start, and its other files and world stay as they are.
+ */
+async function withoutMalware(q: Queryable, revision: ServerRevision): Promise<ServerRevision> {
+  const malware = await quarantinedOf(
+    q,
+    revision.mods.map((m) => m.artifact.sha512),
+  )
+  if (malware.size === 0) return revision
+  return { ...revision, mods: revision.mods.filter((m) => !malware.has(m.artifact.sha512)) }
 }
 
 /**

@@ -5,7 +5,8 @@
 /**
  * The emails to a server's owner about what happened to that server: it left the directory over
  * a mod (listings/service.ts), its idle world will be deleted (operations/schedules/expiring.ts),
- * or it was rebuilt from a backup on another computer (operations/handlers/moving.ts).
+ * it was rebuilt from a backup on another computer (operations/handlers/moving.ts), or a jar it
+ * runs turned out to be malware (mods/jar-checks.ts).
  */
 import { box, type Email, esc, INK, layout, link, MONO, MUTED, OWNER, p, plain, SANS } from '../emails.ts'
 
@@ -50,6 +51,28 @@ export function listingRemoved(input: {
           'Your server keeps running as it is. Update or remove the mod, and the listing comes back on its own.',
         ),
       action: { label: 'Open mods', url },
+      why: OWNER,
+    }),
+  }
+}
+
+/** A jar uploaded to the server matches known malware: it comes off at the server's next start. */
+export function jarTakenOff(input: { server: Server; fileName: string; origin: string }): Email {
+  const url = `${input.origin}/servers/${input.server.id}/mods`
+  const subject = `We’re taking ${input.fileName} off ${input.server.name}`
+  const said = `${input.fileName} matches known malware, so Cubepals takes it off ${input.server.name} the next time it starts.`
+  const kept = 'Your world and everything else on the server stay as they are.'
+  return {
+    subject,
+    text: [said, kept, '', url].join('\n'),
+    html: plain({
+      subject,
+      body:
+        p(
+          `<strong style="font-family:${MONO};color:${INK}">${esc(input.fileName)}</strong> matches known malware, so Cubepals takes it off <strong style="color:${INK}">${esc(input.server.name)}</strong> the next time it starts.`,
+        ) +
+        p(kept) +
+        p(link({ label: 'Open mods', url })),
       why: OWNER,
     }),
   }

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { MINUTE_S } from '@blockly/contracts/durations'
 import { type Db, schema } from '@blockly/db'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
@@ -73,6 +73,8 @@ import {
   loadPendingUpload,
 } from '../uploads/persistence.ts'
 import { DATAPACK_LIMITS, DatapackUploads } from './datapack-uploads.ts'
+import { digestsOf, quarantinedOf, refusalOf, requireInstallable } from './jar-check-records.ts'
+import type { JarChecks } from './jar-checks.ts'
 import { JarNeedsReader } from './jar-needs.ts'
 import {
   deleteModUpload,
@@ -164,16 +166,19 @@ export class ModService {
   readonly #builds: LoaderBuilds
   readonly #jars: JarNeedsReader
   readonly #datapacks: DatapackUploads
+  readonly #checks: JarChecks
 
   constructor(deps: {
     db: Db
+    jarChecks: JarChecks
     catalog: ModCatalog
     sync: CatalogSync
     revisions: RevisionService
     policy: AccessPolicy
     capabilities: DeploymentCapabilities
-    /** Reading what owners upload: jars' metadata, and datapacks opened as hostile input. */
-    files: { formats: FileFormats; archives: PackArchives }
+    formats: FileFormats
+    /** Datapacks owners upload are opened as hostile input. */
+    archives: PackArchives
     /** Listings that pin what moved re-evaluate (§15.3); the listing service does that. */
     catalogMoved: (transitions: readonly CatalogTransition[]) => Promise<void>
     loaderBuilds: LoaderBuilds
@@ -184,11 +189,12 @@ export class ModService {
     this.#revisions = deps.revisions
     this.#policy = deps.policy
     this.#caps = deps.capabilities
-    this.#formats = deps.files.formats
+    this.#formats = deps.formats
     this.#catalogMoved = deps.catalogMoved
     this.#builds = deps.loaderBuilds
-    this.#jars = new JarNeedsReader({ db: deps.db, formats: deps.files.formats })
-    this.#datapacks = new DatapackUploads(deps.files)
+    this.#jars = new JarNeedsReader({ db: deps.db, formats: deps.formats })
+    this.#datapacks = new DatapackUploads(deps)
+    this.#checks = deps.jarChecks
   }
 
   /**
@@ -234,9 +240,10 @@ export class ModService {
   }
 
   /**
-   * The second half: the file is read back and checked (whole, the bytes the browser hashed, a mod,
-   * plugin or datapack this server can run), copied under its hash, and recorded as the owner's
-   * upload. Uploads are never trusted, whatever they say about themselves (§15.3).
+   * The second half: the file is read back and checked (whole, the bytes the browser hashed, not
+   * known malware, a mod, plugin or datapack this server can run), copied under its hash, and
+   * recorded as the owner's upload. A jar's classes are queued to be read (`jar-checks.ts`); a
+   * datapack holds none. Uploads are never trusted, whatever they say about themselves (§15.3).
    */
   async finishUpload(actor: Actor, serverId: string, ticket: string): Promise<ModUploadRecord> {
     const server = authorize(actor, await findServer(this.#db, serverId))
@@ -258,9 +265,12 @@ export class ModService {
       throw new AppError('invalid_upload', 'The file didn’t arrive whole. Upload it again.')
     const link = await store.presignGet(pending.key, READ_LINK_SECONDS, 'browser')
     const bytes = await readAll(link.url, pending.sizeBytes)
-    const sha512 = createHash('sha512').update(bytes).digest('hex')
+    const digests = digestsOf(bytes)
+    const { sha512 } = digests
     if (sha512 !== pending.sha512)
       throw new AppError('invalid_upload', 'The file changed on its way here. Upload it again.')
+    const check = await this.#checks.screen(digests)
+    if (check !== null) throw new AppError('invalid_upload', refusalOf(pending.fileName, check) ?? '')
     const { gameVersion } = await loadRevision(this.#db, server.desiredRevisionId)
     const file = { url: link.url, bytes, sha512, fileName: pending.fileName, gameVersion }
     const jar = datapack ? null : await this.#readJar(bytes, sha512)
@@ -271,6 +281,7 @@ export class ModService {
 
     const upload = await this.#db.transaction(async (tx) => {
       await recordStored(tx, { sha512: kept.sha512, key, sizeBytes: kept.sizeBytes, source: 'upload' })
+      if (jar !== null) await this.#checks.start(tx, digests)
       const id =
         (await findModUpload(tx, pending.ownerId, kept.sha512))?.id ??
         (await insertModUpload(tx, {
@@ -557,7 +568,15 @@ export class ModService {
     loader: Loader,
     change: ModChange,
   ): Promise<ModPlan> {
-    const removed = new Set(change.remove ?? [])
+    // A jar found to be malware since it was pinned leaves with this change, as with any start.
+    const malware = await quarantinedOf(
+      this.#db,
+      desired.mods.map((m) => m.artifact.sha512),
+    )
+    const removed = new Set([
+      ...(change.remove ?? []),
+      ...desired.mods.filter((m) => malware.has(m.artifact.sha512)).map(identity),
+    ])
     const uploaded = await this.#published(desired, change.addUploads ?? [])
     const current = await this.#withUploads(
       desired,
@@ -627,6 +646,7 @@ export class ModService {
     const server = await findServer(this.#db, desired.serverId)
     if (records.length !== new Set(added).size || records.some((u) => u.ownerId !== server?.ownerId))
       throw new NotFound('Upload')
+    await requireInstallable(this.#db, records)
     const found = await this.#reading(() => this.#catalog.filesByHash(records.map((u) => u.sha512)))
     const own: string[] = []
     const catalog: Array<{ projectId: string; versionId: string }> = []
