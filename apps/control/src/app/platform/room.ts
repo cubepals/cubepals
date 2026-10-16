@@ -75,16 +75,17 @@ export class CreateRoom {
 
   /**
    * For a create: whether a runtime could take it, where and as big as it asks when it says, and
-   * how long creates already wait.
+   * how long creates already wait, other than the one for `written`, a server already made.
    */
   async facts(
     q: Queryable,
     capability: Capability,
     now: Date,
     answers?: Map<string, boolean>,
+    written?: string,
   ): Promise<Pick<RoomFacts, 'runtimes' | 'queuedCreateMs'>> {
     return capability.kind === 'create_server'
-      ? this.#facts(q, capability.where ?? null, now, answers)
+      ? this.#facts(q, capability.where ?? null, now, answers, written)
       : NOT_A_CREATE
   }
 
@@ -100,8 +101,14 @@ export class CreateRoom {
     return answers
   }
 
-  async #facts(q: Queryable, where: NewServerRoom | null, now: Date, answers?: Map<string, boolean>) {
-    const oldest = await oldestWaitingCreate(q)
+  async #facts(
+    q: Queryable,
+    where: NewServerRoom | null,
+    now: Date,
+    answers?: Map<string, boolean>,
+    written?: string,
+  ) {
+    const oldest = await oldestWaitingCreate(q, written)
     return {
       runtimes: await this.#placement.roomFor(q, where, answers),
       queuedCreateMs: oldest === null ? 0 : Math.max(0, now.getTime() - oldest.getTime()),

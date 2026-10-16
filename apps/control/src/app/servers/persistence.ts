@@ -299,6 +299,23 @@ export async function slugAvailable(
   return retired === undefined || retired.serverId === serverId
 }
 
+/**
+ * Whether a create may claim `slug`: it is free, and no other create is claiming it. Claims on one
+ * address take turns under its own lock, held to commit, so the second finds it taken; without
+ * `wait`, one another create holds answers no at once. Renames rely on the unique index alone.
+ */
+export async function slugClaimable(tx: Tx, slug: Slug, now: Date, options: { wait: boolean }) {
+  const key = `blockly:slug:${slug}`
+  if (options.wait) await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`)
+  else {
+    const { rows } = await tx.execute<{ locked: boolean }>(
+      sql`select pg_try_advisory_xact_lock(hashtext(${key})) as locked`,
+    )
+    if (rows[0]?.locked !== true) return false
+  }
+  return slugAvailable(tx, slug, now)
+}
+
 /** How long a retired address stays out of reach (§19.1): longer for one the directory listed. */
 const SLUG_QUARANTINE_DAYS = { unlisted: 30, listed: 180 } as const
 

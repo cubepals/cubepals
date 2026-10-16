@@ -25,6 +25,7 @@ import type { LoaderBuilds } from '../ports/loaders.ts'
 import type { PlayAddressing, RegionCatalog } from '../ports/platform.ts'
 import { runsOf } from '../revisions/caps.ts'
 import { draftOf } from '../revisions/service.ts'
+import { loadRules } from '../runtimes/persistence.ts'
 import type { RuntimePlacement } from '../runtimes/service.ts'
 import { keepSentIcon, type OwnIcon } from '../server-icons/persistence.ts'
 import type { SetupService } from '../setups/service.ts'
@@ -48,6 +49,7 @@ import {
   saveIdentity,
   setDesired,
   slugAvailable,
+  slugClaimable,
 } from './persistence.ts'
 import type { ServerTransitions } from './transitions.ts'
 import { UpkeepNow } from './upkeep-now.ts'
@@ -146,9 +148,11 @@ export class MinecraftServerService {
       // over its address: whoever has it in their server list finds the new one there.
       const replaced =
         request.replaces === undefined ? null : await this.#makeWay(tx, owner, request.replaces)
-      // Room is asked last, before anything is written: a create refused for it leaves nothing.
+      // Room is asked before anything is written, so a refused create leaves nothing, and again
+      // under the platform's lock last: nobody else's create waits on this one's writes.
       const where = { regionKey, memoryMb: memoryMb(memoryTier), storageGb }
-      await this.#policy.require(tx, owner.userId, { kind: 'create_server', memoryTier, where })
+      const asked = { kind: 'create_server', memoryTier, where } as const
+      const admit = await this.#policy.requireThenAdmit(tx, owner.userId, asked)
       const slug = await this.#claimSlug(tx, madeBy, request.name, replaced?.slug ?? request.slug)
       const created = await insertServer(
         tx,
@@ -168,19 +172,6 @@ export class MinecraftServerService {
         { ...revision, createdBy: requestedBy(madeBy) },
         world,
       )
-      const placed = await this.#placement.place(
-        tx,
-        {
-          serverId: created.server.id,
-          ownerId: owner.userId,
-          plan,
-          regionKey,
-          memoryMb: memoryMb(memoryTier),
-          storageGb,
-        },
-        requestedBy(madeBy),
-      )
-      await createRuntimeBinding(tx, created.server.id, placed.provider)
       await createAccess(tx, created.server.id)
       await this.#audit(tx, madeBy, 'server.created', created.server.id, {
         slug,
@@ -206,6 +197,16 @@ export class MinecraftServerService {
         requestedBy: requestedBy(madeBy),
         idempotencyKey: 'provision',
       })
+      const rules = await loadRules(tx)
+      // Under the platform's lock to commit: the count, and placing by each runtime's count.
+      await admit(created.server.id)
+      const placed = await this.#placement.place(
+        tx,
+        { serverId: created.server.id, ownerId: owner.userId, plan, ...where },
+        rules,
+        requestedBy(madeBy),
+      )
+      await createRuntimeBinding(tx, created.server.id, placed.provider)
       return created.server
     })
     return server
@@ -633,13 +634,13 @@ export class MinecraftServerService {
       const check = checkSlug(preferred)
       if (!check.ok)
         throw new AppError('slug_invalid', 'Addresses use 3–40 lowercase letters, numbers and dashes.')
-      if (!(await slugAvailable(tx, preferred, now)))
+      if (!(await slugClaimable(tx, check.slug, now, { wait: true })))
         throw new AppError('slug_taken', 'That address is taken — try adding a word.')
       return check.slug
     }
     for (const candidate of slugCandidates(name, Math.random).filter((s) => mayGive(actor, s))) {
       const check = checkSlug(candidate)
-      if (check.ok && (await slugAvailable(tx, candidate, now))) return check.slug
+      if (check.ok && (await slugClaimable(tx, check.slug, now, { wait: false }))) return check.slug
     }
     throw new AppError('slug_taken', 'We could not find a free address for that name. Pick one yourself.')
   }

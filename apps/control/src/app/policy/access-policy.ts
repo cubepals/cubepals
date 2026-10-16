@@ -145,32 +145,80 @@ export class AccessPolicy {
     options: { lock?: boolean } = {},
   ): Promise<Decision> {
     const locks = options.lock !== false
-    // The account's own facts are read under its own lock, which others' decisions don't wait on;
-    // the platform's lock is taken last, for the few reads only it guards, and held to commit.
+    const { account, answers } = await this.#ownFacts(tx, accountId, capability, now, locks)
+    // The platform's lock is taken last, for the few reads only it guards, and held to commit.
+    if (PLATFORM_WIDE.has(capability.kind) && locks) await lockCapacity(tx)
+    return evaluate({ ...account, ...(await this.#platformFacts(tx, capability, now, answers)) }, capability)
+  }
+
+  /**
+   * `require` for a create, in two halves, so the create's own writes are made outside the
+   * platform's lock. First it decides on everything, the platform's counts read without that lock,
+   * so a create that can't go ahead is refused before anything is written. The `admit` it returns
+   * is called once the server and its create are written, last before placing it: it takes the
+   * platform's lock and decides again on the platform's counts, read afresh, less the server and
+   * its create. Every admission still counts each one before it, since the lock is held from that
+   * count to commit.
+   */
+  async requireThenAdmit(
+    tx: Tx,
+    accountId: string,
+    capability: Extract<Capability, { kind: 'create_server' }>,
+  ): Promise<(serverId: string) => Promise<void>> {
+    const now = new Date()
+    const { account, answers } = await this.#ownFacts(tx, accountId, capability, now, true)
+    refuseUnless(
+      evaluate({ ...account, ...(await this.#platformFacts(tx, capability, now, answers)) }, capability),
+    )
+    return async (serverId) => {
+      await lockCapacity(tx)
+      const platform = await this.#platformFacts(tx, capability, new Date(), answers, serverId)
+      // The count now holds the server this create wrote, `provisioning`: one server, one running.
+      const global = { servers: platform.global.servers - 1, running: platform.global.running - 1 }
+      refuseUnless(evaluate({ ...account, ...platform, global }, capability))
+    }
+  }
+
+  /**
+   * The account's own facts, read under its own locks, which others' decisions don't wait on; and,
+   * for a create, what the runtimes say about room for it, asked before the platform's lock.
+   */
+  async #ownFacts(tx: Tx, accountId: string, capability: Capability, now: Date, locks: boolean) {
     if (SPENDS.has(capability.kind) && locks) await lockOwnerCapacity(tx, accountId)
     // Counted and written in one transaction per account, so a burst can't slip past the count.
     const counted = rateLimited(capability.kind) ? COUNTED_AS[capability.kind] : null
     if (counted !== null && locks) await lockAccountActions(tx, accountId)
     const account = await accountFacts(tx, accountId, capability, counted, now)
-    const answers = await this.room.ask(tx, capability)
-    if (PLATFORM_WIDE.has(capability.kind) && locks) await lockCapacity(tx)
-    return evaluate(
-      {
-        ...account,
-        deployment: supportOf(this.#caps),
-        controls: await loadControls(tx),
-        serverCeiling: this.room.serverCeiling,
-        global: await countServers(tx),
-        room: await this.room.facts(tx, capability, now, answers),
-        roomRules: this.room.rules(),
-      },
-      capability,
-    )
+    return { account, answers: await this.room.ask(tx, capability) }
+  }
+
+  /**
+   * The platform's switches, counts and room: what only the platform's lock guards. `written` is a
+   * server this transaction made, whose own create isn't one the room waits on.
+   */
+  async #platformFacts(
+    tx: Tx,
+    capability: Capability,
+    now: Date,
+    answers: Map<string, boolean>,
+    written?: string,
+  ) {
+    return {
+      deployment: supportOf(this.#caps),
+      controls: await loadControls(tx),
+      serverCeiling: this.room.serverCeiling,
+      global: await countServers(tx),
+      room: await this.room.facts(tx, capability, now, answers, written),
+      roomRules: this.room.rules(),
+    }
   }
 
   /** `check`, turned into the refusal people see when it says no. */
   async require(tx: Tx, accountId: string, capability: Capability): Promise<void> {
-    const decision = await this.check(tx, accountId, capability)
-    if (!decision.ok) throw new AppError(decision.code, decision.message)
+    refuseUnless(await this.check(tx, accountId, capability))
   }
+}
+
+function refuseUnless(decision: Decision): void {
+  if (!decision.ok) throw new AppError(decision.code, decision.message)
 }

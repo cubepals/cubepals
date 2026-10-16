@@ -75,13 +75,17 @@ export class RuntimePlacement {
     this.defaultProvider = deps.defaultProvider
   }
 
-  /** Where a new server goes, decided once and recorded in the transaction that makes it. */
-  async place(tx: Tx, server: NewServer, by: string): Promise<Placed> {
+  /**
+   * Where a new server goes by `rules`, decided once and recorded in the transaction that makes
+   * it. The create reads its rules before the platform's lock, which doesn't guard them, and places
+   * under it, where each runtime's count is.
+   */
+  async place(tx: Tx, server: NewServer, rules: readonly StoredRule[], by: string): Promise<Placed> {
     // A runtime whose provider caps the servers it holds (Fly's machine limit) is full at its cap:
     // the deployment's own cap can't see that once another runtime has none. Only servers holding
     // compute there count against it.
     const held = await computeByProvider(tx)
-    const placed = await decidePlacement(server, await loadRules(tx), {
+    const placed = await decidePlacement(server, rules, {
       defaultProvider: this.defaultProvider,
       providers: this.#runtimes.providers,
       runs: (provider) => this.#runtimes.runs(provider),

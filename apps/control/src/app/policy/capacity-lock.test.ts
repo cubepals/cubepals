@@ -8,7 +8,9 @@
  * one person's plan; free creates close before Plus ones; and creates and starts mixed together
  * all finish, none of them deadlocked. Each person's facts are read under their own lock and the
  * platform's counts under the platform's, so this is what proves the two locks together still
- * count every decision before the next. Every test here fails with one of the two taken out.
+ * count every decision before the next. Every test of a cap fails with one of the two taken out.
+ * A create writes its server before it takes the platform's lock, so fifty after one address
+ * each get one of their own.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -109,6 +111,26 @@ describe.skipIf(!hasDatabase)('fifty creates at once', () => {
       .from(schema.minecraftServers)
       .where(eq(schema.minecraftServers.ownerId, person.userId))
     expect(owned[0]?.n).toBe(limit)
+  }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('fifty creates of one name at once', () => {
+  let h: Harness
+
+  beforeAll(async () => {
+    h = await startHarness({ controls: ROOMY })
+  }, 30_000)
+
+  afterAll(() => h.close())
+
+  test('are all made, each at an address of its own', async () => {
+    // A create writes its server before the platform's lock, so two after one address take turns
+    // at it, under its own lock, rather than at the platform's.
+    const people = await Promise.all(
+      Array.from({ length: AT_ONCE }, (_, i) => h.user(`Namesake ${i}`, 'plus')),
+    )
+    const made = await Promise.all(people.map((person) => h.create(person, { name: 'Same World' })))
+    expect(new Set(made.map((server) => server.slug)).size).toBe(AT_ONCE)
   }, 60_000)
 })
 

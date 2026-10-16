@@ -25,7 +25,7 @@ Paths are from the repository root; `control/` is `apps/control/src/`.
 | 3 | `control/infra/fly/fly-runtime.ts:137,140`, `control/config/load.ts:127`, `scripts/staging.ts:442` | Servers Fly holds: `floor((machine limit − platform machines) / 2)` | Staging: 50 typed in, about 21 servers. Production: the `fly_machine_limit` variable | Staging overflowed to Boat at 22 servers (see [Fly's ceiling](#flys-ceiling)) | Every new server beyond the ceiling goes elsewhere or waits | Same | Count the second machine only while it exists; read the real limit | brief B |
 | 4 | `control/app/edge/service.ts` (`listed`), `apps/edge/agent.ts`, `apps/edge/router.ts` | The edge's route list: rebuilt from every live server, every binding and today's play, once a second per edge. It used to rewrite the whole routes file on any change and reload every route in mc-router, which empties its table for a moment: 145 of 23,550 pings to a route that never changed were closed while one other route changed ten times a second among 300 (602 of 22,199 among 1,000). Now only the routes that changed go to mc-router, one at a time through its API: 0 closed of about 25,700 at both sizes, and a change lands in 2 ms (p50) whatever the count | 1 s poll, full rebuild, about seven queries | — | Several full-table reads a second | Database time grows with every server; mc-router's side no longer does | Done at the edge: changes only, through mc-router's API. Left: serve changes since a version, not the whole list; cache the list between polls | brief C |
 | 5 | `scripts/production.ts:154` (`--ha=false`), `infra/fly/edge.toml` | One machine each for the edge, the api and the worker | 1 each | A deploy or restart of the edge drops every player in every world; an api restart stops wakes | Same, more people hit | Same, and one edge's CPU carries every connection | Two edges, two api machines; a worker that can be more than one | brief D |
-| 6 | `control/app/policy/access-policy.ts:150,156`, `control/app/accounts/persistence.ts:418,426` | Creates, starts and undeletes on the platform take turns under one lock for the platform's counts, room and caps, held from the decision to the commit; each person's own facts are read before it, under a lock of their own | One platform-wide lock, for the decision and the create's own writes | — | A create burst still runs one decision at a time: about 46 a second on a local stack, up from 29 | The create's own writes, held under the lock until it commits, are the ceiling | Each person's facts under their own lock; the platform's lock for its counts only, taken last; the count from an index of live servers; a provider asked about room before the lock; resizes take no platform lock. Left: the platform lock still holds most of a burst | partial (brief E) |
+| 6 | `control/app/policy/access-policy.ts` (`requireThenAdmit`), `control/app/servers/service.ts` (`#create`), `control/app/accounts/persistence.ts` (`lockCapacity`) | Creates, starts and undeletes on the platform take turns under one lock for the platform's counts, room and caps, held from the decision to the commit; each person's own facts are read before it, under a lock of their own | One platform-wide lock: for a create, its count, its placement and its commit | — | A create burst still takes the platform lock one create at a time: about 60–80 a second on a local stack, up from 44–50 | Placement and the commit, held under the lock, are the ceiling | Each person's facts under their own lock; the platform's lock for its counts only, taken last; the count from an index of live servers; a provider asked about room before the lock; a create's own writes made before the lock, its count read again under it; resizes take no platform lock. Left: the count, placement and commit still run one create at a time | partial (brief E) |
 | 7 | `packages/db/src/index.ts:31`, `control/config/load.ts:91`, `control/infra/pg/jobs.ts:154`, `control/infra/pg/locks.ts:26` | Database connections: each process opens a query pool and a job-queue pool of `DATABASE_POOL_MAX` each, plus a listener for live updates, and a worker one more for the job queue's wake-ups; a request waits for a free connection without end; every console command holds one for its whole RCON session | 10 + 10 + 1 per process, 2 in a worker; no wait timeout; production leaves the size unset | — | Eight operations, the edge poll and console sessions share 10; requests stall | Pool exhaustion; the session pooler's own limit is reached | Separate sizes per pool, a wait timeout, locks that don't pin a connection | brief F |
 | 8 | `control/app/operations/schedules/presence.ts:53`, `session-cap.ts:106`, `idle.ts:40`, `drift.ts:37`, `disk-growth.ts:42`, `control/app/accounts/service.ts:490,497` | Per-minute sweeps go through every running server or owner one at a time; presence asks each server over RCON; a scheduled job is cut off at 5 minutes and not retried (`control/infra/pg/jobs.ts:591`) | Serial, unbounded | — | A pass takes most of its minute; a few hung servers make it miss | Passes never finish; presence, idle stops and limits go stale | Work in parallel with a bound; page through; skip the slow | brief G |
 | 9 | `control/infra/auth/better-auth.ts:188,192` | Sign-in, sign-up and password reset per address, counted in each api machine's memory, by the full address | Better Auth's default per-address limit | A class signing in at once from a school's one address is refused | Same, for any carrier-grade NAT | Same | Its own limits from `ABUSE_LIMITS`, IPv6 by /64, counted in the database | brief H |
@@ -137,42 +137,54 @@ it can be two.
 
 Partly done. Creates, starts and undeletes read each person's own facts (standing, play, their
 servers, their creates an hour) under a lock per person, `blockly:capacity:<id>`
-(`control/app/accounts/persistence.ts:426`, taken at `control/app/policy/access-policy.ts:150`),
-which other people's decisions don't wait on. Only then do they take `blockly:capacity`
-(`control/app/accounts/persistence.ts:418`, taken at `control/app/policy/access-policy.ts:156`),
-for the platform's switches, its count of servers and running ones, and the room for a new
-server. That count is one query read from the index of live servers by state
-(`servers_live_status`), not two counts of the table. A resize reads none of the platform's facts
-and takes only its owner's lock. The per-person lock is always taken before the platform's, never
-after.
+(`lockOwnerCapacity` in `control/app/accounts/persistence.ts`), which other people's decisions
+don't wait on. Only then do they take `blockly:capacity` (`lockCapacity`), for the platform's
+switches, its count of servers and running ones, and the room for a new server. That count is one
+query read from the index of live servers by state (`servers_live_status`), not two counts of the
+table. A resize reads none of the platform's facts and takes only its owner's lock. The per-person
+lock is always taken before the platform's, never after.
 
 A runtime is asked whether it has room before the lock, so a call to Fly is never waited on under
 it; its count of servers is read again under the lock. That can't admit more than before: the lock
 never covered the answer, since a provider's room changes outside the database, and provisioning
 asks the provider again and waits for room when it has gone.
 
+A create decides in two halves (`requireThenAdmit` in `control/app/policy/access-policy.ts`). It
+decides first on everything, the platform's counts read without the platform's lock, so a create
+that can't go ahead is still refused before anything is written. It then writes its server, world,
+access, audit, event and queued create, and reads the placement rules, none of which another
+create waits on. Last, it takes the platform's lock and decides again on the platform's counts read
+afresh, less its own server and its own queued create, then places the server and commits. Every
+admission still counts each one before it: the lock is held from that count to commit, and nothing
+counted is written by a transaction that hasn't taken it. Two creates after the same address take
+turns at it under a lock of its own (`slugClaimable` in `control/app/servers/persistence.ts`), which a
+create made under the platform's lock used to do by the way; one finding another create claiming
+an address it only suggested tries the next one rather than waiting.
+
 `capacity-lock.test.ts` sends requests at once and checks that nothing passes a cap and nothing
 deadlocks: fifty creates by fifty people stay within the room, and fifty by one person within
 their plan; twenty starts stay within the platform's running cap, and eight by one person within
 their plan's; undeletes stay within the runtime's ceiling; free and Plus creates mixed close to
 free plans at their share first and Plus fills the rest; creates and starts mixed stay within both
-running caps. With the platform's lock taken out, every test of a platform cap fails; with the
-per-person lock taken out (in the policy and in the create), every test of a plan's cap fails.
+running caps; fifty creates of one name are all made, each at its own address. With the platform's
+lock taken out of a create's second half, the tests of the room and of free plans' share fail; with
+its own server left in that count, the room's fails; with the address lock taken out, the test of
+one name fails.
 
-On a local stack (the operation-test harness, fake runtime, fifty Plus creates at once, three runs
-each, the lock sampled from `pg_locks`):
+On a local stack (the operation-test harness, fake runtime, fifty Plus creates at once, six runs
+each, the first a warm-up, the lock sampled from `pg_locks`):
 
 | | Creates a second | Mean hold | Share of the burst the lock is held |
 |---|---|---|---|
-| Before | 28–32 | 26–33 ms | 92–97% |
-| After | 40–48 | 18–20 ms | 85–90% |
-| Before, the runtime taking 20 ms to say it has room | 17–19 | 43–50 ms | 96–97% |
-| After, the same | 38–50 | 17–20 ms | 84–87% |
+| Both locks, writes under the platform's (#59) | 40–50 | 19–25 ms | 96–97% |
+| A create's writes before the platform's lock | 52–79 | 11–17 ms | 87–90% |
 
-Left: the platform lock still holds most of a burst. A create still writes its server, placement,
-binding, audit and job under it, since the count it was admitted by must include them, and that
-is now most of the hold. The runtimes' count of servers by provider
-(`control/app/runtimes/persistence.ts:208`) still joins every binding, twice per create.
+Left: the platform lock still holds most of a burst. Under it a create reads the platform's
+switches, its count, the oldest waiting create and each runtime's count of servers, then counts
+each runtime again to place the server, writes its placement and binding, and commits; those are
+now the hold. The runtimes' count of servers by provider (`control/app/runtimes/persistence.ts`,
+`computeByProvider`) still joins every binding, twice per create. Starts and undeletes still decide
+under the lock before their own writes, which are few.
 
 ### F. Database connections
 

@@ -3,7 +3,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { type Queryable, schema, type Tx } from '@blockly/db'
-import { and, count, desc, eq, inArray, isNull, like, lt, lte, min, notInArray, or, sql } from 'drizzle-orm'
+import {
+  and,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  like,
+  lt,
+  lte,
+  min,
+  ne,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm'
 import type { PlatformControls } from '../../domain/policy/policy.ts'
 import type { DaySpend } from '../../domain/policy/spend.ts'
 
@@ -62,12 +77,18 @@ export async function saveCreatesFull(tx: Tx, full: CreatesFull | null): Promise
     .where(eq(schema.platformControls.id, 1))
 }
 
-/** When the oldest create still waiting for a worker was asked for; null when none waits. */
-export async function oldestWaitingCreate(q: Queryable): Promise<Date | null> {
+/** When the oldest create still waiting for a worker was asked for, but `except`'s; null when none waits. */
+export async function oldestWaitingCreate(q: Queryable, except?: string): Promise<Date | null> {
   const [row] = await q
     .select({ at: min(operations.createdAt) })
     .from(operations)
-    .where(and(eq(operations.kind, 'provision'), eq(operations.status, 'queued')))
+    .where(
+      and(
+        eq(operations.kind, 'provision'),
+        eq(operations.status, 'queued'),
+        except === undefined ? undefined : ne(operations.serverId, except),
+      ),
+    )
   return row?.at ?? null
 }
 
