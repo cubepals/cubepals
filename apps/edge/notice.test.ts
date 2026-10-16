@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { expect, test } from 'bun:test'
-import { Notice, type NoticeText, packet, statusRequest } from './notice.ts'
+import { handshakeOf, Notice, type NoticeText, packet, statusRequest } from './notice.ts'
 
 type NoticeTextJoins = NoticeText['joins']
 
@@ -143,4 +143,17 @@ test('a sleeping server’s own message keeps its codes, and its picture goes wi
   expect(answer.description).toEqual({ text: own.status })
   expect(answer.favicon).toBe(own.icon)
   expect(answer.players).toEqual({ max: 0, online: 0 })
+})
+
+test('a handshake is read once its whole packet is there, as a ping or a join, and anything else is none', () => {
+  const ping = handshake(1)
+  expect(handshakeOf(ping)).toEqual({ protocol: 767, address: 'lobby.play.test', intent: 1 })
+  expect(handshakeOf(handshake(2))).toEqual({ protocol: 767, address: 'lobby.play.test', intent: 2 })
+  // With the status request behind it in the same bytes, as a client sends them.
+  expect(handshakeOf(statusRequest('lobby.play.test', 25565))).toMatchObject({ intent: 1 })
+  expect(handshakeOf(new Uint8Array())).toBe('more')
+  expect(handshakeOf(ping.slice(0, 6))).toBe('more')
+  // A client from before 1.7 pings with no handshake at all; a packet that isn't one isn't either.
+  expect(handshakeOf(Uint8Array.from([0xfe, 0x01]))).toBeNull()
+  expect(handshakeOf(packet(1, [1, 2, 3]))).toBeNull()
 })

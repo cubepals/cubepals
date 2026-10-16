@@ -48,6 +48,12 @@ export interface AbuseLimits {
   /** Wakes the edge asks of one server an hour. */
   wakesPerHour: number
   /**
+   * How long a server-list ping may not wake a server again after its last such wake went unjoined
+   * (`app/edge/ping-wake.ts`), in hours. Anything can ping, a site that lists servers every few
+   * minutes included, and must not keep waking a world nobody comes to.
+   */
+  pingWakeHoldHours: number
+  /**
    * People one invite link may let in an hour. A link is meant for friends; a leaked one should
    * cost its holder little and its owner nothing. A class or a club joining at once needs more.
    */
@@ -81,6 +87,7 @@ export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {
   giftsPerDay: 5,
   wrongCodesPerHour: 5,
   wakesPerHour: 20,
+  pingWakeHoldHours: 24,
   inviteJoinsPerHour: 10,
 }
 

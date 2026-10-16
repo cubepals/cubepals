@@ -6,6 +6,7 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import {
   EDGE_PROTOCOL_BASE,
   IdleHint,
+  PingWakeRequest,
   SessionEvent,
   WakeRequest,
   type WakeResult,
@@ -56,6 +57,12 @@ export function createInternalApp(deps: { edge: EdgeService; token: string }): H
     const understands = request.data.understands ?? []
     const woken = await deps.edge.wake(request.data.hostname, understands.includes('failed'))
     return c.json(forEdge(woken, understands))
+  })
+
+  app.post(`${EDGE_PROTOCOL_BASE}/ping-wake`, async (c) => {
+    const request = PingWakeRequest.safeParse(await c.req.json().catch(() => null))
+    if (!request.success) return c.json({ error: 'bad request' }, 400)
+    return c.json(await deps.edge.pingWake(request.data.hostname))
   })
 
   app.post(`${EDGE_PROTOCOL_BASE}/idle`, async (c) => {

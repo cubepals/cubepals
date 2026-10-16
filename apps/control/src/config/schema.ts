@@ -185,6 +185,7 @@ const AbuseLimits = z
       wakesPerHour: Count,
       // Optional, so a deployment's ABUSE_LIMITS from before it existed still parses.
       inviteJoinsPerHour: Count.default(DEFAULT_ABUSE_LIMITS.inviteJoinsPerHour),
+      pingWakeHoldHours: Count.default(DEFAULT_ABUSE_LIMITS.pingWakeHoldHours),
     },
     { error: 'ABUSE_LIMITS is the deployment’s abuse limits, as JSON (docs/configuration.md)' },
   )

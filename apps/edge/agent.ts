@@ -8,7 +8,7 @@
 
 import { connect, createServer, type Socket } from 'node:net'
 import { hostname } from 'node:os'
-import type { EdgeRoutes, SessionEvent, WakeResult } from '@blockly/contracts/edge'
+import type { EdgeRoutes, PingWakeResult, SessionEvent, WakeResult } from '@blockly/contracts/edge'
 // Copied into the image beside the agent (Dockerfile): the one place play coming back is worded.
 import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { EDGE_ID_HEADER, NEWER_REASONS } from '../../packages/contracts/src/edge-poll.ts'
@@ -23,7 +23,8 @@ import { forServer, Unwrap } from './header.ts'
 import { Held, LOGIN_QUERIES, turnAway } from './hold.ts'
 import { Gate } from './limits.ts'
 import { mappings } from './mappings.ts'
-import { hostnameOf, type Join, Notice, type NoticeText, statusRequest } from './notice.ts'
+import { hostnameOf, type Join, Notice, type NoticeText, pingOf, statusRequest } from './notice.ts'
+import { PingWakes } from './ping-wake.ts'
 import { RoutesPoll } from './poll.ts'
 import { RouterRoutes } from './router.ts'
 
@@ -50,6 +51,14 @@ const RESTARTING = {
 /** Where a sleeping server's hostname goes: a notice of the agent's that passes joins on. */
 const SLEEPING = `127.0.0.1:${env('SLEEPING_PORT', '25563')}`
 const ASLEEP: NoticeText = { status: env('ASLEEP_MOTD', 'Sleeping · join to wake it up'), join: null }
+/** What a ping is told of a sleeping server on its way up, woken by a join or by a ping before it. */
+const WAKING_MOTD = env('WAKING_MOTD', 'Waking up · join in a few seconds')
+/**
+ * How long a ping waits to hear whether its server is waking before it is answered, and how long
+ * an answer stands before another ping asks again.
+ */
+const PING_WAKE_WAIT_MS = Number(env('PING_WAKE_WAIT_MS', '1500'))
+const PING_WAKE_EVERY_MS = Number(env('PING_WAKE_EVERY_MS', '30000'))
 /** A sleeping server whose owner's plan has no play left today, until it is back at their midnight. */
 const usedToday = (backAt: string): string =>
   `Today’s play is used up · back at midnight, in ${waitFor(new Date(), new Date(backAt))}`
@@ -396,19 +405,44 @@ function passOn(client: Socket, join: Join, header: Uint8Array | null): void {
   pipe(client, route.destination, forServer(route.proxyProtocol === true, header, join.bytes), TIMEOUTS)
 }
 
+/** Sleeping servers a ping asked to wake early, so each is asked once a while (`ping-wake.ts`). */
+const pingWakes = new PingWakes(
+  (hostname) =>
+    control('/ping-wake', { method: 'POST', body: JSON.stringify({ hostname }) }).then(
+      // A control plane from before it took these answers 404: the server stays asleep.
+      async (response) => response.ok && ((await response.json()) as PingWakeResult).waking,
+    ),
+  PING_WAKE_EVERY_MS,
+)
+
+/** Whether its owner's play for today is used up: then no ping or join wakes it before midnight. */
+const usedUp = (route: EdgeRoutes['routes'][number] | undefined): string | null =>
+  route?.backAt !== undefined && Date.parse(route.backAt) > Date.now() ? route.backAt : null
+
 /**
- * What a ping to a sleeping server is told: its own message and picture, and that a join wakes it;
- * or, while its owner's play for today is used up, when it is back.
+ * What a ping to a sleeping server is told: its own message and picture, and that a join wakes it,
+ * or that it is waking already; or, while its owner's play for today is used up, when it is back.
  */
 function asleep(address: string): NoticeText {
-  const route = routes.find((r) => r.hostname === hostnameOf({ address }))
+  const name = hostnameOf({ address })
+  const route = routes.find((r) => r.hostname === name)
   const icon = route?.icon === undefined ? undefined : icons.get(route.icon)
-  const backAt = route?.backAt
+  const backAt = usedUp(route)
+  const waking = route?.waking === true || pingWakes.waking(name)
   const status =
-    backAt !== undefined && Date.parse(backAt) > Date.now()
-      ? usedToday(backAt)
-      : asleepMessage(route?.motd, ASLEEP.status)
+    backAt !== null ? usedToday(backAt) : asleepMessage(route?.motd, waking ? WAKING_MOTD : ASLEEP.status)
   return { ...ASLEEP, status, ...(icon ? { icon } : {}), ...(route?.joins ? { joins: route.joins } : {}) }
+}
+
+/**
+ * A ping is often the moment before a join: for a sleeping server that isn't waking yet, the
+ * control plane may start it now, and the ping, answered once it has said or a moment has passed,
+ * says it is waking. Which servers it starts is the control plane's to decide.
+ */
+async function pinged(hostname: string): Promise<void> {
+  const route = routes.find((r) => r.hostname === hostname)
+  if (route?.state !== 'asleep' || route.waking === true || usedUp(route) !== null) return
+  await Promise.race([pingWakes.ask(hostname), Bun.sleep(PING_WAKE_WAIT_MS)])
 }
 
 /**
@@ -424,10 +458,7 @@ function asleepAt(
     const unwrap = new Unwrap()
     client.setTimeout(10_000, () => client.destroy())
     client.on('error', () => client.destroy())
-    const receive = (chunk: Buffer) => {
-      const own = unwrap.take(chunk)
-      if (own === 'bad') return void client.destroy()
-      if (own === null) return
+    const answer = (own: Uint8Array) => {
       const { reply, close, join } = notice.receive(own)
       for (const bytes of reply) client.write(bytes)
       if (close) client.end()
@@ -435,6 +466,27 @@ function asleepAt(
       client.off('data', receive)
       client.setTimeout(0)
       then(client, join, unwrap.header)
+    }
+    // What came before the handshake was whole, held until it says whether this is a ping.
+    let held: Uint8Array | null = new Uint8Array(0)
+    /** The handshake is whole: a ping is answered once its server may have been woken, in order. */
+    const greeted = (ping: string | null, sent: Uint8Array) => {
+      held = null
+      if (ping === null) return answer(sent)
+      client.pause()
+      void pinged(hostnameOf({ address: ping })).finally(() => {
+        answer(sent)
+        client.resume()
+      })
+    }
+    const receive = (chunk: Buffer) => {
+      const own = unwrap.take(chunk)
+      if (own === 'bad') return void client.destroy()
+      if (own === null) return
+      if (held === null) return answer(own)
+      held = Buffer.concat([held, own])
+      const ping = pingOf(held)
+      if (ping !== 'more') greeted(ping, held)
     }
     client.on('data', receive)
   }).listen(Number(address.split(':')[1]), '127.0.0.1')

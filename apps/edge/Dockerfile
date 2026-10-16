@@ -9,7 +9,7 @@ WORKDIR /build
 # The agent imports only types from the contracts, plus play-today.ts (with the units of time it
 # imports), edge-poll.ts, proxy-header.ts, server-list.ts and Minecraft's ports, which import
 # nothing else, so it compiles without installing anything.
-COPY apps/edge/agent.ts apps/edge/asleep.ts apps/edge/clients.ts apps/edge/front.ts apps/edge/header.ts apps/edge/hold.ts apps/edge/limits.ts apps/edge/mappings.ts apps/edge/notice.ts apps/edge/poll.ts apps/edge/router.ts apps/edge/
+COPY apps/edge/agent.ts apps/edge/asleep.ts apps/edge/clients.ts apps/edge/front.ts apps/edge/header.ts apps/edge/hold.ts apps/edge/limits.ts apps/edge/mappings.ts apps/edge/notice.ts apps/edge/ping-wake.ts apps/edge/poll.ts apps/edge/router.ts apps/edge/
 COPY packages/contracts/src/durations.ts packages/contracts/src/edge-poll.ts packages/contracts/src/play-today.ts packages/contracts/src/proxy-header.ts packages/contracts/src/server-list.ts packages/contracts/src/
 COPY apps/control/src/minecraft/ports.ts apps/control/src/minecraft/
 RUN bun build apps/edge/agent.ts --compile --outfile /build/edge-agent

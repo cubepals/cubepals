@@ -4,7 +4,7 @@
 
 import { BLOCKLY_ICON } from '@blockly/contracts'
 import { HOUR_MS, SECOND_MS } from '@blockly/contracts/durations'
-import type { EdgeRoutes, SessionEvent, WakeResult } from '@blockly/contracts/edge'
+import type { EdgeRoutes, PingWakeResult, SessionEvent, WakeResult } from '@blockly/contracts/edge'
 import { motdForGame } from '@blockly/contracts/server-list'
 import type { AppliedConfigJson, Db } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
@@ -31,6 +31,7 @@ import { presenceFor, recordDomainJoin, recordEdgePresence, wakesInLastHour } fr
 import type { ServerWaiter } from '../servers/waiter.ts'
 import { tuning } from '../tuning.ts'
 import { type Fingerprint, fingerprint, type RouteInputs, type RouteServer, readInputs } from './inputs.ts'
+import { pingWake } from './ping-wake.ts'
 import { forgetQuietEdges, markListed, sawEdge, seen } from './routed.ts'
 
 /**
@@ -133,18 +134,24 @@ export class EdgeService {
     const { print, inputs } = await this.#inputs()
     const { servers: live, bindings, comingBack, stops, motds, plays } = inputs
     const restarting = restartingOf(live, comingBack)
+    const unstoring = new Set(comingBack.filter((o) => o.kind === 'unstore').map((o) => o.serverId))
     const out = outOf(stops, new Date())
     const routes: EdgeRoutes['routes'] = []
     for (const server of live) {
-      const state = server.status === 'running' ? null : restarting.has(server.id) ? 'restarting' : 'asleep'
+      const { state, back, waking } = runOf(
+        server.status,
+        restarting.has(server.id),
+        unstoring.has(server.id),
+      )
       const binding = bindings.get(server.id)
-      const destination = this.#destinationOf(server.status, state, binding?.handle)
+      const destination = back ? NOWHERE : this.#destinationOf(server.status, state, binding?.handle)
       if (destination === null) continue
       for (const address of this.#addressing.all(server.slug)) {
         routes.push({
           hostname: address.hostname,
           destination,
           ...noticeOf(state, out.get(server.id)),
+          ...(waking ? { waking: true as const } : {}),
           ...this.#identityOf(server, state, motds),
           ...(binding?.proxyProtocol ? { proxyProtocol: true as const } : {}),
           ...joinsOf(plays, state, binding?.revisionId, server.desiredRevisionId),
@@ -379,6 +386,14 @@ export class EdgeService {
     )
   }
 
+  /**
+   * A server list asked how an asleep server is: the server may start now, before anyone joins
+   * (`ping-wake.ts`). Answers at once, whether or not it started it.
+   */
+  pingWake(hostname: string): Promise<PingWakeResult> {
+    return pingWake({ db: this.#db, addressing: this.#addressing, service: this.#service }, hostname)
+  }
+
   /** The edge saw no players for a while. Only the idle policy decides whether to stop. */
   async idleHint(hostname: string): Promise<IdleDecision | 'not_running' | 'players_online'> {
     const slug = this.#addressing.slugFor(hostname)
@@ -449,6 +464,22 @@ function joinsOf(
   if (range === null) return {}
   const { release, protocol, oldest, newest } = range
   return { joins: { release, protocol, oldest, ...(newest === null ? {} : { newest }) } }
+}
+
+/**
+ * Where a server's run is, as its routes say: why it can't be joined now (null while it runs);
+ * whether its world is coming back from rest (`back`), which has nothing to dial until it is, but
+ * whose ping is told it wakes and whose join waits in the waiting room; and whether it is on its
+ * way up (`waking`).
+ */
+function runOf(
+  status: ServerStatus,
+  restarting: boolean,
+  unstoring: boolean,
+): { state: 'asleep' | 'restarting' | null; back: boolean; waking: boolean } {
+  const state = status === 'running' ? null : restarting ? 'restarting' : 'asleep'
+  const back = status === 'restoring' && unstoring
+  return { state, back, waking: state === 'asleep' && (status === 'starting' || back) }
 }
 
 /**

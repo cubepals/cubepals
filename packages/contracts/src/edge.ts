@@ -4,7 +4,8 @@
 
 /**
  * The edge protocol, v1, that any Minecraft edge router speaks to the control plane: the routes
- * it polls, the wakes it asks for, its idle hints and the sessions it saw.
+ * it polls, the wakes it asks for (a join's, and a ping's early one), its idle hints and the
+ * sessions it saw.
  */
 import { z } from 'zod'
 
@@ -29,6 +30,11 @@ export const EdgeRoute = z.object({
    * their midnight. The edge says so to a ping, in `play-today.ts`'s words.
    */
   backAt: z.iso.datetime().optional(),
+  /**
+   * An asleep server already on its way up, woken by a join or a ping: the edge tells a ping it is
+   * waking. A join still goes to the waiting room, as to any server that isn't running.
+   */
+  waking: z.literal(true).optional(),
   /**
    * An asleep server's own message, as the game reads it (section-sign codes), which the edge
    * shows a ping in place of its own notice. Absent while the message is still Blockly's welcome.
@@ -106,6 +112,15 @@ export const WakeResult = z.discriminatedUnion('outcome', [
   }),
 ])
 export type WakeResult = z.infer<typeof WakeResult>
+
+/**
+ * A server list asked how an asleep server is, which often comes just before a join: the control
+ * plane may start it now, so the join finds it nearly up. It answers at once, without waiting for
+ * the start; `waking` says whether the server is on its way up, by this ask or an earlier one.
+ */
+export const PingWakeRequest = z.object({ hostname: z.string() })
+export const PingWakeResult = z.object({ waking: z.boolean() })
+export type PingWakeResult = z.infer<typeof PingWakeResult>
 
 export const IdleHint = z.object({ hostname: z.string() })
 

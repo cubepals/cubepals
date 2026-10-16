@@ -73,6 +73,53 @@ export function packet(id: number, fields: readonly number[]): Uint8Array {
   return Uint8Array.from([...varInt(body.length), ...body])
 }
 
+/**
+ * A handshake: the client's protocol version, the address it dialled, and what it wants (1, the
+ * server's status; anything else, a join).
+ */
+export interface Hello {
+  protocol: number
+  address: string
+  intent: number
+}
+
+/** The handshake whose fields begin at `offset`, after its packet's id; null when they don't read as one. */
+function helloAt(bytes: Uint8Array, offset: number): Hello | null {
+  const protocol = readVarInt(bytes, offset)
+  if (protocol === null) return null
+  const address = readVarInt(bytes, protocol.next)
+  if (address === null) return null
+  const intent = readVarInt(bytes, address.next + address.value + 2)
+  if (intent === null) return null
+  const dialled = new TextDecoder().decode(bytes.subarray(address.next, address.next + address.value))
+  return { protocol: protocol.value, address: dialled, intent: intent.value }
+}
+
+/**
+ * The handshake a connection opens with, read from what it has sent so far: `more` until its whole
+ * packet is there, null when it isn't one.
+ */
+export function handshakeOf(bytes: Uint8Array): Hello | 'more' | null {
+  // A client from before 1.7 pings in a format of its own, with no handshake.
+  if (bytes[0] === 0xfe) return null
+  const length = readVarInt(bytes, 0)
+  if (length === null) return bytes.length < 5 ? 'more' : null
+  if (length.next + length.value > bytes.length) return 'more'
+  const id = readVarInt(bytes, length.next)
+  return id?.value === 0 ? helloAt(bytes, id.next) : null
+}
+
+/**
+ * The address a server list's ping dialled, read from what the connection has sent so far: `more`
+ * until its handshake is whole, null for a join, or for anything that isn't a handshake.
+ */
+export function pingOf(bytes: Uint8Array): string | 'more' | null {
+  const hello = handshakeOf(bytes)
+  // Far longer than any handshake: it never will be one.
+  if (hello === 'more') return bytes.length > 4096 ? null : 'more'
+  return hello?.intent === 1 ? hello.address : null
+}
+
 /** What a server list sends to ask a server how it is: a handshake, then a status request. */
 export function statusRequest(address: string, port: number): Uint8Array {
   const handshake = packet(0, [...varInt(767), ...string(address), port >> 8, port & 0xff, 1])
@@ -116,27 +163,20 @@ export class Notice {
       if (id === null) return { reply, close: true }
       offset = end
       if (this.#protocol === null) {
-        // The handshake: the client's protocol version, the address it dialled, and what it wants.
-        const protocol = readVarInt(received, id.next)
-        if (id.value !== 0 || protocol === null) return { reply, close: true }
-        const address = readVarInt(received, protocol.next)
-        if (address === null) return { reply, close: true }
-        const intent = readVarInt(received, address.next + address.value + 2)
-        if (intent === null) return { reply, close: true }
-        this.#protocol = protocol.value
-        const dialled = new TextDecoder().decode(
-          received.subarray(address.next, address.next + address.value),
-        )
+        const hello = id.value === 0 ? helloAt(received, id.next) : null
+        if (hello === null) return { reply, close: true }
+        this.#protocol = hello.protocol
+        const dialled = hello.address
         this.#text = this.#say(dialled)
         // Anything but a status request is a join, in any version's words for it.
-        if (intent.value !== 1 && this.#text.join === null) {
+        if (hello.intent !== 1 && this.#text.join === null) {
           return {
             reply,
             close: false,
-            join: { address: dialled, protocol: protocol.value, bytes: received },
+            join: { address: dialled, protocol: hello.protocol, bytes: received },
           }
         }
-        if (intent.value !== 1)
+        if (hello.intent !== 1)
           return {
             reply: [...reply, packet(0, string(JSON.stringify({ text: this.#text.join })))],
             close: true,

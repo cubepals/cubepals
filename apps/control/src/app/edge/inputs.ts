@@ -29,8 +29,11 @@ const {
   serverRevisions: revisions,
 } = schema
 
-/** The kinds of operation that bring a running server back by themselves: it is restarting. */
-const COMES_BACK = ['restart', 'restore', 'relocate'] as const
+/**
+ * The kinds of operation that bring a server back by themselves: a running one is restarting, and
+ * one whose world comes back from rest (`unstore`) is waking.
+ */
+const COMES_BACK = ['restart', 'restore', 'relocate', 'unstore'] as const
 
 /** Of a live server, what its routes say. */
 export interface RouteServer {
