@@ -63,7 +63,7 @@ export class AuditQueries {
     const last = page.at(-1)
     return {
       entries,
-      next: rows.length > PAGE && last ? `${last.at.toISOString()}|${last.id}` : null,
+      next: rows.length > PAGE && last ? `${last.mark}|${last.id}` : null,
     }
   }
 
@@ -80,9 +80,8 @@ const personOf = (actor: string): string | null => {
   return (kind === 'user' || kind === 'admin') && id ? id : null
 }
 
-function cursorOf(after: string | null): { at: Date; id: string } | null {
+function cursorOf(after: string | null): { at: string; id: string } | null {
   if (after === null) return null
   const [at, id] = after.split('|')
-  const date = new Date(at ?? '')
-  return id && UUID.test(id) && !Number.isNaN(date.getTime()) ? { at: date, id } : null
+  return at && id && UUID.test(id) && !Number.isNaN(new Date(at).getTime()) ? { at, id } : null
 }

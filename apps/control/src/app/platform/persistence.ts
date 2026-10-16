@@ -8,6 +8,7 @@ import {
   count,
   desc,
   eq,
+  getTableColumns,
   inArray,
   isNull,
   like,
@@ -316,6 +317,9 @@ export interface AuditRow {
   subjectType: string
   subjectId: string
   data: Record<string, unknown>
+  /** `at` to the microsecond, as Postgres keeps it. A `Date` holds only milliseconds, and a cursor
+   * cut to those would skip the entries written later in the same millisecond. */
+  mark: string
 }
 
 export interface AuditFilter {
@@ -325,7 +329,7 @@ export interface AuditFilter {
   actors: string[] | null
   subjectId: string | null
   /** The page after this entry, newest first. */
-  after: { at: Date; id: string } | null
+  after: { at: string; id: string } | null
   limit: number
 }
 
@@ -341,9 +345,22 @@ export async function searchAudit(q: Queryable, filter: AuditFilter): Promise<Au
     ...(filter.subjectId === null ? [] : [eq(log.subjectId, filter.subjectId)]),
     ...(filter.after === null
       ? []
-      : [or(lt(log.at, filter.after.at), and(eq(log.at, filter.after.at), lt(log.id, filter.after.id)))]),
+      : [
+          or(
+            sql`${log.at} < ${filter.after.at}::timestamptz`,
+            and(sql`${log.at} = ${filter.after.at}::timestamptz`, lt(log.id, filter.after.id)),
+          ),
+        ]),
   )
-  return q.select().from(log).where(where).orderBy(desc(log.at), desc(log.id)).limit(filter.limit)
+  return q
+    .select({
+      ...getTableColumns(log),
+      mark: sql<string>`to_char(${log.at} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+    })
+    .from(log)
+    .where(where)
+    .orderBy(desc(log.at), desc(log.id))
+    .limit(filter.limit)
 }
 
 /** Emails for account ids, and names for server ids, to show who and what an entry is about. */
