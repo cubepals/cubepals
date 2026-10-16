@@ -342,7 +342,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     schedules,
     events,
     links,
-    wakeWaitMs: settings.wakeWaitMs,
+    ...settings,
   })
 
   return {

@@ -568,6 +568,13 @@
       "when": 1792185836776,
       "tag": "0080_compat_plugins",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1792190655189,
+      "tag": "0081_known_addresses",
+      "breakpoints": true
     }
   ]
 }

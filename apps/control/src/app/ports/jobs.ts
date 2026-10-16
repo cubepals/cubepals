@@ -32,6 +32,7 @@ export type ScheduledJob =
   | 'listing-eligibility-sweep'
   | 'admin-alerts'
   | 'free-play-links'
+  | 'known-addresses'
   | 'spend-watchdog'
   | 'creates-room'
   | 'usage-close'

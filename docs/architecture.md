@@ -1309,18 +1309,21 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
     `app/edge/service.ts`); past that the wake is `denied: quota`. Nothing about a connection
     proves who sent it, and each wake costs the owner a run.
   - A deleted server's address answers `denied: deleted`, so its players are told.
-- **`pingWake(hostname)`** (`app/edge/ping-wake.ts`). A server list pinged an asleep server,
-  often just before a join. It starts the server as a wake would, without waiting for it, where its
-  start is a boot: one at rest, or one whose sleep stopped it (`server_runtimes.memory_kept_at` is
-  null), since a resume is about as quick as the click. It answers `{ waking }`. It starts nothing:
+- **`pingWake(hostname, address)`** (`app/edge/ping-wake.ts`). A server list pinged an asleep
+  server, often just before a join. It starts the server as a wake would, without waiting for it,
+  where its start is a boot from a sleep: one whose sleep stopped it
+  (`server_runtimes.memory_kept_at` is null), since a resume is about as quick as the click, and
+  never a world at rest. It answers `{ waking }`. It starts nothing:
+  - for a ping from anywhere the server's own players haven't joined it from within
+    `AbuseLimits.knownAddressDays` (`app/edge/known-addresses.ts`), or with no address;
   - for a server its owner can't start (the same policy);
   - past `wakesPerHour`;
   - once the owner's included hours are used;
   - for `AbuseLimits.pingWakeHoldHours` after a ping wake nobody joined, unless someone played
     since.
 
-  Its run is a woken one, so the probation puts it back to sleep unjoined. The times are in
-  [waking.md](waking.md).
+  Its run is a woken one, so the probation puts it back to sleep unjoined, and it counts toward no
+  hours until the server itself sees a player on it. The times are in [waking.md](waking.md).
 - **`idleHint(hostname)`.** Triggers an immediate idle evaluation. Only the idle policy
   (`Schedules.evaluateIdle`, entitlement-aware: some plans never idle-stop) decides whether to
   stop. The edge timer is
@@ -1328,7 +1331,9 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
 - **`recordSession`.** Upserts presence with `source = 'edge'` and bumps
   `server_activity.last_player_at`. This identity is **client-claimed**, so it's used for
   display and activity only, never for authorization. `presence-sync` (RCON `list`) is
-  authoritative and overwrites it.
+  authoritative and overwrites it. A disconnect carries the client's address: its network becomes
+  one the server's pings may wake it from where the server's own reading had that player on
+  (`known-addresses.ts`), kept only as a hash keyed to the server.
 
 ### Edge side (`apps/edge`): the only mc-router-aware code
 

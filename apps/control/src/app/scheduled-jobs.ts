@@ -137,6 +137,11 @@ export function scheduledJobs(
       says: (n) => `${n} free accounts now share another's free hours`,
     },
     {
+      job: 'known-addresses',
+      run: () => app.edge.forgetAddresses(),
+      says: (n) => `forgot ${n} networks that no longer wake a server with a ping`,
+    },
+    {
       job: 'admin-alerts',
       run: async () => {
         const { cleared } = await app.alerts.sweep()

@@ -8,7 +8,7 @@ import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:
  * Per-server secrets are derived, never stored: HMAC of the deployment's key over the server id
  * and a purpose. Rotating the key rotates every server on its next apply.
  */
-export type SecretPurpose = 'rcon' | 'artifacts'
+export type SecretPurpose = 'rcon' | 'artifacts' | 'addresses'
 
 /**
  * The deployment's runtime keys: rotation is a key-version bump plus an apply (docs/configuration.md,

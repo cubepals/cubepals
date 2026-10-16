@@ -186,6 +186,7 @@ const AbuseLimits = z
       // Optional, so a deployment's ABUSE_LIMITS from before it existed still parses.
       inviteJoinsPerHour: Count.default(DEFAULT_ABUSE_LIMITS.inviteJoinsPerHour),
       pingWakeHoldHours: Count.default(DEFAULT_ABUSE_LIMITS.pingWakeHoldHours),
+      knownAddressDays: Count.default(DEFAULT_ABUSE_LIMITS.knownAddressDays),
     },
     { error: 'ABUSE_LIMITS is the deployment’s abuse limits, as JSON (docs/configuration.md)' },
   )

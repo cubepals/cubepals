@@ -54,6 +54,13 @@ export interface AbuseLimits {
    */
   pingWakeHoldHours: number
   /**
+   * How long after a player's join ends the network they joined from may still wake the server
+   * with a ping, in days; it is forgotten then (`app/edge/known-addresses.ts`). Long enough to
+   * cover a group's usual gap between sessions, short enough that an address handed on to someone
+   * else soon stops counting.
+   */
+  knownAddressDays: number
+  /**
    * People one invite link may let in an hour. A link is meant for friends; a leaked one should
    * cost its holder little and its owner nothing. A class or a club joining at once needs more.
    */
@@ -88,6 +95,7 @@ export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {
   wrongCodesPerHour: 5,
   wakesPerHour: 20,
   pingWakeHoldHours: 24,
+  knownAddressDays: 7,
   inviteJoinsPerHour: 10,
 }
 

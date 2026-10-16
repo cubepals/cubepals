@@ -596,6 +596,8 @@ const CRON: Record<ScheduledJob, string> = {
   'admin-alerts': '*/5 * * * *',
   // Free accounts their players show are one group's, linked before the next alert sweep reads them.
   'free-play-links': '*/5 * * * *',
+  // Networks that no longer wake a server with a ping, forgotten: counted by the day, so hourly.
+  'known-addresses': '31 * * * *',
   // A day's spend against its limit. At the most the platform runs at
   // once, ten minutes between passes is about 35 cents past the limit before it pauses.
   'spend-watchdog': '*/10 * * * *',
