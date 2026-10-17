@@ -17,7 +17,7 @@
  * It is not where servers stop at the end of what was allowed: `AccountService.enforceLimits` is.
  */
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
-import { type Db, schema } from '@blockly/db'
+import { type Db, type Queryable, schema } from '@blockly/db'
 import { and, asc, count, desc, eq, gt, gte, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm'
 import { type Entitlements, entitlementsFor } from '../../domain/account/entitlements.ts'
 import { extraBeforeStop, extraPlay } from '../../domain/account/extra-play.ts'
@@ -39,7 +39,7 @@ import {
 } from '../ports/optional.ts'
 import { tuning } from '../tuning.ts'
 import { meteredMonth } from './chip-in-meter.ts'
-import { billingFacts, extraStoppedAt, latestSubscription } from './persistence.ts'
+import { billingFacts, extraStoppedAt, keepMonthBlock, latestSubscription } from './persistence.ts'
 
 const months = schema.extraPlayMonths
 const reports = schema.extraPlayReports
@@ -119,13 +119,15 @@ export class ExtraUsage {
    * takes them back, and hours played while it couldn't use extra (servers sleep then) are never
    * counted. A month before this one is final (`finalAt`) once it has been over `FINAL_AFTER_MS`
    * and nothing that ran in it still runs; it is counted for the last time then. True when
-   * something new was counted.
+   * something new was counted. This month's block is kept as the most it was (`keepMonthBlock`),
+   * so hours lowered later in the month never turn play they covered into extra.
    */
   async count(userId: string, now = new Date(), read?: AccountStanding): Promise<boolean> {
     const standing = read ?? (await loadStanding(this.#db, userId, now))
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
     if (plan.includedUnits === null) return false
     const zone = standing.timeZone ?? DEFAULT_TIME_ZONE
+    await keepMonthBlock(this.#db, userId, monthOf(now, zone), plan.includedUnits)
     const allowance = await this.#allowance(standing, plan, now)
     let grew = false
     for (const month of await this.#months(userId, now, zone, allowance !== null)) {
@@ -161,13 +163,15 @@ export class ExtraUsage {
   /**
    * What the account may count, and up to when: while it may play extra, what it allowed, up to
    * now; once it stopped (a cancel, a failed renewal, an ending), what it could use before, up to
-   * that moment (`extraStoppedAt`). Null when it never could.
+   * that moment (`extraStoppedAt`). Null when it never could, and on a test account, whose play
+   * is never sent to be billed (`extraPlayNow`).
    */
   async #allowance(
     standing: AccountStanding,
     plan: Entitlements,
     now: Date,
   ): Promise<{ units: number; until: Date } | null> {
+    if (standing.testAccount) return null
     const facts = await billingFacts(this.#db, standing.userId)
     const decision = extraPlay(plan, standing.extraUnitsAllowed, facts, tuning().abuse.extraCeiling)
     if (decision.may) return { units: decision.units, until: now }
@@ -493,6 +497,20 @@ export class ExtraUsage {
       )
     return rows.map((row) => row.ownerId)
   }
+}
+
+/**
+ * Before an admin changes an account's hours (`AccountService.setLimits`): once it has played this
+ * month, the month keeps the block it has, so hours lowered apply from the next month and play they
+ * covered is never billed as extra. With nothing played yet there is nothing to cover, and they
+ * apply at once.
+ */
+export async function keepPlayedBlock(q: Queryable, userId: string, now: Date): Promise<void> {
+  const standing = await loadStanding(q, userId, now)
+  const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+  const month = await meteredMonth(q, standing, plan, now)
+  if (month !== null && month.units > 0)
+    await keepMonthBlock(q, userId, monthOf(now, standing.timeZone ?? DEFAULT_TIME_ZONE), month.included)
 }
 
 /** What an account's extra play this month comes to: counted, and of that, sent to be billed. */
