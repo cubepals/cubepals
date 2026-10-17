@@ -62,12 +62,6 @@ const JARS_VARIABLE = 'BLOCKLY_JARS'
 export const FILES_VARIABLES = { plain: 'BLOCKLY_FILES', compressed: 'BLOCKLY_FILES_GZ' } as const
 
 /**
- * The most bytes one variable a start is given may hold, well under Linux's 131,072 for a single
- * variable, so a template's files growing is caught by a test long before a machine refuses them.
- */
-export const VARIABLE_BYTES_LIMIT = 64 * 1024
-
-/**
  * The step. Names hold no spaces or quotes (`placeablePath`), so the shell splits lines on spaces.
  * What the last start wrote and this revision doesn't is removed; a placed jar already holding
  * its bytes is kept, and any other is fetched and checked against its sha512 before it is moved
