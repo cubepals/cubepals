@@ -568,6 +568,10 @@ const account = router({
           overview.plan.gifted === null
             ? null
             : { ...overview.plan.gifted, until: overview.plan.gifted.until.toISOString() },
+        giftNext:
+          overview.plan.giftNext === null
+            ? null
+            : { ...overview.plan.giftNext, startsAt: overview.plan.giftNext.startsAt.toISOString() },
       },
     }
   }),

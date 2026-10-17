@@ -23,6 +23,7 @@ import { type Actor, runsThePlatform } from '../actor.ts'
 import { settleable } from '../billing/balance.ts'
 import { meteredMonth, meteredUnitsSince } from '../billing/chip-in-meter.ts'
 import { extraThisMonth } from '../billing/extra-usage.ts'
+import { giftNext } from '../billing/gifts.ts'
 import { extraPlayNow, giftedPlan, latestSubscription, PAST_DUE_GRACE_MS } from '../billing/persistence.ts'
 import { yearView } from '../billing/years.ts'
 import { NotFound } from '../errors.ts'
@@ -82,6 +83,8 @@ export interface AccountOverview {
     year: { planKey: string; startsAt: Date; endsAt: Date; renewed: boolean } | null
     /** A redeemed gift that gives the plan now, and when the gifted time runs out. */
     gifted: { planKey: string; until: Date } | null
+    /** A redeemed gift waiting to start, once the time the account has paid for ends. */
+    giftNext: { planKey: string; months: number; startsAt: Date } | null
   }
   entitlements: Entitlements
   /** The sizes the plan allows, as somebody reads them: "3 GB · up to 5 players". */
@@ -210,6 +213,7 @@ export class AccountQueries {
               },
         year: await yearView(this.#db, userId, now),
         gifted,
+        giftNext: await giftNext(this.#db, userId, now),
       },
       entitlements,
       settings: { afkKickMinutes: standing.afkKickMinutes },

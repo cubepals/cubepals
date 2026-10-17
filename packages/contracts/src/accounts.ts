@@ -256,6 +256,8 @@ export interface AccountOverviewView {
     year: { planKey: string; startsAt: string; endsAt: string; renewed: boolean } | null
     /** A redeemed gift that gives the plan now, and when the gifted time runs out. */
     gifted: { planKey: string; until: string } | null
+    /** A redeemed gift waiting to start, once the time the account has paid for ends. */
+    giftNext: { planKey: string; months: number; startsAt: string } | null
   }
   entitlements: EntitlementsView
   /** What the owner has set for themselves, where their plan lets them. */

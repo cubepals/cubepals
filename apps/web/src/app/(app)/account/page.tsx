@@ -467,11 +467,13 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
 
 /** What the account's plan section says under its name: what pays for the plan, and until when. */
 function planSummary(overview: AccountOverviewView): string {
-  const { key, billed, year, gifted } = overview.plan
+  const { key, billed, year, gifted, giftNext } = overview.plan
   if (year !== null) return yearSummary(year, gifted !== null)
   const paying = billed !== null && billed.status !== 'ended' && billed.planKey === key
   if (paying && billed.pastDueUntil)
     return `Your last payment didn’t go through. Update your card in Manage billing by ${dayOf(billed.pastDueUntil)} to keep ${title(key)}.`
+  if (paying && billed.periodEnd && !billed.cancelAtPeriodEnd && giftNext !== null)
+    return `Renews on ${dayOf(billed.periodEnd)}. ${giftWaits(giftNext)}`
   if (paying && billed.periodEnd)
     return billed.cancelAtPeriodEnd
       ? `Ends on ${dayOf(billed.periodEnd)}; then you're on the free trial.`
@@ -481,6 +483,12 @@ function planSummary(overview: AccountOverviewView): string {
   return key !== 'free'
     ? 'Given to this account by Cubepals.'
     : 'No card, and nothing is charged when it ends.'
+}
+
+/** A gift waiting while the plan renews: it starts once the time being paid for ends. */
+function giftWaits(gift: NonNullable<AccountOverviewView['plan']['giftNext']>): string {
+  const what = gift.months === 1 ? 'gifted month now starts' : `gifted ${gift.months} months now start`
+  return `Your ${what} on ${dayOf(gift.startsAt)}, after the month you’re paying for.`
 }
 
 /**
