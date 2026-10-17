@@ -435,9 +435,6 @@ const PAPER_THROTTLE_STEP = [
   `else printf 'settings:\n  connection-throttle: -1\n' > ${DATA_DIR}/bukkit.yml; fi;`,
 ].join(' ')
 
-/** What a Paper server's start put in place first before it read PROXY headers. */
-const PAPER_THROTTLE_ONLY_STEP = `${PAPER_JAR_STEP} ${PAPER_THROTTLE_STEP}`
-
 /**
  * Paper reads a PROXY protocol header before each connection (`proxies.proxy-protocol`, in its
  * global configuration since 1.19, so on every Paper release Cubepals offers) where `PROXY_ENV`
@@ -463,7 +460,7 @@ const PAPER_PROXY_STEP = [
 ].join(' ')
 
 /** What a Paper server's start puts in place first: its jar, the throttle off, then the PROXY header read. */
-const PAPER_STEP = `${PAPER_THROTTLE_ONLY_STEP} ${PAPER_PROXY_STEP}`
+const PAPER_STEP = `${PAPER_JAR_STEP} ${PAPER_THROTTLE_STEP} ${PAPER_PROXY_STEP}`
 
 /** The image's own entrypoint, which a server's runs after Blockly's steps. */
 const IMAGE_ENTRYPOINT = '/image/scripts/start'
@@ -484,7 +481,6 @@ function entrypointFor(steps: {
   pack: boolean
   carried: boolean
 }): readonly string[] {
-  // The files steps lead, so `withoutFilesStep` leaves the rest as it was before them.
   const script = [
     steps.paper ? PAPER_STEP : DIMENSIONS_STEP,
     DATAPACKS_STEP,
@@ -499,26 +495,13 @@ function entrypointFor(steps: {
 }
 
 /**
- * The entrypoint without its files steps and `WAKE_STEP`, as it was before those steps existed:
- * what drift compares, so a step, which changes nothing a running server does, restarts none. It
- * arrives at the next start. What the datapacks step installs is in the environment, which drift
- * compares.
+ * The entrypoint as drift compares it: none, where it is Blockly's own steps before the image's
+ * start, which every Minecraft server's is. Each step acts on what the environment says, and drift
+ * compares the environment, so a new text of a step restarts no running server and boots no
+ * sleeping one: it arrives at the next start.
  */
-export function withoutFilesStep(entrypoint: readonly string[] | undefined): readonly string[] | undefined {
-  const script = entrypoint?.[2]
-  if (entrypoint === undefined || script === undefined) return entrypoint
-  let rest = script.replace(`${WAKE_STEP} `, '')
-  // A Paper server's whole step first, then each it ran before: without the PROXY header read, and
-  // without the throttle too.
-  for (const steps of [
-    [PAPER_STEP, PAPER_THROTTLE_ONLY_STEP, PAPER_JAR_STEP, DIMENSIONS_STEP],
-    [DATAPACKS_STEP],
-  ]) {
-    const step = steps.find((s) => rest.startsWith(`${s} `))
-    if (step !== undefined) rest = rest.slice(step.length + 1)
-  }
-  if (rest === script) return entrypoint
-  return rest === EXEC_IMAGE ? undefined : [...entrypoint.slice(0, 2), rest, ...entrypoint.slice(3)]
+export function withoutOwnSteps(entrypoint: readonly string[] | undefined): readonly string[] | undefined {
+  return entrypoint?.[2]?.endsWith(EXEC_IMAGE) === true ? undefined : entrypoint
 }
 
 export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {

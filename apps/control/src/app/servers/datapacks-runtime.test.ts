@@ -17,7 +17,7 @@ import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import { DATAPACKS_STEP, datapackName } from '../../minecraft/datapacks.ts'
 import { installCheck } from '../../minecraft/install-check.ts'
-import { toRuntimeSpec, withoutFilesStep } from '../../minecraft/runtime-spec.ts'
+import { toRuntimeSpec, withoutOwnSteps } from '../../minecraft/runtime-spec.ts'
 import { levelTypeEnv, VOID_LEVEL } from '../../minecraft/worlds.ts'
 import { pinUpload } from '../mods/uploads.ts'
 
@@ -161,9 +161,10 @@ describe('datapacks in a revision', () => {
     const plain = toRuntimeSpec({ ...input, revision })
     expect(plain.entrypoint?.[2]).toContain(DATAPACKS_STEP)
     expect(plain.env.BLOCKLY_DATAPACKS).toBeUndefined()
-    expect(withoutFilesStep(plain.entrypoint)).toBeUndefined()
+    expect(withoutOwnSteps(plain.entrypoint)).toBeUndefined()
     const icon = toRuntimeSpec({ ...input, revision, iconUrl: 'http://control.test/grass.png' })
-    expect(withoutFilesStep(icon.entrypoint)?.[2]).toStartWith('if [ -n "$ICON" ]')
+    expect(icon.entrypoint?.[2]).toContain(DATAPACKS_STEP)
+    expect(withoutOwnSteps(icon.entrypoint)).toBeUndefined()
   })
 })
 

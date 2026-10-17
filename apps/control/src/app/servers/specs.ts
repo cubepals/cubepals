@@ -20,7 +20,7 @@ import {
   PROXY_ENV,
   toRuntimeSpec,
   usesProxyProtocol,
-  withoutFilesStep,
+  withoutOwnSteps,
 } from '../../minecraft/runtime-spec.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import type { BuiltPack } from '../artifacts/brand-pack.ts'
@@ -74,14 +74,15 @@ export function specDigest(spec: RuntimeSpec): string {
 }
 
 /**
- * The spec as drift sees it: without what the owner's plan sets, the picture they chose, the
- * step that moves a Paper world's Nether and End back for another server type, or Paper's reading
- * a PROXY protocol header, which a server running from before it was asked takes at its next start.
+ * The spec as drift sees it: without what the owner's plan sets, the picture they chose, Paper's
+ * reading a PROXY protocol header, which a server running from before it was asked takes at its
+ * next start, or Blockly's own steps before the image starts (`withoutOwnSteps`), whose text can
+ * change without changing what a server runs.
  */
 export function withoutPlanLimits(spec: RuntimeSpec): RuntimeSpec {
   const ignored = [...PLAN_ENV, ...IDENTITY_ENV, PROXY_ENV]
   const { entrypoint: _entrypoint, ...rest } = spec
-  const entrypoint = withoutFilesStep(spec.entrypoint)
+  const entrypoint = withoutOwnSteps(spec.entrypoint)
   return {
     ...rest,
     ...(entrypoint === undefined ? {} : { entrypoint }),
