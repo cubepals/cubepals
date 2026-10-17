@@ -18,6 +18,7 @@ import type { ServerRevision } from '../../domain/revision/revision.ts'
 import { DATAPACKS_STEP, datapackName } from '../../minecraft/datapacks.ts'
 import { installCheck } from '../../minecraft/install-check.ts'
 import { toRuntimeSpec, withoutOwnSteps } from '../../minecraft/runtime-spec.ts'
+import { UNLINKED } from '../../minecraft/volume-links.ts'
 import { levelTypeEnv, VOID_LEVEL } from '../../minecraft/worlds.ts'
 import { pinUpload } from '../mods/uploads.ts'
 
@@ -219,7 +220,8 @@ describe('the datapacks step', () => {
   const run = async (level: string, lines: string[]) => {
     const env: Record<string, string> = { PATH: process.env.PATH ?? '/usr/bin:/bin', LEVEL: level }
     if (lines.length > 0) env.BLOCKLY_DATAPACKS = lines.join('\n')
-    const script = DATAPACKS_STEP.replaceAll('"/data/', `"${volume}/`)
+    // With what a start's script defines before its steps, on this volume.
+    const script = `${UNLINKED} ${DATAPACKS_STEP}`.replace(/\/data(?![A-Za-z])/g, volume)
     const step = Bun.spawn(['sh', '-c', script], { env, stderr: 'pipe' })
     return { exitCode: await step.exited, stderr: await new Response(step.stderr).text() }
   }

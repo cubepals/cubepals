@@ -22,6 +22,7 @@ import { DATA_DIR, JAR_LISTS, jarsOf } from './jars.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
 import { STARTER_STEP, starterEnv, starterOf } from './starter.ts'
 import { javaFor } from './versions.ts'
+import { UNLINKED } from './volume-links.ts'
 import { WAKE_STEP } from './wake-step.ts'
 import { levelTypeEnv } from './worlds.ts'
 
@@ -290,12 +291,13 @@ function modsEnv(input: RuntimeSpecInput): Record<string, string> {
  */
 function jarListStep(variable: 'MODS' | 'PLUGINS'): string {
   const file = `/tmp/blockly-${variable.toLowerCase()}`
-  const mark = `${DATA_DIR}/.blockly-${variable.toLowerCase()}-file`
+  const record = `.blockly-${variable.toLowerCase()}-file`
+  const mark = `${DATA_DIR}/${record}`
   const { compressed } = JAR_LISTS[variable]
   return [
     `rm -f ${file}; if [ -n "$${compressed}" ]; then printf %s "$${compressed}" | base64 -d | gzip -dc > ${file} || exit 1;`,
     `elif [ -n "\${${variable}+x}" ] && [ -f ${mark} ]; then printf %s "$${variable}" | tr , '\\n' > ${file}; fi;`,
-    `if [ -f ${file} ]; then export ${variable}= ${variable}_FILE=${file}; : > ${mark}; fi;`,
+    `if [ -f ${file} ]; then export ${variable}= ${variable}_FILE=${file}; unlinked ${record}; : > ${mark}; fi;`,
   ].join(' ')
 }
 
@@ -348,7 +350,8 @@ function exactPath(path: string): string {
 }
 
 /** Where the volume remembers which pack file it holds, and the variable naming the one pinned. */
-const PACK_MARK = `${DATA_DIR}/.blockly-pack`
+const PACK_RECORD = '.blockly-pack'
+const PACK_MARK = `${DATA_DIR}/${PACK_RECORD}`
 const PACK_VARIABLE = 'BLOCKLY_PACK'
 
 /**
@@ -363,7 +366,7 @@ const PACK_VARIABLE = 'BLOCKLY_PACK'
  */
 const PACK_STEP = [
   `if [ "$(cat ${PACK_MARK} 2>/dev/null)" != "$${PACK_VARIABLE}" ]; then`,
-  `rm -f ${DATA_DIR}/modpack.mrpack;`,
+  `rm -f ${DATA_DIR}/modpack.mrpack; unlinked ${PACK_RECORD};`,
   `printf %s "$${PACK_VARIABLE}" > ${PACK_MARK};`,
   'fi;',
 ]
@@ -452,7 +455,7 @@ const PAPER_JAR_STEP = [
  * changed, and a new one is given the setting alone, which Paper fills out with its defaults.
  */
 const PAPER_THROTTLE_STEP = [
-  `if [ -f ${DATA_DIR}/bukkit.yml ]; then sed -i 's/^  connection-throttle: .*/  connection-throttle: -1/' ${DATA_DIR}/bukkit.yml;`,
+  `unlinked bukkit.yml; if [ -f ${DATA_DIR}/bukkit.yml ]; then sed -i 's/^  connection-throttle: .*/  connection-throttle: -1/' ${DATA_DIR}/bukkit.yml;`,
   `else printf 'settings:\n  connection-throttle: -1\n' > ${DATA_DIR}/bukkit.yml; fi;`,
 ].join(' ')
 
@@ -468,16 +471,19 @@ const PAPER_THROTTLE_STEP = [
  * The step runs as root, before the image runs the server as the volume's owner, so what it and the
  * throttle step write is handed to that owner: a `config` directory left as root's keeps Paper from
  * writing its world defaults there, and it stops at its first start, and a `bukkit.yml` left as
- * root's can't be saved (tried 2026-10-15 with Paper 1.21.1-133).
+ * root's can't be saved (tried 2026-10-15 with Paper 1.21.1-133). Being root, the two steps replace
+ * any link on the way to what they write (`volume-links.ts`), and hand over the files themselves,
+ * never what a link names.
  */
 const PAPER_PROXY_SETTING = 'print "proxies:"; print "  proxy-protocol: " v'
 const PAPER_PROXY_STEP = [
   `v=false; if [ "$${PROXY_ENV}" = TRUE ]; then v=true; fi;`,
+  'unlinked config/paper-global.yml; unlinked config/paper-global.yml.new;',
   `g=${DATA_DIR}/config/paper-global.yml; mkdir -p ${DATA_DIR}/config; if [ -f "$g" ]; then`,
   `awk -v v="$v" '/^  proxy-protocol:/ { next } /^proxies:/ { ${PAPER_PROXY_SETTING}; p = 1; next } { print }`,
-  `END { if (!p) { ${PAPER_PROXY_SETTING} } }' "$g" > "$g.new" && mv "$g.new" "$g";`,
+  `END { if (!p) { ${PAPER_PROXY_SETTING} } }' "$g" > "$g.new" && mv -fT "$g.new" "$g";`,
   `else printf 'proxies:\\n  proxy-protocol: %s\\n' "$v" > "$g"; fi;`,
-  `chown "$(ls -nd ${DATA_DIR} | awk '{ print $3 ":" $4 }')" ${DATA_DIR}/config "$g" ${DATA_DIR}/bukkit.yml;`,
+  `chown -h "$(ls -nd ${DATA_DIR} | awk '{ print $3 ":" $4 }')" ${DATA_DIR}/config "$g" ${DATA_DIR}/bukkit.yml;`,
 ].join(' ')
 
 /** What a Paper server's start puts in place first: its jar, the throttle off, then the PROXY header read. */
@@ -488,7 +494,8 @@ const IMAGE_ENTRYPOINT = '/image/scripts/start'
 const EXEC_IMAGE = `exec ${IMAGE_ENTRYPOINT} "$@"`
 
 /**
- * The image's own entrypoint, after Blockly's steps. The first puts the volume's files as the
+ * The image's own entrypoint, after Blockly's steps, which run as root on the volume: before them,
+ * what they call to replace a link where they write (`volume-links.ts`). The first puts the volume's files as the
  * server type reads them (`PAPER_STEP` on Paper, `DIMENSIONS_STEP` on any other), and the
  * second the world's datapacks (`DATAPACKS_STEP`); the world a template starts on
  * (`STARTER_STEP`), the icon, the pack, the files Cubepals places itself and the list of jars the
@@ -504,6 +511,7 @@ function entrypointFor(steps: {
   jars: 'MODS' | 'PLUGINS' | null
 }): readonly string[] {
   const script = [
+    UNLINKED,
     steps.paper ? PAPER_STEP : DIMENSIONS_STEP,
     DATAPACKS_STEP,
     ...(steps.starter ? [STARTER_STEP] : []),

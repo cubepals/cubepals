@@ -48,7 +48,31 @@ const KEPT_BY_BLOCKLY: ReadonlySet<string> = new Set([
 ])
 
 /** Where the volume remembers what this step wrote, so what a later revision drops goes too. */
-const PLACED_MARK = `${DATA_DIR}/.blockly-files`
+const PLACED_RECORD = '.blockly-files'
+const PLACED_MARK = `${DATA_DIR}/${PLACED_RECORD}`
+
+/**
+ * A line of the record that `placeablePath` refuses, as a shell `case` pattern: never a path the
+ * step wrote. The record is on the volume, where the server can change it, so such a line is
+ * passed over rather than removed.
+ */
+const UNPLACEABLE = [
+  "''",
+  '*[!A-Za-z0-9._+/-]*',
+  '/*',
+  '*/',
+  '*//*',
+  '.',
+  '..',
+  './*',
+  '../*',
+  '*/./*',
+  '*/../*',
+  '*/.',
+  '*/..',
+  '.blockly*',
+  ...KEPT_BY_BLOCKLY,
+].join('|')
 
 /**
  * Each placed jar on one line: its path, its sha512 and its link. A start given more of them than
@@ -73,18 +97,21 @@ export const FILES_VARIABLES = {
  * What the last start wrote and this revision doesn't is removed; a placed jar already holding
  * its bytes is kept, and any other is fetched and checked against its sha512 before it is moved
  * into place, or the start stops with what it couldn't fetch. Then every carried file is written.
+ * It runs as root, so it replaces any link on the way to what it writes or removes
+ * (`volume-links.ts`), and never follows one out of the volume.
  */
 export const CARRIED_STEP = [
   // The files' and jars' lines, from their compressed variables, or as an earlier start gave them.
   readList('files', FILES_VARIABLES),
   readList('jars', JARS_VARIABLES),
-  `placed=$(printf '%s\\n%s\\n' "$jars" "$files" | cut -d ' ' -f 1);`,
-  `for old in $(cat ${PLACED_MARK} 2>/dev/null); do case " $(echo $placed) " in *" $old "*) ;; *) rm -f "${DATA_DIR}/$old";; esac; done;`,
-  `printf '%s\\n' "$jars" | while read -r path sha url; do [ -n "$path" ] || continue; f="${DATA_DIR}/$path";`,
-  `if [ "$(sha512sum "$f" 2>/dev/null | cut -d ' ' -f 1)" != "$sha" ]; then mkdir -p "$(dirname "$f")" &&`,
-  `curl -fsSL --retry 3 --max-time 300 -o "$f.part" "$url" && [ "$(sha512sum "$f.part" | cut -d ' ' -f 1)" = "$sha" ] && mv "$f.part" "$f"`,
+  `placed=$(printf '%s\\n%s\\n' "$jars" "$files" | cut -d ' ' -f 1); unlinked ${PLACED_RECORD};`,
+  `if [ -f ${PLACED_MARK} ]; then while read -r old; do case "$old" in ${UNPLACEABLE}) continue;; esac;`,
+  `case " $(echo $placed) " in *" $old "*) ;; *) unlinked "$old"; rm -f "${DATA_DIR}/$old";; esac; done < ${PLACED_MARK}; fi;`,
+  `printf '%s\\n' "$jars" | while read -r path sha url; do [ -n "$path" ] || continue; unlinked "$path"; f="${DATA_DIR}/$path";`,
+  `if [ "$(sha512sum "$f" 2>/dev/null | cut -d ' ' -f 1)" != "$sha" ]; then mkdir -p "$(dirname "$f")" && rm -f "$f.part" &&`,
+  `curl -fsSL --retry 3 --max-time 300 -o "$f.part" "$url" && [ "$(sha512sum "$f.part" | cut -d ' ' -f 1)" = "$sha" ] && mv -fT "$f.part" "$f"`,
   `|| { rm -f "$f.part"; echo "Cubepals could not fetch $path" >&2; exit 1; }; fi; done || exit 1;`,
-  `printf '%s\\n' "$files" | while read -r path data; do [ -n "$path" ] || continue;`,
+  `printf '%s\\n' "$files" | while read -r path data; do [ -n "$path" ] || continue; unlinked "$path";`,
   `mkdir -p "$(dirname "${DATA_DIR}/$path")" && printf %s "$data" | base64 -d > "${DATA_DIR}/$path" || exit 1; done || exit 1;`,
   `printf '%s\\n' $placed > ${PLACED_MARK};`,
 ].join(' ')
