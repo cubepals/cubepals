@@ -7,16 +7,18 @@
  * lock, before a node is asked to start a copy, so two starts can't both take the last of it; and
  * given back when the copy stops, or when the node, the final arbiter, refuses it for room. It
  * owns the claim's columns of a placement: `desired_power`, `power_changed_at`, and the memory and
- * CPU it claims.
+ * CPU it claims. The node's answer to a power command counts as its report of the copy at once
+ * (`answered`), so a copy that stopped frees its room before the node's next heartbeat.
  *
  * Choosing a node is `node-choice.ts`'s; moving a server to one with room is `rehoming.ts`'s.
  */
 import type { Db, Queryable } from '@blockly/db'
 import { sql } from 'drizzle-orm'
 import { RuntimeFull, type RuntimeSpec } from '../../../app/ports/runtime.ts'
-import { NodeRefused } from '../node-client.ts'
+import { NodeRefused, NodeUnreachable } from '../node-client.ts'
 import type { PlacementRequest } from '../placement.ts'
-import { lockRegion, type NodeRow } from '../registry.ts'
+import { answered, lockRegion, type NodeRow } from '../registry.ts'
+import { event, rows } from '../sql.ts'
 import type { EnsureResponse, PowerResponse } from '../wire.ts'
 import { type Ledger, type PlacementRow, placementOf, StaleHandle } from './ledger.ts'
 import type { NodeChoice } from './node-choice.ts'
@@ -27,14 +29,14 @@ export const NO_ROOM = new Set(['insufficient_capacity', 'no_free_ports', 'insuf
 
 export class Admission {
   readonly #db: Db
-  readonly #api: Pick<WorkloadApi, 'put' | 'power'>
+  readonly #api: Pick<WorkloadApi, 'put' | 'power' | 'view'>
   readonly #choice: Pick<NodeChoice, 'refusalToStart'>
   readonly #ledger: Pick<Ledger, 'undoRefused'>
   readonly #provider: string
 
   constructor(options: {
     db: Db
-    api: Pick<WorkloadApi, 'put' | 'power'>
+    api: Pick<WorkloadApi, 'put' | 'power' | 'view'>
     choice: Pick<NodeChoice, 'refusalToStart'>
     ledger: Pick<Ledger, 'undoRefused'>
     provider: string
@@ -114,17 +116,60 @@ export class Admission {
 
   /**
    * A power command to the node. A start's claim on the node's memory is written before it is sent
-   * (`claim`); a stop or a kill gives the claim back once the node has done it.
+   * (`claim`); a stop or a kill gives the claim back once the node has done it, and the node's
+   * answer saying the copy no longer runs frees its room at once.
+   *
+   * A kill is what is asked when a stop failed for good, so that nothing runs that nobody asked
+   * for. When the node can't be reached for it, the claim is given back all the same and the kill
+   * ends without its answer: the server rests stopped on what it ran, as on Fly. A node out of
+   * reach restarts nothing once its lease runs out, and a copy still running when it is back is
+   * stopped then, as stray compute behind a stopped server is.
    */
   async power(
     node: NodeRow,
     key: string,
     epoch: number,
     verb: 'start' | 'stop' | 'kill',
-  ): Promise<PowerResponse> {
-    const response = await this.#api.power(node, key, epoch, verb)
+  ): Promise<PowerResponse | null> {
+    let response: PowerResponse
+    try {
+      response = await this.#api.power(node, key, epoch, verb)
+    } catch (error) {
+      if (!(verb === 'kill' && error instanceof NodeUnreachable)) throw error
+      await this.unclaim(key, epoch)
+      await event(this.#db, 'power.unanswered', {
+        node: node.id,
+        workload: key,
+        epoch,
+        data: { verb, error: error.message },
+      })
+      return null
+    }
     if (verb !== 'start') await this.unclaim(key, epoch)
+    await answered(this.#db, node.id, response.workload)
     return response
+  }
+
+  /**
+   * Asks a node the ledger counts full how its copies are now, before a start moves a server off it
+   * for room: a copy that stopped since the node last reported it frees its room here. True when
+   * any report changed. A copy the node can't say anything about keeps its last report.
+   */
+  async lookAgain(node: NodeRow): Promise<boolean> {
+    const held = await rows<{ workload: string }>(
+      this.#db,
+      sql`SELECT workload FROM fleet_observations
+          WHERE node_id = ${node.id} AND state IN ('creating', 'running', 'restarting', 'stopping', 'suspended')`,
+    )
+    let changed = false
+    for (const { workload } of held) {
+      try {
+        if (await answered(this.#db, node.id, await this.#api.view(node, workload))) changed = true
+      } catch (error) {
+        if (!(error instanceof NodeRefused || error instanceof NodeUnreachable)) throw error
+      }
+    }
+    return changed
   }
 
   /** Claims room to run on `node`, then starts the copy there: RuntimeFull when it has none now. */

@@ -4,14 +4,16 @@
 
 /**
  * The registry as placement and operators read it: each node with the ledger's reservations on it,
- * and the health upkeep records for it.
- * It changes no node's lifecycle (`lifecycle.ts`) and takes no report from a node (`heartbeat.ts`).
+ * and the health upkeep records for it; and a node's own answer about one copy, which the ledger
+ * counts as soon as it comes rather than at the node's next heartbeat.
+ * It changes no node's lifecycle (`lifecycle.ts`) and takes no heartbeat (`heartbeat.ts`).
  */
 import type { Db, Queryable } from '@blockly/db'
 import { sql } from 'drizzle-orm'
 import type { Health, Thresholds } from '../health.ts'
 import type { NodeView } from '../placement.ts'
-import { event, one, rows } from '../sql.ts'
+import { event, exec, one, rows } from '../sql.ts'
+import type { WorkloadView } from '../wire.ts'
 import { healthOf, NODE_COLUMNS, type NodeRow } from './node.ts'
 import { listeningSeconds } from './presence.ts'
 
@@ -25,14 +27,15 @@ export interface NodeSummary extends NodeRow {
 
 /**
  * Whether placement `p` holds memory and CPU on its node, `o` being its node's report of the copy:
- * while it is being made; while the node reports the copy in use; and from a start until the node
- * reports the copy stopped. A copy made and not yet started (`created`) keeps a start's claim. A
- * sleeping server holds none of either, only its disk (docs/fleet.md, "Admission").
+ * while it is being made; while the node reports the copy in use, or suspended with its memory
+ * kept; and from a start until the node reports the copy stopped. A copy made and not yet started
+ * (`created`) keeps a start's claim. A sleeping server holds none of either, only its disk
+ * (docs/fleet.md, "Admission").
  */
 const HOLDS = sql.raw(`(
   p.state = 'placing'
   OR (p.state = 'placed' AND (
-    COALESCE(o.state IN ('creating', 'running', 'restarting', 'stopping'), false)
+    COALESCE(o.state IN ('creating', 'running', 'restarting', 'stopping', 'suspended'), false)
     OR (p.desired_power = 'running' AND NOT COALESCE(
       o.state IN ('stopped', 'crashed', 'missing', 'retained', 'fenced')
         AND o.state_changed_at >= p.power_changed_at, false))
@@ -48,6 +51,23 @@ export async function holdsMemory(q: Queryable, workload: string): Promise<boole
         WHERE p.workload = ${workload}`,
   )
   return row?.holds === true
+}
+
+/**
+ * The node's own answer about its copy of `workload` (to a stop, a kill, a start, or a read),
+ * taken as its latest report of the copy's state, so the memory a copy that no longer runs held is
+ * free at once. Only for the copy of the epoch the node last reported: a copy it hasn't reported
+ * yet waits for its heartbeat, which carries the rest of the report. False when nothing changed.
+ */
+export async function answered(q: Queryable, nodeId: string, view: WorkloadView): Promise<boolean> {
+  const written = await exec(
+    q,
+    sql`UPDATE fleet_observations SET state = ${view.state}, state_changed_at = now(), observed_at = now(),
+          report = jsonb_set(report, '{state}', to_jsonb(${view.state}::text))
+        WHERE node_id = ${nodeId} AND workload = ${view.id} AND epoch IS NOT DISTINCT FROM ${view.epoch}
+          AND state <> ${view.state}`,
+  )
+  return written > 0
 }
 
 /** Every node that isn't retired, with the ledger's reservations on it. */
