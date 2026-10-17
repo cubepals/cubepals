@@ -106,7 +106,7 @@ Cubepals follows it:
 | ground | Ink on Paper. Paper on Ink only for the landing page's night and the product's own navigation, never as a page's ground. Stone `#E6E3DC` for what is set down on Paper |
 | type | **Geologica** ([SIL OFL 1.1](https://openfontlicense.org/)). Headings and buttons at weight 700–800 with its sharpness axis at 100, so corners are cut square; running text at sharpness 30. Addresses in IBM Plex Mono. The game's own voice (a chat line, the server list) in Pixelify Sans |
 | shape | square. A block is a fill with a 2px Ink edge; a floating one throws a hard Ink shadow down and to the right; a button stands 3px proud of its edge and goes down onto it when pressed. No rounded corners, no blurred shadows, no gradients |
-| pictures | the world as the landing page prints it: voxels in one-bit dither, Ink on Paper. No photographs and no renders in colour. A print is never scaled, because a scaled dither shimmers |
+| pictures | the world as the landing page prints it: voxels lit and then printed in one-bit dither, Ink on Paper. A dot is a whole number of device pixels: two on a screen at one device pixel to a pixel, three at two and on a phone, so it reads as a print and not as grey; lines where planes meet are one dot thick. No photographs and no renders in colour. A print is never scaled, because a scaled dither shimmers |
 | colour | none of its own. The only colours are the product's status colours where the product shows them (Online is amber, `#8A5A00` on `#FFE9BD`; a sleeping world is dusk, `#4D47B8`) and the small item icons. No coloured type, and no coloured or dark backgrounds |
 
 The tokens are in `apps/web/src/ui/tokens.json`; the landing page (`apps/web/src/landing/`) is

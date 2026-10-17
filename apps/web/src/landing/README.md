@@ -26,8 +26,19 @@ open one. That is Blockly's own rule applied to its page: the complexity is ther
 in the way. (An earlier cut put every section and its control panel on the main line; it read as
 a technical tour, which is why the page is cut this way.)
 
-The chunk is drawn in one-bit dither, one drawn dot to a screen pixel, and stays on screen the
-whole way; the camera flies it in three dimensions. A gauge reads the depth as Minecraft's own Y.
+The chunk is drawn in one-bit dither and stays on screen the whole way; the camera flies it in
+three dimensions. A gauge reads the depth as Minecraft's own Y.
+
+It is lit first and printed after, so the print carries depth. Every block's corners are shaded by
+the blocks round them; one key light (the moon by night, the sun by day) casts shadows from a
+shadow map drawn again only when the light or the world changes; the sky fills in the rest, and a
+room's lamps light it without shadows. The light goes through a tone curve (exposure, contrast,
+gamma) that eases with the camera between three looks, night, day and a room, and is then
+dithered 8 by 8. A dot is two device pixels where a screen pixel is one, and three where it is two,
+so it reads as a print and not as grey; lines where planes meet are one dot thick. Behind the words
+on the picture and the header the print opens to bare ground, its dots thinning out over about 150
+CSS pixels, so no word sits on texture. A lamp is solid torch and its light round it torch dots.
+The coarser print a slow device falls back to gives up the shadow map first.
 
 ## Where things are
 
@@ -37,7 +48,7 @@ whole way; the camera flies it in three dimensions. A gauge reads the depth as M
 | `app/phone/page.tsx` | The page a phone is sent at `/` (`next.config.ts`): the phone's page alone |
 | `landing/Landing.tsx` | What both routes share: the title, what the page reads, and the frame (the foot, the marks, the structured data) |
 | `landing/Layouts.tsx` | Which form a screen gets, by width, before anything runs and after |
-| `landing/film/` | The film: `FilmPage.tsx` (which beats, in which order, and each beat's proof), `Beat` (a screen with a shot and a caption) and `useBeat` (its cues, played on arrival on a clock that scrolling hurries, `clock.ts`), `Proof` (the section opened over a beat), `Film.tsx` (every beat, and what each tells the stage), `Nav.tsx` (the header, which the phone's page has too) |
+| `landing/film/` | The film: `FilmPage.tsx` (which beats, in which order, and each beat's proof), `Beat` (a screen with a shot and a caption) and `useBeat` (its cues, played on arrival on a clock that scrolling hurries, `clock.ts`), `Proof` (the section opened over a beat), `Film.tsx` (every beat, and what each tells the stage), `proofs.tsx` (the proofs, loaded after the page), `Arcade.tsx` (the first screen's line about Cubepals' own Arcade, as it is now). The header is the public pages' own (`app/(public)/header.tsx`) |
 | `landing/phone/` | The phone's page: `Phone.tsx` (the page), `Still.tsx` (the two pictures of the chunk) and `printer.ts` (what prints them, once each, in a worker, `still.worker.ts`), `agent.ts` (how a phone is told apart) |
 | `landing/landing.css` | The whole look: tones, type, frames, buttons, dither, the gauge, the cursor |
 | `landing/kit.tsx` | `Section`, `Demo`, `Facts`, `Strata`: what a section is built from |
@@ -49,12 +60,14 @@ whole way; the camera flies it in three dimensions. A gauge reads the depth as M
 | `landing/Cursor.tsx`, `landing/Chat.tsx` | The crosshair that stands in for the arrow, and the line of chat the chunk answers with |
 | `landing/names.ts` | What each room is called, wherever it is named |
 | `landing/stops.ts` | Where the page rests on each section: the scrolling and the camera both read it |
-| `landing/engine/` | `world.ts` the voxel grid, `chunk.ts` the chunk itself, block by block, `cast.ts` who moves on it, `models.ts` what they are built from, `fleet.ts` the other worlds, `camera.ts` the camera's arithmetic, `gl.ts` the renderer (only the layers in view are drawn; the far worlds are drawn without their undersides and only where they can be seen; a device that can't keep up gets a coarser print) |
+| `landing/engine/` | `world.ts` the voxel grid, `chunk.ts` the chunk itself, block by block, `cast.ts` who moves on it, `models.ts` what they are built from, `fleet.ts` the other worlds, `camera.ts` the camera's arithmetic, `gl.ts` the renderer (only the layers in view are drawn; the far worlds are drawn without their undersides and only where they can be seen; a device that can't keep up gets a coarser print) with its two passes, `scene-pass.ts` (the light) and `print-pass.ts` (the dots), `light.ts` the inks and the three looks, `shadow.ts` the shadow map's arithmetic, `loose.ts` what moves, packed for a frame |
+| `landing/views.ts`, `landing/quiet.ts` | The shots read off the sections and the view between them; the rects the print keeps quiet behind |
 | `landing/sections/` | The proofs: one section to a file, its demonstration beside it, its own CSS module. Rendered `bare` inside a beat's proof. Also the two scenes the film uses whole (the turn and all the worlds), the plans and the foot |
 
 ## The rules
 
-**Three colours and a light.** Ink and paper are the brand's. The night field is the sky over a
+**Three colours and a light.** Ink and paper are the brand's; under the grass the paper is stone,
+and the dig is ink on stone all the way down, its depth told by the gauge and the fog. The night field is the sky over a
 sleeping server: the hero's, and the sky over all the worlds at the end. The torch is the only
 warm colour and means one thing everywhere: this is on, awake, running, live. It is never
 decoration.
@@ -63,7 +76,7 @@ decoration.
 Colour with those, never with literals, so a component reads on stone and on slate alike. The
 chunk's print takes its palette from the tone behind it, row by row.
 
-**One unit.** `--px` is one drawn pixel of the chunk. Lines are that thick, corners step by it
+**One unit.** `--px` is about one dot of the chunk's print. Lines are that thick, corners step by it
 (`.bl-frame`), and nothing is rounded. Greys are dither (`.bl-dither`), not tints.
 
 **Three voices.** Geologica says what a person is told. The pixel face is the game talking: the
@@ -222,7 +235,8 @@ All of it is drawn as loose boxes each frame, so none of it can be dug. With les
 everyone is in place and nothing moves.
 
 The night sky has a moon that sets behind the house as the day comes and rises again from behind
-it, and stars that go out one at a time. Nothing in the sky fades. Day has no sun: it is the plain
+it, and stars: single dots of paper, printed with the chunk, there or not. Nothing in the sky
+fades. The phone's pictures have none. Day has no sun: it is the plain
 page.
 
 ## The pointer
@@ -271,8 +285,8 @@ the friends joining; the day, with everyone in; what it asks; that it saves the 
 stops; the plans; the button again. Between the two places the page sets the button, it follows
 the reader in a bar at the foot of the screen (`Follow`).
 
-The chunk is two still pictures, printed once each by the film's own renderer in a worker
-(`phone/printer.ts`), after the page has loaded and as each comes near the screen: nothing is held,
+The chunk is two still pictures, printed once each by the film's own renderer in a worker, in the
+same lit print at three device pixels a dot (`phone/printer.ts`), after the page has loaded and as each comes near the screen: nothing is held,
 pinned, scrubbed or played by the scroll, and nothing is left drawing. Until a picture is printed,
 and on a device that can't print it, its frame is its own ground. A phone turned on its side gets
 the pictures printed again at the new width, and the night's beside the words.

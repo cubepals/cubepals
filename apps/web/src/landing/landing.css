@@ -973,10 +973,11 @@
   .bl-gauge__stops a:focus-visible span {
     opacity: 1;
   }
+  /* The dig is ink on stone all the way down, so the depth is told here: the Y is set large. */
   .bl-gauge__y {
     writing-mode: vertical-rl;
     rotate: 180deg;
-    font-size: 1.125rem;
+    font-size: 1.5rem;
   }
   .bl-gauge__dug {
     display: block;

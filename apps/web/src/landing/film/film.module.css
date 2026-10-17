@@ -87,7 +87,7 @@
 
 /* The way to the proof: small, under the picture, for whoever wants it; and, in the dig, the way
    on to the prices beside it. */
-.ways {
+.foot {
   position: absolute;
   inset-block-end: clamp(20px, 5vh, 56px);
   inset-inline-start: calc(var(--gutter) + var(--rail));
@@ -377,7 +377,7 @@
     display: none;
   }
   .caption,
-  .ways,
+  .foot,
   .address,
   .asks .form,
   .first .words,

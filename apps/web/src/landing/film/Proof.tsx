@@ -63,7 +63,7 @@ export function Proof({
 
   return (
     <>
-      <div className={styles.ways} data-over>
+      <div className={styles.foot} data-over>
         <button
           ref={button}
           type="button"
