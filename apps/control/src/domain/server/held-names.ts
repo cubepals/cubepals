@@ -7,6 +7,9 @@
  * hold each falls under; `app/servers/names.ts` says who may still give one. A server that already
  * has one keeps it: these are read when an address is chosen, never when one is routed. Offensive
  * words are not here; an open-source matcher judges those (`@blockly/contracts/names`).
+ *
+ * Also the words the name or description of a server not marked official can't say
+ * (`saysOfficial`), read when either is chosen.
  */
 
 /**
@@ -100,3 +103,57 @@ const bare = (word: string): string =>
     .replaceAll('4', 'a')
     .replaceAll('5', 's')
     .replaceAll('7', 't')
+
+/** Words a server's name or description can't say unless the server is marked official. */
+const OFFICIAL_WORDS: ReadonlySet<string> = new Set(['cubepal', 'cubepals', 'official', 'verified', 'staff'])
+
+/** Cyrillic and Greek letters drawn like the Latin ones they stand for here. */
+const LOOK_ALIKE_LETTERS: Readonly<Record<string, string>> = {
+  а: 'a',
+  в: 'b',
+  е: 'e',
+  ѕ: 's',
+  і: 'i',
+  ј: 'j',
+  о: 'o',
+  р: 'p',
+  с: 'c',
+  у: 'y',
+  х: 'x',
+  ԁ: 'd',
+  α: 'a',
+  β: 'b',
+  ε: 'e',
+  ι: 'i',
+  ο: 'o',
+  ρ: 'p',
+  υ: 'u',
+  ν: 'v',
+}
+
+/**
+ * Whether a server's name or description says Cubepals, Official, Verified or Staff as a word:
+ * read without case, accents or widths, with look-alike letters as the Latin ones, digits for
+ * letters and a number after the word as the address rule reads them (`cub3pals`, `staff2`), and
+ * words spelled across spaces or marks joined up (`Cube pals`, `O f f i c i a l`).
+ */
+export function saysOfficial(text: string): boolean {
+  const words = text
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/./gu, (letter) => LOOK_ALIKE_LETTERS[letter] ?? letter)
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word.length > 0)
+  for (let start = 0; start < words.length; start++) {
+    let joined = ''
+    for (let end = start; end < words.length && joined.length < 12; end++) {
+      joined += words[end]
+      if (officialWord(bare(joined))) return true
+    }
+  }
+  return false
+}
+
+const officialWord = (word: string): boolean =>
+  OFFICIAL_WORDS.has(word.replaceAll('1', 'i')) || OFFICIAL_WORDS.has(word.replaceAll('1', 'l'))

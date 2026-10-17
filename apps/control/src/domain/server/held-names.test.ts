@@ -4,7 +4,7 @@
 
 /** Which addresses are held back, and that everyday names with a held word inside are not. */
 import { describe, expect, test } from 'bun:test'
-import { HELD_FOR_CUBEPALS, holdOn } from './held-names.ts'
+import { HELD_FOR_CUBEPALS, holdOn, saysOfficial } from './held-names.ts'
 import { checkSlug } from './slug.ts'
 
 describe('held names', () => {
@@ -57,5 +57,45 @@ describe('held names', () => {
 
   test('every held name is an address a server could otherwise have', () => {
     for (const slug of HELD_FOR_CUBEPALS) expect(checkSlug(slug).ok).toBe(true)
+  })
+
+  test('a name or description that says Cubepals, Official, Verified or Staff, however it is written', () => {
+    for (const text of [
+      'Cubepals',
+      'cubepals smp',
+      'Cube pals',
+      'Cube-Pals Survival',
+      'Cubepal5',
+      'Cub3pals',
+      'CUBEPAL',
+      'C u b e p a l s',
+      'Ｃｕｂｅｐａｌｓ',
+      'Сubераls',
+      'Cubépals',
+      'Official',
+      'The Official Server',
+      '0ff1c1al',
+      'O.f.f.i.c.i.a.l',
+      'Verified SMP',
+      'V3rified',
+      'Staff',
+      'Staff2 only',
+      'Run by staff',
+    ])
+      expect([text, saysOfficial(text)]).toEqual([text, true])
+  })
+
+  test('words that only contain those, or sit beside them, are not them', () => {
+    for (const text of [
+      'Moss Hollow SMP',
+      'Unofficial Skyblock',
+      'Staffordshire builders',
+      'Cube world',
+      'Pals of the cube',
+      'Officially fun',
+      'Verify your builds',
+      'A quiet survival world for six friends.',
+    ])
+      expect([text, saysOfficial(text)]).toEqual([text, false])
   })
 })

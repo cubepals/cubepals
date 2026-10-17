@@ -49,7 +49,7 @@ describe.skipIf(!hasDatabase)('the official mark', () => {
     )
 
   test('only an admin marks a server Cubepals runs, which comes first while a join gets in', async () => {
-    const ours = await listed('Cubepals Duels')
+    const ours = await listed('Duels')
     const theirs = await listed('Newer Castle')
     const order = async () =>
       (await h.app.listingQueries.browse({ search: '', tag: null, offset: 0 })).listings

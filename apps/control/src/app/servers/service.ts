@@ -17,6 +17,7 @@ import { loadStanding, lockOwnerCapacity } from '../accounts/persistence.ts'
 import { type Actor, authorize, type OperatorActor, requestedBy, type UserActor } from '../actor.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { FUNNEL, noteOnce } from '../insight/record.ts'
+import { loadListing } from '../listings/persistence.ts'
 import { loadOperation } from '../operations/persistence.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
@@ -445,9 +446,10 @@ export class MinecraftServerService {
 
     const saved = await this.#db.transaction(async (tx) => {
       const server = authorize(actor, await lockServer(tx, serverId))
+      const official = (await loadListing(tx, server.id))?.official === true
       const change = {
-        ...renamed(server.name, name),
-        ...redescribed(server.description, description),
+        ...renamed(server.name, name, official),
+        ...redescribed(server.description, description, official),
         ...(identity.icon === undefined || identity.icon === server.icon ? {} : { icon: identity.icon }),
         ...(await keepSentIcon(tx, server, identity.picture)),
         ...(tags === undefined || tags.join() === server.tags.join() ? {} : { tags }),
