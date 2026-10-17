@@ -57,7 +57,7 @@ describe.skipIf(!hasDatabase)('a time zone reported at the end of a used-up mont
         ),
       )
     expect(await check()).toMatchObject({ ok: false, code: 'limit_reached' })
-    // The browser now says UTC+14, where it is already the 1st: the month is still UTC's.
+    // A zone reported once the account has played waits for the next month: this one stays UTC's.
     await h.app.accounts.setTimeZone(actor, 'Pacific/Kiritimati')
     expect(await check()).toMatchObject({ ok: false, code: 'limit_reached' })
   }, 60_000)
