@@ -18,11 +18,12 @@ import type { MinecraftServer } from '../../domain/server/server.ts'
 export const TEMPORARY_HOURS = 24
 
 /**
- * How long a server in the trash lasts once restored, or null for one kept for good: the time it
- * had left when it went in, or, when its time was up by then, the time a new one starts with.
+ * How long a server in the trash lasts once restored, or null for one kept for good: never less
+ * than a new one starts with, so one that went in with minutes left, or none, doesn't go straight
+ * back at the next expiry sweep.
  */
 export function lastsOnceRestored(server: Pick<MinecraftServer, 'expiresAt' | 'deletedAt'>): number | null {
   if (server.expiresAt === null || server.deletedAt === null) return null
   const left = server.expiresAt.getTime() - server.deletedAt.getTime()
-  return left > 0 ? left : TEMPORARY_HOURS * HOUR_MS
+  return Math.max(left, TEMPORARY_HOURS * HOUR_MS)
 }

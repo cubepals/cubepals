@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Taking a server back out of the trash: one made for a while stays so, with the time it had left
- * when it went in, or a new one's time when its own had run out; an unplayed world's idle clock
- * starts over. Neither sweep sends it straight back, and it counts against the plan's servers as a
- * new one would.
+ * Taking a server back out of the trash: one made for a while stays so, with at least the time a
+ * new one starts with; an unplayed world's idle clock starts over. Neither sweep sends it straight
+ * back, and it counts against the plan's servers as a new one would.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -28,30 +27,31 @@ describe.skipIf(!hasDatabase)('a server taken back out of the trash', () => {
     await h.close()
   })
 
-  test('a server made for a while comes back with the time it had left, and goes when that is up', async () => {
+  test('a server made for a while deleted with minutes left comes back with a full allowance', async () => {
     const owner = await h.user()
     const created = await h.create(owner, { temporary: true })
     await h.until(created.id, 'running')
     await h.settled(created.id)
-    const server = await h.server(created.id)
-    await h.app.servers.deleteServer(owner, created.id, server.name)
-    const trashed = await h.server(created.id)
-    const left = (trashed.expiresAt as Date).getTime() - (trashed.deletedAt as Date).getTime()
+    await h.db
+      .update(schema.minecraftServers)
+      .set({ expiresAt: new Date(Date.now() + 3 * MINUTE_MS) })
+      .where(eq(schema.minecraftServers.id, created.id))
+    await h.app.servers.deleteServer(owner, created.id, (await h.server(created.id)).name)
     await h.settled(created.id)
+    // The trash line says it lasts a new one's time once restored, not the minutes it had.
+    const [listed] = (await h.app.queries.trash(owner)).filter((s) => s.id === created.id)
+    expect(listed?.lastsOnceRestored).toBe(TEMPORARY_HOURS * HOUR_MS)
 
-    // Its owner restores it: it is still made for a while, with the same time left.
     const at = Date.now()
     const back = await h.app.servers.undeleteServer(owner, created.id)
     expect(back.lifecycle.status).toBe('stopped')
     const end = (back.expiresAt as Date).getTime()
-    expect(end).toBeGreaterThanOrEqual(at + left)
-    expect(end).toBeLessThanOrEqual(Date.now() + left)
-
-    // The next sweep leaves it; one past its end sends it to the trash again.
+    expect(end).toBeGreaterThanOrEqual(at + TEMPORARY_HOURS * HOUR_MS)
+    expect(end).toBeLessThanOrEqual(Date.now() + TEMPORARY_HOURS * HOUR_MS)
+    // The next sweep, past the minutes it had, leaves it; one past its new end takes it.
     expect(await h.app.schedules.expirySweep(new Date(at + 5 * MINUTE_MS))).toBe(0)
     expect((await h.server(created.id)).lifecycle.status).toBe('stopped')
     expect(await h.app.schedules.expirySweep(new Date(end + SECOND_MS))).toBe(1)
-    expect((await h.server(created.id)).lifecycle.status).toBe('deleted')
     await h.settled(created.id)
   }, 60_000)
 
