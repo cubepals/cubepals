@@ -155,5 +155,8 @@ const rooms = [
 
 rmSync(world, { recursive: true, force: true })
 writeFileSync(OUT, `${JSON.stringify({ world: ARCADE_WORLD.sha512, rooms }, null, 2)}\n`)
+// Written as the repository's formatter writes JSON, so lint passes on it as it is.
+if (spawnSync('bunx', ['biome', 'format', '--write', OUT], { stdio: 'inherit' }).status !== 0)
+  throw new Error(`${OUT} would not format`)
 for (const room of rooms) process.stdout.write(`${room.at.join(' ')}: reaches ${room.reach} either side\n`)
 process.stdout.write(`${OUT}: ${rooms.length} rooms measured\n`)
