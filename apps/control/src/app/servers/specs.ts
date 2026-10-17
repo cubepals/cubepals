@@ -26,6 +26,7 @@ import { loadStanding } from '../accounts/persistence.ts'
 import type { BuiltPack } from '../artifacts/brand-pack.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
 import { compatFor, projectsOf } from '../compat/service.ts'
+import { PermanentFailure } from '../errors.ts'
 import { loadListing } from '../listings/persistence.ts'
 import { quarantinedOf } from '../mods/jar-check-records.ts'
 import { loadPackContents } from '../packs/persistence.ts'
@@ -179,12 +180,13 @@ export class RuntimeSpecs {
     // plugins, they never arrive through drift.
     const starting = withCurrentOwnFiles(revision)
     // Its carried files compressed, and any long list, so that no variable comes near Linux's limit
-    // (`carried-files.ts`). One still past it is refused here, before a machine fails on it.
+    // (`carried-files.ts`). One still past it is refused here, before a machine fails on it, in
+    // words its owner reads, and not tried again: trying again changes nothing.
     const labelled = label(
       withCompressedFiles(toRuntimeSpec({ ...input, revision: starting, compat: placed })),
     )
     const refused = tooLongForAStart(labelled)
-    if (refused !== null) throw new Error(refused)
+    if (refused !== null) throw new PermanentFailure(refused)
     // The Via plugins arrive at a start, never through drift: a running server isn't restarted
     // for Cubepals' compatibility layer, or for a newer pin of it.
     const driftDigest = specDigest(withoutPlanLimits(label(toRuntimeSpec(input))))

@@ -8,16 +8,20 @@
  * the start hands it to the image as a file; a start that would still pass the limit is refused in
  * a sentence before a machine fails on it.
  */
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { schema } from '@blockly/db'
+import { eq } from 'drizzle-orm'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import { defaultSettings, type ServerRevision } from '../../domain/revision/revision.ts'
 import { JAR_LISTS } from '../../minecraft/jars.ts'
 import { toRuntimeSpec } from '../../minecraft/runtime-spec.ts'
+import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { ArtifactLinks } from '../artifacts/links.ts'
+import { ownersWords, PermanentFailure } from '../errors.ts'
 import { singleKey } from '../secrets.ts'
 import { listLines, tooLongForAStart, VARIABLE_BYTES_LIMIT, withCompressedFiles } from './carried-files.ts'
 
@@ -166,6 +170,32 @@ describe('a server with many mods', () => {
 
   test('a start past what Linux takes is refused in a sentence', () => {
     expect(tooLongForAStart(specOf(2000))).toBe(
+      'This server has too many mods, plugins and files to start. Removing some lets it start.',
+    )
+  })
+})
+
+describe.skipIf(!hasDatabase)('a start past what Linux takes, as its owner meets it', () => {
+  let h: Harness
+  beforeAll(async () => {
+    h = await startHarness()
+  }, 30_000)
+  afterAll(() => h.close())
+
+  test('is refused in the sentence, once, rather than retried as an error on Cubepals’ side', async () => {
+    const owner = await h.user('Steve', 'plus')
+    const server = await h.create(owner)
+    // Thousands of datapacks on its revision: more than one start can carry, even compressed.
+    const datapacks = Array.from({ length: 2000 }, (_, i) => ({ ...mod(i), loaders: ['datapack'] }))
+    await h.db
+      .update(schema.serverRevisions)
+      .set({ mods: datapacks })
+      .where(eq(schema.serverRevisions.id, server.desiredRevisionId))
+    const refused = await h.app.specs
+      .desired(h.db, await h.server(server.id))
+      .catch((error: unknown) => error)
+    expect(refused).toBeInstanceOf(PermanentFailure)
+    expect(ownersWords(refused)).toBe(
       'This server has too many mods, plugins and files to start. Removing some lets it start.',
     )
   })
