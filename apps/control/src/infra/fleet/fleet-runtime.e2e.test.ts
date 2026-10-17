@@ -267,6 +267,7 @@ describe.skipIf(!ready)('FleetRuntime against a real blocklyd', () => {
       placement: DEFAULTS,
       cpuMillisPerGb: 250,
       thresholds: THRESHOLDS,
+      suspend: true,
       log: () => {},
     })
 
@@ -332,6 +333,31 @@ describe.skipIf(!ready)('FleetRuntime against a real blocklyd', () => {
     const again = await runtime.ensureProvisioned(key, { regionKey: 'eu' }, SPEC, progress)
     expect(runtime.sameCompute(again, handle)).toBe(true)
     expect(runtime.prices(handle, { memoryMb: 128, storageGb: 1 })?.storageMonthCents).toBeGreaterThan(0)
+  }, 120_000)
+
+  test('asleep, it is suspended and wakes where it was; a change made meanwhile lands at its next boot', async () => {
+    const asleep = { ...SPEC, resumesOn: 'e2e' }
+    handle = await runtime.apply(handle, asleep)
+    const started = containerStarted()
+    expect(await runtime.sleep(handle)).toBe('suspended')
+    const reported = async () =>
+      (
+        await rows<{ state: string }>(db, sql`SELECT state FROM fleet_observations WHERE workload = ${key}`)
+      )[0]
+    await until('a suspended report', async () => (await reported())?.state === 'suspended')
+    const changed = { ...asleep, env: { ...SPEC.env, MOTD: 'Back soon' } }
+    const steps: string[] = []
+    const sink: ProgressSink = { step: async (step) => void steps.push(step), handle: async () => {} }
+    expect(await runtime.ensureProvisioned(key, { regionKey: 'eu' }, changed, sink)).toBe(handle)
+    await runtime.waitRunning(handle, AbortSignal.timeout(MINUTE_MS))
+    expect(steps).toEqual(['allocating', 'compute', 'resuming'])
+    expect(containerStarted()).toBe(started)
+    expect(await exec('echo "[$MOTD]"')).toBe('[]')
+    await runtime.stop(handle)
+    await runtime.ensureProvisioned(key, { regionKey: 'eu' }, changed, progress)
+    await runtime.waitRunning(handle, AbortSignal.timeout(MINUTE_MS))
+    expect(containerStarted()).not.toBe(started)
+    expect(await exec('echo "[$MOTD]"')).toBe('[Back soon]')
   }, 120_000)
 
   test('a snapshot restores in place, from the node, and reaches the store', async () => {

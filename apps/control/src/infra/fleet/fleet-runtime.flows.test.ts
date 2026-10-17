@@ -83,14 +83,15 @@ class Nodes {
   readonly calls: Call[] = []
   readonly copies = new Map<string, Copy>()
   readonly #store: MemoryStore
-  readonly #hooks: Array<{ match: RegExp; run: () => Promise<void> }> = []
+  readonly #hooks: Array<{ match: RegExp; run: (answer: () => unknown) => Promise<unknown> }> = []
   #port = 40_000
 
   constructor(store: MemoryStore) {
     this.#store = store
   }
 
-  once(match: RegExp, run: () => Promise<void>): void {
+  /** `run` before the next call `match` finds is answered: what it returns, if anything, is the answer. */
+  once(match: RegExp, run: (answer: () => unknown) => Promise<unknown>): void {
     this.#hooks.push({ match, run })
   }
 
@@ -106,8 +107,8 @@ class Nodes {
     })
     const line = `${method} ${path}`
     const at = this.#hooks.findIndex((hook) => hook.match.test(line))
-    if (at >= 0) await this.#hooks.splice(at, 1)[0]?.run()
-    return this.#answer(node.id, method, path, options) as T
+    const answer = () => this.#answer(node.id, method, path, options)
+    return ((at >= 0 ? await this.#hooks.splice(at, 1)[0]?.run(answer) : undefined) ?? answer()) as T
   }
 
   async probe() {
@@ -435,14 +436,11 @@ describe.skipIf(!hasDatabase)('FleetRuntime flows, with blocklyd in memory', () 
     expect(await running(n.id)).toBe(1024)
     expect(await kinds(key)).toEqual(['placement.created', 'placement.placed'])
     expect(await history(key)).toEqual([{ epoch: '1', node_id: n.id, reason: 'placed', end_reason: null }])
-    // Running already, it is ensured again without a new placement or epoch.
+    // Its start answered running, so the wait asks nothing; the same spec again starts with no PUT.
     await runtime.waitRunning(handle, AbortSignal.timeout(1_000))
     const again = await runtime.ensureProvisioned(key, { regionKey: 'first' }, SPEC, quiet)
     expect(decodeHandle(again).epoch).toBe(1)
-    expect(await callsSince(since + 3)).toEqual([
-      `first-0 PUT /v1/workloads/${key} e1 t1200000`,
-      `first-0 POST /v1/workloads/${key}/start e1 t60000`,
-    ])
+    expect(await callsSince(since + 2)).toEqual([`first-0 POST /v1/workloads/${key}/start e1 t30000`])
   })
 
   test('2. a first placement its node refuses for room is undone, and its room given back', async () => {
@@ -484,8 +482,7 @@ describe.skipIf(!hasDatabase)('FleetRuntime flows, with blocklyd in memory', () 
     const { sink, seen } = recorder()
     const moved = await runtime.ensureProvisioned(key, { regionKey: 'refused-start' }, SPEC, sink)
     expect(await callsSince(since)).toEqual([
-      `${homeName} PUT /v1/workloads/${key} e1 t1200000`,
-      `${homeName} POST /v1/workloads/${key}/start e1 t60000`,
+      `${homeName} POST /v1/workloads/${key}/start e1 t30000`,
       `${homeName} POST /v1/workloads/${key}/export e1 t${TRANSFER_MS}`,
       `${awayName} PUT /v1/workloads/${key} e2 t1200000`,
       `${awayName} POST /v1/workloads/${key}/restore e2 t${TRANSFER_MS}`,
@@ -493,16 +490,7 @@ describe.skipIf(!hasDatabase)('FleetRuntime flows, with blocklyd in memory', () 
       `${homeName} DELETE /v1/workloads/${key}?data=delete e2 t${TEARDOWN_MS}`,
       `${awayName} POST /v1/workloads/${key}/start e2 t60000`,
     ])
-    expect(seen).toEqual([
-      'allocating',
-      'compute',
-      'handle e1',
-      'booting',
-      'storage',
-      'compute',
-      'handle e2',
-      'booting',
-    ])
+    expect(seen).toEqual(['allocating', 'handle e1', 'booting', 'storage', 'compute', 'handle e2', 'booting'])
     expect(decodeHandle(moved)).toMatchObject({ node: away.id, epoch: 2 })
     expect(await running(home.id)).toBe(0)
     expect(await running(away.id)).toBe(1024)
@@ -878,5 +866,17 @@ describe.skipIf(!hasDatabase)('FleetRuntime flows, with blocklyd in memory', () 
     expect(stored(key)).toEqual([])
     expect(await kinds(key, after)).toEqual(['placement.released', 'placement.destroyed'])
     expect((await eventData('placement.destroyed', key)).map((e) => e.data)).toEqual([{ nodes: [n.id] }])
+  })
+
+  test('13. a suspended copy whose resume does not come back goes on as a boot', async () => {
+    const [n] = (await region('resume-hung', 1)) as [EnrolledNode]
+    const key = server()
+    await runtime.ensureProvisioned(key, { regionKey: 'resume-hung' }, SPEC, quiet)
+    Object.assign(nodes.copies.get(`${n.id}/${key}`) ?? {}, { state: 'suspended' })
+    await pulse(n)
+    nodes.once(/^POST .*\/start$/, async (answer) => ({ ...(answer() as object), resumed: false }))
+    const { sink, seen } = recorder()
+    await runtime.ensureProvisioned(key, { regionKey: 'resume-hung' }, SPEC, sink)
+    expect(seen).toEqual(['allocating', 'handle e1', 'resuming', 'booting'])
   })
 })

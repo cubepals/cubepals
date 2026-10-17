@@ -184,6 +184,7 @@ function runtimeFrom(provider: string, env: NodeJS.ProcessEnv, isDefault: boolea
         renewDays: Number(env.FLEET_RENEW_DAYS ?? 10),
         // Nodes on an older blocklyd are offered this image's, one per region at a time.
         upgrades: env.FLEET_UPGRADES,
+        suspend: env.FLEET_SUSPEND,
       }
     case 'docker':
       return {

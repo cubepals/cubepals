@@ -223,7 +223,13 @@ export const fleetPlacements = pgTable(
     ports: jsonb('ports').$type<Record<string, number>>().notNull().default({}),
     /** The handle issued for this placement. */
     handle: text('handle'),
+    /** The node's digest of the spec its copy runs: what an apply's `If-Match` names. */
     specDigest: text('spec_digest'),
+    /**
+     * Blockly's digest of the spec last sent to this placement's copy, secrets included: a start
+     * with the same spec sends none. Cleared with each new epoch.
+     */
+    sentDigest: text('sent_digest'),
     /**
      * What a `placing` row waits on before it is placed: null for a new placement, else the
      * restore, move or recovery that fills the copy first, which a retry resumes.

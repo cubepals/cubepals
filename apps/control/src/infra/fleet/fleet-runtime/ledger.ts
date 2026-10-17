@@ -41,6 +41,7 @@ export interface PlacementRow {
   ports: Record<string, number>
   handle: string | null
   spec_digest: string | null
+  sent_digest: string | null
   completing: 'restore' | 'move' | 'recover' | null
   restore_from: string | null
   desired_power: string
@@ -130,7 +131,7 @@ export async function rehome(
     sql`UPDATE fleet_placements SET node_id = ${to.node}, epoch = ${to.epoch}, state = 'placing',
           region_key = ${to.region}, memory_mb = ${to.request.memoryMb}, cpu_millis = ${to.request.cpuMillis},
           disk_gb = ${to.request.diskGb}, completing = ${why.started}, restore_from = ${why.restoreFrom},
-          move_requested_at = NULL, move_to = NULL, updated_at = now()
+          sent_digest = NULL, move_requested_at = NULL, move_to = NULL, updated_at = now()
         WHERE workload = ${row.workload} AND epoch = ${row.epoch} RETURNING *`,
   )
   if (moved === null) throw new StaleHandle('The placement changed while a new home was chosen for it')
@@ -291,8 +292,20 @@ export class Ledger {
     })
   }
 
-  /** The placement is made: `placed`, with the ports the node chose and the handle that names them. */
-  async settle(key: string, node: NodeRow, epoch: number, view: WorkloadView): Promise<RuntimeHandle> {
+  /**
+   * The placement is made: `placed`, with the ports the node chose and the handle that names them.
+   * `sent` is Blockly's digest of the spec just sent, where the caller keeps one. A spec the node
+   * deferred while its copy is suspended is kept as sent, since the copy boots with it next, as a
+   * Fly machine keeps the spec it slept on; the node's own digest is then unknown until that boot
+   * (`booted`), so an apply meanwhile replaces whatever it runs.
+   */
+  async settle(
+    key: string,
+    node: NodeRow,
+    epoch: number,
+    view: WorkloadView,
+    sent: { digest: string; deferred: boolean } | null = null,
+  ): Promise<RuntimeHandle> {
     const ports = Object.fromEntries(view.ports.map((p) => [p.name, p.hostPort]))
     return this.#db.transaction(async (t) => {
       const row = await placementOf(t, key, true)
@@ -307,13 +320,21 @@ export class Ledger {
         control_host: node.control_host,
       })
       await t.execute(sql`
-        UPDATE fleet_placements SET state = 'placed', ports = ${jsonb(ports)}, spec_digest = ${view.specDigest},
+        UPDATE fleet_placements SET state = 'placed', ports = ${jsonb(ports)},
+          spec_digest = ${sent?.deferred ? null : view.specDigest}, sent_digest = ${sent?.digest ?? null},
           handle = ${handle}, completing = NULL, restore_from = NULL, updated_at = now()
         WHERE workload = ${key}`)
       if (row.state === 'placing')
         await event(t, 'placement.placed', { node: node.id, workload: key, epoch, data: { ports } })
       return handle
     })
+  }
+
+  /** The copy booted on the spec the node's digest names, which a deferred one may have become. */
+  async booted(key: string, epoch: number, specDigest: string): Promise<void> {
+    await this.#db.execute(sql`
+      UPDATE fleet_placements SET spec_digest = ${specDigest}
+      WHERE workload = ${key} AND epoch = ${epoch} AND spec_digest IS DISTINCT FROM ${specDigest}`)
   }
 
   /** A first placement its node refused for room: undone, as one never made is (`placement.abandoned`). */
@@ -340,7 +361,7 @@ export class Ledger {
     await this.#db.transaction(async (t) => {
       await t.execute(sql`
         UPDATE fleet_placements SET state = 'released', node_id = NULL, handle = ${released}, completing = NULL,
-          restore_from = NULL, updated_at = now() WHERE workload = ${key} AND epoch = ${epoch}`)
+          restore_from = NULL, sent_digest = NULL, updated_at = now() WHERE workload = ${key} AND epoch = ${epoch}`)
       await endHistory(t, key, epoch, 'released')
       await event(t, 'placement.released', { node: nodeId, workload: key, epoch })
     })

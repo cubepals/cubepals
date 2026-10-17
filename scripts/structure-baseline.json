@@ -21,15 +21,15 @@
       "reason": "Characterization tests of one class on one fake node, whose shared home testing/fleet.ts infra may not import."
     },
     "apps/control/src/infra/fleet/fleet-runtime.flows.test.ts › describe.skipIf FleetRuntime flows, with blocklyd in memory": {
-      "n": 643,
+      "n": 642,
       "reason": "Characterization tests of one class on one fake node, whose shared home testing/fleet.ts infra may not import."
     },
     "apps/control/src/infra/fleet/fleet-runtime.ts": {
-      "n": 876,
+      "n": 873,
       "reason": "Decomposed into eight parts in fleet-runtime/; what is left is the port's verbs on one placement, observation, tidy and one-line delegates, and a further split would only spread single verbs over more files."
     },
     "apps/control/src/infra/fleet/fleet-runtime.ts › class FleetRuntime": {
-      "n": 774,
+      "n": 772,
       "reason": "Decomposed into eight parts in fleet-runtime/; what is left is the port's verbs on one placement, observation, tidy and one-line delegates, and a further split would only spread single verbs over more files."
     },
     "apps/control/src/infra/fly/fly-runtime.test.ts": {
@@ -1177,11 +1177,11 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fleet/fleet-runtime.e2e.test.ts › describe.skipIf FleetRuntime against a real blocklyd": {
-      "n": 334,
+      "n": 329,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fleet/fleet-runtime.flows.test.ts › describe.skipIf FleetRuntime flows, with blocklyd in memory": {
-      "n": 533,
+      "n": 530,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fleet/fleet-runtime.test.ts › describe.skipIf FleetRuntime, with blocklyd in memory": {

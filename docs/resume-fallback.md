@@ -1,7 +1,8 @@
 # When a resume hangs
 
 How Blockly wakes a server that Fly suspended, and the fallbacks it takes in turn when the resume
-doesn't come back. The code is in `apps/control/src/app/`: `operations/resume.ts` (the resume and
+doesn't come back. The table's last column says what happens on the fleet, where blocklyd suspends
+([waking.md](waking.md#on-the-fleet)). The code is in `apps/control/src/app/`: `operations/resume.ts` (the resume and
 its bounds), `operations/handlers/host-refused.ts` (the rebuild elsewhere) and the edge's wake in
 `edge/service.ts`.
 
@@ -94,19 +95,19 @@ in a moment", and a plain message ends the hold.
      so until an edge names them it hears what it did before: "starting" for the first case, and
      the suspended wording for the second.
 
-| Failure | How it shows | Response | Bound |
-| --- | --- | --- | --- |
-| Normal resume | `started`, answers a ping | Lets players in | 30 s to run, 10 s to answer |
-| Snapshot dropped (deploy, migration, maintenance) | Runs, prints a boot, doesn't answer yet | Goes on as a boot | Boot's waits (2 min to run, 10 min to answer) |
-| Resume stuck in `starting` | Not `started` by 30 s | Kill, cold start on the same volume | 30 s, then the kill's 60 s at most |
-| Resume `started` but frozen | No answer and no output by 30 s, and 10 s after running | Kill, cold start on the same volume | 30 s, or running + 10 s |
-| Wedged machine (won't stop or start) | The kill or the fresh start fails | Rebuild elsewhere from the sleep's snapshot after the last run, keeping the old volume; otherwise fail for good and alert | Kill's 60 s, then a rebuild |
-| No room on the host | Fly refuses the start (`insufficient resources`) | The same | At once |
-| Host unreachable | `host_status: unreachable` | Rebuild from the newest snapshot (existing sweep) | 10 min grace |
-| API 429, 502–504 | Non-OK answers | Client paces requests and retries a 429, and a 502–504 on a repeatable call, waiting out `Retry-After`; an attempt that fails anyway is retried twice, backing off from 5 s | 5 tries a request, 3 attempts |
-| Lease held | "lease currently held" | Blockly's own lease lives 120 s; the attempt retries | 3 attempts |
-| Volume still claimed | 412 on create | Waits for the claim, clearing leftover helpers (existing) | 3 min |
-| Slow image pull on a new host (rebuild only) | Machine stays `created` | Waits for it to settle (existing) | 10 min |
+| Failure | How it shows | Response | Bound | On the fleet |
+| --- | --- | --- | --- | --- |
+| Normal resume | `started`, answers a ping | Lets players in | 30 s to run, 10 s to answer | blocklyd resumes the frozen container; the start answers `resumed: true` |
+| Snapshot dropped (deploy, migration, maintenance) | Runs, prints a boot, doesn't answer yet | Goes on as a boot | Boot's waits (2 min to run, 10 min to answer) | A host restart drops the frozen process: the copy reads `stopped` and boots on its data |
+| Resume stuck in `starting` | Not `started` by 30 s | Kill, cold start on the same volume | 30 s, then the kill's 60 s at most | blocklyd kills it after `resume_timeout_seconds` (10 s) and starts it afresh; the start answers `resumed: false` and goes on as a boot |
+| Resume `started` but frozen | No answer and no output by 30 s, and 10 s after running | Kill, cold start on the same volume | 30 s, or running + 10 s | Ladder as on Fly, after blocklyd's own 10 s |
+| Wedged machine (won't stop or start) | The kill or the fresh start fails | Rebuild elsewhere from the sleep's snapshot after the last run, keeping the old volume; otherwise fail for good and alert | Kill's 60 s, then a rebuild | Ladder as on Fly |
+| No room on the host | Fly refuses the start (`insufficient resources`) | The same | At once | The node refuses the start (`insufficient_capacity`): the server moves to a node with room |
+| Host unreachable | `host_status: unreachable` | Rebuild from the newest snapshot (existing sweep) | 10 min grace | The node is suspect, then lost; an operator confirms the loss, and the server is rebuilt |
+| API 429, 502–504 | Non-OK answers | Client paces requests and retries a 429, and a 502–504 on a repeatable call, waiting out `Retry-After`; an attempt that fails anyway is retried twice, backing off from 5 s | 5 tries a request, 3 attempts | None |
+| Lease held | "lease currently held" | Blockly's own lease lives 120 s; the attempt retries | 3 attempts | None |
+| Volume still claimed | 412 on create | Waits for the claim, clearing leftover helpers (existing) | 3 min | None |
+| Slow image pull on a new host (rebuild only) | Machine stays `created` | Waits for it to settle (existing) | 10 min | A wake's PUT waits its grace plus 2 min; the node finishes the pull, and the retry finds it done |
 
 ## What is left open
 

@@ -122,6 +122,14 @@ const Runtime = z.discriminatedUnion('provider', [
     unavailableSeconds: z.number().int().positive(),
     certDays: z.number().int().min(2).max(397),
     renewDays: z.number().int().min(1),
+    /**
+     * Whether a server put to sleep is suspended with its memory kept, on a node that can, rather
+     * than stopped, so a join resumes it where it was. FLEET_SUSPEND; off unless set.
+     */
+    suspend: z
+      .enum(['on', 'off'], { message: 'FLEET_SUSPEND is on or off' })
+      .default('off')
+      .transform((v) => v === 'on'),
     /** Whether nodes on an older blocklyd are offered `blocklydBin`, one per region at a time. */
     upgrades: z
       .enum(['on', 'off'], { message: 'FLEET_UPGRADES is on or off' })

@@ -10,7 +10,7 @@
  * It decides nothing: what the ledger records around a call is the caller's (`ledger.ts`,
  * `admission.ts`), and how an archive is offered in parts is `transfers.ts`'s.
  */
-import { HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
+import { HOUR_MS, MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { RuntimeSpec } from '../../../app/ports/runtime.ts'
 import { CONFIRM_DELETE_HEADER, type NodeAddress, type NodeClient } from '../node-client.ts'
 import type { NodeRow } from '../registry.ts'
@@ -33,6 +33,21 @@ import type {
  */
 export const TEARDOWN_MS = 10 * MINUTE_MS
 export const TRANSFER_MS = 3 * HOUR_MS
+/** A first PUT may pull the image, which the node gives this long (`pull_timeout_seconds`). */
+const FIRST_PUT_MS = 20 * MINUTE_MS
+/**
+ * A wake's start: a resume the node gives up on after its `resume_timeout_seconds` (10), then the
+ * kill and a fresh start on the copy's data.
+ */
+const WAKE_START_MS = 30 * SECOND_MS
+/**
+ * A wake's PUT beyond the spec's grace: a changed spec stops the copy gracefully, then makes it
+ * again, usually on an image the node holds. The node finishes a PUT its caller stopped waiting
+ * for, so the wake's retry finds it done rather than the wake waiting out a first pull.
+ */
+const WAKE_PUT_MS = 2 * MINUTE_MS
+/** A poll's read: one the node doesn't answer this soon is asked again. */
+const POLL_MS = 5 * SECOND_MS
 
 /** A node as the runtime dials it. */
 type Dialled = Pick<NodeRow, 'id' | 'api_address'>
@@ -61,6 +76,8 @@ function toWorkloadSpec(spec: RuntimeSpec): WorkloadSpec {
     // lease.
     restart: { policy: 'on-failure', maxRetries: 3 },
     labels: { ...spec.labels },
+    // A change that names the same, sent to a suspended copy, waits for its next boot (`deferred`).
+    ...(spec.resumesOn === undefined ? {} : { resumesOn: spec.resumesOn }),
   }
 }
 
@@ -71,24 +88,43 @@ export class WorkloadApi {
     this.#nodes = nodes
   }
 
-  /** The node's copy of the workload, as it is now. */
-  view(node: Dialled, key: string): Promise<WorkloadView> {
-    return this.#nodes.call<WorkloadView>(address(node), 'GET', `/v1/workloads/${key}`)
-  }
-
-  put(node: Dialled, key: string, spec: RuntimeSpec, epoch: number): Promise<EnsureResponse> {
-    return this.#nodes.call<EnsureResponse>(address(node), 'PUT', `/v1/workloads/${key}`, {
-      body: toWorkloadSpec(spec),
-      epoch,
-      // A first PUT may pull the image.
-      timeoutMs: 20 * MINUTE_MS,
+  /** The node's copy of the workload, as it is now; `poll` for a read asked again until a deadline. */
+  view(node: Dialled, key: string, poll = false): Promise<WorkloadView> {
+    return this.#nodes.call<WorkloadView>(address(node), 'GET', `/v1/workloads/${key}`, {
+      ...(poll ? { timeoutMs: POLL_MS } : {}),
     })
   }
 
-  power(node: Dialled, key: string, epoch: number, verb: 'start' | 'stop' | 'kill'): Promise<PowerResponse> {
+  /**
+   * The spec to the node. `wake` for a copy that exists, being woken; `ifMatch` replaces only the
+   * spec the node's digest names, so an apply can't overwrite a newer one.
+   */
+  put(
+    node: Dialled,
+    key: string,
+    spec: RuntimeSpec,
+    epoch: number,
+    options: { wake?: boolean; ifMatch?: string | null } = {},
+  ): Promise<EnsureResponse> {
+    return this.#nodes.call<EnsureResponse>(address(node), 'PUT', `/v1/workloads/${key}`, {
+      body: toWorkloadSpec(spec),
+      epoch,
+      ...(options.ifMatch ? { headers: { 'if-match': `"${options.ifMatch}"` } } : {}),
+      timeoutMs: options.wake ? spec.stop.timeoutSeconds * SECOND_MS + WAKE_PUT_MS : FIRST_PUT_MS,
+    })
+  }
+
+  /** A power command; `wake` for a start that wakes the copy, resumed or booted. */
+  power(
+    node: Dialled,
+    key: string,
+    epoch: number,
+    verb: 'start' | 'stop' | 'kill' | 'suspend',
+    wake = false,
+  ): Promise<PowerResponse> {
     return this.#nodes.call<PowerResponse>(address(node), 'POST', `/v1/workloads/${key}/${verb}`, {
       epoch,
-      timeoutMs: verb === 'stop' ? TEARDOWN_MS : MINUTE_MS,
+      timeoutMs: verb === 'stop' ? TEARDOWN_MS : wake ? WAKE_START_MS : MINUTE_MS,
     })
   }
 
