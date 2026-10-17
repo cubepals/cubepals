@@ -13,15 +13,18 @@
  * flat plane it belongs to (scene-pass.ts). What glows is blurred, one way and then the other.
  * Pass two turns brightness into dots through a tone curve and an ordered dither, and draws a
  * line wherever two different planes meet, so blocks that lie flat together read as one surface
- * and every corner reads as a corner (print-pass.ts).
+ * and every corner reads as a corner (print-pass.ts). The light that doesn't move is baked into a
+ * grid when the world is sent (bake.ts) and read by pass one from a 3D texture (volume.ts).
  */
+import { baked } from './bake'
 import type { Vec3 } from './camera'
 import type { Frame, Packed, Palette } from './frame'
 import { Maps } from './maps'
 import { GLOW_FRAG, PRINT_FRAG, PRINT_VERT } from './print-pass'
 import { MAX_LIGHTS, QUICK_FRAG, SCENE_FRAG, SCENE_VERT, SHADOW_FRAG } from './scene-pass'
 import { lampMatrix, lightMatrix, MAP_SIZE } from './shadow'
-import { CORNERS, type Light } from './world'
+import { Volume } from './volume'
+import { CORNERS, type World } from './world'
 
 function compile(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
   const shader = gl.createShader(type)
@@ -155,9 +158,9 @@ export class Renderer {
   private target: Target | null = null
   /** The shadow maps, and what the key light's was last drawn for (the light's way and the world). */
   private readonly maps: Maps
+  private readonly volume: Volume
   private mapFor = ''
   private worldVersion = 0
-  private lights: Light[] = []
   // What a frame hands the shaders, kept between frames so drawing allocates nothing.
   private readonly groups = new Float32Array(16)
   private readonly lightWhere = new Float32Array(MAX_LIGHTS * 4)
@@ -188,6 +191,7 @@ export class Renderer {
     if (!gl) throw new Error('WebGL 2 is not available')
     this.gl = gl
     this.maps = new Maps(gl, mapSize)
+    this.volume = new Volume(gl)
     // The programs are set compiling here and waited for only when first used, or not at all
     // where the driver can say when they are done (`ready`): the page never stops for them.
     this.parallel = gl.getExtension('KHR_parallel_shader_compile') !== null
@@ -255,6 +259,7 @@ export class Renderer {
       gl.uniform1fv(this.at(program, 'uRoom'), ROOM_LIGHT)
       unit('uShadowMap', 2)
       unit('uLampMap', 3)
+      unit('uVolume', 4)
     }
     if (name === 'print') {
       unit('uShade', 0)
@@ -365,9 +370,9 @@ export class Renderer {
   }
 
   /** The world itself. Sent again whenever a block is dug out or put back. */
-  setWorld(packed: Packed, lights: Light[]): void {
+  setWorld(packed: Packed, world: World): void {
     this.load(this.still, packed, this.gl.STATIC_DRAW)
-    this.lights = lights
+    this.volume.load(baked(world))
     this.worldVersion += 1
   }
 
@@ -534,13 +539,6 @@ export class Renderer {
       this.lightOwner[lit] = owner
       lit += 1
     }
-    for (const light of this.lights) {
-      if (lit === MAX_LIGHTS) break
-      const level = this.groups[light.group] ?? 0
-      if (level <= 0 || light.y < frame.viewY[0] - light.radius || light.y > frame.viewY[1] + light.radius)
-        continue
-      put(light.x, light.y, light.z, light.radius, level, light.group)
-    }
     const torch = frame.torch
     if (torch && torch[4] > 0 && lit < MAX_LIGHTS)
       put(torch[0], torch[1], torch[2], torch[3], torch[4], torch[5])
@@ -614,6 +612,7 @@ export class Renderer {
   private drawFar(s: WebGLProgram, frame: Frame): void {
     const gl = this.gl
     gl.uniform1i(this.at(s, 'uMapped'), 0)
+    gl.uniform4f(this.at(s, 'uVolume3'), 0, 0, 0, 0)
     gl.uniform1f(this.at(s, 'uNudge'), 0)
     gl.uniform2f(this.at(s, 'uWave'), frame.crowd * 330, 60)
     gl.uniform3f(this.at(s, 'uFog'), frame.fog[0], frame.fog[1], 1)
@@ -630,6 +629,9 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, this.maps.key)
     gl.activeTexture(gl.TEXTURE3)
     gl.bindTexture(gl.TEXTURE_2D, this.maps.lamp)
+    gl.activeTexture(gl.TEXTURE4)
+    gl.bindTexture(gl.TEXTURE_3D, this.volume.texture)
+    gl.uniform4f(this.at(s, 'uVolume3'), ...this.volume.size, this.volume.bottom)
     gl.uniform1i(this.at(s, 'uTorch'), torch)
     gl.uniformMatrix4fv(this.at(s, 'uLampView'), false, this.lampView)
     gl.uniform1f(this.at(s, 'uRoomFill'), frame.roomFill)
@@ -710,8 +712,7 @@ export class Renderer {
     gl.uniform1f(this.at(p, 'uContrast'), frame.contrast)
     gl.uniform1f(this.at(p, 'uLevels'), frame.levels)
     gl.uniform1f(this.at(p, 'uStars'), frame.stars ? 1 : 0)
-    gl.uniform1f(this.at(p, 'uUnit'), frame.unit)
-    gl.uniform4fv(this.at(p, 'uQuiet'), frame.quiet)
+    gl.uniform1f(this.at(p, 'uTime'), frame.time)
     gl.drawArrays(gl.TRIANGLES, 0, 3)
   }
 
@@ -732,6 +733,7 @@ export class Renderer {
     gl.deleteBuffer(this.nearCorners)
     for (const { program } of Object.values(this.linking)) gl.deleteProgram(program)
     this.maps.dispose()
+    this.volume.dispose()
     this.freeTarget()
   }
 }

@@ -85,7 +85,7 @@ function make(): Made | null {
   }
   const world = buildChunk()
   const mesh = new Mesh(world, null)
-  renderer.setWorld(mesh, world.lights)
+  renderer.setWorld(mesh, world)
   return { world, mesh, renderer, canvas }
 }
 
@@ -127,10 +127,8 @@ export function print(still: Still, width: number, height: number, dot: number):
     stars: false,
     star: PAPER,
     unit: dot,
-    quiet: new Float32Array(12),
     torch: null,
     time: 0,
-    viewY: [BOTTOM - 20, TOP + 20],
     pick: null,
     runs: mesh.between(BOTTOM, TOP),
     farRuns: [],

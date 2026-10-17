@@ -46,7 +46,6 @@ import { DAY_KEY, DIG, INK, keyAt, lookAt, mix, NIGHT, PAPER, TORCH } from './en
 import { Loose } from './engine/loose'
 import { hash3, Kind, Mesh, relight, type Taken, type World } from './engine/world'
 import { playing } from './film/clock'
-import { Quiet } from './quiet'
 import { choice } from './sections/choice'
 import { type Aim, stage } from './stage'
 import { FIRST_CANVAS, nextCanvas, RESTORED_WITHIN_MS, withoutDrawing } from './start'
@@ -213,7 +212,7 @@ export function Chunk() {
     const mouse = window.matchMedia('(hover: hover) and (pointer: fine)')
 
     const { world, mesh } = prepared()
-    renderer.setWorld(mesh, world.lights)
+    renderer.setWorld(mesh, world)
     // The other worlds, seen only at the end, are built a while after; as many as the width wants.
     let fleet: Fleet | null = null
     const refleet = () => {
@@ -335,9 +334,6 @@ export function Chunk() {
     ]
     let skyFor = ''
 
-    // Behind the words on the picture, and the header, the print keeps quiet (quiet.ts).
-    const hush = new Quiet()
-
     // Where a frame's time went, for the trace: relighting, measuring the page, writing to it.
     const spent = { relight: 0, measures: 0, dom: 0 }
 
@@ -361,7 +357,6 @@ export function Chunk() {
       // What each distance means: how many blocks fit top to bottom, the lens, and the height the
       // camera stands at. "Far" is the whole column, drawn nearly flat.
       shots = shotsOf(root, band, trying)
-      hush.find(root)
       // The edge between two strata is drawn on the lighter ground, so it counts as paper.
       layers = [...root.querySelectorAll<HTMLElement>('.bl-dig > [data-tone], .bl-dig > .bl-strata')]
         .filter((element) => element !== spine)
@@ -557,7 +552,7 @@ export function Chunk() {
       const taken = world.take(x, y, z)
       if (!taken) return
       mesh.around(x, y, z, keyAt(Math.max(0, shadedAt) / 6))
-      renderer.setWorld(mesh, world.lights)
+      renderer.setWorld(mesh, world)
       holes.push({ taken, until: time + REGROWS_AFTER })
       if (!still.matches) scatter(picked.cell, picked.normal, 9, time)
       dug += 1
@@ -824,7 +819,7 @@ export function Chunk() {
           mesh.scale(x, y, z, 0)
           growing.push({ taken: hole.taken, born: time, size: 0 })
         }
-        renderer.setWorld(mesh, world.lights)
+        renderer.setWorld(mesh, world)
         if (time - grewAt > 5000) stage.say(SAYS.back)
         grewAt = time
         aimed = true
@@ -851,7 +846,7 @@ export function Chunk() {
           stepped = true
         }
         growing = growing.filter((grow) => time - grow.born < GROWS_FOR)
-        if (whole) renderer.setWorld(mesh, world.lights)
+        if (whole) renderer.setWorld(mesh, world)
         else if (stepped) renderer.relight(mesh.data)
         if (whole || stepped) dirty = true
       }
@@ -982,8 +977,8 @@ export function Chunk() {
         torchLight[0] = cast.torch[0]
         torchLight[1] = cast.torch[1]
         torchLight[2] = cast.torch[2]
-        torchLight[3] = 3.8
-        torchLight[4] = glowing
+        torchLight[3] = 6
+        torchLight[4] = glowing * 6
         torchLight[5] = HOME
       }
       let carried = cast.torch && glowing > 0 ? torchLight : null
@@ -1024,7 +1019,6 @@ export function Chunk() {
         stars: dawnOf(day) < 0.35,
         star: PAPER,
         unit,
-        quiet: hush.at(time, box),
         detail: plainer ? 0 : 1,
         rock: Number(trying.get('rock')) || 0,
         groups,
@@ -1036,7 +1030,6 @@ export function Chunk() {
         torch: carried,
         // Water and leaves move by this clock; with less motion asked for it stands still.
         time: quiet ? 0 : clock / 1000,
-        viewY: [BOTTOM - 20, TOP + 20],
         // The block a click would dig is marked the way the game marks one; a kept block only
         // shows itself for the moment after it is knocked on.
         pick: knocked?.cell ?? (aiming === 'dig' ? (picked?.cell ?? null) : null),
@@ -1080,7 +1073,6 @@ export function Chunk() {
       dirty = true
     }
     const scrolled = () => {
-      hush.moved()
       moved = true
       dirty = true
     }

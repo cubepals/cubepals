@@ -6,10 +6,12 @@
  * The first pass of the print (gl.ts): it draws the world's blocks and loose parts, lights them,
  * and writes, for every drawn pixel, how bright the surface there is, whether it glows, and which
  * flat plane it belongs to. The light is one key (the moon by night, the sun by day) with a shadow
- * map, a fill from the sky, a room's own light, and the lamps, which cast no shadow; corners are
- * darkened by the blocks round them (ambient occlusion, worked out when the world is packed). Not
- * the dots, which the second pass makes (print-pass.ts), nor the shadow map's own drawing, which
- * uses this vertex shader with SHADOW_FRAG.
+ * map; a fill from the sky, as much of it as can be seen from here; a room's own light; the placed
+ * lamps, their shadows and their bounce baked when the chunk was built (bake.ts); and the lights
+ * that move. Corners are darkened by the blocks round them (ambient occlusion, worked out when the
+ * world is packed), and the light hanging in the air near a lamp is handed on as dust for a beam.
+ * Not the dots, which the second pass makes (print-pass.ts), nor the shadow map's own drawing,
+ * which uses this vertex shader with SHADOW_FRAG.
  */
 
 export const MAX_LIGHTS = 24
@@ -175,6 +177,12 @@ uniform float uRoomFill;
 uniform float uLampGain;
 // How far the camera is under the grass, 0 to 1: the rock outside the rooms goes dark with it.
 uniform float uDeep;
+// The light that doesn't move, baked a cell a block (bake.ts): red the sky a cell sees, green the
+// placed lamps' light that reaches it, blue what comes back off the blocks round it. Its size in
+// cells and the height of its lowest cell; a size of 0 where there is none (the far worlds).
+uniform highp sampler3D uVolume;
+uniform vec4 uVolume3;
+uniform vec3 uEye;
 layout(location=0) out vec4 o0;
 layout(location=1) out vec4 o1;
 
@@ -228,6 +236,52 @@ float lit(vec3 n, bool sunny, int kind) {
     for (int dy = -2; dy <= 2; dy++)
       sum += texture(uShadowMap, vec3(s.xy + vec2(float(dx), float(dy)) * uMapTexel, s.z - 0.0006));
   return sum / 25.0;
+}
+
+// The baked light just in front of this surface, blended between cells: the sky it sees, and the
+// placed lamps' light, straight and bounced, as one, twice what a byte holds (LAMP_SCALE).
+vec2 baked(vec3 n) {
+#ifdef QUICK
+  return vec2(1.0, 0.0);
+#endif
+  if (uVolume3.x <= 0.0) return vec2(1.0, 0.0);
+  vec3 p = vWorld + n * 0.55;
+  vec3 q = vec3(p.x, p.y - uVolume3.w, p.z) / uVolume3.xyz;
+  if (any(lessThan(q, vec3(0.0))) || any(greaterThan(q, vec3(1.0)))) return vec2(1.0, 0.0);
+  vec3 v = texture(uVolume, q).rgb;
+  // A block further out says which way the light comes from: more there, and this face is turned
+  // toward it; less, and away, so the far side of a rack or a figure is dark.
+  vec3 f = texture(uVolume, q + n / uVolume3.xyz).rgb;
+  float near = v.g + v.b;
+  float far = f.g + f.b;
+  float toward = clamp(0.5 + 1.5 * (far - near) / max(far + near, 0.02), 0.0, 1.0);
+  return vec2(v.r, near * 2.0 * (0.15 + 0.85 * toward));
+}
+
+// Light hanging in the air between the eye and this point, walked back toward the eye for eight
+// blocks: only where it is thick, close by a placed lamp (baked) or a light that moves (a torch),
+// so it shows as a few beams and not as a haze over everything. 0 to 1.
+float beams(float level) {
+#ifdef QUICK
+  return 0.0;
+#endif
+  if (uVolume3.x <= 0.0) return 0.0;
+  vec3 back = normalize(uEye - vWorld);
+  float sum = 0.0;
+  for (int i = 1; i <= 12; i++) {
+    vec3 p = vWorld + back * (float(i) * 0.65);
+    vec3 q = vec3(p.x, p.y - uVolume3.w, p.z) / uVolume3.xyz;
+    if (any(lessThan(q, vec3(0.0))) || any(greaterThan(q, vec3(1.0)))) continue;
+    // Only where a lamp's light is thick, near it: a room's general glow is no beam.
+    vec4 v = texture(uVolume, q);
+    sum += max(0.0, v.g * 2.0 * level - 1.0) * 2.0;
+    for (int k = 0; k < ${MAX_LIGHTS}; k++) {
+      if (k >= uLightCount) break;
+      float f = clamp(1.0 - distance(p, uLights[k].xyz) / uLights[k].w, 0.0, 1.0);
+      sum += uLightOn[k] * max(0.0, f * f * f - 0.5);
+    }
+  }
+  return clamp(sum * 0.12, 0.0, 0.7);
 }
 
 // How much of the room's main lamp reaches this point, 0 to 1, from its own map, 3 by 3.
@@ -305,7 +359,10 @@ void main() {
   // Out of doors: the key where it reaches, and the sky's fill, white from above and a grey bounce
   // from the ground below, so a face turned away from the key is dark.
   float key = uKeyLight * max(dot(n, uKey), 0.0) * lit(n, (sunny & (1 << vFace)) != 0, kind);
-  float sky = uFill * mix(0.604, 1.0, n.y * 0.5 + 0.5);
+  vec2 still = baked(n);
+  // The sky's fill as much as the sky can be seen from here: under eaves, in corners and down the
+  // dig it is shut out.
+  float sky = uFill * mix(0.604, 1.0, n.y * 0.5 + 0.5) * mix(0.3, 1.0, still.x);
   // From inside a room, all that is out of doors is in the dark, however high the room is.
   float deep = loose ? 1.0 : 1.0 - uDeep;
   float light = open ? (key + sky) * deep : roomLight * uRoomFill;
@@ -313,7 +370,10 @@ void main() {
 
   // The lamps: a room's light that room, the ones outdoors the outdoors. Each falls off with
   // distance and lights the faces turned to it; the room's main lamp casts a shadow.
-  float lamp = 0.0;
+  // The placed lamps, baked with their shadows and the light they bounce, by how far up their
+  // switch is: eased, so a room turned low still glows. A room seen from out of doors (the column,
+  // a cutaway) is a lit window in a dark wall, so its lamps count for more there.
+  float lamp = still.y * sqrt(uGroups[open ? 1 : room]) * (open ? 1.0 : 1.0 + 5.0 * (1.0 - uDeep));
   // A room's rock walls stand close beside its lamps and face them square on, so a lamp would
   // light a round pool on a wall, bright to its rim: there its light falls away sooner, and the
   // pool fades into the wall's dark the way the floor's does.
@@ -355,8 +415,11 @@ void main() {
   }
   id = mod(id + 8192.0, 65535.0) + 1.0;
   // Brightness is kept at half, so light past white still has room before the tone curve.
-  // Blue is how much of the light here is lamplight: the second pass prints that share warm.
-  o0 = vec4(clamp(lum * 0.5, 0.0, 1.0), glow, clamp(warmth / max(lum, 0.001), 0.0, 1.0), 1.0);
+  // Blue is how much of the light here is lamplight, where there is enough of it to show: the
+  // second pass prints that share warm.
+  // The alpha carries the dust of a beam in front of this point, for the second pass to scatter.
+  float dust = loose ? 0.0 : beams(uGroups[open ? 1 : room]);
+  o0 = vec4(clamp(lum * 0.5, 0.0, 1.0), glow, clamp(warmth / max(lum, 0.001), 0.0, 1.0) * smoothstep(0.02, 0.2, warmth), 1.0 - 0.4 * dust);
   // (Half marks a part that is thinning: no line is drawn round its scattered dots.)
   o1 = vec4(mod(id, 256.0) / 255.0, floor(id / 256.0) / 255.0, vFog, ghost ? 0.5 : 1.0);
 }`

@@ -66,6 +66,9 @@ const TONE: Record<number, number> = {
   [Kind.sand]: 0.94,
 }
 
+/** How much light a block of this kind gives back, 0 to 1 (its tone). */
+export const toneOf = (kind: number): number => TONE[kind] ?? 0.5
+
 /**
  * A block's four corners on each face, in the order its quad takes them, which is also the order
  * of the face's corner shading: where on the face is (0, 0), (1, 0), (1, 1), then (0, 1).

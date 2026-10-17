@@ -6,10 +6,9 @@
  * The second pass of the print (gl.ts): it turns what the first pass wrote (scene-pass.ts) into
  * dots. Brightness goes through a tone curve (exposure, contrast, gamma) and then an 8 by 8
  * ordered dither; a line is drawn where two planes meet; what glows is printed solid, and its
- * blur (GLOW_FRAG, twice) as torch dots round it; the empty night sky gets a few stars. Behind the
- * words on the page the print opens to bare ground (the quiet rects), its dots thinning out over
- * about 150 CSS pixels (wider on the dark grounds, shorter on the hero's sky), so no word sits
- * on texture.
+ * blur (GLOW_FRAG, twice) as torch dots round it; the empty night sky gets a few stars; and the
+ * dust in a beam of light is a scatter of dots that drifts. The picture runs on under the words:
+ * they carry a halo of their own ground (landing.css), so nothing of it is erased for them.
  */
 
 export const PRINT_VERT = `#version 300 es
@@ -54,10 +53,8 @@ uniform float uExposure;
 uniform float uContrast;
 uniform float uLevels;
 uniform float uStars;
-// How many CSS pixels one drawn dot is, and the rects (x, y, w, h in CSS pixels from the canvas's
-// top left) the print keeps quiet behind; a width of 0 or less is unused.
-uniform float uUnit;
-uniform vec4 uQuiet[3];
+// The scene's clock, in seconds, for the dust drifting in a beam.
+uniform float uTime;
 out vec4 o;
 
 float b2(vec2 a) { a = floor(a); return fract(a.x / 2.0 + a.y * a.y * 0.75); }
@@ -68,24 +65,6 @@ float hash(vec2 p) {
   vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
   q += dot(q, q.yzx + 33.33);
   return fract((q.x + q.y) * q.z);
-}
-
-// How quiet the print is here, 0 to 1: the distance to each rect, as a rect with round corners,
-// eased over \`reach\` CSS pixels with a smoothstep, so the open ground has a soft, round edge and
-// never a box's.
-float quietAt(float reach) {
-  vec2 css = vec2(gl_FragCoord.x, float(uSize.y) - gl_FragCoord.y) * uUnit;
-  float m = 0.0;
-  for (int i = 0; i < 3; i++) {
-    vec4 r = uQuiet[i];
-    if (r.z <= 0.0) continue;
-    vec2 half_ = r.zw * 0.5;
-    float corner = min(48.0, min(half_.x, half_.y));
-    vec2 q = abs(css - (r.xy + half_)) - half_ + corner;
-    float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - corner;
-    m = max(m, 1.0 - smoothstep(-24.0, reach, d));
-  }
-  return m;
 }
 
 void main() {
@@ -106,42 +85,41 @@ void main() {
   float row = float(uSize.y - 1 - c.y);
   int region = row < uEdges.x ? 0 : (row < uEdges.y ? 1 : (row < uEdges.z ? 2 : (row < uEdges.w ? 3 : 4)));
   int band = uRegions[region];
-  // On the dark grounds a lamp lights the walls round the words, and a short fade would read as
-  // a dark shape cut out of them: there the light fades over a wider reach (below). The hero's
-  // chunk stands close beside its words, so on its sky the reach is short.
-  float quiet = quietAt(band == 2 ? 260.0 : (band == 0 ? 40.0 : 150.0));
   float t = bayer8(vec2(c));
   // A lamp is solid torch; its light round it is torch dots, added in the dither's own order.
-  float glow = texelFetch(uGlow, c, 0).r * (1.0 - quiet);
-  bool solid = shade.a > 0.5 && shade.g > 0.5 && quiet < t;
+  float glow = texelFetch(uGlow, c, 0).r;
+  bool solid = shade.a > 0.5 && shade.g > 0.5;
   if (solid || glow * 1.5 > t + 0.05) { o = vec4(uWarm, 1.0); return; }
+  // A beam of light through the air in front of what is drawn (scene-pass.ts, the alpha below
+  // one): dust, a scatter of warm dots as thick as the beam, drifting down a dot at a time.
+  float dust = shade.a > 0.5 ? (1.0 - shade.a) / 0.4 : 0.0;
+  if (dust > 0.0 && hash(vec2(c.x, c.y + int(floor(uTime * 5.0)))) < dust * 0.4) { o = vec4(uWarm, 1.0); return; }
   if (shade.a < 0.5 && !edge) {
     // The night sky, where nothing is drawn: a star here and there, each one dot, never fading.
     bool night = band == 0 || band == 3;
-    if (night && uStars > 0.5 && quiet < 0.01 && hash(vec2(c)) > 0.9992) { o = vec4(uStar, 1.0); return; }
+    if (night && uStars > 0.5 && hash(vec2(c)) > 0.9992) { o = vec4(uStar, 1.0); return; }
     o = vec4(0.0);
     return;
   }
   // Far off, a world thins to scattered dots and then to nothing, whatever the page's colour.
   float fog = max(here.b, max(right.b, down.b));
   if (fog > bayer8(vec2(c + ivec2(3, 5)))) { o = vec4(0.0); return; }
-  if (edge && quiet < t) { o = vec4(uLine[band], 1.0); return; }
+  if (edge) { o = vec4(uLine[band], 1.0); return; }
   // The tone curve: exposure, then contrast about the middle, then gamma. This is the art direction.
   float l = shade.r * 2.0 * uExposure;
   l = 1.0 - exp(-l);
   l = clamp((l - 0.5) * uContrast + 0.5, 0.0, 1.0);
-  l = pow(l, 1.0 / 2.2);
+  // On the dark grounds the gamma starts with a straight run out of black, as sRGB's does, so the
+  // faintest light comes in a few dots at a time and a wall's shading draws no contour.
+  l = band == 2 && l < 0.1 ? l * 3.51 : pow(l, 1.0 / 2.2);
   // (The plainer print has a few flat steps of grey instead.)
   if (uLevels > 0.0) l = floor(l * uLevels + 0.5) / uLevels;
-  // Behind the words the print opens to its ground: paper on the light grounds, dark on the dark,
-  // where the quiet dims the lamps' light the way distance does.
-  l = band == 2 ? l * (1.0 - quiet) : mix(l, 1.0, quiet);
-  // In the dark rooms the faint end of the lamps' light goes to the dark: below about a sixth it
-  // prints nothing and above that it eases in, so neither a lamp's pool nor the quiet has a rim.
-  // The dither's order is jittered a little there too, so its steps draw no contour on a wall.
+  // In the dark rooms the faint end of the light eases into the dark: below a thirtieth it
+  // prints nothing and above that it comes in gently, so a lamp's pool has no rim. The dither's
+  // order is jittered a little there too, so its steps draw no contour on a wall.
   if (band == 2) {
-    l = smoothstep(0.15, 0.95, l);
-    t = clamp(t + (hash(vec2(c) + 3.0) - 0.5) * 0.12, 0.0, 1.0);
+    l = smoothstep(0.03, 0.95, l);
+    t = clamp(t + (hash(vec2(c) + 3.0) - 0.5) * 0.12, 0.03, 1.0);
   }
   if (l <= t) { o = vec4(uLow[band], 1.0); return; }
   // A lit dot is warm where that share of the light here is lamplight, in the dither's own order.

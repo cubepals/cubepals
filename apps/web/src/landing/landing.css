@@ -279,6 +279,18 @@
   }
 }
 
+/* The words set on the picture keep it off their letters with a halo of their own ground, three
+   pixels round each letter and drawn under it, so the picture runs on behind them and none of it
+   is erased. A button, a field or the game's own lettering has a ground of its own and no halo. */
+.bl [data-over] {
+  -webkit-text-stroke: 6px var(--field);
+  paint-order: stroke fill;
+}
+.bl [data-over] :is(.bl-btn, .bl-game, button, input, [data-field]),
+.bl [data-over] :is(.bl-btn, .bl-game, button, input, [data-field]) * {
+  -webkit-text-stroke: 0;
+}
+
 /* The chunk's place. On a wide screen its canvas covers the whole view and stays there for as long
    as the dig lasts, and the camera moves within it. On a narrow one it is a band pinned to the
    top, and the page scrolls under it; the band takes the colour of whichever stratum is passing

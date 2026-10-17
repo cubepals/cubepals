@@ -58,8 +58,6 @@ export interface Frame {
   star: Rgb
   /** How many CSS pixels one drawn dot is. */
   unit: number
-  /** Up to three rects the print keeps quiet behind, in CSS pixels: x, y, width, height each. */
-  quiet: Float32Array
   /**
    * A light that isn't part of the world (a torch somebody carries, the server's own glow): where
    * it is, how far it reaches, how bright, and whose it is (1 out of doors, or a room's switch).
@@ -71,8 +69,6 @@ export interface Frame {
   /** How far the camera is under the grass, 0 to 1: the rock outside the rooms goes dark with it. */
   deep: number
   time: number
-  /** The range of world height in view, to choose which lights count. */
-  viewY: readonly [number, number]
   /** The block the cursor is on, or null. */
   pick: readonly [number, number, number] | null
   /**

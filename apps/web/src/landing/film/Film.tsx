@@ -156,7 +156,7 @@ export function Knock() {
     >
       <div className={styles.address} data-over>
         <span className={styles.label}>Server Address</span>
-        <span className={styles.field}>
+        <span className={styles.field} data-field>
           {ADDRESS.slice(0, typed)}
           {beat.on && <i className={styles.caret} aria-hidden />}
         </span>
