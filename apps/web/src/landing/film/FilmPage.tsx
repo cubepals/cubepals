@@ -62,6 +62,18 @@ export function FilmPage({ create, signedIn, plans, getPlan, arcade }: Landed) {
         <div className="bl-dig">
           <div className="bl-spine">
             <Chunk />
+            {/* The hero as printed beforehand, until the canvas has its own lit print (landing.css). */}
+            {/* biome-ignore lint/performance/noImgElement: a print one pixel a dot, scaled whole, never re-encoded. */}
+            <img
+              className="bl-first"
+              src="/imagery/landing-hero.png"
+              srcSet="/imagery/landing-hero.png 1x, /imagery/landing-hero-2x.png 2x"
+              width={1440}
+              height={900}
+              alt=""
+              fetchPriority="high"
+              aria-hidden
+            />
           </div>
           <Night create={create} plans={plans} arcade={arcade} />
           <Knock />

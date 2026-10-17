@@ -8,7 +8,7 @@
  * ordered dither; a line is drawn where two planes meet; what glows is printed solid, and its
  * blur (GLOW_FRAG, twice) as torch dots round it; the empty night sky gets a few stars. Behind the
  * words on the page the print opens to bare ground (the quiet rects), its dots thinning out over
- * about 150 CSS pixels, so no word sits on texture.
+ * about 150 CSS pixels (wider on the dark grounds), so no word sits on texture.
  */
 
 export const PRINT_VERT = `#version 300 es
@@ -70,9 +70,9 @@ float hash(vec2 p) {
 }
 
 // How quiet the print is here, 0 to 1: the distance to each rect, as a rect with round corners,
-// eased over 150 CSS pixels with a smoothstep, so the open ground has a soft, round edge and never
-// a box's.
-float quietAt() {
+// eased over \`reach\` CSS pixels with a smoothstep, so the open ground has a soft, round edge and
+// never a box's.
+float quietAt(float reach) {
   vec2 css = vec2(gl_FragCoord.x, float(uSize.y) - gl_FragCoord.y) * uUnit;
   float m = 0.0;
   for (int i = 0; i < 3; i++) {
@@ -82,7 +82,7 @@ float quietAt() {
     float corner = min(48.0, min(half_.x, half_.y));
     vec2 q = abs(css - (r.xy + half_)) - half_ + corner;
     float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - corner;
-    m = max(m, 1.0 - smoothstep(-24.0, 150.0, d));
+    m = max(m, 1.0 - smoothstep(-24.0, reach, d));
   }
   return m;
 }
@@ -100,13 +100,16 @@ void main() {
   bool edge = !thin && (
     (any(notEqual(here.rg, right.rg)) && abs(right.a - 0.5) >= 0.2) ||
     (any(notEqual(here.rg, down.rg)) && abs(down.a - 0.5) >= 0.2));
-  float quiet = quietAt();
-  float t = bayer8(vec2(c));
   // The page behind the print changes colour on the way down, and the print changes with it, on
   // the same row.
   float row = float(uSize.y - 1 - c.y);
   int region = row < uEdges.x ? 0 : (row < uEdges.y ? 1 : (row < uEdges.z ? 2 : (row < uEdges.w ? 3 : 4)));
   int band = uRegions[region];
+  // On the dark grounds a lamp lights the walls round the words, and a short fade would read as
+  // a dark shape cut out of them: there the light dots thin out over a wider reach, so the dark
+  // comes on with no edge to see (below).
+  float quiet = quietAt(band == 2 ? 260.0 : 150.0);
+  float t = bayer8(vec2(c));
   // A lamp is solid torch; its light round it is torch dots, added in the dither's own order.
   float glow = texelFetch(uGlow, c, 0).r * (1.0 - quiet);
   bool solid = shade.a > 0.5 && shade.g > 0.5 && quiet < t;
@@ -129,9 +132,12 @@ void main() {
   l = pow(l, 1.0 / 2.2);
   // (The plainer print has a few flat steps of grey instead.)
   if (uLevels > 0.0) l = floor(l * uLevels + 0.5) / uLevels;
-  // Behind the words the print opens to its ground: paper on the light grounds, dark on the dark.
-  l = mix(l, band == 2 ? 0.0 : 1.0, quiet);
-  if (l <= t) { o = vec4(uLow[band], 1.0); return; }
+  // Behind the words the print opens to its ground. On the light grounds the tone eases to paper.
+  // On the dark ones the light dots drop out one at a time, at random, as many as the quiet asks:
+  // easing the tone instead would put out a whole evenly lit wall's dots at the same distance,
+  // and leave the edge of a shape.
+  if (band != 2) l = mix(l, 1.0, quiet);
+  if (l <= t || (band == 2 && quiet > hash(vec2(c) + 17.0))) { o = vec4(uLow[band], 1.0); return; }
   // A lit dot is warm where that share of the light here is lamplight, in the dither's own order.
   o = vec4(shade.b > bayer8(vec2(c + ivec2(5, 2))) ? uWarm : uHigh[band], 1.0);
 }`

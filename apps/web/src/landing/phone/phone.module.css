@@ -130,6 +130,18 @@
   align-items: center;
   gap: 12px 20px;
 }
+/* The trial line and the one under the last button: no word left alone on a line. `pretty` where
+   the browser has it, `balance` where it doesn't. */
+.go p,
+.last .under {
+  text-wrap: balance;
+}
+@supports (text-wrap: pretty) {
+  .go p,
+  .last .under {
+    text-wrap: pretty;
+  }
+}
 .go p {
   margin: 0;
   font-size: 0.9375rem;

@@ -128,6 +128,15 @@ interface Target {
   glowFb: [WebGLFramebuffer, WebGLFramebuffer]
 }
 
+/**
+ * A canvas on the page says, with `data-lit`, once it shows the lit print, so the still printed
+ * beforehand that stands in for it (`.bl-first`, FilmPage.tsx) can give way. A worker's canvas has
+ * no attributes.
+ */
+function markLit(canvas: HTMLCanvasElement | OffscreenCanvas): void {
+  if ('dataset' in canvas && !('lit' in canvas.dataset)) canvas.dataset.lit = ''
+}
+
 export class Renderer {
   private readonly gl: WebGL2RenderingContext
   /** The programs while they compile, and each once it has. */
@@ -583,6 +592,7 @@ export class Renderer {
     gl.disable(gl.DEPTH_TEST)
     this.blurGlow(target, frame.unit)
     this.printFrame(target, frame)
+    if (lit) markLit(gl.canvas)
     return lit
   }
 
