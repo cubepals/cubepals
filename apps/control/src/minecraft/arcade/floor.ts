@@ -13,6 +13,7 @@
  *
  * A round is `#state` in its objective: 0 nobody waiting, 1 counting down, 2 under way.
  */
+import { type Read, viewFrom } from '../readable.ts'
 import { AS_COUNT, onSidebar, SECONDS, shown, submit, TMP, WORK } from './boards.ts'
 import { type Block, box, NS, PAPER, type Part } from './datapack.ts'
 import { type BrandSign, buildSign, creditLabel, ICE } from './signs.ts'
@@ -31,6 +32,24 @@ const FLOOR_BLOCK = 'snow_block'
 
 /** Where a player arrives from the hub, and goes back to between rounds: the pad at the lake's edge, facing the floors. */
 export const FLOOR_ARRIVAL = '0.5 60 52.5 180 0'
+
+/**
+ * What to do here, read on arriving at the pad: one line between the pad and the floors, over the
+ * lake's headroom and short of the floors (`readable.ts`). The title on arriving names the game.
+ */
+export const FLOOR_READS: readonly Read[] = [
+  {
+    label: {
+      at: [0.5, 63.06, 46.5],
+      tag: `${NS}.label`,
+      text: [{ text: 'Wait here for the next round', color: PAPER }],
+      scale: 1,
+      facing: 'south',
+    },
+    from: viewFrom(FLOOR_ARRIVAL),
+    titled: true,
+  },
+]
 
 /** The pad players wait on, built into the world (`scripts/lib/arcade-brand.ts`), by its middle. */
 export const FLOOR_PAD: Block = [0, 59, 52]
@@ -162,7 +181,10 @@ export const FLOOR_PART: Part = {
     `team modify ${NS}.floor collisionRule never`,
     `scoreboard objectives setdisplay sidebar.team.yellow ${FF}.best`,
   ],
-  labels: [creditLabel(FLOOR_SIGN)].filter((credit) => credit !== null),
+  labels: [
+    ...FLOOR_READS.map(({ label }) => label),
+    ...[creditLabel(FLOOR_SIGN)].filter((credit) => credit !== null),
+  ],
   build: [
     ...buildSign(FLOOR_SIGN),
     `function ${NS}:floor/rebuild`,

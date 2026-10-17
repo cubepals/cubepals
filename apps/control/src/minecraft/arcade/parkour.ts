@@ -13,8 +13,9 @@
  * The places are the courses' own, from each map's `map.xml`, moved to where the course sits in
  * the Arcade's world (`maps.ts`).
  */
+import { type Read, viewFrom } from '../readable.ts'
 import { onSidebar, SECONDS, shown, submit, TMP, WORK } from './boards.ts'
-import { type Block, box, NS, PAPER, type Part } from './datapack.ts'
+import { type Block, box, NS, PAPER, type Part, titled } from './datapack.ts'
 import { placed } from './maps.ts'
 import { clearSign, type SignPlace } from './signs.ts'
 
@@ -90,6 +91,25 @@ export const PARKOUR_FINISHES: ReadonlyArray<{ from: Block; to: Block }> = STAGE
 const FIRST = STAGES[0]?.start ?? RESPAWNS[0]
 if (FIRST === undefined) throw new Error('The parkour has no stages')
 export const PARKOUR_ARRIVAL = where(FIRST)
+
+/**
+ * What to do here, read on arriving: beyond the Jungle's far end, past all of its jumps, over a
+ * look ahead, clear of the first stairs in front of it and of the title the arrival shows, large
+ * enough to read from there (`readable.ts`).
+ */
+export const PARKOUR_READS: readonly Read[] = [
+  {
+    label: {
+      at: [968.5, 73.6, 0.5],
+      tag: `${NS}.label`,
+      text: titled('Parkour', 'Step off to start the clock'),
+      scale: 5,
+      facing: 'east',
+    },
+    from: viewFrom(PARKOUR_ARRIVAL),
+    titled: true,
+  },
+]
 
 /** Everything the courses take up, from below them to well above. */
 const ZONE = box([940, 40, -60], [1460, 140, 60])
@@ -182,7 +202,7 @@ export const PARKOUR_PART: Part = {
     `team modify ${NS}.parkour nametagVisibility hideForOtherTeams`,
     `scoreboard objectives setdisplay sidebar.team.aqua ${PK}.side`,
   ],
-  labels: [],
+  labels: PARKOUR_READS.map(({ label }) => label),
   build: [clearSign(OLD_SIGN), 'forceload remove 960 -40 1410 40'],
   tick: [
     `team join ${NS}.parkour @a[team=!${NS}.parkour,${ZONE}]`,

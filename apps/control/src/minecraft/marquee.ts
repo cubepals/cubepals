@@ -14,8 +14,7 @@
  * or an item in its place would be shaded grey by the light. The mark is drawn as the pack's
  * pictures draw it (`brand-art.ts`), a fraction of a block to a cell, with the brand's clear space
  * round it (`brand/README.md`): block displays of black concrete for its depth, each faced in Ink
- * the same way as the Paper. The
- * same square turns to whoever looks over each of the Arcade's pads (`markBadge`).
+ * the same way as the Paper.
  */
 import { type Block, exactly, type Facing, INK, PAPER, YAW } from './arcade/datapack.ts'
 import { markPixels } from './brand-art.ts'
@@ -224,30 +223,3 @@ export const buildMarquee = (sign: Marquee, tags: readonly string[]): string[] =
   ...blocks(sign),
   ...badge(sign, tags),
 ]
-
-/**
- * The same square on its own, turning to whoever looks: `side` blocks across, its middle at `at`, a
- * text display of Paper and one of Ink for each rectangle of the mark, all standing where it does,
- * so they turn as one.
- */
-export function markBadge(
-  at: readonly [number, number, number],
-  side: number,
-  tags: readonly string[],
-): string[] {
-  const grain = 12
-  const cells = markIn(side * grain)
-  const offset = (side - cells.length / grain) / 2
-  const bottom: [number, number, number] = [at[0], at[1] - side / 2, at[2]]
-  const summon = (body: string) =>
-    `summon minecraft:text_display ${exactly(bottom)} {${tagged(tags)},billboard:"vertical",${body}}`
-  return [
-    summon(square(side, side, PAPER, [0, 0, 0])),
-    ...patches(cells).map((patch) => {
-      const [width, height] = [patch.columns / grain, patch.rows / grain]
-      const left = -side / 2 + offset + patch.column / grain
-      const top = side - offset - patch.row / grain
-      return summon(square(width, height, INK, [left + width / 2, top - height, 0.01]))
-    }),
-  ]
-}

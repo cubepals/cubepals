@@ -20,6 +20,7 @@ import type { ModArtifact, PinnedMod } from '../domain/mods/artifact.ts'
 import { onLevel, placedMods } from '../domain/revision/carried.ts'
 import type { ServerRevision } from '../domain/revision/revision.ts'
 import { DATA_DIR, diskName } from './jars.ts'
+import { type ListVariables, readList } from './step-lists.ts'
 
 /**
  * Whether a path is one Cubepals may write: relative, plain, and none of the files Blockly keeps
@@ -47,10 +48,37 @@ const KEPT_BY_BLOCKLY: ReadonlySet<string> = new Set([
 ])
 
 /** Where the volume remembers what this step wrote, so what a later revision drops goes too. */
-const PLACED_MARK = `${DATA_DIR}/.blockly-files`
+const PLACED_RECORD = '.blockly-files'
+const PLACED_MARK = `${DATA_DIR}/${PLACED_RECORD}`
 
-/** Each placed jar on one line: its path, its sha512 and its link. */
-const JARS_VARIABLE = 'BLOCKLY_JARS'
+/**
+ * A line of the record that `placeablePath` refuses, as a shell `case` pattern: never a path the
+ * step wrote. The record is on the volume, where the server can change it, so such a line is
+ * passed over rather than removed.
+ */
+const UNPLACEABLE = [
+  "''",
+  '*[!A-Za-z0-9._+/-]*',
+  '/*',
+  '*/',
+  '*//*',
+  '.',
+  '..',
+  './*',
+  '../*',
+  '*/./*',
+  '*/../*',
+  '*/.',
+  '*/..',
+  '.blockly*',
+  ...KEPT_BY_BLOCKLY,
+].join('|')
+
+/**
+ * Each placed jar on one line: its path, its sha512 and its link. A start given more of them than
+ * one variable holds is given them compressed (`step-lists.ts`).
+ */
+export const JARS_VARIABLES: ListVariables = { plain: 'BLOCKLY_JARS', compressed: 'BLOCKLY_JARS_GZ' }
 /**
  * Each carried file on one line: its path and its bytes in base64, as `carriedEnv` writes them. A
  * start is given them compressed instead (`compressed`, made by `app/servers/carried-files.ts`): the
@@ -59,24 +87,31 @@ const JARS_VARIABLE = 'BLOCKLY_JARS'
  * fails before anything runs ("Argument list too long", production's Arcade, 2026-10-17). The step
  * reads either, the compressed one first.
  */
-export const FILES_VARIABLES = { plain: 'BLOCKLY_FILES', compressed: 'BLOCKLY_FILES_GZ' } as const
+export const FILES_VARIABLES = {
+  plain: 'BLOCKLY_FILES',
+  compressed: 'BLOCKLY_FILES_GZ',
+} as const satisfies ListVariables
 
 /**
  * The step. Names hold no spaces or quotes (`placeablePath`), so the shell splits lines on spaces.
  * What the last start wrote and this revision doesn't is removed; a placed jar already holding
  * its bytes is kept, and any other is fetched and checked against its sha512 before it is moved
  * into place, or the start stops with what it couldn't fetch. Then every carried file is written.
+ * It runs as root, so it replaces any link on the way to what it writes or removes
+ * (`volume-links.ts`), and never follows one out of the volume.
  */
 export const CARRIED_STEP = [
-  // The files' lines, from their compressed variable, or as an earlier start gave them.
-  `if [ -n "$${FILES_VARIABLES.compressed}" ]; then files=$(printf %s "$${FILES_VARIABLES.compressed}" | base64 -d | gzip -dc) || exit 1; else files="$${FILES_VARIABLES.plain}"; fi;`,
-  `placed=$(printf '%s\\n%s\\n' "$${JARS_VARIABLE}" "$files" | cut -d ' ' -f 1);`,
-  `for old in $(cat ${PLACED_MARK} 2>/dev/null); do case " $(echo $placed) " in *" $old "*) ;; *) rm -f "${DATA_DIR}/$old";; esac; done;`,
-  `printf '%s\\n' "$${JARS_VARIABLE}" | while read -r path sha url; do [ -n "$path" ] || continue; f="${DATA_DIR}/$path";`,
-  `if [ "$(sha512sum "$f" 2>/dev/null | cut -d ' ' -f 1)" != "$sha" ]; then mkdir -p "$(dirname "$f")" &&`,
-  `curl -fsSL --retry 3 --max-time 300 -o "$f.part" "$url" && [ "$(sha512sum "$f.part" | cut -d ' ' -f 1)" = "$sha" ] && mv "$f.part" "$f"`,
+  // The files' and jars' lines, from their compressed variables, or as an earlier start gave them.
+  readList('files', FILES_VARIABLES),
+  readList('jars', JARS_VARIABLES),
+  `placed=$(printf '%s\\n%s\\n' "$jars" "$files" | cut -d ' ' -f 1); unlinked ${PLACED_RECORD};`,
+  `if [ -f ${PLACED_MARK} ]; then while read -r old; do case "$old" in ${UNPLACEABLE}) continue;; esac;`,
+  `case " $(echo $placed) " in *" $old "*) ;; *) unlinked "$old"; rm -f "${DATA_DIR}/$old";; esac; done < ${PLACED_MARK}; fi;`,
+  `printf '%s\\n' "$jars" | while read -r path sha url; do [ -n "$path" ] || continue; unlinked "$path"; f="${DATA_DIR}/$path";`,
+  `if [ "$(sha512sum "$f" 2>/dev/null | cut -d ' ' -f 1)" != "$sha" ]; then mkdir -p "$(dirname "$f")" && rm -f "$f.part" &&`,
+  `curl -fsSL --retry 3 --max-time 300 -o "$f.part" "$url" && [ "$(sha512sum "$f.part" | cut -d ' ' -f 1)" = "$sha" ] && mv -fT "$f.part" "$f"`,
   `|| { rm -f "$f.part"; echo "Cubepals could not fetch $path" >&2; exit 1; }; fi; done || exit 1;`,
-  `printf '%s\\n' "$files" | while read -r path data; do [ -n "$path" ] || continue;`,
+  `printf '%s\\n' "$files" | while read -r path data; do [ -n "$path" ] || continue; unlinked "$path";`,
   `mkdir -p "$(dirname "${DATA_DIR}/$path")" && printf %s "$data" | base64 -d > "${DATA_DIR}/$path" || exit 1; done || exit 1;`,
   `printf '%s\\n' $placed > ${PLACED_MARK};`,
 ].join(' ')
@@ -126,7 +161,7 @@ export function carriedEnv(
     .map((entry) => entry.path)
   if (wrong.length > 0) throw new Error(`Cubepals can't place ${wrong.join(', ')} on a server.`)
   return {
-    [JARS_VARIABLE]: jars.map((jar) => `${jar.path} ${jar.sha512} ${jar.url}`).join('\n'),
+    [JARS_VARIABLES.plain]: jars.map((jar) => `${jar.path} ${jar.sha512} ${jar.url}`).join('\n'),
     [FILES_VARIABLES.plain]: files
       .map((file) => `${file.path} ${Buffer.from(file.content, 'utf8').toString('base64')}`)
       .join('\n'),

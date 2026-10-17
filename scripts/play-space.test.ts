@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import type { Label } from '../apps/control/src/minecraft/arcade/datapack.ts'
-import { HUB_MARKERS, PAD_BADGES } from '../apps/control/src/minecraft/arcade/hub.ts'
+import { HUB_MARKERS } from '../apps/control/src/minecraft/arcade/hub.ts'
 import { markerRoom, type Room, roomOf, wallOf } from '../apps/control/src/minecraft/arcade/label-space.ts'
 import { ARCADE_WORLD } from '../apps/control/src/minecraft/arcade/maps.ts'
 import { PARKOUR_FINISHES } from '../apps/control/src/minecraft/arcade/parkour.ts'
@@ -86,9 +86,6 @@ const ARCADE_THINGS: Thing[] = [
   }),
   ...ARCADE_LABELS.flatMap((label) => shown(`the label "${labelText(label)}"`, roomOf(label))),
   ...HUB_MARKERS.flatMap((marker) => shown(`the marker at ${marker.at.join(' ')}`, markerRoom(marker))),
-  ...PAD_BADGES.flatMap(({ at, side }) =>
-    shown(`the badge at ${at.join(' ')}`, markerRoom({ at, scale: side })),
-  ),
   ...signBlocks(ARCADE_FILES),
 ]
 
