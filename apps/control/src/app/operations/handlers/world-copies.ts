@@ -59,7 +59,7 @@ export type WorldCopies = ReturnType<typeof worldCopies>
 
 export function worldCopies(deps: {
   db: Db
-  runtime: Pick<Runtimes, 'snapshot' | 'snapshotLifetimeDays' | 'exportSnapshot'>
+  runtime: Pick<Runtimes, 'snapshot' | 'snapshotLifetimeDays' | 'exportSnapshot' | 'observe'>
   console: Pick<ServerConsole, 'run' | 'runAll'>
   consoleTarget: GameConsole['consoleTarget']
   events: Pick<EventBus, 'publish'>
@@ -116,7 +116,14 @@ export function worldCopies(deps: {
     taken?: () => void,
   ): Promise<BackupRecord> => {
     const target = consoleTarget(server, handle)
-    const saved = running ? await paused(target) : true
+    // A compute that isn't running has no game to pause: its disk holds what the game last wrote.
+    const live =
+      running &&
+      (await runtime.observe(handle).then(
+        (seen) => seen.state === 'running',
+        () => true,
+      ))
+    const saved = live ? await paused(target) : true
     try {
       const made = await runtime.snapshot(handle, taken)
       const lifetime = runtime.snapshotLifetimeDays(made.snapshot)
@@ -135,7 +142,7 @@ export function worldCopies(deps: {
       )
       return backup
     } finally {
-      if (running) await resumed(server, target)
+      if (live) await resumed(server, target)
     }
   }
 
