@@ -50,7 +50,7 @@ import {
   setDesired,
 } from '../servers/persistence.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
-import { deletePendingUpload, insertPendingUpload, loadPendingUpload } from '../uploads/persistence.ts'
+import { claimPendingUpload, insertPendingUpload, loadPendingUpload } from '../uploads/persistence.ts'
 import { insertWorld, listWorlds, markPruned, markWorldDeleted } from '../worlds/persistence.ts'
 import { downloadsErased, downloadsToErase } from './download-records.ts'
 import { WorldDownloads } from './downloads.ts'
@@ -63,6 +63,7 @@ import {
   insertArchive,
   latestBackup,
   latestRestorePoint,
+  listBackups,
   loadBackup,
   readySnapshots,
   setBackupStatus,
@@ -293,6 +294,12 @@ export class BackupService {
 
     return this.#db.transaction(async (tx) => {
       const locked = authorize(actor, await lockServer(tx, server.id))
+      // One upload is one backup: the same finish asked again gets the backup the first one made.
+      if (!(await claimPendingUpload(tx, pending.id))) {
+        const made = (await listBackups(tx, locked.id)).find((b) => b.archiveKey === pending.key)
+        if (made === undefined) throw new NotFound('Upload')
+        return made
+      }
       const known = (await listWorlds(tx, locked.id)).find((w) => w.levelName === world.levelName)
       let worldId = known?.id
       if (worldId === undefined) {
@@ -328,8 +335,6 @@ export class BackupService {
           gameVersion: world.gameVersion,
         },
       })
-      // The key is the backup's now; nothing is left to clear.
-      await deletePendingUpload(tx, pending.id)
       await this.#audit(tx, actor, 'server.world_uploaded', locked.id, {
         backupId: backup.id,
         level: world.levelName,

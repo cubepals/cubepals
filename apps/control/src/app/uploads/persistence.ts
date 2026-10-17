@@ -45,6 +45,15 @@ export async function deletePendingUpload(q: Queryable, id: string): Promise<voi
   await q.delete(pending).where(eq(pending.id, id))
 }
 
+/**
+ * Takes the upload out of the pending ones: true for the one caller that removed it, false for
+ * every other. Whoever takes it is the one who decides what becomes of its file.
+ */
+export async function claimPendingUpload(q: Queryable, id: string): Promise<boolean> {
+  const taken = await q.delete(pending).where(eq(pending.id, id)).returning({ id: pending.id })
+  return taken.length > 0
+}
+
 /** Uploads whose leftovers can go: finished ones, and ones nobody finished in time. */
 export async function uploadsToClear(
   q: Queryable,

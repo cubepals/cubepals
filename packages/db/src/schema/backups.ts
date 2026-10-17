@@ -68,6 +68,8 @@ export const backups = pgTable(
     index('backups_server_recent').on(t.serverId, t.createdAt),
     // Ready backups their provider has let go by now, swept every hour.
     index('backups_ready_expiry').on(t.expiresAt).where(sql`${t.status} = 'ready'`),
+    // A file in the store belongs to one backup, so deleting one backup never takes another's world.
+    uniqueIndex('backups_one_per_archive_key').on(t.archiveKey).where(sql`${t.archiveKey} is not null`),
     // Only snapshots have a provider handle, and every snapshot that was made has one; a failed
     // snapshot records the attempt without one (§9: backup `failed`, server unaffected).
     check('backups_handle_only_on_snapshots', sql`${t.tier} = 'snapshot' or ${t.snapshotHandle} is null`),
@@ -77,6 +79,21 @@ export const backups = pgTable(
     ),
   ],
 )
+
+/**
+ * A world the server lists whose directories are not on its volume, only in a backup: a restore
+ * replaced the volume and couldn't copy the world back. Restoring the world from that backup
+ * brings it back; until then the backup is kept whatever retention says.
+ */
+export const keptWorlds = pgTable('kept_worlds', {
+  worldId: uuid('world_id')
+    .primaryKey()
+    .references(() => worlds.id),
+  backupId: uuid('backup_id')
+    .notNull()
+    .references(() => backups.id),
+  createdAt: createdAt(),
+})
 
 /**
  * A world download: an archive's world, without what Blockly may not hand on, copied into the
