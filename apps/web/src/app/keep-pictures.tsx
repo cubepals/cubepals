@@ -32,13 +32,15 @@ function overPicture(event: MouseEvent): boolean {
   )
 }
 
-/** Whether a letter of the page's text is under the point. */
+/**
+ * Whether a letter of the page's text is under the point. A browser without
+ * `caretPositionFromPoint` counts every point as text, so the menu stays there.
+ */
 function textAt(x: number, y: number): boolean {
-  // Older Safari has only the older of the two.
-  const caret = document.caretPositionFromPoint?.(x, y)
-  const range = caret ? null : document.caretRangeFromPoint?.(x, y)
-  const node = caret ? caret.offsetNode : range?.startContainer
-  const offset = caret ? caret.offset : (range?.startOffset ?? 0)
+  if (!('caretPositionFromPoint' in document)) return true
+  const caret = document.caretPositionFromPoint(x, y)
+  const node = caret?.offsetNode
+  const offset = caret?.offset ?? 0
   if (!(node instanceof Text)) return false
   const letter = document.createRange()
   return [offset - 1, offset].some((at) => {
