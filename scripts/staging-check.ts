@@ -376,6 +376,12 @@ class Journey {
         Date.now() - at,
       )
       await this.settled()
+      // A new server that can't come up where it was placed is put on another runtime and comes up
+      // there, slower; a player would have waited through the first, so it fails here.
+      const fellBack = await sql(
+        `select format('from %s to %s: %s', from_provider, provider, reason) from runtime_decisions where server_id = '${this.server.id}' and kind = 'fell_back' order by at desc limit 1`,
+      )
+      check(fellBack === '', `it never came up where it was placed, after ${took}, and fell back ${fellBack}`)
       const machines = await machinesOf(this.server.id)
       check(
         machines.some((m) => m.state === 'started'),
@@ -406,6 +412,11 @@ class Journey {
     return `its account moved to ${fits?.plan}`
   }
 
+  /** Whether the server runs on Fly, and not on the runtime a new server falls back to. */
+  async onFly(): Promise<boolean> {
+    return (await sql(`select provider from server_runtimes where server_id = '${this.server.id}'`)) === 'fly'
+  }
+
   /** The end of a journey, unless the run keeps what it made. */
   async trash(): Promise<void> {
     if (KEEP) return
@@ -414,6 +425,7 @@ class Journey {
       await this.waitFor((v) => v.activeOperation === null && v.status === 'deleted', 'deleted', 300).catch(
         () => undefined,
       )
+      if (!(await this.onFly())) return 'not on Fly, so Fly holds nothing of it'
       const machines = await machinesOf(this.server.id)
       return `Fly: ${machines.length} machines, ${(await volumesOf(this.server.id)).length} volume kept for the trash`
     })
@@ -665,14 +677,16 @@ async function ownTemplate(j: Journey, own: (typeof OWN_TEMPLATES)[number]): Pro
     await j.api('servers.stop', { serverId: j.server.id, requestId: randomUUID() })
     await j.waitFor((v) => v.status === 'stopped', 'went to sleep', 300)
     await j.settled()
-    const slept = [...new Set((await machinesOf(j.server.id)).map((m) => m.state))].join(', ')
+    const slept = (await j.onFly())
+      ? `its machine ${[...new Set((await machinesOf(j.server.id)).map((m) => m.state))].join(', ')}`
+      : 'not on Fly'
     const at = Date.now()
     await j.api('servers.start', { serverId: j.server.id, requestId: randomUUID() })
     await j.waitFor((v) => v.status === 'running', 'woke', 600)
     await j.settled()
     const took = j.timed('wake (nothing changed)', Date.now() - at)
     await answers()
-    return `its machine ${slept} while asleep; woke in ${took}, its datapack answering again`
+    return `${slept} while asleep; woke in ${took}, its datapack answering again`
   })
 
   await j.trash()
