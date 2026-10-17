@@ -38,6 +38,7 @@ export function PlayerFace({
           key={src}
           src={src}
           alt=""
+          draggable={false}
           width={size}
           height={size}
           decoding="async"

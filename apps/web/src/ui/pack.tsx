@@ -59,6 +59,7 @@ export function GetPack({
           className="bk-getpack__icon"
           src={pack.icon ?? '/server-icons/chest.svg'}
           alt=""
+          draggable={false}
           width={44}
           height={44}
         />

@@ -23,6 +23,20 @@
   color: #0d0d0d;
 }
 
+/* Pictures can't be selected, dragged or saved with iOS's long press. keep-pictures.tsx cancels
+   the drag and the right-click menu on the same elements. Text around them still selects. */
+img,
+picture,
+video,
+canvas,
+svg[role="img"],
+.bk-face svg {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+}
+
 /* Scrollbars, on the page and in everything inside it that scrolls: a quiet thumb on no track,
    darker under the pointer, from the tokens so the dark theme follows. Chromium and Safari draw
    them from the pseudo-elements, which keep a 12px hit area around a slimmer thumb and give it a
