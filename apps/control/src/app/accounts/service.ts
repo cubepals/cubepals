@@ -17,6 +17,7 @@ import { DEFAULT_TIME_ZONE, isTimeZone, monthOf } from '../../domain/account/pla
 import type { AccountStanding, Restrictions } from '../../domain/account/standing.ts'
 import { type Actor, requestedBy, runsThePlatform } from '../actor.ts'
 import { chippedInLeft, meteredMonth } from '../billing/chip-in-meter.ts'
+import { keepPlayedBlock } from '../billing/extra-usage.ts'
 import { extraPlayNow } from '../billing/persistence.ts'
 import { freeHoursWarning, playWarning } from '../emails/play.ts'
 import { AppError, NotFound } from '../errors.ts'
@@ -55,6 +56,7 @@ import {
   verifiedByEmail,
 } from './persistence.ts'
 import { playTotal } from './play-total.ts'
+import { applyTimeZones, reportTimeZone } from './time-zone.ts'
 
 /** Plans an admin can put an account on: the paid ones, and free. */
 const PLANS = new Set(['free', ...PAID_PLANS])
@@ -303,22 +305,24 @@ export class AccountService {
   }
 
   /**
-   * Where the owner is, as their browser reports it: where their plan's day begins. Nobody picks
-   * it; the app says it whenever it differs from what is kept, and one Blockly doesn't know is
-   * ignored, leaving the day where it was.
+   * Where the owner is, as their browser reports it: where their plan's day and month begin. Nobody
+   * picks it; the app says it whenever it differs from what is kept, and one Blockly doesn't know is
+   * ignored, leaving the day where it was. Once the account has played, a new zone waits for the
+   * next month (`time-zone.ts`).
    */
   async setTimeZone(actor: Actor, timeZone: string): Promise<void> {
     if (actor.kind !== 'user') throw new NotFound('Account')
     if (!isTimeZone(timeZone)) return
     await this.#db.transaction(async (tx) => {
       const locked = await lockStanding(tx, actor.userId)
-      if (locked !== null && locked.timeZone !== timeZone) await saveStanding(tx, actor.userId, { timeZone })
+      if (locked !== null) await reportTimeZone(tx, locked, timeZone, new Date())
     })
   }
 
   /**
    * Limits above or below the plan's, for this account only; null returns to the plan's. Hours of
    * play a month (`includedUnits`) are given the same way: to make up for a bad month, or to test.
+   * Hours lowered once the account has played this month apply from the next (`keepPlayedBlock`).
    */
   async setLimits(
     actor: Actor,
@@ -336,9 +340,10 @@ export class AccountService {
       ...(limits.maxRunning === null ? {} : { maxRunning: limits.maxRunning }),
       ...(hours === null ? {} : { includedUnits: hours }),
     }
-    await this.#change(actor, userId, 'account.limits_set', { limits: overrides }, (tx) =>
-      saveStanding(tx, userId, { limitOverrides: overrides }),
-    )
+    await this.#change(actor, userId, 'account.limits_set', { limits: overrides }, async (tx) => {
+      await keepPlayedBlock(tx, userId, new Date())
+      await saveStanding(tx, userId, { limitOverrides: overrides })
+    })
   }
 
   async grantAdmin(actor: Actor, userId: string): Promise<void> {
@@ -481,9 +486,11 @@ export class AccountService {
 
   /**
    * `standing-sweep`: what standing forbids, undone even when it was mid-way through other work
-   * when the standing changed. Suspended accounts' servers stop; terminated ones' close.
+   * when the standing changed. Suspended accounts' servers stop; terminated ones' close. A time
+   * zone that waited for its month takes over first, so the month is read in it.
    */
   async enforce(): Promise<{ stopped: number; closed: number }> {
+    await applyTimeZones(this.#db, new Date())
     let stopped = 0
     let closed = 0
     const inactive = new Set<string>()
@@ -588,7 +595,7 @@ export class AccountService {
         to,
         ...playWarning({
           mark: reached,
-          included: plan.includedUnits,
+          included: played.included,
           carried: Math.round(played.carried * 10) / 10,
           used: Math.round(units * 10) / 10,
           extraAllowed: extraUnits(decision),

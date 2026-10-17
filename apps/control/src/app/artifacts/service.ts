@@ -17,7 +17,7 @@ import type { Locks } from '../ports/locks.ts'
 import type { ArchiveStore } from '../ports/optional.ts'
 import { acceptedSecrets, type SecretKeyring } from '../secrets.ts'
 import { loadOwnIcon } from '../server-icons/persistence.ts'
-import { deletePendingUpload, uploadsToClear } from '../uploads/persistence.ts'
+import { claimPendingUpload, uploadsToClear } from '../uploads/persistence.ts'
 import {
   compatPinned,
   firstWorldOfType,
@@ -137,9 +137,14 @@ export class ArtifactService {
     if (store === null) return { uploads: 0, blobs: 0 }
     let uploads = 0
     for (const upload of await uploadsToClear(this.#db, new Date(now.getTime() - ABANDONED_UPLOAD_MS))) {
-      await store.delete(upload.key)
-      await deletePendingUpload(this.#db, upload.id)
-      uploads++
+      // Taken before its file goes: a finish that took it first keeps the file as its backup's, and
+      // a file that can't be deleted now leaves the upload for the next run.
+      const cleared = await this.#db.transaction(async (tx) => {
+        if (!(await claimPendingUpload(tx, upload.id))) return false
+        await store.delete(upload.key)
+        return true
+      })
+      if (cleared) uploads++
     }
     let blobs = 0
     for (const blob of await unreferencedStored(this.#db, new Date(now.getTime() - GC_GRACE_MS))) {

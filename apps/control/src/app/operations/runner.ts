@@ -183,17 +183,13 @@ export class OperationRunner {
         await recordAttemptError(this.#db, op.id, said, detail)
         throw error
       }
-      try {
-        await handler.abandon?.(op, said, 'failed')
-      } finally {
-        await this.#fail(
-          op,
-          handler,
-          said,
-          detail,
-          error instanceof DiagnosedFailure ? error.remedy : undefined,
-        )
-      }
+      await this.#fail(
+        op,
+        handler,
+        said,
+        await this.#abandon(handler, op, said, detail),
+        error instanceof DiagnosedFailure ? error.remedy : undefined,
+      )
     }
   }
 
@@ -205,10 +201,28 @@ export class OperationRunner {
     const op = await loadOperation(this.#db, operationId)
     if (op === null || isFinished(op.status)) return
     const handler = this.#handlers.get(op.kind)
+    await this.#fail(op, handler, reason, await this.#abandon(handler, op, reason, detail))
+  }
+
+  /**
+   * Runs a handler's `abandon` after a final failure, and returns the detail to record: `detail`,
+   * with what `abandon` threw when it threw. The failure is recorded and its job completes either
+   * way (the provider is down, say), so the server's queue moves on and "Try again" runs; compute
+   * left behind is the stray sweep's (`schedules/reconcile.ts`).
+   */
+  async #abandon(
+    handler: OperationHandler | undefined,
+    op: OperationRecord,
+    reason: string,
+    detail: string | undefined,
+  ): Promise<string | undefined> {
     try {
       await handler?.abandon?.(op, reason, 'failed')
-    } finally {
-      await this.#fail(op, handler, reason, detail)
+      return detail
+    } catch (error) {
+      const unsettled = inFull(error)
+      console.warn(`operation ${op.kind} ${op.id} could not be settled after it failed: ${unsettled}`)
+      return `${detail ?? reason}; settling it failed too: ${unsettled}`
     }
   }
 

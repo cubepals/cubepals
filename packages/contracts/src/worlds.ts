@@ -113,6 +113,11 @@ export interface WorldView {
   /** The world the server last booted. */
   running: boolean
   backups: number
+  /**
+   * When the backup was taken that this world is kept in, where its files are only there: a
+   * restore replaced the volume and couldn't copy the world back. Null for a world on the volume.
+   */
+  keptInBackupFrom: string | null
 }
 
 export const CreateWorldInput = z.object({

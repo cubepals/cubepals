@@ -174,7 +174,7 @@ describe.skipIf(!hasDatabase)('arcade', () => {
     )
     const volume = h.runtime.machine(server.id)?.dir ?? ''
     for (const file of revision.files.map((carried) => onLevel(carried, 'world')))
-      expect(readFileSync(`${volume}/${file.path}`, 'utf8')).toBe(file.content)
+      expect(readFileSync(`${volume}/${file.path}`, file.encoding ?? 'utf8')).toBe(file.content)
 
     // A fresh world starts on the Arcade's world again, and the games go into it.
     await h.app.worlds.freshStart(owner, server.id, randomUUID())
@@ -227,7 +227,8 @@ describe.skipIf(!hasDatabase)('an Arcade made before its games changed', () => {
 
     const volume = h.runtime.machine(server.id)?.dir ?? ''
     const now = [...ARCADE_FILES, ...moderationFiles(null)].map((file) => onLevel(file, 'world'))
-    for (const file of now) expect(readFileSync(`${volume}/${file.path}`, 'utf8')).toBe(file.content)
+    for (const file of now)
+      expect(readFileSync(`${volume}/${file.path}`, file.encoding ?? 'utf8')).toBe(file.content)
     // What only the older datapack had is gone; the chat filter stays off, as its owner left it.
     expect(
       existsSync(`${volume}/${onLevel({ path: `${pack}gone.mcfunction`, content: '' }, 'world').path}`),

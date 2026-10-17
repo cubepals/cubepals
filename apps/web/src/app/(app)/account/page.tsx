@@ -12,6 +12,7 @@ import { messageOf, useTRPC } from '../../../lib/api'
 import { checkoutHref } from '../../../lib/checkout'
 import { useOutcome } from '../../../lib/outcome'
 import { billingReturned, extraPlaySet } from '../../../lib/paying'
+import { countedFrom, zoneFrom } from '../../../lib/play-clock'
 import { dayOf, loaderLabel } from '../../../lib/present'
 import {
   BlockMeter,
@@ -149,7 +150,7 @@ function Play({ overview }: { overview: AccountOverviewView }) {
   return (
     <FormSection
       title="Play this month"
-      description={`${fromLastMonth(u.carriedUnits)}${comesBack(e.carryUnits)}`}
+      description={`${countedFrom(u.monthBegan, u.timeZone, new Date())}${zoneFrom(u.nextTimeZone, 'month')}${fromLastMonth(u.carriedUnits)}${comesBack(e.carryUnits)}`}
     >
       <BlockMeter left={left} included={included} label="This month's play" />
       {share >= 100 ? (
@@ -253,7 +254,10 @@ function PlayToday({ overview }: { overview: AccountOverviewView }) {
   if (today === null || (total !== null && total.units >= total.included)) return null
   const share = Math.round(Math.min(1, today.units / today.included) * 100)
   return (
-    <FormSection title="Play today" description="More every day at midnight.">
+    <FormSection
+      title="Play today"
+      description={`${zoneFrom(overview.usage.nextTimeZone, 'day')}More every day at midnight.`}
+    >
       <BlockMeter
         left={Math.max(0, today.included - today.units)}
         included={today.included}
@@ -467,11 +471,14 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
 
 /** What the account's plan section says under its name: what pays for the plan, and until when. */
 function planSummary(overview: AccountOverviewView): string {
-  const { key, billed, year, gifted } = overview.plan
+  const { key, billed, year, gifted, giftNext } = overview.plan
   if (year !== null) return yearSummary(year, gifted !== null)
+  if (billed?.endedFor && key === 'free') return endedSummary(billed.endedFor, title(billed.planKey))
   const paying = billed !== null && billed.status !== 'ended' && billed.planKey === key
   if (paying && billed.pastDueUntil)
     return `Your last payment didn’t go through. Update your card in Manage billing by ${dayOf(billed.pastDueUntil)} to keep ${title(key)}.`
+  if (paying && billed.periodEnd && !billed.cancelAtPeriodEnd && giftNext !== null)
+    return `Renews on ${dayOf(billed.periodEnd)}. ${giftWaits(giftNext)}`
   if (paying && billed.periodEnd)
     return billed.cancelAtPeriodEnd
       ? `Ends on ${dayOf(billed.periodEnd)}; then you're on the free trial.`
@@ -481,6 +488,24 @@ function planSummary(overview: AccountOverviewView): string {
   return key !== 'free'
     ? 'Given to this account by Cubepals.'
     : 'No card, and nothing is charged when it ends.'
+}
+
+/** Cubepals ended the plan's subscription itself: after a withdrawal, or a renewal left unpaid. */
+function endedSummary(why: 'withdrawal' | 'unpaid', plan: string): string {
+  return why === 'withdrawal'
+    ? `Your refund went through, and ${plan} has ended. You can subscribe again any time.`
+    : `Your payment didn’t go through, so ${plan} has ended and your card won’t be charged for it again. You can subscribe again any time.`
+}
+
+/**
+ * A gift waiting while the plan renews: it starts once the time being paid for ends, or, when part
+ * of it ran already, what is left of it continues then.
+ */
+function giftWaits(gift: NonNullable<AccountOverviewView['plan']['giftNext']>): string {
+  if (gift.continues)
+    return `The rest of your gift continues on ${dayOf(gift.startsAt)}, once the time you’re paying for ends, until ${dayOf(gift.endsAt)}.`
+  const what = gift.months === 1 ? 'gifted month starts' : `gifted ${gift.months} months start`
+  return `Your ${what} on ${dayOf(gift.startsAt)}, once the time you’re paying for ends.`
 }
 
 /**

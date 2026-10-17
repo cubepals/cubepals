@@ -15,10 +15,11 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import type { Label } from '../apps/control/src/minecraft/arcade/datapack.ts'
-import { HUB_MARKERS, PAD_BADGES } from '../apps/control/src/minecraft/arcade/hub.ts'
+import { HUB_MARKERS } from '../apps/control/src/minecraft/arcade/hub.ts'
 import { markerRoom, type Room, roomOf, wallOf } from '../apps/control/src/minecraft/arcade/label-space.ts'
 import { ARCADE_WORLD } from '../apps/control/src/minecraft/arcade/maps.ts'
 import { PARKOUR_FINISHES } from '../apps/control/src/minecraft/arcade/parkour.ts'
+import { HALL, PIT_SIGN_POSTS } from '../apps/control/src/minecraft/arcade/pit.ts'
 import { signExtent } from '../apps/control/src/minecraft/arcade/signs.ts'
 import { ARCADE_FILES, ARCADE_LABELS, ARCADE_SIGNS } from '../apps/control/src/minecraft/arcade.ts'
 import {
@@ -86,9 +87,6 @@ const ARCADE_THINGS: Thing[] = [
   }),
   ...ARCADE_LABELS.flatMap((label) => shown(`the label "${labelText(label)}"`, roomOf(label))),
   ...HUB_MARKERS.flatMap((marker) => shown(`the marker at ${marker.at.join(' ')}`, markerRoom(marker))),
-  ...PAD_BADGES.flatMap(({ at, side }) =>
-    shown(`the badge at ${at.join(' ')}`, markerRoom({ at, scale: side })),
-  ),
   ...signBlocks(ARCADE_FILES),
 ]
 
@@ -116,8 +114,31 @@ describe('nothing Cubepals puts up stands where players play', () => {
 
   test('the Arcade: the hub, the parkour, the falling floor and the pit', () => {
     const boxes = Object.values(SPACE.arcade).filter((value): value is RoomBox[] => Array.isArray(value))
-    expect(ARCADE_THINGS.length).toBeGreaterThan(10)
+    // The signs, and every label that stands free rather than on a wall.
+    expect(ARCADE_THINGS.length).toBeGreaterThan(5)
     expect(inTheWay(ARCADE_THINGS, boxes.flat())).toEqual([])
+  })
+
+  test('the one exception: the posts the pit’s sign stands on, on the roof of a hall nobody gets onto', () => {
+    // The room counts the whole market, up to a jump over its highest roof, as players may be
+    // anywhere in it. The posts stand on the long hall's ridge, which nobody climbs to: they are
+    // in no room but that, and on the ridge, from it up to the sign.
+    const posts = PIT_SIGN_POSTS.map(
+      ([x, y, z]): Thing => ({
+        what: `the post at ${x} ${y} ${z}`,
+        from: [x, y, z],
+        to: [x + 1, y + 1, z + 1],
+      }),
+    )
+    const { pit = [], ...rest } = SPACE.arcade
+    const elsewhere = Object.values(rest).filter((value): value is RoomBox[] => Array.isArray(value))
+    expect(inTheWay(posts, elsewhere.flat())).toEqual([])
+    expect(inTheWay(posts, pit)).toHaveLength(posts.length)
+    for (const [x, y, z] of PIT_SIGN_POSTS) {
+      expect(x > HALL.from[0] && x < HALL.to[0] && z > HALL.from[1] && z < HALL.to[1]).toBe(true)
+      expect(y).toBeGreaterThan(HALL.ridge)
+    }
+    expect(Math.min(...PIT_SIGN_POSTS.map(([, y]) => y))).toBe(HALL.ridge + 1)
   })
 
   test('Duels: the platform, its parkour and its pit', () => {

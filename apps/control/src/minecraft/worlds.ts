@@ -4,7 +4,8 @@
 
 /**
  * Worlds on the volume: the generation types Blockly makes worlds with and the variables that say
- * so, the level names it runs, and the one command that removes worlds it no longer keeps.
+ * so, the level names it runs, the command that removes worlds it no longer keeps, and the one
+ * that copies worlds back from a copy of the volume.
  */
 import { DATA_DIR } from './jars.ts'
 import { starterOf } from './starter.ts'
@@ -56,7 +57,7 @@ export const isLevelName = (name: string): boolean => LEVEL_NAME.test(name)
  * Every directory a world takes on the volume. Vanilla keeps the Nether and the End inside the
  * level directory; Paper keeps them beside it, as `<level>_nether` and `<level>_the_end`.
  */
-function worldDirectories(levelName: string): string[] {
+export function worldDirectories(levelName: string): string[] {
   if (!LEVEL_NAME.test(levelName)) throw new Error(`Not a level name Blockly makes: ${levelName}`)
   return [levelName, `${levelName}_nether`, `${levelName}_the_end`]
 }
@@ -66,3 +67,39 @@ export function pruneWorldsCommand(levelNames: readonly string[]): readonly stri
   const directories = levelNames.flatMap(worldDirectories)
   return ['sh', '-c', `cd ${DATA_DIR} && rm -rf -- ${directories.join(' ')}`]
 }
+
+/** Where worlds being copied back are unpacked first, and, with `.done`, how the copy went. */
+const BRINGING_BACK = '.blockly-worlds-back'
+
+/**
+ * One exec that starts copying `directories` back from the gzipped tarball of a volume at `url`,
+ * in the background, so a big world isn't held to the time an exec may take. Each is unpacked
+ * beside the volume's first, then takes the place of what is there, whole. The link and the names
+ * are arguments, never part of the script. `WORLDS_BACK` reads how it went.
+ */
+export function bringWorldsBackCommand(url: string, directories: readonly string[]): readonly string[] {
+  const script = [
+    `cd ${DATA_DIR} || exit 1`,
+    `t=${BRINGING_BACK}`,
+    'rm -rf -- "$t" "$t.done" && mkdir -- "$t" || exit 1',
+    '(',
+    '  s=1',
+    '  if curl -fsS "$0" | tar -xzf - -C "$t" --no-anchored -- "$@"; then',
+    '    s=0',
+    '    for d in "$@"; do',
+    '      if [ -e "$t/$d" ]; then rm -rf -- "$d" && mv -- "$t/$d" "$d" || s=1; fi',
+    '    done',
+    '  fi',
+    '  rm -rf -- "$t"',
+    '  echo "$s" > "$t.done"',
+    ') </dev/null >/dev/null 2>&1 &',
+  ].join('\n')
+  return ['sh', '-c', script, url, ...directories]
+}
+
+/** How the copy went: `0` done, `1` failed, nothing while it is still going. Read once. */
+export const WORLDS_BACK: readonly string[] = [
+  'sh',
+  '-c',
+  `cd ${DATA_DIR} && cat ${BRINGING_BACK}.done 2>/dev/null && rm -f ${BRINGING_BACK}.done`,
+]

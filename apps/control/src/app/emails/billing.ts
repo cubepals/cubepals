@@ -8,6 +8,8 @@
  * (`BillingService.tellAboutPayments`). Both say what to do: fix the card in Manage billing while
  * it is still tried, and once it is owed, pay it on the account page. And, since nothing renews a
  * year paid at once, that it is about to end, 14 and 3 days before (`BillingService.remindYears`).
+ * And that Blockly ended a plan's subscription itself, after a withdrawal or a renewal left unpaid
+ * (`planEnded`).
  * All are `plain`: money is mail a person must see, not mail Gmail may file under Promotions.
  */
 import { dollars } from '../../domain/policy/spend.ts'
@@ -78,6 +80,35 @@ export function yearEnding(input: {
     html: plain({
       subject,
       body: lines.map(p).join('') + p(link({ label: 'Renew on your account', url: account })),
+      why: ACCOUNT,
+    }),
+  }
+}
+
+/**
+ * Blockly ended the plan's subscription itself (`SubscriptionEnding`): its first month was refunded
+ * as the withdrawal, or its renewal was still unpaid when the plan's grace ran out. Either way
+ * nothing more is charged for it, and subscribing again is open.
+ */
+export function planEnded(input: { plan: string; why: 'withdrawal' | 'unpaid'; origin: string }): Email {
+  const account = `${input.origin}/account`
+  const lines = [
+    input.why === 'withdrawal'
+      ? `Your refund went through, and ${input.plan} has ended. Nothing more will be charged for it.`
+      : `Your ${input.plan} payment still didn’t go through, so we’ve ended ${input.plan} and won’t charge this card for it again.`,
+    `Your account is on the free trial now. Your worlds stay, and anything that needs ${input.plan} waits until you have it again.`,
+    'You can subscribe again any time on your account.',
+  ]
+  const subject =
+    input.why === 'withdrawal'
+      ? `Your refund went through, and ${input.plan} has ended`
+      : `Your Cubepals ${input.plan} has ended`
+  return {
+    subject,
+    text: [...lines, '', account].join('\n'),
+    html: plain({
+      subject,
+      body: lines.map(p).join('') + p(link({ label: 'Open your account', url: account })),
       why: ACCOUNT,
     }),
   }

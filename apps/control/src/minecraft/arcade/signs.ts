@@ -11,12 +11,33 @@
  * under a game's sign naming its map and who built it, flat on it so it never turns into it
  * (`creditLabel`). Not where the games are (`maps.ts`).
  */
+import type { CarriedFile } from '../../domain/revision/carried.ts'
+import { artFiles, MAPS_26_2, type MapArt } from '../map-art.ts'
 import { AXES, buildMarquee, type Frame, type Marquee, marqueeExtent } from '../marquee.ts'
 import { type Block, type Facing, type Label, NS, PAPER } from './datapack.ts'
 import { ARCADE_MAPS } from './maps.ts'
 
-/** Cells of the mark to a block. */
-const GRAIN = 8
+/**
+ * The art of each size of sign, by its side in blocks: the maps it shows, numbered from here, well
+ * past the maps the world already holds (9000 to 9104, the lockup its signs once showed) and any a
+ * player could make. Signs of one size show the same maps.
+ */
+const ART: Readonly<Record<number, MapArt>> = {
+  4: { side: 4, firstId: 9200 },
+  6: { side: 6, firstId: 9216 },
+  5: { side: 5, firstId: 9252 },
+}
+
+const artOf = (side: number): MapArt => {
+  const art = ART[side]
+  if (art === undefined) throw new Error(`No art for a sign ${side} blocks square`)
+  return art
+}
+
+/** The maps every size of sign shows, as files in the world's data, for 26.2, the Arcade's release. */
+export const SIGN_MAP_FILES: readonly CarriedFile[] = Object.values(ART).flatMap((art) =>
+  artFiles(art, MAPS_26_2),
+)
 
 export interface BrandSign {
   /** The Paper square's block at its reader's top left. */
@@ -53,7 +74,7 @@ const marquee = (sign: BrandSign): Marquee => ({
   frame: sign.frame,
   backed: sign.backed ?? true,
   side: sign.side,
-  grain: GRAIN,
+  art: artOf(sign.side),
 })
 
 /** Where a sign stands and how large it is: all that says what it takes. */
@@ -103,9 +124,9 @@ function onBase(sign: BrandSign): Label['at'] {
   at[along] = left + (right * sign.side) / 2
   // A line is 12 of the game's 40 pixels to a block high, with its background.
   at[1] = sign.at[1] - sign.side + (1 - (12 / 40) * CREDIT_SCALE) / 2
-  // The frame stands a block in front of the panel; its face is one further.
+  // The base is level with the panel (`marquee.ts`), so its face is the panel's.
   const panelFace = toward > 0 ? sign.at[out] + 1 : sign.at[out]
-  at[out] = panelFace + toward * (1 + OFF)
+  at[out] = panelFace + toward * OFF
   return [at[0] ?? 0, at[1] ?? 0, at[2] ?? 0]
 }
 

@@ -750,9 +750,10 @@ export class FleetRuntime implements MinecraftRuntime {
   /**
    * Copies nobody needs: those a finished move left behind, those of resting servers, and those of
    * servers destroyed while their node couldn't be reached. They are fenced, then deleted into
-   * their node's trash. A copy whose epoch ended because its host was declared lost is never
-   * touched: it may hold play the rebuild didn't, and its owner decides. Nor is one with no
-   * placement and no record of its server's end: the heartbeat fences it, and an operator looks.
+   * their node's trash, once the snapshots only they hold are in the store. Never an unfinished
+   * move's, nor one whose host was declared lost: it may hold play the rebuild didn't, and its owner
+   * decides. Nor is one with no placement and no record of its server's end: the heartbeat fences
+   * it, and an operator looks.
    */
   async tidy(): Promise<number> {
     const found = await rows<{
@@ -770,7 +771,7 @@ export class FleetRuntime implements MinecraftRuntime {
           LEFT JOIN fleet_placement_history h ON h.workload = o.workload AND h.epoch = o.epoch
           WHERE n.lifecycle IN ('active', 'draining') AND o.epoch IS NOT NULL
             AND o.node_id IS DISTINCT FROM p.node_id
-            AND ((p.state = 'placed' AND o.epoch < p.epoch AND h.end_reason = 'moved')
+            AND ((p.state = 'placed' AND p.completing IS NULL AND o.epoch < p.epoch AND h.end_reason = 'moved')
               OR (p.state = 'released' AND o.epoch <= p.epoch))
           UNION ALL
           SELECT o.node_id, o.workload, o.epoch, o.epoch + 1, 'destroyed'
@@ -786,7 +787,7 @@ export class FleetRuntime implements MinecraftRuntime {
       const node = await getNode(this.#o.db, row.node_id)
       if (node === null) continue
       try {
-        await this.#api.deleteWithData(node, row.workload, Number(row.current_epoch))
+        if (!(await this.#rehoming.deleteLeftCopy(node, row.workload, Number(row.current_epoch)))) continue
         await event(this.#o.db, 'copy.tidied', {
           node: row.node_id,
           workload: row.workload,
@@ -810,12 +811,10 @@ export class FleetRuntime implements MinecraftRuntime {
     return this.#transfers.uploadPending(limit)
   }
 
-  /**
-   * Deleted archives whose copies couldn't all go when they were deleted: one in the store, which
-   * keeps its key until the store lets it go, and one on a node, once its node can be asked.
-   */
-  dropDeletedCopies(limit = 20): Promise<void> {
-    return this.#archives.dropDeletedCopies(limit)
+  /** Copies that couldn't go when their archive was deleted, and moves' copies no move will use. */
+  async dropDeletedCopies(limit = 20): Promise<void> {
+    await this.#transfers.dropUnusedMoveExports(limit)
+    await this.#archives.dropDeletedCopies(limit)
   }
 
   /** Node copies of snapshots the store holds too, but the newest per server. */

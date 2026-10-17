@@ -5,8 +5,8 @@
 /**
  * Puts a backup's world in place of the server's (§9), with a way back: the current world is
  * snapshotted first, and the server returns to it if the backup doesn't come up. Who can join is
- * never rewound (§15.1). Taking backups is `backups.ts`; rebuilding a lost host from one is
- * `moving.ts`.
+ * never rewound (§15.1), and the server's other worlds stay as they were (`other-worlds.ts`).
+ * Taking backups is `backups.ts`; rebuilding a lost host from one is `moving.ts`.
  */
 import type { Db } from '@blockly/db'
 import { diskForWorld, entitlementsFor } from '../../../domain/account/entitlements.ts'
@@ -18,19 +18,20 @@ import { type BackupRecord, loadBackup } from '../../backups/persistence.ts'
 import type { BackupService } from '../../backups/service.ts'
 import { aside, inFull, PermanentFailure } from '../../errors.ts'
 import type { ArchiveStore } from '../../ports/optional.ts'
-import { type RestoreSource, RuntimeAtLimit } from '../../ports/runtime.ts'
+import { type RestoreSource, RuntimeAtLimit, type RuntimeHandle } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import { grownStorage, growStorage, lockServer, saveHandle } from '../../servers/persistence.ts'
 import type { DesiredRuntime, RuntimeSpecs } from '../../servers/specs.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { openInterval } from '../../servers/usage.ts'
-import { reopenWorlds, setWorldFacts } from '../../worlds/persistence.ts'
+import { reopenWorlds, type WorldRecord } from '../../worlds/persistence.ts'
 import { enqueuePrune } from '../../worlds/service.ts'
 import type { BootSequence } from '../boot.ts'
 import { NoLongerApplies, type OperationContext, type OperationHandler } from '../runner.ts'
 import { appliedConfig, bootedBack, type ServerBinding } from './binding.ts'
 import type { GameConsole } from './game-console.ts'
 import type { GoingBack } from './going-back.ts'
+import { otherWorlds } from './other-worlds.ts'
 import type { Rechecks } from './rechecks.ts'
 import { IMPORT_LINK_SECONDS, type WorldCopies } from './world-copies.ts'
 
@@ -42,15 +43,15 @@ import { IMPORT_LINK_SECONDS, type WorldCopies } from './world-copies.ts'
 const nothingToGoBackFrom = (error: unknown): boolean =>
   error instanceof NoLongerApplies || error instanceof RuntimeAtLimit
 
-export function restoring(deps: {
+interface RestoringDeps {
   db: Db
-  runtime: Pick<Runtimes, 'observe' | 'restore' | 'stop'>
+  runtime: Pick<Runtimes, 'observe' | 'restore' | 'stop' | 'exec'>
   specs: Pick<RuntimeSpecs, 'desired' | 'forConfig'>
   access: Pick<AccessReconciler, 'reconcile'>
   boot: Pick<BootSequence, 'run'>
   transitions: ServerTransitions
   archives: ArchiveStore | null
-  backups: Pick<BackupService, 'enforceRetention'>
+  backups: Pick<BackupService, 'enforceRetention' | 'topLevelOf'>
   bindingOf: ServerBinding['bindingOf']
   progressSink: ServerBinding['progressSink']
   startCompute: ServerBinding['startCompute']
@@ -59,26 +60,13 @@ export function restoring(deps: {
   mayBoot: Rechecks['mayBoot']
   preflight: Rechecks['preflight']
   windDown: GameConsole['windDown']
-  capture: WorldCopies['capture']
+  copies: Pick<WorldCopies, 'capture' | 'pack'>
   putBack: GoingBack['putBack']
-}) {
-  const {
-    db,
-    runtime,
-    transitions,
-    specs,
-    boot,
-    bindingOf,
-    progressSink,
-    startCompute,
-    booted,
-    stopWhatFailed,
-    mayBoot,
-    preflight,
-    windDown,
-    capture,
-    putBack,
-  } = deps
+}
+
+/** A backup's world put on the server's storage and booted, and the server stopped again after. */
+function bringingBack(deps: RestoringDeps) {
+  const { db, runtime, boot, bindingOf, progressSink, startCompute } = deps
 
   /**
    * Where a backup's world comes from: the provider's snapshot, or the archive store through a
@@ -95,15 +83,14 @@ export function restoring(deps: {
   /**
    * A backup's world on the server's storage, booted while the server is `restoring`, where no
    * route reaches it, so the access record is back on the files before anyone can join (§9,
-   * §15.1). A server that was stopped is stopped again afterwards.
+   * §15.1). It is left running, for `leaveAsAsked`.
    */
   const bringBack = async (
     ctx: OperationContext,
     server: MinecraftServer,
     backup: BackupRecord,
     target: DesiredRuntime,
-    up: boolean,
-  ) => {
+  ): Promise<RuntimeHandle> => {
     const { handle } = await bindingOf(server.id)
     if (handle === null) throw new Error('The server has no storage to restore into.')
     const restored = await runtime.restore(
@@ -115,9 +102,35 @@ export function restoring(deps: {
     await saveHandle(db, server.id, restored)
     const started = await startCompute(server.id, restored)
     await boot.run(ctx, server, started, target.revision, undefined, { startAgainOnHang: false })
+    return started
+  }
+
+  /** A server that was stopped is stopped again; one that ran stays up. */
+  const leaveAsAsked = async (server: MinecraftServer, started: RuntimeHandle, up: boolean) => {
     if (up) return
-    await windDown(server, started)
+    await deps.windDown(server, started)
     await runtime.stop(started)
+  }
+
+  return { bringBack, leaveAsAsked }
+}
+
+export function restoring(deps: RestoringDeps) {
+  const { db, runtime, transitions, specs, bindingOf, booted, stopWhatFailed, mayBoot, preflight, putBack } =
+    deps
+  const { bringBack, leaveAsAsked } = bringingBack(deps)
+  const others = otherWorlds({ ...deps, pack: deps.copies.pack })
+
+  /**
+   * A backup gone while its restore waited its turn, before anything was touched: the server goes
+   * on as it is, running or not, on what it ran.
+   */
+  const goneMeanwhile = async (server: MinecraftServer, binding: Awaited<ReturnType<typeof bindingOf>>) => {
+    if (binding.handle === null || binding.applied === null)
+      throw new PermanentFailure('That backup is no longer there.')
+    const running = (await runtime.observe(binding.handle)).state === 'running'
+    await putBack(server, binding.applied, { from: 'restoring', up: running })
+    return { status: 'failed' as const, reason: 'That backup is no longer there, so nothing changed.' }
   }
 
   /**
@@ -137,8 +150,7 @@ export function restoring(deps: {
       const { up, refusal } = await mayBoot(server, input)
       const binding = await bindingOf(server.id)
       const chosen = await loadBackup(db, input.backupId)
-      if (chosen === null || chosen.status !== 'ready')
-        throw new PermanentFailure('That backup is no longer there.')
+      if (chosen === null || chosen.status !== 'ready') return goneMeanwhile(server, binding)
       if (binding.handle === null || binding.applied === null)
         throw new PermanentFailure('This server has no world to restore into.')
       const previous = binding.applied
@@ -155,11 +167,16 @@ export function restoring(deps: {
       await preflight(desired, null)
       if ((await runtime.observe(binding.handle)).state === 'running')
         await deps.access.reconcile(server, binding.handle, 'import').catch(() => undefined)
+      // Every other world the server lists stays as it is now, whatever the backup holds.
+      const besides = await others.besides(server.id, chosen)
       await ctx.step('saving')
-      const before = await capture(server, binding.handle, previous, 'pre_restore')
+      const before = await deps.copies.capture(server, binding.handle, previous, 'pre_restore')
       await markReseed(db, server.id)
+      let left: WorldRecord[]
       try {
-        await bringBack(ctx, server, chosen, desired, up)
+        const started = await bringBack(ctx, server, chosen, desired)
+        left = await others.bringBack(started, before, besides)
+        await leaveAsAsked(server, started, up)
       } catch (error) {
         if (nothingToGoBackFrom(error)) throw error
         await ctx.step('rolling_back')
@@ -170,7 +187,7 @@ export function restoring(deps: {
             worldId: previous.worldId,
             memoryTier: previous.memoryTier as MinecraftServer['memoryTier'],
           })
-          await bringBack(quiet, server, before, back, up)
+          await leaveAsAsked(server, await bringBack(quiet, server, before, back), up)
           await putBack(server, bootedBack(previous, back), { from: 'restoring', up })
         } catch (again) {
           if (again instanceof NoLongerApplies) throw again
@@ -191,8 +208,7 @@ export function restoring(deps: {
         await booted(tx, server.id, appliedConfig(locked, desired))
         // The backup brought back every world directory it held, deleted ones included.
         await reopenWorlds(tx, server.id, desired.world.id)
-        // An uploaded world is the one its files describe, whatever its row said before.
-        if (chosen.worldFacts !== null) await setWorldFacts(tx, chosen.worldId, chosen.worldFacts)
+        await others.settle(tx, chosen, left, before)
         // Running again counts again; one that ran all along keeps the interval it has.
         if (up) await openInterval(tx, server.id, locked.memoryTier, new Date())
         const restored = await transitions.outcome(tx, locked, {

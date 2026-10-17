@@ -5,7 +5,8 @@
 /**
  * What Blockly knows about each account and the platform as a whole: admins, an account's standing
  * and plan, the platform's kill switches and caps, what each day cost, the places sign-ups in
- * flight hold and the waitlist for sign-up, and the alerts that need an admin.
+ * flight hold and the waitlist for sign-up, the alerts that need an admin, and how the platform's
+ * own recurring work last went.
  */
 import { sql } from 'drizzle-orm'
 import { boolean, check, date, integer, jsonb, pgEnum, pgTable, text } from 'drizzle-orm/pg-core'
@@ -55,9 +56,24 @@ export const accountStanding = pgTable('account_standing', {
   extraWarned: text('extra_warned'),
   /**
    * The owner's time zone, as their browser last reported it ("Europe/Paris"): where a plan's day
-   * begins. Null until it has; the day is UTC's until then. Nobody picks it.
+   * begins. Null until it has; the day is UTC's until then. Nobody picks it. It is the zone the
+   * current month is counted in: a zone reported later waits in `nextTimeZone`.
    */
   timeZone: text('time_zone'),
+  /**
+   * When `timeZone` took over from the zone before it, and when the month and day it took over in
+   * began, in that zone before: that month and day run from then. Null when it has been the zone
+   * from the start.
+   */
+  timeZoneFrom: ts('time_zone_from'),
+  timeZoneBegan: ts('time_zone_began'),
+  /**
+   * A zone the browser reported that differs from `timeZone`, and when it takes over: once the
+   * month has begun again in both, so a change never opens a month's hours early. Null when none
+   * waits.
+   */
+  nextTimeZone: text('next_time_zone'),
+  nextTimeZoneFrom: ts('next_time_zone_from'),
   /**
    * Where the account came from, as the link that brought it said (`?ref=` or `utm_source=`),
    * kept once in the week after sign-up; null when no link said. No cookie carries it.
@@ -177,4 +193,22 @@ export const platformAlerts = pgTable('platform_alerts', {
   /** When admins were told; null until an email went out. */
   notifiedAt: ts('notified_at'),
   clearedAt: ts('cleared_at'),
+})
+
+/**
+ * How each piece of the platform's recurring work last went: every scheduled job by its name, as the
+ * worker that ran it recorded it (`every_seconds` its schedule's interval), and the parts of one that
+ * fail on their own (`spend-figure`, the provider read for the spend watchdog; `realtime-certificate`,
+ * the realtime role's renewals). The `admin-alerts` sweep and `/api/health` read it.
+ */
+export const jobHealth = pgTable('job_health', {
+  job: text('job').primaryKey(),
+  /** How often a scheduled job runs; null for what runs on no schedule of its own. */
+  everySeconds: integer('every_seconds'),
+  firstSeenAt: ts('first_seen_at').notNull(),
+  lastSucceededAt: ts('last_succeeded_at'),
+  lastFailedAt: ts('last_failed_at'),
+  lastError: text('last_error'),
+  /** Failures in a row since the last success. */
+  failures: integer('failures').notNull().default(0),
 })

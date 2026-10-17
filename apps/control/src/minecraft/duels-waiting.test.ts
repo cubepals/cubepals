@@ -20,6 +20,9 @@ const fileAt = (path: string) =>
     ?.content ?? ''
 
 /** A function's commands, one to a line. */
+/** The command that shows the sign's maps. */
+const shows = (commands: readonly string[]): string =>
+  commands.find((command) => command.endsWith('run function cubepals:sign')) ?? ''
 const commands = (name: string) => fileAt(`data/cubepals/function/${name}.mcfunction`).trim().split('\n')
 
 /** The block positions a building command names: its first three numbers, and the next three, each the block it is in. */
@@ -51,11 +54,14 @@ function builtBlocks(): Set<string> {
 }
 
 describe('the datapack for waiting on a Duels server', () => {
-  test('it goes in the world the server runs, at paths Cubepals may write', () => {
+  test('it goes in the world the server runs, at paths Cubepals may write, its sign’s maps in the world’s data', () => {
     for (const file of WAITING_FILES.map((carried) => onLevel(carried, 'world-2'))) {
-      expect(file.path).toStartWith(`${PACK}/`)
+      expect(file.path.startsWith(`${PACK}/`) || /^world-2\/data\/map_92\d\d\.dat$/.test(file.path)).toBe(
+        true,
+      )
       expect(placeablePath(file.path)).toBe(true)
     }
+    expect(WAITING_FILES.filter((file) => file.encoding === 'base64')).toHaveLength(16)
     expect(JSON.parse(fileAt('data/minecraft/tags/function/load.json'))).toEqual({
       values: ['cubepals:load'],
     })
@@ -77,7 +83,10 @@ describe('the datapack for waiting on a Duels server', () => {
     const forced = load
       .filter((command) => command.startsWith('forceload add '))
       .map((command) => (command.match(/-?\d+/g) ?? []).map(Number))
-    for (const command of [...commands('build'), ...commands('sign')])
+    const placing = [...commands('build'), ...commands('sign')].filter((command) =>
+      /^(setblock|fill|summon|clone|execute) /.test(command),
+    )
+    for (const command of placing)
       for (const [x, y, z] of positions(command)) {
         const kept = forced.some(
           ([x1 = 0, z1 = 0, x2 = 0, z2 = 0]) => x >= x1 && x <= x2 + 1 && z >= z1 && z <= z2 + 1,
@@ -89,7 +98,9 @@ describe('the datapack for waiting on a Duels server', () => {
         expect(onPlatform).toBe(false)
       }
   })
+})
 
+describe('the players waiting on a Duels server', () => {
   test('a new player is told how to duel, and of the parkour and pit only where they are', () => {
     const tick = commands('tick')
     const welcome = tick.filter((command) => command.includes('tag=!cubepals.welcomed'))
@@ -111,6 +122,28 @@ describe('the datapack for waiting on a Duels server', () => {
     )
     expect(tick).toContain('tag @a[scores={cubepals.died=1..}] remove cubepals.pit')
     expect(commands('load')).toContain('scoreboard objectives add cubepals.died deathCount')
+  })
+
+  test('its sign’s maps go up once its blocks stand, as a block its build sets says', () => {
+    const [, at, block] =
+      shows(WAITING_FILES.flatMap((file) => file.content.split('\n'))).match(
+        /if block (-?\d+ -?\d+ -?\d+) (minecraft:\w+)/,
+      ) ?? []
+    expect(commands('build')).toContain(`setblock ${at} ${block}`)
+    // Before, it stood a block proud of its base, off the platform: that row is taken down first.
+    expect(commands('build')).toContain('fill 11 -61 25 6 -61 25 minecraft:air')
+  })
+
+  test('its maps replace the displays it was shown as before, on a server that kept them', () => {
+    expect(shows(commands('tick'))).toContain('unless entity @e[tag=cubepals.sign.maps]')
+    const sign = commands('sign')
+    expect(sign[0]).toBe('kill @e[type=!minecraft:player,tag=cubepals.sign]')
+    expect(
+      sign.slice(1).every((command) => command.includes('Tags:["cubepals.sign","cubepals.sign.maps"]')),
+    ).toBe(true)
+    expect(commands('tick')).toContain(
+      'kill @e[type=!minecraft:player,tag=cubepals.sign,tag=!cubepals.sign.maps]',
+    )
   })
 
   test('the pit is built closed: a glass lid over its inside at the rim, and a sign that says why', () => {

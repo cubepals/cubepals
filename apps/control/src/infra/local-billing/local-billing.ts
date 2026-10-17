@@ -132,6 +132,14 @@ export class LocalBilling implements BillingProvider {
       )
   }
 
+  /** Its record of who pays is `billing_subscriptions`, where Blockly marks it ended itself. */
+  async endSubscription(): Promise<void> {}
+
+  /** Nothing was charged here, so nothing is refunded as a withdrawal. */
+  async refundedAsWithdrawal(): Promise<boolean> {
+    return false
+  }
+
   async portalUrl(input: { userId: string; returnUrl: string }): Promise<string> {
     return this.#link({
       page: 'portal',

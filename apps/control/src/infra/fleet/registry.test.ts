@@ -72,6 +72,10 @@ const silence = (id: string, minutes = 10) =>
     sql`UPDATE fleet_nodes SET last_heartbeat_at = now() - make_interval(mins => ${minutes}) WHERE id = ${id}`,
   )
 
+/** The session's switch, as long ago as the new session's hold lasts. */
+const pastHold = (id: string) =>
+  db.execute(sql`UPDATE fleet_nodes SET session_started_at = now() - interval '30 seconds' WHERE id = ${id}`)
+
 const ALG = { name: 'ECDSA', namedCurve: 'P-256', hash: 'SHA-256' }
 
 /** Two requests for one key, as a node that keeps its key between attempts signs them. */
@@ -437,10 +441,10 @@ describe.skipIf(!hasDatabase)('the node registry, against Postgres', () => {
       sql`UPDATE fleet_placement_history SET ended_at = now(), end_reason = 'lost' WHERE workload = 'w-lost'`,
     )
     await place('w-lost', b.id, 2)
-    // The lost node comes back, still holding epoch 1.
-    const back = await send(a, beat(a, 's2', 1, [report('w-lost', 1)]))
-    expect(back.lifecycle).toBe('lost')
-    expect(back.leaseSeconds).toBe(0)
+    // The lost node comes back, still holding epoch 1, in a new session that counts once it can.
+    await send(a, beat(a, 's2', 1, [report('w-lost', 1)])).then(() => pastHold(a.id))
+    const back = await send(a, beat(a, 's2', 2, [report('w-lost', 1)]))
+    expect([back.lifecycle, back.leaseSeconds]).toEqual(['lost', 0])
     expect(back.fences).toEqual([{ workload: 'w-lost', currentEpoch: 2 }])
     expect((await events('fork.detected')).some((e) => e.workload === 'w-lost')).toBe(true)
     expect((await events('node.returned_while_lost')).some((e) => e.node_id === a.id)).toBe(true)

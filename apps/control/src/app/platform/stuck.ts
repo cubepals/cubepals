@@ -72,12 +72,16 @@ export class StuckWork {
   async takeBack(): Promise<number> {
     const lastAttempts = await this.#jobs.takeBack(await runningOperationIds(this.#db))
     for (const operationId of lastAttempts) {
-      await this.#runner.giveUp(
-        operationId,
-        'It was cut off when Cubepals restarted. Trying again usually works.',
-        'cut off by a control-plane restart on its last attempt',
-      )
-      await this.#jobs.discardBlocked(operationId)
+      // Its job is dropped even when settling it fails, so the server's queue moves again.
+      try {
+        await this.#runner.giveUp(
+          operationId,
+          'It was cut off when Cubepals restarted. Trying again usually works.',
+          'cut off by a control-plane restart on its last attempt',
+        )
+      } finally {
+        await this.#jobs.discardBlocked(operationId)
+      }
     }
     return lastAttempts.length
   }
@@ -90,13 +94,16 @@ export class StuckWork {
 
   async discard(actor: Actor, operationId: string): Promise<void> {
     const job = await this.#blocked(actor, operationId)
-    await this.#runner.giveUp(
-      operationId,
-      'It got stuck, and the people who run Cubepals stopped it. Trying again usually works.',
-      `discarded by an admin after its job failed: ${job.error ?? 'no reason recorded'}`,
-    )
-    await this.#audit(actor, 'operation.discarded', job)
-    await this.#jobs.discardBlocked(operationId)
+    try {
+      await this.#runner.giveUp(
+        operationId,
+        'It got stuck, and the people who run Cubepals stopped it. Trying again usually works.',
+        `discarded by an admin after its job failed: ${job.error ?? 'no reason recorded'}`,
+      )
+    } finally {
+      await this.#audit(actor, 'operation.discarded', job)
+      await this.#jobs.discardBlocked(operationId)
+    }
   }
 
   async #blocked(actor: Actor, operationId: string): Promise<BlockedOperation> {

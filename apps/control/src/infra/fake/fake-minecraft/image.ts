@@ -18,6 +18,9 @@ import { strFromU8, strToU8, unzipSync } from 'fflate'
 
 type Env = Readonly<Record<string, string>>
 
+/** A list's lines from its compressed variable, as Blockly's steps read one (`minecraft/step-lists.ts`). */
+const unpacked = (compressed: string) => gunzipSync(Buffer.from(compressed, 'base64')).toString('utf8')
+
 /**
  * The image's jar handling, as mc-image-helper 1.68.0 does it (docs/dependency-audit.md): a
  * HEAD for every listed link, and anything but 200 stops the boot; a GET, following redirects,
@@ -26,7 +29,10 @@ type Env = Readonly<Record<string, string>>
  * installed before and no longer lists removed. An unset list skips all of it.
  */
 export async function installJars(volume: string, env: Env, say: (text: string) => void): Promise<void> {
-  const listed = env.MODS ?? env.PLUGINS
+  // A list too long for its variable comes compressed, and the step hands it over as a file.
+  const compressed = env.BLOCKLY_MODS_GZ ?? env.BLOCKLY_PLUGINS_GZ
+  const listed =
+    compressed === undefined ? (env.MODS ?? env.PLUGINS) : unpacked(compressed).replaceAll('\n', ',')
   if (listed === undefined) return
   const dir = join(volume, jarDir(env))
   await mkdir(dir, { recursive: true })
@@ -135,20 +141,21 @@ export async function installPack(volume: string, env: Env, say: (text: string) 
  * is written over what is there. The step itself runs in a real shell in `app/servers/carried-runtime.test.ts`.
  */
 export async function placeCarried(volume: string, env: Env, say: (text: string) => void): Promise<void> {
-  if (env.BLOCKLY_JARS === undefined && env.BLOCKLY_FILES === undefined && env.BLOCKLY_FILES_GZ === undefined)
+  if (
+    env.BLOCKLY_JARS === undefined &&
+    env.BLOCKLY_JARS_GZ === undefined &&
+    env.BLOCKLY_FILES === undefined &&
+    env.BLOCKLY_FILES_GZ === undefined
+  )
     return
   const lines = (text: string | undefined) =>
     (text ?? '')
       .split('\n')
       .filter(Boolean)
       .map((line) => line.split(' '))
-  const jars = lines(env.BLOCKLY_JARS)
   // Compressed as a start is given them, or plain as earlier starts were (`minecraft/carried.ts`).
-  const files = lines(
-    env.BLOCKLY_FILES_GZ
-      ? gunzipSync(Buffer.from(env.BLOCKLY_FILES_GZ, 'base64')).toString('utf8')
-      : env.BLOCKLY_FILES,
-  )
+  const jars = lines(env.BLOCKLY_JARS_GZ ? unpacked(env.BLOCKLY_JARS_GZ) : env.BLOCKLY_JARS)
+  const files = lines(env.BLOCKLY_FILES_GZ ? unpacked(env.BLOCKLY_FILES_GZ) : env.BLOCKLY_FILES)
   const placed = [...jars, ...files].map(([path]) => path ?? '')
   const mark = join(volume, '.blockly-files')
   const before = (await readFile(mark, 'utf8').catch(() => '')).split('\n').filter(Boolean)

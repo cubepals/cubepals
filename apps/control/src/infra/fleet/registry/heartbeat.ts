@@ -26,8 +26,19 @@ import { rollout } from './upgrades.ts'
 
 // ─── heartbeats ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The highest epoch a node may report. Every epoch a node holds counts toward a server's next one,
+ * since a restored database may not know which node holds what: below this, whatever a node
+ * reports, the epochs after it stay whole numbers this process holds exactly for longer than any
+ * server will be restored or moved.
+ */
+const EPOCH_CEILING = 2 ** 52
+
 /** How long after a session switch a beat from the previous session may still be in flight. */
 const LATE_BEAT_SECONDS = 15
+
+/** Room past a heartbeat interval for a beat that is sent on time but arrives late. */
+const BEAT_MARGIN_SECONDS = 5
 
 type Certificate = 'current' | 'next'
 
@@ -52,6 +63,8 @@ export async function heartbeat(
 ): Promise<HeartbeatResponse> {
   if (request?.nodeId !== nodeId)
     throw new Refused(400, 'invalid_request', 'the heartbeat is for another node')
+  if (!request.workloads.every((r) => exact(r.epoch) && exact(r.supersededBy)))
+    throw new Refused(400, 'invalid_request', `an epoch is not a whole number from 0 to ${EPOCH_CEILING}`)
   const outcome = await db.transaction(
     async (t): Promise<{ response: HeartbeatResponse } | { refused: Refused }> => {
       const node = await getNode(t, nodeId, true)
@@ -85,10 +98,15 @@ export async function heartbeat(
           next_cert_sha256 = NULL, next_cert_expires_at = NULL WHERE id = ${node.id}`)
         await event(t, 'node.certificate_renewed', { node: node.id })
       }
+      const held = heldBack(
+        node,
+        session === 'switched',
+        LATE_BEAT_SECONDS + options.heartbeatSeconds + BEAT_MARGIN_SECONDS,
+      )
       const upgrade =
         session === 'stale'
           ? undefined
-          : await apply(t, node, request, session === 'switched', options.release)
+          : await apply(t, node, request, { switched: session === 'switched', held }, options.release)
       const fences = await fencesFor(t, nodeId)
       const renewDue =
         certificate === 'current' &&
@@ -99,8 +117,7 @@ export async function heartbeat(
           lifecycle: node.lifecycle,
           fences,
           heartbeatSeconds: options.heartbeatSeconds,
-          // A node an operator declared lost restarts nothing on its own: a copy of it may run elsewhere.
-          leaseSeconds: node.lifecycle === 'lost' ? 0 : options.leaseSeconds,
+          leaseSeconds: leaseFor(node, held, options.leaseSeconds),
           ...(renewDue ? { renew: true } : {}),
           upgrade,
         },
@@ -132,6 +149,35 @@ export function sessionOf(
   return 'switched'
 }
 
+/**
+ * Whether a beat must not resume anything, move the node's addresses or change its copies. A new
+ * session while the previous one may still beat could be a second host booted from a copy of this
+ * one's disk: it is held for `holdSeconds`, long enough that the previous session's next beat
+ * after its in-flight window arrives while it still is, and quarantines the pair. A real reboot's
+ * resumes wait as long. A quarantined node waits for an operator.
+ */
+function heldBack(
+  node: Pick<NodeRow, 'session_id' | 'previous_session_id' | 'session_age' | 'duplicate_seen_at'>,
+  switched: boolean,
+  holdSeconds: number,
+): boolean {
+  if (node.duplicate_seen_at !== null) return true
+  if (switched) return node.session_id !== null
+  return node.previous_session_id !== null && (node.session_age ?? Number.POSITIVE_INFINITY) < holdSeconds
+}
+
+/**
+ * The lease a beat is answered with. A node an operator declared lost restarts nothing on its
+ * own: a copy of it may run elsewhere. Nor does one held back: it may be two hosts.
+ */
+function leaseFor(node: Pick<NodeRow, 'lifecycle'>, held: boolean, seconds: number): number {
+  return node.lifecycle === 'lost' || held ? 0 : seconds
+}
+
+/** An epoch, if any, is a whole number no higher than `EPOCH_CEILING`. */
+const exact = (epoch: number | null) =>
+  epoch === null || (Number.isSafeInteger(epoch) && epoch >= 0 && epoch <= EPOCH_CEILING)
+
 /** Addresses a node reports, when they are addresses and nothing more. */
 function validAddresses(addresses: NodeAddresses | null | undefined): NodeAddresses | null {
   if (!addresses) return null
@@ -139,15 +185,19 @@ function validAddresses(addresses: NodeAddresses | null | undefined): NodeAddres
   return addresses
 }
 
-/** The report applied to the node's row and its copies; returns the upgrade to offer it, if any. */
+/**
+ * The report applied to the node's row and its copies; returns the upgrade to offer it, if any.
+ * A `held` node's new addresses aren't followed, and its list of copies changes nothing: both may
+ * be another host's, and the ledger keeps what the node last said for itself.
+ */
 async function apply(
   t: Queryable,
   node: NodeRow,
   request: HeartbeatRequest,
-  switched: boolean,
+  { switched, held }: { switched: boolean; held: boolean },
   release: UpgradeOffer | null | undefined,
 ): Promise<UpgradeOffer | undefined> {
-  const addresses = validAddresses(request.addresses)
+  const addresses = held ? null : validAddresses(request.addresses)
   const moved =
     addresses !== null &&
     (addresses.api !== node.api_address ||
@@ -183,12 +233,18 @@ async function apply(
   )
     await event(t, 'node.returned_while_lost', { node: node.id, data: { fencedBy: node.fenced_by } })
 
-  await observe(t, node, request.workloads)
+  await recordCopies(t, node, request.workloads, held)
+  return rollout(t, node, request, release)
+}
+
+/** The copies a node reports, as it holds them now; a `held` node's list changes nothing. */
+async function recordCopies(t: Queryable, node: NodeRow, reported: WorkloadReport[], held: boolean) {
+  if (held) return
+  await observe(t, node, reported)
   // What the node no longer reports, it no longer holds.
   await t.execute(sql`
     DELETE FROM fleet_observations
-    WHERE node_id = ${node.id} AND NOT (workload = ANY(${textArray(request.workloads.map((r) => r.id))}))`)
-  return rollout(t, node, request, release)
+    WHERE node_id = ${node.id} AND NOT (workload = ANY(${textArray(reported.map((r) => r.id))}))`)
 }
 
 /**

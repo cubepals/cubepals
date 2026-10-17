@@ -392,13 +392,14 @@ export class Ledger {
   /**
    * New placements a crash left `placing` after their node made the copy: the node's report of
    * that epoch is proof enough, so they are placed with the ports it reports. Never one a restore,
-   * move or recovery must fill first (`completing`): its copy exists before its data.
+   * move or recovery must fill first (`completing`): its copy exists before its data. Nor one the
+   * node is still making (`creating`): its image may never arrive, and the copy goes with it.
    */
   async finishReported(): Promise<number> {
     const found = await rows<ObservedRow>(
       this.#db,
       sql`${OBSERVE_SQL} WHERE p.state = 'placing' AND p.completing IS NULL AND o.epoch = p.epoch
-            AND p.updated_at < now() - interval '20 seconds'`,
+            AND o.state <> 'creating' AND p.updated_at < now() - interval '20 seconds'`,
     )
     let finished = 0
     for (const row of found) {

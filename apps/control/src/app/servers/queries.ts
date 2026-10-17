@@ -94,6 +94,7 @@ import {
 } from './persistence.ts'
 import { partySizesFor, planFit, usableFirst } from './plan-fit.ts'
 import type { MinecraftServerService } from './service.ts'
+import { lastsOnceRestored } from './temporary.ts'
 import { knownPlayers, lastActivity, openIntervalStart, openRun, presenceFor } from './usage.ts'
 
 /** Who is on a running server, as presence has it; null while it isn't running. */
@@ -241,6 +242,7 @@ export class ServerQueries {
               deletedAt: server.deletedAt.toISOString(),
               purgeAfter: server.purgeAfter.toISOString(),
               backups: backups.get(server.id) ?? { snapshots: 0, archives: 0 },
+              lastsOnceRestored: lastsOnceRestored(server),
             },
           ],
     )

@@ -243,8 +243,9 @@ describe.skipIf(!hasDatabase)('edge', () => {
     expect(online).toMatchObject([
       { playerUuid: '5f2c5d3a-9b6e-4f10-a1b2-c3d4e5f60718', playerName: 'Alex', source: 'edge' },
     ])
-    // An idle hint while someone is on changes nothing.
-    expect(await h.app.edge.idleHint(`${slug}.play.test`)).toBe('players_online')
+    // A connect is a claim, not someone the server has seen: the idle policy decides, and
+    // presence is read again before anything stops.
+    expect(await h.app.edge.idleHint(`${slug}.play.test`)).toBe('grace')
     // Nobody's name, a made-up id, or a name that isn't ours change nothing.
     await h.app.edge.recordSession({
       edgeId: 'e1',

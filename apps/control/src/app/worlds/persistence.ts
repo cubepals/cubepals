@@ -7,6 +7,7 @@ import { and, asc, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm'
 import type { World } from '../../domain/world/world.ts'
 
 const worlds = schema.worlds
+const kept = schema.keptWorlds
 
 export interface WorldRecord extends World {
   createdAt: Date
@@ -80,4 +81,37 @@ export async function setWorldFacts(
       generatedOnVersion: facts.gameVersion,
     })
     .where(eq(worlds.id, worldId))
+}
+
+/**
+ * Worlds a restore couldn't copy back, kept only in `backupId` now. One already kept in an older
+ * backup stays kept there: that one holds its directories, the newer one doesn't.
+ */
+export async function keepWorldsIn(tx: Tx, worldIds: readonly string[], backupId: string): Promise<void> {
+  if (worldIds.length === 0) return
+  await tx
+    .insert(kept)
+    .values(worldIds.map((worldId) => ({ worldId, backupId })))
+    .onConflictDoNothing()
+}
+
+/** These worlds' directories are on the volume again. */
+export async function worldsBack(tx: Tx, worldIds: readonly string[]): Promise<void> {
+  if (worldIds.length === 0) return
+  await tx.delete(kept).where(inArray(kept.worldId, [...worldIds]))
+}
+
+/** Every world kept in `backupId` is on the volume again: a restore of that backup brought it back. */
+export async function worldsBackFrom(tx: Tx, backupId: string): Promise<void> {
+  await tx.delete(kept).where(eq(kept.backupId, backupId))
+}
+
+/** Each world the server lists that is kept only in a backup, with that backup's id. */
+export async function keptWorlds(q: Queryable, serverId: string): Promise<Map<string, string>> {
+  const rows = await q
+    .select({ worldId: kept.worldId, backupId: kept.backupId })
+    .from(kept)
+    .innerJoin(worlds, eq(worlds.id, kept.worldId))
+    .where(and(eq(worlds.serverId, serverId), isNull(worlds.deletedAt)))
+  return new Map(rows.map((row) => [row.worldId, row.backupId]))
 }

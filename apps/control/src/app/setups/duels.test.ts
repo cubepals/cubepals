@@ -127,7 +127,7 @@ describe.skipIf(!hasDatabase)('duels', () => {
     ])
     const volume = h.runtime.machine(server.id)?.dir ?? ''
     for (const file of revision.files.map((carried) => onLevel(carried, 'world')))
-      expect(readFileSync(`${volume}/${file.path}`, 'utf8')).toBe(file.content)
+      expect(readFileSync(`${volume}/${file.path}`, file.encoding ?? 'utf8')).toBe(file.content)
     // The datapack is in the world the server runs.
     expect(readFileSync(`${volume}/world/datapacks/cubepals-duels/pack.mcmeta`, 'utf8')).toContain('Cubepals')
   }, 30_000)

@@ -4,11 +4,12 @@
 
 import { randomUUID } from 'node:crypto'
 import { NAME_MAX_LENGTH } from '@blockly/contracts'
-import { DAY_MS, HOUR_S, MINUTE_S } from '@blockly/contracts/durations'
+import { DAY_MS, HOUR_S, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
 import { type Db, schema, type Tx } from '@blockly/db'
 import {
   comesWith,
   entitlementsFor,
+  PLAN_KEYS,
   planThatRuns,
   WORLD_SHARE_OF_DISK,
 } from '../../domain/account/entitlements.ts'
@@ -31,7 +32,7 @@ import { type DeploymentCapabilities, requireCapability } from '../capabilities.
 import { AppError, NotFound } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
-import { type FileFormats, UnreadableFile } from '../ports/formats.ts'
+import { type FileFormats, ReadCutShort, UnreadableFile } from '../ports/formats.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { LoaderBuilds } from '../ports/loaders.ts'
 import { RuntimeUnsupported } from '../ports/runtime.ts'
@@ -49,8 +50,8 @@ import {
   setDesired,
 } from '../servers/persistence.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
-import { deletePendingUpload, insertPendingUpload, loadPendingUpload } from '../uploads/persistence.ts'
-import { insertWorld, listWorlds, markPruned, markWorldDeleted } from '../worlds/persistence.ts'
+import { claimPendingUpload, insertPendingUpload, loadPendingUpload } from '../uploads/persistence.ts'
+import { insertWorld, keptWorlds, listWorlds, markPruned, markWorldDeleted } from '../worlds/persistence.ts'
 import { downloadsErased, downloadsToErase } from './download-records.ts'
 import { WorldDownloads } from './downloads.ts'
 import {
@@ -62,6 +63,7 @@ import {
   insertArchive,
   latestBackup,
   latestRestorePoint,
+  listBackups,
   loadBackup,
   readySnapshots,
   setBackupStatus,
@@ -83,8 +85,25 @@ const worldUploadLimit = (diskGb: number): number =>
 const WORLD_UPLOAD_LINK_SECONDS = HOUR_S
 /** Long enough to read an uploaded world's properties and level.dat. */
 const READ_LINK_SECONDS = 30 * MINUTE_S
+/** A world is never larger than the largest disk any plan offers, so neither is a download of one inflated. */
+const MAX_INFLATED_WORLD_BYTES =
+  Math.max(...PLAN_KEYS.map((plan) => entitlementsFor(plan).storage.mostGb)) * 1024 ** 3
+/** How long a world download is read for: as long as the link it is read through. */
+const READ_DEADLINE_MS = READ_LINK_SECONDS * SECOND_MS
 /** A level.dat is a few kilobytes; server.properties less. */
 const MAX_WORLD_FILE_BYTES = 4 * 1024 * 1024
+/**
+ * What reading a download keeps: its properties, its note and a level.dat for each world beside
+ * them. A server with many worlds has a few dozen; the bytes held stay a few times one file's limit.
+ */
+const MAX_KEPT_WORLD_FILES = 64
+const MAX_KEPT_WORLD_BYTES = 4 * MAX_WORLD_FILE_BYTES
+/** What a player is told when reading their upload stopped short, by the limit that stopped it. */
+const CUT_SHORT_BECAUSE: Record<ReadCutShort['limit'], string> = {
+  kept: 'This download holds more worlds than one server runs. Upload one server’s download.',
+  size: 'This world is larger than any Cubepals server holds.',
+  time: 'Reading this world took too long. Try a smaller world, or write to support and we’ll help bring this one in.',
+}
 /** An uploaded world stays at least this long, whatever the plan keeps, so there is time to restore it. */
 const UPLOADED_KEPT_DAYS = 7
 
@@ -275,6 +294,12 @@ export class BackupService {
 
     return this.#db.transaction(async (tx) => {
       const locked = authorize(actor, await lockServer(tx, server.id))
+      // One upload is one backup: the same finish asked again gets the backup the first one made.
+      if (!(await claimPendingUpload(tx, pending.id))) {
+        const made = (await listBackups(tx, locked.id)).find((b) => b.archiveKey === pending.key)
+        if (made === undefined) throw new NotFound('Upload')
+        return made
+      }
       const known = (await listWorlds(tx, locked.id)).find((w) => w.levelName === world.levelName)
       let worldId = known?.id
       if (worldId === undefined) {
@@ -310,8 +335,6 @@ export class BackupService {
           gameVersion: world.gameVersion,
         },
       })
-      // The key is the backup's now; nothing is left to clear.
-      await deletePendingUpload(tx, pending.id)
       await this.#audit(tx, actor, 'server.world_uploaded', locked.id, {
         backupId: backup.id,
         level: world.levelName,
@@ -348,11 +371,35 @@ export class BackupService {
         }
       },
       maxEntryBytes: MAX_WORLD_FILE_BYTES,
+      maxKeptEntries: MAX_KEPT_WORLD_FILES,
+      maxKeptBytes: MAX_KEPT_WORLD_BYTES,
+      maxInflatedBytes: MAX_INFLATED_WORLD_BYTES,
+      deadlineMs: READ_DEADLINE_MS,
     })
     const level = levelOf(files)
     if (level === null) throw new Error('The copy has no server settings naming a world')
     if ((files.get(`${level}/level.dat`)?.length ?? 0) === 0)
       throw new Error(`The copy has no ${level}/level.dat`)
+  }
+
+  /** The names at the top of a copy of a volume in the store: which directories it holds. */
+  async topLevelOf(key: string): Promise<Set<string>> {
+    const store = requireCapability(this.#caps, 'archives')
+    const link = await store.presignGet(key, READ_LINK_SECONDS, 'browser')
+    const names = new Set<string>()
+    await this.#formats.readTarball(link.url, {
+      wanted: (path) => {
+        names.add(path.split('/')[0] ?? path)
+        return false
+      },
+      enough: () => false,
+      maxEntryBytes: MAX_WORLD_FILE_BYTES,
+      maxKeptEntries: MAX_KEPT_WORLD_FILES,
+      maxKeptBytes: MAX_KEPT_WORLD_BYTES,
+      maxInflatedBytes: MAX_INFLATED_WORLD_BYTES,
+      deadlineMs: READ_DEADLINE_MS,
+    })
+    return names
   }
 
   /** The world a download holds: named in its server.properties, described in its level.dat. */
@@ -385,8 +432,13 @@ export class BackupService {
           }
         },
         maxEntryBytes: MAX_WORLD_FILE_BYTES,
+        maxKeptEntries: MAX_KEPT_WORLD_FILES,
+        maxKeptBytes: MAX_KEPT_WORLD_BYTES,
+        maxInflatedBytes: MAX_INFLATED_WORLD_BYTES,
+        deadlineMs: READ_DEADLINE_MS,
       })
     } catch (error) {
+      if (error instanceof ReadCutShort) throw new AppError('invalid_upload', CUT_SHORT_BECAUSE[error.limit])
       if (error instanceof UnreadableFile)
         throw new AppError('invalid_upload', 'This file isn’t a whole world download (.tar.gz).')
       throw error
@@ -522,7 +574,9 @@ export class BackupService {
   async enforceRetention(server: MinecraftServer): Promise<void> {
     const standing = await loadStanding(this.#db, server.ownerId)
     const kept = entitlementsFor(standing.plan, standing.limitOverrides).backupPolicy.snapshotsKept
-    const ready = await readySnapshots(this.#db, server.id)
+    // A backup a listed world is kept in is the only place that world is: it stays while it is.
+    const holding = new Set((await keptWorlds(this.#db, server.id)).values())
+    const ready = (await readySnapshots(this.#db, server.id)).filter((b) => !holding.has(b.id))
     const own = ready.filter((b) => !SAFETY.includes(b.trigger)).slice(kept)
     const safety = ready.filter((b) => SAFETY.includes(b.trigger)).slice(SAFETY_KEPT)
     await this.#forget(server, [...own, ...safety])

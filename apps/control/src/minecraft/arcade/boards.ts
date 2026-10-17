@@ -14,7 +14,9 @@
  * The name comes from a player head the loot table fills with the player's profile, the one way a
  * datapack reads a player's name as text.
  */
+import { type Read, turnedTo } from '../readable.ts'
 import { type Block, INDIGO, type Label, NS, PAPER, type Part, type Run } from './datapack.ts'
+import { plateOf } from './label-space.ts'
 
 /** The world storage that keeps each board, by its key. */
 const BOARDS = `${NS}:boards`
@@ -32,19 +34,24 @@ interface Board {
 }
 
 /**
- * The boards, west to east, one before each of the four domes along the hub's balcony, each
- * beside its game's pad: the parkour's west of the middle, the pit's by the middle, the falling
- * floor's two east of it.
+ * The boards, west to east, one on each of the four domes along the hub's balcony, each beside its
+ * game's pad: the parkour's west of the middle, the pit's by the middle, the falling floor's two
+ * east of it. A dome's glass front curves back from a flat middle five blocks wide, a block in
+ * from the balcony's ledge; each board hangs square on that middle, a twentieth of a block off it,
+ * high enough over the ledge's quartz, a block in front of it, that the quartz hides none of it
+ * from where it is read (`BOARD_READS`).
  */
+const FACE = 1436 - 0.05
+const BOARD_Y = 85.9
 const BOARD_LIST: readonly Board[] = [
-  { key: 'pk', title: 'Parkour: fastest', at: [123.5, 83.5, 1434.5] },
-  { key: 'kills', title: 'The pit: kills', at: [151.5, 83.5, 1434.5] },
-  { key: 'ff', title: 'Falling floor: longest', at: [199.5, 83.5, 1434.5] },
-  { key: 'wins', title: 'Falling floor: wins', at: [227.5, 83.5, 1434.5] },
+  { key: 'pk', title: 'Parkour: fastest', at: [124.5, BOARD_Y, FACE] },
+  { key: 'kills', title: 'The pit: kills', at: [152.5, BOARD_Y, FACE] },
+  { key: 'ff', title: 'Falling floor: longest', at: [199.5, BOARD_Y, FACE] },
+  { key: 'wins', title: 'Falling floor: wins', at: [227.5, BOARD_Y, FACE] },
 ]
 
-/** How much larger a board's text is than the game's, to be read from across the balcony. */
-const BOARD_SCALE = 1.6
+/** How much larger a board's text is than the game's: as large as fits the widest board on a dome's flat middle. */
+const BOARD_SCALE = 1.1
 
 /**
  * The most a board shows, which its room is measured by: its title over ten lines, each the
@@ -65,10 +72,30 @@ const boardLabels: Label[] = BOARD_LIST.map(({ key, title, at }) => ({
   tag: `${NS}.board.${key}`,
   text: [],
   scale: BOARD_SCALE,
-  // Flat before its dome, facing the balcony: turning, it would sweep into the dome behind it.
+  // Flat on its dome, facing the balcony: turning, it would sweep into the dome behind it.
   facing: 'north',
   widest: widest(title),
 }))
+
+/**
+ * Where each board is first read: on the balcony, on the way to it from the hub's middle, turned
+ * to its middle. Not from right behind a pad, where the pad's words, two blocks off and over the
+ * player, stand in front of the board behind them.
+ */
+const BOARD_READ_FROM: Readonly<Record<string, Block>> = {
+  pk: [130.5, 78, 1431.5],
+  kills: [157.5, 78, 1430.5],
+  ff: [194.5, 78, 1430.5],
+  wins: [222.5, 78, 1432.5],
+}
+
+export const BOARD_READS: readonly Read[] = boardLabels.map((label) => {
+  const from = BOARD_READ_FROM[label.tag.replace(`${NS}.board.`, '')]
+  if (from === undefined) throw new Error(`No place to read ${label.tag} from`)
+  const { bottom, top } = plateOf(label)
+  const [x, y, z] = label.at
+  return { label, from: turnedTo(from, [x, y + (bottom + top) / 2, z]) }
+})
 
 /**
  * Hands the player's entry in `WORK new` to a board, which keeps it if it is in the top ten. Run as
@@ -149,9 +176,11 @@ export const BOARDS_PART: Part = {
       `$data modify storage ${WORK} text set from storage ${NS}:titles $(board)`,
       `data modify storage ${WORK} list set value []`,
       `$data modify storage ${WORK} list set from storage ${BOARDS} $(board)`,
-      `execute unless data storage ${WORK} list[0] run data modify storage ${WORK} text append value {text:"\\nNobody yet. Be the first.",color:"gray"}`,
       `scoreboard players set #rank ${TMP} 0`,
+      `execute unless data storage ${WORK} list[0] run data modify storage ${WORK} text append value {text:"\\nNobody yet. Be the first.",color:"gray"}`,
+      `execute unless data storage ${WORK} list[0] run scoreboard players set #rank ${TMP} 1`,
       `function ${NS}:boards/line`,
+      `function ${NS}:boards/fill`,
       `$data modify entity @e[type=minecraft:text_display,tag=${NS}.board.$(board),limit=1] text set from storage ${WORK} text`,
     ],
     'boards/line': [
@@ -161,6 +190,14 @@ export const BOARDS_PART: Part = {
       `function ${NS}:boards/append with storage ${WORK} list[0]`,
       `data remove storage ${WORK} list[0]`,
       `function ${NS}:boards/line`,
+    ],
+    // Empty lines after the last, to a full board's ten, so the words start at the top of its
+    // plate, which is a full board's size: the game stands a display's lines up from its foot.
+    'boards/fill': [
+      `execute if score #rank ${TMP} matches 10.. run return 0`,
+      `scoreboard players add #rank ${TMP} 1`,
+      `data modify storage ${WORK} text append value "\\n "`,
+      `function ${NS}:boards/fill`,
     ],
     'boards/append': [
       `$data modify storage ${WORK} text append value {text:"\\n$(rank). ",color:"gray"}`,

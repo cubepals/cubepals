@@ -133,6 +133,14 @@ export const extraPlayMonths = pgTable(
     accruedMilli: integer('accrued_milli').notNull().default(0),
     reportedMilli: integer('reported_milli').notNull().default(0),
     pendingSince: ts('pending_since'),
+    /**
+     * The block of hours the month keeps when an admin lowers the account's hours after it played
+     * that month, in hours, and the plan it was kept under (`blockPlan`): the lowered hours apply
+     * from the next month, so play already covered stays covered. It holds only while that plan is
+     * in force; a plan that changes brings its own block at once. Null when nothing was kept.
+     */
+    blockUnits: integer('block_units'),
+    blockPlan: text('block_plan'),
     /** When the month was counted for the last time: it is over, and nothing still runs in it. */
     finalAt: ts('final_at'),
     updatedAt: updatedAt(),

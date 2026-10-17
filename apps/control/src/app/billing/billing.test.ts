@@ -420,7 +420,7 @@ describe.skipIf(!hasDatabase)('billing', () => {
   test('the account overview answers each feature as the API would', async () => {
     const owner = await h.user()
     const before = await h.app.accountQueries.overview(owner)
-    expect(before.plan).toEqual({ key: 'free', billed: null, year: null, gifted: null })
+    expect(before.plan).toEqual({ key: 'free', billed: null, year: null, gifted: null, giftNext: null })
     const feature = (o: typeof before, name: string) => o.features.find((f) => f.feature === name)
     expect(feature(before, 'upload_mod')).toMatchObject({ available: false, code: 'deployment_unsupported' })
     expect(feature(before, 'billing')).toEqual({ feature: 'billing', available: true })

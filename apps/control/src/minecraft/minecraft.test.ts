@@ -12,7 +12,7 @@ import { installCheck, installProblems, parseInstalled } from './install-check.t
 import { diskName, jarsOf } from './jars.ts'
 import { bootMilestone, classifyLine, saysReady } from './logs.ts'
 import { catalogLoadersFor, projectTypesFor, serverEnvironment } from './mods.ts'
-import { IDENTITY_ENV, imageFor, PLAN_ENV, toRuntimeSpec, withoutFilesStep } from './runtime-spec.ts'
+import { IDENTITY_ENV, imageFor, PLAN_ENV, toRuntimeSpec, withoutOwnSteps } from './runtime-spec.ts'
 import { compareVersions, javaFor } from './versions.ts'
 import { WAKE_STEP } from './wake-step.ts'
 
@@ -173,7 +173,7 @@ describe('toRuntimeSpec', () => {
     expect(script).toContain('export ICON=/tmp/blockly-icon')
     // Last of Blockly's steps, what spares the image work it would redo; drift never sees it.
     expect(script).toEndWith(`${WAKE_STEP} exec /image/scripts/start "$@"`)
-    expect(withoutFilesStep(plain.entrypoint)).toBeUndefined()
+    expect(withoutOwnSteps(plain.entrypoint)).toBeUndefined()
   })
 
   test('a modded server keeps more memory outside its heap than a vanilla one', () => {
@@ -247,7 +247,7 @@ describe('toRuntimeSpec', () => {
     expect(first.env.BLOCKLY_PACK).toBe('a'.repeat(32))
     expect(second.env.BLOCKLY_PACK).not.toBe(first.env.BLOCKLY_PACK)
     // Without a pack or an icon, only the first step (app/servers/paper-runtime.test.ts) is left.
-    expect(withoutFilesStep(toRuntimeSpec({ ...input, revision }).entrypoint)).toBeUndefined()
+    expect(withoutOwnSteps(toRuntimeSpec({ ...input, revision }).entrypoint)).toBeUndefined()
     // One with both fetches its icon, then sees to its pack.
     const both = pack('a'.repeat(128), 'http://control.test/grass.png')
     expect(both.entrypoint?.[2]).toMatch(/blockly-icon.*modpack\.mrpack.*exec \/image\/scripts\/start/)

@@ -1,5 +1,5 @@
 {
-  "id": "b834e9a7-7cfe-4fa7-8ea3-4275638b9559",
+  "id": "888d5940-fc8e-4921-be53-1003d8f50edd",
   "prevId": "52e94bb5-db96-4fe9-99f0-32de1a0b4ecf",
   "version": "7",
   "dialect": "postgresql",
@@ -388,6 +388,30 @@
         "time_zone": {
           "name": "time_zone",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "time_zone_from": {
+          "name": "time_zone_from",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "time_zone_began": {
+          "name": "time_zone_began",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_time_zone": {
+          "name": "next_time_zone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_time_zone_from": {
+          "name": "next_time_zone_from",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -6428,71 +6452,6 @@
       "compositePrimaryKeys": {
         "server_player_snapshots_server_id_player_uuid_pk": {
           "name": "server_player_snapshots_server_id_player_uuid_pk",
-          "columns": [
-            "server_id",
-            "player_uuid"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.server_turned_away": {
-      "name": "server_turned_away",
-      "schema": "",
-      "columns": {
-        "server_id": {
-          "name": "server_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "player_uuid": {
-          "name": "player_uuid",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "player_name": {
-          "name": "player_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "at": {
-          "name": "at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "server_turned_away_server_id_minecraft_servers_id_fk": {
-          "name": "server_turned_away_server_id_minecraft_servers_id_fk",
-          "tableFrom": "server_turned_away",
-          "tableTo": "minecraft_servers",
-          "columnsFrom": [
-            "server_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "server_turned_away_server_id_player_uuid_pk": {
-          "name": "server_turned_away_server_id_player_uuid_pk",
           "columns": [
             "server_id",
             "player_uuid"

@@ -24,6 +24,7 @@ import type { PlatformControls } from '../../domain/policy/policy.ts'
 import type { DaySpend } from '../../domain/policy/spend.ts'
 
 const alerts = schema.platformAlerts
+const jobs = schema.jobHealth
 const log = schema.auditLog
 const servers = schema.minecraftServers
 const operations = schema.serverOperations
@@ -221,6 +222,60 @@ export async function alertNotified(q: Queryable, key: string, at: Date): Promis
 
 export async function clearAlert(q: Queryable, key: string, at: Date): Promise<void> {
   await q.update(alerts).set({ clearedAt: at }).where(eq(alerts.key, key))
+}
+
+// ─── Job health ──────────────────────────────────────────────────────────────────────────────
+
+export type JobHealthRecord = typeof schema.jobHealth.$inferSelect
+
+export async function loadJobHealth(q: Queryable): Promise<JobHealthRecord[]> {
+  return q.select().from(jobs)
+}
+
+/**
+ * The scheduled jobs as they are now, each with its interval; one first seen now counts from now.
+ * Scheduled jobs no longer among them are forgotten; what runs on no schedule is kept.
+ */
+export async function recordSchedule(
+  q: Queryable,
+  scheduled: ReadonlyArray<{ job: string; everySeconds: number }>,
+  at: Date,
+): Promise<void> {
+  if (scheduled.length === 0) return
+  await q
+    .insert(jobs)
+    .values(scheduled.map(({ job, everySeconds }) => ({ job, everySeconds, firstSeenAt: at })))
+    .onConflictDoUpdate({ target: jobs.job, set: { everySeconds: sql`excluded.every_seconds` } })
+  await q.delete(jobs).where(
+    and(
+      sql`${jobs.everySeconds} IS NOT NULL`,
+      notInArray(
+        jobs.job,
+        scheduled.map((s) => s.job),
+      ),
+    ),
+  )
+}
+
+export async function recordJobSucceeded(q: Queryable, job: string, at: Date): Promise<void> {
+  await q
+    .insert(jobs)
+    .values({ job, firstSeenAt: at, lastSucceededAt: at })
+    .onConflictDoUpdate({ target: jobs.job, set: { lastSucceededAt: at, failures: 0 } })
+}
+
+/** The most of an error kept: enough to know it by. */
+const ERROR_KEPT = 1000
+
+export async function recordJobFailed(q: Queryable, job: string, at: Date, failure: string): Promise<void> {
+  const error = failure.slice(0, ERROR_KEPT)
+  await q
+    .insert(jobs)
+    .values({ job, firstSeenAt: at, lastFailedAt: at, lastError: error, failures: 1 })
+    .onConflictDoUpdate({
+      target: jobs.job,
+      set: { lastFailedAt: at, lastError: error, failures: sql`${jobs.failures} + 1` },
+    })
 }
 
 // ─── Work that needs an admin ───────────────────────────────────────────────────────────────
