@@ -21,6 +21,8 @@ import { LOCK_NOT_AVAILABLE, MIGRATION_LOCK_WAIT_MS, migrationsFolder } from './
  */
 const ATTEMPTS = 5
 const FIRST_BACKOFF_MS = Number(process.env.MIGRATION_BACKOFF_MS) || 5 * SECOND_MS
+/** The migrations to apply: this package's, or, in tests, a copy holding one of their own. */
+const folder = process.env.MIGRATIONS_FOLDER || migrationsFolder
 
 // Migrations take advisory locks and run DDL, which belong on a connection of their own: past a
 // pooler when there is one (DATABASE_DIRECT_URL), else the one URL there is.
@@ -44,7 +46,7 @@ try {
   for (let attempt = 1; ; attempt++) {
     try {
       // All pending migrations run in one transaction, so one that gives way leaves none applied.
-      await migrate(drizzle(client), { migrationsFolder })
+      await migrate(drizzle(client), { migrationsFolder: folder })
       break
     } catch (error) {
       if (!gaveWay(error)) throw error
