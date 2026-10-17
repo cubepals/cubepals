@@ -219,12 +219,25 @@ world stays.
   may add up to its memory × `FLEET_MEMORY_OVERCOMMIT`, since few of a node's servers run at
   once. `1` holds memory for every placed server.
 - **A start claims its memory** in the ledger, under the region's lock, before the node is asked.
-  A stop gives the claim back. So does the node reporting the copy stopped or crashed after the
-  start. A copy made and not yet started (`created`) keeps the claim.
+  A stop or a kill gives the claim back once the node has done it. So does the node reporting the
+  copy stopped or crashed after the start. A copy made and not yet started (`created`) keeps the
+  claim.
+- **The node's answer to a start, stop or kill counts as its report of the copy** (`answered` in
+  `registry/summaries.ts`), so a stop frees the copy's memory at once, not at the next heartbeat.
+- **A kill the node can't be reached for** gives the claim back all the same and is recorded as
+  `power.unanswered`, so a stop that failed for good ends with the server stopped on what it ran.
+  A node out of reach restarts nothing once its lease runs out, and a copy still running when it
+  is back is stopped then.
+- **Calls safe to repeat are retried** while the node doesn't answer (`NodeUnreachable`), within
+  the call's timeout: `GET`, `PUT`, start and stop. Kill, delete, fence, exec and transfers are
+  sent once. A TLS failure is never retried.
 - **A start with no room where the server sleeps moves it first.** This is the start the
-  application makes for a sleeping server, `ensureProvisioned` with its spec. If the servers
-  running on its node leave it no room, its world goes through the archive store to a node in its
-  region that has room, as a planned move does, and it starts there. Operators see this as
+  application makes for a sleeping server, `ensureProvisioned` with its spec. If the ledger counts
+  its node full, `Rehoming.startElsewhere` first asks the node how its copies in use are now
+  (`Admission.lookAgain`): a copy that stopped since its last report frees its room, and when that
+  leaves enough, the server starts where it is. If the servers still running there leave it no
+  room, its world goes through the archive store to a node in its region that has room, as a
+  planned move does, and it starts there. Operators see this as
   `placement.moved_for_room`, with the reason. Nobody is asked: the world is the same wherever it
   runs, and the move costs only the export and restore, seconds for a small world. With no room on
   any node, the start fails with `RuntimeFull`, as at any provider that is out of capacity.
