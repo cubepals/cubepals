@@ -13,13 +13,14 @@ import { SECOND_MS } from '@blockly/contracts/durations'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import pg from 'pg'
-import { LOCK_NOT_AVAILABLE, migrationsFolder } from './index.ts'
+import { LOCK_NOT_AVAILABLE, MIGRATION_LOCK_WAIT_MS, migrationsFolder } from './index.ts'
 
-/** How long one statement may wait for a lock: the longest the running release's queries queue. */
-const LOCK_WAIT_MS = 5 * SECOND_MS
-/** How many times the migrations try, and the wait before the second; each wait doubles. */
+/**
+ * How many times the migrations try, and the wait before the second; each wait doubles. Tests
+ * shorten the wait (MIGRATION_BACKOFF_MS) so a run that gives up ends in seconds.
+ */
 const ATTEMPTS = 5
-const FIRST_BACKOFF_MS = 5 * SECOND_MS
+const FIRST_BACKOFF_MS = Number(process.env.MIGRATION_BACKOFF_MS) || 5 * SECOND_MS
 
 // Migrations take advisory locks and run DDL, which belong on a connection of their own: past a
 // pooler when there is one (DATABASE_DIRECT_URL), else the one URL there is.
@@ -39,7 +40,7 @@ const client = new pg.Client({ connectionString: url })
 await client.connect()
 try {
   // SET takes no bind parameters.
-  await client.query(`SET lock_timeout = ${LOCK_WAIT_MS}`)
+  await client.query(`SET lock_timeout = ${MIGRATION_LOCK_WAIT_MS}`)
   for (let attempt = 1; ; attempt++) {
     try {
       // All pending migrations run in one transaction, so one that gives way leaves none applied.
