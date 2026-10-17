@@ -1209,7 +1209,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fly/fly-runtime-calls.test.ts › describe FlyRuntime calls, in order": {
-      "n": 167,
+      "n": 120,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fly/fly-runtime.test.ts › describe FlyRuntime power": {
