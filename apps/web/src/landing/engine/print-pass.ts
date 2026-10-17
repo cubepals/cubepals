@@ -89,7 +89,7 @@ void main() {
   // A lamp is solid torch; its light round it is torch dots, added in the dither's own order.
   float glow = texelFetch(uGlow, c, 0).r;
   bool solid = shade.a > 0.5 && shade.g > 0.5;
-  if (solid || glow * 1.5 > t + 0.05) { o = vec4(uWarm, 1.0); return; }
+  if (solid || glow * 0.9 > t + 0.08) { o = vec4(uWarm, 1.0); return; }
   // A beam of light through the air in front of what is drawn (scene-pass.ts, the alpha below
   // one): dust, a scatter of warm dots as thick as the beam, drifting down a dot at a time.
   float dust = shade.a > 0.5 ? (1.0 - shade.a) / 0.4 : 0.0;

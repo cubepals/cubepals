@@ -101,7 +101,7 @@ const MOONLIT: Omit<Look, 'deep' | 'windows'> = {
   ambient: 0.28,
   lampGain: 1.5,
   exposure: 0.85,
-  contrast: 1.35,
+  contrast: 1.2,
 }
 const DAYLIT: Omit<Look, 'deep' | 'windows'> = {
   keyLight: 2.8,
@@ -110,7 +110,7 @@ const DAYLIT: Omit<Look, 'deep' | 'windows'> = {
   ambient: 0.45,
   lampGain: 1.5,
   exposure: 0.5,
-  contrast: 1.45,
+  contrast: 1.25,
 }
 const ROOMLIT: Omit<Look, 'deep' | 'windows'> = {
   keyLight: 2.2,
@@ -119,7 +119,7 @@ const ROOMLIT: Omit<Look, 'deep' | 'windows'> = {
   ambient: 0.3,
   lampGain: 1.6,
   exposure: 1.4,
-  contrast: 1.4,
+  contrast: 1.2,
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t

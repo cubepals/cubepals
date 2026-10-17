@@ -274,17 +274,15 @@ function fleetRoom(world: World): void {
 /**
  * The vault: a hall under the house and the path, open at the chunk's wall, where the server
  * itself stands (engine/cast.ts builds it). It lies beside the first room and
- * above the second, so none opens into another. Two lamps hang from its ceiling, on its switch,
- * and the server adds its own light.
+ * above the second, so none opens into another. Light falls from its ceiling, on its switch,
+ * and the server adds its own.
  */
 function cellar(world: World): void {
   // Two blocks short of the first room: a block is lit by one room only, so the wall between two
   // rooms is a block for each.
   world.carve({ x0: 3, x1: SIZE - 1, z0: 1, z1: 6, y0: -8, y1: -2 }, CELLAR)
-  for (const x of [6, 12]) {
-    world.set(x, -2, 3, Kind.lamp, CELLAR)
-    world.light(x + 0.5, -2.5, 3.5, 8, CELLAR)
-  }
+  // Its light from above, on its switch: soft, with no lamp block in the way of the vault's shot.
+  for (const x of [5, 9]) world.light(x + 0.5, -2.5, 3.5, 8, CELLAR)
 }
 
 export function buildChunk(): World {

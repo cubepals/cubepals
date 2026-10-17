@@ -235,10 +235,11 @@ float lit(vec3 n, bool sunny, int kind) {
   vec4 at = uLight * vec4(vWorld + n * push, 1.0);
   vec3 s = at.xyz * 0.5 + 0.5;
   if (any(lessThan(s, vec3(0.0))) || any(greaterThan(s, vec3(1.0)))) return 1.0;
+  // Five by five taps two texels apart: a shadow's edge is a soft band, not a line.
   float sum = 0.0;
   for (int dx = -2; dx <= 2; dx++)
     for (int dy = -2; dy <= 2; dy++)
-      sum += texture(uShadowMap, vec3(s.xy + vec2(float(dx), float(dy)) * uMapTexel, s.z - 0.0006));
+      sum += texture(uShadowMap, vec3(s.xy + vec2(float(dx), float(dy)) * 2.0 * uMapTexel, s.z - 0.0006));
   return sum / 25.0;
 }
 
@@ -254,12 +255,12 @@ vec2 baked(vec3 n) {
   if (any(lessThan(q, vec3(0.0))) || any(greaterThan(q, vec3(1.0)))) return vec2(1.0, 0.0);
   vec3 v = texture(uVolume, q).rgb;
   // A block further out says which way the light comes from: more there, and this face is turned
-  // toward it; less, and away, so the far side of a rack or a figure is dark.
+  // toward it; less, and away, so the far side of a rack or a figure is a step darker, softly.
   vec3 f = texture(uVolume, q + n / uVolume3.xyz).rgb;
   float near = v.g + v.b;
   float far = f.g + f.b;
   float toward = clamp(0.5 + 1.5 * (far - near) / max(far + near, 0.02), 0.0, 1.0);
-  return vec2(v.r, near * 2.0 * (0.15 + 0.85 * toward));
+  return vec2(v.r, near * 2.0 * (0.4 + 0.6 * toward));
 }
 
 // Light hanging in the air between the eye and this point, walked back toward the eye for eight
@@ -398,9 +399,9 @@ void main() {
     vec3 to = uLights[i].xyz - vWorld;
     float d = length(to);
     float f = clamp(1.0 - d / uLights[i].w, 0.0, 1.0);
-    float facing = 0.15 + 0.85 * max(dot(n, to / max(d, 0.001)), 0.0);
+    float facing = 0.4 + 0.6 * max(dot(n, to / max(d, 0.001)), 0.0);
     float shadow = i == uTorch ? lampLit(n) : 1.0;
-    lamp += uLightOn[i] * f * f * f * (wall ? f * 0.8 : 1.0) * facing * shadow;
+    lamp += uLightOn[i] * f * f * (wall ? f * 0.8 : 1.0) * facing * shadow;
   }
 #endif
   float warmth = tone * lamp * uLampGain * ao;
@@ -409,9 +410,11 @@ void main() {
   // What glows: a lit window, a lamp, a torch. The second pass prints it solid and its blur warm.
   float glow = 0.0;
   if (group > 0 && (kind == 12 || kind == 13 || kind == 22)) glow = uGroups[group];
-  // A room seen from out of doors (the column, a cutaway) is a lit window: with its switch up,
-  // its inside prints solid warm with a glow round it, so it reads at any size.
-  if (!open && !loose && room > 0) glow = max(glow, uGroups[room] * smoothstep(2.0, 5.0, uWindows));
+  // A room seen from out of doors and far off (the column) is a lit window: with its switch up,
+  // its inside prints solid warm with a glow round it, so it reads at that size. Close to, as in
+  // the vault or a cutaway, it is drawn as a room.
+  float far = smoothstep(120.0, 200.0, distance(uEye, vWorld));
+  if (!open && !loose && room > 0) glow = max(glow, uGroups[room] * smoothstep(2.0, 5.0, uWindows) * far);
 
   // Which flat plane this is: the way it faces, how far along that way, and what it's made of.
   int axis = vFace % 3;
@@ -436,7 +439,7 @@ void main() {
   // A beam is light in the air: what is seen through it is seen paler and warmer.
   lum += dust * 0.9;
   warmth += dust * 0.2;
-  o0 = vec4(clamp(lum * 0.5, 0.0, 1.0), glow, clamp(warmth / max(lum, 0.001), 0.0, 1.0) * 0.6 * smoothstep(0.02, 0.2, warmth), 1.0 - 0.4 * dust);
+  o0 = vec4(clamp(lum * 0.5, 0.0, 1.0), glow, clamp(warmth / max(lum, 0.001), 0.0, 1.0) * 0.6 * smoothstep(0.0, 0.6, warmth), 1.0 - 0.4 * dust);
   // (Half marks a part that is thinning: no line is drawn round its scattered dots.)
   o1 = vec4(mod(id, 256.0) / 255.0, floor(id / 256.0) / 255.0, vFog, ghost ? 0.5 : 1.0);
 }`
