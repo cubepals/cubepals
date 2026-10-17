@@ -12,7 +12,7 @@ import { type Actor, authorize } from '../actor.ts'
 import { listBackups } from '../backups/persistence.ts'
 import { findServer, loadRuntime } from '../servers/persistence.ts'
 import { freshStartOf } from './fresh-start.ts'
-import { listWorlds } from './persistence.ts'
+import { keptWorlds, listWorlds } from './persistence.ts'
 
 /** A world's stored type, as the page names it; one Blockly never makes is a bug, not a world. */
 function knownType(type: string): LevelType {
@@ -33,7 +33,9 @@ export class WorldQueries {
   async list(actor: Actor, serverId: string): Promise<WorldView[]> {
     const server = authorize(actor, await findServer(this.#db, serverId))
     const { applied } = await loadRuntime(this.#db, server.id, this.#providers)
-    const backups = (await listBackups(this.#db, server.id)).filter((b) => b.status === 'ready')
+    const all = await listBackups(this.#db, server.id)
+    const backups = all.filter((b) => b.status === 'ready')
+    const kept = await keptWorlds(this.#db, server.id)
     return (await listWorlds(this.#db, server.id))
       .filter((world) => world.deletedAt === null)
       .map((world) => ({
@@ -47,6 +49,7 @@ export class WorldQueries {
         active: world.id === server.activeWorldId,
         running: world.id === applied?.worldId,
         backups: backups.filter((b) => b.worldId === world.id).length,
+        keptInBackupFrom: all.find((b) => b.id === kept.get(world.id))?.createdAt.toISOString() ?? null,
       }))
   }
 

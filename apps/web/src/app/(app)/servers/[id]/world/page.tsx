@@ -5,11 +5,13 @@
 'use client'
 
 import { type FreshStartView, LEVEL_TYPES, type ServerView, type WorldView } from '@blockly/contracts'
+import { MINUTE_MS } from '@blockly/contracts/durations'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type SubmitEvent, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
+import { useNow } from '../../../../../lib/hooks'
 import { said, useOutcome } from '../../../../../lib/outcome'
-import { levelTypeLabel } from '../../../../../lib/present'
+import { levelTypeLabel, whenTaken } from '../../../../../lib/present'
 import * as rules from '../../../../../lib/rules'
 import { useChecked } from '../../../../../lib/use-checked'
 import {
@@ -364,19 +366,29 @@ function Others({ view, worlds }: { view: ServerView; worlds: WorldView[] }) {
     }),
   )
   const allowed = changeable(view)
+  const now = useNow(MINUTE_MS)
   return (
     <FormSection title="Other worlds" description="Kept on the server until you delete them.">
       {worlds.map((world) => (
         <FormRow
           key={world.id}
           label={world.name}
-          description={`${levelTypeLabel(world.levelType)} · first opened on Minecraft ${world.generatedOnVersion}${world.backups > 0 ? ` · ${world.backups} ${world.backups === 1 ? 'backup' : 'backups'}` : ''}`}
+          description={
+            world.keptInBackupFrom !== null
+              ? `Kept in a backup (${whenTaken(world.keptInBackupFrom, now)}). Restore it from Backups to play it again.`
+              : `${levelTypeLabel(world.levelType)} · first opened on Minecraft ${world.generatedOnVersion}${world.backups > 0 ? ` · ${world.backups} ${world.backups === 1 ? 'backup' : 'backups'}` : ''}`
+          }
           control={
             <div className="bk-row" style={{ gap: 'var(--space-8)' }}>
               <Button variant="ghost" size="sm" disabled={world.running} onClick={() => setDeleting(world)}>
                 Delete
               </Button>
-              <Button variant="outline" size="sm" disabled={!allowed.ok} onClick={() => setSwitching(world)}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!allowed.ok || world.keptInBackupFrom !== null}
+                onClick={() => setSwitching(world)}
+              >
                 Switch to it
               </Button>
             </div>

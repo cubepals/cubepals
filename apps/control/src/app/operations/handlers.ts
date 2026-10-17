@@ -21,6 +21,7 @@
  * - `going-back.ts`: puts a server back on the configuration it last ran.
  * - `host-refused.ts`: a start refused where the server is (`bringing-up.ts`'s), rebuilt elsewhere when only its host can't run it.
  * - `moving.ts`: moves a server to another region, off a lost host, or onto another runtime.
+ * - `other-worlds.ts`: a server's other worlds kept as they were through a restore of one.
  * - `prune-worlds.ts`: removes the directories of a server's deleted worlds while it runs.
  * - `rechecks.ts`: what a worker checks again before it boots a server.
  * - `restoring.ts`: puts a backup's world in place of the server's, with a way back.
@@ -198,7 +199,7 @@ export function createHandlers(deps: HandlerDeps): OperationHandler[] {
     mayBoot,
     preflight,
     windDown,
-    capture,
+    copies: { capture, pack },
     putBack: back.putBack,
   })
 

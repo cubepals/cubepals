@@ -14,7 +14,7 @@ import type { EventBus } from '../ports/events.ts'
 import { loadRevision, loadRuntime, lockServer, setDesired } from '../servers/persistence.ts'
 import { notNow, type ServerTransitions } from '../servers/transitions.ts'
 import { freshStartOf } from './fresh-start.ts'
-import { awaitingPrune, insertWorld, listWorlds, markWorldDeleted } from './persistence.ts'
+import { awaitingPrune, insertWorld, keptWorlds, listWorlds, markWorldDeleted } from './persistence.ts'
 
 export interface NewWorld {
   name: string
@@ -106,6 +106,12 @@ export class WorldService {
     return this.#switch(actor, serverId, requestId, 'server.world_switched', async (tx, server) => {
       const world = (await listWorlds(tx, server.id)).find((w) => w.id === worldId)
       if (world === undefined || world.deletedAt !== null) throw new NotFound('World')
+      // Run without its files, it would be new land under the old name.
+      if ((await keptWorlds(tx, server.id)).has(world.id))
+        throw new AppError(
+          'invalid_choice',
+          'This world is kept in a backup. Restore it from that backup to play it again.',
+        )
       return world
     })
   }
