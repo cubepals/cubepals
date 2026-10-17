@@ -3,10 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A gift order whose refund is delivered before its paid word is handled (the paid delivery
- * failed and was retried, or was redelivered): the refund finds no gift to void, and the paid
- * delivery then makes one, live, and emails its code (`Gifts.received` reads the delivery, not
- * the order as kept).
+ * A gift is made only for an order Blockly keeps as paid and not refunded, whatever order Polar
+ * delivers its word in: one refunded before its paid delivery is handled never gets a code.
  */
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test'
 import { schema } from '@blockly/db'
@@ -51,7 +49,7 @@ test.skipIf(!hasDatabase)('a gift refunded before its paid delivery arrives neve
     billing_reason: 'purchase',
     subscription_id: null,
   } as const
-  // The refund's word comes first; the paid delivery, held back by a failure, after it.
+  // The refund's word is handled first, and the paid delivery after it.
   await w.ordered(buyer, null, { ...paid, status: 'refunded', refunded_amount: 1500 }, 'order.refunded')
   await w.post(
     orderEvent(
@@ -65,11 +63,12 @@ test.skipIf(!hasDatabase)('a gift refunded before its paid delivery arrives neve
   )
   // Blockly keeps the order as refunded…
   expect((await w.kept(id))?.refundedCents).toBe(1500)
-  // …so no gift may be live, and no code emailed.
+  // …so the gift is kept as refunded, with no code, and nothing is emailed.
   const [gift] = await w.h.db
     .select()
     .from(schema.planGifts)
     .where(eq(schema.planGifts.buyerId, buyer.userId))
   expect(gift === undefined || gift.voidedAt !== null).toBe(true)
+  expect(gift?.codeHash ?? null).toBeNull()
   expect((await w.mailTo(buyer)).length).toBe(0)
 })

@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * An order delivered again after newer word about it: Polar delivers at least once, and a
- * redelivery skips its ordering. The order row keeps the refund (`recordOrder`), but the year is
- * made again from the older delivery's own amounts (`recordYear`), so a refunded year comes back.
+ * A year's end follows the refund on its order as Blockly kept it, which only grows: a year
+ * refunded in full stays refunded when an older paid delivery of its order comes again.
  */
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test'
 import { schema } from '@blockly/db'
@@ -40,7 +39,7 @@ test.skipIf(!hasDatabase)(
     await w.post(orderEvent({ ...paid, status: 'refunded', refunded_amount: 15000 }, 'order.refunded'))
     const [refunded] = await yearsOf(owner)
     expect(refunded?.endsAt).toEqual(refunded?.startsAt as Date)
-    // Polar delivers the older `order.paid` again (a duplicate, or a redelivery).
+    // Polar delivers the older `order.paid` again: the year stays as the refund left it.
     await w.post(orderEvent(paid, 'order.paid'))
     const [after] = await yearsOf(owner)
     expect(after?.endsAt).toEqual(after?.startsAt as Date)
