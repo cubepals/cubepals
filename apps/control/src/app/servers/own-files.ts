@@ -12,8 +12,9 @@
  * it. A set the revision doesn't carry is never added, so turning the moderation tools off stays
  * off; nothing else on the server changes, its world included, nor anything its owner added.
  *
- * Only a start places them (`specs.ts`): a running server is never restarted for them, and one
- * asleep wakes as it went to sleep. Not what a revision holds, which stays as it was made.
+ * Only a start places them (`specs.ts`): a running server is never restarted for them. One asleep
+ * on older ones boots at its next wake, once, to place them, and wakes as it slept after that. Not
+ * what a revision holds, which stays as it was made.
  */
 import type { CarriedFile } from '../../domain/revision/carried.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'

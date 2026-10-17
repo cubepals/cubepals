@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto'
 import { BLOCKLY_ICON } from '@blockly/contracts'
 import type { Queryable } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import type { CarriedFile } from '../../domain/revision/carried.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import type { MemoryTier } from '../../domain/server/size.ts'
@@ -174,9 +175,8 @@ export class RuntimeSpecs {
     const placed = await compatFor(q, revision)
     // A start places the files Cubepals owns as they are now (`own-files.ts`); like the Via
     // plugins, they never arrive through drift.
-    const labelled = label(
-      toRuntimeSpec({ ...input, revision: withCurrentOwnFiles(revision), compat: placed }),
-    )
+    const starting = withCurrentOwnFiles(revision)
+    const labelled = label(toRuntimeSpec({ ...input, revision: starting, compat: placed }))
     // The Via plugins arrive at a start, never through drift: a running server isn't restarted
     // for Cubepals' compatibility layer, or for a newer pin of it.
     const driftDigest = specDigest(withoutPlanLimits(label(toRuntimeSpec(input))))
@@ -187,11 +187,17 @@ export class RuntimeSpecs {
     // for its next boot. One that places none wakes on the drift digest alone, as before them.
     // How they are named on disk is in it too: one asleep on jars named as the image names its
     // own, which the image could remove as it started (`carried.ts`), boots once to have them.
+    // So do the files Cubepals owns, where they are newer than its revision's: a server that only
+    // ever sleeps and wakes would otherwise never have them. Its wake boots once to place them;
+    // after that it wakes as it slept again, until Cubepals' files change once more.
+    const newer =
+      filesDigest(starting.files) === filesDigest(revision.files) ? [] : [filesDigest(starting.files)]
+    const startOnly = [...(compat.length === 0 ? [] : [compat.join(','), COMPAT_PREFIX]), ...newer]
     const resumesOn =
-      compat.length === 0
+      startOnly.length === 0
         ? driftDigest
         : createHash('sha256')
-            .update(`${driftDigest} ${compat.join(',')} ${COMPAT_PREFIX}`)
+            .update(`${driftDigest} ${startOnly.join(' ')}`)
             .digest('hex')
     const spec = { ...labelled, resumesOn }
     return {
@@ -207,6 +213,14 @@ export class RuntimeSpecs {
     }
   }
 }
+
+/** A revision's carried files, by path and content, in any order, as one digest. */
+const filesDigest = (files: readonly CarriedFile[]): string =>
+  createHash('sha256')
+    .update(
+      JSON.stringify([...files].sort((a, b) => a.path.localeCompare(b.path)).map((f) => [f.path, f.content])),
+    )
+    .digest('hex')
 
 /**
  * A revision without the jars found to be malware since it was pinned (`mods/jar-checks.ts`): each
