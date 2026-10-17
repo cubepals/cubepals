@@ -36,6 +36,7 @@ import {
   TO_HUB,
   titled,
 } from './datapack.ts'
+import { plateOf } from './label-space.ts'
 import { type BrandSign, buildSign } from './signs.ts'
 import { GAMES, playing } from './ways-in.ts'
 
@@ -132,7 +133,8 @@ export const HUB_MARKERS: readonly ShownMarker[] = [
  * Over each game's pad, its name and what to do, read as a player walks the balcony toward it from
  * the corridor in from the house: turning to them, just over the reach of anyone standing on the
  * pad (1.8 blocks tall and a 1.2522-block jump), and large enough to read from where it is first
- * seen (`readable.ts`). The pit's pad stands back in its dome, so it is read from further away.
+ * seen (`readable.ts`). The pit's pad stands back in its dome, so it is read from further away,
+ * and its words are larger to look as large from there as the others do from theirs.
  */
 const PAD_READ_FROM: Readonly<Record<string, Block>> = {
   parkour: [134.5, 78, 1431.5],
@@ -142,16 +144,13 @@ const PAD_READ_FROM: Readonly<Record<string, Block>> = {
 const OVER_REACH = 1 + 1.8 + 1.2522 + 0.05
 export const PAD_READS: readonly Read[] = GAMES.map((game) => {
   const [x, y, z] = game.pad
-  const at: [number, number, number] = [x + 0.5, y + OVER_REACH, z + 0.5]
+  const words = { text: titled(game.name, 'Stand here to play'), scale: game.key === 'pit' ? 2.2 : 1.3 }
+  // The plate reaches a little under the words: it is the plate's foot that clears the reach.
+  const at: [number, number, number] = [x + 0.5, y + OVER_REACH - plateOf(words).bottom, z + 0.5]
   const from = PAD_READ_FROM[game.key]
   if (from === undefined) throw new Error(`No place to read ${game.key}'s pad from`)
   return {
-    label: {
-      at,
-      tag: `${NS}.label`,
-      text: titled(game.name, 'Stand here to play'),
-      scale: game.key === 'pit' ? 1.7 : 1.3,
-    },
+    label: { at, tag: `${NS}.label`, ...words },
     from: lookingAt(from, at),
   }
 })
