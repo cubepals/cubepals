@@ -41,15 +41,15 @@
       "reason": "One linear run whose steps share state."
     },
     "apps/web/src/landing/Chunk.tsx": {
-      "n": 1413,
+      "n": 1264,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk": {
-      "n": 1232,
+      "n": 1099,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect": {
-      "n": 1214,
+      "n": 1081,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/engine/cast.ts": {
@@ -58,10 +58,6 @@
     },
     "apps/web/src/landing/engine/cast.ts › class Cast": {
       "n": 1027,
-      "reason": "The landing page, written before the check reached its branch; not yet split up."
-    },
-    "apps/web/src/landing/engine/gl.ts": {
-      "n": 879,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/engine/scenes/backups.ts": {
@@ -624,18 +620,6 @@
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect": {
       "n": 20,
-      "reason": "The landing page, written before the check reached its branch; not yet split up."
-    },
-    "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect › measure": {
-      "n": 22,
-      "reason": "The landing page, written before the check reached its branch; not yet split up."
-    },
-    "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect › measure › .map((element): Shot => {": {
-      "n": 72,
-      "reason": "The landing page, written before the check reached its branch; not yet split up."
-    },
-    "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect › wanted": {
-      "n": 45,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect › aim": {
@@ -1285,11 +1269,11 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk": {
-      "n": 886,
+      "n": 791,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect": {
-      "n": 879,
+      "n": 784,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect › frame": {
