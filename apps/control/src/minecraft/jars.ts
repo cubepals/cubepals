@@ -4,6 +4,7 @@
 
 import type { ModArtifact } from '../domain/mods/artifact.ts'
 import type { Loader } from '../domain/revision/revision.ts'
+import type { ListVariables } from './step-lists.ts'
 
 /** The volume's mount point inside the image. */
 export const DATA_DIR = '/data'
@@ -17,6 +18,15 @@ export function jarsOf(loader: Loader): { dir: string; env: 'MODS' | 'PLUGINS' }
   return loader === 'paper'
     ? { dir: `${DATA_DIR}/plugins`, env: 'PLUGINS' }
     : { dir: `${DATA_DIR}/mods`, env: 'MODS' }
+}
+
+/**
+ * The image's lists of jars, each with the variable a start is given it in, compressed, when it is
+ * longer than one variable holds (`step-lists.ts`): the image itself never reads that one.
+ */
+export const JAR_LISTS: Readonly<Record<'MODS' | 'PLUGINS', ListVariables>> = {
+  MODS: { plain: 'MODS', compressed: 'BLOCKLY_MODS_GZ' },
+  PLUGINS: { plain: 'PLUGINS', compressed: 'BLOCKLY_PLUGINS_GZ' },
 }
 
 /**

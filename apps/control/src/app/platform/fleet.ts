@@ -9,6 +9,7 @@ import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { isMemoryTier, memoryMb, sizeLabel } from '../../domain/server/size.ts'
 import { formatJoinAddress } from '../../minecraft/address.ts'
 import type { Actor } from '../actor.ts'
+import { billedPlan } from '../billing/persistence.ts'
 import { NotFound } from '../errors.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import { type RuntimeHandle, type RuntimeTags, runtimeKey } from '../ports/runtime.ts'
@@ -109,7 +110,13 @@ export class Fleet {
       .where(match)
       .orderBy(desc(servers.createdAt))
     const ran = await this.#ranThisMonth(match, now)
-    const views = found.map((row) => this.#view(row, ran.get(row.id) ?? [], now))
+    // Each owner's plan in force: a subscription's, a year's or a gift's before the one set.
+    const billed = new Map<string, string | null>()
+    for (const userId of new Set(found.map((row) => row.userId)))
+      billed.set(userId, await billedPlan(this.#db, userId, now))
+    const views = found.map((row) =>
+      this.#view({ ...row, plan: billed.get(row.userId) ?? row.plan }, ran.get(row.id) ?? [], now),
+    )
     return {
       total: views.length,
       servers: views.slice(query.offset, query.offset + query.limit),

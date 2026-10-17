@@ -571,7 +571,11 @@ const account = router({
         giftNext:
           overview.plan.giftNext === null
             ? null
-            : { ...overview.plan.giftNext, startsAt: overview.plan.giftNext.startsAt.toISOString() },
+            : {
+                ...overview.plan.giftNext,
+                startsAt: overview.plan.giftNext.startsAt.toISOString(),
+                endsAt: overview.plan.giftNext.endsAt.toISOString(),
+              },
       },
     }
   }),

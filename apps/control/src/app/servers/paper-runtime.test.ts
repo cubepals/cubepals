@@ -15,7 +15,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { defaultSettings, type ServerRevision } from '../../domain/revision/revision.ts'
-import { installOf, PROXY_ENV, toRuntimeSpec, withoutFilesStep } from '../../minecraft/runtime-spec.ts'
+import { installOf, PROXY_ENV, toRuntimeSpec, withoutOwnSteps } from '../../minecraft/runtime-spec.ts'
 import { withoutPlanLimits } from './specs.ts'
 
 const input = {
@@ -141,24 +141,15 @@ describe('plain Minecraft on Paper', () => {
     rmSync(data, { recursive: true })
   })
 
-  test('drift sees the entrypoint as it was before its first step', () => {
+  test('drift sees none of Blockly’s own steps, Paper’s among them', () => {
     const icon = 'http://control.test/grass.png'
-    const withIcon = toRuntimeSpec({ ...input, revision, iconUrl: icon }).entrypoint
-    const before = withoutFilesStep(withIcon)
-    expect(before?.[2]).toStartWith('if [ -n "$ICON" ]')
-    expect(before?.slice(0, 2)).toEqual(['/bin/sh', '-c'])
-    expect(before?.[3]).toBe('start')
-    // Paper's step goes the same way, leaving what Paper servers ran before.
     const paper = toRuntimeSpec({ ...input, revision: { ...revision, loader: 'paper' }, iconUrl: icon })
     expect(paper.entrypoint?.[2]).toContain('PAPER_CUSTOM_JAR')
-    expect(withoutFilesStep(paper.entrypoint)?.[2]).toEqual(before?.[2])
-    // With nothing after it, nothing is left: as a plain server without an icon started before.
-    expect(withoutFilesStep(toRuntimeSpec({ ...input, revision }).entrypoint)).toBeUndefined()
-    expect(
-      withoutFilesStep(
-        toRuntimeSpec({ ...input, revision: { ...revision, loaderVersion: '132' } }).entrypoint,
-      ),
-    ).toBeUndefined()
+    expect(withoutOwnSteps(paper.entrypoint)).toBeUndefined()
+    expect(withoutOwnSteps(toRuntimeSpec({ ...input, revision, iconUrl: icon }).entrypoint)).toBeUndefined()
+    expect(withoutOwnSteps(toRuntimeSpec({ ...input, revision }).entrypoint)).toBeUndefined()
+    // An entrypoint that isn't Blockly's steps before the image's start is compared as it is.
+    expect(withoutOwnSteps(['/bin/sh', '-c', 'true'])).toEqual(['/bin/sh', '-c', 'true'])
   })
 })
 
@@ -209,7 +200,7 @@ describe('Paper reading a PROXY header', () => {
   test('a Paper server running from before it read headers is not restarted for them', () => {
     const paper = toRuntimeSpec({ ...input, revision: { ...revision, loader: 'paper' } })
     const { [PROXY_ENV]: _, ...env } = paper.env
-    const before = { ...paper, env, entrypoint: withoutFilesStep(paper.entrypoint) }
+    const before = { ...paper, env, entrypoint: withoutOwnSteps(paper.entrypoint) }
     expect(withoutPlanLimits(paper)).toEqual(withoutPlanLimits(before))
   })
 })

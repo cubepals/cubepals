@@ -456,7 +456,7 @@ describe.skipIf(!hasDatabase)('server lifecycle', () => {
     expect(
       Math.round(((retired?.availableAfter.getTime() ?? 0) - (retired?.retiredAt.getTime() ?? 0)) / DAY_MS),
     ).toBe(30)
-    expect(await h.app.queries.trash(owner)).toEqual([
+    expect(await h.app.queries.trash(owner)).toMatchObject([
       {
         id: created.id,
         name: 'Tidy Town',

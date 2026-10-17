@@ -220,8 +220,10 @@ type AccessFile = 'whitelist.json' | 'ops.json' | 'banned-players.json'
 
 /**
  * One exec that writes these files, and with `forgetNames` also the server's cache of which name
- * is which player. Each file is written into rather than replaced, and handed back to whoever owns
- * the data directory, so the server — which does not run as root — can go on saving it.
+ * is which player. It runs as whoever owns the data directory, as the server itself does, so the
+ * server can go on saving what it writes, and it can reach nothing the server couldn't: the exec
+ * comes as root, and the image's `gosu` hands it over. Each file is written in place of what is
+ * there, a link included, which is replaced rather than followed.
  *
  * The server reads the whitelist again when told to (`whitelist reload`); operators and bans only
  * as it starts, so those are written just before a restart. The name cache is forgotten after a
@@ -229,14 +231,21 @@ type AccessFile = 'whitelist.json' | 'ops.json' | 'banned-players.json'
  */
 export function writeAccessFiles(files: Partial<Record<AccessFile, string>>, forgetNames: boolean): string[] {
   // `ls -n` rather than `chown --reference`, which only GNU's chown has.
-  const steps = [`cd ${DATA_DIR}`, `owner=$(ls -nd . | awk '{print $3":"$4}')`]
+  const owner = `owner=$(ls -nd . | awk '{print $3":"$4}')`
+  const steps = [owner]
   const contents: string[] = []
   for (const name of ['whitelist.json', 'ops.json', 'banned-players.json'] as const) {
     const content = files[name]
     if (content === undefined) continue
     contents.push(content)
-    steps.push(`printf '%s' "$${contents.length}" > ${name}`, `chown "$owner" ${name}`)
+    steps.push(
+      `{ [ ! -L ${name} ] || { rm -f ${name} && echo "Cubepals replaced a link at ${name}" >&2; }; }`,
+      `printf '%s' "$${contents.length}" > ${name}`,
+      `chown -h "$owner" ${name}`,
+    )
   }
   if (forgetNames) steps.push('rm -f usercache.json')
-  return ['sh', '-c', steps.join(' && '), 'blockly-access', ...contents]
+  // The writes, run as the owner where the exec is root's and the image has `gosu`.
+  const handOver = `${owner} && if [ "$(id -u)" = 0 ] && command -v gosu >/dev/null 2>&1; then exec gosu "$owner" sh -c "$1" "$@"; fi; exec sh -c "$1" "$@"`
+  return ['sh', '-c', `cd ${DATA_DIR} && ${handOver}`, 'blockly-access', steps.join(' && '), ...contents]
 }

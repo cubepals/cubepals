@@ -473,6 +473,7 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
 function planSummary(overview: AccountOverviewView): string {
   const { key, billed, year, gifted, giftNext } = overview.plan
   if (year !== null) return yearSummary(year, gifted !== null)
+  if (billed?.endedFor && key === 'free') return endedSummary(billed.endedFor, title(billed.planKey))
   const paying = billed !== null && billed.status !== 'ended' && billed.planKey === key
   if (paying && billed.pastDueUntil)
     return `Your last payment didn’t go through. Update your card in Manage billing by ${dayOf(billed.pastDueUntil)} to keep ${title(key)}.`
@@ -489,10 +490,22 @@ function planSummary(overview: AccountOverviewView): string {
     : 'No card, and nothing is charged when it ends.'
 }
 
-/** A gift waiting while the plan renews: it starts once the time being paid for ends. */
+/** Cubepals ended the plan's subscription itself: after a withdrawal, or a renewal left unpaid. */
+function endedSummary(why: 'withdrawal' | 'unpaid', plan: string): string {
+  return why === 'withdrawal'
+    ? `Your refund went through, and ${plan} has ended. You can subscribe again any time.`
+    : `Your payment didn’t go through, so ${plan} has ended and your card won’t be charged for it again. You can subscribe again any time.`
+}
+
+/**
+ * A gift waiting while the plan renews: it starts once the time being paid for ends, or, when part
+ * of it ran already, what is left of it continues then.
+ */
 function giftWaits(gift: NonNullable<AccountOverviewView['plan']['giftNext']>): string {
-  const what = gift.months === 1 ? 'gifted month now starts' : `gifted ${gift.months} months now start`
-  return `Your ${what} on ${dayOf(gift.startsAt)}, after the month you’re paying for.`
+  if (gift.continues)
+    return `The rest of your gift continues on ${dayOf(gift.startsAt)}, once the time you’re paying for ends, until ${dayOf(gift.endsAt)}.`
+  const what = gift.months === 1 ? 'gifted month starts' : `gifted ${gift.months} months start`
+  return `Your ${what} on ${dayOf(gift.startsAt)}, once the time you’re paying for ends.`
 }
 
 /**

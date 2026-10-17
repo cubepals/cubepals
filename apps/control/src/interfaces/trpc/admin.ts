@@ -46,6 +46,8 @@ const accountView = (row: AccountRow): AccountView => ({
   status: row.standing.status,
   reason: row.standing.reason,
   plan: row.standing.plan,
+  planFrom: row.planFrom,
+  setPlan: row.setPlan,
   admin: row.admin,
   test: row.standing.testAccount,
   servers: row.servers,
@@ -53,6 +55,8 @@ const accountView = (row: AccountRow): AccountView => ({
 
 const accountDetailView = (detail: AccountDetail): AccountDetailView => ({
   ...accountView(detail),
+  planUntil: detail.planUntil?.toISOString() ?? null,
+  planRenews: detail.planRenews,
   plans: detail.plans,
   restrictions: {
     provisioning: detail.standing.restrictions.provisioning === true,

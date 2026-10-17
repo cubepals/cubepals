@@ -18,10 +18,11 @@ import { PACK_ID, PROMPT } from './brand-pack.ts'
 import { CARRIED_STEP, carriedEnv, placesFiles } from './carried.ts'
 import { DATAPACKS_STEP, datapacksEnv, datapacksOf } from './datapacks.ts'
 import { WAITING_DATAPACK } from './duels-waiting.ts'
-import { DATA_DIR, jarsOf } from './jars.ts'
+import { DATA_DIR, JAR_LISTS, jarsOf } from './jars.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
 import { STARTER_STEP, starterEnv, starterOf } from './starter.ts'
 import { javaFor } from './versions.ts'
+import { UNLINKED } from './volume-links.ts'
 import { WAKE_STEP } from './wake-step.ts'
 import { levelTypeEnv } from './worlds.ts'
 
@@ -279,6 +280,28 @@ function modsEnv(input: RuntimeSpecInput): Record<string, string> {
 }
 
 /**
+ * The image takes a list of jars from a file as well as from its variable (`MODS_FILE`,
+ * `PLUGINS_FILE`), so a list too long for one variable, given compressed, goes to it as a file on
+ * the machine's own disk, and the variable is left empty. The image keeps a record of what it
+ * installed from each kind of list, and cleans up only after the kind it is given (itzg
+ * 2026.9.1, `scripts/start-setupModpack`): so a volume whose jars came from a file once, which it
+ * remembers, is given its list as a file from then on, however short. Its first start so removes
+ * the jars the variable installed and fetches them again from the file. A server that never had a
+ * long list starts as it always did.
+ */
+function jarListStep(variable: 'MODS' | 'PLUGINS'): string {
+  const file = `/tmp/blockly-${variable.toLowerCase()}`
+  const record = `.blockly-${variable.toLowerCase()}-file`
+  const mark = `${DATA_DIR}/${record}`
+  const { compressed } = JAR_LISTS[variable]
+  return [
+    `rm -f ${file}; if [ -n "$${compressed}" ]; then printf %s "$${compressed}" | base64 -d | gzip -dc > ${file} || exit 1;`,
+    `elif [ -n "\${${variable}+x}" ] && [ -f ${mark} ]; then printf %s "$${variable}" | tr , '\\n' > ${file}; fi;`,
+    `if [ -f ${file} ]; then export ${variable}= ${variable}_FILE=${file}; unlinked ${record}; : > ${mark}; fi;`,
+  ].join(' ')
+}
+
+/**
  * A modpack: the image installs the pack itself — its loader, its mods, its configuration and
  * the clean-up when it moves to another version — from the exact pack file Blockly pinned.
  */
@@ -327,7 +350,8 @@ function exactPath(path: string): string {
 }
 
 /** Where the volume remembers which pack file it holds, and the variable naming the one pinned. */
-const PACK_MARK = `${DATA_DIR}/.blockly-pack`
+const PACK_RECORD = '.blockly-pack'
+const PACK_MARK = `${DATA_DIR}/${PACK_RECORD}`
 const PACK_VARIABLE = 'BLOCKLY_PACK'
 
 /**
@@ -342,7 +366,7 @@ const PACK_VARIABLE = 'BLOCKLY_PACK'
  */
 const PACK_STEP = [
   `if [ "$(cat ${PACK_MARK} 2>/dev/null)" != "$${PACK_VARIABLE}" ]; then`,
-  `rm -f ${DATA_DIR}/modpack.mrpack;`,
+  `rm -f ${DATA_DIR}/modpack.mrpack; unlinked ${PACK_RECORD};`,
   `printf %s "$${PACK_VARIABLE}" > ${PACK_MARK};`,
   'fi;',
 ]
@@ -368,14 +392,16 @@ const ICON_STEP = [
  * that already has its own is left alone.
  */
 const DIMENSIONS_BESIDE = [
-  `if [ -d "${DATA_DIR}/$LEVEL" ]; then for pair in nether/DIM-1 the_end/DIM1; do`,
+  `unlinked "$LEVEL"; if [ -d "${DATA_DIR}/$LEVEL" ]; then for pair in nether/DIM-1 the_end/DIM1; do`,
+  `unlinked "\${LEVEL}_\${pair%/*}/\${pair#*/}"; unlinked "$LEVEL/\${pair#*/}";`,
   `kept="${DATA_DIR}/\${LEVEL}_\${pair%/*}/\${pair#*/}"; home="${DATA_DIR}/$LEVEL/\${pair#*/}";`,
-  'if [ -d "$kept" ] && [ ! -e "$home" ]; then mv "$kept" "$home"; fi;',
+  'if [ -d "$kept" ] && [ ! -e "$home" ]; then mv -T "$kept" "$home"; fi;',
   'done; fi;',
 ]
 
 /** Where a world's files that only Paper reads are set aside, by level, when another type runs it. */
-const PAPER_SET_ASIDE = `${DATA_DIR}/.blockly-paper`
+const PAPER_SET_ASIDE_RECORD = '.blockly-paper'
+const PAPER_SET_ASIDE = `${DATA_DIR}/${PAPER_SET_ASIDE_RECORD}`
 
 /**
  * From 26.1, Paper keeps a world's own state in each dimension's folder, with a `data/paper` folder
@@ -390,19 +416,25 @@ const PAPER_SET_ASIDE = `${DATA_DIR}/.blockly-paper`
  * reads them, from the overworld, and sets Paper's own files aside, with the copies Paper kept for
  * the other dimensions: Minecraft never reads them, and Paper, back on the world, imports it again
  * from what Minecraft left. The clocks Paper keeps for the whole world stay where they are.
+ *
+ * Both steps run as root, so each replaces any link on the way to what it moves, from or to
+ * (`volume-links.ts`): nothing comes into the volume from outside it, or goes out of it.
  */
 const PAPER_WORLD_STATE = [
   `w="${DATA_DIR}/$LEVEL"; if [ -d "$w/dimensions/minecraft/overworld/data/paper" ]; then`,
-  'mkdir -p "$w/data/minecraft";',
+  'unlinked "$LEVEL/data/minecraft"; mkdir -p "$w/data/minecraft";',
   'for f in game_rules scheduled_events weather world_gen_settings; do',
+  'unlinked "$LEVEL/dimensions/minecraft/overworld/data/minecraft/$f.dat"; unlinked "$LEVEL/data/minecraft/$f.dat";',
   'own="$w/dimensions/minecraft/overworld/data/minecraft/$f.dat";',
-  'if [ -f "$own" ]; then mv -f "$own" "$w/data/minecraft/$f.dat"; fi; done;',
-  'for dim in "$w"/dimensions/*/*; do',
-  `aside="${PAPER_SET_ASIDE}/$LEVEL/\${dim#"$w"/}"; mkdir -p "$aside/data/minecraft";`,
-  'for f in game_rules scheduled_events weather world_gen_settings world_clocks; do',
+  'if [ -f "$own" ]; then mv -fT "$own" "$w/data/minecraft/$f.dat"; fi; done;',
+  `unlinked "$LEVEL/dimensions"; for dim in "$w"/dimensions/*/*; do rel=\${dim#"$w"/};`,
+  `for p in data/minecraft data/paper paper-world.yml; do unlinked "$LEVEL/$rel/$p"; unlinked "${PAPER_SET_ASIDE_RECORD}/$LEVEL/$rel/$p"; done;`,
+  '[ -d "$dim" ] || continue;',
+  `aside="${PAPER_SET_ASIDE}/$LEVEL/$rel"; mkdir -p "$aside/data/minecraft";`,
+  'for f in game_rules scheduled_events weather world_gen_settings world_clocks; do unlinked "$LEVEL/$rel/data/minecraft/$f.dat";',
   'if [ -f "$dim/data/minecraft/$f.dat" ]; then mv -f "$dim/data/minecraft/$f.dat" "$aside/data/minecraft/"; fi; done;',
-  'if [ -d "$dim/data/paper" ]; then rm -rf "$aside/data/paper"; mv "$dim/data/paper" "$aside/data/"; fi;',
-  'if [ -f "$dim/paper-world.yml" ]; then mv -f "$dim/paper-world.yml" "$aside/"; fi;',
+  'if [ -d "$dim/data/paper" ]; then rm -rf "$aside/data/paper"; mv -T "$dim/data/paper" "$aside/data/paper"; fi;',
+  'if [ -f "$dim/paper-world.yml" ]; then mv -fT "$dim/paper-world.yml" "$aside/paper-world.yml"; fi;',
   'done; fi;',
 ]
 
@@ -431,12 +463,9 @@ const PAPER_JAR_STEP = [
  * changed, and a new one is given the setting alone, which Paper fills out with its defaults.
  */
 const PAPER_THROTTLE_STEP = [
-  `if [ -f ${DATA_DIR}/bukkit.yml ]; then sed -i 's/^  connection-throttle: .*/  connection-throttle: -1/' ${DATA_DIR}/bukkit.yml;`,
+  `unlinked bukkit.yml; if [ -f ${DATA_DIR}/bukkit.yml ]; then sed -i 's/^  connection-throttle: .*/  connection-throttle: -1/' ${DATA_DIR}/bukkit.yml;`,
   `else printf 'settings:\n  connection-throttle: -1\n' > ${DATA_DIR}/bukkit.yml; fi;`,
 ].join(' ')
-
-/** What a Paper server's start put in place first before it read PROXY headers. */
-const PAPER_THROTTLE_ONLY_STEP = `${PAPER_JAR_STEP} ${PAPER_THROTTLE_STEP}`
 
 /**
  * Paper reads a PROXY protocol header before each connection (`proxies.proxy-protocol`, in its
@@ -450,31 +479,35 @@ const PAPER_THROTTLE_ONLY_STEP = `${PAPER_JAR_STEP} ${PAPER_THROTTLE_STEP}`
  * The step runs as root, before the image runs the server as the volume's owner, so what it and the
  * throttle step write is handed to that owner: a `config` directory left as root's keeps Paper from
  * writing its world defaults there, and it stops at its first start, and a `bukkit.yml` left as
- * root's can't be saved (tried 2026-10-15 with Paper 1.21.1-133).
+ * root's can't be saved (tried 2026-10-15 with Paper 1.21.1-133). Being root, the two steps replace
+ * any link on the way to what they write (`volume-links.ts`), and hand over the files themselves,
+ * never what a link names.
  */
 const PAPER_PROXY_SETTING = 'print "proxies:"; print "  proxy-protocol: " v'
 const PAPER_PROXY_STEP = [
   `v=false; if [ "$${PROXY_ENV}" = TRUE ]; then v=true; fi;`,
+  'unlinked config/paper-global.yml; unlinked config/paper-global.yml.new;',
   `g=${DATA_DIR}/config/paper-global.yml; mkdir -p ${DATA_DIR}/config; if [ -f "$g" ]; then`,
   `awk -v v="$v" '/^  proxy-protocol:/ { next } /^proxies:/ { ${PAPER_PROXY_SETTING}; p = 1; next } { print }`,
-  `END { if (!p) { ${PAPER_PROXY_SETTING} } }' "$g" > "$g.new" && mv "$g.new" "$g";`,
+  `END { if (!p) { ${PAPER_PROXY_SETTING} } }' "$g" > "$g.new" && mv -fT "$g.new" "$g";`,
   `else printf 'proxies:\\n  proxy-protocol: %s\\n' "$v" > "$g"; fi;`,
-  `chown "$(ls -nd ${DATA_DIR} | awk '{ print $3 ":" $4 }')" ${DATA_DIR}/config "$g" ${DATA_DIR}/bukkit.yml;`,
+  `chown -h "$(ls -nd ${DATA_DIR} | awk '{ print $3 ":" $4 }')" ${DATA_DIR}/config "$g" ${DATA_DIR}/bukkit.yml;`,
 ].join(' ')
 
 /** What a Paper server's start puts in place first: its jar, the throttle off, then the PROXY header read. */
-const PAPER_STEP = `${PAPER_THROTTLE_ONLY_STEP} ${PAPER_PROXY_STEP}`
+const PAPER_STEP = `${PAPER_JAR_STEP} ${PAPER_THROTTLE_STEP} ${PAPER_PROXY_STEP}`
 
 /** The image's own entrypoint, which a server's runs after Blockly's steps. */
 const IMAGE_ENTRYPOINT = '/image/scripts/start'
 const EXEC_IMAGE = `exec ${IMAGE_ENTRYPOINT} "$@"`
 
 /**
- * The image's own entrypoint, after Blockly's steps. The first puts the volume's files as the
+ * The image's own entrypoint, after Blockly's steps, which run as root on the volume: before them,
+ * what they call to replace a link where they write (`volume-links.ts`). The first puts the volume's files as the
  * server type reads them (`PAPER_STEP` on Paper, `DIMENSIONS_STEP` on any other), and the
  * second the world's datapacks (`DATAPACKS_STEP`); the world a template starts on
- * (`STARTER_STEP`), the icon, the pack and the files Cubepals places itself follow where a server
- * has them, and last what spares the image work it would
+ * (`STARTER_STEP`), the icon, the pack, the files Cubepals places itself and the list of jars the
+ * image installs follow where a server has them, and last what spares the image work it would
  * redo (`WAKE_STEP`).
  */
 function entrypointFor(steps: {
@@ -483,15 +516,17 @@ function entrypointFor(steps: {
   icon: boolean
   pack: boolean
   carried: boolean
+  jars: 'MODS' | 'PLUGINS' | null
 }): readonly string[] {
-  // The files steps lead, so `withoutFilesStep` leaves the rest as it was before them.
   const script = [
+    UNLINKED,
     steps.paper ? PAPER_STEP : DIMENSIONS_STEP,
     DATAPACKS_STEP,
     ...(steps.starter ? [STARTER_STEP] : []),
     ...(steps.icon ? ICON_STEP : []),
     ...(steps.pack ? PACK_STEP : []),
     ...(steps.carried ? [CARRIED_STEP] : []),
+    ...(steps.jars === null ? [] : [jarListStep(steps.jars)]),
     WAKE_STEP,
     EXEC_IMAGE,
   ].join(' ')
@@ -499,26 +534,13 @@ function entrypointFor(steps: {
 }
 
 /**
- * The entrypoint without its files steps and `WAKE_STEP`, as it was before those steps existed:
- * what drift compares, so a step, which changes nothing a running server does, restarts none. It
- * arrives at the next start. What the datapacks step installs is in the environment, which drift
- * compares.
+ * The entrypoint as drift compares it: none, where it is Blockly's own steps before the image's
+ * start, which every Minecraft server's is. Each step acts on what the environment says, and drift
+ * compares the environment, so a new text of a step restarts no running server and boots no
+ * sleeping one: it arrives at the next start.
  */
-export function withoutFilesStep(entrypoint: readonly string[] | undefined): readonly string[] | undefined {
-  const script = entrypoint?.[2]
-  if (entrypoint === undefined || script === undefined) return entrypoint
-  let rest = script.replace(`${WAKE_STEP} `, '')
-  // A Paper server's whole step first, then each it ran before: without the PROXY header read, and
-  // without the throttle too.
-  for (const steps of [
-    [PAPER_STEP, PAPER_THROTTLE_ONLY_STEP, PAPER_JAR_STEP, DIMENSIONS_STEP],
-    [DATAPACKS_STEP],
-  ]) {
-    const step = steps.find((s) => rest.startsWith(`${s} `))
-    if (step !== undefined) rest = rest.slice(step.length + 1)
-  }
-  if (rest === script) return entrypoint
-  return rest === EXEC_IMAGE ? undefined : [...entrypoint.slice(0, 2), rest, ...entrypoint.slice(3)]
+export function withoutOwnSteps(entrypoint: readonly string[] | undefined): readonly string[] | undefined {
+  return entrypoint?.[2]?.endsWith(EXEC_IMAGE) === true ? undefined : entrypoint
 }
 
 export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
@@ -540,6 +562,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
     icon: input.iconUrl !== null,
     pack: pack !== null,
     carried: viaPlaced || placesFiles(placing),
+    jars: pack === null ? (jarsOf(revision.loader)?.env ?? null) : null,
   })
   const reconstructible = reconstructibleOf(revision)
 

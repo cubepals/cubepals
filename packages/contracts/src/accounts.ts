@@ -30,7 +30,12 @@ export interface AccountView {
   createdAt: string
   status: AccountStatus
   reason: string | null
+  /** The plan in force: a subscription's, a year's or a gift's before the one set on the account. */
   plan: string
+  /** What gives `plan`: billing (a subscription, a year paid at once, a gift), an admin, or nothing. */
+  planFrom: 'subscription' | 'year' | 'gift' | 'admin' | 'free'
+  /** The plan set on the account, by an admin or Free: in force once nothing billed is. */
+  setPlan: string
   admin: boolean
   /** One Cubepals uses to test itself: left out of its numbers, billing and analytics. */
   test: boolean
@@ -39,6 +44,9 @@ export interface AccountView {
 }
 
 export interface AccountDetailView extends AccountView {
+  /** Until when `plan` is known to hold (null for an admin's or Free), and whether it renews then. */
+  planUntil: string | null
+  planRenews: boolean
   /** The plans an admin can put the account on. */
   plans: string[]
   restrictions: { provisioning: boolean; publicListing: boolean; consoleCommands: boolean }
@@ -247,6 +255,8 @@ export interface AccountOverviewView {
       planKey: string
       /** Its renewal failed to charge: the plan lasts until then unless the card is fixed. */
       pastDueUntil: string | null
+      /** Cubepals ended it itself: its first month was withdrawn, or its renewal stayed unpaid. */
+      endedFor: 'withdrawal' | 'unpaid' | null
     } | null
     /**
      * The plan paid for a year at once: when the first year still to run starts (later than now
@@ -256,8 +266,11 @@ export interface AccountOverviewView {
     year: { planKey: string; startsAt: string; endsAt: string; renewed: boolean } | null
     /** A redeemed gift that gives the plan now, and when the gifted time runs out. */
     gifted: { planKey: string; until: string } | null
-    /** A redeemed gift waiting to start, once the time the account has paid for ends. */
-    giftNext: { planKey: string; months: number; startsAt: string } | null
+    /**
+     * A redeemed gift waiting to start, once the time the account has paid for ends; `continues`
+     * when part of it ran already, and what is left of it runs then, until `endsAt`.
+     */
+    giftNext: { planKey: string; months: number; startsAt: string; endsAt: string; continues: boolean } | null
   }
   entitlements: EntitlementsView
   /** What the owner has set for themselves, where their plan lets them. */

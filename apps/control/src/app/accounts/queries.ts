@@ -22,6 +22,7 @@ import { type MemoryTier, PARTY, playerCapacity, sizeLabel } from '../../domain/
 import { type Actor, runsThePlatform } from '../actor.ts'
 import { settleable } from '../billing/balance.ts'
 import { meteredMonth, meteredUnitsSince } from '../billing/chip-in-meter.ts'
+import { type EndedFor, endedFor } from '../billing/ending.ts'
 import { extraThisMonth } from '../billing/extra-usage.ts'
 import { giftNext } from '../billing/gifts.ts'
 import { extraPlayNow, giftedPlan, latestSubscription, PAST_DUE_GRACE_MS } from '../billing/persistence.ts'
@@ -38,6 +39,7 @@ import {
   runHoursSince,
   searchAccounts,
 } from './persistence.ts'
+import type { PlayMonth } from './play-month.ts'
 import { playToday } from './play-today.ts'
 import { type PlayTotal, playTotal } from './play-total.ts'
 
@@ -47,6 +49,10 @@ const round = (value: number): number => Math.round(value * 10) / 10
 /** The play in all as the account page shows it, to a tenth like the rest. */
 const totalSaid = (total: PlayTotal | null): AccountOverviewView['usage']['total'] =>
   total === null ? null : { units: round(total.units), included: total.included }
+
+/** The plan with this month's block: hours lowered mid-month apply from the next (`meteredMonth`). */
+const monthsBlock = (entitlements: Entitlements, month: PlayMonth | null): Entitlements =>
+  month === null ? entitlements : { ...entitlements, includedUnits: month.included }
 
 /** A time zone the browser reported that takes over next month, as the account page says it. */
 const zoneWaiting = (
@@ -75,7 +81,7 @@ export interface AccountOverview {
     /**
      * What the billing provider says, when a subscription pays for the plan or once did.
      * `pastDueUntil`: its renewal failed to charge, and the plan lasts until then unless the card
-     * is fixed.
+     * is fixed. `endedFor`: Blockly ended it itself, after a withdrawal or a renewal left unpaid.
      */
     billed: {
       status: string
@@ -83,6 +89,7 @@ export interface AccountOverview {
       cancelAtPeriodEnd: boolean
       planKey: string
       pastDueUntil: Date | null
+      endedFor: EndedFor | null
     } | null
     /**
      * The plan paid for a year at once: when the first year still to run starts, when the last
@@ -91,8 +98,11 @@ export interface AccountOverview {
     year: { planKey: string; startsAt: Date; endsAt: Date; renewed: boolean } | null
     /** A redeemed gift that gives the plan now, and when the gifted time runs out. */
     gifted: { planKey: string; until: Date } | null
-    /** A redeemed gift waiting to start, once the time the account has paid for ends. */
-    giftNext: { planKey: string; months: number; startsAt: Date } | null
+    /**
+     * A redeemed gift waiting to start, once the time the account has paid for ends; `continues`
+     * when part of it ran already, and what is left of it runs then.
+     */
+    giftNext: { planKey: string; months: number; startsAt: Date; endsAt: Date; continues: boolean } | null
   }
   entitlements: Entitlements
   /** The sizes the plan allows, as somebody reads them: "3 GB · up to 5 players". */
@@ -155,6 +165,13 @@ export interface Me {
 export type { AccountRow }
 
 export interface AccountDetail extends AccountRow {
+  /**
+   * Until when the plan in force is known to hold, as `planFrom` says it: a subscription's paid
+   * period (or its grace, past due), a year's end, a gift's; null for one an admin set, or Free.
+   * `planRenews`: a subscription that pays and isn't set to end.
+   */
+  planUntil: Date | null
+  planRenews: boolean
   plans: string[]
   serverList: Array<{ id: string; name: string; slug: string; status: string; deleted: boolean }>
   /** What admins and the platform did to the account, newest first. */
@@ -222,12 +239,13 @@ export class AccountQueries {
                   subscription.status === 'past_due' && subscription.pastDueAt !== null
                     ? new Date(subscription.pastDueAt.getTime() + PAST_DUE_GRACE_MS)
                     : null,
+                endedFor: await endedFor(this.#db, subscription),
               },
         year: await yearView(this.#db, userId, now),
         gifted,
         giftNext: await giftNext(this.#db, userId, now),
       },
-      entitlements,
+      entitlements: monthsBlock(entitlements, month),
       settings: { afkKickMinutes: standing.afkKickMinutes },
       usage: {
         servers: owned.servers,
@@ -301,6 +319,7 @@ export class AccountQueries {
     const { rows } = await searchAccounts(this.#db, user.email, 0, 1)
     const row = rows.find((r) => r.userId === userId)
     if (!row) throw new NotFound('Account')
+    const until = await this.#planUntil(row, new Date())
     const servers = await listUnpurged(this.#db, userId)
     const history = await this.#db
       .select()
@@ -310,6 +329,7 @@ export class AccountQueries {
       .limit(50)
     return {
       ...row,
+      ...until,
       plans: ['free', ...PAID_PLANS],
       serverList: servers.map((s) => ({
         id: s.id,
@@ -325,6 +345,27 @@ export class AccountQueries {
         data: h.data,
       })),
     }
+  }
+
+  /** `AccountDetail.planUntil` and `planRenews`, from what gives the plan in force. */
+  async #planUntil(row: AccountRow, now: Date): Promise<Pick<AccountDetail, 'planUntil' | 'planRenews'>> {
+    if (row.planFrom === 'subscription') {
+      const subscription = await latestSubscription(this.#db, row.userId)
+      if (subscription?.status === 'past_due' && subscription.pastDueAt !== null)
+        return {
+          planUntil: new Date(subscription.pastDueAt.getTime() + PAST_DUE_GRACE_MS),
+          planRenews: false,
+        }
+      return {
+        planUntil: subscription?.currentPeriodEnd ?? null,
+        planRenews: subscription?.cancelAtPeriodEnd === false,
+      }
+    }
+    if (row.planFrom === 'year')
+      return { planUntil: (await yearView(this.#db, row.userId, now))?.endsAt ?? null, planRenews: false }
+    if (row.planFrom === 'gift')
+      return { planUntil: (await giftedPlan(this.#db, row.userId, now))?.until ?? null, planRenews: false }
+    return { planUntil: null, planRenews: false }
   }
 }
 

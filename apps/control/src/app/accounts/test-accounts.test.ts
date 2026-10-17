@@ -30,6 +30,8 @@ const billing: BillingProvider = {
   },
   sellsYear: async () => false,
   stopRenewing: async () => {},
+  endSubscription: async () => {},
+  refundedAsWithdrawal: async () => false,
   portalUrl: async () => 'https://billing.test/portal',
   receive: async () => null,
   stateOf: async () => null,
