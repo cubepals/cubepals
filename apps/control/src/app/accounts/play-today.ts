@@ -15,8 +15,8 @@ import { type Queryable, schema } from '@blockly/db'
 import { and, eq, gt, isNull, max, sql } from 'drizzle-orm'
 import type { Entitlements } from '../../domain/account/entitlements.ts'
 import { METER_UNITS } from '../../domain/account/meter.ts'
-import { DEFAULT_TIME_ZONE, dayStart, nextDayStart } from '../../domain/account/play-day.ts'
-import type { AccountStanding } from '../../domain/account/standing.ts'
+import { DEFAULT_TIME_ZONE, dayBegan, nextDayStart } from '../../domain/account/play-day.ts'
+import { type AccountStanding, zoneChange } from '../../domain/account/standing.ts'
 import type { MemoryTier } from '../../domain/server/size.ts'
 import { freeSharers } from './free-play.ts'
 import { runUnitsSince } from './persistence.ts'
@@ -35,14 +35,14 @@ export interface PlayToday {
 /** Today's play for the account; null when its plan counts none by the day. */
 export async function playToday(
   q: Queryable,
-  standing: Pick<AccountStanding, 'userId' | 'timeZone'>,
+  standing: Pick<AccountStanding, 'userId' | 'timeZone' | 'timeZoneFrom' | 'timeZoneBegan'>,
   plan: Pick<Entitlements, 'dailyUnits'>,
   now: Date,
 ): Promise<PlayToday | null> {
   if (plan.dailyUnits === null) return null
   const zone = standing.timeZone ?? DEFAULT_TIME_ZONE
   const { ids } = await freeSharers(q, standing.userId, now)
-  const units = await runUnitsSince(q, ids, dayStart(now, zone), now)
+  const units = await runUnitsSince(q, ids, dayBegan(now, zone, zoneChange(standing)), now)
   return {
     included: plan.dailyUnits,
     units,

@@ -29,7 +29,7 @@ const rcon = () => new RconConsole(new LocalLocks(), { connectMs: 300, commandMs
  */
 function vanillaRcon(
   password: string,
-  answer: (command: string) => string,
+  answer: (command: string) => string | Promise<string>,
   packets: number[] = [],
 ): Promise<Server> {
   const reply = (socket: Socket, id: number, type: number, body: string) => {
@@ -56,8 +56,10 @@ function vanillaRcon(
         authed = body === password
         reply(socket, authed ? id : -1, 2, '')
       } else if (type === 2 && authed) {
-        const text = answer(body)
-        for (let i = 0; i < text.length || i === 0; i += 4096) reply(socket, id, 0, text.slice(i, i + 4096))
+        void Promise.resolve(answer(body)).then((text) => {
+          if (socket.destroyed) return
+          for (let i = 0; i < text.length || i === 0; i += 4096) reply(socket, id, 0, text.slice(i, i + 4096))
+        })
       } else {
         reply(socket, id, 0, `Unknown request ${type.toString(16)}`)
       }
@@ -147,6 +149,17 @@ describe('RconConsole', () => {
     expect(answers).toEqual(Array.from({ length: 8 }, (_, i) => `ran say ${i}`))
     const runs = packets.filter((connection, i) => connection !== packets[i - 1])
     expect(runs).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
+  })
+
+  test('a command given longer than usual waits for its answer', async () => {
+    server = await vanillaRcon('secret', async (command) => {
+      if (command === 'save-all flush') await Bun.sleep(600)
+      return 'Saved the game'
+    })
+    const [usual] = await rcon().runAll(target(server), ['save-all flush'])
+    expect(usual).toEqual({ ok: false, error: 'The console stopped answering' })
+    const [longer] = await rcon().runAll(target(server), ['save-all flush'], { commandMs: 1500 })
+    expect(longer).toEqual({ ok: true, output: 'Saved the game' })
   })
 
   test('a server that accepts the connection and never answers is given up on', async () => {

@@ -22,6 +22,7 @@
  * - `helper-jobs.ts`: the scripts helper machines run, and what they print.
  * - `discovery.ts`: this deployment's servers found among the organization's apps and machines.
  * - `tags.ts`: servers' tags written onto their machines' metadata.
+ * - `strays.ts`: machines in a server's app that nothing names, found and destroyed.
  */
 
 import type {
@@ -85,6 +86,7 @@ import { checkRegions, flyRegion, placeable, requireCapacity } from './fly-runti
 import { idOf } from './fly-runtime/responses.ts'
 import { ROOM_WAIT, type RoomWait, whenRoom } from './fly-runtime/room.ts'
 import { goneSnapshots, takeSnapshot } from './fly-runtime/snapshots.ts'
+import { clearExports, clearOtherServers, destroyStrays } from './fly-runtime/strays.ts'
 import { tagMachines } from './fly-runtime/tags.ts'
 import {
   clearEarlierWakes,
@@ -92,6 +94,7 @@ import {
   dataVolume,
   deleteLeftoverVolumes,
   deleteVolume,
+  EXPORT_VOLUME_NAME,
   ensureVolume,
   fitVolume,
   readVolume,
@@ -230,7 +233,8 @@ export class FlyRuntime implements MinecraftRuntime {
   ): Promise<RuntimeHandle> {
     const region = flyRegion(this.#regions, placement)
     const app = appName(this.#deployment, key)
-    const existing = await minecraftMachine(this.#fly, app)
+    // The machine its handle names: an app can briefly hold two (`#replace`), in no listed order.
+    const existing = await minecraftMachine(this.#fly, app, machineOf(storage))
     // Asleep on what it is asked to run: nothing to make, post or change, and a change would drop
     // the memory Fly kept, so it resumes as it was.
     const asleep = asleepOn(existing, spec)
@@ -283,7 +287,7 @@ export class FlyRuntime implements MinecraftRuntime {
     const volumeId = idOf(volume, 'a volume')
 
     await progress.step('compute')
-    let machine = await minecraftMachine(this.#fly, app)
+    let machine = await minecraftMachine(this.#fly, app, existing?.id ?? null)
     const config = this.#config(key, spec, volumeId, machine)
     if (machine === null)
       machine = await createMachine(
@@ -522,7 +526,7 @@ export class FlyRuntime implements MinecraftRuntime {
       this.#fly,
       ref.app,
       {
-        name: 'blockly_export',
+        name: EXPORT_VOLUME_NAME,
         region: ref.region,
         size_gb: ref.sizeGb * 2,
         snapshot_id: ref.snapshotId,
@@ -554,7 +558,9 @@ export class FlyRuntime implements MinecraftRuntime {
       }
       return { sha256, sizeBytes }
     } finally {
-      await deleteVolume(this.#fly, ref.app, volumeId)
+      // The archive is up: a volume Fly won't let go of yet is the leftover sweep's.
+      const sweep = `fly: ${ref.app} keeps export volume ${volumeId} for the leftover sweep`
+      await deleteVolume(this.#fly, ref.app, volumeId).catch((error: unknown) => console.warn(sweep, error))
     }
   }
 
@@ -594,14 +600,16 @@ export class FlyRuntime implements MinecraftRuntime {
       deleted.add(volumeId)
       volumeId = (await dataVolume(this.#fly, ref.app, deleted))?.id ?? null
     }
+    await clearExports(this.#fly, ref.app)
     if (machineId !== null || volumeId !== null)
       throw new Error(`${ref.app} still holds a machine or a volume after letting them go`)
     return encodeHandle({ ...ref, machineId: null, volumeId: null })
   }
 
   /**
-   * World volumes in the server's app that no machine mounts, beside the one the handle names (or
-   * none, for a world resting in the archive store) and those `kept` handles name.
+   * Server machines no handle names, helpers past their lifetime, and then world and export volumes
+   * no machine mounts, beside the one the handle names (or none, for a world resting in the archive
+   * store) and those `kept` handles name.
    */
   async clearLeftovers(
     handle: RuntimeHandle,
@@ -611,7 +619,9 @@ export class FlyRuntime implements MinecraftRuntime {
     const ref = decodeHandle(handle)
     requireOwnApp(ref.app, this.#deployment)
     const keep = [...(worldElsewhere ? [] : [ref.volumeId]), ...kept.map((k) => decodeHandle(k).volumeId)]
-    return deleteLeftoverVolumes(this.#fly, ref.app, keep)
+    const machines = [ref.machineId, ...kept.map((k) => decodeHandle(k).machineId)]
+    const destroyed = await destroyStrays(this.#fly, ref.app, { machines, volumes: keep }, Date.now())
+    return [...destroyed, ...(await deleteLeftoverVolumes(this.#fly, ref.app, keep))]
   }
 
   async destroy(target: RuntimeKey | RuntimeHandle): Promise<void> {
@@ -694,7 +704,9 @@ export class FlyRuntime implements MinecraftRuntime {
    * a server that waits for room to make it keeps running meanwhile; then the old machine and the
    * old volume go. The Flycast address belongs to the app, so the edge's route does not change.
    * With the old host lost there is nothing to stop, and clearing what it held is left to Fly when
-   * it can't be done now. `keepStorage`: the old volume stays, a full copy of the world.
+   * it can't be done now. `keepStorage`: the old volume stays, a full copy of the world. Once the
+   * new handle is saved, any other server machine in the app goes too, with its volume: one an
+   * earlier try made before it stopped, which a wake would otherwise boot.
    */
   async #replace(
     ref: FlyRef,
@@ -737,6 +749,7 @@ export class FlyRuntime implements MinecraftRuntime {
     if (ref.machineId !== null) await destroyMachine(this.#fly, ref.app, ref.machineId).catch(leftBehind)
     if (ref.volumeId !== null && !options.keepStorage)
       await deleteVolume(this.#fly, ref.app, ref.volumeId).catch(leftBehind)
+    await clearOtherServers(this.#fly, ref.app, idOf(machine, 'a machine'), [volumeId, ref.volumeId])
     if (wasRunning) await this.start(next)
     return next
   }
@@ -747,6 +760,11 @@ export class FlyRuntime implements MinecraftRuntime {
 function requireMachine(ref: FlyRef): string {
   if (ref.machineId === null) throw new Error('This server has no machine; it was decommissioned')
   return ref.machineId
+}
+
+/** The machine the storage a server holds names, by id: its handle's. */
+function machineOf(storage: HeldStorage): string | null {
+  return storage.held != null && isFlyHandle(storage.held) ? decodeHandle(storage.held).machineId : null
 }
 
 /** The volumes the storage a server holds names, by id: what its handle names, and what is kept. */

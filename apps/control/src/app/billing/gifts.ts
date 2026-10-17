@@ -8,15 +8,16 @@
  * emails its buyer the code, of which only a hash is kept. Redeeming gives the account the plan
  * for the gift's months, from then or from when the time it already has ends (a year paid at once
  * included), and `billedPlan` reads it from there. A refund voids a code nobody has used, and ends
- * the time of one somebody has. Buying is capped per buyer per day, and wrong codes per account
- * per hour.
+ * the time of one somebody has. A gift redeemed to start when a subscription set to end runs out
+ * moves on if the subscription is kept and renews, so it never runs under paid days. Buying is
+ * capped per buyer per day, and wrong codes per account per hour.
  *
  * Not here: the plan's own checkout and subscriptions (`service.ts`).
  */
 import type { GiftOptionView, GiftView, RedeemedGiftView } from '@blockly/contracts'
 import { DAY_MS, HOUR_MS } from '@blockly/contracts/durations'
-import { type Db, schema, type Tx } from '@blockly/db'
-import { and, count, desc, eq, gt, isNotNull, isNull, lte, max } from 'drizzle-orm'
+import { type Db, type Queryable, schema, type Tx } from '@blockly/db'
+import { and, asc, count, desc, eq, gt, isNotNull, isNull, lte, max } from 'drizzle-orm'
 import { emailOf, isTestAccount, loadStanding, lockStanding } from '../accounts/persistence.ts'
 import type { AccountService } from '../accounts/service.ts'
 import { type Actor, requestedBy } from '../actor.ts'
@@ -29,7 +30,7 @@ import type { JobQueue } from '../ports/jobs.ts'
 import { type BillingOrder, BillingUnavailable, type GiftProduct } from '../ports/optional.ts'
 import type { Mailer } from '../ports/platform.ts'
 import { tuning } from '../tuning.ts'
-import { planChange, writeEntries } from './audit.ts'
+import { type AuditEntry, planChange, writeEntries } from './audit.ts'
 import { codeHash, codeHint, newCode, readCode } from './gift-codes.ts'
 import { latestSubscription, PAID_ORDER, PAYING } from './persistence.ts'
 import { addMonths, lastYearEnd } from './years.ts'
@@ -109,12 +110,27 @@ export class Gifts {
 
   /**
    * The provider's word on an order (`BillingService.receiveWebhook`): a gift paid for is made
-   * and its code emailed, once; a gift refunded is voided. Anything else is not a gift's.
+   * and its code emailed, once; a gift refunded is voided. The refund is the order's as
+   * `recordOrder` kept it, which only grows, so a paid delivery that comes after the refund's
+   * makes no gift. Anything else is not a gift's.
    */
   async received(provider: string, order: BillingOrder): Promise<void> {
     if (order.userId === null) return
-    if (order.refundedCents > 0 || order.status === 'refunded') {
-      await this.#void(provider, order.externalOrderId)
+    const [kept] = await this.#db
+      .select({ refundedCents: schema.billingOrders.refundedCents })
+      .from(schema.billingOrders)
+      .where(
+        and(
+          eq(schema.billingOrders.provider, provider),
+          eq(schema.billingOrders.externalOrderId, order.externalOrderId),
+        ),
+      )
+    if (order.refundedCents > 0 || (kept?.refundedCents ?? 0) > 0 || order.status === 'refunded') {
+      await this.#void(
+        provider,
+        order.externalOrderId,
+        order.gift ? { buyerId: order.userId, gift: order.gift } : null,
+      )
       return
     }
     if (order.gift && PAID_ORDER.includes(order.status))
@@ -159,10 +175,27 @@ export class Gifts {
 
   /**
    * A refund: the code stops working, and time already redeemed with it ends now. The account that
-   * had it moves to the plan it has without it, and what that plan doesn't allow stops.
+   * had it moves to the plan it has without it, and what that plan doesn't allow stops. A gift
+   * order refunded before its gift was made (`bought`) is kept as a gift refunded, with no code, so
+   * its paid delivery coming after never makes one.
    */
-  async #void(provider: string, externalOrderId: string): Promise<void> {
+  async #void(
+    provider: string,
+    externalOrderId: string,
+    bought: { buyerId: string; gift: GiftProduct } | null,
+  ): Promise<void> {
     const redeemedBy = await this.#db.transaction(async (tx) => {
+      if (bought !== null)
+        await tx
+          .insert(gifts)
+          .values({
+            provider,
+            externalOrderId,
+            buyerId: bought.buyerId,
+            planKey: bought.gift.planKey,
+            months: bought.gift.months,
+          })
+          .onConflictDoNothing()
       const [row] = await tx
         .select()
         .from(gifts)
@@ -407,6 +440,72 @@ export class Gifts {
       throw new AppError('invalid_choice', 'This is a test account: its plan is set by an admin.')
     return user
   }
+}
+
+/**
+ * Redeemed gifts under a subscription that renews (`BillingService.syncSubscription`), as when its
+ * owner set it to end, redeemed a gift to start then, and kept it after all: each gift that would
+ * start before the paid time ends (`paidUntil`), or is running, moves to start then, and the gifts
+ * after it run on from it, so a gift never runs under days that are paid for. One that hasn't
+ * started keeps its months; one running keeps the time it had left. Run under the account's
+ * standing lock. Answers the moves, for the audit log.
+ */
+export async function giftsAfterPaidTime(
+  tx: Tx,
+  userId: string,
+  paidUntil: Date,
+  now: Date,
+): Promise<AuditEntry[]> {
+  const held = await tx
+    .select()
+    .from(gifts)
+    .where(and(eq(gifts.redeemedBy, userId), isNull(gifts.voidedAt), gt(gifts.endsAt, now)))
+    .orderBy(asc(gifts.startsAt))
+  const moves: AuditEntry[] = []
+  let from = paidUntil
+  for (const gift of held) {
+    if (gift.startsAt === null || gift.endsAt === null || gift.months === null) continue
+    if (gift.startsAt >= from) {
+      if (gift.endsAt > from) from = gift.endsAt
+      continue
+    }
+    const startsAt = from
+    const endsAt =
+      gift.startsAt > now
+        ? addMonths(startsAt, gift.months)
+        : new Date(startsAt.getTime() + gift.endsAt.getTime() - now.getTime())
+    await tx.update(gifts).set({ startsAt, endsAt }).where(eq(gifts.id, gift.id))
+    moves.push({
+      action: 'billing.gift_moved',
+      data: {
+        gift: gift.id,
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+        was: gift.startsAt.toISOString(),
+      },
+    })
+    from = endsAt
+  }
+  return moves
+}
+
+/**
+ * For the account page: the first redeemed gift still to start, its plan, its months and when it
+ * starts; null with none waiting.
+ */
+export async function giftNext(
+  q: Queryable,
+  userId: string,
+  now: Date,
+): Promise<{ planKey: string; months: number; startsAt: Date } | null> {
+  const [row] = await q
+    .select({ planKey: gifts.planKey, months: gifts.months, startsAt: gifts.startsAt })
+    .from(gifts)
+    .where(and(eq(gifts.redeemedBy, userId), isNull(gifts.voidedAt), gt(gifts.startsAt, now)))
+    .orderBy(asc(gifts.startsAt))
+    .limit(1)
+  if (!row?.planKey || !row.months || !row.startsAt) return null
+  return { planKey: row.planKey, months: row.months, startsAt: row.startsAt }
 }
 
 /** The provider being down is a refusal people can read, not an internal error. */

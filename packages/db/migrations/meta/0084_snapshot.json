@@ -1,5 +1,5 @@
 {
-  "id": "ab72a885-2236-4430-aa54-923066ca7aaa",
+  "id": "888d5940-fc8e-4921-be53-1003d8f50edd",
   "prevId": "52e94bb5-db96-4fe9-99f0-32de1a0b4ecf",
   "version": "7",
   "dialect": "postgresql",
@@ -391,6 +391,30 @@
           "primaryKey": false,
           "notNull": false
         },
+        "time_zone_from": {
+          "name": "time_zone_from",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "time_zone_began": {
+          "name": "time_zone_began",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_time_zone": {
+          "name": "next_time_zone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_time_zone_from": {
+          "name": "next_time_zone_from",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "signup_source": {
           "name": "signup_source",
           "type": "text",
@@ -459,62 +483,6 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.job_health": {
-      "name": "job_health",
-      "schema": "",
-      "columns": {
-        "job": {
-          "name": "job",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "every_seconds": {
-          "name": "every_seconds",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "first_seen_at": {
-          "name": "first_seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_succeeded_at": {
-          "name": "last_succeeded_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_failed_at": {
-          "name": "last_failed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_error": {
-          "name": "last_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "failures": {
-          "name": "failures",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

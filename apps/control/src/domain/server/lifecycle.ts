@@ -108,6 +108,8 @@ export type Outcome =
   | { type: 'provisioned' }
   | { type: 'started' }
   | { type: 'stopped'; reason: StopReason }
+  /** A stop called off before anything went down: someone joined the server it was idling. */
+  | { type: 'kept' }
   | { type: 'crashed' }
   | { type: 'updated'; running: boolean; reason?: StopReason }
   /** A server that comes back stopped says why: its owner's choice, or policy refusing the boot. */
@@ -243,6 +245,9 @@ export function transition(current: Lifecycle, outcome: Outcome): Lifecycle {
     case 'stopped':
       fits('stopping')
       return stoppedBecause(outcome.reason)
+    case 'kept':
+      fits('stopping')
+      return moving('running')
     case 'crashed':
       // A crash while starting is the start operation's failure, not reconciliation's finding.
       fits('running')

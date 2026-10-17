@@ -76,7 +76,8 @@ export function drifting(deps: {
     for (const server of running) {
       if (drifted >= limit) break
       if ((online.get(server.id)?.length ?? 0) > 0) continue
-      const digest = await driftedTo(server, applied.get(server.id))
+      const binding = applied.get(server.id)
+      const digest = await driftedTo(server, binding)
       if (digest === null || (await activeOperation(db, server.id)) !== null) continue
       await db.transaction(async (tx) => {
         const locked = await lockServer(tx, server.id)
@@ -85,7 +86,8 @@ export function drifting(deps: {
           tx,
           locked,
           { type: 'apply' },
-          { requestedBy: 'system:reconcile', idempotencyKey: `drift:${digest}` },
+          // Named for the move, from what was applied to what it should run.
+          { requestedBy: 'system:reconcile', idempotencyKey: `drift:${binding?.digest}→${digest}` },
         )
       })
       drifted++

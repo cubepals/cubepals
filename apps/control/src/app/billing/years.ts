@@ -23,6 +23,7 @@ import { type AuditEntry, type BillingSource, planChange, planRecordedSince, wri
 import { PAID_ORDER, PAYING } from './persistence.ts'
 
 const years = schema.planYears
+const orders = schema.billingOrders
 const gifts = schema.planGifts
 const subscriptions = schema.billingSubscriptions
 
@@ -58,9 +59,11 @@ export function monthsKept(order: Pick<BillingOrder, 'netCents' | 'refundedCents
 /**
  * A year's order, kept as the provider says it now: the year it pays for is made the first time
  * it is paid, starting when the time the account already has ends, and shortened by what has been
- * refunded since. Answers what changed, for the audit log; null for an order that pays for no year
- * or hasn't been paid. Run under the account's standing lock, so two years can't both start at
- * the same end.
+ * refunded since. The refund is the order's as `recordOrder` kept it, which only grows, so a paid
+ * delivery that comes again after a refund never gives the year back: its end only ever moves
+ * earlier. Answers what changed, for the audit log; null for an order that pays for no year or
+ * hasn't been paid. Run under the account's standing lock, so two years can't both start at the
+ * same end.
  */
 export async function recordYear(
   tx: Tx,
@@ -70,13 +73,21 @@ export async function recordYear(
   if (!order.paysForYear || order.userId === null || order.planKey === null) return null
   if (!PAID_ORDER.includes(order.status)) return null
   const about = { provider, order: order.externalOrderId, plan: order.planKey }
+  const [kept] = await tx
+    .select({ refundedCents: orders.refundedCents })
+    .from(orders)
+    .where(and(eq(orders.provider, provider), eq(orders.externalOrderId, order.externalOrderId)))
+  const paid = {
+    netCents: order.netCents,
+    refundedCents: Math.max(order.refundedCents, kept?.refundedCents ?? 0),
+  }
   const [held] = await tx
     .select()
     .from(years)
     .where(and(eq(years.provider, provider), eq(years.externalOrderId, order.externalOrderId)))
   if (held !== undefined) {
-    const endsAt = addMonths(held.startsAt, monthsKept(order))
-    if (endsAt.getTime() === held.endsAt.getTime()) return []
+    const endsAt = addMonths(held.startsAt, monthsKept(paid))
+    if (endsAt.getTime() >= held.endsAt.getTime()) return []
     await tx
       .update(years)
       .set({ endsAt, updatedAt: new Date() })
@@ -89,7 +100,7 @@ export async function recordYear(
     ]
   }
   const startsAt = await paidUntil(tx, order.userId, order.orderedAt)
-  const endsAt = addMonths(startsAt, monthsKept(order))
+  const endsAt = addMonths(startsAt, monthsKept(paid))
   await tx.insert(years).values({
     provider,
     externalOrderId: order.externalOrderId,

@@ -110,8 +110,16 @@ export class ServerTransitions {
     if (decision.kind === 'noop') return { server, operation: null }
 
     const moved = decision.to === server.lifecycle ? server : await this.#save(tx, server, decision.to)
-    const operation =
-      decision.operation === null ? null : await this.enqueue(tx, moved, decision.operation, request)
+    if (decision.operation === null) return { server: moved, operation: null }
+    // A status moves only with work that moves it on. A key already spent on finished work (the
+    // same change asked for again later) queues a fresh operation after it, as purge-sweep does.
+    let operation = await this.enqueue(tx, moved, decision.operation, request)
+    while (operation.status !== 'queued' && operation.status !== 'running') {
+      operation = await this.enqueue(tx, moved, decision.operation, {
+        ...request,
+        idempotencyKey: `${request.idempotencyKey}:after:${operation.id}`,
+      })
+    }
     return { server: moved, operation }
   }
 
