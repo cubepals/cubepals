@@ -49,7 +49,10 @@ const toBackup = (row: typeof backups.$inferSelect): BackupRecord => ({
   snapshotHandle: row.snapshotHandle as SnapshotHandle | null,
 })
 
-/** A provider snapshot that exists, recorded as a ready backup. */
+/**
+ * A provider snapshot that exists, recorded as a ready backup; with `error`, as one that failed,
+ * its handle kept for the operation that took it to go back to.
+ */
 export async function recordSnapshot(
   q: Queryable,
   input: {
@@ -60,6 +63,7 @@ export async function recordSnapshot(
     snapshot: SnapshotHandle
     sizeBytes: number
     expiresAt: Date | null
+    error?: string | null
   },
 ): Promise<BackupRecord> {
   const [row] = await q
@@ -70,10 +74,11 @@ export async function recordSnapshot(
       revisionId: input.revisionId,
       tier: 'snapshot',
       trigger: input.trigger,
-      status: 'ready',
+      status: input.error == null ? 'ready' : 'failed',
       snapshotHandle: input.snapshot,
       sizeBytes: input.sizeBytes,
       expiresAt: input.expiresAt,
+      error: input.error ?? null,
     })
     .returning()
   if (!row) throw new Error('The backup just recorded is missing')
