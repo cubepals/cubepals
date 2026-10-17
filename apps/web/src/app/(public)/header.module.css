@@ -1,0 +1,156 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/* The one header (header.tsx): the same on the landing page and on every public page. Ink on the
+   ground it stands on; over the landing's picture it is fixed, and the picture opens behind it. */
+.header {
+  --out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 72px;
+  color: var(--ink);
+}
+.header[data-over-picture] {
+  position: fixed;
+  z-index: 7;
+  inset-block-start: 0;
+  inset-inline: 0;
+  padding-inline: calc(var(--gutter, 24px) + var(--rail, 0px)) var(--gutter, 24px);
+  pointer-events: none;
+}
+.header[data-over-picture] > * {
+  pointer-events: auto;
+}
+/* Over the picture the ground changes: over the dark of the dig the header is paper. */
+.header[data-ground="slate"],
+.header[data-ground="bedrock"] {
+  /* Literal, since each would otherwise be read from the other on this same element. */
+  --ink: #f8f7f5;
+  --paper: #0d0d0d;
+}
+
+.lockup {
+  display: inline-flex;
+  color: var(--ink);
+  font-family: var(--font-figtree), system-ui, sans-serif;
+  font-size: 26px;
+  line-height: 1;
+  text-decoration: none;
+}
+.links {
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 2vw, 28px);
+}
+.link {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 1rem;
+  text-decoration: none;
+  text-underline-offset: 0.3em;
+  white-space: nowrap;
+}
+.link:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+}
+/* There once the page has been scrolled: it opens into the end of the row, and the links make
+   room for it as it does; it closes the same way. */
+.create {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  max-width: 0;
+  min-height: 40px;
+  margin-inline-start: calc(clamp(12px, 2vw, 28px) * -1);
+  padding: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  white-space: nowrap;
+  visibility: hidden;
+  transition:
+    max-width 120ms var(--out-quart),
+    padding 120ms var(--out-quart),
+    margin 120ms var(--out-quart),
+    translate 120ms var(--out-quart),
+    visibility 0s 120ms;
+}
+.create[data-shown] {
+  max-width: 12em;
+  margin-inline-start: 0;
+  padding: 0 16px;
+  visibility: visible;
+  transition:
+    max-width 120ms var(--out-quart),
+    padding 120ms var(--out-quart),
+    margin 120ms var(--out-quart),
+    translate 120ms var(--out-quart);
+}
+.create[data-shown]:hover {
+  translate: 0 -2px;
+}
+.create[data-shown]:active {
+  translate: 0 1px;
+}
+.create:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+/* A phone has a bar of its own at the foot of the screen for it (Follow), and less room up here. */
+@media (max-width: 1023px) {
+  .create {
+    display: none;
+  }
+}
+@media (max-width: 420px) {
+  .header {
+    gap: 8px;
+  }
+  .links {
+    gap: 12px;
+  }
+  .link {
+    font-size: 0.9375rem;
+  }
+  .lockup {
+    font-size: 21px;
+  }
+}
+@media (max-width: 374px) {
+  .links {
+    gap: 10px;
+  }
+  .link {
+    font-size: 0.875rem;
+  }
+  .lockup {
+    font-size: 19px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .create,
+  .create[data-shown] {
+    transition: none;
+  }
+}
+
+/* Over the picture the words keep it off their letters with a halo of their ground, as the
+   words on the landing page do: the links by a stroke drawn under them, the lockup and its beta
+   mark (drawings) by an outline. */
+.header[data-over-picture] .link {
+  -webkit-text-stroke: 6px var(--paper);
+  paint-order: stroke fill;
+}
+.header[data-over-picture] > :first-child {
+  filter: drop-shadow(3px 0 0 var(--paper)) drop-shadow(-3px 0 0 var(--paper))
+    drop-shadow(0 3px 0 var(--paper)) drop-shadow(0 -3px 0 var(--paper));
+}

@@ -9,42 +9,40 @@
  * sets it. Every mark the funnels count is here under the same name as in the film.
  */
 import Link from 'next/link'
+import { SiteHeader } from '../../app/(public)/header'
 import { ctaMark, seenMark } from '../../app/(public)/steps'
 import { Follow } from '../Follow'
-import { Nav } from '../film/Nav'
 import type { Landed } from '../Landing'
-import { PlansSaid } from '../sections/Plans'
-import { Stars } from '../sections/Stars'
+import { lastSaid, PlansSaid, trialSaid } from '../sections/Plans'
 import surface from '../sections/surface.module.css'
 import { Address } from './Address'
 import styles from './phone.module.css'
 import { Still } from './Still'
 
+/** The night's picture as printed beforehand, shown until the worker's own print is in. */
+const night = { src: '/imagery/landing-still-night.png', width: 430, height: 323 }
+
 export function Phone({ create, signedIn, plans, getPlan }: Landed) {
   return (
     <main className={styles.page} data-phone>
       <section className={styles.night} data-tone="night" data-sky {...seenMark('top')}>
-        <Stars className={styles.stars} />
-        <Nav signedIn={signedIn} />
+        <SiteHeader signedIn={signedIn} create={create} marks="nav" />
         <p className={styles.kicker}>Minecraft server hosting for friends</p>
-        <h1 className={`bl-display ${styles.headline}`}>Send your friends the address. They’re in.</h1>
-        <p className={`bl-lede ${styles.support}`}>
-          Make a server in three decisions. Your friends join from the normal game, whenever they like, and
-          nobody has to start it first.
-        </p>
-        <Still still="night" className={styles.still} />
+        <h1 className={`bl-display ${styles.headline}`}>
+          <span>Send your friends</span> <span>the address.</span> <span>They’re in.</span>
+        </h1>
+        <p className={`bl-lede ${styles.support}`}>Make a server in three decisions.</p>
         <div className={styles.go}>
           <Link href={create} className="bl-btn bl-btn--lg" {...ctaMark('hero_create')}>
             Create a server
           </Link>
           <p>
-            Start with a free trial, no card needed.
+            <strong>{trialSaid(plans)}</strong>
             <br />
-            For Minecraft: Java Edition.
-            <br />
-            Bedrock is coming soon.
+            Minecraft: Java Edition. Bedrock is coming soon.
           </p>
         </div>
+        <Still still="night" first={night} className={styles.still} />
         <p className={styles.line} {...seenMark('the-address')}>
           Share the address.
         </p>
@@ -80,6 +78,7 @@ export function Phone({ create, signedIn, plans, getPlan }: Landed) {
         <Link href={create} className="bl-btn bl-btn--lg" {...ctaMark('last_create')}>
           Create a server
         </Link>
+        <p className={styles.under}>{lastSaid(plans)}</p>
       </section>
       <Follow create={create} />
     </main>

@@ -66,6 +66,93 @@ const TONE: Record<number, number> = {
   [Kind.sand]: 0.94,
 }
 
+/** How much light a block of this kind gives back, 0 to 1 (its tone). */
+export const toneOf = (kind: number): number => TONE[kind] ?? 0.5
+
+/**
+ * A block's four corners on each face, in the order its quad takes them, which is also the order
+ * of the face's corner shading: where on the face is (0, 0), (1, 0), (1, 1), then (0, 1).
+ */
+export const CORNERS: readonly (readonly (readonly [number, number, number])[])[] = [
+  [
+    [0, 1, 0],
+    [1, 1, 0],
+    [1, 1, 1],
+    [0, 1, 1],
+  ],
+  [
+    [1, 0, 1],
+    [1, 0, 0],
+    [1, 1, 0],
+    [1, 1, 1],
+  ],
+  [
+    [0, 0, 1],
+    [1, 0, 1],
+    [1, 1, 1],
+    [0, 1, 1],
+  ],
+  [
+    [0, 0, 0],
+    [1, 0, 0],
+    [1, 0, 1],
+    [0, 0, 1],
+  ],
+  [
+    [0, 0, 0],
+    [0, 0, 1],
+    [0, 1, 1],
+    [0, 1, 0],
+  ],
+  [
+    [1, 0, 0],
+    [0, 0, 0],
+    [0, 1, 0],
+    [1, 1, 0],
+  ],
+]
+
+/** Per-vertex ambient occlusion for blocks (0fps, 2013): 0 is a closed corner, 3 is open. */
+const aoOf = (s1: number, s2: number, c: number) => (s1 && s2 ? 0 : 3 - (s1 + s2 + c))
+
+/**
+ * For each face and each of its corners, the three cells round that corner of the cell the face
+ * looks into, as steps from the block: the two beside it along the face, then the one diagonal.
+ */
+const AROUND_CORNERS: number[][] = CORNERS.map((corners, face) => {
+  const normal = [
+    [0, 1, 0],
+    [1, 0, 0],
+    [0, 0, 1],
+    [0, -1, 0],
+    [-1, 0, 0],
+    [0, 0, -1],
+  ][face] as number[]
+  const [u, v] = normal[0] !== 0 ? [1, 2] : normal[1] !== 0 ? [0, 2] : [0, 1]
+  return corners.flatMap((corner) => {
+    const a = [0, 0, 0]
+    const b = [0, 0, 0]
+    a[u as number] = corner[u as number] ? 1 : -1
+    b[v as number] = corner[v as number] ? 1 : -1
+    const out = (d: number[]) => normal.map((n, axis) => n + (d[axis] as number))
+    return [
+      ...out(a),
+      ...out(b),
+      ...out([
+        (a[0] as number) + (b[0] as number),
+        (a[1] as number) + (b[1] as number),
+        (a[2] as number) + (b[2] as number),
+      ]),
+    ]
+  })
+})
+
+/**
+ * Where the sun (or the moon) is, for the bits that say which faces it reaches; null where those
+ * aren't wanted, because a shadow map says it instead (gl.ts), and are left at none.
+ */
+type Sun = readonly [number, number, number] | null
+
 /** A point light: torches and lit windows. `group` names the switch that turns it on. */
 export interface Light {
   x: number
@@ -197,6 +284,43 @@ export class World {
   }
 
   /**
+   * How shut in each corner of each face is, by the blocks round the cell the face looks into:
+   * two bits a corner, four corners a face, one byte a face in the renderer's order.
+   */
+  occlusion(x: number, y: number, z: number): number[] {
+    const bytes = [0, 0, 0, 0, 0, 0]
+    for (let face = 0; face < 6; face++) {
+      const steps = AROUND_CORNERS[face] as number[]
+      let byte = 0
+      for (let k = 0, at = 0; k < 4; k++, at += 9) {
+        const s1 = this.solid(
+          x + (steps[at] as number),
+          y + (steps[at + 1] as number),
+          z + (steps[at + 2] as number),
+        )
+        const s2 = this.solid(
+          x + (steps[at + 3] as number),
+          y + (steps[at + 4] as number),
+          z + (steps[at + 5] as number),
+        )
+        const c = this.solid(
+          x + (steps[at + 6] as number),
+          y + (steps[at + 7] as number),
+          z + (steps[at + 8] as number),
+        )
+        byte |= aoOf(s1, s2, c) << (2 * k)
+      }
+      bytes[face] = byte
+    }
+    return bytes
+  }
+
+  /** 1 where there is a block, 0 where there is air or nothing. */
+  private solid(x: number, y: number, z: number): number {
+    return this.has(x, y, z) && this.kinds[this.index(x, y, z)] !== Kind.air ? 1 : 0
+  }
+
+  /**
    * Digs a block out and hands back what it was, so it can be put back. A hole dug in the wall of
    * a room becomes part of that room, and is lit with it.
    */
@@ -228,7 +352,7 @@ export class World {
    * faces are open, which of them the sun reaches, which of them look outdoors, the room the
    * others look into, and how big to draw it (255 is whole). Null when none of it can be seen.
    */
-  bytes(x: number, y: number, z: number, sun: readonly [number, number, number]): number[] | null {
+  bytes(x: number, y: number, z: number, sun: Sun): number[] | null {
     const kind = this.get(x, y, z)
     if (kind === Kind.air) return null
     let mask = 0
@@ -247,7 +371,7 @@ export class World {
       kind,
       this.groups[this.index(x, y, z)] ?? 0,
       mask,
-      this.sunOn(x, y, z, sun),
+      sun ? this.sunOn(x, y, z, sun) : 0,
       outdoors,
       room,
       255,
@@ -272,6 +396,8 @@ export interface Taken {
 export class Mesh {
   positions: Float32Array
   data: Uint8Array
+  /** Each block's corner shading, six bytes in eight (`World.occlusion`). */
+  ao: Uint8Array
   count = 0
   /**
    * The world as it was first packed is in layers, bottom to top: `layers[n]` is where the layer
@@ -283,10 +409,11 @@ export class Mesh {
   private readonly slots = new Map<number, number>()
   private readonly world: World
 
-  constructor(world: World, sun: readonly [number, number, number]) {
+  constructor(world: World, sun: Sun) {
     this.world = world
     this.positions = new Float32Array(3 * 4096)
     this.data = new Uint8Array(8 * 4096)
+    this.ao = new Uint8Array(8 * 4096)
     this.layers = new Uint32Array(world.height + 1)
     for (let y = world.bottom; y < world.top; y++) {
       this.layers[y - world.bottom] = this.count
@@ -320,7 +447,7 @@ export class Mesh {
   }
 
   /** Works one block out again, after it or something beside it changed. */
-  refresh(x: number, y: number, z: number, sun: readonly [number, number, number]): void {
+  refresh(x: number, y: number, z: number, sun: Sun): void {
     if (!this.world.has(x, y, z)) return
     const key = this.slot(x, y, z)
     const bytes = this.world.bytes(x, y, z, sun)
@@ -334,20 +461,27 @@ export class Mesh {
         const data = new Uint8Array(this.data.length * 2)
         data.set(this.data)
         this.data = data
+        const ao = new Uint8Array(this.ao.length * 2)
+        ao.set(this.ao)
+        this.ao = ao
       }
       at = this.count++
       this.slots.set(key, at)
       this.positions.set([x, y, z], at * 3)
     }
-    if (bytes) this.data.set(bytes, at * 8)
+    if (bytes) {
+      this.data.set(bytes, at * 8)
+      this.ao.set(this.world.occlusion(x, y, z), at * 8)
+    }
     // A block with no face open keeps its place in the list and is simply not drawn.
     else this.data[at * 8 + 3] = 0
   }
 
-  /** Works out a block and the six beside it. */
-  around(x: number, y: number, z: number, sun: readonly [number, number, number]): void {
-    this.refresh(x, y, z, sun)
-    for (const [dx, dy, dz] of World.FACES) this.refresh(x + dx, y + dy, z + dz, sun)
+  /** Works out a block and the ones round it: beside it for its faces, and corner to corner for their shading. */
+  around(x: number, y: number, z: number, sun: Sun): void {
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dz = -1; dz <= 1; dz++)
+        for (let dx = -1; dx <= 1; dx++) this.refresh(x + dx, y + dy, z + dz, sun)
   }
 }
 

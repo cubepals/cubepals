@@ -32,9 +32,29 @@ export interface Pose {
   drop: number
   /** How much of the other worlds around this one is there to be seen, 0 to 1. */
   crowd: number
+  /** How far onto the dig's dark grounds it is, 0 to 1: the print's look follows it. */
+  under: number
+  /** How far into a room it is, 0 out on the grass to 1 in one. */
+  inside: number
+  /** How bright the print is taken, 1 as it is: the tone curve's exposure is scaled by it. */
+  bright: number
 }
 
-export const POSE_KEYS = ['x', 'y', 'z', 'az', 'el', 'span', 'fov', 'side', 'drop', 'crowd'] as const
+export const POSE_KEYS = [
+  'x',
+  'y',
+  'z',
+  'az',
+  'el',
+  'span',
+  'fov',
+  'side',
+  'drop',
+  'crowd',
+  'under',
+  'inside',
+  'bright',
+] as const
 
 const rad = (degrees: number) => (degrees * Math.PI) / 180
 

@@ -13,6 +13,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import Lenis from 'lenis'
 import { useEffect, useRef } from 'react'
 import 'lenis/dist/lenis.css'
+import { inOut } from './engine/curves'
 import { playing } from './film/clock'
 import { useReducedMotion } from './hooks'
 import { stopOf } from './stops'
@@ -67,7 +68,6 @@ const OWN_KEYS = [
   ].map((role) => `[role="${role}"]`),
 ].join(', ')
 
-const inOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
 const clamp = (value: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, value))
 
 /**
@@ -252,8 +252,9 @@ export function Scroll() {
         // A ride can be sent somewhere else while it is under way (a link pressed mid-flight).
         force: true,
         lock: true,
-        // A ride of a few pixels is over sooner than one to the next section.
-        duration: far < 420 ? 0.5 + (far / 420) * 0.65 : clamp(1 + far / 2800, 1.15, 2.8),
+        // A ride of a few pixels is over sooner than one to the next section, and a ride between
+        // beats takes 0.9 to 1.6 seconds by how far it goes.
+        duration: far < 420 ? 0.5 + (far / 420) * 0.4 : clamp(0.9 + far / 4000, 0.9, 1.6),
         easing: inOut,
         onComplete: () => {
           riding = false

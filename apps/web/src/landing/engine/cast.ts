@@ -659,7 +659,7 @@ export class Cast {
         cube(
           box,
           3.5 + age * 1.1,
-          10.3 + age * 3.4,
+          8.3 + age * 3.4,
           3.5 - age * 0.5,
           size,
           252,

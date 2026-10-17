@@ -31,15 +31,6 @@
     z-index: 4;
   }
 }
-.overview .stars {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  color: var(--paper);
-  pointer-events: none;
-}
-
 .overview .words {
   position: absolute;
   z-index: 4;
@@ -72,10 +63,6 @@
 /* Sized by the screen's height as well as its width: the sky it has to fit in is half the height. */
 .overview.worlds .words h2 {
   font-size: clamp(2.5rem, min(5.6vw, 11vh), 6.25rem);
-}
-/* Over all the worlds the stars keep to the sky: the lowest stops at the horizon. */
-.overview.worlds .stars {
-  height: 48%;
 }
 .overview.worlds .words p:last-child {
   color: var(--ink);

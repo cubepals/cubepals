@@ -279,6 +279,18 @@
   }
 }
 
+/* The words set on the picture keep it off their letters with a halo of their own ground, three
+   pixels round each letter and drawn under it, so the picture runs on behind them and none of it
+   is erased. A button, a field or the game's own lettering has a ground of its own and no halo. */
+.bl [data-over] {
+  -webkit-text-stroke: 6px var(--field);
+  paint-order: stroke fill;
+}
+.bl [data-over] :is(.bl-btn, .bl-game, button, input, [data-field]),
+.bl [data-over] :is(.bl-btn, .bl-game, button, input, [data-field]) * {
+  -webkit-text-stroke: 0;
+}
+
 /* The chunk's place. On a wide screen its canvas covers the whole view and stays there for as long
    as the dig lasts, and the camera moves within it. On a narrow one it is a band pinned to the
    top, and the page scrolls under it; the band takes the colour of whichever stratum is passing
@@ -315,7 +327,43 @@
   }
 }
 
-/* Three letters over the chimney while the server sleeps, rising a step at a time. */
+/* The hero's chunk as printed beforehand by the same print, 1440 by 900 at one and at two device
+   pixels to a CSS pixel (public/imagery/landing-hero*.png, one pixel a dot), over the canvas until
+   the canvas has drawn its first lit frame (`data-lit`, engine/gl.ts), and then dissolving into it.
+   The camera keeps the chunk as tall as a fixed share of the screen and its middle at the hero's
+   `side` across (0.754, Film.tsx), so a still as tall as the screen and placed by the same fraction
+   lands where the live print does at any size. Only on a wide screen, where the canvas is the
+   whole screen; it scrolls away with the hero. */
+.bl-first {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .bl-first {
+    position: absolute;
+    top: 0;
+    left: 75.4%;
+    display: block;
+    width: auto;
+    max-width: none;
+    height: 100svh;
+    translate: -75.4% 0;
+    image-rendering: pixelated;
+    pointer-events: none;
+    transition:
+      opacity 240ms ease-out,
+      visibility 0s;
+  }
+  .bl-chunk[data-lit] ~ .bl-first {
+    visibility: hidden;
+    opacity: 0;
+    transition:
+      opacity 240ms ease-out,
+      visibility 0s 240ms;
+  }
+}
+
+/* Three letters over the chimney of the phone's sleeping server (phone/Still.tsx), rising a step
+   at a time. */
 .bl-snore {
   position: absolute;
   top: 0;
@@ -326,14 +374,6 @@
   color: var(--ink);
   opacity: 0;
   transition: opacity 300ms steps(3);
-}
-@media (min-width: 1024px) {
-  .bl-snore {
-    position: sticky;
-    top: 0;
-    height: 0;
-    margin-top: -100svh;
-  }
 }
 .bl-snore i {
   position: absolute;
@@ -453,7 +493,7 @@
   transition: background-color 1.2s steps(6);
 }
 
-/* ─── The sky: the moon and the stars ───────────────────────────────────────────────────────── */
+/* ─── The sky: the moon ─────────────────────────────────────────────────────────────────────── */
 
 /* `--day` runs from 0, night, to 1, day (Chunk.tsx hands it over in small steps, and a short
    transition carries each to the next). It is eased here, so the moon gathers speed and sheds it,
@@ -464,10 +504,10 @@
   --m: clamp(0, calc(var(--day, 0) / 0.45), 1);
   --e: calc(var(--m) * var(--m) * (3 - 2 * var(--m)));
   position: absolute;
-  inset-block-start: 13svh;
+  inset-block-start: 12svh;
   inset-inline-end: 7vw;
-  width: calc(var(--px) * 18);
-  height: calc(var(--px) * 18);
+  width: calc(var(--px) * 14);
+  height: calc(var(--px) * 14);
   pointer-events: none;
   transition:
     translate 110ms linear,
@@ -498,30 +538,7 @@
     display: none;
   }
 }
-/* A star is there or it isn't: each goes out at its own moment as the day comes, the low ones
-   first, and in the dark each blinks in its own time. */
-.bl-stars rect {
-  transform-box: fill-box;
-  transform-origin: center;
-  scale: clamp(0, calc((var(--at, 0.5) * 0.55 - var(--day, 0)) * 40), 1);
-  animation: bl-twinkle var(--every, 4s) steps(1, end) var(--after, 0s) infinite;
-}
-@keyframes bl-twinkle {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  86% {
-    opacity: 0.25;
-  }
-  93% {
-    opacity: 1;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .bl-stars rect {
-    animation: none;
-  }
   .bl-moon {
     transition: none;
   }
@@ -716,7 +733,7 @@
   cursor: pointer;
   --step: calc(var(--px) * 2);
   translate: 0 calc(var(--px) * -2);
-  transition: translate 80ms ease-out;
+  transition: translate 120ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 .bl-btn::before,
 .bl-btn::after {
@@ -743,7 +760,7 @@
   background: var(--btn-shadow, color-mix(in srgb, var(--fg) 38%, var(--field)));
   translate: 0 calc(var(--px) * 2);
   z-index: -2;
-  transition: translate 80ms ease-out;
+  transition: translate 120ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 .bl-btn::after {
   background: var(--btn-fill, var(--fg));
@@ -919,11 +936,8 @@
   font-size: 1rem;
   line-height: 1;
   white-space: nowrap;
-  text-shadow:
-    var(--px) 0 0 var(--paper),
-    calc(var(--px) * -1) 0 0 var(--paper),
-    0 var(--px) 0 var(--paper),
-    0 calc(var(--px) * -1) 0 var(--paper);
+  -webkit-text-stroke: 6px var(--paper);
+  paint-order: stroke fill;
 }
 .bl-gauge__dug {
   display: none;
@@ -965,12 +979,8 @@
     width: calc(var(--px) * 3);
     height: calc(var(--px) * 3);
     background: currentColor;
-    box-shadow: 0 0 0 var(--px) var(--paper);
-    opacity: 0.7;
-  }
-  .bl-gauge__stops a:hover::before,
-  .bl-gauge__stops a:focus-visible::before {
-    opacity: 1;
+    /* A halo of the ground, as the words on the picture have, so the mark is never lost in it. */
+    box-shadow: 0 0 0 calc(var(--px) * 2) var(--paper);
   }
   .bl-gauge__stops a[aria-current]::before {
     width: calc(var(--px) * 6);
@@ -996,10 +1006,11 @@
   .bl-gauge__stops a:focus-visible span {
     opacity: 1;
   }
+  /* The dig is ink on stone all the way down, so the depth is told here: the Y is set large. */
   .bl-gauge__y {
     writing-mode: vertical-rl;
     rotate: 180deg;
-    font-size: 1.125rem;
+    font-size: 1.5rem;
   }
   .bl-gauge__dug {
     display: block;
@@ -1051,7 +1062,7 @@
    slow steps would show nothing for the first tenth of a second. */
 .bl-follow[data-shown]:hover,
 .bl-follow[data-shown]:active {
-  transition: translate 80ms ease-out;
+  transition: translate 120ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 /* Ink and paper both, so the ring shows on any ground. */
 .bl .bl-follow:focus-visible {
@@ -1064,6 +1075,11 @@
 }
 .bl-follow:active {
   translate: 0 var(--px);
+}
+/* The bar stands at the foot of the phone's screen: whatever the page brings into view keeps
+   72 px clear of it, so it never covers a heading. */
+html:has([data-phone]) {
+  scroll-padding-block-end: 72px;
 }
 /* On the phone's page it is a bar along the foot of the screen, where a thumb is. */
 .bl [data-phone] .bl-follow {
@@ -1167,6 +1183,13 @@
 .bl-next__echo {
   margin-top: calc(var(--px) * -1);
   scale: var(--push, 0);
+}
+/* With words (the first screen's "Scroll to join") it stands in the open field under the words'
+   column, clear of the picture on the right. */
+.bl-next:has([data-part="words"]:not(:empty)) {
+  inset-inline-start: calc(var(--gutter) + var(--rail));
+  justify-items: start;
+  translate: none;
 }
 /* Pushing back up, the same mark at the top of the screen, turned to point up. */
 .bl-next[data-way="up"] {
@@ -1445,8 +1468,6 @@
   clip-path: polygon(0 0, 50% 0, 50% 20%, 100% 20%, 100% 80%, 50% 80%, 50% 100%, 0 100%);
 }
 /* A paused demonstration holds the sky still too, and so does a sky that is nowhere on screen. */
-.bl[data-paused] .bl-stars rect,
-.bl[data-skyless] .bl-stars rect,
 .bl[data-paused] .bl-snore i {
   animation-play-state: paused;
 }

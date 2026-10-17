@@ -25,15 +25,6 @@
   }
 }
 
-.beat .stars {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 62%;
-  color: var(--paper);
-  pointer-events: none;
-}
-
 /* The caption: one sentence, as large as the screen lets it be, set straight on the picture in
    the ground's own ink. Nothing is put behind it. What keeps it readable over a busy part of the
    drawing is a hard edge in the colour of the ground it stands on, a few pixels wide, the way
@@ -63,19 +54,20 @@
     calc(var(--edge) * -1) var(--edge) 0 var(--field),
     var(--edge) calc(var(--edge) * -1) 0 var(--field),
     calc(var(--edge) * -1) calc(var(--edge) * -1) 0 var(--field);
-  /* A new line is printed on: it arrives from the left in a few steps. */
-  animation: stamp 260ms steps(5, end) both;
+}
+/* A new sentence arrives a line at a time: each rises into its place, the next 60 ms after. */
+.caption .word {
+  display: inline-block;
+  animation: rise 420ms cubic-bezier(0.25, 1, 0.5, 1) calc(var(--line, 0) * 60ms) both;
 }
 .caption[data-place="top"] {
   inset-block-end: auto;
   inset-block-start: clamp(88px, 14vh, 150px);
 }
-@keyframes stamp {
+@keyframes rise {
   from {
-    clip-path: inset(-12px 100% -12px -12px);
-  }
-  to {
-    clip-path: inset(-12px);
+    opacity: 0;
+    translate: 0 24px;
   }
 }
 
@@ -93,12 +85,30 @@
   pointer-events: none;
 }
 
-/* The way to the proof: small, under the picture, for whoever wants it. */
-.how {
+/* The way to the proof: small, under the picture, for whoever wants it; and, in the dig, the way
+   on to the prices beside it. */
+.foot {
   position: absolute;
   inset-block-end: clamp(20px, 5vh, 56px);
   inset-inline-start: calc(var(--gutter) + var(--rail));
   z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+}
+.toPrice {
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  text-decoration: underline;
+  text-decoration-thickness: var(--px);
+  text-underline-offset: 0.25em;
+}
+.toPrice:hover {
+  text-decoration-thickness: calc(var(--px) * 2);
+}
+.how {
   padding: 4px 10px 5px;
   border: 0;
   background: var(--ink);
@@ -159,44 +169,13 @@
 
 /* ─── The first screen ──────────────────────────────────────────────────────────────────────── */
 
+/* The words in a column on open field, under the header, the chunk low on the right. */
 .first .words {
   position: absolute;
-  inset-block-start: 0;
-  inset-inline: calc(var(--gutter) + var(--rail)) var(--gutter);
+  inset-block-start: 72px;
+  inset-inline-start: calc(var(--gutter) + var(--rail));
   z-index: 4;
-}
-/* The page's header (`Nav`): on the first screen here, and at the top of the phone's page. */
-.nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  height: 72px;
-}
-.wordmark {
-  display: inline-flex;
-  color: var(--ink);
-  font-family: var(--font-figtree), system-ui, sans-serif;
-  font-variation-settings: normal;
-  font-size: 26px;
-  line-height: 1;
-  text-decoration: none;
-}
-.links {
-  display: flex;
-  align-items: center;
-  gap: clamp(12px, 2vw, 28px);
-}
-.link {
-  color: var(--ink);
-  font-weight: 600;
-  font-size: 1rem;
-  text-decoration: none;
-  text-underline-offset: 0.3em;
-}
-.link:hover {
-  text-decoration: underline;
-  text-decoration-thickness: var(--px);
+  width: min(46vw, 40rem);
 }
 /* What the page is, in the words people search for: small and quiet over the headline. */
 .first .kicker {
@@ -205,13 +184,19 @@
   font-size: 0.9375rem;
   line-height: 1.35;
 }
+/* Three lines, each its own: "Send your friends / the address. / They’re in." */
 .first .headline {
   margin-top: clamp(4px, 1vh, 12px);
-  max-width: 11em;
+  /* The room the descenders of "They’re" hang into, below the line box. */
+  padding-bottom: 0.18em;
+  font-size: clamp(3rem, min(5.4vw, 10.5vh), 6.25rem);
+}
+.first .headline span {
+  display: block;
 }
 .first .support {
   margin-top: clamp(12px, 2vh, 24px);
-  max-width: 30em;
+  max-width: 26em;
 }
 .first .go {
   display: flex;
@@ -220,10 +205,29 @@
   gap: 12px 20px;
   margin-top: clamp(20px, 3vh, 36px);
 }
-.first .go p {
+.first .go p,
+.last .go p {
   margin: 0;
   font-size: 0.9375rem;
   line-height: 1.35;
+}
+/* Cubepals' own Arcade, as it is now: a line under the button, its address a press to copy. */
+.first .arcade {
+  margin: clamp(14px, 2.2vh, 24px) 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.35;
+}
+.first .arcade button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-family: var(--game);
+  text-decoration: underline;
+  text-decoration-thickness: var(--px);
+  text-underline-offset: 0.25em;
+  cursor: copy;
 }
 
 /* ─── The address, typed ────────────────────────────────────────────────────────────────────── */
@@ -331,6 +335,12 @@
 
 /* ─── The last screen ───────────────────────────────────────────────────────────────────────── */
 
+.last .go {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
 .last .words {
   position: absolute;
   inset-block-start: clamp(80px, 13vh, 150px);
@@ -363,15 +373,12 @@
     min-height: calc(100svh - var(--band));
     padding-block-start: 22px;
   }
-  .beat .stars {
-    height: 100%;
-  }
   /* A phone scrolls as a phone does: nothing holds it, so there is nothing to measure. */
   .through {
     display: none;
   }
   .caption,
-  .how,
+  .foot,
   .address,
   .asks .form,
   .first .words,
@@ -393,7 +400,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .caption,
+  .caption .word,
   .proof {
     animation: none;
   }

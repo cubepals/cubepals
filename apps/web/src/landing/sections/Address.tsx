@@ -26,6 +26,10 @@ export function Address({ plans = [], bare }: { plans?: PublicPlan[]; bare?: boo
         Every player arrives at one door, the edge, which reads the name they typed and sends them through. A
         join is what wakes a sleeping server.
       </p>
+      <p className="bl-body">
+        Asleep, it’s usually back in a couple of seconds. The first start, or one after a change, can take up
+        to a minute.
+      </p>
 
       <Demo
         label="A server list row for an example address, the wire a refresh or a join travels to whichever end answers, and the handshake the edge reads"

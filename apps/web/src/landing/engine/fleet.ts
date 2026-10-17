@@ -10,6 +10,7 @@
  * A handful of worlds are built block by block and then set down many times over, so there can be
  * a great many of them for the price of a few.
  */
+import { type Camera, project } from './camera'
 import { hash3, Kind, World } from './world'
 
 /** The light switches the far worlds' windows are on: two groups that wake and sleep in turn. */
@@ -75,7 +76,7 @@ function island(seed: number): World {
 }
 
 /** The faces a far world shows, in the order the renderer keeps their corners: all but the underside. */
-export const FAR_FACES = [0, 1, 2, 4, 5] as const
+const FAR_FACES = [0, 1, 2, 4, 5] as const
 
 /** One far world: where its faces are in the packed list, and where its middle is. */
 export interface Island {
@@ -161,4 +162,51 @@ export function buildFleet(reach: number, sun: readonly [number, number, number]
       ;(islands[index] as Island).runs.push([first, at - first])
     })
   return { positions, data, count, islands }
+}
+
+/**
+ * Whether a far world is in sight: reached by the ring the worlds arrive in, nearer than where
+ * they have faded to nothing (unless its windows are lit: those still show), and inside the
+ * picture, its edge if not its middle.
+ */
+function inSight(island: Island, lens: Camera, ring: number, gone: number): boolean {
+  if (Math.hypot(island.x - SIZE / 2, island.z - SIZE / 2) > ring) return false
+  const away = Math.hypot(island.x - lens.eye[0], island.y - lens.eye[1], island.z - lens.eye[2])
+  if (away > gone && !island.lit) return false
+  if (away <= 30) return true
+  const reachOut = 14 / Math.max(1, away * lens.reach)
+  const spot = project(lens, [island.x, island.y, island.z])
+  return spot !== null && Math.abs(spot[0] - 0.5) < 0.5 + reachOut && Math.abs(spot[1] - 0.5) < 0.5 + reachOut
+}
+
+/**
+ * Which of the far worlds' faces to draw this frame, as runs of their packed list, written into
+ * `runs`; `seen` is room for the worlds in sight, kept between frames. `crowd` is how much of the
+ * other worlds is there, 0 to 1.
+ */
+export function farRunsOf(
+  fleet: Fleet,
+  lens: Camera,
+  crowd: number,
+  runs: [number, number, number][],
+  seen: Island[],
+): void {
+  runs.length = 0
+  seen.length = 0
+  const gone = lens.distance * 1.82 + 24
+  const ring = crowd * 330 + 14
+  for (const island of fleet.islands) if (inSight(island, lens, ring, gone)) seen.push(island)
+  // A face at a time, as they are packed: every seen world's tops, then each wall in turn.
+  for (let slot = 0; slot < FAR_FACES.length; slot++) {
+    let run: [number, number, number] | undefined
+    for (const island of seen) {
+      const [first, count] = island.runs[slot] as [number, number]
+      if (count === 0) continue
+      if (run && run[0] + run[1] === first) run[1] += count
+      else {
+        run = [first, count, slot]
+        runs.push(run)
+      }
+    }
+  }
 }

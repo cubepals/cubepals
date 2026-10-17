@@ -12,6 +12,7 @@
 import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
 import { type ReactNode, useId, useRef, useState } from 'react'
+import type { PublicStatus } from '../../app/(public)/status'
 import { ctaMark } from '../../app/(public)/steps'
 import type { RoomKey } from '../engine/chunk'
 import type { Tone } from '../kit'
@@ -27,12 +28,12 @@ import {
   useChoice,
 } from '../sections/choice'
 import { decisionsOf } from '../sections/LedgerDemo'
-import { Stars } from '../sections/Stars'
+import { lastSaid, trialSaid } from '../sections/Plans'
 import { type Showing, stage } from '../stage'
+import { Arcade } from './Arcade'
 import { Beat, type Playing, useBeat } from './Beat'
 import { playing } from './clock'
 import styles from './film.module.css'
-import { Nav } from './Nav'
 
 /** The gate with the server asleep behind it and nobody at the door. */
 const SHUT = { power: 'stopped', route: 'notice', joining: false, held: false, asking: false }
@@ -66,11 +67,26 @@ const chat = (line: string) => {
 const ADDRESS = addressOf(EXAMPLE_NAME)
 const FRIENDS = ['moss_walker', 'kai', 'noor']
 
+/** Beside each room's "How it works": the way on past the dig, to the prices. */
+const toPrice = (
+  <a href="#price" className={styles.toPrice} {...ctaMark('to_price')}>
+    Straight to what it costs
+  </a>
+)
+
 /**
  * I. Night. The surface, the house dark, and the one sentence the page is for. Coming back here
  * puts the server back to sleep: the film starts from the top.
  */
-export function Night({ create, signedIn }: { create: string; signedIn: boolean }) {
+export function Night({
+  create,
+  plans,
+  arcade,
+}: {
+  create: string
+  plans: PublicPlan[]
+  arcade: PublicStatus | null
+}) {
   const beat = useBeat(() => [[0, () => stage.set({ power: 'asleep', players: 0 })]])
   return (
     <Beat
@@ -81,30 +97,34 @@ export function Night({ create, signedIn }: { create: string; signedIn: boolean 
       tone="night"
       sky
       y={76}
-      side="right"
+      side={0.754}
       zoom="wide"
+      // Framed as concept A1: the island's top a broad lit floor across the right half, seen from
+      // 28 degrees up through a long lens, its left and right corners at 48% and 99% across, the
+      // house set back on it and the column running off the foot of the screen.
+      shot={{ span: 26.3, drop: 0.202, x: 8.5, z: 7.5, el: 28, az: 40.4, fov: 19.2 }}
       className={styles.first}
     >
-      <Stars className={styles.stars} />
       <span className="bl-moon" aria-hidden />
       <div className={styles.words} data-over>
-        <Nav signedIn={signedIn} />
         <p className={styles.kicker}>Minecraft server hosting for friends</p>
-        <h1 className={`bl-display ${styles.headline}`}>Send your friends the address. They’re in.</h1>
+        <h1 className={`bl-display ${styles.headline}`}>
+          <span>Send your friends</span> <span>the address.</span> <span>They’re in.</span>
+        </h1>
         <p className={`bl-lede ${styles.support}`}>
-          Make a server in three decisions. Your friends join from the normal game, whenever they like, and
-          nobody has to start it first.
+          Make a server in three decisions. Your friends join from the normal game, whenever they like.
         </p>
         <div className={styles.go}>
           <Link href={create} className="bl-btn bl-btn--lg" {...ctaMark('hero_create')}>
             Create a server
           </Link>
           <p>
-            Start with a free trial, no card needed.
+            {trialSaid(plans)}
             <br />
-            For Minecraft: Java Edition. Bedrock is coming soon.
+            Minecraft: Java Edition. Bedrock is coming soon.
           </p>
         </div>
+        <Arcade status={arcade} className={styles.arcade} />
       </div>
     </Beat>
   )
@@ -135,10 +155,9 @@ export function Knock() {
       line="Share the address."
       place="top"
     >
-      <Stars className={styles.stars} />
       <div className={styles.address} data-over>
         <span className={styles.label}>Server Address</span>
-        <span className={styles.field}>
+        <span className={styles.field} data-field>
           {ADDRESS.slice(0, typed)}
           {beat.on && <i className={styles.caret} aria-hidden />}
         </span>
@@ -181,13 +200,10 @@ export function Wake({ proof }: { proof: ReactNode }) {
       tone="stone"
       room="edge"
       shot={{ span: 8.4, drop: 0.6 }}
-      line={
-        awake
-          ? 'Asleep, it’s usually back in a couple of seconds. The first start, or one after a change, can take up to a minute.'
-          : 'They join like any server.'
-      }
+      line={awake ? 'If it’s asleep, it wakes up for them.' : 'They join like any server.'}
       place="top"
       proof={proof}
+      beside={toPrice}
     />
   )
 }
@@ -218,9 +234,7 @@ export function Daybreak() {
       shot={{ x: 8.5, z: 6.5, az: 50, el: 17, span: 24, drop: 0.56 }}
       line="No dashboard to open. No one to wait for."
       place="top"
-    >
-      <Stars className={styles.stars} />
-    </Beat>
+    ></Beat>
   )
 }
 
@@ -320,7 +334,8 @@ export function Decided({ plans, proof }: { plans: PublicPlan[]; proof: ReactNod
       y={58.6}
       act="ledger"
       side={0.56}
-      shot={{ x: 12.5, z: 4, az: 84, el: 11, span: 8.6, fov: 34, drop: 0.56 }}
+      // The vault is lit by the server alone: it is taken brighter than the rooms.
+      shot={{ x: 12.5, z: 4, az: 84, el: 11, span: 8.6, fov: 34, drop: 0.56, bright: 1.6 }}
       line={`The other ${decisionsOf(plans, play, party, name)} choices are made for you.`}
       place="top"
       proof={proof}
@@ -359,9 +374,7 @@ export function Leaves() {
       shot={{ x: 9.5, z: 6, az: 58, el: 15, span: 23, drop: 0.56 }}
       line="Hours only count while it’s running."
       place="top"
-    >
-      <Stars className={styles.stars} />
-    </Beat>
+    ></Beat>
   )
 }
 
@@ -405,6 +418,7 @@ function Room({
       line={line}
       place="top"
       proof={proof}
+      beside={toPrice}
     />
   )
 }
@@ -632,7 +646,7 @@ export function Kept({ proof }: { proof: ReactNode }) {
 }
 
 /** Where the film ends: everyone in, and the one button. */
-export function Last({ create }: { create: string }) {
+export function Last({ create, plans }: { create: string; plans: PublicPlan[] }) {
   const beat = useBeat(() => [])
   return (
     <Beat
@@ -649,10 +663,11 @@ export function Last({ create }: { create: string }) {
     >
       <div className={styles.words} data-over>
         <h2 className="bl-display">Start a world with your friends</h2>
-        <div>
+        <div className={styles.go}>
           <Link href={create} className="bl-btn bl-btn--lg" {...ctaMark('last_create')}>
             Create a server
           </Link>
+          <p>{lastSaid(plans)}</p>
         </div>
       </div>
     </Beat>

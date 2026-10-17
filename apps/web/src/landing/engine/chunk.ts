@@ -86,10 +86,14 @@ function strata(world: World): void {
       }
 }
 
+/**
+ * A trunk `height` blocks tall and a crown three layers deep on it, low enough to sit with the
+ * house; its lowest leaves are clear over the head of anyone who walks under it.
+ */
 function tree(world: World, x: number, z: number, height: number): void {
   for (let y = 1; y <= height; y++) world.set(x, y, z, Kind.log)
-  for (let dy = 0; dy <= 3; dy++) {
-    const reach = dy === 3 ? 1 : 2
+  for (let dy = 0; dy <= 2; dy++) {
+    const reach = dy === 2 ? 1 : 2
     for (let dz = -reach; dz <= reach; dz++)
       for (let dx = -reach; dx <= reach; dx++) {
         const corner = Math.abs(dx) === reach && Math.abs(dz) === reach
@@ -105,33 +109,34 @@ function house(world: World): void {
   const x1 = 7
   const z0 = 2
   const z1 = 7
-  // A cobble footing and plank walls, hollow, so the windows have a room to light.
+  // A cobble footing and plank walls, hollow, so the windows have a room to light. Low, as a
+  // cottage is: the island is the picture, and the house sits on it rather than towering over it.
   world.fill({ x0, x1, z0, z1, y0: 1, y1: 1 }, Kind.cobble)
-  world.fill({ x0, x1, z0, z1, y0: 2, y1: 4 }, Kind.planks)
-  world.fill({ x0: x0 + 1, x1: x1 - 1, z0: z0 + 1, z1: z1 - 1, y0: 1, y1: 4 }, Kind.air)
+  world.fill({ x0, x1, z0, z1, y0: 2, y1: 3 }, Kind.planks)
+  world.fill({ x0: x0 + 1, x1: x1 - 1, z0: z0 + 1, z1: z1 - 1, y0: 1, y1: 3 }, Kind.air)
   // A pitched roof, ridge along x, with the gable on the wall the sun reaches.
   for (let step = 0; step <= 3; step++) {
     const za = z0 - 1 + step
     const zb = z1 + 1 - step
     if (za > zb) break
-    world.fill({ x0, x1, z0: za, z1: zb, y0: 5 + step, y1: 5 + step }, Kind.roof)
+    world.fill({ x0, x1, z0: za, z1: zb, y0: 4 + step, y1: 4 + step }, Kind.roof)
     if (zb - za >= 2)
       world.fill(
-        { x0, x1, z0: za + 1, z1: zb - 1, y0: 5 + step, y1: 5 + step },
+        { x0, x1, z0: za + 1, z1: zb - 1, y0: 4 + step, y1: 4 + step },
         step === 0 ? Kind.air : Kind.planks,
       )
     if (zb - za >= 2 && step === 0)
-      world.fill({ x0: x1, x1, z0: za + 1, z1: zb - 1, y0: 5, y1: 5 }, Kind.planks)
+      world.fill({ x0: x1, x1, z0: za + 1, z1: zb - 1, y0: 4, y1: 4 }, Kind.planks)
   }
   // The door and a window beside it on the gable, one above, two on the shaded wall.
   world.set(x1, 1, 4, Kind.dark)
   world.set(x1, 2, 4, Kind.dark)
   world.set(x1, 3, 6, Kind.glass, HOME)
-  world.set(x1, 6, 4, Kind.glass, HOME)
+  world.set(x1, 5, 4, Kind.glass, HOME)
   world.set(3, 3, z1, Kind.glass, HOME)
   world.set(5, 3, z1, Kind.glass, HOME)
-  world.fill({ x0: 3, x1: 3, z0: 3, z1: 3, y0: 6, y1: 9 }, Kind.cobble)
-  world.light(4.5, 3, 5, 4.5, HOME)
+  world.fill({ x0: 3, x1: 3, z0: 3, z1: 3, y0: 5, y1: 7 }, Kind.cobble)
+  world.light(4.5, 2.5, 5, 4.5, HOME)
   world.light(8.6, 2.5, 5.5, 3, HOME)
   world.light(4.5, 2.5, 8.6, 3, HOME)
 }
@@ -153,10 +158,10 @@ function surface(world: World): void {
   // The signpost at the edge, carrying the address.
   world.set(15, 1, 6, Kind.log)
   world.set(15, 2, 6, Kind.planks)
-  // A lamp by the door.
+  // A lamp by the door, on whatever the server is doing: whoever comes to the door can see it.
   world.set(9, 1, 6, Kind.log)
   world.set(9, 2, 6, Kind.log)
-  world.set(9, 3, 6, Kind.lamp, HOME)
+  world.set(9, 3, 6, Kind.lamp, LIT)
   world.light(9.5, 3.5, 6.5, 4.5, HOME)
   house(world)
   tree(world, 13, 1, 4)
@@ -273,13 +278,15 @@ function fleetRoom(world: World): void {
 /**
  * The vault: a hall under the house and the path, open at the chunk's wall, where the server
  * itself stands (engine/cast.ts builds it). It lies beside the first room and
- * above the second, so none opens into another. It has no lamps of its own: the server
- * lights it.
+ * above the second, so none opens into another. Light falls from its ceiling, on its switch,
+ * and the server adds its own.
  */
 function cellar(world: World): void {
   // Two blocks short of the first room: a block is lit by one room only, so the wall between two
   // rooms is a block for each.
   world.carve({ x0: 3, x1: SIZE - 1, z0: 1, z1: 6, y0: -8, y1: -2 }, CELLAR)
+  // Its light from above, on its switch: soft, with no lamp block in the way of the vault's shot.
+  for (const x of [5, 9]) world.light(x + 0.5, -2.5, 3.5, 8, CELLAR)
 }
 
 export function buildChunk(): World {

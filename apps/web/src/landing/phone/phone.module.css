@@ -21,14 +21,6 @@
   padding-block-end: 64px;
   overflow: clip;
 }
-.stars {
-  position: absolute;
-  inset: 0 0 auto;
-  width: 100%;
-  height: min(100svh, 46rem);
-  color: var(--paper);
-  pointer-events: none;
-}
 /* What the page is, in the words people search for: small and quiet over the headline. */
 .kicker {
   position: relative;
@@ -37,15 +29,26 @@
   font-size: 0.875rem;
   line-height: 1.35;
 }
-.headline {
+/* Three lines, each its own, so the button still fits the first screen of the smallest phone.
+   Doubled up (`.night >`) so it outranks the shared `.bl-display`, whichever stylesheet loads
+   last. "Send your friends", the longest line, is 8.08 of its font size wide in Geologica 800 at
+   this tracking, measured in a browser; it is given 8.4, so it fits inside the gutters with a
+   little to spare in any browser's rendering. 44 px where that fits, less where it doesn't. The
+   padding under it is the room the descenders of "They’re" hang into, below the line box, so
+   the line under it is a clear 16 px from the glyphs themselves. */
+.night > .headline {
   position: relative;
-  max-width: 11em;
-  margin-top: 6px;
-  font-size: clamp(2.5rem, 11vw, 4.75rem);
-  text-wrap: balance;
+  margin-top: 12px;
+  padding-bottom: 0.2em;
+  font-size: min(44px, calc((100vw - 2 * var(--gutter)) / 8.4));
+  line-height: 0.95;
+}
+.night > .headline span {
+  display: block;
+  white-space: nowrap;
 }
 
-.support {
+.night > .support {
   position: relative;
   margin-top: 16px;
 }
@@ -57,6 +60,20 @@
   height: min(75vw, 64svh, 30rem);
   margin-inline: calc(var(--gutter) * -1);
 }
+/* The night's picture as printed beforehand (public/imagery/landing-still-night.png), centred and never scaled, until the
+   worker's own print of it is in. */
+.still img {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  max-width: none;
+  translate: -50% -50%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+.still canvas[data-printed] ~ img {
+  display: none;
+}
 .still canvas {
   display: block;
   width: 100%;
@@ -64,7 +81,7 @@
   image-rendering: pixelated;
 }
 .night .still {
-  margin-block: 8px 4px;
+  margin-block: 24px 4px;
 }
 
 /* A phone on its side has a wide screen and little height: the picture stands beside the words,
@@ -76,7 +93,7 @@
     align-content: start;
     column-gap: var(--gutter);
   }
-  .night > :not(.stars) {
+  .night > * {
     grid-column: 1 / -1;
   }
   .night > .kicker,
@@ -107,10 +124,23 @@
 
 .go {
   position: relative;
+  margin-top: 20px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 12px 20px;
+}
+/* The trial line and the one under the last button: no word left alone on a line. `pretty` where
+   the browser has it, `balance` where it doesn't. */
+.go p,
+.last .under {
+  text-wrap: balance;
+}
+@supports (text-wrap: pretty) {
+  .go p,
+  .last .under {
+    text-wrap: pretty;
+  }
 }
 .go p {
   margin: 0;
@@ -176,6 +206,11 @@
   gap: 28px;
   /* Room under the button for the one that follows the reader, which steps aside here. */
   padding-block: 72px 96px;
+}
+.last .under {
+  margin: -12px 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.35;
 }
 .last h2 {
   max-width: 10em;

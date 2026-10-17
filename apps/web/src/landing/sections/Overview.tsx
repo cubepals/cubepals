@@ -12,7 +12,6 @@ import { ROOMS, roomFaces, roomY } from '../engine/chunk'
 import { ROOM_NAMES } from '../names'
 import styles from './overview.module.css'
 import { RoomLights } from './RoomLights'
-import { Stars } from './Stars'
 
 /**
  * The turn of the page. Everything above this is what a player needs; here the camera stands back
@@ -95,7 +94,6 @@ export function Worlds({ played }: { played?: boolean } = {}) {
       aria-labelledby="worlds-title"
     >
       <div className={styles.held} data-scene>
-        <Stars className={styles.stars} />
         <span className={`bl-moon ${styles.moon}`} aria-hidden />
         <div className={styles.words} data-words>
           <h2 id="worlds-title" className="bl-display">

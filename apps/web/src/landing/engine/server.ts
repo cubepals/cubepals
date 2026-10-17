@@ -349,8 +349,9 @@ export class Rack {
     // One just pushed home lights them one after another.
     if (age < 0.7 + lamp * 0.1) return dark
     // Switched on, it boots from the bottom tray up, a lamp at a time; held lit while it boots,
-    // and then each lamp keeps its own time.
-    const booted = since - tray * 0.3 - lamp * 0.09
+    // and then each lamp keeps its own time. A tray's four lamps come on over 0.3 s, quickly and
+    // then slower (out-quart), and the next tray begins 0.12 s after.
+    const booted = since - tray * 0.42 - 0.3 * (1 - (1 - lamp / 4) ** 0.25)
     if (booted < 0) return dark
     if (this.state === 'booting' || hot || booted < 1.2 || age < 1.6) return lit
     const beat = Math.floor(clock / 1.7 + hash3(tray + this.seed * 7, lamp, 3) * 7)

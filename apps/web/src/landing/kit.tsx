@@ -36,6 +36,8 @@ export interface Shot {
   /** Where across the chunk it looks, in blocks, when that isn't the middle. */
   x?: number
   z?: number
+  /** How bright the print is taken here, 1 as it is: the tone curve's exposure is scaled by it. */
+  bright?: number
 }
 
 /** A shot as the attributes the camera reads off a section. */
@@ -49,6 +51,7 @@ export const shotAttributes = (shot: Shot | undefined) => ({
   'data-crowd': shot?.crowd,
   'data-x': shot?.x,
   'data-z': shot?.z,
+  'data-bright': shot?.bright,
 })
 
 /**

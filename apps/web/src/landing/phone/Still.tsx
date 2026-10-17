@@ -27,7 +27,16 @@ const printer = () => {
   return worker
 }
 
-export function Still({ still, className }: { still: Which; className?: string }) {
+export function Still({
+  still,
+  first,
+  className,
+}: {
+  still: Which
+  /** The picture as printed once beforehand, shown until it is printed here, so it is there at once. */
+  first?: { src: string; width: number; height: number }
+  className?: string
+}) {
   const frame = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const [chimney, setChimney] = useState<Printed['chimney']>(null)
@@ -43,7 +52,11 @@ export function Still({ still, className }: { still: Which; className?: string }
       const width = Math.round(size.width)
       if (!near || !loaded || width === 0 || width === asked) return
       asked = width
-      printer().postMessage({ still, width, height: Math.round(size.height) })
+      // Three device pixels a dot, however fine the screen, so the picture reads as a print.
+      const dot = 3 / (window.devicePixelRatio || 1)
+      const across = Math.round(size.width / dot)
+      const down = Math.round(size.height / dot)
+      printer().postMessage({ still, width, across, down, dot })
     }
     const answered = (event: MessageEvent<Answer>) => {
       const { printed } = event.data
@@ -83,6 +96,11 @@ export function Still({ still, className }: { still: Which; className?: string }
   return (
     <div ref={frame} className={className} data-still={still} aria-hidden>
       <canvas ref={canvas} width={0} height={0} />
+      {first && (
+        // A print's dots are kept whole: drawn one to a CSS pixel, never scaled to fit.
+        // biome-ignore lint/performance/noImgElement: a fixed print, not a photo to resize.
+        <img src={first.src} width={first.width} height={first.height} alt="" decoding="sync" />
+      )}
       {chimney && (
         <span
           className="bl-snore bl-game"

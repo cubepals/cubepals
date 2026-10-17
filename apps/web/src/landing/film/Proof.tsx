@@ -24,6 +24,7 @@ export function Proof({
   detail,
   open,
   onOpen,
+  beside,
   children,
 }: {
   /** What the way in says: a few words. */
@@ -34,6 +35,8 @@ export function Proof({
   detail: string
   open: boolean
   onOpen: (open: boolean) => void
+  /** What stands beside the way in, at the foot of the picture: a link on, say. */
+  beside?: ReactNode
   children: ReactNode
 }) {
   const id = useId()
@@ -60,18 +63,20 @@ export function Proof({
 
   return (
     <>
-      <button
-        ref={button}
-        type="button"
-        className={styles.how}
-        data-over
-        aria-expanded={open}
-        aria-controls={id}
-        {...detailMark(detail)}
-        onClick={() => onOpen(!open)}
-      >
-        {open ? 'Back to the picture' : says}
-      </button>
+      <div className={styles.foot} data-over>
+        <button
+          ref={button}
+          type="button"
+          className={styles.how}
+          aria-expanded={open}
+          aria-controls={id}
+          {...detailMark(detail)}
+          onClick={() => onOpen(!open)}
+        >
+          {open ? 'Back to the picture' : says}
+        </button>
+        {!open && beside}
+      </div>
       {open && (
         <section
           ref={panel}

@@ -4,391 +4,27 @@
 
 /**
  * Draws a voxel world as a one-bit print, from any angle: every surface is either ink or paper,
- * with a third colour for anything lit from within. Two passes at a low resolution, scaled up
- * without smoothing so each drawn pixel stays a square.
+ * with a third colour for anything lit from within. It is lit first and printed after, so the
+ * print carries depth. The passes run at a low resolution, scaled up without smoothing so each
+ * drawn dot stays a square.
  *
- * Pass one writes, for every pixel, how bright the surface there is, how much lamplight reaches
- * it, and which flat plane it belongs to. Pass two turns brightness into dots with an ordered
- * dither and draws an ink line wherever two different planes meet, so blocks that lie flat
- * together read as one surface and every corner reads as a corner.
+ * The shadow map is drawn from the key light, and only again when the light moves or the world
+ * changes. Pass one lights every pixel and writes how bright it is, whether it glows, and which
+ * flat plane it belongs to (scene-pass.ts). What glows is blurred, one way and then the other.
+ * Pass two turns brightness into dots through a tone curve and an ordered dither, and draws a
+ * line wherever two different planes meet, so blocks that lie flat together read as one surface
+ * and every corner reads as a corner (print-pass.ts). The light that doesn't move is baked into a
+ * grid when the world is sent (bake.ts) and read by pass one from a 3D texture (volume.ts).
  */
-import type { Light } from './world'
-
-const MAX_LIGHTS = 24
-
-const SCENE_VERT = `#version 300 es
-precision highp float;
-layout(location=0) in vec3 aCorner;
-layout(location=1) in float aFace;
-layout(location=2) in vec2 aUv;
-layout(location=3) in vec3 iPos;
-layout(location=4) in vec4 iA;
-layout(location=5) in vec4 iB;
-layout(location=6) in vec2 iTurn;
-uniform mat4 uCamera;
-uniform vec2 uShift;
-uniform float uNudge;
-uniform vec2 uWave;
-uniform vec3 uEye;
-uniform vec3 uFog;
-uniform float uTime;
-uniform float uLoose;
-uniform float uFace[6];
-uniform float uRoom[6];
-out vec3 vWorld;
-out float vFog;
-out vec2 vUv;
-flat out vec2 vLit;
-flat out int vFace;
-flat out vec4 vA;
-flat out vec4 vB;
-flat out vec3 vCell;
-flat out float vSolid;
-void main() {
-  // What moves is made of loose parts: boxes of any size, every face of them drawn. Their bytes
-  // say other things than a block's do (see Renderer.setMoving).
-  bool loose = uLoose > 0.5;
-  int mask = loose ? 63 : int(iA.a * 255.0 + 0.5);
-  int face = int(aFace + 0.5);
-  // A face with a block against it is never drawn: its corners are sent off the picture here,
-  // before any of the work below is done for them.
-  if ((mask & (1 << face)) == 0) {
-    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-    return;
-  }
-  // The far worlds arrive as a ring spreading out from this one: each block grows from nothing
-  // and rises into its place as the ring's edge passes it.
-  float grow = uWave.y <= 0.0 ? 1.0 : clamp((uWave.x - distance(iPos.xz, vec2(8.0))) / uWave.y, 0.0, 1.0);
-  // A block may be drawn smaller than whole (one growing back after being dug), about its middle.
-  float size = iB.a * grow;
-  int kind = int(iA.g * 255.0 + 0.5);
-  // What moves by itself moves a few times a second, like the frames of a drawn loop.
-  float tick = floor(uTime * 9.0) / 9.0;
-  // Leaves breathe, each block a little out of step with the next, and the whole crown leans.
-  if (!loose && kind == 7) size *= 1.04 + 0.05 * sin(tick * 2.6 + dot(iPos, vec3(1.3, 2.1, 1.7)));
-  vec3 p = iPos + 0.5 + (aCorner - 0.5) * size;
-  // A loose part: where its low corner is, and how far it reaches each way (up to two blocks).
-  // It may be turned about its own middle: tipped forward or back, and then turned to face any
-  // way round. That is how an arm swings from a shoulder and a figure turns to look at something.
-  vLit = vec2(0.0);
-  if (loose) {
-    vec3 reach = vec3(iA.a, iB.r, iB.g) * 2.0;
-    vec3 o = (aCorner - 0.5) * reach;
-    vec3 n = face == 0 ? vec3(0.0, 1.0, 0.0) : face == 1 ? vec3(1.0, 0.0, 0.0) : face == 2 ? vec3(0.0, 0.0, 1.0)
-      : face == 3 ? vec3(0.0, -1.0, 0.0) : face == 4 ? vec3(-1.0, 0.0, 0.0) : vec3(0.0, 0.0, -1.0);
-    float cp = cos(iTurn.y);
-    float sp = sin(iTurn.y);
-    o = vec3(o.x, o.y * cp - o.z * sp, o.y * sp + o.z * cp);
-    n = vec3(n.x, n.y * cp - n.z * sp, n.y * sp + n.z * cp);
-    float cy = cos(iTurn.x);
-    float sy = sin(iTurn.x);
-    o = vec3(o.x * cy + o.z * sy, o.y, -o.x * sy + o.z * cy);
-    n = vec3(n.x * cy + n.z * sy, n.y, -n.x * sy + n.z * cy);
-    p = iPos + reach * 0.5 + o;
-    // A turned face takes its light from the ways it now leans, each by how far it leans there.
-    vec3 w = n * n;
-    vLit.x = w.y * (n.y > 0.0 ? uFace[0] : uFace[3]) + w.x * (n.x > 0.0 ? uFace[1] : uFace[4])
-      + w.z * (n.z > 0.0 ? uFace[2] : uFace[5]);
-    vLit.y = w.y * (n.y > 0.0 ? uRoom[0] : uRoom[3]) + w.x * (n.x > 0.0 ? uRoom[1] : uRoom[4])
-      + w.z * (n.z > 0.0 ? uRoom[2] : uRoom[5]);
-  }
-  if (!loose && kind == 7) {
-    p.x += 0.09 * sin(tick * 1.7 + iPos.y * 0.9 + iPos.z * 0.35);
-    p.z += 0.07 * sin(tick * 1.3 + iPos.y * 0.7 + iPos.x * 0.35);
-  }
-  // Water lies a little under its bank and swells: its surface is one sheet, so the corners that
-  // blocks share move together.
-  if (!loose && kind == 10 && aCorner.y > 0.5) {
-    vec2 at = iPos.xz + aCorner.xz;
-    p.y -= 0.24 + 0.13 * sin(tick * 2.8 + at.x * 1.1 + at.y * 0.7) + 0.06 * sin(tick * 4.1 - at.y * 1.6);
-  }
-  p.y -= (1.0 - grow) * (1.0 - grow) * 14.0;
-  // The worlds a long way off fade into the page, the way far hills do.
-  vFog = uFog.z * clamp((distance(iPos, uEye) - uFog.x) / uFog.y, 0.0, 1.0);
-  vec4 clip = uCamera * vec4(p, 1.0);
-  // The whole picture is slid across the screen, so what the camera looks at can be held to one
-  // side of it.
-  clip.xy += uShift * clip.w;
-  clip.z -= uNudge * clip.w;
-  gl_Position = clip;
-  vWorld = p;
-  vUv = aUv;
-  vFace = face;
-  vA = iA;
-  // A loose part is lit by the day when it is out of doors and by its room when it is in one.
-  float outside = iB.b > 0.0 ? 0.0 : 63.0 / 255.0;
-  vB = loose ? vec4(outside, outside, iB.b, 1.0) : iB;
-  // A part has no cell of its own on the grid; its number stands in, so its grain holds still as
-  // it moves and its faces get lines of their own.
-  vCell = loose ? vec3(float(gl_InstanceID) * 1.37 + 500.0) : iPos;
-  // How much of a loose part is there: all of it, or some of its dots while it comes or goes.
-  vSolid = loose ? iB.a : 1.0;
-}`
-
-const SCENE_FRAG = `#version 300 es
-precision highp float;
-in vec3 vWorld;
-in float vFog;
-in vec2 vUv;
-flat in vec2 vLit;
-flat in int vFace;
-flat in vec4 vA;
-flat in vec4 vB;
-flat in vec3 vCell;
-flat in float vSolid;
-uniform float uFace[6];
-uniform float uRoom[6];
-uniform float uShadow;
-uniform float uLevels;
-uniform float uTime;
-uniform float uLoose;
-uniform vec4 uLights[${MAX_LIGHTS}];
-uniform float uLightOn[${MAX_LIGHTS}];
-uniform float uLightGroup[${MAX_LIGHTS}];
-uniform int uLightCount;
-uniform float uGroups[16];
-uniform float uDetail;
-uniform float uRock;
-uniform vec3 uPick;
-layout(location=0) out vec4 o0;
-layout(location=1) out vec4 o1;
-
-float hash(vec3 p) {
-  p = fract(p * vec3(0.1031, 0.1030, 0.0973));
-  p += dot(p, p.yxz + 33.33);
-  return fract((p.x + p.y) * p.z);
-}
-
-float bayer(vec2 p) {
-  int x = int(p.x) & 3;
-  int y = int(p.y) & 3;
-  int m[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
-  return (float(m[y * 4 + x]) + 0.5) / 16.0;
-}
-
-void main() {
-  // A part that is coming or going is drawn in some of its dots only, and what is behind shows
-  // through the rest: it thins away the way far hills do, in the print's own grain.
-  bool ghost = vSolid < 0.995;
-  if (ghost && vSolid <= bayer(gl_FragCoord.xy)) discard;
-  float tone = vA.r;
-  int kind = int(vA.g * 255.0 + 0.5);
-  int group = int(vA.b * 255.0 + 0.5);
-  int sunny = int(vB.r * 255.0 + 0.5);
-  int outdoors = int(vB.g * 255.0 + 0.5);
-  int room = int(vB.b * 255.0 + 0.5);
-  float sun = (sunny & (1 << vFace)) != 0 ? 1.0 : 0.0;
-  bool open = (outdoors & (1 << vFace)) != 0;
-  // A room with its switch only part-way up is still a room you can see into: the walls keep most
-  // of their light and it is the lamps' warmth that dims.
-  float level = uGroups[room];
-  bool loose = uLoose > 0.5;
-  float roomLight = (loose ? vLit.y : uRoom[vFace]) * min(1.0, level * 8.0) * (0.6 + 0.4 * level);
-
-  // Each kind gets a little of its own grain, so a field of one material isn't a flat tint.
-  float grain = hash(vCell) - 0.5;
-  vec2 texel = floor(vUv * 4.0);
-  float fine = hash(vec3(texel, 7.0) + vCell * 3.0) - 0.5;
-  // (With the detail turned down a material is one flat tone: the plainer, sharper print.)
-  if (kind == 2) tone += step(0.4, grain) * 0.2 * uDetail;
-  if (kind == 3) tone -= step(0.44, grain) * 0.25 * uDetail;
-  if (kind == 4) tone += step(0.44, grain) * 0.25 * uDetail;
-  if (kind == 5) tone += fine * 0.3 * uDetail;
-  if (kind == 7) tone += grain * 0.5 * uDetail;
-  if (kind == 9) tone += step(0.2, fine) * 0.25 * uDetail;
-  if (kind == 14 && uDetail > 0.5) tone = fine > 0.15 ? 0.0 : tone;
-  // Sand is as pale as the grass beside it, so it is told apart by its pebbles.
-  if (kind == 23) tone -= step(0.24, fine) * 0.55 * uDetail;
-  if (kind == 10) {
-    // Water: hatched with short dashes that run both ways, crossed by darker troughs that travel
-    // over it, with a glint here and there. Stepped in time, like everything that moves by itself.
-    float tick = floor(uTime * 9.0) / 9.0;
-    float row = floor(vWorld.z * 3.0);
-    float way = mod(row, 2.0) * 2.0 - 1.0;
-    float dash = step(0.5, fract(vWorld.x * 0.8 + row * 0.37 + tick * 0.55 * way));
-    float on = step(fract(vWorld.z * 3.0), 0.34);
-    tone = 1.0 - on * dash * 0.9;
-    // Two ripples a block and a half apart, each a narrow shadow, so the pond stays one sheet of
-    // water with waves crossing it and is never cut in two by one.
-    float trough = sin(vWorld.x * 2.1 + vWorld.z * 3.3 - tick * 4.2);
-    tone -= smoothstep(0.62, 0.92, trough) * 0.6;
-    float glint = step(0.975, hash(vec3(floor(vWorld.xz * 2.0), floor(tick * 2.5))));
-    tone = max(tone, glint);
-  }
-
-  // A lit room is brighter than the rock it is cut from, so it reads as a room and not as more wall.
-  if (!open) tone = mix(tone, 1.0, 0.45);
-  // The rock a room is cut from is the margin of the picture, not the picture: it prints quieter.
-  if (open && !loose && vWorld.y < -0.5) tone = mix(tone, 1.0, uRock);
-  float daylight = open ? (loose ? vLit.x : uFace[vFace]) * mix(uShadow, 1.0, sun) : roomLight;
-  float lum = clamp(tone * daylight, 0.0, 1.0);
-
-  float warm = 0.0;
-  for (int i = 0; i < ${MAX_LIGHTS}; i++) {
-    if (i >= uLightCount) break;
-    // A room's lamps light that room; the lamps outdoors light the outdoors. Rock is not glass.
-    float mine = open ? 1.0 : float(room);
-    if (abs(uLightGroup[i] - mine) > 0.5) continue;
-    float d = distance(vWorld, uLights[i].xyz);
-    float f = clamp(1.0 - d / uLights[i].w, 0.0, 1.0);
-    warm += uLightOn[i] * f * f;
-  }
-  warm = clamp(warm * (0.35 + tone * 0.65), 0.0, 1.0);
-  // A few flat steps of grey, so each face prints as one clean pattern rather than as noise.
-  lum = floor(lum * uLevels + 0.5) / uLevels;
-  warm = floor(warm * uLevels + 0.5) / uLevels;
-
-  float glow = 0.0;
-  if (group > 0 && (kind == 12 || kind == 13 || kind == 22)) glow = uGroups[group];
-
-  // Which flat plane this is: the way it faces, how far along that way, and what it's made of.
-  int axis = vFace % 3;
-  float along = axis == 0 ? vCell.y : (axis == 1 ? vCell.x : vCell.z);
-  float plane = along + (vFace < 3 ? 1.0 : 0.0);
-  float id = float(vFace) * 7.0 + plane * 13.0 + float(kind) * 31.0;
-  bool gridded = kind == 16 || kind == 15 || kind == 18 || kind == 13 || kind == 12;
-  if (gridded) id += dot(vCell, vec3(3.0, 17.0, 5.0));
-  // The block the cursor is on: bare paper with a line round it, the way the game marks one.
-  if (all(equal(vCell, uPick))) {
-    lum = 1.0;
-    warm = 0.0;
-    id += 977.0 + dot(vCell, vec3(3.0, 17.0, 5.0));
-  }
-  id = mod(id + 8192.0, 65535.0) + 1.0;
-  o0 = vec4(lum, warm, glow, 1.0);
-  // (Half marks a part that is thinning: no line is drawn round its scattered dots.)
-  o1 = vec4(mod(id, 256.0) / 255.0, floor(id / 256.0) / 255.0, vFog, ghost ? 0.5 : 1.0);
-}`
-
-const PRINT_VERT = `#version 300 es
-void main() {
-  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
-  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
-}`
-
-const PRINT_FRAG = `#version 300 es
-precision highp float;
-uniform sampler2D uShade;
-uniform sampler2D uPlane;
-uniform vec3 uLow[4];
-uniform vec3 uHigh[4];
-uniform vec3 uLine[4];
-uniform vec3 uWarm;
-uniform vec4 uEdges;
-uniform int uRegions[5];
-uniform ivec2 uSize;
-out vec4 o;
-
-float bayer(ivec2 p) {
-  int x = p.x & 3;
-  int y = p.y & 3;
-  int m[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
-  return (float(m[y * 4 + x]) + 0.5) / 16.0;
-}
-
-void main() {
-  ivec2 c = ivec2(gl_FragCoord.xy);
-  ivec2 hi = uSize - 1;
-  vec4 shade = texelFetch(uShade, c, 0);
-  vec4 here = texelFetch(uPlane, c, 0);
-  vec4 right = texelFetch(uPlane, min(c + ivec2(1, 0), hi), 0);
-  vec4 down = texelFetch(uPlane, max(c - ivec2(0, 1), ivec2(0)), 0);
-  // A line is drawn where one plane meets another, but not round the dots of something that is
-  // thinning away: those would close up into a blot.
-  bool thin = abs(here.a - 0.5) < 0.2;
-  bool edge = !thin && (
-    (any(notEqual(here.rg, right.rg)) && abs(right.a - 0.5) >= 0.2) ||
-    (any(notEqual(here.rg, down.rg)) && abs(down.a - 0.5) >= 0.2));
-  if (shade.a < 0.5 && !edge) { o = vec4(0.0); return; }
-  // The page behind the print changes colour on the way down, and the print changes with it, on
-  // the same row.
-  float row = float(uSize.y - 1 - c.y);
-  int region = row < uEdges.x ? 0 : (row < uEdges.y ? 1 : (row < uEdges.z ? 2 : (row < uEdges.w ? 3 : 4)));
-  int band = uRegions[region];
-  float t = bayer(c);
-  float t2 = bayer(c + ivec2(2, 1));
-  // Far off, a world thins to scattered dots and then to nothing, whatever the page's colour.
-  float fog = max(here.b, max(right.b, down.b));
-  // A lit window still shows from a long way off.
-  if (fog > 0.0 && shade.b > t * 0.9) { o = vec4(uWarm, 1.0); return; }
-  if (fog > bayer(c + ivec2(1, 3))) { o = vec4(0.0); return; }
-  if (edge) { o = vec4(uLine[band], 1.0); return; }
-  if (shade.b > t * 0.9) { o = vec4(uWarm, 1.0); return; }
-  if (shade.g > t2) { o = vec4(uWarm, 1.0); return; }
-  o = vec4(shade.r > t ? uHigh[band] : uLow[band], 1.0);
-}`
-
-export type Rgb = readonly [number, number, number]
-
-/** The colours of a print: the dark dot, the light dot and the line. */
-export interface Palette {
-  low: Rgb
-  high: Rgb
-  line: Rgb
-}
-
-/** What one frame needs to know. Colours are 0–1 RGB. */
-export interface Frame {
-  /** The camera: world to clip space, column-major, as WebGL takes it. */
-  camera: Float32Array
-  /** How far the whole picture is slid across and up the screen, in half-screens. */
-  shift: readonly [number, number]
-  /** How much daylight a face gets, by the way it faces: up, +x, +z, down, −x, −z. */
-  faceLight: readonly number[]
-  /** What's left of that light in a shadow, 0–1. */
-  shadow: number
-  /** How many steps of grey the print has between ink and paper. */
-  levels: number
-  /** How much of each material's own grain is drawn, 0 to 1. */
-  detail: number
-  /** How far the rock under the grass is lifted toward bare paper, 0 to 1. */
-  rock?: number
-  /** How bright each light switch is, 0–1: sixteen of them. Switch 0 is unused. */
-  groups: ArrayLike<number>
-  /** The palettes a print can be in: the sky, the light ground, the dark ground, the night. */
-  bands: readonly [Palette, Palette, Palette, Palette]
-  /**
-   * The drawn rows, counted from the top, where the page behind changes colour (four of them,
-   * rising; the ones not needed are far below the picture), and which palette each of the five
-   * stretches they make is printed in.
-   */
-  edges: readonly [number, number, number, number]
-  regions: readonly [number, number, number, number, number]
-  warm: Rgb
-  /**
-   * A light that isn't part of the world (a torch somebody carries, the server's own glow): where
-   * it is, how far it reaches, how bright, and whose it is (1 out of doors, or a room's switch).
-   */
-  torch: readonly [number, number, number, number, number, number] | null
-  time: number
-  /** The range of world height in view, to choose which lights count. */
-  viewY: readonly [number, number]
-  /** The block the cursor is on, or null. */
-  pick: readonly [number, number, number] | null
-  /**
-   * Which of the world's blocks to draw, as runs of the packed list (first block, how many): the
-   * layers the camera can see, and whatever digging has uncovered since.
-   */
-  runs: readonly (readonly [number, number])[]
-  /**
-   * Which of the far worlds' faces to draw, as runs of their packed list: the first, how many, and
-   * which of the five faces kept they are (0 to 4).
-   */
-  farRuns: readonly (readonly [number, number, number])[]
-  /** Where the camera's eye is, and how far off the far worlds start to fade and are gone by. */
-  eye: readonly [number, number, number]
-  fog: readonly [number, number]
-  /** How much of the other worlds is there, 0 to 1: they spread outward from this one. */
-  crowd: number
-}
-
-export interface Packed {
-  positions: Float32Array
-  data: Uint8Array
-  count: number
-  /** For loose parts only: how each is turned about its middle, two angles a part (round, tipped). */
-  turns?: Float32Array
-}
+import { baked } from './bake'
+import type { Vec3 } from './camera'
+import type { Frame, Packed, Palette } from './frame'
+import { Maps } from './maps'
+import { GLOW_FRAG, PRINT_FRAG, PRINT_VERT } from './print-pass'
+import { MAX_LIGHTS, QUICK_FRAG, SCENE_FRAG, SCENE_VERT, SHADOW_FRAG } from './scene-pass'
+import { lampMatrix, lightMatrix, MAP_SIZE } from './shadow'
+import { Volume } from './volume'
+import { CORNERS, type World } from './world'
 
 function compile(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
   const shader = gl.createShader(type)
@@ -436,55 +72,19 @@ function linked(gl: WebGL2RenderingContext, { program, vertex, fragment }: Linki
 // A block's six faces, two triangles each: corner, face, and where on the face. The faces are in
 // the world's order: up, +x, +z, down, −x, −z.
 const FACES: number[] = []
-function quad(face: number, corners: [number, number, number][]) {
-  const uvs: [number, number][] = [
-    [0, 0],
-    [1, 0],
-    [1, 1],
-    [0, 1],
-  ]
+const UVS = [
+  [0, 0],
+  [1, 0],
+  [1, 1],
+  [0, 1],
+] as const
+CORNERS.forEach((corners, face) => {
   for (const i of [0, 1, 2, 0, 2, 3]) {
-    const corner = corners[i] as [number, number, number]
-    const uv = uvs[i] as [number, number]
+    const corner = corners[i] as readonly [number, number, number]
+    const uv = UVS[i] as readonly [number, number]
     FACES.push(corner[0], corner[1], corner[2], face, uv[0], uv[1])
   }
-}
-quad(0, [
-  [0, 1, 0],
-  [1, 1, 0],
-  [1, 1, 1],
-  [0, 1, 1],
-])
-quad(1, [
-  [1, 0, 1],
-  [1, 0, 0],
-  [1, 1, 0],
-  [1, 1, 1],
-])
-quad(2, [
-  [0, 0, 1],
-  [1, 0, 1],
-  [1, 1, 1],
-  [0, 1, 1],
-])
-quad(3, [
-  [0, 0, 0],
-  [1, 0, 0],
-  [1, 0, 1],
-  [0, 0, 1],
-])
-quad(4, [
-  [0, 0, 0],
-  [0, 0, 1],
-  [0, 1, 1],
-  [0, 1, 0],
-])
-quad(5, [
-  [1, 0, 0],
-  [0, 0, 0],
-  [0, 1, 0],
-  [1, 1, 0],
-])
+})
 
 /** Floats to a corner, and the corners of the five faces a far world can show: all but its underside. */
 const CORNER = 6
@@ -492,6 +92,17 @@ const NEAR_FACES = [...FACES.slice(0, 18 * CORNER), ...FACES.slice(24 * CORNER)]
 
 /** How much light a room's own switch gives a face, by the way it faces. */
 const ROOM_LIGHT = new Float32Array([1, 0.86, 0.64, 0.5, 0.7, 0.78])
+
+/** The KHR_parallel_shader_compile extension's COMPLETION_STATUS_KHR, which WebGL names nowhere. */
+const COMPLETION_STATUS_KHR = 0x91b1
+
+/** The programs: the quick look's three, which the first frames are drawn with, and the lit look's. */
+type Program = 'quick' | 'print' | 'blur' | 'scene' | 'shadow'
+const QUICK: readonly Program[] = ['quick', 'print', 'blur']
+const LIT: readonly Program[] = ['scene', 'shadow']
+
+/** Every corner of every face open: what a part without shading of its own is drawn with. */
+const OPEN = 0xffffffff
 
 interface Batch {
   vao: WebGLVertexArrayObject
@@ -505,28 +116,52 @@ interface Batch {
   /** How its parts are turned, for the batch of loose parts; a block of the world is never turned. */
   turns: WebGLBuffer | null
   turnsRoom: number
+  /** How its corners are shaded, for the world's own blocks. */
+  ao: WebGLBuffer | null
+}
+
+/** The textures a frame is drawn into before it is printed, at the print's own size. */
+interface Target {
+  fb: WebGLFramebuffer
+  shade: WebGLTexture
+  plane: WebGLTexture
+  depth: WebGLRenderbuffer
+  /** What glows, blurred one way and then the other, each into a framebuffer of its own. */
+  glow: [WebGLTexture, WebGLTexture]
+  glowFb: [WebGLFramebuffer, WebGLFramebuffer]
+}
+
+/**
+ * A canvas on the page says, with `data-lit`, once it shows the lit print, so the still printed
+ * beforehand that stands in for it (`.bl-first`, FilmPage.tsx) can give way. A worker's canvas has
+ * no attributes.
+ */
+function markLit(canvas: HTMLCanvasElement | OffscreenCanvas): void {
+  if ('dataset' in canvas && !('lit' in canvas.dataset)) canvas.dataset.lit = ''
 }
 
 export class Renderer {
   private readonly gl: WebGL2RenderingContext
-  private readonly scene: WebGLProgram
-  private readonly print: WebGLProgram
+  /** The programs while they compile, and each once it has. */
+  private readonly linking: Record<Program, Linking>
+  private readonly programs: Partial<Record<Program, WebGLProgram>> = {}
+  /** Whether a frame has been drawn: without the parallel compile, the lit look is waited for after it. */
+  private drawn = false
+  /** Whether the driver can say a program has finished compiling without being waited on. */
+  private readonly parallel: boolean
   private readonly corners: WebGLBuffer
   private readonly nearCorners: WebGLBuffer
   private readonly still: Batch
   private readonly moving: Batch
   private readonly far: Batch
-  private readonly sceneUniforms = new Map<string, WebGLUniformLocation | null>()
-  private readonly printUniforms = new Map<string, WebGLUniformLocation | null>()
-  private target: {
-    fb: WebGLFramebuffer
-    shade: WebGLTexture
-    plane: WebGLTexture
-    depth: WebGLRenderbuffer
-  } | null = null
-  private lights: Light[] = []
+  private readonly uniforms = new Map<WebGLProgram, Map<string, WebGLUniformLocation | null>>()
+  private target: Target | null = null
+  /** The shadow maps, and what the key light's was last drawn for (the light's way and the world). */
+  private readonly maps: Maps
+  private readonly volume: Volume
+  private mapFor = ''
+  private worldVersion = 0
   // What a frame hands the shaders, kept between frames so drawing allocates nothing.
-  private readonly faceLight = new Float32Array(6)
   private readonly groups = new Float32Array(16)
   private readonly lightWhere = new Float32Array(MAX_LIGHTS * 4)
   private readonly lightOn = new Float32Array(MAX_LIGHTS)
@@ -535,10 +170,13 @@ export class Renderer {
   private readonly high = new Float32Array(12)
   private readonly line = new Float32Array(12)
   private readonly regions = new Int32Array(5)
+  private lightView: Float32Array = new Float32Array(16)
+  private lampView: Float32Array = new Float32Array(16)
   width = 1
   height = 1
 
-  constructor(canvas: HTMLCanvasElement | OffscreenCanvas) {
+  /** `mapSize` is how many texels a side the shadow map has; a device short of memory can ask for fewer. */
+  constructor(canvas: HTMLCanvasElement | OffscreenCanvas, mapSize = MAP_SIZE) {
     const gl = canvas.getContext('webgl2', {
       alpha: true,
       antialias: false,
@@ -552,19 +190,19 @@ export class Renderer {
     })
     if (!gl) throw new Error('WebGL 2 is not available')
     this.gl = gl
-    const scene = link(gl, SCENE_VERT, SCENE_FRAG)
-    const print = link(gl, PRINT_VERT, PRINT_FRAG)
-    this.scene = linked(gl, scene)
-    this.print = linked(gl, print)
-    // What never changes is said once: the light a room's switch gives each face, and which
-    // texture is which.
-    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
-    gl.useProgram(this.scene)
-    gl.uniform1fv(this.at(this.scene, 'uRoom'), ROOM_LIGHT)
-    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
-    gl.useProgram(this.print)
-    gl.uniform1i(this.at(this.print, 'uShade'), 0)
-    gl.uniform1i(this.at(this.print, 'uPlane'), 1)
+    this.maps = new Maps(gl, mapSize)
+    this.volume = new Volume(gl)
+    // The programs are set compiling here and waited for only when first used, or not at all
+    // where the driver can say when they are done (`ready`): the page never stops for them.
+    this.parallel = gl.getExtension('KHR_parallel_shader_compile') !== null
+    // The quick look first, so a frame can be drawn as soon as it is: the lit look follows.
+    this.linking = {
+      quick: link(gl, SCENE_VERT, QUICK_FRAG),
+      print: link(gl, PRINT_VERT, PRINT_FRAG),
+      blur: link(gl, PRINT_VERT, GLOW_FRAG),
+      scene: link(gl, SCENE_VERT, SCENE_FRAG),
+      shadow: link(gl, SCENE_VERT, SHADOW_FRAG),
+    }
     const corners = gl.createBuffer()
     if (!corners) throw new Error('no buffer')
     this.corners = corners
@@ -575,13 +213,70 @@ export class Renderer {
     this.nearCorners = nearCorners
     gl.bindBuffer(gl.ARRAY_BUFFER, nearCorners)
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(NEAR_FACES), gl.STATIC_DRAW)
-    this.still = this.batch(corners, 36)
+    this.still = this.batch(corners, 36, false, true)
     this.moving = this.batch(corners, 36, true)
     // The far worlds are never seen from underneath, so five faces of each block are enough.
     this.far = this.batch(nearCorners, 30)
+    // A batch without shading of its own reads every corner as open.
+    gl.vertexAttribI4ui(7, OPEN, OPEN, 0, 0)
   }
 
-  private batch(corners: WebGLBuffer, count: number, turned = false): Batch {
+  /**
+   * Whether the quick look's programs have compiled, asked without waiting where the driver
+   * allows it: a frame can be drawn once they have. The lit look is swapped in when it is ready.
+   */
+  get ready(): boolean {
+    return this.compiled(QUICK, !this.parallel)
+  }
+
+  /** Whether the lit look has compiled: until it has, frames are drawn in the quick one. */
+  get lit(): boolean {
+    return LIT.every((name) => this.programs[name])
+  }
+
+  /**
+   * Whether these programs have compiled, each waited for and set up once it has; `wait` waits
+   * for any still compiling, or else this only asks.
+   */
+  private compiled(names: readonly Program[], wait: boolean): boolean {
+    for (const name of names) {
+      if (this.programs[name]) continue
+      const linking = this.linking[name]
+      if (!wait && this.parallel && !this.gl.getProgramParameter(linking.program, COMPLETION_STATUS_KHR))
+        return false
+      this.programs[name] = this.setUp(name, linked(this.gl, linking))
+    }
+    return true
+  }
+
+  /** Says once what never changes in a program: room light, and which texture is which. */
+  private setUp(name: Program, program: WebGLProgram): WebGLProgram {
+    const gl = this.gl
+    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
+    gl.useProgram(program)
+    const unit = (uniform: string, index: number) => gl.uniform1i(this.at(program, uniform), index)
+    if (name === 'scene' || name === 'quick') {
+      gl.uniform1fv(this.at(program, 'uRoom'), ROOM_LIGHT)
+      unit('uShadowMap', 2)
+      unit('uLampMap', 3)
+      unit('uVolume', 4)
+    }
+    if (name === 'print') {
+      unit('uShade', 0)
+      unit('uPlane', 1)
+      unit('uGlow', 2)
+    }
+    if (name === 'blur') unit('uFrom', 0)
+    return program
+  }
+
+  /** A program, waited for if it has to be. */
+  private program(name: Program): WebGLProgram {
+    this.compiled([name], true)
+    return this.programs[name] as WebGLProgram
+  }
+
+  private batch(corners: WebGLBuffer, count: number, turned = false, shaded = false): Batch {
     const gl = this.gl
     const vao = gl.createVertexArray()
     const positions = gl.createBuffer()
@@ -616,8 +311,17 @@ export class Renderer {
       gl.vertexAttribPointer(6, 2, gl.FLOAT, false, 8, 0)
       gl.vertexAttribDivisor(6, 1)
     }
+    let ao: WebGLBuffer | null = null
+    if (shaded) {
+      ao = gl.createBuffer()
+      if (!ao) throw new Error('no buffer')
+      gl.bindBuffer(gl.ARRAY_BUFFER, ao)
+      gl.enableVertexAttribArray(7)
+      gl.vertexAttribIPointer(7, 2, gl.UNSIGNED_INT, 8, 0)
+      gl.vertexAttribDivisor(7, 1)
+    }
     gl.bindVertexArray(null)
-    return { vao, positions, data, count: 0, corners: count, room: 0, turns, turnsRoom: 0 }
+    return { vao, positions, data, count: 0, corners: count, room: 0, turns, turnsRoom: 0, ao }
   }
 
   private load(batch: Batch, packed: Packed, usage: number): void {
@@ -635,6 +339,11 @@ export class Renderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, batch.data)
     if (fits) gl.bufferSubData(gl.ARRAY_BUFFER, 0, data)
     else gl.bufferData(gl.ARRAY_BUFFER, packed.data, usage)
+    if (batch.ao && packed.ao) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, batch.ao)
+      if (fits) gl.bufferSubData(gl.ARRAY_BUFFER, 0, packed.ao.subarray(0, packed.count * 8))
+      else gl.bufferData(gl.ARRAY_BUFFER, packed.ao, usage)
+    }
     if (!fits) batch.room = packed.positions.length / 3
     batch.count = packed.count
   }
@@ -653,13 +362,18 @@ export class Renderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, batch.data)
     gl.vertexAttribPointer(4, 4, gl.UNSIGNED_BYTE, true, 8, first * 8)
     gl.vertexAttribPointer(5, 4, gl.UNSIGNED_BYTE, true, 8, first * 8 + 4)
+    if (batch.ao) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, batch.ao)
+      gl.vertexAttribIPointer(7, 2, gl.UNSIGNED_INT, 8, first * 8)
+    }
     gl.drawArraysInstanced(gl.TRIANGLES, from, corners, count)
   }
 
   /** The world itself. Sent again whenever a block is dug out or put back. */
-  setWorld(packed: Packed, lights: Light[]): void {
+  setWorld(packed: Packed, world: World): void {
     this.load(this.still, packed, this.gl.STATIC_DRAW)
-    this.lights = lights
+    this.volume.load(baked(world))
+    this.worldVersion += 1
   }
 
   /** The other worlds round this one, seen only when the camera stands a long way back. */
@@ -667,11 +381,12 @@ export class Renderer {
     this.load(this.far, packed, this.gl.STATIC_DRAW)
   }
 
-  /** The world's light again, after the sun moved: the same blocks, new shadows. */
+  /** The world's light again, after the sun moved or a block grew a step: the same blocks. */
   relight(data: Uint8Array): void {
     const gl = this.gl
     gl.bindBuffer(gl.ARRAY_BUFFER, this.still.data)
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, data.subarray(0, this.still.count * 8))
+    this.worldVersion += 1
   }
 
   /**
@@ -695,6 +410,32 @@ export class Renderer {
     }
   }
 
+  private colourTexture(format: number, width: number, height: number): WebGLTexture {
+    const gl = this.gl
+    const t = gl.createTexture()
+    if (!t) throw new Error('no texture')
+    gl.bindTexture(gl.TEXTURE_2D, t)
+    gl.texStorage2D(gl.TEXTURE_2D, 1, format, width, height)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    return t
+  }
+
+  private freeTarget(): void {
+    const gl = this.gl
+    const target = this.target
+    if (!target) return
+    gl.deleteFramebuffer(target.fb)
+    gl.deleteTexture(target.shade)
+    gl.deleteTexture(target.plane)
+    gl.deleteRenderbuffer(target.depth)
+    for (const texture of target.glow) gl.deleteTexture(texture)
+    for (const fb of target.glowFb) gl.deleteFramebuffer(fb)
+    this.target = null
+  }
+
   resize(width: number, height: number): void {
     const gl = this.gl
     if (width === this.width && height === this.height && this.target) return
@@ -702,23 +443,9 @@ export class Renderer {
     this.height = height
     gl.canvas.width = width
     gl.canvas.height = height
-    if (this.target) {
-      gl.deleteFramebuffer(this.target.fb)
-      gl.deleteTexture(this.target.shade)
-      gl.deleteTexture(this.target.plane)
-      gl.deleteRenderbuffer(this.target.depth)
-    }
-    const texture = () => {
-      const t = gl.createTexture()
-      if (!t) throw new Error('no texture')
-      gl.bindTexture(gl.TEXTURE_2D, t)
-      gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height)
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-      return t
-    }
-    const shade = texture()
-    const plane = texture()
+    this.freeTarget()
+    const shade = this.colourTexture(gl.RGBA8, width, height)
+    const plane = this.colourTexture(gl.RGBA8, width, height)
     const depth = gl.createRenderbuffer()
     const fb = gl.createFramebuffer()
     if (!depth || !fb) throw new Error('no framebuffer')
@@ -729,12 +456,27 @@ export class Renderer {
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, plane, 0)
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth)
     gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1])
+    const glow: [WebGLTexture, WebGLTexture] = [
+      this.colourTexture(gl.R8, width, height),
+      this.colourTexture(gl.R8, width, height),
+    ]
+    const glowFb = glow.map((texture) => {
+      const made = gl.createFramebuffer()
+      if (!made) throw new Error('no framebuffer')
+      gl.bindFramebuffer(gl.FRAMEBUFFER, made)
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0)
+      return made
+    }) as [WebGLFramebuffer, WebGLFramebuffer]
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-    this.target = { fb, shade, plane, depth }
+    this.target = { fb, shade, plane, depth, glow, glowFb }
   }
 
   private at(program: WebGLProgram, name: string): WebGLUniformLocation | null {
-    const known = program === this.scene ? this.sceneUniforms : this.printUniforms
+    let known = this.uniforms.get(program)
+    if (!known) {
+      known = new Map()
+      this.uniforms.set(program, known)
+    }
     let where = known.get(name)
     if (where === undefined) {
       where = this.gl.getUniformLocation(program, name)
@@ -743,11 +485,83 @@ export class Renderer {
     return where
   }
 
-  draw(frame: Frame): void {
+  /**
+   * Draws the shadow map from the key light, if the light has moved or the world has changed since
+   * it was last drawn. Only the world's blocks cast: what moves is drawn every frame and the map
+   * is not, so it is lit by the map without casting into it.
+   */
+  private castShadows(shadows: NonNullable<Frame['shadows']>, key: Vec3): void {
+    const wanted = `${key.join(',')}|${shadows.middle.join(',')}|${shadows.radius}|${this.worldVersion}`
+    if (wanted === this.mapFor) return
+    this.mapFor = wanted
+    this.lightView = lightMatrix(key, shadows.middle, shadows.radius)
+    this.maps.drawKey()
+    this.cast(this.lightView, shadows.runs, 0, false)
+  }
+
+  /**
+   * Draws the room lamp's map from where the lamp is, every frame: what moves in the room casts
+   * into it as well as the room itself.
+   */
+  private castLamp(frame: Frame, torch: NonNullable<Frame['torch']>): void {
+    this.lampView = lampMatrix([torch[0], torch[1], torch[2]])
+    this.maps.drawLamp()
+    this.cast(this.lampView, frame.runs, frame.time, true)
+  }
+
+  /** Draws what casts into a map, as seen through `view`: the world's runs, and what moves too. */
+  private cast(view: Float32Array, runs: Frame['runs'], time: number, moving: boolean): void {
+    const gl = this.gl
+    const s = this.program('shadow')
+    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
+    gl.useProgram(s)
+    gl.uniformMatrix4fv(this.at(s, 'uCamera'), false, view)
+    gl.uniform2f(this.at(s, 'uShift'), 0, 0)
+    gl.uniform2f(this.at(s, 'uWave'), 0, 0)
+    gl.uniform1f(this.at(s, 'uNudge'), 0)
+    gl.uniform1f(this.at(s, 'uTime'), time)
+    gl.uniform3f(this.at(s, 'uFog'), 0, 1, 0)
+    gl.uniform1f(this.at(s, 'uLoose'), 0)
+    for (const [first, count] of runs) this.run(this.still, first, Math.min(count, this.still.count - first))
+    if (moving) {
+      gl.uniform1f(this.at(s, 'uLoose'), 1)
+      this.run(this.moving, 0, this.moving.count)
+    }
+    gl.bindVertexArray(null)
+  }
+
+  /** The lights that are on and near what's in view, the carried one too: a chunk has more than a shader wants. */
+  private gatherLights(frame: Frame): number {
+    let lit = 0
+    const put = (x: number, y: number, z: number, radius: number, on: number, owner: number) => {
+      this.lightWhere.set([x, y, z, radius], lit * 4)
+      this.lightOn[lit] = on
+      this.lightOwner[lit] = owner
+      lit += 1
+    }
+    const torch = frame.torch
+    if (torch && torch[4] > 0 && lit < MAX_LIGHTS)
+      put(torch[0], torch[1], torch[2], torch[3], torch[4], torch[5])
+    return lit
+  }
+
+  /**
+   * Draws a frame: in the lit look once its programs have compiled, and in the quick look (no
+   * shadows, no lamps) until then. Says which, so the caller draws again until it is lit. `wait`
+   * waits for the lit look instead, for a picture printed once.
+   */
+  draw(frame: Frame, wait = false): boolean {
     const gl = this.gl
     const target = this.target
-    if (!target) return
-    const s = this.scene
+    if (!target) return false
+    const lit = this.compiled(LIT, wait || (!this.parallel && this.drawn))
+    this.drawn = true
+    const s = this.program(lit ? 'scene' : 'quick')
+    for (let i = 0; i < 16; i++) this.groups[i] = frame.groups[i] ?? 0
+    const shadows = lit ? frame.shadows : null
+    if (shadows) this.castShadows(shadows, frame.key)
+    const count = this.gatherLights(frame)
+    const torch = lit ? this.lampOf(frame, count) : -1
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.fb)
     gl.viewport(0, 0, this.width, this.height)
@@ -757,58 +571,12 @@ export class Renderer {
     gl.depthFunc(gl.LESS)
     gl.disable(gl.BLEND)
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
-    gl.useProgram(s)
-    gl.uniformMatrix4fv(this.at(s, 'uCamera'), false, frame.camera)
-    gl.uniform2f(this.at(s, 'uShift'), frame.shift[0], frame.shift[1])
-    for (let i = 0; i < 6; i++) this.faceLight[i] = frame.faceLight[i] ?? 0
-    gl.uniform1fv(this.at(s, 'uFace'), this.faceLight)
-    gl.uniform1f(this.at(s, 'uShadow'), frame.shadow)
-    gl.uniform1f(this.at(s, 'uLevels'), frame.levels)
-    gl.uniform1f(this.at(s, 'uDetail'), frame.detail)
-    gl.uniform1f(this.at(s, 'uRock'), frame.rock ?? 0)
-    gl.uniform1f(this.at(s, 'uTime'), frame.time)
-    if (frame.pick) gl.uniform3f(this.at(s, 'uPick'), frame.pick[0], frame.pick[1], frame.pick[2])
-    else gl.uniform3f(this.at(s, 'uPick'), -999, -999, -999)
-    const groups = this.groups
-    for (let i = 0; i < 16; i++) groups[i] = frame.groups[i] ?? 0
-    gl.uniform1fv(this.at(s, 'uGroups'), groups)
-
-    // Only the lights that are on and near what's in view: a chunk has more than a shader wants.
-    let lit = 0
-    for (const light of this.lights) {
-      if (lit === MAX_LIGHTS) break
-      const level = groups[light.group] ?? 0
-      if (level <= 0 || light.y < frame.viewY[0] - light.radius || light.y > frame.viewY[1] + light.radius)
-        continue
-      this.lightWhere[lit * 4] = light.x
-      this.lightWhere[lit * 4 + 1] = light.y
-      this.lightWhere[lit * 4 + 2] = light.z
-      this.lightWhere[lit * 4 + 3] = light.radius
-      this.lightOn[lit] = level
-      this.lightOwner[lit] = light.group
-      lit += 1
-    }
-    // A loose light is one more of them, wherever it is this frame.
-    if (frame.torch && frame.torch[4] > 0 && lit < MAX_LIGHTS) {
-      this.lightWhere[lit * 4] = frame.torch[0]
-      this.lightWhere[lit * 4 + 1] = frame.torch[1]
-      this.lightWhere[lit * 4 + 2] = frame.torch[2]
-      this.lightWhere[lit * 4 + 3] = frame.torch[3]
-      this.lightOn[lit] = frame.torch[4]
-      this.lightOwner[lit] = frame.torch[5]
-      lit += 1
-    }
-    gl.uniform4fv(this.at(s, 'uLights'), this.lightWhere)
-    gl.uniform1fv(this.at(s, 'uLightOn'), this.lightOn)
-    gl.uniform1fv(this.at(s, 'uLightGroup'), this.lightOwner)
-    gl.uniform1i(this.at(s, 'uLightCount'), lit)
-    gl.uniform3f(this.at(s, 'uEye'), frame.eye[0], frame.eye[1], frame.eye[2])
-
+    this.sceneUniforms(s, frame, torch, count)
     // The world: only the runs of it the camera can see.
+    gl.uniform1i(this.at(s, 'uMapped'), shadows ? 1 : 0)
     gl.uniform2f(this.at(s, 'uWave'), 0, 0)
     gl.uniform1f(this.at(s, 'uLoose'), 0)
-    gl.uniform3f(this.at(s, 'uFog'), frame.fog[0], frame.fog[1], 0)
+    gl.uniform3f(this.at(s, 'uFog'), frame.fog[0], frame.fog[1], frame.worldFog ?? 0)
     gl.uniform1f(this.at(s, 'uNudge'), 0)
     for (const [first, count] of frame.runs)
       this.run(this.still, first, Math.min(count, this.still.count - first))
@@ -817,20 +585,106 @@ export class Renderer {
     gl.uniform1f(this.at(s, 'uLoose'), 1)
     this.run(this.moving, 0, this.moving.count)
     gl.uniform1f(this.at(s, 'uLoose'), 0)
-    if (frame.crowd > 0.004 && this.far.count > 0) {
-      // The far worlds: the ring's edge, and how wide the band is in which blocks are still growing.
-      gl.uniform1f(this.at(s, 'uNudge'), 0)
-      gl.uniform2f(this.at(s, 'uWave'), frame.crowd * 330, 60)
-      gl.uniform3f(this.at(s, 'uFog'), frame.fog[0], frame.fog[1], 1)
-      for (const [first, count, slot] of frame.farRuns)
-        this.run(this.far, first, Math.min(count, this.far.count - first), slot * 6, 6)
-    }
+    if (frame.crowd > 0.004 && this.far.count > 0) this.drawFar(s, frame)
     gl.bindVertexArray(null)
+    gl.disable(gl.DEPTH_TEST)
+    this.blurGlow(target, frame.unit)
+    this.printFrame(target, frame)
+    if (lit) markLit(gl.canvas)
+    return lit
+  }
 
-    const p = this.print
+  /**
+   * Which of the lights is a room's own lamp (not out of doors, switch 1), the carried one, last:
+   * it casts shadows, from a map of its own drawn now. −1 where there is none.
+   */
+  private lampOf(frame: Frame, count: number): number {
+    const torch = frame.torch
+    if (!torch || torch[5] === 1 || torch[4] <= 0) return -1
+    this.castLamp(frame, torch)
+    return count - 1
+  }
+
+  /**
+   * The far worlds: the ring's edge, and how wide the band is in which blocks are still growing.
+   * The map doesn't reach them; their own bits say where the key falls.
+   */
+  private drawFar(s: WebGLProgram, frame: Frame): void {
+    const gl = this.gl
+    gl.uniform1i(this.at(s, 'uMapped'), 0)
+    gl.uniform4f(this.at(s, 'uVolume3'), 0, 0, 0, 0)
+    gl.uniform1f(this.at(s, 'uNudge'), 0)
+    gl.uniform2f(this.at(s, 'uWave'), frame.crowd * 330, 60)
+    gl.uniform3f(this.at(s, 'uFog'), frame.fog[0], frame.fog[1], 1)
+    for (const [first, count, slot] of frame.farRuns)
+      this.run(this.far, first, Math.min(count, this.far.count - first), slot * 6, 6)
+  }
+
+  /** What the scene pass is told of a frame: its camera, its light, its lamps and its maps. */
+  private sceneUniforms(s: WebGLProgram, frame: Frame, torch: number, count: number): void {
+    const gl = this.gl
+    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
+    gl.useProgram(s)
+    gl.activeTexture(gl.TEXTURE2)
+    gl.bindTexture(gl.TEXTURE_2D, this.maps.key)
+    gl.activeTexture(gl.TEXTURE3)
+    gl.bindTexture(gl.TEXTURE_2D, this.maps.lamp)
+    gl.activeTexture(gl.TEXTURE4)
+    gl.bindTexture(gl.TEXTURE_3D, this.volume.texture)
+    gl.uniform4f(this.at(s, 'uVolume3'), ...this.volume.size, this.volume.bottom)
+    gl.uniform1i(this.at(s, 'uTorch'), torch)
+    gl.uniformMatrix4fv(this.at(s, 'uLampView'), false, this.lampView)
+    gl.uniform1f(this.at(s, 'uRoomFill'), frame.roomFill)
+    gl.uniform1f(this.at(s, 'uLampGain'), frame.lampGain)
+    gl.uniform1f(this.at(s, 'uDeep'), frame.deep)
+    gl.uniform1f(this.at(s, 'uAmbient'), frame.ambient)
+    gl.uniform1f(this.at(s, 'uWindows'), frame.windows)
+    gl.uniformMatrix4fv(this.at(s, 'uCamera'), false, frame.camera)
+    gl.uniform2f(this.at(s, 'uShift'), frame.shift[0], frame.shift[1])
+    gl.uniform3f(this.at(s, 'uKey'), frame.key[0], frame.key[1], frame.key[2])
+    gl.uniform1f(this.at(s, 'uKeyLight'), frame.keyLight)
+    gl.uniform1f(this.at(s, 'uFill'), frame.fill)
+    gl.uniformMatrix4fv(this.at(s, 'uLight'), false, this.lightView)
+    gl.uniform1f(this.at(s, 'uMapTexel'), this.maps.keyTexel)
+    gl.uniform1f(this.at(s, 'uDetail'), frame.detail)
+    gl.uniform1f(this.at(s, 'uRock'), frame.rock ?? 0)
+    gl.uniform1f(this.at(s, 'uTime'), frame.time)
+    if (frame.pick) gl.uniform3f(this.at(s, 'uPick'), frame.pick[0], frame.pick[1], frame.pick[2])
+    else gl.uniform3f(this.at(s, 'uPick'), -999, -999, -999)
+    gl.uniform1fv(this.at(s, 'uGroups'), this.groups)
+    gl.uniform4fv(this.at(s, 'uLights'), this.lightWhere)
+    gl.uniform1fv(this.at(s, 'uLightOn'), this.lightOn)
+    gl.uniform1fv(this.at(s, 'uLightGroup'), this.lightOwner)
+    gl.uniform1i(this.at(s, 'uLightCount'), count)
+    gl.uniform3f(this.at(s, 'uEye'), frame.eye[0], frame.eye[1], frame.eye[2])
+  }
+
+  /** What glows, blurred across and then down: about seven CSS pixels between taps. */
+  private blurGlow(target: Target, unit: number): void {
+    const gl = this.gl
+    const b = this.program('blur')
+    const step = 7 / Math.max(0.25, unit)
+    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
+    gl.useProgram(b)
+    gl.viewport(0, 0, this.width, this.height)
+    gl.activeTexture(gl.TEXTURE0)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.glowFb[0])
+    gl.bindTexture(gl.TEXTURE_2D, target.shade)
+    gl.uniform1i(this.at(b, 'uChannel'), 1)
+    gl.uniform2f(this.at(b, 'uStep'), step, 0)
+    gl.drawArrays(gl.TRIANGLES, 0, 3)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.glowFb[1])
+    gl.bindTexture(gl.TEXTURE_2D, target.glow[0])
+    gl.uniform1i(this.at(b, 'uChannel'), 0)
+    gl.uniform2f(this.at(b, 'uStep'), 0, step)
+    gl.drawArrays(gl.TRIANGLES, 0, 3)
+  }
+
+  private printFrame(target: Target, frame: Frame): void {
+    const gl = this.gl
+    const p = this.program('print')
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
     gl.viewport(0, 0, this.width, this.height)
-    gl.disable(gl.DEPTH_TEST)
     gl.clearColor(0, 0, 0, 0)
     gl.clear(gl.COLOR_BUFFER_BIT)
     // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
@@ -839,6 +693,8 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, target.shade)
     gl.activeTexture(gl.TEXTURE1)
     gl.bindTexture(gl.TEXTURE_2D, target.plane)
+    gl.activeTexture(gl.TEXTURE2)
+    gl.bindTexture(gl.TEXTURE_2D, target.glow[1])
     gl.uniform2i(this.at(p, 'uSize'), this.width, this.height)
     for (let index = 0; index < 4; index++) {
       const band = frame.bands[index] as Palette
@@ -850,9 +706,15 @@ export class Renderer {
     gl.uniform3fv(this.at(p, 'uHigh'), this.high)
     gl.uniform3fv(this.at(p, 'uLine'), this.line)
     gl.uniform3f(this.at(p, 'uWarm'), frame.warm[0], frame.warm[1], frame.warm[2])
+    gl.uniform3f(this.at(p, 'uStar'), frame.star[0], frame.star[1], frame.star[2])
     gl.uniform4f(this.at(p, 'uEdges'), frame.edges[0], frame.edges[1], frame.edges[2], frame.edges[3])
     this.regions.set(frame.regions)
     gl.uniform1iv(this.at(p, 'uRegions'), this.regions)
+    gl.uniform1f(this.at(p, 'uExposure'), frame.exposure)
+    gl.uniform1f(this.at(p, 'uContrast'), frame.contrast)
+    gl.uniform1f(this.at(p, 'uLevels'), frame.levels)
+    gl.uniform1f(this.at(p, 'uStars'), frame.stars ? 1 : 0)
+    gl.uniform1f(this.at(p, 'uTime'), frame.time)
     gl.drawArrays(gl.TRIANGLES, 0, 3)
   }
 
@@ -867,17 +729,13 @@ export class Renderer {
       gl.deleteBuffer(batch.positions)
       gl.deleteBuffer(batch.data)
       if (batch.turns) gl.deleteBuffer(batch.turns)
+      if (batch.ao) gl.deleteBuffer(batch.ao)
     }
     gl.deleteBuffer(this.corners)
     gl.deleteBuffer(this.nearCorners)
-    gl.deleteProgram(this.scene)
-    gl.deleteProgram(this.print)
-    if (this.target) {
-      gl.deleteFramebuffer(this.target.fb)
-      gl.deleteTexture(this.target.shade)
-      gl.deleteTexture(this.target.plane)
-      gl.deleteRenderbuffer(this.target.depth)
-      this.target = null
-    }
+    for (const { program } of Object.values(this.linking)) gl.deleteProgram(program)
+    this.maps.dispose()
+    this.volume.dispose()
+    this.freeTarget()
   }
 }

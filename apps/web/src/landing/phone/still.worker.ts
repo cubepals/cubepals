@@ -9,8 +9,10 @@
  */
 import { print, type Still } from './printer'
 
-self.onmessage = (event: MessageEvent<{ still: Still; width: number; height: number }>) => {
-  const { still, width, height } = event.data
-  const printed = print(still, width, height)
+self.onmessage = (
+  event: MessageEvent<{ still: Still; width: number; across: number; down: number; dot: number }>,
+) => {
+  const { still, width, across, down, dot } = event.data
+  const printed = print(still, across, down, dot)
   self.postMessage({ still, width, printed }, printed ? { transfer: [printed.bitmap] } : {})
 }
