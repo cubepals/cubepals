@@ -28,6 +28,7 @@ import { createHash } from 'node:crypto'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { BOARD_READS } from '../apps/control/src/minecraft/arcade/boards.ts'
 import { HUB_MARKERS } from '../apps/control/src/minecraft/arcade/hub.ts'
 import {
   inRoom,
@@ -65,9 +66,12 @@ const built = blocksSet(
 const blocksBuilt = (from: [number, number, number], to: [number, number, number]) =>
   laidOver(blocksIn(world, from, to), built, from, to)
 
-/** Blocks that aren't a solid, opaque, whole block, which a label on them would hang over or show through. */
+/**
+ * Blocks that aren't a whole block flush with its neighbours, which a label on them would hang over.
+ * Whole glass is a wall: every label has its own plate (`arcade/label.ts`), so nothing shows through.
+ */
 const NOT_WALL =
-  /slab|stairs|pane|glass|fence|_wall|wall_|door|carpet|button|lever|torch|lantern(?<!sea_lantern)|chain|rail|sign|banner|flower|sapling|^minecraft:light$|barrier|bars|ladder|vine|plate|leaves|candle|head|skull|pot|frame|scaffolding|bed|chest|anvil|hopper|cauldron|campfire|_rod|grass$|fern|bush|cobweb|water|lava|snow$/
+  /slab|stairs|pane|fence|_wall|wall_|door|carpet|button|lever|torch|lantern(?<!sea_lantern)|chain|rail|sign|banner|flower|sapling|^minecraft:light$|barrier|bars|ladder|vine|plate|leaves|candle|head|skull|pot|frame|scaffolding|bed|chest|anvil|hopper|cauldron|campfire|_rod|grass$|fern|bush|cobweb|water|lava|snow$/
 
 /**
  * The face of the wall a flat room is on, around it, a row to each block's height, top first, and a
@@ -167,7 +171,7 @@ function hidden({ label, from }: Read): { at: readonly number[]; hidden: number;
   })
   return { at: label.at, hidden: blocked.length, rays: points.length }
 }
-const sight = ARCADE_READS.map(hidden)
+const sight = [...ARCADE_READS, ...BOARD_READS].map(hidden)
 
 rmSync(world, { recursive: true, force: true })
 writeFileSync(OUT, `${JSON.stringify({ world: ARCADE_WORLD.sha512, rooms, sight }, null, 2)}\n`)

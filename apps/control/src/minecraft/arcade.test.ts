@@ -9,7 +9,7 @@
  * and that the credits name every map.
  */
 import { describe, expect, test } from 'bun:test'
-import { onLevel } from '../domain/revision/carried.ts'
+import { onLevel, RUNNING_LEVEL } from '../domain/revision/carried.ts'
 import { HINT, PADS, PASSAGE } from './arcade/hub.ts'
 import { ARCADE_MAPS } from './arcade/maps.ts'
 import { ARCADE_FILES } from './arcade.ts'
@@ -75,7 +75,9 @@ const zones = new Map(
 describe('the Arcade datapack as Minecraft loads it', () => {
   test('it goes in the world the server runs, at paths Cubepals may write, and runs as the world loads', () => {
     for (const file of files) {
-      expect(file.path).toStartWith(`${PACK}/`)
+      expect(
+        file.path.startsWith(`${PACK}/`) || /^world-2\/data\/minecraft\/maps\/92\d\d\.dat$/.test(file.path),
+      ).toBe(true)
       expect(placeablePath(file.path)).toBe(true)
     }
     expect(JSON.parse(fileAt('data/minecraft/tags/function/load.json'))).toEqual({ values: ['arcade:load'] })
@@ -206,39 +208,6 @@ describe('the Arcade as its players find it', () => {
     expect(finishing[0]).toContain(`scores={arcade.pk.cp=${last}}`)
   })
 
-  test('the credits name every map, who built it, its licence and source as links, and what changed', () => {
-    const lines = commands('hub/credits').filter((line) => line.startsWith('tellraw '))
-    for (const map of ARCADE_MAPS) {
-      const line = lines.find((candidate) => candidate.includes(`text:"${map.title}"`)) ?? ''
-      for (const builder of map.builders) expect(line).toContain(builder)
-      expect(line).toContain(map.licence)
-      const links = [...line.matchAll(/open_url",url:"([^"]+)"/g)].map((link) => link[1])
-      expect(links).toEqual([
-        `https://creativecommons.org/licenses/${map.licence === 'CC BY 4.0' ? 'by' : 'by-sa'}/4.0/`,
-        expect.stringMatching(/^https:\/\/github\.com\/[^/]+\/[^/]+\/tree\/[0-9a-f]{40}\//),
-      ])
-      expect(map.changes.length).toBeGreaterThan(0)
-      for (const change of map.changes) expect(line).toContain(change)
-    }
-    expect(lines.join('\n')).toContain('CC BY-SA 4.0 too')
-  })
-
-  test("each game's Cubepals sign names its map and who built it, in one line under it", () => {
-    // The parkour has none: its sign stood over the first course's stairs, and is taken down.
-    const lines = everyCommand.filter(
-      (c) => c.startsWith('summon minecraft:text_display') && c.includes(', by '),
-    )
-    expect(lines.map((c) => c.match(/text:\["",\{text:"([^"]+)"/)?.[1])).toEqual([
-      'Meltdown, by NetherGames',
-      'Frozen Market, by _3Each',
-    ])
-    // Each sign is built, not hung: one square of Paper behind its mark, over the hub, at the
-    // floor, and twice back to back at the pit.
-    expect(everyCommand.filter((c) => c.startsWith('summon minecraft:glow_item_frame'))).toEqual([])
-    const papers = everyCommand.filter((c) => c.includes(`background:${0xff000000 | 0xf8f7f5}`))
-    expect(papers).toHaveLength(1 + 1 + 2)
-  })
-
   test('a new player is put at the hub and told in one sentence what to do, and whose maps these are, once', () => {
     const welcome = commands('play').filter((command) => command.includes('tag=!arcade.welcomed'))
     expect(welcome).toHaveLength(4)
@@ -269,16 +238,66 @@ describe('the Arcade as its players find it', () => {
   })
 })
 
+describe('the Arcade’s credits and its Cubepals signs', () => {
+  test('the credits name every map, who built it, its licence and source as links, and what changed', () => {
+    const lines = commands('hub/credits').filter((line) => line.startsWith('tellraw '))
+    for (const map of ARCADE_MAPS) {
+      const line = lines.find((candidate) => candidate.includes(`text:"${map.title}"`)) ?? ''
+      for (const builder of map.builders) expect(line).toContain(builder)
+      expect(line).toContain(map.licence)
+      const links = [...line.matchAll(/open_url",url:"([^"]+)"/g)].map((link) => link[1])
+      expect(links).toEqual([
+        `https://creativecommons.org/licenses/${map.licence === 'CC BY 4.0' ? 'by' : 'by-sa'}/4.0/`,
+        expect.stringMatching(/^https:\/\/github\.com\/[^/]+\/[^/]+\/tree\/[0-9a-f]{40}\//),
+      ])
+      expect(map.changes.length).toBeGreaterThan(0)
+      for (const change of map.changes) expect(line).toContain(change)
+    }
+    expect(lines.join('\n')).toContain('CC BY-SA 4.0 too')
+  })
+
+  test("each game's Cubepals sign names its map and who built it, in one line under it", () => {
+    // The parkour has none: its sign stood over the first course's stairs, and is taken down.
+    const lines = everyCommand.filter(
+      (c) => c.startsWith('summon minecraft:text_display') && c.includes(', by '),
+    )
+    expect(lines.map((c) => c.match(/text:\["",\{text:"([^"]+)"/)?.[1])).toEqual([
+      'Meltdown, by NetherGames',
+      'Frozen Market, by _3Each',
+    ])
+  })
+
+  test('each sign’s mark is map art, a map to a block of its square, every map one the datapack carries', () => {
+    const frames = everyCommand.filter((c) => c.startsWith('summon minecraft:glow_item_frame'))
+    // Six blocks square over the hub, four at the floor, and four twice back to back at the pit.
+    expect(frames).toHaveLength(6 * 6 + 4 * 4 + 2 * 5 * 5)
+    const carried = new Set(
+      ARCADE_FILES.filter((file) => file.encoding === 'base64').map((file) => file.path),
+    )
+    for (const frame of frames) {
+      expect(frame).toContain('Fixed:1b,Invisible:1b')
+      const id = frame.match(/"minecraft:map_id":(\d+)/)?.[1]
+      expect(carried.has(`${RUNNING_LEVEL}/data/minecraft/maps/${id}.dat`)).toBe(true)
+    }
+    // Nothing of the mark is a block or a patch of colour.
+    expect(everyCommand.filter((c) => c.startsWith('summon minecraft:block_display'))).toEqual([])
+    expect(everyCommand.filter((c) => c.includes(`background:${0xff000000 | 0xf8f7f5}`))).toEqual([])
+  })
+})
+
 describe('the Arcade’s signs out of play', () => {
   test('a sign that stood where players play is taken down as the datapack builds, before any sign goes up', () => {
     const build = commands('build')
-    // Over the parkour's first stairs, and the pit's two, three blocks under where they stand now:
-    // the pit's taken down before its new ones, in the market's spruce, go up over the same place.
+    // Over the parkour's first stairs, and the pit's two, over the long hall's north gable, where
+    // they first stood and where they were raised to: taken down before the new ones, in the
+    // market's spruce, go up on the hall's ridge.
     expect(build).toContain('fill 993 68 -2 995 73 3 minecraft:air')
     const pitSign = build.findIndex((command) => command.endsWith('minecraft:spruce_planks'))
     for (const taken of [
       'fill -1048 88 0 -1043 93 1 minecraft:air',
       'fill -1048 88 1 -1043 93 2 minecraft:air',
+      'fill -1048 92 0 -1043 97 1 minecraft:air',
+      'fill -1048 92 1 -1043 97 2 minecraft:air',
     ]) {
       expect(build).toContain(taken)
       expect(build.indexOf(taken)).toBeLessThan(pitSign)

@@ -40,7 +40,7 @@ export const FLOOR_ARRIVAL = '0.5 60 52.5 180 0'
 export const FLOOR_READS: readonly Read[] = [
   {
     label: {
-      at: [0.5, 63.06, 46.5],
+      at: [0.5, 63.08, 46.5],
       tag: `${NS}.label`,
       text: [{ text: 'Wait here for the next round', color: PAPER }],
       scale: 1,

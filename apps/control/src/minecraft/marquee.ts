@@ -5,25 +5,16 @@
 /**
  * Cubepals' signs on its own servers, built into the world: the look its servers have everywhere,
  * as in the server list, the mark alone in Ink on a square of Paper, with square corners, set in a
- * frame of the place's own blocks. The frame stands a block proud of the Paper, lights every other
- * block round its top and sides and a solid base under it, and the mark stands out from the Paper
- * a quarter of a block: any further, and its shapes' sides, as black as their faces, run them
- * together seen from below. Not where each sign is, which is each game's.
+ * frame of the place's own blocks. The frame stands a block proud of the square round its top and
+ * sides, lights every other block of them, and a base level with the square under it. Not where
+ * each sign is, which is each game's.
  *
- * The Paper is a text display's background, which the game draws in its exact colour; a block
- * or an item in its place would be shaded grey by the light. The mark is drawn as the pack's
- * pictures draw it (`brand-art.ts`), a fraction of a block to a cell, with the brand's clear space
- * round it (`brand/README.md`): block displays of black concrete for its depth, each faced in Ink
- * the same way as the Paper.
+ * The square is map art (`map-art.ts`): a map to each of its blocks, in glow item frames that show
+ * it at full light, a hundred and twenty-eight pixels to a block, drawn from the mark's own shapes,
+ * so its circles are round from anywhere a player stands. Nothing of the mark is a block.
  */
-import { type Block, exactly, type Facing, INK, PAPER, YAW } from './arcade/datapack.ts'
-import { markPixels } from './brand-art.ts'
-
-/** The brand's clear space round the mark: a quarter of its height, on every side. */
-const CLEAR = 0.25
-
-/** How far the mark stands out from the Paper, in blocks. */
-const RELIEF = 0.25
+import type { Block, Facing } from './arcade/datapack.ts'
+import { type MapArt, mapId } from './map-art.ts'
 
 /** A frame's look: its casing, its corners, and its lights: a bulb at the front, and behind it a lamp. */
 export interface Frame {
@@ -46,10 +37,10 @@ export interface Marquee {
   at: Block
   /** The way it faces: toward whoever reads it. */
   facing: Facing
-  /** The Paper square's side, in blocks; the frame goes round it. */
+  /** The square's side, in blocks; the frame goes round it. */
   side: number
-  /** Cells of the mark to a block. */
-  grain: number
+  /** The maps the square shows, as many as it has blocks. */
+  art: MapArt
   frame: Frame
   /** Whether a casing closes its back; not where another sign is back to back with it. */
   backed: boolean
@@ -77,7 +68,10 @@ const setblock = ([x, y, z]: Block, block: string) => `setblock ${x} ${y} ${z} m
 const fill = ([x0, y0, z0]: Block, [x1, y1, z1]: Block, block: string) =>
   `fill ${x0} ${y0} ${z0} ${x1} ${y1} ${z1} minecraft:${block}`
 
-/** One block of the frame round the square, at the square's plane and in front of it. */
+/**
+ * One block of the frame round the square, at the square's plane and, but under it, in front of it
+ * too. Players read a sign from under it, and a lip under the square would hide its foot from them.
+ */
 function frameBlock(sign: Marquee, across: number, down: number): string[] {
   const { side, frame } = sign
   const edge = across === -1 || across === side
@@ -87,10 +81,11 @@ function frameBlock(sign: Marquee, across: number, down: number): string[] {
     : !base && (across + down) % 2 === 0
       ? [frame.lamp, frame.bulb]
       : [frame.casing, frame.casing]
-  return [setblock(place(sign, across, down, 0), back), setblock(place(sign, across, down, 1), front)]
+  const inPlane = setblock(place(sign, across, down, 0), back)
+  return base ? [inPlane] : [inPlane, setblock(place(sign, across, down, 1), front)]
 }
 
-/** The blocks: its casing behind, the square's blocks under the Paper, and the frame round it two blocks deep. */
+/** The blocks: its casing behind, the square's blocks its maps hang on, and the frame round it two blocks deep. */
 function blocks(sign: Marquee): string[] {
   const { side, frame } = sign
   const ring: string[] = []
@@ -105,108 +100,46 @@ function blocks(sign: Marquee): string[] {
   ]
 }
 
-/** A rectangle of the mark's cells: its top left, and how many across and down. */
-interface Patch {
-  column: number
-  row: number
-  columns: number
-  rows: number
-}
+/**
+ * Taking down the row a sign once had in front of its base, a block proud of it as the rest of its
+ * frame is: for where a sign stood built that way, and only where nothing else is in that row.
+ */
+export const clearOldBase = (sign: Marquee): string =>
+  fill(place(sign, -1, sign.side, 1), place(sign, sign.side, sign.side, 1), 'air')
 
-/** The mark's cells as rectangles: each row's runs, each carried down while the rows under it repeat it. */
-function patches(cells: readonly (readonly boolean[])[]): Patch[] {
-  let open = new Map<number, Patch>()
-  const done: Patch[] = []
-  cells.forEach((line, row) => {
-    const next = new Map<number, Patch>()
-    let run: Patch | undefined
-    line.forEach((on, column) => {
-      if (!on) run = undefined
-      else if (run !== undefined) run.columns++
-      else {
-        run = { column, row, columns: 1, rows: 1 }
-        next.set(column, run)
-      }
-    })
-    for (const [column, patch] of next) {
-      const above = open.get(column)
-      if (above !== undefined && above.columns === patch.columns) {
-        above.rows++
-        next.set(column, above)
-        open.delete(column)
-      }
-    }
-    done.push(...open.values())
-    open = next
-  })
-  return [...done, ...open.values()]
-}
-
-/** The mark as large as a square `cells` across holds with its clear space round it. */
-function markIn(cells: number): boolean[][] {
-  const most = Math.floor(cells / (1 + 2 * CLEAR))
-  return markPixels(Math.floor((most - 1) / 2), 5)
-}
-
-/** Four places after the point. */
-const exact = (value: number) => Number(value.toFixed(4))
-
-/** A colour as a display's background takes it: opaque, one signed ARGB number. */
-const argb = (hex: string) => 0xff000000 | Number.parseInt(hex.slice(1), 16)
+/** A block the sign's build always sets, and what to: the base under the square's first column, of its casing. */
+export const footOf = (sign: Marquee): { at: Block; block: string } => ({
+  at: place(sign, 0, sign.side, 0),
+  block: sign.frame.casing,
+})
 
 const tagged = (tags: readonly string[]) => `Tags:[${tags.map((tag) => `"${tag}"`).join(',')}]`
-const transformation = (scale: readonly number[], translation: readonly number[] = [0, 0, 0]) =>
-  `transformation:{left_rotation:[0f,0f,0f,1f],right_rotation:[0f,0f,0f,1f],translation:[${translation.map((v) => `${exact(v)}f`).join(',')}],scale:[${scale.map((v) => `${exact(v)}f`).join(',')}]}`
+
+/** The way an item frame faces, as the game numbers it: down, up, north, south, west, east. */
+const FRAME_FACING: Record<Facing, number> = { north: 2, south: 3, west: 4, east: 5 }
 
 /**
- * A square of colour as a text display draws it: its background behind one space. A space's
- * background is five of the game's text pixels across, from two left of where it stands to three
- * right, and ten up from it, forty to a block: so a square `width` by `height` blocks, its middle
- * bottom where it stands, is that scaled by 8 and 4 to a block, and moved a fifth of its width left.
+ * The square's maps, one to each block of it, each in a glow item frame hung on the block, in front
+ * of it: fixed, so nothing turns or takes it, and invisible, so the maps meet edge to edge. Its
+ * place and block are written out too: the game reads a frame's block before it moves it to where
+ * it is summoned, and without them logs each frame as at an invalid place.
  */
-const square = (width: number, height: number, colour: string, translation: readonly number[]) =>
-  `text:" ",background:${argb(colour)},default_background:false,see_through:false,shadow:false,brightness:{block:15,sky:15},${transformation(
-    [8 * width, 4 * height, 1],
-    [(translation[0] ?? 0) - width / 10, translation[1] ?? 0, translation[2] ?? 0],
-  )}`
-
-/** The Paper square in front of the square's blocks, and the mark on it in Ink, standing out from it. */
-function badge(sign: Marquee, tags: readonly string[]): string[] {
-  const cells = markIn(sign.side * sign.grain)
-  const { along, right, out, toward } = AXES[sign.facing]
-  const offset = (sign.side - cells.length / sign.grain) / 2
-  // The square's left edge along the sign, its bottom, and its face.
-  const edge = right > 0 ? sign.at[along] : sign.at[along] + 1
-  const face = toward > 0 ? sign.at[out] + 1 : sign.at[out]
-  const middle: [number, number, number] = [0, sign.at[1] + 1 - sign.side, 0]
-  middle[along] = edge + (right * sign.side) / 2
-  middle[out] = face + toward * 0.002
-  const paper = `summon minecraft:text_display ${exactly(middle.map(exact))} {${tagged(tags)},billboard:"fixed",Rotation:[${YAW[sign.facing]}f,0f],${square(sign.side, sign.side, PAPER, [0, 0, 0])}}`
-  const ink = patches(cells).flatMap((patch) => {
-    const from: [number, number, number] = [0, 0, 0]
-    const size: [number, number, number] = [0, 0, 0]
-    const [a, b] = [offset + patch.column / sign.grain, offset + (patch.column + patch.columns) / sign.grain]
-    from[along] = Math.min(edge + right * a, edge + right * b)
-    size[along] = b - a
-    from[1] = sign.at[1] + 1 - offset - (patch.row + patch.rows) / sign.grain
-    size[1] = patch.rows / sign.grain
-    from[out] = toward > 0 ? face : face - RELIEF
-    size[out] = RELIEF
-    // Its front in Ink itself, a hair proud of the block's face, which the game would draw greyer.
-    const front: [number, number, number] = [...from]
-    front[along] = from[along] + size[along] / 2
-    front[out] = face + toward * (RELIEF + 0.002)
-    return [
-      `summon minecraft:block_display ${exactly(from.map(exact))} {${tagged(tags)},block_state:{Name:"minecraft:black_concrete"},brightness:{block:15,sky:15},${transformation(size)}}`,
-      `summon minecraft:text_display ${exactly(front.map(exact))} {${tagged(tags)},billboard:"fixed",Rotation:[${YAW[sign.facing]}f,0f],${square(size[along], size[1], INK, [0, 0, 0])}}`,
-    ]
-  })
-  return [paper, ...ink]
+function maps(sign: Marquee, tags: readonly string[]): string[] {
+  if (sign.art.side !== sign.side) throw new Error('A sign shows a map to each block of its square')
+  const frames: string[] = []
+  for (let down = 0; down < sign.side; down++)
+    for (let across = 0; across < sign.side; across++) {
+      const [x, y, z] = place(sign, across, down, 1)
+      frames.push(
+        `summon minecraft:glow_item_frame ${x} ${y} ${z} {${tagged(tags)},Pos:[${x + 0.5}d,${y + 0.5}d,${z + 0.5}d],block_pos:[I;${x},${y},${z}],Facing:${FRAME_FACING[sign.facing]}b,Fixed:1b,Invisible:1b,Invulnerable:1b,Item:{id:"minecraft:filled_map",count:1,components:{"minecraft:map_id":${mapId(sign.art, across, down)}}}}`,
+      )
+    }
+  return frames
 }
 
 /**
- * Everything a sign takes, its blocks and what stands out in front of its Paper: the box from its
- * least corner to its greatest, in blocks, the frame round the square two deep and the casing behind.
+ * Everything a sign takes, its blocks and the frames its maps hang in: the box from its least
+ * corner to its greatest, in blocks, the frame round the square two deep and the casing behind.
  */
 export function marqueeExtent(sign: Pick<Marquee, 'at' | 'facing' | 'side' | 'backed'>): [Block, Block] {
   const corners = [place(sign, -1, -1, sign.backed ? -1 : 0), place(sign, sign.side, sign.side, 1)]
@@ -218,8 +151,8 @@ export function marqueeExtent(sign: Pick<Marquee, 'at' | 'facing' | 'side' | 'ba
   ]
 }
 
-/** Every command that builds a sign: its blocks, then its Paper and mark, whose displays carry `tags`. */
+/** Every command that builds a sign: its blocks, then its maps, whose frames carry `tags`. */
 export const buildMarquee = (sign: Marquee, tags: readonly string[]): string[] => [
   ...blocks(sign),
-  ...badge(sign, tags),
+  ...maps(sign, tags),
 ]

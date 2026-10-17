@@ -100,7 +100,7 @@ export const PARKOUR_ARRIVAL = where(FIRST)
 export const PARKOUR_READS: readonly Read[] = [
   {
     label: {
-      at: [968.5, 73.6, 0.5],
+      at: [968.5, 73.8, 0.5],
       tag: `${NS}.label`,
       text: titled('Parkour', 'Step off to start the clock'),
       scale: 5,

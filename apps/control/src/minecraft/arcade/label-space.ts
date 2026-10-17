@@ -55,14 +55,42 @@ export interface Room {
 /** How thick a flat label is: the game draws it a hair proud of where it stands. */
 const TEXT_DEPTH = 0.02
 
-/** The room a label's words take: as wide as its widest line, as tall as its lines, with its background's edge. */
-export function roomOf(label: Label): Room {
+/** The plate's room round a label's words, in the game's text pixels, the same on every side. */
+export const PLATE_PAD = 2
+
+/**
+ * A label's plate, in blocks from where it stands, to its reader's right and up: its words' ink and
+ * the same room round it on every side. The game draws a label's lines ten text pixels apart up from
+ * where it stands, the bottom row of the last line one pixel over it, the top of the first at its
+ * lines' height less one; across, the game moves its words a pixel right of centre, so their first
+ * pixel is one in from half their width, and the last pixel of that width is the gap after the
+ * last letter (as a client draws them, `docs/minecraft/readable-text.md`).
+ */
+export function plateOf(label: Pick<Label, 'text' | 'scale' | 'widest'>): {
+  left: number
+  right: number
+  bottom: number
+  top: number
+} {
   const lines = lineWidths(label.widest ?? label.text)
   const scale = (label.scale ?? 1) / PER_BLOCK
+  const widest = Math.max(...lines)
   return {
-    at: label.at,
-    width: (Math.max(...lines) + 2) * scale,
-    height: (lines.length * LINE_HEIGHT + 2) * scale,
+    left: (1 - widest / 2 - PLATE_PAD) * scale,
+    right: (widest / 2 + PLATE_PAD) * scale,
+    bottom: (1 - PLATE_PAD) * scale,
+    top: (lines.length * LINE_HEIGHT - 1 + PLATE_PAD) * scale,
+  }
+}
+
+/** The room a label's words take: its plate, and a turning one's sweep round its middle. */
+export function roomOf(label: Label): Room {
+  const { left, right, bottom, top } = plateOf(label)
+  const [x, y, z] = label.at
+  return {
+    at: [x, y + bottom, z],
+    width: 2 * Math.max(-left, right),
+    height: top - bottom,
     ...(label.facing === undefined ? {} : { flat: { facing: label.facing, depth: TEXT_DEPTH } }),
   }
 }

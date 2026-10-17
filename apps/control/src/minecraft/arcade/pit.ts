@@ -46,20 +46,48 @@ const ARMOUR: Readonly<Record<'head' | 'chest' | 'legs' | 'feet', string>> = {
 }
 
 /**
- * The small Cubepals sign over the middle of the market, both ways, so the spawn points on either
- * side see it: two back to back on one panel, in the market's spruce. It stands clear over the
- * market's roofs, out of reach of anyone climbing them (`scripts/play-space.test.ts`).
+ * The market's long hall, from its west eave to its east and its north gable to its south, and
+ * the top of its roof's ridge, three blocks wide along its middle. Its eaves stand six blocks over
+ * the street with nothing to climb, so nobody gets onto its roof.
  */
-const SIGN_Y = 96
+export const HALL = { from: [-1049, -9] as const, to: [-1043, -1] as const, ridge: 86 }
+
+/**
+ * The small Cubepals sign over the middle of the market, both ways, so the spawn points on either
+ * side see it: two back to back on one panel, in the market's spruce, as wide as the long hall and
+ * stood on its ridge, over its middle, on two posts. The panel is clear over the market's roofs,
+ * out of reach of anyone on them (`scripts/play-space.test.ts`); only its posts are under that.
+ */
+const SIDE = 5
+const SIGN_Y = 97
+const SIGN_Z = (HALL.from[1] + HALL.to[1]) / 2
 export const PIT_SIGNS: readonly BrandSign[] = [
-  { at: [-1044, SIGN_Y, 1], side: 4, facing: 'north', frame: MARKET, backed: false },
+  { at: [HALL.to[0] - 1, SIGN_Y, SIGN_Z], side: SIDE, facing: 'north', frame: MARKET, backed: false },
   // One credit line, under this one.
-  { at: [-1047, SIGN_Y, 1], side: 4, facing: 'south', frame: MARKET, backed: false, credit: 'market' },
+  {
+    at: [HALL.from[0] + 1, SIGN_Y, SIGN_Z],
+    side: SIDE,
+    facing: 'south',
+    frame: MARKET,
+    backed: false,
+    credit: 'market',
+  },
 ]
 
-/** Where the same sign once stood, four blocks lower, within a jump of the roofs: taken down first. */
-const OLD_SIGNS = PIT_SIGNS.map((sign): SignPlace => ({ ...sign, at: [sign.at[0], 92, sign.at[2]] }))
-const SIGN_CHUNKS = 'forceload add -1048 0 -1043 4'
+/** The posts: a block each, from the ridge up to the sign's base, either side of its middle. */
+export const PIT_SIGN_POSTS: readonly Block[] = [HALL.from[0] + 2, HALL.to[0] - 2].flatMap((x) =>
+  Array.from({ length: SIGN_Y - SIDE - HALL.ridge - 1 }, (_, i): Block => [x, HALL.ridge + 1 + i, SIGN_Z]),
+)
+
+/**
+ * Where the sign once stood, smaller and over the hall's north gable, rather than on it: within a
+ * jump of the roofs, then raised clear of them. Both are taken down first.
+ */
+const OLD_SIGNS: readonly SignPlace[] = [92, 96].flatMap((y): SignPlace[] => [
+  { at: [-1044, y, 1], side: 4, facing: 'north', backed: false },
+  { at: [-1047, y, 1], side: 4, facing: 'south', backed: false },
+])
+const SIGN_CHUNKS = `forceload add ${HALL.from[0]} ${HALL.from[1]} ${HALL.to[0]} 2`
 
 export const PIT_PART: Part = {
   functions: {
@@ -100,7 +128,12 @@ export const PIT_PART: Part = {
     `scoreboard objectives setdisplay sidebar.team.red ${PIT}.kills`,
   ],
   labels: PIT_SIGNS.map(creditLabel).filter((credit) => credit !== null),
-  build: [...OLD_SIGNS.map(clearSign), ...PIT_SIGNS.flatMap(buildSign), SIGN_CHUNKS.replace('add', 'remove')],
+  build: [
+    ...OLD_SIGNS.map(clearSign),
+    ...PIT_SIGN_POSTS.map(([x, y, z]) => `setblock ${x} ${y} ${z} minecraft:${MARKET.corner}`),
+    ...PIT_SIGNS.flatMap(buildSign),
+    SIGN_CHUNKS.replace('add', 'remove'),
+  ],
   tick: [
     `team join ${PIT} @a[team=!${PIT},${ZONE}]`,
     `execute as @a[scores={${PIT}.raw=1..}] at @s run function ${NS}:pit/kill`,

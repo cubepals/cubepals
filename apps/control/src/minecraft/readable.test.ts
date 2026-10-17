@@ -8,6 +8,7 @@
  * label and sign there (`readable.ts`; the numbers' sources are in `docs/minecraft/readable-text.md`).
  */
 import { describe, expect, test } from 'bun:test'
+import { BOARD_READS } from './arcade/boards.ts'
 import CLEARANCE from './arcade/clearance.json' with { type: 'json' }
 import type { Label } from './arcade/datapack.ts'
 import { HUB_MARKERS } from './arcade/hub.ts'
@@ -113,5 +114,44 @@ describe('every arrival’s and pad’s words read where they stand', () => {
     expect(unreadable(at(-6, 68), view).some((rule) => rule.includes('level look'))).toBe(true)
     expect(letterPixels(at(-6, 65.5), view)).toBeGreaterThan(LEAST_LETTER)
     expect([MOST_TILT, WIDEST]).toEqual([15, 41])
+  })
+})
+
+/**
+ * The boards hang on the domes over the balcony's ledge, so they are read looking up, further off
+ * level than the rules allow words at a pad or an arrival; and they are as wide as the domes' flat
+ * faces, which leaves their letters about nine pixels tall from the balcony, under the least the
+ * rules ask (`docs/minecraft/readable-text.md`). What they are held to is the rest: all of a board
+ * on the screen, nothing in front of it, and nothing else shown beside it, from where a player
+ * walking out from the hub reads it.
+ */
+describe('every board reads from where it is first seen', () => {
+  test('all of it is on the screen', () => {
+    for (const { label, from } of BOARD_READS) {
+      const rect = seen(label, from, SCREEN)
+      if (rect === null) throw new Error(`${label.tag} isn't seen`)
+      expect([
+        label.tag,
+        rect.left >= 0 && rect.top >= 0 && rect.right <= SCREEN.width && rect.bottom <= SCREEN.height,
+      ]).toEqual([label.tag, true])
+    }
+  })
+
+  test('nothing in the world hides any of it from there, as measured in the world', () => {
+    for (const { label } of BOARD_READS) {
+      const measured = CLEARANCE.sight.find((seen) => seen.at.join(' ') === label.at.join(' '))
+      expect([label.tag, measured?.hidden]).toEqual([label.tag, 0])
+    }
+  })
+
+  test('it is clear of every other label, sign and marker on the screen there', () => {
+    for (const { label, from } of BOARD_READS) {
+      const own = seen(label, from, SCREEN)
+      if (own === null) throw new Error(`${label.tag} isn't seen`)
+      const crowding = others(label, from)
+        .filter(([, rect]) => crowd(own, rect))
+        .map(([what]) => what)
+      expect([label.tag, crowding]).toEqual([label.tag, []])
+    }
   })
 })

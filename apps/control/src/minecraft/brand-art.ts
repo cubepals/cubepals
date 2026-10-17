@@ -4,7 +4,8 @@
 
 /**
  * The pictures in Cubepals' resource pack (`brand-pack.ts`), drawn from source rather than kept as
- * images: the mark from its own shapes in `brand/mark.svg`, sampled into pixels, and around it the
+ * images: the mark from its own shapes in `brand/mark.svg`, sampled into pixels fine enough that its
+ * circles are round (`DETAIL`), and around it the
  * door that takes a player back to the hub and the open door over every way through, and the pack's
  * own picture, the mark in Ink on Paper as Cubepals' servers show it. Ink and Paper, the brand's
  * two colours, with the beta's indigo where light comes through (`brand/README.md`). Each picture is whole pixels, as the game's
@@ -21,7 +22,7 @@ export interface Picture {
   rgba: Uint8Array
 }
 
-/** Every texture's side, in pixels: twice the game's, so the mark keeps its four shapes. */
+/** Every door's drawing, in units: a grid of 32, twice the game's 16. */
 export const SIDE = 32
 
 type Point = readonly [number, number]
@@ -71,46 +72,12 @@ function inMark([x, y]: Point): boolean {
 }
 
 /**
- * The mark drawn on a grid of pixels: each of its four shapes in a cell `cell` pixels square, with
- * a pixel between them, as the hall's mark in blocks is (`scripts/lib/arcade-brand.ts`), since
- * below the brand's twenty pixels the four would run together. Each pixel is sampled `samples` by
- * `samples`; an odd number leaves no pixel half in, so the square, which sits inside its cell,
- * keeps its corners.
+ * Whether a point of the mark's square is in the mark, the square read from its top left (0, 0) to
+ * its bottom right (1, 1) as `brand/mark.svg`'s view box: for drawing it at any size, its shapes
+ * exact, as map art does (`map-art.ts`).
  */
-export function markPixels(cell: number, samples = 4): boolean[][] {
-  const size = 2 * cell + 1
-  const side = (n: number): 0 | 1 | null => (n < cell ? 0 : n > cell ? 1 : null)
-  return Array.from({ length: size }, (_, row) =>
-    Array.from({ length: size }, (_, column) => {
-      const [across, down] = [side(column), side(row)]
-      return across !== null && down !== null && mostlyMark(cell, samples, across, down, column, row)
-    }),
-  )
-}
-
-/**
- * Whether at least half of a pixel in the cell `across` and `down` (each 0 or 1) is its shape's:
- * sampled `samples` by `samples` in the shape's own 300-unit cell of the view box, with the view
- * box's margin.
- */
-function mostlyMark(
-  cell: number,
-  samples: number,
-  across: 0 | 1,
-  down: 0 | 1,
-  column: number,
-  row: number,
-): boolean {
-  const [cx, cy] = [column - across * (cell + 1), row - down * (cell + 1)]
-  let covered = 0
-  for (let sy = 0; sy < samples; sy++)
-    for (let sx = 0; sx < samples; sx++) {
-      const x = across * 300 + VIEW.origin + ((cx + (sx + 0.5) / samples) / cell) * (VIEW.size / 2)
-      const y = down * 300 + VIEW.origin + ((cy + (sy + 0.5) / samples) / cell) * (VIEW.size / 2)
-      if (inMark([x, y])) covered++
-    }
-  return covered >= Math.ceil((samples * samples) / 2)
-}
+export const markAt = (u: number, v: number): boolean =>
+  inMark([VIEW.origin + u * VIEW.size, VIEW.origin + v * VIEW.size])
 
 const rgb = (hex: string): readonly [number, number, number] => [
   Number.parseInt(hex.slice(1, 3), 16),
@@ -118,28 +85,52 @@ const rgb = (hex: string): readonly [number, number, number] => [
   Number.parseInt(hex.slice(5, 7), 16),
 ]
 
-/** A picture to draw on: clear to start with, and filled a rectangle or the mark at a time. */
-function canvas(side: number) {
-  const rgba = new Uint8Array(side * side * 4)
+/** Pixels of a door's picture to a unit of its drawing: its frame on a grid of 32, the mark four times finer, so its circles are round. */
+export const DETAIL = 4
+
+/** Samples to a pixel each way: a pixel is the mark's where at least half of them are in it. */
+const SAMPLES = 3
+
+/**
+ * Whether a pixel is the mark's, the mark drawn `size` pixels square from (0, 0): at least half of
+ * the points sampled across it are in the mark. Pixels round the mark are not; `x` and `y` may be
+ * fractions, for a mark that doesn't start on a whole pixel.
+ */
+export function markPixel(x: number, y: number, size: number): boolean {
+  let covered = 0
+  for (let sy = 0; sy < SAMPLES; sy++)
+    for (let sx = 0; sx < SAMPLES; sx++) {
+      const [u, v] = [(x + (sx + 0.5) / SAMPLES) / size, (y + (sy + 0.5) / SAMPLES) / size]
+      if (u >= 0 && u <= 1 && v >= 0 && v <= 1 && markAt(u, v)) covered++
+    }
+  return covered * 2 >= SAMPLES * SAMPLES
+}
+
+/**
+ * A picture to draw on, clear to start with, `side` units square at `detail` pixels to a unit,
+ * filled a rectangle or the mark at a time.
+ */
+function canvas(side: number, detail = 1) {
+  const pixels = side * detail
+  const rgba = new Uint8Array(pixels * pixels * 4)
   const dot = (x: number, y: number, hex: string) => {
-    if (x < 0 || y < 0 || x >= side || y >= side) return
-    rgba.set([...rgb(hex), 255], (y * side + x) * 4)
+    if (x < 0 || y < 0 || x >= pixels || y >= pixels) return
+    rgba.set([...rgb(hex), 255], (y * pixels + x) * 4)
   }
   return {
-    /** Fills from (x, y), `width` across and `height` down. */
+    /** Fills from (x, y), `width` across and `height` down, in units. */
     rect(x: number, y: number, width: number, height: number, hex: string) {
-      for (let row = y; row < y + height; row++)
-        for (let column = x; column < x + width; column++) dot(column, row, hex)
+      for (let row = y * detail; row < (y + height) * detail; row++)
+        for (let column = x * detail; column < (x + width) * detail; column++) dot(column, row, hex)
     },
-    /** The mark, its shapes `cell` pixels square, its top left at (x, y). */
-    mark(x: number, y: number, cell: number, hex: string) {
-      markPixels(cell).forEach((row, r) => {
-        row.forEach((on, c) => {
-          if (on) dot(x + c, y + r, hex)
-        })
-      })
+    /** The mark, `size` units square, its top left at (x, y), drawn from its own shapes. */
+    mark(x: number, y: number, size: number, hex: string) {
+      const across = size * detail
+      for (let row = 0; row < across; row++)
+        for (let column = 0; column < across; column++)
+          if (markPixel(column, row, across)) dot(x * detail + column, y * detail + row, hex)
     },
-    picture: (): Picture => ({ width: side, height: side, rgba }),
+    picture: (): Picture => ({ width: pixels, height: pixels, rgba }),
   }
 }
 
@@ -151,17 +142,17 @@ function frame(draw: ReturnType<typeof canvas>, top: number) {
 
 /** The door the "Back to the hub" item shows: shut, Ink, the mark on it in Paper, and an indigo handle. */
 export function backToHub(): Picture {
-  const draw = canvas(SIDE)
+  const draw = canvas(SIDE, DETAIL)
   frame(draw, 1)
   draw.rect(9, 4, 14, SIDE - 4, INK)
-  draw.mark(10, 7, 5, PAPER)
+  draw.mark(10, 7, 11, PAPER)
   draw.rect(19, 21, 2, 2, INDIGO)
   return draw.picture()
 }
 
 /** The open door over a way through: its leaf swung back against the frame, and indigo light in the doorway. */
 export function wayOut(): Picture {
-  const draw = canvas(SIDE)
+  const draw = canvas(SIDE, DETAIL)
   frame(draw, 1)
   draw.rect(9, 4, 14, SIDE - 4, INDIGO)
   draw.rect(9, 4, 4, SIDE - 4, INK)
@@ -175,8 +166,8 @@ export function wayOut(): Picture {
 export function badge(side: number): Picture {
   const draw = canvas(side)
   draw.rect(0, 0, side, side, PAPER)
-  const cell = Math.floor((Math.floor(side / 1.5) - 1) / 2)
-  const at = Math.floor((side - (2 * cell + 1)) / 2)
-  draw.mark(at, at, cell, INK)
+  const mark = Math.floor(side / 1.5)
+  const at = Math.floor((side - mark) / 2)
+  draw.mark(at, at, mark, INK)
   return draw.picture()
 }

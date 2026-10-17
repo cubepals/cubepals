@@ -7,7 +7,7 @@
  * now, never one it doesn't carry, and nothing else of the revision.
  */
 import { describe, expect, test } from 'bun:test'
-import type { CarriedFile } from '../../domain/revision/carried.ts'
+import { type CarriedFile, RUNNING_LEVEL } from '../../domain/revision/carried.ts'
 import { defaultSettings, type ServerRevision } from '../../domain/revision/revision.ts'
 import { ARCADE_DATAPACK, ARCADE_FILES } from '../../minecraft/arcade.ts'
 import { DUELS_FILES } from '../../minecraft/duels.ts'
@@ -64,7 +64,10 @@ describe('the files Cubepals owns, at a start', () => {
     expect(byPath(beside.files)).toEqual(byPath([...plain.files, ...ARCADE_FILES]))
     expect(
       beside.files.every(
-        (file) => file.path.startsWith(`${ARCADE_DATAPACK}/`) || file.path.startsWith('plugins/LifeStealZ/'),
+        (file) =>
+          file.path.startsWith(`${ARCADE_DATAPACK}/`) ||
+          file.path.startsWith(`${RUNNING_LEVEL}/data/minecraft/maps/`) ||
+          file.path.startsWith('plugins/LifeStealZ/'),
       ),
     ).toBe(true)
   })

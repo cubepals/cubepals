@@ -10,7 +10,7 @@
 import { describe, expect, test } from 'bun:test'
 import { INDIGO, INK, PAPER } from './arcade/datapack.ts'
 import { ARCADE_FILES } from './arcade.ts'
-import { type Picture, SIDE } from './brand-art.ts'
+import { DETAIL, type Picture, SIDE } from './brand-art.ts'
 import { BRAND_PACK, MARKER_ITEM, MARKERS, RESOURCE_FORMATS } from './brand-pack.ts'
 import { EXIT_MARKER, WAITING_FILES } from './duels-waiting.ts'
 
@@ -96,12 +96,12 @@ describe("Cubepals' resource pack", () => {
     }
   })
 
-  test("its pictures are the brand's two colours and the indigo, whole pixels at twice the game's size", () => {
+  test("its pictures are the brand's two colours and the indigo, whole pixels, the doors at eight times the game's size", () => {
     for (const file of BRAND_PACK)
       if ('picture' in file) {
         const { width, height } = file.picture
         expect(width).toBe(height)
-        if (file.path !== 'pack.png') expect(width).toBe(SIDE)
+        if (file.path !== 'pack.png') expect(width).toBe(SIDE * DETAIL)
         const { alphas, colours } = inked(file.picture)
         // Clear round the shape, and solid in it: nothing blended at an edge. The pack's own picture
         // is a whole square of Paper, as Cubepals' servers show the mark.

@@ -34,7 +34,8 @@
 import { type CarriedFile, RUNNING_LEVEL } from '../domain/revision/carried.ts'
 import { MARKERS, type ShownMarker, showMarker } from './brand-pack.ts'
 import { DUELS_ARENA } from './duels.ts'
-import { buildMarquee, type Frame, type Marquee } from './marquee.ts'
+import { artFiles, MAPS_1_21_11 } from './map-art.ts'
+import { buildMarquee, clearOldBase, type Frame, footOf, type Marquee } from './marquee.ts'
 
 /** The datapack's folder in the running world, and the name Minecraft lists it by. */
 export const WAITING_DATAPACK = `${RUNNING_LEVEL}/datapacks/cubepals-duels`
@@ -59,15 +60,30 @@ export const BRAND_SIGN: Marquee = {
   at: [10, -57, 26],
   facing: 'north',
   side: 4,
-  grain: 8,
+  art: { side: 4, firstId: 9200 },
   frame: ARENA,
   backed: true,
 }
-const SIGN_PARTS = buildMarquee(BRAND_SIGN, ['cubepals.sign'])
+/**
+ * Every display the sign has had carries `cubepals.sign`; its maps carry `cubepals.sign.maps` too.
+ * A server that showed it as blocks of colour before keeps those displays in its world: they are
+ * taken down as the maps go up, and any that load after, as they load.
+ */
+const SIGN_MAPS = 'cubepals.sign.maps'
+const SIGN_PARTS = buildMarquee(BRAND_SIGN, ['cubepals.sign', SIGN_MAPS])
 /** Its blocks, built with the course and the pit; its Paper and mark, shown once someone is here, as the way out's marker is. */
-export const DUELS_SIGN_COMMANDS = SIGN_PARTS.filter((command) => !command.startsWith('summon '))
-const SIGN_DISPLAYS = SIGN_PARTS.filter((command) => command.startsWith('summon '))
-const SHOW_SIGN = `execute if entity @a if block 8 -61 25 minecraft:stone_bricks unless entity @e[tag=cubepals.sign] run function cubepals:sign`
+export const DUELS_SIGN_COMMANDS = [
+  // The sign as first built stood a block proud of its base too, off the platform's edge, over the void.
+  clearOldBase(BRAND_SIGN),
+  ...SIGN_PARTS.filter((command) => !command.startsWith('summon ')),
+]
+const SIGN_DISPLAYS = [
+  'kill @e[type=!minecraft:player,tag=cubepals.sign]',
+  ...SIGN_PARTS.filter((command) => command.startsWith('summon ')),
+]
+const SIGN_FOOT = footOf(BRAND_SIGN)
+const SHOW_SIGN = `execute if entity @a if block ${SIGN_FOOT.at.join(' ')} minecraft:${SIGN_FOOT.block} unless entity @e[tag=${SIGN_MAPS}] run function cubepals:sign`
+const OLD_SIGN_DISPLAYS = `kill @e[type=!minecraft:player,tag=cubepals.sign,tag=!${SIGN_MAPS}]`
 
 /** Where a player is in the pit: inside its walls, from its floor up through its rim. */
 const IN_PIT = 'x=-6,y=-64,z=-26,dx=14,dy=3,dz=14'
@@ -213,6 +229,7 @@ const TICK = [
   `execute as @a[${IN_PIT}] at @s if block ~ ~-1 ~ minecraft:lime_concrete run function cubepals:leave`,
   SHOW_EXIT,
   SHOW_SIGN,
+  OLD_SIGN_DISPLAYS,
   `kill @e[type=minecraft:item,${IN_PIT}]`,
   `execute as @a at @s if block ~ ~-1 ~ minecraft:gold_block run tellraw @s "You finished the parkour."`,
   `execute as @a at @s if block ~ ~-1 ~ minecraft:gold_block run tp @s ${START}`,
@@ -247,4 +264,6 @@ export const WAITING_FILES: readonly CarriedFile[] = [
   { path: `${WAITING_DATAPACK}/data/cubepals/function/open.mcfunction`, content: lines(OPEN) },
   { path: `${WAITING_DATAPACK}/data/cubepals/function/close.mcfunction`, content: lines(CLOSE) },
   { path: `${WAITING_DATAPACK}/data/cubepals/function/leave.mcfunction`, content: lines(LEAVE) },
+  // The maps the sign shows, in the world's data beside the datapack, as 1.21.11 keeps them.
+  ...artFiles(BRAND_SIGN.art, MAPS_1_21_11),
 ]
