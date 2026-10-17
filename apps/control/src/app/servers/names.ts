@@ -10,6 +10,7 @@
  * has one keeps it: this is asked only when a name or address is chosen.
  */
 import { offensive, PICK_ANOTHER_NAME } from '@blockly/contracts/names'
+import { sealProblem } from '@blockly/contracts/seal'
 import { holdOn } from '../../domain/server/held-names.ts'
 import type { Actor } from '../actor.ts'
 import { AppError } from '../errors.ts'
@@ -30,8 +31,16 @@ export function refuseAddress(actor: Actor, slug: string): void {
 /** A new name for a server as a change to it; the name it already has stays, whatever it is. */
 export function renamed(current: string, name: string | undefined): { name?: string } {
   if (name === undefined || name === current) return {}
-  if (offensive(name)) throw new AppError('invalid_name', PICK_ANOTHER_NAME)
+  refuseName(name)
   return { name }
+}
+
+/** A new description for a server as a change to it; the one it already has stays, whatever it is. */
+export function redescribed(current: string, description: string | undefined): { description?: string } {
+  if (description === undefined || description === current) return {}
+  const seal = sealProblem(description, 'Descriptions')
+  if (seal !== null) throw new AppError('invalid_choice', seal)
+  return { description }
 }
 
 /**
@@ -42,6 +51,12 @@ export function checkNewServer(
   actor: Actor,
   request: { name: string; slug?: string | undefined; replaces?: string | undefined },
 ): void {
-  if (offensive(request.name)) throw new AppError('invalid_name', PICK_ANOTHER_NAME)
+  refuseName(request.name)
   if (request.slug !== undefined && request.replaces === undefined) refuseAddress(actor, request.slug)
+}
+
+function refuseName(name: string): void {
+  if (offensive(name)) throw new AppError('invalid_name', PICK_ANOTHER_NAME)
+  const seal = sealProblem(name, 'Names')
+  if (seal !== null) throw new AppError('invalid_name', seal)
 }

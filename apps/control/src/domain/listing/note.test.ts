@@ -73,6 +73,13 @@ describe('a note on a server', () => {
     })
   })
 
+  test('refuses a check mark or a seal, as a character or an emoji', () => {
+    for (const mark of ['✓', '✔', cp(0x2714, 0xfe0f), '☑', '✅', '🗸', '🗹', '√', '🏅', '🎖', '🏵', '📛']) {
+      expect(cleanNote(`Great builds ${mark}`)).toEqual({ refused: 'Notes can’t use check marks or seals.' })
+    }
+    expect(cleanNote('Great builds ★ ✨')).toEqual({ note: 'Great builds ★ ✨' })
+  })
+
   test('the same words again are the same note, whatever their case', () => {
     expect(sameNote('Great server', 'great SERVER')).toBe(true)
     expect(sameNote('Great server', 'Great server!')).toBe(false)

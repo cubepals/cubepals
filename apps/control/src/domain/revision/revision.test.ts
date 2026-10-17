@@ -62,6 +62,15 @@ describe('settings', () => {
     expect(settingsProblems(draft().settings, playerCapacity('2g'))).toEqual([])
   })
 
+  test('a server message with a check mark or a seal in it is refused', () => {
+    for (const mark of ['✓', '✔', '☑', '✅', '🗸', '🏅']) {
+      expect(settingsProblems({ ...draft().settings, motd: `&aJoin us ${mark}` }, 4)).toEqual([
+        'Server messages can’t use check marks or seals.',
+      ])
+    }
+    expect(settingsProblems({ ...draft().settings, motd: '&a★ Join us ★' }, 4)).toEqual([])
+  })
+
   test('each bound is checked and worded', () => {
     const settings = {
       ...draft().settings,

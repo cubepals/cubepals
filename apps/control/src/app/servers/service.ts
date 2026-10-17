@@ -30,7 +30,7 @@ import type { RuntimePlacement } from '../runtimes/service.ts'
 import { keepSentIcon, type OwnIcon } from '../server-icons/persistence.ts'
 import type { SetupService } from '../setups/service.ts'
 import { newInviteCode } from './invites.ts'
-import { checkNewServer, mayGive, refuseAddress, renamed } from './names.ts'
+import { checkNewServer, mayGive, redescribed, refuseAddress, renamed } from './names.ts'
 import { type CreateServerRequest, draftNewServer } from './new-server.ts'
 import {
   createRuntimeBinding,
@@ -447,7 +447,7 @@ export class MinecraftServerService {
       const server = authorize(actor, await lockServer(tx, serverId))
       const change = {
         ...renamed(server.name, name),
-        ...(description === undefined || description === server.description ? {} : { description }),
+        ...redescribed(server.description, description),
         ...(identity.icon === undefined || identity.icon === server.icon ? {} : { icon: identity.icon }),
         ...(await keepSentIcon(tx, server, identity.picture)),
         ...(tags === undefined || tags.join() === server.tags.join() ? {} : { tags }),

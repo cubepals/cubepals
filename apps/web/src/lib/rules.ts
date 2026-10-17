@@ -27,6 +27,7 @@ import {
   SEED_MAX_LENGTH,
 } from '@blockly/contracts'
 import { offensive, PICK_ANOTHER_NAME } from '@blockly/contracts/names'
+import { sealProblem } from '@blockly/contracts/seal'
 
 export type Rule = (value: string) => string | null
 
@@ -46,7 +47,7 @@ export const password: Rule = (value) =>
 export const serverName: Rule = (value) => {
   if (blank(value)) return null
   if (value.trim().length > NAME_MAX_LENGTH) return `A name can be up to ${NAME_MAX_LENGTH} characters.`
-  return offensive(value) ? PICK_ANOTHER_NAME : null
+  return offensive(value) ? PICK_ANOTHER_NAME : sealProblem(value, 'Names')
 }
 
 /** The address people type in Minecraft: a DNS label, which is what the slug becomes. */
@@ -80,7 +81,7 @@ export const seed: Rule = (value) =>
 
 export const description: Rule = (value) =>
   value.trim().length <= DESCRIPTION_MAX_LENGTH
-    ? null
+    ? sealProblem(value, 'Descriptions')
     : `That’s longer than ${DESCRIPTION_MAX_LENGTH} characters.`
 
 /**
@@ -90,7 +91,9 @@ export const description: Rule = (value) =>
 export const note: Rule = (value) => {
   const wanted = value.trim()
   if (wanted.length === 0) return 'Write something first.'
-  return wanted.length <= NOTE_MAX_LENGTH ? null : `A note is up to ${NOTE_MAX_LENGTH} characters.`
+  return wanted.length <= NOTE_MAX_LENGTH
+    ? sealProblem(wanted, 'Notes')
+    : `A note is up to ${NOTE_MAX_LENGTH} characters.`
 }
 
 /**

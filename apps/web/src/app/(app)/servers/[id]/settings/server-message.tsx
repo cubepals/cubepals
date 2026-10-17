@@ -19,6 +19,7 @@ import {
   motdText,
   type ServerView,
 } from '@blockly/contracts'
+import { sealProblem } from '@blockly/contracts/seal'
 import { type CSSProperties, useId, useLayoutEffect, useRef, useState } from 'react'
 import { TextField } from '../../../../../ui'
 import { GROUND, ListEntry, scrambled } from './list-entry'
@@ -28,10 +29,13 @@ import { StyleBar } from './style-bar'
 
 /**
  * Why a message can't be saved, as the control plane would refuse it (`settingsProblems`): it is
- * kept without the spaces around it, needs some text, and all of it must show in the list.
+ * kept without the spaces around it, needs some text with no check marks or seals in it, and all
+ * of it must show in the list.
  */
 export function messageProblem(motd: string): string | null {
   if (motdText(motd).trim() === '') return 'Write something to show under the name.'
+  const seal = sealProblem(motd, 'Server messages')
+  if (seal !== null) return seal
   const { cutCount } = motdLayout(motd.trim())
   return cutCount > 0 ? motdCutSentence(cutCount) : null
 }

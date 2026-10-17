@@ -39,6 +39,7 @@ function Words({ view, outcome }: { view: ServerView; outcome: Outcome }) {
   const [name, setName] = useState(view.name)
   const checkedName = useChecked(rules.serverName, name)
   const [description, setDescription] = useState(view.description)
+  const checkedDescription = useChecked(rules.description, description)
   const icon = useIconChoice(view)
   const save = useMutation(
     trpc.servers.saveIdentity.mutationOptions({
@@ -52,7 +53,7 @@ function Words({ view, outcome }: { view: ServerView; outcome: Outcome }) {
 
   const submit = (event: SubmitEvent) => {
     event.preventDefault()
-    if (!dirty || name.trim().length === 0) return
+    if (!dirty || name.trim().length === 0 || !checkedDescription.check()) return
     save.mutate({ serverId: view.id, name: name.trim(), description: description.trim(), ...icon.input })
   }
   return (
@@ -75,8 +76,15 @@ function Words({ view, outcome }: { view: ServerView; outcome: Outcome }) {
           placeholder="A quiet survival world for six friends. Nothing is off limits."
           value={description}
           onChange={(event) => setDescription(event.target.value)}
+          {...checkedDescription.field}
         />
-        <span className="bk-field__help">Shown to anyone you share it with.</span>
+        {checkedDescription.error === null ? (
+          <span className="bk-field__help">Shown to anyone you share it with.</span>
+        ) : (
+          <span className="bk-field__error" role="alert">
+            {checkedDescription.error}
+          </span>
+        )}
       </label>
       <IconPicker choice={icon} />
       {/* It stays a moment after saving, to say it did. */}
