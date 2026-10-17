@@ -20,6 +20,7 @@ import type { EventBus } from '../../ports/events.ts'
 import type { ArchiveStore } from '../../ports/optional.ts'
 import type { RuntimeHandle } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
+import { keptStorage } from '../../servers/kept-storage.ts'
 import { loadRuntime, lockServer, markStored, saveHandle } from '../../servers/persistence.ts'
 import type { RuntimeSpecs } from '../../servers/specs.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
@@ -73,6 +74,9 @@ export function storedWorlds(deps: {
   /** Why a server may not rest now, or null when it may. One an operator rests `now` may have been played. */
   const whyNotStore = async (server: MinecraftServer, now: Date, asked: boolean): Promise<string | null> => {
     if (!(await loadControls(db)).storingEnabled) return 'Resting worlds is paused.'
+    // Letting go would take the storage a rebuild kept with the rest (`kept-storage.ts`).
+    if ((await keptStorage(db, server.id, now)).length > 0)
+      return 'It keeps its world’s copy from before a rebuild, in case the rebuild missed anything. It rests once that copy goes.'
     const standing = await loadStanding(db, server.ownerId)
     const days = asked ? 0 : entitlementsFor(standing.plan, standing.limitOverrides).storeAfterIdleDays
     if (now.getTime() - server.lastActiveAt.getTime() < days * DAY_MS) return 'It was played recently.'

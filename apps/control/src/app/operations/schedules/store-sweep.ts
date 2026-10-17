@@ -11,6 +11,7 @@ import { DAY_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
 import { entitlementsFor, PLAN_KEYS } from '../../../domain/account/entitlements.ts'
 import { loadControls, loadStanding } from '../../accounts/persistence.ts'
+import { keptStorage } from '../../servers/kept-storage.ts'
 import { idleSince, lockServer } from '../../servers/persistence.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { latestOfKind, pendingOfKind } from '../persistence.ts'
@@ -44,6 +45,8 @@ export function storingIdle(deps: {
       const days = entitlementsFor(standing.plan, standing.limitOverrides).storeAfterIdleDays
       if (now.getTime() - server.lastActiveAt.getTime() < days * DAY_MS) continue
       if (await pendingOfKind(db, server.id, 'store')) continue
+      // The storage a rebuild kept would go with the rest: it rests once that is let go.
+      if ((await keptStorage(db, server.id, now)).length > 0) continue
       // One try per stretch of idleness, and another after each that ended without resting it: at
       // once after one called off (somebody played, something else waited), a day after one that
       // failed, since what failed it (a store that is down, a world too big to pack) seldom mends
