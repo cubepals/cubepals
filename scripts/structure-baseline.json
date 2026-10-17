@@ -454,10 +454,6 @@
       "n": 18,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
-    "apps/control/src/infra/mc-protocol/rcon.test.ts › function vanillaRcon › server › socket.on('data', (chunk) => {": {
-      "n": 17,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    },
     "apps/control/src/infra/mc-protocol/slp.ts › class SlpProbe › ping › return new Promise((resolve, reject) => { › socket.on('data', (chunk) => {": {
       "n": 24,
       "reason": "Over the threshold when the check began, and not yet looked at."

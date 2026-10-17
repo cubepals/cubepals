@@ -24,7 +24,7 @@ describe('what may go to production as the website alone', () => {
       flyInputs([
         'apps/web/src/app/page.tsx',
         'apps/control/src/main.node.ts',
-        'apps/edge/src/main.ts',
+        'apps/edge/router.ts',
         'packages/contracts/src/agreements.ts',
         'infra/fly/control.toml',
         'bun.lock',
@@ -32,7 +32,7 @@ describe('what may go to production as the website alone', () => {
       ]),
     ).toEqual([
       'apps/control/src/main.node.ts',
-      'apps/edge/src/main.ts',
+      'apps/edge/router.ts',
       'packages/contracts/src/agreements.ts',
       'infra/fly/control.toml',
       'bun.lock',
@@ -43,9 +43,13 @@ describe('what may go to production as the website alone', () => {
 
 describe('what a hotfix deploys', () => {
   test('only the Fly apps the change is built into, control first', () => {
-    expect(appsFor(['apps/edge/src/main.ts'])).toEqual(['edge'])
+    expect(appsFor(['apps/edge/router.ts'])).toEqual(['edge'])
     expect(appsFor(['apps/control/src/app/billing/service.ts'])).toEqual(['control', 'realtime'])
-    expect(appsFor(['packages/db/src/schema/billing.ts'])).toEqual(['control', 'realtime', 'edge'])
+    expect(appsFor(['packages/db/src/schema/billing.ts'])).toEqual(['control', 'realtime'])
+    expect(appsFor(['packages/contracts/src/durations.ts'])).toEqual(['control', 'realtime', 'edge'])
+    expect(appsFor(['apps/control/src/minecraft/ports.ts'])).toEqual(['control', 'realtime', 'edge'])
+    expect(appsFor(['bun.lock'])).toEqual(['control', 'realtime'])
+    expect(appsFor(['apps/edge/README.md', 'apps/control/README.md'])).toEqual([])
     expect(appsFor(['infra/fly/realtime.toml'])).toEqual(['realtime'])
     expect(appsFor(['apps/web/src/ui/plans.tsx', 'docs/production.md'])).toEqual([])
   })

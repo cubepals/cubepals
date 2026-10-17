@@ -12,6 +12,7 @@ import { messageOf, useTRPC } from '../../../lib/api'
 import { checkoutHref } from '../../../lib/checkout'
 import { useOutcome } from '../../../lib/outcome'
 import { billingReturned, extraPlaySet } from '../../../lib/paying'
+import { countedFrom, zoneFrom } from '../../../lib/play-clock'
 import { dayOf, loaderLabel } from '../../../lib/present'
 import {
   BlockMeter,
@@ -149,7 +150,7 @@ function Play({ overview }: { overview: AccountOverviewView }) {
   return (
     <FormSection
       title="Play this month"
-      description={`${fromLastMonth(u.carriedUnits)}${comesBack(e.carryUnits)}`}
+      description={`${countedFrom(u.monthBegan, u.timeZone, new Date())}${zoneFrom(u.nextTimeZone, 'month')}${fromLastMonth(u.carriedUnits)}${comesBack(e.carryUnits)}`}
     >
       <BlockMeter left={left} included={included} label="This month's play" />
       {share >= 100 ? (
@@ -253,7 +254,10 @@ function PlayToday({ overview }: { overview: AccountOverviewView }) {
   if (today === null || (total !== null && total.units >= total.included)) return null
   const share = Math.round(Math.min(1, today.units / today.included) * 100)
   return (
-    <FormSection title="Play today" description="More every day at midnight.">
+    <FormSection
+      title="Play today"
+      description={`${zoneFrom(overview.usage.nextTimeZone, 'day')}More every day at midnight.`}
+    >
       <BlockMeter
         left={Math.max(0, today.included - today.units)}
         included={today.included}

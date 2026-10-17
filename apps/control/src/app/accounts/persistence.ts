@@ -53,6 +53,10 @@ const toStanding = (row: typeof standing.$inferSelect): AccountStanding => ({
   playWarned: row.playWarned,
   extraWarned: row.extraWarned,
   timeZone: row.timeZone,
+  timeZoneFrom: row.timeZoneFrom,
+  timeZoneBegan: row.timeZoneBegan,
+  nextTimeZone: row.nextTimeZone,
+  nextTimeZoneFrom: row.nextTimeZoneFrom,
   testAccount: row.testAccount,
 })
 

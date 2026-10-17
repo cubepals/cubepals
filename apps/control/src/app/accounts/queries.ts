@@ -48,6 +48,14 @@ const round = (value: number): number => Math.round(value * 10) / 10
 const totalSaid = (total: PlayTotal | null): AccountOverviewView['usage']['total'] =>
   total === null ? null : { units: round(total.units), included: total.included }
 
+/** A time zone the browser reported that takes over next month, as the account page says it. */
+const zoneWaiting = (
+  standing: Pick<AccountStanding, 'nextTimeZone' | 'nextTimeZoneFrom'>,
+): AccountOverviewView['usage']['nextTimeZone'] =>
+  standing.nextTimeZone === null || standing.nextTimeZoneFrom === null
+    ? null
+    : { zone: standing.nextTimeZone, from: standing.nextTimeZoneFrom.toISOString() }
+
 /** Features an account page lists, each answered by the policy as the API would answer it. */
 const FEATURES = [
   'create_server',
@@ -99,6 +107,9 @@ export interface AccountOverview {
     hoursThisMonth: number
     /** What was left of last month's block and carried into this one, up to the plan's `carryUnits`, in units. */
     carriedUnits: number
+    monthBegan: AccountOverviewView['usage']['monthBegan']
+    timeZone: AccountOverviewView['usage']['timeZone']
+    nextTimeZone: AccountOverviewView['usage']['nextTimeZone']
     extraUnitsAllowed: number
     unitCents: number
     /**
@@ -171,7 +182,8 @@ export class AccountQueries {
     const entitlements = entitlementsFor(standing.plan, standing.limitOverrides)
     const owned = await countServers(this.#db, userId)
     const month = await meteredMonth(this.#db, standing, entitlements, now)
-    const monthBegan = month?.start ?? monthStart(now, standing.timeZone ?? DEFAULT_TIME_ZONE)
+    const zone = standing.timeZone ?? DEFAULT_TIME_ZONE
+    const monthBegan = month?.start ?? monthStart(now, zone)
     const subscription = await latestSubscription(this.#db, userId)
     const gifted = await giftedPlan(this.#db, userId, now)
     const { decision, owedCents } = await extraPlayNow(this.#db, standing)
@@ -228,6 +240,9 @@ export class AccountQueries {
         unitsThisMonth: round(await meteredUnitsSince(this.#db, userId, monthBegan, now)),
         hoursThisMonth: round(await runHoursSince(this.#db, userId, monthBegan, now)),
         carriedUnits: round(month?.carried ?? 0),
+        monthBegan: monthBegan.toISOString(),
+        timeZone: zone,
+        nextTimeZone: zoneWaiting(standing),
         extraUnitsAllowed: standing.extraUnitsAllowed,
         unitCents: UNIT_CENTS,
         extra: {
@@ -265,7 +280,8 @@ export class AccountQueries {
       email: user.email,
       admin: await isAdmin(this.#db, user.id),
       standing: { status: standing.status, reason: standing.reason, plan: standing.plan },
-      timeZone: standing.timeZone,
+      // What the browser last said, waiting or not, so it isn't said again.
+      timeZone: standing.nextTimeZone ?? standing.timeZone,
     }
   }
 

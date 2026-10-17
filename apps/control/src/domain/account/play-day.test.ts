@@ -6,13 +6,16 @@
 import { describe, expect, test } from 'bun:test'
 import {
   DEFAULT_TIME_ZONE,
+  dayBegan,
   dayStart,
   isTimeZone,
+  monthBegan,
   monthOf,
   monthStart,
   nextDayStart,
   nextMonthStart,
   startOfMonth,
+  zoneTakesOver,
 } from './play-day.ts'
 
 const at = (iso: string) => new Date(iso)
@@ -80,5 +83,44 @@ describe('the play month', () => {
       const start = monthStart(at('2026-10-12T15:30:00Z'), zone)
       expect(startOfMonth(monthOf(start, zone), zone)).toEqual(start)
     }
+  })
+})
+
+describe('a time zone that changes', () => {
+  const kiritimati = 'Pacific/Kiritimati'
+
+  test('takes over once the next month has begun in both zones, never sooner', () => {
+    // Late on 30 November in UTC it is already 1 December in Kiritimati, UTC+14.
+    const now = at('2026-11-30T12:00:00Z')
+    expect(zoneTakesOver(now, 'UTC', kiritimati)).toEqual(at('2026-12-01T00:00:00Z'))
+    // Kiritimati is counting December already: it counts it to its end, and UTC takes January.
+    expect(zoneTakesOver(now, kiritimati, 'UTC')).toEqual(at('2027-01-01T00:00:00Z'))
+    expect(zoneTakesOver(at('2026-11-10T00:00:00Z'), kiritimati, 'UTC')).toEqual(at('2026-12-01T00:00:00Z'))
+    expect(zoneTakesOver(at('2026-11-10T00:00:00Z'), 'UTC', kiritimati)).toEqual(at('2026-12-01T00:00:00Z'))
+  })
+
+  test('to a zone ahead: its first month and day begin where the zone before left off', () => {
+    const change = { from: at('2026-12-01T00:00:00Z'), began: at('2026-12-01T00:00:00Z') }
+    // Kiritimati's December began 14 hours earlier, in the month UTC had already counted.
+    expect(monthBegan(at('2026-12-01T05:00:00Z'), kiritimati, change)).toEqual(change.began)
+    expect(dayBegan(at('2026-12-01T05:00:00Z'), kiritimati, change)).toEqual(change.began)
+    // From then on, the 1st and midnight are Kiritimati's.
+    expect(monthBegan(at('2027-01-10T00:00:00Z'), kiritimati, change)).toEqual(at('2026-12-31T10:00:00Z'))
+    expect(dayBegan(at('2026-12-01T12:00:00Z'), kiritimati, change)).toEqual(at('2026-12-01T10:00:00Z'))
+  })
+
+  test('to a zone behind: its first month and day run on from when they began in the zone before', () => {
+    // Kiritimati's December began at 10:00 UTC on 30 November; UTC's begins 14 hours later.
+    const change = { from: at('2026-12-01T00:00:00Z'), began: at('2026-11-30T10:00:00Z') }
+    expect(monthBegan(at('2026-12-20T00:00:00Z'), 'UTC', change)).toEqual(change.began)
+    expect(dayBegan(at('2026-12-01T05:00:00Z'), 'UTC', change)).toEqual(change.began)
+    expect(dayBegan(at('2026-12-02T05:00:00Z'), 'UTC', change)).toEqual(at('2026-12-02T00:00:00Z'))
+    expect(monthBegan(at('2027-01-10T00:00:00Z'), 'UTC', change)).toEqual(at('2027-01-01T00:00:00Z'))
+  })
+
+  test('changes nothing when there was no change', () => {
+    const now = at('2026-10-12T15:30:00Z')
+    expect(monthBegan(now, kiritimati, null)).toEqual(monthStart(now, kiritimati))
+    expect(dayBegan(now, kiritimati, null)).toEqual(dayStart(now, kiritimati))
   })
 })

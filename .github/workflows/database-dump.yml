@@ -9,7 +9,7 @@ name: Database dump
 # GitHub emails, when a step fails or the database nears Supabase Free's 500 MB.
 # The repository is public, and so are these logs: the script prints sizes, the dump's key and
 # whether each step passed, never a row or an address. Its values are secrets of the `production`
-# environment, which production.ts sets; until they are, the run says so and passes.
+# environment, which production.ts sets; a run that gets none of them fails.
 on:
   schedule:
     - cron: '37 3 * * *'
