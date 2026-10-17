@@ -250,6 +250,25 @@ export async function setBackupStatus(
 }
 
 /**
+ * Backups whose time is up, retired, as read at `now`: only those still ready and still past their
+ * expiry, so one kept for longer since it was read, or for good, as the copy a world rests in, stays.
+ */
+export async function expireDue(q: Queryable, ids: readonly string[], now: Date): Promise<void> {
+  if (ids.length === 0) return
+  await q
+    .update(backups)
+    .set({ status: 'expired' })
+    .where(
+      and(
+        inArray(backups.id, [...ids]),
+        eq(backups.status, 'ready'),
+        isNotNull(backups.expiresAt),
+        lt(backups.expiresAt, now),
+      ),
+    )
+}
+
+/**
  * The copy of a server's world made to rest it: its newest ready one. While
  * the server is stored it has no expiry, and it is the only copy of the world there is.
  */

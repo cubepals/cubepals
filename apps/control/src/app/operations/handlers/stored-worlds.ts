@@ -90,7 +90,9 @@ export function storedWorlds(deps: {
     config: AppliedConfigJson,
   ): Promise<BackupRecord> => {
     const existing = await storedCopy(db, server.id)
-    if (existing !== null && existing.createdAt >= server.lastActiveAt) return existing
+    // One past its expiry is the daily sweep's to retire, and may be on its way out of the store.
+    const due = existing?.expiresAt != null && existing.expiresAt <= new Date()
+    if (existing !== null && !due && existing.createdAt >= server.lastActiveAt) return existing
     // Only a server asleep rests, its world saved; one whose memory was kept stops for real first.
     return runtime.stop(handle).then(() => archiveCopy(server, handle, config, 'stored', stillApplies))
   }

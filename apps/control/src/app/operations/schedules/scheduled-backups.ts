@@ -11,7 +11,14 @@
 import { DAY_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
-import { latestRestorePoint, listBackups, pastExpiry, setBackupStatus } from '../../backups/persistence.ts'
+import {
+  type BackupRecord,
+  expireDue,
+  latestRestorePoint,
+  listBackups,
+  pastExpiry,
+  setBackupStatus,
+} from '../../backups/persistence.ts'
 import type { BackupService } from '../../backups/service.ts'
 import type { EventBus } from '../../ports/events.ts'
 import type { SnapshotHandle } from '../../ports/runtime.ts'
@@ -65,7 +72,8 @@ export function schedulingBackups(deps: {
   }
 
   const expireBackups = async (now: Date, servers: readonly MinecraftServer[]): Promise<void> => {
-    const gone = new Map((await pastExpiry(db, now)).map((b) => [b.id, b]))
+    const due = new Map((await pastExpiry(db, now)).map((b) => [b.id, b]))
+    const gone = new Map<string, BackupRecord>()
     for (const server of servers) {
       const ready = (await listBackups(db, server.id)).filter(
         (b) => b.status === 'ready' && b.snapshotHandle !== null,
@@ -82,10 +90,13 @@ export function schedulingBackups(deps: {
       for (const backup of ready)
         if (backup.snapshotHandle !== null && vanished.has(backup.snapshotHandle)) gone.set(backup.id, backup)
     }
-    if (gone.size === 0) return
+    if (due.size === 0 && gone.size === 0) return
     await db.transaction(async (tx) => {
+      // What was due when it was read may have been kept since: a world resting in it, a wake
+      // keeping it a while. Only what is still due goes.
+      await expireDue(tx, [...due.keys()], now)
       await setBackupStatus(tx, [...gone.keys()], 'expired')
-      for (const serverId of new Set([...gone.values()].map((b) => b.serverId))) {
+      for (const serverId of new Set([...due.values(), ...gone.values()].map((b) => b.serverId))) {
         const server = await findServer(tx, serverId)
         if (server) await events.publish(tx, { type: 'backup_changed', serverId, ownerId: server.ownerId })
       }
