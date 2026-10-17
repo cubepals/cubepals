@@ -485,10 +485,15 @@ function planSummary(overview: AccountOverviewView): string {
     : 'No card, and nothing is charged when it ends.'
 }
 
-/** A gift waiting while the plan renews: it starts once the time being paid for ends. */
+/**
+ * A gift waiting while the plan renews: it starts once the time being paid for ends, or, when part
+ * of it ran already, what is left of it continues then.
+ */
 function giftWaits(gift: NonNullable<AccountOverviewView['plan']['giftNext']>): string {
-  const what = gift.months === 1 ? 'gifted month now starts' : `gifted ${gift.months} months now start`
-  return `Your ${what} on ${dayOf(gift.startsAt)}, after the month you’re paying for.`
+  if (gift.continues)
+    return `The rest of your gift continues on ${dayOf(gift.startsAt)}, once the time you’re paying for ends, until ${dayOf(gift.endsAt)}.`
+  const what = gift.months === 1 ? 'gifted month starts' : `gifted ${gift.months} months start`
+  return `Your ${what} on ${dayOf(gift.startsAt)}, once the time you’re paying for ends.`
 }
 
 /**

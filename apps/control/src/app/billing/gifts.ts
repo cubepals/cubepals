@@ -490,22 +490,24 @@ export async function giftsAfterPaidTime(
 }
 
 /**
- * For the account page: the first redeemed gift still to start, its plan, its months and when it
- * starts; null with none waiting.
+ * For the account page: the first redeemed gift still to start, its plan, its months, when it
+ * starts and ends, and whether it ran already before paid time moved it (`continues`: what is left
+ * of it runs then, not its months whole); null with none waiting.
  */
 export async function giftNext(
   q: Queryable,
   userId: string,
   now: Date,
-): Promise<{ planKey: string; months: number; startsAt: Date } | null> {
+): Promise<{ planKey: string; months: number; startsAt: Date; endsAt: Date; continues: boolean } | null> {
   const [row] = await q
-    .select({ planKey: gifts.planKey, months: gifts.months, startsAt: gifts.startsAt })
+    .select({ planKey: gifts.planKey, months: gifts.months, startsAt: gifts.startsAt, endsAt: gifts.endsAt })
     .from(gifts)
     .where(and(eq(gifts.redeemedBy, userId), isNull(gifts.voidedAt), gt(gifts.startsAt, now)))
     .orderBy(asc(gifts.startsAt))
     .limit(1)
-  if (!row?.planKey || !row.months || !row.startsAt) return null
-  return { planKey: row.planKey, months: row.months, startsAt: row.startsAt }
+  if (!row?.planKey || !row.months || !row.startsAt || !row.endsAt) return null
+  const continues = row.endsAt < addMonths(row.startsAt, row.months)
+  return { planKey: row.planKey, months: row.months, startsAt: row.startsAt, endsAt: row.endsAt, continues }
 }
 
 /** The provider being down is a refusal people can read, not an internal error. */

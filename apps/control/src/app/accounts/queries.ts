@@ -83,8 +83,11 @@ export interface AccountOverview {
     year: { planKey: string; startsAt: Date; endsAt: Date; renewed: boolean } | null
     /** A redeemed gift that gives the plan now, and when the gifted time runs out. */
     gifted: { planKey: string; until: Date } | null
-    /** A redeemed gift waiting to start, once the time the account has paid for ends. */
-    giftNext: { planKey: string; months: number; startsAt: Date } | null
+    /**
+     * A redeemed gift waiting to start, once the time the account has paid for ends; `continues`
+     * when part of it ran already, and what is left of it runs then.
+     */
+    giftNext: { planKey: string; months: number; startsAt: Date; endsAt: Date; continues: boolean } | null
   }
   entitlements: Entitlements
   /** The sizes the plan allows, as somebody reads them: "3 GB · up to 5 players". */
