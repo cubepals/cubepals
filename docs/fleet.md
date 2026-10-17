@@ -303,9 +303,10 @@ with backoff from Fly's and Docker's runtimes), and only while it holds an **exe
 - Each heartbeat answer grants `FLEET_LEASE_SECONDS` (120) from when the beat was sent, measured
   on `CLOCK_BOOTTIME`, which keeps counting while a VM is paused.
 - A new daemon session gets 0 for its first 15 s, while the previous session's beats may still
-  be in flight, and its new addresses wait as long: a second host booted from a copy of the disk
-  shows itself in that time (§3). A real reboot's resumes wait that long too. A quarantined node
-  gets 0, and keeps its addresses, until an operator decides.
+  be in flight, and its new addresses and its list of copies change nothing as long: a second
+  host booted from a copy of the disk shows itself in that time (§3). A real reboot's resumes,
+  and its first report, wait that long too. A quarantined node gets 0, and keeps its addresses
+  and the copies it last reported, until an operator decides.
 - A node the control plane holds `lost` gets 0. A node that hasn't heard from the control plane
   in a lease's time restarts nothing on its own: it may have been replaced.
 - The lease never stops anything. A control-plane outage changes nothing for players.

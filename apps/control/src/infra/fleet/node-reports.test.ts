@@ -74,6 +74,34 @@ describe.skipIf(!hasDatabase)('the lease, and who may beat for a node', () => {
     expect((await summary(a.id))?.edge_host).toBe('10.0.0.5')
   })
 
+  test("a second host's beats leave the copies the node reported, and their room, as they were", async () => {
+    const a = await enrollNode(db, ca, 'clone-copies')
+    await place('w-kept-1', a.id, 1)
+    await place('w-kept-2', a.id, 1)
+    const copies = [report('w-kept-1', 1), report('w-kept-2', 1)]
+    for (let seq = 1; seq <= 3; seq++) await send(a, beat(a, 'original', seq, copies))
+    const observed = () =>
+      rows<{ workload: string; state: string }>(
+        db,
+        sql`SELECT workload, state FROM fleet_observations WHERE node_id = ${a.id} ORDER BY workload`,
+      )
+    const before = await observed()
+    expect(before).toHaveLength(2)
+    expect((await summary(a.id))?.running.memoryMb).toBe(2048)
+    await send(a, beat(a, 'clone', 1))
+    await send(a, beat(a, 'clone', 2, [report('w-kept-1', 1, { state: 'stopped' })]))
+    expect(await observed()).toEqual(before)
+    expect((await summary(a.id))?.running.memoryMb).toBe(2048)
+    // Caught and quarantined, it changes nothing either.
+    await pastInFlight(a.id)
+    await expect(send(a, beat(a, 'original', 4, copies))).rejects.toMatchObject({
+      code: 'duplicate_identity',
+    })
+    await send(a, beat(a, 'clone', 3))
+    expect(await observed()).toEqual(before)
+    expect((await summary(a.id))?.running.memoryMb).toBe(2048)
+  })
+
   test('a rebooted node gets its lease, and is reached at its new address, once the old session is past', async () => {
     const a = await enrollNode(db, ca, 'reboot-lease', { apiAddress: '10.0.0.6:7443' })
     expect((await send(a, beat(a, 'one', 1))).leaseSeconds).toBe(120)
@@ -99,14 +127,29 @@ describe.skipIf(!hasDatabase)('epochs, as nodes report them', () => {
     ).rejects.toMatchObject({ code: 'invalid_request' })
   })
 
-  test("a server's next epoch counts its own nodes' reports, and no other node's", async () => {
-    const a = await enrollNode(db, ca, 'epoch-home')
-    const b = await enrollNode(db, ca, 'epoch-other')
-    await place('w-far', a.id, 1)
-    await send(b, beat(b, 's', 1, [report('w-far', Number.MAX_SAFE_INTEGER - 1)]))
-    expect(await nextEpoch(db, 'w-far')).toBe(2)
-    await send(a, beat(a, 's', 1, [report('w-far', 1, { state: 'fenced', supersededBy: 6 })]))
-    expect(await nextEpoch(db, 'w-far')).toBe(7)
+  test('one up to the ceiling is taken, and the epochs after it stay exact', async () => {
+    const a = await enrollNode(db, ca, 'epoch-ceiling')
+    await expect(send(a, beat(a, 's', 1, [report('w-high', 2 ** 52 + 1)]))).rejects.toMatchObject({
+      code: 'invalid_request',
+    })
+    await send(a, beat(a, 's', 1, [report('w-high', 2 ** 52)]))
+    const next = await nextEpoch(db, 'w-high')
+    expect(next).toBe(2 ** 52 + 1)
+    expect(Number.isSafeInteger(next)).toBe(true)
+  })
+
+  test("every node's copy counts, so a restored database never hands out an epoch a node holds", async () => {
+    const a = await enrollNode(db, ca, 'restored-a')
+    const b = await enrollNode(db, ca, 'restored-b')
+    // The backup has the server on A at 3; since then it moved to B at 4.
+    await place('w-restored', a.id, 3)
+    await send(b, beat(b, 's', 1, [report('w-restored', 4)]))
+    expect(await nextEpoch(db, 'w-restored')).toBe(5)
+    // Given a new home at that epoch, B's copy is fenced.
+    await db.execute(sql`UPDATE fleet_placements SET epoch = 5 WHERE workload = 'w-restored'`)
+    expect((await send(b, beat(b, 's', 2, [report('w-restored', 4)]))).fences).toEqual([
+      { workload: 'w-restored', currentEpoch: 5 },
+    ])
   })
 })
 

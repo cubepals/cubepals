@@ -26,6 +26,14 @@ import { rollout } from './upgrades.ts'
 
 // ─── heartbeats ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The highest epoch a node may report. Every epoch a node holds counts toward a server's next one,
+ * since a restored database may not know which node holds what: below this, whatever a node
+ * reports, the epochs after it stay whole numbers this process holds exactly for longer than any
+ * server will be restored or moved.
+ */
+const EPOCH_CEILING = 2 ** 52
+
 /** How long after a session switch a beat from the previous session may still be in flight. */
 const LATE_BEAT_SECONDS = 15
 
@@ -53,11 +61,7 @@ export async function heartbeat(
   if (request?.nodeId !== nodeId)
     throw new Refused(400, 'invalid_request', 'the heartbeat is for another node')
   if (!request.workloads.every((r) => exact(r.epoch) && exact(r.supersededBy)))
-    throw new Refused(
-      400,
-      'invalid_request',
-      'an epoch is not a whole number this control plane counts exactly',
-    )
+    throw new Refused(400, 'invalid_request', `an epoch is not a whole number from 0 to ${EPOCH_CEILING}`)
   const outcome = await db.transaction(
     async (t): Promise<{ response: HeartbeatResponse } | { refused: Refused }> => {
       const node = await getNode(t, nodeId, true)
@@ -163,8 +167,9 @@ function leaseFor(node: Pick<NodeRow, 'lifecycle'>, held: boolean, seconds: numb
   return node.lifecycle === 'lost' || held ? 0 : seconds
 }
 
-/** An epoch, if any, is a whole number this process holds exactly: one past that can't be raised past. */
-const exact = (epoch: number | null) => epoch === null || (Number.isSafeInteger(epoch) && epoch >= 0)
+/** An epoch, if any, is a whole number no higher than `EPOCH_CEILING`. */
+const exact = (epoch: number | null) =>
+  epoch === null || (Number.isSafeInteger(epoch) && epoch >= 0 && epoch <= EPOCH_CEILING)
 
 /** Addresses a node reports, when they are addresses and nothing more. */
 function validAddresses(addresses: NodeAddresses | null | undefined): NodeAddresses | null {
@@ -175,7 +180,8 @@ function validAddresses(addresses: NodeAddresses | null | undefined): NodeAddres
 
 /**
  * The report applied to the node's row and its copies; returns the upgrade to offer it, if any.
- * A `held` node's new addresses aren't followed: they may be another host's.
+ * A `held` node's new addresses aren't followed, and its list of copies changes nothing: both may
+ * be another host's, and the ledger keeps what the node last said for itself.
  */
 async function apply(
   t: Queryable,
@@ -220,12 +226,18 @@ async function apply(
   )
     await event(t, 'node.returned_while_lost', { node: node.id, data: { fencedBy: node.fenced_by } })
 
-  await observe(t, node, request.workloads)
+  await recordCopies(t, node, request.workloads, held)
+  return rollout(t, node, request, release)
+}
+
+/** The copies a node reports, as it holds them now; a `held` node's list changes nothing. */
+async function recordCopies(t: Queryable, node: NodeRow, reported: WorkloadReport[], held: boolean) {
+  if (held) return
+  await observe(t, node, reported)
   // What the node no longer reports, it no longer holds.
   await t.execute(sql`
     DELETE FROM fleet_observations
-    WHERE node_id = ${node.id} AND NOT (workload = ANY(${textArray(request.workloads.map((r) => r.id))}))`)
-  return rollout(t, node, request, release)
+    WHERE node_id = ${node.id} AND NOT (workload = ANY(${textArray(reported.map((r) => r.id))}))`)
 }
 
 /**
