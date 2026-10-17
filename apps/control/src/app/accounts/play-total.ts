@@ -12,8 +12,9 @@
  * used is the session check's; the day's play beside it is `play-today.ts`'s.
  */
 import type { ServerView } from '@blockly/contracts'
-import type { Queryable } from '@blockly/db'
-import type { Entitlements } from '../../domain/account/entitlements.ts'
+import { type Queryable, schema } from '@blockly/db'
+import { and, eq, isNull } from 'drizzle-orm'
+import { type Entitlements, entitlementsFor } from '../../domain/account/entitlements.ts'
 import { METER_UNITS } from '../../domain/account/meter.ts'
 import type { AccountStanding } from '../../domain/account/standing.ts'
 import type { MemoryTier } from '../../domain/server/size.ts'
@@ -58,3 +59,38 @@ export const totalView = (total: PlayTotal | null, tier: MemoryTier): ServerView
   total === null
     ? null
     : { hours: total.included, hoursLeft: Math.floor((total.left / METER_UNITS[tier]) * 100) / 100 }
+
+/**
+ * Each live server stopped because its owner's free trial's hours ran out, with its owner's plan
+ * as `trialOver` reads it; unrun, so the edge's routes can fold it into their fingerprint
+ * (`edge/inputs.ts`), and a plan that changes moves it.
+ */
+export function trialStops(q: Queryable) {
+  const servers = schema.minecraftServers
+  const standing = schema.accountStanding
+  return q
+    .select({ id: servers.id, plan: standing.plan, overrides: standing.limitOverrides })
+    .from(servers)
+    .leftJoin(standing, eq(standing.userId, servers.ownerId))
+    .where(
+      and(isNull(servers.deletedAt), eq(servers.status, 'stopped'), eq(servers.stopReason, 'free_hours')),
+    )
+}
+
+/**
+ * Of `trialStops`, the servers whose owner is still on a plan with hours in all: on any other,
+ * the next join starts them as it would any sleeping server.
+ */
+export function trialOver(
+  stops: ReadonlyArray<{
+    id: string
+    plan: string | null
+    overrides: Parameters<typeof entitlementsFor>[1] | null
+  }>,
+): Set<string> {
+  return new Set(
+    stops
+      .filter((row) => entitlementsFor(row.plan ?? 'free', row.overrides ?? {}).totalUnits !== null)
+      .map((row) => row.id),
+  )
+}

@@ -43,6 +43,7 @@ import {
   StatusPill,
 } from '../../../../ui'
 import { ctaMark } from '../../../(public)/steps'
+import { CameBy } from '../../came-by'
 import { FreeHoursUsed } from '../../free-hours-used'
 import { OutForToday } from '../../out-for-today'
 import { PlusOffer } from '../../plus-offer'
@@ -306,6 +307,7 @@ function Actions({ server, wake }: { server: ServerView; wake: Wake }) {
           </span>
         </Note>
       )}
+      <CameBy server={server} />
       <Today server={server} />
       {server.deletesAt !== null && <Unplayed server={server} at={server.deletesAt} />}
       {server.expiresAt !== null && (

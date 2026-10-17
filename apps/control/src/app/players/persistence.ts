@@ -118,4 +118,5 @@ export async function playedHere(
 export async function forgetPlayers(q: Queryable, serverId: string): Promise<void> {
   await q.delete(snapshots).where(eq(snapshots.serverId, serverId))
   await q.delete(waiting).where(eq(waiting.serverId, serverId))
+  await q.delete(schema.serverTurnedAway).where(eq(schema.serverTurnedAway.serverId, serverId))
 }

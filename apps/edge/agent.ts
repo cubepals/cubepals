@@ -12,7 +12,6 @@ import type { EdgeRoutes, PingWakeResult, SessionEvent, WakeResult } from '@bloc
 // Copied into the image beside the agent (Dockerfile): the one place play coming back is worded.
 import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { EDGE_ID_HEADER, NEWER_REASONS } from '../../packages/contracts/src/edge-poll.ts'
-import { waitFor } from '../../packages/contracts/src/play-today.ts'
 import { LOCAL_HEADER, readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
 import { OWN_ICON_MAX_BYTES } from '../../packages/contracts/src/server-list.ts'
 import { GAME_PORT } from '../control/src/minecraft/ports.ts'
@@ -26,6 +25,7 @@ import { mappings } from './mappings.ts'
 import { hostnameOf, type Join, Notice, type NoticeText, pingOf, statusRequest } from './notice.ts'
 import { PingWakes } from './ping-wake.ts'
 import { RoutesPoll } from './poll.ts'
+import { type Resting, restingJoin, restingStatus } from './resting.ts'
 import { RouterRoutes } from './router.ts'
 
 const env = (name: string, fallback?: string): string => {
@@ -59,9 +59,6 @@ const WAKING_MOTD = env('WAKING_MOTD', 'Waking up · join in a few seconds')
  */
 const PING_WAKE_WAIT_MS = Number(env('PING_WAKE_WAIT_MS', '1500'))
 const PING_WAKE_EVERY_MS = Number(env('PING_WAKE_EVERY_MS', '30000'))
-/** A sleeping server whose owner's plan has no play left today, until it is back at their midnight. */
-const usedToday = (backAt: string): string =>
-  `Today’s play is used up · back at midnight, in ${waitFor(new Date(), new Date(backAt))}`
 /** Where a join goes that has to wait for its server: the agent's waiting room, which wakes it. */
 const WAITING = `127.0.0.1:${env('WAITING_PORT', '25562')}`
 /** How long the waiting room holds a join for its server to come up, before asking for another try. */
@@ -421,9 +418,15 @@ const pingWakes = new PingWakes(
   PING_WAKE_EVERY_MS,
 )
 
-/** Whether its owner's play for today is used up: then no ping or join wakes it before midnight. */
-const usedUp = (route: EdgeRoutes['routes'][number] | undefined): string | null =>
-  route?.backAt !== undefined && Date.parse(route.backAt) > Date.now() ? route.backAt : null
+/**
+ * Why its owner's play leaves it resting, where it does: today's is used up, until their next day
+ * begins, or the free trial's hours are. Then no ping or join wakes it.
+ */
+function restingOf(route: EdgeRoutes['routes'][number] | undefined): Resting | null {
+  if (route?.trialOver === true) return { for: 'trial' }
+  const backAt = route?.backAt === undefined ? null : new Date(route.backAt)
+  return backAt !== null && backAt.getTime() > Date.now() ? { for: 'today', backAt } : null
+}
 
 /**
  * What a ping to a sleeping server is told: its own message and picture, and that a join wakes it,
@@ -433,10 +436,12 @@ function asleep(address: string): NoticeText {
   const name = hostnameOf({ address })
   const route = routes.find((r) => r.hostname === name)
   const icon = route?.icon === undefined ? undefined : icons.get(route.icon)
-  const backAt = usedUp(route)
+  const resting = restingOf(route)
   const waking = route?.waking === true || pingWakes.waking(name)
   const status =
-    backAt !== null ? usedToday(backAt) : asleepMessage(route?.motd, waking ? WAKING_MOTD : ASLEEP.status)
+    resting !== null
+      ? restingStatus(resting, route?.motd, new Date())
+      : asleepMessage(route?.motd, waking ? WAKING_MOTD : ASLEEP.status)
   return { ...ASLEEP, status, ...(icon ? { icon } : {}), ...(route?.joins ? { joins: route.joins } : {}) }
 }
 
@@ -448,7 +453,7 @@ function asleep(address: string): NoticeText {
  */
 async function pinged(hostname: string, address: string | null): Promise<void> {
   const route = routes.find((r) => r.hostname === hostname)
-  if (route?.state !== 'asleep' || route.waking === true || usedUp(route) !== null) return
+  if (route?.state !== 'asleep' || route.waking === true || restingOf(route) !== null) return
   await Promise.race([pingWakes.ask(hostname, address), Bun.sleep(PING_WAKE_WAIT_MS)])
 }
 
@@ -538,8 +543,23 @@ async function hold(client: Socket, join: Join, header: Uint8Array | null): Prom
     )
     return
   }
-  const backAt = result?.outcome === 'denied' ? result.backAt : undefined
-  client.end(turnAway(backAt === undefined ? TURNED_AWAY[whyNot(result)] : usedToday(backAt)))
+  const route = routes.find((r) => r.hostname === hostnameOf(join))
+  client.end(turnAway(refusal(result, route)))
+}
+
+/**
+ * What a held join that can't go on is told. Refused for play used up, it hears whose server it
+ * reached and when it is back (`resting.ts`); refused for anything else, why, in a line.
+ */
+function refusal(result: WakeResult | null, route: EdgeRoutes['routes'][number] | undefined): string {
+  if (result?.outcome !== 'denied' || result.reason !== 'quota') return TURNED_AWAY[whyNot(result)]
+  const resting: Resting | null =
+    result.backAt === undefined
+      ? route?.trialOver === true
+        ? { for: 'trial' }
+        : null
+      : { for: 'today', backAt: new Date(result.backAt) }
+  return resting === null ? TURNED_AWAY.quota : restingJoin(resting, route?.name, new Date())
 }
 
 /** Asks for the wake until the server is up, is refused, the client leaves, or `deadline` passes. */

@@ -22,13 +22,20 @@ import { loadStanding } from '../../accounts/persistence.ts'
 import { minutesOfPlayLeft, type PlayToday, playToday } from '../../accounts/play-today.ts'
 import { type PlayTotal, playTotal } from '../../accounts/play-total.ts'
 import type { Actor } from '../../actor.ts'
+import { playEnded } from '../../insight/record.ts'
 import type { EventBus } from '../../ports/events.ts'
 import type { ConsoleTarget, ServerConsole } from '../../ports/minecraft.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import { listByStatus, loadRuntime } from '../../servers/persistence.ts'
 import type { MinecraftServerService } from '../../servers/service.ts'
 import type { RuntimeSpecs } from '../../servers/specs.ts'
-import { claimSessionWarning, fixPlayEnd, openSession, releaseSessionWarning } from '../../servers/usage.ts'
+import {
+  claimSessionWarning,
+  fixPlayEnd,
+  openSession,
+  presenceFor,
+  releaseSessionWarning,
+} from '../../servers/usage.ts'
 
 /** Minutes left when a server is told its session is ending, in order. */
 const SESSION_WARNINGS = [10, 2] as const
@@ -162,10 +169,15 @@ export function sessionCaps(deps: {
     return at === null ? null : { at, reason, minutes }
   }
 
-  /** The end is reached: the ordinary stop, which winds the server down and saves its world. */
+  /**
+   * The end is reached: the ordinary stop, which winds the server down and saves its world. One
+   * that ends the owner's play with someone still on is counted, once a session, with how many.
+   */
   const endSession = async (server: MinecraftServer, end: SessionEnd, startedAt: Date): Promise<void> => {
     const key = `${KEYED[end.reason]}:${startedAt.toISOString()}`
+    const online = (await presenceFor(db, [server.id])).get(server.id)?.length ?? 0
     await service.stop(ENDED_BY[end.reason], server.id, key, end.reason).catch(() => undefined)
+    if (end.reason !== 'session_cap' && online > 0) await playEnded(db, server, end.reason, key, online)
     await sessionEvent(server, end.minutes, 0)
   }
 
