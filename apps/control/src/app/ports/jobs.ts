@@ -49,6 +49,20 @@ export type Schedule = { job: ScheduledJob } & (
   | { run: () => Promise<number>; says: (count: number) => string }
 )
 
+/**
+ * The worker's heartbeat: a scheduled job of the queue's own that does nothing, so its passes say
+ * the worker is working its schedules. `/api/health` reads it, beside the key sweeps.
+ */
+export type WorkerHeartbeat = 'worker-heartbeat'
+
+/** Each pass of a scheduled job, written down where the alerts and the health check read it. */
+export interface JobOutcomes {
+  /** The jobs scheduled now and how often each runs: what else was recorded is forgotten. */
+  scheduled(jobs: ReadonlyArray<{ job: string; everySeconds: number }>, at: Date): Promise<void>
+  succeeded(job: string, at: Date): Promise<void>
+  failed(job: string, at: Date, error: string): Promise<void>
+}
+
 /** A catalog jar to copy into the store, as its revision pins it. */
 export type MirrorJob = ModArtifact
 

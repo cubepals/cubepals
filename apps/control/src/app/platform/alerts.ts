@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { AlertKey, AlertView } from '@blockly/contracts'
-import { DAY_MS, HOUR_MS, SECOND_MS } from '@blockly/contracts/durations'
+import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
 import { entitlementsFor, PLAN_KEYS } from '../../domain/account/entitlements.ts'
 import { unreviewedLinks } from '../accounts/free-play.ts'
@@ -16,13 +16,18 @@ import { EDGE_BEHIND_MS, edgesBehind } from '../edge/routed.ts'
 import { adminAlert } from '../emails/admins.ts'
 import { NotFound } from '../errors.ts'
 import { markedSince } from '../operations/persistence.ts'
+import { SPEND_FIGURE, SPEND_UNREAD_MS } from '../operations/schedules/spend.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { Mailer } from '../ports/platform.ts'
+import { CERTIFICATE_RENEWAL, CERTIFICATE_WARN_MS, storedAcmeCertificate } from '../realtime/certificate.ts'
 import { KEEP_MS, serversKeepingStorage } from '../servers/kept-storage.ts'
+import { FAILING_IN_A_ROW, overdue, quietSince } from './job-record.ts'
 import {
   alertNotified,
   clearAlert,
+  type JobHealthRecord,
   loadAlerts,
+  loadJobHealth,
   overduePurges,
   raiseAlert,
   restateAlert,
@@ -44,6 +49,9 @@ const WHERE: Record<AlertKey, string> = {
   resumes_hung: '/admin/health',
   hosts_refused: '/admin/health',
   storage_kept: '/admin/health',
+  jobs_failing: '/admin/health',
+  spend_unread: '/admin/platform',
+  realtime_certificate_expiring: '/admin/health',
 }
 
 interface Condition {
@@ -160,7 +168,11 @@ export class PlatformAlerts {
         key: 'worlds_outgrow_plan',
         summary: `${outgrown} ${outgrown === 1 ? 'account keeps' : 'accounts keep'} more world data than ${outgrown === 1 ? 'its plan covers' : 'their plans cover'}, and ${outgrown === 1 ? 'costs' : 'cost'} more than ${outgrown === 1 ? 'it pays' : 'they pay'}.`,
       })
+    const recorded = await loadJobHealth(this.#db)
     conditions.push(
+      ...jobsCondition(recorded, now),
+      ...spendCondition(recorded, now),
+      ...(await certificateCondition(this.#db, recorded, now)),
       ...(await edgeCondition(this.#db)),
       ...(await wakeConditions(this.#db, now)),
       ...(await unsentCondition(this.#db)),
@@ -187,6 +199,68 @@ export class PlatformAlerts {
     }
     return told
   }
+}
+
+/** A span as an admin reads it: minutes under two hours, then hours. */
+const spanOf = (ms: number) =>
+  ms < 2 * HOUR_MS ? `${Math.round(ms / MINUTE_MS)} minutes` : `${Math.floor(ms / HOUR_MS)} hours`
+
+/**
+ * Scheduled jobs that keep failing, or that have gone three of their intervals without a success
+ * (`job-record.ts`). A worker that is down raises nothing here, since this sweep runs on it:
+ * `/api/health`, polled from outside, says that.
+ */
+function jobsCondition(recorded: JobHealthRecord[], now: Date): Condition[] {
+  const named = recorded.flatMap((row) => {
+    if (row.everySeconds === null) return []
+    if (row.failures >= FAILING_IN_A_ROW)
+      return [`${row.job} failed ${row.failures} times in a row (${(row.lastError ?? '').slice(0, 160)})`]
+    if (overdue(row, now))
+      return [`${row.job} hasn't run for ${spanOf(now.getTime() - quietSince(row).getTime())}`]
+    return []
+  })
+  if (named.length === 0) return []
+  const one = named.length === 1
+  return [
+    {
+      key: 'jobs_failing',
+      summary: `${named.length} scheduled ${one ? 'job is' : 'jobs are'} not getting through: ${named.join('; ')}.`,
+    },
+  ]
+}
+
+/**
+ * The spend watchdog unable to work out today's figure for a while (`spend.ts`): nothing holds the
+ * daily limit meanwhile. It clears with the next figure.
+ */
+function spendCondition(recorded: JobHealthRecord[], now: Date): Condition[] {
+  const figure = recorded.find((row) => row.job === SPEND_FIGURE)
+  if (figure === undefined || figure.failures === 0) return []
+  const unread = now.getTime() - quietSince(figure).getTime()
+  if (unread < SPEND_UNREAD_MS) return []
+  return [
+    {
+      key: 'spend_unread',
+      summary: `The spend watchdog hasn't had a figure for ${spanOf(unread)}, so the daily spend limit isn't enforced until it does. Reading the provider failed with: ${(figure.lastError ?? '').slice(0, 200)}`,
+    },
+  ]
+}
+
+/**
+ * The realtime role's certificate a week from lapsing (`realtime/certificate.ts`): its renewals
+ * have failed since two thirds of its life, and realtime stops for every browser when it lapses.
+ */
+async function certificateCondition(db: Db, recorded: JobHealthRecord[], now: Date): Promise<Condition[]> {
+  const stored = await storedAcmeCertificate(db)
+  if (stored === null || stored.expiresAt.getTime() - now.getTime() > CERTIFICATE_WARN_MS) return []
+  const days = Math.max(0, Math.floor((stored.expiresAt.getTime() - now.getTime()) / DAY_MS))
+  const renewal = recorded.find((row) => row.job === CERTIFICATE_RENEWAL)
+  return [
+    {
+      key: 'realtime_certificate_expiring',
+      summary: `The realtime certificate for ${stored.hostname} lapses in ${days} ${days === 1 ? 'day' : 'days'} and hasn't been renewed; realtime stops for every browser when it does. The last renewal said: ${(renewal?.lastError ?? 'nothing').slice(0, 200)}`,
+    },
+  ]
 }
 
 /** Edges that keep asking for routes without keeping up: servers no longer wait on them. */

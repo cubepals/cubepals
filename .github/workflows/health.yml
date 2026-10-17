@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+name: Production health
+
+# Production's control plane, asked from outside every 15 minutes. `/api/health` answers 503 when
+# its database can't be read or the worker's key sweeps (its heartbeat, the admin alerts, the spend
+# watchdog) have gone quiet: the alerts run on the worker, so a worker that is down can only be
+# heard of from here. The run fails, and GitHub emails, when it isn't healthy. It prints only what
+# the endpoint says: whether it is healthy and which sweeps are stale.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: production-health
+  cancel-in-progress: false
+
+jobs:
+  health:
+    name: Ask production's health
+    if: github.repository == 'cubepals/cubepals'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # A few tries a little apart, so one dropped request isn't a failure; three in a row are.
+      - name: Ask /api/health
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 20 \
+            --retry 3 --retry-delay 20 --retry-all-errors \
+            https://cubepals.com/api/health

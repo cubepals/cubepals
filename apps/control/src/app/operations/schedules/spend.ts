@@ -9,6 +9,7 @@
  * call, on the platform page. The prices and the arithmetic are `domain/policy/spend.ts`'s;
  * finding compute nobody accounts for is `stray.ts`'s, and stopping it `orphans.ts`'s.
  */
+import { MINUTE_MS } from '@blockly/contracts/durations'
 import { type Db, schema } from '@blockly/db'
 import { entitlementsFor } from '../../../domain/account/entitlements.ts'
 import { type DaySpend, daySpend, overLimit, utcDay } from '../../../domain/policy/spend.ts'
@@ -21,16 +22,23 @@ import {
   loadSpendDay,
   markSpendNotified,
   markSpendTripped,
+  recordJobFailed,
+  recordJobSucceeded,
   runsBetween,
   saveControls,
   saveSpendDay,
 } from '../../platform/persistence.ts'
 import type { Mailer } from '../../ports/platform.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
-import { strayCompute } from './stray.ts'
+import { type StrayCompute, strayCompute } from './stray.ts'
 
 /** The watchdog is the platform's own doing, not an admin's. */
 const WATCHDOG: Actor = { kind: 'system', reason: 'spend' }
+
+/** Where whether a pass got today's figure is written down (`job_health`). */
+export const SPEND_FIGURE = 'spend-figure'
+/** How long without a figure before admins hear of it (`spend_unread`): three passes. */
+export const SPEND_UNREAD_MS = 30 * MINUTE_MS
 
 export interface SpendCheck extends DaySpend {
   day: string
@@ -67,10 +75,19 @@ export class SpendWatchdog {
    * `spend-watchdog`: today's figure, written down every pass; past the limit, the switches go
    * off once a day. An admin who turns them back on that day is not overruled until the next one.
    * A provider that can't be read ends the pass before anything is written: no figure beats a low one.
+   * Each pass writes down whether it got one, and what stopped it, so a run of them without raises
+   * `spend_unread` for the admins; the next figure clears it.
    */
   async check(now = new Date()): Promise<SpendCheck> {
     const { from, day } = utcDay(now)
-    const strays = await strayCompute(this.#db, this.#runtime)
+    let strays: StrayCompute[]
+    try {
+      strays = await strayCompute(this.#db, this.#runtime)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      await recordJobFailed(this.#db, SPEND_FIGURE, now, message)
+      throw error
+    }
     const spend = daySpend({
       from,
       to: now,
@@ -84,6 +101,7 @@ export class SpendWatchdog {
     const { running } = await countServers(this.#db)
     const counts = { strayMachines: strays.length, runningServers: running }
     await saveSpendDay(this.#db, day, spend, counts, now)
+    await recordJobSucceeded(this.#db, SPEND_FIGURE, now)
     const { dailySpendLimitCents: limitCents } = await loadControls(this.#db)
     const tripped = overLimit(spend, limitCents) && (await this.#trip(day, spend, limitCents, now))
     await this.#tell(day, limitCents, now)

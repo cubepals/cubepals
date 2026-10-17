@@ -10,7 +10,8 @@
  * Parts (`schema/`):
  * - `columns.ts`: the timestamp columns every table writes the same way.
  * - `auth.ts`: the accounts people sign in to, as Better Auth keeps them.
- * - `accounts.ts`: an account's standing and plan, admins, the platform's controls, spend and alerts.
+ * - `accounts.ts`: an account's standing and plan, admins, the platform's controls, spend, alerts,
+ *   and how its recurring work last went.
  * - `servers.ts`: a Minecraft server, its pictures, revisions and worlds, its runtime, and its operations.
  * - `access.ts`: who may join a server and who runs it.
  * - `backups.ts`: a server's snapshots and archive copies, and the world downloads made of them.

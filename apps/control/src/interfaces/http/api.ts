@@ -53,7 +53,21 @@ export function createApiApp(deps: {
     if (!c.res.headers.has('Cache-Control')) c.header('Cache-Control', 'no-store')
   })
 
-  app.get('/api/health', (c) => c.json({ ok: true }))
+  // Whether the control plane can do its work: its database read and the worker's key sweeps
+  // recent (`PlatformHealth.liveness`), 503 otherwise. A scheduled workflow polls it from outside
+  // (.github/workflows/health.yml), so a worker that is down is heard of while nothing inside runs.
+  app.get('/api/health', async (c) => {
+    try {
+      const health = await deps.services.health.liveness()
+      return c.json(health, health.ok ? 200 : 503)
+    } catch (error) {
+      console.error('health', error)
+      return c.json({ ok: false }, 503)
+    }
+  })
+  // Only that this process answers: what Fly's check on the api reads (infra/fly/control.toml), so
+  // the worker being down never takes the api out of Fly's routing.
+  app.get('/api/health/live', (c) => c.json({ ok: true }))
 
   // A public server's state, for anything outside Blockly, the faces player rows show, and the
   // textures items are drawn with.
