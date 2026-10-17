@@ -33,16 +33,16 @@ export function hostRefused(deps: {
   const { db, runtime, specs, transitions, bindingOf } = deps
 
   /**
-   * The snapshot a sleep took of the server's world once its last run had ended, where there is
-   * one and its region has room for the server; else null. Nothing ran on the world since, so it
-   * holds everything played. Any other snapshot (a schedule's, an owner's) may have been taken
+   * The snapshot a sleep took of the server once its last run had ended, where there is one and
+   * its region has room for the server; else null. Nothing ran since, so it holds everything
+   * played, on every world: a snapshot is the whole volume, whatever world it was recorded under. Any other snapshot (a schedule's, an owner's) may have been taken
    * while people played, and is never one a rebuild starts from by itself.
    */
   const wholeSnapshot = async (server: MinecraftServer) => {
     const ended = await lastRunEnded(db, server.id)
     if (ended === null) return null
     const [newest] = (await listBackups(db, server.id))
-      .filter((b) => b.tier === 'snapshot' && b.status === 'ready' && b.worldId === server.activeWorldId)
+      .filter((b) => b.tier === 'snapshot' && b.status === 'ready')
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     if (newest?.snapshotHandle == null || newest.trigger !== 'sleep' || newest.createdAt < ended) return null
     const { provider } = await bindingOf(server.id)
