@@ -28,7 +28,7 @@ import { createHash } from 'node:crypto'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { HUB_MARKERS, PAD_BADGES } from '../apps/control/src/minecraft/arcade/hub.ts'
+import { HUB_MARKERS } from '../apps/control/src/minecraft/arcade/hub.ts'
 import {
   inRoom,
   markerRoom,
@@ -38,7 +38,9 @@ import {
   wallOf,
 } from '../apps/control/src/minecraft/arcade/label-space.ts'
 import { ARCADE_WORLD } from '../apps/control/src/minecraft/arcade/maps.ts'
-import { ARCADE_FILES, ARCADE_LABELS } from '../apps/control/src/minecraft/arcade.ts'
+import { ARCADE_FILES, ARCADE_LABELS, ARCADE_READS } from '../apps/control/src/minecraft/arcade.ts'
+import type { Read } from '../apps/control/src/minecraft/readable.ts'
+import { cornersOf } from '../apps/control/src/minecraft/sight.ts'
 import { blocksSet, laidOver } from './lib/build-blocks.ts'
 import { blocksIn } from './lib/region-blocks.ts'
 
@@ -114,11 +116,7 @@ function reach(room: Room): number {
 }
 
 // Each measured over its height to the thousandth above, which is what is written.
-const rooms = [
-  ...ARCADE_LABELS.map(roomOf),
-  ...HUB_MARKERS.map(markerRoom),
-  ...PAD_BADGES.map(({ at, side }) => markerRoom({ at, scale: side })),
-]
+const rooms = [...ARCADE_LABELS.map(roomOf), ...HUB_MARKERS.map(markerRoom)]
   .map((room) => ({ ...room, height: Math.ceil(room.height * 1000) / 1000 }))
   .map((room) => ({
     at: room.at,
@@ -128,10 +126,55 @@ const rooms = [
     ...(faceOf(room) === undefined ? {} : { face: faceOf(room) }),
   }))
 
+/** Blocks a player sees through: what isn't there, light, barriers, glass and water. */
+const SEE_THROUGH = /(^|:)(air|cave_air|void_air|light|barrier|structure_void|water)$|glass/
+
+/**
+ * How much of a label is hidden from where it is first read: rays from the eye to points across
+ * its plate, seven along and three up, a little in from its edges, each marched a twentieth of a
+ * block at a time; a ray is hidden where it meets a block a player can't see through.
+ */
+function hidden({ label, from }: Read): { at: readonly number[]; hidden: number; rays: number } {
+  const [topLeft, topRight, , bottomLeft] = cornersOf(label, from.eye)
+  if (topLeft === undefined || topRight === undefined || bottomLeft === undefined)
+    throw new Error('A plate has four corners')
+  type Point = [number, number, number]
+  const along = (k: number) => topRight[k] ?? 0
+  /** The point `u` of the way along the plate from its left and `v` of the way up from its foot. */
+  const on = (u: number, v: number): Point => {
+    const at = (k: 0 | 1 | 2) =>
+      (bottomLeft[k] ?? 0) +
+      (along(k) - (topLeft[k] ?? 0)) * u +
+      ((topLeft[k] ?? 0) - (bottomLeft[k] ?? 0)) * v
+    return [at(0), at(1), at(2)]
+  }
+  const points: Point[] = []
+  for (let i = 0; i < 7; i++)
+    for (let j = 0; j < 3; j++) points.push(on(0.04 + (0.92 * i) / 6, 0.08 + (0.84 * j) / 2))
+  const eye = from.eye
+  const bound = (pick: (...values: number[]) => number) =>
+    [0, 1, 2].map((k) => Math.floor(pick(eye[k] ?? 0, ...points.map((point) => point[k] ?? 0)))) as Point
+  const blocks = blocksBuilt(bound(Math.min), bound(Math.max))
+  const blocked = points.filter((point) => {
+    const steps = Math.ceil(Math.hypot(point[0] - eye[0], point[1] - eye[1], point[2] - eye[2]) / 0.05)
+    for (let step = 1; step < steps; step++) {
+      const t = step / steps
+      const cell = [0, 1, 2].map((k) => Math.floor((eye[k] ?? 0) + ((point[k] ?? 0) - (eye[k] ?? 0)) * t))
+      const block = blocks.get(cell.join(' '))
+      if (block !== undefined && !SEE_THROUGH.test(block)) return true
+    }
+    return false
+  })
+  return { at: label.at, hidden: blocked.length, rays: points.length }
+}
+const sight = ARCADE_READS.map(hidden)
+
 rmSync(world, { recursive: true, force: true })
-writeFileSync(OUT, `${JSON.stringify({ world: ARCADE_WORLD.sha512, rooms }, null, 2)}\n`)
+writeFileSync(OUT, `${JSON.stringify({ world: ARCADE_WORLD.sha512, rooms, sight }, null, 2)}\n`)
 // Written as the repository's formatter writes JSON, so lint passes on it as it is.
 if (spawnSync('bunx', ['biome', 'format', '--write', OUT], { stdio: 'inherit' }).status !== 0)
   throw new Error(`${OUT} would not format`)
 for (const room of rooms) process.stdout.write(`${room.at.join(' ')}: reaches ${room.reach} either side\n`)
+for (const seen of sight)
+  process.stdout.write(`${seen.at.join(' ')}: ${seen.hidden} of ${seen.rays} rays hidden\n`)
 process.stdout.write(`${OUT}: ${rooms.length} rooms measured\n`)

@@ -10,7 +10,7 @@
  */
 import { describe, expect, test } from 'bun:test'
 import { onLevel } from '../domain/revision/carried.ts'
-import { HINT, PAD_BADGES, PADS, PASSAGE } from './arcade/hub.ts'
+import { HINT, PADS, PASSAGE } from './arcade/hub.ts'
 import { ARCADE_MAPS } from './arcade/maps.ts'
 import { ARCADE_FILES } from './arcade.ts'
 import { placeablePath } from './carried.ts'
@@ -236,7 +236,7 @@ describe('the Arcade as its players find it', () => {
     // floor, and twice back to back at the pit.
     expect(everyCommand.filter((c) => c.startsWith('summon minecraft:glow_item_frame'))).toEqual([])
     const papers = everyCommand.filter((c) => c.includes(`background:${0xff000000 | 0xf8f7f5}`))
-    expect(papers).toHaveLength(1 + 1 + 2 + PAD_BADGES.length)
+    expect(papers).toHaveLength(1 + 1 + 2)
   })
 
   test('a new player is put at the hub and told in one sentence what to do, and whose maps these are, once', () => {
