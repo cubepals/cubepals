@@ -137,8 +137,15 @@ export function restoring(deps: {
       const { up, refusal } = await mayBoot(server, input)
       const binding = await bindingOf(server.id)
       const chosen = await loadBackup(db, input.backupId)
-      if (chosen === null || chosen.status !== 'ready')
-        throw new PermanentFailure('That backup is no longer there.')
+      if (chosen === null || chosen.status !== 'ready') {
+        if (binding.handle === null || binding.applied === null)
+          throw new PermanentFailure('That backup is no longer there.')
+        // Gone while the restore waited its turn, before anything was touched: the server goes on
+        // as it is, running or not, on what it ran.
+        const running = (await runtime.observe(binding.handle)).state === 'running'
+        await putBack(server, binding.applied, { from: 'restoring', up: running })
+        return { status: 'failed', reason: 'That backup is no longer there, so nothing changed.' }
+      }
       if (binding.handle === null || binding.applied === null)
         throw new PermanentFailure('This server has no world to restore into.')
       const previous = binding.applied
