@@ -4,10 +4,10 @@
 
 /**
  * The waiting room refuses a frame whose length is negative, as the front door and the notices do,
- * rather than reading it again and again.
+ * and goes on serving everyone else.
  *
- * `Held` runs on the agent's own event loop, so a call that never returned would hang the test
- * runner; the construction runs in a child bun and the test asserts it returns before a deadline.
+ * `Held` runs on the agent's own event loop, so the construction runs in a child bun and the test
+ * asserts it returns before a deadline.
  */
 
 import { describe, expect, test } from 'bun:test'
@@ -38,7 +38,7 @@ async function construction(ms: number): Promise<boolean> {
 }
 
 describe('a negative frame length in the waiting room', () => {
-  test('a held join with a poisoned frame is handled, not looped on forever', async () => {
+  test('a held join with a negative frame length returns at once', async () => {
     expect(await construction(3_000)).toBe(true)
   }, 10_000)
 })
