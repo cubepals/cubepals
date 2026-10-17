@@ -314,6 +314,10 @@ void main() {
   // The lamps: a room's light that room, the ones outdoors the outdoors. Each falls off with
   // distance and lights the faces turned to it; the room's main lamp casts a shadow.
   float lamp = 0.0;
+  // A room's rock walls stand close beside its lamps and face them square on, so a lamp would
+  // light a round pool on a wall, bright to its rim: there its light falls away sooner, and the
+  // pool fades into the wall's dark the way the floor's does.
+  bool wall = !open && abs(n.y) < 0.5 && (kind == 2 || kind == 3 || kind == 4 || kind == 5 || kind == 14);
 #ifndef QUICK
   for (int i = 0; i < ${MAX_LIGHTS}; i++) {
     if (i >= uLightCount) break;
@@ -325,7 +329,7 @@ void main() {
     float f = clamp(1.0 - d / uLights[i].w, 0.0, 1.0);
     float facing = 0.15 + 0.85 * max(dot(n, to / max(d, 0.001)), 0.0);
     float shadow = i == uTorch ? lampLit(n) : 1.0;
-    lamp += uLightOn[i] * f * f * f * facing * shadow;
+    lamp += uLightOn[i] * f * f * f * (wall ? f * 0.8 : 1.0) * facing * shadow;
   }
 #endif
   float warmth = tone * lamp * uLampGain * ao;
