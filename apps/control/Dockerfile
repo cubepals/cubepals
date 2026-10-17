@@ -43,6 +43,8 @@ COPY apps/control/package.json apps/control/
 COPY apps/control/src apps/control/src
 # The server icons game runtimes download as they start: without them every server fails to boot.
 COPY apps/control/assets apps/control/assets
+# Cubepals' lockup, which every shared link's picture carries (src/interfaces/http/card.ts).
+COPY brand/png/lockup-horizontal.png brand/png/lockup-horizontal.png
 # What the node endpoint serves joining hosts: join.sh and daemon.json are in src/infra/fleet, and
 # blocklyd itself is the pinned release's. Its licence (FSL-1.1-ALv2) goes with it.
 COPY --from=blocklyd /blocklyd /usr/local/lib/blocklyd/blocklyd
