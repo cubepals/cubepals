@@ -168,7 +168,7 @@ export function restoring(deps: RestoringDeps) {
       if ((await runtime.observe(binding.handle)).state === 'running')
         await deps.access.reconcile(server, binding.handle, 'import').catch(() => undefined)
       // Every other world the server lists stays as it is now, whatever the backup holds.
-      const besides = await others.besides(server.id, desired.world.id)
+      const besides = await others.besides(server.id, chosen)
       await ctx.step('saving')
       const before = await deps.copies.capture(server, binding.handle, previous, 'pre_restore')
       await markReseed(db, server.id)

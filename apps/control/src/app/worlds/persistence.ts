@@ -101,6 +101,11 @@ export async function worldsBack(tx: Tx, worldIds: readonly string[]): Promise<v
   await tx.delete(kept).where(inArray(kept.worldId, [...worldIds]))
 }
 
+/** Every world kept in `backupId` is on the volume again: a restore of that backup brought it back. */
+export async function worldsBackFrom(tx: Tx, backupId: string): Promise<void> {
+  await tx.delete(kept).where(eq(kept.backupId, backupId))
+}
+
 /** Each world the server lists that is kept only in a backup, with that backup's id. */
 export async function keptWorlds(q: Queryable, serverId: string): Promise<Map<string, string>> {
   const rows = await q

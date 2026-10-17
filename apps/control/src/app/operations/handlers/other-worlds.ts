@@ -20,10 +20,12 @@ import type { RuntimeHandle, SnapshotHandle } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import {
   keepWorldsIn,
+  keptWorlds,
   listWorlds,
   setWorldFacts,
   type WorldRecord,
   worldsBack,
+  worldsBackFrom,
 } from '../../worlds/persistence.ts'
 import { EXPORT_LINK_SECONDS, IMPORT_LINK_SECONDS, type WorldCopies } from './world-copies.ts'
 
@@ -41,9 +43,16 @@ export function otherWorlds(deps: {
 }) {
   const { runtime } = deps
 
-  /** Every world the server lists besides the one restored: what a restore leaves as it is. */
-  const besides = async (serverId: string, restoredWorldId: string): Promise<WorldRecord[]> =>
-    (await listWorlds(deps.db, serverId)).filter((w) => w.deletedAt === null && w.id !== restoredWorldId)
+  /**
+   * Every world the server lists besides those `restored` brings back, which a restore leaves as
+   * it is: its own world, and every world kept in it, which comes back from it as it was kept.
+   */
+  const besides = async (serverId: string, restored: BackupRecord): Promise<WorldRecord[]> => {
+    const kept = await keptWorlds(deps.db, serverId)
+    return (await listWorlds(deps.db, serverId)).filter(
+      (w) => w.deletedAt === null && w.id !== restored.worldId && kept.get(w.id) !== restored.id,
+    )
+  }
 
   /** Whether the copy the server was handed finished well, asked until it says or time is up. */
   const finished = async (handle: RuntimeHandle): Promise<boolean> => {
@@ -97,8 +106,9 @@ export function otherWorlds(deps: {
   }
 
   /**
-   * Recorded as the restore ends: the world restored is on the volume, as its files describe it,
-   * and each world in `left` is kept in `before`, which the page says, until restored from there.
+   * Recorded as the restore ends: the world restored, and every world kept in `restored`, is on
+   * the volume again, the restored one as its files describe it; each world in `left` is kept in
+   * `before`, which the page says, until restored from there.
    */
   const settle = async (
     tx: Tx,
@@ -107,6 +117,7 @@ export function otherWorlds(deps: {
     before: BackupRecord,
   ) => {
     await worldsBack(tx, [restored.worldId])
+    await worldsBackFrom(tx, restored.id)
     // An uploaded world is the one its files describe, whatever its row said before.
     if (restored.worldFacts !== null) await setWorldFacts(tx, restored.worldId, restored.worldFacts)
     await keepWorldsIn(
