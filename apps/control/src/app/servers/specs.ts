@@ -30,6 +30,7 @@ import { quarantinedOf } from '../mods/jar-check-records.ts'
 import { loadPackContents } from '../packs/persistence.ts'
 import type { InstallSeed, RuntimeSpec } from '../ports/runtime.ts'
 import { acceptedSecrets, deriveServerSecret, type SecretKeyring } from '../secrets.ts'
+import { withCurrentOwnFiles } from './own-files.ts'
 import { grownStorage, loadRevision, loadWorld } from './persistence.ts'
 
 export interface DesiredRuntime {
@@ -171,7 +172,11 @@ export class RuntimeSpecs {
       labels: { ...spec.labels, [SECRETS_VERSION_LABEL]: String(current.version) },
     })
     const placed = await compatFor(q, revision)
-    const labelled = label(toRuntimeSpec({ ...input, compat: placed }))
+    // A start places the files Cubepals owns as they are now (`own-files.ts`); like the Via
+    // plugins, they never arrive through drift.
+    const labelled = label(
+      toRuntimeSpec({ ...input, revision: withCurrentOwnFiles(revision), compat: placed }),
+    )
     // The Via plugins arrive at a start, never through drift: a running server isn't restarted
     // for Cubepals' compatibility layer, or for a newer pin of it.
     const driftDigest = specDigest(withoutPlanLimits(label(toRuntimeSpec(input))))

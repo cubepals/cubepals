@@ -11,13 +11,14 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { TEMPLATE_CARDS } from '@blockly/contracts'
 import { DAY_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
+import { eq } from 'drizzle-orm'
 import { onLevel } from '../../domain/revision/carried.ts'
 import { ARCADE_WORLD } from '../../minecraft/arcade/maps.ts'
-import { ARCADE_FILES } from '../../minecraft/arcade.ts'
+import { ARCADE_DATAPACK, ARCADE_FILES } from '../../minecraft/arcade.ts'
 import {
   CHATSENTINEL,
   filtersChat,
@@ -32,7 +33,7 @@ import { type Harness, hasDatabase, startHarness } from '../../testing/harness.t
 import { MemoryStore } from '../../testing/memory-store.ts'
 import type { Actor } from '../actor.ts'
 import { recordStored } from '../artifacts/persistence.ts'
-import { CHAT_FILTER } from '../moderation/service.ts'
+import { CHAT_FILTER } from '../moderation/chat-filter.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import { listWorlds } from '../worlds/persistence.ts'
 
@@ -189,6 +190,55 @@ describe.skipIf(!hasDatabase)('arcade', () => {
     expect(readFileSync(`${volume}/world-2/datapacks/cubepals-arcade/pack.mcmeta`, 'utf8')).toContain(
       'Arcade',
     )
+  }, 30_000)
+})
+
+describe.skipIf(!hasDatabase)('an Arcade made before its games changed', () => {
+  beforeAll(begin, 30_000)
+  afterAll(end)
+
+  test('an Arcade made before its games changed plays them as they are now from its next start, and nothing else of it changes', async () => {
+    const owner = await h.user('Ines', 'plus')
+    if (ARCADE_WORLD.ref.kind !== 'stored') throw new Error('The Arcade world is kept in the store')
+    store.objects.set(ARCADE_WORLD.ref.key, Buffer.from('the arcade world'))
+    const server = await h.create(owner, { from: { kind: 'template', key: 'arcade' } })
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+    // As a server made on an earlier day has it: the datapack as it was then, a function since
+    // gone among it and one since added missing, and its owner's chat filter turned off.
+    const pack = `${ARCADE_DATAPACK}/data/arcade/function/`
+    const then = [
+      ...ARCADE_FILES.filter((file) => !file.path.startsWith(`${pack}play/`)).map((file) =>
+        file.path.endsWith('/hub/back.mcfunction') ? { ...file, content: 'say an older hub\n' } : file,
+      ),
+      { path: `${pack}gone.mcfunction`, content: 'say gone\n' },
+      ...moderationFiles(null),
+    ]
+    const revisionId = (await h.server(server.id)).desiredRevisionId
+    await h.db
+      .update(schema.serverRevisions)
+      .set({ files: then })
+      .where(eq(schema.serverRevisions.id, revisionId))
+    const running = await h.app.specs.desired(h.db, await h.server(server.id))
+    const drift = running.driftDigest
+    await h.app.servers.restart(owner, server.id, randomUUID())
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+
+    const volume = h.runtime.machine(server.id)?.dir ?? ''
+    const now = [...ARCADE_FILES, ...moderationFiles(null)].map((file) => onLevel(file, 'world'))
+    for (const file of now) expect(readFileSync(`${volume}/${file.path}`, 'utf8')).toBe(file.content)
+    // What only the older datapack had is gone; the chat filter stays off, as its owner left it.
+    expect(
+      existsSync(`${volume}/${onLevel({ path: `${pack}gone.mcfunction`, content: '' }, 'world').path}`),
+    ).toBe(false)
+    expect(existsSync(`${volume}/plugins/ChatSentinel/config.yml`)).toBe(false)
+    // Its revision, its world and its drift are as they were: nothing restarts a running server
+    // for Cubepals' files, and nothing of the owner's moves.
+    expect((await loadRevision(h.db, revisionId)).files).toEqual(then)
+    expect((await h.server(server.id)).desiredRevisionId).toBe(revisionId)
+    expect((await listWorlds(h.db, server.id)).map((w) => w.levelName)).toEqual(['world'])
+    expect((await h.app.specs.desired(h.db, await h.server(server.id))).driftDigest).toBe(drift)
   }, 30_000)
 })
 
