@@ -4,7 +4,7 @@
 
 import type { BillingTerm } from '@blockly/contracts'
 import { MINUTE_MS } from '@blockly/contracts/durations'
-import { PolarClientError, PolarError, PolarRateLimitError } from '@polar-sh/sdk'
+import { PolarClientError } from '@polar-sh/sdk'
 import { createPolar, errors, type models, webhooks } from '@polar-sh/sdk/2026-10'
 import { z } from 'zod'
 import {
@@ -12,7 +12,6 @@ import {
   type BillingOrder,
   type BillingProvider,
   type BillingState,
-  BillingUnavailable,
   type Discount,
   DiscountRefused,
   type GiftProduct,
@@ -24,6 +23,7 @@ import {
 import { discountBody, discountOf } from './polar-discounts.ts'
 import { GIFT_METADATA, giftOf } from './polar-gifts.ts'
 import type { Fields } from './polar-models.ts'
+import { call, refusal } from './polar-requests.ts'
 
 /**
  * Polar through its official TypeScript SDK, pinned to API version 2026-10 for requests and for
@@ -753,17 +753,6 @@ function refusesEmail(error: unknown): boolean {
 }
 
 /**
- * What Polar said was wrong with a request: its first problem's message, or its own summary. A
- * 422 lists its problems (`HTTPValidationError`); a 400, which the SDK doesn't map, says one.
- */
-function refusal(error: PolarClientError): string {
-  const body = error.error as models.HTTPValidationError | Partial<models.BadRequest> | null
-  const detail = body?.detail
-  if (typeof detail === 'string') return detail
-  return detail?.find((problem) => problem.msg)?.msg ?? error.message
-}
-
-/**
  * A checkout made with the customer's email, or without it when Polar won't take the address (one
  * on a reserved domain, as test accounts have): that isn't the person's to fix, so the checkout
  * opens without it and asks them for one.
@@ -773,22 +762,4 @@ function withEmail<T>(email: string, create: (field: { customer_email?: string }
     if (refusesEmail(error)) return create({})
     throw error
   })
-}
-
-/**
- * Polar's outage, rate limit or an unreachable network is billing being unavailable. So is Polar
- * refusing Blockly's own token (revoked, or short a scope): it waits for a person to fix it, and
- * nothing asked meanwhile is at fault for it.
- */
-async function call<T>(what: string, request: () => Promise<T>): Promise<T> {
-  try {
-    return await request()
-  } catch (error) {
-    const unavailable =
-      error instanceof PolarRateLimitError ||
-      (error instanceof PolarClientError && (error.statusCode === 401 || error.statusCode === 403)) ||
-      (error instanceof PolarError && !(error instanceof PolarClientError))
-    if (unavailable) throw new BillingUnavailable(`${what}: ${(error as Error).message}`)
-    throw error
-  }
 }
