@@ -158,12 +158,17 @@ next nightly covers it there.
 bun scripts/production.ts rollback          # the Fly apps and the website
 bun scripts/production.ts rollback fly      # the Fly apps alone
 bun scripts/production.ts rollback website  # the website alone
+bun scripts/production.ts rollback fly edge # the edge app to its previous image, whatever deployed it
 ```
 
-Each Fly app goes back to the image its previous release ran, and the website to the Worker
-version that was live before, at once and without a build (`wrangler rollback`; any of the last
-100 versions). A rollback doesn't undo a migration or a secret, and the `production`
-branch still names the newer commit: fix forward, then deploy again.
+A rollback undoes the last deploy. Every image `apply` and `hotfix` build is tagged with the
+deploy's time and commit, so the Fly apps that deploy changed go back to the images they ran
+before it, and the apps it didn't change stay as they are; it says which. A second rollback
+goes back one deploy further. The `production` branch moves back to the commit that is live
+again. The website goes to the Worker version that was live before, at once and without a build
+(`wrangler rollback`; any of the last 100 versions). Images from before deploys were tagged
+don't say which deploy made them: then name the apps. A rollback doesn't undo a migration or a
+secret: fix forward, then deploy again.
 
 ## 4. Check it
 
