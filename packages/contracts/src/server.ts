@@ -778,4 +778,6 @@ export interface TrashedServerView {
   purgeAfter: string
   /** Its backups: snapshots go with the server at purge, archives are kept for their own retention. */
   backups: { snapshots: number; archives: number }
+  /** For one made for a while, how long it lasts once restored, in milliseconds; null for one kept. */
+  lastsOnceRestored: number | null
 }

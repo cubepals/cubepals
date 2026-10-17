@@ -12,6 +12,7 @@ import { isMemoryTier } from '../../domain/server/size.ts'
 import type { Slug } from '../../domain/server/slug.ts'
 import type { World } from '../../domain/world/world.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
+import { lastsOnceRestored } from './temporary.ts'
 
 const servers = schema.minecraftServers
 const revisions = schema.serverRevisions
@@ -458,11 +459,11 @@ export async function purgeSooner(
   return toServer(row)
 }
 
-/** Out of the trash, its idle clock new; one made for a while keeps the time it had left in it. */
+/** Out of the trash, its idle clock new; one made for a while lasts as `lastsOnceRestored` says. */
 export async function markUndeleted(tx: Tx, server: MinecraftServer): Promise<MinecraftServer> {
   const now = new Date()
-  const { expiresAt: end, deletedAt: went } = server
-  const expiresAt = end && went && new Date(now.getTime() + Math.max(0, end.getTime() - went.getTime()))
+  const lasts = lastsOnceRestored(server)
+  const expiresAt = lasts === null ? null : new Date(now.getTime() + lasts)
   const kept = { expiresAt, lastActiveAt: now, deletionWarned: null }
   const [row] = await tx
     .update(servers)

@@ -22,6 +22,7 @@ import { type MemoryTier, PARTY, playerCapacity, sizeLabel } from '../../domain/
 import { type Actor, runsThePlatform } from '../actor.ts'
 import { settleable } from '../billing/balance.ts'
 import { meteredMonth, meteredUnitsSince } from '../billing/chip-in-meter.ts'
+import { type EndedFor, endedFor } from '../billing/ending.ts'
 import { extraThisMonth } from '../billing/extra-usage.ts'
 import { giftNext } from '../billing/gifts.ts'
 import { extraPlayNow, giftedPlan, latestSubscription, PAST_DUE_GRACE_MS } from '../billing/persistence.ts'
@@ -75,7 +76,7 @@ export interface AccountOverview {
     /**
      * What the billing provider says, when a subscription pays for the plan or once did.
      * `pastDueUntil`: its renewal failed to charge, and the plan lasts until then unless the card
-     * is fixed.
+     * is fixed. `endedFor`: Blockly ended it itself, after a withdrawal or a renewal left unpaid.
      */
     billed: {
       status: string
@@ -83,6 +84,7 @@ export interface AccountOverview {
       cancelAtPeriodEnd: boolean
       planKey: string
       pastDueUntil: Date | null
+      endedFor: EndedFor | null
     } | null
     /**
      * The plan paid for a year at once: when the first year still to run starts, when the last
@@ -91,8 +93,11 @@ export interface AccountOverview {
     year: { planKey: string; startsAt: Date; endsAt: Date; renewed: boolean } | null
     /** A redeemed gift that gives the plan now, and when the gifted time runs out. */
     gifted: { planKey: string; until: Date } | null
-    /** A redeemed gift waiting to start, once the time the account has paid for ends. */
-    giftNext: { planKey: string; months: number; startsAt: Date } | null
+    /**
+     * A redeemed gift waiting to start, once the time the account has paid for ends; `continues`
+     * when part of it ran already, and what is left of it runs then.
+     */
+    giftNext: { planKey: string; months: number; startsAt: Date; endsAt: Date; continues: boolean } | null
   }
   entitlements: Entitlements
   /** The sizes the plan allows, as somebody reads them: "3 GB · up to 5 players". */
@@ -222,6 +227,7 @@ export class AccountQueries {
                   subscription.status === 'past_due' && subscription.pastDueAt !== null
                     ? new Date(subscription.pastDueAt.getTime() + PAST_DUE_GRACE_MS)
                     : null,
+                endedFor: await endedFor(this.#db, subscription),
               },
         year: await yearView(this.#db, userId, now),
         gifted,

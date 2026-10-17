@@ -101,7 +101,9 @@ export async function confirmLost(
 
 /**
  * A lost node came back and its data is wanted: its servers that weren't rebuilt elsewhere are
- * placed there again. One rebuilt meanwhile has a newer epoch, and its copy here is fenced.
+ * placed there again. One rebuilt meanwhile has a newer epoch, and its copy here is fenced. One
+ * whose restore, move or rebuild here hadn't finished (`completing`) is `placing` again, so the next
+ * start or retry finishes filling it rather than running it empty.
  */
 export async function reinstate(db: Db, id: string, by: string): Promise<{ restored: string[] }> {
   return db.transaction(async (t) => {
@@ -113,7 +115,8 @@ export async function reinstate(db: Db, id: string, by: string): Promise<{ resto
         updated_at = now() WHERE id = ${id}`)
     const restored = await rows<{ workload: string }>(
       t,
-      sql`UPDATE fleet_placements SET state = 'placed', updated_at = now()
+      sql`UPDATE fleet_placements
+          SET state = (CASE WHEN completing IS NULL THEN 'placed' ELSE 'placing' END)::fleet_placement_state, updated_at = now()
           WHERE node_id = ${id} AND state = 'displaced' RETURNING workload`,
     )
     await event(t, 'node.reinstated', { node: id, data: { placements: restored.map((r) => r.workload), by } })

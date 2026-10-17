@@ -269,6 +269,56 @@ export class Transfers {
   }
 
   /**
+   * Moves' copies no move will restore from, marked deleted so that `dropDeletedCopies` removes them
+   * from the store: an export a crash left `uploading`, one that reached the store while its server
+   * never left the copy it was made from (which still holds the world), and one that failed before
+   * failed exports were deleted. Only once stale, so a move under way keeps its copy; never one a
+   * placement still restores from.
+   */
+  async dropUnusedMoveExports(limit: number): Promise<number> {
+    const dropped = await rows<{ id: string; workload: string; status: string }>(
+      this.#db,
+      sql`WITH unused AS (
+            SELECT a.id, a.status FROM fleet_archives a
+            WHERE a.purpose = 'move' AND a.object_key IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM fleet_placements p WHERE p.restore_from = a.id)
+              AND ((a.status = 'failed' AND NOT starts_with(COALESCE(a.error, ''), ${TOO_BIG}))
+                OR ((a.status = 'uploading' OR (a.status = 'ready' AND EXISTS (
+                      SELECT 1 FROM fleet_placements p WHERE p.workload = a.workload AND p.epoch = a.epoch)))
+                  AND a.upload_started_at < now() - make_interval(mins => ${UPLOAD_STALE_MINUTES})))
+            ORDER BY a.upload_started_at LIMIT ${limit} FOR UPDATE SKIP LOCKED)
+          UPDATE fleet_archives a SET status = 'deleted', deleted_at = now()
+          FROM unused WHERE a.id = unused.id RETURNING a.id, a.workload, unused.status`,
+    )
+    for (const row of dropped)
+      await event(this.#db, 'move.export_dropped', {
+        workload: row.workload,
+        data: { id: row.id, was: row.status },
+      })
+    return dropped.length
+  }
+
+  /**
+   * Snapshots of a server held only on `node`, uploaded before the node deletes its copy with its
+   * data, which takes them with it. True once none is left that may still upload: those that never
+   * can (failed for good, or never made) go with the copy, and `forgetNodeCopies` says so.
+   */
+  async uploadBeforeDelete(key: string, nodeId: string): Promise<boolean> {
+    const only = sql`workload = ${key} AND node_id = ${nodeId} AND purpose = 'snapshot'
+      AND local_id IS NOT NULL AND local_deleted_at IS NULL`
+    const pending = await rows<{ id: string }>(
+      this.#db,
+      sql`SELECT id FROM fleet_archives WHERE ${only} AND status IN ('local', 'uploading') ORDER BY captured_at`,
+    )
+    for (const { id } of pending) await this.upload(id)
+    const left = await rows<{ id: string }>(
+      this.#db,
+      sql`SELECT id FROM fleet_archives WHERE ${only} AND status IN ('local', 'uploading')`,
+    )
+    return left.length === 0
+  }
+
+  /**
    * Why a server's world can't move between nodes, when the newest of its copies to finish was
    * refused as too big for one upload to the store; null otherwise. A newer copy that uploads (a
    * world that shrank) lets it move again.
@@ -378,11 +428,19 @@ export class Transfers {
         )
     } catch (error) {
       const large = tooLarge(error)
-      const message = large === null ? (error as Error).message : `${TOO_BIG}${large.reason}`
+      if (large === null) {
+        // Some of it may have reached the store: no move restores from it, so it goes, now or by upkeep.
+        await this.#db.execute(sql`
+          UPDATE fleet_archives SET status = 'deleted', deleted_at = now(), error = ${(error as Error).message}
+          WHERE id = ${id}`)
+        await this.#archives.deleteStored(id, objectKey).catch(() => undefined)
+        throw error
+      }
+      // Refused before anything was sent; kept as failed, since the next move of its world reads why.
+      const message = `${TOO_BIG}${large.reason}`
       await this.#db.execute(
         sql`UPDATE fleet_archives SET status = 'failed', error = ${message} WHERE id = ${id}`,
       )
-      if (large === null) throw error
       await event(this.#db, 'snapshot.upload_failed', {
         node: node.id,
         workload: key,

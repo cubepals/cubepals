@@ -52,6 +52,7 @@ import {
   slugAvailable,
   slugClaimable,
 } from './persistence.ts'
+import { TEMPORARY_HOURS } from './temporary.ts'
 import type { ServerTransitions } from './transitions.ts'
 import { UpkeepNow } from './upkeep-now.ts'
 
@@ -672,13 +673,6 @@ const BOOTS: ReadonlySet<OperationKind | null> = new Set(['start', 'unstore', 'p
 
 /** What the platform does on its own, found by reconciling what the provider reports. */
 const PLATFORM: Actor = { kind: 'system', reason: 'reconcile' }
-
-/**
- * How long a server made for a while lasts. A day covers the thing people ask for — an evening
- * with friends, a modpack someone wants to try — and it is one number rather than a question
- * with options. Keeping it is one press, and Blockly says the exact time from the start.
- */
-const TEMPORARY_HOURS = 24
 
 /**
  * The check for booting `server`: what it would boot, which the plan must run, and which server it
