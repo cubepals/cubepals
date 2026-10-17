@@ -4,7 +4,8 @@
 
 /**
  * What the owner reads about the people who tried to join while their server rested for its
- * play: who, when, and that they were told. When it is back is said beside it (`OutForToday`).
+ * play: who, when, and what they were told. On the server's page, why it rests and when it is
+ * back are said just under it (`OutForToday`, `FreeHoursUsed`), so it doesn't say them again.
  */
 import type { ServerView } from '@blockly/contracts'
 import { DAY_MS } from '@blockly/contracts/durations'
@@ -43,7 +44,10 @@ export function cameByLine(
   const many = server.cameBy.length > 1
   const tried = `${who(server.cameBy.map((p) => p.name))} tried to join${named ? ` ${server.name}` : ''}`
   const at = `${many ? ', the last' : ''} ${when(latest.at, now)}`
+  const told = server.stopReason === 'free_hours' ? 'it’s resting for now' : 'when it’s back'
+  // On the server's own page, the note beside this says why it rests; the list has no such note.
+  if (!named) return `${tried}${at}. Cubepals told them ${told}.`
   return server.stopReason === 'free_hours'
-    ? `${tried}${at}, after your free trial’s hours were played. Cubepals told them it’s resting for now.`
-    : `${tried}${at}, after today’s play was used up. Cubepals told them when it’s back.`
+    ? `${tried}${at}, after your free trial’s hours were played. Cubepals told them ${told}.`
+    : `${tried}${at}, after today’s play was used up. Cubepals told them ${told}.`
 }
