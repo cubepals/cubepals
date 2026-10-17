@@ -83,9 +83,13 @@ export async function monthSpans(
   const zone = standing.timeZone ?? DEFAULT_TIME_ZONE
   const change = zoneChange(standing)
   const first = monthBegan(at, zone, change)
-  const began = await blockBegan(q, standing.userId, standing.plan, now)
-  // The month the block began in counts from then: what was played before was another plan's.
-  const start = began !== null && began > first ? began : first
+  // When the block began: when the run of paid time on the plan that holds `now` began, each
+  // stretch of it (subscription, years paid at once in `billing/years.ts`, gifts redeemed in
+  // `billing/gifts.ts`) running on from or over the one before, so months on Free never carry.
+  const spans = await paidSpans(q, standing.userId, standing.plan, now)
+  const began = spans.length > 0 ? runBegan(spans) : await accountMade(q, standing.userId)
+  // The month paid time began in counts from then: what was played before was another plan's.
+  const start = spans.length > 0 && began !== null && began > first ? began : first
   // Whole months before this one, oldest first, back to the first the block covered from its 1st.
   const before: Date[] = []
   let month = monthBegan(new Date(first.getTime() - 1), zone, change)
@@ -122,15 +126,8 @@ interface PaidSpan {
   to: Date
 }
 
-/**
- * When the account's monthly block began: when the run of paid time on the plan that holds `now`
- * began, each stretch of it (subscription, years paid at once in `billing/years.ts`, gifts redeemed
- * in `billing/gifts.ts`) running on from or over the one before, so months on Free never carry. On a
- * plan nothing pays for (an admin's), when the account was made. Null for an account not yet made.
- */
-async function blockBegan(q: Queryable, userId: string, plan: string, now: Date): Promise<Date | null> {
-  const spans = await paidSpans(q, userId, plan, now)
-  if (spans.length > 0) return runBegan(spans)
+/** When the account was made: where the block of a plan nothing pays for (an admin's) began. */
+async function accountMade(q: Queryable, userId: string): Promise<Date | null> {
   const [made] = await q
     .select({ at: schema.accountStanding.createdAt })
     .from(schema.accountStanding)

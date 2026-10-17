@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The owner's month follows the time zone their browser last reported, read at every check. A
- * zone changed at the end of a month that is used up opens the next month's block early: the
- * hours played then fall back into the month already spent when the zone changes back.
+ * A month is counted in one time zone from its start to its end: a zone the browser reports once
+ * the account has played waits for the next month, so a month that is used up stays used up.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { HOUR_MS } from '@blockly/contracts/durations'
@@ -16,7 +15,7 @@ import { type Harness, hasDatabase, startHarness } from '../../testing/harness.t
 
 const PLUS_HOURS = entitlementsFor('plus').includedUnits ?? 0
 
-describe.skipIf(!hasDatabase)('a time zone changed at the end of a month', () => {
+describe.skipIf(!hasDatabase)('a time zone reported at the end of a used-up month', () => {
   let h: Harness
 
   beforeAll(async () => {
@@ -27,7 +26,7 @@ describe.skipIf(!hasDatabase)('a time zone changed at the end of a month', () =>
     await h.close()
   })
 
-  test('opens no block of hours early', async () => {
+  test('leaves the month used up until it ends', async () => {
     const actor = await h.user('Tavi', 'plus')
     await h.app.accounts.setTimeZone(actor, 'Etc/UTC')
     const server = await h.create(actor)
@@ -58,7 +57,7 @@ describe.skipIf(!hasDatabase)('a time zone changed at the end of a month', () =>
         ),
       )
     expect(await check()).toMatchObject({ ok: false, code: 'limit_reached' })
-    // The browser now says UTC+14: it is the 1st there, and a fresh 120 hours open.
+    // The browser now says UTC+14, where it is already the 1st: the month is still UTC's.
     await h.app.accounts.setTimeZone(actor, 'Pacific/Kiritimati')
     expect(await check()).toMatchObject({ ok: false, code: 'limit_reached' })
   }, 60_000)

@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Plus's 120 hours a month are counted from the owner's 1st, whatever the account was on then.
- * Play on the free trial earlier in the same month is spent from the block Plus was bought for.
+ * The month Plus begins in counts only play since it began: hours played on the free trial
+ * earlier that month stay the free trial's, and Plus's block is whole.
  */
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -33,7 +33,7 @@ const thisMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(),
 const monthRoom = Date.now() - thisMonth.getTime()
 
 test.skipIf(!hasDatabase || monthRoom < 12 * HOUR_MS)(
-  'hours played on the free trial before Plus began are not spent from Plus’s month',
+  'the month Plus begins in counts only play since Plus began',
   async () => {
     const owner = await w.h.user('Yara')
     const server = await w.h.create(owner)

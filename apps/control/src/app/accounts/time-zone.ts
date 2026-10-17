@@ -54,7 +54,7 @@ async function hasPlayed(tx: Tx, userId: string): Promise<boolean> {
 
 /**
  * `standing-sweep`: each zone that waited and whose moment has come takes over, recorded with when
- * the month it takes over in began in the zone before, and in the audit log. A report that changed
+ * the month it takes over in began in the zone before, and in the account's log. A report that changed
  * what waits in the meantime is left for the next pass. How many changed.
  */
 export async function applyTimeZones(db: Db, now: Date): Promise<number> {
