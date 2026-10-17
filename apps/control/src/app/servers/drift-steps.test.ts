@@ -9,8 +9,9 @@
  */
 import { describe, expect, test } from 'bun:test'
 import { defaultSettings, type ServerRevision } from '../../domain/revision/revision.ts'
-import { CARRIED_STEP } from '../../minecraft/carried.ts'
+import { CARRIED_STEP, FILES_VARIABLES } from '../../minecraft/carried.ts'
 import { toRuntimeSpec } from '../../minecraft/runtime-spec.ts'
+import { readList } from '../../minecraft/step-lists.ts'
 import { specDigest, withoutPlanLimits } from './specs.ts'
 
 const revision: ServerRevision = {
@@ -53,8 +54,8 @@ const input = {
 
 const drift = (spec: ReturnType<typeof toRuntimeSpec>) => specDigest(withoutPlanLimits(spec))
 
-/** The carried step as it read before it took its files compressed. */
-const EARLIER_STEP = CARRIED_STEP.replace(/^if \[ -n "\$BLOCKLY_FILES_GZ" \].*?fi; /, '').replaceAll(
+/** The carried step as it would read had it never taken its files compressed. */
+const EARLIER_STEP = CARRIED_STEP.replace(`${readList('files', FILES_VARIABLES)} `, '').replaceAll(
   '"$files"',
   '"$BLOCKLY_FILES"',
 )
@@ -62,7 +63,6 @@ const EARLIER_STEP = CARRIED_STEP.replace(/^if \[ -n "\$BLOCKLY_FILES_GZ" \].*?f
 describe('the drift digest and the text of Blockly’s own steps', () => {
   test('a server with carried files keeps its drift digest when a step’s text changes', () => {
     expect(EARLIER_STEP).not.toBe(CARRIED_STEP)
-    expect(EARLIER_STEP.startsWith('placed=$(printf')).toBe(true)
     const now = toRuntimeSpec(input)
     const withScript = (change: (script: string) => string) => ({
       ...now,

@@ -31,7 +31,7 @@ import { quarantinedOf } from '../mods/jar-check-records.ts'
 import { loadPackContents } from '../packs/persistence.ts'
 import type { InstallSeed, RuntimeSpec } from '../ports/runtime.ts'
 import { acceptedSecrets, deriveServerSecret, type SecretKeyring } from '../secrets.ts'
-import { withCompressedFiles } from './carried-files.ts'
+import { tooLongForAStart, withCompressedFiles } from './carried-files.ts'
 import { withCurrentOwnFiles } from './own-files.ts'
 import { grownStorage, loadRevision, loadWorld } from './persistence.ts'
 
@@ -178,10 +178,13 @@ export class RuntimeSpecs {
     // A start places the files Cubepals owns as they are now (`own-files.ts`); like the Via
     // plugins, they never arrive through drift.
     const starting = withCurrentOwnFiles(revision)
-    // Its carried files compressed, so that no variable comes near Linux's limit (`carried-files.ts`).
+    // Its carried files compressed, and any long list, so that no variable comes near Linux's limit
+    // (`carried-files.ts`). One still past it is refused here, before a machine fails on it.
     const labelled = label(
       withCompressedFiles(toRuntimeSpec({ ...input, revision: starting, compat: placed })),
     )
+    const refused = tooLongForAStart(labelled)
+    if (refused !== null) throw new Error(refused)
     // The Via plugins arrive at a start, never through drift: a running server isn't restarted
     // for Cubepals' compatibility layer, or for a newer pin of it.
     const driftDigest = specDigest(withoutPlanLimits(label(toRuntimeSpec(input))))

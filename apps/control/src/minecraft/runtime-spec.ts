@@ -18,7 +18,7 @@ import { PACK_ID, PROMPT } from './brand-pack.ts'
 import { CARRIED_STEP, carriedEnv, placesFiles } from './carried.ts'
 import { DATAPACKS_STEP, datapacksEnv, datapacksOf } from './datapacks.ts'
 import { WAITING_DATAPACK } from './duels-waiting.ts'
-import { DATA_DIR, jarsOf } from './jars.ts'
+import { DATA_DIR, JAR_LISTS, jarsOf } from './jars.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
 import { STARTER_STEP, starterEnv, starterOf } from './starter.ts'
 import { javaFor } from './versions.ts'
@@ -279,6 +279,27 @@ function modsEnv(input: RuntimeSpecInput): Record<string, string> {
 }
 
 /**
+ * The image takes a list of jars from a file as well as from its variable (`MODS_FILE`,
+ * `PLUGINS_FILE`), so a list too long for one variable, given compressed, goes to it as a file on
+ * the machine's own disk, and the variable is left empty. The image keeps a record of what it
+ * installed from each kind of list, and cleans up only after the kind it is given (itzg
+ * 2026.9.1, `scripts/start-setupModpack`): so a volume whose jars came from a file once, which it
+ * remembers, is given its list as a file from then on, however short. Its first start so removes
+ * the jars the variable installed and fetches them again from the file. A server that never had a
+ * long list starts as it always did.
+ */
+function jarListStep(variable: 'MODS' | 'PLUGINS'): string {
+  const file = `/tmp/blockly-${variable.toLowerCase()}`
+  const mark = `${DATA_DIR}/.blockly-${variable.toLowerCase()}-file`
+  const { compressed } = JAR_LISTS[variable]
+  return [
+    `rm -f ${file}; if [ -n "$${compressed}" ]; then printf %s "$${compressed}" | base64 -d | gzip -dc > ${file} || exit 1;`,
+    `elif [ -n "\${${variable}+x}" ] && [ -f ${mark} ]; then printf %s "$${variable}" | tr , '\\n' > ${file}; fi;`,
+    `if [ -f ${file} ]; then export ${variable}= ${variable}_FILE=${file}; : > ${mark}; fi;`,
+  ].join(' ')
+}
+
+/**
  * A modpack: the image installs the pack itself — its loader, its mods, its configuration and
  * the clean-up when it moves to another version — from the exact pack file Blockly pinned.
  */
@@ -470,8 +491,8 @@ const EXEC_IMAGE = `exec ${IMAGE_ENTRYPOINT} "$@"`
  * The image's own entrypoint, after Blockly's steps. The first puts the volume's files as the
  * server type reads them (`PAPER_STEP` on Paper, `DIMENSIONS_STEP` on any other), and the
  * second the world's datapacks (`DATAPACKS_STEP`); the world a template starts on
- * (`STARTER_STEP`), the icon, the pack and the files Cubepals places itself follow where a server
- * has them, and last what spares the image work it would
+ * (`STARTER_STEP`), the icon, the pack, the files Cubepals places itself and the list of jars the
+ * image installs follow where a server has them, and last what spares the image work it would
  * redo (`WAKE_STEP`).
  */
 function entrypointFor(steps: {
@@ -480,6 +501,7 @@ function entrypointFor(steps: {
   icon: boolean
   pack: boolean
   carried: boolean
+  jars: 'MODS' | 'PLUGINS' | null
 }): readonly string[] {
   const script = [
     steps.paper ? PAPER_STEP : DIMENSIONS_STEP,
@@ -488,6 +510,7 @@ function entrypointFor(steps: {
     ...(steps.icon ? ICON_STEP : []),
     ...(steps.pack ? PACK_STEP : []),
     ...(steps.carried ? [CARRIED_STEP] : []),
+    ...(steps.jars === null ? [] : [jarListStep(steps.jars)]),
     WAKE_STEP,
     EXEC_IMAGE,
   ].join(' ')
@@ -523,6 +546,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
     icon: input.iconUrl !== null,
     pack: pack !== null,
     carried: viaPlaced || placesFiles(placing),
+    jars: pack === null ? (jarsOf(revision.loader)?.env ?? null) : null,
   })
   const reconstructible = reconstructibleOf(revision)
 

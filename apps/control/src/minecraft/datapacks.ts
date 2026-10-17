@@ -26,9 +26,16 @@ import type { ModArtifact, PinnedMod } from '../domain/mods/artifact.ts'
 import type { Loader } from '../domain/revision/revision.ts'
 import { DATA_DIR } from './jars.ts'
 import { installsAsDatapack } from './mods.ts'
+import { type ListVariables, readList } from './step-lists.ts'
 
-/** The variable listing a revision's datapacks: one per line, `<sha512> <name> <link>`. */
-const DATAPACKS_VARIABLE = 'BLOCKLY_DATAPACKS'
+/**
+ * The variable listing a revision's datapacks: one per line, `<sha512> <name> <link>`. A start given
+ * more of them than one variable holds is given them compressed (`step-lists.ts`).
+ */
+export const DATAPACKS_VARIABLES: ListVariables = {
+  plain: 'BLOCKLY_DATAPACKS',
+  compressed: 'BLOCKLY_DATAPACKS_GZ',
+}
 
 /**
  * The name a datapack has in the world's folder: unique to its bytes, as a jar's is, and plain
@@ -55,7 +62,7 @@ export function datapacksEnv(
   const lines = datapacksOf(revision).map(
     (mod) => `${mod.artifact.sha512} ${datapackName(mod.artifact)} ${artifactUrl(mod.artifact)}`,
   )
-  return lines.length === 0 ? {} : { [DATAPACKS_VARIABLE]: lines.join('\n') }
+  return lines.length === 0 ? {} : { [DATAPACKS_VARIABLES.plain]: lines.join('\n') }
 }
 
 /**
@@ -66,11 +73,12 @@ export function datapacksEnv(
  * running a world on something nobody chose. A file already right is never fetched again.
  */
 export const DATAPACKS_STEP = [
+  readList('listed', DATAPACKS_VARIABLES),
   `packs="${DATA_DIR}/$LEVEL/datapacks"; mark="${DATA_DIR}/$LEVEL/.blockly-datapacks";`,
-  `if [ -n "$${DATAPACKS_VARIABLE}" ] || [ -f "$mark" ]; then mkdir -p "$packs";`,
-  `if [ -f "$mark" ]; then while read -r old; do case "$${DATAPACKS_VARIABLE}" in *" $old "*) ;;`,
+  'if [ -n "$listed" ] || [ -f "$mark" ]; then mkdir -p "$packs";',
+  'if [ -f "$mark" ]; then while read -r old; do case "$listed" in *" $old "*) ;;',
   '*) rm -f -- "$packs/$old";; esac; done < "$mark"; fi;',
-  `printf '%s\\n' "$${DATAPACKS_VARIABLE}" | while read -r sha name url; do [ -n "$name" ] || continue;`,
+  `printf '%s\\n' "$listed" | while read -r sha name url; do [ -n "$name" ] || continue;`,
   `if [ "$(sha512sum "$packs/$name" 2>/dev/null | cut -d' ' -f1)" != "$sha" ]; then`,
   'curl -fsSL --retry 3 --max-time 300 -o "$packs/$name.part" "$url" &&',
   `[ "$(sha512sum "$packs/$name.part" | cut -d' ' -f1)" = "$sha" ] ||`,
