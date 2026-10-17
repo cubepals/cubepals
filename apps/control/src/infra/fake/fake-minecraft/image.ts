@@ -13,6 +13,7 @@
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { gunzipSync } from 'node:zlib'
 import { strFromU8, strToU8, unzipSync } from 'fflate'
 
 type Env = Readonly<Record<string, string>>
@@ -134,14 +135,20 @@ export async function installPack(volume: string, env: Env, say: (text: string) 
  * is written over what is there. The step itself runs in a real shell in `app/servers/carried-runtime.test.ts`.
  */
 export async function placeCarried(volume: string, env: Env, say: (text: string) => void): Promise<void> {
-  if (env.BLOCKLY_JARS === undefined && env.BLOCKLY_FILES === undefined) return
+  if (env.BLOCKLY_JARS === undefined && env.BLOCKLY_FILES === undefined && env.BLOCKLY_FILES_GZ === undefined)
+    return
   const lines = (text: string | undefined) =>
     (text ?? '')
       .split('\n')
       .filter(Boolean)
       .map((line) => line.split(' '))
   const jars = lines(env.BLOCKLY_JARS)
-  const files = lines(env.BLOCKLY_FILES)
+  // Compressed as a start is given them, or plain as earlier starts were (`minecraft/carried.ts`).
+  const files = lines(
+    env.BLOCKLY_FILES_GZ
+      ? gunzipSync(Buffer.from(env.BLOCKLY_FILES_GZ, 'base64')).toString('utf8')
+      : env.BLOCKLY_FILES,
+  )
   const placed = [...jars, ...files].map(([path]) => path ?? '')
   const mark = join(volume, '.blockly-files')
   const before = (await readFile(mark, 'utf8').catch(() => '')).split('\n').filter(Boolean)
