@@ -53,7 +53,7 @@ export class Held {
     let offset = 0
     for (;;) {
       const length = readVarInt(received, offset)
-      if (length === null || length.next + length.value > received.length) break
+      if (length === null || length.value < 0 || length.next + length.value > received.length) break
       const end = length.next + length.value
       const id = readVarInt(received, length.next)
       // An answer to one of the hold's own queries is the hold's; the server never asked it.
