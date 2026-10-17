@@ -19,6 +19,29 @@ const TYPED = 'input, textarea, select, [contenteditable="true"]'
 const CORNERS = ['top left', 'top right', 'bottom right', 'bottom left'] as const
 
 /**
+ * Where "Click to dig" stands: beside the crosshair, at whichever corner of it leaves the words on
+ * the picture clear, so it never covers a caption.
+ */
+function hintAt(hint: HTMLElement, root: HTMLElement, point: { x: number; y: number }): string {
+  const width = hint.offsetWidth
+  const height = hint.offsetHeight
+  const words = [...root.querySelectorAll<HTMLElement>('[data-over]')].map((element) =>
+    element.getBoundingClientRect(),
+  )
+  const corners = [
+    [point.x + 16, point.y + 16],
+    [point.x + 16, point.y - 16 - height],
+    [point.x - 16 - width, point.y + 16],
+    [point.x - 16 - width, point.y - 16 - height],
+  ] as const
+  const clear = corners.find(
+    ([x, y]) => !words.some((r) => x < r.right && x + width > r.left && y < r.bottom && y + height > r.top),
+  )
+  const [x, y] = clear ?? corners[0]
+  return `${x}px ${y}px`
+}
+
+/**
  * The page's own cursor, for a mouse: the game's crosshair, in the page's own pixels. Over
  * something that can be pressed it becomes the outline of that thing; over a block of the chunk
  * that can be dug it is the crosshair of someone holding a pickaxe, and says so until the first
@@ -38,28 +61,6 @@ export function Cursor() {
     const hint = cursor.querySelector<HTMLElement>('[data-part="hint"]')
     if (!cross || !box || !hint) return
     let at: { x: number; y: number } | null = null
-
-    // "Click to dig" stands beside the crosshair, at whichever corner of it leaves the words on
-    // the picture clear: it never covers a caption.
-    const hintAt = (point: { x: number; y: number }) => {
-      const width = hint.offsetWidth
-      const height = hint.offsetHeight
-      const words = [...root.querySelectorAll<HTMLElement>('[data-over]')].map((element) =>
-        element.getBoundingClientRect(),
-      )
-      const corners = [
-        [point.x + 16, point.y + 16],
-        [point.x + 16, point.y - 16 - height],
-        [point.x - 16 - width, point.y + 16],
-        [point.x - 16 - width, point.y - 16 - height],
-      ] as const
-      const clear = corners.find(
-        ([x, y]) =>
-          !words.some((r) => x < r.right && x + width > r.left && y < r.bottom && y + height > r.top),
-      )
-      const [x, y] = clear ?? corners[0]
-      return `${x}px ${y}px`
-    }
 
     const place = () => {
       if (!at) {
@@ -93,7 +94,6 @@ export function Cursor() {
               ? 'kept'
               : 'aim'
       cursor.toggleAttribute('data-hint', now.aim === 'dig' && now.dug === 0)
-      if (cursor.hasAttribute('data-hint')) hint.style.translate = hintAt(at)
     }
     let waiting = 0
     const soon = () => {
@@ -101,6 +101,7 @@ export function Cursor() {
       waiting = requestAnimationFrame(() => {
         waiting = 0
         place()
+        if (at && cursor.hasAttribute('data-hint')) hint.style.translate = hintAt(hint, root, at)
       })
     }
     const moved = (event: PointerEvent) => {
