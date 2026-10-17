@@ -12,7 +12,7 @@ import { type SubmitEvent, useState } from 'react'
 import { isNotFound, messageOf, useTRPC } from '../../../../../lib/api'
 import { useNow } from '../../../../../lib/hooks'
 import { said, useOutcome } from '../../../../../lib/outcome'
-import { whenTaken } from '../../../../../lib/present'
+import { dayOf, whenTaken } from '../../../../../lib/present'
 import * as rules from '../../../../../lib/rules'
 import {
   Badge,
@@ -204,10 +204,41 @@ function Account({ account }: { account: AccountDetailView }) {
   )
 }
 
+const title = (plan: string) => (plan[0]?.toUpperCase() ?? '') + plan.slice(1)
+
+/** "3 Nov", with the year when it isn't this one: "3 Nov 2027". */
+const dayAndYear = (at: string) => {
+  const year = new Date(at).getFullYear()
+  return year === new Date().getFullYear() ? dayOf(at) : `${dayOf(at)} ${year}`
+}
+
+/** The plan in force and where it comes from: "Plus, from Polar, renews 3 Nov". */
+function planSaid(account: AccountDetailView): string {
+  const until = account.planUntil === null ? '' : dayAndYear(account.planUntil)
+  const when = until === '' ? '' : `, ${account.planRenews ? 'renews' : 'until'} ${until}`
+  switch (account.planFrom) {
+    case 'subscription':
+      return `${title(account.plan)}, from Polar${when}`
+    case 'year':
+      return `${title(account.plan)}, a year paid at once${when}`
+    case 'gift':
+      return `${title(account.plan)}, from a gift${when}`
+    case 'admin':
+      return `${title(account.plan)}, given by an admin`
+    case 'free':
+      return 'Free'
+  }
+}
+
+/**
+ * The plan set on the account. Where billing gives one, the plan set here waits underneath it and
+ * applies once that ends, so the control starts from it, not from the plan in force.
+ */
 function Plan({ account }: { account: AccountDetailView }) {
   const trpc = useTRPC()
   const queries = useQueryClient()
-  const [plan, setPlan] = useState(account.plan)
+  const billed = account.planFrom !== 'admin' && account.planFrom !== 'free'
+  const [plan, setPlan] = useState(account.setPlan)
   const saved = useOutcome(undefined)
   const save = useMutation(
     trpc.admin.setPlan.mutationOptions({
@@ -220,11 +251,16 @@ function Plan({ account }: { account: AccountDetailView }) {
   )
   return (
     <div className="bk-stack" style={{ gap: 'var(--space-12)' }}>
+      <p className="type-body-sm">Now: {planSaid(account)}</p>
       <Select
-        label="Plan"
-        help="Set by billing where there is billing; an admin can comp one."
+        label={billed ? 'Plan once that ends' : 'Plan'}
+        help={
+          billed
+            ? `${account.planFrom === 'subscription' ? 'Polar bills this account' : 'This account has paid time'}, so a plan set here only applies once that ends.`
+            : 'Set by billing where there is billing; an admin can comp one.'
+        }
         value={plan}
-        options={account.plans.map((p) => ({ value: p, label: p[0]?.toUpperCase() + p.slice(1) }))}
+        options={account.plans.map((p) => ({ value: p, label: title(p) }))}
         onChange={(event) => setPlan(event.target.value)}
       />
       <div className="bk-row" style={{ gap: 'var(--space-8)' }}>
@@ -232,7 +268,7 @@ function Plan({ account }: { account: AccountDetailView }) {
           variant="outline"
           size="sm"
           {...said(saved)}
-          disabled={plan === account.plan || save.isPending}
+          disabled={plan === account.setPlan || save.isPending}
           onClick={() => save.mutate({ userId: account.userId, plan })}
         >
           Save plan
@@ -290,6 +326,7 @@ function Limits({ account }: { account: AccountDetailView }) {
         />
         <TextField
           label="Hours of play a month, instead of the plan's"
+          help="More hours apply now. Fewer apply from next month once the account has played this month, so play they covered stays covered."
           optional
           inputMode="numeric"
           value={hours}
@@ -392,6 +429,12 @@ function TestAccount({ account }: { account: AccountDetailView }) {
       }
     >
       {failure && <Note tone="danger">{messageOf(failure)}</Note>}
+      {!account.test && account.planFrom === 'subscription' && (
+        <Note tone="info">
+          Polar bills this account. As a test account it can’t play extra hours, so its servers sleep once its
+          included hours are used.
+        </Note>
+      )}
       <FormRow
         label="A test account"
         control={

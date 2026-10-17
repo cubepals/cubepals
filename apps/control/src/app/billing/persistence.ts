@@ -83,6 +83,18 @@ export interface SubscriptionRecord {
  * every entitlement is read through here, sweeps every minute included.
  */
 export async function billedPlan(q: Queryable, userId: string, now = new Date()): Promise<string | null> {
+  return (await billedBy(q, userId, now))?.plan ?? null
+}
+
+/** What gives the account a plan now (`billedPlan`): a subscription, a year paid at once, or a gift. */
+export type PlanSource = 'subscription' | 'year' | 'gift'
+
+/** `billedPlan`, with which of the three gives it. */
+export async function billedBy(
+  q: Queryable,
+  userId: string,
+  now = new Date(),
+): Promise<{ plan: string; from: PlanSource } | null> {
   const paying = q
     .select({ planKey: subscriptions.planKey })
     .from(subscriptions)
@@ -118,10 +130,15 @@ export async function billedPlan(q: Queryable, userId: string, now = new Date())
       ),
     )
     .limit(1)
-  const { rows } = await q.execute<{ plan: string | null }>(
-    sql`select coalesce((${paying}), (${year}), (${giftRunning(q, userId, now)})) as plan`,
+  const gift = giftRunning(q, userId, now)
+  const { rows } = await q.execute<{ subscription: string | null; year: string | null; gift: string | null }>(
+    sql`select (${paying}) as subscription, (${year}) as year, (${gift}) as gift`,
   )
-  return rows[0]?.plan ?? null
+  const row = rows[0]
+  if (row?.subscription) return { plan: row.subscription, from: 'subscription' }
+  if (row?.year) return { plan: row.year, from: 'year' }
+  if (row?.gift) return { plan: row.gift, from: 'gift' }
+  return null
 }
 
 /** The redeemed gift running now that began first, as `giftedPlan` reads it. */
@@ -557,10 +574,14 @@ export async function extraStoppedAt(q: Queryable, userId: string): Promise<Date
   return null
 }
 
+/** Why a test account plays no extra: what it plays is never sent to be billed. */
+const TEST_NO_EXTRA = 'This is a test account, so extra hours are off: nothing it plays is billed.'
+
 /**
  * Whether the account may play past its included hours now, and how far, with what it owes:
  * every place that counts extra play (the policy, the sweep that stops servers, the account page,
- * the reporter) reads it from here.
+ * the reporter) reads it from here. Never on a test account, whose play is never sent to be
+ * billed (`ExtraUsage.send`), so nothing is counted that nothing bills.
  */
 export async function extraPlayNow(
   q: Queryable,
@@ -569,7 +590,50 @@ export async function extraPlayNow(
   const facts = await billingFacts(q, standing.userId)
   const plan = entitlementsFor(standing.plan, standing.limitOverrides)
   return {
-    decision: extraPlay(plan, standing.extraUnitsAllowed, facts, tuning().abuse.extraCeiling),
+    decision: standing.testAccount
+      ? { may: false, why: TEST_NO_EXTRA }
+      : extraPlay(plan, standing.extraUnitsAllowed, facts, tuning().abuse.extraCeiling),
     owedCents: facts.owedCents,
   }
+}
+
+const months = schema.extraPlayMonths
+
+/**
+ * The block of hours the month (`month`, as `monthOf` names it) kept when an admin lowered the
+ * account's hours (`keepMonthBlock`), in hours; null when none was kept, or when it was kept under
+ * a plan other than `plan`, which is no longer in force.
+ */
+export async function monthBlock(
+  q: Queryable,
+  userId: string,
+  month: string,
+  plan: string,
+): Promise<number | null> {
+  const [row] = await q
+    .select({ units: months.blockUnits })
+    .from(months)
+    .where(and(eq(months.userId, userId), eq(months.month, month), eq(months.blockPlan, plan)))
+  return row?.units ?? null
+}
+
+/**
+ * Keeps `units` as the month's block under `plan`, when it is more than what is kept under that
+ * plan: hours an admin lowers apply from the next month (`monthBlock`).
+ */
+export async function keepMonthBlock(
+  q: Queryable,
+  userId: string,
+  month: string,
+  plan: string,
+  units: number,
+): Promise<void> {
+  await q
+    .insert(months)
+    .values({ userId, month, blockUnits: units, blockPlan: plan })
+    .onConflictDoUpdate({
+      target: [months.userId, months.month],
+      set: { blockUnits: units, blockPlan: plan, updatedAt: new Date() },
+      setWhere: sql`${months.blockPlan} is distinct from ${plan} or ${months.blockUnits} is null or ${months.blockUnits} < ${units}`,
+    })
 }

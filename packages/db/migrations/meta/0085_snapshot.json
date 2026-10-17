@@ -1,5 +1,5 @@
 {
-  "id": "56547d9c-cf0c-4ed0-8626-d29e00e546dc",
+  "id": "ccde317b-d6d5-4d56-b3cc-31535918f525",
   "prevId": "888d5940-fc8e-4921-be53-1003d8f50edd",
   "version": "7",
   "dialect": "postgresql",
@@ -1950,22 +1950,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "backups_one_per_archive_key": {
-          "name": "backups_one_per_archive_key",
-          "columns": [
-            {
-              "expression": "archive_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"backups\".\"archive_key\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -2022,65 +2006,6 @@
           "value": "\"backups\".\"tier\" <> 'snapshot' or \"backups\".\"status\" in ('failed', 'deleted') or \"backups\".\"snapshot_handle\" is not null"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.kept_worlds": {
-      "name": "kept_worlds",
-      "schema": "",
-      "columns": {
-        "world_id": {
-          "name": "world_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "backup_id": {
-          "name": "backup_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "kept_worlds_world_id_worlds_id_fk": {
-          "name": "kept_worlds_world_id_worlds_id_fk",
-          "tableFrom": "kept_worlds",
-          "tableTo": "worlds",
-          "columnsFrom": [
-            "world_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "kept_worlds_backup_id_backups_id_fk": {
-          "name": "kept_worlds_backup_id_backups_id_fk",
-          "tableFrom": "kept_worlds",
-          "tableTo": "backups",
-          "columnsFrom": [
-            "backup_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.world_downloads": {
@@ -2566,6 +2491,18 @@
         "pending_since": {
           "name": "pending_since",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "block_units": {
+          "name": "block_units",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "block_plan": {
+          "name": "block_plan",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
