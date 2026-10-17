@@ -206,9 +206,15 @@ function Account({ account }: { account: AccountDetailView }) {
 
 const title = (plan: string) => (plan[0]?.toUpperCase() ?? '') + plan.slice(1)
 
+/** "3 Nov", with the year when it isn't this one: "3 Nov 2027". */
+const dayAndYear = (at: string) => {
+  const year = new Date(at).getFullYear()
+  return year === new Date().getFullYear() ? dayOf(at) : `${dayOf(at)} ${year}`
+}
+
 /** The plan in force and where it comes from: "Plus, from Polar, renews 3 Nov". */
 function planSaid(account: AccountDetailView): string {
-  const until = account.planUntil === null ? '' : dayOf(account.planUntil)
+  const until = account.planUntil === null ? '' : dayAndYear(account.planUntil)
   const when = until === '' ? '' : `, ${account.planRenews ? 'renews' : 'until'} ${until}`
   switch (account.planFrom) {
     case 'subscription':
