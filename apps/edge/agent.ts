@@ -517,6 +517,7 @@ asleepAt(SLEEPING, passOn)
 /** Holds `join` until its server is up, then passes it on; or turns it away, saying why. */
 async function hold(client: Socket, join: Join, header: Uint8Array | null): Promise<void> {
   const held = new Held(join)
+  if (held.refused) return void client.destroy()
   client.on('data', (chunk: Buffer) => {
     if (!held.receive(chunk)) client.destroy()
   })

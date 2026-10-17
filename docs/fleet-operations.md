@@ -72,8 +72,9 @@ environment's `fleet-nodes.auto.tfvars.json` (as `fsn1-ccx33-1`, unless `--name`
 which shows its plan and asks before it buys anything (`--yes` doesn't ask). The server
 ([`modules/fleet-node`](../infra/terraform/modules/fleet-node/main.tf)) is on the private network,
 behind a firewall that admits nothing from the internet (`fleet_hetzner.edge_sources` opens the
-game ports to an edge out there), and runs the line below at first boot. `add` waits until the
-node beats `healthy` and says so. Commit the tfvars change.
+game ports to an edge out there) and has no outbound rules, so what the node and its servers
+dial ([fleet.md §11](fleet.md#11-networking-and-the-edge)) is open, and runs the line below at
+first boot. `add` waits until the node beats `healthy` and says so. Commit the tfvars change.
 
 **An edge on Fly reaching Hetzner nodes over the internet.** Every edge machine dials a node from
 its region's egress addresses, and the firewall lets in only what `edge_sources` lists. Without
@@ -102,9 +103,13 @@ deletes the server.
 
 **The host.** A Linux machine on the private network, with an empty `/etc/machine-id` in its image
 (so each host makes its own at first boot) and a firewall that allows the node's API and game ports
-only from the private network. XFS with reflink (the default for `mkfs.xfs`) for `/var/lib/blocklyd`
-makes snapshots free until the world changes, though each still needs room for a full copy above
-the floor; ext4 works, with full copies.
+only from the private network. Outbound, the host and its servers need HTTPS to the node
+endpoint, the artifact endpoint (`ARTIFACTS_RUNTIME_FACING_URL`), the archive store's presigned
+host, and Mojang and the mod hosts ([fleet.md §11](fleet.md#11-networking-and-the-edge) says
+which reaches what, and why); a firewall that filters outbound traffic allows them. XFS with
+reflink (the default for `mkfs.xfs`) for `/var/lib/blocklyd` makes snapshots free until the world
+changes, though each still needs room for a full copy above the floor; ext4 works, with full
+copies.
 
 **The line**, from where you operate:
 
@@ -205,10 +210,11 @@ served. With several, nodes spread across them, and each call may reach a differ
   provider's changes. `monthly_cost_cents` is a whole number of US cents. The cost views use it at
   once (other processes within seconds), and `node.labels_changed` records the labels before and
   after, and who changed them.
-- **A full node** needs nothing from you. Sleeping servers hold no memory. When one wakes and the
-  servers running on its node leave no room, it moves to a node in its region with room before it
-  starts (`placement.moved_for_room` in `events`). If that happens most evenings, the region needs
-  another node, or a lower `FLEET_MEMORY_OVERCOMMIT`.
+- **A full node** needs nothing from you. Stopped servers hold no memory; a server asleep with
+  its memory holds it as a running one does, and a reboot of its node drops what it held. When one
+  wakes and the servers running on its node leave no room, it moves to a node in its region with
+  room before it starts (`placement.moved_for_room` in `events`). If that happens most evenings,
+  the region needs another node, or a lower `FLEET_MEMORY_OVERCOMMIT`.
 
 A **reboot** needs none of this: servers running when the host goes down start again once it is
 back and has heard from the control plane. Expect a minute or two of downtime per server.
@@ -426,7 +432,7 @@ From `events` and each node's `/metrics` ([fleet.md §14](fleet.md#14-observabil
   after 30 minutes. Now and then is a network blip; often is a node or path to look at;
 - any `fork.detected`, `copy.orphaned`, `epoch.conflict`, `node.duplicate_identity`;
 - free disk near the floor. Worlds stay on their nodes while they sleep, so disk fills before
-  memory;
+  memory, though servers asleep with their memory hold that too;
 - `placement.moved_for_room` most evenings, or starts refused with `RuntimeFull`: the region is
   short of room to run;
 - certificates within three days of their end.
@@ -444,7 +450,9 @@ What the line in [§2](#2-adding-a-node) does, step by step, for a host it can't
   ext4 works, with full copies.
 - An empty `/etc/machine-id` in the image, so each host makes its own at first boot.
 - Its private address, and a firewall that allows the node's API and game ports only from the
-  private network.
+  private network, and lets the host and its servers out over HTTPS to the node endpoint, the
+  artifact endpoint (`ARTIFACTS_RUNTIME_FACING_URL`), the archive store's presigned host, and
+  Mojang and the mod hosts ([fleet.md §11](fleet.md#11-networking-and-the-edge)).
 
 **blocklyd.** The static binary at `/var/lib/blocklyd/bin/blocklyd`, linked from
 `/usr/local/bin/blocklyd` so it can [upgrade itself](#9-upgrading-blocklyd), checked against its

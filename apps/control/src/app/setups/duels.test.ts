@@ -29,7 +29,7 @@ import { offeredVersions } from '../../minecraft/versions.ts'
 import { VOID_LEVEL } from '../../minecraft/worlds.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
-import { CHAT_FILTER } from '../moderation/service.ts'
+import { CHAT_FILTER } from '../moderation/chat-filter.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import { listWorlds } from '../worlds/persistence.ts'
 

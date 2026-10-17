@@ -55,6 +55,7 @@ import {
   verifiedByEmail,
 } from './persistence.ts'
 import { playTotal } from './play-total.ts'
+import { applyTimeZones, reportTimeZone } from './time-zone.ts'
 
 /** Plans an admin can put an account on: the paid ones, and free. */
 const PLANS = new Set(['free', ...PAID_PLANS])
@@ -303,16 +304,17 @@ export class AccountService {
   }
 
   /**
-   * Where the owner is, as their browser reports it: where their plan's day begins. Nobody picks
-   * it; the app says it whenever it differs from what is kept, and one Blockly doesn't know is
-   * ignored, leaving the day where it was.
+   * Where the owner is, as their browser reports it: where their plan's day and month begin. Nobody
+   * picks it; the app says it whenever it differs from what is kept, and one Blockly doesn't know is
+   * ignored, leaving the day where it was. Once the account has played, a new zone waits for the
+   * next month (`time-zone.ts`).
    */
   async setTimeZone(actor: Actor, timeZone: string): Promise<void> {
     if (actor.kind !== 'user') throw new NotFound('Account')
     if (!isTimeZone(timeZone)) return
     await this.#db.transaction(async (tx) => {
       const locked = await lockStanding(tx, actor.userId)
-      if (locked !== null && locked.timeZone !== timeZone) await saveStanding(tx, actor.userId, { timeZone })
+      if (locked !== null) await reportTimeZone(tx, locked, timeZone, new Date())
     })
   }
 
@@ -481,9 +483,11 @@ export class AccountService {
 
   /**
    * `standing-sweep`: what standing forbids, undone even when it was mid-way through other work
-   * when the standing changed. Suspended accounts' servers stop; terminated ones' close.
+   * when the standing changed. Suspended accounts' servers stop; terminated ones' close. A time
+   * zone that waited for its month takes over first, so the month is read in it.
    */
   async enforce(): Promise<{ stopped: number; closed: number }> {
+    await applyTimeZones(this.#db, new Date())
     let stopped = 0
     let closed = 0
     const inactive = new Set<string>()

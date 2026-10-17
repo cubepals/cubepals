@@ -260,6 +260,13 @@ describe('ops.ts', () => {
     expect(calls).toEqual([])
   })
 
+  test('retry tries a server again as its owner’s Try again does', async () => {
+    expect((await ops(['retry', SERVER])).code).toBe(0)
+    expect(writes().map(({ method, path }) => [method, path])).toEqual([
+      ['POST', `/ops/v1/servers/${SERVER}/retry`],
+    ])
+  })
+
   test('prints no token, even when the API answers with one, and names who acted', async () => {
     const read = await ops(['server', LEAKY], { OPERATOR: 'ada' })
     const failed = await ops(['start', LEAKY], { OPERATOR: 'ada' })

@@ -18,6 +18,7 @@
     "./play-today": "./src/play-today.ts",
     "./meter": "./src/meter.ts",
     "./names": "./src/names.ts",
+    "./seal": "./src/seal.ts",
     "./proxy-header": "./src/proxy-header.ts"
   },
   "dependencies": {

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { motdCutSentence, motdLayout } from '@blockly/contracts/motd-layout'
+import { sealProblem } from '@blockly/contracts/seal'
 import { motdText } from '@blockly/contracts/server-list'
 import { isDatapack, type PinnedMod } from '../mods/artifact.ts'
 import { type PinnedModpack, samePack } from '../mods/modpack.ts'
@@ -152,8 +153,10 @@ export function settingsProblems(settings: ServerSettings, capacity: number): st
   if (!Number.isInteger(settings.maxPlayers) || settings.maxPlayers < 1 || settings.maxPlayers > capacity)
     problems.push(`This size holds up to ${capacity} players. Pick a bigger size for more.`)
   // One line, which the list wraps onto its two by the game's own widths; codes take no room.
+  const motdSeal = sealProblem(settings.motd, 'Server messages')
   if (motdText(settings.motd).trim().length === 0) problems.push('Write something to show under the name.')
   else if (/\p{Cc}/u.test(settings.motd)) problems.push('The server message is one line of text.')
+  else if (motdSeal !== null) problems.push(motdSeal)
   else {
     const { cutCount } = motdLayout(settings.motd)
     if (cutCount > 0) problems.push(motdCutSentence(cutCount))

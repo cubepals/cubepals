@@ -18,11 +18,12 @@ type Layer = (typeof LAYERS)[number]
  * written once for every workspace, the bounds the API holds what people type to
  * (`@blockly/contracts/limits`), how Minecraft's server list reads a message
  * (`@blockly/contracts/server-list`), how wide its font draws each character
- * (`@blockly/contracts/minecraft-font`), and where published maps are
- * (`@blockly/contracts/published-maps`). None imports anything itself.
+ * (`@blockly/contracts/minecraft-font`), where published maps are
+ * (`@blockly/contracts/published-maps`), and the check marks and seals typed text refuses
+ * (`@blockly/contracts/seal`). None imports anything itself.
  */
 const PURE_PACKAGES =
-  /^@blockly\/contracts\/(durations|limits|minecraft-font|motd-layout|published-maps|server-list)$/
+  /^@blockly\/contracts\/(durations|limits|minecraft-font|motd-layout|published-maps|seal|server-list)$/
 const APP_PACKAGES = /^(@blockly\/(db|contracts)(\/.*)?|drizzle-orm(\/.*)?|zod|node:.*)$/
 
 /** A string literal holding a hostname, with or without a scheme (§17). */
@@ -296,11 +297,12 @@ if (PROVIDER_ID !== null)
     for (const match of withoutComments(readFileSync(file, 'utf8')).matchAll(PROVIDER_ID))
       fail(file, `${match[0]} names a runtime: the API's contracts never tell runtimes apart`)
 
-// Values written once and read from anywhere: domain/ reads the limits and the server list's
-// codes, the edge's image copies Minecraft's ports alone. Each stays a file that imports nothing.
+// Values written once and read from anywhere: domain/ reads the limits, the server list's codes
+// and the check marks typed text refuses, the edge's image copies Minecraft's ports alone. Each stays a file that imports nothing.
 for (const path of [
   'packages/contracts/src/limits.ts',
   'packages/contracts/src/published-maps.ts',
+  'packages/contracts/src/seal.ts',
   'packages/contracts/src/server-list.ts',
   'apps/control/src/minecraft/ports.ts',
 ])

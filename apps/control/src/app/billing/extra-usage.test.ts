@@ -120,10 +120,13 @@ const post = (event: unknown) => {
 }
 
 /**
- * When every subscription here was made: this month, so the month `at` falls in has nothing carried
- * into it, and each test counts against Plus's block alone.
+ * When every subscription here was made: a minute into this month, so the month `at` falls in has
+ * nothing carried into it, each test counts against Plus's block alone, and the runs a test writes
+ * earlier this month were played on Plus.
  */
-const made = new Date().toISOString()
+const made = new Date(
+  Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1) + MINUTE_MS,
+).toISOString()
 
 /** Polar's word on the account's subscription, as a customer state now and its delivery. */
 const standing = async (

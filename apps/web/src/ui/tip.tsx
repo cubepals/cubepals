@@ -30,7 +30,16 @@ import { type ReactNode, useState } from 'react'
  * card, the landing page's, dark mode), so the tip turns light and never melts into what it opens
  * over: the text's own color says so wherever the tip is used, with nothing to mark by hand.
  */
-export function Tip({ tip, children }: { tip: ReactNode; children: ReactNode }) {
+export function Tip({
+  tip,
+  card = false,
+  children,
+}: {
+  tip: ReactNode
+  /** Ink on Paper in either theme, edged like a popover, with nothing underlined beneath it. */
+  card?: boolean
+  children: ReactNode
+}) {
   const [open, setOpen] = useState(false)
   const [onDark, setOnDark] = useState(false)
   const { refs, floatingStyles, context } = useFloating({
@@ -62,10 +71,12 @@ export function Tip({ tip, children }: { tip: ReactNode; children: ReactNode }) 
     common: { transitionTimingFunction: 'cubic-bezier(0.2, 0, 0, 1)' },
   })
 
+  const reference = card ? 'bk-tip bk-tip--card' : 'bk-tip'
+
   return (
     <>
       {/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus is how a keyboard reaches the tip */}
-      <span ref={refs.setReference} className="bk-tip" tabIndex={0} {...getReferenceProps()}>
+      <span ref={refs.setReference} className={reference} tabIndex={0} {...getReferenceProps()}>
         {children}
       </span>
       {isMounted && (
@@ -77,7 +88,9 @@ export function Tip({ tip, children }: { tip: ReactNode; children: ReactNode }) 
             {...getFloatingProps()}
           >
             <div
-              className={onDark ? 'bk-tip__bubble bk-tip__bubble--light' : 'bk-tip__bubble'}
+              className={
+                card ? 'bk-tip__card' : onDark ? 'bk-tip__bubble bk-tip__bubble--light' : 'bk-tip__bubble'
+              }
               style={styles}
             >
               {tip}

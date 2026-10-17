@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { createHash, randomBytes } from 'node:crypto'
+import { once } from 'node:events'
 import { createServer, type Server } from 'node:https'
 import { hostname } from 'node:os'
 import type { TLSSocket } from 'node:tls'
@@ -144,6 +145,9 @@ export async function startNodeEndpoint(
       minVersion: 'TLSv1.3',
     },
   }) as unknown as Server
+  // serve() returns before the port is bound. Whoever is told the endpoint listens may dial it at
+  // once (a node joining right after a restart), and a port that can't be bound fails the start.
+  if (!server.listening) await once(server, 'listening')
   const renewal = setInterval(() => {
     identity()
       .then((next) => server.setSecureContext({ key: next.keyPem, cert: next.certPem, ca: [ca.pem] }))

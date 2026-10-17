@@ -1,4 +1,4 @@
-// Generated from infra/fleet/node-writes.openapi.json (sha256 22ab72d6a8898254ea8d33524a2a89fe678d1b5c4fbaca9ca4ed9cd372c784ea) by tools/openapi.
+// Generated from infra/fleet/node-writes.openapi.json (sha256 2f9dcc71221800e017b9be1eb891c23473f5d7d2235867e37663423ad68f5d24) by tools/openapi.
 // Do not edit. Regenerate with `bun run openapi:generate`; update the spec with `bun scripts/blocklyd.ts bump <version>`.
 
 export type paths = Record<string, never>;
@@ -65,7 +65,7 @@ export interface components {
             facts: components["schemas"]["NodeFacts"];
             token: string;
         };
-        EnsureOutcome: "created" | "unchanged" | "replaced";
+        EnsureOutcome: "created" | "unchanged" | "replaced" | "deferred";
         EnsureResponse: {
             outcome: components["schemas"]["EnsureOutcome"];
             restarted: boolean;
@@ -365,6 +365,11 @@ export interface components {
              * @default false
              */
             forced: boolean;
+            /**
+             * @description For a start of a suspended workload: true when it came back from memory, false when the
+             *     resume didn't come back in time and it was started afresh on its data. Absent otherwise.
+             */
+            resumed?: boolean | null;
             workload: components["schemas"]["WorkloadView"];
         };
         /** @enum {string} */
@@ -576,7 +581,7 @@ export interface components {
          *     · unknown → unknown · fenced → stopped (this copy lost its placement; the current one is
          *     elsewhere).
          */
-        WorkloadState: "running" | "creating" | "created" | "stopping" | "stopped" | "crashed" | "restarting" | "missing" | "retained" | "unknown" | "fenced";
+        WorkloadState: "running" | "creating" | "created" | "stopping" | "stopped" | "crashed" | "restarting" | "missing" | "retained" | "unknown" | "fenced" | "suspended";
         WorkloadView: {
             /** @description When the state last changed, as the runtime recorded it (survives blocklyd restarts). */
             changedAt: string;
@@ -603,6 +608,11 @@ export interface components {
             /** @description When it last failed and the host started it again (Blockly's `failedAt`). */
             lastFailureAt: string | null;
             locate: components["schemas"]["Locate"];
+            /**
+             * @description A spec a `PUT` deferred while the workload is suspended (`EnsureOutcome::Deferred`): put in
+             *     place at its next boot. Absent when there is none.
+             */
+            pendingSpecDigest?: string | null;
             ports: components["schemas"]["PortView"][];
             resources: components["schemas"]["Resources"];
             /**

@@ -2,13 +2,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { PNG } from 'pngjs'
 
 /**
  * The picture a shared link shows, drawn per server (§15.6). Chat apps want a raster image, so
  * Blockly draws one: rectangles and a pixel font, which is the look the game has and the look
- * of the icons it already ships. Same data as the badge and the status endpoint, so there is
- * one source for what a server is, not three.
+ * of the icons it already ships. The one thing not drawn here is Cubepals' lockup: that is the
+ * brand's own PNG, laid over the canvas, so it is never redrawn or recoloured. Same data as the
+ * badge and the status endpoint, so there is one source for what a server is, not three.
  *
  * The encoding is `pngjs`. Rendering an SVG instead — the badge's own markup through
  * `@resvg/resvg-js` — was tried on 2026-09-23 and dropped: it draws real type, but it draws it
@@ -21,15 +24,33 @@ import { PNG } from 'pngjs'
 const WIDTH = 1200
 const HEIGHT = 630
 const MARGIN = 72
+const BAND = 16
 
-/** Paper, ink and the two states, as the rest of Blockly uses them. */
-const PAPER: Rgb = [0xf7, 0xf4, 0xec]
-const INK: Rgb = [0x1c, 0x1b, 0x17]
-const MUTED: Rgb = [0x6b, 0x67, 0x5c]
-const GRASS: Rgb = [0x6c, 0xc2, 0x4a]
-const ASLEEP: Rgb = [0x8f, 0x86, 0xd6]
+/** Ink and Paper, the brand's two colours (brand/README.md), and the product's lighter ink. */
+const PAPER: Rgb = [0xf8, 0xf7, 0xf5]
+const INK: Rgb = [0x0d, 0x0d, 0x0d]
+const SUBTLE: Rgb = [0x5b, 0x59, 0x54]
+/** The two states as the product shows them (tokens.json): a strong colour and the fill behind it. */
+const ONLINE = { strong: [0x8a, 0x5a, 0x00], soft: [0xff, 0xe9, 0xbd] } as const
+const SLEEPING = { strong: [0x4d, 0x47, 0xb8], soft: [0xe3, 0xe1, 0xfb] } as const
+/** A block's edge, the product's 2px drawn at the size a preview shrinks this picture to. */
+const EDGE = 4
+/** Room around the words inside a block. */
+const PAD_X = 20
+const PAD_Y = 14
 
 type Rgb = readonly [number, number, number]
+
+/**
+ * The brand's own horizontal lockup, the mark and the lowercase word as `brand/png/` draws them,
+ * at a fifth of its size: 400 by 82. Read once, as the module loads, so a build without the file
+ * fails to start (and its tests fail) instead of failing the first link someone shares. The
+ * control plane's Dockerfile copies it to the same place under /app.
+ */
+export const LOCKUP_FILE = fileURLToPath(
+  new URL('../../../../../brand/png/lockup-horizontal.png', import.meta.url),
+)
+const LOCKUP = shrink(PNG.sync.read(readFileSync(LOCKUP_FILE)), 5)
 
 export interface CardView {
   name: string
@@ -42,47 +63,93 @@ export interface CardView {
   invited: boolean
 }
 
+interface Row {
+  text: string
+  scale: number
+  colour: Rgb
+  gap: number
+  /** Drawn on a block of this fill with an Ink edge, as the product draws a status. */
+  block?: Rgb
+}
+
 export function serverCard(view: CardView): Buffer {
   const canvas = new Canvas(WIDTH, HEIGHT, PAPER)
-  const state = view.awake ? GRASS : ASLEEP
+  const state = view.awake ? ONLINE : SLEEPING
   // A band of the state's own colour, so a glance says running or asleep before any word does.
-  canvas.fill(0, 0, WIDTH, 16, state)
+  canvas.fill(0, 0, WIDTH, BAND, state.strong)
 
-  // The whole block is measured before any of it is drawn, so one line and two sit the same:
-  // a little above the middle, which is where a preview is cropped last.
+  // The whole block is measured before any of it is drawn, so one line and two sit the same: in
+  // the middle of what the band and the lockup leave, a little high, which is where a preview is
+  // cropped last.
   const scale = view.name.length > 16 ? 8 : 11
   const name = wrap(view.name, Math.floor((WIDTH - MARGIN * 2) / (scale * 6)), 2)
-  const rows: Array<{ text: string; scale: number; colour: Rgb; gap: number }> = [
-    ...(view.invited ? [{ text: "YOU'RE INVITED TO", scale: 4, colour: MUTED, gap: 28 }] : []),
+  const rows: Row[] = [
+    ...(view.invited ? [{ text: "YOU'RE INVITED TO", scale: 4, colour: SUBTLE, gap: 28 }] : []),
     ...name.map((line) => ({ text: line, scale, colour: INK, gap: scale * 3 })),
     {
       text: view.awake ? `${view.online} OF ${view.maxPlayers} PLAYING` : 'ASLEEP. IT WAKES WHEN YOU JOIN',
       scale: 5,
-      colour: view.awake ? INK : MUTED,
-      gap: 22,
+      colour: state.strong,
+      gap: 24,
+      block: state.soft,
     },
     {
       text: `MINECRAFT ${view.gameVersion}${view.serverType === null ? '' : ` ${view.serverType.toUpperCase()}`}`,
       scale: 4,
-      colour: MUTED,
+      colour: SUBTLE,
       gap: 0,
     },
   ]
+  const height = (row: Row) => row.scale * 7 + (row.block === undefined ? 0 : (PAD_Y + EDGE) * 2)
   // The last row's gap is below it, so the stack's own height leaves it out.
-  const stack = rows.reduce((total, row) => total + row.scale * 7 + row.gap, 0) - (rows.at(-1)?.gap ?? 0)
-  let y = Math.round((HEIGHT - stack) / 2) - 24
+  const stack = rows.reduce((total, row) => total + height(row) + row.gap, 0) - (rows.at(-1)?.gap ?? 0)
+  const lockupTop = HEIGHT - MARGIN - LOCKUP.height
+  let y = BAND + Math.round((lockupTop - BAND - stack) / 2) - 16
   for (const row of rows) {
-    canvas.text(MARGIN, y, row.text, row.scale, row.colour)
-    y += row.scale * 7 + row.gap
+    if (row.block === undefined) canvas.text(MARGIN, y, row.text, row.scale, row.colour)
+    else {
+      const width = row.text.length * row.scale * 6 - row.scale + (PAD_X + EDGE) * 2
+      canvas.fill(MARGIN, y, width, height(row), INK)
+      canvas.fill(MARGIN + EDGE, y + EDGE, width - EDGE * 2, height(row) - EDGE * 2, row.block)
+      canvas.text(MARGIN + EDGE + PAD_X, y + EDGE + PAD_Y, row.text, row.scale, row.colour)
+    }
+    y += height(row) + row.gap
   }
 
-  canvas.text(MARGIN, HEIGHT - MARGIN - 4 * 7, 'BLOCKLY', 4, MUTED)
-  // A block of the state's colour in the corner, the size of one big pixel: the mark, not a logo.
-  canvas.fill(WIDTH - MARGIN - 48, HEIGHT - MARGIN - 48, 48, 48, state)
+  canvas.draw(MARGIN, lockupTop, LOCKUP)
   return canvas.png()
 }
 
-/** Words onto at most `lines` lines of `width` characters, the last one cut with a full stop. */
+/** An RGBA picture, its colour already weighted by how opaque each pixel is. */
+interface Picture {
+  width: number
+  height: number
+  /** Red, green and blue times opacity, then opacity, each from 0 to 1. */
+  pixels: Float32Array
+}
+
+/** A PNG made `factor` times smaller, each new pixel the average of the square it covers. */
+function shrink(png: PNG, factor: number): Picture {
+  const width = Math.floor(png.width / factor)
+  const height = Math.floor(png.height / factor)
+  const pixels = new Float32Array(width * height * 4)
+  const area = factor * factor * 255
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      const to = (y * width + x) * 4
+      for (let dy = 0; dy < factor; dy++)
+        for (let dx = 0; dx < factor; dx++) {
+          const at = ((y * factor + dy) * png.width + x * factor + dx) * 4
+          const alpha = (png.data[at + 3] as number) / 255
+          for (let channel = 0; channel < 3; channel++)
+            (pixels[to + channel] as number) += ((png.data[at + channel] as number) * alpha) / area
+          ;(pixels[to + 3] as number) += (png.data[at + 3] as number) / area
+        }
+    }
+  return { width, height, pixels }
+}
+
+/** Words onto at most `lines` lines of `width` characters, a name cut short ending in "...". */
 function wrap(text: string, width: number, lines: number): string[] {
   const words = text
     .toUpperCase()
@@ -91,6 +158,7 @@ function wrap(text: string, width: number, lines: number): string[] {
     .split(/\s+/)
   const out: string[] = []
   let line = ''
+  let cut = false
   for (const word of words) {
     const next = line === '' ? word : `${line} ${word}`
     if (next.length <= width) {
@@ -98,14 +166,21 @@ function wrap(text: string, width: number, lines: number): string[] {
       continue
     }
     out.push(line === '' ? word.slice(0, width) : line)
+    // A word longer than the line is cut; one that starts the line after the last is left out.
+    cut = cut || line === '' || out.length === lines
     line = line === '' ? '' : word
     if (out.length === lines) break
   }
   if (out.length < lines && line !== '') out.push(line)
   if (out.length === 0) return ['A MINECRAFT SERVER']
-  const last = out[out.length - 1] as string
-  if (last.length > width) out[out.length - 1] = `${last.slice(0, width - 1)}.`
+  out[out.length - 1] = ending(out[out.length - 1] as string, cut, width)
   return out
+}
+
+/** The last line of a name, ending in "..." within `width` characters where the name didn't fit. */
+function ending(line: string, cut: boolean, width: number): string {
+  if (!cut && line.length <= width) return line
+  return `${line.length + 3 <= width ? line : line.slice(0, width - 3).trimEnd()}...`
 }
 
 /** Pixels in memory, and the PNG they become. Nothing here knows what it is drawing. */
@@ -132,6 +207,21 @@ class Canvas {
         this.#pixels[at] = colour[0]
         this.#pixels[at + 1] = colour[1]
         this.#pixels[at + 2] = colour[2]
+      }
+  }
+
+  /** A picture laid over what is there, as its own opacity says. */
+  draw(x: number, y: number, picture: Picture): void {
+    for (let row = 0; row < picture.height; row++)
+      for (let column = 0; column < picture.width; column++) {
+        const from = (row * picture.width + column) * 4
+        const at = ((y + row) * this.#width + x + column) * 3
+        const alpha = picture.pixels[from + 3] as number
+        for (let channel = 0; channel < 3; channel++)
+          this.#pixels[at + channel] = Math.round(
+            (picture.pixels[from + channel] as number) * 255 +
+              (this.#pixels[at + channel] as number) * (1 - alpha),
+          )
       }
   }
 
@@ -170,7 +260,7 @@ class Canvas {
  * the shapes a server's name, its numbers and its state need; anything else becomes a question
  * mark rather than a hole.
  */
-const FONT: Record<string, string> = {
+export const FONT: Record<string, string> = {
   A: '0e11111f111111',
   B: '1e11111e11111e',
   C: '0e11101010110e',

@@ -11,7 +11,31 @@ import {
   PlatformControlsInput,
   SaveIdentityInput,
 } from '@blockly/contracts'
+import { messageProblem } from '../app/(app)/servers/[id]/settings/server-message'
 import * as rules from './rules'
+
+/** Check marks and seals, alone and as emoji, that the fields refuse. */
+const LOOK_ALIKES = [
+  '✓',
+  '✔',
+  '✔\ufe0f',
+  '☑',
+  '☑\ufe0f',
+  '✅',
+  '🗸',
+  '🗹',
+  '√',
+  '⍻',
+  '𐄂',
+  '🮱',
+  '🏅',
+  '🎖',
+  '🏵',
+  '🔰',
+  '💮',
+  '📛',
+  '🥇',
+]
 
 /**
  * The words are Blockly's; the bounds are the API's. These check the two still agree, so a
@@ -33,6 +57,20 @@ describe('what Blockly says about what was typed', () => {
     expect(rules.address('f-u-c-k')).toBe('Pick another name.')
     expect(rules.serverName('Scunthorpe')).toBeNull()
     expect(rules.address('sussex-smp')).toBeNull()
+  })
+
+  test('a name, description, note or server message with a check mark or a seal in it is refused', () => {
+    for (const mark of LOOK_ALIKES) {
+      expect(rules.serverName(`Arcade ${mark}`)).toBe('Names can’t use check marks or seals.')
+      expect(rules.description(`Games ${mark}`)).toBe('Descriptions can’t use check marks or seals.')
+      expect(rules.note(`Nice ${mark}`)).toBe('Notes can’t use check marks or seals.')
+      expect(messageProblem(`Join us ${mark}`)).toBe('Server messages can’t use check marks or seals.')
+    }
+    // Stars, sparkles, hearts and crosses are not check marks.
+    for (const mark of ['✦', '★', '✨', '♥', '✗', '❌', '⚔']) {
+      expect(rules.serverName(`${mark} SMP ${mark}`)).toBeNull()
+      expect(rules.description(`Games ${mark}`)).toBeNull()
+    }
   })
 
   test('an email says what an email looks like, and an empty field says nothing yet', () => {

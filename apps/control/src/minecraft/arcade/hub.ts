@@ -18,7 +18,9 @@
  * names fails that function alone.
  */
 
-import { MARKER_ITEM, MARKERS, markerData, type ShownMarker, showMarker } from '../brand-pack.ts'
+import { MARKERS, type ShownMarker, showMarker } from '../brand-pack.ts'
+import { CABINET, markBadge } from '../marquee.ts'
+import { TMP } from './boards.ts'
 import { CREDIT_LINES } from './credits.ts'
 import {
   type Block,
@@ -33,14 +35,19 @@ import {
   TO_HUB,
   titled,
 } from './datapack.ts'
-import { FLOOR_ARRIVAL } from './floor.ts'
-import { PARKOUR_ARRIVAL } from './parkour.ts'
-import { type BrandSign, hangSign } from './signs.ts'
+import { type BrandSign, buildSign } from './signs.ts'
+import { GAMES, playing } from './ways-in.ts'
 
 const HUB = `${NS}.hub`
 
-/** The large Cubepals sign, over the big ARCADE cabinet, facing the hall. */
-export const HUB_SIGN: BrandSign = { art: 'large', at: [165, 110, 1359], facing: 'south' }
+/**
+ * The Cubepals sign on the big ARCADE cabinet, facing the hall, over its name: its base the front
+ * of the cabinet's roof, as high as the hall's ceiling lets it be, in the cabinets' own lights.
+ */
+export const HUB_SIGN: BrandSign = { at: [173, 111, 1363], side: 6, facing: 'south', frame: CABINET }
+
+/** The plain Paper the sign over the cabinet once hung on, further back on its roof, taken away. */
+const OLD_BACKING = 'fill 165 107 1358 184 110 1358 minecraft:air replace minecraft:quartz_block'
 
 /** What a player types after `/trigger` to come back, or to read who made the maps. */
 const BACK = 'hub'
@@ -48,25 +55,12 @@ const CREDITS = 'credits'
 
 /**
  * Each game's pad on the balcony, by the block at its middle: Ink in a ring of Paper, built into
- * the world (`scripts/lib/arcade-brand.ts`), and what standing on it does.
+ * the world (`scripts/lib/arcade-brand.ts`), and what standing on it does (`ways-in.ts`).
  */
-export const PADS: ReadonlyArray<{ middle: Block; sends: string; name: Label['text'] }> = [
-  {
-    middle: [126, 77, 1431],
-    sends: `tp @s ${PARKOUR_ARRIVAL}`,
-    name: titled('Parkour', 'Three courses against the clock'),
-  },
-  {
-    middle: [175, 78, 1438],
-    sends: `function ${NS}:pit/arrive`,
-    name: titled('The pit', 'Everyone fights everyone'),
-  },
-  {
-    middle: [224, 77, 1431],
-    sends: `tp @s ${FLOOR_ARRIVAL}`,
-    name: titled('Falling floor', 'Last one standing'),
-  },
-]
+export const PADS: ReadonlyArray<{ middle: Block; sends: string }> = GAMES.map((game) => ({
+  middle: game.pad,
+  sends: playing(game),
+}))
 
 /** The top step of the stairs from the house's floor, which a sign floats over. */
 export const STAIRS_TOP: Block = [183, 121, 1459]
@@ -97,78 +91,76 @@ export const PASSAGE = {
 /** The hall, the ground it is buried in, and the house and garden on the grass. */
 const ZONE = box([96, 40, 1336], [260, 140, 1470])
 
-/** Standing on a pad; a moderator flying past in spectator mode isn't. */
-const onPad = ([x, y, z]: Block) => `${box([x - 1, y + 1, z - 1], [x + 1, y + 2, z + 1])},gamemode=!spectator`
+const welcome = `["",{text:"Welcome to the Cubepals Arcade. ",color:"${PAPER}",bold:true},"See if you can get your name on the boards."]`
 
-const welcome = `["",{text:"Welcome to the Cubepals Arcade. ",color:"${PAPER}",bold:true},"Step on a black pad to play a game, and see if you can get your name on the boards."]`
+/** Whose maps these are, told with the welcome: the maps' licences ask for it to be said. */
+const CREDITS_LINE = `["",{text:"Made of maps by NetherGames and the Overcast community. ",color:"gray"},{text:"Type /trigger credits",color:"${PAPER}"},{text:" for who built each one.",color:"gray"}]`
 
-/**
- * The item every player keeps in their last slot: using it is going back to the hub. It is drawn
- * as an oak door, Cubepals' own with the pack (`brand-pack.ts`). A player carrying it as it was
- * before it was marked for the pack gets it again.
- */
-const BACK_ITEM = `minecraft:carrot_on_a_stick[custom_name={text:"Back to the hub",color:"${PAPER}",italic:false},item_model="${MARKER_ITEM}",${markerData(MARKERS.backToHub)},custom_data={${NS}_back:1b}]`
-const HAS_BACK_ITEM = `items entity @s hotbar.8 minecraft:carrot_on_a_stick[custom_data~{${NS}_back:1b},${markerData(MARKERS.backToHub)}]`
+/** How to start a game, told on each arrival at the hub: on joining, and on coming back from anywhere. */
+export const HINT = 'Open the book to pick a game, or walk into a game’s machine in the hall.'
+
+/** Every how many ticks the pads sparkle. */
+const GLOW_EVERY = 10
+
+/** How far out from a wall what is flat on it stands: no block face in front of it, nor a gap to see. */
+const OFF_WALL = 0.05
 
 /**
  * Each doorway between the house and the hall ends at a wall: walking up to it is walking on
- * through (`PASSAGE`). Flat on that wall, just off it, are an open door and where it goes.
+ * through (`PASSAGE`). Flat on that wall, just off it, are an open door and where it goes, one over
+ * the other, a little under the game's size, centred on the wall's face: two blocks across in the
+ * house, between the doorway's frame, and three in the hall, from the floor up three.
  */
 const ENDS: ReadonlyArray<{ x: number; floor: number; z: number; facing: Facing; to: string }> = [
-  { x: 168.03, floor: PASSAGE.house.through[0][1], z: 1460, facing: 'east', to: 'The Arcade' },
-  { x: 138.5, floor: PASSAGE.hall.through[0][1], z: 1460.97, facing: 'north', to: 'The house' },
+  { x: 168 + OFF_WALL, floor: PASSAGE.house.through[0][1], z: 1460, facing: 'east', to: 'The Arcade' },
+  { x: 138.5, floor: PASSAGE.hall.through[0][1], z: 1461 - OFF_WALL, facing: 'north', to: 'The house' },
 ]
+const END_SCALE = 0.8
 
-/** The markers over the ways in and out: the app icon's tile over each game's pad, above its name, and an open door at each passage's end. */
+/** The open door flat on the wall at each passage's end. */
 export const HUB_MARKERS: readonly ShownMarker[] = [
-  ...PADS.map(({ middle: [x, y, z] }) => ({
-    marker: MARKERS.portal,
-    at: [x + 0.5, y + 4.6, z + 0.5] as const,
-  })),
   ...ENDS.map(({ x, floor, z, facing }) => ({
     marker: MARKERS.wayOut,
-    at: [x, floor + 1, z] as const,
+    at: [x, floor + 1.25, z] as const,
     facing,
-    scale: 0.8,
+    scale: END_SCALE,
   })),
 ]
 
-/** Every label in the hub: each game's name over its pad, the hub's name, the credits and the ways between the house and the hall. */
+/**
+ * Over each game's pad, above its name, Cubepals' own look, turning to whoever looks: the mark in
+ * Ink on a square of Paper, a block across (`markBadge`).
+ */
+export const PAD_BADGES: ReadonlyArray<{ at: readonly [number, number, number]; side: number }> = PADS.map(
+  ({ middle: [x, y, z] }) => ({ at: [x + 0.5, y + 4.6, z + 0.5] as const, side: 1 }),
+)
+
+/**
+ * Every label in the hub: its name and the ways between the house and the hall. None stands where
+ * players walk or jump (`scripts/play-space.test.ts`): what the credits said from the balcony's
+ * floor is told on arriving instead (`CREDITS_LINE`).
+ */
 const HUB_LABELS: readonly Label[] = [
-  ...PADS.map((pad) => ({
-    at: [pad.middle[0] + 0.5, pad.middle[1] + 3.2, pad.middle[2] + 0.5] as const,
-    tag: `${NS}.label`,
-    text: pad.name,
-  })),
   {
     at: [175.5, 98.2, 1444.5],
     tag: `${NS}.label`,
     text: [{ text: 'Cubepals Arcade', color: PAPER, bold: true }],
     scale: 4,
   },
+  // On the house's west wall by the top of the stairs, facing a player as they start: in the
+  // middle of the wall's face, four blocks across from the house's south wall to its north, and
+  // three high from the floor.
   {
-    at: [160.5, 79.5, 1430.5],
-    tag: `${NS}.label`,
-    text: [
-      { text: 'Made of maps by NetherGames and the Overcast community.', color: PAPER },
-      { text: '\nType /trigger credits for who built each one.', color: 'gray' },
-    ],
-  },
-  // On the house's west wall, over the top of the stairs, facing a player as they start. The
-  // house is two blocks across there, as the passages are, so it is the passages' size.
-  {
-    at: [STAIRS_TOP[0] - 2.97, STAIRS_TOP[1] + 2, STAIRS_TOP[2] + 1],
+    at: [STAIRS_TOP[0] - 3 + OFF_WALL, STAIRS_TOP[1] + 3.225, STAIRS_TOP[2]],
     tag: `${NS}.label`,
     text: titled('The Arcade', 'Down the stairs'),
-    scale: 0.9,
     facing: 'east',
   },
   ...ENDS.map(({ x, floor, z, facing, to }) => ({
-    at: [x, floor + 1.7, z] as const,
+    at: [x, floor + 1.75, z] as const,
     tag: `${NS}.label`,
     text: titled(to, 'Walk on through'),
-    // A little under the game's size, to fit the house's end, two blocks across.
-    scale: 0.9,
+    scale: END_SCALE,
     facing,
   })),
 ]
@@ -181,6 +173,15 @@ export const HUB_PART: Part = {
       `scoreboard players reset @s ${NS}.back`,
       `scoreboard players reset @s ${NS}.died`,
       `tp @s ${HUB_SPAWN}`,
+      `tellraw @s {text:${JSON.stringify(HINT)},color:"gray"}`,
+    ],
+    // A few sparks rising off each pad, so it reads as somewhere to stand.
+    'hub/glow': [
+      `scoreboard players set #glow ${TMP} 0`,
+      ...GAMES.map(
+        ({ pad: [x, y, z] }) =>
+          `particle minecraft:end_rod ${x + 0.5} ${y + 1.2} ${z + 0.5} 0.8 0.1 0.8 0.01 2 normal`,
+      ),
     ],
     'hub/credits': [
       `scoreboard players reset @s ${CREDITS}`,
@@ -216,7 +217,9 @@ export const HUB_PART: Part = {
   labels: HUB_LABELS,
   build: [
     ...HUB_MARKERS.map((marker) => showMarker(marker, [`${NS}.display`])),
-    ...hangSign(HUB_SIGN),
+    ...PAD_BADGES.flatMap(({ at, side }) => markBadge(at, side, [`${NS}.display`])),
+    OLD_BACKING,
+    ...buildSign(HUB_SIGN),
     // Nothing in the hub can be hurt: whatever the maps brought along, and what the build made.
     `execute as @e[type=!minecraft:player] run data merge entity @s {Invulnerable:1b}`,
   ],
@@ -224,14 +227,15 @@ export const HUB_PART: Part = {
     // A new player, to the hub's spawn too: like a respawn, a first join can land on the roof.
     `execute as @a[tag=!${NS}.welcomed] run function ${TO_HUB}`,
     `tellraw @a[tag=!${NS}.welcomed] ${welcome}`,
+    `tellraw @a[tag=!${NS}.welcomed] ${CREDITS_LINE}`,
     `tag @a[tag=!${NS}.welcomed] add ${NS}.welcomed`,
     `team join ${HUB} @a[team=!${HUB},${ZONE}]`,
-    ...PADS.map((pad) => `execute as @a[${onPad(pad.middle)}] run ${pad.sends}`),
     `execute as @a[${box(...PASSAGE.house.through)},gamemode=!spectator] run tp @s ${PASSAGE.hall.arrive}`,
     `execute as @a[${box(...PASSAGE.hall.through)},gamemode=!spectator] run tp @s ${PASSAGE.house.arrive}`,
     `scoreboard players enable @a ${BACK}`,
     `scoreboard players enable @a ${CREDITS}`,
-    `execute as @a unless ${HAS_BACK_ITEM} run item replace entity @s hotbar.8 with ${BACK_ITEM}`,
+    `scoreboard players add #glow ${TMP} 1`,
+    `execute if score #glow ${TMP} matches ${GLOW_EVERY}.. run function ${NS}:hub/glow`,
     `execute as @a[scores={${BACK}=1..}] run function ${TO_HUB}`,
     `execute as @a[scores={${NS}.back=1..}] run function ${TO_HUB}`,
     `execute as @a[scores={${CREDITS}=1..}] run function ${NS}:hub/credits`,

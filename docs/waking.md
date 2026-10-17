@@ -109,6 +109,38 @@ whole life and an image pull onto the volume's host.
   then every 5 s. A small world's copy was done well inside the 5 s the helper used to wait
   between reads.
 
+## On the fleet
+
+Servers on Cubepals' own machines sleep and wake through blocklyd (`infra/fleet/fleet-runtime/power.ts`).
+
+- **A sleep suspends** where `FLEET_SUSPEND` is `on` and the server's node lists the `suspend`
+  feature: blocklyd freezes the container with its memory kept, and the node still counts that
+  memory as in use, so the server keeps its room on the node. Otherwise, or where the server
+  isn't running, it stops. Either way the sleep says which it did, as Fly's does. The switch is
+  off unless set.
+- **A wake resumes** a suspended copy: the same process, from the same start, reported as
+  `resuming`. blocklyd gives a resume 10 seconds (`resume_timeout_seconds`). One that doesn't come
+  back is killed and started afresh on its data, and the start answers `resumed: false`; the wake
+  then reports `booting` and goes on as a boot.
+- **A spec is sent only when it changed.** Each placement keeps a digest of the last spec sent to
+  its copy, secrets included (`fleet_placements.sent_digest`). A start on the same spec skips the
+  PUT and only starts. A start whose copy the node lost (`container_missing`, `not_created`) sends
+  the spec again, then starts.
+- **A change only a start reads waits for the next boot.** A spec with the same `resumesOn` as the
+  one the copy was suspended on is deferred by the node (`outcome: "deferred"`): the copy resumes
+  as it slept, and boots on the new spec next time, as a Fly machine keeps the spec it slept on.
+- **Running at once.** The wait for running is over as soon as the start's own answer says
+  `running`. Otherwise it asks the node every half second, each read bounded by what is left of
+  the wait, and asks again when the node doesn't answer.
+- **Timeouts sized for a wake.** A wake's start waits 30 seconds, enough for a resume, its kill
+  and a fresh start. A wake's PUT waits the spec's stop grace plus 2 minutes, since a changed
+  spec stops the copy before making it again. A first placement's PUT keeps the 20 minutes an
+  image pull may take. blocklyd finishes what a caller stopped waiting for, so a retry finds it
+  done.
+- **An apply names the spec it replaces** (`If-Match` with the node's digest the placement keeps),
+  so it can't overwrite a newer one. While a deferred spec waits, that digest is unknown, and the
+  apply replaces whatever the copy runs.
+
 ## Not done here
 
 - **The restore inside the server's own machine.** No helper, so no second machine made, started

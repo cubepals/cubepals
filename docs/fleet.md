@@ -207,22 +207,37 @@ Placement decides on the **ledger**, never on what is observed, so a burst of pl
 overcommit a node before its next heartbeat. Observed numbers are for operators and for the node's
 own admission: it refuses a start past allocatable × `memory_overcommit` of running memory. A
 running server's memory isn't overcommitted by default, since a JVM with a pre-touched heap uses
-what it is given. A sleeping server holds none.
+what it is given. A server asleep with its memory (§7) holds it as a running one does; a stopped
+one holds none.
 
-**Admission.** Memory and CPU are held only by servers that run, or are being started or made
-(`HOLDS` in `registry.ts`). A sleeping server holds only its disk, where its world stays.
+**Admission.** Memory and CPU are held only by servers that run, sleep with their memory, or are
+being started or made (`HOLDS` in `registry.ts`). A stopped server holds only its disk, where its
+world stays.
 
 - **A placement** (a new server, a move, a rebuild) needs room to run now, after
   `FLEET_HEADROOM_MB`. It also needs room to stay: the servers placed on a node, running or not,
   may add up to its memory × `FLEET_MEMORY_OVERCOMMIT`, since few of a node's servers run at
   once. `1` holds memory for every placed server.
 - **A start claims its memory** in the ledger, under the region's lock, before the node is asked.
-  A stop gives the claim back. So does the node reporting the copy stopped or crashed after the
-  start. A copy made and not yet started (`created`) keeps the claim.
+  A stop or a kill gives the claim back once the node has done it. So does the node reporting the
+  copy stopped or crashed after the start. A copy made and not yet started (`created`) keeps the
+  claim.
+- **The node's answer to a start, stop or kill counts as its report of the copy** (`answered` in
+  `registry/summaries.ts`), so a stop frees the copy's memory at once, not at the next heartbeat.
+- **A kill the node can't be reached for** gives the claim back all the same and is recorded as
+  `power.unanswered`, so a stop that failed for good ends with the server stopped on what it ran.
+  A node out of reach restarts nothing once its lease runs out, and a copy still running when it
+  is back is stopped then.
+- **Calls safe to repeat are retried** while the node doesn't answer (`NodeUnreachable`), within
+  the call's timeout: `GET`, `PUT`, start and stop. Kill, delete, fence, exec and transfers are
+  sent once. A TLS failure is never retried.
 - **A start with no room where the server sleeps moves it first.** This is the start the
-  application makes for a sleeping server, `ensureProvisioned` with its spec. If the servers
-  running on its node leave it no room, its world goes through the archive store to a node in its
-  region that has room, as a planned move does, and it starts there. Operators see this as
+  application makes for a sleeping server, `ensureProvisioned` with its spec. If the ledger counts
+  its node full, `Rehoming.startElsewhere` first asks the node how its copies in use are now
+  (`Admission.lookAgain`): a copy that stopped since its last report frees its room, and when that
+  leaves enough, the server starts where it is. If the servers still running there leave it no
+  room, its world goes through the archive store to a node in its region that has room, as a
+  planned move does, and it starts there. Operators see this as
   `placement.moved_for_room`, with the reason. Nobody is asked: the world is the same wherever it
   runs, and the move costs only the export and restore, seconds for a small world. With no room on
   any node, the start fails with `RuntimeFull`, as at any provider that is out of capacity.
@@ -299,6 +314,31 @@ stop, not superseded and with a restart policy was running when the host went do
 applies its fences first, so a server rebuilt elsewhere meanwhile never starts here. A node held
 lost gives its resumes up and forgets them. A restart of blocklyd alone (same boot) resumes
 nothing: what died while it was down is reported, not restarted.
+
+**Sleep, with the memory.** A server put to sleep (`sleep`) on a node that announces the
+`suspend` feature is frozen where it is, with Docker's cgroup freezer (`POST …/suspend`): its
+processes stop, and its memory stays on the node. Its next start resumes it, the same process
+with what it held, and says so (`resumed: true`). A resume that doesn't come back within
+`workloads.resume_timeout_seconds` (10) is killed and the server booted on its data
+(`resumed: false`): a cold start, from what it last saved. Nothing is saved on the way to sleep;
+the application saves first, as it does for any runtime.
+
+- A frozen server holds its memory as a running one does: the node counts it against what it
+  gives out, and placement against the node's room (§5).
+- A new spec while it sleeps that names the same `resumesOn` (it differs only in what the server
+  reads as it starts: its message, its picture, its plan's limits) waits: the server stays
+  asleep with its memory, the answer is `outcome: "deferred"`, the copy's `pendingSpecDigest`
+  names the spec, and the node puts it in place at the server's next boot. A resume keeps it
+  waiting. Any other new spec replaces the copy, stopping it first, and the memory is gone.
+- Stop, kill, fence and delete reach it as they reach a running server: a stop's signal arrives
+  as it thaws, so it saves on the way out. Exec needs a running process, and is `409 not_running`.
+- The memory goes with the host: after a reboot the copy reads `stopped`, is never resumed, and
+  its next start boots it on its data, with a waiting spec put in place first. A restart of
+  blocklyd alone leaves it asleep.
+- A node beats as soon as a copy's state, epoch or ports change (at most once a second), besides
+  every `heartbeat_seconds`, so a sleep or a resume reaches the control plane without waiting
+  for the next beat.
+- A node without `suspend` stops the server instead, and `sleep` says it `stopped`.
 
 ## 8. Storage, snapshots and backups
 
@@ -428,6 +468,24 @@ WireGuard. On it:
 Nothing on a node needs a public address. A node's addresses are configuration it reports in
 every heartbeat; the control plane follows a change (`node.addresses_changed`), so renumbering a
 host is a config change and a restart, not a re-enrollment.
+
+**What a server reaches.** Nothing dials a server's container but the edge and the control plane,
+on the ports above. The container dials out, through the node's NAT on Docker's bridge, over
+HTTPS, to:
+
+- **the artifact endpoint**, `ARTIFACTS_RUNTIME_FACING_URL`: the control plane's, by the address
+  runtimes use, for the server's mods and plugins and its picture, at every start;
+- **the archive store's presigned host**, where the artifact endpoint redirects for a file the
+  store keeps a copy of: the store's endpoint, or `ARCHIVE_S3_RUNTIME_ENDPOINT` where runtimes
+  reach it by another name;
+- **Mojang and the mod hosts**: Mojang for the game and to check each player who joins
+  (`sessionserver.mojang.com`), and the hosts the server's loader and its mods are published on
+  (PaperMC, Fabric, Modrinth's and Hangar's CDNs, and the like) for a file the store has no copy
+  of.
+
+blocklyd, on the host, dials the node endpoint, and the archive store's presigned host for
+snapshots, moves and rests. A node whose outbound traffic is filtered allows all of these: without
+the first three a server can't start, or can't let anyone in.
 
 **The edge routes by the server's stable identity.** The edge asks the control plane for routes
 (`/edge/v1/routes`); each is the server's play hostname and the endpoint its current handle names

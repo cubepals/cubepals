@@ -254,7 +254,8 @@ describe('the datapacks step', () => {
     const wrong = line('/counter', 'cc-counter.zip', 'other bytes')
     const result = await run('world', [line('/manhunt', 'aa-manhunt.zip'), wrong])
     expect(result.exitCode).not.toBe(0)
-    expect(result.stderr).toContain('The datapack cc-counter.zip did not download as chosen.')
+    // The console shows this line to the owner, so it names Cubepals, not the codename.
+    expect(result.stderr).toContain('[cubepals] The datapack cc-counter.zip did not download as chosen.')
     expect((await packs('world')).sort()).toEqual(['aa-manhunt.zip', 'castle-loot.zip'])
     // Its record is still the last start's, so the next start knows what it put there.
     expect(await readFile(join(volume, 'world', '.blockly-datapacks'), 'utf8')).toBe('aa-manhunt.zip\n')

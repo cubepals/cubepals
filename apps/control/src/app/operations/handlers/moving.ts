@@ -387,8 +387,10 @@ export function moving(deps: {
   }
 
   /**
-   * The newest snapshot of the world the server plays, the one a lost host is rebuilt from; or
-   * the one `id` names, where a rebuild chose its own.
+   * The newest snapshot of the server, the one a lost host is rebuilt from; or the one `id`
+   * names, where a rebuild chose its own. A snapshot holds the whole volume, every world on it,
+   * whatever world it was recorded under: one the owner switched away from while asleep is still
+   * the newest copy of all their play.
    */
   const newestSnapshot = async (server: MinecraftServer, id?: string) =>
     (await listBackups(db, server.id))
@@ -397,7 +399,6 @@ export function moving(deps: {
           b.tier === 'snapshot' &&
           b.status === 'ready' &&
           b.snapshotHandle !== null &&
-          b.worldId === server.activeWorldId &&
           (id === undefined || b.id === id),
       )
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null

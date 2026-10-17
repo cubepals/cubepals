@@ -51,8 +51,15 @@ const PLACED_MARK = `${DATA_DIR}/.blockly-files`
 
 /** Each placed jar on one line: its path, its sha512 and its link. */
 const JARS_VARIABLE = 'BLOCKLY_JARS'
-/** Each carried file on one line: its path and its bytes in base64. */
-const FILES_VARIABLE = 'BLOCKLY_FILES'
+/**
+ * Each carried file on one line: its path and its bytes in base64, as `carriedEnv` writes them. A
+ * start is given them compressed instead (`compressed`, made by `app/servers/carried-files.ts`): the
+ * lines gzipped, the whole in base64. Linux takes no single variable over 128 KiB (`MAX_ARG_STRLEN`,
+ * 131,072 bytes), and the Arcade's files alone, as plain lines, are more: a machine given them
+ * fails before anything runs ("Argument list too long", production's Arcade, 2026-10-17). The step
+ * reads either, the compressed one first.
+ */
+export const FILES_VARIABLES = { plain: 'BLOCKLY_FILES', compressed: 'BLOCKLY_FILES_GZ' } as const
 
 /**
  * The step. Names hold no spaces or quotes (`placeablePath`), so the shell splits lines on spaces.
@@ -61,13 +68,15 @@ const FILES_VARIABLE = 'BLOCKLY_FILES'
  * into place, or the start stops with what it couldn't fetch. Then every carried file is written.
  */
 export const CARRIED_STEP = [
-  `placed=$(printf '%s\\n%s\\n' "$${JARS_VARIABLE}" "$${FILES_VARIABLE}" | cut -d ' ' -f 1);`,
+  // The files' lines, from their compressed variable, or as an earlier start gave them.
+  `if [ -n "$${FILES_VARIABLES.compressed}" ]; then files=$(printf %s "$${FILES_VARIABLES.compressed}" | base64 -d | gzip -dc) || exit 1; else files="$${FILES_VARIABLES.plain}"; fi;`,
+  `placed=$(printf '%s\\n%s\\n' "$${JARS_VARIABLE}" "$files" | cut -d ' ' -f 1);`,
   `for old in $(cat ${PLACED_MARK} 2>/dev/null); do case " $(echo $placed) " in *" $old "*) ;; *) rm -f "${DATA_DIR}/$old";; esac; done;`,
   `printf '%s\\n' "$${JARS_VARIABLE}" | while read -r path sha url; do [ -n "$path" ] || continue; f="${DATA_DIR}/$path";`,
   `if [ "$(sha512sum "$f" 2>/dev/null | cut -d ' ' -f 1)" != "$sha" ]; then mkdir -p "$(dirname "$f")" &&`,
   `curl -fsSL --retry 3 --max-time 300 -o "$f.part" "$url" && [ "$(sha512sum "$f.part" | cut -d ' ' -f 1)" = "$sha" ] && mv "$f.part" "$f"`,
   `|| { rm -f "$f.part"; echo "Cubepals could not fetch $path" >&2; exit 1; }; fi; done || exit 1;`,
-  `printf '%s\\n' "$${FILES_VARIABLE}" | while read -r path data; do [ -n "$path" ] || continue;`,
+  `printf '%s\\n' "$files" | while read -r path data; do [ -n "$path" ] || continue;`,
   `mkdir -p "$(dirname "${DATA_DIR}/$path")" && printf %s "$data" | base64 -d > "${DATA_DIR}/$path" || exit 1; done || exit 1;`,
   `printf '%s\\n' $placed > ${PLACED_MARK};`,
 ].join(' ')
@@ -118,7 +127,7 @@ export function carriedEnv(
   if (wrong.length > 0) throw new Error(`Cubepals can't place ${wrong.join(', ')} on a server.`)
   return {
     [JARS_VARIABLE]: jars.map((jar) => `${jar.path} ${jar.sha512} ${jar.url}`).join('\n'),
-    [FILES_VARIABLE]: files
+    [FILES_VARIABLES.plain]: files
       .map((file) => `${file.path} ${Buffer.from(file.content, 'utf8').toString('base64')}`)
       .join('\n'),
   }

@@ -1,4 +1,4 @@
-// Generated from infra/fleet/node-reads.openapi.json (sha256 af74b64eedeeedb0b411abcfd82751dad117fd99cf8f1add082fdd39814d2383) by tools/openapi.
+// Generated from infra/fleet/node-reads.openapi.json (sha256 20b2097db89729fa2b3ec08ba2f53b231fc6e8c2c2f8c9c1b3e57e5d741a9292) by tools/openapi.
 // Do not edit. Regenerate with `bun run openapi:generate`; update the spec with `bun scripts/blocklyd.ts bump <version>`.
 
 export type paths = Record<string, never>;
@@ -307,6 +307,13 @@ export interface components {
              *     }
              */
             restart?: components["schemas"]["RestartSpec"];
+            /**
+             * @description What a suspended workload may wake into without losing its memory: a `PUT` whose spec
+             *     differs but names the same `resumesOn` as the spec it was suspended on keeps it suspended,
+             *     and its spec is put in place at its next boot. Not part of the spec's digest.
+             * @default null
+             */
+            resumesOn?: string | null;
             /** @description Environment the workload needs but nobody else may see (Blockly: `RCON_PASSWORD`). */
             secrets?: {
                 [key: string]: components["schemas"]["Secret"];

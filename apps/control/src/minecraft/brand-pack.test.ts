@@ -15,11 +15,14 @@ import { BRAND_PACK, MARKER_ITEM, MARKERS, RESOURCE_FORMATS } from './brand-pack
 import { EXIT_MARKER, WAITING_FILES } from './duels-waiting.ts'
 
 /**
- * The resource format of each release Cubepals' games run on, as Mojang's server jars declare it
- * (`version.json`, `pack_version.resource_major` and `resource_minor`): Duels' 1.21.11, and the
- * Arcade's newest releases.
+ * The resource format of each release Cubepals' games run on, as Mojang's jars declare it
+ * (`version.json`, `pack_version.resource_major` and `resource_minor`): Duels' 1.21.11, the
+ * Arcade's newest releases, and 1.21.4 and 1.21.8, which join the Arcade through Via.
  */
-const RELEASE_FORMATS = { '1.21.11': 75, '26.2': 88, '26.3': 97.1 }
+const RELEASE_FORMATS = { '1.21.4': 46, '1.21.8': 64, '1.21.11': 75, '26.2': 88, '26.3': 97.1 }
+
+/** The last format a release reads only `pack_format` and `supported_formats` for: 1.21.8's. */
+const BEFORE_RANGES = 64
 
 const json = (path: string) => {
   const file = BRAND_PACK.find((candidate) => candidate.path === path)
@@ -49,12 +52,18 @@ function inked({ rgba }: Picture): { alphas: Set<number>; colours: Set<string> }
 }
 
 describe("Cubepals' resource pack", () => {
-  test("every release Cubepals' games run on takes it: its format is in the range the pack names", () => {
-    const { pack } = json('pack.mcmeta') as { pack: { min_format: number; max_format: number } }
+  test("every release Cubepals' games run on takes it: its format is in the range the pack names, the way that release reads it", () => {
+    const { pack } = json('pack.mcmeta') as {
+      pack: { min_format: number; max_format: number; pack_format?: number; supported_formats?: number[] }
+    }
     expect(pack.min_format).toBe(RESOURCE_FORMATS.min)
     for (const format of Object.values(RELEASE_FORMATS)) {
-      expect(pack.min_format).toBeLessThanOrEqual(format)
-      expect(pack.max_format).toBeGreaterThanOrEqual(format)
+      // A 1.21.8 game ignores a pack without `pack_format`, and draws every marker as an oak door.
+      const [min, max] =
+        format <= BEFORE_RANGES ? (pack.supported_formats ?? []) : [pack.min_format, pack.max_format]
+      if (format <= BEFORE_RANGES) expect(pack.pack_format).toBe(min)
+      expect(min).toBeLessThanOrEqual(format)
+      expect(max).toBeGreaterThanOrEqual(format)
     }
   })
 
@@ -94,8 +103,9 @@ describe("Cubepals' resource pack", () => {
         expect(width).toBe(height)
         if (file.path !== 'pack.png') expect(width).toBe(SIDE)
         const { alphas, colours } = inked(file.picture)
-        // Clear round the shape, and solid in it: nothing blended at an edge.
-        expect([...alphas].sort((a, b) => a - b)).toEqual([0, 255])
+        // Clear round the shape, and solid in it: nothing blended at an edge. The pack's own picture
+        // is a whole square of Paper, as Cubepals' servers show the mark.
+        expect([...alphas].sort((a, b) => a - b)).toEqual(file.path === 'pack.png' ? [255] : [0, 255])
         expect([...colours].every((colour) => [INK, PAPER, INDIGO].includes(colour))).toBe(true)
         expect(colours.has(INK) && colours.has(PAPER)).toBe(true)
       }
@@ -106,8 +116,8 @@ describe("Cubepals' resource pack", () => {
     const shown = commands.filter(
       (command) => command.includes('summon minecraft:item_display') && command.includes('cubepals:'),
     )
-    // A portal over each of the hub's three pads, an open door at each passage's end, one over Duels' way out.
-    expect(shown).toHaveLength(3 + 2 + 1)
+    // An open door at each passage's end, and one over Duels' way out.
+    expect(shown).toHaveLength(2 + 1)
     for (const command of shown) expect(command).toContain(`id:"${MARKER_ITEM}"`)
     expect(commands.find((command) => command.includes('Back to the hub'))).toContain(
       `item_model="${MARKER_ITEM}",custom_model_data={strings:["${MARKERS.backToHub}"]}`,

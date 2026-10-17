@@ -327,13 +327,13 @@ describe.skipIf(!hasDatabase)('what curation records', () => {
     if (copy === undefined) throw new Error('no copy was kept')
     const entries = unzipBytes(copy)
     expect(Object.keys(entries).sort()).toEqual([
-      'blockly-notices.txt',
+      'cubepals-notices.txt',
       'modrinth.index.json',
       'overrides/config/pack.toml',
       'overrides/mods/n1.jar',
       'overrides/mods/n2.jar',
     ])
-    expect(textOf(entries['blockly-notices.txt'] as Uint8Array)).toBe(
+    expect(textOf(entries['cubepals-notices.txt'] as Uint8Array)).toBe(
       [
         'Pack noticed 1.0, by Test authors.',
         'Cubepals made this copy for its own servers, file for file as its authors published them.',

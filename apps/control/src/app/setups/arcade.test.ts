@@ -11,13 +11,14 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { TEMPLATE_CARDS } from '@blockly/contracts'
 import { DAY_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
+import { and, desc, eq } from 'drizzle-orm'
 import { onLevel } from '../../domain/revision/carried.ts'
 import { ARCADE_WORLD } from '../../minecraft/arcade/maps.ts'
-import { ARCADE_FILES } from '../../minecraft/arcade.ts'
+import { ARCADE_DATAPACK, ARCADE_FILES } from '../../minecraft/arcade.ts'
 import {
   CHATSENTINEL,
   filtersChat,
@@ -32,7 +33,7 @@ import { type Harness, hasDatabase, startHarness } from '../../testing/harness.t
 import { MemoryStore } from '../../testing/memory-store.ts'
 import type { Actor } from '../actor.ts'
 import { recordStored } from '../artifacts/persistence.ts'
-import { CHAT_FILTER } from '../moderation/service.ts'
+import { CHAT_FILTER } from '../moderation/chat-filter.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import { listWorlds } from '../worlds/persistence.ts'
 
@@ -192,6 +193,55 @@ describe.skipIf(!hasDatabase)('arcade', () => {
   }, 30_000)
 })
 
+describe.skipIf(!hasDatabase)('an Arcade made before its games changed', () => {
+  beforeAll(begin, 30_000)
+  afterAll(end)
+
+  test('an Arcade made before its games changed plays them as they are now from its next start, and nothing else of it changes', async () => {
+    const owner = await h.user('Ines', 'plus')
+    if (ARCADE_WORLD.ref.kind !== 'stored') throw new Error('The Arcade world is kept in the store')
+    store.objects.set(ARCADE_WORLD.ref.key, Buffer.from('the arcade world'))
+    const server = await h.create(owner, { from: { kind: 'template', key: 'arcade' } })
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+    // As a server made on an earlier day has it: the datapack as it was then, a function since
+    // gone among it and one since added missing, and its owner's chat filter turned off.
+    const pack = `${ARCADE_DATAPACK}/data/arcade/function/`
+    const then = [
+      ...ARCADE_FILES.filter((file) => !file.path.startsWith(`${pack}play/`)).map((file) =>
+        file.path.endsWith('/hub/back.mcfunction') ? { ...file, content: 'say an older hub\n' } : file,
+      ),
+      { path: `${pack}gone.mcfunction`, content: 'say gone\n' },
+      ...moderationFiles(null),
+    ]
+    const revisionId = (await h.server(server.id)).desiredRevisionId
+    await h.db
+      .update(schema.serverRevisions)
+      .set({ files: then })
+      .where(eq(schema.serverRevisions.id, revisionId))
+    const running = await h.app.specs.desired(h.db, await h.server(server.id))
+    const drift = running.driftDigest
+    await h.app.servers.restart(owner, server.id, randomUUID())
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+
+    const volume = h.runtime.machine(server.id)?.dir ?? ''
+    const now = [...ARCADE_FILES, ...moderationFiles(null)].map((file) => onLevel(file, 'world'))
+    for (const file of now) expect(readFileSync(`${volume}/${file.path}`, 'utf8')).toBe(file.content)
+    // What only the older datapack had is gone; the chat filter stays off, as its owner left it.
+    expect(
+      existsSync(`${volume}/${onLevel({ path: `${pack}gone.mcfunction`, content: '' }, 'world').path}`),
+    ).toBe(false)
+    expect(existsSync(`${volume}/plugins/ChatSentinel/config.yml`)).toBe(false)
+    // Its revision, its world and its drift are as they were: nothing restarts a running server
+    // for Cubepals' files, and nothing of the owner's moves.
+    expect((await loadRevision(h.db, revisionId)).files).toEqual(then)
+    expect((await h.server(server.id)).desiredRevisionId).toBe(revisionId)
+    expect((await listWorlds(h.db, server.id)).map((w) => w.levelName)).toEqual(['world'])
+    expect((await h.app.specs.desired(h.db, await h.server(server.id))).driftDigest).toBe(drift)
+  }, 30_000)
+})
+
 describe.skipIf(!hasDatabase)("Cubepals' resource pack on an Arcade", () => {
   beforeAll(begin, 30_000)
   afterAll(end)
@@ -219,4 +269,67 @@ describe.skipIf(!hasDatabase)("Cubepals' resource pack on an Arcade", () => {
     await h.app.listings.markOfficial(admin, server.id, false, 'Not ours any more')
     expect((await env()).RESOURCE_PACK).toBeUndefined()
   }, 30_000)
+})
+
+describe.skipIf(!hasDatabase)('an Arcade that only sleeps and wakes', () => {
+  beforeAll(async () => {
+    await begin()
+    h.runtime.sleeps.on = true
+  }, 30_000)
+  afterAll(end)
+
+  test('asleep on older games, its next wake boots once to place them, and it wakes as it slept after that', async () => {
+    const owner = await h.user('Remy', 'plus')
+    if (ARCADE_WORLD.ref.kind !== 'stored') throw new Error('The Arcade world is kept in the store')
+    store.objects.set(ARCADE_WORLD.ref.key, Buffer.from('the arcade world'))
+    const server = await h.create(owner, { from: { kind: 'template', key: 'arcade' } })
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+    /** Put to sleep, then woken: the steps its start took. */
+    const sleepAndWake = async (between = async () => {}) => {
+      await h.app.servers.stop(owner, server.id, randomUUID(), 'idle')
+      await h.until(server.id, 'stopped')
+      await h.settled(server.id)
+      expect(h.runtime.machine(server.id)?.state).toBe('suspended')
+      await between()
+      await h.app.servers.start(owner, server.id, randomUUID())
+      await h.until(server.id, 'running')
+      await h.settled(server.id)
+      const [start] = await h.db
+        .select({ steps: schema.serverOperations.steps })
+        .from(schema.serverOperations)
+        .where(
+          and(eq(schema.serverOperations.serverId, server.id), eq(schema.serverOperations.kind, 'start')),
+        )
+        .orderBy(desc(schema.serverOperations.createdAt))
+        .limit(1)
+      return (start?.steps ?? []).map((entry) => entry.step)
+    }
+    // With its games as Cubepals has them, a wake is a resume, as for any server.
+    expect(await sleepAndWake()).toContain('resuming')
+
+    // Cubepals' games change while it sleeps, as a deploy changes them, its revision as it was:
+    // as production's Arcade was after #103, which woke on its old datapack without the play
+    // functions. Its first wake after places them with a boot.
+    const changed = ARCADE_FILES.find((file) => file.path.endsWith('/hub/back.mcfunction'))
+    if (changed === undefined) throw new Error('The Arcade has no hub/back function')
+    const before = changed.content
+    try {
+      const first = await sleepAndWake(async () => {
+        ;(changed as { content: string }).content = `${before}say a newer hub\n`
+      })
+      expect(first).toContain('booting')
+      expect(first).not.toContain('resuming')
+      const volume = h.runtime.machine(server.id)?.dir ?? ''
+      expect(readFileSync(`${volume}/${onLevel(changed, 'world').path}`, 'utf8')).toBe(
+        `${before}say a newer hub\n`,
+      )
+      // And every wake after resumes again.
+      const second = await sleepAndWake()
+      expect(second).toContain('resuming')
+      expect(second).not.toContain('booting')
+    } finally {
+      ;(changed as { content: string }).content = before
+    }
+  }, 60_000)
 })

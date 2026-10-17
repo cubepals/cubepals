@@ -14,8 +14,9 @@
  */
 import { AS_COUNT, submit, TMP, WORK } from './boards.ts'
 import { type Block, box, NS, type Part } from './datapack.ts'
+import { KEEP } from './kept.ts'
 import { placed } from './maps.ts'
-import { type BrandSign, creditLabel, hangSign } from './signs.ts'
+import { type BrandSign, buildSign, clearSign, creditLabel, MARKET, type SignPlace } from './signs.ts'
 
 const PIT = `${NS}.pit`
 
@@ -46,20 +47,27 @@ const ARMOUR: Readonly<Record<'head' | 'chest' | 'legs' | 'feet', string>> = {
 
 /**
  * The small Cubepals sign over the middle of the market, both ways, so the spawn points on either
- * side see it, on one backing between the two.
+ * side see it: two back to back on one panel, in the market's spruce. It stands clear over the
+ * market's roofs, out of reach of anyone climbing them (`scripts/play-space.test.ts`).
  */
+const SIGN_Y = 96
 export const PIT_SIGNS: readonly BrandSign[] = [
-  { art: 'small', at: [-1044, 92, 0], facing: 'north' },
+  { at: [-1044, SIGN_Y, 1], side: 4, facing: 'north', frame: MARKET, backed: false },
   // One credit line, under this one.
-  { art: 'small', at: [-1048, 92, 2], facing: 'south', credit: 'market' },
+  { at: [-1047, SIGN_Y, 1], side: 4, facing: 'south', frame: MARKET, backed: false, credit: 'market' },
 ]
-const SIGN_CHUNKS = 'forceload add -1048 0 -1044 2'
+
+/** Where the same sign once stood, four blocks lower, within a jump of the roofs: taken down first. */
+const OLD_SIGNS = PIT_SIGNS.map((sign): SignPlace => ({ ...sign, at: [sign.at[0], 92, sign.at[2]] }))
+const SIGN_CHUNKS = 'forceload add -1048 0 -1043 4'
 
 export const PIT_PART: Part = {
   functions: {
     // Run as the player, from the hub's pad: the kit, then one of the spawn points.
     'pit/arrive': [
       'clear @s',
+      // What every player keeps first, in its slots, so the kit fills round it.
+      KEEP,
       ...Object.entries(ARMOUR).map(
         ([slot, item]) => `item replace entity @s armor.${slot} with minecraft:${item}`,
       ),
@@ -71,7 +79,6 @@ export const PIT_PART: Part = {
         const [x, y, z] = placed('market', at)
         return `execute if score #spawn ${TMP} matches ${i} run tp @s ${x + 0.5} ${y} ${z + 0.5} ${yaw} 0`
       }),
-      `tellraw @s "Everyone here fights everyone, and every kill counts. Losing takes you back to the hub."`,
     ],
     'pit/kill': [
       `execute unless entity @s[tag=${PIT}] run return run scoreboard players reset @s ${PIT}.raw`,
@@ -93,7 +100,7 @@ export const PIT_PART: Part = {
     `scoreboard objectives setdisplay sidebar.team.red ${PIT}.kills`,
   ],
   labels: PIT_SIGNS.map(creditLabel).filter((credit) => credit !== null),
-  build: [...PIT_SIGNS.flatMap(hangSign), SIGN_CHUNKS.replace('add', 'remove')],
+  build: [...OLD_SIGNS.map(clearSign), ...PIT_SIGNS.flatMap(buildSign), SIGN_CHUNKS.replace('add', 'remove')],
   tick: [
     `team join ${PIT} @a[team=!${PIT},${ZONE}]`,
     `execute as @a[scores={${PIT}.raw=1..}] at @s run function ${NS}:pit/kill`,

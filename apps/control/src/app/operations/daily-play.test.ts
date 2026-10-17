@@ -16,6 +16,7 @@ import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { playToday } from '../accounts/play-today.ts'
+import { applyTimeZones } from '../accounts/time-zone.ts'
 import type { UserActor } from '../actor.ts'
 
 const TEN = '[Cubepals] Today’s play ends in 10 minutes. The world is saved, and play is back at midnight.'
@@ -99,7 +100,12 @@ describe.skipIf(!hasDatabase)('the play day', () => {
       left: 0,
       backAt: new Date('2026-01-16T00:00:00Z'),
     })
+    // Reported once the account has played, the zone waits for the next month, then takes over.
     await h.app.accounts.setTimeZone(actor, 'America/New_York')
+    expect((await today(actor, now))?.units).toBe(3)
+    const waiting = await loadStanding(h.db, actor.userId)
+    expect(waiting).toMatchObject({ timeZone: null, nextTimeZone: 'America/New_York' })
+    expect(await applyTimeZones(h.db, waiting.nextTimeZoneFrom ?? now)).toBe(1)
     expect(await today(actor, now)).toEqual({
       included: 2,
       units: 1,

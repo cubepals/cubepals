@@ -12,7 +12,6 @@
  * What helpers do in game stays in LibertyBans, which shows it there (`/history`); this history
  * holds what was given from Cubepals.
  */
-import { readFileSync } from 'node:fs'
 import {
   DEFAULT_LADDER,
   type ModerationActionView,
@@ -42,12 +41,10 @@ import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
 import { findServer, loadRevision, lockServer } from '../servers/persistence.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
+import { CHAT_FILTER } from './chat-filter.ts'
 import { endOf } from './delivery.ts'
 
 const actions = schema.serverModerationActions
-
-/** ChatSentinel's own settings with Cubepals' changes, which its header lists. */
-export const CHAT_FILTER = readFileSync(new URL('./chatsentinel-config.yml', import.meta.url), 'utf8')
 
 /** How much of a server's history its page shows: the newest. */
 const HISTORY_SHOWN = 500

@@ -11,7 +11,7 @@ import { WAITING_FILES } from '../../minecraft/duels-waiting.ts'
 import { CHATSENTINEL, LIBERTYBANS, LUCKPERMS, moderationFiles } from '../../minecraft/moderation.ts'
 import { ARCADE_LEVEL } from '../../minecraft/starter.ts'
 import { VOID_LEVEL } from '../../minecraft/worlds.ts'
-import { CHAT_FILTER } from '../moderation/service.ts'
+import { CHAT_FILTER } from '../moderation/chat-filter.ts'
 
 /**
  * What Blockly offers when it asks "what do you want to play?" (§15.6). Each one is a setup with

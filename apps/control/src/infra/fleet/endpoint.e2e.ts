@@ -12,6 +12,9 @@
  * DATABASE_URL in the environment, and BLOCKLYD_STATIC_BIN for the blocklyd it hands to joining
  * hosts and offers to older nodes (FLEET_UPGRADES=off offers it to none). It listens on 127.0.0.1 unless told otherwise, and its certificate names 127.0.0.1 and
  * the addresses given.
+ *
+ * It writes `listening` once its port is bound, so a node may dial it the moment it does. A port
+ * it can't bind ends it with the error, before it writes anything.
  */
 import { readFileSync } from 'node:fs'
 import { createDb, createPool } from '@blockly/db'

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { NOTE_MAX_LENGTH } from '@blockly/contracts/limits'
+import { sealProblem } from '@blockly/contracts/seal'
 
 /**
  * A short note on a public server's guestbook, as it is kept and shown: one line of plain text.
@@ -24,7 +25,7 @@ const STACKED = /(\p{M}{4})\p{M}+/gu
 /**
  * A note cleaned to what is shown: normalised, on one line with single spaces, without invisible
  * characters or towers of marks, and trimmed. Refused, in one sentence, when nothing is left or it
- * is too long. Line breaks become spaces before the invisible characters go, and spaces left
+ * is too long, or holds a check mark or a seal. Line breaks become spaces before the invisible characters go, and spaces left
  * doubled by what went are made single again.
  */
 export function cleanNote(raw: string): { note: string } | { refused: string } {
@@ -37,6 +38,8 @@ export function cleanNote(raw: string): { note: string } | { refused: string } {
     .trim()
   if (note === '') return { refused: 'Write something first.' }
   if (note.length > NOTE_MAX_LENGTH) return { refused: `A note is up to ${NOTE_MAX_LENGTH} characters.` }
+  const seal = sealProblem(note, 'Notes')
+  if (seal !== null) return { refused: seal }
   return { note }
 }
 

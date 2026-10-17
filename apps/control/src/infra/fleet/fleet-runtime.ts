@@ -21,6 +21,7 @@
  * - `ledger.ts`: where each server's world lives, under which epoch, and the history of its homes.
  * - `node-cache.ts`: what the synchronous methods know of each node, reread every few seconds.
  * - `node-choice.ts`: what a server needs of a node, judged by placement against every node now.
+ * - `power.ts`: a placed copy woken (resumed or booted), put to sleep or stopped, and waited on to run.
  * - `rehoming.ts`: a world's new home under a new epoch, its old copy fenced once the new one holds it.
  * - `transfers.ts`: a copy of a world sent off its node, to the store or a target, whole or in parts.
  * - `workload-api.ts`: the calls made to a node's workload API, each with its path, epoch and timeout.
@@ -63,6 +64,7 @@ import {
 } from './fleet-runtime/ledger.ts'
 import { NodeCache } from './fleet-runtime/node-cache.ts'
 import { describe, NEEDS, NodeChoice } from './fleet-runtime/node-choice.ts'
+import { Power } from './fleet-runtime/power.ts'
 import { Rehoming } from './fleet-runtime/rehoming.ts'
 import { Transfers } from './fleet-runtime/transfers.ts'
 import { address, WorkloadApi } from './fleet-runtime/workload-api.ts'
@@ -83,9 +85,6 @@ import { event, exec, jsonb, one, rows, toDate } from './sql.ts'
 import type { FleetStore } from './store.ts'
 import type { WorkloadReport } from './wire.ts'
 
-/** Node states in which a workload waited on to run never will without being asked again. */
-const NOT_STARTING = new Set(['stopped', 'crashed', 'missing', 'retained', 'fenced'])
-
 export interface FleetRuntimeOptions {
   db: Db
   nodes: NodeClient
@@ -97,12 +96,12 @@ export interface FleetRuntimeOptions {
   /** CPU a server is counted for, per GB of memory, in thousandths of a core. */
   cpuMillisPerGb: number
   thresholds: Thresholds
+  /** Whether a sleep suspends, where the node can; off, every sleep stops. */
+  suspend?: boolean
   log?: (message: string, fields?: object) => void
 }
 
 export { StaleHandle } from './fleet-runtime/ledger.ts'
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export class FleetRuntime implements MinecraftRuntime {
   readonly provider = 'fleet'
@@ -125,6 +124,7 @@ export class FleetRuntime implements MinecraftRuntime {
   readonly #archives: Archives
   readonly #transfers: Transfers
   readonly #rehoming: Rehoming
+  readonly #power: Power
 
   constructor(options: FleetRuntimeOptions) {
     this.#o = options
@@ -168,6 +168,15 @@ export class FleetRuntime implements MinecraftRuntime {
       admission: this.#admission,
       archives: this.#archives,
       transfers: this.#transfers,
+      provider: this.provider,
+      log: this.#log,
+    })
+    this.#power = new Power({
+      db: options.db,
+      api: this.#api,
+      admission: this.#admission,
+      ledger: this.#ledger,
+      suspend: options.suspend ?? false,
       provider: this.provider,
       log: this.#log,
     })
@@ -329,31 +338,22 @@ export class FleetRuntime implements MinecraftRuntime {
       return moved
     }
     if (chosen.full !== null) return this.#rehoming.startElsewhere(chosen.row, spec, progress, chosen.full)
-    const epoch = Number(chosen.row.epoch)
     const node = await this.#ledger.nodeOf(chosen.row.node_id)
-    await progress.step('compute')
-    const ensured = await this.#admission.put(node, key, spec, epoch, chosen.created)
-    const handle = await this.#ledger.settle(key, node, epoch, ensured.workload)
-    await progress.handle(handle)
-    await progress.step('booting')
     try {
-      await this.#admission.power(node, key, epoch, 'start')
+      return await this.#power.wake(chosen.row, node, spec, progress, chosen.created)
     } catch (error) {
       if (!(error instanceof NodeRefused && NO_ROOM.has(error.code))) throw error
       // The node counts what the ledger doesn't, such as a copy it still runs: it moves after all.
-      await this.#admission.unclaim(key, epoch)
+      await this.#admission.unclaim(key, Number(chosen.row.epoch))
       const placed = await placementOf(this.#o.db, key)
       if (placed === null) throw error
       return this.#rehoming.startElsewhere(placed, spec, progress, `${node.name}: ${error.message}`)
     }
-    return handle
   }
 
   async apply(handle: RuntimeHandle, spec: RuntimeSpec): Promise<RuntimeHandle> {
-    const { ref, node } = await this.#ledger.current(handle)
-    const ensured = await this.#admission.put(node, ref.key, spec, ref.epoch, false)
-    // A running workload whose spec changed is restarted by the node as it replaces it.
-    return this.#ledger.settle(ref.key, node, ref.epoch, ensured.workload)
+    const { row, node } = await this.#ledger.current(handle)
+    return this.#power.apply(row, node, spec)
   }
 
   /**
@@ -375,27 +375,23 @@ export class FleetRuntime implements MinecraftRuntime {
 
   async stop(handle: RuntimeHandle): Promise<void> {
     const { ref, node } = await this.#ledger.current(handle)
-    await this.#admission.power(node, ref.key, ref.epoch, 'stop')
+    await this.#power.halt(ref, node, 'stop')
+  }
+
+  /** Suspended where the deployment's switch is on and the node can, so a start resumes it; else stopped. */
+  async sleep(handle: RuntimeHandle): Promise<'suspended' | 'stopped'> {
+    const { ref, node } = await this.#ledger.current(handle)
+    return this.#power.sleep(ref, node)
   }
 
   async forceStop(handle: RuntimeHandle): Promise<void> {
     const { ref, node } = await this.#ledger.current(handle)
-    await this.#admission.power(node, ref.key, ref.epoch, 'kill')
+    await this.#power.halt(ref, node, 'kill')
   }
 
   async waitRunning(handle: RuntimeHandle, signal: AbortSignal): Promise<void> {
     const { ref, node } = await this.#ledger.current(handle)
-    while (!signal.aborted) {
-      const view = await this.#api.view(node, ref.key)
-      if (view.epoch !== ref.epoch) throw new StaleHandle('The copy on the node belongs to another placement')
-      if (view.state === 'running') return
-      if (NOT_STARTING.has(view.state))
-        throw new Error(
-          `The workload is ${view.state}${view.exit ? ` (exit ${view.exit.code}${view.exit.oomKilled ? ', out of memory' : ''})` : ''}`,
-        )
-      await sleep(500)
-    }
-    throw new Error('The workload did not start in time')
+    await this.#power.waitRunning(ref, node, signal)
   }
 
   // ─── snapshots ─────────────────────────────────────────────────────────────────────────────
@@ -868,6 +864,7 @@ export class FleetRuntime implements MinecraftRuntime {
       case 'creating':
       case 'created':
       case 'stopped':
+      case 'suspended':
       case 'fenced':
         return { state: 'stopped', at, ...exit }
       case 'missing':

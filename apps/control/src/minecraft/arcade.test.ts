@@ -10,7 +10,7 @@
  */
 import { describe, expect, test } from 'bun:test'
 import { onLevel } from '../domain/revision/carried.ts'
-import { PADS, PASSAGE } from './arcade/hub.ts'
+import { HINT, PAD_BADGES, PADS, PASSAGE } from './arcade/hub.ts'
 import { ARCADE_MAPS } from './arcade/maps.ts'
 import { ARCADE_FILES } from './arcade.ts'
 import { placeablePath } from './carried.ts'
@@ -158,10 +158,12 @@ describe('the Arcade as its players find it', () => {
 
   test('the hub sends a player to each game, into its place and off every pad', () => {
     const pads = PADS.map(({ middle: [x, y, z] }) => boxOf(`x=${x - 1},y=${y + 1},z=${z - 1},dx=2,dy=1,dz=2`))
-    const places = (sends: string) =>
-      sends.startsWith('tp @s ')
-        ? [sends]
-        : commands(sends.replace('function arcade:', '')).filter((command) => / run tp @s /.test(command))
+    // Every teleport a command makes, through the functions it runs.
+    const places = (command: string): string[] => {
+      const called = command.match(/(?:^| run )function arcade:([a-z/_]+)$/)?.[1]
+      if (called !== undefined) return commands(called).flatMap(places)
+      return /(?:^| run )tp @s /.test(command) ? [command] : []
+    }
     for (const pad of PADS) {
       const arrivals = places(pad.sends)
       expect(arrivals.length).toBeGreaterThan(0)
@@ -222,27 +224,32 @@ describe('the Arcade as its players find it', () => {
   })
 
   test("each game's Cubepals sign names its map and who built it, in one line under it", () => {
+    // The parkour has none: its sign stood over the first course's stairs, and is taken down.
     const lines = everyCommand.filter(
       (c) => c.startsWith('summon minecraft:text_display') && c.includes(', by '),
     )
     expect(lines.map((c) => c.match(/text:\["",\{text:"([^"]+)"/)?.[1])).toEqual([
-      'Jungle, by Crazy_, ViceTechnicolour and Tywnis',
       'Meltdown, by NetherGames',
       'Frozen Market, by _3Each',
     ])
-    // Each sign hangs every frame of its lockup: twenty by four over the hub, five across at each game.
-    const frames = everyCommand.filter((c) => c.startsWith('summon minecraft:glow_item_frame'))
-    expect(frames).toHaveLength(80 + 5 * 4)
+    // Each sign is built, not hung: one square of Paper behind its mark, over the hub, at the
+    // floor, and twice back to back at the pit.
+    expect(everyCommand.filter((c) => c.startsWith('summon minecraft:glow_item_frame'))).toEqual([])
+    const papers = everyCommand.filter((c) => c.includes(`background:${0xff000000 | 0xf8f7f5}`))
+    expect(papers).toHaveLength(1 + 1 + 2 + PAD_BADGES.length)
   })
 
-  test('a new player is put at the hub and told in one sentence what to do, once', () => {
+  test('a new player is put at the hub and told in one sentence what to do, and whose maps these are, once', () => {
     const welcome = commands('play').filter((command) => command.includes('tag=!arcade.welcomed'))
-    expect(welcome).toHaveLength(3)
+    expect(welcome).toHaveLength(4)
     expect(welcome[0]).toBe('execute as @a[tag=!arcade.welcomed] run function arcade:hub/back')
-    expect(welcome[1]).toContain(
-      'Step on a black pad to play a game, and see if you can get your name on the boards.',
-    )
-    expect(welcome[2]).toBe('tag @a[tag=!arcade.welcomed] add arcade.welcomed')
+    expect(welcome[1]).toContain('See if you can get your name on the boards.')
+    // How to start a game, as they arrive and on each return: once, not every tick.
+    expect(commands('hub/back')).toContain(`tellraw @s {text:"${HINT}",color:"gray"}`)
+    expect(commands('play').filter((command) => command.includes(HINT))).toEqual([])
+    expect(welcome[2]).toContain('Made of maps by NetherGames and the Overcast community.')
+    expect(welcome[2]).toContain('Type /trigger credits')
+    expect(welcome[3]).toBe('tag @a[tag=!arcade.welcomed] add arcade.welcomed')
   })
 
   test('a player back from dying is put at the hub, since a spawn under a roof moves onto it', () => {
@@ -259,5 +266,22 @@ describe('the Arcade as its players find it', () => {
     expect(commands('boards/forget')).toEqual(['$data remove storage arcade:work list[{uuid:$(uuid)}]'])
     for (const board of ['pk', 'ff', 'wins', 'kills'])
       expect(everyCommand).toContain(`function arcade:boards/submit {board:"${board}"}`)
+  })
+})
+
+describe('the Arcade’s signs out of play', () => {
+  test('a sign that stood where players play is taken down as the datapack builds, before any sign goes up', () => {
+    const build = commands('build')
+    // Over the parkour's first stairs, and the pit's two, three blocks under where they stand now:
+    // the pit's taken down before its new ones, in the market's spruce, go up over the same place.
+    expect(build).toContain('fill 993 68 -2 995 73 3 minecraft:air')
+    const pitSign = build.findIndex((command) => command.endsWith('minecraft:spruce_planks'))
+    for (const taken of [
+      'fill -1048 88 0 -1043 93 1 minecraft:air',
+      'fill -1048 88 1 -1043 93 2 minecraft:air',
+    ]) {
+      expect(build).toContain(taken)
+      expect(build.indexOf(taken)).toBeLessThan(pitSign)
+    }
   })
 })

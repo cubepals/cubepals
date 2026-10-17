@@ -254,6 +254,12 @@ if (import.meta.main) {
   const work = mkdtempSync(join(tmpdir(), 'database-dump-'))
   try {
     const config = configOf(env)
+    // GitHub gives a secret that isn't there as an empty string. Production's values were set long
+    // ago, so on this repository's own runs none of them arriving means they were lost, not unset.
+    if (config === null && env.GITHUB_ACTIONS === 'true' && env.GITHUB_REPOSITORY === 'cubepals/cubepals')
+      throw new Error(
+        "None of the database dump's values reached this run, so no dump was taken. Check the production environment's secrets; production.ts apply sets them.",
+      )
     if (config === null)
       say("The database dump isn't set up: none of its values is set. production.ts apply sets them.")
     else await dump(config, work)

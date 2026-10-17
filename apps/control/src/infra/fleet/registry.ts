@@ -34,7 +34,7 @@ export { getNode, lockRegion, Refused } from './registry/node.ts'
 export { endpointSeen, listeningSeconds } from './registry/presence.ts'
 export { renew } from './registry/renewal.ts'
 
-export { holdsMemory, nodeSummaries, recordHealth, toNodeView } from './registry/summaries.ts'
+export { answered, holdsMemory, nodeSummaries, recordHealth, toNodeView } from './registry/summaries.ts'
 
 export {
   isOlder,

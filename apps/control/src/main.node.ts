@@ -228,6 +228,7 @@ async function providerFor(
         placement: runtime.placement,
         cpuMillisPerGb: runtime.cpuMillisPerGb,
         thresholds,
+        suspend: runtime.suspend,
       })
       const stopWatching = await fleet.watchRegistry()
       const rotation = setInterval(

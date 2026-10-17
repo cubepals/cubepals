@@ -172,6 +172,53 @@ async function startEndpoint(cert: string, key: string, url: string, database: s
   return endpoint
 }
 
+/** The test bucket, as the fleet's own store and as the application's archive. */
+const BUCKET = `blockly-${DEPLOYMENT}`
+const archiveStore = () =>
+  new S3ArchiveStore({
+    endpoint: S3 ?? '',
+    runtimeEndpoint: null,
+    bucket: BUCKET,
+    region: 'auto',
+    ...credentials,
+  })
+
+/** A node's blocklyd.toml: its own state, API and port range, enrolling with the token in `home`. */
+function nodeConfig(at: {
+  home: string
+  endpointUrl: string
+  dir: string
+  apiPort: number
+  opsPort: number
+  low: number
+}): string {
+  const { home, endpointUrl, dir, apiPort, opsPort, low } = at
+  return `deployment_id = "${DEPLOYMENT}"
+state_dir = "${join(home, 'state')}"
+[api]
+listen = "127.0.0.1:${apiPort}"
+[ops]
+listen = "127.0.0.1:${opsPort}"
+[network]
+port_range = [${low}, ${low + 49}]
+port_quarantine_seconds = 0
+[workloads]
+allowed_images = ["alpine:"]
+min_memory_mb = 64
+[capacity]
+reserved_memory_mb = 0
+allocatable_memory_mb = 4096
+min_free_disk_mb = 256
+[transfer]
+max_put_mb = 1
+[fleet]
+url = "${endpointUrl}"
+ca = "${join(dir, 'ca.pem')}"
+enrollment_token_file = "${join(home, 'token')}"
+heartbeat_seconds = 1
+`
+}
+
 describe.skipIf(!ready)('FleetRuntime against a real blocklyd', () => {
   const dir = join(tmpdir(), `blockly-${DEPLOYMENT}`)
   let db: Db
@@ -200,8 +247,7 @@ describe.skipIf(!ready)('FleetRuntime against a real blocklyd', () => {
     const fresh = await freshDatabase()
     ;({ db, drop } = fresh)
     database = fresh.url
-    const bucket = `blockly-${DEPLOYMENT}`
-    await createTestBucket(S3 ?? '', credentials, bucket)
+    await createTestBucket(S3 ?? '', credentials, BUCKET)
 
     const pems = await FleetCa.generate(DEPLOYMENT)
     const ca = await FleetCa.fromPem(pems.certPem, pems.keyPem)
@@ -215,21 +261,13 @@ describe.skipIf(!ready)('FleetRuntime against a real blocklyd', () => {
     runtime = new FleetRuntime({
       db,
       nodes,
-      store: new FleetStore(
-        new S3ArchiveStore({
-          endpoint: S3 ?? '',
-          runtimeEndpoint: null,
-          bucket,
-          region: 'auto',
-          ...credentials,
-        }),
-        DEPLOYMENT,
-      ),
+      store: new FleetStore(archiveStore(), DEPLOYMENT),
       deployment: DEPLOYMENT,
       regionMap: {},
       placement: DEFAULTS,
       cpuMillisPerGb: 250,
       thresholds: THRESHOLDS,
+      suspend: true,
       log: () => {},
     })
 
@@ -247,33 +285,7 @@ describe.skipIf(!ready)('FleetRuntime against a real blocklyd', () => {
     const opsPort = await freePort()
     const low = 45_000 + (Number.parseInt(DEPLOYMENT.slice(3), 16) % 90) * 50
     const config = join(home, 'blocklyd.toml')
-    writeFileSync(
-      config,
-      `deployment_id = "${DEPLOYMENT}"
-state_dir = "${join(home, 'state')}"
-[api]
-listen = "127.0.0.1:${apiPort}"
-[ops]
-listen = "127.0.0.1:${opsPort}"
-[network]
-port_range = [${low}, ${low + 49}]
-port_quarantine_seconds = 0
-[workloads]
-allowed_images = ["alpine:"]
-min_memory_mb = 64
-[capacity]
-reserved_memory_mb = 0
-allocatable_memory_mb = 4096
-min_free_disk_mb = 256
-[transfer]
-max_put_mb = 1
-[fleet]
-url = "${endpointUrl}"
-ca = "${join(dir, 'ca.pem')}"
-enrollment_token_file = "${join(home, 'token')}"
-heartbeat_seconds = 1
-`,
-    )
+    writeFileSync(config, nodeConfig({ home, endpointUrl, dir, apiPort, opsPort, low }))
     node = daemon(home, config, opsPort)
     node.start()
     await until('the node to enroll and beat', async () => {
@@ -323,6 +335,31 @@ heartbeat_seconds = 1
     expect(runtime.prices(handle, { memoryMb: 128, storageGb: 1 })?.storageMonthCents).toBeGreaterThan(0)
   }, 120_000)
 
+  test('asleep, it is suspended and wakes where it was; a change made meanwhile lands at its next boot', async () => {
+    const asleep = { ...SPEC, resumesOn: 'e2e' }
+    handle = await runtime.apply(handle, asleep)
+    const started = containerStarted()
+    expect(await runtime.sleep(handle)).toBe('suspended')
+    const reported = async () =>
+      (
+        await rows<{ state: string }>(db, sql`SELECT state FROM fleet_observations WHERE workload = ${key}`)
+      )[0]
+    await until('a suspended report', async () => (await reported())?.state === 'suspended')
+    const changed = { ...asleep, env: { ...SPEC.env, MOTD: 'Back soon' } }
+    const steps: string[] = []
+    const sink: ProgressSink = { step: async (step) => void steps.push(step), handle: async () => {} }
+    expect(await runtime.ensureProvisioned(key, { regionKey: 'eu' }, changed, sink)).toBe(handle)
+    await runtime.waitRunning(handle, AbortSignal.timeout(MINUTE_MS))
+    expect(steps).toEqual(['allocating', 'compute', 'resuming'])
+    expect(containerStarted()).toBe(started)
+    expect(await exec('echo "[$MOTD]"')).toBe('[]')
+    await runtime.stop(handle)
+    await runtime.ensureProvisioned(key, { regionKey: 'eu' }, changed, progress)
+    await runtime.waitRunning(handle, AbortSignal.timeout(MINUTE_MS))
+    expect(containerStarted()).not.toBe(started)
+    expect(await exec('echo "[$MOTD]"')).toBe('[Back soon]')
+  }, 120_000)
+
   test('a snapshot restores in place, from the node, and reaches the store', async () => {
     await exec('echo day-one > /data/world/level.dat')
     const taken = await runtime.snapshot(handle)
@@ -355,14 +392,7 @@ heartbeat_seconds = 1
       return row?.status === 'ready'
     })
     // The archive the application keeps, as it would export one for a stored world.
-    const bucket = `blockly-${DEPLOYMENT}`
-    const archives = new S3ArchiveStore({
-      endpoint: S3 ?? '',
-      runtimeEndpoint: null,
-      bucket,
-      region: 'auto',
-      ...credentials,
-    })
+    const archives = archiveStore()
     const keyName = `stored/${DEPLOYMENT}.tar.gz`
     const put = await archives.archiveTarget(keyName, 600, 'runtime')
     const exported = await runtime.exportSnapshot(taken.snapshot, put)
@@ -396,14 +426,7 @@ heartbeat_seconds = 1
       db,
       sql`SELECT object_key, size_bytes, sha256 FROM fleet_archives ORDER BY captured_at DESC LIMIT 1`,
     )
-    const bucket = `blockly-${DEPLOYMENT}`
-    const archives = new S3ArchiveStore({
-      endpoint: S3 ?? '',
-      runtimeEndpoint: null,
-      bucket,
-      region: 'auto',
-      ...credentials,
-    })
+    const archives = archiveStore()
     const sha256 = async (key: string) => {
       const read = await fetch((await archives.presignGet(key, 600, 'browser')).url)
       return createHash('sha256')
@@ -442,13 +465,7 @@ heartbeat_seconds = 1
     await exec('echo elsewhere > /data/world/moved.txt')
     await runtime.stop(handle)
     const taken = await runtime.snapshot(handle)
-    const archives = new S3ArchiveStore({
-      endpoint: S3 ?? '',
-      runtimeEndpoint: null,
-      bucket: `blockly-${DEPLOYMENT}`,
-      region: 'auto',
-      ...credentials,
-    })
+    const archives = archiveStore()
     const keyName = `moved/${DEPLOYMENT}.tar.gz`
     await runtime.exportSnapshot(taken.snapshot, await archives.archiveTarget(keyName, 600, 'runtime'))
     const other = runtimeKey(randomUUID())

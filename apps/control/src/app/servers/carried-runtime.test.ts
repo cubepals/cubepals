@@ -14,11 +14,13 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
-import { RUNNING_LEVEL } from '../../domain/revision/carried.ts'
+import { onLevel, RUNNING_LEVEL } from '../../domain/revision/carried.ts'
 import { defaultSettings, type ServerRevision } from '../../domain/revision/revision.ts'
 import { placeablePath } from '../../minecraft/carried.ts'
 import { installCheck } from '../../minecraft/install-check.ts'
 import { toRuntimeSpec } from '../../minecraft/runtime-spec.ts'
+import { TEMPLATES, type Template, templateOf } from '../setups/templates.ts'
+import { carriedFileLines, VARIABLE_BYTES_LIMIT, withCompressedFiles } from './carried-files.ts'
 
 const BENTOBOX = Buffer.from('bentobox jar')
 const AONEBLOCK = Buffer.from('aoneblock jar')
@@ -110,7 +112,10 @@ afterAll(() => links.stop(true))
  * which it skips. Not `spawnSync`: the links are served from this same thread.
  */
 async function start(data: string, of: ServerRevision, levelName = input.world.levelName): Promise<number> {
-  const spec = toRuntimeSpec({ ...input, world: { ...input.world, levelName }, revision: of })
+  // As a start is given it: the files compressed.
+  const spec = withCompressedFiles(
+    toRuntimeSpec({ ...input, world: { ...input.world, levelName }, revision: of }),
+  )
   const step = (spec.entrypoint?.[2] ?? '')
     .replaceAll('/data', data)
     .replace('exec /image/scripts/start "$@"', 'true')
@@ -123,7 +128,7 @@ async function start(data: string, of: ServerRevision, levelName = input.world.l
 
 describe('what a revision places itself', () => {
   test('the image installs the plugins folder; a game mode in a folder of its own and the files are Blockly’s', () => {
-    const spec = toRuntimeSpec({ ...input, revision })
+    const spec = withCompressedFiles(toRuntimeSpec({ ...input, revision }))
     expect(spec.env.PLUGINS?.split(',')).toEqual([
       linkOf({ fileName: 'BentoBox.jar' }),
       linkOf({ fileName: 'LifeStealZ.jar' }),
@@ -131,11 +136,13 @@ describe('what a revision places itself', () => {
     expect(spec.env.BLOCKLY_JARS).toBe(
       `plugins/BentoBox/addons/${sha512(AONEBLOCK).slice(0, 12)}-AOneBlock.jar ${sha512(AONEBLOCK)} ${linkOf({ fileName: 'AOneBlock.jar' })}`,
     )
-    expect(spec.env.BLOCKLY_FILES).toBe(
+    expect(carriedFileLines(spec.env)).toBe(
       `plugins/LifeStealZ/config.yml ${Buffer.from(LIFESTEAL).toString('base64')}`,
     )
+    // Compressed, so no one variable comes near Linux's limit; the uncompressed one is gone.
+    expect(spec.env.BLOCKLY_FILES).toBeUndefined()
     // After Paper's own step, before the image's start.
-    expect(spec.entrypoint?.[2]).toContain('BLOCKLY_FILES')
+    expect(spec.entrypoint?.[2]).toContain('BLOCKLY_FILES_GZ')
     expect(spec.entrypoint?.[2]).toEndWith('exec /image/scripts/start "$@"')
   })
 
@@ -143,7 +150,7 @@ describe('what a revision places itself', () => {
     const plain = { ...revision, mods: [plugin('BentoBox', BENTOBOX)], files: [] }
     const spec = toRuntimeSpec({ ...input, revision: plain })
     expect(spec.entrypoint?.[2]).not.toContain('BLOCKLY_FILES')
-    expect(spec.env.BLOCKLY_FILES).toBeUndefined()
+    expect(spec.env.BLOCKLY_FILES_GZ).toBeUndefined()
     expect(spec.env.BLOCKLY_JARS).toBeUndefined()
   })
 
@@ -268,7 +275,7 @@ describe('the world a carried file names', () => {
     const data = mkdtempSync(join(tmpdir(), 'carried-'))
     const pack = { path: `${RUNNING_LEVEL}/datapacks/p/pack.mcmeta`, content: '{}\n' }
     const inWorld = { ...revision, files: [pack] }
-    expect(toRuntimeSpec({ ...input, revision: inWorld }).env.BLOCKLY_FILES).toStartWith(
+    expect(carriedFileLines(toRuntimeSpec({ ...input, revision: inWorld }).env)).toStartWith(
       'world/datapacks/p/pack.mcmeta ',
     )
     expect(await start(data, inWorld)).toBe(0)
@@ -283,6 +290,54 @@ describe('the world a carried file names', () => {
         revision: { ...revision, files: [{ path: `${RUNNING_LEVEL}/../x`, content: '' }] },
       }),
     ).toThrow('Cubepals can')
+    rmSync(data, { recursive: true })
+  })
+})
+
+describe('what a start is given, against what Linux takes', () => {
+  /** A revision of a template's: Paper, with the template's files, as a server made from it starts. */
+  const ofTemplate = (template: Template): ServerRevision => ({
+    ...revision,
+    mods: [],
+    files: [...(template.setup.files ?? [])],
+  })
+
+  test("no template's start is given one value near Linux's limit for a single variable or argument", () => {
+    for (const template of TEMPLATES) {
+      const spec = withCompressedFiles(toRuntimeSpec({ ...input, revision: ofTemplate(template) }))
+      for (const [name, value] of [
+        ...Object.entries(spec.env),
+        ...(spec.entrypoint ?? []).map((part, i) => [`entrypoint ${i}`, part]),
+      ])
+        expect(`${template.key} ${name}: ${Buffer.byteLength(`${name}=${value}`)} bytes`).toBe(
+          `${template.key} ${name}: ${Math.min(Buffer.byteLength(`${name}=${value}`), VARIABLE_BYTES_LIMIT)} bytes`,
+        )
+    }
+  })
+
+  test("the Arcade's files, all of them, are placed by the step in a real shell", async () => {
+    const data = mkdtempSync(join(tmpdir(), 'carried-'))
+    const arcade = ofTemplate(templateOf('arcade') as Template)
+    expect(await start(data, arcade)).toBe(0)
+    for (const file of arcade.files.map((carried) => onLevel(carried, input.world.levelName)))
+      expect(readFileSync(`${data}/${file.path}`, 'utf8')).toBe(file.content)
+    rmSync(data, { recursive: true })
+  })
+
+  test('a start given its files uncompressed, as starts before were, places them too', async () => {
+    const data = mkdtempSync(join(tmpdir(), 'carried-'))
+    const spec = toRuntimeSpec({ ...input, revision })
+    const step = (spec.entrypoint?.[2] ?? '')
+      .replaceAll('/data', data)
+      .replace('exec /image/scripts/start "$@"', 'true')
+    const { BLOCKLY_FILES_GZ: _compressed, ...rest } = spec.env
+    const env = Object.fromEntries(Object.entries(rest).filter(([name]) => name.startsWith('BLOCKLY_')))
+    const exited = await Bun.spawn(['/bin/sh', '-c', step], {
+      env: { ...env, BLOCKLY_FILES: carriedFileLines(spec.env), VERSION: '26.1.2', PAPER_BUILD: '40' },
+      stderr: 'ignore',
+    }).exited
+    expect(exited).toBe(0)
+    expect(readFileSync(`${data}/plugins/LifeStealZ/config.yml`, 'utf8')).toBe(LIFESTEAL)
     rmSync(data, { recursive: true })
   })
 })

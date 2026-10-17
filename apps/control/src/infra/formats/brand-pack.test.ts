@@ -23,12 +23,20 @@ describe("Cubepals' resource pack as a zip", () => {
   test('it holds every file of the pack at its path, pack.mcmeta at the top', () => {
     expect(Object.keys(files)).toEqual(BRAND_PACK.map((file) => file.path))
     const { pack } = JSON.parse(strFromU8(files['pack.mcmeta'] ?? new Uint8Array())) as {
-      pack: { min_format: number; max_format: number; description: string }
+      pack: {
+        min_format: number
+        max_format: number
+        description: string
+        pack_format: number
+        supported_formats: number[]
+      }
     }
     expect(pack).toEqual({
       description: expect.any(String),
       min_format: RESOURCE_FORMATS.min,
       max_format: RESOURCE_FORMATS.max,
+      pack_format: RESOURCE_FORMATS.min,
+      supported_formats: [RESOURCE_FORMATS.min, RESOURCE_FORMATS.max],
     })
   })
 
