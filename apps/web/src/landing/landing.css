@@ -319,7 +319,7 @@
    pixels to a CSS pixel (public/imagery/landing-hero*.png, one pixel a dot), over the canvas until
    the canvas has drawn its first lit frame (`data-lit`, engine/gl.ts), and then dissolving into it.
    The camera keeps the chunk as tall as a fixed share of the screen and its middle at the hero's
-   `side` across (0.72, Film.tsx), so a still as tall as the screen and placed by the same fraction
+   `side` across (0.79, Film.tsx), so a still as tall as the screen and placed by the same fraction
    lands where the live print does at any size. Only on a wide screen, where the canvas is the
    whole screen; it scrolls away with the hero. */
 .bl-first {
@@ -329,12 +329,12 @@
   .bl-first {
     position: absolute;
     top: 0;
-    left: 72%;
+    left: 79%;
     display: block;
     width: auto;
     max-width: none;
     height: 100svh;
-    translate: -72% 0;
+    translate: -79% 0;
     image-rendering: pixelated;
     pointer-events: none;
     transition:
@@ -350,7 +350,8 @@
   }
 }
 
-/* Three letters over the chimney while the server sleeps, rising a step at a time. */
+/* Three letters over the chimney of the phone's sleeping server (phone/Still.tsx), rising a step
+   at a time. */
 .bl-snore {
   position: absolute;
   top: 0;
@@ -361,14 +362,6 @@
   color: var(--ink);
   opacity: 0;
   transition: opacity 300ms steps(3);
-}
-@media (min-width: 1024px) {
-  .bl-snore {
-    position: sticky;
-    top: 0;
-    height: 0;
-    margin-top: -100svh;
-  }
 }
 .bl-snore i {
   position: absolute;
@@ -499,10 +492,10 @@
   --m: clamp(0, calc(var(--day, 0) / 0.45), 1);
   --e: calc(var(--m) * var(--m) * (3 - 2 * var(--m)));
   position: absolute;
-  inset-block-start: 17svh;
-  inset-inline-end: 17vw;
-  width: calc(var(--px) * 18);
-  height: calc(var(--px) * 18);
+  inset-block-start: 12svh;
+  inset-inline-end: 7vw;
+  width: calc(var(--px) * 14);
+  height: calc(var(--px) * 14);
   pointer-events: none;
   transition:
     translate 110ms linear,

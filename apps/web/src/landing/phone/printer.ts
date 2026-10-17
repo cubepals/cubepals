@@ -57,7 +57,7 @@ const POSES: Record<Still, Pose> = {
   },
 }
 
-/** The chimney's top, where a sleeping server's snore comes out (Chunk.tsx). */
+/** The chimney's top, where a sleeping server's snore comes out (Still.tsx). */
 const CHIMNEY = [3.5, 10.6, 3.5] as const
 
 /** What a picture is: the bitmap, and where on it the chimney is, in fractions of its width and height. */

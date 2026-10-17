@@ -306,8 +306,8 @@ void main() {
   // from the ground below, so a face turned away from the key is dark.
   float key = uKeyLight * max(dot(n, uKey), 0.0) * lit(n, (sunny & (1 << vFace)) != 0, kind);
   float sky = uFill * mix(0.604, 1.0, n.y * 0.5 + 0.5);
-  // Down in the dig the rock outside the rooms is in the dark.
-  float deep = !loose && vWorld.y < -0.5 ? 1.0 - uDeep * 0.85 : 1.0;
+  // From inside a room, all that is out of doors is in the dark, however high the room is.
+  float deep = loose ? 1.0 : 1.0 - uDeep;
   float light = open ? (key + sky) * deep : roomLight * uRoomFill;
   float lum = tone * light * ao;
 

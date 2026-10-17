@@ -86,7 +86,8 @@ interface Look {
  * The three looks the film is printed in. The tone curve is the art direction: each is tuned by
  * eye so that everything in the chunk (the house, the trees, the sheep, people, the lamps) reads
  * at a glance, by its lit edges and its silhouette: a strong key from one side and a low fill, so
- * the faces turned away print nearly ink. Under the grass a room is dark but for its lamps.
+ * the faces turned away print nearly ink. Under the grass a room has no light of its own: it is
+ * dark but for its lamps, whose light falls off to nothing.
  */
 const MOONLIT: Omit<Look, 'deep'> = {
   keyLight: 2.2,
@@ -107,8 +108,8 @@ const DAYLIT: Omit<Look, 'deep'> = {
 const ROOMLIT: Omit<Look, 'deep'> = {
   keyLight: 2.2,
   fill: 0.55,
-  roomFill: 0.15,
-  lampGain: 3,
+  roomFill: 0,
+  lampGain: 2.4,
   exposure: 1.45,
   contrast: 1.55,
 }

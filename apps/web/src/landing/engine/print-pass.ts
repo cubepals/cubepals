@@ -8,7 +8,8 @@
  * ordered dither; a line is drawn where two planes meet; what glows is printed solid, and its
  * blur (GLOW_FRAG, twice) as torch dots round it; the empty night sky gets a few stars. Behind the
  * words on the page the print opens to bare ground (the quiet rects), its dots thinning out over
- * about 150 CSS pixels (wider on the dark grounds), so no word sits on texture.
+ * about 150 CSS pixels (wider on the dark grounds, shorter on the hero's sky), so no word sits
+ * on texture.
  */
 
 export const PRINT_VERT = `#version 300 es
@@ -106,9 +107,9 @@ void main() {
   int region = row < uEdges.x ? 0 : (row < uEdges.y ? 1 : (row < uEdges.z ? 2 : (row < uEdges.w ? 3 : 4)));
   int band = uRegions[region];
   // On the dark grounds a lamp lights the walls round the words, and a short fade would read as
-  // a dark shape cut out of them: there the light dots thin out over a wider reach, so the dark
-  // comes on with no edge to see (below).
-  float quiet = quietAt(band == 2 ? 260.0 : 150.0);
+  // a dark shape cut out of them: there the light fades over a wider reach (below). The hero's
+  // chunk stands close beside its words, so on its sky the reach is short.
+  float quiet = quietAt(band == 2 ? 260.0 : (band == 0 ? 40.0 : 150.0));
   float t = bayer8(vec2(c));
   // A lamp is solid torch; its light round it is torch dots, added in the dither's own order.
   float glow = texelFetch(uGlow, c, 0).r * (1.0 - quiet);
@@ -132,12 +133,17 @@ void main() {
   l = pow(l, 1.0 / 2.2);
   // (The plainer print has a few flat steps of grey instead.)
   if (uLevels > 0.0) l = floor(l * uLevels + 0.5) / uLevels;
-  // Behind the words the print opens to its ground. On the light grounds the tone eases to paper.
-  // On the dark ones the light dots drop out one at a time, at random, as many as the quiet asks:
-  // easing the tone instead would put out a whole evenly lit wall's dots at the same distance,
-  // and leave the edge of a shape.
-  if (band != 2) l = mix(l, 1.0, quiet);
-  if (l <= t || (band == 2 && quiet > hash(vec2(c) + 17.0))) { o = vec4(uLow[band], 1.0); return; }
+  // Behind the words the print opens to its ground: paper on the light grounds, dark on the dark,
+  // where the quiet dims the lamps' light the way distance does.
+  l = band == 2 ? l * (1.0 - quiet) : mix(l, 1.0, quiet);
+  // In the dark rooms the faint end of the lamps' light goes to the dark: below about a sixth it
+  // prints nothing and above that it eases in, so neither a lamp's pool nor the quiet has a rim.
+  // The dither's order is jittered a little there too, so its steps draw no contour on a wall.
+  if (band == 2) {
+    l = smoothstep(0.15, 0.95, l);
+    t = clamp(t + (hash(vec2(c) + 3.0) - 0.5) * 0.12, 0.0, 1.0);
+  }
+  if (l <= t) { o = vec4(uLow[band], 1.0); return; }
   // A lit dot is warm where that share of the light here is lamplight, in the dither's own order.
   o = vec4(shade.b > bayer8(vec2(c + ivec2(5, 2))) ? uWarm : uHigh[band], 1.0);
 }`

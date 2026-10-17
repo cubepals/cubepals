@@ -178,7 +178,6 @@ interface Piece {
  */
 export function Chunk() {
   const ref = useRef<HTMLCanvasElement>(null)
-  const snore = useRef<HTMLSpanElement>(null)
   // A context that fails to start, or is lost and never given back, gets a new canvas (start.ts).
   const [drawnOn, renew] = useReducer(nextCanvas, FIRST_CANVAS)
   // After the first paint the chunk is built, and a task later the print's shaders are compiled.
@@ -952,29 +951,6 @@ export function Chunk() {
         }
       }
 
-      // The sleeping server snores from its chimney: the letters ride on the drawing, so they are
-      // placed where the chimney's top lands. Only under the night sky and only from close by:
-      // once the page has dug past it, the letters would float over rock.
-      if (snore.current) {
-        const spot = drawn([3.5, 10.6, 3.5])
-        // (The dusk a way to play is shown by is not the server's night: nobody snores through it.)
-        // (Nor where they would reach up into the header.)
-        const asleep =
-          spot !== null &&
-          spot[1] + box.top > 110 &&
-          now.power === 'asleep' &&
-          day < 0.05 &&
-          sky < 0.5 &&
-          act !== 'play' &&
-          here.span < 60
-        // Only while they show are the letters moved; a style that hasn't changed isn't written.
-        if (spot && asleep) {
-          const place = `${Math.round(spot[0])}px ${Math.round(spot[1])}px`
-          if (snore.current.style.translate !== place) snore.current.style.translate = place
-        }
-        const opacity = asleep ? '1' : '0'
-        if (snore.current.style.opacity !== opacity) snore.current.style.opacity = opacity
-      }
       // A label pinned to a room sits at the outer edge of the room's opening. As a band there is
       // no room for them on the drawing, and the page lays them out itself.
       for (const pin of pins) {
@@ -1189,14 +1165,5 @@ export function Chunk() {
     }
   }, [drawnOn, painted])
 
-  return (
-    <>
-      <canvas key={drawnOn.key} ref={ref} className="bl-chunk" aria-hidden />
-      <span ref={snore} className="bl-snore bl-game" aria-hidden>
-        <i>z</i>
-        <i>z</i>
-        <i>Z</i>
-      </span>
-    </>
-  )
+  return <canvas key={drawnOn.key} ref={ref} className="bl-chunk" aria-hidden />
 }

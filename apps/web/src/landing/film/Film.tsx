@@ -97,11 +97,11 @@ export function Night({
       tone="night"
       sky
       y={76}
-      side={0.72}
+      side={0.79}
       zoom="wide"
-      // The chunk at about half the screen, low on the right, under the moon; the words on open
-      // field to the left of it.
-      shot={{ span: 33, drop: 0.57, x: 8.5, z: 7.5 }}
+      // The chunk is the other half of the screen: its top level with the headline, its base
+      // running off the foot of the screen; the words on open field to the left of it.
+      shot={{ span: 30, drop: 0.175, x: 8.5, z: 7.5 }}
       className={styles.first}
     >
       <span className="bl-moon" aria-hidden />

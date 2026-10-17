@@ -89,8 +89,9 @@ function poseOf(element: HTMLElement, band: boolean, lens: Lens, trying: URLSear
     side: sideOf(element.dataset.side, band),
     drop: band ? 0.5 : numberOr(element.dataset.drop, 0.5),
     crowd: numberOr(element.dataset.crowd, 0),
-    // A room is printed in the room's look; anywhere else, by the day.
-    under: key ? 1 : 0,
+    // A room is printed in the room's look, and so is anything on the dig's dark grounds, lit by
+    // its lamps alone; anywhere else, by the day.
+    under: key || element.dataset.tone === 'slate' || element.dataset.tone === 'bedrock' ? 1 : 0,
     bright: numberOr(element.dataset.bright, 1),
   }
 }
