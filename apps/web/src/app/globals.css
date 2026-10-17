@@ -46,7 +46,9 @@ a[target="_blank"]:not(:has(img, svg, picture, video, canvas))::after {
   display: inline-block;
   width: 0;
   white-space: nowrap;
-  translate: 0.125rem 0;
+  /* Small and raised, like a superscript, so it sits clear of a comma or full stop after the link. */
+  font-size: 0.75em;
+  translate: 0.125rem -0.4em;
   opacity: 0;
   pointer-events: none;
   transition: opacity 150ms ease-out;
