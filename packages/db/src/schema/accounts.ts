@@ -55,9 +55,24 @@ export const accountStanding = pgTable('account_standing', {
   extraWarned: text('extra_warned'),
   /**
    * The owner's time zone, as their browser last reported it ("Europe/Paris"): where a plan's day
-   * begins. Null until it has; the day is UTC's until then. Nobody picks it.
+   * begins. Null until it has; the day is UTC's until then. Nobody picks it. It is the zone the
+   * current month is counted in: a zone reported later waits in `nextTimeZone`.
    */
   timeZone: text('time_zone'),
+  /**
+   * When `timeZone` took over from the zone before it, and when the month and day it took over in
+   * began, in that zone before: that month and day run from then. Null when it has been the zone
+   * from the start.
+   */
+  timeZoneFrom: ts('time_zone_from'),
+  timeZoneBegan: ts('time_zone_began'),
+  /**
+   * A zone the browser reported that differs from `timeZone`, and when it takes over: once the
+   * month has begun again in both, so a change never opens a month's hours early. Null when none
+   * waits.
+   */
+  nextTimeZone: text('next_time_zone'),
+  nextTimeZoneFrom: ts('next_time_zone_from'),
   /**
    * Where the account came from, as the link that brought it said (`?ref=` or `utm_source=`),
    * kept once in the week after sign-up; null when no link said. No cookie carries it.

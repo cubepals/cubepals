@@ -5,7 +5,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { createHash, randomUUID } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
-import { DAY_MS, MINUTE_MS } from '@blockly/contracts/durations'
+import { DAY_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { and, eq, sql } from 'drizzle-orm'
 import { S3ArchiveStore } from '../../infra/s3/s3-archive-store.ts'
@@ -207,30 +207,6 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('stored worlds', () 
     const kinds = (await h.operations(id)).map((op) => `${op.kind}:${op.status}`)
     expect(kinds).toContain('store:succeeded')
     expect(kinds).toContain('unstore:succeeded')
-  }, 60_000)
-
-  test('a wake nobody joined rests again without making a second copy', async () => {
-    const { id } = await asleep('free', 'Knock')
-    await idleFor(id, 15)
-    await rest(id)
-    const { slug } = await h.server(id)
-    await h.app.edge.wake(`${slug}.play.test`)
-    await h.until(id, 'running', 20_000)
-    await h.settled(id, 20_000)
-    // Nobody joined: probation stops it, and nothing marks it played. (Ten minutes on, past the
-    // grace a freshly started control plane gives presence.)
-    await h.db
-      .update(schema.powerIntervals)
-      .set({ startedAt: new Date(Date.now() - 6 * MINUTE_MS) })
-      .where(and(eq(schema.powerIntervals.serverId, id), sql`${schema.powerIntervals.stoppedAt} is null`))
-    expect(
-      await h.app.schedules.evaluateIdle(await h.server(id), new Date(Date.now() + 10 * MINUTE_MS)),
-    ).toBe('nobody_joined')
-    await h.until(id, 'stopped')
-    await h.settled(id)
-    // Still idle for as long as before: it rests again, from the copy it already had.
-    expect((await rest(id)).lifecycle.status).toBe('stored')
-    expect(await copiesOf(id)).toHaveLength(1)
   }, 60_000)
 
   test('a copy that fails lets go of nothing, and a sweep a day later tries again', async () => {

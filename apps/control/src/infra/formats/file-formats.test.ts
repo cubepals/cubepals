@@ -19,6 +19,14 @@ import { LibraryFileFormats } from './file-formats.ts'
 
 const run = promisify(execFile)
 const formats = new LibraryFileFormats()
+/** A tarball's entries are read up to a kilobyte each, and every other bound far past these tarballs. */
+const bounds = {
+  maxEntryBytes: 1024,
+  maxKeptEntries: 100,
+  maxKeptBytes: 1_000_000,
+  maxInflatedBytes: 10_000_000,
+  deadlineMs: 60_000,
+}
 
 describe('file formats', () => {
   test('a jar gives up the files asked for, and nothing else', () => {
@@ -142,14 +150,14 @@ describe('file formats', () => {
       const found = await formats.readTarball(`${base}/world.tar.gz`, {
         wanted: (path) => path === 'server.properties' || /^[^/]+\/level\.dat$/.test(path),
         enough: (files) => files.has('server.properties') && files.has('world/level.dat'),
-        maxEntryBytes: 1024,
+        ...bounds,
       })
       expect([...found.keys()].sort()).toEqual(['server.properties', 'world/level.dat'])
       expect(Buffer.from(found.get('world/level.dat') ?? []).toString()).toBe('LEVEL')
     })
 
     test('an entry over the limit, a file that is not an archive, and a missing one fail', async () => {
-      const everything = { wanted: () => true, enough: () => false }
+      const everything = { wanted: () => true, enough: () => false, ...bounds }
       await expect(
         formats.readTarball(`${base}/world.tar.gz`, { ...everything, maxEntryBytes: 100 }),
       ).rejects.toBeInstanceOf(UnreadableFile)

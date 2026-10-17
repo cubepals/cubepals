@@ -5,13 +5,23 @@
 /**
  * ci-comment.ts's reading of bun's JUnit reports, made by bun itself from small fixture files, and
  * the comment it writes from them and a run's jobs: running, passed, failed, skipped parts, a
- * fork's run and a long list of failures.
+ * fork's run and a long list of failures; and that a job that finds the run done writes its
+ * results, whatever event started it.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ciComment, type Job, MARKER, parseJunit, type Report, type Run, readReports } from './ci-comment.ts'
+import {
+  ciComment,
+  type Job,
+  MARKER,
+  parseJunit,
+  type Report,
+  type Run,
+  readReports,
+  report,
+} from './ci-comment.ts'
 
 // The reports come from bun itself: each fixture runs under `bun test --reporter=junit`.
 const FIXTURES = {
@@ -215,5 +225,76 @@ describe('readReports', () => {
 
   test('no directory: no reports', () => {
     expect(readReports(join(dir, 'nowhere')).size).toBe(0)
+  })
+})
+
+describe('report', () => {
+  // GitHub's API as the job sees it: the run, its pull request, its jobs and the comment so far.
+  const realFetch = globalThis.fetch
+  const writes: { method: string; path: string; body: string }[] = []
+  let status = 'in_progress'
+
+  beforeAll(() => {
+    process.env.GH_TOKEN = 'token'
+    const done = () => status === 'completed'
+    const answers: Record<string, () => unknown> = {
+      '/repos/cubepals/cubepals/actions/runs/1': () => ({
+        event: 'pull_request',
+        status,
+        conclusion: done() ? 'success' : null,
+        head_sha: base.sha,
+        head_branch: 'feature',
+        html_url: base.url,
+        head_repository: { full_name: 'cubepals/cubepals', owner: { login: 'cubepals' } },
+        pull_requests: [{ number: 97 }],
+      }),
+      '/repos/cubepals/cubepals/actions/runs/1/jobs': () => ({ jobs: parts(done() ? 'success' : null) }),
+      '/repos/cubepals/cubepals/pulls/97': () => ({ number: 97, head: { sha: base.sha } }),
+      '/repos/cubepals/cubepals/issues/97/comments': () => [
+        { id: 5, body: `${MARKER}\nRunning`, user: { login: 'github-actions[bot]' } },
+      ],
+    }
+    globalThis.fetch = (async (url: string, init: RequestInit = {}) => {
+      const { pathname, search } = new URL(url)
+      if (init.method)
+        writes.push({ method: init.method, path: pathname, body: JSON.parse(`${init.body}`).body })
+      const answer = init.method ? () => ({}) : answers[pathname]
+      return answer
+        ? new Response(JSON.stringify(answer()), { status: 200 })
+        : new Response(`${pathname}${search}`, { status: 404 })
+    }) as typeof fetch
+  })
+
+  afterAll(() => {
+    globalThis.fetch = realFetch
+  })
+
+  test('an in_progress event handled after the run completed writes the final results', async () => {
+    const downloads = join(dir, 'late')
+    mkdirSync(join(downloads, 'junit-Server lifecycle'), { recursive: true })
+    writeFileSync(join(downloads, 'junit-Server lifecycle', 'junit.xml'), xml.passing as string)
+    status = 'completed'
+    writes.length = 0
+    expect(await report('cubepals/cubepals', '1', downloads, base.now)).toBe('Wrote the results.')
+    expect(writes).toHaveLength(1)
+    expect(writes[0]?.method).toBe('PATCH')
+    expect(writes[0]?.path).toBe('/repos/cubepals/cubepals/issues/comments/5')
+    expect(writes[0]?.body).toContain('| **Status** | **✅ Passed** |')
+    expect(writes[0]?.body).toMatch(/Tests, Server lifecycle\]\([^)]+\) \| ✅ Passed \| 2 \| 0 \| 1 \|/)
+    expect(writes[0]?.body).not.toContain('Running')
+  })
+
+  test("a run done whose reports couldn't be downloaded still writes its result", async () => {
+    status = 'completed'
+    writes.length = 0
+    expect(await report('cubepals/cubepals', '1', undefined, base.now)).toBe('Wrote the results.')
+    expect(writes[0]?.body).toContain('| **Status** | **✅ Passed** |')
+  })
+
+  test('while the run runs: it says so', async () => {
+    status = 'in_progress'
+    writes.length = 0
+    expect(await report('cubepals/cubepals', '1', undefined, base.now)).toBe('Wrote that the run is going.')
+    expect(writes[0]?.body).toContain('| **Status** | **⏳ Running** |')
   })
 })

@@ -34,6 +34,7 @@ interface FakeMachine {
   config: Json
   events: Json[]
   updated_at: string
+  created_at?: string
   host_status?: 'ok' | 'unknown' | 'unreachable'
   /** Reads before Fly has prepared a machine made with skip_launch. */
   prepareReadsLeft?: number
@@ -459,6 +460,7 @@ export class FakeFly {
       config: body.config as Json,
       events: [],
       updated_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
       prepareReadsLeft: this.prepareReads,
     }
     this.machines.set(app, [...(this.machines.get(app) ?? []), machine])

@@ -5,7 +5,7 @@
 import { DESCRIPTION_MAX_LENGTH, NAME_MAX_LENGTH, SERVER_ICONS, SERVER_TAGS } from '@blockly/contracts'
 import { DAY_MS, HOUR_MS } from '@blockly/contracts/durations'
 import { type Db, schema, type Tx } from '@blockly/db'
-import { eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { type RevisionDraft, welcome } from '../../domain/revision/revision.ts'
 import { type Command, decide, type OperationKind, type StopReason } from '../../domain/server/lifecycle.ts'
@@ -553,10 +553,12 @@ export class MinecraftServerService {
       if (server.purgeAfter === null || server.purgeAfter <= new Date())
         throw new AppError('invalid_transition', 'This server can no longer be restored.')
       if (actor.kind === 'user') await this.#policy.require(tx, server.ownerId, { kind: 'undelete_server' })
+      // Sent to the trash while its rest let go of its storage, it comes back resting.
+      const stored = server.storedAt !== null || (await restLettingGo(tx, server.id))
       const { server: restored } = await this.#transitions.command(
         tx,
         server,
-        { type: 'undelete', stored: server.storedAt !== null },
+        { type: 'undelete', stored },
         {
           requestedBy: requestedBy(actor),
           idempotencyKey: `undelete:${crypto.randomUUID()}`,
@@ -567,7 +569,7 @@ export class MinecraftServerService {
       const back = (await slugAvailable(tx, restored.slug, new Date(), restored.id))
         ? restored
         : await saveIdentity(tx, restored, { slug: await this.#claimSlug(tx, actor, restored.name) })
-      await markUndeleted(tx, back)
+      const kept = await markUndeleted(tx, back)
       await tx.delete(schema.retiredSlugs).where(eq(schema.retiredSlugs.slug, back.slug))
       await this.#audit(
         tx,
@@ -577,7 +579,7 @@ export class MinecraftServerService {
         back === restored ? {} : { readdressed: back.slug },
       )
       await this.#jobs.enqueueEligibility([serverId], tx)
-      return back
+      return kept
     })
   }
 
@@ -687,3 +689,24 @@ const booting = async (tx: Tx, server: MinecraftServer, kind: 'start_server' | '
   runs: runsOf(server.memoryTier, await loadRevision(tx, server.desiredRevisionId)),
   serverId: server.id,
 })
+
+/**
+ * Whether a rest is letting go of the server's storage now (its `storage` step,
+ * `handlers/stored-worlds.ts`): past its copy, its world only in it.
+ */
+async function restLettingGo(tx: Tx, serverId: string): Promise<boolean> {
+  const ops = schema.serverOperations
+  const [row] = await tx
+    .select({ id: ops.id })
+    .from(ops)
+    .where(
+      and(
+        eq(ops.serverId, serverId),
+        eq(ops.kind, 'store'),
+        eq(ops.status, 'running'),
+        sql`${ops.progress}->>'step' = 'storage'`,
+      ),
+    )
+    .limit(1)
+  return row !== undefined
+}

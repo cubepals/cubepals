@@ -2,6 +2,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * The database package's surface: the schema, the pool and handle every process opens, where the
+ * migrations live and how long they may wait for a lock, and Postgres values the code compares
+ * against. Not the queries themselves, which live with the code that owns each table.
+ */
 import { fileURLToPath } from 'node:url'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres'
@@ -43,6 +48,30 @@ export function createPool(connectionString: string, max = 10): pg.Pool {
 export function createDb(pool: pg.Pool): Db {
   return drizzle(pool, { schema })
 }
+
+/**
+ * Postgres' SQLSTATE for lock_not_available, which pg exports no table of: a wait that ran past
+ * lock_timeout. https://www.postgresql.org/docs/current/errcodes-appendix.html
+ */
+export const LOCK_NOT_AVAILABLE = '55P03'
+
+/**
+ * How long one statement of the release's migrations may wait for a lock (migrate.ts), as
+ * lock_timeout: Postgres aborts a statement that waits longer than this to acquire a lock, each
+ * acquisition timed on its own (https://www.postgresql.org/docs/current/runtime-config-client.html#GUC-LOCK-TIMEOUT).
+ * While an ALTER TABLE waits for its ACCESS EXCLUSIVE lock, every later query on that table queues
+ * behind it (https://www.postgresql.org/docs/current/explicit-locking.html), so this is also the
+ * longest the running release's queries on that table queue, once per try:
+ * packages/db/src/migrate-lock.test.ts measures a reader answered within it.
+ *
+ * The other side, measured by apps/control/src/infra/pg/migration-locks.test.ts: a server created,
+ * started, stopped, restarted and backed up through the control plane held a lock on a table the
+ * migrations change for at most 67 to 81 ms in an open transaction, on a local Postgres. Five
+ * seconds is some sixty times that, room for the round trips to a database across a network, so a
+ * migration doesn't give way to the control plane's own work; and short enough that a request
+ * queued behind a waiting migration still answers.
+ */
+export const MIGRATION_LOCK_WAIT_MS = 5 * SECOND_MS
 
 /** The SQL migrations, for the migrate script and for tests that build a database of their own. */
 export const migrationsFolder = fileURLToPath(new URL('../migrations', import.meta.url))
