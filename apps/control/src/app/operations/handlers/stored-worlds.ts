@@ -33,6 +33,10 @@ import { appliedConfig, type ServerBinding } from './binding.ts'
 import type { Rechecks } from './rechecks.ts'
 import { IMPORT_LINK_SECONDS, KEPT_AFTER_WAKING_MS, type WorldCopies } from './world-copies.ts'
 
+/** Why a server keeping a rebuild's old storage doesn't rest: letting go would take that too. */
+const KEEPING_REBUILDS_STORAGE =
+  'It keeps its world’s copy from before a rebuild, in case the rebuild missed anything. It rests once that copy goes.'
+
 export function storedWorlds(deps: {
   db: Db
   runtime: Pick<Runtimes, 'providers' | 'stop' | 'release' | 'restore'>
@@ -74,9 +78,7 @@ export function storedWorlds(deps: {
   /** Why a server may not rest now, or null when it may. One an operator rests `now` may have been played. */
   const whyNotStore = async (server: MinecraftServer, now: Date, asked: boolean): Promise<string | null> => {
     if (!(await loadControls(db)).storingEnabled) return 'Resting worlds is paused.'
-    // Letting go would take the storage a rebuild kept with the rest (`kept-storage.ts`).
-    if ((await keptStorage(db, server.id, now)).length > 0)
-      return 'It keeps its world’s copy from before a rebuild, in case the rebuild missed anything. It rests once that copy goes.'
+    if ((await keptStorage(db, server.id, now)).length > 0) return KEEPING_REBUILDS_STORAGE
     const standing = await loadStanding(db, server.ownerId)
     const days = asked ? 0 : entitlementsFor(standing.plan, standing.limitOverrides).storeAfterIdleDays
     if (now.getTime() - server.lastActiveAt.getTime() < days * DAY_MS) return 'It was played recently.'
@@ -85,9 +87,8 @@ export function storedWorlds(deps: {
 
   /**
    * The copy a world rests in: a snapshot of the stopped server packed into the store, unless a
-   * join has woken it by then (`stillApplies`). Every rest makes its own. An earlier copy, even
-   * one nobody is seen to have played since, can miss what changed the world without a player
-   * being counted: a short visit, console commands, a restore. It goes when its week is up.
+   * join has woken it by then (`stillApplies`). Every rest makes its own, since the world can
+   * change with no play counted (a short visit, console commands, a restore).
    */
   const storedCopyFor = async (
     { server, stillApplies }: OperationContext,
@@ -145,6 +146,7 @@ export function storedWorlds(deps: {
         await expireSnapshotsOf(tx, server.id)
         await markStored(tx, server.id, new Date())
         if (locked.lifecycle.status === 'storing') await transitions.outcome(tx, locked, { type: 'stored' })
+        if (locked.lifecycle.status === 'stopped') await restsAfterUndelete(tx, transitions, locked, copy)
         await tx.insert(schema.auditLog).values({
           actor: 'system:store',
           action: 'server.stored',
@@ -279,6 +281,27 @@ export function storedWorlds(deps: {
   }
 
   return { store, unstore }
+}
+
+/**
+ * A server taken out of the trash while its rest let go of its storage came back asleep, on
+ * storage it no longer has: it rests, as it would have, and wakes from the copy.
+ */
+async function restsAfterUndelete(
+  tx: Tx,
+  transitions: ServerTransitions,
+  server: MinecraftServer,
+  copy: BackupRecord,
+): Promise<void> {
+  const storing = await transitions.outcome(tx, server, { type: 'storing' })
+  await transitions.outcome(tx, storing, { type: 'stored' })
+  await tx.insert(schema.auditLog).values({
+    actor: 'system:store',
+    action: 'server.stored_after_undelete',
+    subjectType: 'server',
+    subjectId: server.id,
+    data: { backupId: copy.id },
+  })
 }
 
 /**
