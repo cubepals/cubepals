@@ -74,7 +74,7 @@ export const DATAPACKS_STEP = [
   `if [ "$(sha512sum "$packs/$name" 2>/dev/null | cut -d' ' -f1)" != "$sha" ]; then`,
   'curl -fsSL --retry 3 --max-time 300 -o "$packs/$name.part" "$url" &&',
   `[ "$(sha512sum "$packs/$name.part" | cut -d' ' -f1)" = "$sha" ] ||`,
-  '{ rm -f "$packs/$name.part"; echo "[blockly] The datapack $name did not download as chosen." >&2; exit 1; };',
+  '{ rm -f "$packs/$name.part"; echo "[cubepals] The datapack $name did not download as chosen." >&2; exit 1; };',
   'mv -f "$packs/$name.part" "$packs/$name"; fi; echo "$name"; done > "$mark.new" || exit 1;',
   'mv -f "$mark.new" "$mark"; fi;',
 ].join(' ')
