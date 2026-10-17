@@ -45,11 +45,12 @@ export const DIG = { low: DARK, high: STONE, line: DARK_LINE } as const
 
 /**
  * The key light by night and by day, as the way toward it: from the left and behind the house as
- * the camera mostly sees it, so the faces it looks at are in shadow and the house reads as a dark
- * mass with its tops and roof steps lit, throwing its shadow across the grass toward the viewer.
- * From positions (−22, 34, 18) and (−16, 34, 26), toward (8, −6, 8).
+ * the camera mostly sees it, so the house reads as a dark mass with its tops and roof steps lit.
+ * The moon stands high, so the island's top is a lit floor with short shadows on it, its left face
+ * a mid-tone and its right face dark (concept A1's three tones); the sun is lower, for the long
+ * shadows of the day.
  */
-const MOON: Vec3 = unit([-30, 40, 10])
+const MOON: Vec3 = unit([-16, 60, 20])
 const SUN: Vec3 = unit([-24, 40, 18])
 
 /** The far worlds are lit by the day's key, from their own bits (fleet.ts). */

@@ -97,11 +97,12 @@ export function Night({
       tone="night"
       sky
       y={76}
-      side={0.79}
+      side={0.754}
       zoom="wide"
-      // The chunk is the other half of the screen: its top level with the headline, its base
-      // running off the foot of the screen; the words on open field to the left of it.
-      shot={{ span: 30, drop: 0.175, x: 8.5, z: 7.5 }}
+      // Framed as concept A1: the island's top a broad lit floor across the right half, seen from
+      // 28 degrees up through a long lens, its left and right corners at 48% and 99% across, the
+      // house set back on it and the column running off the foot of the screen.
+      shot={{ span: 26.3, drop: 0.202, x: 8.5, z: 7.5, el: 28, az: 40.4, fov: 19.2 }}
       className={styles.first}
     >
       <span className="bl-moon" aria-hidden />
