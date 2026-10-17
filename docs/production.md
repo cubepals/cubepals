@@ -166,9 +166,16 @@ deploy's time and commit, so the Fly apps that deploy changed go back to the ima
 before it, and the apps it didn't change stay as they are; it says which. A second rollback
 goes back one deploy further. The `production` branch moves back to the commit that is live
 again. The website goes to the Worker version that was live before, at once and without a build
-(`wrangler rollback`; any of the last 100 versions). Images from before deploys were tagged
-don't say which deploy made them: then name the apps. A rollback doesn't undo a migration or a
+(`wrangler rollback`; any of the last 100 versions). A rollback doesn't undo a migration or a
 secret: fix forward, then deploy again.
+
+Until the first `apply` or `hotfix` built with this tagging has run, the images the Fly apps run
+don't say which deploy made them, so a bare `rollback` or `rollback fly` leaves every Fly app as
+it is and says so. Name the apps instead:
+
+```sh
+bun scripts/production.ts rollback fly control realtime edge
+```
 
 ## 4. Check it
 
