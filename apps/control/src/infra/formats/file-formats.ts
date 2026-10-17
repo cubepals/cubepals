@@ -138,6 +138,8 @@ export class LibraryFileFormats implements FileFormats {
       wanted(path: string): boolean
       enough(found: ReadonlyMap<string, Uint8Array>): boolean
       maxEntryBytes: number
+      maxKeptEntries: number
+      maxKeptBytes: number
       maxInflatedBytes: number
       deadlineMs: number
     },
@@ -164,6 +166,8 @@ export class LibraryFileFormats implements FileFormats {
       // round through the stream, so they are large ones: zlib's default is many times slower.
       const gunzip = createGunzip({ chunkSize: INFLATED_CHUNK_BYTES })
       let inflated = 0
+      let kept = 0
+      let keptBytes = 0
       let settled = false
       const finish = (error?: Error) => {
         if (settled) return
@@ -198,6 +202,19 @@ export class LibraryFileFormats implements FileFormats {
           if (entry.size > options.maxEntryBytes) {
             entry.resume()
             finish(new UnreadableFile(`${path} is ${entry.size} bytes, more than ${options.maxEntryBytes}`))
+            return
+          }
+          // Counted as each entry starts, before any of it is held.
+          kept += 1
+          keptBytes += entry.size
+          if (kept > options.maxKeptEntries || keptBytes > options.maxKeptBytes) {
+            entry.resume()
+            finish(
+              new ReadCutShort(
+                'kept',
+                `More than ${options.maxKeptEntries} files or ${options.maxKeptBytes} bytes to keep`,
+              ),
+            )
             return
           }
           const chunks: Buffer[] = []

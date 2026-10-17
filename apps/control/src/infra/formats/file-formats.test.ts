@@ -19,8 +19,14 @@ import { LibraryFileFormats } from './file-formats.ts'
 
 const run = promisify(execFile)
 const formats = new LibraryFileFormats()
-/** A tarball's entries are read up to a kilobyte each, and the whole far past what it inflates to. */
-const bounds = { maxEntryBytes: 1024, maxInflatedBytes: 10_000_000, deadlineMs: 60_000 }
+/** A tarball's entries are read up to a kilobyte each, and every other bound far past these tarballs. */
+const bounds = {
+  maxEntryBytes: 1024,
+  maxKeptEntries: 100,
+  maxKeptBytes: 1_000_000,
+  maxInflatedBytes: 10_000_000,
+  deadlineMs: 60_000,
+}
 
 describe('file formats', () => {
   test('a jar gives up the files asked for, and nothing else', () => {

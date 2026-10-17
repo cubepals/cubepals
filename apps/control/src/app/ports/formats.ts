@@ -34,7 +34,8 @@ export interface FileFormats {
    * Reads a gzipped tarball from a URL and keeps the entries `wanted` picks, each up to
    * `maxEntryBytes`. It stops as soon as `enough` says it has what it needs, so a large
    * archive is only read as far as that. Paths are relative, without a leading `./`. An archive
-   * that inflates past `maxInflatedBytes`, or is still being read after `deadlineMs`, is read no
+   * that would have it keep more than `maxKeptEntries` entries or `maxKeptBytes` in all, that
+   * inflates past `maxInflatedBytes`, or that is still being read after `deadlineMs`, is read no
    * further: a ReadCutShort.
    */
   readTarball(
@@ -43,6 +44,8 @@ export interface FileFormats {
       wanted(path: string): boolean
       enough(found: ReadonlyMap<string, Uint8Array>): boolean
       maxEntryBytes: number
+      maxKeptEntries: number
+      maxKeptBytes: number
       maxInflatedBytes: number
       deadlineMs: number
     },
@@ -165,10 +168,13 @@ export class UnreadableFile extends Error {
   }
 }
 
-/** An archive read no further: it inflated past what it may (`size`), or took too long (`time`). */
+/**
+ * An archive read no further: it held more to keep than it may (`kept`), inflated past what it may
+ * (`size`), or took too long (`time`).
+ */
 export class ReadCutShort extends UnreadableFile {
-  readonly limit: 'size' | 'time'
-  constructor(limit: 'size' | 'time', detail: string) {
+  readonly limit: 'kept' | 'size' | 'time'
+  constructor(limit: 'kept' | 'size' | 'time', detail: string) {
     super(detail)
     this.name = 'ReadCutShort'
     this.limit = limit

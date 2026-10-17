@@ -91,6 +91,18 @@ const MAX_INFLATED_WORLD_BYTES =
 const READ_DEADLINE_MS = READ_LINK_SECONDS * SECOND_MS
 /** A level.dat is a few kilobytes; server.properties less. */
 const MAX_WORLD_FILE_BYTES = 4 * 1024 * 1024
+/**
+ * What reading a download keeps: its properties, its note and a level.dat for each world beside
+ * them. A server with many worlds has a few dozen; the bytes held stay a few times one file's limit.
+ */
+const MAX_KEPT_WORLD_FILES = 64
+const MAX_KEPT_WORLD_BYTES = 4 * MAX_WORLD_FILE_BYTES
+/** What a player is told when reading their upload stopped short, by the limit that stopped it. */
+const CUT_SHORT_BECAUSE: Record<ReadCutShort['limit'], string> = {
+  kept: 'This download holds more worlds than one server runs. Upload one server’s download.',
+  size: 'This world is larger than any Cubepals server holds.',
+  time: 'Reading this world took too long. Try a smaller world, or write to support and we’ll help bring this one in.',
+}
 /** An uploaded world stays at least this long, whatever the plan keeps, so there is time to restore it. */
 const UPLOADED_KEPT_DAYS = 7
 
@@ -354,6 +366,8 @@ export class BackupService {
         }
       },
       maxEntryBytes: MAX_WORLD_FILE_BYTES,
+      maxKeptEntries: MAX_KEPT_WORLD_FILES,
+      maxKeptBytes: MAX_KEPT_WORLD_BYTES,
       maxInflatedBytes: MAX_INFLATED_WORLD_BYTES,
       deadlineMs: READ_DEADLINE_MS,
     })
@@ -393,17 +407,13 @@ export class BackupService {
           }
         },
         maxEntryBytes: MAX_WORLD_FILE_BYTES,
+        maxKeptEntries: MAX_KEPT_WORLD_FILES,
+        maxKeptBytes: MAX_KEPT_WORLD_BYTES,
         maxInflatedBytes: MAX_INFLATED_WORLD_BYTES,
         deadlineMs: READ_DEADLINE_MS,
       })
     } catch (error) {
-      if (error instanceof ReadCutShort)
-        throw new AppError(
-          'invalid_upload',
-          error.limit === 'size'
-            ? 'This world is larger than any Cubepals server holds.'
-            : 'Reading this world took too long. Try again.',
-        )
+      if (error instanceof ReadCutShort) throw new AppError('invalid_upload', CUT_SHORT_BECAUSE[error.limit])
       if (error instanceof UnreadableFile)
         throw new AppError('invalid_upload', 'This file isn’t a whole world download (.tar.gz).')
       throw error
