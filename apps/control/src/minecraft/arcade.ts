@@ -32,14 +32,15 @@
 import { type CarriedFile, RUNNING_LEVEL } from '../domain/revision/carried.ts'
 import { BOARDS_PART, TMP } from './arcade/boards.ts'
 import { label, NS, type Part } from './arcade/datapack.ts'
-import { FLOOR_PART, FLOOR_SIGN } from './arcade/floor.ts'
-import { HUB_PART, HUB_SIGN, PADS } from './arcade/hub.ts'
+import { FLOOR_PART, FLOOR_READS, FLOOR_SIGN } from './arcade/floor.ts'
+import { HUB_PART, HUB_SIGN, PAD_READS, PADS } from './arcade/hub.ts'
 import { KEPT_PART } from './arcade/kept.ts'
 import { MACHINES_PART } from './arcade/machines.ts'
-import { PARKOUR_PART } from './arcade/parkour.ts'
+import { PARKOUR_PART, PARKOUR_READS } from './arcade/parkour.ts'
 import { PIT_PART, PIT_SIGNS } from './arcade/pit.ts'
 import type { BrandSign } from './arcade/signs.ts'
 import { WAYS_IN_PART } from './arcade/ways-in.ts'
+import type { Read } from './readable.ts'
 
 /** The datapack's folder in the running world, and the name Minecraft lists it by. */
 export const ARCADE_DATAPACK = `${RUNNING_LEVEL}/datapacks/cubepals-arcade`
@@ -61,6 +62,9 @@ const PARTS: readonly Part[] = [
 
 /** Every label the datapack makes, in every part. */
 export const ARCADE_LABELS = PARTS.flatMap((part) => part.labels ?? [])
+
+/** Every arrival's and pad's words, with where each is first read from (`readable.ts`). */
+export const ARCADE_READS: readonly Read[] = [...PAD_READS, ...PARKOUR_READS, ...FLOOR_READS]
 
 /** Every Cubepals sign the datapack builds: over the hub's ARCADE cabinet, and at the games. */
 export const ARCADE_SIGNS: readonly BrandSign[] = [HUB_SIGN, FLOOR_SIGN, ...PIT_SIGNS]

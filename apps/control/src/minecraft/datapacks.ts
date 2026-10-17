@@ -26,9 +26,16 @@ import type { ModArtifact, PinnedMod } from '../domain/mods/artifact.ts'
 import type { Loader } from '../domain/revision/revision.ts'
 import { DATA_DIR } from './jars.ts'
 import { installsAsDatapack } from './mods.ts'
+import { type ListVariables, readList } from './step-lists.ts'
 
-/** The variable listing a revision's datapacks: one per line, `<sha512> <name> <link>`. */
-const DATAPACKS_VARIABLE = 'BLOCKLY_DATAPACKS'
+/**
+ * The variable listing a revision's datapacks: one per line, `<sha512> <name> <link>`. A start given
+ * more of them than one variable holds is given them compressed (`step-lists.ts`).
+ */
+export const DATAPACKS_VARIABLES: ListVariables = {
+  plain: 'BLOCKLY_DATAPACKS',
+  compressed: 'BLOCKLY_DATAPACKS_GZ',
+}
 
 /**
  * The name a datapack has in the world's folder: unique to its bytes, as a jar's is, and plain
@@ -55,7 +62,7 @@ export function datapacksEnv(
   const lines = datapacksOf(revision).map(
     (mod) => `${mod.artifact.sha512} ${datapackName(mod.artifact)} ${artifactUrl(mod.artifact)}`,
   )
-  return lines.length === 0 ? {} : { [DATAPACKS_VARIABLE]: lines.join('\n') }
+  return lines.length === 0 ? {} : { [DATAPACKS_VARIABLES.plain]: lines.join('\n') }
 }
 
 /**
@@ -64,17 +71,23 @@ export function datapacksEnv(
  * aren't the pinned ones is fetched again, and kept only once its SHA-512 is: a download cut short
  * or a file changed where it is published stops the start, which the apply rolls back, rather than
  * running a world on something nobody chose. A file already right is never fetched again.
+ *
+ * It runs as root, so it replaces any link on the way to what it writes or removes
+ * (`volume-links.ts`), and passes over a line of the world's record that `datapackName` never
+ * writes: a world brought from elsewhere brings its record with it.
  */
 export const DATAPACKS_STEP = [
+  readList('listed', DATAPACKS_VARIABLES),
   `packs="${DATA_DIR}/$LEVEL/datapacks"; mark="${DATA_DIR}/$LEVEL/.blockly-datapacks";`,
-  `if [ -n "$${DATAPACKS_VARIABLE}" ] || [ -f "$mark" ]; then mkdir -p "$packs";`,
-  `if [ -f "$mark" ]; then while read -r old; do case "$${DATAPACKS_VARIABLE}" in *" $old "*) ;;`,
-  '*) rm -f -- "$packs/$old";; esac; done < "$mark"; fi;',
-  `printf '%s\\n' "$${DATAPACKS_VARIABLE}" | while read -r sha name url; do [ -n "$name" ] || continue;`,
-  `if [ "$(sha512sum "$packs/$name" 2>/dev/null | cut -d' ' -f1)" != "$sha" ]; then`,
+  'if [ -n "$listed" ] || [ -f "$mark" ]; then',
+  'for p in datapacks .blockly-datapacks .blockly-datapacks.new; do unlinked "$LEVEL/$p"; done; mkdir -p "$packs";',
+  `if [ -f "$mark" ]; then while read -r old; do case "$old" in ''|*[!A-Za-z0-9._-]*|.|..) continue;; esac;`,
+  'case "$listed" in *" $old "*) ;; *) rm -f -- "$packs/$old";; esac; done < "$mark"; fi;',
+  `printf '%s\\n' "$listed" | while read -r sha name url; do [ -n "$name" ] || continue; unlinked "$LEVEL/datapacks/$name";`,
+  `if [ "$(sha512sum "$packs/$name" 2>/dev/null | cut -d' ' -f1)" != "$sha" ]; then rm -f "$packs/$name.part";`,
   'curl -fsSL --retry 3 --max-time 300 -o "$packs/$name.part" "$url" &&',
   `[ "$(sha512sum "$packs/$name.part" | cut -d' ' -f1)" = "$sha" ] ||`,
   '{ rm -f "$packs/$name.part"; echo "[cubepals] The datapack $name did not download as chosen." >&2; exit 1; };',
-  'mv -f "$packs/$name.part" "$packs/$name"; fi; echo "$name"; done > "$mark.new" || exit 1;',
-  'mv -f "$mark.new" "$mark"; fi;',
+  'mv -fT "$packs/$name.part" "$packs/$name"; fi; echo "$name"; done > "$mark.new" || exit 1;',
+  'mv -fT "$mark.new" "$mark"; fi;',
 ].join(' ')

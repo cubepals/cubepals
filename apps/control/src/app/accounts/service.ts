@@ -17,6 +17,7 @@ import { DEFAULT_TIME_ZONE, isTimeZone, monthOf } from '../../domain/account/pla
 import type { AccountStanding, Restrictions } from '../../domain/account/standing.ts'
 import { type Actor, requestedBy, runsThePlatform } from '../actor.ts'
 import { chippedInLeft, meteredMonth } from '../billing/chip-in-meter.ts'
+import { keepPlayedBlock } from '../billing/extra-usage.ts'
 import { extraPlayNow } from '../billing/persistence.ts'
 import { freeHoursWarning, playWarning } from '../emails/play.ts'
 import { AppError, NotFound } from '../errors.ts'
@@ -321,6 +322,7 @@ export class AccountService {
   /**
    * Limits above or below the plan's, for this account only; null returns to the plan's. Hours of
    * play a month (`includedUnits`) are given the same way: to make up for a bad month, or to test.
+   * Hours lowered once the account has played this month apply from the next (`keepPlayedBlock`).
    */
   async setLimits(
     actor: Actor,
@@ -338,9 +340,10 @@ export class AccountService {
       ...(limits.maxRunning === null ? {} : { maxRunning: limits.maxRunning }),
       ...(hours === null ? {} : { includedUnits: hours }),
     }
-    await this.#change(actor, userId, 'account.limits_set', { limits: overrides }, (tx) =>
-      saveStanding(tx, userId, { limitOverrides: overrides }),
-    )
+    await this.#change(actor, userId, 'account.limits_set', { limits: overrides }, async (tx) => {
+      await keepPlayedBlock(tx, userId, new Date())
+      await saveStanding(tx, userId, { limitOverrides: overrides })
+    })
   }
 
   async grantAdmin(actor: Actor, userId: string): Promise<void> {
@@ -592,7 +595,7 @@ export class AccountService {
         to,
         ...playWarning({
           mark: reached,
-          included: plan.includedUnits,
+          included: played.included,
           carried: Math.round(played.carried * 10) / 10,
           used: Math.round(units * 10) / 10,
           extraAllowed: extraUnits(decision),

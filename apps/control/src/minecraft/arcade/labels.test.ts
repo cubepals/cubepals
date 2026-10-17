@@ -13,7 +13,7 @@ import { ARCADE_FILES, ARCADE_LABELS } from '../arcade.ts'
 import { WAITING_FILES } from '../duels-waiting.ts'
 import clearance from './clearance.json' with { type: 'json' }
 import { INK, type Label, PAPER } from './datapack.ts'
-import { HUB_MARKERS, PAD_BADGES } from './hub.ts'
+import { HUB_MARKERS } from './hub.ts'
 import { inRoom, lineWidths, markerRoom, type Room, roomOf, wallOf } from './label-space.ts'
 import { ARCADE_WORLD } from './maps.ts'
 
@@ -25,10 +25,6 @@ const rooms: Array<[string, Room]> = [
     roomOf(label),
   ]),
   ...HUB_MARKERS.map((marker): [string, Room] => [`the ${marker.marker} marker`, markerRoom(marker)]),
-  ...PAD_BADGES.map(({ at, side }): [string, Room] => [
-    'the mark over a pad',
-    markerRoom({ at, scale: side }),
-  ]),
 ]
 
 const label = (text: string, more: Partial<Label> = {}): Label => ({
@@ -76,8 +72,8 @@ describe('the floating words on the Arcade and Duels', () => {
   test('a label turns to its reader only in the open; one by a wall, or a board before its dome, is flat on it', () => {
     const flat = ARCADE_LABELS.filter((shown) => shown.facing !== undefined)
     // The boards, the two credit lines under the floor's and the pit's signs, the stairs, both
-    // passages and the three machines.
-    expect(flat).toHaveLength(4 + 2 + 1 + 2 + 3)
+    // passages, the three machines, and the parkour's and the floor's words, facing their arrivals.
+    expect(flat).toHaveLength(4 + 2 + 1 + 2 + 3 + 2)
     expect(
       flat.filter((shown) => shown.tag.startsWith('arcade.board.')).map((shown) => shown.facing),
     ).toEqual(['north', 'north', 'north', 'north'])

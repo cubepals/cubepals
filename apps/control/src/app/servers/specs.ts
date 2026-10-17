@@ -20,18 +20,19 @@ import {
   PROXY_ENV,
   toRuntimeSpec,
   usesProxyProtocol,
-  withoutFilesStep,
+  withoutOwnSteps,
 } from '../../minecraft/runtime-spec.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import type { BuiltPack } from '../artifacts/brand-pack.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
 import { compatFor, projectsOf } from '../compat/service.ts'
+import { PermanentFailure } from '../errors.ts'
 import { loadListing } from '../listings/persistence.ts'
 import { quarantinedOf } from '../mods/jar-check-records.ts'
 import { loadPackContents } from '../packs/persistence.ts'
 import type { InstallSeed, RuntimeSpec } from '../ports/runtime.ts'
 import { acceptedSecrets, deriveServerSecret, type SecretKeyring } from '../secrets.ts'
-import { withCompressedFiles } from './carried-files.ts'
+import { tooLongForAStart, withCompressedFiles } from './carried-files.ts'
 import { withCurrentOwnFiles } from './own-files.ts'
 import { grownStorage, loadRevision, loadWorld } from './persistence.ts'
 
@@ -74,14 +75,15 @@ export function specDigest(spec: RuntimeSpec): string {
 }
 
 /**
- * The spec as drift sees it: without what the owner's plan sets, the picture they chose, the
- * step that moves a Paper world's Nether and End back for another server type, or Paper's reading
- * a PROXY protocol header, which a server running from before it was asked takes at its next start.
+ * The spec as drift sees it: without what the owner's plan sets, the picture they chose, Paper's
+ * reading a PROXY protocol header, which a server running from before it was asked takes at its
+ * next start, or Blockly's own steps before the image starts (`withoutOwnSteps`), whose text can
+ * change without changing what a server runs.
  */
 export function withoutPlanLimits(spec: RuntimeSpec): RuntimeSpec {
   const ignored = [...PLAN_ENV, ...IDENTITY_ENV, PROXY_ENV]
   const { entrypoint: _entrypoint, ...rest } = spec
-  const entrypoint = withoutFilesStep(spec.entrypoint)
+  const entrypoint = withoutOwnSteps(spec.entrypoint)
   return {
     ...rest,
     ...(entrypoint === undefined ? {} : { entrypoint }),
@@ -177,10 +179,14 @@ export class RuntimeSpecs {
     // A start places the files Cubepals owns as they are now (`own-files.ts`); like the Via
     // plugins, they never arrive through drift.
     const starting = withCurrentOwnFiles(revision)
-    // Its carried files compressed, so that no variable comes near Linux's limit (`carried-files.ts`).
+    // Its carried files compressed, and any long list, so that no variable comes near Linux's limit
+    // (`carried-files.ts`). One still past it is refused here, before a machine fails on it, in
+    // words its owner reads, and not tried again: trying again changes nothing.
     const labelled = label(
       withCompressedFiles(toRuntimeSpec({ ...input, revision: starting, compat: placed })),
     )
+    const refused = tooLongForAStart(labelled)
+    if (refused !== null) throw new PermanentFailure(refused)
     // The Via plugins arrive at a start, never through drift: a running server isn't restarted
     // for Cubepals' compatibility layer, or for a newer pin of it.
     const driftDigest = specDigest(withoutPlanLimits(label(toRuntimeSpec(input))))

@@ -20,10 +20,11 @@ import { and, eq, inArray, lte, sql } from 'drizzle-orm'
 import { draw, heldMilli, type Span, unitsWithin } from '../../domain/account/chip-in.ts'
 import { type Entitlements, entitlementsFor } from '../../domain/account/entitlements.ts'
 import { METER_UNITS } from '../../domain/account/meter.ts'
-import { DEFAULT_TIME_ZONE, nextMonthStart } from '../../domain/account/play-day.ts'
+import { DEFAULT_TIME_ZONE, monthOf, nextMonthStart } from '../../domain/account/play-day.ts'
 import type { AccountStanding } from '../../domain/account/standing.ts'
 import { countedFrom, loadStanding, runUnitsIn } from '../accounts/persistence.ts'
-import { monthSpans, type PlayMonth, playOf } from '../accounts/play-month.ts'
+import { type MonthSpans, monthSpans, type PlayMonth, playOf } from '../accounts/play-month.ts'
+import { monthBlock } from './persistence.ts'
 
 const chipIns = schema.chipIns
 const draws = schema.chipInDraws
@@ -78,7 +79,7 @@ export async function pendingDraws(q: Queryable, ownerId: string, to: Date): Pro
   let state = left
   for (let from = mark; from < to; from = nextMonthStart(from, zone)) {
     const until = new Date(Math.min(nextMonthStart(from, zone).getTime(), to.getTime()))
-    const month = await monthSpans(q, standing, plan, to, from)
+    const month = await blockSpans(q, standing, plan, to, from)
     if (month === null) break
     // What the month played before `from`, and what carried into it, without what was covered.
     const spans = [...month.before, { from: month.start, to: from }]
@@ -120,6 +121,25 @@ function atMark(
 }
 
 /**
+ * `monthSpans`, with the block the month kept when an admin lowered its hours after it played
+ * (`monthBlock`): the lowered hours apply from the next month, so play they covered stays covered.
+ * A kept block holds only under the plan it was kept under; another plan's block applies at once.
+ */
+async function blockSpans(
+  q: Queryable,
+  standing: Pick<AccountStanding, 'userId' | 'plan' | 'timeZone' | 'timeZoneFrom' | 'timeZoneBegan'>,
+  plan: Pick<Entitlements, 'includedUnits' | 'carryUnits'>,
+  now: Date,
+  at: Date,
+): Promise<MonthSpans | null> {
+  const month = await monthSpans(q, standing, plan, now, at)
+  if (month === null) return null
+  const zone = standing.timeZone ?? DEFAULT_TIME_ZONE
+  const kept = await monthBlock(q, standing.userId, monthOf(at, zone), standing.plan)
+  return kept !== null && kept > month.included ? { ...month, included: kept } : month
+}
+
+/**
  * This month's play (`accounts/play-month.ts` `PlayMonth`) without what hours chipped in covered:
  * in it, and in the months whose hours carried into it. Null on a plan with no monthly hours.
  */
@@ -130,7 +150,7 @@ export async function meteredMonth(
   now: Date,
   at: Date = now,
 ): Promise<PlayMonth | null> {
-  const month = await monthSpans(q, standing, plan, now, at)
+  const month = await blockSpans(q, standing, plan, now, at)
   if (month === null) return null
   const end = new Date(Math.min(month.next.getTime(), now.getTime()))
   const spans = [...month.before, { from: month.start, to: end }]

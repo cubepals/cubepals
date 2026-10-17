@@ -19,7 +19,8 @@
  */
 
 import { MARKERS, type ShownMarker, showMarker } from '../brand-pack.ts'
-import { CABINET, markBadge } from '../marquee.ts'
+import { CABINET } from '../marquee.ts'
+import { lookingAt, type Read } from '../readable.ts'
 import { TMP } from './boards.ts'
 import { CREDIT_LINES } from './credits.ts'
 import {
@@ -128,12 +129,33 @@ export const HUB_MARKERS: readonly ShownMarker[] = [
 ]
 
 /**
- * Over each game's pad, above its name, Cubepals' own look, turning to whoever looks: the mark in
- * Ink on a square of Paper, a block across (`markBadge`).
+ * Over each game's pad, its name and what to do, read as a player walks the balcony toward it from
+ * the corridor in from the house: turning to them, just over the reach of anyone standing on the
+ * pad (1.8 blocks tall and a 1.2522-block jump), and large enough to read from where it is first
+ * seen (`readable.ts`). The pit's pad stands back in its dome, so it is read from further away,
+ * and its words are larger to look as large from there as the others do from theirs.
  */
-export const PAD_BADGES: ReadonlyArray<{ at: readonly [number, number, number]; side: number }> = PADS.map(
-  ({ middle: [x, y, z] }) => ({ at: [x + 0.5, y + 4.6, z + 0.5] as const, side: 1 }),
-)
+const PAD_READ_FROM: Readonly<Record<string, Block>> = {
+  parkour: [134.5, 78, 1431.5],
+  pit: [163.5, 78, 1432.5],
+  floor: [216.5, 78, 1431.5],
+}
+const OVER_REACH = 1 + 1.8 + 1.2522 + 0.05
+export const PAD_READS: readonly Read[] = GAMES.map((game) => {
+  const [x, y, z] = game.pad
+  const at: [number, number, number] = [x + 0.5, y + OVER_REACH, z + 0.5]
+  const from = PAD_READ_FROM[game.key]
+  if (from === undefined) throw new Error(`No place to read ${game.key}'s pad from`)
+  return {
+    label: {
+      at,
+      tag: `${NS}.label`,
+      text: titled(game.name, 'Stand here to play'),
+      scale: game.key === 'pit' ? 2.2 : 1.3,
+    },
+    from: lookingAt(from, at),
+  }
+})
 
 /**
  * Every label in the hub: its name and the ways between the house and the hall. None stands where
@@ -141,6 +163,7 @@ export const PAD_BADGES: ReadonlyArray<{ at: readonly [number, number, number]; 
  * floor is told on arriving instead (`CREDITS_LINE`).
  */
 const HUB_LABELS: readonly Label[] = [
+  ...PAD_READS.map(({ label }) => label),
   {
     at: [175.5, 98.2, 1444.5],
     tag: `${NS}.label`,
@@ -217,7 +240,6 @@ export const HUB_PART: Part = {
   labels: HUB_LABELS,
   build: [
     ...HUB_MARKERS.map((marker) => showMarker(marker, [`${NS}.display`])),
-    ...PAD_BADGES.flatMap(({ at, side }) => markBadge(at, side, [`${NS}.display`])),
     OLD_BACKING,
     ...buildSign(HUB_SIGN),
     // Nothing in the hub can be hurt: whatever the maps brought along, and what the build made.
