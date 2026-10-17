@@ -18,7 +18,8 @@
  * names fails that function alone.
  */
 
-import { MARKER_ITEM, MARKERS, markerData, type ShownMarker, showMarker } from '../brand-pack.ts'
+import { MARKERS, type ShownMarker, showMarker } from '../brand-pack.ts'
+import { TMP } from './boards.ts'
 import { CREDIT_LINES } from './credits.ts'
 import {
   type Block,
@@ -33,9 +34,8 @@ import {
   TO_HUB,
   titled,
 } from './datapack.ts'
-import { FLOOR_ARRIVAL } from './floor.ts'
-import { PARKOUR_ARRIVAL } from './parkour.ts'
 import { type BrandSign, hangSign } from './signs.ts'
+import { GAMES, playing } from './ways-in.ts'
 
 const HUB = `${NS}.hub`
 
@@ -48,25 +48,16 @@ const CREDITS = 'credits'
 
 /**
  * Each game's pad on the balcony, by the block at its middle: Ink in a ring of Paper, built into
- * the world (`scripts/lib/arcade-brand.ts`), and what standing on it does.
+ * the world (`scripts/lib/arcade-brand.ts`), what standing on it does (`ways-in.ts`), and the words
+ * over it.
  */
-export const PADS: ReadonlyArray<{ middle: Block; sends: string; name: Label['text'] }> = [
-  {
-    middle: [126, 77, 1431],
-    sends: `tp @s ${PARKOUR_ARRIVAL}`,
-    name: titled('Parkour', 'Three courses against the clock'),
-  },
-  {
-    middle: [175, 78, 1438],
-    sends: `function ${NS}:pit/arrive`,
-    name: titled('The pit', 'Everyone fights everyone'),
-  },
-  {
-    middle: [224, 77, 1431],
-    sends: `tp @s ${FLOOR_ARRIVAL}`,
-    name: titled('Falling floor', 'Last one standing'),
-  },
-]
+export const PADS: ReadonlyArray<{ middle: Block; sends: string; name: Label['text'] }> = GAMES.map(
+  (game) => ({
+    middle: game.pad,
+    sends: playing(game),
+    name: titled(game.name, 'Stand here to play'),
+  }),
+)
 
 /** The top step of the stairs from the house's floor, which a sign floats over. */
 export const STAIRS_TOP: Block = [183, 121, 1459]
@@ -97,18 +88,13 @@ export const PASSAGE = {
 /** The hall, the ground it is buried in, and the house and garden on the grass. */
 const ZONE = box([96, 40, 1336], [260, 140, 1470])
 
-/** Standing on a pad; a moderator flying past in spectator mode isn't. */
-const onPad = ([x, y, z]: Block) => `${box([x - 1, y + 1, z - 1], [x + 1, y + 2, z + 1])},gamemode=!spectator`
+const welcome = `["",{text:"Welcome to the Cubepals Arcade. ",color:"${PAPER}",bold:true},"See if you can get your name on the boards."]`
 
-const welcome = `["",{text:"Welcome to the Cubepals Arcade. ",color:"${PAPER}",bold:true},"Step on a black pad to play a game, and see if you can get your name on the boards."]`
+/** How to start a game, told on each arrival at the hub: on joining, and on coming back from anywhere. */
+export const HINT = 'Open the book to pick a game, or stand on a game’s pad.'
 
-/**
- * The item every player keeps in their last slot: using it is going back to the hub. It is drawn
- * as an oak door, Cubepals' own with the pack (`brand-pack.ts`). A player carrying it as it was
- * before it was marked for the pack gets it again.
- */
-const BACK_ITEM = `minecraft:carrot_on_a_stick[custom_name={text:"Back to the hub",color:"${PAPER}",italic:false},item_model="${MARKER_ITEM}",${markerData(MARKERS.backToHub)},custom_data={${NS}_back:1b}]`
-const HAS_BACK_ITEM = `items entity @s hotbar.8 minecraft:carrot_on_a_stick[custom_data~{${NS}_back:1b},${markerData(MARKERS.backToHub)}]`
+/** Every how many ticks the pads sparkle. */
+const GLOW_EVERY = 10
 
 /**
  * Each doorway between the house and the hall ends at a wall: walking up to it is walking on
@@ -181,6 +167,15 @@ export const HUB_PART: Part = {
       `scoreboard players reset @s ${NS}.back`,
       `scoreboard players reset @s ${NS}.died`,
       `tp @s ${HUB_SPAWN}`,
+      `tellraw @s {text:${JSON.stringify(HINT)},color:"gray"}`,
+    ],
+    // A few sparks rising off each pad, so it reads as somewhere to stand.
+    'hub/glow': [
+      `scoreboard players set #glow ${TMP} 0`,
+      ...GAMES.map(
+        ({ pad: [x, y, z] }) =>
+          `particle minecraft:end_rod ${x + 0.5} ${y + 1.2} ${z + 0.5} 0.8 0.1 0.8 0.01 2 normal`,
+      ),
     ],
     'hub/credits': [
       `scoreboard players reset @s ${CREDITS}`,
@@ -226,12 +221,12 @@ export const HUB_PART: Part = {
     `tellraw @a[tag=!${NS}.welcomed] ${welcome}`,
     `tag @a[tag=!${NS}.welcomed] add ${NS}.welcomed`,
     `team join ${HUB} @a[team=!${HUB},${ZONE}]`,
-    ...PADS.map((pad) => `execute as @a[${onPad(pad.middle)}] run ${pad.sends}`),
     `execute as @a[${box(...PASSAGE.house.through)},gamemode=!spectator] run tp @s ${PASSAGE.hall.arrive}`,
     `execute as @a[${box(...PASSAGE.hall.through)},gamemode=!spectator] run tp @s ${PASSAGE.house.arrive}`,
     `scoreboard players enable @a ${BACK}`,
     `scoreboard players enable @a ${CREDITS}`,
-    `execute as @a unless ${HAS_BACK_ITEM} run item replace entity @s hotbar.8 with ${BACK_ITEM}`,
+    `scoreboard players add #glow ${TMP} 1`,
+    `execute if score #glow ${TMP} matches ${GLOW_EVERY}.. run function ${NS}:hub/glow`,
     `execute as @a[scores={${BACK}=1..}] run function ${TO_HUB}`,
     `execute as @a[scores={${NS}.back=1..}] run function ${TO_HUB}`,
     `execute as @a[scores={${CREDITS}=1..}] run function ${NS}:hub/credits`,

@@ -14,6 +14,7 @@
  */
 import { AS_COUNT, submit, TMP, WORK } from './boards.ts'
 import { type Block, box, NS, type Part } from './datapack.ts'
+import { KEEP } from './kept.ts'
 import { placed } from './maps.ts'
 import { type BrandSign, creditLabel, hangSign } from './signs.ts'
 
@@ -60,6 +61,8 @@ export const PIT_PART: Part = {
     // Run as the player, from the hub's pad: the kit, then one of the spawn points.
     'pit/arrive': [
       'clear @s',
+      // What every player keeps first, in its slots, so the kit fills round it.
+      KEEP,
       ...Object.entries(ARMOUR).map(
         ([slot, item]) => `item replace entity @s armor.${slot} with minecraft:${item}`,
       ),
@@ -71,7 +74,6 @@ export const PIT_PART: Part = {
         const [x, y, z] = placed('market', at)
         return `execute if score #spawn ${TMP} matches ${i} run tp @s ${x + 0.5} ${y} ${z + 0.5} ${yaw} 0`
       }),
-      `tellraw @s "Everyone here fights everyone, and every kill counts. Losing takes you back to the hub."`,
     ],
     'pit/kill': [
       `execute unless entity @s[tag=${PIT}] run return run scoreboard players reset @s ${PIT}.raw`,

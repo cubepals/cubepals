@@ -21,6 +21,8 @@
  * - `credits.ts`: who made each map, its licence and source as links, in the game and the archive.
  * - `signs.ts`: the Cubepals signs, the lockup as map art in frames, over the hub and each game.
  * - `boards.ts`: the leaderboards: keeping each top ten in storage and drawing it in the hub.
+ * - `ways-in.ts`: each game's way in, and what it does: from its pad, its machine and the book.
+ * - `kept.ts`: what every player keeps in their hotbar, the back item and the book, one of each.
  * - `hub.ts`: the hub, its pads, the welcome, the ways back, and the world's rules.
  * - `parkour.ts`: the timed parkour over three courses, its checkpoints and best times.
  * - `floor.ts`: the falling floor, its rounds, longest times and wins.
@@ -31,8 +33,10 @@ import { BOARDS_PART, TMP } from './arcade/boards.ts'
 import { label, NS, type Part } from './arcade/datapack.ts'
 import { FLOOR_PART } from './arcade/floor.ts'
 import { HUB_PART, PADS } from './arcade/hub.ts'
+import { KEPT_PART } from './arcade/kept.ts'
 import { PARKOUR_PART } from './arcade/parkour.ts'
 import { PIT_PART } from './arcade/pit.ts'
+import { WAYS_IN_PART } from './arcade/ways-in.ts'
 
 /** The datapack's folder in the running world, and the name Minecraft lists it by. */
 export const ARCADE_DATAPACK = `${RUNNING_LEVEL}/datapacks/cubepals-arcade`
@@ -41,7 +45,15 @@ export const ARCADE_DATAPACK = `${RUNNING_LEVEL}/datapacks/cubepals-arcade`
  * In the order each tick runs them: the boards' scratch objective is made before anyone uses it,
  * and a game catches its own falls before the hub catches anyone else's.
  */
-const PARTS: readonly Part[] = [BOARDS_PART, PARKOUR_PART, FLOOR_PART, PIT_PART, HUB_PART]
+const PARTS: readonly Part[] = [
+  BOARDS_PART,
+  PARKOUR_PART,
+  FLOOR_PART,
+  PIT_PART,
+  WAYS_IN_PART,
+  KEPT_PART,
+  HUB_PART,
+]
 
 /** Every label the datapack makes, in every part. */
 export const ARCADE_LABELS = PARTS.flatMap((part) => part.labels ?? [])

@@ -10,7 +10,7 @@
  */
 import { describe, expect, test } from 'bun:test'
 import { onLevel } from '../domain/revision/carried.ts'
-import { PADS, PASSAGE } from './arcade/hub.ts'
+import { HINT, PADS, PASSAGE } from './arcade/hub.ts'
 import { ARCADE_MAPS } from './arcade/maps.ts'
 import { ARCADE_FILES } from './arcade.ts'
 import { placeablePath } from './carried.ts'
@@ -158,10 +158,12 @@ describe('the Arcade as its players find it', () => {
 
   test('the hub sends a player to each game, into its place and off every pad', () => {
     const pads = PADS.map(({ middle: [x, y, z] }) => boxOf(`x=${x - 1},y=${y + 1},z=${z - 1},dx=2,dy=1,dz=2`))
-    const places = (sends: string) =>
-      sends.startsWith('tp @s ')
-        ? [sends]
-        : commands(sends.replace('function arcade:', '')).filter((command) => / run tp @s /.test(command))
+    // Every teleport a command makes, through the functions it runs.
+    const places = (command: string): string[] => {
+      const called = command.match(/(?:^| run )function arcade:([a-z/_]+)$/)?.[1]
+      if (called !== undefined) return commands(called).flatMap(places)
+      return /(?:^| run )tp @s /.test(command) ? [command] : []
+    }
     for (const pad of PADS) {
       const arrivals = places(pad.sends)
       expect(arrivals.length).toBeGreaterThan(0)
@@ -239,9 +241,10 @@ describe('the Arcade as its players find it', () => {
     const welcome = commands('play').filter((command) => command.includes('tag=!arcade.welcomed'))
     expect(welcome).toHaveLength(3)
     expect(welcome[0]).toBe('execute as @a[tag=!arcade.welcomed] run function arcade:hub/back')
-    expect(welcome[1]).toContain(
-      'Step on a black pad to play a game, and see if you can get your name on the boards.',
-    )
+    expect(welcome[1]).toContain('See if you can get your name on the boards.')
+    // How to start a game, as they arrive and on each return: once, not every tick.
+    expect(commands('hub/back')).toContain(`tellraw @s {text:"${HINT}",color:"gray"}`)
+    expect(commands('play').filter((command) => command.includes(HINT))).toEqual([])
     expect(welcome[2]).toBe('tag @a[tag=!arcade.welcomed] add arcade.welcomed')
   })
 
