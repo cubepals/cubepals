@@ -5,10 +5,11 @@
 /**
  * The second pass of the print (gl.ts): it turns what the first pass wrote (scene-pass.ts) into
  * dots. Brightness goes through a tone curve (exposure, contrast, gamma) and then an 8 by 8
- * ordered dither; a line is drawn where two planes meet; what glows is printed solid, and its
- * blur (GLOW_FRAG, twice) as torch dots round it; the empty night sky gets a few stars; and the
- * dust in a beam of light is a scatter of dots that drifts. The picture runs on under the words:
- * they carry a halo of their own ground (landing.css), so nothing of it is erased for them.
+ * ordered dither between five tones; a line is drawn where two planes meet; what glows is printed
+ * solid, and its blur (GLOW_FRAG, twice) as torch dots round it; the empty night sky gets a few
+ * stars; and the dust in a beam of light is a scatter of dots that drifts. The picture runs on
+ * under the words: they carry a halo of their own ground (landing.css), so nothing of it is erased
+ * for them.
  */
 
 export const PRINT_VERT = `#version 300 es
@@ -56,6 +57,9 @@ uniform float uStars;
 // The scene's clock, in seconds, for the dust drifting in a beam.
 uniform float uTime;
 out vec4 o;
+
+// How many tones a dot can take between the ground's dark and its light, the dark aside.
+const float TONES = 4.0;
 
 float b2(vec2 a) { a = floor(a); return fract(a.x / 2.0 + a.y * a.y * 0.75); }
 float bayer4(vec2 a) { return b2(0.5 * a) * 0.25 + b2(a); }
@@ -125,7 +129,13 @@ void main() {
     l = smoothstep(0.03, 0.95, l);
     t = clamp(t + (hash(vec2(c) + 3.0) - 0.5) * 0.12, 0.03, 1.0);
   }
-  if (l <= t) { o = vec4(uLow[band], 1.0); return; }
+  // Five tones, not two: the ground's dark, three steps between, and its light; the dither only
+  // ever sets a dot beside the next tone up. A grey is then a quiet weave of near tones instead of
+  // black on white, which is easier on the eye and still reads as a print.
+  float v = l * TONES;
+  float rung = min(floor(v) + (fract(v) > t ? 1.0 : 0.0), TONES) / TONES;
+  if (rung <= 0.0) { o = vec4(uLow[band], 1.0); return; }
   // A lit dot is warm where that share of the light here is lamplight, in the dither's own order.
-  o = vec4(shade.b > bayer8(vec2(c + ivec2(5, 2))) ? uWarm : uHigh[band], 1.0);
+  vec3 top = shade.b > bayer8(vec2(c + ivec2(5, 2))) ? uWarm : uHigh[band];
+  o = vec4(mix(uLow[band], top, rung), 1.0);
 }`

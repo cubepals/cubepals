@@ -86,10 +86,14 @@ function strata(world: World): void {
       }
 }
 
+/**
+ * A trunk `height` blocks tall and a crown three layers deep on it, low enough to sit with the
+ * house; its lowest leaves are clear over the head of anyone who walks under it.
+ */
 function tree(world: World, x: number, z: number, height: number): void {
   for (let y = 1; y <= height; y++) world.set(x, y, z, Kind.log)
-  for (let dy = 0; dy <= 3; dy++) {
-    const reach = dy === 3 ? 1 : 2
+  for (let dy = 0; dy <= 2; dy++) {
+    const reach = dy === 2 ? 1 : 2
     for (let dz = -reach; dz <= reach; dz++)
       for (let dx = -reach; dx <= reach; dx++) {
         const corner = Math.abs(dx) === reach && Math.abs(dz) === reach
@@ -160,8 +164,8 @@ function surface(world: World): void {
   world.set(9, 3, 6, Kind.lamp, LIT)
   world.light(9.5, 3.5, 6.5, 4.5, HOME)
   house(world)
-  tree(world, 13, 1, 3)
-  tree(world, 1, 12, 3)
+  tree(world, 13, 1, 4)
+  tree(world, 1, 12, 4)
 }
 
 /**
