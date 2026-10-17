@@ -33,9 +33,10 @@
  *                                     reaches it, then a check that production answers. Never
  *                                     Terraform. From main, or from a branch made from
  *                                     `production` with only the fix on it
- *   bun scripts/production.ts rollback [fly|website]
- *                                     each Fly app back to the image it ran before, and the
- *                                     website back to the version that was live before
+ *   bun scripts/production.ts rollback [fly [app…]|website]
+ *                                     the Fly apps the last deploy changed back to the images
+ *                                     they ran before it, the `production` branch back to that
+ *                                     commit, and the website back to the version live before
  *
  * The `production` branch names what is live, so it is moved, not merged: a push here may move
  * it past a hotfix branch's commit. The website is the Cloudflare Worker `blockly-web`, built here
@@ -145,12 +146,16 @@ const DOCKERFILES: Record<FlyApp, string> = {
 }
 
 /**
- * One Fly app deployed from this checkout, or from an image a release of it already ran (a
- * rollback). One machine a role, and the edge one in each of `edge_regions`, as
- * FLY_PLATFORM_MACHINES counts them; a second machine each comes once a blip matters.
+ * One Fly app deployed from this checkout, its image tagged with the deploy's label, or from an
+ * image a release of it already ran (a rollback). One machine a role, and the edge one in each of
+ * `edge_regions`, as FLY_PLATFORM_MACHINES counts them; a second machine each comes once a blip
+ * matters.
  */
-function deployApp(app: FlyApp, env: NodeJS.ProcessEnv, image?: string): void {
-  const source = image ? ['--image', image] : ['.', '--dockerfile', DOCKERFILES[app], '--remote-only']
+function deployApp(app: FlyApp, env: NodeJS.ProcessEnv, from: { label: string } | { image: string }): void {
+  const source =
+    'image' in from
+      ? ['--image', from.image]
+      : ['.', '--dockerfile', DOCKERFILES[app], '--remote-only', '--image-label', from.label]
   const config = ['--config', `infra/fly/${app}.toml`, '--app', `bly-prod-${app}`]
   run('fly', ['deploy', ...source, ...config, '--yes', '--ha=false'], env)
   if (app === 'edge') placeEdge(env)
@@ -197,6 +202,27 @@ function moveProduction(env: NodeJS.ProcessEnv): void {
   const live = git('rev-parse', 'origin/production')
   run('git', ['push', `--force-with-lease=production:${live}`, 'origin', 'HEAD:production'], env)
 }
+
+/** One run of apply or hotfix: when it started and the commit it deploys. */
+type Deploy = { time: string; commit: string }
+
+/**
+ * The label a deploy tags each image it builds with, the same on every app it deploys, so a
+ * rollback can tell from the images alone which apps a deploy changed and which commit an image
+ * was built from. A Docker tag: its time first, so labels sort in the order deploys ran.
+ */
+const deployLabel = (commit: string, now = new Date()): string =>
+  `deploy-${now.toISOString().replaceAll(/[-:]/g, '').slice(0, 15)}-${commit}`
+
+/** The deploy an image was built by, from its label; null for an image from before labels. */
+function deployOf(image: string): Deploy | null {
+  const match = /:deploy-(\d{8}T\d{6})-([0-9a-f]{40})\b/.exec(image)
+  return match ? { time: match[1] as string, commit: match[2] as string } : null
+}
+
+/** Whether a deploy ran before another; an image from before labels ran before any labelled one. */
+const before = (a: Deploy | null, b: Deploy): boolean =>
+  a === null || `${a.time}-${a.commit}` < `${b.time}-${b.commit}`
 
 /** Whether CI passed on a commit, on main or on the pull request that carries it. */
 function ciPassed(sha: string): boolean {
@@ -293,7 +319,8 @@ async function apply(): Promise<void> {
   terraform('apply', '-input=false')
   setDumpSecrets(values, env)
   // The control app first: its release runs the migrations.
-  for (const app of ['control', 'realtime', 'edge'] as const) deployApp(app, env)
+  const label = deployLabel(head)
+  for (const app of ['control', 'realtime', 'edge'] as const) deployApp(app, env, { label })
   moveProduction(env)
   deployWorker(site, head, say)
   await signInGuard()
@@ -426,7 +453,8 @@ async function hotfix(): Promise<void> {
   const env = productionEnv(values)
   const website = site ? productionSite(values, environment()) : undefined
   if (website) buildWorker(website, head, say)
-  for (const app of apps) deployApp(app, env)
+  const label = deployLabel(head)
+  for (const app of apps) deployApp(app, env, { label })
   moveProduction(env)
   if (website) {
     deployWorker(website, head, say)
@@ -445,34 +473,107 @@ async function hotfix(): Promise<void> {
   )
 }
 
-/** The image an app ran before the one it runs now, from its release history; null when there is none. */
-function previousImage(app: FlyApp, env: NodeJS.ProcessEnv): string | null {
+/** The images an app's finished releases ran, newest first. */
+function imagesOf(app: FlyApp, env: NodeJS.ProcessEnv): string[] {
   const listed = spawnSync('fly', ['releases', '-a', `bly-prod-${app}`, '--image', '--json'], {
     encoding: 'utf8',
     env,
   })
   const releases = JSON.parse(listed.stdout || '[]') as { Status: string; ImageRef: string }[]
-  const images = releases
-    .filter((release) => release.Status === 'complete')
-    .map((release) => release.ImageRef)
-  return images.find((image) => image !== images[0]) ?? null
+  return releases.filter((release) => release.Status === 'complete').map((release) => release.ImageRef)
 }
 
 /**
- * Production back to what ran before, when a deploy went wrong: each Fly app to its previous image,
- * and the website to the commit it was built from before. `fly` or `website` alone, or both. It
- * doesn't undo a migration (a later release's columns stay; the older code ignores them) or a
- * secret, and the `production` branch still names the newer commit: fix forward, then deploy again.
+ * The `production` branch moved back to the commit that is live again after a rollback. Fetched
+ * by its hash, since a later deploy may have moved the branch past it.
  */
-async function rollback(part: string | undefined): Promise<void> {
+function moveProductionTo(commit: string, env: NodeJS.ProcessEnv): void {
+  git('fetch', '--quiet', 'origin', 'production')
+  git('fetch', '--quiet', 'origin', commit)
+  const live = git('rev-parse', 'origin/production')
+  const pushed = spawnSync(
+    'git',
+    ['push', `--force-with-lease=production:${live}`, 'origin', `${commit}:production`],
+    {
+      stdio: 'inherit',
+      env,
+    },
+  )
+  say(
+    pushed.status === 0
+      ? `The production branch names ${commit.slice(0, 8)} again.`
+      : `The production branch couldn’t be moved back. Move it by hand to ${commit}.`,
+  )
+}
+
+/**
+ * The Fly apps back to what ran before the last deploy, and only the apps it changed: that deploy
+ * is the newest label among the images the apps run now (deployLabel). Each goes to its newest
+ * image from an earlier deploy, so a second rollback goes further back rather than forward again.
+ * Apps named after `fly` go back to their previous image whatever deployed it, for images from
+ * before labels. Returns the apps it deployed.
+ */
+function rollbackFly(named: FlyApp[], env: NodeJS.ProcessEnv): FlyApp[] {
+  const images = Object.fromEntries(
+    (['control', 'realtime', 'edge'] as const).map((app) => [app, imagesOf(app, env)]),
+  ) as Record<FlyApp, string[]>
+  const current = (app: FlyApp) => deployOf(images[app][0] ?? '')
+  const last = (['control', 'realtime', 'edge'] as const)
+    .map(current)
+    .reduce<Deploy | null>((newest, deploy) => (deploy && before(newest, deploy) ? deploy : newest), null)
+  if (named.length === 0 && last === null) {
+    say('The images the Fly apps run don’t say which deploy made them, so none was rolled back.')
+    say('Name the apps that deploy changed: bun scripts/production.ts rollback fly control realtime edge')
+    return []
+  }
+  const changed = (app: FlyApp) =>
+    named.length > 0
+      ? named.includes(app)
+      : last !== null && current(app)?.time === last.time && current(app)?.commit === last.commit
+  const restored: Deploy[] = []
+  const deployed: FlyApp[] = []
+  for (const app of ['control', 'realtime', 'edge'] as const) {
+    const [now, ...earlier] = images[app]
+    if (!changed(app)) {
+      say(`${app}: left as it is; the deploy being undone didn’t change it.`)
+      const deploy = current(app)
+      if (deploy) restored.push(deploy)
+      continue
+    }
+    const nowDeploy = current(app)
+    const image = earlier.find((image) => (nowDeploy ? before(deployOf(image), nowDeploy) : image !== now))
+    if (image === undefined) {
+      say(`${app}: there is no earlier image to go back to.`)
+      continue
+    }
+    deployApp(app, env, { image })
+    deployed.push(app)
+    const deploy = deployOf(image)
+    if (deploy) restored.push(deploy)
+  }
+  const live = restored.reduce<Deploy | null>(
+    (newest, deploy) => (before(newest, deploy) ? deploy : newest),
+    null,
+  )
+  if (deployed.length > 0 && live) moveProductionTo(live.commit, env)
+  return deployed
+}
+
+/**
+ * Production back to what ran before, when a deploy went wrong: the Fly apps the last deploy
+ * changed to the images they ran before it (rollbackFly), and the website to the commit it was
+ * built from before. `fly` or `website` alone, or both. It doesn't undo a migration (a later
+ * release's columns stay; the older code ignores them) or a secret: fix forward, then deploy again.
+ */
+async function rollback(part: string | undefined, named: string[]): Promise<void> {
   const values = read()
   const env = productionEnv(values)
-  const apps: FlyApp[] = part === 'website' ? [] : ['control', 'realtime', 'edge']
-  for (const app of apps) {
-    const image = previousImage(app, env)
-    if (image === null) say(`${app}: there is no earlier image to go back to.`)
-    else deployApp(app, env, image)
+  const unknown = named.filter((name) => !['control', 'realtime', 'edge'].includes(name))
+  if (unknown.length > 0) {
+    say(`There is no Fly app called ${unknown.join(', ')}: name control, realtime or edge.`)
+    process.exit(1)
   }
+  const apps = part === 'website' ? [] : rollbackFly(named as FlyApp[], env)
   if (part !== 'fly' && !rollbackWebsite(productionSite(values, environment()), say))
     say('The website has no earlier version to go back to.')
   say(
@@ -488,8 +589,8 @@ else if (command === 'check') process.exit(check(read()) ? 0 : 1)
 else if (command === 'apply') await apply()
 else if (command === 'web') await web()
 else if (command === 'hotfix') await hotfix()
-else if (command === 'rollback') await rollback(process.argv[3])
+else if (command === 'rollback') await rollback(process.argv[3], process.argv.slice(4))
 else {
-  say('Usage: bun scripts/production.ts init | check | apply | web | hotfix | rollback [fly|website]')
+  say('Usage: bun scripts/production.ts init | check | apply | web | hotfix | rollback [fly [app…]|website]')
   process.exit(1)
 }

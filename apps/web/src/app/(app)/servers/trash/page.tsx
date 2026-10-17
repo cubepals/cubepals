@@ -46,8 +46,8 @@ export default function TrashPage() {
           title={`${trash.data.length} deleted ${trash.data.length === 1 ? 'server' : 'servers'}`}
           description={
             capabilities.data?.archives
-              ? 'Restoring brings a server back stopped, with its world and backups. After its purge date it is gone, and only its downloadable backups stay, for as long as they are kept.'
-              : 'Restoring brings a server back stopped, with its world and backups. After its purge date it is gone, backups and all.'
+              ? 'Restoring brings a server back, stopped or resting, with its world and backups. One made for a while keeps the time it had left. After its purge date it is gone, and only its downloadable backups stay, for as long as they are kept.'
+              : 'Restoring brings a server back, stopped or resting, with its world and backups. One made for a while keeps the time it had left. After its purge date it is gone, backups and all.'
           }
         >
           {trash.data.map((server) => (

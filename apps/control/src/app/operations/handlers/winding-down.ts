@@ -17,6 +17,7 @@ import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { DATA_DIR } from '../../../minecraft/jars.ts'
 import { PORT_NAMES } from '../../../minecraft/runtime-spec.ts'
 import { loadStanding } from '../../accounts/persistence.ts'
+import { requestedBy } from '../../actor.ts'
 import { latestRestorePoint } from '../../backups/persistence.ts'
 import { forgetPlayers } from '../../players/persistence.ts'
 import type { PlayerService } from '../../players/service.ts'
@@ -32,7 +33,7 @@ import {
 } from '../../servers/persistence.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { clearPresence, closeInterval, lastActivity } from '../../servers/usage.ts'
-import type { OperationHandler } from '../runner.ts'
+import type { OperationHandler, OperationResult } from '../runner.ts'
 import type { ServerBinding } from './binding.ts'
 import type { GameConsole } from './game-console.ts'
 
@@ -44,6 +45,9 @@ import type { GameConsole } from './game-console.ts'
  */
 const SLEEPS: ReadonlySet<StopReason> = new Set(['idle', 'user', 'daily'])
 
+/** Who the idle check's stops are requested by. */
+const IDLE_ACTOR = requestedBy({ kind: 'system', reason: 'idle' })
+
 /** A server's game port as the control plane pings it, and whether the run it is in reads a PROXY header. */
 const gameOf = (
   runtime: Pick<Runtimes, 'endpoint'>,
@@ -53,6 +57,29 @@ const gameOf = (
   ...runtime.endpoint(handle, PORT_NAMES.game, 'control'),
   proxyProtocol: booted?.proxyProtocol,
 })
+
+/** How many are on the server, as the game says now; null when it doesn't answer. */
+async function playersOn(probe: Pick<ReadinessProbe, 'ping'>, game: Parameters<ReadinessProbe['ping']>[0]) {
+  const status = await probe.ping(game, AbortSignal.timeout(5_000)).catch(() => null)
+  return status?.online ?? null
+}
+
+/** Whether anyone is on the server, as the game says now. */
+const joined = async (probe: Pick<ReadinessProbe, 'ping'>, game: Parameters<ReadinessProbe['ping']>[0]) =>
+  ((await playersOn(probe, game)) ?? 0) > 0
+
+/** An idle stop called off: the server goes back to running, as it was before it was asked. */
+async function keep(
+  db: Db,
+  transitions: Pick<ServerTransitions, 'outcome'>,
+  serverId: string,
+): Promise<OperationResult> {
+  await db.transaction(async (tx) => {
+    const locked = await lockServer(tx, serverId)
+    if (locked?.lifecycle.status === 'stopping') await transitions.outcome(tx, locked, { type: 'kept' })
+  })
+  return { status: 'cancelled', reason: 'Someone joined, so it stayed on.' }
+}
 
 /** Whether a player was seen since the server's newest restore point: what a new one would hold. */
 async function playedSinceRestorePoint(q: Queryable, serverId: string): Promise<boolean> {
@@ -93,14 +120,12 @@ export function windingDown(deps: {
 
   /**
    * Whether a server just saved may sleep with its memory kept rather than stop: nobody on it, as
-   * the game says now (one who joined since the idle check would be frozen with it, where a stop
-   * at least says goodbye), and its files written through to its storage, since the provider may
-   * drop the memory it kept and boot from there.
+   * the game says now (one who joined since the stop was asked would be frozen with it, where a
+   * stop at least says goodbye), and its files written through to its storage, since the provider
+   * may drop the memory it kept and boot from there.
    */
   const mayDoze = async (handle: RuntimeHandle, booted: AppliedConfigJson | null) => {
-    const game = gameOf(runtime, handle, booted)
-    const status = await deps.probe.ping(game, AbortSignal.timeout(5_000)).catch(() => null)
-    if (status === null || status.online > 0) return false
+    if ((await playersOn(deps.probe, gameOf(runtime, handle, booted))) !== 0) return false
     const synced = await runtime.exec(handle, ['sync'], 60).catch(() => null)
     return synced?.exitCode === 0
   }
@@ -114,6 +139,9 @@ export function windingDown(deps: {
       const { handle, applied } = await bindingOf(server.id)
       const reason = (ctx.op.input.reason as StopReason | undefined) ?? 'user'
       if (handle !== null) {
+        // Someone may have joined since the idle check read nobody on: a server anyone is on stays up.
+        if (ctx.op.requestedBy === IDLE_ACTOR && (await joined(deps.probe, gameOf(runtime, handle, applied))))
+          return keep(db, transitions, server.id)
         await ctx.step('saving')
         const saved = await windDown(server, handle)
         await measureDisk(server, handle)

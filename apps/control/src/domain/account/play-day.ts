@@ -5,8 +5,10 @@
 /**
  * The day a plan's daily play is counted over, and the month its monthly block is: from the
  * owner's local midnight to the next, or from their midnight on the 1st to the next 1st, in the time
- * zone their browser reported, or UTC until one has. Only the clock lives here; what was played in
- * it is `accounts/play-today.ts`'s and `accounts/play-month.ts`'s.
+ * zone their browser reported, or UTC until one has. A zone reported later takes over once the month
+ * has begun again in both, and the month and day it takes over in run from when they began in the
+ * zone before. Only the clock lives here; what was played in it is `accounts/play-today.ts`'s and
+ * `accounts/play-month.ts`'s.
  */
 import { SECOND_MS } from '@blockly/contracts/durations'
 
@@ -89,6 +91,40 @@ export function monthStart(at: Date, zone: string): Date {
 export function nextMonthStart(at: Date, zone: string): Date {
   const { year, month } = wallClock(at, zone)
   return midnightOf(year, month + 1, 1, zone)
+}
+
+/**
+ * Where the zone in force took over from the one before (`AccountStanding.timeZoneFrom`), and when
+ * the month and day it took over in began, in the zone before (`timeZoneBegan`).
+ */
+export interface ZoneChange {
+  from: Date
+  began: Date
+}
+
+/**
+ * When a zone reported at `now` takes over from `zone`: once the month after the one `zone` is
+ * counting has begun in both, so this month is counted in `zone` to its end, the month the new zone
+ * takes over in is the same month in either, and no hours open early.
+ */
+export function zoneTakesOver(now: Date, zone: string, next: string): Date {
+  const after = nextMonthStart(now, zone)
+  return new Date(Math.max(after.getTime(), startOfMonth(monthOf(after, zone), next).getTime()))
+}
+
+/**
+ * When the month `at` falls in began, in `zone`: midnight on its 1st, except the month a zone took
+ * over in, which began when it did in the zone before.
+ */
+export function monthBegan(at: Date, zone: string, change: ZoneChange | null): Date {
+  const start = monthStart(at, zone)
+  return change !== null && start.getTime() === monthStart(change.from, zone).getTime() ? change.began : start
+}
+
+/** When the day `at` falls in began, in `zone`, the day a zone took over in as `monthBegan` has it. */
+export function dayBegan(at: Date, zone: string, change: ZoneChange | null): Date {
+  const start = dayStart(at, zone)
+  return change !== null && start.getTime() === dayStart(change.from, zone).getTime() ? change.began : start
 }
 
 /** The local month `at` falls in, in `zone`, as the date of its 1st: "2026-10-01". */
