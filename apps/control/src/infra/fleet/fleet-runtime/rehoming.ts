@@ -25,10 +25,10 @@ import {
 } from '../../../app/ports/runtime.ts'
 import { decodeHandle, decodeSnapshot, type FleetRef } from '../handle.ts'
 import { NodeRefused, NodeUnreachable } from '../node-client.ts'
-import type { Considered } from '../placement.ts'
-import { getNode, lockRegion } from '../registry.ts'
+import type { Considered, PlacementRequest } from '../placement.ts'
+import { getNode, lockRegion, type NodeRow } from '../registry.ts'
 import { event, one } from '../sql.ts'
-import type { Admission } from './admission.ts'
+import { type Admission, NO_ROOM } from './admission.ts'
 import type { ArchiveRow, Archives } from './archives.ts'
 import { type Ledger, nextEpoch, type PlacementRow, placementOf, rehome, StaleHandle } from './ledger.ts'
 import { describe, type NodeChoice } from './node-choice.ts'
@@ -40,7 +40,10 @@ export class Rehoming {
   readonly #api: Pick<WorkloadApi, 'view' | 'restore' | 'fence' | 'deleteWithData'>
   readonly #ledger: Pick<Ledger, 'current' | 'nodeOf' | 'settle' | 'dropMoveRequest'>
   readonly #choice: Pick<NodeChoice, 'request' | 'choose'>
-  readonly #admission: Pick<Admission, 'put' | 'power' | 'startOn' | 'claimMoved'>
+  readonly #admission: Pick<
+    Admission,
+    'put' | 'power' | 'startOn' | 'claimMoved' | 'lookAgain' | 'claim' | 'unclaim'
+  >
   readonly #archives: Pick<Archives, 'archiveOf' | 'discardExport' | 'source' | 'fromStore'>
   readonly #transfers: Pick<Transfers, 'exportForMove' | 'tooBigToMove'>
   readonly #provider: string
@@ -51,7 +54,7 @@ export class Rehoming {
     api: Pick<WorkloadApi, 'view' | 'restore' | 'fence' | 'deleteWithData'>
     ledger: Pick<Ledger, 'current' | 'nodeOf' | 'settle' | 'dropMoveRequest'>
     choice: Pick<NodeChoice, 'request' | 'choose'>
-    admission: Pick<Admission, 'put' | 'power' | 'startOn' | 'claimMoved'>
+    admission: Pick<Admission, 'put' | 'power' | 'startOn' | 'claimMoved' | 'lookAgain' | 'claim' | 'unclaim'>
     archives: Pick<Archives, 'archiveOf' | 'discardExport' | 'source' | 'fromStore'>
     transfers: Pick<Transfers, 'exportForMove' | 'tooBigToMove'>
     provider: string
@@ -226,18 +229,24 @@ export class Rehoming {
    * that has room: its world goes through the archive store as a planned move's does, and it starts
    * there. Nobody is asked, since the start would fail otherwise and the world is the same
    * wherever it runs; operators see `placement.moved_for_room`. RuntimeFull when no node has room.
+   *
+   * Its node is asked how its copies are first: one that stopped since its last report leaves room
+   * after all, and the server starts where it is.
    */
   async startElsewhere(
     row: PlacementRow,
     spec: RuntimeSpec,
     progress: ProgressSink,
-    why: string,
+    refusal: string,
   ): Promise<RuntimeHandle> {
     const key = row.workload
     const epoch = Number(row.epoch)
     const region = row.region_key
     const source = await this.#ledger.nodeOf(row.node_id)
     const request = this.#choice.request(spec, region, [source.id])
+    const here = await this.#startHere(source, row, spec, progress, request)
+    if (typeof here !== 'string') return here
+    const why = here === '' ? refusal : here
     const full = (considered: readonly Considered[]) =>
       new RuntimeFull(this.#provider, `${source.name}: ${why}; elsewhere: ${describe(considered)}`)
     // A world too big to move waits for room where it is, as a start with nowhere to go does.
@@ -290,6 +299,43 @@ export class Rehoming {
       region,
     )
     return handle
+  }
+
+  /**
+   * The server started on its own node after all, when a fresh look at the node leaves room for it:
+   * its handle. Else why not: the node's refusal for room, or '' when the look changed nothing.
+   */
+  async #startHere(
+    node: NodeRow,
+    row: PlacementRow,
+    spec: RuntimeSpec,
+    progress: ProgressSink,
+    request: PlacementRequest,
+  ): Promise<RuntimeHandle | string> {
+    if (!(await this.#admission.lookAgain(node))) return ''
+    const key = row.workload
+    const epoch = Number(row.epoch)
+    const claimed = await this.#db.transaction(async (t) => {
+      await lockRegion(t, row.region_key)
+      const current = await placementOf(t, key, true)
+      if (current === null || Number(current.epoch) !== epoch || current.node_id !== node.id)
+        throw new StaleHandle('The placement changed before it could start')
+      return (await this.#admission.claim(t, current, request)) === null
+    })
+    if (!claimed) return ''
+    await progress.step('compute')
+    const ensured = await this.#admission.put(node, key, spec, epoch, false)
+    const handle = await this.#ledger.settle(key, node, epoch, ensured.workload)
+    await progress.handle(handle)
+    await progress.step('booting')
+    try {
+      await this.#admission.power(node, key, epoch, 'start')
+      return handle
+    } catch (error) {
+      if (!(error instanceof NodeRefused && NO_ROOM.has(error.code))) throw error
+      await this.#admission.unclaim(key, epoch)
+      return `${node.name}: ${error.message}`
+    }
   }
 
   /**

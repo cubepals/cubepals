@@ -21,9 +21,9 @@ import { controlPlaneName, FleetCa } from './ca.ts'
 import { FleetRuntime } from './fleet-runtime.ts'
 import { decodeHandle } from './handle.ts'
 import { type JoinPoint, joinCommand, joinToken } from './join-token.ts'
-import { NodeClient } from './node-client.ts'
+import { NodeClient, NodeUnreachable, splitAddress } from './node-client.ts'
 import { DEFAULTS } from './placement.ts'
-import { confirmLost, createToken, drain, nodeSummaries, undrain } from './registry.ts'
+import { confirmLost, createToken, drain, holdsMemory, nodeSummaries, undrain } from './registry.ts'
 import { rows } from './sql.ts'
 import { FleetStore } from './store.ts'
 
@@ -154,6 +154,111 @@ interface Node {
   boot: () => void
 }
 
+/** What a scenario below reads of the two nodes the suite set up, and the server it keeps. */
+interface TwoNodes {
+  db: Db
+  runtime: FleetRuntime
+  node: Record<'a' | 'b', Node>
+  h1: RuntimeHandle
+}
+
+/** The servers the suite's s1, s2 and s3 name. */
+const KEY = {
+  s1: runtimeKey('1b6f1f2e-6a47-4c9a-9a39-2f4ac7e51f10'),
+  s2: runtimeKey('2b6f1f2e-6a47-4c9a-9a39-2f4ac7e51f10'),
+  s3: runtimeKey('3b6f1f2e-6a47-4c9a-9a39-2f4ac7e51f10'),
+}
+const nodeOf = (handle: RuntimeHandle) => decodeHandle(handle).node
+const ledger = async (db: Db) => new Map((await nodeSummaries(db, THRESHOLDS)).map((n) => [n.id, n]))
+const movedForRoom = (db: Db) =>
+  rows(db, sql`SELECT 1 FROM fleet_events WHERE kind = 'placement.moved_for_room'`)
+
+/** The fleet acting on the nodes' own answers, run in order after the moves above. */
+const ANSWERS: Array<{ name: string; ms: number; run: (t: TwoNodes) => Promise<void> }> = [
+  {
+    name: "a wake right after another server's stop on a full node starts in place",
+    ms: 180_000,
+    run: async ({ db, runtime, node, h1 }) => {
+      const home = nodeOf(h1)
+      const away = home === node.a.id ? node.b : node.a
+      // The stop's answer frees its memory, before the node beats again.
+      await runtime.stop(h1)
+      expect((await ledger(db)).get(home ?? '')?.running.memoryMb).toBe(0)
+      // Another server takes all but 64 MB of the node's 2048 to run.
+      await drain(db, away.id, 'e2e')
+      const h3 = await runtime.ensureProvisioned(
+        KEY.s3,
+        { regionKey: 'eu' },
+        { ...SPEC, resources: { memoryMb: 1984 } },
+        progress,
+      )
+      await undrain(db, away.id, 'e2e')
+      expect(nodeOf(h3)).toBe(home)
+      await runtime.waitRunning(h3, AbortSignal.timeout(MINUTE_MS))
+      const moves = (await movedForRoom(db)).length
+      // It stops, and the sleeping server wakes at once, where it sleeps.
+      await runtime.stop(h3)
+      const woken = await runtime.ensureProvisioned(KEY.s1, { regionKey: 'eu' }, SPEC, progress)
+      expect(woken).toBe(h1)
+      expect((await movedForRoom(db)).length).toBe(moves)
+      await runtime.waitRunning(h1, AbortSignal.timeout(MINUTE_MS))
+      expect((await runtime.exec(h1, ['cat', '/data/world/level.dat'], 10)).stdout.trim()).toBe('slept')
+      await runtime.destroy(h3)
+    },
+  },
+  {
+    name: 'an apply against a node that went away ends stopped on what it ran, not failed',
+    ms: 180_000,
+    run: async ({ db, runtime, node, h1 }) => {
+      const busy = nodeOf(h1) ?? ''
+      const gone = busy === node.a.id ? node.b : node.a
+      await drain(db, busy, 'e2e')
+      const h2 = await runtime.ensureProvisioned(KEY.s2, { regionKey: 'eu' }, SPEC, progress)
+      await undrain(db, busy, 'e2e')
+      expect(nodeOf(h2)).toBe(gone.id)
+      await runtime.waitRunning(h2, AbortSignal.timeout(MINUTE_MS))
+      // The node turns away every call to its API; it still beats, and its copy still runs.
+      const api = (await ledger(db)).get(gone.id)?.api_address ?? ''
+      const rule = ['INPUT', '-p', 'tcp', '--dport', String(splitAddress(api).port)]
+      docker('exec', gone.container, 'iptables', '-I', ...rule, '-j', 'REJECT', '--reject-with', 'tcp-reset')
+      try {
+        await expect(runtime.apply(h2, { ...SPEC, env: { CHANGED: '1' } })).rejects.toBeInstanceOf(
+          NodeUnreachable,
+        )
+        // What the application does when it can't go back: a stop, killed where it won't.
+        await runtime.stop(h2).catch(() => runtime.forceStop(h2))
+        // Its claim is given back; the copy holds memory only while its node says it still runs.
+        const [placed] = await rows<{ desired_power: string }>(
+          db,
+          sql`SELECT desired_power FROM fleet_placements WHERE workload = ${KEY.s2}`,
+        )
+        expect(placed?.desired_power).toBe('stopped')
+        const unanswered = await rows<{ data: { verb: string } }>(
+          db,
+          sql`SELECT data FROM fleet_events WHERE kind = 'power.unanswered' AND workload = ${KEY.s2}`,
+        )
+        expect(unanswered.map((e) => e.data.verb)).toEqual(['kill'])
+      } finally {
+        docker(
+          'exec',
+          gone.container,
+          'iptables',
+          '-D',
+          ...rule,
+          '-j',
+          'REJECT',
+          '--reject-with',
+          'tcp-reset',
+        )
+      }
+      // Back in reach, the copy the kill never reached is stopped, as stray compute is.
+      await runtime.stop(h2)
+      expect(await holdsMemory(db, KEY.s2)).toBe(false)
+      await runtime.destroy(h2)
+    },
+  },
+]
+
 describe.skipIf(!ready)('FleetRuntime across two nodes', () => {
   const dir = join(tmpdir(), `blockly-${DEPLOYMENT}`)
   let db: Db
@@ -162,16 +267,13 @@ describe.skipIf(!ready)('FleetRuntime across two nodes', () => {
   let runtime: FleetRuntime
   let nodes: NodeClient
   const node: Record<'a' | 'b', Node> = {} as Record<'a' | 'b', Node>
-  const s1 = runtimeKey('1b6f1f2e-6a47-4c9a-9a39-2f4ac7e51f10')
-  const s2 = runtimeKey('2b6f1f2e-6a47-4c9a-9a39-2f4ac7e51f10')
-  const s3 = runtimeKey('3b6f1f2e-6a47-4c9a-9a39-2f4ac7e51f10')
+  const { s1, s2, s3 } = KEY
   let h1: RuntimeHandle
   let lastSnapshot: SnapshotHandle
   let joinPoint: JoinPoint
 
   const exec = async (handle: RuntimeHandle, command: string) =>
     (await runtime.exec(handle, ['sh', '-c', command], 10)).stdout.trim()
-  const nodeOf = (handle: RuntimeHandle) => decodeHandle(handle).node
   const other = (id: string | null) => (id === node.a.id ? node.b : node.a)
   const inner = (n: Node, ...args: string[]) => docker('exec', n.container, 'docker', ...args)
   const uploaded = () =>
@@ -385,12 +487,9 @@ describe.skipIf(!ready)('FleetRuntime across two nodes', () => {
     const away = other(home.id)
     const ledger = async () => new Map((await nodeSummaries(db, THRESHOLDS)).map((n) => [n.id, n]))
     await exec(h1, 'echo slept > /data/world/level.dat')
-    // Asleep, its world stays on its node and its memory doesn't, once the node reports it stopped.
+    // Asleep, its world stays on its node and its memory doesn't, as soon as the stop is answered.
     await runtime.stop(h1)
-    await until(
-      'the stop to reach the ledger',
-      async () => (await ledger()).get(home.id)?.running.memoryMb === 0,
-    )
+    expect((await ledger()).get(home.id)?.running.memoryMb).toBe(0)
     // Another server, there, takes all but 64 MB of the node's 2048 to run.
     await drain(db, away.id, 'e2e')
     const h3 = await runtime.ensureProvisioned(
@@ -429,6 +528,9 @@ describe.skipIf(!ready)('FleetRuntime across two nodes', () => {
     })
     await runtime.destroy(h3)
   }, 240_000)
+
+  for (const scenario of ANSWERS)
+    test(scenario.name, () => scenario.run({ db, runtime, node, h1 }), scenario.ms)
 
   test('a host lost is rebuilt elsewhere from its last snapshot, never from what it said later', async () => {
     await exec(h1, 'echo snapshotted > /data/world/level.dat')

@@ -5,6 +5,7 @@
 import https from 'node:https'
 import { connect as tcpConnect } from 'node:net'
 import type { Readable } from 'node:stream'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { nodeName } from './ca.ts'
 
 /**
@@ -12,6 +13,9 @@ import { nodeName } from './ca.ts'
  * the control plane's own client certificate, the fleet CA as the only root, and the node's name,
  * which the control plane chose at enrollment, as what the node's certificate must say. An address
  * is only where to dial; it never identifies a node.
+ *
+ * A call that is safe to repeat is sent again when the node doesn't answer, within the call's own
+ * timeout; any other is sent once.
  */
 
 const EPOCH_HEADER = 'blocklyd-epoch'
@@ -69,6 +73,22 @@ export function splitAddress(address: string): { host: string; port: number } {
   return { host, port: Number(address.slice(at + 1)) }
 }
 
+/**
+ * The waits between attempts at a call that is safe to repeat, after no answer: a keep-alive
+ * connection the node had closed, or blocklyd restarting. The call's timeout bounds them all.
+ */
+const RETRY_DELAYS_MS = [250, 1000, 2500]
+
+/**
+ * Whether a call may be sent again when nothing is known of the first: a read, a PUT of a spec,
+ * and a start or stop, which blocklyd answers the same however often it is asked. Not a kill, a
+ * delete, a fence, an exec or a transfer.
+ */
+export function repeatable(method: string, path: string): boolean {
+  if (method === 'GET' || method === 'PUT') return true
+  return method === 'POST' && /^\/v1\/workloads\/[^/?]+\/(start|stop)$/.test(path)
+}
+
 function unreachable(error: NodeJS.ErrnoException): NodeUnreachable {
   const code = error.code ?? ''
   if (code === 'ECONNREFUSED') return new NodeUnreachable('refused', `connection refused: ${error.message}`)
@@ -108,13 +128,43 @@ export class NodeClient {
     setTimeout(() => old.destroy(), 120_000).unref()
   }
 
+  /**
+   * One call to the node. One that is safe to repeat (`repeatable`) is sent again while the node
+   * doesn't answer, as long as its timeout leaves time to; a TLS failure is never retried, since
+   * the same certificates fail the same way.
+   */
   async call<T>(node: NodeAddress, method: string, path: string, options: CallOptions = {}): Promise<T> {
+    const deadline = performance.now() + (options.timeoutMs ?? 30_000)
+    const delays = repeatable(method, path) ? RETRY_DELAYS_MS : []
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.#once<T>(node, method, path, options, deadline - performance.now())
+      } catch (error) {
+        const delay = delays[attempt]
+        if (
+          !(error instanceof NodeUnreachable) ||
+          error.kind === 'tls' ||
+          delay === undefined ||
+          performance.now() + delay >= deadline
+        )
+          throw error
+        await sleep(delay)
+      }
+    }
+  }
+
+  #once<T>(
+    node: NodeAddress,
+    method: string,
+    path: string,
+    options: CallOptions,
+    timeoutMs: number,
+  ): Promise<T> {
     const { host, port } = splitAddress(node.apiAddress)
     const body = options.body === undefined ? null : Buffer.from(JSON.stringify(options.body))
     const headers: Record<string, string> = { accept: 'application/json', ...options.headers }
     if (body !== null) headers['content-type'] = 'application/json'
     if (options.epoch !== undefined && options.epoch !== null) headers[EPOCH_HEADER] = String(options.epoch)
-    const timeoutMs = options.timeoutMs ?? 30_000
     return new Promise<T>((resolve, reject) => {
       const request = https.request(
         {
@@ -157,7 +207,9 @@ export class NodeClient {
         },
       )
       const timer = setTimeout(() => {
-        request.destroy(Object.assign(new Error(`no answer within ${timeoutMs} ms`), { code: 'TIMEOUT' }))
+        request.destroy(
+          Object.assign(new Error(`no answer within ${Math.round(timeoutMs)} ms`), { code: 'TIMEOUT' }),
+        )
       }, timeoutMs)
       request.on('error', (error: NodeJS.ErrnoException) => {
         clearTimeout(timer)
