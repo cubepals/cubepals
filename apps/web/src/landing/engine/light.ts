@@ -92,11 +92,11 @@ interface Look {
  */
 const MOONLIT: Omit<Look, 'deep'> = {
   keyLight: 2.2,
-  fill: 0.55,
+  fill: 0.9,
   roomFill: 0.45,
   lampGain: 1.2,
-  exposure: 0.5,
-  contrast: 1.6,
+  exposure: 0.7,
+  contrast: 1.45,
 }
 const DAYLIT: Omit<Look, 'deep'> = {
   keyLight: 2.8,
