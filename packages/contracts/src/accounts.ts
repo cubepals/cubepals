@@ -247,6 +247,8 @@ export interface AccountOverviewView {
       planKey: string
       /** Its renewal failed to charge: the plan lasts until then unless the card is fixed. */
       pastDueUntil: string | null
+      /** Cubepals ended it itself: its first month was withdrawn, or its renewal stayed unpaid. */
+      endedFor: 'withdrawal' | 'unpaid' | null
     } | null
     /**
      * The plan paid for a year at once: when the first year still to run starts (later than now

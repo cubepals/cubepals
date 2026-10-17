@@ -131,6 +131,17 @@ const Subscription = z.object({
   past_due_at: z.string().nullish(),
 } satisfies Fields<models.Subscription>)
 
+// An order's refunds, each with the reason it was given for.
+const Refunds = z.object({
+  items: z.array(z.object({ reason: z.string() } satisfies Fields<models.Refund>)),
+} satisfies Fields<models.ListResourceRefund>)
+
+/**
+ * The refund reason a withdrawal is given in Polar: the player asked for their money back.
+ * Blockly's own refunds (`refund`) are `duplicate`.
+ */
+const WITHDRAWAL_REASON: models.RefundReason = 'customer_request'
+
 // The fields of Polar's `Order` (SDK 2026-10 `models`, read 2026-10-10) that revenue and extra play
 // need: every amount is in cents, the customer carries the external id Blockly gave it, and each
 // line names the price it charged, which says whether it is the metered one.
@@ -148,6 +159,7 @@ const Order = z.object({
     .default([]),
   id: z.string(),
   created_at: z.string(),
+  modified_at: z.string().nullish(),
   subtotal_amount: z.number().int(),
   discount_amount: z.number().int(),
   net_amount: z.number().int(),
@@ -371,6 +383,27 @@ export class PolarBilling implements BillingProvider {
     )
   }
 
+  /**
+   * Revoked, as in Polar's dashboard: it ends now, and Polar neither renews it nor retries a charge
+   * for it. Polar refuses one revoked already, which is ended all the same.
+   */
+  async endSubscription(externalSubscriptionId: string): Promise<void> {
+    await call('ending a subscription now', () =>
+      this.#polar.subscriptions.revoke(externalSubscriptionId).catch((error: unknown) => {
+        if (!(error instanceof errors.AlreadyCanceledSubscription)) throw error
+      }),
+    )
+  }
+
+  async refundedAsWithdrawal(externalOrderId: string): Promise<boolean> {
+    const refunds = Refunds.parse(
+      await call('reading an order’s refunds', () =>
+        this.#polar.refunds.list({ order_id: externalOrderId, limit: 100 }),
+      ),
+    )
+    return refunds.items.some((refund) => refund.reason === WITHDRAWAL_REASON)
+  }
+
   /** Every gift product for a plan this deployment sells, cheapest first, read from Polar now. */
   async giftProducts(): Promise<GiftProduct[]> {
     const found = Listed.parse(
@@ -520,6 +553,7 @@ export class PolarBilling implements BillingProvider {
       paysForYear: year !== undefined,
       gift,
       orderedAt: new Date(order.created_at),
+      changedAt: order.modified_at ? new Date(order.modified_at) : null,
     }
   }
 
