@@ -220,21 +220,21 @@ describe.skipIf(!hasDatabase)('billing audit: failed renewals and the person ask
             }),
           }
         : notFound
-    // The failure arrives late, its grace already gone: the failure, then the lapse, both kept.
+    // The failure arrives late, its grace already gone: the failure, then the lapse, both kept, and
+    // the subscription ended at Polar, so no retry charges for time on Free.
     await revoked(owner)
     expect(await said(owner)).toEqual([
       'billing.subscribed by system:billing (webhook)',
       'account.plan_changed by system:billing (webhook)',
       'billing.renewal_failed by system:billing (webhook)',
       'account.plan_changed by system:billing (webhook)',
+      'billing.subscription_lapsed by system:billing (webhook)',
+      'billing.subscription_revoked by system:billing (webhook)',
+      'billing.subscription_ended by system:billing (webhook)',
     ])
-    // The plan changed then because the failure was already past its grace; the sweep finds the
-    // lapse itself and records it once, with no second plan change.
+    // The lapse is recorded once, with no second plan change: nothing is left for the sweep.
     await h.app.billing.recordLapses()
-    await h.app.billing.recordLapses()
-    expect((await said(owner)).slice(4)).toEqual([
-      'billing.subscription_lapsed by system:billing (scheduled)',
-    ])
+    expect(await said(owner)).toHaveLength(7)
   })
 
   test('the person asking for their standing is the one recorded', async () => {

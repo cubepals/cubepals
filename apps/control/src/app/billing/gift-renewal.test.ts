@@ -15,6 +15,7 @@ import { hasDatabase } from '../../testing/harness.ts'
 import { PolarWorld } from '../../testing/polar-world.ts'
 import type { UserActor } from '../actor.ts'
 import { codeHash, codeHint, newCode } from './gift-codes.ts'
+import { addMonths } from './years.ts'
 
 const w = new PolarWorld()
 
@@ -70,10 +71,13 @@ test.skipIf(!hasDatabase)(
     // The gift starts when the paid month ends, its month whole, and the account page says so.
     const gift = await giftOf(owner)
     expect(gift?.startsAt).toEqual(renewedEnd)
+    expect(gift?.endsAt).toEqual(addMonths(renewedEnd, 1))
     expect((await w.h.app.accountQueries.overview(owner)).plan.giftNext).toEqual({
       planKey: 'plus',
       months: 1,
       startsAt: renewedEnd,
+      endsAt: expect.any(Date),
+      continues: false,
     })
     expect(await w.audited(owner, 'billing.gift_moved')).toHaveLength(1)
   },
@@ -109,4 +113,9 @@ test.skipIf(!hasDatabase)('a running gift keeps the time it had left when Plus r
   const kept = (gift?.endsAt?.getTime() ?? 0) - periodEnd.getTime()
   expect(kept).toBeLessThanOrEqual(left)
   expect(kept).toBeGreaterThan(left - MINUTE_MS)
+  // The account page says what is left of it continues then, not that a whole month starts.
+  expect((await w.h.app.accountQueries.overview(owner)).plan.giftNext).toMatchObject({
+    startsAt: periodEnd,
+    continues: true,
+  })
 })

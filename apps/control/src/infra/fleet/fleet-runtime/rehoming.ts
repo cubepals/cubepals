@@ -28,6 +28,7 @@ import { NodeRefused, NodeUnreachable } from '../node-client.ts'
 import type { Considered, PlacementRequest } from '../placement.ts'
 import { getNode, lockRegion, type NodeRow } from '../registry.ts'
 import { event, one } from '../sql.ts'
+import type { EnsureResponse } from '../wire.ts'
 import { type Admission, NO_ROOM } from './admission.ts'
 import type { ArchiveRow, Archives } from './archives.ts'
 import { type Ledger, nextEpoch, type PlacementRow, placementOf, rehome, StaleHandle } from './ledger.ts'
@@ -44,8 +45,11 @@ export class Rehoming {
     Admission,
     'put' | 'power' | 'startOn' | 'claimMoved' | 'lookAgain' | 'claim' | 'unclaim'
   >
-  readonly #archives: Pick<Archives, 'archiveOf' | 'discardExport' | 'source' | 'fromStore'>
-  readonly #transfers: Pick<Transfers, 'exportForMove' | 'tooBigToMove'>
+  readonly #archives: Pick<
+    Archives,
+    'archiveOf' | 'discardExport' | 'source' | 'fromStore' | 'forgetNodeCopies'
+  >
+  readonly #transfers: Pick<Transfers, 'exportForMove' | 'tooBigToMove' | 'uploadBeforeDelete'>
   readonly #provider: string
   readonly #log: (message: string, fields?: object) => void
 
@@ -55,8 +59,8 @@ export class Rehoming {
     ledger: Pick<Ledger, 'current' | 'nodeOf' | 'settle' | 'dropMoveRequest'>
     choice: Pick<NodeChoice, 'request' | 'choose'>
     admission: Pick<Admission, 'put' | 'power' | 'startOn' | 'claimMoved' | 'lookAgain' | 'claim' | 'unclaim'>
-    archives: Pick<Archives, 'archiveOf' | 'discardExport' | 'source' | 'fromStore'>
-    transfers: Pick<Transfers, 'exportForMove' | 'tooBigToMove'>
+    archives: Pick<Archives, 'archiveOf' | 'discardExport' | 'source' | 'fromStore' | 'forgetNodeCopies'>
+    transfers: Pick<Transfers, 'exportForMove' | 'tooBigToMove' | 'uploadBeforeDelete'>
     provider: string
     log: (message: string, fields?: object) => void
   }) {
@@ -127,8 +131,8 @@ export class Rehoming {
         inPlace: false,
       }
     })
-    const epoch = Number(plan.row.epoch)
-    const node = await this.#ledger.nodeOf(plan.row.node_id)
+    let epoch = Number(plan.row.epoch)
+    let node = await this.#ledger.nodeOf(plan.row.node_id)
     let wasRunning = false
     if (plan.inPlace) {
       const view = await this.#api.view(node, ref.key)
@@ -137,7 +141,21 @@ export class Rehoming {
       if (wasRunning) await this.#admission.power(node, ref.key, epoch, 'stop')
     }
     await progress.step('compute')
-    const ensured = await this.#admission.put(node, ref.key, spec, epoch, false)
+    let ensured: EnsureResponse
+    const refused: string[] = []
+    for (;;) {
+      try {
+        ensured = await this.#admission.put(node, ref.key, spec, epoch, false)
+        break
+      } catch (error) {
+        // A new home its node refuses for room is chosen again, elsewhere, so no wake waits on it.
+        if (plan.inPlace || !(error instanceof RuntimeFull)) throw error
+        refused.push(node.id)
+        const again = await this.#chooseAgain(ref.key, epoch, node, spec, refused, error)
+        epoch = Number(again.epoch)
+        node = await this.#ledger.nodeOf(again.node_id)
+      }
+    }
     const restored = await this.#api.restore(node, ref.key, epoch, await this.#archives.source(from, node.id))
     const fresh = await this.#ledger.settle(ref.key, node, epoch, ensured.workload)
     await progress.handle(fresh)
@@ -149,6 +167,49 @@ export class Rehoming {
     })
     if (wasRunning) await this.#admission.startOn(node, ref.key, epoch, plan.row.region_key)
     return fresh
+  }
+
+  /**
+   * A restore's new home whose node refused it for room, given up for another node with room under
+   * a new epoch, avoiding every node that refused it: `placement.refused` says so. RuntimeFull when
+   * none has room; the row stays placing where it was, and the next wake chooses again.
+   */
+  async #chooseAgain(
+    key: string,
+    epoch: number,
+    node: NodeRow,
+    spec: RuntimeSpec,
+    refused: string[],
+    refusal: RuntimeFull,
+  ): Promise<PlacementRow> {
+    const again = await this.#db.transaction(async (t) => {
+      const row = await placementOf(t, key, true)
+      if (row === null) throw new Error(`Nothing is placed for ${key}`)
+      await lockRegion(t, row.region_key)
+      if (Number(row.epoch) !== epoch || row.node_id !== node.id || row.state !== 'placing')
+        throw new StaleHandle('The placement changed while it was being restored')
+      const request = this.#choice.request(spec, row.region_key, refused)
+      const decision = await this.#choice.choose(t, request)
+      await event(t, 'placement.refused', {
+        node: node.id,
+        workload: key,
+        epoch,
+        data: { why: refusal.message, considered: decision.considered },
+      })
+      if (decision.node === null) return { row: null, considered: decision.considered }
+      const to = { node: decision.node.id, epoch: await nextEpoch(t, key), region: row.region_key, request }
+      const ended = `refused: ${node.name}`
+      return {
+        row: await rehome(t, row, to, { ended, started: 'restore', restoreFrom: null }),
+        considered: decision.considered,
+      }
+    })
+    if (again.row === null)
+      throw new RuntimeFull(
+        this.#provider,
+        `${node.name} refused it for room; elsewhere: ${describe(again.considered)}`,
+      )
+    return again.row
   }
 
   /**
@@ -422,6 +483,18 @@ export class Rehoming {
   }
 
   /**
+   * A copy a server left on a node, deleted with its data, which takes the snapshots on that node
+   * with it: those only there go up to the store first. False when one may still go up, so the copy
+   * stays for upkeep (`tidy`) to delete once it has.
+   */
+  async deleteLeftCopy(node: NodeRow, key: string, epoch: number): Promise<boolean> {
+    if (!(await this.#transfers.uploadBeforeDelete(key, node.id))) return false
+    await this.#api.deleteWithData(node, key, epoch)
+    await this.#archives.forgetNodeCopies(key, node.id)
+    return true
+  }
+
+  /**
    * Fills a placing row from its copy in the store and places it; then fences the copy the move
    * left behind, and deletes it if it was a planned move. Idempotent, so a retry after a crash
    * resumes here.
@@ -474,7 +547,7 @@ export class Rehoming {
             epoch: Number(before.epoch),
             data: fenced,
           })
-          if (before.end_reason === 'moved') await this.#api.deleteWithData(source, key, epoch)
+          if (before.end_reason === 'moved') await this.deleteLeftCopy(source, key, epoch)
         } catch (error) {
           if (!(error instanceof NodeRefused || error instanceof NodeUnreachable)) throw error
           this.#log('move left its source copy for upkeep', {

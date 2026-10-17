@@ -25,7 +25,7 @@ import { METER_UNITS } from '../../domain/account/meter.ts'
 import { type AccountStanding, newStanding } from '../../domain/account/standing.ts'
 import type { PlatformControls } from '../../domain/policy/policy.ts'
 import type { ServerStatus } from '../../domain/server/lifecycle.ts'
-import { billedPlan, PAYING } from '../billing/persistence.ts'
+import { billedBy, billedPlan, PAYING, type PlanSource } from '../billing/persistence.ts'
 
 const standing = schema.accountStanding
 const servers = schema.minecraftServers
@@ -196,12 +196,20 @@ export interface AccountRow {
   email: string
   emailVerified: boolean
   createdAt: Date
+  /** With the plan in force (`loadStanding`). */
   standing: AccountStanding
+  /** The plan set on the account (free, or one an admin gave it): in force once nothing billed is. */
+  setPlan: string
+  /** What gives the plan in force: billing (`billedBy`), an admin, or nothing (free). */
+  planFrom: PlanSource | 'admin' | 'free'
   admin: boolean
   servers: number
 }
 
-/** Accounts by name or email, newest first, with how many live servers each has. */
+/**
+ * Accounts by name or email, newest first, with how many live servers each has and the plan in
+ * force, as `loadStanding` reads it.
+ */
 export async function searchAccounts(
   q: Queryable,
   search: string,
@@ -226,19 +234,24 @@ export async function searchAccounts(
     .orderBy(desc(users.createdAt))
     .offset(offset)
     .limit(limit)
-  return {
-    total: total?.n ?? 0,
-    rows: found.map((row) => ({
+  const rows: AccountRow[] = []
+  for (const row of found) {
+    const set = row.standing ? toStanding(row.standing) : newStanding(row.user.id)
+    const billed = await billedBy(q, row.user.id)
+    rows.push({
       userId: row.user.id,
       name: row.user.name,
       email: row.user.email,
       emailVerified: row.user.emailVerified,
       createdAt: row.user.createdAt,
-      standing: row.standing ? toStanding(row.standing) : newStanding(row.user.id),
+      standing: billed === null ? set : { ...set, plan: billed.plan },
+      setPlan: set.plan,
+      planFrom: billed?.from ?? (set.plan === 'free' ? 'free' : 'admin'),
       admin: row.admin !== null,
       servers: Number(row.servers),
-    })),
+    })
   }
+  return { total: total?.n ?? 0, rows }
 }
 
 /** Called when an account is created, so standing always has a row to lock and audit. */

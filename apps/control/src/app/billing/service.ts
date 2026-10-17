@@ -28,19 +28,13 @@ import {
   subscriptionChanges,
   writeEntries,
 } from './audit.ts'
-import {
-  auditPaidTwice,
-  auditRefund,
-  claimRefund,
-  paidTwice,
-  releaseRefund,
-  settleable,
-  settleWith,
-} from './balance.ts'
+import { settleable, settleWith } from './balance.ts'
 import { ChipIns } from './chip-ins.ts'
 import { Coupons } from './coupons.ts'
+import { SubscriptionEnding } from './ending.ts'
 import { auditRenewal, ExtraUsage } from './extra-usage.ts'
 import { Gifts, giftsAfterPaidTime } from './gifts.ts'
+import { Overpayments } from './overpaid.ts'
 import {
   billingFacts,
   failingUntold,
@@ -97,6 +91,10 @@ export class BillingService {
   readonly chipIns: ChipIns
   /** Time on a plan bought for someone else, redeemed with a code. */
   readonly gifts: Gifts
+  /** Money paid that was owed no more, refunded at once. */
+  readonly #overpaid: Overpayments
+  /** Subscriptions Blockly ends at the provider itself: a withdrawal, a renewal left unpaid. */
+  readonly #ending: SubscriptionEnding
   readonly #webOrigin: string
   /** Where the web app's account page is, for the provider to send people back to. */
   readonly #returnUrl: string
@@ -125,6 +123,8 @@ export class BillingService {
       webOrigin: deps.webOrigin,
     })
     this.gifts = new Gifts(deps)
+    this.#overpaid = new Overpayments(deps)
+    this.#ending = new SubscriptionEnding(deps)
     this.#webOrigin = deps.webOrigin
     // The page reads the provider's word when people come back, before the webhook arrives.
     this.#returnUrl = new URL('/account?from=billing', deps.webOrigin).toString()
@@ -294,63 +294,18 @@ export class BillingService {
 
   /**
    * What an order the provider's word kept (`recordOrder`) means: a balance paid, hours chipped in,
-   * a renewal, a year or a gift paid for, and the account's limits read again.
+   * a renewal, a year or a gift paid for, a month withdrawn, and the account's limits read again.
    */
   async #orderKept(provider: string, order: BillingOrder): Promise<void> {
-    await this.#balancePaid(order)
-    await this.#paidTwice(order)
+    await this.#overpaid.balancePaid(order)
+    await this.#overpaid.paidTwice(order)
     await this.chipIns.record(provider, order)
     await auditRenewal(this.#db, provider, order)
     if (order.paysForYear) await this.#yearPaid(order)
     await this.gifts.received(provider, order)
+    await this.#ending.refunded(order)
     // An order paid can clear what was owed; one left unpaid can be what is owed now.
     if (order.userId !== null) await this.#accounts.enforceLimits(order.userId)
-  }
-
-  /**
-   * A balance order's word (`settleWith`): what it paid past what was still owed, the same orders
-   * paid twice or paid by card since, is refunded through the provider at once, and audited. It is
-   * settled and its refund claimed in one transaction, under the lock `settleWith` takes on the
-   * order, so deliveries of it handled at once never both read the debt as open.
-   */
-  async #balancePaid(order: BillingOrder): Promise<void> {
-    const billing = requireCapability(this.#caps, 'billing')
-    const refundCents = await this.#db.transaction(async (tx) => {
-      const { refundCents } = await settleWith(tx, billing.provider, order)
-      if (refundCents <= 0) return 0
-      return (await claimRefund(tx, billing.provider, order.externalOrderId)) ? refundCents : 0
-    })
-    if (refundCents <= 0) return
-    await this.#refundClaimed(order.externalOrderId, refundCents, 'Paid for orders that were already paid.')
-    await auditRefund(this.#db, order, refundCents)
-  }
-
-  /**
-   * An order a balance paid in its place, charged after all (`paidTwice`): the charge is refunded
-   * through the provider at once, and audited. The balance stands, so it is paid for once.
-   */
-  async #paidTwice(order: BillingOrder): Promise<void> {
-    const billing = requireCapability(this.#caps, 'billing')
-    const { refundCents, settledBy } = await paidTwice(this.#db, billing.provider, order)
-    if (settledBy === null || refundCents <= 0) return
-    if (!(await claimRefund(this.#db, billing.provider, order.externalOrderId))) return
-    await this.#refundClaimed(order.externalOrderId, refundCents, 'Paid already, as a balance.')
-    await auditPaidTwice(this.#db, order, settledBy, refundCents)
-  }
-
-  /**
-   * Gives `cents` of the order back through the provider, its refund claimed already
-   * (`claimRefund`). One the provider doesn't take is released, and asked for again when it
-   * delivers the order again.
-   */
-  async #refundClaimed(externalOrderId: string, cents: number, why: string): Promise<void> {
-    const billing = requireCapability(this.#caps, 'billing')
-    try {
-      await billing.refund({ externalOrderId, cents, why })
-    } catch (error) {
-      await releaseRefund(this.#db, billing.provider, externalOrderId)
-      throw error
-    }
   }
 
   /**
@@ -395,7 +350,8 @@ export class BillingService {
   /**
    * The provider's view of an account replaces ours: its paying subscription is saved, every
    * other one is ended or, where its renewal failed and the provider still retries it, past due
-   * (the plan lasts a grace period then), and what the resulting plan no longer allows stops.
+   * (the plan lasts a grace period then, and one past it is ended at the provider), and what the
+   * resulting plan no longer allows stops.
    */
   async syncSubscription(
     state: Pick<BillingState, 'userId' | 'subscription'> & { externalCustomerId?: string },
@@ -466,6 +422,7 @@ export class BillingService {
       // Whether a plan lists publicly is an eligibility input (§15.3).
       await this.#jobs.enqueueEligibility(await listingsOfOwner(tx, state.userId), tx)
     })
+    await this.#ending.unpaid(source, new Date(), state.userId)
     await this.#accounts.enforceLimits(state.userId)
   }
 
@@ -497,12 +454,14 @@ export class BillingService {
 
   /**
    * `standing-sweep`'s billing, before what it stops: paid time that ran out with no word from the
-   * provider, audited (`recordLapses`), and gifted time that ran out (`Gifts.recordEnds`); then
+   * provider, audited (`recordLapses`), and gifted time that ran out (`Gifts.recordEnds`); a
+   * renewal still unpaid past its grace, ended at the provider (`SubscriptionEnding.unpaid`); then
    * owners told about payments that failed, and about years about to end. Answers how many lapses
    * were recorded.
    */
   async sweep(now = new Date()): Promise<number> {
     const lapsed = (await this.recordLapses(now)) + (await this.gifts.recordEnds(now))
+    await this.#ending.unpaid('scheduled', now)
     await this.tellAboutPayments(now)
     await this.remindYears(now)
     return lapsed

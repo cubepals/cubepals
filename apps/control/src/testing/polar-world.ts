@@ -5,8 +5,9 @@
 /**
  * The control plane with the real Polar adapter against a stand-in for Polar's API, for tests of
  * what Polar's word does to an account: subscriptions, orders and their payments as Polar holds
- * them now, signed webhook deliveries of each, the balance product and a year of Plus. One per test file, started
- * in `beforeAll` and `reset` in `beforeEach`.
+ * them now (a revoke and an order's refunds among them), signed webhook deliveries of each, the
+ * balance product and a year of Plus. One per test file, started in `beforeAll` and `reset` in
+ * `beforeEach`.
  *
  * It is not the stand-in itself (`polar.ts`), and holds no assertion.
  */
@@ -105,14 +106,40 @@ export class PolarWorld {
       return { status: 200, body: product(PLUS_PRODUCT) }
     if (method === 'POST') return this.#write(url.pathname, body)
     if (url.pathname === '/v1/checkouts/') return this.#open(url)
+    if (url.pathname === '/v1/refunds/') {
+      const asked = url.searchParams.get('order_id')
+      return list(
+        this.refunds
+          .filter((r) => r.order_id === asked)
+          .map((r, i) => ({ ...refund(`refund-${i + 1}`, r.order_id, r.amount), reason: r.reason })),
+      )
+    }
     if (url.pathname.startsWith('/v1/payments')) {
       const asked = url.searchParams.get('order_id') ?? ''
       return list(this.declined.has(asked) ? [payment(asked, 'failed')] : [])
     }
     const sub = id('/v1/subscriptions/')
+    if (sub !== null && method === 'DELETE') return this.#revoke(sub)
     if (sub !== null) return { status: 200, body: this.subscriptions.get(sub) ?? subscription(sub) }
     const held = this.orders.get(id('/v1/orders/') ?? '')
     return held === undefined ? notFound : { status: 200, body: held }
+  }
+
+  /** A subscription revoked: it ends now, as Polar answers it; one revoked already is refused. */
+  #revoke(sub: string): Answer {
+    const held = this.subscriptions.get(sub) ?? subscription(sub, { status: 'active', ended_at: null })
+    if (held.ended_at !== null)
+      return { status: 403, body: { error: 'AlreadyCanceledSubscription', detail: 'already revoked' } }
+    const now = new Date().toISOString()
+    const revoked = {
+      ...held,
+      status: 'canceled' as const,
+      canceled_at: now,
+      ended_at: now,
+      past_due_at: null,
+    }
+    this.subscriptions.set(sub, revoked)
+    return { status: 200, body: revoked }
   }
 
   /** One-time products, found by their metadata, which the query names. */

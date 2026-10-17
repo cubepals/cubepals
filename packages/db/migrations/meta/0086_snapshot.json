@@ -1,6 +1,6 @@
 {
-  "id": "73d5cc8e-af08-4a5a-a613-144de466c9eb",
-  "prevId": "888d5940-fc8e-4921-be53-1003d8f50edd",
+  "id": "fe43ceb7-1554-4a7a-acd0-802ba8a3ebe9",
+  "prevId": "ccde317b-d6d5-4d56-b3cc-31535918f525",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2547,6 +2547,18 @@
         "pending_since": {
           "name": "pending_since",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "block_units": {
+          "name": "block_units",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "block_plan": {
+          "name": "block_plan",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
