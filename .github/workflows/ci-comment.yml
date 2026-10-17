@@ -18,9 +18,12 @@ permissions:
   actions: read
   pull-requests: write
 
-# One at a time for a pull request's head, so "running" never lands after the results.
+# One job at a time for each CI run, so "running" never lands after its results. GitHub keeps one
+# job pending in a group and cancels the one it replaces, so the `completed` event's job can be
+# cancelled for a later event's; that job starts after the run is done and writes the results
+# itself. A group per run, not per branch, so one run's events never cancel another run's.
 concurrency:
-  group: ci-comment-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  group: ci-comment-${{ github.event.workflow_run.id }}
 
 jobs:
   comment:
@@ -37,15 +40,22 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.3
-      # Each test group's report, in a directory of its artifact's name.
+      # Each test group's report, in a directory of its artifact's name, once the run is done. The
+      # run as it is now, not as the event saw it: a job that waited behind another can start after
+      # the run is done, whatever event started it.
       - name: Download the test results
-        if: github.event.action == 'completed'
+        id: results
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.event.workflow_run.id }}
-        run: >-
-          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'junit-*' --dir "$RUNNER_TEMP/junit" ||
-          echo "::warning::The run's test results couldn't be downloaded."
+        run: |
+          status=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq .status || true)
+          if [ "$status" != completed ]; then exit 0; fi
+          if gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'junit-*' --dir "$RUNNER_TEMP/junit"; then
+            echo "dir=$RUNNER_TEMP/junit" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::The run's test results couldn't be downloaded."
+          fi
       # Cubepals' own bot writes the comment where the repository has its app (CUBEPALS_APP_CLIENT_ID
       # and CUBEPALS_APP_PRIVATE_KEY); without them, or if it fails, github-actions[bot] does.
       - name: Cubepals' bot
@@ -62,7 +72,7 @@ jobs:
           COMMENT_AUTHOR: ${{ steps.bot.outputs.app-slug && format('{0}[bot]', steps.bot.outputs.app-slug) || 'github-actions[bot]' }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.event.workflow_run.id }}
-          JUNIT: ${{ github.event.action == 'completed' && format('{0}/junit', runner.temp) || '' }}
+          JUNIT: ${{ steps.results.outputs.dir }}
         run: >-
           bun scripts/ci-comment.ts ||
           echo "::warning::The CI comment couldn't be written."
