@@ -35,9 +35,15 @@ const send = (n: { id: string; sha: string }, request: HeartbeatRequest) =>
 
 const summary = async (id: string) => (await nodeSummaries(db, THRESHOLDS)).find((n) => n.id === id)
 
-/** The session's switch, as long ago as the previous session's beats could still be in flight. */
-const pastInFlight = (id: string) =>
-  db.execute(sql`UPDATE fleet_nodes SET session_started_at = now() - interval '20 seconds' WHERE id = ${id}`)
+/** The session's switch, `seconds` ago. */
+const switchedAgo = (id: string, seconds: number) =>
+  db.execute(
+    sql`UPDATE fleet_nodes SET session_started_at = now() - make_interval(secs => ${seconds}) WHERE id = ${id}`,
+  )
+/** Past the previous session's in-flight window, and not yet past the new session's hold. */
+const pastInFlight = (id: string) => switchedAgo(id, 20)
+/** Past the new session's hold: the previous session's beat in flight, a heartbeat, and a margin. */
+const pastHold = (id: string) => switchedAgo(id, 30)
 
 async function place(workload: string, nodeId: string, epoch: number, state = 'placed'): Promise<void> {
   await db.execute(sql`
@@ -102,6 +108,32 @@ describe.skipIf(!hasDatabase)('the lease, and who may beat for a node', () => {
     expect((await summary(a.id))?.running.memoryMb).toBe(2048)
   })
 
+  test("a second host's beat just past the in-flight window, before the original's next, is still held", async () => {
+    const a = await enrollNode(db, ca, 'clone-edge')
+    await place('w-edge', a.id, 1)
+    const copies = [report('w-edge', 1)]
+    for (let seq = 1; seq <= 3; seq++) await send(a, beat(a, 'original', seq, copies))
+    const observed = () =>
+      rows<{ workload: string; state: string }>(
+        db,
+        sql`SELECT workload, state FROM fleet_observations WHERE node_id = ${a.id}`,
+      )
+    const before = await observed()
+    expect((await send(a, beat(a, 'clone', 1))).leaseSeconds).toBe(0)
+    // Both beat every few seconds: the clone's comes first after the window.
+    await switchedAgo(a.id, 16)
+    expect((await send(a, beat(a, 'clone', 2))).leaseSeconds).toBe(0)
+    expect(await observed()).toEqual(before)
+    // The original's next beat, a heartbeat later and a little late, catches the pair.
+    await switchedAgo(a.id, 16 + registryOptions().heartbeatSeconds + 3)
+    await expect(send(a, beat(a, 'original', 4, copies))).rejects.toMatchObject({
+      code: 'duplicate_identity',
+    })
+    expect((await summary(a.id))?.duplicate_seen_at).not.toBeNull()
+    expect((await send(a, beat(a, 'clone', 3))).leaseSeconds).toBe(0)
+    expect(await observed()).toEqual(before)
+  })
+
   test('a rebooted node gets its lease, and is reached at its new address, once the old session is past', async () => {
     const a = await enrollNode(db, ca, 'reboot-lease', { apiAddress: '10.0.0.6:7443' })
     expect((await send(a, beat(a, 'one', 1))).leaseSeconds).toBe(120)
@@ -110,8 +142,11 @@ describe.skipIf(!hasDatabase)('the lease, and who may beat for a node', () => {
       addresses: { api: '10.0.0.7:7443', edge: '10.0.0.7', control: '10.0.0.7' },
     }
     expect((await send(a, beat(a, 'two', 1, [], rebooted))).leaseSeconds).toBe(0)
-    await pastInFlight(a.id)
-    expect((await send(a, beat(a, 'two', 2, [], rebooted))).leaseSeconds).toBe(120)
+    // Past the in-flight window, it is still held: the old session's next beat may yet come.
+    await switchedAgo(a.id, 16)
+    expect((await send(a, beat(a, 'two', 2, [], rebooted))).leaseSeconds).toBe(0)
+    await pastHold(a.id)
+    expect((await send(a, beat(a, 'two', 3, [], rebooted))).leaseSeconds).toBe(120)
     expect((await summary(a.id))?.edge_host).toBe('10.0.0.7')
   })
 })
