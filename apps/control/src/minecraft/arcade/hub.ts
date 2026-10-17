@@ -91,19 +91,25 @@ const ZONE = box([96, 40, 1336], [260, 140, 1470])
 const welcome = `["",{text:"Welcome to the Cubepals Arcade. ",color:"${PAPER}",bold:true},"See if you can get your name on the boards."]`
 
 /** How to start a game, told on each arrival at the hub: on joining, and on coming back from anywhere. */
-export const HINT = 'Open the book to pick a game, or stand on a game’s pad.'
+export const HINT = 'Open the book to pick a game, or walk into a game’s machine in the hall.'
 
 /** Every how many ticks the pads sparkle. */
 const GLOW_EVERY = 10
 
+/** How far out from a wall what is flat on it stands: no block face in front of it, nor a gap to see. */
+const OFF_WALL = 0.05
+
 /**
  * Each doorway between the house and the hall ends at a wall: walking up to it is walking on
- * through (`PASSAGE`). Flat on that wall, just off it, are an open door and where it goes.
+ * through (`PASSAGE`). Flat on that wall, just off it, are an open door and where it goes, one over
+ * the other, a little under the game's size, centred on the wall's face: two blocks across in the
+ * house, between the doorway's frame, and three in the hall, from the floor up three.
  */
 const ENDS: ReadonlyArray<{ x: number; floor: number; z: number; facing: Facing; to: string }> = [
-  { x: 168.03, floor: PASSAGE.house.through[0][1], z: 1460, facing: 'east', to: 'The Arcade' },
-  { x: 138.5, floor: PASSAGE.hall.through[0][1], z: 1460.97, facing: 'north', to: 'The house' },
+  { x: 168 + OFF_WALL, floor: PASSAGE.house.through[0][1], z: 1460, facing: 'east', to: 'The Arcade' },
+  { x: 138.5, floor: PASSAGE.hall.through[0][1], z: 1461 - OFF_WALL, facing: 'north', to: 'The house' },
 ]
+const END_SCALE = 0.8
 
 /** The markers over the ways in and out: the app icon's tile over each game's pad, above its name, and an open door at each passage's end. */
 export const HUB_MARKERS: readonly ShownMarker[] = [
@@ -113,9 +119,9 @@ export const HUB_MARKERS: readonly ShownMarker[] = [
   })),
   ...ENDS.map(({ x, floor, z, facing }) => ({
     marker: MARKERS.wayOut,
-    at: [x, floor + 1, z] as const,
+    at: [x, floor + 1.25, z] as const,
     facing,
-    scale: 0.8,
+    scale: END_SCALE,
   })),
 ]
 
@@ -140,21 +146,20 @@ const HUB_LABELS: readonly Label[] = [
       { text: '\nType /trigger credits for who built each one.', color: 'gray' },
     ],
   },
-  // On the house's west wall, over the top of the stairs, facing a player as they start. The
-  // house is two blocks across there, as the passages are, so it is the passages' size.
+  // On the house's west wall by the top of the stairs, facing a player as they start: in the
+  // middle of the wall's face, four blocks across from the house's south wall to its north, and
+  // three high from the floor.
   {
-    at: [STAIRS_TOP[0] - 2.97, STAIRS_TOP[1] + 2, STAIRS_TOP[2] + 1],
+    at: [STAIRS_TOP[0] - 3 + OFF_WALL, STAIRS_TOP[1] + 3.225, STAIRS_TOP[2]],
     tag: `${NS}.label`,
     text: titled('The Arcade', 'Down the stairs'),
-    scale: 0.9,
     facing: 'east',
   },
   ...ENDS.map(({ x, floor, z, facing, to }) => ({
-    at: [x, floor + 1.7, z] as const,
+    at: [x, floor + 1.75, z] as const,
     tag: `${NS}.label`,
     text: titled(to, 'Walk on through'),
-    // A little under the game's size, to fit the house's end, two blocks across.
-    scale: 0.9,
+    scale: END_SCALE,
     facing,
   })),
 ]

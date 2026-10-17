@@ -4,8 +4,9 @@
 
 /**
  * The Arcade's floating words and markers: that each is a text or item display the game hides
- * behind what stands in front of it, readable on its background, and that each has its room clear
- * of the world's blocks, as `scripts/arcade-clearance.ts` measured them in `ARCADE_WORLD`.
+ * behind what stands in front of it, readable on its background, that each has its room clear of
+ * the world's blocks, and that each flat on a wall sits on the wall's solid face, as
+ * `scripts/arcade-clearance.ts` measured them in `ARCADE_WORLD`.
  */
 import { describe, expect, test } from 'bun:test'
 import { ARCADE_FILES, ARCADE_LABELS } from '../arcade.ts'
@@ -13,7 +14,7 @@ import { WAITING_FILES } from '../duels-waiting.ts'
 import clearance from './clearance.json' with { type: 'json' }
 import { INK, type Label, PAPER } from './datapack.ts'
 import { HUB_MARKERS } from './hub.ts'
-import { inRoom, lineWidths, markerRoom, type Room, roomOf } from './label-space.ts'
+import { inRoom, lineWidths, markerRoom, type Room, roomOf, wallOf } from './label-space.ts'
 import { ARCADE_WORLD } from './maps.ts'
 
 const everyCommand = [...ARCADE_FILES, ...WAITING_FILES].flatMap((file) => file.content.split('\n'))
@@ -67,8 +68,9 @@ describe('the floating words on the Arcade and Duels', () => {
 
   test('a label turns to its reader only in the open; one by a wall, or a board before its dome, is flat on it', () => {
     const flat = ARCADE_LABELS.filter((shown) => shown.facing !== undefined)
-    // The boards, the three credit lines under the games' signs, the stairs and both passages.
-    expect(flat).toHaveLength(4 + 3 + 1 + 2)
+    // The boards, the three credit lines under the games' signs, the stairs, both passages and the
+    // three machines.
+    expect(flat).toHaveLength(4 + 3 + 1 + 2 + 3)
     expect(
       flat.filter((shown) => shown.tag.startsWith('arcade.board.')).map((shown) => shown.facing),
     ).toEqual(['north', 'north', 'north', 'north'])
@@ -113,6 +115,30 @@ describe('the floating words on the Arcade and Duels', () => {
       expect(room.width / 2, `${name} reaches into the blocks beside it`).toBeLessThanOrEqual(
         measured?.reach ?? 0,
       )
+    }
+  })
+
+  test('every label and marker flat on a wall stands a twentieth of a block off it, all of it on the wall’s solid face', () => {
+    const onWalls = rooms.filter(([, room]) => wallOf(room) !== null)
+    // The stairs, both passages' words and doors, the three machines and the games' credit lines.
+    expect(onWalls.length).toBe(1 + 2 * 2 + 3 + 3)
+    for (const [name, room] of onWalls) {
+      const on = wallOf(room)
+      const measured = clearance.rooms.find((candidate) =>
+        candidate.at.every((value, i) => value === room.at[i]),
+      )
+      const face = (measured as { face?: { from: number; top: number; rows: string[] } } | undefined)?.face
+      expect(face, `${name}, at ${room.at.join(' ')}, has no wall measured`).toBeDefined()
+      if (on === null || face === undefined) continue
+      expect(on.gap, `${name} is not a twentieth of a block off its wall`).toBeCloseTo(0.05, 3)
+      // Every block whose face it covers, along the wall and up it.
+      const [left, right] = [on.mid - room.width / 2, on.mid + room.width / 2]
+      const [bottom, top] = [room.at[1], room.at[1] + room.height]
+      for (let y = Math.floor(bottom); y < top; y++)
+        for (let along = Math.floor(left); along < right; along++) {
+          const cell = face.rows[face.top - y]?.[along - face.from]
+          expect(cell, `${name} is off its wall's solid face at ${along}, ${y}`).toBe('#')
+        }
     }
   })
 })

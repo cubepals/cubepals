@@ -13,6 +13,7 @@ import { ARCADE_FILES } from '../arcade.ts'
 import { PADS } from './hub.ts'
 import { KEPT } from './kept.ts'
 import { lineWidths } from './label-space.ts'
+import { inside, MACHINES, passage } from './machines.ts'
 import { GAMES, PLAY, playing } from './ways-in.ts'
 
 const FUNCTIONS = 'world/datapacks/cubepals-arcade/data/arcade/function/'
@@ -88,6 +89,51 @@ describe('the ways into the Arcade’s games', () => {
         SCREEN,
       )
       expect(2 * Math.max(...lineWidths([{ text: subtitle, color: '' }]))).toBeLessThanOrEqual(SCREEN)
+    }
+  })
+})
+
+describe('the hall’s machines a player walks into', () => {
+  const build = commands('build')
+  const span = (from: readonly number[], to: readonly number[]) =>
+    from.map((v, i) => Math.abs((to[i] ?? 0) - v) + 1)
+
+  test('there is one for each game, west to east as the pads are, each a mouth two wide and three high', () => {
+    expect(MACHINES.map((machine) => machine.game)).toEqual(GAMES.map((game) => game.key))
+    const west = (machine: (typeof MACHINES)[number]) => Math.min(machine.mouth[0][0], machine.mouth[1][0])
+    expect(MACHINES.map(west)).toEqual([...MACHINES.map(west)].sort((a, b) => a - b))
+    for (const machine of MACHINES) {
+      const [x, y, z] = span(...machine.mouth)
+      const across = machine.facing === 'north' || machine.facing === 'south' ? x : z
+      expect([across, y]).toEqual([2, 3])
+    }
+  })
+
+  test('the build cuts each mouth and its passage out of the machine, its passage lined in black', () => {
+    for (const machine of MACHINES) {
+      const [from, to] = passage(machine)
+      const cuts = build.filter(
+        (command) => command.startsWith('fill ') && command.endsWith(' minecraft:air'),
+      )
+      expect(cuts).toContain(`fill ${from.join(' ')} ${to.join(' ')} minecraft:air`)
+      const lining = build[build.indexOf(`fill ${from.join(' ')} ${to.join(' ')} minecraft:air`) - 1] ?? ''
+      expect(lining).toEndWith(' minecraft:black_concrete')
+    }
+  })
+
+  test('walking in, past the mouth to the passage’s end, runs the same function as the game’s pad and book', () => {
+    for (const [i, machine] of MACHINES.entries()) {
+      const [from, to] = inside(machine)
+      const [pFrom, pTo] = passage(machine)
+      // The box where walking in sends a player is in the passage, not in front of the machine.
+      for (const axis of [0, 1, 2]) {
+        expect(from[axis] ?? 0).toBeGreaterThanOrEqual(pFrom[axis] ?? 0)
+        expect(to[axis] ?? 0).toBeLessThanOrEqual(pTo[axis] ?? 0)
+      }
+      const box = `x=${from[0]},y=${from[1]},z=${from[2]},dx=${(to[0] ?? 0) - (from[0] ?? 0)},dy=${(to[1] ?? 0) - (from[1] ?? 0)},dz=${(to[2] ?? 0) - (from[2] ?? 0)}`
+      const walking = tick.filter((command) => command.includes(box))
+      expect(walking.map(runs)).toEqual([GAMES[i]?.key])
+      expect(walking[0]).toContain('gamemode=!spectator')
     }
   })
 })

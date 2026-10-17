@@ -5,9 +5,9 @@
 /**
  * Every way into the Arcade's games from the hub, and the one thing each does: a game's own
  * function, `arcade:play/<game>`, that sends a player there and tells them, as they arrive, what to
- * do. Standing on its pad on the balcony runs it, and so does picking it in the book every player
- * keeps (`kept.ts`), through the `play` trigger. Not the games themselves, each its own file, or how
- * the pads look (`hub.ts`).
+ * do. Standing on its pad on the balcony runs it, walking into its machine in the hall does
+ * (`machines.ts`), and so does picking it in the book every player keeps (`kept.ts`), through the
+ * `play` trigger. Not the games themselves, each its own file, or how the pads look (`hub.ts`).
  */
 import { type Block, box, NS, PAPER, type Part } from './datapack.ts'
 import { FLOOR_ARRIVAL } from './floor.ts'

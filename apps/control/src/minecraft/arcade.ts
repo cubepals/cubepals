@@ -22,6 +22,7 @@
  * - `signs.ts`: the Cubepals signs, the lockup as map art in frames, over the hub and each game.
  * - `boards.ts`: the leaderboards: keeping each top ten in storage and drawing it in the hub.
  * - `ways-in.ts`: each game's way in, and what it does: from its pad, its machine and the book.
+ * - `machines.ts`: the three hall machines a player walks into to play a game, cut as it builds.
  * - `kept.ts`: what every player keeps in their hotbar, the back item and the book, one of each.
  * - `hub.ts`: the hub, its pads, the welcome, the ways back, and the world's rules.
  * - `parkour.ts`: the timed parkour over three courses, its checkpoints and best times.
@@ -34,6 +35,7 @@ import { label, NS, type Part } from './arcade/datapack.ts'
 import { FLOOR_PART } from './arcade/floor.ts'
 import { HUB_PART, PADS } from './arcade/hub.ts'
 import { KEPT_PART } from './arcade/kept.ts'
+import { MACHINES_PART } from './arcade/machines.ts'
 import { PARKOUR_PART } from './arcade/parkour.ts'
 import { PIT_PART } from './arcade/pit.ts'
 import { WAYS_IN_PART } from './arcade/ways-in.ts'
@@ -51,6 +53,7 @@ const PARTS: readonly Part[] = [
   FLOOR_PART,
   PIT_PART,
   WAYS_IN_PART,
+  MACHINES_PART,
   KEPT_PART,
   HUB_PART,
 ]

@@ -95,6 +95,37 @@ export function inRoom(room: Room, [bx, by, bz]: Block): boolean {
   return bx < x + spanX && bx + 1 > x - spanX && bz < z + spanZ && bz + 1 > z - spanZ
 }
 
+/** A step out of a flat room's front, toward whoever reads it. */
+const OUT: Record<Facing, readonly [number, number]> = {
+  north: [0, -1],
+  south: [0, 1],
+  east: [1, 0],
+  west: [-1, 0],
+}
+
+/**
+ * The wall a flat room stands on: the layer of blocks behind it, the layer it stands in, and how far
+ * in front of the wall it is. A room is on a wall when it is within a tenth of a block of it; one
+ * further out, a board before its dome, stands free. `across` is the axis it runs along, x or z,
+ * and `mid` its middle on it.
+ */
+export function wallOf(room: Room): {
+  across: 'x' | 'z'
+  mid: number
+  front: number
+  wall: number
+  gap: number
+} | null {
+  if (room.flat === undefined) return null
+  const [ox, oz] = OUT[room.flat.facing]
+  const [x, , z] = room.at
+  const [plane, out] = ox === 0 ? [z, oz] : [x, ox]
+  const front = out > 0 ? Math.floor(plane) : Math.ceil(plane) - 1
+  const gap = out > 0 ? plane - front : front + 1 - plane
+  if (gap > 0.1) return null
+  return { across: ox === 0 ? 'x' : 'z', mid: ox === 0 ? x : z, front, wall: front - out, gap }
+}
+
 /** The box of blocks that holds a room: what reading the world for it must cover. */
 export function roomBox(room: Room): [Block, Block] {
   const [x, y, z] = room.at
