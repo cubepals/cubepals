@@ -67,8 +67,8 @@ export function roomOf(label: Label): Room {
   }
 }
 
-/** The room a marker takes: a square as wide as it is, round its middle, as thick as an item drawn flat. */
-export function markerRoom(marker: ShownMarker): Room {
+/** The room a marker takes, or a badge: a square as wide as it is, round its middle, as thick as an item drawn flat. */
+export function markerRoom(marker: Pick<ShownMarker, 'at' | 'scale' | 'facing'>): Room {
   const side = marker.scale ?? 1
   const [x, y, z] = marker.at
   return {

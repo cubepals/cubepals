@@ -10,7 +10,7 @@
  */
 import { describe, expect, test } from 'bun:test'
 import { onLevel } from '../domain/revision/carried.ts'
-import { HINT, PADS, PASSAGE } from './arcade/hub.ts'
+import { HINT, PAD_BADGES, PADS, PASSAGE } from './arcade/hub.ts'
 import { ARCADE_MAPS } from './arcade/maps.ts'
 import { ARCADE_FILES } from './arcade.ts'
 import { placeablePath } from './carried.ts'
@@ -232,9 +232,11 @@ describe('the Arcade as its players find it', () => {
       'Meltdown, by NetherGames',
       'Frozen Market, by _3Each',
     ])
-    // Each sign hangs every frame of its lockup: twenty by four over the hub, five across at each game.
-    const frames = everyCommand.filter((c) => c.startsWith('summon minecraft:glow_item_frame'))
-    expect(frames).toHaveLength(80 + 5 * 4)
+    // Each sign is built, not hung: one square of Paper behind its mark, over the hub, at the
+    // parkour and the floor, and twice back to back at the pit.
+    expect(everyCommand.filter((c) => c.startsWith('summon minecraft:glow_item_frame'))).toEqual([])
+    const papers = everyCommand.filter((c) => c.includes(`background:${0xff000000 | 0xf8f7f5}`))
+    expect(papers).toHaveLength(1 + 1 + 1 + 2 + PAD_BADGES.length)
   })
 
   test('a new player is put at the hub and told in one sentence what to do, once', () => {

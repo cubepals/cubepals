@@ -22,9 +22,9 @@ const fileAt = (path: string) =>
 /** A function's commands, one to a line. */
 const commands = (name: string) => fileAt(`data/cubepals/function/${name}.mcfunction`).trim().split('\n')
 
-/** The block positions a building command names: its first three numbers, and the next three. */
+/** The block positions a building command names: its first three numbers, and the next three, each the block it is in. */
 function positions(command: string): Array<[number, number, number]> {
-  const numbers = (command.match(/-?\d+/g) ?? []).map(Number)
+  const numbers = (command.match(/-?\d+(\.\d+)?/g) ?? []).map((n) => Math.floor(Number(n)))
   const at: Array<[number, number, number]> = [[numbers[0] ?? 0, numbers[1] ?? 0, numbers[2] ?? 0]]
   if (command.startsWith('fill ')) at.push([numbers[3] ?? 0, numbers[4] ?? 0, numbers[5] ?? 0])
   return at
@@ -70,18 +70,19 @@ describe('the datapack for waiting on a Duels server', () => {
     expect(pack.max_format).toBeGreaterThanOrEqual(94)
   })
 
-  test('the course and the pit are built on a void world only, in chunks kept loaded, off the arena', () => {
+  test('the course, the pit and the sign are built on a void world only, in chunks kept loaded, off the arena', () => {
     const load = commands('load')
     expect(load).toContain('execute if block 8 -62 8 minecraft:air run function cubepals:build')
     // `forceload add` names x and z only, of two corners.
-    const forceload = load.find((command) => command.startsWith('forceload add ')) ?? ''
-    const [x1 = 0, z1 = 0, x2 = 0, z2 = 0] = (forceload.match(/-?\d+/g) ?? []).map(Number)
-    for (const command of commands('build'))
+    const forced = load
+      .filter((command) => command.startsWith('forceload add '))
+      .map((command) => (command.match(/-?\d+/g) ?? []).map(Number))
+    for (const command of [...commands('build'), ...commands('sign')])
       for (const [x, y, z] of positions(command)) {
-        expect(x).toBeGreaterThanOrEqual(x1)
-        expect(x).toBeLessThanOrEqual(x2)
-        expect(z).toBeGreaterThanOrEqual(z1)
-        expect(z).toBeLessThanOrEqual(z2)
+        const kept = forced.some(
+          ([x1 = 0, z1 = 0, x2 = 0, z2 = 0]) => x >= x1 && x <= x2 + 1 && z >= z1 && z <= z2 + 1,
+        )
+        expect(`${command}: ${kept}`).toBe(`${command}: true`)
         expect(y).toBeGreaterThanOrEqual(-64)
         // The arena's platform is x and z -8 to 24, at y -61: nothing is built on it.
         const onPlatform = x >= -8 && x <= 24 && z >= -8 && z <= 24

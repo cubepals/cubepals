@@ -9,12 +9,13 @@
  * are the Duels plugin's (`duels.ts`).
  *
  * All of it is one datapack Cubepals writes into the world the server runs, which Minecraft reads
- * on its own, so no plugin is added for it. As the world loads, it builds the course and the pit
- * beside the void world's platform (`duels.ts` says where that is); a world of another kind, whose
- * arena is a room underground, gets neither, and its welcome says only how to duel. Every tick it
- * welcomes a player it hasn't, opens or closes the pit, gives whoever drops into the pit the pit's
- * kit and tells them the way out, lets out whoever takes it, shows an open door over the way out,
- * and sends whoever reaches the end of the parkour back to its start.
+ * on its own, so no plugin is added for it. As the world loads, it builds the course, the pit and
+ * Cubepals' sign beside the void world's platform (`duels.ts` says where that is); a world of
+ * another kind, whose arena is a room underground, gets none of them, and its welcome says only how
+ * to duel. Every tick it welcomes a player it hasn't, opens or closes the pit, gives whoever drops
+ * into the pit the pit's kit and tells them the way out, lets out whoever takes it, shows an open
+ * door over the way out and the sign's mark, and sends whoever reaches the end of the parkour back
+ * to its start.
  *
  * The pit is a fight, so it is open only while two can have one: while fewer than two players are
  * outside a duel, a lid of glass covers it and the sign over it says why. A player is in a duel
@@ -32,12 +33,40 @@
 
 import { type CarriedFile, RUNNING_LEVEL } from '../domain/revision/carried.ts'
 import { MARKERS, type ShownMarker, showMarker } from './brand-pack.ts'
+import { buildMarquee, type Frame, type Marquee } from './marquee.ts'
 
 /** The datapack's folder in the running world, and the name Minecraft lists it by. */
 export const WAITING_DATAPACK = `${RUNNING_LEVEL}/datapacks/cubepals-duels`
 
 /** The void world's platform is one block thick: below its middle there is nothing. */
 const ON_VOID = 'execute if block 8 -62 8 minecraft:air run'
+
+/** The arena's own stone round Cubepals' sign: stone bricks, chiseled at the corners, lit by pale froglights. */
+const ARENA: Frame = {
+  casing: 'stone_bricks',
+  corner: 'chiseled_stone_bricks',
+  bulb: 'pearlescent_froglight',
+  lamp: 'stone_bricks',
+}
+
+/**
+ * Cubepals' sign, the mark in Ink on Paper in a frame of the arena's stone (`marquee.ts`): against
+ * the platform's south edge, off it, its base level with the platform's top, facing back across it
+ * to where a player arrives.
+ */
+const BRAND_SIGN: Marquee = {
+  at: [10, -57, 26],
+  facing: 'north',
+  side: 4,
+  grain: 8,
+  frame: ARENA,
+  backed: true,
+}
+const SIGN_PARTS = buildMarquee(BRAND_SIGN, ['cubepals.sign'])
+/** Its blocks, built with the course and the pit; its Paper and mark, shown once someone is here, as the way out's marker is. */
+const SIGN_BLOCKS = SIGN_PARTS.filter((command) => !command.startsWith('summon '))
+const SIGN_DISPLAYS = SIGN_PARTS.filter((command) => command.startsWith('summon '))
+const SHOW_SIGN = `execute if entity @a if block 8 -61 25 minecraft:stone_bricks unless entity @e[tag=cubepals.sign] run function cubepals:sign`
 
 /** Where a player is in the pit: inside its walls, from its floor up through its rim. */
 const IN_PIT = 'x=-6,y=-64,z=-26,dx=14,dy=3,dz=14'
@@ -125,6 +154,7 @@ const LEAVE = ['clear @s', 'tag @s remove cubepals.pit', `tp @s ${OUTSIDE}`]
  */
 const LOAD = [
   'forceload add -34 -28 9 1',
+  'forceload add 6 25 11 27',
   'scoreboard objectives add cubepals.died deathCount',
   'scoreboard objectives add cubepals.waiting dummy',
   `${ON_VOID} function cubepals:build`,
@@ -171,6 +201,7 @@ const TICK = [
   `tag @a[tag=!cubepals.pit,${IN_PIT}] add cubepals.pit`,
   `execute as @a[${IN_PIT}] at @s if block ~ ~-1 ~ minecraft:lime_concrete run function cubepals:leave`,
   SHOW_EXIT,
+  SHOW_SIGN,
   `kill @e[type=minecraft:item,${IN_PIT}]`,
   `execute as @a at @s if block ~ ~-1 ~ minecraft:gold_block run tellraw @s "You finished the parkour."`,
   `execute as @a at @s if block ~ ~-1 ~ minecraft:gold_block run tp @s ${START}`,
@@ -198,8 +229,9 @@ export const WAITING_FILES: readonly CarriedFile[] = [
   { path: `${WAITING_DATAPACK}/data/cubepals/function/load.mcfunction`, content: lines(LOAD) },
   {
     path: `${WAITING_DATAPACK}/data/cubepals/function/build.mcfunction`,
-    content: lines([...PARKOUR, ...PIT]),
+    content: lines([...PARKOUR, ...PIT, ...SIGN_BLOCKS]),
   },
+  { path: `${WAITING_DATAPACK}/data/cubepals/function/sign.mcfunction`, content: lines(SIGN_DISPLAYS) },
   { path: `${WAITING_DATAPACK}/data/cubepals/function/tick.mcfunction`, content: lines(TICK) },
   { path: `${WAITING_DATAPACK}/data/cubepals/function/open.mcfunction`, content: lines(OPEN) },
   { path: `${WAITING_DATAPACK}/data/cubepals/function/close.mcfunction`, content: lines(CLOSE) },

@@ -103,8 +103,9 @@ describe("Cubepals' resource pack", () => {
         expect(width).toBe(height)
         if (file.path !== 'pack.png') expect(width).toBe(SIDE)
         const { alphas, colours } = inked(file.picture)
-        // Clear round the shape, and solid in it: nothing blended at an edge.
-        expect([...alphas].sort((a, b) => a - b)).toEqual([0, 255])
+        // Clear round the shape, and solid in it: nothing blended at an edge. The pack's own picture
+        // is a whole square of Paper, as Cubepals' servers show the mark.
+        expect([...alphas].sort((a, b) => a - b)).toEqual(file.path === 'pack.png' ? [255] : [0, 255])
         expect([...colours].every((colour) => [INK, PAPER, INDIGO].includes(colour))).toBe(true)
         expect(colours.has(INK) && colours.has(PAPER)).toBe(true)
       }
@@ -115,8 +116,8 @@ describe("Cubepals' resource pack", () => {
     const shown = commands.filter(
       (command) => command.includes('summon minecraft:item_display') && command.includes('cubepals:'),
     )
-    // A portal over each of the hub's three pads, an open door at each passage's end, one over Duels' way out.
-    expect(shown).toHaveLength(3 + 2 + 1)
+    // An open door at each passage's end, and one over Duels' way out.
+    expect(shown).toHaveLength(2 + 1)
     for (const command of shown) expect(command).toContain(`id:"${MARKER_ITEM}"`)
     expect(commands.find((command) => command.includes('Back to the hub'))).toContain(
       `item_model="${MARKER_ITEM}",custom_model_data={strings:["${MARKERS.backToHub}"]}`,

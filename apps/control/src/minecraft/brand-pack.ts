@@ -15,7 +15,7 @@
  * through, and every label's words are the same.
  */
 import { exactly, type Facing, YAW } from './arcade/datapack.ts'
-import { backToHub, type Picture, portal, wayOut } from './brand-art.ts'
+import { backToHub, badge, type Picture, wayOut } from './brand-art.ts'
 
 /** The pack's names for its markers, as an item's `custom_model_data` carries them. */
 export const MARKERS = {
@@ -23,8 +23,6 @@ export const MARKERS = {
   backToHub: 'cubepals:back_to_hub',
   /** Over a way through, out of where a player is: an open door. */
   wayOut: 'cubepals:way_out',
-  /** Over a way into a game: the app icon's tile. */
-  portal: 'cubepals:portal',
 } as const
 
 type Marker = (typeof MARKERS)[keyof typeof MARKERS]
@@ -80,7 +78,6 @@ export type PackFile = { path: string; json: unknown } | { path: string; picture
 const PICTURES: Record<Marker, Picture> = {
   [MARKERS.backToHub]: backToHub(),
   [MARKERS.wayOut]: wayOut(),
-  [MARKERS.portal]: portal(),
 }
 
 /** A marker's own name, without its namespace: `way_out`. */
@@ -116,7 +113,7 @@ export const BRAND_PACK: readonly PackFile[] = [
       },
     },
   },
-  { path: 'pack.png', picture: portal(64) },
+  { path: 'pack.png', picture: badge(64) },
   { path: 'assets/minecraft/items/oak_door.json', json: OAK_DOOR },
   ...Object.values(MARKERS).flatMap((marker): PackFile[] => [
     {

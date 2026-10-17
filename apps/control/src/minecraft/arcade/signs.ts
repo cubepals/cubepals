@@ -3,59 +3,67 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The Cubepals signs: the horizontal lockup, the mark and the lowercase wordmark, Ink on Paper, as
- * map art in glow item frames on a Paper backing. A large one over the hub's ARCADE cabinet, and a
- * small one at each game's start. The maps are in the world (`scripts/lib/arcade-brand.ts` draws
- * them, and builds each backing); each part of the datapack hangs its own sign's frames as it
- * builds, with a line under a game's sign naming its map and who built it, flat on the sign's wall
- * so that it never turns into it (`creditLabel`). Every small sign shows
- * the same maps. Not where the games are (`maps.ts`).
+ * The Arcade's Cubepals signs: one on top of the hub's ARCADE cabinet, and one at each game's
+ * start, each the mark in Ink on a square of Paper in a frame of the place's own blocks
+ * (`../marquee.ts`): the hall's cabinet lights over the hub, jungle wood over the parkour, ice by
+ * the falling floor and the market's spruce over the pit. Each part of the datapack builds its own
+ * sign as it builds, over the plain Paper each sign once hung on, with a line on its frame's base
+ * under a game's sign naming its map and who built it, flat on it so it never turns into it
+ * (`creditLabel`). Not where the games are (`maps.ts`).
  */
+import { AXES, buildMarquee, type Frame, type Marquee } from '../marquee.ts'
 import { type Block, type Facing, type Label, NS, PAPER } from './datapack.ts'
 import { ARCADE_MAPS } from './maps.ts'
 
-/** The two sizes of sign, by the frames across and down, and the first of their maps. */
-export const SIGN_ART = {
-  large: { columns: 20, rows: 4, firstMap: 9000 },
-  small: { columns: 5, rows: 1, firstMap: 9100 },
-} as const
+/** Cells of the mark to a block. */
+const GRAIN = 8
 
 export interface BrandSign {
-  art: keyof typeof SIGN_ART
-  /** The frame at the sign's top left, as a player reading it sees it. */
+  /** The Paper square's block at its reader's top left. */
   at: Block
   /** The way the sign faces: toward whoever reads it. */
   facing: Facing
-  /** The map it stands at, which a line under it names, with who built it; none over the hub. */
+  /** The Paper square's side, in blocks. */
+  side: number
+  frame: Frame
+  /** Whether a casing closes its back; not where another sign is back to back with it. */
+  backed?: boolean
+  /** The map it stands at, which a line on its base names, with who built it; none over the hub. */
   credit?: string
 }
 
-/** Each way a frame faces: its number in the game, the way its columns run, and where its backing is. */
-const FACING: Record<Facing, { code: number; right: Block; back: Block }> = {
-  south: { code: 3, right: [1, 0, 0], back: [0, 0, -1] },
-  north: { code: 2, right: [-1, 0, 0], back: [0, 0, 1] },
-  east: { code: 5, right: [0, 0, -1], back: [-1, 0, 0] },
-  west: { code: 4, right: [0, 0, 1], back: [1, 0, 0] },
+/** The frames of the games' signs, each in its map's own blocks. */
+export const JUNGLE: Frame = {
+  casing: 'jungle_planks',
+  bulb: 'ochre_froglight',
+  lamp: 'jungle_planks',
+  corner: 'jungle_log',
+}
+export const ICE: Frame = {
+  casing: 'packed_ice',
+  bulb: 'light_blue_stained_glass',
+  lamp: 'sea_lantern',
+  corner: 'blue_ice',
+}
+export const MARKET: Frame = {
+  casing: 'spruce_planks',
+  bulb: 'shroomlight',
+  lamp: 'spruce_planks',
+  corner: 'stripped_spruce_log',
 }
 
-/** Every frame of a sign, left to right and top to bottom, with the map it shows. */
-function signFrames(sign: BrandSign): Array<{ at: Block; map: number }> {
-  const { columns, rows, firstMap } = SIGN_ART[sign.art]
-  const { right } = FACING[sign.facing]
-  const [x, y, z] = sign.at
-  return Array.from({ length: rows * columns }, (_, i) => {
-    const [col, row] = [i % columns, Math.floor(i / columns)]
-    return { at: [x + right[0] * col, y - row, z + right[2] * col] as Block, map: firstMap + i }
-  })
-}
+/** A sign as the marquee it is built as. */
+const marquee = (sign: BrandSign): Marquee => ({
+  at: sign.at,
+  facing: sign.facing,
+  frame: sign.frame,
+  backed: sign.backed ?? true,
+  side: sign.side,
+  grain: GRAIN,
+})
 
-/** The blocks a sign hangs on, one behind each frame: its two opposite corners. */
-export function signBacking(sign: BrandSign): [Block, Block] {
-  const frames = signFrames(sign)
-  const { back } = FACING[sign.facing]
-  const behind = ([x, y, z]: Block): Block => [x + back[0], y + back[1], z + back[2]]
-  return [behind(frames[0]?.at ?? sign.at), behind(frames.at(-1)?.at ?? sign.at)]
-}
+/** The commands that build a sign: its blocks and its lockup, the lockup carrying the build's tag. */
+export const buildSign = (sign: BrandSign): string[] => buildMarquee(marquee(sign), [`${NS}.display`])
 
 /** Names in a sentence: `Crazy_, ViceTechnicolour and Tywnis`. */
 const inWords = (names: readonly string[]): string =>
@@ -68,16 +76,27 @@ function creditLine(key: string): string {
   return `${map.name}, by ${inWords(map.builders)}`
 }
 
+/** A twentieth of a block off the face it is on, as every label on a wall is. */
+const OFF = 0.05
+
+/** How large a credit line is: a little under the game's size, to fit a frame's base. */
+const CREDIT_SCALE = 0.8
+
 /**
- * Under the middle of a sign, just in front of its wall: where its credit line stands, flat, as the
- * sign hangs, its words up from there.
+ * Where a sign's credit line stands: on the middle of its frame's base, the row under the Paper,
+ * a twentieth of a block off the frame's front, its one line in the middle of the row's height.
  */
-function under(sign: BrandSign): Label['at'] {
-  const frames = signFrames(sign)
-  const [first, last] = [frames[0]?.at ?? sign.at, frames.at(-1)?.at ?? sign.at]
-  const { back } = FACING[sign.facing]
-  const middle = (a: number, b: number, toward: number) => (a + b) / 2 + 0.5 + toward * 0.45
-  return [middle(first[0], last[0], back[0]), last[1] - 0.3, middle(first[2], last[2], back[2])]
+function onBase(sign: BrandSign): Label['at'] {
+  const { along, right, out, toward } = AXES[sign.facing]
+  const at = [0, 0, 0]
+  const left = right > 0 ? sign.at[along] : sign.at[along] + 1
+  at[along] = left + (right * sign.side) / 2
+  // A line is 12 of the game's 40 pixels to a block high, with its background.
+  at[1] = sign.at[1] - sign.side + (1 - (12 / 40) * CREDIT_SCALE) / 2
+  // The frame stands a block in front of the panel; its face is one further.
+  const panelFace = toward > 0 ? sign.at[out] + 1 : sign.at[out]
+  at[out] = panelFace + toward * (1 + OFF)
+  return [at[0] ?? 0, at[1] ?? 0, at[2] ?? 0]
 }
 
 /** A sign's credit line, the map it stands at and who built it, or null for the hub's, which has none. */
@@ -85,15 +104,9 @@ export const creditLabel = (sign: BrandSign): Label | null =>
   sign.credit === undefined
     ? null
     : {
-        at: under(sign),
+        at: onBase(sign),
         tag: `${NS}.label`,
         text: [{ text: creditLine(sign.credit), color: PAPER }],
+        scale: CREDIT_SCALE,
         facing: sign.facing,
       }
-
-/** The commands that hang a sign: a fixed, unbreakable glow frame for each of its maps. */
-export const hangSign = (sign: BrandSign): string[] =>
-  signFrames(sign).map(
-    ({ at: [x, y, z], map }) =>
-      `summon minecraft:glow_item_frame ${x} ${y} ${z} {Tags:["${NS}.display"],Facing:${FACING[sign.facing].code}b,Fixed:1b,Invisible:1b,Invulnerable:1b,Item:{id:"minecraft:filled_map",count:1,components:{"minecraft:map_id":${map}}}}`,
-  )

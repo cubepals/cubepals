@@ -15,7 +15,7 @@
  */
 import { AS_COUNT, onSidebar, SECONDS, shown, submit, TMP, WORK } from './boards.ts'
 import { type Block, box, NS, PAPER, type Part, titled } from './datapack.ts'
-import { type BrandSign, creditLabel, hangSign } from './signs.ts'
+import { type BrandSign, buildSign, creditLabel, ICE } from './signs.ts'
 
 const FF = `${NS}.ff`
 
@@ -59,8 +59,14 @@ const [x0, , z0] = FLOOR_DISC.from
 const [x1, , z1] = FLOOR_DISC.to
 const [sx, , sz] = FLOOR_STORE
 
-/** The small Cubepals sign between the pad and the floors, facing a player on the pad. */
-export const FLOOR_SIGN: BrandSign = { art: 'small', at: [-2, 66, 48], facing: 'south', credit: 'meltdown' }
+/** The small Cubepals sign between the pad and the floors, facing a player on the pad, in ice. */
+const FLOOR_SIGN: BrandSign = {
+  at: [-2, 68, 47],
+  side: 4,
+  facing: 'south',
+  frame: ICE,
+  credit: 'meltdown',
+}
 
 export const FLOOR_PART: Part = {
   functions: {
@@ -168,7 +174,7 @@ export const FLOOR_PART: Part = {
     ...[creditLabel(FLOOR_SIGN)].filter((credit) => credit !== null),
   ],
   build: [
-    ...hangSign(FLOOR_SIGN),
+    ...buildSign(FLOOR_SIGN),
     `function ${NS}:floor/rebuild`,
     `kill @e[type=minecraft:marker,tag=${FF}.drop]`,
   ],

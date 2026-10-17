@@ -16,7 +16,7 @@ import { AS_COUNT, submit, TMP, WORK } from './boards.ts'
 import { type Block, box, NS, type Part } from './datapack.ts'
 import { KEEP } from './kept.ts'
 import { placed } from './maps.ts'
-import { type BrandSign, creditLabel, hangSign } from './signs.ts'
+import { type BrandSign, buildSign, creditLabel, MARKET } from './signs.ts'
 
 const PIT = `${NS}.pit`
 
@@ -47,14 +47,14 @@ const ARMOUR: Readonly<Record<'head' | 'chest' | 'legs' | 'feet', string>> = {
 
 /**
  * The small Cubepals sign over the middle of the market, both ways, so the spawn points on either
- * side see it, on one backing between the two.
+ * side see it: two back to back on one panel, in the market's spruce.
  */
-export const PIT_SIGNS: readonly BrandSign[] = [
-  { art: 'small', at: [-1044, 92, 0], facing: 'north' },
+const PIT_SIGNS: readonly BrandSign[] = [
+  { at: [-1044, 92, 1], side: 4, facing: 'north', frame: MARKET, backed: false },
   // One credit line, under this one.
-  { art: 'small', at: [-1048, 92, 2], facing: 'south', credit: 'market' },
+  { at: [-1047, 92, 1], side: 4, facing: 'south', frame: MARKET, backed: false, credit: 'market' },
 ]
-const SIGN_CHUNKS = 'forceload add -1048 0 -1044 2'
+const SIGN_CHUNKS = 'forceload add -1048 0 -1043 4'
 
 export const PIT_PART: Part = {
   functions: {
@@ -95,7 +95,7 @@ export const PIT_PART: Part = {
     `scoreboard objectives setdisplay sidebar.team.red ${PIT}.kills`,
   ],
   labels: PIT_SIGNS.map(creditLabel).filter((credit) => credit !== null),
-  build: [...PIT_SIGNS.flatMap(hangSign), SIGN_CHUNKS.replace('add', 'remove')],
+  build: [...PIT_SIGNS.flatMap(buildSign), SIGN_CHUNKS.replace('add', 'remove')],
   tick: [
     `team join ${PIT} @a[team=!${PIT},${ZONE}]`,
     `execute as @a[scores={${PIT}.raw=1..}] at @s run function ${NS}:pit/kill`,

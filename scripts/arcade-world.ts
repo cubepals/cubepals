@@ -19,8 +19,8 @@
  *    in Cubepals' colours, lit, with a doorway (`arcade-hall.ts`), buried in the ground
  *    (`arcade-ground.ts`) under the landing page's house, a few steps from a doorway to it
  *    (`arcade-house.ts`); a copy of the falling floor's floors to put them back from
- *    (`arcade-additions.ts`); and Cubepals: the mark on the hall's screens, the pads, and every
- *    sign's backing and its lockup as map art (`arcade-brand.ts`).
+ *    (`arcade-additions.ts`); and Cubepals: the mark on the hall's screens and the pads
+ *    (`arcade-brand.ts`). The Cubepals signs are the datapack's, which builds them as it starts.
  * 4. The overworld alone is packed as `arcade-world.tar.gz`, with `CREDITS.txt`, and its SHA-512
  *    and size printed for `ARCADE_WORLD`. `bun scripts/arcade-upload.ts` puts it in a
  *    deployment's archive store; the maps never go into this repository.
@@ -37,7 +37,7 @@ import { HUB_SPAWN } from '../apps/control/src/minecraft/arcade/datapack.ts'
 import { ARCADE_MAPS, type ArcadeMap } from '../apps/control/src/minecraft/arcade/maps.ts'
 import { RCON_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { ADDITIONS } from './lib/arcade-additions.ts'
-import { BRAND_COMMANDS, writeSignMaps } from './lib/arcade-brand.ts'
+import { BRAND_COMMANDS } from './lib/arcade-brand.ts'
 import { GROUND, GROUND_COMMANDS } from './lib/arcade-ground.ts'
 import { HALL_COMMANDS, HALL_LIGHTS } from './lib/arcade-hall.ts'
 import { HOUSE_COMMANDS, INSIDE } from './lib/arcade-house.ts'
@@ -322,7 +322,6 @@ async function main(): Promise<void> {
   } finally {
     await stop()
   }
-  writeSignMaps(join(WORK, 'server', LEVEL), resolve('brand/png/lockup-horizontal.png'))
   const out = pack()
   const bytes = readFileSync(out)
   say(`${out}: sha512 ${createHash('sha512').update(bytes).digest('hex')}, ${bytes.length} bytes`)

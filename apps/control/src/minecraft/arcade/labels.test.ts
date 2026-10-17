@@ -13,7 +13,7 @@ import { ARCADE_FILES, ARCADE_LABELS } from '../arcade.ts'
 import { WAITING_FILES } from '../duels-waiting.ts'
 import clearance from './clearance.json' with { type: 'json' }
 import { INK, type Label, PAPER } from './datapack.ts'
-import { HUB_MARKERS } from './hub.ts'
+import { HUB_MARKERS, PAD_BADGES } from './hub.ts'
 import { inRoom, lineWidths, markerRoom, type Room, roomOf, wallOf } from './label-space.ts'
 import { ARCADE_WORLD } from './maps.ts'
 
@@ -25,6 +25,10 @@ const rooms: Array<[string, Room]> = [
     roomOf(label),
   ]),
   ...HUB_MARKERS.map((marker): [string, Room] => [`the ${marker.marker} marker`, markerRoom(marker)]),
+  ...PAD_BADGES.map(({ at, side }): [string, Room] => [
+    'the mark over a pad',
+    markerRoom({ at, scale: side }),
+  ]),
 ]
 
 const label = (text: string, more: Partial<Label> = {}): Label => ({
@@ -36,7 +40,10 @@ const label = (text: string, more: Partial<Label> = {}): Label => ({
 
 describe('the floating words on the Arcade and Duels', () => {
   test('every one is a text display the game hides behind blocks, on Ink, with a shadow; none is a name over an entity', () => {
-    const texts = everyCommand.filter((command) => command.includes('summon minecraft:text_display'))
+    // Not the squares of colour Cubepals' signs are made of, which hold one space and no words.
+    const texts = everyCommand.filter(
+      (command) => command.includes('summon minecraft:text_display') && !command.includes('text:" "'),
+    )
     expect(texts).toHaveLength(ARCADE_LABELS.length)
     for (const text of texts) {
       expect(text).toContain('see_through:false')

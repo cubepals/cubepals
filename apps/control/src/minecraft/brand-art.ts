@@ -5,9 +5,9 @@
 /**
  * The pictures in Cubepals' resource pack (`brand-pack.ts`), drawn from source rather than kept as
  * images: the mark from its own shapes in `brand/mark.svg`, sampled into pixels, and around it the
- * door that takes a player back to the hub, the open door over every way through, and the app
- * icon's tile over every way into a game. Ink and Paper, the brand's two colours, with the beta's
- * indigo where light comes through (`brand/README.md`). Each picture is whole pixels, as the game's
+ * door that takes a player back to the hub and the open door over every way through, and the pack's
+ * own picture, the mark in Ink on Paper as Cubepals' servers show it. Ink and Paper, the brand's
+ * two colours, with the beta's indigo where light comes through (`brand/README.md`). Each picture is whole pixels, as the game's
  * own textures are: nothing is blended at an edge. Not how the pack is put together or offered.
  *
  * The art is Cubepals' own, as the brand's files are (`brand/LICENSE.md`).
@@ -73,33 +73,43 @@ function inMark([x, y]: Point): boolean {
 /**
  * The mark drawn on a grid of pixels: each of its four shapes in a cell `cell` pixels square, with
  * a pixel between them, as the hall's mark in blocks is (`scripts/lib/arcade-brand.ts`), since
- * below the brand's twenty pixels the four would run together.
+ * below the brand's twenty pixels the four would run together. Each pixel is sampled `samples` by
+ * `samples`; an odd number leaves no pixel half in, so the square, which sits inside its cell,
+ * keeps its corners.
  */
-function markPixels(cell: number): boolean[][] {
+export function markPixels(cell: number, samples = 4): boolean[][] {
   const size = 2 * cell + 1
   const side = (n: number): 0 | 1 | null => (n < cell ? 0 : n > cell ? 1 : null)
   return Array.from({ length: size }, (_, row) =>
     Array.from({ length: size }, (_, column) => {
       const [across, down] = [side(column), side(row)]
-      return across !== null && down !== null && mostlyMark(cell, across, down, column, row)
+      return across !== null && down !== null && mostlyMark(cell, samples, across, down, column, row)
     }),
   )
 }
 
 /**
- * Whether most of a pixel in the cell `across` and `down` (each 0 or 1) is its shape's: sampled
- * four by four in the shape's own 300-unit cell of the view box, with the view box's margin.
+ * Whether at least half of a pixel in the cell `across` and `down` (each 0 or 1) is its shape's:
+ * sampled `samples` by `samples` in the shape's own 300-unit cell of the view box, with the view
+ * box's margin.
  */
-function mostlyMark(cell: number, across: 0 | 1, down: 0 | 1, column: number, row: number): boolean {
+function mostlyMark(
+  cell: number,
+  samples: number,
+  across: 0 | 1,
+  down: 0 | 1,
+  column: number,
+  row: number,
+): boolean {
   const [cx, cy] = [column - across * (cell + 1), row - down * (cell + 1)]
   let covered = 0
-  for (let sy = 0; sy < 4; sy++)
-    for (let sx = 0; sx < 4; sx++) {
-      const x = across * 300 + VIEW.origin + ((cx + (sx + 0.5) / 4) / cell) * (VIEW.size / 2)
-      const y = down * 300 + VIEW.origin + ((cy + (sy + 0.5) / 4) / cell) * (VIEW.size / 2)
+  for (let sy = 0; sy < samples; sy++)
+    for (let sx = 0; sx < samples; sx++) {
+      const x = across * 300 + VIEW.origin + ((cx + (sx + 0.5) / samples) / cell) * (VIEW.size / 2)
+      const y = down * 300 + VIEW.origin + ((cy + (sy + 0.5) / samples) / cell) * (VIEW.size / 2)
       if (inMark([x, y])) covered++
     }
-  return covered >= 8
+  return covered >= Math.ceil((samples * samples) / 2)
 }
 
 const rgb = (hex: string): readonly [number, number, number] => [
@@ -128,16 +138,6 @@ function canvas(side: number) {
           if (on) dot(x + c, y + r, hex)
         })
       })
-    },
-    /** The app icon's rounded tile: corners cut to `brand/app-icon.svg`'s radius, 22.37% of its side. */
-    tile(hex: string) {
-      const radius = side * 0.2237
-      for (let row = 0; row < side; row++)
-        for (let column = 0; column < side; column++) {
-          const dx = Math.max(radius - (column + 0.5), column + 0.5 - (side - radius), 0)
-          const dy = Math.max(radius - (row + 0.5), row + 0.5 - (side - radius), 0)
-          if (dx * dx + dy * dy <= radius * radius) dot(column, row, hex)
-        }
     },
     picture: (): Picture => ({ width: side, height: side, rgba }),
   }
@@ -168,12 +168,15 @@ export function wayOut(): Picture {
   return draw.picture()
 }
 
-/** Over every way into a game: the app icon, the mark in Paper at 58% on its Ink tile (`brand/app-icon.svg`). */
-export function portal(side = SIDE): Picture {
+/**
+ * Cubepals' own servers' look, as their server-list picture is: the mark alone in Ink on a square
+ * of Paper, square corners, with the brand's clear space round it, a quarter of its height.
+ */
+export function badge(side: number): Picture {
   const draw = canvas(side)
-  draw.tile(INK)
-  const cell = Math.round((side * 0.58 - 1) / 2)
+  draw.rect(0, 0, side, side, PAPER)
+  const cell = Math.floor((Math.floor(side / 1.5) - 1) / 2)
   const at = Math.floor((side - (2 * cell + 1)) / 2)
-  draw.mark(at, at, cell, PAPER)
+  draw.mark(at, at, cell, INK)
   return draw.picture()
 }

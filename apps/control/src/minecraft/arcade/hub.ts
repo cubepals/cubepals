@@ -19,6 +19,7 @@
  */
 
 import { MARKERS, type ShownMarker, showMarker } from '../brand-pack.ts'
+import { CABINET, markBadge } from '../marquee.ts'
 import { TMP } from './boards.ts'
 import { CREDIT_LINES } from './credits.ts'
 import {
@@ -34,13 +35,19 @@ import {
   TO_HUB,
   titled,
 } from './datapack.ts'
-import { type BrandSign, hangSign } from './signs.ts'
+import { type BrandSign, buildSign } from './signs.ts'
 import { GAMES, playing } from './ways-in.ts'
 
 const HUB = `${NS}.hub`
 
-/** The large Cubepals sign, over the big ARCADE cabinet, facing the hall. */
-export const HUB_SIGN: BrandSign = { art: 'large', at: [165, 110, 1359], facing: 'south' }
+/**
+ * The Cubepals sign on the big ARCADE cabinet, facing the hall, over its name: its base the front
+ * of the cabinet's roof, as high as the hall's ceiling lets it be, in the cabinets' own lights.
+ */
+const HUB_SIGN: BrandSign = { at: [173, 111, 1363], side: 6, facing: 'south', frame: CABINET }
+
+/** The plain Paper the sign over the cabinet once hung on, further back on its roof, taken away. */
+const OLD_BACKING = 'fill 165 107 1358 184 110 1358 minecraft:air replace minecraft:quartz_block'
 
 /** What a player types after `/trigger` to come back, or to read who made the maps. */
 const BACK = 'hub'
@@ -111,12 +118,8 @@ const ENDS: ReadonlyArray<{ x: number; floor: number; z: number; facing: Facing;
 ]
 const END_SCALE = 0.8
 
-/** The markers over the ways in and out: the app icon's tile over each game's pad, above its name, and an open door at each passage's end. */
+/** The open door flat on the wall at each passage's end. */
 export const HUB_MARKERS: readonly ShownMarker[] = [
-  ...PADS.map(({ middle: [x, y, z] }) => ({
-    marker: MARKERS.portal,
-    at: [x + 0.5, y + 4.6, z + 0.5] as const,
-  })),
   ...ENDS.map(({ x, floor, z, facing }) => ({
     marker: MARKERS.wayOut,
     at: [x, floor + 1.25, z] as const,
@@ -124,6 +127,14 @@ export const HUB_MARKERS: readonly ShownMarker[] = [
     scale: END_SCALE,
   })),
 ]
+
+/**
+ * Over each game's pad, above its name, Cubepals' own look, turning to whoever looks: the mark in
+ * Ink on a square of Paper, a block across (`markBadge`).
+ */
+export const PAD_BADGES: ReadonlyArray<{ at: readonly [number, number, number]; side: number }> = PADS.map(
+  ({ middle: [x, y, z] }) => ({ at: [x + 0.5, y + 4.6, z + 0.5] as const, side: 1 }),
+)
 
 /** Every label in the hub: each game's name over its pad, the hub's name, the credits and the ways between the house and the hall. */
 const HUB_LABELS: readonly Label[] = [
@@ -216,7 +227,9 @@ export const HUB_PART: Part = {
   labels: HUB_LABELS,
   build: [
     ...HUB_MARKERS.map((marker) => showMarker(marker, [`${NS}.display`])),
-    ...hangSign(HUB_SIGN),
+    ...PAD_BADGES.flatMap(({ at, side }) => markBadge(at, side, [`${NS}.display`])),
+    OLD_BACKING,
+    ...buildSign(HUB_SIGN),
     // Nothing in the hub can be hurt: whatever the maps brought along, and what the build made.
     `execute as @e[type=!minecraft:player] run data merge entity @s {Invulnerable:1b}`,
   ],

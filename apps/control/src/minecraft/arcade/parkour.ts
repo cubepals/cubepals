@@ -16,7 +16,7 @@
 import { onSidebar, SECONDS, shown, submit, TMP, WORK } from './boards.ts'
 import { type Block, box, NS, PAPER, type Part, titled } from './datapack.ts'
 import { placed } from './maps.ts'
-import { type BrandSign, creditLabel, hangSign } from './signs.ts'
+import { type BrandSign, buildSign, creditLabel, JUNGLE } from './signs.ts'
 
 /** A box in a map, both corners included, and where a player stands when sent there, facing on. */
 interface Spot {
@@ -126,8 +126,14 @@ const finishTicks = STAGES.flatMap((stage, s) => {
   ]
 })
 
-/** The small Cubepals sign over the first course, ahead of a player arriving, facing them. */
-export const PARKOUR_SIGN: BrandSign = { art: 'small', at: [995, 71, 2], facing: 'east', credit: 'jungle' }
+/** The small Cubepals sign over the first course, ahead of a player arriving, facing them, in jungle wood. */
+const PARKOUR_SIGN: BrandSign = {
+  at: [994, 72, 2],
+  side: 4,
+  facing: 'east',
+  frame: JUNGLE,
+  credit: 'jungle',
+}
 
 export const PARKOUR_PART: Part = {
   functions: {
@@ -188,7 +194,7 @@ export const PARKOUR_PART: Part = {
     },
     ...[creditLabel(PARKOUR_SIGN)].filter((credit) => credit !== null),
   ],
-  build: [...hangSign(PARKOUR_SIGN), 'forceload remove 960 -40 1410 40'],
+  build: [...buildSign(PARKOUR_SIGN), 'forceload remove 960 -40 1410 40'],
   tick: [
     `team join ${NS}.parkour @a[team=!${NS}.parkour,${ZONE}]`,
     `execute as @a[${RUNNING}] unless entity @s[${ZONE}] run tag @s remove ${NS}.pk.run`,
