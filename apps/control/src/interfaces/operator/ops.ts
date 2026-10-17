@@ -5,8 +5,9 @@
 /**
  * Accounts and their servers, acted on from the command line, on the internal listener with the
  * operator token (docs/production.md): an account found, read, or made for a person, its plan and
- * limits set, and a server made for it, started, stopped, sent to the trash and taken back out,
- * rested in the archive store now, or purged now. What an owner does on a server's own pages is
+ * limits set, and a server made for it, started, stopped, tried again after a start that failed
+ * (as its owner's Try again does), sent to the trash and taken back out, rested in the archive
+ * store now, or purged now. What an owner does on a server's own pages is
  * `server-pages.ts`'s; Browse and its allowlist are `listings.ts`'s; the admins' platform switches
  * are `platform.ts`'s; uploaded jars' malware checks are `jar-checks.ts`'s. All of it is under `/ops/v1`. `scripts/ops.ts` is its command line, and `scripts/production-check.ts`
  * runs a server's whole life through it. Production's health reads as the admin Health page
@@ -27,7 +28,7 @@ import { z } from 'zod'
 import type { AccountDetail, AccountQueries } from '../../app/accounts/queries.ts'
 import type { AccountService } from '../../app/accounts/service.ts'
 import type { OperatorActor } from '../../app/actor.ts'
-import { NotFound } from '../../app/errors.ts'
+import { AppError, NotFound } from '../../app/errors.ts'
 import type { PlatformHealth } from '../../app/platform/health.ts'
 import type { ServerQueries } from '../../app/servers/queries.ts'
 import type { MinecraftServerService } from '../../app/servers/service.ts'
@@ -44,7 +45,10 @@ export type OpsApiOptions = ServerPagesOptions &
   PlatformOptions & {
     accounts: Pick<AccountService, 'setPlan' | 'setLimits' | 'createAccount'>
     accountQueries: Pick<AccountQueries, 'list' | 'get'>
-    servers: Pick<MinecraftServerService, 'createFor' | 'start' | 'stop' | 'deleteServer' | 'undeleteServer'>
+    servers: Pick<
+      MinecraftServerService,
+      'createFor' | 'start' | 'stop' | 'retry' | 'deleteServer' | 'undeleteServer'
+    >
     queries: Pick<ServerQueries, 'get'>
     upkeep: Pick<UpkeepNow, 'rest' | 'purge'>
     health: Pick<PlatformHealth, 'view' | 'operations' | 'operation'>
@@ -165,6 +169,12 @@ function accountRoutes(app: Hono, { accounts, accountQueries }: OpsApiOptions): 
   })
 }
 
+/** A start a failed server refuses, saying what does bring it back. */
+const RETRY_INSTEAD = new AppError(
+  'invalid_transition',
+  "It didn't start last time: try it again with retry (`ops.ts retry <server>`), as its owner's Try again does.",
+)
+
 function serverRoutes(app: Hono, { accountQueries, servers, queries, upkeep }: OpsApiOptions): void {
   app.post(`${OPS_BASE}/servers`, async (c) => {
     const operator = operatorOf(c)
@@ -180,7 +190,21 @@ function serverRoutes(app: Hono, { accountQueries, servers, queries, upkeep }: O
   app.post(`${OPS_BASE}/servers/:id/start`, async (c) => {
     const operator = operatorOf(c)
     const { requestId } = RequestBody.parse(await bodyOf(c))
-    await servers.start(operator, c.req.param('id'), requestId ?? randomUUID())
+    await servers.start(operator, c.req.param('id'), requestId ?? randomUUID()).catch(async (error) => {
+      throw (await failedLastTime(error)) ? RETRY_INSTEAD : error
+    })
+    return c.json(await queries.get(operator, c.req.param('id')))
+
+    async function failedLastTime(error: unknown) {
+      if (!(error instanceof AppError) || error.code !== 'invalid_transition') return false
+      return (await queries.get(operator, c.req.param('id'))).status === 'failed'
+    }
+  })
+  // What a failed server's owner gets from Try again: the failed work again, with what it was asked for.
+  app.post(`${OPS_BASE}/servers/:id/retry`, async (c) => {
+    const operator = operatorOf(c)
+    const { requestId } = RequestBody.parse(await bodyOf(c))
+    await servers.retry(operator, c.req.param('id'), requestId ?? randomUUID())
     return c.json(await queries.get(operator, c.req.param('id')))
   })
   app.post(`${OPS_BASE}/servers/:id/stop`, async (c) => {

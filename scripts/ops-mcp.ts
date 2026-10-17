@@ -198,6 +198,12 @@ tool(
   read,
 )
 tool('server_start', 'Starts a server.', { serverId }, (a) => ['POST', at(a.serverId, '/start')])
+tool(
+  'server_retry',
+  'Tries again a server that didn’t start last time, as its owner’s Try again does; server_start refuses it.',
+  { serverId },
+  (a) => ['POST', at(a.serverId, '/retry')],
+)
 tool('server_stop', 'Stops a server; its world is kept.', { serverId }, (a) => [
   'POST',
   at(a.serverId, '/stop'),

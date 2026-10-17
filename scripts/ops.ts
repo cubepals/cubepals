@@ -22,6 +22,9 @@
  *                                                   a server for that account, as the web makes one
  *   bun scripts/ops.ts server <server>              one server, as its owner's page reads it
  *   bun scripts/ops.ts start|stop <server>
+ *   bun scripts/ops.ts retry <server>               a server that didn't start last time, tried
+ *                                                   again as its owner's Try again does; start
+ *                                                   refuses it and says to use this
  *   bun scripts/ops.ts trash <server> --confirm <its name>
  *   bun scripts/ops.ts untrash <server>             back out of the trash, while its window lasts
  *   bun scripts/ops.ts rest <server>                a stopped server's world to the archive store now
@@ -189,6 +192,7 @@ switch (command) {
     break
   case 'start':
   case 'stop':
+  case 'retry':
   case 'untrash':
   case 'rest':
     show(await api('POST', `/servers/${serverId()}/${command}`))
@@ -417,7 +421,7 @@ switch (command) {
   }
   default:
     say(
-      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|trash|untrash|rest|purge|console|identity|message|mods|players|whitelist|operator|helper|ban|pardon|moderation|listing|official|allowlist|platform|jars|health|operations|operation',
+      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|retry|trash|untrash|rest|purge|console|identity|message|mods|players|whitelist|operator|helper|ban|pardon|moderation|listing|official|allowlist|platform|jars|health|operations|operation',
     )
     say('See the top of scripts/ops.ts, and docs/production.md.')
     if (command !== 'help') process.exit(1)
