@@ -182,11 +182,24 @@ export class Archives {
     await this.deleteStored(archive.id, archive.objectKey).catch(() => undefined)
   }
 
-  /** A released server's copies on its node went with its data; the store's stay. */
+  /**
+   * A server's copies on a node that deleted its data went with it; the store's stay. A snapshot
+   * the store never got is gone, so it is no longer offered (`held`), and each is recorded.
+   */
   async forgetNodeCopies(key: string, nodeId: string): Promise<void> {
-    await this.#db.execute(sql`
-          UPDATE fleet_archives SET local_deleted_at = now()
-          WHERE workload = ${key} AND node_id = ${nodeId} AND local_deleted_at IS NULL`)
+    const forgotten = await rows<{ id: string; status: ArchiveRow['status']; error: string | null }>(
+      this.#db,
+      sql`UPDATE fleet_archives SET local_deleted_at = now()
+          WHERE workload = ${key} AND node_id = ${nodeId} AND local_id IS NOT NULL AND local_deleted_at IS NULL
+          RETURNING id, status, error`,
+    )
+    for (const row of forgotten)
+      if (row.status !== 'ready' && row.status !== 'deleted')
+        await event(this.#db, 'snapshot.lost_with_copy', {
+          node: nodeId,
+          workload: key,
+          data: { id: row.id, status: row.status, error: row.error },
+        })
   }
 
   /** Every copy of a destroyed server the store holds, deleted; the first failure stops it. */

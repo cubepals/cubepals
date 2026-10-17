@@ -4,7 +4,7 @@
 
 import type { BillingTerm } from '@blockly/contracts'
 import { MINUTE_MS } from '@blockly/contracts/durations'
-import { PolarClientError, PolarError, PolarRateLimitError } from '@polar-sh/sdk'
+import { PolarClientError } from '@polar-sh/sdk'
 import { createPolar, errors, type models, webhooks } from '@polar-sh/sdk/2026-10'
 import { z } from 'zod'
 import {
@@ -12,7 +12,6 @@ import {
   type BillingOrder,
   type BillingProvider,
   type BillingState,
-  BillingUnavailable,
   type Discount,
   DiscountRefused,
   type GiftProduct,
@@ -24,6 +23,7 @@ import {
 import { discountBody, discountOf } from './polar-discounts.ts'
 import { GIFT_METADATA, giftOf } from './polar-gifts.ts'
 import type { Fields } from './polar-models.ts'
+import { call, refusal } from './polar-requests.ts'
 
 /**
  * Polar through its official TypeScript SDK, pinned to API version 2026-10 for requests and for
@@ -131,6 +131,17 @@ const Subscription = z.object({
   past_due_at: z.string().nullish(),
 } satisfies Fields<models.Subscription>)
 
+// An order's refunds, each with the reason it was given for.
+const Refunds = z.object({
+  items: z.array(z.object({ reason: z.string() } satisfies Fields<models.Refund>)),
+} satisfies Fields<models.ListResourceRefund>)
+
+/**
+ * The refund reason a withdrawal is given in Polar: the player asked for their money back.
+ * Blockly's own refunds (`refund`) are `duplicate`.
+ */
+const WITHDRAWAL_REASON: models.RefundReason = 'customer_request'
+
 // The fields of Polar's `Order` (SDK 2026-10 `models`, read 2026-10-10) that revenue and extra play
 // need: every amount is in cents, the customer carries the external id Blockly gave it, and each
 // line names the price it charged, which says whether it is the metered one.
@@ -148,6 +159,7 @@ const Order = z.object({
     .default([]),
   id: z.string(),
   created_at: z.string(),
+  modified_at: z.string().nullish(),
   subtotal_amount: z.number().int(),
   discount_amount: z.number().int(),
   net_amount: z.number().int(),
@@ -371,6 +383,27 @@ export class PolarBilling implements BillingProvider {
     )
   }
 
+  /**
+   * Revoked, as in Polar's dashboard: it ends now, and Polar neither renews it nor retries a charge
+   * for it. Polar refuses one revoked already, which is ended all the same.
+   */
+  async endSubscription(externalSubscriptionId: string): Promise<void> {
+    await call('ending a subscription now', () =>
+      this.#polar.subscriptions.revoke(externalSubscriptionId).catch((error: unknown) => {
+        if (!(error instanceof errors.AlreadyCanceledSubscription)) throw error
+      }),
+    )
+  }
+
+  async refundedAsWithdrawal(externalOrderId: string): Promise<boolean> {
+    const refunds = Refunds.parse(
+      await call('reading an order’s refunds', () =>
+        this.#polar.refunds.list({ order_id: externalOrderId, limit: 100 }),
+      ),
+    )
+    return refunds.items.some((refund) => refund.reason === WITHDRAWAL_REASON)
+  }
+
   /** Every gift product for a plan this deployment sells, cheapest first, read from Polar now. */
   async giftProducts(): Promise<GiftProduct[]> {
     const found = Listed.parse(
@@ -520,6 +553,7 @@ export class PolarBilling implements BillingProvider {
       paysForYear: year !== undefined,
       gift,
       orderedAt: new Date(order.created_at),
+      changedAt: order.modified_at ? new Date(order.modified_at) : null,
     }
   }
 
@@ -753,17 +787,6 @@ function refusesEmail(error: unknown): boolean {
 }
 
 /**
- * What Polar said was wrong with a request: its first problem's message, or its own summary. A
- * 422 lists its problems (`HTTPValidationError`); a 400, which the SDK doesn't map, says one.
- */
-function refusal(error: PolarClientError): string {
-  const body = error.error as models.HTTPValidationError | Partial<models.BadRequest> | null
-  const detail = body?.detail
-  if (typeof detail === 'string') return detail
-  return detail?.find((problem) => problem.msg)?.msg ?? error.message
-}
-
-/**
  * A checkout made with the customer's email, or without it when Polar won't take the address (one
  * on a reserved domain, as test accounts have): that isn't the person's to fix, so the checkout
  * opens without it and asks them for one.
@@ -773,22 +796,4 @@ function withEmail<T>(email: string, create: (field: { customer_email?: string }
     if (refusesEmail(error)) return create({})
     throw error
   })
-}
-
-/**
- * Polar's outage, rate limit or an unreachable network is billing being unavailable. So is Polar
- * refusing Blockly's own token (revoked, or short a scope): it waits for a person to fix it, and
- * nothing asked meanwhile is at fault for it.
- */
-async function call<T>(what: string, request: () => Promise<T>): Promise<T> {
-  try {
-    return await request()
-  } catch (error) {
-    const unavailable =
-      error instanceof PolarRateLimitError ||
-      (error instanceof PolarClientError && (error.statusCode === 401 || error.statusCode === 403)) ||
-      (error instanceof PolarError && !(error instanceof PolarClientError))
-    if (unavailable) throw new BillingUnavailable(`${what}: ${(error as Error).message}`)
-    throw error
-  }
 }

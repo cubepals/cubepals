@@ -2,8 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { PassThrough, Readable } from 'node:stream'
+import { PassThrough, Readable, Transform } from 'node:stream'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
+import { createGunzip } from 'node:zlib'
+import { SECOND_MS } from '@blockly/contracts/durations'
 import { configure } from '@zip.js/zip.js'
 import { parse as parseProperties } from 'dot-properties'
 import { strFromU8, unzipSync, zipSync } from 'fflate'
@@ -12,7 +14,7 @@ import nbt from 'prismarine-nbt'
 import { parse as parseToml } from 'smol-toml'
 import { Header, Pack, Parser, ReadEntry } from 'tar'
 import { parse as parseYaml } from 'yaml'
-import { type FileFormats, UnreadableFile } from '../../app/ports/formats.ts'
+import { type FileFormats, ReadCutShort, UnreadableFile } from '../../app/ports/formats.ts'
 import { readRemoteZip } from './remote-zip.ts'
 
 /**
@@ -136,25 +138,61 @@ export class LibraryFileFormats implements FileFormats {
       wanted(path: string): boolean
       enough(found: ReadonlyMap<string, Uint8Array>): boolean
       maxEntryBytes: number
+      maxKeptEntries: number
+      maxKeptBytes: number
+      maxInflatedBytes: number
+      deadlineMs: number
     },
   ): Promise<Map<string, Uint8Array>> {
-    const response = await fetch(url)
-    if (!response.ok || response.body === null)
+    const late = () => new ReadCutShort('time', `Not read within ${options.deadlineMs / SECOND_MS} s`)
+    const stop = new AbortController()
+    const timer = setTimeout(() => stop.abort(late()), options.deadlineMs)
+    let response: Response
+    try {
+      response = await fetch(url, { signal: stop.signal })
+    } catch (error) {
+      clearTimeout(timer)
+      throw stop.signal.aborted ? late() : error
+    }
+    if (!response.ok || response.body === null) {
+      clearTimeout(timer)
       throw new Error(`Fetching the archive answered ${response.status}`)
+    }
     const input = Readable.fromWeb(response.body as WebReadableStream<Uint8Array>)
     const found = new Map<string, Uint8Array>()
     return new Promise((resolve, reject) => {
+      // Inflated here rather than by the parser, so every byte the archive inflates to is counted,
+      // the ones no entry is read for and any after its end included. Each chunk inflated costs a
+      // round through the stream, so they are large ones: zlib's default is many times slower.
+      const gunzip = createGunzip({ chunkSize: INFLATED_CHUNK_BYTES })
+      let inflated = 0
+      let kept = 0
+      let keptBytes = 0
       let settled = false
       const finish = (error?: Error) => {
         if (settled) return
         settled = true
+        clearTimeout(timer)
         input.destroy()
+        gunzip.destroy()
+        counted.destroy()
         if (error) reject(error)
         else resolve(found)
       }
-      // Strict: an archive that isn't one fails instead of warning its way to nothing.
+      const counted = new Transform({
+        transform(chunk: Buffer, _encoding, done) {
+          inflated += chunk.length
+          if (inflated <= options.maxInflatedBytes) return done(null, chunk)
+          finish(new ReadCutShort('size', `More than ${options.maxInflatedBytes} bytes once inflated`))
+          done()
+        },
+      })
+      // Strict: an archive that isn't one fails instead of warning its way to nothing. What reaches
+      // it is inflated already: a tarball compressed again inside would inflate uncounted, so any
+      // further inflating is refused.
       const parser = new Parser({
         strict: true,
+        maxDecompressionRatio: 1,
         onReadEntry: (entry: ReadEntry) => {
           const path = entry.path.replace(/^\.\//, '')
           if (!FILES.has(entry.type) || !options.wanted(path)) {
@@ -164,6 +202,19 @@ export class LibraryFileFormats implements FileFormats {
           if (entry.size > options.maxEntryBytes) {
             entry.resume()
             finish(new UnreadableFile(`${path} is ${entry.size} bytes, more than ${options.maxEntryBytes}`))
+            return
+          }
+          // Counted as each entry starts, before any of it is held.
+          kept += 1
+          keptBytes += entry.size
+          if (kept > options.maxKeptEntries || keptBytes > options.maxKeptBytes) {
+            entry.resume()
+            finish(
+              new ReadCutShort(
+                'kept',
+                `More than ${options.maxKeptEntries} files or ${options.maxKeptBytes} bytes to keep`,
+              ),
+            )
             return
           }
           const chunks: Buffer[] = []
@@ -179,7 +230,10 @@ export class LibraryFileFormats implements FileFormats {
       )
       parser.on('end', () => finish())
       input.on('error', (error) => finish(error))
-      input.pipe(parser)
+      gunzip.on('error', (error) => finish(new UnreadableFile(`Not a gzipped tarball: ${messageOf(error)}`)))
+      if (stop.signal.aborted) return finish(late())
+      stop.signal.addEventListener('abort', () => finish(late()))
+      input.pipe(gunzip).pipe(counted).pipe(parser)
     })
   }
 
@@ -266,5 +320,6 @@ const MAX_JAR_RECORDS = 20_000
 /** Reading every class of a jar: more files than any jar holds, inflated this much at a time. */
 const MAX_SCANNED_RECORDS = 150_000
 const BATCH_BYTES = 64 * 1024 * 1024
+const INFLATED_CHUNK_BYTES = 1024 * 1024
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))

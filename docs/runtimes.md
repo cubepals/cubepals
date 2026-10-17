@@ -186,12 +186,16 @@ and only an operator can say what it is.
 The same sweep, as it ends, asks each server's own runtime for storage it holds beside the world
 that no machine mounts (`clearLeftovers`): what a wake, a restore or a move that failed partway
 made, or a delete that gave up while the provider still held the volume. It keeps what the
-server's handle names, unless the server is resting, whose world is in the archive store. It asks
+server's handle names, unless the server is resting, whose world is in the archive store. On Fly
+it also destroys a server machine in the app that no handle names (a restore or a move that
+stopped after making its new machine), and a helper past its lifetime, and deletes an export's
+volume no machine mounts. It asks
 under the server's lock, never with an operation in flight, and once per volume with no waiting;
 what the provider still holds goes on a later pass. Each deletion is in the log
 (`orphans: deleted <ids>, left beside <server>'s world`) and the audit log
 (`server.leftover_storage_deleted`). On Fly, a wake from the archive also clears what earlier
-failed wakes left as soon as it is up.
+failed wakes left as soon as it is up, and a restore or a move destroys any other server machine
+in the app as soon as its own handle is saved, so a wake never boots one an earlier try left.
 
 ## 6. Operating it
 

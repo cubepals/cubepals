@@ -32,6 +32,7 @@ import {
   RuntimeUnsupported,
   type SnapshotHandle,
 } from '../ports/runtime.ts'
+import { keepingSaving } from './owed-saving.ts'
 
 /** What is done through a handle: the port's own verbs, each sent to the runtime that issued it. */
 type HandleVerbs =
@@ -433,12 +434,12 @@ export class RoutedAdapters {
       const provider = router.providerOf(handle)
       return (provider === null ? undefined : byProvider.get(provider)) ?? first
     }
-    this.console = {
+    this.console = keepingSaving({
       run: (target: ConsoleTarget, command: string) =>
         forEndpoint(target.endpoint).console.run(target, command),
-      runAll: (target: ConsoleTarget, commands: readonly string[]) =>
-        forEndpoint(target.endpoint).console.runAll(target, commands),
-    }
+      runAll: (target: ConsoleTarget, commands: readonly string[], options?: { commandMs?: number }) =>
+        forEndpoint(target.endpoint).console.runAll(target, commands, options),
+    })
     this.probe = {
       ping: (endpoint: GameEndpoint, signal: AbortSignal): Promise<ServerStatusPing> =>
         forEndpoint(endpoint).probe.ping(endpoint, signal),

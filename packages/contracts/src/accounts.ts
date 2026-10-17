@@ -247,6 +247,8 @@ export interface AccountOverviewView {
       planKey: string
       /** Its renewal failed to charge: the plan lasts until then unless the card is fixed. */
       pastDueUntil: string | null
+      /** Cubepals ended it itself: its first month was withdrawn, or its renewal stayed unpaid. */
+      endedFor: 'withdrawal' | 'unpaid' | null
     } | null
     /**
      * The plan paid for a year at once: when the first year still to run starts (later than now
@@ -256,6 +258,11 @@ export interface AccountOverviewView {
     year: { planKey: string; startsAt: string; endsAt: string; renewed: boolean } | null
     /** A redeemed gift that gives the plan now, and when the gifted time runs out. */
     gifted: { planKey: string; until: string } | null
+    /**
+     * A redeemed gift waiting to start, once the time the account has paid for ends; `continues`
+     * when part of it ran already, and what is left of it runs then, until `endsAt`.
+     */
+    giftNext: { planKey: string; months: number; startsAt: string; endsAt: string; continues: boolean } | null
   }
   entitlements: EntitlementsView
   /** What the owner has set for themselves, where their plan lets them. */
@@ -278,6 +285,17 @@ export interface AccountOverviewView {
      * to the plan's `carryUnits`. They are spent first, and carry no further.
      */
     carriedUnits: number
+    /**
+     * When this month's count began: the owner's midnight on the 1st, or later in the month the
+     * plan began, so play on another plan before it isn't spent from this month's hours.
+     */
+    monthBegan: string
+    /**
+     * The time zone the day and month are counted in, and one the browser reported since that takes
+     * over when the next month has begun in both (`from`); null when none waits.
+     */
+    timeZone: string
+    nextTimeZone: { zone: string; from: string } | null
     /** Units past the included block the owner has allowed, and what they cost per unit. */
     extraUnitsAllowed: number
     unitCents: number

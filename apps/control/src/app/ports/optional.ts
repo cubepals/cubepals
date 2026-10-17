@@ -123,6 +123,8 @@ export interface BillingOrder {
   /** What it bought as a gift, when it is for one of the provider's gift products. */
   gift?: GiftProduct | null
   orderedAt: Date
+  /** When the provider last changed it (paid, refunded…), where it says. */
+  changedAt?: Date | null
 }
 
 /**
@@ -213,6 +215,13 @@ export interface BillingProvider {
    * the portal would: a year was bought to follow it.
    */
   stopRenewing(externalSubscriptionId: string): Promise<void>
+  /**
+   * The subscription ends now, and nothing more is charged for it: its first month was withdrawn,
+   * or its renewal is still unpaid when the plan's grace runs out. One ended already stays ended.
+   */
+  endSubscription(externalSubscriptionId: string): Promise<void>
+  /** A refund of the order was the withdrawal the Refunds page offers, by the provider's reason for it. */
+  refundedAsWithdrawal(externalOrderId: string): Promise<boolean>
   portalUrl(input: { userId: string; returnUrl: string }): Promise<string>
   /**
    * A one-time payment for orders the provider can no longer collect (their subscription ended),

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { type RealtimeMap, realtimeContract } from '@blockly/contracts/realtime'
-import { type ConnectRequest, createServer, refuse, type ServerPeer } from 'transport-io'
+import { type ConnectRequest, createServer, refuse, type ServerPeer, TransportError } from 'transport-io'
 import { listenHttp3 } from 'transport-io/node-transport'
 import { listenWebSocket } from 'transport-io/websocket-node-transport'
 import type { ConsoleFeed } from '../../app/console/feed.ts'
@@ -40,6 +40,16 @@ const TAILED = new Set(['provisioning', 'starting', 'running', 'stopping'])
  * them on a new server's first start, or on a replaced one's, so the step itself opens the tail.
  */
 const BOOTING = new Set(['booting', 'starting', 'loading_world'])
+
+/**
+ * Ends a handler's work. transport-io neither awaits nor catches what a handler returns, and an
+ * unhandled rejection ends the process, so every async handler settles here. A peer that left
+ * while its handler waited is routine; anything else is said, and the session carries on.
+ */
+const settle = (what: string) => (error: unknown) => {
+  if (error instanceof TransportError && error.code === 'WT_SESSION_CLOSED') return
+  console.error(`realtime: ${what} failed`, error)
+}
 
 /**
  * The realtime role: exactly one per deployment (Transport.io rooms live in one process). It
@@ -91,8 +101,8 @@ export async function startRealtime(options: RealtimeOptions): Promise<{ stop():
   }
 
   server.onSession((peer: ServerPeer<RealtimeMap, Peer>) => {
-    void peer.join(userRoom(peer.data.userId))
-    peer.on('watch', async ({ serverId }) => {
+    peer.join(userRoom(peer.data.userId)).catch(settle('joining a person to their room'))
+    const watch = async (serverId: string) => {
       if (!(await options.console.canWatch(peer.data.userId, serverId))) return
       await peer.join(consoleRoom(serverId))
       void startTail(serverId)
@@ -103,11 +113,13 @@ export async function startRealtime(options: RealtimeOptions): Promise<{ stop():
         serverId,
         lines: lines.map((l) => ({ at: l.at.toISOString(), text: l.text, level: l.level })),
       })
-    })
-    peer.on('unwatch', async ({ serverId }) => {
+    }
+    const unwatch = async (serverId: string) => {
       await peer.leave(consoleRoom(serverId))
       stopTailIfUnwatched(serverId)
-    })
+    }
+    peer.on('watch', ({ serverId }) => void watch(serverId).catch(settle('a watch')))
+    peer.on('unwatch', ({ serverId }) => void unwatch(serverId).catch(settle('an unwatch')))
     void peer.closed.then(() => {
       for (const serverId of tails.keys()) stopTailIfUnwatched(serverId)
     })

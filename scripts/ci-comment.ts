@@ -11,9 +11,10 @@
  *
  * ci-comment.yml runs it from the base branch on each of CI's runs, with GH_TOKEN, REPO and
  * RUN_ID, and once the run is done, JUNIT: the directory its test groups' JUnit reports were
- * downloaded to, one directory per artifact. It reads the run and its jobs from GitHub's API,
- * finds the pull request from the run's head, and edits the comment it wrote before, found by its
- * marker. It needs no installed package. Not for judging the run: ci.yml's `check` does that, and
+ * downloaded to, one directory per artifact. Whichever event's job finds the run done writes its
+ * results, so a cancelled or late job never leaves the comment saying it runs. It reads the run
+ * and its jobs from GitHub's API, finds the pull request from the run's head, and edits the
+ * comment it wrote before, found by its marker. It needs no installed package. Not for judging the run: ci.yml's `check` does that, and
  * this comment only reports it.
  */
 import { readdirSync, readFileSync } from 'node:fs'
@@ -314,31 +315,40 @@ const need = (name: string): string => {
   return value
 }
 
-if (import.meta.main) {
-  const repo = need('REPO')
-  const id = need('RUN_ID')
+/**
+ * Writes the comment for run `id`, as the run is now: running while it runs, its results once it
+ * is done, whatever event started the job. `junit` is where its reports were downloaded, if they
+ * were. Gives what it did.
+ */
+export async function report(
+  repo: string,
+  id: string,
+  junit: string | undefined,
+  now: Date,
+): Promise<string> {
   const run = (await (await github(`repos/${repo}/actions/runs/${id}`)).json()) as WorkflowRun
   const pull = run.event === 'pull_request' ? await pullOf(repo, run) : undefined
   // A push to main gets no comment, and an older commit's run doesn't write over a newer one's.
-  if (!pull) process.stdout.write('No open pull request is this run’s.\n')
-  else if (pull.head.sha !== run.head_sha)
-    process.stdout.write('The pull request has moved on from this run.\n')
-  // Results are written once the reports are downloaded; a late "running" doesn't write over them.
-  else if (run.status === 'completed' && !process.env.JUNIT)
-    process.stdout.write('The run is done already.\n')
-  else {
-    const jobs = (await (await github(`repos/${repo}/actions/runs/${id}/jobs?per_page=100`)).json()) as {
-      jobs: Job[]
-    }
-    const body = ciComment({
-      repo,
-      sha: run.head_sha,
-      url: run.html_url,
-      conclusion: run.status === 'completed' ? run.conclusion : null,
-      jobs: jobs.jobs,
-      reports: process.env.JUNIT ? readReports(process.env.JUNIT) : new Map(),
-      now: new Date(),
-    })
-    await keepComment(repo, pull.number, MARKER, body)
+  if (!pull) return 'No open pull request is this run’s.'
+  if (pull.head.sha !== run.head_sha) return 'The pull request has moved on from this run.'
+  const jobs = (await (await github(`repos/${repo}/actions/runs/${id}/jobs?per_page=100`)).json()) as {
+    jobs: Job[]
   }
+  const done = run.status === 'completed'
+  const body = ciComment({
+    repo,
+    sha: run.head_sha,
+    url: run.html_url,
+    conclusion: done ? run.conclusion : null,
+    jobs: jobs.jobs,
+    reports: junit ? readReports(junit) : new Map(),
+    now,
+  })
+  await keepComment(repo, pull.number, MARKER, body)
+  return done ? 'Wrote the results.' : 'Wrote that the run is going.'
+}
+
+if (import.meta.main) {
+  const done = await report(need('REPO'), need('RUN_ID'), process.env.JUNIT || undefined, new Date())
+  process.stdout.write(`${done}\n`)
 }

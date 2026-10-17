@@ -22,7 +22,9 @@ import { type MemoryTier, PARTY, playerCapacity, sizeLabel } from '../../domain/
 import { type Actor, runsThePlatform } from '../actor.ts'
 import { settleable } from '../billing/balance.ts'
 import { meteredMonth, meteredUnitsSince } from '../billing/chip-in-meter.ts'
+import { type EndedFor, endedFor } from '../billing/ending.ts'
 import { extraThisMonth } from '../billing/extra-usage.ts'
+import { giftNext } from '../billing/gifts.ts'
 import { extraPlayNow, giftedPlan, latestSubscription, PAST_DUE_GRACE_MS } from '../billing/persistence.ts'
 import { yearView } from '../billing/years.ts'
 import { NotFound } from '../errors.ts'
@@ -47,6 +49,14 @@ const round = (value: number): number => Math.round(value * 10) / 10
 const totalSaid = (total: PlayTotal | null): AccountOverviewView['usage']['total'] =>
   total === null ? null : { units: round(total.units), included: total.included }
 
+/** A time zone the browser reported that takes over next month, as the account page says it. */
+const zoneWaiting = (
+  standing: Pick<AccountStanding, 'nextTimeZone' | 'nextTimeZoneFrom'>,
+): AccountOverviewView['usage']['nextTimeZone'] =>
+  standing.nextTimeZone === null || standing.nextTimeZoneFrom === null
+    ? null
+    : { zone: standing.nextTimeZone, from: standing.nextTimeZoneFrom.toISOString() }
+
 /** Features an account page lists, each answered by the policy as the API would answer it. */
 const FEATURES = [
   'create_server',
@@ -66,7 +76,7 @@ export interface AccountOverview {
     /**
      * What the billing provider says, when a subscription pays for the plan or once did.
      * `pastDueUntil`: its renewal failed to charge, and the plan lasts until then unless the card
-     * is fixed.
+     * is fixed. `endedFor`: Blockly ended it itself, after a withdrawal or a renewal left unpaid.
      */
     billed: {
       status: string
@@ -74,6 +84,7 @@ export interface AccountOverview {
       cancelAtPeriodEnd: boolean
       planKey: string
       pastDueUntil: Date | null
+      endedFor: EndedFor | null
     } | null
     /**
      * The plan paid for a year at once: when the first year still to run starts, when the last
@@ -82,6 +93,11 @@ export interface AccountOverview {
     year: { planKey: string; startsAt: Date; endsAt: Date; renewed: boolean } | null
     /** A redeemed gift that gives the plan now, and when the gifted time runs out. */
     gifted: { planKey: string; until: Date } | null
+    /**
+     * A redeemed gift waiting to start, once the time the account has paid for ends; `continues`
+     * when part of it ran already, and what is left of it runs then.
+     */
+    giftNext: { planKey: string; months: number; startsAt: Date; endsAt: Date; continues: boolean } | null
   }
   entitlements: Entitlements
   /** The sizes the plan allows, as somebody reads them: "3 GB · up to 5 players". */
@@ -96,6 +112,9 @@ export interface AccountOverview {
     hoursThisMonth: number
     /** What was left of last month's block and carried into this one, up to the plan's `carryUnits`, in units. */
     carriedUnits: number
+    monthBegan: AccountOverviewView['usage']['monthBegan']
+    timeZone: AccountOverviewView['usage']['timeZone']
+    nextTimeZone: AccountOverviewView['usage']['nextTimeZone']
     extraUnitsAllowed: number
     unitCents: number
     /**
@@ -168,7 +187,8 @@ export class AccountQueries {
     const entitlements = entitlementsFor(standing.plan, standing.limitOverrides)
     const owned = await countServers(this.#db, userId)
     const month = await meteredMonth(this.#db, standing, entitlements, now)
-    const monthBegan = month?.start ?? monthStart(now, standing.timeZone ?? DEFAULT_TIME_ZONE)
+    const zone = standing.timeZone ?? DEFAULT_TIME_ZONE
+    const monthBegan = month?.start ?? monthStart(now, zone)
     const subscription = await latestSubscription(this.#db, userId)
     const gifted = await giftedPlan(this.#db, userId, now)
     const { decision, owedCents } = await extraPlayNow(this.#db, standing)
@@ -207,9 +227,11 @@ export class AccountQueries {
                   subscription.status === 'past_due' && subscription.pastDueAt !== null
                     ? new Date(subscription.pastDueAt.getTime() + PAST_DUE_GRACE_MS)
                     : null,
+                endedFor: await endedFor(this.#db, subscription),
               },
         year: await yearView(this.#db, userId, now),
         gifted,
+        giftNext: await giftNext(this.#db, userId, now),
       },
       entitlements,
       settings: { afkKickMinutes: standing.afkKickMinutes },
@@ -224,6 +246,9 @@ export class AccountQueries {
         unitsThisMonth: round(await meteredUnitsSince(this.#db, userId, monthBegan, now)),
         hoursThisMonth: round(await runHoursSince(this.#db, userId, monthBegan, now)),
         carriedUnits: round(month?.carried ?? 0),
+        monthBegan: monthBegan.toISOString(),
+        timeZone: zone,
+        nextTimeZone: zoneWaiting(standing),
         extraUnitsAllowed: standing.extraUnitsAllowed,
         unitCents: UNIT_CENTS,
         extra: {
@@ -261,7 +286,8 @@ export class AccountQueries {
       email: user.email,
       admin: await isAdmin(this.#db, user.id),
       standing: { status: standing.status, reason: standing.reason, plan: standing.plan },
-      timeZone: standing.timeZone,
+      // What the browser last said, waiting or not, so it isn't said again.
+      timeZone: standing.nextTimeZone ?? standing.timeZone,
     }
   }
 
