@@ -68,6 +68,8 @@ export interface Frame {
   lampGain: number
   /** How far the camera is under the grass, 0 to 1: the rock outside the rooms goes dark with it. */
   deep: number
+  /** How many times over a room's lamps count: more when the room is a lit window seen from outside. */
+  windows: number
   time: number
   /** The block the cursor is on, or null. */
   pick: readonly [number, number, number] | null

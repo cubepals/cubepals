@@ -58,11 +58,24 @@ import { director, type Shot, shotsOf } from './views'
 const bandOf = (tone: string): number =>
   tone === 'night' ? 0 : tone === 'dusk' ? 3 : tone === 'slate' || tone === 'bedrock' ? 2 : 1
 
-/**
- * How much weight the camera's spring has, in seconds. The page opens on its first screen as it
- * is, with nothing flying behind the words.
- */
+/** How much weight the camera's spring has, in seconds. The first screen opens still, as it is. */
 const WEIGHT = 0.17
+/** Where the camera is until the page has said where it should be. */
+const OPENING: Pose = {
+  x: 8,
+  y: 0,
+  z: 8,
+  az: 42,
+  el: 20,
+  span: 34,
+  fov: 26,
+  side: 0.5,
+  drop: 0.5,
+  crowd: 0,
+  under: 0,
+  inside: 0,
+  bright: 1,
+}
 
 /** How close to its goal each of the camera's values has to be to count as there. */
 const WITHIN: Record<keyof Pose, number> = {
@@ -77,6 +90,7 @@ const WITHIN: Record<keyof Pose, number> = {
   drop: 0.0003,
   crowd: 0.002,
   under: 0.002,
+  inside: 0.002,
   bright: 0.002,
 }
 
@@ -257,20 +271,7 @@ export function Chunk() {
     let skyless = false
     let room: RoomKey | null = null
     let act: string | null = null
-    let goal: Pose = {
-      x: 8,
-      y: 0,
-      z: 8,
-      az: 42,
-      el: 20,
-      span: 34,
-      fov: 26,
-      side: 0.5,
-      drop: 0.5,
-      crowd: 0,
-      under: 0,
-      bright: 1,
-    }
+    let goal: Pose = OPENING
     let view: Pose | null = null
     // How fast each of the camera's values is moving, in the order of POSE_KEYS.
     const velocity = new Float64Array(POSE_KEYS.length)
@@ -412,8 +413,7 @@ export function Chunk() {
         castAt = time
         castBeat = beat
       }
-      // Nobody on the grass moves while nobody could make them out: from far off they stand
-      // where they were.
+      // Nobody on the grass moves while nobody could make them out: from far off they stand still.
       const step = surfaceNear ? passed : 0
       const chips = quiet
         ? () => {}
@@ -999,7 +999,7 @@ export function Chunk() {
         carried = torchLight
       }
       // The light and the tone curve: by the day, and eased with the camera into a room and out.
-      const look = lookAt(light, here.under, here.bright)
+      const look = lookAt(light, here.under, here.bright, here.inside)
       // The hero's sky is the one colour of the print that changes: night to paper with the day.
       if (skyFor !== dayNow) {
         bands[0] = { low: INK, high: mix(NIGHT, PAPER, dawnOf(day)), line: INK }

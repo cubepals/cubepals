@@ -89,9 +89,11 @@ function poseOf(element: HTMLElement, band: boolean, lens: Lens, trying: URLSear
     side: sideOf(element.dataset.side, band),
     drop: band ? 0.5 : numberOr(element.dataset.drop, 0.5),
     crowd: numberOr(element.dataset.crowd, 0),
-    // A room is printed in the room's look, and so is anything on the dig's dark grounds, lit by
-    // its lamps alone; anywhere else, by the day.
-    under: key || element.dataset.tone === 'slate' || element.dataset.tone === 'bedrock' ? 1 : 0,
+    // The page goes darker only on the way down: the dig's upper rooms are printed by the day on
+    // stone, and only what is on the dark grounds below (slate, bedrock) in the room's look, lit
+    // by its lamps alone. A room is never darker than the page it is on.
+    under: element.dataset.tone === 'slate' || element.dataset.tone === 'bedrock' ? 1 : 0,
+    inside: key ? 1 : 0,
     bright: numberOr(element.dataset.bright, 1),
   }
 }
@@ -99,7 +101,7 @@ function poseOf(element: HTMLElement, band: boolean, lens: Lens, trying: URLSear
 /** The shots of every section on the page, in the order the page reaches them. */
 export function shotsOf(root: HTMLElement, band: boolean, trying: URLSearchParams): Shot[] {
   const lens: Lens = {
-    far: { span: (TOP - BOTTOM) * 1.18, fov: 12, el: 10 },
+    far: { span: (TOP - BOTTOM) * 1.55, fov: 12, el: 10 },
     wide: { span: band ? 30 : 36, fov: 24, el: 22 },
     near: { span: band ? 20 : 23, fov: 28, el: 14 },
     close: { span: band ? 12 : 17, fov: 36, el: 12 },
@@ -160,6 +162,7 @@ function flight(a: Pose, b: Pose, t: number, scrollSpeed: number): Pose {
     drop: lerp(a.drop, b.drop, t),
     crowd: lerp(a.crowd, b.crowd, t),
     under: lerp(a.under, b.under, t),
+    inside: lerp(a.inside, b.inside, t),
     bright: lerp(a.bright, b.bright, t),
   }
 }

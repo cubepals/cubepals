@@ -79,8 +79,10 @@ interface Look {
   lampGain: number
   exposure: number
   contrast: number
-  /** How far the camera is into a room, which darkens the rock outside it. */
+  /** How far the camera is onto the dark grounds, which darkens the rock outside the rooms. */
   deep: number
+  /** How many times over a room's lamps count: a room seen from out of doors is a lit window. */
+  windows: number
 }
 
 /**
@@ -90,7 +92,7 @@ interface Look {
  * the faces turned away print nearly ink. Under the grass a room is dim, its walls in dark greys,
  * and its lamps light it.
  */
-const MOONLIT: Omit<Look, 'deep'> = {
+const MOONLIT: Omit<Look, 'deep' | 'windows'> = {
   keyLight: 2.2,
   fill: 0.9,
   roomFill: 0.45,
@@ -98,7 +100,7 @@ const MOONLIT: Omit<Look, 'deep'> = {
   exposure: 0.7,
   contrast: 1.45,
 }
-const DAYLIT: Omit<Look, 'deep'> = {
+const DAYLIT: Omit<Look, 'deep' | 'windows'> = {
   keyLight: 2.8,
   fill: 0.85,
   roomFill: 0.45,
@@ -106,7 +108,7 @@ const DAYLIT: Omit<Look, 'deep'> = {
   exposure: 0.42,
   contrast: 1.55,
 }
-const ROOMLIT: Omit<Look, 'deep'> = {
+const ROOMLIT: Omit<Look, 'deep' | 'windows'> = {
   keyLight: 2.2,
   fill: 0.55,
   roomFill: 0.24,
@@ -119,18 +121,24 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 
 /**
  * The look at a moment: `light` is how far the day has come, 0 to 1; `under` how far the camera is
- * into a room, 0 to 1; `bright` scales the exposure, for a beat that asks for more or less.
+ * onto the dig's dark grounds, 0 to 1; `bright` scales the exposure, for a beat that asks for more
+ * or less; `inside` how far the camera is into a room. A room on a light ground is lit as plainly
+ * as the grass; only on the dark grounds is it dim and lit by its lamps. Seen from out of doors
+ * its lamps count for more, so it is a lit window in a dark wall.
  */
-export function lookAt(light: number, under: number, bright = 1): Look {
-  const at = (key: Exclude<keyof Look, 'deep'>) =>
+export function lookAt(light: number, under: number, bright = 1, inside = 0): Look {
+  const at = (key: Exclude<keyof Look, 'deep' | 'windows'>) =>
     lerp(lerp(MOONLIT[key], DAYLIT[key], light), ROOMLIT[key], under)
+  const plain = inside * (1 - under)
   return {
     keyLight: at('keyLight'),
     fill: at('fill'),
-    roomFill: at('roomFill'),
+    roomFill: lerp(at('roomFill'), 1, plain),
     lampGain: at('lampGain'),
-    exposure: at('exposure') * bright,
+    // A room on a light ground is taken brighter, so its walls print pale, as the page does.
+    exposure: at('exposure') * lerp(1, 1.8, plain) * bright,
     contrast: at('contrast'),
     deep: under,
+    windows: lerp(6, 1, Math.max(inside, under)),
   }
 }

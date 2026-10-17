@@ -637,6 +637,7 @@ export class Renderer {
     gl.uniform1f(this.at(s, 'uRoomFill'), frame.roomFill)
     gl.uniform1f(this.at(s, 'uLampGain'), frame.lampGain)
     gl.uniform1f(this.at(s, 'uDeep'), frame.deep)
+    gl.uniform1f(this.at(s, 'uWindows'), frame.windows)
     gl.uniformMatrix4fv(this.at(s, 'uCamera'), false, frame.camera)
     gl.uniform2f(this.at(s, 'uShift'), frame.shift[0], frame.shift[1])
     gl.uniform3f(this.at(s, 'uKey'), frame.key[0], frame.key[1], frame.key[2])

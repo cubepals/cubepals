@@ -39,6 +39,7 @@ const POSES: Record<Still, Pose> = {
     drop: 0.55,
     crowd: 0,
     under: 0,
+    inside: 0,
     bright: 1,
   },
   day: {
@@ -53,6 +54,7 @@ const POSES: Record<Still, Pose> = {
     drop: 0.56,
     crowd: 0,
     under: 0,
+    inside: 0,
     bright: 1,
   },
 }
@@ -116,6 +118,7 @@ export function print(still: Still, width: number, height: number, dot: number):
     shadows: { middle: [8, 3, 8], radius: 16, runs: mesh.between(-8, TOP) },
     ...look,
     deep: 0,
+    windows: 6,
     levels: 0,
     detail: 1,
     groups,

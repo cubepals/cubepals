@@ -197,7 +197,7 @@ export function Wake({ proof }: { proof: ReactNode }) {
       // The gate's room, by its own name, so the gauge and a sent link can reach it.
       id="edge"
       name="The wake"
-      tone="slate"
+      tone="stone"
       room="edge"
       shot={{ span: 8.4, drop: 0.6 }}
       line={awake ? 'If it’s asleep, it wakes up for them.' : 'They join like any server.'}
@@ -330,7 +330,7 @@ export function Decided({ plans, proof }: { plans: PublicPlan[]; proof: ReactNod
     <Beat
       {...beat}
       name="What it didn’t ask"
-      tone="slate"
+      tone="stone"
       y={58.6}
       act="ledger"
       side={0.56}
@@ -442,7 +442,7 @@ export function Asleep({ proof }: { proof: ReactNode }) {
       beat={beat}
       room="sleep"
       name="Asleep"
-      tone="slate"
+      tone="stone"
       line="It saves the world before it stops."
       span={8.6}
       proof={proof}
@@ -486,7 +486,7 @@ export function Built({ proof }: { proof: ReactNode }) {
       beat={beat}
       room="machine"
       name="Built"
-      tone="slate"
+      tone="stone"
       line="Sized for your game and your group."
       span={9.4}
       proof={proof}
@@ -529,7 +529,7 @@ export function Fitted({ proof }: { proof: ReactNode }) {
       beat={beat}
       room="packs"
       name="Fitted"
-      tone="slate"
+      tone="stone"
       line="Pick a pack and Cubepals installs all of it."
       span={9}
       proof={proof}
@@ -566,7 +566,7 @@ export function Copied({ proof }: { proof: ReactNode }) {
       beat={beat}
       room="backups"
       name="Copied"
-      tone="slate"
+      tone="stone"
       line="A backup each time everyone leaves."
       span={9.6}
       drop={0.68}
@@ -606,7 +606,7 @@ export function Sent({ proof }: { proof: ReactNode }) {
       beat={beat}
       room="runtimes"
       name="Sent"
-      tone="bedrock"
+      tone="slate"
       line="Cubepals picks where it runs."
       span={9}
       proof={proof}
@@ -636,7 +636,7 @@ export function Kept({ proof }: { proof: ReactNode }) {
       beat={beat}
       room="fleet"
       name="Kept"
-      tone="bedrock"
+      tone="slate"
       line="Cubepals is building its own machines for this."
       span={11.5}
       drop={0.68}

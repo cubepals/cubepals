@@ -177,6 +177,8 @@ uniform float uRoomFill;
 uniform float uLampGain;
 // How far the camera is under the grass, 0 to 1: the rock outside the rooms goes dark with it.
 uniform float uDeep;
+// How many times over a room's lamps count: more when it is a lit window seen from out of doors.
+uniform float uWindows;
 // The light that doesn't move, baked a cell a block (bake.ts): red the sky a cell sees, green the
 // placed lamps' light that reaches it, blue what comes back off the blocks round it. Its size in
 // cells and the height of its lowest cell; a size of 0 where there is none (the far worlds).
@@ -373,7 +375,7 @@ void main() {
   // The placed lamps, baked with their shadows and the light they bounce, by how far up their
   // switch is: eased, so a room turned low still glows. A room seen from out of doors (the column,
   // a cutaway) is a lit window in a dark wall, so its lamps count for more there.
-  float lamp = still.y * sqrt(uGroups[open ? 1 : room]) * (open ? 1.0 : 1.0 + 5.0 * (1.0 - uDeep));
+  float lamp = still.y * sqrt(uGroups[open ? 1 : room]) * (open ? 1.0 : uWindows);
   // A room's rock walls stand close beside its lamps and face them square on, so a lamp would
   // light a round pool on a wall, bright to its rim: there its light falls away sooner, and the
   // pool fades into the wall's dark the way the floor's does.
