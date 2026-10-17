@@ -4,39 +4,42 @@
 
 'use client'
 
+/**
+ * The one button, kept in reach on the phone's page: a bar along the foot of the screen from the
+ * first scroll on, which steps aside wherever the page's own button is on screen (the last one,
+ * and each plan card's). On a wide screen the header carries it (app/(public)/header.tsx).
+ */
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { ctaMark } from '../app/(public)/steps'
 
-/**
- * The one button, kept in reach. The dig is long, and whoever decides halfway down that they want
- * a server shouldn't have to climb back up for the button: once the hero has scrolled away this
- * stays in the corner, and steps aside again where the page's own button is on screen. On the
- * phone's page it does the same as a bar along the foot of the screen.
- */
 export function Follow({ create }: { create: string }) {
   const marker = useRef<HTMLSpanElement>(null)
-  const [shown, setShown] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+  const [covered, setCovered] = useState(false)
 
   useEffect(() => {
-    // The nearest of the page's two forms: the phone's page, or the film it is a part of.
-    const root = marker.current?.closest('[data-phone], [data-landing]')
-    const hero = root?.querySelector('[data-sky]')
-    const closing = root?.querySelector('[data-closing]')
-    if (!hero) return
+    const root = marker.current?.closest('[data-phone]')
+    if (!root) return
+    const scroll = () => setScrolled(window.scrollY > 8)
+    scroll()
+    window.addEventListener('scroll', scroll, { passive: true })
+    const own = root.querySelectorAll('[data-closing], [data-plan], [data-cta="plans_create"]')
     const inView = new Set<Element>()
     const seen = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
+      for (const entry of entries)
         if (entry.isIntersecting) inView.add(entry.target)
         else inView.delete(entry.target)
-      }
-      setShown(inView.size === 0)
+      setCovered(inView.size > 0)
     })
-    seen.observe(hero)
-    if (closing) seen.observe(closing)
-    return () => seen.disconnect()
+    for (const element of own) seen.observe(element)
+    return () => {
+      window.removeEventListener('scroll', scroll)
+      seen.disconnect()
+    }
   }, [])
 
+  const shown = scrolled && !covered
   return (
     <>
       <span ref={marker} hidden />

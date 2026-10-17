@@ -105,7 +105,7 @@
 }
 @media (max-width: 420px) {
   .header {
-    gap: 10px;
+    gap: 8px;
   }
   .links {
     gap: 12px;
@@ -114,7 +114,18 @@
     font-size: 0.9375rem;
   }
   .lockup {
-    font-size: 22px;
+    font-size: 21px;
+  }
+}
+@media (max-width: 374px) {
+  .links {
+    gap: 10px;
+  }
+  .link {
+    font-size: 0.875rem;
+  }
+  .lockup {
+    font-size: 19px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

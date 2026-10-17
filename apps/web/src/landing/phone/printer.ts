@@ -9,13 +9,13 @@
  * handed back as a bitmap, so nothing is left drawing. Not for the film, which draws its chunk
  * itself (Chunk.tsx).
  */
-import { AROUND, INK, MIDDLE, NIGHT, PAPER, TORCH } from '../Chunk'
+import { AROUND, MIDDLE } from '../Chunk'
 import { cameraOf, type Pose, project } from '../engine/camera'
 import { Cast } from '../engine/cast'
 import { BOTTOM, buildChunk, HOME, LIT, TOP } from '../engine/chunk'
 import { type Palette, Renderer } from '../engine/gl'
-import { keyAt, lookAt } from '../engine/light'
-import { type Box, REACH } from '../engine/models'
+import { INK, keyAt, lookAt, NIGHT, PAPER, TORCH } from '../engine/light'
+import { Loose } from '../engine/loose'
 import { Mesh, type World } from '../engine/world'
 
 /** Which picture: the server asleep, or awake with everyone in. */
@@ -59,9 +59,6 @@ const POSES: Record<Still, Pose> = {
 /** The chimney's top, where a sleeping server's snore comes out (Chunk.tsx). */
 const CHIMNEY = [3.5, 10.6, 3.5] as const
 
-/** As many loose parts as a picture can hold: the friends, the sheep and the tower are a few hundred. */
-const LOOSE = 4096
-
 /** What a picture is: the bitmap, and where on it the chimney is, in fractions of its width and height. */
 export interface Printed {
   bitmap: ImageBitmap
@@ -86,7 +83,7 @@ function make(): Made | null {
     return null
   }
   const world = buildChunk()
-  const mesh = new Mesh(world, keyAt(0))
+  const mesh = new Mesh(world, null)
   renderer.setWorld(mesh, world.lights)
   return { world, mesh, renderer, canvas }
 }
@@ -147,35 +144,12 @@ export function print(still: Still, width: number, height: number, dot: number):
 }
 
 /**
- * Who is on the grass, packed as the renderer takes loose parts (Chunk.tsx packs them the same
- * way): the sheep, and `friends` of them at their places with the tower built, as the film has
+ * Who is on the grass, packed as the renderer takes loose parts (engine/loose.ts, as the film
+ * packs them): the sheep, and `friends` of them at their places with the tower built, as the film has
  * them when nobody moves.
  */
-function cast(friends: number) {
-  const positions = new Float32Array(LOOSE * 3)
-  const data = new Uint8Array(LOOSE * 8)
-  const turns = new Float32Array(LOOSE * 2)
-  let count = 0
-  const byte = (reach: number) => Math.min(255, Math.round((reach / REACH) * 255))
-  const put: Box = (x, y, z, sx, sy, sz, tone, kind, group, inside, round = 0, tipped = 0, solid = 1) => {
-    if (count === LOOSE) return
-    positions.set([x, y, z], count * 3)
-    data.set(
-      [
-        tone,
-        kind,
-        group,
-        byte(sx),
-        byte(sy),
-        byte(sz),
-        inside,
-        Math.max(0, Math.min(255, Math.round(solid * 255))),
-      ],
-      count * 8,
-    )
-    turns.set([round, tipped], count * 2)
-    count += 1
-  }
-  new Cast().friendsStep(friends, 0, put, () => {}, HOME, true, true)
-  return { positions, data, turns, count }
+function cast(friends: number): Loose {
+  const loose = new Loose()
+  new Cast().friendsStep(friends, 0, loose.put, () => {}, HOME, true, true)
+  return loose
 }

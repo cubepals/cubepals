@@ -16,12 +16,11 @@
  * and every corner reads as a corner (print-pass.ts).
  */
 import type { Vec3 } from './camera'
+import type { Rgb } from './light'
 import { GLOW_FRAG, PRINT_FRAG, PRINT_VERT } from './print-pass'
 import { MAX_LIGHTS, SCENE_FRAG, SCENE_VERT, SHADOW_FRAG } from './scene-pass'
 import { lightMatrix, MAP_SIZE } from './shadow'
 import { CORNERS, type Light } from './world'
-
-export type Rgb = readonly [number, number, number]
 
 /** The colours of a print: the dark dot, the light dot and the line. */
 export interface Palette {
@@ -180,6 +179,9 @@ const NEAR_FACES = [...FACES.slice(0, 18 * CORNER), ...FACES.slice(24 * CORNER)]
 /** How much light a room's own switch gives a face, by the way it faces. */
 const ROOM_LIGHT = new Float32Array([1, 0.86, 0.64, 0.5, 0.7, 0.78])
 
+/** The KHR_parallel_shader_compile extension's COMPLETION_STATUS_KHR, which WebGL names nowhere. */
+const COMPLETION_STATUS_KHR = 0x91b1
+
 /** Every corner of every face open: what a part without shading of its own is drawn with. */
 const OPEN = 0xffffffff
 
@@ -212,10 +214,11 @@ interface Target {
 
 export class Renderer {
   private readonly gl: WebGL2RenderingContext
-  private readonly scene: WebGLProgram
-  private readonly print: WebGLProgram
-  private readonly shadow: WebGLProgram
-  private readonly blur: WebGLProgram
+  /** The four programs while they compile, and once they have. */
+  private readonly linking: Record<'scene' | 'print' | 'shadow' | 'blur', Linking>
+  private programs: Record<'scene' | 'print' | 'shadow' | 'blur', WebGLProgram> | null = null
+  /** Whether the driver can say a program has finished compiling without being waited on. */
+  private readonly parallel: boolean
   private readonly corners: WebGLBuffer
   private readonly nearCorners: WebGLBuffer
   private readonly still: Batch
@@ -258,28 +261,16 @@ export class Renderer {
     if (!gl) throw new Error('WebGL 2 is not available')
     this.gl = gl
     this.mapSize = mapSize
-    const scene = link(gl, SCENE_VERT, SCENE_FRAG)
-    const print = link(gl, PRINT_VERT, PRINT_FRAG)
-    const shadow = link(gl, SCENE_VERT, SHADOW_FRAG)
-    const blur = link(gl, PRINT_VERT, GLOW_FRAG)
-    this.scene = linked(gl, scene)
-    this.print = linked(gl, print)
-    this.shadow = linked(gl, shadow)
-    this.blur = linked(gl, blur)
-    // What never changes is said once: the light a room's switch gives each face, and which
-    // texture is which.
-    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
-    gl.useProgram(this.scene)
-    gl.uniform1fv(this.at(this.scene, 'uRoom'), ROOM_LIGHT)
-    gl.uniform1i(this.at(this.scene, 'uShadowMap'), 2)
-    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
-    gl.useProgram(this.print)
-    gl.uniform1i(this.at(this.print, 'uShade'), 0)
-    gl.uniform1i(this.at(this.print, 'uPlane'), 1)
-    gl.uniform1i(this.at(this.print, 'uGlow'), 2)
-    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
-    gl.useProgram(this.blur)
-    gl.uniform1i(this.at(this.blur, 'uFrom'), 0)
+    // The programs are set compiling here and waited for only when first used, or not at all
+    // where the driver can say when they are done (`ready`): the page never stops for them.
+    this.parallel = gl.getExtension('KHR_parallel_shader_compile') !== null
+    this.linking = {
+      scene: link(gl, SCENE_VERT, SCENE_FRAG),
+      print: link(gl, PRINT_VERT, PRINT_FRAG),
+      shadow: link(gl, SCENE_VERT, SHADOW_FRAG),
+      blur: link(gl, PRINT_VERT, GLOW_FRAG),
+    }
+    if (!this.parallel) this.finish()
     const corners = gl.createBuffer()
     if (!corners) throw new Error('no buffer')
     this.corners = corners
@@ -298,6 +289,49 @@ export class Renderer {
     gl.vertexAttribI4ui(7, OPEN, OPEN, 0, 0)
     // Until a map is drawn, the sampler still needs a depth texture to read: one texel of it.
     this.map = { texture: this.depthTexture(1), fb: null, size: 1 }
+  }
+
+  /**
+   * Whether the programs have compiled, asked without waiting where the driver allows it. A
+   * frame drawn before then would wait for them.
+   */
+  get ready(): boolean {
+    if (this.programs) return true
+    if (
+      Object.values(this.linking).some(
+        ({ program }) => !this.gl.getProgramParameter(program, COMPLETION_STATUS_KHR),
+      )
+    )
+      return false
+    this.finish()
+    return true
+  }
+
+  /** Waits for the programs, and says once what never changes: room light, which texture is which. */
+  private finish(): Record<'scene' | 'print' | 'shadow' | 'blur', WebGLProgram> {
+    if (this.programs) return this.programs
+    const gl = this.gl
+    const { scene, print, shadow, blur } = this.linking
+    const programs = {
+      scene: linked(gl, scene),
+      print: linked(gl, print),
+      shadow: linked(gl, shadow),
+      blur: linked(gl, blur),
+    }
+    this.programs = programs
+    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
+    gl.useProgram(programs.scene)
+    gl.uniform1fv(this.at(programs.scene, 'uRoom'), ROOM_LIGHT)
+    gl.uniform1i(this.at(programs.scene, 'uShadowMap'), 2)
+    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
+    gl.useProgram(programs.print)
+    gl.uniform1i(this.at(programs.print, 'uShade'), 0)
+    gl.uniform1i(this.at(programs.print, 'uPlane'), 1)
+    gl.uniform1i(this.at(programs.print, 'uGlow'), 2)
+    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
+    gl.useProgram(programs.blur)
+    gl.uniform1i(this.at(programs.blur, 'uFrom'), 0)
+    return programs
   }
 
   private depthTexture(size: number): WebGLTexture {
@@ -558,7 +592,7 @@ export class Renderer {
       this.map = { texture, fb, size: this.mapSize }
     }
     this.lightView = lightMatrix(key, shadows.middle, shadows.radius)
-    const s = this.shadow
+    const s = this.finish().shadow
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.map.fb)
     gl.viewport(0, 0, this.map.size, this.map.size)
     gl.enable(gl.DEPTH_TEST)
@@ -605,7 +639,7 @@ export class Renderer {
     const gl = this.gl
     const target = this.target
     if (!target) return
-    const s = this.scene
+    const s = this.finish().scene
     for (let i = 0; i < 16; i++) this.groups[i] = frame.groups[i] ?? 0
     if (frame.shadows) this.castShadows(frame.shadows, frame.key)
 
@@ -673,7 +707,7 @@ export class Renderer {
   /** What glows, blurred across and then down: about seven CSS pixels between taps. */
   private blurGlow(target: Target, unit: number): void {
     const gl = this.gl
-    const b = this.blur
+    const b = this.finish().blur
     const step = 7 / Math.max(0.25, unit)
     // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
     gl.useProgram(b)
@@ -693,7 +727,7 @@ export class Renderer {
 
   private printFrame(target: Target, frame: Frame): void {
     const gl = this.gl
-    const p = this.print
+    const p = this.finish().print
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
     gl.viewport(0, 0, this.width, this.height)
     gl.clearColor(0, 0, 0, 0)
@@ -745,7 +779,7 @@ export class Renderer {
     }
     gl.deleteBuffer(this.corners)
     gl.deleteBuffer(this.nearCorners)
-    for (const program of [this.scene, this.print, this.shadow, this.blur]) gl.deleteProgram(program)
+    for (const { program } of Object.values(this.linking)) gl.deleteProgram(program)
     gl.deleteTexture(this.map.texture)
     if (this.map.fb) gl.deleteFramebuffer(this.map.fb)
     this.freeTarget()

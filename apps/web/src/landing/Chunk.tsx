@@ -10,7 +10,7 @@
  * steps the cast and the room scenes, prints it all, and answers the pointer (the crosshair's
  * block, digging). The drawing itself is engine/gl.ts; who moves is engine/cast.ts.
  */
-import { useEffect, useReducer, useRef } from 'react'
+import { useEffect, useReducer, useRef, useState } from 'react'
 import {
   type Camera,
   cameraOf,
@@ -38,34 +38,18 @@ import {
 } from './engine/chunk'
 import { clamp, inOut, lerp } from './engine/curves'
 import { buildFleet, COHORTS, type Fleet, farRunsOf, type Island } from './engine/fleet'
-import { type Packed, type Palette, Renderer, type Rgb } from './engine/gl'
+import { type Packed, type Palette, Renderer } from './engine/gl'
 import { Ground } from './engine/ground'
 import { Handover } from './engine/handover'
-import { keyAt, lookAt, sunAt } from './engine/light'
+import { INK, keyAt, lookAt, mix, NIGHT, PAPER, STONE, sunAt, TORCH } from './engine/light'
+import { Loose } from './engine/loose'
 import { hash3, Kind, Mesh, relight, type Taken, type World } from './engine/world'
 import { playing } from './film/clock'
+import { Quiet } from './quiet'
 import { choice } from './sections/choice'
 import { type Aim, stage } from './stage'
 import { FIRST_CANVAS, nextCanvas, RESTORED_WITHIN_MS, withoutDrawing } from './start'
 import { director, type Shot, shotsOf } from './views'
-
-const rgb = (hex: string): Rgb => [
-  Number.parseInt(hex.slice(1, 3), 16) / 255,
-  Number.parseInt(hex.slice(3, 5), 16) / 255,
-  Number.parseInt(hex.slice(5, 7), 16) / 255,
-]
-const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
-  a[0] + (b[0] - a[0]) * t,
-  a[1] + (b[1] - a[1]) * t,
-  a[2] + (b[2] - a[2]) * t,
-]
-
-// Ink, paper and the night field, as landing.css names them; the torch here is lamplight, kept warm.
-export const INK = rgb('#0d0d0d')
-export const PAPER = rgb('#F8F7F5')
-export const NIGHT = rgb('#8C86F2')
-export const TORCH = rgb('#FFB01F')
-const STONE = rgb('#E6E3DC')
 
 /**
  * Which palette the print takes over each kind of ground: the hero's sky, paper, the stone of the
@@ -145,7 +129,23 @@ const SAYS = {
  * who is looking, so they are built once and kept for as long as the page's code is: coming back
  * to the page, or the page mounting twice in development, finds them ready.
  */
-let built: { world: World; mesh: Mesh; fleet: Fleet; reach: number } | null = null
+let built: { world: World; mesh: Mesh } | null = null
+let fleets: { fleet: Fleet; reach: number } | null = null
+
+/** The chunk and its mesh, built if they aren't yet. */
+function prepared(): { world: World; mesh: Mesh } {
+  if (!built) {
+    const world = buildChunk()
+    built = { world, mesh: new Mesh(world, null) }
+  }
+  return built
+}
+
+/** The other worlds round this one, `reach` worlds out, built if they aren't yet. */
+function fleetOf(reach: number): Fleet {
+  if (fleets?.reach !== reach) fleets = { fleet: buildFleet(reach, sunAt(1)), reach }
+  return fleets.fleet
+}
 
 /** A piece of a block that was just dug out, on its way to the ground. */
 interface Piece {
@@ -180,11 +180,26 @@ export function Chunk() {
   const snore = useRef<HTMLSpanElement>(null)
   // A context that fails to start, or is lost and never given back, gets a new canvas (start.ts).
   const [drawnOn, renew] = useReducer(nextCanvas, FIRST_CANVAS)
+  // After the first paint the chunk is built, and a task later the print's shaders are compiled.
+  const [painted, setPainted] = useState(false)
+  useEffect(() => {
+    let timer = 0
+    const frame = requestAnimationFrame(() => {
+      timer = window.setTimeout(() => {
+        prepared()
+        timer = window.setTimeout(() => setPainted(true))
+      })
+    })
+    return () => {
+      cancelAnimationFrame(frame)
+      clearTimeout(timer)
+    }
+  }, [])
 
   useEffect(() => {
     const canvas = ref.current
     const root = canvas?.closest<HTMLElement>('[data-landing]')
-    if (!canvas || !root) return
+    if (!canvas || !root || !painted) return
     let renderer: Renderer
     try {
       renderer = new Renderer(canvas)
@@ -197,29 +212,16 @@ export function Chunk() {
     const narrow = window.matchMedia('(max-width: 1023px)')
     const mouse = window.matchMedia('(hover: hover) and (pointer: fine)')
 
-    const reach = narrow.matches ? 4 : 8
-    if (!built || built.reach !== reach) {
-      const made = built?.world ?? buildChunk()
-      built = {
-        world: made,
-        mesh: built?.mesh ?? new Mesh(made, keyAt(0)),
-        fleet: buildFleet(reach, sunAt(1)),
-        reach,
-      }
-    }
-    const { world, mesh } = built
-    let fleet = built.fleet
+    const { world, mesh } = prepared()
     renderer.setWorld(mesh, world.lights)
-    renderer.setFar(fleet)
-    // A window that is widened or narrowed gets as many other worlds as its picture is made for.
+    // The other worlds, seen only at the end, are built a while after; as many as the width wants.
+    let fleet: Fleet | null = null
     const refleet = () => {
-      const wanted = narrow.matches ? 4 : 8
-      if (!built || built.reach === wanted) return
-      fleet = buildFleet(wanted, sunAt(1))
-      built = { ...built, fleet, reach: wanted }
+      fleet = fleetOf(narrow.matches ? 4 : 8)
       renderer.setFar(fleet)
       dirty = true
     }
+    const gathering = window.setTimeout(refleet, 2000)
 
     const spine = canvas.parentElement
     // What takes the sky's colour: the section that is the sky, and the band the chunk is drawn in
@@ -332,26 +334,9 @@ export function Chunk() {
       { low: INK, high: NIGHT, line: INK },
     ]
     let skyFor = ''
-    let movingPositions = new Float32Array(3 * 64)
-    let movingData = new Uint8Array(8 * 64)
-    let movingTurns = new Float32Array(2 * 64)
 
-    // The words set on the picture, and the header: the print keeps quiet behind the three of them
-    // most on screen, as rects in CSS pixels from the canvas's corner.
-    let worded: HTMLElement[] = []
-    const hush = new Float32Array(12)
-    const quietRects = () => {
-      hush.fill(0)
-      const seen = worded
-        .map((element) => element.getBoundingClientRect())
-        .filter((r) => r.width > 0 && r.bottom > box.top && r.top < box.bottom)
-        .sort((a, b) => b.width * b.height - a.width * a.height)
-        .slice(0, 3)
-      seen.forEach((r, n) => {
-        hush.set([r.left - box.left, r.top - box.top, r.width, r.height], n * 4)
-      })
-      return hush
-    }
+    // Behind the words on the picture, and the header, the print keeps quiet (quiet.ts).
+    const hush = new Quiet()
 
     // Where a frame's time went, for the trace: relighting, measuring the page, writing to it.
     const spent = { relight: 0, measures: 0, dom: 0 }
@@ -376,7 +361,7 @@ export function Chunk() {
       // What each distance means: how many blocks fit top to bottom, the lens, and the height the
       // camera stands at. "Far" is the whole column, drawn nearly flat.
       shots = shotsOf(root, band, trying)
-      worded = [...root.querySelectorAll<HTMLElement>('[data-over], [data-quiet]')]
+      hush.find(root)
       // The edge between two strata is drawn on the lighter ground, so it counts as paper.
       layers = [...root.querySelectorAll<HTMLElement>('.bl-dig > [data-tone], .bl-dig > .bl-strata')]
         .filter((element) => element !== spine)
@@ -409,59 +394,13 @@ export function Chunk() {
 
     const wanted = director(still)
 
-    // What moves in the world: people, sheep, a cart on the rails, the worker underground, the
-    // chips of a block that was just dug. Each is a loose box: 3 floats for its low corner, the 8
-    // bytes the renderer reads for one, and two angles for how it is turned about its middle
-    // (Renderer.setMoving).
-    let moving = 0
-    const put = (
-      x: number,
-      y: number,
-      z: number,
-      sx: number,
-      sy: number,
-      sz: number,
-      tone: number,
-      kind: number,
-      group: number,
-      inside: number,
-      round = 0,
-      tipped = 0,
-      solid = 1,
-    ) => {
-      if ((moving + 1) * 3 > movingPositions.length) {
-        const positions = new Float32Array(movingPositions.length * 2)
-        positions.set(movingPositions)
-        movingPositions = positions
-        const data = new Uint8Array(movingData.length * 2)
-        data.set(movingData)
-        movingData = data
-        const turns = new Float32Array(movingTurns.length * 2)
-        turns.set(movingTurns)
-        movingTurns = turns
-      }
-      movingTurns[moving * 2] = round
-      movingTurns[moving * 2 + 1] = tipped
-      movingPositions[moving * 3] = x
-      movingPositions[moving * 3 + 1] = y
-      movingPositions[moving * 3 + 2] = z
-      const at = moving * 8
-      movingData[at] = tone
-      movingData[at + 1] = kind
-      movingData[at + 2] = group
-      // A box reaches up to two blocks each way: 255 is two.
-      movingData[at + 3] = Math.min(255, Math.round(sx * 127.5))
-      movingData[at + 4] = Math.min(255, Math.round(sy * 127.5))
-      movingData[at + 5] = Math.min(255, Math.round(sz * 127.5))
-      movingData[at + 6] = inside
-      // How much of it is there: 255 is all of it.
-      movingData[at + 7] = Math.max(0, Math.min(255, Math.round(solid * 255)))
-      moving += 1
-    }
+    // What moves in the world, written afresh every frame (engine/loose.ts).
+    const loose = new Loose()
+    const put = loose.put
     // The cast's boxes, and what a section puts on handed to the next through the print's dots.
     const handover = new Handover(put, ground)
     const actors = (time: number): Packed => {
-      moving = 0
+      loose.clear()
       ground.next()
       // Whoever is on the grass: the friends who joined, each at something of their own, or,
       // beside the two questions, the way to play that is chosen. Nobody moves unseen.
@@ -533,7 +472,7 @@ export function Chunk() {
           0,
         )
       }
-      return { positions: movingPositions, data: movingData, count: moving, turns: movingTurns }
+      return loose
     }
 
     /** The block under the pointer, if the pointer is on the drawing and not on the words. */
@@ -640,7 +579,7 @@ export function Chunk() {
     if (trace) (window as { __blTrace?: number[][] }).__blTrace = trace
     const frame = (time: number) => {
       raf = requestAnimationFrame(frame)
-      if (!visible || lost) return
+      if (!visible || lost || !renderer.ready) return
       const began = trace ? performance.now() : 0
       // A long gap between frames (a hidden tab) still moves things on by a fair step.
       const dt = Math.min(0.25, (time - last) / 1000)
@@ -983,7 +922,7 @@ export function Chunk() {
       const runs = low > high ? mesh.between(BOTTOM, TOP) : mesh.between(low - 4, high + 4)
 
       // Of the far worlds, only the ones the camera can see (fleet.ts).
-      if (here.crowd > 0.004) farRunsOf(fleet, lens, here.crowd, farRuns, farSeen)
+      if (here.crowd > 0.004 && fleet) farRunsOf(fleet, lens, here.crowd, farRuns, farSeen)
       else farRuns.length = 0
 
       // The print changes palette on the rows where the ground behind it changes: the ground at
@@ -1109,7 +1048,7 @@ export function Chunk() {
         stars: dawnOf(day) < 0.35,
         star: PAPER,
         unit,
-        quiet: quietRects(),
+        quiet: hush.at(time, box),
         detail: plainer ? 0 : 1,
         rock: Number(trying.get('rock')) || 0,
         groups,
@@ -1165,6 +1104,7 @@ export function Chunk() {
       dirty = true
     }
     const scrolled = () => {
+      hush.moved()
       moved = true
       dirty = true
     }
@@ -1222,6 +1162,7 @@ export function Chunk() {
     return () => {
       cancelAnimationFrame(raf)
       clearTimeout(lostFor)
+      clearTimeout(gathering)
       unsubscribe()
       unchoose()
       canvas.removeEventListener('webglcontextlost', gone)
@@ -1246,7 +1187,7 @@ export function Chunk() {
         mesh.around(grow.taken.x, grow.taken.y, grow.taken.z, keyAt(Math.max(0, shadedAt) / 6))
       renderer.dispose()
     }
-  }, [drawnOn])
+  }, [drawnOn, painted])
 
   return (
     <>

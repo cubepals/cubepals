@@ -17,16 +17,8 @@ import { Gauge } from '../Gauge'
 import { Strata } from '../kit'
 import type { Landed } from '../Landing'
 import { Scroll } from '../Scroll'
-import { Address } from '../sections/Address'
-import { Backups } from '../sections/Backups'
-import { Fleet } from '../sections/Fleet'
-import { Ledger } from '../sections/Ledger'
-import { Machine } from '../sections/Machine'
 import { Overview, Worlds } from '../sections/Overview'
-import { Packs } from '../sections/Packs'
 import { Plans } from '../sections/Plans'
-import { Runtimes } from '../sections/Runtimes'
-import { Sleep } from '../sections/Sleep'
 import { Type } from '../Type'
 import {
   Asks,
@@ -44,11 +36,23 @@ import {
   Sent,
   Wake,
 } from './Film'
+import {
+  AddressProof,
+  BackupsProof,
+  FleetProof,
+  LedgerProof,
+  MachineProof,
+  PacksProof,
+  RuntimesProof,
+  SleepProof,
+  WarmProofs,
+} from './proofs'
 
 export function FilmPage({ create, signedIn, plans, getPlan }: Landed) {
   return (
     <>
       <Scroll />
+      <WarmProofs />
       <Type />
       <Cursor />
       <Chat />
@@ -62,16 +66,16 @@ export function FilmPage({ create, signedIn, plans, getPlan }: Landed) {
           <Night create={create} plans={plans} />
           <Knock />
           <Strata from="var(--night)" to="var(--stone)" />
-          <Wake proof={<Address plans={plans} bare />} />
+          <Wake proof={<AddressProof plans={plans} bare />} />
           <Strata from="var(--stone)" to="var(--night)" />
           <Daybreak />
           <Asks />
           <Strata from="var(--paper)" to="var(--stone)" />
-          <Decided plans={plans} proof={<Ledger plans={plans} bare />} />
+          <Decided plans={plans} proof={<LedgerProof plans={plans} bare />} />
           <Strata from="var(--stone)" to="var(--night)" />
           <Leaves />
           <Strata from="var(--night)" to="var(--stone)" />
-          <Asleep proof={<Sleep plans={plans} bare />} />
+          <Asleep proof={<SleepProof plans={plans} bare />} />
           <Strata from="var(--stone)" to="var(--paper)" />
           <Overview played>
             <a className="bl-btn" href="#price" {...ctaMark('to_price')}>
@@ -79,11 +83,11 @@ export function FilmPage({ create, signedIn, plans, getPlan }: Landed) {
             </a>
           </Overview>
           <Strata from="var(--paper)" to="var(--stone)" />
-          <Built proof={<Machine bare />} />
-          <Fitted proof={<Packs plans={plans} bare />} />
-          <Copied proof={<Backups plans={plans} bare />} />
-          <Sent proof={<Runtimes bare />} />
-          <Kept proof={<Fleet bare />} />
+          <Built proof={<MachineProof bare />} />
+          <Fitted proof={<PacksProof plans={plans} bare />} />
+          <Copied proof={<BackupsProof plans={plans} bare />} />
+          <Sent proof={<RuntimesProof bare />} />
+          <Kept proof={<FleetProof bare />} />
           <Strata from="var(--stone)" to="var(--night)" drawn />
           <Worlds played />
           <Strata from="var(--night)" to="var(--paper)" drawn />

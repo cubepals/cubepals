@@ -1042,6 +1042,11 @@
 .bl-follow:active {
   translate: 0 var(--px);
 }
+/* The bar stands at the foot of the phone's screen: whatever the page brings into view keeps
+   72 px clear of it, so it never covers a heading. */
+html:has([data-phone]) {
+  scroll-padding-block-end: 72px;
+}
 /* On the phone's page it is a bar along the foot of the screen, where a thumb is. */
 .bl [data-phone] .bl-follow {
   inset-block: auto max(14px, env(safe-area-inset-bottom));

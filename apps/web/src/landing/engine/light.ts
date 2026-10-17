@@ -7,7 +7,7 @@
  * the sun by day), how strong it and the sky's fill are, and the tone curve the print goes through,
  * by how far the day has come and whether the camera is out on the grass or in a room. The film
  * (Chunk.tsx) and the phone's pictures (phone/printer.ts) both read it, so they print alike. Not
- * the drawing itself (gl.ts).
+ * the drawing itself (gl.ts). Also the inks the print is made in.
  */
 import type { Vec3 } from './camera'
 
@@ -15,6 +15,28 @@ export const unit = (v: Vec3): [number, number, number] => {
   const length = Math.hypot(v[0], v[1], v[2]) || 1
   return [v[0] / length, v[1] / length, v[2] / length]
 }
+
+/** A colour, 0–1 each of red, green and blue. */
+export type Rgb = readonly [number, number, number]
+
+const rgb = (hex: string): Rgb => [
+  Number.parseInt(hex.slice(1, 3), 16) / 255,
+  Number.parseInt(hex.slice(3, 5), 16) / 255,
+  Number.parseInt(hex.slice(5, 7), 16) / 255,
+]
+export const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
+  a[0] + (b[0] - a[0]) * t,
+  a[1] + (b[1] - a[1]) * t,
+  a[2] + (b[2] - a[2]) * t,
+]
+
+// The print's inks: ink, paper and the night field, as landing.css names them, the stone of the
+// dig, and the torch, the one warm colour, which means something is on.
+export const INK = rgb('#0d0d0d')
+export const PAPER = rgb('#F8F7F5')
+export const NIGHT = rgb('#8C86F2')
+export const TORCH = rgb('#FFB01F')
+export const STONE = rgb('#E6E3DC')
 
 /** The moon stands high to the front left of the house as the camera mostly sees it. */
 const MOON: Vec3 = unit([0.42, 0.82, 0.4])
@@ -50,9 +72,9 @@ interface Look {
  * eye so that everything in the chunk (the house, the trees, the sheep, people, the lamps) reads
  * at a glance, by moonlight as by day.
  */
-const NIGHT: Look = { keyLight: 0.8, fill: 0.55, exposure: 1.3, contrast: 1.5 }
-const DAY: Look = { keyLight: 1, fill: 0.85, exposure: 0.9, contrast: 1.4 }
-const ROOM: Look = { keyLight: 1, fill: 0.85, exposure: 3.1, contrast: 1.15 }
+const MOONLIT: Look = { keyLight: 0.8, fill: 0.55, exposure: 1.3, contrast: 1.5 }
+const DAYLIT: Look = { keyLight: 1, fill: 0.85, exposure: 0.9, contrast: 1.4 }
+const ROOMLIT: Look = { keyLight: 1, fill: 0.85, exposure: 3.1, contrast: 1.15 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 
@@ -61,8 +83,8 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t
  * into a room, 0 to 1; `bright` scales the exposure, for a beat that asks for more or less.
  */
 export function lookAt(light: number, under: number, bright = 1): Look {
-  const out = (key: keyof Look) => lerp(NIGHT[key], DAY[key], light)
-  const pick = (key: keyof Look) => lerp(out(key), ROOM[key], under)
+  const out = (key: keyof Look) => lerp(MOONLIT[key], DAYLIT[key], light)
+  const pick = (key: keyof Look) => lerp(out(key), ROOMLIT[key], under)
   return {
     keyLight: pick('keyLight'),
     fill: pick('fill'),
