@@ -4,17 +4,53 @@
 
 'use client'
 
-import { useEffect } from 'react'
-
 /**
  * Pictures can't be dragged or saved from the menu: a drag that starts on one moves nothing, and
  * a right-click on one opens no menu. Text, links, fields and everything else keep theirs.
  * globals.css stops the same elements selecting and offering iOS's long-press "Save image".
  */
+import { useEffect } from 'react'
+
 const PICTURE = 'img, picture, video, canvas, svg[role="img"], .bk-face svg'
+const CONTROL = 'a, button, input, textarea, select, label, summary, [contenteditable], [tabindex]'
 
 function onPicture(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(PICTURE) !== null
+}
+
+/**
+ * Whether a right-click lands on a picture that lets the pointer through to what is beneath it,
+ * such as the landing's film over its scenes. A click on text or a control there keeps its menu.
+ */
+function overPicture(event: MouseEvent): boolean {
+  const target = event.target
+  const { clientX: x, clientY: y } = event
+  if (!(target instanceof Element) || target.closest(CONTROL) !== null || textAt(x, y)) return false
+  return [...document.querySelectorAll(PICTURE)].some(
+    (picture) =>
+      getComputedStyle(picture).pointerEvents === 'none' && inside(picture.getBoundingClientRect(), x, y),
+  )
+}
+
+/** Whether a letter of the page's text is under the point. */
+function textAt(x: number, y: number): boolean {
+  // Older Safari has only the older of the two.
+  const caret = document.caretPositionFromPoint?.(x, y)
+  const range = caret ? null : document.caretRangeFromPoint?.(x, y)
+  const node = caret ? caret.offsetNode : range?.startContainer
+  const offset = caret ? caret.offset : (range?.startOffset ?? 0)
+  if (!(node instanceof Text)) return false
+  const letter = document.createRange()
+  return [offset - 1, offset].some((at) => {
+    if (at < 0 || at >= node.length) return false
+    letter.setStart(node, at)
+    letter.setEnd(node, at + 1)
+    return inside(letter.getBoundingClientRect(), x, y)
+  })
+}
+
+function inside(box: DOMRect, x: number, y: number): boolean {
+  return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom
 }
 
 export function KeepPictures() {
@@ -29,7 +65,7 @@ export function KeepPictures() {
       if (pressedOnPicture || onPicture(event.target)) event.preventDefault()
     }
     const onMenu = (event: MouseEvent) => {
-      if (onPicture(event.target)) event.preventDefault()
+      if (onPicture(event.target) || overPicture(event)) event.preventDefault()
     }
     document.addEventListener('pointerdown', onPress, true)
     document.addEventListener('dragstart', onDrag, true)
