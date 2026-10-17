@@ -209,7 +209,7 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('stored worlds', () 
     expect(kinds).toContain('unstore:succeeded')
   }, 60_000)
 
-  test('a wake nobody joined rests again without making a second copy', async () => {
+  test('a wake nobody joined rests again in a copy of its own, the first kept its week', async () => {
     const { id } = await asleep('free', 'Knock')
     await idleFor(id, 15)
     await rest(id)
@@ -228,9 +228,14 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('stored worlds', () 
     ).toBe('nobody_joined')
     await h.until(id, 'stopped')
     await h.settled(id)
-    // Still idle for as long as before: it rests again, from the copy it already had.
+    // Still idle for as long as before: it rests again. Nothing counted play, but the world may
+    // have changed anyway, so the rest makes a new copy; the first goes when its week is up.
     expect((await rest(id)).lifecycle.status).toBe('stored')
-    expect(await copiesOf(id)).toHaveLength(1)
+    const [newest, first] = await copiesOf(id)
+    expect(newest?.expiresAt).toBeNull()
+    expect(first?.status).toBe('ready')
+    expect(first?.expiresAt).not.toBeNull()
+    expect((await storedCopy(h.db, id))?.id).toBe(newest?.id)
   }, 60_000)
 
   test('a copy that fails lets go of nothing, and a sweep a day later tries again', async () => {

@@ -80,22 +80,18 @@ export function storedWorlds(deps: {
   }
 
   /**
-   * The copy a world rests in. One made since anyone last played is the world as it is, and is
-   * used again, which also makes a wake nobody joined cheap to undo. Otherwise a snapshot of the
-   * stopped server is packed into the store, unless a join has woken it by then (`stillApplies`).
+   * The copy a world rests in: a snapshot of the stopped server packed into the store, unless a
+   * join has woken it by then (`stillApplies`). Every rest makes its own. An earlier copy, even
+   * one nobody is seen to have played since, can miss what changed the world without a player
+   * being counted: a short visit, console commands, a restore. It goes when its week is up.
    */
   const storedCopyFor = async (
     { server, stillApplies }: OperationContext,
     handle: RuntimeHandle,
     config: AppliedConfigJson,
-  ): Promise<BackupRecord> => {
-    const existing = await storedCopy(db, server.id)
-    // One past its expiry is the daily sweep's to retire, and may be on its way out of the store.
-    const due = existing?.expiresAt != null && existing.expiresAt <= new Date()
-    if (existing !== null && !due && existing.createdAt >= server.lastActiveAt) return existing
+  ): Promise<BackupRecord> =>
     // Only a server asleep rests, its world saved; one whose memory was kept stops for real first.
-    return runtime.stop(handle).then(() => archiveCopy(server, handle, config, 'stored', stillApplies))
-  }
+    runtime.stop(handle).then(() => archiveCopy(server, handle, config, 'stored', stillApplies))
 
   const store: OperationHandler = {
     kind: 'store',
