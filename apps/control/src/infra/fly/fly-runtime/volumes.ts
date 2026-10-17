@@ -18,6 +18,8 @@ type Volume = FlySchemas['Volume']
 type CreateVolumeRequest = FlySchemas['CreateVolumeRequest']
 
 export const VOLUME_NAME = 'minecraft_data'
+/** A snapshot's world, made for an export to pack, beside the archive it writes. */
+export const EXPORT_VOLUME_NAME = 'blockly_export'
 const VOLUME_GONE = new Set([
   'destroyed',
   'destroying',
@@ -67,12 +69,19 @@ async function liveVolume(fly: FlyClient, app: string, volumeId: string | undefi
  * The app's world volumes that aren't going away, as Fly lists them: one, but for a rebuild that
  * kept the old storage, or a restore that failed partway.
  */
-export async function worldVolumes(fly: FlyClient, app: string): Promise<Volume[]> {
+export function worldVolumes(fly: FlyClient, app: string): Promise<Volume[]> {
+  return volumesNamed(fly, app, VOLUME_NAME)
+}
+
+/** The app's export volumes that aren't going away: none, but while an export runs or after one stopped. */
+export function exportVolumes(fly: FlyClient, app: string): Promise<Volume[]> {
+  return volumesNamed(fly, app, EXPORT_VOLUME_NAME)
+}
+
+async function volumesNamed(fly: FlyClient, app: string, name: string): Promise<Volume[]> {
   const listed = await fly.GET('/v1/apps/{app_name}/volumes', { params: { path: { app_name: app } } })
   if (listed.response.status === 404) return []
-  return must(listed, 'listing volumes').filter(
-    (v) => v.name === VOLUME_NAME && !VOLUME_GONE.has(v.state ?? ''),
-  )
+  return must(listed, 'listing volumes').filter((v) => v.name === name && !VOLUME_GONE.has(v.state ?? ''))
 }
 
 /**
@@ -180,9 +189,10 @@ export async function deleteVolume(fly: FlyClient, app: string, volumeId: string
  * lists counts for nothing: Fly went on claiming a wake's volume for a helper it had destroyed,
  * naming no machine (2026-10-10), and only a delete finds out whether it still does. What a wake,
  * a restore or a move that failed partway made, or a delete that gave up on. Each is asked once,
- * with no wait for Fly to let go: one it still holds stays for the next call. Export volumes are
- * left alone: an export makes one before any machine mounts it, and deletes its own. Returns the
- * ids deleted.
+ * with no wait for Fly to let go: one it still holds stays for the next call. Export volumes go the
+ * same way once their helper does: an export interrupted, or whose own delete Fly refused, leaves
+ * one. An export makes its volume before any machine mounts it, so this is asked only while no
+ * export runs for the server. Returns the ids deleted.
  */
 export async function deleteLeftoverVolumes(
   fly: FlyClient,
@@ -192,7 +202,10 @@ export async function deleteLeftoverVolumes(
   const listed = await fly.GET('/v1/apps/{app_name}/volumes', { params: { path: { app_name: app } } })
   if (listed.response.status === 404) return []
   const unused = must(listed, 'listing volumes').filter(
-    (v) => v.name === VOLUME_NAME && !keep.includes(v.id ?? null) && !VOLUME_GONE.has(v.state ?? ''),
+    (v) =>
+      (v.name === VOLUME_NAME || v.name === EXPORT_VOLUME_NAME) &&
+      !keep.includes(v.id ?? null) &&
+      !VOLUME_GONE.has(v.state ?? ''),
   )
   if (unused.length === 0) return []
   const machines = must(

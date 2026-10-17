@@ -14,7 +14,7 @@
  * It is not where an order becomes owed (`persistence.ts` `owing`) or where the block it puts on
  * servers is enforced (the policy).
  */
-import { type Queryable, schema } from '@blockly/db'
+import { type Queryable, schema, type Tx } from '@blockly/db'
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { BillingOrder } from '../ports/optional.ts'
 import { owing, UNPAID_ORDER } from './persistence.ts'
@@ -55,31 +55,43 @@ export async function settleable(
  * already stay cleared, and the provider's word again answers the same refund, which the caller
  * asks for only while it hasn't been (`claimRefund`). Refunded, so that less is
  * left of it than what it cleared, they are owed again.
+ *
+ * It reads the order as `recordOrder` kept it, under a lock on its row: deliveries of the same
+ * order handled at once take turns, so what one cleared the next reads as cleared, and a delivery
+ * older than a refund never clears the debt again.
  */
 export async function settleWith(
-  q: Queryable,
+  tx: Tx,
   provider: string,
-  order: BillingOrder,
+  delivered: BillingOrder,
 ): Promise<{ refundCents: number }> {
   const none = { refundCents: 0 }
-  if (!order.balance || order.userId === null || order.settles.length === 0) return none
+  const userId = delivered.userId
+  if (!delivered.balance || userId === null || delivered.settles.length === 0) return none
+  const [kept] = await tx
+    .select({ status: orders.status, netCents: orders.netCents, refundedCents: orders.refundedCents })
+    .from(orders)
+    .where(and(eq(orders.provider, provider), eq(orders.externalOrderId, delivered.externalOrderId)))
+    .for('update')
+  if (kept === undefined) return none
+  const order = { ...delivered, ...kept }
   if (order.refundedCents > 0) {
-    await unsettle(q, provider, order)
+    await unsettle(tx, provider, order)
     return none
   }
   if (order.status !== 'paid') return none
   // Its own word again: what it cleared stays cleared, and what it paid past that is owed back
   // still, for a refund the provider didn't take the first time (`claimRefund` asks only once).
-  const cleared = await clearedBy(q, provider, order)
+  const cleared = await clearedBy(tx, provider, order)
   if (cleared.length > 0)
     return { refundCents: order.netCents - cleared.reduce((sum, row) => sum + row.net, 0) }
-  const named = await q
+  const named = await tx
     .select({ id: orders.externalOrderId, net: orders.netCents, settledBy: orders.settledBy })
     .from(orders)
     .where(
       and(
         eq(orders.provider, provider),
-        eq(orders.userId, order.userId),
+        eq(orders.userId, userId),
         inArray(orders.externalOrderId, order.settles),
         inArray(orders.status, UNPAID_ORDER),
       ),
@@ -88,7 +100,7 @@ export async function settleWith(
   const owedNet = open.reduce((sum, row) => sum + row.net, 0)
   const facts = { order: order.externalOrderId, paidCents: order.netCents, owedCents: owedNet }
   if (order.netCents < owedNet) {
-    await audit(q, order, 'billing.balance_short', { ...facts, orders: open.map((row) => row.id) })
+    await audit(tx, order, 'billing.balance_short', { ...facts, orders: open.map((row) => row.id) })
     return none
   }
   // Still unpaid as it is cleared: one the provider charged meanwhile is left to its charge, and
@@ -96,7 +108,7 @@ export async function settleWith(
   const settled =
     open.length === 0
       ? []
-      : await q
+      : await tx
           .update(orders)
           .set({ settledBy: order.externalOrderId, updatedAt: new Date() })
           .where(
@@ -112,7 +124,7 @@ export async function settleWith(
           )
           .returning({ id: orders.externalOrderId, net: orders.netCents })
   if (settled.length > 0)
-    await audit(q, order, 'billing.balance_settled', { ...facts, orders: settled.map((row) => row.id) })
+    await audit(tx, order, 'billing.balance_settled', { ...facts, orders: settled.map((row) => row.id) })
   return { refundCents: order.netCents - settled.reduce((sum, row) => sum + row.net, 0) }
 }
 
@@ -166,10 +178,10 @@ const clearedBy = (q: Queryable, provider: string, order: BillingOrder) =>
 
 /**
  * Claims the refund of an order for this caller, once: false when it was asked for already,
- * so a webhook delivered twice never refunds twice. `release` gives it back when the provider
- * didn't take the refund, for the provider's next delivery to try again.
+ * so a webhook delivered twice never refunds twice. One the provider didn't take is given back
+ * (`releaseRefund`), for the provider's next delivery to try again.
  */
-export async function claimRefund(q: Queryable, provider: string, externalOrderId: string) {
+export async function claimRefund(q: Queryable, provider: string, externalOrderId: string): Promise<boolean> {
   const claimed = await q
     .update(orders)
     .set({ refundAskedAt: new Date() })
@@ -181,15 +193,15 @@ export async function claimRefund(q: Queryable, provider: string, externalOrderI
       ),
     )
     .returning({ id: orders.externalOrderId })
-  return {
-    claimed: claimed.length > 0,
-    release: () =>
-      q
-        .update(orders)
-        .set({ refundAskedAt: null })
-        .where(and(eq(orders.provider, provider), eq(orders.externalOrderId, externalOrderId))),
-  }
+  return claimed.length > 0
 }
+
+/** A refund claimed (`claimRefund`) that the provider didn't take, to be asked for again. */
+export const releaseRefund = (q: Queryable, provider: string, externalOrderId: string) =>
+  q
+    .update(orders)
+    .set({ refundAskedAt: null })
+    .where(and(eq(orders.provider, provider), eq(orders.externalOrderId, externalOrderId)))
 
 /** A balance paid past what was owed was refunded: kept on the account's audit log. */
 export const auditRefund = (q: Queryable, order: BillingOrder, cents: number) =>

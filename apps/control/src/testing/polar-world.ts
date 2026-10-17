@@ -11,6 +11,7 @@
  * It is not the stand-in itself (`polar.ts`), and holds no assertion.
  */
 import { randomUUID } from 'node:crypto'
+import { MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import type { UserActor } from '../app/actor.ts'
@@ -168,10 +169,13 @@ export class PolarWorld {
   }
 
   /**
-   * When its subscriptions were made: when the world was, so the month a test counts in has
-   * nothing carried into it from an earlier month of Plus.
+   * When its subscriptions were made: a minute into the month the world was made in, so the month a
+   * test counts in has nothing carried into it from an earlier month of Plus, and the runs a test
+   * writes earlier this month were played on Plus.
    */
-  readonly #made = new Date().toISOString()
+  readonly #made = new Date(
+    Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1) + MINUTE_MS,
+  ).toISOString()
 
   /** Polar's word on the account's subscription, as a customer state now and its delivery. */
   async standing(owner: UserActor, sub: string, patch: Partial<StateSubscription> = {}, paying = true) {

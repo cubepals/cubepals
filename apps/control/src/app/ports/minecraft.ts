@@ -28,10 +28,14 @@ export class ConsoleUnavailable extends Error {
 /** Runs console commands on a live server. RCON today; the port does not say so. */
 export interface ServerConsole {
   run(target: ConsoleTarget, command: string): Promise<string>
-  /** Runs several commands over one connection, in order, collecting per-command failures. */
+  /**
+   * Runs several commands over one connection, in order, collecting per-command failures.
+   * `commandMs` gives each command longer than usual to answer.
+   */
   runAll(
     target: ConsoleTarget,
     commands: readonly string[],
+    options?: { commandMs?: number },
   ): Promise<Array<{ ok: true; output: string } | { ok: false; error: string }>>
 }
 

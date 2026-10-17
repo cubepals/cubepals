@@ -2,14 +2,9 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { LOCK_NOT_AVAILABLE } from '@blockly/db'
 import type pg from 'pg'
 import { LockBusy, type Locks } from '../../app/ports/locks.ts'
-
-/**
- * Postgres' SQLSTATE for lock_not_available, which pg exports no table of:
- * https://www.postgresql.org/docs/current/errcodes-appendix.html
- */
-const LOCK_NOT_AVAILABLE = '55P03'
 
 /**
  * Postgres advisory locks. Each hold keeps one pooled connection for the length of the work, so a

@@ -7,6 +7,7 @@ import type { ProgressSink, RuntimeHandle, RuntimeKey, RuntimeSpec } from '../..
 import { recordingTarget } from '../../testing/archive-target.ts'
 import { flyClient } from './client.ts'
 import { FakeFly, type Json } from './fake-fly.ts'
+import { HELPER_LIFETIME_MS } from './fly-runtime/helper-machine.ts'
 import { FlyRuntime } from './fly-runtime.ts'
 import { decodeHandle, decodeSnapshot } from './handle.ts'
 
@@ -212,6 +213,14 @@ describe('FlyRuntime calls, in order', () => {
     ])
   })
 
+  test('a destroy', async () => {
+    const { runtime, mark, callsSince } = await provisioned()
+    await runtime.destroy(KEY)
+    expect(callsSince(mark)).toEqual([`DELETE ${at()}`])
+  })
+})
+
+describe('FlyRuntime calls, in order, replacing a machine', () => {
   test('a restore from a snapshot into a new volume', async () => {
     const { runtime, handle, progress, callsSince } = await provisioned()
     const { snapshot } = await runtime.snapshot(handle)
@@ -233,6 +242,7 @@ describe('FlyRuntime calls, in order', () => {
       `DELETE ${at('/machines/m_2')}`,
       `GET ${at('/machines/m_2')}`,
       `DELETE ${at('/volumes/vol_1')}`,
+      `GET ${at('/machines')}`,
       `GET ${at('/machines/m_5')}`,
       `GET ${at('/machines/m_5/wait')}`,
       `GET ${at('/machines/m_5')}`,
@@ -261,13 +271,8 @@ describe('FlyRuntime calls, in order', () => {
       `DELETE ${at('/machines/m_2')}`,
       `GET ${at('/machines/m_2')}`,
       `DELETE ${at('/volumes/vol_1')}`,
+      `GET ${at('/machines')}`,
     ])
-  })
-
-  test('a destroy', async () => {
-    const { runtime, mark, callsSince } = await provisioned()
-    await runtime.destroy(KEY)
-    expect(callsSince(mark)).toEqual([`DELETE ${at()}`])
   })
 })
 
@@ -285,6 +290,9 @@ describe('FlyRuntime calls, in order, for a resting world', () => {
       `GET ${at('/machines/m_2')}`,
       `GET ${at('/machines')}`,
       `DELETE ${at('/volumes/vol_1')}`,
+      `GET ${at('/volumes')}`,
+      // Helpers and export volumes an interrupted export left: none here.
+      `GET ${at('/machines')}`,
       `GET ${at('/volumes')}`,
     ])
   })
@@ -314,6 +322,7 @@ describe('FlyRuntime calls, in order, for a resting world', () => {
       `POST ${at('/secrets')}`,
       `POST ${at('/machines')}`,
       `GET ${at('/volumes/vol_4')}`,
+      `GET ${at('/machines')}`,
       `GET ${at('/volumes')}`,
     ])
   })
@@ -419,7 +428,7 @@ describe('FlyRuntime requests', () => {
       region: 'fra',
       config: {
         image: 'curlimages/curl:8.22.0',
-        init: { exec: ['/bin/sleep', '86400'] },
+        init: { exec: ['/bin/sleep', String(HELPER_LIFETIME_MS / 1000)] },
         guest: { cpu_kind: 'shared', cpus: 1, memory_mb: 1024 },
         mounts: [{ volume: expect.stringMatching(/^vol_/), path: '/data' }],
         restart: { policy: 'no' },

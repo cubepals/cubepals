@@ -37,6 +37,41 @@ svg[role="img"],
   -webkit-touch-callout: none;
 }
 
+/* A text link that opens a new tab shows ↗ while it is pointed at or focused, so the new tab
+   isn't a surprise. The arrow takes no room: the words around the link never move, and it isn't
+   read out (OutLink already says "opens in a new tab"). Links made of a picture or an icon are
+   left as they are. */
+a[target="_blank"]:not(:has(img, svg, picture, video, canvas))::after {
+  content: "↗";
+  display: inline-block;
+  width: 0;
+  white-space: nowrap;
+  /* Small and raised, like a superscript, so it sits clear of a comma or full stop after the link. */
+  font-size: 0.75em;
+  translate: 0.125rem -0.4em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease-out;
+}
+@supports (content: "x" / "") {
+  a[target="_blank"]:not(:has(img, svg, picture, video, canvas))::after {
+    content: "↗" / "";
+  }
+}
+@media (hover: hover) {
+  a[target="_blank"]:hover::after {
+    opacity: 1;
+  }
+}
+a[target="_blank"]:focus-visible::after {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  a[target="_blank"]::after {
+    transition: none;
+  }
+}
+
 /* Scrollbars, on the page and in everything inside it that scrolls: a quiet thumb on no track,
    darker under the pointer, from the tokens so the dark theme follows. Chromium and Safari draw
    them from the pseudo-elements, which keep a 12px hit area around a slimmer thumb and give it a

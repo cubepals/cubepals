@@ -57,7 +57,15 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.23.2
-      - run: bun install --frozen-lockfile
+      # WebTransport's install fetches its binary from GitHub's releases, which refuse a burst of
+      # downloads now and then, so the install retries as the image pulls do.
+      - name: Install dependencies
+        run: |
+          for wait in 5 15 30 60 0; do
+            bun install --frozen-lockfile && break
+            [ "$wait" = 0 ] && exit 1
+            sleep "$wait"
+          done
       - run: bun run openapi:install
       - name: API types match their pinned specs
         run: bun run openapi:check
@@ -101,7 +109,15 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.23.2
-      - run: bun install --frozen-lockfile
+      # WebTransport's install fetches its binary from GitHub's releases, which refuse a burst of
+      # downloads now and then, so the install retries as the image pulls do.
+      - name: Install dependencies
+        run: |
+          for wait in 5 15 30 60 0; do
+            bun install --frozen-lockfile && break
+            [ "$wait" = 0 ] && exit 1
+            sleep "$wait"
+          done
       - name: Build the Worker
         working-directory: apps/web
         env:
@@ -261,7 +277,15 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.23.2
-      - run: bun install --frozen-lockfile
+      # WebTransport's install fetches its binary from GitHub's releases, which refuse a burst of
+      # downloads now and then, so the install retries as the image pulls do.
+      - name: Install dependencies
+        run: |
+          for wait in 5 15 30 60 0; do
+            bun install --frozen-lockfile && break
+            [ "$wait" = 0 ] && exit 1
+            sleep "$wait"
+          done
       - run: bun run openapi:install
       - name: Create the test bucket
         run: |

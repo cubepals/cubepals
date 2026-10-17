@@ -20,7 +20,7 @@ import { outOf, playToday } from '../accounts/play-today.ts'
 import { playTotal } from '../accounts/play-total.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
 import { AppError, type AppErrorCode } from '../errors.ts'
-import { failedWaking, openOfKinds } from '../operations/persistence.ts'
+import { failedWaking, loadOperation, openOfKinds } from '../operations/persistence.ts'
 import type { IdleDecision, Schedules } from '../operations/schedules.ts'
 import type { ChangeSignal } from '../ports/changes.ts'
 import type { EventBus } from '../ports/events.ts'
@@ -83,6 +83,12 @@ const BEHIND: ReadonlyMap<
 
 /** On its way to a rest, to sleep, or onto another host: a join waits for it, then wakes it. */
 const MOVING_ON: ReadonlySet<ServerStatus> = new Set(['storing', 'stopping', 'relocating'])
+
+/** A start that found its server had moved on to other work since the join read it. */
+const MOVED_ON = Symbol('moved on')
+
+/** Who a start a join asked for is requested by. */
+const WAKE = { kind: 'system', reason: 'wake' } as const
 
 /** A route's word that its server reads a PROXY header, where the run it is in does. */
 const headerRead = (applied: AppliedConfigJson | null | undefined): { proxyProtocol?: true } =>
@@ -358,27 +364,81 @@ export class EdgeService {
   }
 
   /**
-   * Starts the server through the same checks as the UI, and waits for it to run: null once it
-   * does, or what the join is told when it was refused or hasn't by the time `left` runs out.
+   * Starts the server and waits for it to run: null once it does, or what the join is told. A
+   * server that moved on to other work between the join's read and its start (its rest began, or
+   * a move) is waited for, as it would have been had the join read it first, and asked once more.
+   * A server that is there is never told it isn't: one that moves on again is still on its way.
    */
   async #start(server: MinecraftServer, left: () => number, retries: boolean): Promise<WakeResult | null> {
-    const actor = { kind: 'system', reason: 'wake' } as const
+    const first = await this.#startOnce(server, left, retries)
+    if (first !== MOVED_ON) return first
+    const latest = await findServer(this.#db, server.id)
+    const status = latest?.lifecycle.status
+    if (latest === null || status === 'deleted' || status === 'purged')
+      return { outcome: 'denied', reason: 'deleted' }
+    const settled = await this.#settled(latest, left)
+    if (typeof settled === 'object') return settled
+    if (settled === 'running') return null
+    const again = await this.#startOnce(latest, left, retries)
+    return again === MOVED_ON ? this.#stillStarting(server.id) : again
+  }
+
+  /**
+   * Starts the server through the same checks as the UI, and waits for it to run: null once it
+   * does, or what the join is told when it was refused or hasn't by the time `left` runs out;
+   * `MOVED_ON` when the server moved on to other work between the join's read and its start.
+   */
+  async #startOnce(
+    server: MinecraftServer,
+    left: () => number,
+    retries: boolean,
+  ): Promise<WakeResult | null | typeof MOVED_ON> {
     const failed = await this.#failed(server)
-    const retrying = retries && failed === 'waking'
-    if (failed !== null && !retrying)
+    if (failed === 'running' || (failed === 'waking' && !retries))
       return { outcome: 'denied', reason: failed === 'waking' ? 'failed' : 'broken' }
-    try {
-      if (retrying) await this.#service.retry(actor, server.id, crypto.randomUUID())
-      else await this.#service.start(actor, server.id, crypto.randomUUID())
-    } catch (error) {
-      if (!(error instanceof AppError)) throw error
-      // A join at another edge asked first, and the start it asked for runs: this one waits on it.
-      const starting = (await findServer(this.#db, server.id))?.lifecycle.status === 'starting'
-      if (error.code !== 'invalid_transition' || !starting) return this.#refused(server, error)
+    if (failed === 'settling') {
+      const settled = await this.#settleAgain(server.id, left)
+      if (settled !== 'stopped') return settled
     }
+    const asked = await this.#ask(server, failed === 'waking')
+    if (asked !== null) return asked
     const status = await this.#waiter.waitFor(server.id, ['running', 'failed', 'stopped', 'stored'], left())
     if (status === 'failed') return { outcome: 'denied', reason: 'failed' }
     return status === 'running' ? null : this.#stillStarting(server.id)
+  }
+
+  /**
+   * Asks for the start, or for a failed wake to be tried again (`retrying`): null once it is
+   * asked for, or runs already because a join at another edge asked first.
+   */
+  async #ask(server: MinecraftServer, retrying: boolean): Promise<WakeResult | typeof MOVED_ON | null> {
+    try {
+      if (retrying) await this.#service.retry(WAKE, server.id, crypto.randomUUID())
+      else await this.#service.start(WAKE, server.id, crypto.randomUUID())
+      return null
+    } catch (error) {
+      if (!(error instanceof AppError)) throw error
+      if (error.code !== 'invalid_transition') return this.#refused(server, error)
+      // A join at another edge asked first, and the start it asked for runs: this one waits on it.
+      // Any other status: the server moved on (a rest, a move) after the join read it.
+      return (await findServer(this.#db, server.id))?.lifecycle.status === 'starting' ? null : MOVED_ON
+    }
+  }
+
+  /**
+   * Blockly's own stop or move failed for good, and left the server's compute off: the join tries
+   * that again, as "Try again" would. `stopped` once it has settled where a start can go on (a
+   * world at rest included), null when it came back running, or what the join is told.
+   */
+  async #settleAgain(serverId: string, left: () => number): Promise<WakeResult | null | 'stopped'> {
+    await this.#service.retry(WAKE, serverId, crypto.randomUUID()).catch((error: unknown) => {
+      // Another join tried it again first: this one waits on the same work.
+      if (!(error instanceof AppError) || error.code !== 'invalid_transition') throw error
+    })
+    const settled = await this.#waiter.waitFor(serverId, ['stopped', 'stored', 'running', 'failed'], left())
+    if (settled === null) return this.#stillStarting(serverId)
+    if (settled === 'failed') return { outcome: 'denied', reason: 'failed' }
+    return settled === 'running' ? null : 'stopped'
   }
 
   /**
@@ -393,16 +453,24 @@ export class EdgeService {
   }
 
   /**
-   * How the server's last start failed for good, where it did: `waking`, in waking it (a resume
-   * that hung, a host that couldn't run it), which the next join tries again within the hourly
-   * cap; `running`, over what the server runs (a broken mod, a crash), which would only fail again
-   * and is its owner's. Read now: what the join waited through may have ended in one.
+   * How the server last failed for good, where it did: `waking`, in waking it (a resume that hung,
+   * a host that couldn't run it), which the next join tries again within the hourly cap;
+   * `settling`, in a stop, or a move Blockly made itself, which ended with its compute forced off
+   * and is Blockly's, so the next join tries that again and then wakes it, within the same cap;
+   * `running`, over what the server runs (a broken mod, a crash), which would only fail again and
+   * is its owner's. Read now: what the join waited through may have ended in one.
    */
-  async #failed(server: MinecraftServer): Promise<'waking' | 'running' | null> {
+  async #failed(server: MinecraftServer): Promise<'waking' | 'settling' | 'running' | null> {
     const { lifecycle } = (await findServer(this.#db, server.id)) ?? server
     if (lifecycle.status !== 'failed') return null
     const { failure } = lifecycle
-    const waking = failure?.during === 'starting' && (await failedWaking(this.#db, failure.operationId))
+    if (failure === null) return 'running'
+    if (failure.during === 'stopping') return 'settling'
+    if (failure.during === 'relocating') {
+      const move = await loadOperation(this.#db, failure.operationId)
+      return move?.requestedBy.startsWith('system:') ? 'settling' : 'running'
+    }
+    const waking = failure.during === 'starting' && (await failedWaking(this.#db, failure.operationId))
     return waking ? 'waking' : 'running'
   }
 
@@ -460,12 +528,10 @@ export class EdgeService {
   }
 
   /** The edge saw no players for a while. Only the idle policy decides whether to stop. */
-  async idleHint(hostname: string): Promise<IdleDecision | 'not_running' | 'players_online'> {
+  async idleHint(hostname: string): Promise<IdleDecision | 'not_running'> {
     const slug = this.#addressing.slugFor(hostname)
     const server = slug === null ? null : await findLiveBySlug(this.#db, slug)
     if (server?.lifecycle.status !== 'running') return 'not_running'
-    const online = await presenceFor(this.#db, [server.id])
-    if ((online.get(server.id)?.length ?? 0) > 0) return 'players_online'
     return this.#schedules.evaluateIdle(server)
   }
 

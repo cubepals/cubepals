@@ -28,11 +28,19 @@ import {
   subscriptionChanges,
   writeEntries,
 } from './audit.ts'
-import { auditPaidTwice, auditRefund, claimRefund, paidTwice, settleable, settleWith } from './balance.ts'
+import {
+  auditPaidTwice,
+  auditRefund,
+  claimRefund,
+  paidTwice,
+  releaseRefund,
+  settleable,
+  settleWith,
+} from './balance.ts'
 import { ChipIns } from './chip-ins.ts'
 import { Coupons } from './coupons.ts'
 import { auditRenewal, ExtraUsage } from './extra-usage.ts'
-import { Gifts } from './gifts.ts'
+import { Gifts, giftsAfterPaidTime } from './gifts.ts'
 import {
   billingFacts,
   failingUntold,
@@ -301,13 +309,20 @@ export class BillingService {
 
   /**
    * A balance order's word (`settleWith`): what it paid past what was still owed, the same orders
-   * paid twice or paid by card since, is refunded through the provider at once, and audited.
+   * paid twice or paid by card since, is refunded through the provider at once, and audited. It is
+   * settled and its refund claimed in one transaction, under the lock `settleWith` takes on the
+   * order, so deliveries of it handled at once never both read the debt as open.
    */
   async #balancePaid(order: BillingOrder): Promise<void> {
     const billing = requireCapability(this.#caps, 'billing')
-    const { refundCents } = await settleWith(this.#db, billing.provider, order)
-    if (await this.#refundOnce(order.externalOrderId, refundCents, 'Paid for orders that were already paid.'))
-      await auditRefund(this.#db, order, refundCents)
+    const refundCents = await this.#db.transaction(async (tx) => {
+      const { refundCents } = await settleWith(tx, billing.provider, order)
+      if (refundCents <= 0) return 0
+      return (await claimRefund(tx, billing.provider, order.externalOrderId)) ? refundCents : 0
+    })
+    if (refundCents <= 0) return
+    await this.#refundClaimed(order.externalOrderId, refundCents, 'Paid for orders that were already paid.')
+    await auditRefund(this.#db, order, refundCents)
   }
 
   /**
@@ -317,27 +332,25 @@ export class BillingService {
   async #paidTwice(order: BillingOrder): Promise<void> {
     const billing = requireCapability(this.#caps, 'billing')
     const { refundCents, settledBy } = await paidTwice(this.#db, billing.provider, order)
-    if (settledBy === null) return
-    if (await this.#refundOnce(order.externalOrderId, refundCents, 'Paid already, as a balance.'))
-      await auditPaidTwice(this.#db, order, settledBy, refundCents)
+    if (settledBy === null || refundCents <= 0) return
+    if (!(await claimRefund(this.#db, billing.provider, order.externalOrderId))) return
+    await this.#refundClaimed(order.externalOrderId, refundCents, 'Paid already, as a balance.')
+    await auditPaidTwice(this.#db, order, settledBy, refundCents)
   }
 
   /**
-   * Gives `cents` of the order back through the provider, once (`claimRefund`): true when it was
-   * refunded now. One the provider doesn't take is asked for again when it delivers the order again.
+   * Gives `cents` of the order back through the provider, its refund claimed already
+   * (`claimRefund`). One the provider doesn't take is released, and asked for again when it
+   * delivers the order again.
    */
-  async #refundOnce(externalOrderId: string, cents: number, why: string): Promise<boolean> {
-    if (cents <= 0) return false
+  async #refundClaimed(externalOrderId: string, cents: number, why: string): Promise<void> {
     const billing = requireCapability(this.#caps, 'billing')
-    const { claimed, release } = await claimRefund(this.#db, billing.provider, externalOrderId)
-    if (!claimed) return false
     try {
       await billing.refund({ externalOrderId, cents, why })
     } catch (error) {
-      await release()
+      await releaseRefund(this.#db, billing.provider, externalOrderId)
       throw error
     }
-    return true
   }
 
   /**
@@ -429,10 +442,16 @@ export class BillingService {
           canceledAt: paid.canceledAt ?? null,
         })
       await settleOtherSubscriptions(tx, state.userId, provider, keep, pastDue)
+      // Kept renewing over a gift redeemed to start when it ended: the gift waits for the paid time.
+      const giftsMoved =
+        paid !== null && !paid.cancelAtPeriodEnd
+          ? await giftsAfterPaidTime(tx, state.userId, paid.currentPeriodEnd, now)
+          : []
       const after = (await loadStanding(tx, state.userId, now)).plan
       await writeEntries(tx, state.userId, by, source, [
         ...subscriptionChanges(before.subs, await snapshotSubscriptions(tx, state.userId)),
         ...planChange(before.plan, after, { cancelAtPeriodEnd: paid?.cancelAtPeriodEnd ?? false }),
+        ...giftsMoved,
       ])
       // Polar's word that a paid plan is in force, kept once per account and plan. Its word only:
       // a refresh after checkout may have saved the plan before this delivery came.
@@ -585,7 +604,7 @@ export class BillingService {
       return null
     }
     if (await recordOrder(this.#db, billing.provider, fresh.order))
-      await settleWith(this.#db, billing.provider, fresh.order)
+      await this.#db.transaction((tx) => settleWith(tx, billing.provider, fresh.order))
     return fresh
   }
 

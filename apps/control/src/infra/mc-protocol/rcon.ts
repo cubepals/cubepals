@@ -131,13 +131,13 @@ class Connection {
    * The sentinel must wait for that first reply — vanilla reads one packet per TCP read and drops
    * whatever else arrived with it.
    */
-  async exec(command: string): Promise<string> {
+  async exec(command: string, commandMs = this.#timings.commandMs): Promise<string> {
     // Anything longer would make vanilla drop the connection.
     if (Buffer.byteLength(command, 'utf8') > MAX_COMMAND_BYTES)
       throw new Error(`Commands longer than ${MAX_COMMAND_BYTES} bytes do not fit in one RCON packet`)
     const deadline = setTimeout(
       () => this.#fail(new ConsoleUnavailable('The console stopped answering')),
-      this.#timings.commandMs,
+      commandMs,
     )
     try {
       const id = this.#send(EXEC, command)
@@ -208,13 +208,13 @@ export class RconConsole implements ServerConsole {
     return this.#session(target, async (connection) => connection.exec(command))
   }
 
-  async runAll(target: ConsoleTarget, commands: readonly string[]) {
+  async runAll(target: ConsoleTarget, commands: readonly string[], options: { commandMs?: number } = {}) {
     try {
       return await this.#session(target, async (connection) => {
         const results: Array<{ ok: true; output: string } | { ok: false; error: string }> = []
         for (const command of commands) {
           try {
-            results.push({ ok: true, output: await connection.exec(command) })
+            results.push({ ok: true, output: await connection.exec(command, options.commandMs) })
           } catch (error) {
             results.push({ ok: false, error: error instanceof Error ? error.message : String(error) })
           }

@@ -20,6 +20,7 @@ import type { EventBus } from '../../ports/events.ts'
 import type { ArchiveStore } from '../../ports/optional.ts'
 import type { RuntimeHandle } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
+import { keptStorage } from '../../servers/kept-storage.ts'
 import { loadRuntime, lockServer, markStored, saveHandle } from '../../servers/persistence.ts'
 import type { RuntimeSpecs } from '../../servers/specs.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
@@ -31,6 +32,10 @@ import { NoLongerApplies, type OperationContext, type OperationHandler } from '.
 import { appliedConfig, type ServerBinding } from './binding.ts'
 import type { Rechecks } from './rechecks.ts'
 import { IMPORT_LINK_SECONDS, KEPT_AFTER_WAKING_MS, type WorldCopies } from './world-copies.ts'
+
+/** Why a server keeping a rebuild's old storage doesn't rest: letting go would take that too. */
+const KEEPING_REBUILDS_STORAGE =
+  'It keeps its world’s copy from before a rebuild, in case the rebuild missed anything. It rests once that copy goes.'
 
 export function storedWorlds(deps: {
   db: Db
@@ -73,6 +78,7 @@ export function storedWorlds(deps: {
   /** Why a server may not rest now, or null when it may. One an operator rests `now` may have been played. */
   const whyNotStore = async (server: MinecraftServer, now: Date, asked: boolean): Promise<string | null> => {
     if (!(await loadControls(db)).storingEnabled) return 'Resting worlds is paused.'
+    if ((await keptStorage(db, server.id, now)).length > 0) return KEEPING_REBUILDS_STORAGE
     const standing = await loadStanding(db, server.ownerId)
     const days = asked ? 0 : entitlementsFor(standing.plan, standing.limitOverrides).storeAfterIdleDays
     if (now.getTime() - server.lastActiveAt.getTime() < days * DAY_MS) return 'It was played recently.'
@@ -80,51 +86,63 @@ export function storedWorlds(deps: {
   }
 
   /**
-   * The copy a world rests in. One made since anyone last played is the world as it is, and is
-   * used again, which also makes a wake nobody joined cheap to undo. Otherwise a snapshot of the
-   * stopped server is packed into the store, unless a join has woken it by then (`stillApplies`).
+   * The copy a world rests in: a snapshot of the stopped server packed into the store, unless a
+   * join has woken it by then (`stillApplies`). Every rest makes its own, since the world can
+   * change with no play counted (a short visit, console commands, a restore).
    */
   const storedCopyFor = async (
     { server, stillApplies }: OperationContext,
     handle: RuntimeHandle,
     config: AppliedConfigJson,
-  ): Promise<BackupRecord> => {
-    const existing = await storedCopy(db, server.id)
-    if (existing !== null && existing.createdAt >= server.lastActiveAt) return existing
+  ): Promise<BackupRecord> =>
     // Only a server asleep rests, its world saved; one whose memory was kept stops for real first.
-    return runtime.stop(handle).then(() => archiveCopy(server, handle, config, 'stored', stillApplies))
+    runtime.stop(handle).then(() => archiveCopy(server, handle, config, 'stored', stillApplies))
+
+  /**
+   * A stopped server's rest, as far as its copy: made, and the server `storing` under its lock,
+   * or why not, its copy then kept a while as an ordinary backup of the world as it was.
+   */
+  const startRest = async (
+    ctx: OperationContext,
+    handle: RuntimeHandle,
+    config: AppliedConfigJson,
+  ): Promise<BackupRecord | string> => {
+    const { server } = ctx
+    const why = await whyNotStore(server, new Date(), ctx.op.input.now === true)
+    if (why !== null) return why
+    await ctx.step('saving')
+    const copy = await storedCopyFor(ctx, handle, config)
+    const refusal = await db.transaction(async (tx) => {
+      const locked = await lockServer(tx, server.id)
+      if (locked === null || locked.lifecycle.status !== 'stopped') return 'It isn’t asleep any more.'
+      if (locked.lastActiveAt > copy.createdAt) return 'Someone played on it meanwhile.'
+      if (await otherWork(tx, server.id, ctx.op.id)) return 'Something else is waiting for it.'
+      await transitions.outcome(tx, locked, { type: 'storing' })
+      return null
+    })
+    if (refusal === null) return copy
+    await setExpiry(db, copy.id, new Date(Date.now() + KEPT_AFTER_WAKING_MS))
+    return refusal
   }
 
   const store: OperationHandler = {
     kind: 'store',
     phase: null,
-    // `storing`: a store that got as far as letting go, and is asked again, finishes from there.
-    runsWhen: ['stopped', 'storing'],
+    // `storing`: a store that got as far as letting go, and is asked again, finishes from there;
+    // so does one whose server was taken out of the trash meanwhile, `stored` before it finished.
+    runsWhen: ['stopped', 'storing', 'stored'],
     async run(ctx) {
       const server = ctx.server
+      if (server.storedAt !== null) return { status: 'cancelled', reason: 'It is resting already.' }
       if (deps.archives === null) return { status: 'cancelled', reason: 'This deployment keeps no archives.' }
       const binding = await bindingOf(server.id)
       if (binding.handle === null || binding.applied === null)
         return { status: 'cancelled', reason: 'It has no world to rest.' }
       let copy: BackupRecord
       if (server.lifecycle.status === 'stopped') {
-        const why = await whyNotStore(server, new Date(), ctx.op.input.now === true)
-        if (why !== null) return { status: 'cancelled', reason: why }
-        await ctx.step('saving')
-        copy = await storedCopyFor(ctx, binding.handle, binding.applied)
-        const refusal = await db.transaction(async (tx) => {
-          const locked = await lockServer(tx, server.id)
-          if (locked === null || locked.lifecycle.status !== 'stopped') return 'It isn’t asleep any more.'
-          if (locked.lastActiveAt > copy.createdAt) return 'Someone played on it meanwhile.'
-          if (await otherWork(tx, server.id, ctx.op.id)) return 'Something else is waiting for it.'
-          await transitions.outcome(tx, locked, { type: 'storing' })
-          return null
-        })
-        if (refusal !== null) {
-          // The copy stays a while, as an ordinary backup of the world as it was.
-          await setExpiry(db, copy.id, new Date(Date.now() + KEPT_AFTER_WAKING_MS))
-          return { status: 'cancelled', reason: refusal }
-        }
+        const started = await startRest(ctx, binding.handle, binding.applied)
+        if (typeof started === 'string') return { status: 'cancelled', reason: started }
+        copy = started
       } else {
         const verified = await storedCopy(db, server.id)
         if (verified === null) throw new PermanentFailure('The copy this world was resting in is missing.')
@@ -143,6 +161,7 @@ export function storedWorlds(deps: {
         await expireSnapshotsOf(tx, server.id)
         await markStored(tx, server.id, new Date())
         if (locked.lifecycle.status === 'storing') await transitions.outcome(tx, locked, { type: 'stored' })
+        if (locked.lifecycle.status === 'stopped') await restsAfterUndelete(tx, transitions, locked, copy)
         await tx.insert(schema.auditLog).values({
           actor: 'system:store',
           action: 'server.stored',
@@ -164,21 +183,8 @@ export function storedWorlds(deps: {
      * it does, since a restore replaces what the handle still names.
      */
     async abandon(op, reason, ended) {
-      if (ended !== 'failed') return
-      await db.transaction(async (tx) => {
-        const locked = await lockServer(tx, op.serverId)
-        if (locked?.lifecycle.status !== 'storing') return
-        await expireSnapshotsOf(tx, op.serverId)
-        await markStored(tx, op.serverId, new Date())
-        await transitions.outcome(tx, locked, { type: 'stored' })
-        await tx.insert(schema.auditLog).values({
-          actor: 'system:store',
-          action: 'server.store_incomplete',
-          subjectType: 'server',
-          subjectId: op.serverId,
-          data: { reason },
-        })
-      })
+      if (ended === 'failed')
+        await db.transaction((tx) => restsIncomplete(tx, transitions, op.serverId, reason))
     },
   }
 
@@ -277,6 +283,47 @@ export function storedWorlds(deps: {
   }
 
   return { store, unstore }
+}
+
+/**
+ * A store that failed for good while letting go: the server rests from here, `storing` as the
+ * store left it, or `stored` already when it was taken out of the trash meanwhile.
+ */
+async function restsIncomplete(tx: Tx, transitions: ServerTransitions, serverId: string, reason: string) {
+  const locked = await lockServer(tx, serverId)
+  const undeleted = locked?.lifecycle.status === 'stored' && locked.storedAt === null
+  if (locked === null || (locked.lifecycle.status !== 'storing' && !undeleted)) return
+  await expireSnapshotsOf(tx, serverId)
+  await markStored(tx, serverId, new Date())
+  if (!undeleted) await transitions.outcome(tx, locked, { type: 'stored' })
+  await tx.insert(schema.auditLog).values({
+    actor: 'system:store',
+    action: 'server.store_incomplete',
+    subjectType: 'server',
+    subjectId: serverId,
+    data: { reason },
+  })
+}
+
+/**
+ * A server taken out of the trash while its rest let go of its storage came back asleep, on
+ * storage it no longer has: it rests, as it would have, and wakes from the copy.
+ */
+async function restsAfterUndelete(
+  tx: Tx,
+  transitions: ServerTransitions,
+  server: MinecraftServer,
+  copy: BackupRecord,
+): Promise<void> {
+  const storing = await transitions.outcome(tx, server, { type: 'storing' })
+  await transitions.outcome(tx, storing, { type: 'stored' })
+  await tx.insert(schema.auditLog).values({
+    actor: 'system:store',
+    action: 'server.stored_after_undelete',
+    subjectType: 'server',
+    subjectId: server.id,
+    data: { backupId: copy.id },
+  })
 }
 
 /**
