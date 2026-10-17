@@ -10,6 +10,8 @@ import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -32,6 +34,9 @@ const s3 = {
 describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('a world upload read no further', () => {
   let h: Harness
   let scratch: string
+  // Answers, then sends nothing: a download that never finishes arriving.
+  let stalled: Server
+  let stalledUrl = ''
   const store = new S3ArchiveStore({
     endpoint: s3.endpoint ?? '',
     bucket: s3.bucket ?? '',
@@ -43,9 +48,14 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('a world upload read
   beforeAll(async () => {
     scratch = await mkdtemp(join(tmpdir(), 'blockly-world-refusals-'))
     h = await startHarness({ capabilities: { archives: store, billing: null } })
+    stalled = createServer((_request, response) => response.writeHead(200).write(''))
+    await new Promise<void>((resolve) => stalled.listen(0, '127.0.0.1', resolve))
+    stalledUrl = `http://127.0.0.1:${(stalled.address() as AddressInfo).port}/world.tar.gz`
   }, 30_000)
 
   afterAll(async () => {
+    stalled.closeAllConnections()
+    stalled.close()
     await h.close()
     await rm(scratch, { recursive: true, force: true })
   })
@@ -72,15 +82,18 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('a world upload read
       (error: { code?: string; message: string }) => ({ code: error.code, message: error.message }),
     )
   }
-  /** The real reader, held to a tighter limit than a real world needs to reach. */
-  const tightened = (limits: { maxInflatedBytes?: number; deadlineMs?: number }) => {
+  /**
+   * The real reader, held to a tighter limit than a real world needs to reach, and reading `from`
+   * in place of the store when given.
+   */
+  const tightened = (limits: { maxInflatedBytes?: number; deadlineMs?: number }, from?: () => string) => {
     const read = LibraryFileFormats.prototype.readTarball
     return spyOn(LibraryFileFormats.prototype, 'readTarball').mockImplementation(function (
       this: LibraryFileFormats,
       url,
       options,
     ) {
-      return read.call(this, url, { ...options, ...limits })
+      return read.call(this, from?.() ?? url, { ...options, ...limits })
     })
   }
 
@@ -108,7 +121,8 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('a world upload read
       small.mockRestore()
     }
 
-    const slow = tightened({ deadlineMs: 1 })
+    // Read from a download that never finishes, so only the deadline ends it.
+    const slow = tightened({ deadlineMs: 200 }, () => stalledUrl)
     try {
       expect(await refusal(owner, id, await tarball(world))).toEqual({
         code: 'invalid_upload',
