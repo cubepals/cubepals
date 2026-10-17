@@ -44,5 +44,11 @@ export function createDb(pool: pg.Pool): Db {
   return drizzle(pool, { schema })
 }
 
+/**
+ * Postgres' SQLSTATE for lock_not_available, which pg exports no table of: a wait that ran past
+ * lock_timeout. https://www.postgresql.org/docs/current/errcodes-appendix.html
+ */
+export const LOCK_NOT_AVAILABLE = '55P03'
+
 /** The SQL migrations, for the migrate script and for tests that build a database of their own. */
 export const migrationsFolder = fileURLToPath(new URL('../migrations', import.meta.url))
