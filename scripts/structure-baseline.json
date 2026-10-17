@@ -1025,7 +1025,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/handlers/stored-worlds.ts › function storedWorlds": {
-      "n": 161,
+      "n": 160,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/lifecycle.test.ts › describe.skipIf server lifecycle": {

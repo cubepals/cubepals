@@ -98,4 +98,21 @@ describe.skipIf(!hasDatabase)('taking a server out of the trash mid-rest', () =>
     expect(audit).toHaveLength(1)
     await wakes(owner, id)
   }, 90_000)
+
+  test('taken back while the rest lets go, and the release fails for good, it still rests and wakes', async () => {
+    const { owner, id, letGo } = await midRest()
+    try {
+      h.runtime.failReleases('the provider went away', { partway: true })
+      await h.app.servers.deleteServer(owner, id, (await h.server(id)).name)
+      expect((await h.app.servers.undeleteServer(owner, id)).lifecycle.status).toBe('stored')
+    } finally {
+      letGo()
+    }
+    await h.settled(id, 30_000)
+    const rested = await h.server(id)
+    expect(rested.lifecycle.status).toBe('stored')
+    expect(rested.storedAt).not.toBeNull()
+    h.runtime.failReleases(null)
+    await wakes(owner, id)
+  }, 90_000)
 })
