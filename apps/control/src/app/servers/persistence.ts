@@ -458,10 +458,12 @@ export async function purgeSooner(
   return toServer(row)
 }
 
-/** Out of the trash, and kept, as `keep` and `keepWorld` keep it: no end date, its idle clock new. */
+/** Out of the trash, its idle clock new; one made for a while keeps the time it had left in it. */
 export async function markUndeleted(tx: Tx, server: MinecraftServer): Promise<MinecraftServer> {
   const now = new Date()
-  const kept = { expiresAt: null, lastActiveAt: now, deletionWarned: null }
+  const { expiresAt: end, deletedAt: went } = server
+  const expiresAt = end && went && new Date(now.getTime() + Math.max(0, end.getTime() - went.getTime()))
+  const kept = { expiresAt, lastActiveAt: now, deletionWarned: null }
   const [row] = await tx
     .update(servers)
     .set({ deletedAt: null, purgeAfter: null, ...kept, updatedAt: now })
