@@ -936,11 +936,8 @@
   font-size: 1rem;
   line-height: 1;
   white-space: nowrap;
-  text-shadow:
-    var(--px) 0 0 var(--paper),
-    calc(var(--px) * -1) 0 0 var(--paper),
-    0 var(--px) 0 var(--paper),
-    0 calc(var(--px) * -1) 0 var(--paper);
+  -webkit-text-stroke: 6px var(--paper);
+  paint-order: stroke fill;
 }
 .bl-gauge__dug {
   display: none;
@@ -982,12 +979,8 @@
     width: calc(var(--px) * 3);
     height: calc(var(--px) * 3);
     background: currentColor;
-    box-shadow: 0 0 0 var(--px) var(--paper);
-    opacity: 0.7;
-  }
-  .bl-gauge__stops a:hover::before,
-  .bl-gauge__stops a:focus-visible::before {
-    opacity: 1;
+    /* A halo of the ground, as the words on the picture have, so the mark is never lost in it. */
+    box-shadow: 0 0 0 calc(var(--px) * 2) var(--paper);
   }
   .bl-gauge__stops a[aria-current]::before {
     width: calc(var(--px) * 6);

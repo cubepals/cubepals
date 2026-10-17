@@ -49,6 +49,7 @@ import { playing } from './film/clock'
 import { choice } from './sections/choice'
 import { type Aim, stage } from './stage'
 import { FIRST_CANVAS, nextCanvas, RESTORED_WITHIN_MS, withoutDrawing } from './start'
+import { type Torch, torchOf } from './torch'
 import { director, type Shot, shotsOf } from './views'
 
 /**
@@ -325,7 +326,7 @@ export function Chunk() {
     const farSeen: Island[] = []
     // A light that isn't part of the world: where it is, how far it reaches (blocks), how bright,
     // and what it lights (out of doors, or one room).
-    const torchLight: [number, number, number, number, number, number] = [0, 0, 0, 3.8, 0, HOME]
+    const torchLight: Torch = [0, 0, 0, 3.8, 0, HOME]
     // What every frame hands the renderer, kept between frames.
     const bands: [Palette, Palette, Palette, Palette] = [
       { low: INK, high: NIGHT, line: INK },
@@ -973,31 +974,16 @@ export function Chunk() {
             : act === 'knock'
               ? 1 - dawnOf(day)
               : 0
-      if (cast.torch && glowing > 0) {
-        torchLight[0] = cast.torch[0]
-        torchLight[1] = cast.torch[1]
-        torchLight[2] = cast.torch[2]
-        torchLight[3] = 6
-        torchLight[4] = glowing * 6
-        torchLight[5] = HOME
-      }
-      let carried = cast.torch && glowing > 0 ? torchLight : null
-      // Under the house the server has a light of its own, for as long as the vault is lit.
-      const vault = lamps[CELLAR] ?? 0
-      if (!carried && cast.glow && vault > 0.02) {
-        torchLight[0] = cast.glow[0]
-        torchLight[1] = cast.glow[1]
-        torchLight[2] = cast.glow[2]
-        torchLight[3] = cast.glow[3]
-        torchLight[4] = vault * 0.8
-        torchLight[5] = CELLAR
-        carried = torchLight
-      }
-      // Under the grass a room's server has one too, in front of whatever lamps are lit on it.
-      if (!carried && room && roomSeen && cast.lamp) {
-        for (let n = 0; n < 6; n++) torchLight[n] = cast.lamp[n] as number
-        carried = torchLight
-      }
+      // The light of the moment: a carried torch, the vault's server, a room's server, or the
+      // lamp by the door, which lights the door warm whenever it is night on the grass.
+      const carried = torchOf(torchLight, {
+        torch: cast.torch,
+        glowing,
+        glow: cast.glow,
+        vault: lamps[CELLAR] ?? 0,
+        lamp: room && roomSeen ? cast.lamp : null,
+        night: surfaceSeen ? 1 - light : 0,
+      })
       // The light and the tone curve: by the day, and eased with the camera into a room and out.
       const look = lookAt(light, here.under, here.bright, here.inside)
       // The hero's sky is the one colour of the print that changes: night to paper with the day.

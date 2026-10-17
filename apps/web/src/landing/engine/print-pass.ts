@@ -117,6 +117,10 @@ void main() {
   // In the dark rooms the faint end of the light eases into the dark: below a thirtieth it
   // prints nothing and above that it comes in gently, so a lamp's pool has no rim. The dither's
   // order is jittered a little there too, so its steps draw no contour on a wall.
+  // On the light grounds a shadow is a dark grey, never a hole of ink: the page is lit. Under the
+  // sky the darkest face keeps a scatter of light dots too, as concept A1's does.
+  if (band == 1) l = mix(0.14, 1.0, l);
+  if (band == 0) l = mix(0.1, 1.0, l);
   if (band == 2) {
     l = smoothstep(0.03, 0.95, l);
     t = clamp(t + (hash(vec2(c) + 3.0) - 0.5) * 0.12, 0.03, 1.0);

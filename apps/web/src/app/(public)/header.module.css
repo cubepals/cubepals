@@ -142,3 +142,15 @@
     transition: none;
   }
 }
+
+/* Over the picture the words keep it off their letters with a halo of their ground, as the
+   words on the landing page do: the links by a stroke drawn under them, the lockup and its beta
+   mark (drawings) by an outline. */
+.header[data-over-picture] .link {
+  -webkit-text-stroke: 6px var(--paper);
+  paint-order: stroke fill;
+}
+.header[data-over-picture] > :first-child {
+  filter: drop-shadow(3px 0 0 var(--paper)) drop-shadow(-3px 0 0 var(--paper))
+    drop-shadow(0 3px 0 var(--paper)) drop-shadow(0 -3px 0 var(--paper));
+}

@@ -177,6 +177,8 @@ uniform float uRoomFill;
 uniform float uLampGain;
 // How far the camera is under the grass, 0 to 1: the rock outside the rooms goes dark with it.
 uniform float uDeep;
+// The least light any face gets, from everything round about.
+uniform float uAmbient;
 // How many times over a room's lamps count: more when it is a lit window seen from out of doors.
 uniform float uWindows;
 // The light that doesn't move, baked a cell a block (bake.ts): red the sky a cell sees, green the
@@ -276,14 +278,14 @@ float beams(float level) {
     if (any(lessThan(q, vec3(0.0))) || any(greaterThan(q, vec3(1.0)))) continue;
     // Only where a lamp's light is thick, near it: a room's general glow is no beam.
     vec4 v = texture(uVolume, q);
-    sum += max(0.0, v.g * 2.0 * level - 1.0) * 2.0;
+    sum += max(0.0, v.g * 2.0 * level - 0.35) * 2.0;
     for (int k = 0; k < ${MAX_LIGHTS}; k++) {
       if (k >= uLightCount) break;
       float f = clamp(1.0 - distance(p, uLights[k].xyz) / uLights[k].w, 0.0, 1.0);
-      sum += uLightOn[k] * max(0.0, f * f * f - 0.5);
+      sum += uLightOn[k] * max(0.0, f * f - 0.25);
     }
   }
-  return clamp(sum * 0.12, 0.0, 0.7);
+  return clamp(sum * 0.16, 0.0, 0.8);
 }
 
 // How much of the room's main lamp reaches this point, 0 to 1, from its own map, 3 by 3.
@@ -318,7 +320,8 @@ void main() {
   // of their light and it is the lamps' warmth that dims.
   float level = uGroups[room];
   bool loose = uLoose > 0.5;
-  float roomLight = (loose ? vRoomLit : uRoom[vFace]) * min(1.0, level * 8.0) * (0.6 + 0.4 * level);
+  // A room with its switch down is dim, never black: its walls keep a share of their light.
+  float roomLight = (loose ? vRoomLit : uRoom[vFace]) * max(min(1.0, level * 8.0) * (0.6 + 0.4 * level), 0.55);
 
   // Each kind gets a little of its own grain, so a field of one material isn't a flat tint.
   float grain = hash(vCell) - 0.5;
@@ -364,10 +367,16 @@ void main() {
   vec2 still = baked(n);
   // The sky's fill as much as the sky can be seen from here: under eaves, in corners and down the
   // dig it is shut out.
-  float sky = uFill * mix(0.604, 1.0, n.y * 0.5 + 0.5) * mix(0.3, 1.0, still.x);
+  // Most of it falls from straight above: the tops are the brightest faces, the sides take less.
+  float up = n.y * 0.5 + 0.5;
+  float sky = uFill * mix(0.3, 1.0, up * up) * mix(0.3, 1.0, still.x);
   // From inside a room, all that is out of doors is in the dark, however high the room is.
   float deep = loose ? 1.0 : 1.0 - uDeep;
-  float light = open ? (key + sky) * deep : roomLight * uRoomFill;
+  // Nothing is ever left in the black: light comes back off everything round about, the more
+  // onto what faces up, so a face in shadow, underground or away from the key is a grey; and
+  // twice as much where no sky is seen, since light shut in goes round and round.
+  float around = uAmbient * mix(0.7, 1.0, n.y * 0.5 + 0.5) * mix(2.0, 1.0, still.x);
+  float light = open ? max((key + sky) * deep, around) : max(roomLight * uRoomFill, around);
   float lum = tone * light * ao;
 
   // The lamps: a room's light that room, the ones outdoors the outdoors. Each falls off with
@@ -400,6 +409,9 @@ void main() {
   // What glows: a lit window, a lamp, a torch. The second pass prints it solid and its blur warm.
   float glow = 0.0;
   if (group > 0 && (kind == 12 || kind == 13 || kind == 22)) glow = uGroups[group];
+  // A room seen from out of doors (the column, a cutaway) is a lit window: with its switch up,
+  // its inside prints solid warm with a glow round it, so it reads at any size.
+  if (!open && !loose && room > 0) glow = max(glow, uGroups[room] * smoothstep(2.0, 5.0, uWindows));
 
   // Which flat plane this is: the way it faces, how far along that way, and what it's made of.
   int axis = vFace % 3;
@@ -418,10 +430,13 @@ void main() {
   id = mod(id + 8192.0, 65535.0) + 1.0;
   // Brightness is kept at half, so light past white still has room before the tone curve.
   // Blue is how much of the light here is lamplight, where there is enough of it to show: the
-  // second pass prints that share warm.
+  // second pass prints that share warm, at most three dots in five, so a lamp-lit wall stays a wall.
   // The alpha carries the dust of a beam in front of this point, for the second pass to scatter.
   float dust = loose ? 0.0 : beams(uGroups[open ? 1 : room]);
-  o0 = vec4(clamp(lum * 0.5, 0.0, 1.0), glow, clamp(warmth / max(lum, 0.001), 0.0, 1.0) * smoothstep(0.02, 0.2, warmth), 1.0 - 0.4 * dust);
+  // A beam is light in the air: what is seen through it is seen paler and warmer.
+  lum += dust * 0.9;
+  warmth += dust * 0.2;
+  o0 = vec4(clamp(lum * 0.5, 0.0, 1.0), glow, clamp(warmth / max(lum, 0.001), 0.0, 1.0) * 0.6 * smoothstep(0.02, 0.2, warmth), 1.0 - 0.4 * dust);
   // (Half marks a part that is thinning: no line is drawn round its scattered dots.)
   o1 = vec4(mod(id, 256.0) / 255.0, floor(id / 256.0) / 255.0, vFog, ghost ? 0.5 : 1.0);
 }`

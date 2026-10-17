@@ -76,6 +76,8 @@ interface Look {
   keyLight: number
   fill: number
   roomFill: number
+  /** The least light any face gets, from everything round about: nothing prints black. */
+  ambient: number
   lampGain: number
   exposure: number
   contrast: number
@@ -93,28 +95,31 @@ interface Look {
  * and its lamps light it.
  */
 const MOONLIT: Omit<Look, 'deep' | 'windows'> = {
-  keyLight: 2.2,
-  fill: 0.9,
-  roomFill: 0.45,
-  lampGain: 1.2,
-  exposure: 0.7,
-  contrast: 1.45,
+  keyLight: 2.4,
+  fill: 1.1,
+  roomFill: 0.6,
+  ambient: 0.28,
+  lampGain: 1.5,
+  exposure: 0.85,
+  contrast: 1.35,
 }
 const DAYLIT: Omit<Look, 'deep' | 'windows'> = {
   keyLight: 2.8,
   fill: 0.85,
-  roomFill: 0.45,
-  lampGain: 1.2,
-  exposure: 0.42,
-  contrast: 1.55,
+  roomFill: 0.6,
+  ambient: 0.45,
+  lampGain: 1.5,
+  exposure: 0.5,
+  contrast: 1.45,
 }
 const ROOMLIT: Omit<Look, 'deep' | 'windows'> = {
   keyLight: 2.2,
-  fill: 0.55,
-  roomFill: 0.24,
-  lampGain: 1.3,
-  exposure: 1.45,
-  contrast: 1.55,
+  fill: 0.8,
+  roomFill: 0.7,
+  ambient: 0.3,
+  lampGain: 1.6,
+  exposure: 1.4,
+  contrast: 1.4,
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
@@ -134,6 +139,7 @@ export function lookAt(light: number, under: number, bright = 1, inside = 0): Lo
     keyLight: at('keyLight'),
     fill: at('fill'),
     roomFill: lerp(at('roomFill'), 1, plain),
+    ambient: at('ambient'),
     lampGain: at('lampGain'),
     // A room on a light ground is taken brighter, so its walls print pale, as the page does.
     exposure: at('exposure') * lerp(1, 1.8, plain) * bright,

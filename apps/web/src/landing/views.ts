@@ -101,7 +101,7 @@ function poseOf(element: HTMLElement, band: boolean, lens: Lens, trying: URLSear
 /** The shots of every section on the page, in the order the page reaches them. */
 export function shotsOf(root: HTMLElement, band: boolean, trying: URLSearchParams): Shot[] {
   const lens: Lens = {
-    far: { span: (TOP - BOTTOM) * 1.55, fov: 12, el: 10 },
+    far: { span: (TOP - BOTTOM) * 1.35, fov: 12, el: 10 },
     wide: { span: band ? 30 : 36, fov: 24, el: 22 },
     near: { span: band ? 20 : 23, fov: 28, el: 14 },
     close: { span: band ? 12 : 17, fov: 36, el: 12 },
