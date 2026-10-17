@@ -25,11 +25,11 @@
       "reason": "Characterization tests of one class on one fake node, whose shared home testing/fleet.ts infra may not import."
     },
     "apps/control/src/infra/fleet/fleet-runtime.ts": {
-      "n": 873,
+      "n": 872,
       "reason": "Decomposed into eight parts in fleet-runtime/; what is left is the port's verbs on one placement, observation, tidy and one-line delegates, and a further split would only spread single verbs over more files."
     },
     "apps/control/src/infra/fleet/fleet-runtime.ts › class FleetRuntime": {
-      "n": 772,
+      "n": 771,
       "reason": "Decomposed into eight parts in fleet-runtime/; what is left is the port's verbs on one placement, observation, tidy and one-line delegates, and a further split would only spread single verbs over more files."
     },
     "apps/control/src/infra/fly/fly-runtime.test.ts": {
