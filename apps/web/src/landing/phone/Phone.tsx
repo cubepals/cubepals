@@ -18,7 +18,9 @@ import surface from '../sections/surface.module.css'
 import { Address } from './Address'
 import styles from './phone.module.css'
 import { Still } from './Still'
-import night from './still-night.png'
+
+/** The night's picture as printed beforehand, shown until the worker's own print is in. */
+const night = { src: '/imagery/landing-still-night.png', width: 430, height: 323 }
 
 export function Phone({ create, signedIn, plans, getPlan }: Landed) {
   return (

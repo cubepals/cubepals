@@ -60,7 +60,7 @@
   height: min(75vw, 64svh, 30rem);
   margin-inline: calc(var(--gutter) * -1);
 }
-/* The night's picture as printed beforehand (still-night.png), centred and never scaled, until the
+/* The night's picture as printed beforehand (public/imagery/landing-still-night.png), centred and never scaled, until the
    worker's own print of it is in. */
 .still img {
   position: absolute;
