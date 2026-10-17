@@ -5,37 +5,17 @@
 'use client'
 
 /**
- * The first screen's proof: Cubepals' own Arcade, which anyone can join, as it is right now. Read
- * from the same public status Browse and a server's page read, after the page has loaded, so the
- * first screen never waits on it. Said only when the status is known and the Arcade is awake or
- * asleep; otherwise nothing is said. The address copies at a press.
+ * The first screen's proof: Cubepals' own Arcade, which anyone can join, as it was read on the
+ * server a moment ago (Landing.tsx), so it is there with the first screen. Said only when the
+ * Arcade is awake or asleep; otherwise nothing is said. The address copies at a press.
  */
 import { useEffect, useRef, useState } from 'react'
 import type { PublicStatus } from '../../app/(public)/status'
 import { ctaMark } from '../../app/(public)/steps'
 
-/** The Arcade's address on the public status endpoint. */
-const ARCADE = 'arcade'
-
-export function Arcade({ className }: { className?: string }) {
-  const [status, setStatus] = useState<PublicStatus | null>(null)
+export function Arcade({ status, className }: { status: PublicStatus | null; className?: string }) {
   const [copied, setCopied] = useState(false)
   const address = useRef<HTMLSpanElement>(null)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    const read = () =>
-      fetch(`/api/public/servers/${ARCADE}`, { signal: controller.signal })
-        .then((response) => (response.ok ? (response.json() as Promise<PublicStatus>) : null))
-        .then((read) => setStatus(read && (read.state === 'awake' || read.state === 'asleep') ? read : null))
-        .catch(() => setStatus(null))
-    if (document.readyState === 'complete') read()
-    else window.addEventListener('load', read, { once: true })
-    return () => {
-      controller.abort()
-      window.removeEventListener('load', read)
-    }
-  }, [])
 
   useEffect(() => {
     if (!copied) return
@@ -43,7 +23,7 @@ export function Arcade({ className }: { className?: string }) {
     return () => clearTimeout(timer)
   }, [copied])
 
-  if (!status) return <p className={className} />
+  if (!status) return null
   const copy = async () => {
     // The clipboard exists only in a secure context; anywhere else the address is selected.
     if (navigator.clipboard?.writeText) {

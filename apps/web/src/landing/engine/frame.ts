@@ -65,6 +65,11 @@ export interface Frame {
    * it is, how far it reaches, how bright, and whose it is (1 out of doors, or a room's switch).
    */
   torch: readonly [number, number, number, number, number, number] | null
+  /** How much light a room has of its own, and how strongly its lamps light it. */
+  roomFill: number
+  lampGain: number
+  /** How far the camera is under the grass, 0 to 1: the rock outside the rooms goes dark with it. */
+  deep: number
   time: number
   /** The range of world height in view, to choose which lights count. */
   viewY: readonly [number, number]

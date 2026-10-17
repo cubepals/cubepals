@@ -12,6 +12,7 @@
 import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
 import { type ReactNode, useId, useRef, useState } from 'react'
+import type { PublicStatus } from '../../app/(public)/status'
 import { ctaMark } from '../../app/(public)/steps'
 import type { RoomKey } from '../engine/chunk'
 import type { Tone } from '../kit'
@@ -77,7 +78,15 @@ const toPrice = (
  * I. Night. The surface, the house dark, and the one sentence the page is for. Coming back here
  * puts the server back to sleep: the film starts from the top.
  */
-export function Night({ create, plans }: { create: string; plans: PublicPlan[] }) {
+export function Night({
+  create,
+  plans,
+  arcade,
+}: {
+  create: string
+  plans: PublicPlan[]
+  arcade: PublicStatus | null
+}) {
   const beat = useBeat(() => [[0, () => stage.set({ power: 'asleep', players: 0 })]])
   return (
     <Beat
@@ -114,7 +123,7 @@ export function Night({ create, plans }: { create: string; plans: PublicPlan[] }
             Minecraft: Java Edition. Bedrock is coming soon.
           </p>
         </div>
-        <Arcade className={styles.arcade} />
+        <Arcade status={arcade} className={styles.arcade} />
       </div>
     </Beat>
   )
@@ -187,7 +196,7 @@ export function Wake({ proof }: { proof: ReactNode }) {
       // The gate's room, by its own name, so the gauge and a sent link can reach it.
       id="edge"
       name="The wake"
-      tone="stone"
+      tone="slate"
       room="edge"
       shot={{ span: 8.4, drop: 0.6 }}
       line={awake ? 'If it’s asleep, it wakes up for them.' : 'They join like any server.'}
@@ -320,11 +329,12 @@ export function Decided({ plans, proof }: { plans: PublicPlan[]; proof: ReactNod
     <Beat
       {...beat}
       name="What it didn’t ask"
-      tone="stone"
+      tone="slate"
       y={58.6}
       act="ledger"
       side={0.56}
-      shot={{ x: 12.5, z: 4, az: 84, el: 11, span: 8.6, fov: 34, drop: 0.56 }}
+      // The vault is lit by the server alone: it is taken brighter than the rooms.
+      shot={{ x: 12.5, z: 4, az: 84, el: 11, span: 8.6, fov: 34, drop: 0.56, bright: 1.6 }}
       line={`The other ${decisionsOf(plans, play, party, name)} choices are made for you.`}
       place="top"
       proof={proof}
@@ -431,7 +441,7 @@ export function Asleep({ proof }: { proof: ReactNode }) {
       beat={beat}
       room="sleep"
       name="Asleep"
-      tone="stone"
+      tone="slate"
       line="It saves the world before it stops."
       span={8.6}
       proof={proof}
@@ -475,7 +485,7 @@ export function Built({ proof }: { proof: ReactNode }) {
       beat={beat}
       room="machine"
       name="Built"
-      tone="stone"
+      tone="slate"
       line="Sized for your game and your group."
       span={9.4}
       proof={proof}
@@ -518,7 +528,7 @@ export function Fitted({ proof }: { proof: ReactNode }) {
       beat={beat}
       room="packs"
       name="Fitted"
-      tone="stone"
+      tone="slate"
       line="Pick a pack and Cubepals installs all of it."
       span={9}
       proof={proof}
@@ -555,7 +565,7 @@ export function Copied({ proof }: { proof: ReactNode }) {
       beat={beat}
       room="backups"
       name="Copied"
-      tone="stone"
+      tone="slate"
       line="A backup each time everyone leaves."
       span={9.6}
       drop={0.68}
@@ -595,7 +605,7 @@ export function Sent({ proof }: { proof: ReactNode }) {
       beat={beat}
       room="runtimes"
       name="Sent"
-      tone="stone"
+      tone="bedrock"
       line="Cubepals picks where it runs."
       span={9}
       proof={proof}
@@ -625,7 +635,7 @@ export function Kept({ proof }: { proof: ReactNode }) {
       beat={beat}
       room="fleet"
       name="Kept"
-      tone="stone"
+      tone="bedrock"
       line="Cubepals is building its own machines for this."
       span={11.5}
       drop={0.68}

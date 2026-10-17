@@ -45,11 +45,11 @@
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk": {
-      "n": 1025,
+      "n": 1024,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect": {
-      "n": 992,
+      "n": 991,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/engine/cast.ts": {
@@ -1269,7 +1269,7 @@
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect › frame": {
-      "n": 372,
+      "n": 371,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/Scroll.tsx › function Scroll": {

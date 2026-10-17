@@ -48,7 +48,7 @@ import {
   WarmProofs,
 } from './proofs'
 
-export function FilmPage({ create, signedIn, plans, getPlan }: Landed) {
+export function FilmPage({ create, signedIn, plans, getPlan, arcade }: Landed) {
   return (
     <>
       <Scroll />
@@ -63,32 +63,33 @@ export function FilmPage({ create, signedIn, plans, getPlan }: Landed) {
           <div className="bl-spine">
             <Chunk />
           </div>
-          <Night create={create} plans={plans} />
+          <Night create={create} plans={plans} arcade={arcade} />
           <Knock />
-          <Strata from="var(--night)" to="var(--stone)" />
+          <Strata from="var(--night)" to="var(--slate)" />
           <Wake proof={<AddressProof plans={plans} bare />} />
-          <Strata from="var(--stone)" to="var(--night)" />
+          <Strata from="var(--slate)" to="var(--night)" />
           <Daybreak />
           <Asks />
-          <Strata from="var(--paper)" to="var(--stone)" />
+          <Strata from="var(--paper)" to="var(--slate)" />
           <Decided plans={plans} proof={<LedgerProof plans={plans} bare />} />
-          <Strata from="var(--stone)" to="var(--night)" />
+          <Strata from="var(--slate)" to="var(--night)" />
           <Leaves />
-          <Strata from="var(--night)" to="var(--stone)" />
+          <Strata from="var(--night)" to="var(--slate)" />
           <Asleep proof={<SleepProof plans={plans} bare />} />
-          <Strata from="var(--stone)" to="var(--paper)" />
+          <Strata from="var(--slate)" to="var(--paper)" />
           <Overview played>
             <a className="bl-btn" href="#price" {...ctaMark('to_price')}>
               Straight to what it costs
             </a>
           </Overview>
-          <Strata from="var(--paper)" to="var(--stone)" />
+          <Strata from="var(--paper)" to="var(--slate)" />
           <Built proof={<MachineProof bare />} />
           <Fitted proof={<PacksProof plans={plans} bare />} />
           <Copied proof={<BackupsProof plans={plans} bare />} />
+          <Strata from="var(--slate)" to="var(--bedrock)" />
           <Sent proof={<RuntimesProof bare />} />
           <Kept proof={<FleetProof bare />} />
-          <Strata from="var(--stone)" to="var(--night)" drawn />
+          <Strata from="var(--bedrock)" to="var(--night)" drawn />
           <Worlds played />
           <Strata from="var(--night)" to="var(--paper)" drawn />
           <Plans plans={plans} create={create} getPlan={getPlan} />

@@ -1151,6 +1151,13 @@ html:has([data-phone]) {
   margin-top: calc(var(--px) * -1);
   scale: var(--push, 0);
 }
+/* With words (the first screen's "Scroll to join") it stands in the open field under the words'
+   column, clear of the picture on the right. */
+.bl-next:has([data-part="words"]:not(:empty)) {
+  inset-inline-start: calc(var(--gutter) + var(--rail));
+  justify-items: start;
+  translate: none;
+}
 /* Pushing back up, the same mark at the top of the screen, turned to point up. */
 .bl-next[data-way="up"] {
   inset-block: clamp(12px, 2.4vh, 22px) auto;

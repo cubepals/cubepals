@@ -36,45 +36,82 @@ export const INK = rgb('#0d0d0d')
 export const PAPER = rgb('#F8F7F5')
 export const NIGHT = rgb('#8C86F2')
 export const TORCH = rgb('#FFB01F')
-export const STONE = rgb('#E6E3DC')
+const STONE = rgb('#E6E3DC')
+/** The dig's dark print: between slate and bedrock, so it is the ground on either; and its line. */
+const DARK = rgb('#16161A')
+const DARK_LINE = rgb('#3C3C44')
+/** The dig's print: light dots on its dark, shadows black. */
+export const DIG = { low: DARK, high: STONE, line: DARK_LINE } as const
 
-/** The moon stands high to the front left of the house as the camera mostly sees it. */
-const MOON: Vec3 = unit([0.42, 0.82, 0.4])
+/**
+ * The key light by night and by day, as the way toward it: from the left and behind the house as
+ * the camera mostly sees it, so the faces it looks at are in shadow and the house reads as a dark
+ * mass with its tops and roof steps lit, throwing its shadow across the grass toward the viewer.
+ * From positions (−22, 34, 18) and (−16, 34, 26), toward (8, −6, 8).
+ */
+const MOON: Vec3 = unit([-30, 40, 10])
+const SUN: Vec3 = unit([-24, 40, 18])
 
-/** The sun climbs from low over the right wall; shadows fall toward the viewer's left. */
-export function sunAt(day: number): [number, number, number] {
-  return unit([0.62, 0.26 + day * 0.9, -0.5])
-}
+/** The far worlds are lit by the day's key, from their own bits (fleet.ts). */
+export const DAY_KEY: Vec3 = SUN
 
 /**
  * Where the key light comes from as the day turns, `day` 0 (night) to 1: the moon swings over
  * into the sun, so the shadows move with it rather than jumping.
  */
 export function keyAt(day: number): [number, number, number] {
-  const sun = sunAt(day)
   return unit([
-    MOON[0] + (sun[0] - MOON[0]) * day,
-    MOON[1] + (sun[1] - MOON[1]) * day,
-    MOON[2] + (sun[2] - MOON[2]) * day,
+    MOON[0] + (SUN[0] - MOON[0]) * day,
+    MOON[1] + (SUN[1] - MOON[1]) * day,
+    MOON[2] + (SUN[2] - MOON[2]) * day,
   ])
 }
 
-/** One look: how strong the key and the fill are, and the tone curve. */
+/**
+ * One look: how strong the key and the sky's fill are, how much light a room has of its own and
+ * how strongly its lamps light it, and the tone curve.
+ */
 interface Look {
   keyLight: number
   fill: number
+  roomFill: number
+  lampGain: number
   exposure: number
   contrast: number
+  /** How far the camera is into a room, which darkens the rock outside it. */
+  deep: number
 }
 
 /**
  * The three looks the film is printed in. The tone curve is the art direction: each is tuned by
  * eye so that everything in the chunk (the house, the trees, the sheep, people, the lamps) reads
- * at a glance, by moonlight as by day.
+ * at a glance, by its lit edges and its silhouette: a strong key from one side and a low fill, so
+ * the faces turned away print nearly ink. Under the grass a room is dark but for its lamps.
  */
-const MOONLIT: Look = { keyLight: 0.8, fill: 0.55, exposure: 1.3, contrast: 1.5 }
-const DAYLIT: Look = { keyLight: 1, fill: 0.85, exposure: 0.9, contrast: 1.4 }
-const ROOMLIT: Look = { keyLight: 1, fill: 0.85, exposure: 3.1, contrast: 1.15 }
+const MOONLIT: Omit<Look, 'deep'> = {
+  keyLight: 2.2,
+  fill: 0.55,
+  roomFill: 0.3,
+  lampGain: 1.2,
+  exposure: 0.5,
+  contrast: 1.6,
+}
+const DAYLIT: Omit<Look, 'deep'> = {
+  keyLight: 2.8,
+  fill: 0.85,
+  roomFill: 0.3,
+  lampGain: 1.2,
+  exposure: 0.42,
+  contrast: 1.55,
+}
+const ROOMLIT: Omit<Look, 'deep'> = {
+  keyLight: 2.2,
+  fill: 0.55,
+  roomFill: 0.15,
+  lampGain: 3,
+  exposure: 1.45,
+  contrast: 1.55,
+}
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 
@@ -83,12 +120,15 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t
  * into a room, 0 to 1; `bright` scales the exposure, for a beat that asks for more or less.
  */
 export function lookAt(light: number, under: number, bright = 1): Look {
-  const out = (key: keyof Look) => lerp(MOONLIT[key], DAYLIT[key], light)
-  const pick = (key: keyof Look) => lerp(out(key), ROOMLIT[key], under)
+  const at = (key: Exclude<keyof Look, 'deep'>) =>
+    lerp(lerp(MOONLIT[key], DAYLIT[key], light), ROOMLIT[key], under)
   return {
-    keyLight: pick('keyLight'),
-    fill: pick('fill'),
-    exposure: pick('exposure') * bright,
-    contrast: pick('contrast'),
+    keyLight: at('keyLight'),
+    fill: at('fill'),
+    roomFill: at('roomFill'),
+    lampGain: at('lampGain'),
+    exposure: at('exposure') * bright,
+    contrast: at('contrast'),
+    deep: under,
   }
 }

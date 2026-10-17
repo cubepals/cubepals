@@ -29,20 +29,26 @@
   font-size: 0.875rem;
   line-height: 1.35;
 }
-/* Three lines, each its own, so the button still fits the first screen of the smallest phone. */
-.headline {
+/* Three lines, each its own, so the button still fits the first screen of the smallest phone.
+   Doubled up (`.night >`) so it outranks the shared `.bl-display`, whichever stylesheet loads
+   last. "Send your friends", the longest line, is 8.08 of its font size wide in Geologica 800 at
+   this tracking, measured in a browser; it is given 8.4, so it fits inside the gutters with a
+   little to spare in any browser's rendering. 44 px where that fits, less where it doesn't. The
+   padding under it is the room the descenders of "They’re" hang into, below the line box, so
+   the line under it is a clear 16 px from the glyphs themselves. */
+.night > .headline {
   position: relative;
   margin-top: 12px;
-  /* 44 px, or less where "Send your friends" wouldn't fit on its line. */
-  font-size: min(44px, 10.8vw);
+  padding-bottom: 0.2em;
+  font-size: min(44px, calc((100vw - 2 * var(--gutter)) / 8.4));
   line-height: 0.95;
 }
-.headline span {
+.night > .headline span {
   display: block;
   white-space: nowrap;
 }
 
-.support {
+.night > .support {
   position: relative;
   margin-top: 16px;
 }
@@ -53,6 +59,20 @@
   position: relative;
   height: min(75vw, 64svh, 30rem);
   margin-inline: calc(var(--gutter) * -1);
+}
+/* The night's picture as printed beforehand (still-night.png), centred and never scaled, until the
+   worker's own print of it is in. */
+.still img {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  max-width: none;
+  translate: -50% -50%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+.still canvas[data-printed] ~ img {
+  display: none;
 }
 .still canvas {
   display: block;

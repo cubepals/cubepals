@@ -165,6 +165,16 @@ uniform float uMapTexel;
 // 1 where the shadow map is drawn and holds this world; 0 where a face's own bits say what the
 // key reaches (the far worlds, and a device that can't afford the map).
 uniform int uMapped;
+// The one lamp that casts a shadow (the light in front of a room's server), as its index among the
+// lights, or -1; its own shadow map, drawn looking down from it.
+uniform int uTorch;
+uniform sampler2DShadow uLampMap;
+uniform mat4 uLampView;
+// How dark the rooms are: their own fill, and how strongly the lamps light them.
+uniform float uRoomFill;
+uniform float uLampGain;
+// How far the camera is under the grass, 0 to 1: the rock outside the rooms goes dark with it.
+uniform float uDeep;
 layout(location=0) out vec4 o0;
 layout(location=1) out vec4 o1;
 
@@ -201,8 +211,12 @@ float occlusion() {
   return a0 * (1.0 - v) + a2 * u + a3 * (v - u);
 }
 
-// How much of the key light reaches this point, 0 to 1: the shadow map read in a 3 by 3 patch.
+// How much of the key light reaches this point, 0 to 1: the shadow map read in a 5 by 5 patch,
+// so the edge of a shadow is soft by a few texels.
 float lit(vec3 n, bool sunny, int kind) {
+#ifdef QUICK
+  return 1.0;
+#endif
   if (uMapped == 0) return sunny ? 1.0 : 0.0;
   // Leaves sway after the map was drawn, so they keep a little further from their own shadow.
   float push = kind == 7 ? 0.16 : 0.04;
@@ -210,9 +224,25 @@ float lit(vec3 n, bool sunny, int kind) {
   vec3 s = at.xyz * 0.5 + 0.5;
   if (any(lessThan(s, vec3(0.0))) || any(greaterThan(s, vec3(1.0)))) return 1.0;
   float sum = 0.0;
+  for (int dx = -2; dx <= 2; dx++)
+    for (int dy = -2; dy <= 2; dy++)
+      sum += texture(uShadowMap, vec3(s.xy + vec2(float(dx), float(dy)) * uMapTexel, s.z - 0.0006));
+  return sum / 25.0;
+}
+
+// How much of the room's main lamp reaches this point, 0 to 1, from its own map, 3 by 3.
+float lampLit(vec3 n) {
+#ifdef QUICK
+  return 1.0;
+#endif
+  vec4 at = uLampView * vec4(vWorld + n * 0.06, 1.0);
+  if (at.w <= 0.0) return 1.0;
+  vec3 s = at.xyz / at.w * 0.5 + 0.5;
+  if (any(lessThan(s, vec3(0.0))) || any(greaterThan(s, vec3(1.0)))) return 1.0;
+  float sum = 0.0;
   for (int dx = -1; dx <= 1; dx++)
     for (int dy = -1; dy <= 1; dy++)
-      sum += texture(uShadowMap, vec3(s.xy + vec2(float(dx), float(dy)) * uMapTexel, s.z - 0.0006));
+      sum += texture(uLampMap, vec3(s.xy + vec2(float(dx), float(dy)) / 1024.0, s.z - 0.0015));
   return sum / 9.0;
 }
 
@@ -265,21 +295,26 @@ void main() {
     tone = max(tone, glint);
   }
 
-  // A lit room is brighter than the rock it is cut from, so it reads as a room and not as more wall.
-  if (!open) tone = mix(tone, 1.0, 0.45);
+  // A room is a little paler than the rock it is cut from, so it reads as a room and not as more wall.
+  if (!open) tone = mix(tone, 1.0, 0.3);
   // The rock a room is cut from is the margin of the picture, not the picture: it prints quieter.
   if (open && !loose && vWorld.y < -0.5) tone = mix(tone, 1.0, uRock);
   tone = clamp(tone, 0.0, 1.0);
   vec3 n = normalize(vNormal);
   float ao = occlusion();
-  // Out of doors: the key where it reaches, and the sky's fill, more from above than from the side.
+  // Out of doors: the key where it reaches, and the sky's fill, white from above and a grey bounce
+  // from the ground below, so a face turned away from the key is dark.
   float key = uKeyLight * max(dot(n, uKey), 0.0) * lit(n, (sunny & (1 << vFace)) != 0, kind);
-  float sky = uFill * (0.62 + 0.38 * n.y);
-  float light = open ? key + sky : roomLight * 0.9;
+  float sky = uFill * mix(0.604, 1.0, n.y * 0.5 + 0.5);
+  // Down in the dig the rock outside the rooms is in the dark.
+  float deep = !loose && vWorld.y < -0.5 ? 1.0 - uDeep * 0.85 : 1.0;
+  float light = open ? (key + sky) * deep : roomLight * uRoomFill;
   float lum = tone * light * ao;
 
-  // The lamps: a room's light that room, the ones outdoors the outdoors. They cast no shadow.
+  // The lamps: a room's light that room, the ones outdoors the outdoors. Each falls off with
+  // distance and lights the faces turned to it; the room's main lamp casts a shadow.
   float lamp = 0.0;
+#ifndef QUICK
   for (int i = 0; i < ${MAX_LIGHTS}; i++) {
     if (i >= uLightCount) break;
     // A room's lamps light that room; the lamps outdoors light the outdoors. Rock is not glass.
@@ -288,9 +323,13 @@ void main() {
     vec3 to = uLights[i].xyz - vWorld;
     float d = length(to);
     float f = clamp(1.0 - d / uLights[i].w, 0.0, 1.0);
-    lamp += uLightOn[i] * f * f * (0.4 + 0.6 * max(dot(n, to / max(d, 0.001)), 0.0));
+    float facing = 0.15 + 0.85 * max(dot(n, to / max(d, 0.001)), 0.0);
+    float shadow = i == uTorch ? lampLit(n) : 1.0;
+    lamp += uLightOn[i] * f * f * f * facing * shadow;
   }
-  lum += tone * lamp * 0.7 * ao;
+#endif
+  float warmth = tone * lamp * uLampGain * ao;
+  lum += warmth;
 
   // What glows: a lit window, a lamp, a torch. The second pass prints it solid and its blur warm.
   float glow = 0.0;
@@ -306,12 +345,17 @@ void main() {
   // The block the cursor is on: bare paper with a line round it, the way the game marks one.
   if (all(equal(vCell, uPick))) {
     lum = 2.0;
+    warmth = 0.0;
     glow = 0.0;
     id += 977.0 + dot(vCell, vec3(3.0, 17.0, 5.0));
   }
   id = mod(id + 8192.0, 65535.0) + 1.0;
   // Brightness is kept at half, so light past white still has room before the tone curve.
-  o0 = vec4(clamp(lum * 0.5, 0.0, 1.0), glow, 0.0, 1.0);
+  // Blue is how much of the light here is lamplight: the second pass prints that share warm.
+  o0 = vec4(clamp(lum * 0.5, 0.0, 1.0), glow, clamp(warmth / max(lum, 0.001), 0.0, 1.0), 1.0);
   // (Half marks a part that is thinning: no line is drawn round its scattered dots.)
   o1 = vec4(mod(id, 256.0) / 255.0, floor(id / 256.0) / 255.0, vFog, ghost ? 0.5 : 1.0);
 }`
+
+/** The same pass without the shadows and the lamps: quick to compile, for the first frames. */
+export const QUICK_FRAG = SCENE_FRAG.replace('#version 300 es\n', '#version 300 es\n#define QUICK\n')

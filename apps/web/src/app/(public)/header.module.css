@@ -26,6 +26,14 @@
 .header[data-over-picture] > * {
   pointer-events: auto;
 }
+/* Over the picture the ground changes: over the dark of the dig the header is paper. */
+.header[data-ground="slate"],
+.header[data-ground="bedrock"] {
+  /* Literal, since each would otherwise be read from the other on this same element. */
+  --ink: #f8f7f5;
+  --paper: #0d0d0d;
+}
+
 .lockup {
   display: inline-flex;
   color: var(--ink);

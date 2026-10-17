@@ -13,7 +13,7 @@ import { AROUND, MIDDLE } from '../Chunk'
 import { cameraOf, type Pose, project } from '../engine/camera'
 import { Cast } from '../engine/cast'
 import { BOTTOM, buildChunk, HOME, LIT, TOP } from '../engine/chunk'
-import type { Palette } from '../engine/frame'
+import type { Frame, Palette } from '../engine/frame'
 import { Renderer } from '../engine/gl'
 import { INK, keyAt, lookAt, NIGHT, PAPER, TORCH } from '../engine/light'
 import { Loose } from '../engine/loose'
@@ -108,16 +108,14 @@ export function print(still: Still, width: number, height: number, dot: number):
   const groups = new Float32Array(16)
   groups[LIT] = 1
   groups[HOME] = 0
-  renderer.draw({
+  const frame: Frame = {
     camera: lens.matrix,
     shift: lens.shift,
     // Lit as the film lights its first screen and its daybreak, shadow map and all.
     key: keyAt(light),
-    keyLight: look.keyLight,
-    fill: look.fill,
     shadows: { middle: [8, 3, 8], radius: 16, runs: mesh.between(-8, TOP) },
-    exposure: look.exposure,
-    contrast: look.contrast,
+    ...look,
+    deep: 0,
     levels: 0,
     detail: 1,
     groups,
@@ -139,7 +137,9 @@ export function print(still: Still, width: number, height: number, dot: number):
     eye: lens.eye,
     fog: [lens.distance * 0.92, lens.distance * 0.9],
     crowd: 0,
-  })
+  }
+  // A picture printed once waits for the lit look rather than being printed in the quick one.
+  renderer.draw(frame, true)
   // Taken in the same task as the drawing, while the canvas still holds it.
   return { bitmap: canvas.transferToImageBitmap(), chimney: night ? project(lens, CHIMNEY) : null }
 }

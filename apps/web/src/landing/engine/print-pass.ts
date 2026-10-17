@@ -69,14 +69,20 @@ float hash(vec2 p) {
   return fract((q.x + q.y) * q.z);
 }
 
+// How quiet the print is here, 0 to 1: the distance to each rect, as a rect with round corners,
+// eased over 150 CSS pixels with a smoothstep, so the open ground has a soft, round edge and never
+// a box's.
 float quietAt() {
   vec2 css = vec2(gl_FragCoord.x, float(uSize.y) - gl_FragCoord.y) * uUnit;
   float m = 0.0;
   for (int i = 0; i < 3; i++) {
     vec4 r = uQuiet[i];
     if (r.z <= 0.0) continue;
-    vec2 d = max(max(r.xy - css, css - (r.xy + r.zw)), 0.0);
-    m = max(m, 1.0 - smoothstep(0.0, 150.0, length(d)));
+    vec2 half_ = r.zw * 0.5;
+    float corner = min(48.0, min(half_.x, half_.y));
+    vec2 q = abs(css - (r.xy + half_)) - half_ + corner;
+    float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - corner;
+    m = max(m, 1.0 - smoothstep(-24.0, 150.0, d));
   }
   return m;
 }
@@ -123,6 +129,9 @@ void main() {
   l = pow(l, 1.0 / 2.2);
   // (The plainer print has a few flat steps of grey instead.)
   if (uLevels > 0.0) l = floor(l * uLevels + 0.5) / uLevels;
-  l = mix(l, 1.0, quiet);
-  o = vec4(l > t ? uHigh[band] : uLow[band], 1.0);
+  // Behind the words the print opens to its ground: paper on the light grounds, dark on the dark.
+  l = mix(l, band == 2 ? 0.0 : 1.0, quiet);
+  if (l <= t) { o = vec4(uLow[band], 1.0); return; }
+  // A lit dot is warm where that share of the light here is lamplight, in the dither's own order.
+  o = vec4(shade.b > bayer8(vec2(c + ivec2(5, 2))) ? uWarm : uHigh[band], 1.0);
 }`

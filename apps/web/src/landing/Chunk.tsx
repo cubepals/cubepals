@@ -42,7 +42,7 @@ import type { Packed, Palette } from './engine/frame'
 import { Renderer } from './engine/gl'
 import { Ground } from './engine/ground'
 import { Handover } from './engine/handover'
-import { INK, keyAt, lookAt, mix, NIGHT, PAPER, STONE, sunAt, TORCH } from './engine/light'
+import { DAY_KEY, DIG, INK, keyAt, lookAt, mix, NIGHT, PAPER, TORCH } from './engine/light'
 import { Loose } from './engine/loose'
 import { hash3, Kind, Mesh, relight, type Taken, type World } from './engine/world'
 import { playing } from './film/clock'
@@ -53,11 +53,11 @@ import { FIRST_CANVAS, nextCanvas, RESTORED_WITHIN_MS, withoutDrawing } from './
 import { director, type Shot, shotsOf } from './views'
 
 /**
- * Which palette the print takes over each kind of ground: the hero's sky, paper, the stone of the
- * dig, night. The dig is ink on stone all the way down: depth is told by the gauge and the fog.
+ * Which palette the print takes over each kind of ground: the hero's sky, the light grounds, the
+ * dark ones of the dig (light dots on dark, shadows black), night.
  */
 const bandOf = (tone: string): number =>
-  tone === 'night' ? 0 : tone === 'dusk' ? 3 : tone === 'paper' ? 1 : 2
+  tone === 'night' ? 0 : tone === 'dusk' ? 3 : tone === 'slate' || tone === 'bedrock' ? 2 : 1
 
 /**
  * How much weight the camera's spring has, in seconds. The page opens on its first screen as it
@@ -144,7 +144,7 @@ function prepared(): { world: World; mesh: Mesh } {
 
 /** The other worlds round this one, `reach` worlds out, built if they aren't yet. */
 function fleetOf(reach: number): Fleet {
-  if (fleets?.reach !== reach) fleets = { fleet: buildFleet(reach, sunAt(1)), reach }
+  if (fleets?.reach !== reach) fleets = { fleet: buildFleet(reach, DAY_KEY), reach }
   return fleets.fleet
 }
 
@@ -331,7 +331,7 @@ export function Chunk() {
     const bands: [Palette, Palette, Palette, Palette] = [
       { low: INK, high: NIGHT, line: INK },
       { low: INK, high: PAPER, line: INK },
-      { low: INK, high: STONE, line: INK },
+      DIG,
       { low: INK, high: NIGHT, line: INK },
     ]
     let skyFor = ''
@@ -905,7 +905,7 @@ export function Chunk() {
       }
       renderer.setMoving(actors(time / 1000))
       // While anybody up there is on the move the drawing keeps up with them, frame for frame.
-      if (castBusy && !quiet && !paused) dirty = true
+      if ((castBusy && !quiet && !paused) || !renderer.lit) dirty = true
 
       // Of the chunk's hundred and forty layers, only the ones the camera can see are drawn: the
       // four upright edges of the chunk are followed down the screen to find which those are.
@@ -1038,8 +1038,7 @@ export function Chunk() {
         camera: lens.matrix,
         shift: lens.shift,
         key: keyAt(shade / 6),
-        keyLight: look.keyLight,
-        fill: look.fill,
+        ...look,
         shadows: mapped ? { middle: SHADED, radius: 16, runs: mesh.between(-8, TOP) } : null,
         exposure: look.exposure * (Number(trying.get('ex')) || 1),
         contrast: Number(trying.get('ct')) || look.contrast,

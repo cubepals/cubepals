@@ -13,11 +13,13 @@ import type { PublicPlan } from '@blockly/contracts'
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { Presses } from '../app/(public)/presses'
+import type { PublicStatus } from '../app/(public)/status'
 import { publicPlans } from '../lib/plans'
 import { currentSession } from '../lib/session'
 import { canonicalOrigin } from '../lib/site'
 import { sourceOf, withSource } from '../lib/source'
 import { appSchema, JsonLd, siteSchema } from '../lib/structured-data'
+import { apiUpstream, RENDER_READ_MS } from '../lib/upstream'
 import { aside, digits, display, pixel } from './fonts'
 import { Footer } from './sections/Footer'
 import './landing.css'
@@ -44,6 +46,30 @@ export interface Landed {
   plans: PublicPlan[]
   /** Where a paid plan's button leads, by plan key. */
   getPlan: (key: string) => string
+  /** Cubepals' own Arcade as anyone can see it, or null unless it is known to be awake or asleep. */
+  arcade: PublicStatus | null
+}
+
+/** The Arcade's address on the public status endpoint. */
+const ARCADE = 'arcade'
+
+/**
+ * The Arcade's public status, read on the server the way Browse reads a server's (status.ts), and
+ * kept half a minute: the browser asks for nothing, so a server that isn't public costs it no
+ * failed request. Null when it can't be read or the Arcade is neither awake nor asleep.
+ */
+async function arcadeNow(): Promise<PublicStatus | null> {
+  try {
+    const response = await fetch(`${apiUpstream()}/api/public/servers/${ARCADE}`, {
+      signal: AbortSignal.timeout(RENDER_READ_MS),
+      next: { revalidate: 30 },
+    })
+    if (!response.ok) return null
+    const status = (await response.json()) as PublicStatus
+    return status.state === 'awake' || status.state === 'asleep' ? status : null
+  } catch {
+    return null
+  }
 }
 
 /** What the page reads for whoever has landed, with the tags of the link they came by. */
@@ -54,12 +80,12 @@ export async function landingOf(
   const source = sourceOf(await searchParams)
   const create = signedIn ? '/servers/new' : withSource('/sign-up', source)
   // Kept five minutes: one reading serves everyone who lands in that time.
-  const plans = await publicPlans(300)
+  const [plans, arcade] = await Promise.all([publicPlans(300), arcadeNow()])
   const getPlan = (key: string) => {
     const account = `/account?get=${key}&reason=pricing`
     return signedIn ? account : withSource(`/sign-up?next=${encodeURIComponent(account)}`, source)
   }
-  return { signedIn, create, plans, getPlan }
+  return { signedIn, create, plans, getPlan, arcade }
 }
 
 /** The frame the page's forms are set in. `film` marks the one the film is in. */

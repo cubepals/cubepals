@@ -18,6 +18,7 @@ import surface from '../sections/surface.module.css'
 import { Address } from './Address'
 import styles from './phone.module.css'
 import { Still } from './Still'
+import night from './still-night.png'
 
 export function Phone({ create, signedIn, plans, getPlan }: Landed) {
   return (
@@ -39,7 +40,7 @@ export function Phone({ create, signedIn, plans, getPlan }: Landed) {
             Minecraft: Java Edition. Bedrock is coming soon.
           </p>
         </div>
-        <Still still="night" className={styles.still} />
+        <Still still="night" first={night} className={styles.still} />
         <p className={styles.line} {...seenMark('the-address')}>
           Share the address.
         </p>

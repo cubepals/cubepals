@@ -17,9 +17,10 @@
  */
 import type { Vec3 } from './camera'
 import type { Frame, Packed, Palette } from './frame'
+import { Maps } from './maps'
 import { GLOW_FRAG, PRINT_FRAG, PRINT_VERT } from './print-pass'
-import { MAX_LIGHTS, SCENE_FRAG, SCENE_VERT, SHADOW_FRAG } from './scene-pass'
-import { lightMatrix, MAP_SIZE } from './shadow'
+import { MAX_LIGHTS, QUICK_FRAG, SCENE_FRAG, SCENE_VERT, SHADOW_FRAG } from './scene-pass'
+import { lampMatrix, lightMatrix, MAP_SIZE } from './shadow'
 import { CORNERS, type Light } from './world'
 
 function compile(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
@@ -92,6 +93,11 @@ const ROOM_LIGHT = new Float32Array([1, 0.86, 0.64, 0.5, 0.7, 0.78])
 /** The KHR_parallel_shader_compile extension's COMPLETION_STATUS_KHR, which WebGL names nowhere. */
 const COMPLETION_STATUS_KHR = 0x91b1
 
+/** The programs: the quick look's three, which the first frames are drawn with, and the lit look's. */
+type Program = 'quick' | 'print' | 'blur' | 'scene' | 'shadow'
+const QUICK: readonly Program[] = ['quick', 'print', 'blur']
+const LIT: readonly Program[] = ['scene', 'shadow']
+
 /** Every corner of every face open: what a part without shading of its own is drawn with. */
 const OPEN = 0xffffffff
 
@@ -124,9 +130,11 @@ interface Target {
 
 export class Renderer {
   private readonly gl: WebGL2RenderingContext
-  /** The four programs while they compile, and once they have. */
-  private readonly linking: Record<'scene' | 'print' | 'shadow' | 'blur', Linking>
-  private programs: Record<'scene' | 'print' | 'shadow' | 'blur', WebGLProgram> | null = null
+  /** The programs while they compile, and each once it has. */
+  private readonly linking: Record<Program, Linking>
+  private readonly programs: Partial<Record<Program, WebGLProgram>> = {}
+  /** Whether a frame has been drawn: without the parallel compile, the lit look is waited for after it. */
+  private drawn = false
   /** Whether the driver can say a program has finished compiling without being waited on. */
   private readonly parallel: boolean
   private readonly corners: WebGLBuffer
@@ -136,11 +144,10 @@ export class Renderer {
   private readonly far: Batch
   private readonly uniforms = new Map<WebGLProgram, Map<string, WebGLUniformLocation | null>>()
   private target: Target | null = null
-  /** The shadow map: its depth, and what it was last drawn for (the light's way and the world). */
-  private map: { texture: WebGLTexture; fb: WebGLFramebuffer | null; size: number }
+  /** The shadow maps, and what the key light's was last drawn for (the light's way and the world). */
+  private readonly maps: Maps
   private mapFor = ''
   private worldVersion = 0
-  private readonly mapSize: number
   private lights: Light[] = []
   // What a frame hands the shaders, kept between frames so drawing allocates nothing.
   private readonly groups = new Float32Array(16)
@@ -152,6 +159,7 @@ export class Renderer {
   private readonly line = new Float32Array(12)
   private readonly regions = new Int32Array(5)
   private lightView: Float32Array = new Float32Array(16)
+  private lampView: Float32Array = new Float32Array(16)
   width = 1
   height = 1
 
@@ -170,17 +178,18 @@ export class Renderer {
     })
     if (!gl) throw new Error('WebGL 2 is not available')
     this.gl = gl
-    this.mapSize = mapSize
+    this.maps = new Maps(gl, mapSize)
     // The programs are set compiling here and waited for only when first used, or not at all
     // where the driver can say when they are done (`ready`): the page never stops for them.
     this.parallel = gl.getExtension('KHR_parallel_shader_compile') !== null
+    // The quick look first, so a frame can be drawn as soon as it is: the lit look follows.
     this.linking = {
-      scene: link(gl, SCENE_VERT, SCENE_FRAG),
+      quick: link(gl, SCENE_VERT, QUICK_FRAG),
       print: link(gl, PRINT_VERT, PRINT_FRAG),
-      shadow: link(gl, SCENE_VERT, SHADOW_FRAG),
       blur: link(gl, PRINT_VERT, GLOW_FRAG),
+      scene: link(gl, SCENE_VERT, SCENE_FRAG),
+      shadow: link(gl, SCENE_VERT, SHADOW_FRAG),
     }
-    if (!this.parallel) this.finish()
     const corners = gl.createBuffer()
     if (!corners) throw new Error('no buffer')
     this.corners = corners
@@ -197,79 +206,60 @@ export class Renderer {
     this.far = this.batch(nearCorners, 30)
     // A batch without shading of its own reads every corner as open.
     gl.vertexAttribI4ui(7, OPEN, OPEN, 0, 0)
-    // Until a map is drawn, the sampler still needs a depth texture to read: one texel of it.
-    this.map = { texture: this.depthTexture(1), fb: null, size: 1 }
   }
 
   /**
-   * Whether the programs have compiled, asked without waiting where the driver allows it. A
-   * frame drawn before then would wait for them.
+   * Whether the quick look's programs have compiled, asked without waiting where the driver
+   * allows it: a frame can be drawn once they have. The lit look is swapped in when it is ready.
    */
   get ready(): boolean {
-    if (this.programs) return true
-    if (
-      Object.values(this.linking).some(
-        ({ program }) => !this.gl.getProgramParameter(program, COMPLETION_STATUS_KHR),
-      )
-    )
-      return false
-    this.finish()
+    return this.compiled(QUICK, !this.parallel)
+  }
+
+  /** Whether the lit look has compiled: until it has, frames are drawn in the quick one. */
+  get lit(): boolean {
+    return LIT.every((name) => this.programs[name])
+  }
+
+  /**
+   * Whether these programs have compiled, each waited for and set up once it has; `wait` waits
+   * for any still compiling, or else this only asks.
+   */
+  private compiled(names: readonly Program[], wait: boolean): boolean {
+    for (const name of names) {
+      if (this.programs[name]) continue
+      const linking = this.linking[name]
+      if (!wait && this.parallel && !this.gl.getProgramParameter(linking.program, COMPLETION_STATUS_KHR))
+        return false
+      this.programs[name] = this.setUp(name, linked(this.gl, linking))
+    }
     return true
   }
 
-  /** Waits for the programs, and says once what never changes: room light, which texture is which. */
-  private finish(): Record<'scene' | 'print' | 'shadow' | 'blur', WebGLProgram> {
-    if (this.programs) return this.programs
+  /** Says once what never changes in a program: room light, and which texture is which. */
+  private setUp(name: Program, program: WebGLProgram): WebGLProgram {
     const gl = this.gl
-    const { scene, print, shadow, blur } = this.linking
-    const programs = {
-      scene: linked(gl, scene),
-      print: linked(gl, print),
-      shadow: linked(gl, shadow),
-      blur: linked(gl, blur),
+    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
+    gl.useProgram(program)
+    const unit = (uniform: string, index: number) => gl.uniform1i(this.at(program, uniform), index)
+    if (name === 'scene' || name === 'quick') {
+      gl.uniform1fv(this.at(program, 'uRoom'), ROOM_LIGHT)
+      unit('uShadowMap', 2)
+      unit('uLampMap', 3)
     }
-    this.programs = programs
-    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
-    gl.useProgram(programs.scene)
-    gl.uniform1fv(this.at(programs.scene, 'uRoom'), ROOM_LIGHT)
-    gl.uniform1i(this.at(programs.scene, 'uShadowMap'), 2)
-    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
-    gl.useProgram(programs.print)
-    gl.uniform1i(this.at(programs.print, 'uShade'), 0)
-    gl.uniform1i(this.at(programs.print, 'uPlane'), 1)
-    gl.uniform1i(this.at(programs.print, 'uGlow'), 2)
-    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
-    gl.useProgram(programs.blur)
-    gl.uniform1i(this.at(programs.blur, 'uFrom'), 0)
-    return programs
+    if (name === 'print') {
+      unit('uShade', 0)
+      unit('uPlane', 1)
+      unit('uGlow', 2)
+    }
+    if (name === 'blur') unit('uFrom', 0)
+    return program
   }
 
-  private depthTexture(size: number): WebGLTexture {
-    const gl = this.gl
-    const texture = gl.createTexture()
-    if (!texture) throw new Error('no texture')
-    gl.bindTexture(gl.TEXTURE_2D, texture)
-    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, size, size)
-    // Compared as it is read, and four texels at once, so each of the 3 by 3 reads is soft already.
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL)
-    if (size === 1)
-      gl.texSubImage2D(
-        gl.TEXTURE_2D,
-        0,
-        0,
-        0,
-        1,
-        1,
-        gl.DEPTH_COMPONENT,
-        gl.UNSIGNED_INT,
-        new Uint32Array([0xffffffff]),
-      )
-    return texture
+  /** A program, waited for if it has to be. */
+  private program(name: Program): WebGLProgram {
+    this.compiled([name], true)
+    return this.programs[name] as WebGLProgram
   }
 
   private batch(corners: WebGLBuffer, count: number, turned = false, shaded = false): Batch {
@@ -487,39 +477,42 @@ export class Renderer {
    * is not, so it is lit by the map without casting into it.
    */
   private castShadows(shadows: NonNullable<Frame['shadows']>, key: Vec3): void {
-    const gl = this.gl
     const wanted = `${key.join(',')}|${shadows.middle.join(',')}|${shadows.radius}|${this.worldVersion}`
-    if (wanted === this.mapFor && this.map.fb) return
+    if (wanted === this.mapFor) return
     this.mapFor = wanted
-    if (!this.map.fb) {
-      gl.deleteTexture(this.map.texture)
-      const texture = this.depthTexture(this.mapSize)
-      const fb = gl.createFramebuffer()
-      if (!fb) throw new Error('no framebuffer')
-      gl.bindFramebuffer(gl.FRAMEBUFFER, fb)
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, texture, 0)
-      gl.drawBuffers([gl.NONE])
-      this.map = { texture, fb, size: this.mapSize }
-    }
     this.lightView = lightMatrix(key, shadows.middle, shadows.radius)
-    const s = this.finish().shadow
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.map.fb)
-    gl.viewport(0, 0, this.map.size, this.map.size)
-    gl.enable(gl.DEPTH_TEST)
-    gl.depthFunc(gl.LESS)
-    gl.clearDepth(1)
-    gl.clear(gl.DEPTH_BUFFER_BIT)
+    this.maps.drawKey()
+    this.cast(this.lightView, shadows.runs, 0, false)
+  }
+
+  /**
+   * Draws the room lamp's map from where the lamp is, every frame: what moves in the room casts
+   * into it as well as the room itself.
+   */
+  private castLamp(frame: Frame, torch: NonNullable<Frame['torch']>): void {
+    this.lampView = lampMatrix([torch[0], torch[1], torch[2]])
+    this.maps.drawLamp()
+    this.cast(this.lampView, frame.runs, frame.time, true)
+  }
+
+  /** Draws what casts into a map, as seen through `view`: the world's runs, and what moves too. */
+  private cast(view: Float32Array, runs: Frame['runs'], time: number, moving: boolean): void {
+    const gl = this.gl
+    const s = this.program('shadow')
     // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
     gl.useProgram(s)
-    gl.uniformMatrix4fv(this.at(s, 'uCamera'), false, this.lightView)
+    gl.uniformMatrix4fv(this.at(s, 'uCamera'), false, view)
     gl.uniform2f(this.at(s, 'uShift'), 0, 0)
     gl.uniform2f(this.at(s, 'uWave'), 0, 0)
     gl.uniform1f(this.at(s, 'uNudge'), 0)
-    gl.uniform1f(this.at(s, 'uLoose'), 0)
-    gl.uniform1f(this.at(s, 'uTime'), 0)
+    gl.uniform1f(this.at(s, 'uTime'), time)
     gl.uniform3f(this.at(s, 'uFog'), 0, 1, 0)
-    for (const [first, count] of shadows.runs)
-      this.run(this.still, first, Math.min(count, this.still.count - first))
+    gl.uniform1f(this.at(s, 'uLoose'), 0)
+    for (const [first, count] of runs) this.run(this.still, first, Math.min(count, this.still.count - first))
+    if (moving) {
+      gl.uniform1f(this.at(s, 'uLoose'), 1)
+      this.run(this.moving, 0, this.moving.count)
+    }
     gl.bindVertexArray(null)
   }
 
@@ -545,13 +538,23 @@ export class Renderer {
     return lit
   }
 
-  draw(frame: Frame): void {
+  /**
+   * Draws a frame: in the lit look once its programs have compiled, and in the quick look (no
+   * shadows, no lamps) until then. Says which, so the caller draws again until it is lit. `wait`
+   * waits for the lit look instead, for a picture printed once.
+   */
+  draw(frame: Frame, wait = false): boolean {
     const gl = this.gl
     const target = this.target
-    if (!target) return
-    const s = this.finish().scene
+    if (!target) return false
+    const lit = this.compiled(LIT, wait || (!this.parallel && this.drawn))
+    this.drawn = true
+    const s = this.program(lit ? 'scene' : 'quick')
     for (let i = 0; i < 16; i++) this.groups[i] = frame.groups[i] ?? 0
-    if (frame.shadows) this.castShadows(frame.shadows, frame.key)
+    const shadows = lit ? frame.shadows : null
+    if (shadows) this.castShadows(shadows, frame.key)
+    const count = this.gatherLights(frame)
+    const torch = lit ? this.lampOf(frame, count) : -1
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.fb)
     gl.viewport(0, 0, this.width, this.height)
@@ -561,32 +564,9 @@ export class Renderer {
     gl.depthFunc(gl.LESS)
     gl.disable(gl.BLEND)
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
-    gl.useProgram(s)
-    gl.activeTexture(gl.TEXTURE2)
-    gl.bindTexture(gl.TEXTURE_2D, this.map.texture)
-    gl.uniformMatrix4fv(this.at(s, 'uCamera'), false, frame.camera)
-    gl.uniform2f(this.at(s, 'uShift'), frame.shift[0], frame.shift[1])
-    gl.uniform3f(this.at(s, 'uKey'), frame.key[0], frame.key[1], frame.key[2])
-    gl.uniform1f(this.at(s, 'uKeyLight'), frame.keyLight)
-    gl.uniform1f(this.at(s, 'uFill'), frame.fill)
-    gl.uniformMatrix4fv(this.at(s, 'uLight'), false, this.lightView)
-    gl.uniform1f(this.at(s, 'uMapTexel'), 1 / this.map.size)
-    gl.uniform1f(this.at(s, 'uDetail'), frame.detail)
-    gl.uniform1f(this.at(s, 'uRock'), frame.rock ?? 0)
-    gl.uniform1f(this.at(s, 'uTime'), frame.time)
-    if (frame.pick) gl.uniform3f(this.at(s, 'uPick'), frame.pick[0], frame.pick[1], frame.pick[2])
-    else gl.uniform3f(this.at(s, 'uPick'), -999, -999, -999)
-    gl.uniform1fv(this.at(s, 'uGroups'), this.groups)
-    const lit = this.gatherLights(frame)
-    gl.uniform4fv(this.at(s, 'uLights'), this.lightWhere)
-    gl.uniform1fv(this.at(s, 'uLightOn'), this.lightOn)
-    gl.uniform1fv(this.at(s, 'uLightGroup'), this.lightOwner)
-    gl.uniform1i(this.at(s, 'uLightCount'), lit)
-    gl.uniform3f(this.at(s, 'uEye'), frame.eye[0], frame.eye[1], frame.eye[2])
-
+    this.sceneUniforms(s, frame, torch, count)
     // The world: only the runs of it the camera can see.
-    gl.uniform1i(this.at(s, 'uMapped'), frame.shadows ? 1 : 0)
+    gl.uniform1i(this.at(s, 'uMapped'), shadows ? 1 : 0)
     gl.uniform2f(this.at(s, 'uWave'), 0, 0)
     gl.uniform1f(this.at(s, 'uLoose'), 0)
     gl.uniform3f(this.at(s, 'uFog'), frame.fog[0], frame.fog[1], frame.worldFog ?? 0)
@@ -598,26 +578,77 @@ export class Renderer {
     gl.uniform1f(this.at(s, 'uLoose'), 1)
     this.run(this.moving, 0, this.moving.count)
     gl.uniform1f(this.at(s, 'uLoose'), 0)
-    if (frame.crowd > 0.004 && this.far.count > 0) {
-      // The far worlds: the ring's edge, and how wide the band is in which blocks are still
-      // growing. The map doesn't reach them; their own bits say where the key falls.
-      gl.uniform1i(this.at(s, 'uMapped'), 0)
-      gl.uniform1f(this.at(s, 'uNudge'), 0)
-      gl.uniform2f(this.at(s, 'uWave'), frame.crowd * 330, 60)
-      gl.uniform3f(this.at(s, 'uFog'), frame.fog[0], frame.fog[1], 1)
-      for (const [first, count, slot] of frame.farRuns)
-        this.run(this.far, first, Math.min(count, this.far.count - first), slot * 6, 6)
-    }
+    if (frame.crowd > 0.004 && this.far.count > 0) this.drawFar(s, frame)
     gl.bindVertexArray(null)
     gl.disable(gl.DEPTH_TEST)
     this.blurGlow(target, frame.unit)
     this.printFrame(target, frame)
+    return lit
+  }
+
+  /**
+   * Which of the lights is a room's own lamp (not out of doors, switch 1), the carried one, last:
+   * it casts shadows, from a map of its own drawn now. −1 where there is none.
+   */
+  private lampOf(frame: Frame, count: number): number {
+    const torch = frame.torch
+    if (!torch || torch[5] === 1 || torch[4] <= 0) return -1
+    this.castLamp(frame, torch)
+    return count - 1
+  }
+
+  /**
+   * The far worlds: the ring's edge, and how wide the band is in which blocks are still growing.
+   * The map doesn't reach them; their own bits say where the key falls.
+   */
+  private drawFar(s: WebGLProgram, frame: Frame): void {
+    const gl = this.gl
+    gl.uniform1i(this.at(s, 'uMapped'), 0)
+    gl.uniform1f(this.at(s, 'uNudge'), 0)
+    gl.uniform2f(this.at(s, 'uWave'), frame.crowd * 330, 60)
+    gl.uniform3f(this.at(s, 'uFog'), frame.fog[0], frame.fog[1], 1)
+    for (const [first, count, slot] of frame.farRuns)
+      this.run(this.far, first, Math.min(count, this.far.count - first), slot * 6, 6)
+  }
+
+  /** What the scene pass is told of a frame: its camera, its light, its lamps and its maps. */
+  private sceneUniforms(s: WebGLProgram, frame: Frame, torch: number, count: number): void {
+    const gl = this.gl
+    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
+    gl.useProgram(s)
+    gl.activeTexture(gl.TEXTURE2)
+    gl.bindTexture(gl.TEXTURE_2D, this.maps.key)
+    gl.activeTexture(gl.TEXTURE3)
+    gl.bindTexture(gl.TEXTURE_2D, this.maps.lamp)
+    gl.uniform1i(this.at(s, 'uTorch'), torch)
+    gl.uniformMatrix4fv(this.at(s, 'uLampView'), false, this.lampView)
+    gl.uniform1f(this.at(s, 'uRoomFill'), frame.roomFill)
+    gl.uniform1f(this.at(s, 'uLampGain'), frame.lampGain)
+    gl.uniform1f(this.at(s, 'uDeep'), frame.deep)
+    gl.uniformMatrix4fv(this.at(s, 'uCamera'), false, frame.camera)
+    gl.uniform2f(this.at(s, 'uShift'), frame.shift[0], frame.shift[1])
+    gl.uniform3f(this.at(s, 'uKey'), frame.key[0], frame.key[1], frame.key[2])
+    gl.uniform1f(this.at(s, 'uKeyLight'), frame.keyLight)
+    gl.uniform1f(this.at(s, 'uFill'), frame.fill)
+    gl.uniformMatrix4fv(this.at(s, 'uLight'), false, this.lightView)
+    gl.uniform1f(this.at(s, 'uMapTexel'), this.maps.keyTexel)
+    gl.uniform1f(this.at(s, 'uDetail'), frame.detail)
+    gl.uniform1f(this.at(s, 'uRock'), frame.rock ?? 0)
+    gl.uniform1f(this.at(s, 'uTime'), frame.time)
+    if (frame.pick) gl.uniform3f(this.at(s, 'uPick'), frame.pick[0], frame.pick[1], frame.pick[2])
+    else gl.uniform3f(this.at(s, 'uPick'), -999, -999, -999)
+    gl.uniform1fv(this.at(s, 'uGroups'), this.groups)
+    gl.uniform4fv(this.at(s, 'uLights'), this.lightWhere)
+    gl.uniform1fv(this.at(s, 'uLightOn'), this.lightOn)
+    gl.uniform1fv(this.at(s, 'uLightGroup'), this.lightOwner)
+    gl.uniform1i(this.at(s, 'uLightCount'), count)
+    gl.uniform3f(this.at(s, 'uEye'), frame.eye[0], frame.eye[1], frame.eye[2])
   }
 
   /** What glows, blurred across and then down: about seven CSS pixels between taps. */
   private blurGlow(target: Target, unit: number): void {
     const gl = this.gl
-    const b = this.finish().blur
+    const b = this.program('blur')
     const step = 7 / Math.max(0.25, unit)
     // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
     gl.useProgram(b)
@@ -637,7 +668,7 @@ export class Renderer {
 
   private printFrame(target: Target, frame: Frame): void {
     const gl = this.gl
-    const p = this.finish().print
+    const p = this.program('print')
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
     gl.viewport(0, 0, this.width, this.height)
     gl.clearColor(0, 0, 0, 0)
@@ -690,8 +721,7 @@ export class Renderer {
     gl.deleteBuffer(this.corners)
     gl.deleteBuffer(this.nearCorners)
     for (const { program } of Object.values(this.linking)) gl.deleteProgram(program)
-    gl.deleteTexture(this.map.texture)
-    if (this.map.fb) gl.deleteFramebuffer(this.map.fb)
+    this.maps.dispose()
     this.freeTarget()
   }
 }

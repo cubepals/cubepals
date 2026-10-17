@@ -47,3 +47,22 @@ export function lightMatrix(key: Vec3, middle: Vec3, radius: number): Float32Arr
     1,
   ])
 }
+
+/** How many texels a side the lamp's map has: a room is small. */
+export const LAMP_MAP_SIZE = 1024
+
+/**
+ * World to the lamp's map, column-major: a wide view straight down from the lamp at `at`, so what
+ * stands between it and the floor (a rack, a chest, the worker) throws a shadow round itself.
+ */
+export function lampMatrix(at: Vec3): Float32Array {
+  // Looking down: x stays x, the view's up is −z, and its back is +y.
+  const near = 0.15
+  const far = 14
+  const f = 1 / Math.tan((150 / 2) * (Math.PI / 180))
+  const a = (far + near) / (near - far)
+  const b = (2 * far * near) / (near - far)
+  // view = rows (1,0,0), (0,0,−1), (0,1,0), each less its dot with the eye.
+  const [x, y, z] = at
+  return new Float32Array([f, 0, 0, 0, 0, 0, a, -1, 0, -f, 0, 0, -f * x, f * z, b - a * y, y])
+}
