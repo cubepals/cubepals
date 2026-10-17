@@ -17,6 +17,7 @@
  * Parts (`arcade/`):
  * - `datapack.ts`: the shape of a part, the hub's place, a place in a selector, and labels.
  * - `label-space.ts`: the room a label takes in the world, which nothing may stand in.
+ * - `label.ts`: how a label is made, its words on a plate of their own.
  * - `maps.ts`: the published maps, their builders, licences, changes and places in the world.
  * - `credits.ts`: who made each map, its licence and source as links, in the game and the archive.
  * - `signs.ts`: the Cubepals signs, the lockup as map art in frames, over the hub and each game.
@@ -31,14 +32,15 @@
  */
 import { type CarriedFile, RUNNING_LEVEL } from '../domain/revision/carried.ts'
 import { BOARDS_PART, TMP } from './arcade/boards.ts'
-import { label, NS, type Part } from './arcade/datapack.ts'
+import { NS, type Part } from './arcade/datapack.ts'
 import { FLOOR_PART, FLOOR_READS, FLOOR_SIGN } from './arcade/floor.ts'
 import { HUB_PART, HUB_SIGN, PAD_READS, PADS } from './arcade/hub.ts'
 import { KEPT_PART } from './arcade/kept.ts'
+import { label } from './arcade/label.ts'
 import { MACHINES_PART } from './arcade/machines.ts'
 import { PARKOUR_PART, PARKOUR_READS } from './arcade/parkour.ts'
 import { PIT_PART, PIT_SIGNS } from './arcade/pit.ts'
-import type { BrandSign } from './arcade/signs.ts'
+import { type BrandSign, SIGN_MAP_FILES } from './arcade/signs.ts'
 import { WAYS_IN_PART } from './arcade/ways-in.ts'
 import type { Read } from './readable.ts'
 
@@ -89,7 +91,7 @@ const BUILD = [
   `execute unless ${ARCADE_WORLD_HERE} run return run scoreboard players set #build ${TMP} -2`,
   `function ${NS}:rules`,
   `kill @e[type=!minecraft:player,tag=${NS}.display]`,
-  ...ARCADE_LABELS.map(label),
+  ...ARCADE_LABELS.flatMap(label),
   ...PARTS.flatMap((part) => part.build),
   `scoreboard players set #build ${TMP} -1`,
 ]
@@ -137,4 +139,6 @@ export const ARCADE_FILES: readonly CarriedFile[] = [
     path: `${ARCADE_DATAPACK}/data/${NS}/function/${name}.mcfunction`,
     content: lines(commands),
   })),
+  // The maps its signs show, in the world's data beside the datapack.
+  ...SIGN_MAP_FILES,
 ]

@@ -10,29 +10,25 @@
  * (`docs/minecraft/readable-text.md`, § Measured).
  */
 import { describe, expect, test } from 'bun:test'
-import type { Label } from './arcade/datapack.ts'
-import { plate, seen } from './sight.ts'
+import { type Rect, seenBox } from './sight.ts'
 
 const SCREEN = { width: 1920, height: 1080, fov: 70 }
 const VIEW = { eye: [500.5, 151.62, 500.5] as const, yaw: 180, pitch: 0 }
-const twelveM = (lines: number, y: number): Label => ({
-  at: [500.5, y, 492.5],
-  tag: 'calib',
-  text: [{ text: Array.from({ length: lines }, () => 'MMMMMMMMMMMM').join('\n'), color: 'white' }],
-  facing: 'south',
-})
 
 /** Within three pixels of what the client drew: the game rounds each edge to a pixel its own way. */
 const near = (actual: number, drawn: number) => expect(Math.abs(actual - drawn)).toBeLessThanOrEqual(3)
 
-describe('where a label falls on the screen', () => {
-  test('a line is ten text pixels tall and its words a pixel short of each side', () => {
-    expect(plate(twelveM(1, 0))).toEqual({ width: 74 / 40, height: 10 / 40 })
-    expect(plate(twelveM(3, 0)).height).toBe(30 / 40)
-  })
+/**
+ * Where the game's own background behind twelve M falls: as wide as their line, 72 of the game's
+ * text pixels, and a pixel each side, ten pixels to a line, standing up from where the display is,
+ * facing south.
+ */
+const background = (lines: number, y: number): Rect | null =>
+  seenBox([500.5 - 74 / 80, y, 492.5], [500.5 + 74 / 80, y + (lines * 10) / 40, 492.5], VIEW, SCREEN)
 
+describe('where a label falls on the screen', () => {
   test('one line, its foot a quarter block under the eye, as the client drew it: 873 540 to 1048 563', () => {
-    const rect = seen(twelveM(1, 151.37), VIEW, SCREEN)
+    const rect = background(1, 151.37)
     if (rect === null) throw new Error('Not seen')
     near(rect.left, 873)
     near(rect.top, 540)
@@ -41,14 +37,14 @@ describe('where a label falls on the screen', () => {
   })
 
   test('two and three lines, their foot at 151: 552 to 599, and 527 to 599', () => {
-    const two = seen(twelveM(2, 151), VIEW, SCREEN)
-    const three = seen(twelveM(3, 151), VIEW, SCREEN)
+    const two = background(2, 151)
+    const three = background(3, 151)
     near(two?.top ?? 0, 552)
     near(two?.bottom ?? 0, 599 + 1)
     near(three?.top ?? 0, 527)
   })
 
   test('behind the player, it isn’t seen', () => {
-    expect(seen(twelveM(1, 151.37), { ...VIEW, yaw: 0 }, SCREEN)).toBeNull()
+    expect(seenBox([500, 151, 492.5], [501, 152, 492.5], { ...VIEW, yaw: 0 }, SCREEN)).toBeNull()
   })
 })

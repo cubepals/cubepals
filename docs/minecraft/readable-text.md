@@ -35,7 +35,7 @@ Minecraft Java isn't sold on Steam, so the survey stands in for PC players in ge
 
 ## How the game draws a label
 
-A label is a text display, and the game draws its text in the world at 1/40 of a block to a font pixel (`DisplayRenderer.TextDisplayRenderer`; Minecraft Wiki, [Display](https://minecraft.wiki/w/Display)), the same size as a name tag (`EntityRenderer.NAMETAG_SCALE`). Lines are 10 font pixels apart. The background runs one pixel round the words on the left and top; with the trailing pixel of the last letter, that is one each side. The text stands up from the entity's position. Its defaults are a line width of 200, a 25% black background, no shadow, centred, and billboard `fixed`; `vertical` turns it about the vertical axis to the player. It is drawn within 64 blocks at the defaults (`Display.shouldRenderAtSqrDistance`).
+A label is a text display, and the game draws its text in the world at 1/40 of a block to a font pixel (`DisplayRenderer.TextDisplayRenderer`; Minecraft Wiki, [Display](https://minecraft.wiki/w/Display)), the same size as a name tag (`EntityRenderer.NAMETAG_SCALE`). Lines are 10 font pixels apart. The background runs one pixel round the words on the left and top; with the trailing pixel of the last letter, that is one each side. The game moves the words one pixel right of centre (`TextDisplayRenderer` translates by 1 − width/2), so a plate drawn behind them is centred on that, not on the display: a plate centred on the display, measured in the client, left three pixels on the words' left and one on their right. The text stands up from the entity's position. Its defaults are a line width of 200, a 25% black background, no shadow, centred, and billboard `fixed`; `vertical` turns it about the vertical axis to the player. It is drawn within 64 blocks at the defaults (`Display.shouldRenderAtSqrDistance`).
 
 For comparison, a sign's words are drawn at 1/96 of a block to a pixel, four lines of at most 90 pixels (`StandingSignRenderer`, `SignBlockEntity`), and a map in an item frame at 1/128 of a block to a pixel.
 
@@ -111,6 +111,18 @@ Each rule is a number in `readable.ts`, checked for every arrival's and pad's wo
 8. **Nothing beside.** From where they're read, the words are at least 8 pixels clear on the screen of every other label, sign and marker. No source gives this number either; it is a margin we chose from the measurements above. The model and the client differed by up to 4 pixels on an edge, so two things the model keeps 8 apart are still apart as the client draws them.
 9. **Over the title.** At an arrival, the words stand clear over the title the game shows there for its first four seconds (`title @s times 5 60 15`): their foot at least 8 pixels over the title's top (the same chosen margin as rule 8, for the same reason), 40 GUI pixels over the middle at the GUI scale Auto picks on 1920×1080 (4), so at field of view 70 they read through it. At 110, no place within 15° clears it, and the title covers the words until it fades.
 10. **Out of play.** No label stands where players walk, jump or fall (`scripts/play-space.test.ts`). So words over a pad start just over the reach of a player on it, 1.8 tall plus a 1.2522 jump.
+
+## Boards
+
+The leaderboards hang on the domes' flat glass faces over the balcony's ledge, so they're read looking up, 45° to 50° from where a player walking out from the hub first reads them (`BOARD_READS` in `apps/control/src/minecraft/arcade/boards.ts`, tested in `readable.test.ts`). From there, all of each board is on the screen, no block stands in front of any of it (rule 7; at first the ledge's quartz hid the foot of each board, 6 or 7 of 21 sight lines), and nothing else shown is beside it (rule 8).
+
+They break three rules, and moving them within the balcony doesn't mend it:
+
+- **Too small.** A board is as wide as a dome's flat face, five blocks, so its text can be no larger than 1.1 times the game's. Its letters come out about 9 pixels tall on 1920×1080 at field of view 70, from its reading place and from anywhere on the balcony (9.3 at most): half of rule 2's 18. The client drew them at about that size.
+- **Too high and too wide** for rules 3 and 4, since the faces start six blocks over the balcony.
+- Right behind the parkour's and the falling floor's pads, two blocks under the pad's words, those words stand in front of the board behind them.
+
+Boards that read at 18 pixels need a wider wall nearer eye level than the domes give.
 
 ## What couldn't be found
 

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { HOUR_S, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
+import { DAY_S, HOUR_S, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
 import { POOL_IDLE_MS, type Tx } from '@blockly/db'
 import { sql } from 'drizzle-orm'
 import { fromDrizzle, type Job, PgBoss, type QueueOptions } from 'pg-boss'
@@ -11,10 +11,12 @@ import type {
   BlockedOperation,
   CurationJob,
   JobAttempt,
+  JobOutcomes,
   JobQueue,
   MirrorJob,
   Schedule,
   ScheduledJob,
+  WorkerHeartbeat,
 } from '../../app/ports/jobs.ts'
 import { Lanes } from './lanes.ts'
 import { everyMinute } from './ticker.ts'
@@ -568,7 +570,9 @@ async function retryLimitOf(boss: PgBoss, jobId: string): Promise<number> {
   return job?.retryLimit ?? 0
 }
 
-const CRON: Record<ScheduledJob, string> = {
+const CRON: Record<ScheduledJob | WorkerHeartbeat, string> = {
+  // Does nothing: each pass says the worker is working its schedules (`/api/health`).
+  'worker-heartbeat': '* * * * *',
   reconcile: '* * * * *',
   drift: '* * * * *',
   relocations: '* * * * *',
@@ -622,11 +626,27 @@ const CRON: Record<ScheduledJob, string> = {
 /**
  * Periodic work. Each runs as a singleton, so two workers never sweep at once. Each is sent as its
  * minute comes (`ticker.ts`), which tells its worker at once (LISTEN/NOTIFY); the worker otherwise
- * asks every ten seconds only where nothing can tell it. A job that has run is kept an hour.
+ * asks every ten seconds only where nothing can tell it. A job that has run is kept an hour. Each
+ * pass that fails is logged, and every pass is written down (`outcomes`), for the alerts and the
+ * health check: the queue itself only marks a failed job failed.
  */
-export async function workSchedules(boss: PgBoss, schedules: readonly Schedule[]): Promise<void> {
-  for (const name of Object.keys(CRON) as ScheduledJob[]) {
-    const schedule = schedules.find((s) => s.job === name)
+export async function workSchedules(
+  boss: PgBoss,
+  schedules: readonly Schedule[],
+  outcomes?: JobOutcomes,
+): Promise<void> {
+  const names = Object.keys(CRON) as Array<keyof typeof CRON>
+  await outcomes
+    ?.scheduled(
+      names.map((job) => ({ job, everySeconds: everySecondsOf(CRON[job]) })),
+      new Date(),
+    )
+    .catch((error: unknown) => console.error('scheduled jobs: their schedule went unrecorded', error))
+  for (const name of names) {
+    const schedule =
+      name === 'worker-heartbeat'
+        ? { run: async () => {}, says: undefined }
+        : schedules.find((s) => s.job === name)
     if (schedule === undefined) throw new Error(`Nothing runs the scheduled job ${name}`)
     await ensureQueue(
       boss,
@@ -641,17 +661,37 @@ export async function workSchedules(boss: PgBoss, schedules: readonly Schedule[]
       pollingIntervalSeconds: 10,
       notifyPollingIntervalSeconds: SCHEDULED_BACKSTOP_SECONDS,
     }
+    const unrecorded = (error: unknown) => console.error(`${name}: its pass went unrecorded`, error)
     await boss.work(name, asks, async () => {
-      if (schedule.says === undefined) {
-        await schedule.run()
-        return
+      try {
+        if (schedule.says === undefined) await schedule.run()
+        else {
+          const count = await schedule.run()
+          if (count > 0) console.warn(`${name}: ${schedule.says(count)}`)
+        }
+      } catch (error) {
+        console.error(`${name} failed`, error)
+        const message = error instanceof Error ? error.message : String(error)
+        await outcomes?.failed(name, new Date(), message).catch(unrecorded)
+        throw error
       }
-      const count = await schedule.run()
-      if (count > 0) console.warn(`${name}: ${schedule.says(count)}`)
+      await outcomes?.succeeded(name, new Date()).catch(unrecorded)
     })
   }
   const stop = everyMinute(boss, Object.entries(CRON))
   boss.once('stopped', stop)
+}
+
+/**
+ * How often a schedule runs, in seconds, for the forms `CRON` uses: every minute or every n, once
+ * an hour or every n hours, once a day.
+ */
+function everySecondsOf(cron: string): number {
+  const [minute = '*', hour = '*'] = cron.split(' ')
+  const every = (field: string) => (field === '*' ? 1 : Number(field.slice(2)))
+  if (minute === '*' || minute.startsWith('*/')) return every(minute) * MINUTE_S
+  if (hour === '*' || hour.startsWith('*/')) return every(hour) * HOUR_S
+  return DAY_S
 }
 
 /**

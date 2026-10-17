@@ -46,12 +46,26 @@ kill_timeout = 90
     soft_limit = 200
     hard_limit = 250
 
+  # Only that the api answers: `/api/health` also judges the worker's sweeps, and a worker that is
+  # down must not take the api out of routing. A scheduled workflow polls that one (health.yml).
   [[http_service.checks]]
     method = "GET"
-    path = "/api/health"
+    path = "/api/health/live"
     interval = "15s"
     timeout = "5s"
     grace_period = "30s"
+
+# The worker serves nothing but its own health, on API_LISTEN's port (src/interfaces/http/
+# worker-health.ts): it fails once the worker's scheduled passes stop being recorded.
+[checks.worker]
+  type = "http"
+  processes = ["worker"]
+  port = 8080
+  method = "GET"
+  path = "/health"
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "2m"
 
 [[vm]]
   processes = ["api"]

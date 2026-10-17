@@ -5,7 +5,8 @@
 /**
  * What Blockly knows about each account and the platform as a whole: admins, an account's standing
  * and plan, the platform's kill switches and caps, what each day cost, the places sign-ups in
- * flight hold and the waitlist for sign-up, and the alerts that need an admin.
+ * flight hold and the waitlist for sign-up, the alerts that need an admin, and how the platform's
+ * own recurring work last went.
  */
 import { sql } from 'drizzle-orm'
 import { boolean, check, date, integer, jsonb, pgEnum, pgTable, text } from 'drizzle-orm/pg-core'
@@ -192,4 +193,22 @@ export const platformAlerts = pgTable('platform_alerts', {
   /** When admins were told; null until an email went out. */
   notifiedAt: ts('notified_at'),
   clearedAt: ts('cleared_at'),
+})
+
+/**
+ * How each piece of the platform's recurring work last went: every scheduled job by its name, as the
+ * worker that ran it recorded it (`every_seconds` its schedule's interval), and the parts of one that
+ * fail on their own (`spend-figure`, the provider read for the spend watchdog; `realtime-certificate`,
+ * the realtime role's renewals). The `admin-alerts` sweep and `/api/health` read it.
+ */
+export const jobHealth = pgTable('job_health', {
+  job: text('job').primaryKey(),
+  /** How often a scheduled job runs; null for what runs on no schedule of its own. */
+  everySeconds: integer('every_seconds'),
+  firstSeenAt: ts('first_seen_at').notNull(),
+  lastSucceededAt: ts('last_succeeded_at'),
+  lastFailedAt: ts('last_failed_at'),
+  lastError: text('last_error'),
+  /** Failures in a row since the last success. */
+  failures: integer('failures').notNull().default(0),
 })

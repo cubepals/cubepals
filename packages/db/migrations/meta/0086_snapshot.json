@@ -1,5 +1,5 @@
 {
-  "id": "9ba0e8e4-c64e-48bb-8bdb-7d35df406d95",
+  "id": "fe43ceb7-1554-4a7a-acd0-802ba8a3ebe9",
   "prevId": "ccde317b-d6d5-4d56-b3cc-31535918f525",
   "version": "7",
   "dialect": "postgresql",
@@ -483,6 +483,62 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.job_health": {
+      "name": "job_health",
+      "schema": "",
+      "columns": {
+        "job": {
+          "name": "job",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "every_seconds": {
+          "name": "every_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_succeeded_at": {
+          "name": "last_succeeded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_failed_at": {
+          "name": "last_failed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failures": {
+          "name": "failures",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -1950,22 +2006,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "backups_one_per_archive_key": {
-          "name": "backups_one_per_archive_key",
-          "columns": [
-            {
-              "expression": "archive_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"backups\".\"archive_key\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -2022,65 +2062,6 @@
           "value": "\"backups\".\"tier\" <> 'snapshot' or \"backups\".\"status\" in ('failed', 'deleted') or \"backups\".\"snapshot_handle\" is not null"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.kept_worlds": {
-      "name": "kept_worlds",
-      "schema": "",
-      "columns": {
-        "world_id": {
-          "name": "world_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "backup_id": {
-          "name": "backup_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "kept_worlds_world_id_worlds_id_fk": {
-          "name": "kept_worlds_world_id_worlds_id_fk",
-          "tableFrom": "kept_worlds",
-          "tableTo": "worlds",
-          "columnsFrom": [
-            "world_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "kept_worlds_backup_id_backups_id_fk": {
-          "name": "kept_worlds_backup_id_backups_id_fk",
-          "tableFrom": "kept_worlds",
-          "tableTo": "backups",
-          "columnsFrom": [
-            "backup_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.world_downloads": {

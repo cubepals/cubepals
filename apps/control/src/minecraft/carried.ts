@@ -163,7 +163,10 @@ export function carriedEnv(
   return {
     [JARS_VARIABLES.plain]: jars.map((jar) => `${jar.path} ${jar.sha512} ${jar.url}`).join('\n'),
     [FILES_VARIABLES.plain]: files
-      .map((file) => `${file.path} ${Buffer.from(file.content, 'utf8').toString('base64')}`)
+      .map(
+        (file) =>
+          `${file.path} ${file.encoding === 'base64' ? file.content : Buffer.from(file.content, 'utf8').toString('base64')}`,
+      )
       .join('\n'),
   }
 }

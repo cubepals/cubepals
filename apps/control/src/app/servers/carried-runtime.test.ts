@@ -319,8 +319,11 @@ describe('what a start is given, against what Linux takes', () => {
     const data = mkdtempSync(join(tmpdir(), 'carried-'))
     const arcade = ofTemplate(templateOf('arcade') as Template)
     expect(await start(data, arcade)).toBe(0)
+    // A map's bytes as they are, base64 as the file carries them; any other file as text.
     for (const file of arcade.files.map((carried) => onLevel(carried, input.world.levelName)))
-      expect(readFileSync(`${data}/${file.path}`, 'utf8')).toBe(file.content)
+      expect(readFileSync(`${data}/${file.path}`, file.encoding === 'base64' ? 'base64' : 'utf8')).toBe(
+        file.content,
+      )
     rmSync(data, { recursive: true })
   })
 

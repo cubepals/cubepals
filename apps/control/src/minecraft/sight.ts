@@ -5,14 +5,13 @@
 /**
  * What a player sees of a label: where its plate falls on their screen from where they stand and
  * the way they look, as the game projects it. The game's camera has a vertical field of view
- * (`fov`) and puts the screen's middle where the player looks; a label's plate is its words'
- * background, as wide as its widest line and a pixel more each side, ten of the game's text pixels
- * to a line, forty to a block at scale 1, standing up from where it is (measured in a 26.2 client,
- * `docs/minecraft/readable-text.md`). A flat label faces its way; one that turns faces the player
- * across, upright. Not where labels go, which the rules in `readable.ts` decide.
+ * (`fov`) and puts the screen's middle where the player looks (measured in a 26.2 client,
+ * `docs/minecraft/readable-text.md`); a label's plate is its words and the room round them
+ * (`plateOf`). A flat label faces its way; one that turns faces the player across, upright. Not
+ * where labels go, which the rules in `readable.ts` decide.
  */
 import { type Facing, type Label, YAW } from './arcade/datapack.ts'
-import { lineWidths } from './arcade/label-space.ts'
+import { plateOf } from './arcade/label-space.ts'
 
 export type Point = readonly [number, number, number]
 
@@ -40,17 +39,6 @@ export interface Rect {
   bottom: number
 }
 
-/** Text pixels to a block, and a line's height in them, as a text display draws its background. */
-const PER_BLOCK = 40
-const LINE = 10
-
-/** A label's plate, in blocks: as wide as its widest line and a pixel each side, a line ten pixels tall. */
-export function plate(label: Pick<Label, 'text' | 'scale' | 'widest'>): { width: number; height: number } {
-  const lines = lineWidths(label.widest ?? label.text)
-  const scale = (label.scale ?? 1) / PER_BLOCK
-  return { width: (Math.max(...lines) + 2) * scale, height: lines.length * LINE * scale }
-}
-
 const radians = (degrees: number) => (degrees * Math.PI) / 180
 const dot = (a: Point, b: Point) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 const minus = (a: Point, b: Point): Point => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
@@ -63,7 +51,7 @@ function across(yaw: number): { ahead: Point; right: Point } {
 
 /** A plate's four corners in the world, as a player at `eye` sees it: a turning one faces them. */
 export function cornersOf(label: Label, eye: Point): Point[] {
-  const { width, height } = plate(label)
+  const { left, right, bottom, top } = plateOf(label)
   const [x, y, z] = label.at
   // The way along the plate, from its reader's left to their right.
   const along: Point =
@@ -74,9 +62,8 @@ export function cornersOf(label: Label, eye: Point): Point[] {
           return [-to[2] / level, 0, to[0] / level]
         })()
       : across(YAW[label.facing as Facing]).right
-  const half = width / 2
   const at = (side: number, up: number): Point => [x + along[0] * side, y + up, z + along[2] * side]
-  return [at(-half, height), at(half, height), at(half, 0), at(-half, 0)]
+  return [at(left, top), at(right, top), at(right, bottom), at(left, bottom)]
 }
 
 /** Where a label's plate falls on a screen, or null if any of it is behind the player. */

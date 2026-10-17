@@ -7,8 +7,8 @@
  * API (`/ops/v1/health`, `bun scripts/ops.ts health`) read the same figures. What servers are doing
  * now; how long creates, starts, wakes, rests and the rest took in the last day, week and month,
  * with a trend and splits by region and setup; what failed; where a slow operation's time went,
- * from the steps its handler reported (`server_operations.steps`); and the money at a glance. It
- * only reads. The SQL is `health-persistence.ts`'s; what to do about a stuck operation is
+ * from the steps its handler reported (`server_operations.steps`); and the money at a glance. Its
+ * `liveness` is `/api/health`'s answer, for whatever outside watches production. It only reads. The SQL is `health-persistence.ts`'s; what to do about a stuck operation is
  * `stuck.ts`'s.
  */
 import {
@@ -41,6 +41,8 @@ import {
   spendSince,
   trend,
 } from './health-persistence.ts'
+import { KEY_SWEEPS, overdue } from './job-record.ts'
+import { loadJobHealth } from './persistence.ts'
 
 /** A split by region or setup says something once its group has this many timed. */
 const SPLIT_AT_LEAST = 3
@@ -93,6 +95,20 @@ export class PlatformHealth {
       slowest: slowest.map(operationView),
       money,
     }
+  }
+
+  /**
+   * Whether the control plane can do its work, for anyone to ask: its database answers, and the
+   * worker's key sweeps (`KEY_SWEEPS`) each succeeded within three of their intervals. One never
+   * recorded counts as stale. It names only the sweeps, never what went wrong in them.
+   */
+  async liveness(now = new Date()): Promise<{ ok: boolean; stale: string[] }> {
+    const recorded = await loadJobHealth(this.#db)
+    const stale = KEY_SWEEPS.filter((job) => {
+      const row = recorded.find((r) => r.job === job)
+      return row === undefined || overdue(row, now)
+    })
+    return { ok: stale.length === 0, stale }
   }
 
   /** Operations found by kind, since when, how slow and how they ended. */

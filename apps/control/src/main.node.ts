@@ -21,6 +21,7 @@ import { passwordChanged, resetPassword, verifyEmail, welcome } from './app/emai
 import { ItemIcons } from './app/items/icons.ts'
 import { ModerationService } from './app/moderation/service.ts'
 import { PlatformHealth } from './app/platform/health.ts'
+import { JobRecord } from './app/platform/job-record.ts'
 import { ServerRepairs } from './app/platform/repairs.ts'
 import { SuspendSwitch } from './app/platform/suspend-switch.ts'
 import { CLIENT_ADDRESS_HEADER } from './app/ports/auth.ts'
@@ -29,7 +30,7 @@ import type { PlayerProfiles, ReadinessProbe, ServerConsole } from './app/ports/
 import type { BillingProvider } from './app/ports/optional.ts'
 import type { LogSource } from './app/ports/platform.ts'
 import type { MinecraftRuntime } from './app/ports/runtime.ts'
-import { acmeCertificate, currentCertificate, publishCertificate } from './app/realtime/certificate.ts'
+import { currentCertificate, publishCertificate, servedAcme } from './app/realtime/certificate.ts'
 import { RoutedAdapters, RuntimeRouter } from './app/runtimes/router.ts'
 import { scheduledJobs } from './app/scheduled-jobs.ts'
 import { ServerIcons } from './app/server-icons/service.ts'
@@ -106,6 +107,7 @@ import { createBillingWebhook } from './interfaces/billing/webhook.ts'
 import { createInternalApp } from './interfaces/edge/internal.ts'
 import { createApiApp } from './interfaces/http/api.ts'
 import { closeServer } from './interfaces/http/listener.ts'
+import { serveWorkerHealth } from './interfaces/http/worker-health.ts'
 import { operatorApis } from './interfaces/operator/mount.ts'
 import { startRealtime } from './interfaces/realtime/server.node.ts'
 import { createRuntimeApp } from './interfaces/runtime/artifacts.ts'
@@ -337,14 +339,9 @@ async function realtimeTls(config: DeploymentConfig, db: Db): Promise<{ cert: st
       email: tls.email,
       solver: new CloudflareDns01(tls.dns01),
     })
-    const served = await acmeCertificate(db, issuer, {
-      hostname: tls.hostname,
-      secrets: config.runtimeSecrets,
-    })
-    if (served.issued) console.warn(`issued a realtime certificate for ${tls.hostname}`)
-    // A renewal is a restart, as a pinned rotation is: the next start gets the new certificate.
-    exitAt(served.renewAt, 'The realtime certificate is due for renewal; exiting so the next start renews it')
-    return { cert: served.cert, privKey: served.privKey }
+    // A renewal is a restart, as a pinned rotation is: the next start serves what it stored.
+    const settings = { hostname: tls.hostname, secrets: config.runtimeSecrets }
+    return servedAcme(db, issuer, settings, () => process.exit(0))
   }
   const minted = await mintPinnedCertificate(tls.hostname)
   await publishCertificate(db, minted.sha256, minted.expiresAt)
@@ -472,8 +469,10 @@ async function startWorker(
   boss: PgBoss,
   app: ControlPlane,
   provider: Awaited<ReturnType<typeof runtimesFor>>,
-  operations: DeploymentConfig['operations'],
-): Promise<void> {
+  config: DeploymentConfig,
+  db: Db,
+): Promise<() => Promise<void> | void> {
+  const record = new JobRecord({ db })
   // What the last worker was running when it stopped carries on now, not at its deadline: taken
   // back as this one starts, and again once the heartbeat it may have sent just before has lapsed.
   // One that can't is logged: the queue's own deadline still catches what it leaves.
@@ -486,7 +485,7 @@ async function startWorker(
     )
   await takeBack()
   setTimeout(() => void takeBack(), (OPERATION_HEARTBEAT_SECONDS + 1) * 1000).unref()
-  await workServerOperations(boss, (attempt) => app.runner.run(attempt), operations)
+  await workServerOperations(boss, (attempt) => app.runner.run(attempt), config.operations)
   await workArtifactMirror(boss, (artifact) => app.artifacts.mirror(artifact))
   await workJarChecks(boss, (sha512) => app.jarChecks.run(sha512))
   await workPackImports(boss, {
@@ -499,7 +498,7 @@ async function startWorker(
     gaveUp: (release, error) => app.curation.ingestGaveUp(release, error),
   })
   await workListingEligibility(boss, (serverIds) => app.listings.reevaluate(serverIds))
-  await workSchedules(boss, scheduledJobs(app, provider))
+  await workSchedules(boss, scheduledJobs(app, provider), record)
   // A catalog that went unrefreshed while no worker ran is refreshed now, not at the next :41,
   // so trust uses what is true and the stale alert judges a refresh that was tried.
   if (await app.catalog.missedRefresh()) await boss.send('catalog-refresh', {})
@@ -512,6 +511,8 @@ async function startWorker(
   // So are the reviewed releases a deploy brought: checked now, offered once an admin says so.
   await boss.send('curation', {})
   console.warn('worker running')
+  // Alone, it answers Fly's check on its group, where the api would listen (control.toml).
+  return config.roles.includes('api') ? () => {} : serveWorkerHealth(hostPort(config.listen.api), record)
 }
 
 /** Where nodes enroll and report, and the operators' API that runs the fleet. */
@@ -745,7 +746,7 @@ async function main(): Promise<void> {
     console.warn(`api on ${config.listen.api}, internal on ${config.listen.internal}`)
   }
 
-  if (config.roles.includes('worker')) await startWorker(boss, app, provider, config.operations)
+  if (config.roles.includes('worker')) stops.push(await startWorker(boss, app, provider, config, db))
 
   if (config.roles.includes('realtime')) {
     const realtime = await startRealtime({

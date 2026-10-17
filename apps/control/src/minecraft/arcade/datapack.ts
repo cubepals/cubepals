@@ -64,9 +64,6 @@ export const PAPER = '#F8F7F5'
 export const INK = '#0D0D0D'
 export const INDIGO = '#6A5CD3'
 
-/** Ink, opaque, as a display's background takes a colour: one signed ARGB number. */
-const INK_ARGB = 0xff000000 | Number.parseInt(INK.slice(1), 16)
-
 /** A way a thing faces: toward whoever reads it. */
 export type Facing = 'north' | 'south' | 'east' | 'west'
 
@@ -108,26 +105,6 @@ export const exactly = (at: readonly number[]): string =>
 
 /** How wide a label's line may be, in the game's text pixels, before its words wrap. */
 export const LINE_WIDTH = 240
-
-/** A label's words as a command writes text: a list of runs after an empty one. */
-const textOf = (runs: readonly Run[]): string =>
-  runs.length === 0
-    ? '""'
-    : `["",${runs.map((run) => `{text:${JSON.stringify(run.text)},color:"${run.color}"${run.bold ? ',bold:true' : ''}}`).join(',')}]`
-
-/** The command that makes a label, as a text display. */
-export function label(shown: Label): string {
-  const scale = shown.scale ?? 1
-  const size =
-    scale === 1
-      ? ''
-      : `,transformation:{left_rotation:[0f,0f,0f,1f],right_rotation:[0f,0f,0f,1f],translation:[0f,0f,0f],scale:[${scale}f,${scale}f,${scale}f]}`
-  const turn =
-    shown.facing === undefined
-      ? 'billboard:"vertical"'
-      : `billboard:"fixed",Rotation:[${YAW[shown.facing]}f,0f]`
-  return `summon minecraft:text_display ${exactly(shown.at)} {Tags:["${NS}.display","${shown.tag}"],${turn},brightness:{block:15,sky:15},background:${INK_ARGB},default_background:false,see_through:false,shadow:true,line_width:${LINE_WIDTH},text:${textOf(shown.text)}${size}}`
-}
 
 /** A label's heading, in the indigo, and its words below, in Paper. */
 export const titled = (title: string, words: string): Run[] => [

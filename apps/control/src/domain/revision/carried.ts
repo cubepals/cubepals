@@ -12,15 +12,17 @@
 
 import type { PinnedMod } from '../mods/artifact.ts'
 
-/** A file Cubepals wrote, at its path under the server's directory, as UTF-8 text. */
+/** A file Cubepals wrote, at its path under the server's directory, as UTF-8 text or, for one that isn't text, base64. */
 export interface CarriedFile {
   /**
    * Relative to the server's directory: `plugins/LifeStealZ/config.yml`. May start with
    * `RUNNING_LEVEL`, for a file that goes in the world the server runs, as a datapack does.
    */
   path: string
-  /** May name the world the server runs as `RUNNING_LEVEL`. */
+  /** May name the world the server runs as `RUNNING_LEVEL`, as text. */
   content: string
+  /** `base64` for a file of bytes, a map's (`minecraft/map-art.ts`): `content` is them in base64. */
+  encoding?: 'base64'
 }
 
 /**
@@ -32,8 +34,9 @@ export const RUNNING_LEVEL = '{{blockly.level}}'
 
 /** A carried file as it is written to a server running `levelName`. */
 export const onLevel = (file: CarriedFile, levelName: string): CarriedFile => ({
+  ...file,
   path: file.path.replaceAll(RUNNING_LEVEL, levelName),
-  content: file.content.replaceAll(RUNNING_LEVEL, levelName),
+  content: file.encoding === 'base64' ? file.content : file.content.replaceAll(RUNNING_LEVEL, levelName),
 })
 
 /**

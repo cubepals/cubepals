@@ -11,8 +11,8 @@
  * any label is, which each game's file says.
  */
 import type { Label } from './arcade/datapack.ts'
-import { lineWidths } from './arcade/label-space.ts'
-import { type Point, plate, type Rect, type Screen, seen, type View } from './sight.ts'
+import { lineWidths, plateOf } from './arcade/label-space.ts'
+import { type Point, type Rect, type Screen, seen, type View } from './sight.ts'
 
 /** A label, and where a player first sees it from: an arrival, or the way to a pad. */
 export interface Read {
@@ -35,6 +35,16 @@ export function viewFrom(place: string): View {
 export function lookingAt(feet: Point, at: Point): View {
   const [dx, dz] = [at[0] - feet[0], at[2] - feet[2]]
   return { eye: [feet[0], feet[1] + EYE, feet[2]], yaw: (Math.atan2(-dx, dz) * 180) / Math.PI, pitch: 0 }
+}
+
+/** The view from a place turned to a point, up or down as well as round: a player reading a board over them. */
+export function turnedTo(feet: Point, at: Point): View {
+  const [dx, dy, dz] = [at[0] - feet[0], at[1] - feet[1] - EYE, at[2] - feet[2]]
+  return {
+    eye: [feet[0], feet[1] + EYE, feet[2]],
+    yaw: (Math.atan2(-dx, dz) * 180) / Math.PI,
+    pitch: (-Math.atan2(dy, Math.hypot(dx, dz)) * 180) / Math.PI,
+  }
 }
 
 /**
@@ -77,26 +87,27 @@ const degrees = (radians: number) => (radians * 180) / Math.PI
 
 /** A label's middle, over or under a level look from the eye, in degrees: over is more than 0. */
 function tilt(label: Label, view: View): number {
-  const { height } = plate(label)
+  const { bottom, top } = plateOf(label)
   const [x, y, z] = label.at
   const flat = Math.hypot(x - view.eye[0], z - view.eye[2])
-  return degrees(Math.atan2(y + height / 2 - view.eye[1], flat))
+  return degrees(Math.atan2(y + (bottom + top) / 2 - view.eye[1], flat))
 }
 
 /** How wide a label looks from the eye, in degrees. */
 function breadth(label: Label, view: View): number {
-  const { width } = plate(label)
+  const { left, right } = plateOf(label)
   const [x, , z] = label.at
   const flat = Math.hypot(x - view.eye[0], z - view.eye[2])
-  return degrees(2 * Math.atan(width / 2 / flat))
+  return degrees(2 * Math.atan((right - left) / 2 / flat))
 }
 
 /** How tall a letter of a label looks on the reading screen, in pixels. */
 export function letterPixels(label: Label, view: View): number {
   const rect = seen(label, { ...view, pitch: 0 }, READING_SCREEN)
   if (rect === null) return 0
-  const lines = lineWidths(label.widest ?? label.text).length
-  return ((rect.bottom - rect.top) / (lines * 10)) * LETTER
+  const { bottom, top } = plateOf(label)
+  // A letter's share of its plate's height, in blocks, forty text pixels to a block.
+  return (rect.bottom - rect.top) * ((LETTER * (label.scale ?? 1)) / 40 / (top - bottom))
 }
 
 const inside = (rect: Rect, screen: Screen) =>
