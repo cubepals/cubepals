@@ -14,7 +14,7 @@
  * A round is `#state` in its objective: 0 nobody waiting, 1 counting down, 2 under way.
  */
 import { AS_COUNT, onSidebar, SECONDS, shown, submit, TMP, WORK } from './boards.ts'
-import { type Block, box, NS, PAPER, type Part, titled } from './datapack.ts'
+import { type Block, box, NS, PAPER, type Part } from './datapack.ts'
 import { type BrandSign, buildSign, creditLabel, ICE } from './signs.ts'
 
 const FF = `${NS}.ff`
@@ -60,7 +60,7 @@ const [x1, , z1] = FLOOR_DISC.to
 const [sx, , sz] = FLOOR_STORE
 
 /** The small Cubepals sign between the pad and the floors, facing a player on the pad, in ice. */
-const FLOOR_SIGN: BrandSign = {
+export const FLOOR_SIGN: BrandSign = {
   at: [-2, 68, 47],
   side: 4,
   facing: 'south',
@@ -162,17 +162,7 @@ export const FLOOR_PART: Part = {
     `team modify ${NS}.floor collisionRule never`,
     `scoreboard objectives setdisplay sidebar.team.yellow ${FF}.best`,
   ],
-  labels: [
-    {
-      at: [FLOOR_PAD[0] + 0.5, FLOOR_PAD[1] + 3.6, FLOOR_PAD[2] + 0.5],
-      tag: `${NS}.label`,
-      text: titled(
-        'Falling floor',
-        'The snow drops away under your feet. Last one standing wins. Wait on this pad for the next round.',
-      ),
-    },
-    ...[creditLabel(FLOOR_SIGN)].filter((credit) => credit !== null),
-  ],
+  labels: [creditLabel(FLOOR_SIGN)].filter((credit) => credit !== null),
   build: [
     ...buildSign(FLOOR_SIGN),
     `function ${NS}:floor/rebuild`,

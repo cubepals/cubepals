@@ -123,8 +123,10 @@ describe('the datapack for waiting on a Duels server', () => {
     expect(build.find((command) => command.endsWith('minecraft:air'))).toBe(
       'fill -6 -63 -26 8 -62 -12 minecraft:air',
     )
-    const sign = build.findIndex((command) => command.startsWith('setblock 2 -60 -11 minecraft:oak_sign'))
+    // On the wall's outside under the rim, where nobody walks; the one on the rim taken away first.
+    const sign = build.findIndex((c) => c.startsWith('setblock 2 -62 -10 minecraft:oak_wall_sign'))
     expect(build[sign + 1]).toContain('"the pit is closed:","it opens when","two can fight"')
+    expect(build[sign - 1]).toEndWith('minecraft:oak_sign run setblock 2 -60 -11 minecraft:air')
   })
 
   test('the lid opens when two outside a duel can fight, and closes under two only over an empty pit', () => {

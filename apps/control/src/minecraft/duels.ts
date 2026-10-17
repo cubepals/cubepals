@@ -31,6 +31,19 @@ import { type CarriedFile, RUNNING_LEVEL } from '../domain/revision/carried.ts'
  * of 1.20.5 and later, which the plugin reads on the 1.21.11 it runs on; the plugin's own default
  * kit is in the older one, which it warns may break.
  */
+/** Where the arena puts each fighter, and where both wait out the countdown: `x y z yaw pitch`. */
+export const DUELS_ARENA = {
+  one: '0.5 -60 8.5 -90 0',
+  two: '16.5 -60 8.5 90 0',
+  lobby: '8.5 -60 8.5 0 0',
+} as const
+
+/** A place as the plugin's arena keeps it. */
+const arenaPlace = (place: string) => {
+  const [x, y, z, yaw, pitch] = place.split(' ').map((n) => Number(n).toFixed(1))
+  return `{ World: ${RUNNING_LEVEL}, X: ${x}, Y: ${y}, Z: ${z}, Yaw: ${yaw}, Pitch: ${pitch} }`
+}
+
 const ARENA_AND_KIT = `# Written by Cubepals at every start: the arena and the kit everyone fights with.
 Kits:
   '0':
@@ -49,9 +62,9 @@ Arenas:
   '1':
     Name: Platform
     Countdown-Seconds: 10
-    Spawn-One: { World: ${RUNNING_LEVEL}, X: 0.5, Y: -60.0, Z: 8.5, Yaw: -90.0, Pitch: 0.0 }
-    Spawn-Two: { World: ${RUNNING_LEVEL}, X: 16.5, Y: -60.0, Z: 8.5, Yaw: 90.0, Pitch: 0.0 }
-    Lobby: { World: ${RUNNING_LEVEL}, X: 8.5, Y: -60.0, Z: 8.5, Yaw: 0.0, Pitch: 0.0 }
+    Spawn-One: ${arenaPlace(DUELS_ARENA.one)}
+    Spawn-Two: ${arenaPlace(DUELS_ARENA.two)}
+    Lobby: ${arenaPlace(DUELS_ARENA.lobby)}
 `
 
 /**

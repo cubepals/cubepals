@@ -94,7 +94,6 @@ export const ARCADE_MAPS: readonly ArcadeMap[] = [
       'Run as the first of three stages against one clock',
       'The statue of a player at the finish taken out, with the ladders up it; the last jumps end on a small mossy pad, which is the finish now',
       'Its player heads replaced by skeleton skulls of the same shape, so no player’s head is shown',
-      'A Cubepals sign over the start',
     ],
   },
   {

@@ -16,7 +16,7 @@ import { AS_COUNT, submit, TMP, WORK } from './boards.ts'
 import { type Block, box, NS, type Part } from './datapack.ts'
 import { KEEP } from './kept.ts'
 import { placed } from './maps.ts'
-import { type BrandSign, buildSign, creditLabel, MARKET } from './signs.ts'
+import { type BrandSign, buildSign, clearSign, creditLabel, MARKET, type SignPlace } from './signs.ts'
 
 const PIT = `${NS}.pit`
 
@@ -47,13 +47,18 @@ const ARMOUR: Readonly<Record<'head' | 'chest' | 'legs' | 'feet', string>> = {
 
 /**
  * The small Cubepals sign over the middle of the market, both ways, so the spawn points on either
- * side see it: two back to back on one panel, in the market's spruce.
+ * side see it: two back to back on one panel, in the market's spruce. It stands clear over the
+ * market's roofs, out of reach of anyone climbing them (`scripts/play-space.test.ts`).
  */
-const PIT_SIGNS: readonly BrandSign[] = [
-  { at: [-1044, 92, 1], side: 4, facing: 'north', frame: MARKET, backed: false },
+const SIGN_Y = 96
+export const PIT_SIGNS: readonly BrandSign[] = [
+  { at: [-1044, SIGN_Y, 1], side: 4, facing: 'north', frame: MARKET, backed: false },
   // One credit line, under this one.
-  { at: [-1047, 92, 1], side: 4, facing: 'south', frame: MARKET, backed: false, credit: 'market' },
+  { at: [-1047, SIGN_Y, 1], side: 4, facing: 'south', frame: MARKET, backed: false, credit: 'market' },
 ]
+
+/** Where the same sign once stood, four blocks lower, within a jump of the roofs: taken down first. */
+const OLD_SIGNS = PIT_SIGNS.map((sign): SignPlace => ({ ...sign, at: [sign.at[0], 92, sign.at[2]] }))
 const SIGN_CHUNKS = 'forceload add -1048 0 -1043 4'
 
 export const PIT_PART: Part = {
@@ -95,7 +100,7 @@ export const PIT_PART: Part = {
     `scoreboard objectives setdisplay sidebar.team.red ${PIT}.kills`,
   ],
   labels: PIT_SIGNS.map(creditLabel).filter((credit) => credit !== null),
-  build: [...PIT_SIGNS.flatMap(buildSign), SIGN_CHUNKS.replace('add', 'remove')],
+  build: [...OLD_SIGNS.map(clearSign), ...PIT_SIGNS.flatMap(buildSign), SIGN_CHUNKS.replace('add', 'remove')],
   tick: [
     `team join ${PIT} @a[team=!${PIT},${ZONE}]`,
     `execute as @a[scores={${PIT}.raw=1..}] at @s run function ${NS}:pit/kill`,

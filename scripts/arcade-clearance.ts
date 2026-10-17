@@ -39,6 +39,7 @@ import {
 } from '../apps/control/src/minecraft/arcade/label-space.ts'
 import { ARCADE_WORLD } from '../apps/control/src/minecraft/arcade/maps.ts'
 import { ARCADE_FILES, ARCADE_LABELS } from '../apps/control/src/minecraft/arcade.ts'
+import { blocksSet, laidOver } from './lib/build-blocks.ts'
 import { blocksIn } from './lib/region-blocks.ts'
 
 const OUT = 'apps/control/src/minecraft/arcade/clearance.json'
@@ -53,40 +54,14 @@ const world = mkdtempSync(join(tmpdir(), 'arcade-clearance-'))
 if (spawnSync('tar', ['-xzf', archive, '-C', world], { stdio: 'inherit' }).status !== 0)
   throw new Error(`${archive} would not unpack`)
 
-/**
- * The datapack's own blocks, by place, as its build leaves them: each `fill` and `setblock` it runs
- * as it builds, in order, and for a `fill … replace`, the block it replaces alone.
- */
-const built = new Map<string, { block: string; only?: string }>()
-const build = ARCADE_FILES.find((file) => file.path.endsWith('/function/build.mcfunction'))?.content ?? ''
-for (const command of build.split('\n')) {
-  const [verb, ...words] = command.split(' ')
-  if (verb !== 'fill' && verb !== 'setblock') continue
-  const numbers = words.slice(0, verb === 'fill' ? 6 : 3).map(Number)
-  const [x0 = 0, y0 = 0, z0 = 0] = numbers
-  const [x1 = x0, y1 = y0, z1 = z0] = verb === 'fill' ? numbers.slice(3) : []
-  const block = (words[verb === 'fill' ? 6 : 3] ?? '').replace(/\[.*$/, '')
-  const [how, only] = words.slice(verb === 'fill' ? 7 : 4)
-  if (how !== undefined && !(verb === 'fill' && how === 'replace' && only !== undefined))
-    throw new Error(`The build's ${command} isn't read here`)
-  for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++)
-    for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++)
-      for (let z = Math.min(z0, z1); z <= Math.max(z0, z1); z++)
-        built.set(`${x} ${y} ${z}`, only === undefined ? { block } : { block, only })
-}
+/** The datapack's own blocks, by place, as its build leaves them. */
+const built = blocksSet(
+  (ARCADE_FILES.find((file) => file.path.endsWith('/function/build.mcfunction'))?.content ?? '').split('\n'),
+)
 
 /** The blocks in a box, as the world has them once the datapack has built: air left out. */
-function blocksBuilt(from: [number, number, number], to: [number, number, number]): Map<string, string> {
-  const found = blocksIn(world, from, to)
-  for (const [at, { block, only }] of built) {
-    const [x = 0, y = 0, z = 0] = at.split(' ').map(Number)
-    const inside = x >= from[0] && x <= to[0] && y >= from[1] && y <= to[1] && z >= from[2] && z <= to[2]
-    if (!inside || (only !== undefined && found.get(at) !== only)) continue
-    if (block === 'minecraft:air') found.delete(at)
-    else found.set(at, block)
-  }
-  return found
-}
+const blocksBuilt = (from: [number, number, number], to: [number, number, number]) =>
+  laidOver(blocksIn(world, from, to), built, from, to)
 
 /** Blocks that aren't a solid, opaque, whole block, which a label on them would hang over or show through. */
 const NOT_WALL =

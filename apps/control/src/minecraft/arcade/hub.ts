@@ -44,7 +44,7 @@ const HUB = `${NS}.hub`
  * The Cubepals sign on the big ARCADE cabinet, facing the hall, over its name: its base the front
  * of the cabinet's roof, as high as the hall's ceiling lets it be, in the cabinets' own lights.
  */
-const HUB_SIGN: BrandSign = { at: [173, 111, 1363], side: 6, facing: 'south', frame: CABINET }
+export const HUB_SIGN: BrandSign = { at: [173, 111, 1363], side: 6, facing: 'south', frame: CABINET }
 
 /** The plain Paper the sign over the cabinet once hung on, further back on its roof, taken away. */
 const OLD_BACKING = 'fill 165 107 1358 184 110 1358 minecraft:air replace minecraft:quartz_block'
@@ -55,16 +55,12 @@ const CREDITS = 'credits'
 
 /**
  * Each game's pad on the balcony, by the block at its middle: Ink in a ring of Paper, built into
- * the world (`scripts/lib/arcade-brand.ts`), what standing on it does (`ways-in.ts`), and the words
- * over it.
+ * the world (`scripts/lib/arcade-brand.ts`), and what standing on it does (`ways-in.ts`).
  */
-export const PADS: ReadonlyArray<{ middle: Block; sends: string; name: Label['text'] }> = GAMES.map(
-  (game) => ({
-    middle: game.pad,
-    sends: playing(game),
-    name: titled(game.name, 'Stand here to play'),
-  }),
-)
+export const PADS: ReadonlyArray<{ middle: Block; sends: string }> = GAMES.map((game) => ({
+  middle: game.pad,
+  sends: playing(game),
+}))
 
 /** The top step of the stairs from the house's floor, which a sign floats over. */
 export const STAIRS_TOP: Block = [183, 121, 1459]
@@ -96,6 +92,9 @@ export const PASSAGE = {
 const ZONE = box([96, 40, 1336], [260, 140, 1470])
 
 const welcome = `["",{text:"Welcome to the Cubepals Arcade. ",color:"${PAPER}",bold:true},"See if you can get your name on the boards."]`
+
+/** Whose maps these are, told with the welcome: the maps' licences ask for it to be said. */
+const CREDITS_LINE = `["",{text:"Made of maps by NetherGames and the Overcast community. ",color:"gray"},{text:"Type /trigger credits",color:"${PAPER}"},{text:" for who built each one.",color:"gray"}]`
 
 /** How to start a game, told on each arrival at the hub: on joining, and on coming back from anywhere. */
 export const HINT = 'Open the book to pick a game, or walk into a game’s machine in the hall.'
@@ -136,26 +135,17 @@ export const PAD_BADGES: ReadonlyArray<{ at: readonly [number, number, number]; 
   ({ middle: [x, y, z] }) => ({ at: [x + 0.5, y + 4.6, z + 0.5] as const, side: 1 }),
 )
 
-/** Every label in the hub: each game's name over its pad, the hub's name, the credits and the ways between the house and the hall. */
+/**
+ * Every label in the hub: its name and the ways between the house and the hall. None stands where
+ * players walk or jump (`scripts/play-space.test.ts`): what the credits said from the balcony's
+ * floor is told on arriving instead (`CREDITS_LINE`).
+ */
 const HUB_LABELS: readonly Label[] = [
-  ...PADS.map((pad) => ({
-    at: [pad.middle[0] + 0.5, pad.middle[1] + 3.2, pad.middle[2] + 0.5] as const,
-    tag: `${NS}.label`,
-    text: pad.name,
-  })),
   {
     at: [175.5, 98.2, 1444.5],
     tag: `${NS}.label`,
     text: [{ text: 'Cubepals Arcade', color: PAPER, bold: true }],
     scale: 4,
-  },
-  {
-    at: [160.5, 79.5, 1430.5],
-    tag: `${NS}.label`,
-    text: [
-      { text: 'Made of maps by NetherGames and the Overcast community.', color: PAPER },
-      { text: '\nType /trigger credits for who built each one.', color: 'gray' },
-    ],
   },
   // On the house's west wall by the top of the stairs, facing a player as they start: in the
   // middle of the wall's face, four blocks across from the house's south wall to its north, and
@@ -237,6 +227,7 @@ export const HUB_PART: Part = {
     // A new player, to the hub's spawn too: like a respawn, a first join can land on the roof.
     `execute as @a[tag=!${NS}.welcomed] run function ${TO_HUB}`,
     `tellraw @a[tag=!${NS}.welcomed] ${welcome}`,
+    `tellraw @a[tag=!${NS}.welcomed] ${CREDITS_LINE}`,
     `tag @a[tag=!${NS}.welcomed] add ${NS}.welcomed`,
     `team join ${HUB} @a[team=!${HUB},${ZONE}]`,
     `execute as @a[${box(...PASSAGE.house.through)},gamemode=!spectator] run tp @s ${PASSAGE.hall.arrive}`,

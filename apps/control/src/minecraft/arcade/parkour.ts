@@ -14,9 +14,9 @@
  * the Arcade's world (`maps.ts`).
  */
 import { onSidebar, SECONDS, shown, submit, TMP, WORK } from './boards.ts'
-import { type Block, box, NS, PAPER, type Part, titled } from './datapack.ts'
+import { type Block, box, NS, PAPER, type Part } from './datapack.ts'
 import { placed } from './maps.ts'
-import { type BrandSign, buildSign, creditLabel, JUNGLE } from './signs.ts'
+import { clearSign, type SignPlace } from './signs.ts'
 
 /** A box in a map, both corners included, and where a player stands when sent there, facing on. */
 interface Spot {
@@ -83,11 +83,13 @@ const inside = (spot: Spot) => box(placed(spot.map, spot.from), placed(spot.map,
  */
 const RESPAWNS: readonly Spot[] = STAGES.flatMap((stage) => [stage.start, ...stage.checkpoints])
 
+/** Each stage's finish, in the Arcade's world: the box a player reaches it in. */
+export const PARKOUR_FINISHES: ReadonlyArray<{ from: Block; to: Block }> = STAGES.map((stage) => stage.finish)
+
 /** Where a player arrives from the hub and comes back to: the first start, facing the course. */
 const FIRST = STAGES[0]?.start ?? RESPAWNS[0]
 if (FIRST === undefined) throw new Error('The parkour has no stages')
 export const PARKOUR_ARRIVAL = where(FIRST)
-const ARRIVAL = placed(FIRST.map, FIRST.stand)
 
 /** Everything the courses take up, from below them to well above. */
 const ZONE = box([940, 40, -60], [1460, 140, 60])
@@ -126,14 +128,11 @@ const finishTicks = STAGES.flatMap((stage, s) => {
   ]
 })
 
-/** The small Cubepals sign over the first course, ahead of a player arriving, facing them, in jungle wood. */
-const PARKOUR_SIGN: BrandSign = {
-  at: [994, 72, 2],
-  side: 4,
-  facing: 'east',
-  frame: JUNGLE,
-  credit: 'jungle',
-}
+/**
+ * Where a Cubepals sign once stood, in jungle wood, over the first course's stairs, which it shut:
+ * taken down as the datapack builds, the open air it stood in left clear.
+ */
+const OLD_SIGN: SignPlace = { at: [994, 72, 2], side: 4, facing: 'east' }
 
 export const PARKOUR_PART: Part = {
   functions: {
@@ -183,18 +182,8 @@ export const PARKOUR_PART: Part = {
     `team modify ${NS}.parkour nametagVisibility hideForOtherTeams`,
     `scoreboard objectives setdisplay sidebar.team.aqua ${PK}.side`,
   ],
-  labels: [
-    {
-      at: [ARRIVAL[0], ARRIVAL[1] + 2.6, ARRIVAL[2]],
-      tag: `${NS}.label`,
-      text: titled(
-        'Parkour',
-        'Three courses, one clock. It starts as you step off. A fall takes you back to your last checkpoint.',
-      ),
-    },
-    ...[creditLabel(PARKOUR_SIGN)].filter((credit) => credit !== null),
-  ],
-  build: [...buildSign(PARKOUR_SIGN), 'forceload remove 960 -40 1410 40'],
+  labels: [],
+  build: [clearSign(OLD_SIGN), 'forceload remove 960 -40 1410 40'],
   tick: [
     `team join ${NS}.parkour @a[team=!${NS}.parkour,${ZONE}]`,
     `execute as @a[${RUNNING}] unless entity @s[${ZONE}] run tag @s remove ${NS}.pk.run`,

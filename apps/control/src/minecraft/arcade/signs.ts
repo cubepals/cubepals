@@ -11,7 +11,7 @@
  * under a game's sign naming its map and who built it, flat on it so it never turns into it
  * (`creditLabel`). Not where the games are (`maps.ts`).
  */
-import { AXES, buildMarquee, type Frame, type Marquee } from '../marquee.ts'
+import { AXES, buildMarquee, type Frame, type Marquee, marqueeExtent } from '../marquee.ts'
 import { type Block, type Facing, type Label, NS, PAPER } from './datapack.ts'
 import { ARCADE_MAPS } from './maps.ts'
 
@@ -33,12 +33,6 @@ export interface BrandSign {
 }
 
 /** The frames of the games' signs, each in its map's own blocks. */
-export const JUNGLE: Frame = {
-  casing: 'jungle_planks',
-  bulb: 'ochre_froglight',
-  lamp: 'jungle_planks',
-  corner: 'jungle_log',
-}
 export const ICE: Frame = {
   casing: 'packed_ice',
   bulb: 'light_blue_stained_glass',
@@ -61,6 +55,22 @@ const marquee = (sign: BrandSign): Marquee => ({
   side: sign.side,
   grain: GRAIN,
 })
+
+/** Where a sign stands and how large it is: all that says what it takes. */
+export type SignPlace = Pick<BrandSign, 'at' | 'facing' | 'side' | 'backed'>
+
+/** Everything a sign takes, from its least corner to its greatest, in blocks. */
+export const signExtent = (sign: SignPlace): [Block, Block] =>
+  marqueeExtent({ ...sign, backed: sign.backed ?? true })
+
+/**
+ * Taking a sign down: everything it took, air again. Only where a sign stood in the open, with
+ * nothing of a map's own inside its box, as each the games once had has.
+ */
+export function clearSign(sign: SignPlace): string {
+  const [from, to] = signExtent(sign)
+  return `fill ${from.join(' ')} ${to.map((v) => v - 1).join(' ')} minecraft:air`
+}
 
 /** The commands that build a sign: its blocks and its lockup, the lockup carrying the build's tag. */
 export const buildSign = (sign: BrandSign): string[] => buildMarquee(marquee(sign), [`${NS}.display`])

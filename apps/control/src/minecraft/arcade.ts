@@ -32,12 +32,13 @@
 import { type CarriedFile, RUNNING_LEVEL } from '../domain/revision/carried.ts'
 import { BOARDS_PART, TMP } from './arcade/boards.ts'
 import { label, NS, type Part } from './arcade/datapack.ts'
-import { FLOOR_PART } from './arcade/floor.ts'
-import { HUB_PART, PADS } from './arcade/hub.ts'
+import { FLOOR_PART, FLOOR_SIGN } from './arcade/floor.ts'
+import { HUB_PART, HUB_SIGN, PADS } from './arcade/hub.ts'
 import { KEPT_PART } from './arcade/kept.ts'
 import { MACHINES_PART } from './arcade/machines.ts'
 import { PARKOUR_PART } from './arcade/parkour.ts'
-import { PIT_PART } from './arcade/pit.ts'
+import { PIT_PART, PIT_SIGNS } from './arcade/pit.ts'
+import type { BrandSign } from './arcade/signs.ts'
 import { WAYS_IN_PART } from './arcade/ways-in.ts'
 
 /** The datapack's folder in the running world, and the name Minecraft lists it by. */
@@ -60,6 +61,9 @@ const PARTS: readonly Part[] = [
 
 /** Every label the datapack makes, in every part. */
 export const ARCADE_LABELS = PARTS.flatMap((part) => part.labels ?? [])
+
+/** Every Cubepals sign the datapack builds: over the hub's ARCADE cabinet, and at the games. */
+export const ARCADE_SIGNS: readonly BrandSign[] = [HUB_SIGN, FLOOR_SIGN, ...PIT_SIGNS]
 
 /**
  * How long after the world loads its chunks are built in, in ticks. Forcing a chunk to load

@@ -33,6 +33,7 @@
 
 import { type CarriedFile, RUNNING_LEVEL } from '../domain/revision/carried.ts'
 import { MARKERS, type ShownMarker, showMarker } from './brand-pack.ts'
+import { DUELS_ARENA } from './duels.ts'
 import { buildMarquee, type Frame, type Marquee } from './marquee.ts'
 
 /** The datapack's folder in the running world, and the name Minecraft lists it by. */
@@ -54,7 +55,7 @@ const ARENA: Frame = {
  * the platform's south edge, off it, its base level with the platform's top, facing back across it
  * to where a player arrives.
  */
-const BRAND_SIGN: Marquee = {
+export const BRAND_SIGN: Marquee = {
   at: [10, -57, 26],
   facing: 'north',
   side: 4,
@@ -64,7 +65,7 @@ const BRAND_SIGN: Marquee = {
 }
 const SIGN_PARTS = buildMarquee(BRAND_SIGN, ['cubepals.sign'])
 /** Its blocks, built with the course and the pit; its Paper and mark, shown once someone is here, as the way out's marker is. */
-const SIGN_BLOCKS = SIGN_PARTS.filter((command) => !command.startsWith('summon '))
+export const DUELS_SIGN_COMMANDS = SIGN_PARTS.filter((command) => !command.startsWith('summon '))
 const SIGN_DISPLAYS = SIGN_PARTS.filter((command) => command.startsWith('summon '))
 const SHOW_SIGN = `execute if entity @a if block 8 -61 25 minecraft:stone_bricks unless entity @e[tag=cubepals.sign] run function cubepals:sign`
 
@@ -77,8 +78,14 @@ const LID = 'fill -6 -61 -26 8 -61 -12'
 /** The middle of the lid, which says whether the pit is open: air if it is, glass if it isn't. */
 const LID_MIDDLE = '1 -61 -19'
 
-/** The sign on the pit's wall beside the bridge, facing the platform. */
-const SIGN = '2 -60 -11'
+/**
+ * The sign on the outside of the pit's wall beside the bridge, just under its rim, facing the
+ * platform: on the wall, not standing on its top, where players walk round the pit.
+ */
+const SIGN = '2 -62 -10'
+
+/** Where the sign stood before, on the wall's top: taken away as the pit is built. */
+const OLD_SIGN = '2 -60 -11'
 
 /** What the sign says, a line to a row, while the pit is closed and while it is open. */
 const CLOSED_SIGN = `data merge block ${SIGN} {front_text:{messages:["the pit is closed:","it opens when","two can fight",""]}}`
@@ -103,10 +110,13 @@ const SHOW_EXIT = `execute if entity @a if block 7 -64 -26 minecraft:lime_concre
 const OUTSIDE = '1.0 -60 -6.5 0 0'
 
 /** The gold block at the end of the parkour, which also says the course is there. */
-const FINISH = '-32 -55 0'
+export const FINISH = '-32 -55 0'
 
 /** Where the parkour starts: the platform's edge, facing the first jump. */
 const START = '-7.5 -60 0.5 90 0'
+
+/** Every place a player is put on a Duels server: the arena's, the parkour's start and the way out of the pit. */
+export const DUELS_PLACES: readonly string[] = [...Object.values(DUELS_ARENA), START, OUTSIDE]
 
 /**
  * The course, west of the platform, which ends at x -8: stepping stones two blocks apart, most a
@@ -137,7 +147,8 @@ const PIT = [
   'fill -6 -64 -26 8 -64 -12 minecraft:smooth_stone',
   EXIT,
   'fill 0 -61 -10 1 -61 -9 minecraft:smooth_stone',
-  `setblock ${SIGN} minecraft:oak_sign[rotation=0]{is_waxed:1b}`,
+  `execute if block ${OLD_SIGN} minecraft:oak_sign run setblock ${OLD_SIGN} minecraft:air`,
+  `setblock ${SIGN} minecraft:oak_wall_sign[facing=south]{is_waxed:1b}`,
   CLOSED_SIGN,
 ]
 
@@ -229,7 +240,7 @@ export const WAITING_FILES: readonly CarriedFile[] = [
   { path: `${WAITING_DATAPACK}/data/cubepals/function/load.mcfunction`, content: lines(LOAD) },
   {
     path: `${WAITING_DATAPACK}/data/cubepals/function/build.mcfunction`,
-    content: lines([...PARKOUR, ...PIT, ...SIGN_BLOCKS]),
+    content: lines([...PARKOUR, ...PIT, ...DUELS_SIGN_COMMANDS]),
   },
   { path: `${WAITING_DATAPACK}/data/cubepals/function/sign.mcfunction`, content: lines(SIGN_DISPLAYS) },
   { path: `${WAITING_DATAPACK}/data/cubepals/function/tick.mcfunction`, content: lines(TICK) },

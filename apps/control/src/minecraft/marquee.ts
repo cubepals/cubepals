@@ -65,7 +65,7 @@ export const AXES: Record<Facing, { along: 0 | 2; right: 1 | -1; out: 0 | 2; tow
 }
 
 /** The block `across` to its reader's right of the square's top left, `down` under it and `out` in front of it. */
-function place(sign: Marquee, across: number, down: number, out: number): Block {
+function place(sign: Pick<Marquee, 'at' | 'facing'>, across: number, down: number, out: number): Block {
   const axes = AXES[sign.facing]
   const at: [number, number, number] = [...sign.at]
   at[axes.along] += axes.right * across
@@ -203,6 +203,20 @@ function badge(sign: Marquee, tags: readonly string[]): string[] {
     ]
   })
   return [paper, ...ink]
+}
+
+/**
+ * Everything a sign takes, its blocks and what stands out in front of its Paper: the box from its
+ * least corner to its greatest, in blocks, the frame round the square two deep and the casing behind.
+ */
+export function marqueeExtent(sign: Pick<Marquee, 'at' | 'facing' | 'side' | 'backed'>): [Block, Block] {
+  const corners = [place(sign, -1, -1, sign.backed ? -1 : 0), place(sign, sign.side, sign.side, 1)]
+  const least = (i: number) => Math.min(...corners.map((corner) => corner[i] ?? 0))
+  const most = (i: number) => Math.max(...corners.map((corner) => corner[i] ?? 0)) + 1
+  return [
+    [least(0), least(1), least(2)],
+    [most(0), most(1), most(2)],
+  ]
 }
 
 /** Every command that builds a sign: its blocks, then its Paper and mark, whose displays carry `tags`. */

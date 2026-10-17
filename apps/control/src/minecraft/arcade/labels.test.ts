@@ -75,9 +75,9 @@ describe('the floating words on the Arcade and Duels', () => {
 
   test('a label turns to its reader only in the open; one by a wall, or a board before its dome, is flat on it', () => {
     const flat = ARCADE_LABELS.filter((shown) => shown.facing !== undefined)
-    // The boards, the three credit lines under the games' signs, the stairs, both passages and the
-    // three machines.
-    expect(flat).toHaveLength(4 + 3 + 1 + 2 + 3)
+    // The boards, the two credit lines under the floor's and the pit's signs, the stairs, both
+    // passages and the three machines.
+    expect(flat).toHaveLength(4 + 2 + 1 + 2 + 3)
     expect(
       flat.filter((shown) => shown.tag.startsWith('arcade.board.')).map((shown) => shown.facing),
     ).toEqual(['north', 'north', 'north', 'north'])
@@ -127,8 +127,8 @@ describe('the floating words on the Arcade and Duels', () => {
 
   test('every label and marker flat on a wall stands a twentieth of a block off it, all of it on the wall’s solid face', () => {
     const onWalls = rooms.filter(([, room]) => wallOf(room) !== null)
-    // The stairs, both passages' words and doors, the three machines and the games' credit lines.
-    expect(onWalls.length).toBe(1 + 2 * 2 + 3 + 3)
+    // The stairs, both passages' words and doors, the three machines and two games' credit lines.
+    expect(onWalls.length).toBe(1 + 2 * 2 + 3 + 2)
     for (const [name, room] of onWalls) {
       const on = wallOf(room)
       const measured = clearance.rooms.find((candidate) =>
