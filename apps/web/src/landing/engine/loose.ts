@@ -10,7 +10,7 @@
  * turned about its middle. The arrays grow when a frame has more than they hold, and are written
  * over the next frame. Not who those parts are or where they go (cast.ts, models.ts).
  */
-import type { Packed } from './gl'
+import type { Packed } from './frame'
 import { type Box, REACH } from './models'
 
 /** A reach in blocks as its byte. */
