@@ -17,6 +17,12 @@
  *           woken from the archive by a join, and checked to be the same world
  *   crash   made, its machine killed under it, and back as the same world
  *
+ * and one more for each of Cubepals' own templates, each template whose setup carries a datapack
+ * Cubepals writes (the Arcade and Duels), found from the templates themselves: made from it and
+ * booted cold, as a player's first server of it is, its own datapack enabled and answering its load
+ * function on the console, then asleep and woken with nothing changed. Its journey is named by the
+ * template's key, so a failure names the template and the step.
+ *
  * Then each goes to the trash, and the trash is purged. Every wait a player would feel is timed,
  * and every step asserts. Before all that, whatever an earlier run left (a run that failed or was
  * cancelled before its end) is purged.
@@ -41,6 +47,7 @@ import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import { MAIL_PORT } from '@blockly/contracts/local'
 import { SQL } from 'bun'
+import { TEMPLATES } from '../apps/control/src/app/setups/templates.ts'
 import { runScheduledNow } from '../apps/control/src/infra/pg/jobs.ts'
 import { GAME_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { Progress, type StepResult, seconds, summaryTable } from './lib/check-progress.ts'
@@ -331,8 +338,11 @@ class Journey {
     )
   }
 
-  /** Its account signed up and its server made and up; whether it got that far. */
-  async begin(): Promise<boolean> {
+  /**
+   * Its account signed up and its server made and up, a plain survival one unless a template is
+   * named; whether it got that far.
+   */
+  async begin(template?: string): Promise<boolean> {
     await this.step('signs up on staging and confirms through its mail catcher', async () => {
       const email = `check-${this.name}-${Date.now()}@${CHECK_DOMAIN}`
       const them = await people(WEB, 'http://127.0.0.1:18025').person(email)
@@ -347,15 +357,17 @@ class Journey {
       return email
     })
     if (this.owner.email === '') return false
+    if (template !== undefined) await this.step('is offered on its plan', () => this.onPlanFor(template))
     await this.step('is made on Fly and comes up', async () => {
       const at = Date.now()
       const created = await this.api('servers.create', {
         idempotencyKey: checkKey(),
         name: 'Staging Check',
-        playStyle: 'survival',
         partySize: '5',
         regionKey: 'eu',
-        loader: 'vanilla',
+        ...(template === undefined
+          ? { playStyle: 'survival', loader: 'vanilla' }
+          : { from: { kind: 'template', key: template } }),
       })
       this.server = { id: created.id, slug: created.slug }
       const up = await this.waitFor((v) => v.status === 'running', 'came up', 900)
@@ -373,6 +385,25 @@ class Journey {
       return `${this.address()} (${this.server.id}), ${up.memoryTier} in ${took}; Fly: ${machines.length} machine, ${volumes}`
     })
     return this.server.id !== ''
+  }
+
+  /**
+   * The template is on the create page, and its account on a plan that runs it: the one the page
+   * names, through staging's database, when Free doesn't.
+   */
+  async onPlanFor(template: string): Promise<string> {
+    const offered = (await this.api('servers.createOptions', {}, 'GET')).templates as {
+      key: string
+      fits: { allowed: boolean; plan?: string | null }
+    }[]
+    const fits = offered.find((t) => t.key === template)?.fits
+    check(fits !== undefined, 'staging does not offer it')
+    if (fits?.allowed) return 'on Free'
+    check(typeof fits?.plan === 'string', 'no plan runs it')
+    await sql(
+      `update account_standing set plan = '${fits?.plan}' where user_id = (select id from users where email = '${this.owner.email}')`,
+    )
+    return `its account moved to ${fits?.plan}`
   }
 
   /** The end of a journey, unless the run keeps what it made. */
@@ -601,6 +632,52 @@ async function crashes(j: Journey): Promise<void> {
   await j.trash()
 }
 
+/**
+ * Cubepals' own templates: each one whose setup carries a datapack Cubepals writes, with the
+ * datapack's folder, the name Minecraft lists it by, and the function its load tag runs, which
+ * only that datapack answers.
+ */
+const OWN_TEMPLATES = TEMPLATES.flatMap(({ key, setup }) =>
+  (setup.files ?? []).flatMap(({ path, content }) => {
+    const pack = /\/datapacks\/([^/]+)\/data\/minecraft\/tags\/function\/load\.json$/.exec(path)?.[1]
+    const load = pack && (JSON.parse(content) as { values: string[] }).values[0]
+    return pack && load ? [{ key, pack, load }] : []
+  }),
+)
+
+/**
+ * One of Cubepals' own templates, made and booted cold as a player's first server of it is, its
+ * own datapack answering on the console, then asleep and woken with nothing changed.
+ */
+async function ownTemplate(j: Journey, own: (typeof OWN_TEMPLATES)[number]): Promise<void> {
+  if (!(await j.begin(own.key))) return
+  const answers = async () => {
+    const enabled = await j.consoleSays('datapack list enabled')
+    check(enabled.includes(`file/${own.pack}`), `${own.pack} is not among its datapacks: "${enabled}"`)
+    const said = await j.consoleSays(`function ${own.load}`)
+    check(said.includes(own.load) && !/unknown/i.test(said), `function ${own.load} answered "${said}"`)
+    return said
+  }
+
+  await j.step('its own datapack is loaded and answers', async () => `${own.pack}: ${await answers()}`)
+
+  await j.step('goes to sleep and wakes with nothing changed', async () => {
+    await j.api('servers.stop', { serverId: j.server.id, requestId: randomUUID() })
+    await j.waitFor((v) => v.status === 'stopped', 'went to sleep', 300)
+    await j.settled()
+    const slept = [...new Set((await machinesOf(j.server.id)).map((m) => m.state))].join(', ')
+    const at = Date.now()
+    await j.api('servers.start', { serverId: j.server.id, requestId: randomUUID() })
+    await j.waitFor((v) => v.status === 'running', 'woke', 600)
+    await j.settled()
+    const took = j.timed('wake (nothing changed)', Date.now() - at)
+    await answers()
+    return `its machine ${slept} while asleep; woke in ${took}, its datapack answering again`
+  })
+
+  await j.trash()
+}
+
 const started = Date.now()
 say(`staging check: ${WEB}, players at <server>.${PLAY_DOMAIN}`)
 
@@ -654,10 +731,18 @@ await before.step(
 const sleep = new Journey('sleep')
 const rest = new Journey('rest')
 const crash = new Journey('crash')
-say('\nthree servers at once: sleep (asleep and woken), rest (archived and back), crash (killed and back)')
-await Promise.all([sleeps(sleep), rests(rest), crashes(crash)])
+const owns = OWN_TEMPLATES.map((own) => ({ own, j: new Journey(own.key) }))
+say(
+  `\n${3 + owns.length} servers at once: sleep (asleep and woken), rest (archived and back), crash (killed and back), and ${owns.map(({ own }) => own.key).join(', ')} (Cubepals' own templates, booted cold)`,
+)
+await Promise.all([
+  sleeps(sleep),
+  rests(rest),
+  crashes(crash),
+  ...owns.map(({ own, j }) => ownTemplate(j, own)),
+])
 
-const made = [sleep, rest, crash].filter((j) => j.server.id !== '')
+const made = [sleep, rest, crash, ...owns.map(({ j }) => j)].filter((j) => j.server.id !== '')
 if (KEEP)
   for (const j of made)
     say(`\nkept (${j.name}): ${j.owner.email} / ${j.owner.password}, server ${j.server.id}`)
