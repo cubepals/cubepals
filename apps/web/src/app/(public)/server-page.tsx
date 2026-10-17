@@ -15,7 +15,17 @@ import { iconSrc, joinLine, loaderLabel } from '../../lib/present'
 import * as rules from '../../lib/rules'
 import { useChecked } from '../../lib/use-checked'
 import { behindSignUp, useSignedIn } from '../../lib/viewer'
-import { Badge, Button, CopyField, FormSection, GetPack, Note, OutLink, TextField } from '../../ui'
+import {
+  Badge,
+  Button,
+  CopyField,
+  FormSection,
+  GetPack,
+  Note,
+  OfficialSeal,
+  OutLink,
+  TextField,
+} from '../../ui'
 import styles from './like-this.module.css'
 import { MapCredits } from './map-credits'
 import { inviteAnswered } from './presses'
@@ -54,6 +64,7 @@ export function ServerPage({ view, invitedBy }: { view: PublicServerView; invite
           )}
           <h1 className="type-display-md" style={{ color: 'var(--ink)' }}>
             {view.name}
+            {view.official && <OfficialSeal />}
           </h1>
           <span
             className="type-body bk-row bk-wrap"
@@ -64,7 +75,6 @@ export function ServerPage({ view, invitedBy }: { view: PublicServerView; invite
               : view.wakesSlowly
                 ? 'Asleep — it wakes up when you join. This one takes a couple of minutes.'
                 : 'Asleep — it wakes up when you join'}
-            {view.official && <Badge tone="grass">Run by Cubepals</Badge>}
             {view.whitelistOnly && <Badge tone="outline">Invite only</Badge>}
           </span>
         </div>

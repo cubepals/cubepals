@@ -17,7 +17,7 @@ import { messageOf, useTRPC } from '../../../lib/api'
 import { useDebounced } from '../../../lib/hooks'
 import { iconSrc, loaderLabel, timeAgo } from '../../../lib/present'
 import { useSignedIn } from '../../../lib/viewer'
-import { Badge, EmptyState, Note, Skeleton, TextField } from '../../../ui'
+import { Badge, EmptyState, Note, OfficialSeal, Skeleton, TextField } from '../../../ui'
 import { useBrowseSteps } from '../presses'
 import { Reactions } from '../reactions'
 import { ctaMark } from '../steps'
@@ -128,7 +128,7 @@ export function Directory() {
  * A server in the directory. The whole card opens its page, yet it holds buttons of its own,
  * which a link can't: so the name is the link, stretched over the card beneath the reactions.
  */
-function Card({ listing }: { listing: ListingCardView }) {
+export function Card({ listing }: { listing: ListingCardView }) {
   const now = Date.now()
   return (
     <article className={`bk-card bk-card--link bk-stack ${styles.card}`}>
@@ -146,6 +146,7 @@ function Card({ listing }: { listing: ListingCardView }) {
             <Link href={`/server/${listing.slug}`} className={styles.open} {...ctaMark('browse_open')}>
               {listing.name}
             </Link>
+            {listing.official && <OfficialSeal />}
           </h2>
           <span className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
             {listing.awake
@@ -165,7 +166,6 @@ function Card({ listing }: { listing: ListingCardView }) {
       )}
       {/* At the foot of every card, so the counts line up along a row of them. */}
       <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)', marginBlockStart: 'auto' }}>
-        {listing.official && <Badge tone="grass">Run by Cubepals</Badge>}
         {listing.whitelistOnly && <Badge tone="outline">Invite only</Badge>}
         {listing.tags.slice(0, 3).map((t) => (
           <Badge key={t}>{t}</Badge>
