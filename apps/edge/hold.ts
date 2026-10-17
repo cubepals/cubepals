@@ -34,6 +34,7 @@ export class Held {
   #pending = new Uint8Array(0)
   #asked = 0
   #answered = 0
+  #refused = false
 
   constructor(join: Join) {
     this.receive(join.bytes)
@@ -47,12 +48,18 @@ export class Held {
 
   /** Takes what the client sent; false when it is no longer a login waiting to go on. */
   receive(chunk: Uint8Array): boolean {
+    if (this.#refused) return false
     const received = new Uint8Array(this.#pending.length + chunk.length)
     received.set(this.#pending)
     received.set(chunk, this.#pending.length)
     let offset = 0
     for (;;) {
       const length = readVarInt(received, offset)
+      // No packet is shorter than nothing: this is not a client waiting to log in.
+      if (length !== null && length.value < 0) {
+        this.#refused = true
+        return false
+      }
       if (length === null || length.next + length.value > received.length) break
       const end = length.next + length.value
       const id = readVarInt(received, length.next)
@@ -62,7 +69,13 @@ export class Held {
       offset = end
     }
     this.#pending = received.slice(offset)
-    return this.#pending.length <= MOST_PENDING
+    this.#refused = this.#pending.length > MOST_PENDING
+    return !this.#refused
+  }
+
+  /** Whether what the client sent is no longer a login waiting to go on, so nothing wakes for it. */
+  get refused(): boolean {
+    return this.#refused
   }
 
   /** Whether every query has been answered, so nothing of the hold's is still on its way. */
