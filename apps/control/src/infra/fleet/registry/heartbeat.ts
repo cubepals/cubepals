@@ -52,6 +52,12 @@ export async function heartbeat(
 ): Promise<HeartbeatResponse> {
   if (request?.nodeId !== nodeId)
     throw new Refused(400, 'invalid_request', 'the heartbeat is for another node')
+  if (!request.workloads.every((r) => exact(r.epoch) && exact(r.supersededBy)))
+    throw new Refused(
+      400,
+      'invalid_request',
+      'an epoch is not a whole number this control plane counts exactly',
+    )
   const outcome = await db.transaction(
     async (t): Promise<{ response: HeartbeatResponse } | { refused: Refused }> => {
       const node = await getNode(t, nodeId, true)
@@ -85,10 +91,11 @@ export async function heartbeat(
           next_cert_sha256 = NULL, next_cert_expires_at = NULL WHERE id = ${node.id}`)
         await event(t, 'node.certificate_renewed', { node: node.id })
       }
+      const held = heldBack(node, session === 'switched')
       const upgrade =
         session === 'stale'
           ? undefined
-          : await apply(t, node, request, session === 'switched', options.release)
+          : await apply(t, node, request, { switched: session === 'switched', held }, options.release)
       const fences = await fencesFor(t, nodeId)
       const renewDue =
         certificate === 'current' &&
@@ -99,8 +106,7 @@ export async function heartbeat(
           lifecycle: node.lifecycle,
           fences,
           heartbeatSeconds: options.heartbeatSeconds,
-          // A node an operator declared lost restarts nothing on its own: a copy of it may run elsewhere.
-          leaseSeconds: node.lifecycle === 'lost' ? 0 : options.leaseSeconds,
+          leaseSeconds: leaseFor(node, held, options.leaseSeconds),
           ...(renewDue ? { renew: true } : {}),
           upgrade,
         },
@@ -132,6 +138,34 @@ export function sessionOf(
   return 'switched'
 }
 
+/**
+ * Whether a beat must not resume anything or move the node's addresses. A new session while the
+ * previous one may still beat could be a second host booted from a copy of this one's disk: it
+ * waits until that has had time to show, which delays a real reboot's resumes by as long. A
+ * quarantined node waits for an operator.
+ */
+function heldBack(
+  node: Pick<NodeRow, 'session_id' | 'previous_session_id' | 'session_age' | 'duplicate_seen_at'>,
+  switched: boolean,
+): boolean {
+  if (node.duplicate_seen_at !== null) return true
+  if (switched) return node.session_id !== null
+  return (
+    node.previous_session_id !== null && (node.session_age ?? Number.POSITIVE_INFINITY) < LATE_BEAT_SECONDS
+  )
+}
+
+/**
+ * The lease a beat is answered with. A node an operator declared lost restarts nothing on its
+ * own: a copy of it may run elsewhere. Nor does one held back: it may be two hosts.
+ */
+function leaseFor(node: Pick<NodeRow, 'lifecycle'>, held: boolean, seconds: number): number {
+  return node.lifecycle === 'lost' || held ? 0 : seconds
+}
+
+/** An epoch, if any, is a whole number this process holds exactly: one past that can't be raised past. */
+const exact = (epoch: number | null) => epoch === null || (Number.isSafeInteger(epoch) && epoch >= 0)
+
 /** Addresses a node reports, when they are addresses and nothing more. */
 function validAddresses(addresses: NodeAddresses | null | undefined): NodeAddresses | null {
   if (!addresses) return null
@@ -139,15 +173,18 @@ function validAddresses(addresses: NodeAddresses | null | undefined): NodeAddres
   return addresses
 }
 
-/** The report applied to the node's row and its copies; returns the upgrade to offer it, if any. */
+/**
+ * The report applied to the node's row and its copies; returns the upgrade to offer it, if any.
+ * A `held` node's new addresses aren't followed: they may be another host's.
+ */
 async function apply(
   t: Queryable,
   node: NodeRow,
   request: HeartbeatRequest,
-  switched: boolean,
+  { switched, held }: { switched: boolean; held: boolean },
   release: UpgradeOffer | null | undefined,
 ): Promise<UpgradeOffer | undefined> {
-  const addresses = validAddresses(request.addresses)
+  const addresses = held ? null : validAddresses(request.addresses)
   const moved =
     addresses !== null &&
     (addresses.api !== node.api_address ||

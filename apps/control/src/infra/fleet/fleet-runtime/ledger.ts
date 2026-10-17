@@ -99,7 +99,10 @@ export async function placementOf(
   )
 }
 
-/** Never reused, never lowered: above anything the database or any node has seen for the key. */
+/**
+ * Never reused, never lowered: above anything the database has seen for the key, or any node that
+ * ever held it. A node can speak only for its own copies: another's report counts for nothing here.
+ */
 export async function nextEpoch(q: Queryable, key: string): Promise<number> {
   const row = await one<{ next: string }>(
     q,
@@ -107,7 +110,9 @@ export async function nextEpoch(q: Queryable, key: string): Promise<number> {
           (SELECT COALESCE(MAX(epoch), 0) FROM fleet_placement_history WHERE workload = ${key}),
           (SELECT COALESCE(MAX(epoch), 0) FROM fleet_placements WHERE workload = ${key}),
           (SELECT COALESCE(MAX(GREATEST(epoch, COALESCE(superseded_by, 0))), 0)
-             FROM fleet_observations WHERE workload = ${key})
+             FROM fleet_observations o WHERE workload = ${key}
+               AND (EXISTS (SELECT 1 FROM fleet_placement_history h WHERE h.workload = o.workload AND h.node_id = o.node_id)
+                    OR EXISTS (SELECT 1 FROM fleet_placements p WHERE p.workload = o.workload AND p.node_id = o.node_id)))
         ) + 1 AS next`,
   )
   return Number(row?.next ?? 1)
@@ -392,13 +397,14 @@ export class Ledger {
   /**
    * New placements a crash left `placing` after their node made the copy: the node's report of
    * that epoch is proof enough, so they are placed with the ports it reports. Never one a restore,
-   * move or recovery must fill first (`completing`): its copy exists before its data.
+   * move or recovery must fill first (`completing`): its copy exists before its data. Nor one the
+   * node is still making (`creating`): its image may never arrive, and the copy goes with it.
    */
   async finishReported(): Promise<number> {
     const found = await rows<ObservedRow>(
       this.#db,
       sql`${OBSERVE_SQL} WHERE p.state = 'placing' AND p.completing IS NULL AND o.epoch = p.epoch
-            AND p.updated_at < now() - interval '20 seconds'`,
+            AND o.state <> 'creating' AND p.updated_at < now() - interval '20 seconds'`,
     )
     let finished = 0
     for (const row of found) {

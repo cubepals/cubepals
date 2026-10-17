@@ -423,7 +423,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fleet/registry/heartbeat.ts › function heartbeat › async (t): Promise<{ response: HeartbeatResponse } | { refus…": {
-      "n": 22,
+      "n": 20,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fleet/registry/heartbeat.ts › function observe": {
