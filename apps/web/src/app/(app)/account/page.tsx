@@ -111,6 +111,26 @@ const comesBack = (carry: number | null) =>
     ? `More on the 1st, and up to ${carry} unused hours carry into the next month, once.`
     : 'More on the 1st.'
 
+/** A day in the zone the month is counted in: "1 December". */
+const dayIn = (at: string, zone: string) =>
+  new Date(at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: zone })
+
+/** A time zone as people say it: "Kiritimati", "New York". */
+const placeOf = (zone: string) => (zone.split('/').at(-1) ?? zone).replaceAll('_', ' ')
+
+/**
+ * When this month began counting, said only when it wasn't the 1st (the month the plan began), and
+ * when a time zone the browser reported takes over: a month is counted in one zone to its end.
+ */
+const monthClock = (u: AccountOverviewView['usage']) => {
+  const began = dayIn(u.monthBegan, u.timeZone)
+  const counted = began.startsWith('1 ') ? '' : `This month counts from ${began}. `
+  const next = u.nextTimeZone
+  return next === null
+    ? counted
+    : `${counted}Your hours reset at midnight on the 1st, ${placeOf(next.zone)} time, from ${dayIn(next.from, next.zone)}. `
+}
+
 /** Money, as people write it: "$4.20". */
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
 
@@ -149,7 +169,7 @@ function Play({ overview }: { overview: AccountOverviewView }) {
   return (
     <FormSection
       title="Play this month"
-      description={`${fromLastMonth(u.carriedUnits)}${comesBack(e.carryUnits)}`}
+      description={`${monthClock(u)}${fromLastMonth(u.carriedUnits)}${comesBack(e.carryUnits)}`}
     >
       <BlockMeter left={left} included={included} label="This month's play" />
       {share >= 100 ? (

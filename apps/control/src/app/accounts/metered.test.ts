@@ -86,6 +86,9 @@ describe.skipIf(!hasDatabase)('metered play', () => {
 
   test('play past the included block is refused until the owner allows it, and only that far', async () => {
     const owner = await h.user('Alex')
+    // Free includes 2 hours a day, and does not sell more. Twelve hours ahead of UTC, `at` is noon.
+    // The browser says so before anything is played, so the day is counted there at once.
+    await h.app.accounts.setTimeZone(owner, 'Etc/GMT-12')
     const server = await h.create(owner)
     await h.until(server.id, 'running')
     await h.settled(server.id)
@@ -93,8 +96,6 @@ describe.skipIf(!hasDatabase)('metered play', () => {
     await h.until(server.id, 'stopped')
     await h.settled(server.id)
 
-    // Free includes 2 hours a day, and does not sell more. Twelve hours ahead of UTC, `at` is noon.
-    await h.app.accounts.setTimeZone(owner, 'Etc/GMT-12')
     await ran(server.id, '3g', 3, 1)
     expect(await start(owner, server.id)).toBe('You’ve played today’s 2 hours. Back at midnight, in 12 h.')
     // Free can't allow more; saying so is the whole answer.
