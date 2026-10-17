@@ -352,7 +352,7 @@ async function* mirrorEntries(input: {
   const encode = (text: string) => new TextEncoder().encode(text)
   yield { name: INDEX_FILE, data: encode(JSON.stringify(manifest, null, 2)) }
   // Beside the index, never under overrides: the notices travel with the copy, not onto servers.
-  yield { name: 'blockly-notices.txt', data: encode(input.notices) }
+  yield { name: 'cubepals-notices.txt', data: encode(input.notices) }
   const carriedPaths = new Set(input.carried.map((file) => file.name.replace(/^(server-)?overrides\//, '')))
   for (const file of input.installed) {
     if (carriedPaths.has(file.path)) continue
