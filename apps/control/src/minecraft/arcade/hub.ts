@@ -132,7 +132,8 @@ export const HUB_MARKERS: readonly ShownMarker[] = [
  * Over each game's pad, its name and what to do, read as a player walks the balcony toward it from
  * the corridor in from the house: turning to them, just over the reach of anyone standing on the
  * pad (1.8 blocks tall and a 1.2522-block jump), and large enough to read from where it is first
- * seen (`readable.ts`). The pit's pad stands back in its dome, so it is read from further away.
+ * seen (`readable.ts`). The pit's pad stands back in its dome, so it is read from further away,
+ * and its words are larger to look as large from there as the others do from theirs.
  */
 const PAD_READ_FROM: Readonly<Record<string, Block>> = {
   parkour: [134.5, 78, 1431.5],
@@ -150,7 +151,7 @@ export const PAD_READS: readonly Read[] = GAMES.map((game) => {
       at,
       tag: `${NS}.label`,
       text: titled(game.name, 'Stand here to play'),
-      scale: game.key === 'pit' ? 1.7 : 1.3,
+      scale: game.key === 'pit' ? 2.2 : 1.3,
     },
     from: lookingAt(from, at),
   }

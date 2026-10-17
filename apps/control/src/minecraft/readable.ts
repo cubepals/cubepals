@@ -64,10 +64,13 @@ export const MOST_TILT = 15
 /** Primary content: within a 41 degree wide middle of the view (Android XR's guidelines). */
 export const WIDEST = 41
 
-/** One line of what to do, under the game's name. */
+/** One line of what to do, under the game's name: our choice, as no guideline gives a count of lines (`docs/minecraft/readable-text.md`). */
 const MOST_LINES = 2
 
-/** The least gap between two things on the screen, so neither reads as part of the other, in pixels at 1080p. */
+/**
+ * The least gap between two things on the screen, in pixels at 1080p: a margin we chose, twice the
+ * most the model and a client differed on an edge (4 pixels), so what the model keeps apart stays apart.
+ */
 const LEAST_GAP = 8
 
 const degrees = (radians: number) => (radians * 180) / Math.PI
