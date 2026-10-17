@@ -33,6 +33,13 @@ export function storingIdle(deps: {
    * everything again under the server's lock before it lets anything go; this only finds them.
    * Nothing is stored where the deployment keeps no archives, or while an admin has paused it.
    */
+  /**
+   * A rest already on its way, or the storage a rebuild kept, which a rest would let go of with
+   * the rest of the server's: it rests once that goes (`kept-storage.ts`).
+   */
+  const heldBack = async (serverId: string, now: Date): Promise<boolean> =>
+    (await pendingOfKind(db, serverId, 'store')) || (await keptStorage(db, serverId, now)).length > 0
+
   const storeSweep = async (now: Date, limit: number): Promise<number> => {
     if (!storing) return 0
     if (!(await loadControls(db)).storingEnabled) return 0
@@ -44,9 +51,7 @@ export function storingIdle(deps: {
       const standing = await loadStanding(db, server.ownerId)
       const days = entitlementsFor(standing.plan, standing.limitOverrides).storeAfterIdleDays
       if (now.getTime() - server.lastActiveAt.getTime() < days * DAY_MS) continue
-      if (await pendingOfKind(db, server.id, 'store')) continue
-      // The storage a rebuild kept would go with the rest: it rests once that is let go.
-      if ((await keptStorage(db, server.id, now)).length > 0) continue
+      if (await heldBack(server.id, now)) continue
       // One try per stretch of idleness, and another after each that ended without resting it: at
       // once after one called off (somebody played, something else waited), a day after one that
       // failed, since what failed it (a store that is down, a world too big to pack) seldom mends

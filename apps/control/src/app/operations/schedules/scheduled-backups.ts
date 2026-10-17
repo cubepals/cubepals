@@ -73,23 +73,7 @@ export function schedulingBackups(deps: {
 
   const expireBackups = async (now: Date, servers: readonly MinecraftServer[]): Promise<void> => {
     const due = new Map((await pastExpiry(db, now)).map((b) => [b.id, b]))
-    const gone = new Map<string, BackupRecord>()
-    for (const server of servers) {
-      const ready = (await listBackups(db, server.id)).filter(
-        (b) => b.status === 'ready' && b.snapshotHandle !== null,
-      )
-      if (ready.length === 0) continue
-      // Another provider's snapshots are its own; this deployment can't say whether they're gone.
-      if ((await loadRuntime(db, server.id, runtime.providers)).foreign) continue
-      // The provider tells its own snapshots apart: a stored handle is only its word for one, and
-      // a restore or a move leaves earlier ones on storage the server no longer uses. A provider
-      // that can't answer now hides nothing.
-      const vanished = await runtime
-        .goneSnapshots(ready.flatMap((b) => (b.snapshotHandle === null ? [] : [b.snapshotHandle])))
-        .catch(() => new Set<SnapshotHandle>())
-      for (const backup of ready)
-        if (backup.snapshotHandle !== null && vanished.has(backup.snapshotHandle)) gone.set(backup.id, backup)
-    }
+    const gone = await vanishedBackups(servers)
     if (due.size === 0 && gone.size === 0) return
     await db.transaction(async (tx) => {
       // What was due when it was read may have been kept since: a world resting in it, a wake
@@ -101,6 +85,27 @@ export function schedulingBackups(deps: {
         if (server) await events.publish(tx, { type: 'backup_changed', serverId, ownerId: server.ownerId })
       }
     })
+  }
+
+  /** Ready backups whose snapshot the provider no longer has, by id. */
+  const vanishedBackups = async (servers: readonly MinecraftServer[]): Promise<Map<string, BackupRecord>> => {
+    const gone = new Map<string, BackupRecord>()
+    for (const server of servers) {
+      const ready = (await listBackups(db, server.id)).filter(
+        (b) => b.status === 'ready' && b.snapshotHandle !== null,
+      )
+      // Another provider's snapshots are its own; this deployment can't say whether they're gone.
+      if (ready.length === 0 || (await loadRuntime(db, server.id, runtime.providers)).foreign) continue
+      // The provider tells its own snapshots apart: a stored handle is only its word for one, and
+      // a restore or a move leaves earlier ones on storage the server no longer uses. A provider
+      // that can't answer now hides nothing.
+      const vanished = await runtime
+        .goneSnapshots(ready.flatMap((b) => (b.snapshotHandle === null ? [] : [b.snapshotHandle])))
+        .catch(() => new Set<SnapshotHandle>())
+      const lost = ready.filter((b) => b.snapshotHandle !== null && vanished.has(b.snapshotHandle))
+      for (const backup of lost) gone.set(backup.id, backup)
+    }
+    return gone
   }
 
   return backups
