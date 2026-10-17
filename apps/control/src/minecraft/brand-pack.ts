@@ -57,12 +57,14 @@ export function showMarker(shown: ShownMarker, tags: readonly string[]): string 
 }
 
 /**
- * The resource formats the pack is for: from 1.21.11, the release Duels runs on, which declares 75
- * (Mojang's server jar, `version.json`, `pack_version.resource_major`), and every one after. It
- * names them as a range, which releases from 1.21.9 read, and uses the item definitions of 1.21.4
- * and after.
+ * The resource formats the pack is for: from 1.21.4's, 46, the first with the item definitions it
+ * uses (Mojang's client jar, `version.json`, `pack_version.resource_major`), and every one after.
+ * Through Via, the Arcade takes players from releases older than its own, and a 1.21.4 to 1.21.8
+ * game ignores a pack that has no `pack_format`, every marker then drawn as vanilla's oak door: so
+ * the pack names its range both ways, as `min_format` and `max_format`, which releases from 1.21.9
+ * read, and as `pack_format` and `supported_formats`, which those before do.
  */
-export const RESOURCE_FORMATS = { min: 75, max: 1000 } as const
+export const RESOURCE_FORMATS = { min: 46, max: 1000 } as const
 
 /** What the game's screen asks each player as they join, under its own words: whether to take it. */
 export const PROMPT = 'Cubepals’ own look for doors and markers. Without it, everything works just the same.'
@@ -109,6 +111,8 @@ export const BRAND_PACK: readonly PackFile[] = [
         description: 'Cubepals: doors and markers on our own servers',
         min_format: RESOURCE_FORMATS.min,
         max_format: RESOURCE_FORMATS.max,
+        pack_format: RESOURCE_FORMATS.min,
+        supported_formats: [RESOURCE_FORMATS.min, RESOURCE_FORMATS.max],
       },
     },
   },

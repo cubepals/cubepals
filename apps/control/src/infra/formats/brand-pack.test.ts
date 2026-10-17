@@ -29,6 +29,8 @@ describe("Cubepals' resource pack as a zip", () => {
       description: expect.any(String),
       min_format: RESOURCE_FORMATS.min,
       max_format: RESOURCE_FORMATS.max,
+      pack_format: RESOURCE_FORMATS.min,
+      supported_formats: [RESOURCE_FORMATS.min, RESOURCE_FORMATS.max],
     })
   })
 
