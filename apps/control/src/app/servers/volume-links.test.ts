@@ -82,11 +82,11 @@ function machine() {
 }
 
 /** The start's script as far as the image's own start, on `data`; what it said, and how it ended. */
-async function start(data: string): Promise<{ exitCode: number; stderr: string }> {
-  const spec = toRuntimeSpec(input)
+async function start(data: string, of = revision): Promise<{ exitCode: number; stderr: string }> {
+  const spec = toRuntimeSpec({ ...input, revision: of })
   const step = (spec.entrypoint?.[2] ?? '')
-    // `/data` itself, not the `/data` inside `/datapacks`.
-    .replace(/\/data(?![A-Za-z])/g, data)
+    // `/data` itself: not the `/data` inside `/datapacks`, or a folder `data` under another path.
+    .replace(/(?<![\w/])\/data(?![A-Za-z])/g, data)
     .replace('exec /image/scripts/start "$@"', 'true')
   const env = Object.fromEntries(Object.entries(spec.env).filter(([name]) => name.startsWith('BLOCKLY_')))
   const run = Bun.spawn(['/bin/sh', '-c', step], {
@@ -154,5 +154,61 @@ describe('root steps on the volume stay inside it', () => {
     expect(exitCode).toBe(0)
     expect(readFileSync(join(outside, 'passwd'), 'utf8')).toBe('root:x:0:0\n')
     expect(readFileSync(join(data, 'whitelist.json'), 'utf8')).toBe('[]')
+  })
+})
+
+describe('a world Paper ran last, opened by another server type, stays inside the volume', () => {
+  // Fabric reads the Nether, the End and the world's settings where Minecraft does.
+  const fabric: ServerRevision = { ...revision, loader: 'fabric', loaderVersion: '0.17.2', files: [] }
+  const overworld = 'world/dimensions/minecraft/overworld'
+
+  /** A world as Paper leaves it: its overworld's own state and Paper's folder. */
+  function paperWorld(data: string) {
+    mkdirSync(join(data, overworld, 'data/minecraft'), { recursive: true })
+    mkdirSync(join(data, overworld, 'data/paper'), { recursive: true })
+    writeFileSync(join(data, overworld, 'data/minecraft/weather.dat'), 'weather')
+  }
+
+  test('a world folder that is a link: the Nether moves nowhere outside the volume', async () => {
+    const { data, outside } = machine()
+    mkdirSync(join(data, 'world_nether/DIM-1'), { recursive: true })
+    symlinkSync(outside, join(data, 'world'))
+    expect((await start(data, fabric)).exitCode).toBe(0)
+    expect(existsSync(join(outside, 'DIM-1'))).toBe(false)
+  })
+
+  test("the world's settings go back into the world, not through a link out of it", async () => {
+    const { data, outside } = machine()
+    paperWorld(data)
+    symlinkSync(outside, join(data, 'world/data'))
+    const { exitCode, stderr } = await start(data, fabric)
+    expect(exitCode).toBe(0)
+    expect(existsSync(join(outside, 'minecraft'))).toBe(false)
+    expect(readFileSync(join(data, 'world/data/minecraft/weather.dat'), 'utf8')).toBe('weather')
+    expect(stderr).toContain('Cubepals replaced a link at world/data')
+  })
+
+  test("Paper's files are set aside inside the volume, whatever link stands where they go", async () => {
+    const { data, outside } = machine()
+    paperWorld(data)
+    symlinkSync(outside, join(data, '.blockly-paper'))
+    expect((await start(data, fabric)).exitCode).toBe(0)
+    expect(existsSync(join(outside, 'world'))).toBe(false)
+    expect(existsSync(join(data, '.blockly-paper/world/dimensions/minecraft/overworld/data/paper'))).toBe(
+      true,
+    )
+  })
+
+  test('a dimension that is a link: nothing outside the volume is moved or removed', async () => {
+    const { data, outside } = machine()
+    paperWorld(data)
+    mkdirSync(join(outside, 'data/minecraft'), { recursive: true })
+    mkdirSync(join(outside, 'data/paper'), { recursive: true })
+    writeFileSync(join(outside, 'data/minecraft/world_clocks.dat'), 'theirs')
+    symlinkSync(outside, join(data, 'world/dimensions/minecraft/the_nether'))
+    expect((await start(data, fabric)).exitCode).toBe(0)
+    expect(readFileSync(join(outside, 'data/minecraft/world_clocks.dat'), 'utf8')).toBe('theirs')
+    expect(existsSync(join(outside, 'data/paper'))).toBe(true)
+    expect(existsSync(join(data, '.blockly-paper/world/dimensions/minecraft/the_nether'))).toBe(false)
   })
 })

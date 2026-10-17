@@ -392,14 +392,16 @@ const ICON_STEP = [
  * that already has its own is left alone.
  */
 const DIMENSIONS_BESIDE = [
-  `if [ -d "${DATA_DIR}/$LEVEL" ]; then for pair in nether/DIM-1 the_end/DIM1; do`,
+  `unlinked "$LEVEL"; if [ -d "${DATA_DIR}/$LEVEL" ]; then for pair in nether/DIM-1 the_end/DIM1; do`,
+  `unlinked "\${LEVEL}_\${pair%/*}/\${pair#*/}"; unlinked "$LEVEL/\${pair#*/}";`,
   `kept="${DATA_DIR}/\${LEVEL}_\${pair%/*}/\${pair#*/}"; home="${DATA_DIR}/$LEVEL/\${pair#*/}";`,
-  'if [ -d "$kept" ] && [ ! -e "$home" ]; then mv "$kept" "$home"; fi;',
+  'if [ -d "$kept" ] && [ ! -e "$home" ]; then mv -T "$kept" "$home"; fi;',
   'done; fi;',
 ]
 
 /** Where a world's files that only Paper reads are set aside, by level, when another type runs it. */
-const PAPER_SET_ASIDE = `${DATA_DIR}/.blockly-paper`
+const PAPER_SET_ASIDE_RECORD = '.blockly-paper'
+const PAPER_SET_ASIDE = `${DATA_DIR}/${PAPER_SET_ASIDE_RECORD}`
 
 /**
  * From 26.1, Paper keeps a world's own state in each dimension's folder, with a `data/paper` folder
@@ -414,19 +416,25 @@ const PAPER_SET_ASIDE = `${DATA_DIR}/.blockly-paper`
  * reads them, from the overworld, and sets Paper's own files aside, with the copies Paper kept for
  * the other dimensions: Minecraft never reads them, and Paper, back on the world, imports it again
  * from what Minecraft left. The clocks Paper keeps for the whole world stay where they are.
+ *
+ * Both steps run as root, so each replaces any link on the way to what it moves, from or to
+ * (`volume-links.ts`): nothing comes into the volume from outside it, or goes out of it.
  */
 const PAPER_WORLD_STATE = [
   `w="${DATA_DIR}/$LEVEL"; if [ -d "$w/dimensions/minecraft/overworld/data/paper" ]; then`,
-  'mkdir -p "$w/data/minecraft";',
+  'unlinked "$LEVEL/data/minecraft"; mkdir -p "$w/data/minecraft";',
   'for f in game_rules scheduled_events weather world_gen_settings; do',
+  'unlinked "$LEVEL/dimensions/minecraft/overworld/data/minecraft/$f.dat"; unlinked "$LEVEL/data/minecraft/$f.dat";',
   'own="$w/dimensions/minecraft/overworld/data/minecraft/$f.dat";',
-  'if [ -f "$own" ]; then mv -f "$own" "$w/data/minecraft/$f.dat"; fi; done;',
-  'for dim in "$w"/dimensions/*/*; do',
-  `aside="${PAPER_SET_ASIDE}/$LEVEL/\${dim#"$w"/}"; mkdir -p "$aside/data/minecraft";`,
-  'for f in game_rules scheduled_events weather world_gen_settings world_clocks; do',
+  'if [ -f "$own" ]; then mv -fT "$own" "$w/data/minecraft/$f.dat"; fi; done;',
+  `unlinked "$LEVEL/dimensions"; for dim in "$w"/dimensions/*/*; do rel=\${dim#"$w"/};`,
+  `for p in data/minecraft data/paper paper-world.yml; do unlinked "$LEVEL/$rel/$p"; unlinked "${PAPER_SET_ASIDE_RECORD}/$LEVEL/$rel/$p"; done;`,
+  '[ -d "$dim" ] || continue;',
+  `aside="${PAPER_SET_ASIDE}/$LEVEL/$rel"; mkdir -p "$aside/data/minecraft";`,
+  'for f in game_rules scheduled_events weather world_gen_settings world_clocks; do unlinked "$LEVEL/$rel/data/minecraft/$f.dat";',
   'if [ -f "$dim/data/minecraft/$f.dat" ]; then mv -f "$dim/data/minecraft/$f.dat" "$aside/data/minecraft/"; fi; done;',
-  'if [ -d "$dim/data/paper" ]; then rm -rf "$aside/data/paper"; mv "$dim/data/paper" "$aside/data/"; fi;',
-  'if [ -f "$dim/paper-world.yml" ]; then mv -f "$dim/paper-world.yml" "$aside/"; fi;',
+  'if [ -d "$dim/data/paper" ]; then rm -rf "$aside/data/paper"; mv -T "$dim/data/paper" "$aside/data/paper"; fi;',
+  'if [ -f "$dim/paper-world.yml" ]; then mv -fT "$dim/paper-world.yml" "$aside/paper-world.yml"; fi;',
   'done; fi;',
 ]
 
