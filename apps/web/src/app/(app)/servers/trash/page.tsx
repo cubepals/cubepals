@@ -5,7 +5,7 @@
 'use client'
 
 import type { TrashedServerView } from '@blockly/contracts'
-import { DAY_MS, MINUTE_MS } from '@blockly/contracts/durations'
+import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2, Undo2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -101,6 +101,9 @@ function Trashed({ server, now }: { server: TrashedServerView; now: number }) {
           `Deleted ${dayOf(server.deletedAt)}`,
           `gone for good ${untilPurge(server.purgeAfter, now)}`,
           backups === 0 ? 'no backups' : `${backups} ${backups === 1 ? 'backup' : 'backups'}`,
+          ...(server.lastsOnceRestored === null
+            ? []
+            : [`lasts ${lasting(server.lastsOnceRestored)} once restored`]),
         ].join(' · ')}
         control={
           <ActionButton
@@ -122,6 +125,14 @@ function Trashed({ server, now }: { server: TrashedServerView; now: number }) {
       {restore.isError && <Note tone="danger">{messageOf(restore.error)}</Note>}
     </>
   )
+}
+
+/** How long a server made for a while lasts once restored: "24 hours", "1 hour", "40 minutes". */
+function lasting(ms: number): string {
+  const hours = Math.floor(ms / HOUR_MS)
+  if (hours >= 1) return `${hours} ${hours === 1 ? 'hour' : 'hours'}`
+  const minutes = Math.max(1, Math.floor(ms / MINUTE_MS))
+  return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
 }
 
 const dayOf = (at: string) => new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })

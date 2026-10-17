@@ -4,16 +4,18 @@
 
 /**
  * Taking a server back out of the trash: one made for a while stays so, with the time it had left
- * when it went in, and an unplayed world's idle clock starts over, so neither sweep sends it
- * straight back. It counts against the plan's servers as a new one would.
+ * when it went in, or a new one's time when its own had run out; an unplayed world's idle clock
+ * starts over. Neither sweep sends it straight back, and it counts against the plan's servers as a
+ * new one would.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
-import { DAY_MS, MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
+import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { TEMPORARY_HOURS } from './temporary.ts'
 
 describe.skipIf(!hasDatabase)('a server taken back out of the trash', () => {
   let h: Harness
@@ -53,14 +55,44 @@ describe.skipIf(!hasDatabase)('a server taken back out of the trash', () => {
     await h.settled(created.id)
   }, 60_000)
 
+  /** A server made for a while, sent to the trash by the expiry sweep once its time ran out. */
+  const timedOut = async (owner: Awaited<ReturnType<Harness['user']>>, name: string) => {
+    const created = await h.create(owner, { name, temporary: true })
+    await h.until(created.id, 'running')
+    await h.settled(created.id)
+    await h.db
+      .update(schema.minecraftServers)
+      .set({ expiresAt: new Date(Date.now() - MINUTE_MS) })
+      .where(eq(schema.minecraftServers.id, created.id))
+    expect(await h.app.schedules.expirySweep(new Date())).toBe(1)
+    await h.settled(created.id)
+    return created.id
+  }
+
+  test('a server made for a while whose time ran out comes back with the time a new one has', async () => {
+    const owner = await h.user()
+    const id = await timedOut(owner, 'Evening')
+    // The trash says how long it lasts once restored.
+    const [listed] = (await h.app.queries.trash(owner)).filter((s) => s.id === id)
+    expect(listed?.lastsOnceRestored).toBe(TEMPORARY_HOURS * HOUR_MS)
+
+    const at = Date.now()
+    const back = await h.app.servers.undeleteServer(owner, id)
+    const end = (back.expiresAt as Date).getTime()
+    expect(end).toBeGreaterThanOrEqual(at + TEMPORARY_HOURS * HOUR_MS)
+    expect(end).toBeLessThanOrEqual(Date.now() + TEMPORARY_HOURS * HOUR_MS)
+    // The next sweep leaves it; one past its new end sends it to the trash again.
+    expect(await h.app.schedules.expirySweep(new Date(at + 5 * MINUTE_MS))).toBe(0)
+    expect((await h.server(id)).lifecycle.status).toBe('stopped')
+    expect(await h.app.schedules.expirySweep(new Date(end + SECOND_MS))).toBe(1)
+    await h.settled(id)
+  }, 60_000)
+
   test('a server comes back out of the trash only while the plan has room for it', async () => {
     const owner = await h.user('Fen', 'free')
     const { maxServers } = entitlementsFor('free')
-    const trashed = await h.create(owner, { name: 'Trashed' })
-    await h.until(trashed.id, 'running')
-    await h.settled(trashed.id)
-    await h.app.servers.deleteServer(owner, trashed.id, 'Trashed')
-    await h.settled(trashed.id)
+    // Made for a while and out of time: restoring it would give it a new one's time.
+    const trashed = { id: await timedOut(owner, 'Trashed') }
     for (let n = 0; n < maxServers; n++) {
       const made = await h.create(owner, { name: `Kept ${n}` })
       await h.settled(made.id)
