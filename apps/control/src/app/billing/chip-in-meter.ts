@@ -121,8 +121,9 @@ function atMark(
 }
 
 /**
- * `monthSpans`, its block the most it was during the month (`monthBlock`): hours an admin lowered
- * mid-month, or a plan's, apply from the next month, so play they covered stays covered.
+ * `monthSpans`, with the block the month kept when an admin lowered its hours after it played
+ * (`monthBlock`): the lowered hours apply from the next month, so play they covered stays covered.
+ * A kept block holds only under the plan it was kept under; another plan's block applies at once.
  */
 async function blockSpans(
   q: Queryable,
@@ -133,7 +134,8 @@ async function blockSpans(
 ): Promise<MonthSpans | null> {
   const month = await monthSpans(q, standing, plan, now, at)
   if (month === null) return null
-  const kept = await monthBlock(q, standing.userId, monthOf(at, standing.timeZone ?? DEFAULT_TIME_ZONE))
+  const zone = standing.timeZone ?? DEFAULT_TIME_ZONE
+  const kept = await monthBlock(q, standing.userId, monthOf(at, zone), standing.plan)
   return kept !== null && kept > month.included ? { ...month, included: kept } : month
 }
 

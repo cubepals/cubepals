@@ -600,33 +600,40 @@ export async function extraPlayNow(
 const months = schema.extraPlayMonths
 
 /**
- * The most the month's block of hours was during the month (`month`, as `monthOf` names it), in
- * hours; null when it was never kept.
+ * The block of hours the month (`month`, as `monthOf` names it) kept when an admin lowered the
+ * account's hours (`keepMonthBlock`), in hours; null when none was kept, or when it was kept under
+ * a plan other than `plan`, which is no longer in force.
  */
-export async function monthBlock(q: Queryable, userId: string, month: string): Promise<number | null> {
+export async function monthBlock(
+  q: Queryable,
+  userId: string,
+  month: string,
+  plan: string,
+): Promise<number | null> {
   const [row] = await q
     .select({ units: months.blockUnits })
     .from(months)
-    .where(and(eq(months.userId, userId), eq(months.month, month)))
+    .where(and(eq(months.userId, userId), eq(months.month, month), eq(months.blockPlan, plan)))
   return row?.units ?? null
 }
 
 /**
- * Keeps `units` as the month's block when it is more than what is kept: a block raised applies at
- * once, and one lowered from the next month (`monthBlock`).
+ * Keeps `units` as the month's block under `plan`, when it is more than what is kept under that
+ * plan: hours an admin lowers apply from the next month (`monthBlock`).
  */
 export async function keepMonthBlock(
   q: Queryable,
   userId: string,
   month: string,
+  plan: string,
   units: number,
 ): Promise<void> {
   await q
     .insert(months)
-    .values({ userId, month, blockUnits: units })
+    .values({ userId, month, blockUnits: units, blockPlan: plan })
     .onConflictDoUpdate({
       target: [months.userId, months.month],
-      set: { blockUnits: units, updatedAt: new Date() },
-      setWhere: sql`${months.blockUnits} is null or ${months.blockUnits} < ${units}`,
+      set: { blockUnits: units, blockPlan: plan, updatedAt: new Date() },
+      setWhere: sql`${months.blockPlan} is distinct from ${plan} or ${months.blockUnits} is null or ${months.blockUnits} < ${units}`,
     })
 }

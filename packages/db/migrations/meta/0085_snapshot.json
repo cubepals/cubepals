@@ -1,5 +1,5 @@
 {
-  "id": "b6521a53-7d0c-43fa-bfcc-eaf574aff463",
+  "id": "ccde317b-d6d5-4d56-b3cc-31535918f525",
   "prevId": "888d5940-fc8e-4921-be53-1003d8f50edd",
   "version": "7",
   "dialect": "postgresql",
@@ -2497,6 +2497,12 @@
         "block_units": {
           "name": "block_units",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "block_plan": {
+          "name": "block_plan",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

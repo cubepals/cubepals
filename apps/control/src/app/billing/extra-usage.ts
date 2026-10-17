@@ -119,15 +119,13 @@ export class ExtraUsage {
    * takes them back, and hours played while it couldn't use extra (servers sleep then) are never
    * counted. A month before this one is final (`finalAt`) once it has been over `FINAL_AFTER_MS`
    * and nothing that ran in it still runs; it is counted for the last time then. True when
-   * something new was counted. This month's block is kept as the most it was (`keepMonthBlock`),
-   * so hours lowered later in the month never turn play they covered into extra.
+   * something new was counted.
    */
   async count(userId: string, now = new Date(), read?: AccountStanding): Promise<boolean> {
     const standing = read ?? (await loadStanding(this.#db, userId, now))
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
     if (plan.includedUnits === null) return false
     const zone = standing.timeZone ?? DEFAULT_TIME_ZONE
-    await keepMonthBlock(this.#db, userId, monthOf(now, zone), plan.includedUnits)
     const allowance = await this.#allowance(standing, plan, now)
     let grew = false
     for (const month of await this.#months(userId, now, zone, allowance !== null)) {
@@ -503,14 +501,20 @@ export class ExtraUsage {
  * Before an admin changes an account's hours (`AccountService.setLimits`): once it has played this
  * month, the month keeps the block it has, so hours lowered apply from the next month and play they
  * covered is never billed as extra. With nothing played yet there is nothing to cover, and they
- * apply at once.
+ * apply at once. What is kept holds only while the plan in force stays the same.
  */
 export async function keepPlayedBlock(q: Queryable, userId: string, now: Date): Promise<void> {
   const standing = await loadStanding(q, userId, now)
   const plan = entitlementsFor(standing.plan, standing.limitOverrides)
   const month = await meteredMonth(q, standing, plan, now)
   if (month !== null && month.units > 0)
-    await keepMonthBlock(q, userId, monthOf(now, standing.timeZone ?? DEFAULT_TIME_ZONE), month.included)
+    await keepMonthBlock(
+      q,
+      userId,
+      monthOf(now, standing.timeZone ?? DEFAULT_TIME_ZONE),
+      standing.plan,
+      month.included,
+    )
 }
 
 /** What an account's extra play this month comes to: counted, and of that, sent to be billed. */
