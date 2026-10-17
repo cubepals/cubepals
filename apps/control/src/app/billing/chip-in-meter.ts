@@ -125,7 +125,7 @@ function atMark(
  */
 export async function meteredMonth(
   q: Queryable,
-  standing: Pick<AccountStanding, 'userId' | 'timeZone' | 'plan'>,
+  standing: Pick<AccountStanding, 'userId' | 'plan' | 'timeZone' | 'timeZoneFrom' | 'timeZoneBegan'>,
   plan: Pick<Entitlements, 'includedUnits' | 'carryUnits'>,
   now: Date,
   at: Date = now,

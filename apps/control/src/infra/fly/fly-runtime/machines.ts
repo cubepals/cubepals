@@ -64,15 +64,36 @@ const LeaseBody = z.union([
   z.object({ data: z.object({ nonce: z.string().min(1) }) }),
 ])
 
-export async function minecraftMachine(fly: FlyClient, app: string): Promise<Machine | null> {
+/**
+ * The app's server machines that aren't going away, as Fly lists them: one, but for a restore or a
+ * move that stopped between making its machine and clearing the old one, or a lost host's machine
+ * Fly still lists.
+ */
+export async function serverMachines(fly: FlyClient, app: string): Promise<Machine[]> {
   const listed = await fly.GET('/v1/apps/{app_name}/machines', {
     params: { path: { app_name: app } },
   })
-  if (listed.response.status === 404) return null
+  if (listed.response.status === 404) return []
+  return must(listed, 'listing machines').filter(
+    (m) => m.config?.metadata?.[META.role] === 'minecraft' && !MACHINE_GONE.has(m.state ?? ''),
+  )
+}
+
+/**
+ * The server's machine: the one `preferred` names (its handle's) while Fly lists it, else one on a
+ * host Fly can reach, else any. Fly's listing order says nothing about which is the server's.
+ */
+export async function minecraftMachine(
+  fly: FlyClient,
+  app: string,
+  preferred: string | null = null,
+): Promise<Machine | null> {
+  const machines = await serverMachines(fly, app)
   return (
-    must(listed, 'listing machines').find(
-      (m) => m.config?.metadata?.[META.role] === 'minecraft' && !MACHINE_GONE.has(m.state ?? ''),
-    ) ?? null
+    machines.find((m) => preferred !== null && m.id === preferred) ??
+    machines.find((m) => m.host_status !== 'unreachable') ??
+    machines[0] ??
+    null
   )
 }
 
@@ -82,8 +103,8 @@ export async function machineOnVolume(
   app: string,
   volumeId: string,
 ): Promise<Machine | null> {
-  const machine = await minecraftMachine(fly, app)
-  return machine?.config?.mounts?.some((mount) => mount.volume === volumeId) ? machine : null
+  const machines = await serverMachines(fly, app)
+  return machines.find((m) => m.config?.mounts?.some((mount) => mount.volume === volumeId)) ?? null
 }
 
 export async function readMachine(fly: FlyClient, app: string, machineId: string): Promise<Machine | null> {

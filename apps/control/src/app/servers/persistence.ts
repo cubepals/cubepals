@@ -458,11 +458,19 @@ export async function purgeSooner(
   return toServer(row)
 }
 
-export async function markUndeleted(tx: Tx, server: MinecraftServer): Promise<void> {
-  await tx
+/** Out of the trash, its idle clock new; one made for a while keeps the time it had left in it. */
+export async function markUndeleted(tx: Tx, server: MinecraftServer): Promise<MinecraftServer> {
+  const now = new Date()
+  const { expiresAt: end, deletedAt: went } = server
+  const expiresAt = end && went && new Date(now.getTime() + Math.max(0, end.getTime() - went.getTime()))
+  const kept = { expiresAt, lastActiveAt: now, deletionWarned: null }
+  const [row] = await tx
     .update(servers)
-    .set({ deletedAt: null, purgeAfter: null, updatedAt: new Date() })
+    .set({ deletedAt: null, purgeAfter: null, ...kept, updatedAt: now })
     .where(eq(servers.id, server.id))
+    .returning()
+  if (!row) throw new Error(`Server ${server.id} vanished while being saved`)
+  return toServer(row)
 }
 
 // ─── Revisions and worlds ───────────────────────────────────────────────────────────────────

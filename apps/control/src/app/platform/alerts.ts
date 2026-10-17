@@ -233,7 +233,7 @@ async function wakeConditions(db: Db, now: Date): Promise<Condition[]> {
   if (keeping.length > 0)
     conditions.push({
       key: 'storage_kept',
-      summary: `${servers(keeping.length)} keep the storage a rebuild moved them off, a full copy of the world, for ${KEEP_MS / DAY_MS} days before it goes by itself (${keeping.join(', ')}).`,
+      summary: `${servers(keeping.length)} keep the storage a rebuild moved them off, a full copy of the world, for ${KEEP_MS / DAY_MS} days before it goes by itself, and don't rest until then (${keeping.join(', ')}).`,
     })
   return conditions
 }

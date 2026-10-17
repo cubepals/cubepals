@@ -3,12 +3,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Deletes storage a runtime holds beside a server's world that nothing uses: what a wake, a restore
- * or a move that failed partway made, or a delete that gave up while the provider still held it.
- * It bills until it goes, and nothing else would ever ask again. Which storage that is, is the
- * runtime's (`clearLeftovers` on the port); this decides when it is safe to ask: under the
- * server's lock, with nothing in flight for it, since a wake or a restore makes storage before its
- * handle names it. Compute nobody accounts for is `orphans.ts`'s, which runs this as it ends.
+ * Deletes what a runtime holds beside a server's world that nothing uses: storage, and compute in
+ * the server's own place that its handle doesn't name, which a wake, a restore, a move or an export
+ * that failed partway made, or a delete that gave up while the provider still held it. It bills
+ * until it goes, and nothing else would ever ask again. Which that is, is the runtime's
+ * (`clearLeftovers` on the port); this decides when it is safe to ask: under the server's lock,
+ * with nothing in flight for it, since a wake or a restore makes storage and compute before its
+ * handle names them. Each id it deleted is in the audit log. Compute whose server nobody accounts
+ * for is `orphans.ts`'s, which runs this as it ends.
  */
 import { type Db, schema } from '@blockly/db'
 import type { Runtimes } from '../../runtimes/router.ts'

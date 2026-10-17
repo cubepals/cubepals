@@ -5,11 +5,12 @@
 /**
  * This month's play, on a plan with a monthly block (`Entitlements.includedUnits`): the spans it
  * is counted over, from the owner's local midnight on the 1st, in meter units, and what carried
- * into it from last month's block. What is left of a month's own block, up to the plan's
- * `carryUnits`, carries into the next month, and no further: carried hours are spent first, so a
- * month that plays into them keeps its own for the month after. A month the block did not cover
- * from its 1st carries nothing. The clock is `domain/account/play-day.ts`'s; stopping servers when
- * the month is used is the session check's.
+ * into it from last month's block. The month the block began in counts from when it began, so
+ * play on another plan earlier that month is never spent from it; its block is still whole. What
+ * is left of a month's own block, up to the plan's `carryUnits`, carries into the next month, and
+ * no further: carried hours are spent first, so a month that plays into them keeps its own for the
+ * month after. A month the block did not cover from its 1st carries nothing. The clock is
+ * `domain/account/play-day.ts`'s; stopping servers when the month is used is the session check's.
  *
  * It is not where play is read: `billing/chip-in-meter.ts` (`meteredMonth`) reads each month's
  * play over these spans with what friends chipped in taken out, which never counts against the
@@ -18,8 +19,8 @@
 import { type Queryable, schema } from '@blockly/db'
 import { and, eq, isNull, lte } from 'drizzle-orm'
 import type { Entitlements } from '../../domain/account/entitlements.ts'
-import { DEFAULT_TIME_ZONE, monthStart, nextMonthStart } from '../../domain/account/play-day.ts'
-import type { AccountStanding } from '../../domain/account/standing.ts'
+import { DEFAULT_TIME_ZONE, monthBegan, nextMonthStart } from '../../domain/account/play-day.ts'
+import { type AccountStanding, zoneChange } from '../../domain/account/standing.ts'
 
 /**
  * The months looked back over for what carried. Carried hours never carry again, so a month a
@@ -52,7 +53,10 @@ export function carriedOut(included: number, cap: number, months: readonly numbe
 
 /** The spans a month's play is read over, and the block they are measured against. */
 export interface MonthSpans {
-  /** The owner's midnight on this month's 1st, and on the next month's: when the block is back. */
+  /**
+   * When this month's count began: the owner's midnight on its 1st, or when the block began if
+   * that was later. `next` is the owner's midnight on the next month's 1st: when the block is back.
+   */
   start: Date
   next: Date
   /** The plan's monthly block, in units. */
@@ -70,28 +74,35 @@ export interface MonthSpans {
  */
 export async function monthSpans(
   q: Queryable,
-  standing: Pick<AccountStanding, 'userId' | 'timeZone' | 'plan'>,
+  standing: Pick<AccountStanding, 'userId' | 'plan' | 'timeZone' | 'timeZoneFrom' | 'timeZoneBegan'>,
   plan: Pick<Entitlements, 'includedUnits' | 'carryUnits'>,
   now: Date,
   at: Date = now,
 ): Promise<MonthSpans | null> {
   if (plan.includedUnits === null) return null
   const zone = standing.timeZone ?? DEFAULT_TIME_ZONE
-  const start = monthStart(at, zone)
-  const began = await blockBegan(q, standing.userId, standing.plan, now)
+  const change = zoneChange(standing)
+  const first = monthBegan(at, zone, change)
+  // When the block began: when the run of paid time on the plan that holds `now` began, each
+  // stretch of it (subscription, years paid at once in `billing/years.ts`, gifts redeemed in
+  // `billing/gifts.ts`) running on from or over the one before, so months on Free never carry.
+  const spans = await paidSpans(q, standing.userId, standing.plan, now)
+  const began = spans.length > 0 ? runBegan(spans) : await accountMade(q, standing.userId)
+  // The month paid time began in counts from then: what was played before was another plan's.
+  const start = spans.length > 0 && began !== null && began > first ? began : first
   // Whole months before this one, oldest first, back to the first the block covered from its 1st.
   const before: Date[] = []
-  let month = monthStart(new Date(start.getTime() - 1), zone)
+  let month = monthBegan(new Date(first.getTime() - 1), zone, change)
   while (began !== null && month >= began && before.length < MONTHS_BACK) {
     before.unshift(month)
-    month = monthStart(new Date(month.getTime() - 1), zone)
+    month = monthBegan(new Date(month.getTime() - 1), zone, change)
   }
   return {
     start,
     next: nextMonthStart(at, zone),
     included: plan.includedUnits,
     carry: plan.carryUnits ?? 0,
-    before: before.map((from) => ({ from, to: nextMonthStart(from, zone) })),
+    before: before.map((from, i) => ({ from, to: before[i + 1] ?? first })),
   }
 }
 
@@ -115,15 +126,8 @@ interface PaidSpan {
   to: Date
 }
 
-/**
- * When the account's monthly block began: when the run of paid time on the plan that holds `now`
- * began, each stretch of it (subscription, years paid at once in `billing/years.ts`, gifts redeemed
- * in `billing/gifts.ts`) running on from or over the one before, so months on Free never carry. On a
- * plan nothing pays for (an admin's), when the account was made. Null for an account not yet made.
- */
-async function blockBegan(q: Queryable, userId: string, plan: string, now: Date): Promise<Date | null> {
-  const spans = await paidSpans(q, userId, plan, now)
-  if (spans.length > 0) return runBegan(spans)
+/** When the account was made: where the block of a plan nothing pays for (an admin's) began. */
+async function accountMade(q: Queryable, userId: string): Promise<Date | null> {
   const [made] = await q
     .select({ at: schema.accountStanding.createdAt })
     .from(schema.accountStanding)

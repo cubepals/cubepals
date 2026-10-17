@@ -23,6 +23,14 @@ const HELPER_GUEST = { cpu_kind: 'shared', cpus: 1, memory_mb: 1024 }
 
 /** How long a job's result is read every second, before every five. */
 const QUICK_READS_MS = 20_000
+/** How long a helper may take to start, and then its job to run. */
+const HELPER_START_SECONDS = 300
+const JOB_DEADLINE_MS = 6 * HOUR_MS
+/**
+ * The longest a helper lives: it sleeps no longer, and then Fly destroys it (`auto_destroy`). One
+ * older is left from work that stopped without destroying it, and is the sweep's to clear.
+ */
+export const HELPER_LIFETIME_MS = HELPER_START_SECONDS * 1000 + JOB_DEADLINE_MS
 
 /** A background job that leaves "ok <output>" or "failed <status>" in /tmp/job.result. */
 export function job(body: string): string {
@@ -58,7 +66,7 @@ export async function helperJob(
         region,
         config: {
           image: HELPER_IMAGE,
-          init: { exec: ['/bin/sleep', '86400'] },
+          init: { exec: ['/bin/sleep', String(HELPER_LIFETIME_MS / 1000)] },
           guest: HELPER_GUEST,
           mounts: [{ volume: volumeId, path: '/data' }],
           restart: { policy: 'no' },
@@ -71,7 +79,7 @@ export async function helperJob(
   )
   const helperId = idOf(helper, 'a helper machine')
   try {
-    await waitFor(fly, app, helperId, 'started', 300)
+    await waitFor(fly, app, helperId, 'started', HELPER_START_SECONDS)
     // Fly's exec passes no stdin (a script sent that way arrived empty on staging, 2026-09-26), so
     // the script travels as an argument, which Fly caps somewhere below 60 kB.
     if (Buffer.byteLength(script) > HELPER_SCRIPT_BYTES)
@@ -89,7 +97,7 @@ export async function helperJob(
       30,
     )
     const began = Date.now()
-    const deadline = began + 6 * HOUR_MS
+    const deadline = began + JOB_DEADLINE_MS
     while (Date.now() < deadline) {
       // Its result; else whether it still runs; else, read once more, since it may have just
       // finished. A job that ended without a result fails now, not at the deadline.

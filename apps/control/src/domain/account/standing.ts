@@ -7,6 +7,8 @@
  * restrictions, an admin's limits, and the owner's own choices (extra play, the AFK kick), with
  * which warnings about the month's play were sent, and the time zone its day is counted in.
  */
+import type { ZoneChange } from './play-day.ts'
+
 type AccountStatus = 'active' | 'suspended' | 'terminated'
 
 export interface Restrictions {
@@ -51,6 +53,18 @@ export interface AccountStanding {
    * begins (`play-day.ts`). Null until it has, and the day is UTC's.
    */
   timeZone: string | null
+  /**
+   * When `timeZone` took over from the zone before, and when the month and day it took over in
+   * began (`play-day.ts` `ZoneChange`); null when it has been the zone from the start.
+   */
+  timeZoneFrom: Date | null
+  timeZoneBegan: Date | null
+  /**
+   * A zone the browser reported since, and when it takes over (`zoneTakesOver`): the month is
+   * counted in one zone from its start to its end. Null when none waits.
+   */
+  nextTimeZone: string | null
+  nextTimeZoneFrom: Date | null
   /** Cubepals' own, for testing it: never billed, and left out of its numbers and analytics. */
   testAccount: boolean
 }
@@ -68,6 +82,19 @@ export function newStanding(userId: string): AccountStanding {
     playWarned: null,
     extraWarned: null,
     timeZone: null,
+    timeZoneFrom: null,
+    timeZoneBegan: null,
+    nextTimeZone: null,
+    nextTimeZoneFrom: null,
     testAccount: false,
   }
+}
+
+/** Where the account's zone in force took over from the one before; null when it always was. */
+export function zoneChange(
+  standing: Pick<AccountStanding, 'timeZoneFrom' | 'timeZoneBegan'>,
+): ZoneChange | null {
+  return standing.timeZoneFrom === null || standing.timeZoneBegan === null
+    ? null
+    : { from: standing.timeZoneFrom, began: standing.timeZoneBegan }
 }

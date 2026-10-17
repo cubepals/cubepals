@@ -242,6 +242,20 @@ export async function presenceFor(
   return result
 }
 
+/**
+ * Who is on one server now, as the idle decision weighs it: how many the server's own reading
+ * found, and how many the edge says connected since that reading (a claim the server hasn't
+ * confirmed, which a reading drops).
+ */
+export async function presenceOn(q: Queryable, serverId: string): Promise<{ read: number; claimed: number }> {
+  const rows = await q
+    .select({ source: presence.source })
+    .from(presence)
+    .where(eq(presence.serverId, serverId))
+  const read = rows.filter((r) => r.source === 'rcon').length
+  return { read, claimed: rows.length - read }
+}
+
 export async function openIntervalStart(q: Queryable, serverId: string): Promise<Date | null> {
   return (await openRun(q, serverId))?.startedAt ?? null
 }
@@ -273,7 +287,8 @@ export async function lastRunEnded(q: Queryable, serverId: string): Promise<Date
 /**
  * How many times a connection woke this server in the last hour: the runs one woke, or the starts
  * one asked for, whichever is more, so starts that never came up count too (a wake its host
- * refuses, a failed start a join asked again). A start its runtime had no room for (`no_room`, a
+ * refuses, a failed start a join asked again), and so do the stops and moves a join tried again
+ * on its way to a start (`EdgeService.#start`). A start its runtime had no room for (`no_room`, a
  * Boat plan's starts spent) cost nothing and doesn't count: a waiting join asks again every few
  * seconds while there is none. It bounds what a flood can cost when every other defence is off — a
  * public server with no whitelist, waking for anyone.
@@ -290,7 +305,7 @@ export async function wakesInLastHour(q: Queryable, serverId: string, now: Date)
     .where(
       and(
         eq(operations.serverId, serverId),
-        eq(operations.kind, 'start'),
+        inArray(operations.kind, ['start', 'stop', 'relocate']),
         eq(operations.requestedBy, WAKE_ACTOR),
         gte(operations.createdAt, since),
         sql`not coalesce(${operations.steps} @> '[{"step":"no_room"}]'::jsonb, false)`,
