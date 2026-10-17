@@ -9,7 +9,16 @@
  * (`useBeat`): cues on a clock of the beat's own, which runs by itself and which the reader's
  * scrolling hurries or runs backwards (clock.ts).
  */
-import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
+import {
+  Fragment,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { seenMark } from '../../app/(public)/steps'
 import { type RoomKey, roomY } from '../engine/chunk'
 import { useReducedMotion } from '../hooks'
@@ -184,6 +193,7 @@ export function Beat({
   place,
   proof,
   says = 'How it works',
+  beside,
   closing,
   open,
   onOpen,
@@ -209,6 +219,8 @@ export function Beat({
   proof?: ReactNode
   /** What the way in to the proof says. */
   says?: string
+  /** What stands beside the way in to the proof. */
+  beside?: ReactNode
   /** The page's own button is on this beat, so the one that follows the reader steps aside. */
   closing?: boolean
   className?: string
@@ -257,17 +269,56 @@ export function Beat({
         {children}
         {line && (
           // Keyed by what it says, so a new line is a new strip stamped on, not the old one edited.
-          <p key={line} className={styles.caption} data-place={place} data-over>
-            <span>{line}</span>
-          </p>
+          <Caption key={line} line={line} place={place} />
         )}
         <i ref={bar} className={styles.through} aria-hidden />
         {proof && (
-          <Proof says={says} label={`${name}: how it works`} detail={named} open={open} onOpen={onOpen}>
+          <Proof
+            says={says}
+            label={`${name}: how it works`}
+            detail={named}
+            open={open}
+            onOpen={onOpen}
+            beside={beside}
+          >
             {proof}
           </Proof>
         )}
       </div>
     </section>
+  )
+}
+
+/**
+ * A beat's one sentence. It arrives a line at a time, each rising into its place, so the words
+ * are told which line they fell on once they are laid out.
+ */
+function Caption({ line, place }: { line: string; place?: 'top' }) {
+  const at = useRef<HTMLParagraphElement>(null)
+  useLayoutEffect(() => {
+    let top = Number.NEGATIVE_INFINITY
+    let count = -1
+    for (const word of at.current?.querySelectorAll<HTMLElement>('[data-word]') ?? []) {
+      if (word.offsetTop > top + 2) {
+        top = word.offsetTop
+        count += 1
+      }
+      word.style.setProperty('--line', String(count))
+    }
+  }, [])
+  return (
+    <p ref={at} className={styles.caption} data-place={place} data-over>
+      <span>
+        {line.split(' ').map((word, n) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: the words of one sentence, which never reorder.
+          <Fragment key={n}>
+            {n > 0 && ' '}
+            <span className={styles.word} data-word>
+              {word}
+            </span>
+          </Fragment>
+        ))}
+      </span>
+    </p>
   )
 }

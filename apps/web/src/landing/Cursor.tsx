@@ -39,13 +39,34 @@ export function Cursor() {
     if (!cross || !box || !hint) return
     let at: { x: number; y: number } | null = null
 
+    // "Click to dig" stands beside the crosshair, at whichever corner of it leaves the words on
+    // the picture clear: it never covers a caption.
+    const hintAt = (point: { x: number; y: number }) => {
+      const width = hint.offsetWidth
+      const height = hint.offsetHeight
+      const words = [...root.querySelectorAll<HTMLElement>('[data-over]')].map((element) =>
+        element.getBoundingClientRect(),
+      )
+      const corners = [
+        [point.x + 16, point.y + 16],
+        [point.x + 16, point.y - 16 - height],
+        [point.x - 16 - width, point.y + 16],
+        [point.x - 16 - width, point.y - 16 - height],
+      ] as const
+      const clear = corners.find(
+        ([x, y]) =>
+          !words.some((r) => x < r.right && x + width > r.left && y < r.bottom && y + height > r.top),
+      )
+      const [x, y] = clear ?? corners[0]
+      return `${x}px ${y}px`
+    }
+
     const place = () => {
       if (!at) {
         cursor.dataset.state = 'away'
         return
       }
       cross.style.translate = `${at.x}px ${at.y}px`
-      hint.style.translate = `${at.x + 16}px ${at.y + 16}px`
       const over = document.elementFromPoint(at.x, at.y)
       const typed = over?.closest(TYPED)
       const found = typed ? null : over?.closest<HTMLElement>(PRESSABLE)
@@ -72,6 +93,7 @@ export function Cursor() {
               ? 'kept'
               : 'aim'
       cursor.toggleAttribute('data-hint', now.aim === 'dig' && now.dug === 0)
+      if (cursor.hasAttribute('data-hint')) hint.style.translate = hintAt(at)
     }
     let waiting = 0
     const soon = () => {
@@ -89,7 +111,6 @@ export function Cursor() {
       // The cross is where the pointer is at once. What it is over is work to find, so that is
       // done once a frame, after the chunk has aimed.
       cross.style.translate = `${at.x}px ${at.y}px`
-      hint.style.translate = `${at.x + 16}px ${at.y + 16}px`
       soon()
     }
     const left = () => {

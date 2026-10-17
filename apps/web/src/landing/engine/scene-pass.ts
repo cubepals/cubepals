@@ -3,9 +3,13 @@
 // SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
 
 /**
- * The first pass of the print (gl.ts): it draws the world's blocks and loose parts and writes, for
- * every drawn pixel, how bright the surface there is, how much lamplight reaches it, and which flat
- * plane it belongs to. Not the dots, which the second pass makes (print-pass.ts).
+ * The first pass of the print (gl.ts): it draws the world's blocks and loose parts, lights them,
+ * and writes, for every drawn pixel, how bright the surface there is, whether it glows, and which
+ * flat plane it belongs to. The light is one key (the moon by night, the sun by day) with a shadow
+ * map, a fill from the sky, a room's own light, and the lamps, which cast no shadow; corners are
+ * darkened by the blocks round them (ambient occlusion, worked out when the world is packed). Not
+ * the dots, which the second pass makes (print-pass.ts), nor the shadow map's own drawing, which
+ * uses this vertex shader with SHADOW_FRAG.
  */
 
 export const MAX_LIGHTS = 24
@@ -19,6 +23,7 @@ layout(location=3) in vec3 iPos;
 layout(location=4) in vec4 iA;
 layout(location=5) in vec4 iB;
 layout(location=6) in vec2 iTurn;
+layout(location=7) in uvec2 iAo;
 uniform mat4 uCamera;
 uniform vec2 uShift;
 uniform float uNudge;
@@ -27,13 +32,14 @@ uniform vec3 uEye;
 uniform vec3 uFog;
 uniform float uTime;
 uniform float uLoose;
-uniform float uFace[6];
 uniform float uRoom[6];
 out vec3 vWorld;
 out float vFog;
 out vec2 vUv;
-flat out vec2 vLit;
+flat out vec3 vNormal;
+flat out float vRoomLit;
 flat out int vFace;
+flat out uint vAo;
 flat out vec4 vA;
 flat out vec4 vB;
 flat out vec3 vCell;
@@ -61,15 +67,15 @@ void main() {
   // Leaves breathe, each block a little out of step with the next, and the whole crown leans.
   if (!loose && kind == 7) size *= 1.04 + 0.05 * sin(tick * 2.6 + dot(iPos, vec3(1.3, 2.1, 1.7)));
   vec3 p = iPos + 0.5 + (aCorner - 0.5) * size;
+  vec3 n = face == 0 ? vec3(0.0, 1.0, 0.0) : face == 1 ? vec3(1.0, 0.0, 0.0) : face == 2 ? vec3(0.0, 0.0, 1.0)
+    : face == 3 ? vec3(0.0, -1.0, 0.0) : face == 4 ? vec3(-1.0, 0.0, 0.0) : vec3(0.0, 0.0, -1.0);
   // A loose part: where its low corner is, and how far it reaches each way (up to two blocks).
   // It may be turned about its own middle: tipped forward or back, and then turned to face any
   // way round. That is how an arm swings from a shoulder and a figure turns to look at something.
-  vLit = vec2(0.0);
+  vRoomLit = 0.0;
   if (loose) {
     vec3 reach = vec3(iA.a, iB.r, iB.g) * 2.0;
     vec3 o = (aCorner - 0.5) * reach;
-    vec3 n = face == 0 ? vec3(0.0, 1.0, 0.0) : face == 1 ? vec3(1.0, 0.0, 0.0) : face == 2 ? vec3(0.0, 0.0, 1.0)
-      : face == 3 ? vec3(0.0, -1.0, 0.0) : face == 4 ? vec3(-1.0, 0.0, 0.0) : vec3(0.0, 0.0, -1.0);
     float cp = cos(iTurn.y);
     float sp = sin(iTurn.y);
     o = vec3(o.x, o.y * cp - o.z * sp, o.y * sp + o.z * cp);
@@ -79,11 +85,9 @@ void main() {
     o = vec3(o.x * cy + o.z * sy, o.y, -o.x * sy + o.z * cy);
     n = vec3(n.x * cy + n.z * sy, n.y, -n.x * sy + n.z * cy);
     p = iPos + reach * 0.5 + o;
-    // A turned face takes its light from the ways it now leans, each by how far it leans there.
+    // A turned face takes its room's light from the ways it now leans, each by how far it leans.
     vec3 w = n * n;
-    vLit.x = w.y * (n.y > 0.0 ? uFace[0] : uFace[3]) + w.x * (n.x > 0.0 ? uFace[1] : uFace[4])
-      + w.z * (n.z > 0.0 ? uFace[2] : uFace[5]);
-    vLit.y = w.y * (n.y > 0.0 ? uRoom[0] : uRoom[3]) + w.x * (n.x > 0.0 ? uRoom[1] : uRoom[4])
+    vRoomLit = w.y * (n.y > 0.0 ? uRoom[0] : uRoom[3]) + w.x * (n.x > 0.0 ? uRoom[1] : uRoom[4])
       + w.z * (n.z > 0.0 ? uRoom[2] : uRoom[5]);
   }
   if (!loose && kind == 7) {
@@ -108,6 +112,9 @@ void main() {
   vWorld = p;
   vUv = aUv;
   vFace = face;
+  vNormal = n;
+  // This face's four corners, two bits each, from the six faces' bytes.
+  vAo = ((face < 4 ? iAo.x : iAo.y) >> uint(8 * (face & 3))) & 255u;
   vA = iA;
   // A loose part is lit by the day when it is out of doors and by its room when it is in one.
   float outside = iB.b > 0.0 ? 0.0 : 63.0 / 255.0;
@@ -119,21 +126,29 @@ void main() {
   vSolid = loose ? iB.a : 1.0;
 }`
 
+/** The shadow map keeps only depth, so its fragments have nothing to write. */
+export const SHADOW_FRAG = `#version 300 es
+precision mediump float;
+void main() {}`
+
 export const SCENE_FRAG = `#version 300 es
 precision highp float;
+precision highp sampler2DShadow;
 in vec3 vWorld;
 in float vFog;
 in vec2 vUv;
-flat in vec2 vLit;
+flat in vec3 vNormal;
+flat in float vRoomLit;
 flat in int vFace;
+flat in uint vAo;
 flat in vec4 vA;
 flat in vec4 vB;
 flat in vec3 vCell;
 flat in float vSolid;
-uniform float uFace[6];
 uniform float uRoom[6];
-uniform float uShadow;
-uniform float uLevels;
+uniform vec3 uKey;
+uniform float uKeyLight;
+uniform float uFill;
 uniform float uTime;
 uniform float uLoose;
 uniform vec4 uLights[${MAX_LIGHTS}];
@@ -144,6 +159,12 @@ uniform float uGroups[16];
 uniform float uDetail;
 uniform float uRock;
 uniform vec3 uPick;
+uniform sampler2DShadow uShadowMap;
+uniform mat4 uLight;
+uniform float uMapTexel;
+// 1 where the shadow map is drawn and holds this world; 0 where a face's own bits say what the
+// key reaches (the far worlds, and a device that can't afford the map).
+uniform int uMapped;
 layout(location=0) out vec4 o0;
 layout(location=1) out vec4 o1;
 
@@ -160,6 +181,41 @@ float bayer(vec2 p) {
   return (float(m[y * 4 + x]) + 0.5) / 16.0;
 }
 
+// How dark a corner is, by how many of the three blocks round it are there (0fps, 2013).
+const float AO_CURVE[4] = float[4](0.42, 0.62, 0.82, 1.0);
+
+// The face's four corners, interpolated across it the way its two triangles would be, with the
+// diagonal flipped where the shading would otherwise smear across it.
+float occlusion() {
+  float a0 = AO_CURVE[int(vAo & 3u)];
+  float a1 = AO_CURVE[int((vAo >> 2u) & 3u)];
+  float a2 = AO_CURVE[int((vAo >> 4u) & 3u)];
+  float a3 = AO_CURVE[int((vAo >> 6u) & 3u)];
+  float u = clamp(vUv.x, 0.0, 1.0);
+  float v = clamp(vUv.y, 0.0, 1.0);
+  if (a0 + a2 < a1 + a3) {
+    if (u + v <= 1.0) return a0 * (1.0 - u - v) + a1 * u + a3 * v;
+    return a2 * (u + v - 1.0) + a1 * (1.0 - v) + a3 * (1.0 - u);
+  }
+  if (u >= v) return a0 * (1.0 - u) + a1 * (u - v) + a2 * v;
+  return a0 * (1.0 - v) + a2 * u + a3 * (v - u);
+}
+
+// How much of the key light reaches this point, 0 to 1: the shadow map read in a 3 by 3 patch.
+float lit(vec3 n, bool sunny, int kind) {
+  if (uMapped == 0) return sunny ? 1.0 : 0.0;
+  // Leaves sway after the map was drawn, so they keep a little further from their own shadow.
+  float push = kind == 7 ? 0.16 : 0.04;
+  vec4 at = uLight * vec4(vWorld + n * push, 1.0);
+  vec3 s = at.xyz * 0.5 + 0.5;
+  if (any(lessThan(s, vec3(0.0))) || any(greaterThan(s, vec3(1.0)))) return 1.0;
+  float sum = 0.0;
+  for (int dx = -1; dx <= 1; dx++)
+    for (int dy = -1; dy <= 1; dy++)
+      sum += texture(uShadowMap, vec3(s.xy + vec2(float(dx), float(dy)) * uMapTexel, s.z - 0.0006));
+  return sum / 9.0;
+}
+
 void main() {
   // A part that is coming or going is drawn in some of its dots only, and what is behind shows
   // through the rest: it thins away the way far hills do, in the print's own grain.
@@ -171,13 +227,12 @@ void main() {
   int sunny = int(vB.r * 255.0 + 0.5);
   int outdoors = int(vB.g * 255.0 + 0.5);
   int room = int(vB.b * 255.0 + 0.5);
-  float sun = (sunny & (1 << vFace)) != 0 ? 1.0 : 0.0;
   bool open = (outdoors & (1 << vFace)) != 0;
   // A room with its switch only part-way up is still a room you can see into: the walls keep most
   // of their light and it is the lamps' warmth that dims.
   float level = uGroups[room];
   bool loose = uLoose > 0.5;
-  float roomLight = (loose ? vLit.y : uRoom[vFace]) * min(1.0, level * 8.0) * (0.6 + 0.4 * level);
+  float roomLight = (loose ? vRoomLit : uRoom[vFace]) * min(1.0, level * 8.0) * (0.6 + 0.4 * level);
 
   // Each kind gets a little of its own grain, so a field of one material isn't a flat tint.
   float grain = hash(vCell) - 0.5;
@@ -214,24 +269,30 @@ void main() {
   if (!open) tone = mix(tone, 1.0, 0.45);
   // The rock a room is cut from is the margin of the picture, not the picture: it prints quieter.
   if (open && !loose && vWorld.y < -0.5) tone = mix(tone, 1.0, uRock);
-  float daylight = open ? (loose ? vLit.x : uFace[vFace]) * mix(uShadow, 1.0, sun) : roomLight;
-  float lum = clamp(tone * daylight, 0.0, 1.0);
+  tone = clamp(tone, 0.0, 1.0);
+  vec3 n = normalize(vNormal);
+  float ao = occlusion();
+  // Out of doors: the key where it reaches, and the sky's fill, more from above than from the side.
+  float key = uKeyLight * max(dot(n, uKey), 0.0) * lit(n, (sunny & (1 << vFace)) != 0, kind);
+  float sky = uFill * (0.62 + 0.38 * n.y);
+  float light = open ? key + sky : roomLight * 0.9;
+  float lum = tone * light * ao;
 
-  float warm = 0.0;
+  // The lamps: a room's light that room, the ones outdoors the outdoors. They cast no shadow.
+  float lamp = 0.0;
   for (int i = 0; i < ${MAX_LIGHTS}; i++) {
     if (i >= uLightCount) break;
     // A room's lamps light that room; the lamps outdoors light the outdoors. Rock is not glass.
     float mine = open ? 1.0 : float(room);
     if (abs(uLightGroup[i] - mine) > 0.5) continue;
-    float d = distance(vWorld, uLights[i].xyz);
+    vec3 to = uLights[i].xyz - vWorld;
+    float d = length(to);
     float f = clamp(1.0 - d / uLights[i].w, 0.0, 1.0);
-    warm += uLightOn[i] * f * f;
+    lamp += uLightOn[i] * f * f * (0.4 + 0.6 * max(dot(n, to / max(d, 0.001)), 0.0));
   }
-  warm = clamp(warm * (0.35 + tone * 0.65), 0.0, 1.0);
-  // A few flat steps of grey, so each face prints as one clean pattern rather than as noise.
-  lum = floor(lum * uLevels + 0.5) / uLevels;
-  warm = floor(warm * uLevels + 0.5) / uLevels;
+  lum += tone * lamp * 0.7 * ao;
 
+  // What glows: a lit window, a lamp, a torch. The second pass prints it solid and its blur warm.
   float glow = 0.0;
   if (group > 0 && (kind == 12 || kind == 13 || kind == 22)) glow = uGroups[group];
 
@@ -244,12 +305,13 @@ void main() {
   if (gridded) id += dot(vCell, vec3(3.0, 17.0, 5.0));
   // The block the cursor is on: bare paper with a line round it, the way the game marks one.
   if (all(equal(vCell, uPick))) {
-    lum = 1.0;
-    warm = 0.0;
+    lum = 2.0;
+    glow = 0.0;
     id += 977.0 + dot(vCell, vec3(3.0, 17.0, 5.0));
   }
   id = mod(id + 8192.0, 65535.0) + 1.0;
-  o0 = vec4(lum, warm, glow, 1.0);
+  // Brightness is kept at half, so light past white still has room before the tone curve.
+  o0 = vec4(clamp(lum * 0.5, 0.0, 1.0), glow, 0.0, 1.0);
   // (Half marks a part that is thinning: no line is drawn round its scattered dots.)
   o1 = vec4(mod(id, 256.0) / 255.0, floor(id / 256.0) / 255.0, vFog, ghost ? 0.5 : 1.0);
 }`

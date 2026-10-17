@@ -9,12 +9,11 @@
  * sets it. Every mark the funnels count is here under the same name as in the film.
  */
 import Link from 'next/link'
+import { SiteHeader } from '../../app/(public)/header'
 import { ctaMark, seenMark } from '../../app/(public)/steps'
 import { Follow } from '../Follow'
-import { Nav } from '../film/Nav'
 import type { Landed } from '../Landing'
 import { PlansSaid } from '../sections/Plans'
-import { Stars } from '../sections/Stars'
 import surface from '../sections/surface.module.css'
 import { Address } from './Address'
 import styles from './phone.module.css'
@@ -24,8 +23,7 @@ export function Phone({ create, signedIn, plans, getPlan }: Landed) {
   return (
     <main className={styles.page} data-phone>
       <section className={styles.night} data-tone="night" data-sky {...seenMark('top')}>
-        <Stars className={styles.stars} />
-        <Nav signedIn={signedIn} />
+        <SiteHeader signedIn={signedIn} create={create} marks="nav" />
         <p className={styles.kicker}>Minecraft server hosting for friends</p>
         <h1 className={`bl-display ${styles.headline}`}>Send your friends the address. They’re in.</h1>
         <p className={`bl-lede ${styles.support}`}>

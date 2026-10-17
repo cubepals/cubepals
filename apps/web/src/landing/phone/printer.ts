@@ -9,13 +9,14 @@
  * handed back as a bitmap, so nothing is left drawing. Not for the film, which draws its chunk
  * itself (Chunk.tsx).
  */
-import { AROUND, INK, MIDDLE, NIGHT, PAPER, sunAt, TORCH } from '../Chunk'
+import { AROUND, INK, MIDDLE, NIGHT, PAPER, TORCH } from '../Chunk'
 import { cameraOf, type Pose, project } from '../engine/camera'
 import { Cast } from '../engine/cast'
 import { BOTTOM, buildChunk, HOME, LIT, TOP } from '../engine/chunk'
 import { type Palette, Renderer } from '../engine/gl'
+import { keyAt, lookAt } from '../engine/light'
 import { type Box, REACH } from '../engine/models'
-import { Mesh, relight, type World } from '../engine/world'
+import { Mesh, type World } from '../engine/world'
 
 /** Which picture: the server asleep, or awake with everyone in. */
 export type Still = 'night' | 'day'
@@ -25,8 +26,34 @@ export type Still = 'night' | 'day'
  * (film/Film.tsx), both brought down onto the house as the film's band brought them.
  */
 const POSES: Record<Still, Pose> = {
-  night: { x: 8, y: 6, z: 8, az: 44, el: 20, span: 26, fov: 24, side: 0.5, drop: 0.55, crowd: 0 },
-  day: { x: 8.5, y: 5, z: 6.5, az: 50, el: 17, span: 22, fov: 28, side: 0.5, drop: 0.56, crowd: 0 },
+  night: {
+    x: 8,
+    y: 6,
+    z: 8,
+    az: 44,
+    el: 20,
+    span: 26,
+    fov: 24,
+    side: 0.5,
+    drop: 0.55,
+    crowd: 0,
+    under: 0,
+    bright: 1,
+  },
+  day: {
+    x: 8.5,
+    y: 5,
+    z: 6.5,
+    az: 50,
+    el: 17,
+    span: 22,
+    fov: 28,
+    side: 0.5,
+    drop: 0.56,
+    crowd: 0,
+    under: 0,
+    bright: 1,
+  },
 }
 
 /** The chimney's top, where a sleeping server's snore comes out (Chunk.tsx). */
@@ -47,8 +74,6 @@ interface Made {
   mesh: Mesh
   renderer: Renderer
   canvas: OffscreenCanvas
-  /** Which picture the mesh's shadows are cast for, once one has been printed. */
-  lit: Still | null
 }
 let made: Made | null | undefined
 
@@ -61,30 +86,26 @@ function make(): Made | null {
     return null
   }
   const world = buildChunk()
-  const mesh = new Mesh(world, sunAt(0))
+  const mesh = new Mesh(world, keyAt(0))
   renderer.setWorld(mesh, world.lights)
-  return { world, mesh, renderer, canvas, lit: null }
+  return { world, mesh, renderer, canvas }
 }
 
 /**
- * Prints one picture `width` by `height` drawn pixels, one to a screen pixel as the film's are.
- * Null where the device has no WebGL 2 here: the picture's ground and stars are then the picture.
+ * Prints one picture `width` by `height` drawn dots, each `dot` CSS pixels across (three device
+ * pixels, the film's dot at its finer screens). Null where the device has no WebGL 2 here: the
+ * picture's ground is then the picture.
  */
-export function print(still: Still, width: number, height: number): Printed | null {
+export function print(still: Still, width: number, height: number, dot: number): Printed | null {
   if (made === undefined) made = make()
   if (!made) return null
-  const { world, mesh, renderer, canvas } = made
+  const { mesh, renderer, canvas } = made
   const night = still === 'night'
-  if (made.lit !== still) {
-    relight(world, mesh, sunAt(night ? 0 : 1), -1)
-    renderer.relight(mesh.data)
-    made.lit = still
-  }
+  const light = night ? 0 : 1
   renderer.setMoving(cast(night ? 0 : 3))
   renderer.resize(width, height)
   const lens = cameraOf(POSES[still], width / height, MIDDLE, AROUND)
-  // By day the face toward the sun takes all of it; by night only what the film gives the dark.
-  const light = night ? 0 : 1
+  const look = lookAt(light, 0)
   const sky: Palette = { low: INK, high: night ? NIGHT : PAPER, line: INK }
   const groups = new Float32Array(16)
   groups[LIT] = 1
@@ -92,22 +113,25 @@ export function print(still: Still, width: number, height: number): Printed | nu
   renderer.draw({
     camera: lens.matrix,
     shift: lens.shift,
-    faceLight: [
-      0.5 + 0.55 * light,
-      0.3 + 0.6 * light,
-      0.14 + 0.36 * light,
-      0.1 + 0.16 * light,
-      0.12 + 0.3 * light,
-      0.22 + 0.5 * light,
-    ],
-    shadow: 0.5,
-    levels: 4,
+    // Lit as the film lights its first screen and its daybreak, shadow map and all.
+    key: keyAt(light),
+    keyLight: look.keyLight,
+    fill: look.fill,
+    shadows: { middle: [8, 3, 8], radius: 16, runs: mesh.between(-8, TOP) },
+    exposure: look.exposure,
+    contrast: look.contrast,
+    levels: 0,
     detail: 1,
     groups,
     bands: [sky, sky, sky, sky],
     edges: [1e6, 1e6, 1e6, 1e6],
     regions: [0, 0, 0, 0, 0],
     warm: TORCH,
+    // No stars on a phone: the pictures are small, and a dot of sky reads as dirt.
+    stars: false,
+    star: PAPER,
+    unit: dot,
+    quiet: new Float32Array(12),
     torch: null,
     time: 0,
     viewY: [BOTTOM - 20, TOP + 20],

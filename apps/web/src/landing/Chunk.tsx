@@ -36,11 +36,12 @@ import {
   SURFACE_Y,
   TOP,
 } from './engine/chunk'
-import { clamp, lerp } from './engine/curves'
-import { buildFleet, COHORTS, FAR_FACES, type Fleet, type Island } from './engine/fleet'
+import { clamp, inOut, lerp } from './engine/curves'
+import { buildFleet, COHORTS, type Fleet, farRunsOf, type Island } from './engine/fleet'
 import { type Packed, type Palette, Renderer, type Rgb } from './engine/gl'
 import { Ground } from './engine/ground'
 import { Handover } from './engine/handover'
+import { keyAt, lookAt, sunAt } from './engine/light'
 import { hash3, Kind, Mesh, relight, type Taken, type World } from './engine/world'
 import { playing } from './film/clock'
 import { choice } from './sections/choice'
@@ -64,11 +65,20 @@ export const INK = rgb('#0d0d0d')
 export const PAPER = rgb('#F8F7F5')
 export const NIGHT = rgb('#8C86F2')
 export const TORCH = rgb('#FFB01F')
-const DEEP: Palette = { low: rgb('#0B0B0C'), high: rgb('#6E6E78'), line: rgb('#9A9AA6') }
+const STONE = rgb('#E6E3DC')
 
-/** Which palette the print takes over each kind of ground: the hero's sky, light, dark, night. */
+/**
+ * Which palette the print takes over each kind of ground: the hero's sky, paper, the stone of the
+ * dig, night. The dig is ink on stone all the way down: depth is told by the gauge and the fog.
+ */
 const bandOf = (tone: string): number =>
-  tone === 'night' ? 0 : tone === 'dusk' ? 3 : tone === 'slate' || tone === 'bedrock' ? 2 : 1
+  tone === 'night' ? 0 : tone === 'dusk' ? 3 : tone === 'paper' ? 1 : 2
+
+/**
+ * How much weight the camera's spring has, in seconds. The page opens on its first screen as it
+ * is, with nothing flying behind the words.
+ */
+const WEIGHT = 0.17
 
 /** How close to its goal each of the camera's values has to be to count as there. */
 const WITHIN: Record<keyof Pose, number> = {
@@ -82,6 +92,8 @@ const WITHIN: Record<keyof Pose, number> = {
   side: 0.0003,
   drop: 0.0003,
   crowd: 0.002,
+  under: 0.002,
+  bright: 0.002,
 }
 
 const smooth = (t: number) => t * t * (3 - 2 * t)
@@ -90,6 +102,9 @@ const smooth = (t: number) => t * t * (3 - 2 * t)
 const MOST_DRAWN = 2_300_000
 
 const dawnOf = (day: number) => smooth(clamp((day - 0.45) / 0.55))
+
+/** What the shadow map covers: the grass and everything that stands on it. */
+const SHADED = [SIZE / 2, 3, SIZE / 2] as const
 
 /** The middle of the chunk, and how far from it anything of the chunk can be. */
 export const MIDDLE = [SIZE / 2, (TOP + BOTTOM) / 2, SIZE / 2] as const
@@ -131,13 +146,6 @@ const SAYS = {
  * to the page, or the page mounting twice in development, finds them ready.
  */
 let built: { world: World; mesh: Mesh; fleet: Fleet; reach: number } | null = null
-
-/** The sun climbs from low over the right wall; shadows fall toward the viewer's left. */
-export function sunAt(day: number): [number, number, number] {
-  const v: [number, number, number] = [0.62, 0.26 + day * 0.9, -0.5]
-  const length = Math.hypot(...v)
-  return [v[0] / length, v[1] / length, v[2] / length]
-}
 
 /** A piece of a block that was just dug out, on its way to the ground. */
 interface Piece {
@@ -194,7 +202,7 @@ export function Chunk() {
       const made = built?.world ?? buildChunk()
       built = {
         world: made,
-        mesh: built?.mesh ?? new Mesh(made, sunAt(0)),
+        mesh: built?.mesh ?? new Mesh(made, keyAt(0)),
         fleet: buildFleet(reach, sunAt(1)),
         reach,
       }
@@ -230,7 +238,8 @@ export function Chunk() {
     let quick = 0
     let recovered = 0
     // Trying another look, from the address bar: ?span= how many blocks a room's view is tall,
-    // ?rock= how quiet the rock prints, ?px= how many screen pixels one drawn pixel is (it was 2).
+    // ?rock= how quiet the rock prints, ?px= how many device pixels one drawn dot is, ?ex= how much
+    // brighter the print is taken, ?ct= its contrast.
     const trying = new URLSearchParams(window.location.search)
     let slow = 0
     let drewAt = 0
@@ -247,7 +256,20 @@ export function Chunk() {
     let skyless = false
     let room: RoomKey | null = null
     let act: string | null = null
-    let goal: Pose = { x: 8, y: 0, z: 8, az: 42, el: 20, span: 34, fov: 26, side: 0.5, drop: 0.5, crowd: 0 }
+    let goal: Pose = {
+      x: 8,
+      y: 0,
+      z: 8,
+      az: 42,
+      el: 20,
+      span: 34,
+      fov: 26,
+      side: 0.5,
+      drop: 0.5,
+      crowd: 0,
+      under: 0,
+      bright: 1,
+    }
     let view: Pose | null = null
     // How fast each of the camera's values is moving, in the order of POSE_KEYS.
     const velocity = new Float64Array(POSE_KEYS.length)
@@ -255,16 +277,13 @@ export function Chunk() {
     let scrollSpeed = 0
     let scrolledY = window.scrollY
     let scrolledTime = 0
-    // Until this time the camera is still arriving: the page opens a long way off, over all the
-    // worlds there are, and comes down to this one.
-    let arriving = 0
-    // How much weight the camera's spring has, in seconds: the arrival's long glide, or its usual.
-    let weight = 0.17
 
     // What is animating: the day, the house's lights, each room's lamps, and who is on the path.
     let day = stage.get().power === 'awake' ? 1 : 0
     let home = 0
     let shadedAt = -1
+    // The light the blocks' own shadow bits were last worked out for, when the map is given up.
+    let bitsAt = -1
     const lamps = new Float32Array(16)
     const groups = new Float32Array(16)
     // Who is about on the grass, and what the cellar holds.
@@ -306,17 +325,33 @@ export function Chunk() {
     // and what it lights (out of doors, or one room).
     const torchLight: [number, number, number, number, number, number] = [0, 0, 0, 3.8, 0, HOME]
     // What every frame hands the renderer, kept between frames.
-    const faceLight = [0, 0, 0, 0, 0, 0]
     const bands: [Palette, Palette, Palette, Palette] = [
       { low: INK, high: NIGHT, line: INK },
       { low: INK, high: PAPER, line: INK },
-      DEEP,
+      { low: INK, high: STONE, line: INK },
       { low: INK, high: NIGHT, line: INK },
     ]
     let skyFor = ''
     let movingPositions = new Float32Array(3 * 64)
     let movingData = new Uint8Array(8 * 64)
     let movingTurns = new Float32Array(2 * 64)
+
+    // The words set on the picture, and the header: the print keeps quiet behind the three of them
+    // most on screen, as rects in CSS pixels from the canvas's corner.
+    let worded: HTMLElement[] = []
+    const hush = new Float32Array(12)
+    const quietRects = () => {
+      hush.fill(0)
+      const seen = worded
+        .map((element) => element.getBoundingClientRect())
+        .filter((r) => r.width > 0 && r.bottom > box.top && r.top < box.bottom)
+        .sort((a, b) => b.width * b.height - a.width * a.height)
+        .slice(0, 3)
+      seen.forEach((r, n) => {
+        hush.set([r.left - box.left, r.top - box.top, r.width, r.height], n * 4)
+      })
+      return hush
+    }
 
     // Where a frame's time went, for the trace: relighting, measuring the page, writing to it.
     const spent = { relight: 0, measures: 0, dom: 0 }
@@ -328,12 +363,11 @@ export function Chunk() {
       const height = canvas.clientHeight
       if (width === 0 || height === 0) return
       const band = narrow.matches
-      // One drawn pixel is a whole number of device pixels, so the print never blurs, and it is
-      // one screen pixel: as fine as the type beside it. A coarser grain makes everything small
-      // (a face, a hand, a lamp) a smudge, and makes whatever moves step instead of move.
-      const base = Number(trying.get('px')) || 1
+      // One drawn dot is a whole number of device pixels, so the print never blurs: two at one
+      // device pixel to a screen pixel, three at two, so it reads as a print and not as grey.
+      const base = Number(trying.get('px')) || Math.max(2, Math.round(dpr * 1.5))
       // Each step coarser is at least one device pixel, so a step always does something.
-      unit = (Math.max(1, Math.round(base * dpr)) + coarse * Math.max(1, Math.round(dpr / 2))) / dpr
+      unit = (base + coarse * Math.max(1, Math.round(dpr / 2))) / dpr
       // However big the screen, the print is no more than about two million drawn pixels: a
       // very large display gets a grain a step coarser, not several times the work.
       while ((width / unit) * (height / unit) > MOST_DRAWN) unit += 1 / dpr
@@ -342,6 +376,7 @@ export function Chunk() {
       // What each distance means: how many blocks fit top to bottom, the lens, and the height the
       // camera stands at. "Far" is the whole column, drawn nearly flat.
       shots = shotsOf(root, band, trying)
+      worded = [...root.querySelectorAll<HTMLElement>('[data-over], [data-quiet]')]
       // The edge between two strata is drawn on the lighter ground, so it counts as paper.
       layers = [...root.querySelectorAll<HTMLElement>('.bl-dig > [data-tone], .bl-dig > .bl-strata')]
         .filter((element) => element !== spine)
@@ -582,7 +617,7 @@ export function Chunk() {
       }
       const taken = world.take(x, y, z)
       if (!taken) return
-      mesh.around(x, y, z, sunAt(Math.max(0, shadedAt) / 6))
+      mesh.around(x, y, z, keyAt(Math.max(0, shadedAt) / 6))
       renderer.setWorld(mesh, world.lights)
       holes.push({ taken, until: time + REGROWS_AFTER })
       if (!still.matches) scatter(picked.cell, picked.normal, 9, time)
@@ -696,23 +731,6 @@ export function Chunk() {
         }
         aimed = true
       }
-      // The camera follows where the page asks it to be, with a little weight, so a scroll that
-      // jumps still arrives as a flight. Its distance is eased by ratio, so a zoom feels even.
-      if (!view && !quiet && !narrow.matches && window.scrollY < 40) {
-        view = {
-          ...goal,
-          y: goal.y - 20,
-          az: goal.az - 36,
-          el: 38,
-          span: 330,
-          fov: 30,
-          side: 0.5,
-          drop: 0.5,
-          crowd: 1,
-        }
-        arriving = time + 3200
-        weight = 0.85
-      }
       // It follows as a weighted thing follows: each value is drawn toward its goal by a spring
       // with just enough drag that it never overshoots, so the camera gathers speed and sheds
       // it, and never starts or stops in one frame. Distance is eased by ratio, so a zoom feels
@@ -728,12 +746,7 @@ export function Chunk() {
         Object.assign(here, goal)
         velocity.fill(0)
       } else {
-        // The arrival's long glide is handed over to the camera's usual weight over a few tenths
-        // of a second, when it is done or as soon as the page is scrolled under it. A spring
-        // stiffened five times over in one frame lunges at whatever it still has to cover.
-        const weightTo = time < arriving && scrollSpeed === 0 ? 0.85 : 0.17
-        weight += (weightTo - weight) * (1 - Math.exp(-dt * 4))
-        const omega = 2 / weight
+        const omega = 2 / WEIGHT
         const k = omega * dt
         const decay = 1 / (1 + k + 0.48 * k * k + 0.235 * k * k * k)
         for (let i = 0; i < POSE_KEYS.length; i++) {
@@ -793,12 +806,19 @@ export function Chunk() {
       }
       const light = Math.min(sky, playLight)
 
-      // The shadows move in a few steps, like the frames of a drawn sunrise.
-      const shade = Math.round(light * 6)
-      if (shade !== shadedAt) {
+      // The shadows move in a few steps, like the frames of a drawn sunrise. With less motion
+      // asked for they hold still, cast by the day's sun.
+      const shade = quiet ? 6 : Math.round(light * 6)
+      // The shadow map is what costs most, so the coarser print gives it up first: the key's reach
+      // is then worked out block by block, and only when the light moves.
+      const mapped = coarse === 0
+      if (shade !== shadedAt || (!mapped && bitsAt !== shade)) {
         const from = trace ? performance.now() : 0
-        relight(world, mesh, sunAt(shade / 6), -1)
-        renderer.relight(mesh.data)
+        if (!mapped) {
+          relight(world, mesh, keyAt(shade / 6), -1)
+          renderer.relight(mesh.data)
+          bitsAt = shade
+        }
         if (trace) spent.relight += performance.now() - from
         shadedAt = shade
         dirty = true
@@ -827,12 +847,14 @@ export function Chunk() {
           said === undefined ? (room === spec.key ? 1 : 0) : room === spec.key ? Math.max(0.3, said) : said
         const current = lamps[index] ?? 0
         if (current !== target) {
-          const step = quiet ? 1 : dt / 0.45
+          const step = quiet ? 1 : dt / 0.6
           lamps[index] =
             current < target ? Math.min(target, current + step) : Math.max(target, current - step)
           dirty = true
         }
-        groups[index] = lamps[index] ?? 0
+        // The glow prints in over 0.6 s, eased in and out: its dots are added in the dither's own
+        // order, a dissolve and not a fade.
+        groups[index] = inOut(lamps[index] ?? 0)
       }
       // The other worlds wake and sleep in their own time, a few at once.
       COHORTS.forEach((group, index) => {
@@ -850,7 +872,7 @@ export function Chunk() {
           urgent = true
         }
       if (urgent) holes.sort((a, b) => a.until - b.until)
-      const sun = sunAt(shade / 6)
+      const sun = keyAt(shade / 6)
       while (holes[0] && time > holes[0].until) {
         const hole = holes.shift()
         if (!hole) break
@@ -960,46 +982,9 @@ export function Chunk() {
       }
       const runs = low > high ? mesh.between(BOTTOM, TOP) : mesh.between(low - 4, high + 4)
 
-      // Of the far worlds, only the ones in front of the camera, inside the picture, nearer than
-      // where they have faded to nothing, and already reached by the ring they arrive in.
-      farRuns.length = 0
-      if (here.crowd > 0.004) {
-        const gone = lens.distance * 1.82 + 24
-        const ring = here.crowd * 330 + 14
-        farSeen.length = 0
-        for (const island of fleet.islands) {
-          if (Math.hypot(island.x - SIZE / 2, island.z - SIZE / 2) > ring) continue
-          const away = Math.hypot(island.x - lens.eye[0], island.y - lens.eye[1], island.z - lens.eye[2])
-          // A world past the fade is nothing to draw, unless its windows are lit: those still show.
-          if (away > gone && !island.lit) continue
-          // A world is some way across, so its middle may be off the picture when its edge isn't.
-          const reachOut = 14 / Math.max(1, away * lens.reach)
-          const spot = project(lens, [island.x, island.y, island.z])
-          if (
-            away > 30 &&
-            (!spot ||
-              spot[0] < -reachOut ||
-              spot[0] > 1 + reachOut ||
-              spot[1] < -reachOut ||
-              spot[1] > 1 + reachOut)
-          )
-            continue
-          farSeen.push(island)
-        }
-        // A face at a time, as they are packed: every seen world's tops, then each wall in turn.
-        for (let slot = 0; slot < FAR_FACES.length; slot++) {
-          let run: [number, number, number] | undefined
-          for (const island of farSeen) {
-            const [first, count] = island.runs[slot] as [number, number]
-            if (count === 0) continue
-            if (run && run[0] + run[1] === first) run[1] += count
-            else {
-              run = [first, count, slot]
-              farRuns.push(run)
-            }
-          }
-        }
-      }
+      // Of the far worlds, only the ones the camera can see (fleet.ts).
+      if (here.crowd > 0.004) farRunsOf(fleet, lens, here.crowd, farRuns, farSeen)
+      else farRuns.length = 0
 
       // The print changes palette on the rows where the ground behind it changes: the ground at
       // the top of the canvas, then each change below it. As a band, the whole print takes one
@@ -1033,8 +1018,10 @@ export function Chunk() {
       if (snore.current) {
         const spot = drawn([3.5, 10.6, 3.5])
         // (The dusk a way to play is shown by is not the server's night: nobody snores through it.)
+        // (Nor where they would reach up into the header.)
         const asleep =
           spot !== null &&
+          spot[1] + box.top > 110 &&
           now.power === 'asleep' &&
           day < 0.05 &&
           sky < 0.5 &&
@@ -1100,13 +1087,8 @@ export function Chunk() {
         for (let n = 0; n < 6; n++) torchLight[n] = cast.lamp[n] as number
         carried = torchLight
       }
-      // Up, toward the sun, away from it, down, and the two walls the camera seldom sees.
-      faceLight[0] = 0.5 + 0.55 * light
-      faceLight[1] = 0.3 + 0.6 * light
-      faceLight[2] = 0.14 + 0.36 * light
-      faceLight[3] = 0.1 + 0.16 * light
-      faceLight[4] = 0.12 + 0.3 * light
-      faceLight[5] = 0.22 + 0.5 * light
+      // The light and the tone curve: by the day, and eased with the camera into a room and out.
+      const look = lookAt(light, here.under, here.bright)
       // The hero's sky is the one colour of the print that changes: night to paper with the day.
       if (skyFor !== dayNow) {
         bands[0] = { low: INK, high: mix(NIGHT, PAPER, dawnOf(day)), line: INK }
@@ -1115,10 +1097,19 @@ export function Chunk() {
       renderer.draw({
         camera: lens.matrix,
         shift: lens.shift,
-        faceLight,
-        shadow: 0.5,
-        // The smoother way to play is drawn plainer and flatter: fewer greys, no grain.
-        levels: plainer ? 2 : 4,
+        key: keyAt(shade / 6),
+        keyLight: look.keyLight,
+        fill: look.fill,
+        shadows: mapped ? { middle: SHADED, radius: 16, runs: mesh.between(-8, TOP) } : null,
+        exposure: look.exposure * (Number(trying.get('ex')) || 1),
+        contrast: Number(trying.get('ct')) || look.contrast,
+        // The smoother way to play is drawn plainer and flatter: two greys, no grain.
+        levels: plainer ? 2 : 0,
+        // Stars are single dots of paper in a night sky, there or not, never fading.
+        stars: dawnOf(day) < 0.35,
+        star: PAPER,
+        unit,
+        quiet: quietRects(),
         detail: plainer ? 0 : 1,
         rock: Number(trying.get('rock')) || 0,
         groups,
@@ -1138,6 +1129,8 @@ export function Chunk() {
         farRuns,
         eye: lens.eye,
         fog: [lens.distance * 0.92, lens.distance * 0.9],
+        // Under the grass, what is further than the room fades toward the ground, so depth reads.
+        worldFog: here.under * 0.7,
         crowd: here.crowd,
       })
       if (trace) {
@@ -1247,10 +1240,10 @@ export function Chunk() {
       // whatever is still dug out is put back, and nothing is left half-grown.
       for (const hole of holes) {
         world.put(hole.taken)
-        mesh.around(hole.taken.x, hole.taken.y, hole.taken.z, sunAt(Math.max(0, shadedAt) / 6))
+        mesh.around(hole.taken.x, hole.taken.y, hole.taken.z, keyAt(Math.max(0, shadedAt) / 6))
       }
       for (const grow of growing)
-        mesh.around(grow.taken.x, grow.taken.y, grow.taken.z, sunAt(Math.max(0, shadedAt) / 6))
+        mesh.around(grow.taken.x, grow.taken.y, grow.taken.z, keyAt(Math.max(0, shadedAt) / 6))
       renderer.dispose()
     }
   }, [drawnOn])

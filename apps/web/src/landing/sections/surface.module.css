@@ -59,8 +59,17 @@
 .plans .paid .action {
   --btn-shadow: color-mix(in srgb, var(--paper) 45%, var(--ink));
 }
+/* What the paid plan comes to for a group: under its pitch, a step quieter. */
+.plans .shared {
+  margin: calc(var(--px) * -2) 0 calc(var(--px) * 4);
+  font-weight: 600;
+}
+.plans .trial {
+  margin: calc(var(--px) * 10) 0 0;
+  font-weight: 600;
+}
 .plans .hours {
-  margin-top: calc(var(--px) * 10);
+  margin-top: calc(var(--px) * 2);
 }
 .plans .more {
   color: inherit;

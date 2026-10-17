@@ -21,14 +21,6 @@
   padding-block-end: 64px;
   overflow: clip;
 }
-.stars {
-  position: absolute;
-  inset: 0 0 auto;
-  width: 100%;
-  height: min(100svh, 46rem);
-  color: var(--paper);
-  pointer-events: none;
-}
 /* What the page is, in the words people search for: small and quiet over the headline. */
 .kicker {
   position: relative;
@@ -76,7 +68,7 @@
     align-content: start;
     column-gap: var(--gutter);
   }
-  .night > :not(.stars) {
+  .night > * {
     grid-column: 1 / -1;
   }
   .night > .kicker,

@@ -41,15 +41,15 @@
       "reason": "One linear run whose steps share state."
     },
     "apps/web/src/landing/Chunk.tsx": {
-      "n": 1264,
+      "n": 1257,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk": {
-      "n": 1099,
+      "n": 1084,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect": {
-      "n": 1081,
+      "n": 1066,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/engine/cast.ts": {
@@ -730,10 +730,6 @@
       "n": 20,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
-    "apps/web/src/landing/engine/gl.ts › class Renderer › draw": {
-      "n": 23,
-      "reason": "The landing page, written before the check reached its branch; not yet split up."
-    },
     "apps/web/src/landing/engine/models.ts › function figure": {
       "n": 38,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
@@ -1269,15 +1265,15 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk": {
-      "n": 791,
+      "n": 778,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect": {
-      "n": 784,
+      "n": 771,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk › useEffect › frame": {
-      "n": 407,
+      "n": 372,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/Scroll.tsx › function Scroll": {

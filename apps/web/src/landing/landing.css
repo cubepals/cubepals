@@ -453,7 +453,7 @@
   transition: background-color 1.2s steps(6);
 }
 
-/* ─── The sky: the moon and the stars ───────────────────────────────────────────────────────── */
+/* ─── The sky: the moon ─────────────────────────────────────────────────────────────────────── */
 
 /* `--day` runs from 0, night, to 1, day (Chunk.tsx hands it over in small steps, and a short
    transition carries each to the next). It is eased here, so the moon gathers speed and sheds it,
@@ -464,8 +464,8 @@
   --m: clamp(0, calc(var(--day, 0) / 0.45), 1);
   --e: calc(var(--m) * var(--m) * (3 - 2 * var(--m)));
   position: absolute;
-  inset-block-start: 13svh;
-  inset-inline-end: 7vw;
+  inset-block-start: 17svh;
+  inset-inline-end: 17vw;
   width: calc(var(--px) * 18);
   height: calc(var(--px) * 18);
   pointer-events: none;
@@ -498,30 +498,7 @@
     display: none;
   }
 }
-/* A star is there or it isn't: each goes out at its own moment as the day comes, the low ones
-   first, and in the dark each blinks in its own time. */
-.bl-stars rect {
-  transform-box: fill-box;
-  transform-origin: center;
-  scale: clamp(0, calc((var(--at, 0.5) * 0.55 - var(--day, 0)) * 40), 1);
-  animation: bl-twinkle var(--every, 4s) steps(1, end) var(--after, 0s) infinite;
-}
-@keyframes bl-twinkle {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  86% {
-    opacity: 0.25;
-  }
-  93% {
-    opacity: 1;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .bl-stars rect {
-    animation: none;
-  }
   .bl-moon {
     transition: none;
   }
@@ -716,7 +693,7 @@
   cursor: pointer;
   --step: calc(var(--px) * 2);
   translate: 0 calc(var(--px) * -2);
-  transition: translate 80ms ease-out;
+  transition: translate 120ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 .bl-btn::before,
 .bl-btn::after {
@@ -743,7 +720,7 @@
   background: var(--btn-shadow, color-mix(in srgb, var(--fg) 38%, var(--field)));
   translate: 0 calc(var(--px) * 2);
   z-index: -2;
-  transition: translate 80ms ease-out;
+  transition: translate 120ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 .bl-btn::after {
   background: var(--btn-fill, var(--fg));
@@ -1051,7 +1028,7 @@
    slow steps would show nothing for the first tenth of a second. */
 .bl-follow[data-shown]:hover,
 .bl-follow[data-shown]:active {
-  transition: translate 80ms ease-out;
+  transition: translate 120ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 /* Ink and paper both, so the ring shows on any ground. */
 .bl .bl-follow:focus-visible {
@@ -1445,8 +1422,6 @@
   clip-path: polygon(0 0, 50% 0, 50% 20%, 100% 20%, 100% 80%, 50% 80%, 50% 100%, 0 100%);
 }
 /* A paused demonstration holds the sky still too, and so does a sky that is nowhere on screen. */
-.bl[data-paused] .bl-stars rect,
-.bl[data-skyless] .bl-stars rect,
 .bl[data-paused] .bl-snore i {
   animation-play-state: paused;
 }

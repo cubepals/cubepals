@@ -45,6 +45,7 @@ const CTAS = [
   // The landing page.
   'hero_create',
   'nav_pricing',
+  'nav_browse',
   'nav_sign_in',
   'follow_create',
   'to_price',
@@ -61,6 +62,7 @@ const CTAS = [
   'copy_server',
   // A server's public page or invitation, and the directory.
   'copy_join_address',
+  'copy_arcade',
   'own_server',
   'browse_open',
   // Signing in and up.

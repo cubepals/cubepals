@@ -8,11 +8,11 @@
  * sets it (app/page.tsx), so the route a phone is sent (app/phone) never loads its code. Not the
  * foot of the page, which the phone's page shares (Landing.tsx).
  */
+import { SiteHeader } from '../../app/(public)/header'
 import { ctaMark } from '../../app/(public)/steps'
 import { Chat } from '../Chat'
 import { Chunk } from '../Chunk'
 import { Cursor } from '../Cursor'
-import { Follow } from '../Follow'
 import { Gauge } from '../Gauge'
 import { Strata } from '../kit'
 import type { Landed } from '../Landing'
@@ -53,13 +53,13 @@ export function FilmPage({ create, signedIn, plans, getPlan }: Landed) {
       <Cursor />
       <Chat />
       <Gauge />
-      <Follow create={create} />
+      <SiteHeader signedIn={signedIn} create={create} marks="nav" over />
       <main>
         <div className="bl-dig">
           <div className="bl-spine">
             <Chunk />
           </div>
-          <Night create={create} signedIn={signedIn} />
+          <Night create={create} plans={plans} />
           <Knock />
           <Strata from="var(--night)" to="var(--stone)" />
           <Wake proof={<Address plans={plans} bare />} />
@@ -82,14 +82,13 @@ export function FilmPage({ create, signedIn, plans, getPlan }: Landed) {
           <Built proof={<Machine bare />} />
           <Fitted proof={<Packs plans={plans} bare />} />
           <Copied proof={<Backups plans={plans} bare />} />
-          <Strata from="var(--stone)" to="var(--slate)" />
           <Sent proof={<Runtimes bare />} />
           <Kept proof={<Fleet bare />} />
-          <Strata from="var(--slate)" to="var(--night)" drawn />
+          <Strata from="var(--stone)" to="var(--night)" drawn />
           <Worlds played />
           <Strata from="var(--night)" to="var(--paper)" drawn />
           <Plans plans={plans} create={create} getPlan={getPlan} />
-          <Last create={create} />
+          <Last create={create} plans={plans} />
         </div>
       </main>
     </>

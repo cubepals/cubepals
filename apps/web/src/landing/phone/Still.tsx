@@ -43,7 +43,11 @@ export function Still({ still, className }: { still: Which; className?: string }
       const width = Math.round(size.width)
       if (!near || !loaded || width === 0 || width === asked) return
       asked = width
-      printer().postMessage({ still, width, height: Math.round(size.height) })
+      // Three device pixels a dot, however fine the screen, so the picture reads as a print.
+      const dot = 3 / (window.devicePixelRatio || 1)
+      const across = Math.round(size.width / dot)
+      const down = Math.round(size.height / dot)
+      printer().postMessage({ still, width, across, down, dot })
     }
     const answered = (event: MessageEvent<Answer>) => {
       const { printed } = event.data
