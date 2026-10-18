@@ -46,7 +46,7 @@ import { INTERNAL_PORT, MAIL_PORT } from '@blockly/contracts/local'
 import { createPolar } from '@polar-sh/sdk/2026-10'
 import { GAME_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { pointRecord } from './lib/cloudflare-dns.ts'
-import { asleep, awake, serve } from './lib/control-wake.ts'
+import { afterStop, asleep, awake, type Machine, serve } from './lib/control-wake.ts'
 import { buildWorker, deployWorker } from './lib/web-worker.ts'
 import { allowing, type Bucket, changeCors, sharePreviewKeys } from './preview-uploads.ts'
 import { previewOrigins, stagingCloudflare, stagingSite } from './staging-website.ts'
@@ -154,12 +154,7 @@ const ipsOf = (app: string) =>
   json<{ Address: string; Type: string }[] | null>(['ips', 'list', '-a', app]) ?? []
 
 const machinesOf = (app: string) =>
-  json<{ id: string; name: string; state: string; region: string }[] | null>([
-    'machines',
-    'list',
-    '-a',
-    app,
-  ]) ?? []
+  json<(Machine & { name: string; region: string })[] | null>(['machines', 'list', '-a', app]) ?? []
 
 const volumesOf = (app: string) =>
   json<{ id: string; name: string; state: string; size_gb: number }[] | null>([
@@ -689,12 +684,14 @@ async function stop(): Promise<void> {
     }
   // A preview's request wakes the API alone, and Fly stops it again once it is idle (control-wake.ts).
   for (const id of serve(APP.control, asleep)) say(`  ${APP.control} ${id} wakes on a request`)
-  const running = appsInOrg().flatMap((app) =>
-    machinesOf(app)
-      .filter((machine) => machine.state === 'started' || machine.state === 'starting')
-      .map((machine) => `${app} ${machine.id}`),
+  // A request can wake it again before this looks; that is no failure.
+  const machines = appsInOrg().flatMap((app) => machinesOf(app).map((machine) => ({ app, machine })))
+  const { woken, running } = afterStop(APP.control, machines)
+  for (const name of woken) say(`  ${name} is awake on a request and stops again when idle`)
+  const every = woken.length === 0 ? 'Every' : 'Every other'
+  say(
+    running.length === 0 ? `${every} machine in ${ORG} is stopped.` : `Still running: ${running.join(', ')}`,
   )
-  say(running.length === 0 ? `Every machine in ${ORG} is stopped.` : `Still running: ${running.join(', ')}`)
   if (running.length > 0) process.exitCode = 1
 }
 

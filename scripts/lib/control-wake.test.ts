@@ -2,8 +2,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Staging's API while staging is stopped: asleep, awake again on `start`, and never counted as
+ * still running when a request has woken it.
+ */
 import { describe, expect, test } from 'bun:test'
-import { asleep, awake, differ, type Service } from './control-wake.ts'
+import { afterStop, asleep, awake, differ, type Service } from './control-wake.ts'
 
 /** The api machine's service as Fly reads back what control.toml deployed. */
 const deployed: Service = {
@@ -35,5 +39,37 @@ describe("staging's API while staging is stopped", () => {
     expect(awake([deployed], toml)).toEqual([
       { ...deployed, autostop: 'suspend', autostart: true, min_machines_running: 2 },
     ])
+  })
+})
+
+describe('what is still running after staging stops', () => {
+  const control = 'bly-staging-control'
+  const sleeping = { config: { services: asleep([deployed]) } }
+
+  test("the API's machine a request has woken is awake, not a failure", () => {
+    const machines = [
+      { app: control, machine: { id: 'woken', state: 'started', ...sleeping } },
+      { app: control, machine: { id: 'resting', state: 'stopped', ...sleeping } },
+      { app: 'bly-staging-realtime', machine: { id: 'stopped', state: 'stopped' } },
+    ]
+    expect(afterStop(control, machines)).toEqual({ woken: [`${control} woken`], running: [] })
+  })
+
+  test('any other running machine is still running', () => {
+    const machines = [
+      { app: control, machine: { id: 'kept-up', state: 'started', config: { services: [deployed] } } },
+      { app: control, machine: { id: 'no-services', state: 'starting' } },
+      { app: 'bly-staging-edge', machine: { id: 'edge', state: 'started', ...sleeping } },
+      { app: 'bly-staging-mail', machine: { id: 'mail', state: 'started' } },
+    ]
+    expect(afterStop(control, machines)).toEqual({
+      woken: [],
+      running: [
+        `${control} kept-up`,
+        `${control} no-services`,
+        'bly-staging-edge edge',
+        'bly-staging-mail mail',
+      ],
+    })
   })
 })

@@ -63,6 +63,34 @@ export const differ = (have: Service[], want: Service[]): boolean =>
       service.min_machines_running !== want[index]?.min_machines_running,
   )
 
+/** A machine as `fly machine list --json` gives it. */
+export interface Machine {
+  id: string
+  state: string
+  config?: { services?: Service[] }
+}
+
+/**
+ * The org's running machines after `stop`, as `${app} ${id}`. `woken` holds the API's machines
+ * left asleep that a request has started since, which Fly stops again once idle; `running` holds
+ * every other, which `stop` failed to stop.
+ */
+export function afterStop(
+  control: string,
+  machines: { app: string; machine: Machine }[],
+): { woken: string[]; running: string[] } {
+  const woken: string[] = []
+  const running: string[] = []
+  for (const { app, machine } of machines) {
+    if (machine.state !== 'started' && machine.state !== 'starting') continue
+    const services = machine.config?.services ?? []
+    const sleeps = app === control && services.length > 0 && !differ(services, asleep(services))
+    if (sleeps) woken.push(`${app} ${machine.id}`)
+    else running.push(`${app} ${machine.id}`)
+  }
+  return { woken, running }
+}
+
 function fly(args: string[]): string {
   const result = Bun.spawnSync(['fly', ...args], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
   if (result.exitCode !== 0)
