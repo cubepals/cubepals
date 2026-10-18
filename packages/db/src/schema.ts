@@ -21,7 +21,8 @@
  * - `jar-checks.ts`: uploaded jars checked for malware, and the lists of known malware.
  * - `listings.ts`: the public directory, its reports, and the stars and notes on public servers.
  * - `usage.ts`: when servers ran and who played on them.
- * - `players.ts`: one player's facts kept while their server sleeps, and what waits for them to join.
+ * - `players.ts`: one player's facts kept while their server sleeps, what waits for them to join,
+ *   and who was turned away while it rested.
  * - `billing.ts`: subscriptions, years paid at once, and the orders that charged them.
  * - `chip-ins.ts`: what friends chipped in to a server, and the play it covered.
  * - `gifts.ts`: time on a paid plan bought for someone else, and the codes that redeem it.

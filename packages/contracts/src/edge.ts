@@ -31,6 +31,16 @@ export const EdgeRoute = z.object({
    */
   backAt: z.iso.datetime().optional(),
   /**
+   * An asleep server whose owner has played all of their free trial's hours: no join wakes it
+   * until their plan changes, and the edge says so to a ping and a join.
+   */
+  trialOver: z.literal(true).optional(),
+  /**
+   * The server's name, on a route resting for either reason above, so the edge can say whose
+   * server a refused join reached. Cubepals' welcome, shown to a ping while it runs, names it too.
+   */
+  name: z.string().optional(),
+  /**
    * An asleep server already on its way up, woken by a join or a ping: the edge tells a ping it is
    * waking. A join still goes to the waiting room, as to any server that isn't running.
    */

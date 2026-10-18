@@ -108,6 +108,32 @@ describe('presentStatus', () => {
     })
 
     expect(presentStatus(stopped('policy')).pill).toBe('suspended')
+
+    // Out of the owner's play, whatever put it to sleep, nothing says a join or the button wakes it.
+    const out = (stopReason: ServerView['stopReason'], status: ServerView['status'] = 'stopped') =>
+      ({
+        ...stopped(stopReason),
+        status,
+        playToday: { hours: 2, hoursLeft: 0, backAt: '2026-10-18T00:00:00Z' },
+        playTotal: { hours: 20, hoursLeft: 4 },
+      }) as ServerView
+    for (const server of [out('daily'), out('idle'), out('user'), out(null, 'stored')])
+      expect(presentStatus(server)).toEqual({
+        pill: 'sleeping',
+        label: 'Resting',
+        detail: 'Resting until midnight. Nobody can wake it before then',
+      })
+    expect(presentStatus({ ...out('idle'), playTotal: { hours: 20, hoursLeft: 0 } })).toEqual({
+      pill: 'stopped',
+      detail: 'The free trial is over. Its world is kept, and Plus starts it again',
+    })
+    // A crash keeps its own words, and a running server is never resting.
+    expect(presentStatus(out('crash')).pill).toBe('crashed')
+    expect(presentStatus({ ...out(null, 'running'), players: null, notLoaded: [] }).label).not.toBe('Resting')
+    // With today's play left, a day's stop is asleep like any.
+    expect(presentStatus({ ...out('daily'), playToday: { hours: 2, hoursLeft: 1, backAt: '' } }).detail).toBe(
+      'Asleep until someone joins, or you wake it here',
+    )
     expect(presentStatus(stopped('entitlement')).pill).toBe('suspended')
     expect(presentStatus(stopped('crash')).pill).toBe('crashed')
   })

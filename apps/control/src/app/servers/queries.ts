@@ -62,6 +62,7 @@ import { type Actor, authorize } from '../actor.ts'
 import { joinsNow } from '../compat/service.ts'
 import type { PackCuration } from '../curation/service.ts'
 import { type Shown, shownOf } from '../edge/routed.ts'
+import { cameByView } from '../edge/turned-away.ts'
 import { packView } from '../mods/pack.ts'
 import {
   activeOperation,
@@ -680,6 +681,7 @@ export class ServerQueries {
       sleepsAt: await this.#sleepsAt(server, online, played, await idleMinutesFor(this.#db, plan)),
       playToday: todayView(today, server.memoryTier),
       playTotal: totalView(total, server.memoryTier),
+      cameBy: await cameByView(this.#db, server),
       movesToSize: movesTo === null ? null : { tier: movesTo, label: sizeLabel(movesTo) },
       roomier: roomier(server.memoryTier, plan.allowedMemoryTiers),
       pendingRestart,

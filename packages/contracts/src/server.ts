@@ -708,6 +708,11 @@ export interface ServerView {
    * them on this server. Null on a plan with no such block.
    */
   playTotal: { hours: number; hoursLeft: number } | null
+  /**
+   * Who tried to join while it rested for its owner's play (`stopReason` says which), since it last
+   * stopped, newest first: each name as their game gave it, and their latest try. Empty otherwise.
+   */
+  cameBy: { name: string; uuid: string; at: string }[]
   /** The size the next change moves it to, when its plan no longer offers the one it is on. */
   movesToSize: { tier: string; label: string } | null
   /**

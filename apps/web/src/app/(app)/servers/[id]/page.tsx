@@ -12,6 +12,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { codeOf, messageOf, useTRPC } from '../../../../lib/api'
 import { useNow, useSince } from '../../../../lib/hooks'
+import { outOfPlay } from '../../../../lib/out-of-play'
 import { said, useOutcome } from '../../../../lib/outcome'
 import {
   busyWord,
@@ -43,6 +44,7 @@ import {
   StatusPill,
 } from '../../../../ui'
 import { ctaMark } from '../../../(public)/steps'
+import { CameBy } from '../../came-by'
 import { FreeHoursUsed } from '../../free-hours-used'
 import { OutForToday } from '../../out-for-today'
 import { PlusOffer } from '../../plus-offer'
@@ -262,9 +264,11 @@ function Actions({ server, wake }: { server: ServerView; wake: Wake }) {
   // it keeps the face it had rather than offering to start what is already starting.
   const now = running ? 'sleep' : asleep ? 'wake' : busy !== null ? 'sleep' : 'start'
 
+  const resting = restsNow(server)
+
   return (
     <div className="bk-stack" style={{ gap: 'var(--space-16)' }}>
-      <div className="bk-row bk-wrap" style={{ gap: 'var(--space-12)' }}>
+      <div className="bk-row bk-wrap" style={{ gap: 'var(--space-12)' }} hidden={resting}>
         <ActionButton
           phases={phases}
           now={now}
@@ -306,6 +310,7 @@ function Actions({ server, wake }: { server: ServerView; wake: Wake }) {
           </span>
         </Note>
       )}
+      <CameBy server={server} />
       <Today server={server} />
       {server.deletesAt !== null && <Unplayed server={server} at={server.deletesAt} />}
       {server.expiresAt !== null && (
@@ -322,13 +327,17 @@ function Actions({ server, wake }: { server: ServerView; wake: Wake }) {
 /** What a press of the power button is counted as, by the phase it was in. */
 const POWER_PRESS = { sleep: 'server_sleep', wake: 'server_wake', start: 'server_start' } as const
 
-/** Out for today: the plan plays by the day, and today's is used. The server sleeps until midnight. */
-const outForToday = (server: ServerView) =>
-  server.playToday !== null && server.playToday.hoursLeft <= 0 && server.status !== 'running'
+/**
+ * Out of its owner's play, with nothing under way: nothing wakes it, so the power button goes and
+ * the note on when it is back is the first thing under the address.
+ */
+const restsNow = (server: ServerView) => outOfPlay(server) !== null && server.activeOperation === null
+
+/** Out for today: the plan plays by the day, and today's is used. The server rests until midnight. */
+const outForToday = (server: ServerView) => outOfPlay(server) === 'today'
 
 /** The plan's hours in all are played (Free's 20): it waits, world kept, for Plus. */
-const outForGood = (server: ServerView) =>
-  server.playTotal !== null && server.playTotal.hoursLeft <= 0 && server.status !== 'running'
+const outForGood = (server: ServerView) => outOfPlay(server) === 'trial'
 
 /**
  * On a plan that plays by the day: what is left of today's, or of the hours in all where those
@@ -642,11 +651,19 @@ function PlayersCard({ server }: { server: ServerView }) {
         <p className="bk-card__desc">
           {server.status === 'running'
             ? 'Nobody’s online right now. Send your friends the address.'
-            : 'Start the server and your friends can join.'}
+            : playersLine(server)}
         </p>
       )}
     </Card>
   )
+}
+
+/** Who can join a server that isn't running: anyone, once it wakes, unless its owner's play is out. */
+function playersLine(server: ServerView): string {
+  const out = outOfPlay(server)
+  if (out === 'today') return 'Your friends can join again from midnight.'
+  if (out === 'trial') return 'Nobody can join while the free trial is over.'
+  return 'Start the server and your friends can join.'
 }
 
 function WhoCanJoinCard({ serverId }: { serverId: string }) {

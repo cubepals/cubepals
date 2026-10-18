@@ -80,10 +80,13 @@ function Account() {
   )
 }
 
-/** The line under the heading: who is signed in. */
+/**
+ * The line under the heading: who is signed in. An email has nowhere a line may break, so it may
+ * break anywhere: on a phone, a long one would otherwise widen the whole page past the screen.
+ */
 function Who({ children }: { children: ReactNode }) {
   return (
-    <p className="type-body" style={{ color: 'var(--ink-muted)' }}>
+    <p className="type-body" style={{ color: 'var(--ink-muted)', overflowWrap: 'anywhere' }}>
       {children}
     </p>
   )

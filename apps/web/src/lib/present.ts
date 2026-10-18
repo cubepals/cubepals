@@ -18,6 +18,7 @@ import {
 import { DAY_MS, DAY_S, HOUR_S, MINUTE_S } from '@blockly/contracts/durations'
 import { PICK_ANOTHER_NAME } from '@blockly/contracts/names'
 import type { PillStatus, ProvisioningStep } from '../ui'
+import { outOfPlay } from './out-of-play'
 
 /**
  * How Blockly words a server's state. The API reports domain facts; the words people read are
@@ -27,6 +28,16 @@ export function presentStatus(
   server: ServerView,
   now = Date.now(),
 ): { pill: PillStatus; label?: string; detail: string } {
+  // Out of its owner's play, nothing wakes it, whatever put it to sleep: that is all there is to say.
+  const out = outOfPlay(server)
+  if (out === 'today')
+    return {
+      pill: 'sleeping',
+      label: 'Resting',
+      detail: 'Resting until midnight. Nobody can wake it before then',
+    }
+  if (out === 'trial')
+    return { pill: 'stopped', detail: 'The free trial is over. Its world is kept, and Plus starts it again' }
   switch (server.status) {
     case 'provisioning':
       return { pill: 'settingUp', detail: 'Building your world' }
@@ -81,17 +92,6 @@ export function presentStatus(
         // The month's play, and any extra the owner allowed, is used: it sleeps until the 1st.
         case 'hours':
           return { pill: 'sleeping', detail: 'This month’s hours are used up. It sleeps until the 1st' }
-        // Today's play is used: it sleeps until the owner's midnight. Past it, it is asleep like any.
-        case 'daily':
-          return { pill: 'sleeping', detail: sleptForTheDay(server) }
-        // The free hours are played: the world is kept, and Plus starts it again.
-        case 'free_hours':
-          return (server.playTotal?.hoursLeft ?? 0) > 0
-            ? { pill: 'sleeping', detail: 'Asleep until someone joins, or you wake it here' }
-            : {
-                pill: 'stopped',
-                detail: 'The free trial is over. Its world is kept, and Plus starts it again',
-              }
         case 'unpaid':
           return {
             pill: 'suspended',
@@ -111,12 +111,6 @@ export function presentStatus(
       }
   }
 }
-
-/** Why a server stopped at the end of the day's play still sleeps, while it does. */
-const sleptForTheDay = (server: ServerView): string =>
-  (server.playToday?.hoursLeft ?? 0) > 0
-    ? 'Asleep until someone joins, or you wake it here'
-    : 'Today’s play is used up. It sleeps until midnight'
 
 /**
  * What failed, and "Try again" only where trying again might do it: once Blockly has recognised

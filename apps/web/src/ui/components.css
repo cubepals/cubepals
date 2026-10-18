@@ -2321,6 +2321,10 @@ textarea.bk-input {
   display: flex;
   align-items: center;
 }
+/* A row can be hidden like anything else: its own display would otherwise win. */
+.bk-row[hidden] {
+  display: none;
+}
 .bk-wrap {
   flex-wrap: wrap;
 }

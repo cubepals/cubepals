@@ -21,6 +21,10 @@ export const FUNNEL = {
   firstWake: 'moment_first_wake',
   firstWeek: 'moment_first_week',
   planUpgraded: 'plan_upgraded',
+  /** A join turned away while its server rested for its owner's play (`edge/turned-away.ts`). */
+  joinTurnedAway: 'join_turned_away',
+  /** A server stopped for its owner's play, the day's or the free trial's, with someone on it. */
+  playEndedOnline: 'play_ended_online',
 } as const
 
 /** The moments worth a short question afterwards ("How's it going?"). */
@@ -136,4 +140,23 @@ export async function playersSeen(
       .where(and(eq(servers.ownerId, owner), gt(usage.activeMinutes, 0)))
     if ((weeks?.n ?? 0) >= 2) await noteMoment(q, owner, FUNNEL.firstWeek, { serverName: server.name }, at)
   }
+}
+
+/**
+ * A server stopped because its owner's play ran out, the day's or the free trial's, with `online`
+ * players still on it: kept once for the stop it was (`key`).
+ */
+export async function playEnded(
+  q: Queryable,
+  server: { id: string; ownerId: string },
+  reason: 'daily' | 'free_hours',
+  key: string,
+  online: number,
+): Promise<void> {
+  await noteOnce(q, {
+    event: FUNNEL.playEndedOnline,
+    subject: `${server.id}:${key}`,
+    userId: server.ownerId,
+    properties: { serverId: server.id, reason, online },
+  })
 }

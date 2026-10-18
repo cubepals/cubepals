@@ -11,6 +11,7 @@ import { useEffect } from 'react'
 import { messageOf, useTRPC } from '../../../lib/api'
 import { coverFor, presentStatus } from '../../../lib/present'
 import { Button, EmptyState, ICON, ServerCard, Skeleton } from '../../../ui'
+import { CameBy } from '../came-by'
 import { usePrefetch } from '../prefetch'
 import styles from './first-world.module.css'
 
@@ -117,30 +118,35 @@ export default function ServersPage() {
           </div>
         </section>
       ) : (
-        <div className="bk-grid bk-grid--three">
-          {servers.data.map((server) => {
-            const status = presentStatus(server)
-            return (
-              <ServerCard
-                key={server.id}
-                href={`/servers/${server.id}`}
-                name={server.name}
-                status={status.pill}
-                {...(status.label ? { statusLabel: status.label } : {})}
-                image={coverFor(server.id)}
-                version={server.gameVersion}
-                loader={
-                  server.loader === 'vanilla'
-                    ? 'Vanilla'
-                    : server.loader[0]?.toUpperCase() + server.loader.slice(1)
-                }
-                pack={server.modpack}
-                detail={status.detail}
-                address={server.joinAddress}
-              />
-            )
-          })}
-        </div>
+        <>
+          {servers.data.map((server) => (
+            <CameBy key={server.id} server={server} named />
+          ))}
+          <div className="bk-grid bk-grid--three">
+            {servers.data.map((server) => {
+              const status = presentStatus(server)
+              return (
+                <ServerCard
+                  key={server.id}
+                  href={`/servers/${server.id}`}
+                  name={server.name}
+                  status={status.pill}
+                  {...(status.label ? { statusLabel: status.label } : {})}
+                  image={coverFor(server.id)}
+                  version={server.gameVersion}
+                  loader={
+                    server.loader === 'vanilla'
+                      ? 'Vanilla'
+                      : server.loader[0]?.toUpperCase() + server.loader.slice(1)
+                  }
+                  pack={server.modpack}
+                  detail={status.detail}
+                  address={server.joinAddress}
+                />
+              )
+            })}
+          </div>
+        </>
       )}
     </>
   )

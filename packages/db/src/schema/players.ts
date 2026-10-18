@@ -4,8 +4,8 @@
 
 /**
  * One player on one server, beyond who may join (`access.ts`): what their files said when the
- * server last went to sleep, and what the owner asked for while they were away, waiting for them
- * to join.
+ * server last went to sleep, what the owner asked for while they were away, waiting for them to
+ * join, and when they came by while it rested and couldn't get in.
  */
 import { jsonb, pgEnum, pgTable, primaryKey, text, uuid } from 'drizzle-orm/pg-core'
 import type { PlayerSnapshotJson } from '../json.ts'
@@ -49,4 +49,24 @@ export const playerActionsWaiting = pgTable(
     askedAt: ts('asked_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.serverId, t.playerUuid, t.kind] })],
+)
+
+/**
+ * Someone the edge let in to wait while the server was resting for its owner's play, and who
+ * could only be turned away: the latest time for each player, for the owner to see who came by.
+ * Their name is as their client claimed it: shown to the owner, never decided by.
+ */
+export const serverTurnedAway = pgTable(
+  'server_turned_away',
+  {
+    serverId: uuid('server_id')
+      .notNull()
+      .references(() => minecraftServers.id),
+    playerUuid: uuid('player_uuid').notNull(),
+    playerName: text('player_name').notNull(),
+    /** Why it rested: `daily`, today's play used up, or `free_hours`, the free trial's. */
+    reason: text('reason').notNull(),
+    at: ts('at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.serverId, t.playerUuid] })],
 )

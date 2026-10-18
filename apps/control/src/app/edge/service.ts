@@ -17,7 +17,7 @@ import { COMPAT } from '../../minecraft/mods.ts'
 import { PORT_NAMES } from '../../minecraft/runtime-spec.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { outOf, playToday } from '../accounts/play-today.ts'
-import { playTotal } from '../accounts/play-total.ts'
+import { playTotal, trialOver } from '../accounts/play-total.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
 import { AppError, type AppErrorCode } from '../errors.ts'
 import { failedWaking, loadOperation, openOfKinds } from '../operations/persistence.ts'
@@ -37,6 +37,7 @@ import { type Fingerprint, fingerprint, type RouteInputs, type RouteServer, read
 import { forgetAddresses, joinEnded } from './known-addresses.ts'
 import { pingWake } from './ping-wake.ts'
 import { forgetQuietEdges, markListed, sawEdge, seen } from './routed.ts'
+import { restingFor, turnedAway } from './turned-away.ts'
 
 /**
  * The application side of the edge protocol. It resolves hostnames and destinations; the edge
@@ -167,10 +168,11 @@ export class EdgeService {
    */
   async listed(): Promise<{ routes: EdgeRoutes; from: Date; unrouted: boolean }> {
     const { print, inputs } = await this.#inputs()
-    const { servers: live, bindings, comingBack, stops, motds, plays } = inputs
+    const { servers: live, bindings, comingBack, stops, trials, motds, plays } = inputs
     const restarting = restartingOf(live, comingBack)
     const unstoring = new Set(comingBack.filter((o) => o.kind === 'unstore').map((o) => o.serverId))
     const out = outOf(stops, new Date())
+    const over = trialOver(trials)
     const routes: EdgeRoutes['routes'] = []
     for (const server of live) {
       const { state, back, waking } = runOf(
@@ -185,7 +187,7 @@ export class EdgeService {
         routes.push({
           hostname: address.hostname,
           destination,
-          ...noticeOf(state, out.get(server.id)),
+          ...noticeOf(state, server, out.get(server.id), over.has(server.id)),
           ...(waking ? { waking: true as const } : {}),
           ...this.#identityOf(server, state, motds),
           ...(binding?.proxyProtocol ? { proxyProtocol: true as const } : {}),
@@ -552,6 +554,9 @@ export class EdgeService {
       // Which address people join through: an alias left from a domain move can go once it's quiet.
       const domain = this.#addressing.domainFor(event.hostname)
       if (event.event === 'connect' && domain !== null) await recordDomainJoin(tx, domain, new Date(event.at))
+      // Let in to wait for a server resting for its owner's play: the edge can only turn it away.
+      const resting = event.event === 'connect' ? await restingFor(tx, server, new Date()) : null
+      if (resting !== null) await turnedAway(tx, server, player, resting, new Date(event.at))
       if (event.event === 'disconnect')
         await joinEnded(tx, this.#keyring, server.id, event.address, player, new Date(event.at))
       const online = (await presenceFor(tx, [server.id])).get(server.id) ?? []
@@ -627,14 +632,18 @@ function runOf(
 
 /**
  * What a route says about a server that isn't running: why, and for one asleep because its owner's
- * day of play ran out, when it is back.
+ * play ran out, its name and when it is back: at their next day for the day's play (`backAt`), or
+ * not by itself for the free trial's hours (`trialOver`).
  */
 function noticeOf(
   state: 'asleep' | 'restarting' | null,
+  server: Pick<RouteServer, 'name'>,
   backAt: Date | undefined,
-): Pick<EdgeRoutes['routes'][number], 'state' | 'backAt'> {
-  if (state === null) return {}
-  return state === 'asleep' && backAt !== undefined ? { state, backAt: backAt.toISOString() } : { state }
+  trial: boolean,
+): Pick<EdgeRoutes['routes'][number], 'state' | 'backAt' | 'trialOver' | 'name'> {
+  if (state !== 'asleep') return state === null ? {} : { state }
+  if (trial) return { state, trialOver: true, name: server.name }
+  return backAt === undefined ? { state } : { state, backAt: backAt.toISOString(), name: server.name }
 }
 
 /**
