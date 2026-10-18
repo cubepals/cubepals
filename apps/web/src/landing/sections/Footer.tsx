@@ -6,7 +6,7 @@
 import Link from 'next/link'
 import { footerGuides } from '../../app/(public)/guides'
 import { GuideLinks } from '../../app/(public)/guides/links'
-import { MOJANG_DISCLAIMER, OperatorLine, PolicyLinks } from '../../legal/footer'
+import { MOJANG_DISCLAIMER, NotBacked, OperatorLine, PolicyLinks } from '../../legal/footer'
 import { Lockup, SOURCE_URL } from '../../ui/brand'
 import { OutLink } from '../../ui/out-link'
 import styles from './surface.module.css'
@@ -46,6 +46,7 @@ export function Footer() {
         </p>
         {/* Mojang's own words, as its usage guidelines ask of anything built around the game. */}
         <p className={styles.legal}>{MOJANG_DISCLAIMER}</p>
+        <NotBacked className={styles.legal} />
       </div>
       {/* Twice over: the outline, then the letters filled with the ground on top of it, so the
           letters that touch share one outline rather than crossing each other's. */}

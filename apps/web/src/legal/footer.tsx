@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The foot of the pages: who runs the service, every policy, and Mojang's words. The landing page
- * builds its own from the same parts.
+ * The foot of the pages: who runs the service, every policy, Mojang's words and a small joke. The
+ * landing page builds its own from the same parts.
  */
 import Link from 'next/link'
 import type { ReactNode } from 'react'
@@ -37,6 +37,21 @@ export function PolicyLinks() {
 }
 
 /**
+ * A wink at the badge funded startups wear: Cubepals pays its own way. Text, not a link; a footer
+ * may add its own class for its small type.
+ */
+export function NotBacked({ className }: { className?: string }) {
+  return (
+    <p className={className ? `${styles.notBacked} ${className}` : styles.notBacked}>
+      Not backed by
+      {/* From https://www.ycombinator.com/ (its own logo, as the site serves it). */}
+      {/* biome-ignore lint/performance/noImgElement: a fixed-size mark, too small to need Next's image pipeline */}
+      <img src="/y-combinator.svg" alt="" width={14} height={14} draggable={false} />Y Combinator
+    </p>
+  )
+}
+
+/**
  * The foot of every page outside the landing page (which has its own, from the same parts): who
  * runs the service, every policy, and Mojang's words. A layout may put its own links first, as the
  * public pages do with the guides.
@@ -56,6 +71,7 @@ export function SiteFooter({ children }: { children?: ReactNode }) {
         <OperatorLine /> · <OutLink href={SOURCE_URL}>Source code</OutLink>
       </p>
       <p className={styles.disclaimer}>{MOJANG_DISCLAIMER}</p>
+      <NotBacked />
     </footer>
   )
 }
