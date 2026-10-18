@@ -100,6 +100,8 @@ export function keepDrawing<T extends object>(
   const gone = (event: Event) => {
     event.preventDefault()
     halt()
+    // What the canvas drew is gone with its context: the printed hero stands in until a new one has.
+    delete canvas.dataset.lit
     drawingFailed('lost')
     restored = window.setTimeout(() => renew(false), RESTORED_WITHIN_MS)
   }

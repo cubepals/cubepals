@@ -420,14 +420,31 @@
 .bl[data-flat] [data-drawn] {
   display: none;
 }
+/* The first screen keeps its own form: the hero as it was printed beforehand (`.bl-first`) stands
+   where the chunk is, at the layout of the working page, and nothing of it moves with the scroll. */
+@media (min-width: 1024px) {
+  .bl[data-flat] .bl-spine {
+    display: block;
+  }
+  .bl[data-flat] .bl-chunk {
+    display: none;
+  }
+  /* The headline's lines are slid by the scroll (Type.tsx), inline; held where they are written. */
+  .bl[data-flat] #top .bl-line {
+    /* biome-ignore lint/complexity/noImportantStyles: the slide is written inline by the scroll */
+    transform: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: the slide is written inline by the scroll */
+    translate: none !important;
+  }
+}
 /* Without the drawing, the scenes that hold the screen still for it are plain sections: the words,
    and under them the rooms as a list. */
-.bl[data-flat] .bl-section:has(> [data-scene]) {
+.bl[data-flat] .bl-section:not(#top, .bl-beat):has(> [data-scene]) {
   min-height: 0;
   padding: var(--gap) var(--gutter);
   padding-inline-start: calc(var(--gutter) + var(--rail));
 }
-.bl[data-flat] .bl-section > [data-scene] {
+.bl[data-flat] .bl-section:not(#top) > [data-scene] {
   position: static;
   height: auto;
   overflow: visible;
@@ -463,19 +480,19 @@
 }
 /* The film without the drawing: each beat is its sentence and whatever it has to press, one under
    another, as a page of plain statements. */
-.bl[data-flat] .bl-beat {
+.bl[data-flat] .bl-beat:not(#top) {
   min-height: 0;
   padding: clamp(28px, 6vh, 64px) var(--gutter);
   padding-inline-start: calc(var(--gutter) + var(--rail));
 }
-.bl[data-flat] .bl-beat > [data-scene] {
+.bl[data-flat] .bl-beat:not(#top) > [data-scene] {
   display: grid;
   justify-items: start;
   gap: 18px;
   min-height: 0;
   padding: 0;
 }
-.bl[data-flat] .bl-beat [data-over] {
+.bl[data-flat] .bl-beat:not(#top) [data-over] {
   position: static;
 }
 /* With nothing drawn beside them, the words have no side to keep to and no picture to stand proud

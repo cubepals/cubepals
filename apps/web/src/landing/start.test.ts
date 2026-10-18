@@ -83,6 +83,7 @@ describe('starting the drawing', () => {
 function surface() {
   const listeners = new Map<string, (event: Event) => void>()
   const canvas = {
+    dataset: { lit: '' },
     addEventListener: (name: string, run: (event: Event) => void) => listeners.set(name, run),
     removeEventListener: (name: string) => listeners.delete(name),
   } as unknown as HTMLCanvasElement
