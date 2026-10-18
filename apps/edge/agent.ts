@@ -49,7 +49,7 @@ const RESTARTING = {
   status: env('RESTARTING_MOTD', 'Restarting · back in a moment'),
   join: env('RESTARTING_JOIN', 'Restarting · join again in a moment'),
 } satisfies NoticeText
-/** Where a sleeping server's hostname goes: a notice of the agent's that passes joins on. */
+/** Where a sleeping server's hostname goes: a notice of the agent's that answers pings and holds joins. */
 const SLEEPING = `127.0.0.1:${env('SLEEPING_PORT', '25563')}`
 const ASLEEP: NoticeText = { status: env('ASLEEP_MOTD', 'Sleeping · join to wake it up'), join: null }
 /** What a ping is told of a sleeping server on its way up, woken by a join or by a ping before it. */
@@ -393,21 +393,12 @@ Bun.listen<{ notice: Notice; unwrap: Unwrap }>({
 
 // ─── A sleeping server's notice ──────────────────────────────────────────────────────────────
 
-// mc-router asks the wake webhook for a join, and dials a server's route only for a ping, or for a
-// join that arrived while another was waking the server. Dialled directly, a sleeping server's
-// ping goes unanswered on Fly: its proxy takes the connection even while the machine is stopped.
-// So the route leads here. A ping is told the server sleeps; the rare join that still arrives
-// comes once the wake is over, and goes on to the server as it would have without this.
-
-/** Connects a join handed back by the notice to the server its address routes to. */
-function passOn(client: Socket, join: Join, header: Uint8Array | null): void {
-  const route = routes.find((r) => r.hostname === hostnameOf(join))
-  if (!route) {
-    client.destroy()
-    return
-  }
-  pipe(client, route.destination, forServer(route.proxyProtocol === true, header, join.bytes), TIMEOUTS)
-}
+// mc-router asks the wake webhook for a join, and dials a server's route for a ping, or for a join
+// that arrives while another is waking the server: mc-router asks once per wake, not once per join.
+// Dialled directly, a sleeping server's route leads nowhere sure on Fly: its proxy takes the
+// connection while the machine is down, then resets it, closes it or holds it for as long as it
+// likes. So the route leads here. A ping is told the server sleeps; a join goes to the waiting
+// room below, which shares the wake already under way and lets it in once the server is up.
 
 /** Sleeping servers a ping asked to wake early, so each is asked once a while (`ping-wake.ts`). */
 const pingWakes = new PingWakes(
@@ -468,13 +459,10 @@ function sourceOf(header: Uint8Array | null): string | null {
 }
 
 /**
- * Tells a ping at `address` that its server sleeps, and hands a join on to `then`, with the PROXY
- * header it came with, if any.
+ * Tells a ping at `address` that its server sleeps, and hands a join to the waiting room, with the
+ * PROXY header it came with, if any.
  */
-function asleepAt(
-  address: string,
-  then: (client: Socket, join: Join, header: Uint8Array | null) => void,
-): void {
+function asleepAt(address: string): void {
   createServer((client) => {
     const notice = new Notice(asleep)
     const unwrap = new Unwrap()
@@ -487,7 +475,7 @@ function asleepAt(
       if (!join) return
       client.off('data', receive)
       client.setTimeout(0)
-      then(client, join, unwrap.header)
+      void hold(client, join, unwrap.header)
     }
     // What came before the handshake was whole, held until it says whether this is a ping.
     let held: Uint8Array | null = new Uint8Array(0)
@@ -514,11 +502,12 @@ function asleepAt(
   }).listen(Number(address.split(':')[1]), '127.0.0.1')
 }
 
-asleepAt(SLEEPING, passOn)
+asleepAt(SLEEPING)
 
 // ─── The waiting room ────────────────────────────────────────────────────────────────────────
 
-// Every join to a server that isn't running comes here at once (`wake`). It wakes the server and
+// Every join to a server that isn't running comes here: at once (`wake`), or through the sleeping
+// notice when it arrives while another join's wake is under way. It wakes the server and
 // holds the player meanwhile, speaking to their client every few seconds so it keeps waiting, then
 // connects them as if they had just dialled it. A player's first join after a sleep gets in; only
 // one that can't is turned away, with why.
@@ -591,7 +580,7 @@ function whyNot(result: WakeResult | null): keyof typeof TURNED_AWAY {
   return result.outcome === 'restarting' ? 'restarting' : 'starting'
 }
 
-asleepAt(WAITING, (client, join, header) => void hold(client, join, header))
+asleepAt(WAITING)
 
 // ─── A play address opened in a browser ─────────────────────────────────────────────────────
 
