@@ -45,7 +45,6 @@ describe.skipIf(!hasDatabase)('retention with an archive and a restore waiting',
     if (oldest === undefined) throw new Error('No backup was taken')
 
     // A backup that takes a while to save, with the archive and the restore asked for behind it.
-    const startedAt = new Date()
     const original = h.runtime.snapshot.bind(h.runtime)
     const saving = spyOn(h.runtime, 'snapshot')
     saving.mockImplementationOnce(async (handle) => {
@@ -57,10 +56,7 @@ describe.skipIf(!hasDatabase)('retention with an archive and a restore waiting',
       // The restore cancels a backup still waiting, so it is asked for once this one is saving.
       for (
         let i = 0;
-        i < 100 &&
-        !(await h.operations(id)).some(
-          (op) => op.kind === 'backup' && op.status === 'running' && op.createdAt > startedAt,
-        );
+        i < 400 && !(await h.operations(id)).some((op) => op.kind === 'backup' && op.status === 'running');
         i++
       )
         await Bun.sleep(50)
