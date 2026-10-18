@@ -188,12 +188,15 @@ module "edge" {
   control_url        = local.internal_url
   edge_token         = var.secrets["EDGE_TOKEN"]
   edge_token_version = var.secret_versions["EDGE_TOKEN"]
+  play_domains       = local.play_domains
+  web_origin         = var.settings["WEB_CANONICAL_ORIGIN"]
 }
 
 module "dns" {
   source              = "../modules/dns"
   zone_id             = var.cloudflare_zone_id
   play_domains        = local.play_domains
+  play_challenges     = module.edge.play_challenges
   edge_ipv4           = module.edge.ipv4
   edge_ipv6           = module.edge.ipv6
   realtime_hostname   = local.realtime_host

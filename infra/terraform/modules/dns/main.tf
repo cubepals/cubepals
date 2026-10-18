@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 # DNS for an environment (§11 hostname audit): the web hosts, wildcard A/AAAA records for the play
-# domain and each alias to the edge, and the realtime hostname's A record, with no AAAA (§19.6).
+# domain and each alias to the edge with the challenge record for their certificate, and the
+# realtime hostname's A record, with no AAAA (§19.6).
 # Every record but the web hosts' is DNS-only: Cloudflare's proxy carries neither Minecraft's TCP
 # nor WebTransport's UDP. The web hosts are proxied once web_proxied says so, which hands them to
 # the Worker's routes (modules/web).
@@ -23,6 +24,11 @@ variable "zone_id" {
 variable "play_domains" {
   description = "PLAY_DOMAIN, then each of PLAY_DOMAIN_ALIASES: <slug>.<domain> reaches the edge."
   type        = list(string)
+}
+
+variable "play_challenges" {
+  description = "Each play domain's DNS-01 challenge for the edge's wildcard certificate (modules/edge)."
+  type        = map(object({ name = string, target = string }))
 }
 
 variable "edge_ipv4" { type = string }
@@ -92,6 +98,19 @@ resource "cloudflare_dns_record" "play_v6" {
   ttl      = 300
   proxied  = false
   comment  = "Minecraft players join <slug>.${each.key} through the edge"
+}
+
+# Fly's wildcard certificate for the play domain, which a browser opening a play address gets on
+# 443. A wildcard is validated over DNS-01 only, by this CNAME to a name Fly answers for the edge.
+resource "cloudflare_dns_record" "play_challenge" {
+  for_each = var.play_challenges
+  zone_id  = var.zone_id
+  name     = each.value.name
+  type     = "CNAME"
+  content  = each.value.target
+  ttl      = 300
+  proxied  = false
+  comment  = "Fly: DNS-01 for the edge's *.${each.key} certificate"
 }
 
 resource "cloudflare_dns_record" "realtime" {

@@ -2,8 +2,9 @@
 # <slug>.<play domain>:25565, whose wildcard A/AAAA records point at this app's addresses.
 # Deploy from the repository root:
 #   fly deploy . --config infra/fly/edge.toml --dockerfile apps/edge/Dockerfile --app bly-<deployment>-edge
-# CONTROL_URL (the control app's internal listener, http://api.process.bly-<deployment>-control.internal:4001)
-# and EDGE_TOKEN are Fly secrets set by Terraform (infra/terraform/modules/edge).
+# CONTROL_URL (the control app's internal listener, http://api.process.bly-<deployment>-control.internal:4001),
+# EDGE_TOKEN, and WEB_CANONICAL_ORIGIN and PLAY_DOMAINS (where a browser's play address goes) are
+# Fly secrets set by Terraform (infra/terraform/modules/edge).
 
 app = "bly-staging-edge"
 primary_region = "fra"
@@ -49,6 +50,37 @@ primary_region = "fra"
   [[services.ports]]
     port = 25565
     handlers = ["proxy_proto"]
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "15s"
+
+# A play address opened in a browser (apps/edge/browser-redirect.ts): the wildcard records send it
+# here too, and without this it would hang until the browser gave up. Fly's proxy speaks HTTP, and
+# on 443 ends TLS with the app's certificate for *.<play domain> (Terraform's fly_cert, issued over
+# a DNS-01 _acme-challenge CNAME), so the agent sees plain HTTP/1.1 with the Host the browser sent.
+# Its own service, so its limits are its own and never count against the Minecraft one's.
+[[services]]
+  protocol = "tcp"
+  internal_port = 8080
+  auto_stop_machines = "off"
+  auto_start_machines = false
+
+  # Each answer is a redirect written at once, so a few hundred at a time is plenty, and past it
+  # a browser waits rather than slows the players on this machine.
+  [services.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
 
   [[services.tcp_checks]]
     interval = "15s"

@@ -17,6 +17,7 @@ import { LOCAL_HEADER, readProxyHeader } from '../../packages/contracts/src/prox
 import { OWN_ICON_MAX_BYTES } from '../../packages/contracts/src/server-list.ts'
 import { GAME_PORT } from '../control/src/minecraft/ports.ts'
 import { asleepMessage } from './asleep.ts'
+import { browserRedirect } from './browser-redirect.ts'
 import { takes, wrongGame } from './clients.ts'
 import { front, pipe } from './front.ts'
 import { forServer, Unwrap } from './header.ts'
@@ -568,6 +569,17 @@ function whyNot(result: WakeResult | null): keyof typeof TURNED_AWAY {
 }
 
 asleepAt(WAITING, (client, join, header) => void hold(client, join, header))
+
+// ─── A play address opened in a browser ─────────────────────────────────────────────────────
+
+// Fly's HTTP service on ports 80 and 443 (infra/fly/edge.toml) hands it here, apart from the
+// Minecraft front door. Left out where the environment doesn't say where its pages are: a browser
+// is then refused, and players are not touched.
+const WEB_ORIGIN = process.env.WEB_CANONICAL_ORIGIN?.replace(/\/$/, '')
+const PLAY_DOMAINS = (process.env.PLAY_DOMAINS ?? '').split(',').flatMap((d) => d.trim() || [])
+if (WEB_ORIGIN && PLAY_DOMAINS.length > 0)
+  browserRedirect({ port: Number(env('BROWSER_PORT', '8080')), domains: PLAY_DOMAINS, web: WEB_ORIGIN })
+else console.error('WEB_CANONICAL_ORIGIN or PLAY_DOMAINS is unset; browsers aren’t redirected')
 
 // ─── Supervise mc-router ────────────────────────────────────────────────────────────────────
 
