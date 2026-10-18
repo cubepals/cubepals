@@ -189,6 +189,8 @@ export function backingUp(deps: BackingUpDeps) {
           ownerId: server.ownerId,
         })
       })
+      // Its snapshot may have been held past the plan's count while this waited.
+      await deps.backups.enforceRetention(server, ctx.op.id)
       return { status: 'succeeded' }
     },
     async abandon(op, reason) {

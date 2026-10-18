@@ -184,7 +184,7 @@ export function moving(deps: {
         // copy): either way it was refused before anything was let go.
         if (!(error instanceof RuntimeFull || error instanceof RuntimeUnsupported)) throw error
         if (!(await stayPut(server, binding.handle, input.hostLost === true))) throw error
-        await deps.backups.enforceRetention(server)
+        await deps.backups.enforceRetention(server, ctx.op.id)
         return {
           status: 'failed',
           reason: input.hostLost
@@ -218,7 +218,7 @@ export function moving(deps: {
         })
         if (up) await enqueuePrune(tx, transitions, relocated)
       })
-      await deps.backups.enforceRetention(server)
+      await deps.backups.enforceRetention(server, ctx.op.id)
       if (rebuildFrom !== null) await rebuilt(deps, server, rebuildFrom, input, binding.handle)
       if (refusal !== null)
         return { status: 'failed', reason: `The server moved, but stayed off: ${refusal}` }
@@ -381,7 +381,7 @@ export function moving(deps: {
       })
       if (up) await enqueuePrune(tx, transitions, relocated)
     })
-    await deps.backups.enforceRetention(server)
+    await deps.backups.enforceRetention(server, ctx.op.id)
     if (refusal !== null) return { status: 'failed', reason: `The server moved, but stayed off: ${refusal}` }
     return { status: 'succeeded' }
   }

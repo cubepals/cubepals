@@ -59,6 +59,7 @@ import {
   archivesToErase,
   type BackupRecord,
   type BackupTrigger,
+  backupsInUse,
   downloadsSince,
   insertArchive,
   latestBackup,
@@ -569,13 +570,16 @@ export class BackupService {
   /**
    * Keeps the newest snapshots the owner's plan allows, and the latest few safety snapshots. One
    * taken each time the server sleeps counts with the daily ones and the owner's own: the plan
-   * keeps its last sessions, however often they are.
+   * keeps its last sessions, however often they are. A snapshot a queued or running operation
+   * will read stays until it ends, then the next pass trims it; `ending` is the operation asking,
+   * done with what it read.
    */
-  async enforceRetention(server: MinecraftServer): Promise<void> {
+  async enforceRetention(server: MinecraftServer, ending?: string): Promise<void> {
     const standing = await loadStanding(this.#db, server.ownerId)
     const kept = entitlementsFor(standing.plan, standing.limitOverrides).backupPolicy.snapshotsKept
     // A backup a listed world is kept in is the only place that world is: it stays while it is.
     const holding = new Set((await keptWorlds(this.#db, server.id)).values())
+    for (const id of await backupsInUse(this.#db, server.id, ending)) holding.add(id)
     const ready = (await readySnapshots(this.#db, server.id)).filter((b) => !holding.has(b.id))
     const own = ready.filter((b) => !SAFETY.includes(b.trigger)).slice(kept)
     const safety = ready.filter((b) => SAFETY.includes(b.trigger)).slice(SAFETY_KEPT)

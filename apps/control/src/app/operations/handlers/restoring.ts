@@ -218,7 +218,7 @@ export function restoring(deps: RestoringDeps) {
         })
         if (up) await enqueuePrune(tx, transitions, restored)
       })
-      await deps.backups.enforceRetention(server)
+      await deps.backups.enforceRetention(server, ctx.op.id)
       if (refusal !== null)
         return { status: 'failed', reason: `The world is back, but the server stayed off: ${refusal}` }
       return { status: 'succeeded' }

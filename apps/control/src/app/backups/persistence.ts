@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { type Queryable, schema, type UploadedWorldFactsJson } from '@blockly/db'
-import { and, count, desc, eq, gte, inArray, isNotNull, lt } from 'drizzle-orm'
+import { and, count, desc, eq, gte, inArray, isNotNull, lt, ne } from 'drizzle-orm'
 import type { SnapshotHandle } from '../ports/runtime.ts'
 
 const backups = schema.backups
@@ -315,6 +315,30 @@ export async function readySnapshots(q: Queryable, serverId: string): Promise<Ba
     .where(and(eq(backups.serverId, serverId), eq(backups.tier, 'snapshot'), eq(backups.status, 'ready')))
     .orderBy(desc(backups.createdAt))
   return rows.map(toBackup)
+}
+
+/**
+ * The backups a queued or running operation of the server will read: an archive's snapshot, a
+ * restore's backup, the snapshot a lost host is rebuilt from. `except` is the operation asking,
+ * which has read its own by now.
+ */
+export async function backupsInUse(q: Queryable, serverId: string, except?: string): Promise<Set<string>> {
+  const ops = schema.serverOperations
+  const rows = await q
+    .select({ kind: ops.kind, input: ops.input })
+    .from(ops)
+    .where(
+      and(
+        eq(ops.serverId, serverId),
+        inArray(ops.status, ['queued', 'running']),
+        inArray(ops.kind, ['archive', 'restore', 'relocate']),
+        except === undefined ? undefined : ne(ops.id, except),
+      ),
+    )
+  const named = rows.map(({ kind, input }) =>
+    kind === 'archive' ? input.snapshotId : kind === 'restore' ? input.backupId : input.fromBackup,
+  )
+  return new Set(named.filter((id): id is string => typeof id === 'string'))
 }
 
 /** Ready backups whose provider has let them go by now. */
