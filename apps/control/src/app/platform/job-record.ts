@@ -11,7 +11,13 @@
 import { MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
 import type { JobOutcomes, ScheduledJob, WorkerHeartbeat } from '../ports/jobs.ts'
-import { type JobHealthRecord, recordJobFailed, recordJobSucceeded, recordSchedule } from './persistence.ts'
+import {
+  type JobHealthRecord,
+  loadJobHealth,
+  recordJobFailed,
+  recordJobSucceeded,
+  recordSchedule,
+} from './persistence.ts'
 
 /** Failures in a row that make a job one that keeps failing. */
 export const FAILING_IN_A_ROW = 3
@@ -45,6 +51,11 @@ export class JobRecord implements JobOutcomes {
   async scheduled(jobs: ReadonlyArray<{ job: string; everySeconds: number }>, at: Date): Promise<void> {
     this.#lastPass = at
     await recordSchedule(this.#db, jobs, at)
+  }
+
+  async lastSucceeded(): Promise<ReadonlyMap<string, Date>> {
+    const rows = await loadJobHealth(this.#db)
+    return new Map(rows.flatMap((r) => (r.lastSucceededAt === null ? [] : [[r.job, r.lastSucceededAt]])))
   }
 
   async succeeded(job: string, at: Date): Promise<void> {

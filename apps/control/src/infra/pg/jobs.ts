@@ -18,6 +18,7 @@ import type {
   ScheduledJob,
   WorkerHeartbeat,
 } from '../../app/ports/jobs.ts'
+import { catchUp } from './catch-up.ts'
 import { Lanes } from './lanes.ts'
 import { everyMinute } from './ticker.ts'
 
@@ -636,12 +637,11 @@ export async function workSchedules(
   outcomes?: JobOutcomes,
 ): Promise<void> {
   const names = Object.keys(CRON) as Array<keyof typeof CRON>
+  const everySeconds = names.map((job) => ({ job, everySeconds: everySecondsOf(CRON[job]) }))
   await outcomes
-    ?.scheduled(
-      names.map((job) => ({ job, everySeconds: everySecondsOf(CRON[job]) })),
-      new Date(),
-    )
+    ?.scheduled(everySeconds, new Date())
     .catch((error: unknown) => console.error('scheduled jobs: their schedule went unrecorded', error))
+  const workers: string[] = []
   for (const name of names) {
     const schedule =
       name === 'worker-heartbeat'
@@ -662,7 +662,7 @@ export async function workSchedules(
       notifyPollingIntervalSeconds: SCHEDULED_BACKSTOP_SECONDS,
     }
     const unrecorded = (error: unknown) => console.error(`${name}: its pass went unrecorded`, error)
-    await boss.work(name, asks, async () => {
+    const worker = await boss.work(name, asks, async () => {
       try {
         if (schedule.says === undefined) await schedule.run()
         else {
@@ -677,6 +677,24 @@ export async function workSchedules(
       }
       await outcomes?.succeeded(name, new Date()).catch(unrecorded)
     })
+    workers.push(worker)
+  }
+  // The heartbeat first: a worker is healthy once its passes are recorded, and the spend watchdog
+  // is one of the passes `/api/health` waits on.
+  if (outcomes !== undefined) {
+    const heartbeatFirst = [
+      ...everySeconds.filter((s) => s.job === 'worker-heartbeat'),
+      ...everySeconds.filter((s) => s.job !== 'worker-heartbeat'),
+    ]
+    const sent = await outcomes
+      .lastSucceeded()
+      .then((succeeded) => catchUp(boss, heartbeatFirst, succeeded, workers, new Date()))
+      .catch((error: unknown) => {
+        console.error('scheduled jobs: catching up failed', error)
+        return []
+      })
+    if (sent.length > 0)
+      console.warn(`scheduled jobs: ${sent.length} sent at start, last run before their interval`)
   }
   const stop = everyMinute(boss, Object.entries(CRON))
   boss.once('stopped', stop)

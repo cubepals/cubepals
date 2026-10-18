@@ -85,6 +85,7 @@ describe.skipIf(!base)('a scheduled job that fails', () => {
     const recorded: string[] = []
     await workSchedules(boss, schedules, {
       scheduled: async (jobs) => void recorded.push(`scheduled ${jobs.length}`),
+      lastSucceeded: async () => new Map(),
       succeeded: async (job) => void recorded.push(`succeeded ${job}`),
       failed: async (job, _at, error) => void recorded.push(`failed ${job}: ${error}`),
     })

@@ -59,6 +59,8 @@ export type WorkerHeartbeat = 'worker-heartbeat'
 export interface JobOutcomes {
   /** The jobs scheduled now and how often each runs: what else was recorded is forgotten. */
   scheduled(jobs: ReadonlyArray<{ job: string; everySeconds: number }>, at: Date): Promise<void>
+  /** When each job last succeeded; a job that never has is absent. */
+  lastSucceeded(): Promise<ReadonlyMap<string, Date>>
   succeeded(job: string, at: Date): Promise<void>
   failed(job: string, at: Date, error: string): Promise<void>
 }
