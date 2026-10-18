@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use or write about Cubepals, please cite it as below."
+type: software
+title: "Cubepals"
+abstract: "A Minecraft server host where every server sleeps when nobody plays and wakes when a friend joins."
+authors:
+  - name: "The Cubepals Authors"
+repository-code: "https://github.com/cubepals/cubepals"
+url: "https://cubepals.com"
+license: AGPL-3.0-only
+keywords:
+  - minecraft
+  - minecraft-server-hosting
+  - game-server-hosting
