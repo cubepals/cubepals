@@ -2,6 +2,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * The edge's answer to a browser: each Host to the page it goes to, and over HTTP, that a browser
+ * is answered without the control plane ever being asked, so no server wakes for one.
+ */
+
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { connect } from 'node:net'
 import { browserRedirect, pageFor } from './browser-redirect.ts'

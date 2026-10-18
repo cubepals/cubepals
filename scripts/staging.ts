@@ -66,6 +66,8 @@ const WEBHOOK_URL = `${origin(APP.control)}/api/billing/webhook`
 const WEB_HOST = 'staging.cubepals.com'
 const WEB = `https://${WEB_HOST}`
 const PLAY_DOMAIN = 'play.staging.cubepals.com'
+/** Where the edge sends a play address opened in a browser (apps/edge/browser-redirect.ts). */
+const EDGE_PAGES = `WEB_CANONICAL_ORIGIN=${WEB}\nPLAY_DOMAINS=${PLAY_DOMAIN}\n`
 /** The org token the control plane creates servers with; `down` revokes every one named so. */
 const TOKEN_NAME = 'bly-staging-control'
 /**
@@ -83,6 +85,11 @@ const SECRETS_FILE = 'local/secrets/staging.env'
  * node-postgres verifies the server against it (`sslmode=verify-full`).
  */
 const DATABASE_CA = '/app/packages/db/certs/supabase-root-2021.crt'
+
+/** What `fly certs show --json` says a certificate still needs, as far as it is read here. */
+interface PlayCertificate {
+  dns_requirements: { acme_challenge: { name: string; target: string } }
+}
 
 interface State {
   /** Supabase's session pooler, `sslmode=require`: from STAGING_DATABASE_URL, which replaces it. */
@@ -269,7 +276,8 @@ function dnsToken(): string {
 /**
  * staging.cubepals.com proxied, so the web Worker's route answers it under the zone's certificate
  * (100:: is Cloudflare's address for a host with no origin), and every name under the play domain
- * on the edge's own addresses, as production's are.
+ * on the edge's own addresses, as production's are, with the edge's certificate for them, which a
+ * browser opening a play address gets on 443 (infra/fly/edge.toml).
  */
 async function pointDomains(edge: { v4: string; v6: string | undefined }): Promise<void> {
   say('domains')
@@ -278,22 +286,13 @@ async function pointDomains(edge: { v4: string; v6: string | undefined }): Promi
   await pointRecord(token, 'cubepals.com', { type: 'A', name: `*.${PLAY_DOMAIN}`, content: edge.v4 })
   if (edge.v6)
     await pointRecord(token, 'cubepals.com', { type: 'AAAA', name: `*.${PLAY_DOMAIN}`, content: edge.v6 })
-}
-
-/**
- * Fly's certificate for every name under the play domain, which a browser opening a play address
- * gets on 443 (infra/fly/edge.toml). A wildcard is issued over DNS-01 only: the CNAME at its
- * _acme-challenge name hands the challenge to Fly, as modules/dns does in Terraform.
- */
-async function pointPlayCertificate(): Promise<void> {
-  const hostname = `*.${PLAY_DOMAIN}`
-  const said =
-    fly(['certs', 'show', hostname, '-a', APP.edge, '--json'], { allowFail: true }) ||
-    fly(['certs', 'add', hostname, '-a', APP.edge, '--json'])
-  const { name, target } = (
-    JSON.parse(said) as { dns_requirements: { acme_challenge: { name: string; target: string } } }
-  ).dns_requirements.acme_challenge
-  await pointRecord(dnsToken(), 'cubepals.com', { type: 'CNAME', name, content: target.replace(/\.$/, '') })
+  // A wildcard is issued over DNS-01 only: a CNAME at its _acme-challenge name hands it to Fly, as
+  // modules/dns does in Terraform.
+  const cert = (verb: 'show' | 'add') =>
+    fly(['certs', verb, `*.${PLAY_DOMAIN}`, '-a', APP.edge, '--json'], { allowFail: verb === 'show' })
+  const said = JSON.parse(cert('show') || cert('add')) as PlayCertificate
+  const { name, target } = said.dns_requirements.acme_challenge
+  await pointRecord(token, 'cubepals.com', { type: 'CNAME', name, content: target.replace(/\.$/, '') })
 }
 
 /**
@@ -418,7 +417,6 @@ async function up(): Promise<void> {
   const edgeV4 = edgeIps.find((ip) => ip.Type === 'v4')?.Address
   if (!edgeV4) throw new Error('the edge has no dedicated IPv4')
   await pointDomains({ v4: edgeV4, v6: edgeIps.find((ip) => ip.Type === 'v6')?.Address })
-  await pointPlayCertificate()
 
   say('credentials')
   if (state.flyToken === undefined) {
@@ -484,14 +482,7 @@ async function up(): Promise<void> {
   for (const app of [APP.control, APP.realtime])
     fly(['secrets', 'import', '-a', app, '--stage'], { input: lines })
   fly(['secrets', 'import', '-a', APP.edge, '--stage'], {
-    input: [
-      `CONTROL_URL=http://api.process.${APP.control}.internal:${INTERNAL_PORT}`,
-      `EDGE_TOKEN=${state.edgeToken}`,
-      // Where a play address opened in a browser goes (apps/edge/browser-redirect.ts).
-      `WEB_CANONICAL_ORIGIN=${WEB}`,
-      `PLAY_DOMAINS=${PLAY_DOMAIN}`,
-      '',
-    ].join('\n'),
+    input: `CONTROL_URL=http://api.process.${APP.control}.internal:${INTERNAL_PORT}\nEDGE_TOKEN=${state.edgeToken}\n${EDGE_PAGES}`,
   })
 
   // The web app is built here while Fly builds the rest on its own builders: neither waits.

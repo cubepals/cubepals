@@ -2,12 +2,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// A play address opened in a browser: `<slug>.<play domain>` pasted into one, or clicked where a
-// site turned it into a link. The edge answers it at once with a redirect to that server's page.
-// The slug comes from the Host header alone. Nothing here asks the control plane, mc-router or a
-// server anything, so a browser can never wake or start a server; the page itself says what it
-// may about a private, missing or deleted server. Not for Minecraft: its front door is front.ts,
-// on its own port and its own Fly service, with its own limits.
+/**
+ * A play address opened in a browser: `<slug>.<play domain>` pasted into one, or clicked where a
+ * site turned it into a link. The edge answers it at once with a redirect to that server's page.
+ * The slug comes from the Host header alone. Nothing here asks the control plane, mc-router or a
+ * server anything, so a browser can never wake or start a server; the page itself says what it
+ * may about a private, missing or deleted server. Not for Minecraft: its front door is front.ts,
+ * on its own port and its own Fly service, with its own limits.
+ */
 
 /** One DNS label, which is all a slug can be in a play address. */
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
@@ -20,10 +22,7 @@ export function pageFor(host: string | null, domains: readonly string[], web: st
   const home = `${web}/`
   if (host === null) return home
   // The port and a fully qualified name's final dot say nothing about the server.
-  const name = host
-    .toLowerCase()
-    .replace(/:\d+$/, '')
-    .replace(/\.$/, '')
+  const name = host.toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '')
   for (const domain of domains) {
     if (!name.endsWith(`.${domain}`)) continue
     const slug = name.slice(0, -domain.length - 1)

@@ -67,8 +67,8 @@ primary_region = "fra"
   auto_stop_machines = "off"
   auto_start_machines = false
 
-  # Each answer is a redirect written at once, so a few hundred at a time is plenty, and past it
-  # a browser waits rather than slows the players on this machine.
+  # Counted in requests, each a redirect written at once. Past the hard limit a browser waits at
+  # the proxy rather than take the CPU the players on this machine need.
   [services.concurrency]
     type = "requests"
     soft_limit = 200

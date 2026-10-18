@@ -256,6 +256,8 @@ which the project's charts leave out.
 |---|---|---|---|
 | `CONTROL_URL` | `http://host.docker.internal:4001` | `http://api.process.bly-<id>-control.internal:4001` | Terraform (edge) |
 | `EDGE_TOKEN` | from `.env` | the control plane's `EDGE_TOKEN` | Terraform (edge) |
+| `WEB_CANONICAL_ORIGIN`, `PLAY_DOMAINS` | unset: browsers aren't answered | the web app's origin; `PLAY_DOMAIN` and its aliases, comma-separated. A browser opening `<slug>.<domain>` is sent to `<origin>/server/<slug>` | Terraform (edge) |
+| `BROWSER_PORT` | `8080` (Fly's HTTP service on 80 and 443) | same | — |
 | `IDLE_HINT_AFTER` | `10m` (compose knob) | `10m` | toml |
 | `MINECRAFT_PORT` | `25565` | `25565` | toml |
 | `EDGE_ID` | `local-edge` | the machine's hostname | — |

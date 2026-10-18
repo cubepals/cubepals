@@ -114,4 +114,16 @@ describe('the edge’s service', () => {
     expect(concurrency?.type).toBe('connections')
     expect(concurrency?.soft_limit).toBeLessThan(concurrency?.hard_limit ?? 0)
   })
+
+  test('answers browsers on 80 and 443 in a service of their own, apart from Minecraft’s limits', () => {
+    const config = parse(readFileSync(join(import.meta.dir, '../infra/fly/edge.toml'), 'utf8')) as {
+      services: { internal_port: number; ports: { port: number; handlers?: string[] }[] }[]
+    }
+    const browsers = config.services.filter((s) => s.ports.some((p) => p.port === 80 || p.port === 443))
+    expect(browsers.map((s) => s.internal_port)).toEqual([8080])
+    expect(browsers[0]?.ports).toEqual([
+      { port: 80, handlers: ['http'] },
+      { port: 443, handlers: ['tls', 'http'] },
+    ])
+  })
 })
