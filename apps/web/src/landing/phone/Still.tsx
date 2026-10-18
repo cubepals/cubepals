@@ -27,8 +27,8 @@ let worker: Worker | null = null
 let failed = false
 /** The worker that prints, or null where it can't start or has failed: the pictures stay as they were. */
 const printer = (): Worker | null => {
-  if (worker) return worker
   if (failed) return null
+  if (worker) return worker
   try {
     worker = withParamsInQuery(
       () => new Worker(new URL('./still.worker.ts', import.meta.url), { type: 'module' }),

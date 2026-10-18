@@ -223,6 +223,7 @@ export function Chunk() {
       drawingFailed('start')
       return withoutDrawing(root, drawnOn, () => renew(true))
     }
+    let lost = false
     // From here the renderer's own failures, and a lost context, end the drawing (start.ts).
     const kept = keepDrawing(renderer, canvas, root, drawnOn, renew, () => {
       lost = true
@@ -270,7 +271,6 @@ export function Chunk() {
     let visible = true
     // The page moved (a scroll, a resize): where the camera should be has to be read again.
     let moved = true
-    let lost = false
     // How much of the upper screen is under the hero's sky, and how much under the night.
     let underSky = 1
     let underNight = 0
