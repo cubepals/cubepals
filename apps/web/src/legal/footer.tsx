@@ -42,17 +42,15 @@ export function PolicyLinks() {
  */
 export function NotBacked({ className }: { className?: string }) {
   return (
-    <>
-      <p className={className ? `${styles.notBacked} ${className}` : styles.notBacked}>
+    <p className={className ? `${styles.notBacked} ${className}` : styles.notBacked}>
+      <span className={styles.badge}>
         Not backed by
         {/* From https://www.ycombinator.com/ (its own logo, as the site serves it). */}
         {/* biome-ignore lint/performance/noImgElement: a fixed-size mark, too small to need Next's image pipeline */}
         <img src="/y-combinator.svg" alt="" width={14} height={14} draggable={false} />Y Combinator
-      </p>
-      <p className={className ? `${styles.backed} ${className}` : styles.backed}>
-        Proudly backed by my salary and my family’s patience
-      </p>
-    </>
+      </span>{' '}
+      · Proudly backed by my salary and my family’s patience
+    </p>
   )
 }
 
