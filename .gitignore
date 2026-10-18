@@ -35,3 +35,6 @@ backend.hcl
 
 # Each Terraform environment's real values, made from its committed config.auto.tfvars.example.json.
 infra/terraform/environments/*/config.auto.tfvars.json
+
+# Python bytecode, written when brand/card.py imports brand/wordmark.py.
+__pycache__/

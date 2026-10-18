@@ -15,9 +15,9 @@ word 66, tracking −0.070em, the mark at 56 (85% of the word), a gap of 14 from
 the word, the baseline at 50.1. The face is fontsource's Figtree 5.3.0, the same one the product's
 live lockup loads from Google Fonts, fetched from jsDelivr and checked against its hash.
 
-It writes the four lockup SVGs and their PNGs in brand/, and the web app's link preview
-(apps/web/src/app/opengraph-image.png). The mark is copied from brand/mark.svg and never redrawn
-here, so mark.svg, favicon.svg and app-icon.svg are not this script's to write.
+It writes the four lockup SVGs and their PNGs in brand/; the web app's link preview, which carries
+the lockup, is card.py's. The mark is copied from brand/mark.svg and never redrawn here, so
+mark.svg, favicon.svg and app-icon.svg are not this script's to write.
 """
 
 import hashlib
@@ -48,9 +48,6 @@ INK = '#0d0d0d'
 PAPER = '#F8F7F5'
 BRAND = Path(__file__).parent
 NO_PNG = {'lockup-stacked-reversed'}  # brand/png has never held one
-PREVIEW = BRAND.parent / 'apps/web/src/app/opengraph-image.png'
-PREVIEW_SIZE = (1200, 630)  # the lockup centred on Paper
-PREVIEW_K = 2.36  # px per lockup unit, the size the preview has always drawn it at
 
 
 def font() -> TTFont:
@@ -119,16 +116,6 @@ def main() -> None:
             if name not in NO_PNG:
                 png.write_bytes(bytes(resvg_py.svg_to_bytes(svg_string=svg, width=width)))
             print(name, num(width))
-    w, h = PREVIEW_SIZE
-    (lw, lh), k = horizontal, PREVIEW_K
-    preview = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">'
-        f'<rect width="{w}" height="{h}" fill="{PAPER}"/>'
-        f'<g fill="{INK}" transform="translate({num((w - lw * k) / 2)} {num((h - lh * k) / 2)}) scale({k})">'
-        f'{mark(0, 0)}<path transform="translate({num(MARK + GAP)} {num(BASELINE)})" d="{d}"/></g></svg>'
-    )
-    PREVIEW.write_bytes(bytes(resvg_py.svg_to_bytes(svg_string=preview, width=w)))
-    print(PREVIEW.relative_to(BRAND.parent))
 
 
 if __name__ == '__main__':

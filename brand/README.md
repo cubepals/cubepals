@@ -34,7 +34,8 @@ visibly dominates. The circle-to-square ratio is √(4/π) ≈ 1.1284.
 | `avatar.svg` | the profile picture on every platform (GitHub, Polar, socials): the app icon's mark on a square of Ink, with no rounding, since each platform crops its own shape. `png/avatar.png` is it at 1024px |
 | `favicon.svg` | mark, ink |
 | `png/` | raster versions, 1024–2000px |
-| `wordmark.py` | outlines the word and draws the lockups, their PNGs and the link preview |
+| `wordmark.py` | outlines the word and draws the lockups and their PNGs |
+| `card.py` | draws the link preview from the lockup, the landing's words and a print the site ships |
 | `figures/` | the landing's people as the emails show them: `bun brand/figures/figures.ts` writes them to `apps/web/public/email/` |
 
 SVGs carry no font dependency — the wordmark is outlined.
@@ -46,7 +47,7 @@ SVGs carry no font dependency — the wordmark is outlined.
 | `apps/web/src/ui/brand.tsx` | `Mark` and `Lockup`, drawn in `currentColor` so one mark serves ink-on-paper pages and the paper-on-ink app navigation |
 | `apps/web/src/app/icon.svg` | the favicon, copied from `favicon.svg` |
 | `apps/web/src/app/apple-icon.png` | the home-screen tile, copied from `png/app-icon.png` |
-| `apps/web/src/app/opengraph-image.png` | the link preview: the horizontal lockup on paper, 1200×630, written by `wordmark.py` |
+| `apps/web/src/app/opengraph-image.png` | the link preview, 1200×630: the landing's headline under its eyebrow, the chunk by day from `public/imagery/chunk-awake.png` printed again at half size, and the lockup small over `cubepals.com` in the top right. The bottom left stays empty, where X lays the page's title. Written by `card.py` |
 | `apps/web/public/email/lockup.png` | the emails' lockup: `lockup-horizontal-reversed.svg` on an Ink tile with 14 units of clear space, 320×88, shown at 160×44. It brings its own Ink, so a mail app that inverts the email can't lose it |
 | `apps/web/public/email/` figures | Moss waving, the worker with a clipboard and Kai hanging from the card's edge, written by `figures/figures.ts` in one-bit dither, drawn at twice the size each email shows them |
 
@@ -60,8 +61,9 @@ drawing). Blockly is the project's codename, used in the code and never shown as
 
 Mark 56 · word 66 · weight 700 · tracking −0.070em · gap 14 · mark nudged +1px.
 
-The lockups, their PNGs and the link preview are all drawn by
-`uv run brand/wordmark.py`, from Figtree 700 at this spec. Run it again rather than editing them.
+The lockups and their PNGs are drawn by `uv run brand/wordmark.py`, from Figtree 700 at this
+spec, and the link preview by `uv run brand/card.py`. Run them again rather than editing what they
+write.
 
 The mark is **85% of the word's size**, not 100%. A solid square carries far more ink per
 unit of height than letterforms, so matching the mark to cap height over-weights it and the
