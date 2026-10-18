@@ -48,7 +48,7 @@ import { hash3, Kind, Mesh, relight, type Taken, type World } from './engine/wor
 import { playing } from './film/clock'
 import { choice } from './sections/choice'
 import { type Aim, stage } from './stage'
-import { FIRST_CANVAS, nextCanvas, RESTORED_WITHIN_MS, withoutDrawing } from './start'
+import { drawingFailed, FIRST_CANVAS, keepDrawing, nextCanvas, withoutDrawing } from './start'
 import { type Torch, torchOf } from './torch'
 import { director, type Shot, shotsOf } from './views'
 
@@ -214,20 +214,26 @@ export function Chunk() {
     const canvas = ref.current
     const root = canvas?.closest<HTMLElement>('[data-landing]')
     if (!canvas || !root || !painted) return
+    const { world, mesh } = prepared()
     let renderer: Renderer
     try {
       renderer = new Renderer(canvas)
+      renderer.setWorld(mesh, world)
     } catch {
+      drawingFailed('start')
       return withoutDrawing(root, drawnOn, () => renew(true))
     }
+    // From here the renderer's own failures, and a lost context, end the drawing (start.ts).
+    const kept = keepDrawing(renderer, canvas, root, drawnOn, renew, () => {
+      lost = true
+    })
+    renderer = kept.renderer
 
     const still = window.matchMedia('(prefers-reduced-motion: reduce)')
     // On a narrow screen the canvas is a band across the top rather than the whole screen.
     const narrow = window.matchMedia('(max-width: 1023px)')
     const mouse = window.matchMedia('(hover: hover) and (pointer: fine)')
 
-    const { world, mesh } = prepared()
-    renderer.setWorld(mesh, world)
     // The other worlds, seen only at the end, are built a while after; as many as the width wants.
     let fleet: Fleet | null = null
     const refleet = () => {
@@ -1082,22 +1088,10 @@ export function Chunk() {
       event.preventDefault()
       strike(performance.now())
     }
-    // The drawing context can be taken away (a phone with the page in the background, a busy
-    // graphics card) and given back with nothing in it, or not at all: the chunk is drawn again on
-    // a new canvas when it comes back, or when it hasn't come back soon (start.ts).
-    let lostFor = 0
-    const gone = (event: Event) => {
-      event.preventDefault()
-      lost = true
-      lostFor = window.setTimeout(() => renew(false), RESTORED_WITHIN_MS)
-    }
-    const back = () => renew(false)
     measure()
     raf = requestAnimationFrame(frame)
     const unsubscribe = stage.subscribe(wake)
     const unchoose = choice.subscribe(wake)
-    canvas.addEventListener('webglcontextlost', gone)
-    canvas.addEventListener('webglcontextrestored', back)
     window.addEventListener('scroll', scrolled, { passive: true })
     window.addEventListener('resize', measure)
     narrow.addEventListener('change', refleet)
@@ -1115,12 +1109,10 @@ export function Chunk() {
 
     return () => {
       cancelAnimationFrame(raf)
-      clearTimeout(lostFor)
+      kept.stop()
       clearTimeout(gathering)
       unsubscribe()
       unchoose()
-      canvas.removeEventListener('webglcontextlost', gone)
-      canvas.removeEventListener('webglcontextrestored', back)
       window.removeEventListener('scroll', scrolled)
       window.removeEventListener('resize', measure)
       narrow.removeEventListener('change', refleet)

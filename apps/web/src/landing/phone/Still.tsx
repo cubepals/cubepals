@@ -12,7 +12,9 @@
  * shared by both.
  */
 import { useEffect, useRef, useState } from 'react'
+import { drawingFailed } from '../start'
 import type { Printed, Still as Which } from './printer'
+import { withParamsInQuery } from './worker-url'
 
 /** What the worker answers: which picture, at what width, and the picture itself or null. */
 interface Answer {
@@ -22,8 +24,28 @@ interface Answer {
 }
 
 let worker: Worker | null = null
-const printer = () => {
-  worker ??= new Worker(new URL('./still.worker.ts', import.meta.url), { type: 'module' })
+let failed = false
+/** The worker that prints, or null where it can't start or has failed: the pictures stay as they were. */
+const printer = (): Worker | null => {
+  if (worker) return worker
+  if (failed) return null
+  try {
+    worker = withParamsInQuery(
+      () => new Worker(new URL('./still.worker.ts', import.meta.url), { type: 'module' }),
+    )
+  } catch {
+    failed = true
+    drawingFailed('worker')
+    return null
+  }
+  // A worker that won't start, or stops with an error, is as good as none: it is counted, once,
+  // and not left to the page as an error.
+  worker.addEventListener('error', (event) => {
+    event.preventDefault()
+    failed = true
+    worker?.terminate()
+    drawingFailed('worker')
+  })
   return worker
 }
 
@@ -56,7 +78,7 @@ export function Still({
       const dot = 3 / (window.devicePixelRatio || 1)
       const across = Math.round(size.width / dot)
       const down = Math.round(size.height / dot)
-      printer().postMessage({ still, width, across, down, dot })
+      printer()?.postMessage({ still, width, across, down, dot })
     }
     const answered = (event: MessageEvent<Answer>) => {
       const { printed } = event.data
@@ -77,7 +99,7 @@ export function Still({
     const seen = new IntersectionObserver(
       ([entry]) => {
         near = entry?.isIntersecting ?? false
-        if (near) printer().addEventListener('message', answered)
+        if (near) printer()?.addEventListener('message', answered)
         ask()
       },
       { rootMargin: '50% 0px' },
