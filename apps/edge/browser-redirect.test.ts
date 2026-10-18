@@ -12,37 +12,51 @@ import { connect } from 'node:net'
 import { browserRedirect, pageFor } from './browser-redirect.ts'
 
 const WEB = 'https://cubepals.test'
-const DOMAINS = ['play.cubepals.test', 'mc.cubepals.test']
+/** Routes name a server's address under the play domain and under each alias. */
+const SERVERS = new Set([
+  'arcade.play.cubepals.test',
+  'arcade.mc.cubepals.test',
+  'sunset-valley.play.cubepals.test',
+])
+const PAGES = {
+  domains: ['play.cubepals.test', 'mc.cubepals.test'],
+  web: WEB,
+  known: (name: string) => SERVERS.has(name),
+}
 
 test('a play address goes to its server’s page', () => {
-  expect(pageFor('arcade.play.cubepals.test', DOMAINS, WEB)).toBe(`${WEB}/server/arcade`)
-  expect(pageFor('Sunset-Valley.Play.Cubepals.Test', DOMAINS, WEB)).toBe(`${WEB}/server/sunset-valley`)
+  expect(pageFor('arcade.play.cubepals.test', PAGES)).toBe(`${WEB}/server/arcade`)
+  expect(pageFor('Sunset-Valley.Play.Cubepals.Test', PAGES)).toBe(`${WEB}/server/sunset-valley`)
 })
 
 test('an alias of the play domain goes to the same page', () => {
-  expect(pageFor('arcade.mc.cubepals.test', DOMAINS, WEB)).toBe(`${WEB}/server/arcade`)
+  expect(pageFor('arcade.mc.cubepals.test', PAGES)).toBe(`${WEB}/server/arcade`)
 })
 
 test('a port and a final dot are not part of the slug', () => {
-  expect(pageFor('arcade.play.cubepals.test:80', DOMAINS, WEB)).toBe(`${WEB}/server/arcade`)
-  expect(pageFor('arcade.play.cubepals.test.', DOMAINS, WEB)).toBe(`${WEB}/server/arcade`)
+  expect(pageFor('arcade.play.cubepals.test:80', PAGES)).toBe(`${WEB}/server/arcade`)
+  expect(pageFor('arcade.play.cubepals.test.', PAGES)).toBe(`${WEB}/server/arcade`)
 })
 
 test('the bare play domain goes home', () => {
-  expect(pageFor('play.cubepals.test', DOMAINS, WEB)).toBe(`${WEB}/`)
+  expect(pageFor('play.cubepals.test', PAGES)).toBe(`${WEB}/`)
+})
+
+test('an address no server has goes home', () => {
+  expect(pageFor('nothing-here.play.cubepals.test', PAGES)).toBe(`${WEB}/`)
 })
 
 test('a host under no play domain, or no host at all, goes home', () => {
-  expect(pageFor('arcade.example.test', DOMAINS, WEB)).toBe(`${WEB}/`)
-  expect(pageFor('evilplay.cubepals.test', DOMAINS, WEB)).toBe(`${WEB}/`)
-  expect(pageFor('203.0.113.7', DOMAINS, WEB)).toBe(`${WEB}/`)
-  expect(pageFor(null, DOMAINS, WEB)).toBe(`${WEB}/`)
+  expect(pageFor('arcade.example.test', PAGES)).toBe(`${WEB}/`)
+  expect(pageFor('evilplay.cubepals.test', PAGES)).toBe(`${WEB}/`)
+  expect(pageFor('203.0.113.7', PAGES)).toBe(`${WEB}/`)
+  expect(pageFor(null, PAGES)).toBe(`${WEB}/`)
 })
 
 test('what can’t be a slug goes home rather than into the path', () => {
-  expect(pageFor('a.b.play.cubepals.test', DOMAINS, WEB)).toBe(`${WEB}/`)
-  expect(pageFor('-arcade.play.cubepals.test', DOMAINS, WEB)).toBe(`${WEB}/`)
-  expect(pageFor('ar_cade.play.cubepals.test', DOMAINS, WEB)).toBe(`${WEB}/`)
+  expect(pageFor('a.b.play.cubepals.test', PAGES)).toBe(`${WEB}/`)
+  expect(pageFor('-arcade.play.cubepals.test', PAGES)).toBe(`${WEB}/`)
+  expect(pageFor('ar_cade.play.cubepals.test', PAGES)).toBe(`${WEB}/`)
 })
 
 // ─── Over HTTP ───────────────────────────────────────────────────────────────────────────────
@@ -61,7 +75,7 @@ beforeAll(() => {
     },
     { preconnect: realFetch.preconnect },
   )
-  server = browserRedirect({ port: 0, hostname: '127.0.0.1', domains: DOMAINS, web: WEB })
+  server = browserRedirect({ port: 0, hostname: '127.0.0.1', ...PAGES })
 })
 
 afterAll(() => {
@@ -103,8 +117,9 @@ test('any path and method get the same answer', async () => {
   expect(answer).toContain(`location: ${WEB}/server/arcade\r\n`)
 })
 
-test('the bare play domain and an unknown host are sent home', async () => {
+test('the bare play domain, an unknown address and an unknown host are sent home', async () => {
   expect(await ask(head('play.cubepals.test'))).toContain(`location: ${WEB}/\r\n`)
+  expect(await ask(head('nothing-here.play.cubepals.test'))).toContain(`location: ${WEB}/\r\n`)
   expect(await ask(head('somewhere.example.test'))).toContain(`location: ${WEB}/\r\n`)
 })
 

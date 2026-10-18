@@ -598,7 +598,12 @@ asleepAt(WAITING, (client, join, header) => void hold(client, join, header))
 const WEB_ORIGIN = process.env.WEB_CANONICAL_ORIGIN?.replace(/\/$/, '')
 const PLAY_DOMAINS = (process.env.PLAY_DOMAINS ?? '').split(',').flatMap((d) => d.trim() || [])
 if (WEB_ORIGIN && PLAY_DOMAINS.length > 0)
-  browserRedirect({ port: Number(env('BROWSER_PORT', '8080')), domains: PLAY_DOMAINS, web: WEB_ORIGIN })
+  browserRedirect({
+    port: Number(env('BROWSER_PORT', '8080')),
+    domains: PLAY_DOMAINS,
+    web: WEB_ORIGIN,
+    known: (name) => hostnames.has(name),
+  })
 else console.error('WEB_CANONICAL_ORIGIN or PLAY_DOMAINS is unset; browsers aren’t redirected')
 
 // ─── Supervise mc-router ────────────────────────────────────────────────────────────────────

@@ -501,8 +501,8 @@ the edge follows within its next poll (a second). Host ports aren't reused for t
 release (`port_quarantine_seconds`), so a stale route can't reach another server.
 
 **A browser at a play address.** Someone who opens `<slug>.<play domain>` in a browser reaches
-the same edge, which redirects them to the server's page from the Host header alone, before any
-route is looked at (`apps/edge/browser-redirect.ts`). A fleet server gets it as a Fly one does;
+the same edge, which redirects them to the server's page from the Host header and the routes it
+already holds, without asking anything (`apps/edge/browser-redirect.ts`). A fleet server gets it as a Fly one does;
 nothing on a node takes part, so blocklyd has nothing to match.
 
 **Stale connections.** mc-router doesn't close a connection when its route changes: a player
