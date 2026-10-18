@@ -132,6 +132,8 @@ let routes: EdgeRoutes['routes'] = []
 let releases: NonNullable<EdgeRoutes['releases']> = []
 /** Every hostname those routes name. */
 let hostnames = new Set<string>()
+/** Kept addresses among them, with the slug of the server each points at. */
+let aliases = new Map<string, string>()
 /** Hostnames of running servers that read no PROXY header: the front door sends them none. */
 let plain = new Set<string>()
 /**
@@ -161,6 +163,7 @@ const poll = new RoutesPoll(
     routes = next.routes
     releases = next.releases ?? []
     hostnames = new Set(routes.map((r) => r.hostname))
+    aliases = new Map(routes.flatMap((r) => (r.aliasOf === undefined ? [] : [[r.hostname, r.aliasOf]])))
     plain = new Set(routes.filter((r) => r.state === undefined && !r.proxyProtocol).map((r) => r.hostname))
     const running = new Set(routes.filter((r) => r.state === undefined).map((r) => r.destination))
     for (const destination of unreachable) if (!running.has(destination)) unreachable.delete(destination)
@@ -603,6 +606,7 @@ if (WEB_ORIGIN && PLAY_DOMAINS.length > 0)
     domains: PLAY_DOMAINS,
     web: WEB_ORIGIN,
     known: (name) => hostnames.has(name),
+    aliasOf: (name) => aliases.get(name),
   })
 else console.error('WEB_CANONICAL_ORIGIN or PLAY_DOMAINS is unset; browsers aren’t redirected')
 

@@ -16,17 +16,30 @@ const WEB = 'https://cubepals.test'
 const SERVERS = new Set([
   'arcade.play.cubepals.test',
   'arcade.mc.cubepals.test',
+  'castle-builders.play.cubepals.test',
   'sunset-valley.play.cubepals.test',
+  'sunset-valley.mc.cubepals.test',
+])
+/** A kept address's routes say which server it points at. */
+const ALIASES = new Map([
+  ['sunset-valley.play.cubepals.test', 'arcade'],
+  ['sunset-valley.mc.cubepals.test', 'arcade'],
 ])
 const PAGES = {
   domains: ['play.cubepals.test', 'mc.cubepals.test'],
   web: WEB,
   known: (name: string) => SERVERS.has(name),
+  aliasOf: (name: string) => ALIASES.get(name),
 }
 
 test('a play address goes to its server’s page', () => {
   expect(pageFor('arcade.play.cubepals.test', PAGES)).toBe(`${WEB}/server/arcade`)
-  expect(pageFor('Sunset-Valley.Play.Cubepals.Test', PAGES)).toBe(`${WEB}/server/sunset-valley`)
+  expect(pageFor('Castle-Builders.Play.Cubepals.Test', PAGES)).toBe(`${WEB}/server/castle-builders`)
+})
+
+test('a kept address goes to the page of the server it points at, under every play domain', () => {
+  expect(pageFor('sunset-valley.play.cubepals.test', PAGES)).toBe(`${WEB}/server/arcade`)
+  expect(pageFor('Sunset-Valley.MC.Cubepals.Test.', PAGES)).toBe(`${WEB}/server/arcade`)
 })
 
 test('an alias of the play domain goes to the same page', () => {
@@ -109,6 +122,12 @@ test('a browser asking for a play address is redirected to its page at once', as
   expect(answer).toContain('cache-control: no-store\r\n')
 })
 
+test('a browser asking for a kept address is redirected to its server’s page', async () => {
+  const answer = await ask(head('sunset-valley.play.cubepals.test'))
+  expect(answer).toStartWith('HTTP/1.1 302')
+  expect(answer).toContain(`location: ${WEB}/server/arcade\r\n`)
+})
+
 test('any path and method get the same answer', async () => {
   const answer = await ask(
     'POST /join?x=1 HTTP/1.1\r\nHost: arcade.play.cubepals.test\r\nContent-Length: 0\r\nConnection: close\r\n\r\n',
@@ -125,6 +144,7 @@ test('the bare play domain, an unknown address and an unknown host are sent home
 
 test('no request ever asks anything of the control plane, so none wakes a server', async () => {
   await ask(head('arcade.play.cubepals.test'))
+  await ask(head('sunset-valley.play.cubepals.test'))
   await ask(head('play.cubepals.test'))
   expect(fetched).toEqual([])
 })

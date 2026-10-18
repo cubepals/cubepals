@@ -15,7 +15,10 @@ export interface PlayAddressing {
   primary(slug: string): PlayAddress
   /** Every address that must route to this server: the primary plus migration aliases. */
   all(slug: string): readonly PlayAddress[]
-  /** The inverse, for edge reports. Normalizes case, trailing dot and port; null if not ours. */
+  /**
+   * The inverse, for edge reports. Normalizes case, trailing dot and port; null if not ours. A
+   * kept address (`domain/server/kept-addresses.ts`) answers with the slug it points at.
+   */
   slugFor(hostname: string): string | null
   /** The play domains: the primary first, then the migration aliases (§11). */
   domains(): readonly { domain: string; alias: boolean }[]

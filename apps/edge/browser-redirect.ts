@@ -26,10 +26,16 @@ export interface Pages {
    * memory, so asking it never reaches the control plane or wakes anything.
    */
   known: (hostname: string) => boolean
+  /**
+   * The slug of the server a kept address points at (the route's `aliasOf`), whose page it opens;
+   * undefined for a server's own address, whose page is its own slug's.
+   */
+  aliasOf: (hostname: string) => string | undefined
 }
 
 /**
- * Where a browser asking for `host` goes: `<web>/server/<slug>` for a server's play address, and
+ * Where a browser asking for `host` goes: `<web>/server/<slug>` for a server's play address or
+ * a kept address pointing at it, and
  * `web`'s home page for a bare play domain, an address no server has, a host under none of the
  * play domains or no host at all.
  */
@@ -41,7 +47,7 @@ export function pageFor(host: string | null, pages: Pages): string {
   for (const domain of pages.domains) {
     if (!name.endsWith(`.${domain}`)) continue
     const slug = name.slice(0, -domain.length - 1)
-    return LABEL.test(slug) && pages.known(name) ? `${pages.web}/server/${slug}` : home
+    return LABEL.test(slug) && pages.known(name) ? `${pages.web}/server/${pages.aliasOf(name) ?? slug}` : home
   }
   return home
 }

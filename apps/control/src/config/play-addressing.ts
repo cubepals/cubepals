@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { PlayAddress, PlayAddressing, RegionCatalog } from '../app/ports/platform.ts'
+import { keptFor } from '../domain/server/kept-addresses.ts'
 import { checkSlug } from '../domain/server/slug.ts'
 
 /** Addresses are the slug plus configuration. Nothing here is persisted. */
@@ -38,7 +39,7 @@ export class ConfiguredPlayAddressing implements PlayAddressing {
       if (!host.endsWith(`.${domain}`)) continue
       const label = host.slice(0, -(domain.length + 1))
       if (label.includes('.')) return null
-      return checkSlug(label).ok ? label : null
+      return keptFor(label) ?? (checkSlug(label).ok ? label : null)
     }
     return null
   }

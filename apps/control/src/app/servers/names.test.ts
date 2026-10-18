@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Names held back from players, end to end: brand names, names held for Cubepals' own servers and
- * offensive ones, as a player, an admin and an operator meet them, and what servers that already
+ * Names held back from players, end to end: brand names, names held for Cubepals' own servers,
+ * addresses Cubepals keeps and offensive ones, as a player, an admin and an operator meet them, and what servers that already
  * have one keep.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
@@ -14,9 +14,16 @@ import type { Slug } from '../../domain/server/slug.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { Actor } from '../actor.ts'
 
+const operator: Actor = { kind: 'operator', name: 'ada' }
+
+const refusal = (promise: Promise<unknown>) =>
+  promise.then(
+    () => null,
+    (error: { code?: string; message: string }) => `${error.code}: ${error.message}`,
+  )
+
 describe.skipIf(!hasDatabase)('held and offensive names', () => {
   let h: Harness
-  const operator: Actor = { kind: 'operator', name: 'ada' }
 
   beforeAll(async () => {
     h = await startHarness()
@@ -26,11 +33,6 @@ describe.skipIf(!hasDatabase)('held and offensive names', () => {
     await h.close()
   })
 
-  const refusal = (promise: Promise<unknown>) =>
-    promise.then(
-      () => null,
-      (error: { code?: string; message: string }) => `${error.code}: ${error.message}`,
-    )
   /** Gives a server an address or name as if it had it before these rules. */
   const had = (id: string, change: { slug?: Slug; name?: string }) =>
     h.db.update(schema.minecraftServers).set(change).where(eq(schema.minecraftServers.id, id))
@@ -129,4 +131,38 @@ describe.skipIf(!hasDatabase)('held and offensive names', () => {
     await h.app.listings.reevaluate([made.id])
     expect((await h.app.listingQueries.own(owner, made.id))?.visible).toBe(true)
   }, 30_000)
+})
+
+describe.skipIf(!hasDatabase)('addresses Cubepals keeps', () => {
+  let h: Harness
+
+  beforeAll(async () => {
+    h = await startHarness()
+  }, 30_000)
+
+  afterAll(async () => {
+    await h.close()
+  })
+
+  test('an address Cubepals keeps for its own server is taken for everyone, operators too', async () => {
+    const owner = await h.user('Steve', 'plus')
+    const admin: Actor = { kind: 'admin', userId: (await h.user('Admin')).userId }
+    expect(await h.app.servers.suggestAddress(owner, 'Sunset Valley')).toMatchObject({
+      slug: expect.stringMatching(/^sunset-valley-\d{4}$/),
+      available: true,
+    })
+    for (const actor of [owner, admin, operator])
+      expect(await h.app.servers.suggestAddress(actor, '', 'sunset-valley')).toMatchObject({
+        available: false,
+      })
+    expect(await refusal(h.create(owner, { name: 'Sunset Valley', slug: 'sunset-valley' }))).toBe(
+      'slug_taken: That address is taken — try adding a word.',
+    )
+    const made = await h.create(owner, { name: 'Sunset Valley' })
+    expect(made.slug).toMatch(/^sunset-valley-\d{4}$/)
+    for (const actor of [owner, admin, operator])
+      expect(await refusal(h.app.servers.changeAddress(actor, made.id, 'sunset-valley'))).toBe(
+        'slug_taken: That address is taken — try adding a word.',
+      )
+  })
 })

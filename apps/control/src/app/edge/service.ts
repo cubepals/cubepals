@@ -9,6 +9,7 @@ import { motdForGame } from '@blockly/contracts/server-list'
 import type { AppliedConfigJson, Db } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { welcome } from '../../domain/revision/revision.ts'
+import { keptAt, keptFor } from '../../domain/server/kept-addresses.ts'
 import { type OperationKind, ROUTABLE, type ServerStatus } from '../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { clientRange, RELEASES } from '../../minecraft/clients.ts'
@@ -24,7 +25,7 @@ import { failedWaking, loadOperation, openOfKinds } from '../operations/persiste
 import type { IdleDecision, Schedules } from '../operations/schedules.ts'
 import type { ChangeSignal } from '../ports/changes.ts'
 import type { EventBus } from '../ports/events.ts'
-import type { PlayAddressing } from '../ports/platform.ts'
+import type { PlayAddress, PlayAddressing } from '../ports/platform.ts'
 import type { Endpoint, RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
 import type { SecretKeyring } from '../secrets.ts'
@@ -183,9 +184,10 @@ export class EdgeService {
       const binding = bindings.get(server.id)
       const destination = back ? NOWHERE : this.#destinationOf(server.status, state, binding?.handle)
       if (destination === null) continue
-      for (const address of this.#addressing.all(server.slug)) {
+      for (const { address, alias } of this.#addressesOf(server.slug)) {
         routes.push({
           hostname: address.hostname,
+          ...alias,
           destination,
           ...noticeOf(state, server, out.get(server.id), over.has(server.id)),
           ...(waking ? { waking: true as const } : {}),
@@ -203,6 +205,21 @@ export class EdgeService {
         live.filter((s) => s.status === 'running' && bindings.get(s.id)?.handle).map((s) => s.id),
       )
     return { routes: { routes, releases: [...RELEASES] }, from: print.from, unrouted: print.unrouted }
+  }
+
+  /**
+   * Every address the server at `slug` is routed at: its own, and the kept addresses that point at
+   * it, which say whose they are. A kept address is never given to a server; one that had it
+   * before is not routed at it.
+   */
+  #addressesOf(slug: string): { address: PlayAddress; alias: { aliasOf?: string } }[] {
+    const own = keptFor(slug) === null ? this.#addressing.all(slug) : []
+    return [
+      ...own.map((address) => ({ address, alias: {} })),
+      ...keptAt(slug).flatMap((kept) =>
+        this.#addressing.all(kept).map((address) => ({ address, alias: { aliasOf: slug } })),
+      ),
+    ]
   }
 
   /**

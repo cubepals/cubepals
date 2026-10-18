@@ -59,6 +59,12 @@ describe('held names', () => {
     for (const slug of HELD_FOR_CUBEPALS) expect(checkSlug(slug).ok).toBe(true)
   })
 
+  test('an address Cubepals keeps for its own server is kept, and one that only contains it is anyone’s', () => {
+    expect(holdOn('sunset-valley')).toBe('kept')
+    expect(checkSlug('sunset-valley').ok).toBe(true)
+    expect(holdOn('sunset-valley-2')).toBeNull()
+  })
+
   test('a name or description that says Cubepals, Official, Verified or Staff, however it is written', () => {
     for (const text of [
       'Cubepals',

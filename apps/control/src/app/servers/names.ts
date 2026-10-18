@@ -6,8 +6,9 @@
  * Which names and addresses an actor may give a server. Offensive ones nobody gives
  * (`@blockly/contracts/names`). Of the ones held back (`domain/server/held-names.ts`), names that
  * pass for Cubepals or Mojang are an operator's alone, and names held for Cubepals' own servers
- * an operator's or a platform admin's; a player is told they are taken. A server that already
- * has one keeps it: this is asked only when a name or address is chosen.
+ * an operator's or a platform admin's; addresses Cubepals keeps for its own servers nobody's. A
+ * player is told they are taken. A server that already has one keeps it: this is asked only when
+ * a name or address is chosen.
  */
 import { offensive, PICK_ANOTHER_NAME } from '@blockly/contracts/names'
 import { sealProblem } from '@blockly/contracts/seal'
@@ -19,6 +20,7 @@ import { AppError } from '../errors.ts'
 export function mayGive(actor: Actor, slug: string): boolean {
   if (offensive(slug)) return false
   const hold = holdOn(slug)
+  if (hold === 'kept') return false
   return hold === null || actor.kind === 'operator' || (hold === 'cubepals' && actor.kind === 'admin')
 }
 

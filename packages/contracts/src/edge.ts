@@ -18,6 +18,11 @@ export const EDGE_PROTOCOL_BASE = '/edge/v1'
 
 export const EdgeRoute = z.object({
   hostname: z.string(),
+  /**
+   * A kept address, which Cubepals points at one of its own servers: that server's slug. The route
+   * is otherwise that server's own, and a browser opening the address goes to that server's page.
+   */
+  aliasOf: z.string().optional(),
   /** `host:port`, reachable from the edge's network. */
   destination: z.string(),
   /**
