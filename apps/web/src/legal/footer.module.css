@@ -47,6 +47,11 @@
   line-height: 20px;
   white-space: nowrap;
 }
+.backed {
+  margin: 0;
+  font-size: 12px;
+  line-height: 20px;
+}
 .notBacked img {
   display: block;
 }
