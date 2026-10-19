@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# The notes `gh release create --generate-notes` writes for each nightly (nightly.yml) and each
+# production release (scripts/production.ts), grouped by the labels tools/labels sets. A pull
+# request goes under the first heading it matches, so schema changes come first: production runs
+# their migrations as it deploys.
+changelog:
+  categories:
+    - title: Database schema changes
+      labels: [risk/migration]
+    - title: New and changed
+      labels: [kind/feature]
+    - title: Fixed
+      labels: [kind/bug]
+    - title: Sturdier
+      labels: [kind/hardening]
+    - title: Faster
+      labels: [kind/perf]
+    - title: Dependencies
+      labels: [kind/deps]
+    - title: Everything else
+      labels: ['*']

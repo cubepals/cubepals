@@ -8,6 +8,7 @@ apps/control/src/infra/*/*.openapi.json linguist-generated
 packages/db/migrations/meta/** linguist-generated
 bun.lock linguist-generated
 tools/openapi/bun.lock linguist-generated
+tools/labels/bun.lock linguist-generated
 
 # Binary, and rendered from docs/architecture's sources.
 *.pdf binary

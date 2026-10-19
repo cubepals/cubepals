@@ -1,0 +1,14 @@
+{
+  "name": "labels-tools",
+  "private": true,
+  "type": "module",
+  "description": "Labels pull requests and issues and checks them (.github/workflows/labels.yml, labels-check.yml). Outside the workspaces so the labelling job installs two dependencies, not the monorepo.",
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.132.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.3",
+    "typescript": "5.9.3"
+  }
+}

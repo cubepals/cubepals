@@ -1,0 +1,92 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+name: Labels
+
+# Every pull request and issue gets its labels on its own (tools/labels): a kind, its areas and a
+# size from what it touches, an impact, and a risk where it touches the schema, billing or what
+# runs servers. A model chooses only what rules can't know, only among those names, and only with
+# ANTHROPIC_API_KEY; without it, or when it fails, the rules' labels stand. A label a person
+# removed is never put back, and a kind someone chose is never replaced.
+#
+# pull_request_target gives the token write access on pull requests from forks too, and runs the
+# default branch's copy of this file and of tools/labels, never the pull request's. The job checks
+# out only the default branch and reads the pull request through the API as data: its title, body
+# and file list. No code from the pull request is checked out, installed or run.
+#
+# The daily run labels whatever is missing and re-runs a failed label check. By hand, from the
+# Actions tab, it makes the label set (sync) and backfills the latest merged pull requests.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+  issues:
+    types: [opened, reopened, edited]
+  schedule:
+    - cron: '29 5 * * *'
+  workflow_dispatch:
+    inputs:
+      command:
+        description: sweep labels what is open; backfill also the latest merged; sync makes the label set
+        type: choice
+        options: [sweep, backfill, sync]
+        default: sweep
+      count:
+        description: For backfill, how many merged pull requests
+        default: '150'
+      dry-run:
+        description: Print what would change and change nothing
+        type: boolean
+        default: false
+
+permissions: {}
+
+# One run at a time for each pull request or issue, in order, so a later push's size wins.
+concurrency:
+  group: labels-${{ github.event.pull_request.number || github.event.issue.number || github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  label:
+    name: Label
+    if: github.repository == 'cubepals/cubepals'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      # Re-runs labels-check.yml once labels are on: labels this token adds start no workflow.
+      actions: write
+    steps:
+      # The default branch, always: never the pull request's head.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: tools/labels
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - run: bun install --cwd tools/labels --frozen-lockfile --ignore-scripts --production
+      # Titles and bodies are untrusted text: the script reads them from the API, never the shell.
+      - name: Label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EVENT: ${{ github.event_name }}
+          NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          COMMAND: ${{ inputs.command }}
+          COUNT: ${{ inputs.count }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          case "$EVENT" in
+            pull_request_target) bun tools/labels/cli.ts pr "$NUMBER" ;;
+            issues) bun tools/labels/cli.ts issue "$NUMBER" ;;
+            schedule) bun tools/labels/cli.ts sweep ;;
+            workflow_dispatch)
+              args=("$COMMAND")
+              [ "$COMMAND" = backfill ] && args+=("$COUNT")
+              [ "$DRY_RUN" = true ] && args+=(--dry-run)
+              bun tools/labels/cli.ts "${args[@]}" ;;
+          esac
