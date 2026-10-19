@@ -68,6 +68,7 @@ export function SiteFooter({ children }: { children?: ReactNode }) {
         </nav>
       )}
       <nav className={styles.links} aria-label="Legal">
+        <Link href="/contact">Contact</Link>
         <PolicyLinks />
       </nav>
       <p className={styles.operator}>

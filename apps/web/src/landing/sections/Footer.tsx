@@ -26,6 +26,7 @@ export function Footer() {
             <p className={styles.groupName}>Cubepals</p>
             <Link href="/pricing">Pricing</Link>
             <Link href="/browse">Browse servers</Link>
+            <Link href="/contact">Contact us</Link>
             <OutLink href={SOURCE_URL}>Source code</OutLink>
           </div>
           {footerGuides().length > 0 && (
