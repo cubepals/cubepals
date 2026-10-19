@@ -1309,9 +1309,9 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   and returns the destination. A `restarting` server is never started: the join waits for the
   restart to finish, and gets `restarting` if it hasn't by then. So nothing is woken twice.
   - A join to a server being put to rest (`storing`) waits for that to finish, then wakes it.
-  - Each server may be woken by a connection at most 12 times an hour (`WAKES_PER_HOUR` in
-    `app/edge/service.ts`); past that the wake is `denied: quota`. Nothing about a connection
-    proves who sent it, and each wake costs the owner a run.
+  - Each server may be woken by a connection only so many times an hour (`AbuseLimits.wakesPerHour`,
+    set in private configuration); past that the wake is `denied: quota`. Nothing about a
+    connection proves who sent it, and each wake costs the owner a run.
   - A deleted server's address answers `denied: deleted`, so its players are told.
 - **`pingWake(hostname, address)`** (`app/edge/ping-wake.ts`). A server list pinged an asleep
   server, often just before a join. It starts the server as a wake would, without waiting for it,

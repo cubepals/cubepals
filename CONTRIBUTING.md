@@ -101,8 +101,13 @@ says, never in an issue. Help with an account on cubepals.com is in [SUPPORT.md]
 The code is AGPL-3.0-only. The Cubepals name, the files in `brand/`, the landing page
 (`apps/web/src/landing/`), the pictures in `apps/web/public/imagery/` and
 `apps/web/public/guides/`, and the guides' words are not:
-[brand/LICENSE.md](brand/LICENSE.md). A change to them is contributed under those terms.
-[LICENSING.md](LICENSING.md) lists what is under what.
+[brand/LICENSE.md](brand/LICENSE.md). [LICENSING.md](LICENSING.md) lists what is under what.
+
+The code is published under the AGPL-3.0-only. By opening a pull request you license your change
+to The Cubepals Authors under the [Apache License, Version
+2.0](https://www.apache.org/licenses/LICENSE-2.0), and you confirm that it is yours to license. You
+keep the copyright in it. Changes to the brand or the site are contributed under
+[`brand/LICENSE.md`](brand/LICENSE.md).
 
 Every file says whose it is and under what license, as [REUSE](https://reuse.software) asks, and CI
 runs `reuse lint`. A new source file opens with two SPDX lines above its doc comment, written with

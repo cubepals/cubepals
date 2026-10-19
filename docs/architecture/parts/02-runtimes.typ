@@ -278,7 +278,7 @@ promise. #implemented (the ledger); density #research (never measured).
   A 3 GB server is a 3 GB container: a 2 GB heap plus about 650 MB the JVM needs outside it, plus
   page cache (#src("apps/control/src/minecraft/runtime-spec.ts:78")).
 - *Sleeping servers hold no memory* (running admission): placed servers may total
-  `FLEET_MEMORY_OVERCOMMIT` (4) × allocatable, because plans let a server run 3–8% of a month. A
+  `FLEET_MEMORY_OVERCOMMIT` (4) × allocatable, because a server is asleep most of the time. A
   waking server on a full node moves first. Setting the overcommit to 1 restores the old ledger,
   where every placed server held its memory.
 - *CPU is bookkeeping, not a quota.* The ledger counts 250 m per GB, but the control plane sends no

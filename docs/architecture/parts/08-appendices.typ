@@ -236,7 +236,7 @@ offers parts only to nodes with `multipart-upload`.
     [`FLEET_PLACEMENT`, `FLEET_HEADROOM_MB`, `FLEET_MEMORY_OVERCOMMIT`, `FLEET_CPU_OVERCOMMIT`, `FLEET_CPU_PRESSURE`, `FLEET_DISK_OVERCOMMIT`, `FLEET_CPU_MILLIS_PER_GB`], [`balanced`, 0, 4, 1, 0.8, 1, 250], [Fleet placement.],
     [`FLEET_HEARTBEAT_SECONDS`, `FLEET_LEASE_SECONDS`, `FLEET_SUSPECT_SECONDS`, `FLEET_UNAVAILABLE_SECONDS`, `FLEET_NODE_CERT_DAYS`, `FLEET_RENEW_DAYS`], [5, 120, 15, 45, 30, 10], [Fleet timing and certificates.],
   ),
-  caption: [Runtime settings. Not configurable: the edge's 25 s wake wait, boot timeouts (120 s running, 10 min ready), 12 wakes an hour, 10 min host-loss grace.],
+  caption: [Runtime settings. Not configurable: the edge's 25 s wake wait, boot timeouts (120 s running, 10 min ready), the hourly wake limit, 10 min host-loss grace.],
   kind: table,
 )
 

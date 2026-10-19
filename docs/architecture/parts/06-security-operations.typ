@@ -22,7 +22,7 @@ Who can do what, at each boundary, and how far isolation really goes. #implement
     [Game runtimes → artifacts], [A per-server token derived from the runtime key, plus a hash the file must match.],
     [Polar → billing webhook], [Polar's signature (`whsec_…`).],
     [Control ↔ fleet nodes], [Mutual TLS 1.3 under a per-deployment CA: one-time enrollment token, then pinned node certificates (30 days); the control plane's client certificate lasts 2 days, renewed daily (@s-enroll).],
-    [Public → edge], [None by design: anyone may connect. Wakes are bounded by a quota (12 an hour per server) and a 5-minute probation; connections are limited per server and per address at the edge, ahead of mc-router's global limit.],
+    [Public → edge], [None by design: anyone may connect. Wakes are bounded by a per-server hourly limit, set in private configuration, and a 5-minute probation; connections are limited per server and per address at the edge, ahead of mc-router's global limit.],
   ),
   caption: [Authentication at each boundary.],
   kind: table,
@@ -55,13 +55,6 @@ Who can do what, at each boundary, and how far isolation really goes. #implement
 - *Secrets.* Per-server secrets (RCON passwords, artifact tokens) are derived from a versioned key,
   never stored. On Fly they are app secrets, never in a machine's config. On a node they exist only
   in Docker's container config, never in records, logs or answers.
-
-#caveat[*Known exposures*, stated so nobody overclaims. The realtime app holds every control-plane
-secret, and every role builds every runtime's client at boot. The control API is public on
-`*.fly.dev` (game runtimes and Polar need it), not gated to the web tier. Operator actions are
-attributed by a self-declared header under one shared token. Fleet servers have no CPU ceiling
-(@s-capacity). gVisor or microVMs for stronger isolation are #designed only
-(#src("docs/fleet.md:453")).]
 
 = Observability <s-observability>
 

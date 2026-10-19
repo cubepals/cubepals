@@ -66,7 +66,7 @@ and carries an ETag, so most polls are a 304 (#src("apps/control/src/app/edge/se
   _seq("p", "mr", comment: [login])
   _seq("mr", "ag", comment: [scale webhook `up`])
   _seq("ag", "cp", comment: [`POST /edge/v1/wake {hostname}`])
-  _note("right", [quota: 12 wakes an hour; the Start button's own policy;\ start op; one 25 s wait for all of it\ (a restart or a rest first, then `running`); the agent gives up at 30 s], pos: "cp")
+  _note("right", [quota: a per-server hourly wake limit; the Start button's own policy;\ start op; one 25 s wait for all of it\ (a restart or a rest first, then `running`); the agent gives up at 30 s], pos: "cp")
   _seq("cp", "ag", comment: [`ready {destination}` (or `starting`, `denied`)], dashed: true)
   _seq("ag", "s", comment: [probe: does it answer?])
   _seq("ag", "mr", comment: [`{backend: destination}`], dashed: true)
@@ -208,6 +208,3 @@ defined: no deployment runs a canary.
   (printed as blind spots) (#src("apps/control/src/app/runtimes/economics.ts:8")).
 - *Stopping*: `rule off <rule>` or percent 0. There is no rule delete. Removing a runtime from
   `RUNTIME_PROVIDERS` is not a stop: its servers become foreign.
-- *The plan*: two EU nodes, named servers first, then an allowlist, a month of measurement, and
-  expansion only if the canary beats the runtime it replaced per played hour with no data lost.
-  #designed

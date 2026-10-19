@@ -28,6 +28,8 @@ path = [
   "apps/web/src/app/apple-icon.png",
   "apps/web/src/app/opengraph-image.png",
   "apps/web/src/app/opengraph-image.alt.txt",
+  "docs/emails/*.png",
+  "docs/architecture/previews/*.png",
 ]
 precedence = "closest"
 SPDX-FileCopyrightText = "2026 The Cubepals Authors"
@@ -51,7 +53,7 @@ SPDX-License-Identifier = "OFL-1.1"
 path = "docs/architecture/Blockly-Architecture.pdf"
 precedence = "closest"
 SPDX-FileCopyrightText = ["2026 The Cubepals Authors", "2017 IBM Corp."]
-SPDX-License-Identifier = "AGPL-3.0-only AND OFL-1.1"
+SPDX-License-Identifier = "LicenseRef-Cubepals-Reserved AND OFL-1.1"
 
 # blocklyd's files, copied from the release this repository pins (scripts/blocklyd.ts), and the
 # types generated from them.

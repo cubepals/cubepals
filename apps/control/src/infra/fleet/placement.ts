@@ -76,7 +76,7 @@ export interface PlacementOptions {
 export const DEFAULTS: PlacementOptions = {
   policy: 'balanced',
   headroomMb: 0,
-  // Plans let a server run 3–8% of a month, so few of a node's servers run at once.
+  // A server is asleep most of the time, so few of a node's servers run at once.
   memoryOvercommit: 4,
   cpuOvercommit: 1,
   cpuPressure: 0.8,
