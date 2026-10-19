@@ -29,7 +29,7 @@ const STYLE = `
 body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:24px 16px;background:var(--paper);color:var(--ink);font:18px/28px system-ui,-apple-system,"Segoe UI",sans-serif}
 main{width:100%;max-width:34rem;display:flex;flex-direction:column;gap:16px}
 img{width:78px;height:auto;image-rendering:pixelated}
-.logo{display:block;width:auto;height:28px;margin-bottom:8px}
+.logo{display:block;align-self:flex-start;width:auto;height:28px;margin-bottom:8px}
 .box{margin-top:8px;font-size:13px;line-height:20px;color:var(--muted);overflow-wrap:anywhere}
 h1{margin:0;font-size:36px;line-height:40px;font-weight:800;letter-spacing:-.05em;text-wrap:balance}
 p{margin:0}
