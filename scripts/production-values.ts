@@ -190,6 +190,22 @@ export const VALUES: Value[] = [
     where: 'the private records: production’s capacity tuning, as one line of JSON (docs/configuration.md)',
     shape: json,
   },
+  {
+    name: 'ECONOMICS_TUNING',
+    goes: ['secret'],
+    where:
+      'only for the economics report’s fees and margin: the private records, production’s economics tuning, as one line of JSON (docs/configuration.md)',
+    optional: 'economics',
+    shape: json,
+  },
+  {
+    name: 'OFFICIAL_SERVER_FILES',
+    goes: ['secret'],
+    where:
+      'only for files on official servers: the private records, as one line of JSON (docs/configuration.md § Files for official servers)',
+    optional: 'official files',
+    shape: json,
+  },
   { name: 'AUTH_SECRET', goes: ['secret'], where: '', generate: random },
   { name: 'WEB_PROXY_SECRET', goes: ['secret'], where: '', generate: random },
   { name: 'REALTIME_TICKET_SECRET', goes: ['secret'], where: '', generate: random },
@@ -411,6 +427,19 @@ function configProblems(values: Record<string, string>, env = environment()): st
  */
 const versionOf = (value: string) => createHash('sha256').update(value).digest('hex').slice(0, 12)
 
+/**
+ * A map as Terraform reads it from a TF_VAR: JSON, which Terraform parses as HCL. In HCL a string
+ * is a template, so `${` and `%{` are written `$${` and `%%{`, and the two control characters JSON
+ * escapes as `\b` and `\f`, which HCL has no escape for, are written as `\u` escapes. A file's
+ * content in OFFICIAL_SERVER_FILES (a plugin's `${player}`) reaches Fly as written.
+ */
+const hclMap = (map: Record<string, string>) =>
+  JSON.stringify(map).replace(/\\[\s\S]|[$%]\{/g, (match) => {
+    if (match === '\\b') return '\\u0008'
+    if (match === '\\f') return '\\u000c'
+    return match.startsWith('\\') ? match : `${match[0]}${match}`
+  })
+
 /** The environment Terraform runs in: its variables and the providers' tokens. Never printed. */
 export function terraformEnv(values: Record<string, string>): Record<string, string> {
   const pick = (to: Destination) =>
@@ -422,11 +451,11 @@ export function terraformEnv(values: Record<string, string>): Record<string, str
     )
   const secrets = pick('secret')
   return {
-    TF_VAR_secrets: JSON.stringify(secrets),
+    TF_VAR_secrets: hclMap(secrets),
     TF_VAR_secret_versions: JSON.stringify(
       Object.fromEntries(Object.entries(secrets).map(([name, value]) => [name, versionOf(value)])),
     ),
-    TF_VAR_operator_settings: JSON.stringify(pick('operator')),
+    TF_VAR_operator_settings: hclMap(pick('operator')),
     TF_VAR_cloudflare_account_id: values.CLOUDFLARE_ACCOUNT_ID ?? '',
     TF_VAR_cloudflare_zone_id: values.CLOUDFLARE_ZONE_ID ?? '',
     TF_VAR_database_dumps_bucket: DUMPS_BUCKET,

@@ -7,11 +7,14 @@
  * The environment's decided values come from its committed example, not an operator's own file.
  */
 import { describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   DEFAULT_ABUSE_LIMITS,
   DEFAULT_CAPACITY_TUNING,
+  DEFAULT_ECONOMICS_TUNING,
   DEFAULT_FREE_LINK_TUNING,
 } from '../apps/control/src/domain/account/tuning.ts'
 import {
@@ -254,5 +257,66 @@ describe('what Terraform gets', () => {
     expect(backendConfig('0123456789abcdef0123456789abcdef')).toContain(
       'endpoints                   = { s3 = "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com" }',
     )
+  })
+})
+
+describe('the optional tuning and official files', () => {
+  test('the economics tuning and official files are optional secrets, each on its own', () => {
+    const economics = JSON.stringify(DEFAULT_ECONOMICS_TUNING)
+    const files = JSON.stringify({ '*': { 'server.properties': 'motd=Cubepals\n' } })
+    for (const given of [{ ECONOMICS_TUNING: economics }, { OFFICIAL_SERVER_FILES: files }]) {
+      expect(problemsOf({ ...complete, ...given }, example).wrong).toEqual([])
+      expect(JSON.parse(terraformEnv({ ...complete, ...given }).TF_VAR_secrets ?? '{}')).toMatchObject(given)
+    }
+    expect(
+      problemsOf({ ...complete, ECONOMICS_TUNING: '{"paymentFee":1}' }, example).wrong.join('\n'),
+    ).toContain('economicsTuning')
+    expect(problemsOf({ ...complete, OFFICIAL_SERVER_FILES: '{"*":' }, example).wrong).toEqual([
+      'OFFICIAL_SERVER_FILES is one line of JSON.',
+    ])
+  })
+
+  test('a multi-line file for official servers survives the values file and reaches Terraform as one string', () => {
+    const yaml =
+      'messages:\n  join: "Welcome, it\'s \\"{player}\\""\n  path: C:\\data\n  list:\n    - a # b\n'
+    const files = { '*': { 'plugins/Example/config.yml': yaml } }
+    const written = valuesFile({ ...complete, OFFICIAL_SERVER_FILES: JSON.stringify(files) })
+    const values = parseValues(written)
+    expect(JSON.parse(values.OFFICIAL_SERVER_FILES ?? '')).toEqual(files)
+    const secrets = JSON.parse(terraformEnv(values).TF_VAR_secrets ?? '{}') as Record<string, string>
+    expect(JSON.parse(secrets.OFFICIAL_SERVER_FILES ?? '')).toEqual(files)
+    expect(problemsOf(values, example).wrong).toEqual([])
+  })
+
+  test("Terraform's template markers in a value are escaped, so Terraform reads them as written", () => {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a plugin's placeholder, which Terraform would read as a template.
+    const content = 'join: ${player} %{x} $${kept} \\b\b\f'
+    const secrets = terraformEnv({ ...complete, OFFICIAL_SERVER_FILES: content }).TF_VAR_secrets ?? ''
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a plugin's placeholder, which Terraform would read as a template.
+    expect(secrets).toContain('"join: $${player} %%{x} $$${kept} \\\\b\\u0008\\u000c"')
+  })
+
+  test.skipIf(!Bun.which('terraform'))('Terraform itself reads every secret back as it was written', () => {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a plugin's placeholder, which Terraform would read as a template.
+    const content = 'a: ${player}\n%{ if x }\nb: $${kept} %%{also} \\path\b\f\u0001 ’ "quoted" end$'
+    const dir = mkdtempSync(join(tmpdir(), 'blockly-tfvar-'))
+    writeFileSync(
+      join(dir, 'main.tf'),
+      'variable "secrets" {\n  type      = map(string)\n  sensitive = true\n}\n',
+    )
+    const read = spawnSync('terraform', ['console'], {
+      cwd: dir,
+      input: 'jsonencode(nonsensitive(var.secrets))\n',
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        TF_VAR_secrets: terraformEnv({ ...complete, OFFICIAL_SERVER_FILES: content }).TF_VAR_secrets,
+      },
+    })
+    rmSync(dir, { recursive: true, force: true })
+    expect(read.stderr).toBe('')
+    const secrets = JSON.parse(JSON.parse(read.stdout)) as Record<string, string>
+    expect(secrets.OFFICIAL_SERVER_FILES).toBe(content)
+    expect(secrets.FLY_API_TOKEN).toBe(complete.FLY_API_TOKEN)
   })
 })

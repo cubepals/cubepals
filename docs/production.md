@@ -73,6 +73,10 @@ Optional, and left out at launch: `POLAR_*` ([below](#billing-later)) and
 `https://cubepals.com/api/auth/callback/github`). Optional too: `ADMIN_ALERT_EMAILS`, where admin
 mail (platform alerts, the spend watchdog) goes when the inbox you read isn't the address you sign
 in with; left out, it goes to each admin's own email.
+`ECONOMICS_TUNING` and `OFFICIAL_SERVER_FILES` come from the private records, one line of JSON
+each ([tuning](configuration.md#private-tuning),
+[files](configuration.md#files-for-official-servers-optional)); left out, the economics report
+leaves fees and margin out, and official servers start with the public defaults.
 
 ```sh
 bun scripts/production.ts check
