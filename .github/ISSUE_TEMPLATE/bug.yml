@@ -4,7 +4,7 @@
 
 name: Bug
 description: Something in the code doesn't work as it should.
-labels: [bug]
+labels: [kind/bug, needs-triage]
 assignees: [v0id-user]
 body:
   - type: textarea

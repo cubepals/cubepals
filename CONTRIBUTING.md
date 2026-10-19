@@ -66,6 +66,8 @@ proves it, and CI runs it on every `Move:` pull request.
    closing period, and put the detail in the body. Commit subjects follow the same rule: the
    `commit-msg` hook that `bun install` sets up checks each commit, and the `PR title` workflow
    checks the title. The branch is deleted on merge.
+   Labels are added on their own; a pull request needs one `kind/`, an `area/` and a `size/` label to
+   merge, and you can change any of them.
 3. Work that isn't finished can still merge if nobody can reach it yet; that beats a branch that
    drifts for weeks.
 

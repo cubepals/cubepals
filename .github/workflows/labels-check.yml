@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+name: Labels check
+
+# A pull request carries exactly one kind/, at least one area/ and one size/ label before it
+# merges (branch protection requires this check). labels.yml adds them within a minute or so of a
+# push; this waits up to three minutes for them, and runs again when someone adds or removes a
+# label. Labels added with labels.yml's token start no workflow, so that run re-runs this one when
+# it failed first. Bots' pull requests are held to it too: Dependabot's carry kind/deps from
+# dependabot.yml and get the rest like any other.
+#
+# It checks out the base branch's tools/labels, not the pull request's, installs nothing and only
+# reads labels, with a read-only token, so it is safe on pull requests from forks.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited, ready_for_review, labeled, unlabeled]
+
+permissions: {}
+
+# Only the newest event's answer matters.
+concurrency:
+  group: labels-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  labels:
+    name: Has a kind, an area and a size
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: tools/labels
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - run: bun tools/labels/cli.ts check "$NUMBER"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number }}
