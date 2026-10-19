@@ -115,6 +115,16 @@ describe.skipIf(!hasDatabase)('taking the passes of scheduled jobs', () => {
     expect(await record.claim(['orphans'], 300, false)).toEqual(['orphans'])
   })
 
+  test('a daily job whose worker died holding it is taken again at the next tick, though not due', async () => {
+    await record.scheduled([{ job: 'retention-sweep', everySeconds: 86_400 }], t0)
+    expect(await record.claim(['retention-sweep'], 0, true)).toEqual(['retention-sweep'])
+    // No success or failure is recorded; the hold lapsed. Nothing is due this minute.
+    expect(await record.claim([], 300, true)).toEqual(['retention-sweep'])
+    // A pass that ended is not taken again out of its day.
+    await record.succeeded('retention-sweep', new Date())
+    expect(await record.claim([], 300, true)).toEqual([])
+  })
+
   test('only what is asked for is taken', async () => {
     await record.scheduled(
       [

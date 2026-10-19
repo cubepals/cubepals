@@ -685,7 +685,6 @@ export async function workSchedules(
   await outcomes
     .scheduled(everySeconds, new Date())
     .catch((error: unknown) => console.error('scheduled jobs: their schedule went unrecorded', error))
-  const running = new Set<Promise<void>>()
   const passes = new Map<string, () => Promise<void>>()
   for (const name of names) {
     const schedule =
@@ -710,9 +709,12 @@ export async function workSchedules(
       await outcomes.succeeded(name, new Date()).catch(unrecorded)
     })
   }
+  // A pass this process still runs is never started twice, though its hold lapsed.
+  const running = new Map<string, Promise<void>>()
   const start = (name: string) => {
-    const pass = (passes.get(name) ?? (async () => {}))().finally(() => running.delete(pass))
-    running.add(pass)
+    if (running.has(name)) return
+    const pass = (passes.get(name) ?? (async () => {}))().finally(() => running.delete(name))
+    running.set(name, pass)
   }
   // Each was a queue of its own once, and pg-boss's scheduler sent them before that: both go, with
   // the jobs they kept.
@@ -731,7 +733,10 @@ export async function workSchedules(
       return []
     })
   const claim = (jobs: string[], spaced: boolean) => outcomes.claim(jobs, PASS_HOLD_SECONDS, spaced)
-  const caught = await claim(stale, false).catch(() => [])
+  const caught = await claim(stale, false).catch((error: unknown) => {
+    console.error('scheduled jobs: the catch-up could not be claimed', error)
+    return []
+  })
   for (const name of caught) start(name)
   if (caught.length > 0)
     console.warn(`scheduled jobs: ${caught.length} run at start, last run before their interval`)
@@ -742,7 +747,7 @@ export async function workSchedules(
     },
     stop: async () => {
       stopTicker()
-      await Promise.allSettled(running)
+      await Promise.allSettled(running.values())
     },
   }
 }

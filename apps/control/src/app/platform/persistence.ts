@@ -268,7 +268,8 @@ const PASS_SPACING_S = MINUTE_S - 5
 /**
  * Takes the right to run a pass of each of `names` that is due: those no pass holds (one ends when
  * it is recorded, or after `holdSeconds`) and, when `spaced`, that no worker took within
- * `PASS_SPACING_S`; and of each job a pass was asked for out of its schedule (`runScheduledNow` in
+ * `PASS_SPACING_S`; of each job a pass was asked for out of its schedule, and of each whose hold lapsed
+ * with no end recorded (its worker died) (`runScheduledNow` in
  * infra/pg/jobs.ts), once.
  * Returns the ones taken. The database's clock decides, so workers on other machines agree.
  */
@@ -295,7 +296,14 @@ export async function claimJobs(
       claimedUntil: sql`clock_timestamp() + make_interval(secs => ${holdSeconds})`,
       askedAt: null,
     })
-    .where(and(or(isNull(jobs.claimedUntil), lt(jobs.claimedUntil, now)), or(due, isNotNull(jobs.askedAt))))
+    .where(
+      and(
+        or(isNull(jobs.claimedUntil), lt(jobs.claimedUntil, now)),
+        // A hold that lapsed without the pass's end recorded (success and failure both clear it) means
+        // its worker died: the job is taken again whether or not it is due.
+        or(due, isNotNull(jobs.askedAt), isNotNull(jobs.claimedUntil)),
+      ),
+    )
     .returning({ job: jobs.job })
   return rows.map((r) => r.job)
 }
