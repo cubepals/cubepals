@@ -2,9 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { DAY_S, HOUR_S, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
+import { DAY_S, HOUR_S, MINUTE_MS, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
 import { POOL_IDLE_MS, type Tx } from '@blockly/db'
 import { sql } from 'drizzle-orm'
+import pg from 'pg'
 import { fromDrizzle, type Job, PgBoss, type QueueOptions } from 'pg-boss'
 import { notifyQueue } from 'pg-boss/dist/plans.js'
 import type {
@@ -75,15 +76,11 @@ const HEAVY_RETRIES = 1
  * own `pollingIntervalSeconds`, as before.
  */
 const BACKSTOP_SECONDS = 30
-/** The same, for queues that run in the background: imports, copies, checks, listings. */
-const BACKGROUND_BACKSTOP_SECONDS = MINUTE_S
 /**
- * The same, for the scheduled jobs: each is sent by the ticker, which always tells, and a
- * listener that reconnects has every worker ask at once for what it missed. So this only
- * catches a word lost some other way.
+ * The same, for queues that run in the background: imports, copies, checks, listings. A job they
+ * retry comes due after 30 to 60 seconds and is asked for again at the next of these.
  */
-const SCHEDULED_BACKSTOP_SECONDS = 15 * MINUTE_S
-
+const BACKGROUND_BACKSTOP_SECONDS = 5 * MINUTE_S
 /**
  * pg-boss's own upkeep, at the pace its users need rather than its defaults (pg-boss 12.36,
  * `ConstructorOptions` in its types and https://pgboss.io/api/constructor). Most of its passes read
@@ -100,8 +97,10 @@ const SCHEDULED_BACKSTOP_SECONDS = 15 * MINUTE_S
  *   hourly rather than daily, so the scheduled jobs' hour is kept to about that.
  * - `flowIntervalSeconds`: resolving jobs that wait on others (flows), whose every pass reads every
  *   queue's definition; it ran every 5 s. No job here waits on another, so an hour.
- * - `notifyHeartbeatIntervalMs`: checking the listening connection is alive, every 30 s rather
- *   than 10: one that dies unnoticed costs only the backstop's wait.
+ * - `bamIntervalSeconds`: running the background commands a pg-boss upgrade leaves (building an
+ *   index); none otherwise, and a deploy that brings one waits ten minutes for it at the most.
+ * - `notifyHeartbeatIntervalMs`: checking the listening connection is alive, every minute rather
+ *   than 10 s: one that dies unnoticed costs only the backstop's wait.
  * - `registerInstance`: nothing here reads pg-boss's registry of instances.
  */
 const UPKEEP = {
@@ -110,7 +109,8 @@ const UPKEEP = {
   monitorIntervalSeconds: 5 * MINUTE_S,
   maintenanceIntervalSeconds: HOUR_S,
   flowIntervalSeconds: HOUR_S,
-  notifyHeartbeatIntervalMs: 30 * SECOND_MS,
+  bamIntervalSeconds: 10 * MINUTE_S,
+  notifyHeartbeatIntervalMs: MINUTE_MS,
   registerInstance: false,
 } as const
 
@@ -123,8 +123,11 @@ const RETRY_DUE_MARGIN_MS = SECOND_MS / 4
  */
 const KEPT_CONNECTIONS = { idleTimeoutMillis: POOL_IDLE_MS }
 
-/** How long a scheduled job is kept once it has run: an hour of them, for looking into a sweep. */
-const SCHEDULED_KEPT_SECONDS = HOUR_S
+/**
+ * How long the other queues keep a job that has run: a day, for looking into one. Server
+ * operations keep the default: a failed one holds its server's queue until an admin moves it.
+ */
+const BACKGROUND_KEPT = { deleteAfterSeconds: DAY_S }
 
 /**
  * A queue as it is asked for, made when missing and, where it was made before, given what was
@@ -191,49 +194,79 @@ export async function startBoss(
     // One made before heartbeats gains them here.
     { heartbeatSeconds: OPERATION_HEARTBEAT_SECONDS },
   )
-  await ensureQueue(boss, LISTING_ELIGIBILITY, {
-    policy: 'standard',
-    retryLimit: 3,
-    retryDelay: 10,
-    expireInSeconds: 300,
-  })
+  await ensureQueue(
+    boss,
+    LISTING_ELIGIBILITY,
+    {
+      policy: 'standard',
+      retryLimit: 3,
+      retryDelay: 10,
+      expireInSeconds: 300,
+    },
+    BACKGROUND_KEPT,
+  )
   // Reading a pack downloads and rewrites up to a few gigabytes: one try more, then its owner is told.
-  await ensureQueue(boss, PACK_IMPORT, {
-    policy: 'standard',
-    retryLimit: HEAVY_RETRIES,
-    retryDelay: 30,
-    expireInSeconds: 1800,
-  })
+  await ensureQueue(
+    boss,
+    PACK_IMPORT,
+    {
+      policy: 'standard',
+      retryLimit: HEAVY_RETRIES,
+      retryDelay: 30,
+      expireInSeconds: 1800,
+    },
+    BACKGROUND_KEPT,
+  )
   // A copy reads and writes a world of up to a few gigabytes, as a pack import does.
-  await ensureQueue(boss, WORLD_DOWNLOAD, {
-    policy: 'standard',
-    retryLimit: HEAVY_RETRIES,
-    retryDelay: 30,
-    expireInSeconds: 1800,
-  })
+  await ensureQueue(
+    boss,
+    WORLD_DOWNLOAD,
+    {
+      policy: 'standard',
+      retryLimit: HEAVY_RETRIES,
+      retryDelay: 30,
+      expireInSeconds: 1800,
+    },
+    BACKGROUND_KEPT,
+  )
   // Checking a release fetches every file it installs, a few hundred megabytes for a big pack, so
   // it gets as long as an upload; a check that fails twice is refused, for an admin to look at.
-  await ensureQueue(boss, CURATION_INGEST, {
-    policy: 'exclusive',
-    retryLimit: HEAVY_RETRIES,
-    retryDelay: 60,
-    expireInSeconds: 1800,
-  })
+  await ensureQueue(
+    boss,
+    CURATION_INGEST,
+    {
+      policy: 'exclusive',
+      retryLimit: HEAVY_RETRIES,
+      retryDelay: 60,
+      expireInSeconds: 1800,
+    },
+    BACKGROUND_KEPT,
+  )
   // Reading a jar takes seconds; one that can't be read stays unchecked, for an operator to see.
-  await ensureQueue(boss, JAR_CHECK, {
-    policy: 'exclusive',
-    retryLimit: 3,
-    retryDelay: 30,
-    retryBackoff: true,
-    expireInSeconds: 600,
-  })
-  await ensureQueue(boss, ARTIFACT_MIRROR, {
-    policy: 'exclusive',
-    retryLimit: 5,
-    retryDelay: 60,
-    retryBackoff: true,
-    expireInSeconds: 900,
-  })
+  await ensureQueue(
+    boss,
+    JAR_CHECK,
+    {
+      policy: 'exclusive',
+      retryLimit: 3,
+      retryDelay: 30,
+      retryBackoff: true,
+      expireInSeconds: 600,
+    },
+    BACKGROUND_KEPT,
+  )
+  await ensureQueue(
+    boss,
+    ARTIFACT_MIRROR,
+    {
+      policy: 'exclusive',
+      retryLimit: 5,
+      retryDelay: 60,
+      retryBackoff: true,
+      expireInSeconds: 900,
+    },
+    BACKGROUND_KEPT,
+  )
   return boss
 }
 
@@ -624,45 +657,43 @@ const CRON: Record<ScheduledJob | WorkerHeartbeat, string> = {
   'insight-send': '* * * * *',
 }
 
+/** How long a pass may hold its job before the next may start: what a pass is given to end in. */
+const PASS_HOLD_SECONDS = 300
+
+/** A started set of scheduled jobs, which can be run out of turn and stopped. */
+export interface Schedules {
+  /** Runs these jobs' passes now, out of their schedule, where none already runs. */
+  runNow(jobs: readonly string[]): Promise<void>
+  /** No more passes start, and those running end. */
+  stop(): Promise<void>
+}
+
 /**
- * Periodic work. Each runs as a singleton, so two workers never sweep at once. Each is sent as its
- * minute comes (`ticker.ts`), which tells its worker at once (LISTEN/NOTIFY); the worker otherwise
- * asks every ten seconds only where nothing can tell it. A job that has run is kept an hour. Each
+ * Periodic work. Each job's pass is taken, as its minute comes (`ticker.ts`), by one claim on the
+ * job's row in `job_health`, which lets one worker run it at a time; there is no job in the queue
+ * for each pass (about six statements, a pass, for a sweep that often finds nothing to do). Each
  * pass that fails is logged, and every pass is written down (`outcomes`), for the alerts and the
- * health check: the queue itself only marks a failed job failed.
+ * health check.
  */
 export async function workSchedules(
   boss: PgBoss,
   schedules: readonly Schedule[],
-  outcomes?: JobOutcomes,
-): Promise<void> {
+  outcomes: JobOutcomes,
+): Promise<Schedules> {
   const names = Object.keys(CRON) as Array<keyof typeof CRON>
   const everySeconds = names.map((job) => ({ job, everySeconds: everySecondsOf(CRON[job]) }))
   await outcomes
-    ?.scheduled(everySeconds, new Date())
+    .scheduled(everySeconds, new Date())
     .catch((error: unknown) => console.error('scheduled jobs: their schedule went unrecorded', error))
-  const workers: string[] = []
+  const passes = new Map<string, () => Promise<void>>()
   for (const name of names) {
     const schedule =
       name === 'worker-heartbeat'
         ? { run: async () => {}, says: undefined }
         : schedules.find((s) => s.job === name)
     if (schedule === undefined) throw new Error(`Nothing runs the scheduled job ${name}`)
-    await ensureQueue(
-      boss,
-      name,
-      { policy: 'singleton', retryLimit: 0, expireInSeconds: 300 },
-      { deleteAfterSeconds: SCHEDULED_KEPT_SECONDS },
-    )
-    // pg-boss's own scheduler sent them before, from what it kept of each: that goes.
-    await boss.unschedule(name)
-    const asks = {
-      batchSize: 1,
-      pollingIntervalSeconds: 10,
-      notifyPollingIntervalSeconds: SCHEDULED_BACKSTOP_SECONDS,
-    }
     const unrecorded = (error: unknown) => console.error(`${name}: its pass went unrecorded`, error)
-    const worker = await boss.work(name, asks, async () => {
+    passes.set(name, async () => {
       try {
         if (schedule.says === undefined) await schedule.run()
         else {
@@ -672,32 +703,53 @@ export async function workSchedules(
       } catch (error) {
         console.error(`${name} failed`, error)
         const message = error instanceof Error ? error.message : String(error)
-        await outcomes?.failed(name, new Date(), message).catch(unrecorded)
-        throw error
+        await outcomes.failed(name, new Date(), message).catch(unrecorded)
+        return
       }
-      await outcomes?.succeeded(name, new Date()).catch(unrecorded)
+      await outcomes.succeeded(name, new Date()).catch(unrecorded)
     })
-    workers.push(worker)
   }
-  // The heartbeat first: a worker is healthy once its passes are recorded, and the spend watchdog
-  // is one of the passes `/api/health` waits on.
-  if (outcomes !== undefined) {
-    const heartbeatFirst = [
-      ...everySeconds.filter((s) => s.job === 'worker-heartbeat'),
-      ...everySeconds.filter((s) => s.job !== 'worker-heartbeat'),
-    ]
-    const sent = await outcomes
-      .lastSucceeded()
-      .then((succeeded) => catchUp(boss, heartbeatFirst, succeeded, workers, new Date()))
-      .catch((error: unknown) => {
-        console.error('scheduled jobs: catching up failed', error)
-        return []
-      })
-    if (sent.length > 0)
-      console.warn(`scheduled jobs: ${sent.length} sent at start, last run before their interval`)
+  // A pass this process still runs is never started twice, though its hold lapsed.
+  const running = new Map<string, Promise<void>>()
+  const start = (name: string) => {
+    if (running.has(name)) return
+    const pass = (passes.get(name) ?? (async () => {}))().finally(() => running.delete(name))
+    running.set(name, pass)
   }
-  const stop = everyMinute(boss, Object.entries(CRON))
-  boss.once('stopped', stop)
+  // Each was a queue of its own once, and pg-boss's scheduler sent them before that: both go, with
+  // the jobs they kept.
+  const queues = new Set((await boss.getQueues()).map((queue) => queue.name))
+  for (const name of names.filter((n) => queues.has(n))) {
+    await boss.unschedule(name)
+    await boss.deleteQueue(name)
+  }
+  // What went stale while no worker ran is run now, not at its next minute: `/api/health` and the
+  // spend watchdog both wait on the heartbeat and the watchdog.
+  const stale = await outcomes
+    .lastSucceeded()
+    .then((succeeded) => catchUp(everySeconds, succeeded, new Date()))
+    .catch((error: unknown) => {
+      console.error('scheduled jobs: catching up failed', error)
+      return []
+    })
+  const claim = (jobs: string[], spaced: boolean) => outcomes.claim(jobs, PASS_HOLD_SECONDS, spaced)
+  const caught = await claim(stale, false).catch((error: unknown) => {
+    console.error('scheduled jobs: the catch-up could not be claimed', error)
+    return []
+  })
+  for (const name of caught) start(name)
+  if (caught.length > 0)
+    console.warn(`scheduled jobs: ${caught.length} run at start, last run before their interval`)
+  const stopTicker = everyMinute({ claim: (jobs) => claim(jobs, true), start }, Object.entries(CRON))
+  return {
+    runNow: async (jobs) => {
+      for (const name of await claim([...jobs], false)) start(name)
+    },
+    stop: async () => {
+      stopTicker()
+      await Promise.allSettled(running.values())
+    },
+  }
 }
 
 /**
@@ -725,25 +777,24 @@ export function asLibpq(connectionString: string): string {
 }
 
 /**
- * Sends a scheduled job now rather than on its schedule, from outside the control plane: the
- * staging scripts run a sweep this way. It leaves pg-boss's tables as the control plane made them
- * (no migration, refused when their version isn't this pg-boss's) and keeps none of the upkeep.
+ * Asks for a scheduled job's pass now rather than on its schedule, from outside the control plane:
+ * the staging scripts run a sweep this way. The next minute's tick of a worker takes it (`claimJobs`
+ * in app/platform/persistence.ts), so within a minute. It writes only that request: a database the
+ * control plane never made, or a job it doesn't schedule, is refused.
  */
 export async function runScheduledNow(connectionString: string, job: ScheduledJob): Promise<void> {
-  const boss = new PgBoss({
+  const client = new pg.Client({
     connectionString: asLibpq(connectionString),
-    max: 1,
-    schema: SCHEMA,
     application_name: 'blockly-jobs',
-    migrate: false,
-    supervise: false,
-    schedule: false,
   })
-  boss.on('error', (error: unknown) => console.error('pg-boss', error))
+  await client.connect()
   try {
-    await boss.start()
-    await boss.send(job, {})
+    const asked = await client.query(
+      'update job_health set run_asked_at = clock_timestamp() where job = $1 and every_seconds is not null',
+      [job],
+    )
+    if (asked.rowCount === 0) throw new Error(`${job} is not a scheduled job of this control plane`)
   } finally {
-    await boss.stop()
+    await client.end()
   }
 }

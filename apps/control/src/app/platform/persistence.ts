@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { MINUTE_S } from '@blockly/contracts/durations'
 import { type Queryable, schema, type Tx } from '@blockly/db'
 import {
   and,
@@ -10,6 +11,7 @@ import {
   eq,
   getTableColumns,
   inArray,
+  isNotNull,
   isNull,
   like,
   lt,
@@ -257,11 +259,69 @@ export async function recordSchedule(
   )
 }
 
-export async function recordJobSucceeded(q: Queryable, job: string, at: Date): Promise<void> {
+/**
+ * How long after a pass of a scheduled job was taken another may be: a minute's ticks, which every
+ * worker makes, take it once between them, and the ticks of one minute fall well within this.
+ */
+const PASS_SPACING_S = MINUTE_S - 5
+
+/**
+ * Takes the right to run a pass of each of `names` that is due: those no pass holds (one ends when
+ * it is recorded, or after `holdSeconds`) and, when `spaced`, that no worker took within
+ * `PASS_SPACING_S`; of each job a pass was asked for out of its schedule, and of each whose hold lapsed
+ * with no end recorded (its worker died) (`runScheduledNow` in
+ * infra/pg/jobs.ts), once.
+ * Returns the ones taken. The database's clock decides, so workers on other machines agree.
+ */
+export async function claimJobs(
+  q: Queryable,
+  names: readonly string[],
+  holdSeconds: number,
+  spaced: boolean,
+): Promise<string[]> {
+  const now = sql`clock_timestamp()`
+  const due = and(
+    inArray(jobs.job, [...names]),
+    spaced
+      ? or(
+          isNull(jobs.claimedAt),
+          lt(jobs.claimedAt, sql`clock_timestamp() - make_interval(secs => ${PASS_SPACING_S})`),
+        )
+      : undefined,
+  )
+  const rows = await q
+    .update(jobs)
+    .set({
+      claimedAt: now,
+      claimedUntil: sql`clock_timestamp() + make_interval(secs => ${holdSeconds})`,
+      askedAt: null,
+    })
+    .where(
+      and(
+        or(isNull(jobs.claimedUntil), lt(jobs.claimedUntil, now)),
+        // A hold that lapsed without the pass's end recorded (success and failure both clear it) means
+        // its worker died: the job is taken again whether or not it is due.
+        or(due, isNotNull(jobs.askedAt), isNotNull(jobs.claimedUntil)),
+      ),
+    )
+    .returning({ job: jobs.job })
+  return rows.map((r) => r.job)
+}
+
+/** Each of these passes succeeded at its time, in one write; the pass ends, so the job can be taken again. */
+export async function recordJobsSucceeded(q: Queryable, done: ReadonlyMap<string, Date>): Promise<void> {
+  if (done.size === 0) return
   await q
     .insert(jobs)
-    .values({ job, firstSeenAt: at, lastSucceededAt: at })
-    .onConflictDoUpdate({ target: jobs.job, set: { lastSucceededAt: at, failures: 0 } })
+    .values([...done].map(([job, at]) => ({ job, firstSeenAt: at, lastSucceededAt: at })))
+    .onConflictDoUpdate({
+      target: jobs.job,
+      set: { lastSucceededAt: sql`excluded.last_succeeded_at`, failures: 0, claimedUntil: null },
+    })
+}
+
+export async function recordJobSucceeded(q: Queryable, job: string, at: Date): Promise<void> {
+  await recordJobsSucceeded(q, new Map([[job, at]]))
 }
 
 /** The most of an error kept: enough to know it by. */
@@ -274,7 +334,7 @@ export async function recordJobFailed(q: Queryable, job: string, at: Date, failu
     .values({ job, firstSeenAt: at, lastFailedAt: at, lastError: error, failures: 1 })
     .onConflictDoUpdate({
       target: jobs.job,
-      set: { lastFailedAt: at, lastError: error, failures: sql`${jobs.failures} + 1` },
+      set: { lastFailedAt: at, lastError: error, failures: sql`${jobs.failures} + 1`, claimedUntil: null },
     })
 }
 

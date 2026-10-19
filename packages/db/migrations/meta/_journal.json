@@ -624,6 +624,13 @@
       "when": 1792278205065,
       "tag": "0088_turned_away",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1792370364760,
+      "tag": "0089_job_claims",
+      "breakpoints": true
     }
   ]
 }

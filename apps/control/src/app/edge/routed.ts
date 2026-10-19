@@ -12,7 +12,8 @@
  * later one holds its route. It reads as running once every counted edge does, and is told so
  * once (`routed_at`). An edge counts while it asks and keeps up:
  *
- * - one not seen for `EDGE_SEEN_MS`, or whose version is older than `EDGE_BEHIND_MS`, doesn't count,
+ * - one not seen for `EDGE_SEEN_MS`, or whose version was older than `EDGE_BEHIND_MS` when it last
+ *   said, doesn't count,
  *   and an admin alert says so (`edgesBehind`);
  * - one first seen after a server became running doesn't hold that server back;
  * - and no server waits more than `EDGE_BEHIND_MS` from becoming running, whatever the edges say.
@@ -29,8 +30,17 @@ import type { EventBus } from '../ports/events.ts'
 
 const { edges, minecraftServers: servers } = schema
 
-/** How long an edge counts after it last asked. It asks every second, so this is several missed polls. */
-const EDGE_SEEN_MS = 10 * SECOND_MS
+/**
+ * How often an edge's word is written while no server waits on the edges (`service.ts`): it asks
+ * every second, and each word is a write. A server that waits is written for on every ask.
+ */
+export const EDGE_SAID_EVERY_MS = 20 * SECOND_MS
+
+/**
+ * How long an edge counts after it last said so: two of its words missed, and a margin. A word
+ * that is still to come as a server turns running is the next ask's, a second away.
+ */
+const EDGE_SEEN_MS = 2 * EDGE_SAID_EVERY_MS + 5 * SECOND_MS
 
 /**
  * How far an edge's version may fall behind before it stops counting; and so the longest a server
@@ -44,8 +54,12 @@ const EDGE_KEPT_MS = DAY_MS
 /** The database's clock, `ms` before now. */
 const ago = (ms: number): SQL => sql`clock_timestamp() - make_interval(secs => ${ms / SECOND_MS})`
 
-/** Whether the edge in the query keeps up: its version is recent, or it is new enough to be catching up. */
-const keepsUp = sql`(coalesce(${edges.syncedTo} > ${ago(EDGE_BEHIND_MS)}, false)
+/**
+ * Whether the edge in the query keeps up: the version it held when it last said so was recent, or
+ * it is new enough to be catching up. Judged against that word and not against now, which a word
+ * written every `EDGE_SAID_EVERY_MS` would always find too old.
+ */
+const keepsUp = sql`(coalesce(${edges.syncedTo} > ${edges.seenAt} - make_interval(secs => ${EDGE_BEHIND_MS / SECOND_MS}), false)
   or (${edges.syncedTo} is null and ${edges.firstSeenAt} > ${ago(EDGE_BEHIND_MS)}))`
 
 /** Whether the edge in the query was seen lately. */

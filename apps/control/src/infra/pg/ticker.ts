@@ -3,16 +3,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Sends each scheduled job as its minute comes (`CRON` in jobs.ts), from every process that works
- * the queues, in place of pg-boss's own scheduler. pg-boss's reads every schedule on each pass and
- * sends what is due through a queue of its own, about 12 kB a minute for nothing that can't be
- * known here. Each worker sends what is due at a second past each minute; the job's minute is its
- * singleton slot (`singletonSeconds`), so two workers, as a rolling deploy runs, send one job
- * between them, and a minute nobody was running for is skipped, as pg-boss's `missed: 'skip'` did.
- * Not for what a job does (`app/scheduled-jobs.ts`).
+ * Starts each scheduled job's pass as its minute comes (`CRON` in jobs.ts), from every process that
+ * works the queues. A pass is taken, not sent: one statement a minute takes every pass due for
+ * this process (`JobOutcomes.claim`), and what it takes is run here, with no job in the queue
+ * between. The claim is how two workers, as a rolling deploy runs, run a pass between them once, and
+ * how a pass that outlasts its minute is not started again; a minute nobody was running for is
+ * skipped. Not for what a job does (`app/scheduled-jobs.ts`), or how its pass is recorded (jobs.ts).
  */
-import { MINUTE_MS, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
-import type { PgBoss } from 'pg-boss'
+import { MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 
 /** How far into each minute the jobs go: clear of where the database's minute and this one's part. */
 const INTO_MINUTE_MS = SECOND_MS
@@ -48,50 +46,51 @@ export function due(cron: string, at: Date): boolean {
 }
 
 /**
- * The longest one minute's sends may take before the next minute is waited for regardless: a pool
+ * The longest one minute's claim may take before the next minute is waited for regardless: a pool
  * with no free connection waits without end, and the ticker must not wait with it.
  */
 const TICK_BOUND_MS = 30 * SECOND_MS
 
-/** What the ticker needs of pg-boss: sending a job. */
-type Sender = Pick<PgBoss, 'send'>
+/** What the ticker needs of the scheduled jobs: taking passes, and starting one taken. */
+export interface Passes {
+  /** The jobs among `names` whose pass this process may run now; the rest are another's or still run. */
+  claim(names: string[]): Promise<string[]>
+  /** Starts the pass of a job claimed. It ends by itself and records how it went. */
+  start(name: string): void
+}
 
 /**
- * Sends each of `schedules` due in `at`'s minute, and settles once they are sent, or after
- * `boundMs` while any still hangs: the hung send goes on by itself.
+ * Starts each of `schedules` due in `at`'s minute that is claimed, and settles once they are
+ * claimed, or after `boundMs` while the claim still hangs: it goes on by itself.
  */
 export async function tick(
-  boss: Sender,
+  passes: Passes,
   schedules: ReadonlyArray<readonly [string, string]>,
   at: Date,
   boundMs = TICK_BOUND_MS,
 ): Promise<void> {
-  const sends = (async () => {
-    for (const [name, cron] of schedules) {
-      if (!due(cron, at)) continue
-      await boss
-        .send(name, {}, { singletonSeconds: MINUTE_S })
-        .catch((error: unknown) => console.error(`schedule: ${name} not sent`, error))
-    }
-  })()
+  const claiming = (async () => {
+    const names = schedules.filter(([, cron]) => due(cron, at)).map(([name]) => name)
+    for (const name of await passes.claim(names)) passes.start(name)
+  })().catch((error: unknown) => console.error('schedule: the passes were not claimed', error))
   let timer: ReturnType<typeof setTimeout> | undefined
   const bound = new Promise<void>((resolve) => {
     timer = setTimeout(() => {
-      console.error(`schedule: the sends for ${at.toISOString()} still wait after ${boundMs} ms`)
+      console.error(`schedule: the claim for ${at.toISOString()} still waits after ${boundMs} ms`)
       resolve()
     }, boundMs)
   })
-  await Promise.race([sends, bound])
+  await Promise.race([claiming, bound])
   clearTimeout(timer)
 }
 
 /**
- * Sends each of `schedules` (job name and cron) as its minute comes, until the returned function
+ * Starts each of `schedules` (job name and cron) as its minute comes, until the returned function
  * is called. Every expression is read once first, so one that can't be refuses at once. The minute
- * the worker starts in is sent at once too: a restart in a daily job's minute would otherwise
- * lose that day's run. Where another worker sent it already, its singleton slot drops this one.
+ * the worker starts in is taken at once too: a restart in a daily job's minute would otherwise
+ * lose that day's run. Where another worker took it already, the claim drops this one.
  */
-export function everyMinute(boss: Sender, schedules: ReadonlyArray<readonly [string, string]>): () => void {
+export function everyMinute(passes: Passes, schedules: ReadonlyArray<readonly [string, string]>): () => void {
   for (const [, cron] of schedules) due(cron, new Date(0))
   let timer: ReturnType<typeof setTimeout> | undefined
   let stopped = false
@@ -101,13 +100,13 @@ export function everyMinute(boss: Sender, schedules: ReadonlyArray<readonly [str
     const at = Math.floor(now / MINUTE_MS) * MINUTE_MS + MINUTE_MS
     timer = setTimeout(
       () => {
-        void tick(boss, schedules, new Date(at)).finally(next)
+        void tick(passes, schedules, new Date(at)).finally(next)
       },
       at + INTO_MINUTE_MS - now,
     )
     timer.unref()
   }
-  void tick(boss, schedules, new Date(Math.floor(Date.now() / MINUTE_MS) * MINUTE_MS)).finally(next)
+  void tick(passes, schedules, new Date(Math.floor(Date.now() / MINUTE_MS) * MINUTE_MS)).finally(next)
   return () => {
     stopped = true
     clearTimeout(timer)

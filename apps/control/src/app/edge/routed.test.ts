@@ -88,6 +88,28 @@ describe.skipIf(!hasDatabase)('a running server, as edges that keep up hold it',
     })
   }, 30_000)
 
+  test('an edge whose last word is 30 s old, as one is while nothing waits, still holds it back', async () => {
+    const owner = await h.user()
+    await edge('e1')()
+    await h.db.update(schema.edges).set({
+      seenAt: sql`clock_timestamp() - interval '30 seconds'`,
+      syncedTo: sql`clock_timestamp() - interval '31 seconds'`,
+    })
+    const id = await running(owner)
+    expect(await shown(owner, id)).toBe('starting')
+  }, 30_000)
+
+  test('an edge not heard from for a minute does not', async () => {
+    const owner = await h.user()
+    await edge('e1')()
+    await h.db.update(schema.edges).set({
+      seenAt: sql`clock_timestamp() - interval '60 seconds'`,
+      syncedTo: sql`clock_timestamp() - interval '61 seconds'`,
+    })
+    const id = await running(owner)
+    expect(await shown(owner, id)).toBe('running')
+  }, 30_000)
+
   test('while the routes keep changing, an edge that applies each list catches up all the same', async () => {
     const owner = await h.user()
     const other = await running(await h.user())

@@ -61,6 +61,12 @@ export interface JobOutcomes {
   scheduled(jobs: ReadonlyArray<{ job: string; everySeconds: number }>, at: Date): Promise<void>
   /** When each job last succeeded; a job that never has is absent. */
   lastSucceeded(): Promise<ReadonlyMap<string, Date>>
+  /**
+   * Takes the right to run a pass of each of these jobs, for the ones no pass holds. With `spaced`,
+   * not those a worker took in the last minute either: the ticks of a minute take a pass once
+   * between them. Returns those taken; the pass ends when it is recorded, or after `holdSeconds`.
+   */
+  claim(jobs: readonly string[], holdSeconds: number, spaced: boolean): Promise<string[]>
   succeeded(job: string, at: Date): Promise<void>
   failed(job: string, at: Date, error: string): Promise<void>
 }

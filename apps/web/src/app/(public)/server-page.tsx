@@ -131,7 +131,8 @@ function Needs({ view }: { view: PublicServerView }) {
       <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
         Nothing to install: plain Minecraft {versionsThatJoin(view.gameVersion, view.needs.joins)} joins this
         server.
-        {view.loader !== 'vanilla' && ' Its mods run on the server only.'}
+        {view.loader !== 'vanilla' &&
+          ` Its ${view.loader === 'paper' ? 'plugins' : 'mods'} run on the server only.`}
       </p>
     )
   return (

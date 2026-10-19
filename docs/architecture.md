@@ -962,7 +962,11 @@ waitRunning
   upload. It is tried once more after a failure, then its owner is told it couldn't be read
   (docs/modpack-system.md).
 
-**Schedules** (separate queues, `singleton` policy, in `infra/pg/jobs.ts`):
+**Schedules** (in `infra/pg/jobs.ts` and `ticker.ts`; no queue of their own). Each worker takes the
+passes due as every minute comes with one statement on `job_health` (`claimed_at`, `claimed_until`):
+a pass is run by whichever worker takes it, once, and is not taken again while it runs or within the
+minute. A script's `runScheduledNow` leaves a request there that the next minute's claim takes.
+Outcomes are written down in `job_health`, the successes of a minute together:
 - `reconcile`: `observeChanged` every minute, reading everything on a process's first pass and
   hourly, to detect crashes and OOMs and to stop compute that runs behind a server holding none
   (§15.5).

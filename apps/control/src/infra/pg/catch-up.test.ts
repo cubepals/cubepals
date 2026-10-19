@@ -8,11 +8,11 @@
  * schedule.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { randomBytes } from 'node:crypto'
-import { HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
-import pg from 'pg'
+import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import type { PgBoss } from 'pg-boss'
+import { JobRecord } from '../../app/platform/job-record.ts'
 import type { Schedule } from '../../app/ports/jobs.ts'
+import { freshDatabase, hasDatabase } from '../../testing/fleet.ts'
 import { catchUp } from './catch-up.ts'
 import { startBoss, workSchedules } from './jobs.ts'
 
@@ -27,86 +27,39 @@ describe('catching up', () => {
     { job: 'retention-sweep', everySeconds: 86_400 },
   ]
 
-  test('sends the jobs whose last success is older than their interval, or that have none', async () => {
-    const sent: string[] = []
-    const woken: string[] = []
-    const boss = {
-      send: async (job: string) => {
-        sent.push(job)
-        return 'id'
-      },
-      notifyWorker: (worker: string) => void woken.push(worker),
-    } as unknown as Pick<PgBoss, 'send' | 'notifyWorker'>
+  test('names the jobs whose last success is older than their interval, or that have none', () => {
     const succeeded = new Map([
       ['worker-heartbeat', ago(5 * HOUR_MS)],
       ['spend-watchdog', ago(5 * HOUR_MS)],
       ['orphans', ago(10 * MINUTE_MS)],
     ])
-    const caught = await catchUp(boss, schedules, succeeded, ['a', 'b'], now)
-    expect(caught).toEqual(['worker-heartbeat', 'spend-watchdog', 'retention-sweep'])
-    expect(sent).toEqual(caught)
-    expect(woken).toEqual(['a', 'b'])
+    expect(catchUp(schedules, succeeded, now)).toEqual([
+      'worker-heartbeat',
+      'spend-watchdog',
+      'retention-sweep',
+    ])
   })
 
-  test('leaves alone a job that ran within its interval', async () => {
-    const sent: string[] = []
-    const boss = {
-      send: async (job: string) => {
-        sent.push(job)
-        return 'id'
-      },
-      notifyWorker: () => {},
-    } as unknown as Pick<PgBoss, 'send' | 'notifyWorker'>
+  test('leaves alone a job that ran within its interval', () => {
     const fresh = new Map(schedules.map((s) => [s.job, ago(s.everySeconds * 1000 - 1000)]))
-    expect(await catchUp(boss, schedules, fresh, [], now)).toEqual([])
-    expect(sent).toEqual([])
-  })
-
-  test('goes on to the next job when one send fails', async () => {
-    const boss = {
-      send: async (job: string) => {
-        if (job === 'spend-watchdog') throw new Error('the database went away')
-        return 'id'
-      },
-      notifyWorker: () => {},
-    } as unknown as Pick<PgBoss, 'send' | 'notifyWorker'>
-    const originalError = console.error
-    console.error = () => {}
-    try {
-      expect(await catchUp(boss, schedules, new Map(), [], now)).toEqual([
-        'worker-heartbeat',
-        'orphans',
-        'retention-sweep',
-      ])
-    } finally {
-      console.error = originalError
-    }
+    expect(catchUp(schedules, fresh, now)).toEqual([])
   })
 })
 
-const base = process.env.DATABASE_URL
-
-describe.skipIf(!base)('a worker that starts after being stopped for hours', () => {
-  const name = `blockly_test_${randomBytes(5).toString('hex')}`
+describe.skipIf(!hasDatabase)('a worker that starts after being stopped for hours', () => {
+  let database: Awaited<ReturnType<typeof freshDatabase>>
   let boss: PgBoss
   beforeAll(async () => {
-    const admin = new pg.Client({ connectionString: base })
-    await admin.connect()
-    await admin.query(`CREATE DATABASE ${name}`)
-    await admin.end()
+    database = await freshDatabase()
   }, 30_000)
   afterAll(async () => {
     await boss?.stop({ graceful: false })
-    const cleanup = new pg.Client({ connectionString: base })
-    await cleanup.connect()
-    await cleanup.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`)
-    await cleanup.end()
+    await database?.drop()
   })
 
   test('runs what went stale within seconds, whichever minute it starts in', async () => {
-    const u = new URL(base as string)
-    u.pathname = `/${name}`
-    boss = await startBoss(u.toString())
+    boss = await startBoss(database.url)
+    const record = new JobRecord({ db: database.db })
     const ran: string[] = []
     const schedules = (
       [
@@ -143,24 +96,27 @@ describe.skipIf(!base)('a worker that starts after being stopped for hours', () 
         'insight-send',
       ] as const
     ).map((job): Schedule => ({ job, run: async () => void ran.push(job) }))
-    const succeeded: string[] = []
-    // Stopped for five hours: every job last succeeded then.
-    const last = new Map(schedules.map((s) => [s.job as string, new Date(Date.now() - 5 * HOUR_MS)]))
-    last.set('worker-heartbeat', new Date(Date.now() - 5 * HOUR_MS))
+    // Stopped for two days: every job last succeeded then.
+    const stale = new Date(Date.now() - 2 * DAY_MS)
+    await record.scheduled(
+      [...schedules.map((s) => s.job), 'worker-heartbeat'].map((job) => ({ job, everySeconds: 60 })),
+      stale,
+    )
+    await Promise.all(
+      [...schedules.map((s) => s.job), 'worker-heartbeat'].map((job) => record.succeeded(job, stale)),
+    )
     const started = Date.now()
-    await workSchedules(boss, schedules, {
-      scheduled: async () => {},
-      lastSucceeded: async () => last,
-      succeeded: async (job) => void succeeded.push(job),
-      failed: async () => {},
-    })
-    while (!(succeeded.includes('spend-watchdog') && succeeded.includes('worker-heartbeat'))) {
-      if (Date.now() - started > 20_000) throw new Error(`Only ${succeeded.join(', ')} ran`)
-      await Bun.sleep(50)
+    const running = await workSchedules(boss, schedules, record)
+    try {
+      while (!(ran.includes('spend-watchdog') && ran.length >= schedules.length)) {
+        if (Date.now() - started > 20_000) throw new Error(`Only ${ran.join(', ')} ran`)
+        await Bun.sleep(50)
+      }
+      // Neither waited for a minute's tick (the next one is at most a minute away, and it is the
+      // ten-minute one that spend waits on).
+      expect(Date.now() - started).toBeLessThan(20_000)
+    } finally {
+      await running.stop()
     }
-    // Neither waited for a minute's tick (the next one is at most a minute away, and it is the
-    // ten-minute one that spend waits on).
-    expect(Date.now() - started).toBeLessThan(20_000)
-    expect(ran).toContain('spend-watchdog')
   }, 40_000)
 })

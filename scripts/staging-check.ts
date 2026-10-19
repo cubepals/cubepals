@@ -140,7 +140,7 @@ const serverApps = async () =>
     (app) => app.Name,
   )
 
-/** Runs a sweep now rather than on its schedule. */
+/** Asks for a sweep now rather than on its schedule: a worker takes it within the minute. */
 const sweep = (job: 'purge-sweep' | 'store-sweep') =>
   runScheduledNow(verifiedAgainstSupabase(databaseUrl), job)
 

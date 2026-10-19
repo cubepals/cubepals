@@ -20,7 +20,7 @@ let record: JobRecord
 beforeAll(async () => {
   if (!hasDatabase) return
   h = await startHarness()
-  record = new JobRecord({ db: h.db })
+  record = new JobRecord({ db: h.db, successesTogetherMs: 0 })
 }, 30_000)
 afterAll(async () => {
   if (hasDatabase) await h.close()
@@ -92,6 +92,48 @@ describe.skipIf(!hasDatabase)('the control plane’s liveness', () => {
     expect(await health()).toEqual({ ok: false, stale: ['worker-heartbeat'] })
     await record.succeeded('worker-heartbeat', new Date(now.getTime() - MINUTE_MS))
     expect(await health()).toEqual({ ok: true, stale: [] })
+  })
+})
+
+describe.skipIf(!hasDatabase)('taking the passes of scheduled jobs', () => {
+  const t0 = new Date('2026-03-01T00:00:00Z')
+
+  test('workers take a minute’s pass between them once, and not again while it runs', async () => {
+    const other = new JobRecord({ db: h.db, successesTogetherMs: 0 })
+    await record.scheduled([{ job: 'drift', everySeconds: 60 }], t0)
+    expect(await record.claim(['drift'], 300, true)).toEqual(['drift'])
+    expect(await other.claim(['drift'], 300, true)).toEqual([])
+    // Even once it ends, the minute's other ticks are too late for it; an out-of-turn request isn't.
+    await record.succeeded('drift', new Date())
+    expect(await other.claim(['drift'], 300, true)).toEqual([])
+    expect(await other.claim(['drift'], 300, false)).toEqual(['drift'])
+  })
+
+  test('a pass that never ends frees its job when its time is up', async () => {
+    await record.scheduled([{ job: 'orphans', everySeconds: 60 }], t0)
+    expect(await record.claim(['orphans'], 0, false)).toEqual(['orphans'])
+    expect(await record.claim(['orphans'], 300, false)).toEqual(['orphans'])
+  })
+
+  test('a daily job whose worker died holding it is taken again at the next tick, though not due', async () => {
+    await record.scheduled([{ job: 'retention-sweep', everySeconds: 86_400 }], t0)
+    expect(await record.claim(['retention-sweep'], 0, true)).toEqual(['retention-sweep'])
+    // No success or failure is recorded; the hold lapsed. Nothing is due this minute.
+    expect(await record.claim([], 300, true)).toEqual(['retention-sweep'])
+    // A pass that ended is not taken again out of its day.
+    await record.succeeded('retention-sweep', new Date())
+    expect(await record.claim([], 300, true)).toEqual([])
+  })
+
+  test('only what is asked for is taken', async () => {
+    await record.scheduled(
+      [
+        { job: 'presence-sync', everySeconds: 60 },
+        { job: 'idle-check', everySeconds: 60 },
+      ],
+      t0,
+    )
+    expect(await record.claim(['idle-check'], 300, true)).toEqual(['idle-check'])
   })
 })
 

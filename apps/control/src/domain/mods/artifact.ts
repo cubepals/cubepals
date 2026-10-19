@@ -64,12 +64,24 @@ export const isDatapack = (
 ): boolean => mod.loaders.includes(DATAPACK) && !mod.loaders.some((loader) => jarLoaders.includes(loader))
 
 /**
+ * The server types that run plugins rather than mods. A plugin lives in the server alone: nothing
+ * in a player's game can load one, so no plugin is ever something to install, whatever a catalog's
+ * side fields say of it (Modrinth's are often wrong for plugins, and deprecated for `environment`).
+ */
+const PLUGIN_LOADERS: readonly string[] = ['paper']
+
+export const runsPlugins = (loader: string): boolean => PLUGIN_LOADERS.includes(loader)
+
+/**
  * The mods players install to play on a server. Plain Minecraft joins unless one of them has to
  * be in a player's game too; then everyone installs the loader anyway, and the ones that only add
  * to a game that has them — voice chat to talk, a minimap — come along. A mod players can do
- * without is never the reason to install a loader.
+ * without is never the reason to install a loader. A plugin server asks nothing of players.
  */
-export function forPlayers<T extends Pick<PinnedMod, 'environment'>>(mods: readonly T[]): T[] {
-  if (!mods.some((mod) => mod.environment === 'both')) return []
+export function forPlayers<T extends Pick<PinnedMod, 'environment'>>(
+  mods: readonly T[],
+  loader: string,
+): T[] {
+  if (runsPlugins(loader) || !mods.some((mod) => mod.environment === 'both')) return []
   return mods.filter((mod) => mod.environment !== 'server')
 }

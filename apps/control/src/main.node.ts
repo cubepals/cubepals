@@ -498,21 +498,24 @@ async function startWorker(
     gaveUp: (release, error) => app.curation.ingestGaveUp(release, error),
   })
   await workListingEligibility(boss, (serverIds) => app.listings.reevaluate(serverIds))
-  await workSchedules(boss, scheduledJobs(app, provider), record)
+  const schedules = await workSchedules(boss, scheduledJobs(app, provider), record)
   // A catalog that went unrefreshed while no worker ran is refreshed now, not at the next :41,
   // so trust uses what is true and the stale alert judges a refresh that was tried.
-  if (await app.catalog.missedRefresh()) await boss.send('catalog-refresh', {})
-  // The default modpack list is checked as a worker starts too, not an hour after a deploy.
-  await boss.send('pack-checks', {})
-  // The lists of known malware too: a worker starts holding uploads to them as they are now.
-  await boss.send('malware-lists', {})
-  // And the Via plugins Paper servers start with, so a deploy's new release has them at once.
-  await boss.send('compat-pins', {})
-  // So are the reviewed releases a deploy brought: checked now, offered once an admin says so.
-  await boss.send('curation', {})
+  if (await app.catalog.missedRefresh()) await schedules.runNow(['catalog-refresh'])
+  // The default modpack list is checked as a worker starts too, not an hour after a deploy; the
+  // lists of known malware too, as a worker starts holding uploads to them as they are now; and
+  // the Via plugins Paper servers start with, so a deploy's new release has them at once; and so
+  // are the reviewed releases a deploy brought: checked now, offered once an admin says so.
+  await schedules.runNow(['pack-checks', 'malware-lists', 'compat-pins', 'curation'])
   console.warn('worker running')
   // Alone, it answers Fly's check on its group, where the api would listen (control.toml).
-  return config.roles.includes('api') ? () => {} : serveWorkerHealth(hostPort(config.listen.api), record)
+  const stopHealth = config.roles.includes('api')
+    ? () => {}
+    : serveWorkerHealth(hostPort(config.listen.api), record)
+  return async () => {
+    await stopHealth()
+    await schedules.stop()
+  }
 }
 
 /** Where nodes enroll and report, and the operators' API that runs the fleet. */
