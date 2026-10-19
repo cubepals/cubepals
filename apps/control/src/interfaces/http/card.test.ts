@@ -22,7 +22,6 @@ describe('link picture', () => {
       maxPlayers: 10,
       gameVersion: '26.3',
       joins: { oldest: '26.3', newer: false },
-      serverType: null,
       invited: false,
       ...patch,
     })
@@ -129,19 +128,22 @@ function cellsOf(word: string, scale: number): { on: Cell[]; off: Cell[] } {
 }
 
 describe('the versions a card names', () => {
-  const row = (joins: { oldest: string; newer: boolean }) =>
-    versionRow({ gameVersion: '1.21.11', joins, serverType: 'paper' })
+  const row = (joins: { oldest: string; newer: boolean }) => versionRow({ gameVersion: '1.21.11', joins })
 
   test('one version where other versions are off', () => {
-    expect(row({ oldest: '1.21.11', newer: false })).toBe('MINECRAFT 1.21.11 PAPER')
+    expect(row({ oldest: '1.21.11', newer: false })).toBe('MINECRAFT 1.21.11')
   })
 
   test('newer ones too with other versions on', () => {
-    expect(row({ oldest: '1.21.11', newer: true })).toBe('MINECRAFT 1.21.11 OR NEWER PAPER')
+    expect(row({ oldest: '1.21.11', newer: true })).toBe('MINECRAFT 1.21.11 OR NEWER')
   })
 
   test('the oldest that joins, with the oldest-versions choice', () => {
-    expect(row({ oldest: '1.7.2', newer: true })).toBe('MINECRAFT 1.7.2 OR NEWER PAPER')
+    expect(row({ oldest: '1.7.2', newer: true })).toBe('MINECRAFT 1.7.2 OR NEWER')
+  })
+
+  test('the server type is not on it', () => {
+    expect(row({ oldest: '1.9', newer: true })).not.toContain('PAPER')
   })
 
   test('every character of it is one the font draws', () => {

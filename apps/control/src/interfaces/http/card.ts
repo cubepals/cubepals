@@ -61,8 +61,6 @@ export interface CardView {
   gameVersion: string
   /** Which versions join, as every page words it. */
   joins: JoinRange
-  /** The server type, where it is not plain Minecraft; null says nothing rather than "VANILLA". */
-  serverType: string | null
   invited: boolean
 }
 
@@ -75,9 +73,9 @@ interface Row {
   block?: Rgb
 }
 
-/** The line under the state: the versions that join, then the server type. */
-export const versionRow = (view: Pick<CardView, 'gameVersion' | 'joins' | 'serverType'>): string =>
-  `MINECRAFT ${versionsThatJoin(view.gameVersion, view.joins)}${view.serverType === null ? '' : ` ${view.serverType}`}`.toUpperCase()
+/** The line under the state: the versions that join. The server type is for its owner's pages, not a link preview. */
+export const versionRow = (view: Pick<CardView, 'gameVersion' | 'joins'>): string =>
+  `MINECRAFT ${versionsThatJoin(view.gameVersion, view.joins)}`.toUpperCase()
 
 export function serverCard(view: CardView): Buffer {
   const canvas = new Canvas(WIDTH, HEIGHT, PAPER)
