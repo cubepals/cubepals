@@ -35,8 +35,10 @@ h1{margin:0;font-size:36px;line-height:40px;font-weight:800;letter-spacing:-.05e
 p{margin:0}
 .fine{color:var(--muted);font-size:16px;line-height:24px}
 .row{display:flex;flex-wrap:wrap;gap:12px;margin-block:8px}
-.go{display:inline-block;padding:10px 18px;border:2px solid var(--ink);border-radius:8px;color:var(--ink);font-weight:700;text-decoration:none}
-.go.first{background:var(--ink);color:var(--paper)}
+.row{padding-bottom:3px}
+.go{display:inline-flex;align-items:center;justify-content:center;height:44px;padding:0 20px;border:2px solid var(--ink);border-radius:0;background:#fff;box-shadow:0 3px 0 0 color-mix(in srgb,var(--ink) 38%,var(--paper));color:var(--ink);font-size:15px;line-height:20px;font-weight:700;letter-spacing:-.02em;text-decoration:none;white-space:nowrap}
+.go.first{background:var(--ink);border-color:var(--paper);color:var(--paper)}
+.go:active{translate:0 3px;box-shadow:none}
 a{color:inherit;text-underline-offset:.2em}
 `
 
@@ -44,11 +46,18 @@ a{color:inherit;text-underline-offset:.2em}
 export const logo = (lockup: string): string =>
   lockup.replace(/<svg\b([^>]*)>/, '<svg class="logo"$1><title>Cubepals</title>')
 
-/**
- * One page as a document; `figure` is the picture as a data URI and `lockup` the brand's drawn
- * lockup (brand/lockup-horizontal.svg), so the page loads alone.
- */
-export function staticPage(file: keyof typeof STATIC_PAGES, figure: string, lockup: string): string {
+/** What a page carries inline, so it loads alone: the figure and the icon as data URIs, and the lockup's SVG. */
+export interface Inline {
+  /** The 404's own figure, public/errors/moss-shrugging.png, as a data URI. */
+  figure: string
+  /** brand/lockup-horizontal.svg. */
+  lockup: string
+  /** brand/favicon.svg, the mark, as a data URI. */
+  icon: string
+}
+
+/** One page as a document. The system font stays: a web font would be a request, which these pages can't depend on. */
+export function staticPage(file: keyof typeof STATIC_PAGES, { figure, lockup, icon }: Inline): string {
   const { kind, token } = STATIC_PAGES[file]
   const copy = LOST[kind]
   return `<!doctype html>
@@ -57,6 +66,7 @@ export function staticPage(file: keyof typeof STATIC_PAGES, figure: string, lock
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
+<link rel="icon" href="${icon}">
 <title>${copy.title} · Cubepals</title>
 <style>${STYLE}</style>
 </head>

@@ -11,7 +11,11 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { STATIC_PAGES, staticPage } from '../src/errors/pages.ts'
 
-const figure = `data:image/png;base64,${readFileSync(new URL('../public/errors/kai-shrugging.png', import.meta.url)).toString('base64')}`
-const lockup = readFileSync(new URL('../../../brand/lockup-horizontal.svg', import.meta.url), 'utf8').trim()
+const read = (path: string) => readFileSync(new URL(path, import.meta.url))
+const inline = {
+  figure: `data:image/png;base64,${read('../public/errors/moss-shrugging.png').toString('base64')}`,
+  lockup: read('../../../brand/lockup-horizontal.svg').toString('utf8').trim(),
+  icon: `data:image/svg+xml,${encodeURIComponent(read('../../../brand/favicon.svg').toString('utf8').trim())}`,
+}
 for (const file of Object.keys(STATIC_PAGES) as Array<keyof typeof STATIC_PAGES>)
-  writeFileSync(new URL(`../public/errors/${file}`, import.meta.url), staticPage(file, figure, lockup))
+  writeFileSync(new URL(`../public/errors/${file}`, import.meta.url), staticPage(file, inline))
