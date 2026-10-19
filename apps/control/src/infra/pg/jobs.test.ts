@@ -3,15 +3,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A scheduled job sent from outside the control plane, as the staging scripts run a sweep: it
- * reaches the queue's worker through pg-boss itself, and touches no database pg-boss isn't in.
+ * A scheduled job asked for from outside the control plane, as the staging scripts run a sweep: a
+ * worker takes it with its next claim, and no database the control plane didn't make is touched.
  * And the order a worker takes server operations in across servers.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomBytes, randomUUID } from 'node:crypto'
+import { HOUR_S } from '@blockly/contracts/durations'
 import { createDb, createPool } from '@blockly/db'
 import pg from 'pg'
 import type { PgBoss } from 'pg-boss'
+import { JobRecord } from '../../app/platform/job-record.ts'
+import { freshDatabase as migratedDatabase } from '../../testing/fleet.ts'
 import { asLibpq, PgBossJobs, runScheduledNow, startBoss } from './jobs.ts'
 
 // Needs a real Postgres: DATABASE_URL=postgres://… bun test
@@ -47,27 +50,27 @@ test('a connection string with an sslmode keeps it as libpq means it; one withou
 })
 
 describe.skipIf(!base)('runScheduledNow', () => {
-  let database: Awaited<ReturnType<typeof freshDatabase>>
-  let boss: PgBoss
+  let database: Awaited<ReturnType<typeof migratedDatabase>>
 
   beforeAll(async () => {
-    database = await freshDatabase()
-    boss = await startBoss(database.url)
+    database = await migratedDatabase()
   }, 30_000)
 
   afterAll(async () => {
-    await boss?.stop({ graceful: false })
     await database?.drop()
   })
 
-  test('a worker of the scheduled job gets it at once', async () => {
-    await boss.createQueue('store-sweep', { policy: 'singleton', retryLimit: 0 })
+  test('the next claim of a worker takes the job once, out of its schedule', async () => {
+    const record = new JobRecord({ db: database.db })
+    await record.scheduled([{ job: 'store-sweep', everySeconds: HOUR_S }], new Date())
     await runScheduledNow(database.url, 'store-sweep')
-    const got = new Promise<void>((resolve) => {
-      void boss.work('store-sweep', { pollingIntervalSeconds: 0.5 }, async () => resolve())
-    })
-    await got
-    expect(await boss.findJobs('store-sweep')).toHaveLength(1)
+    // Nothing is due this minute, and the request is taken all the same, once.
+    expect(await record.claim([], 300, true)).toEqual(['store-sweep'])
+    expect(await record.claim([], 300, true)).toEqual([])
+  }, 10_000)
+
+  test('a job the control plane does not schedule is refused', async () => {
+    await expect(runScheduledNow(database.url, 'purge-sweep')).rejects.toThrow('not a scheduled job')
   }, 10_000)
 
   test('a database the control plane never made jobs in is refused, and left as it was', async () => {

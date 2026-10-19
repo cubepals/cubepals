@@ -3,14 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Reading the scheduled jobs' cron expressions as their minutes come, in UTC, and the one job a
- * minute two workers send between them.
+ * Reading the scheduled jobs' cron expressions as their minutes come, in UTC, and starting the
+ * passes a worker takes.
  */
 import { describe, expect, test } from 'bun:test'
-import { randomBytes } from 'node:crypto'
-import { MINUTE_S } from '@blockly/contracts/durations'
-import pg from 'pg'
-import { startBoss } from './jobs.ts'
 import { due, everyMinute, tick } from './ticker.ts'
 
 const at = (iso: string) => new Date(iso)
@@ -36,65 +32,61 @@ describe('a cron expression', () => {
 })
 
 describe('the ticker', () => {
-  test('sends what is due in the minute a worker starts in, at once', async () => {
-    const sent: string[] = []
-    const boss = {
-      send: async (name: string) => {
-        sent.push(name)
-        return null
-      },
-    } as never
+  test('claims what is due in the minute a worker starts in, at once, and starts what it is given', async () => {
+    const asked: string[][] = []
+    const started: string[] = []
     // Every minute is due for one; the other is due a minute that is never now.
-    const stop = everyMinute(boss, [
-      ['each-minute', '* * * * *'],
-      ['never-now', `0 0 1 1 ${(new Date().getUTCDay() + 1) % 7}`],
-    ])
+    const stop = everyMinute(
+      {
+        claim: async (names) => {
+          asked.push(names)
+          return names
+        },
+        start: (name) => void started.push(name),
+      },
+      [
+        ['each-minute', '* * * * *'],
+        ['never-now', `0 0 1 1 ${(new Date().getUTCDay() + 1) % 7}`],
+      ],
+    )
     try {
       await Bun.sleep(50)
-      expect(sent).toEqual(['each-minute'])
+      expect(asked).toEqual([['each-minute']])
+      expect(started).toEqual(['each-minute'])
     } finally {
       stop()
     }
   })
 
-  test('goes on to the next minute when a send hangs', async () => {
+  test('starts only the passes it is given, those another worker took being left to it', async () => {
+    const started: string[] = []
+    await tick(
+      { claim: async () => ['mine'], start: (name) => void started.push(name) },
+      [
+        ['mine', '* * * * *'],
+        ['theirs', '* * * * *'],
+      ],
+      new Date(),
+    )
+    expect(started).toEqual(['mine'])
+  })
+
+  test('goes on to the next minute when a claim hangs', async () => {
     let asked = 0
-    const boss = {
-      send: () => {
-        asked++
-        return new Promise(() => {})
-      },
-    } as never
     const started = Date.now()
-    await tick(boss, [['hangs', '* * * * *']], new Date(), 100)
+    await tick(
+      {
+        claim: () => {
+          asked++
+          return new Promise(() => {})
+        },
+        start: () => {},
+      },
+      [['hangs', '* * * * *']],
+      new Date(),
+      100,
+    )
     expect(asked).toBe(1)
     expect(Date.now() - started).toBeLessThan(1000)
   })
-})
-
-const base = process.env.DATABASE_URL
-
-describe.skipIf(!base)('a scheduled job sent by two workers in one minute', () => {
-  test('is one job', async () => {
-    const name = `blockly_test_${randomBytes(5).toString('hex')}`
-    const admin = new pg.Client({ connectionString: base })
-    await admin.connect()
-    await admin.query(`CREATE DATABASE ${name}`)
-    const url = new URL(base as string)
-    url.pathname = `/${name}`
-    const [one, two] = [await startBoss(url.toString()), await startBoss(url.toString())]
-    try {
-      await one.createQueue('tick-test', { policy: 'singleton' })
-      // The first already ran when the second worker sends: the minute still holds one job.
-      expect(await one.send('tick-test', {}, { singletonSeconds: MINUTE_S })).not.toBeNull()
-      const [job] = await one.fetch('tick-test')
-      await one.complete('tick-test', job?.id ?? '')
-      expect(await two.send('tick-test', {}, { singletonSeconds: MINUTE_S })).toBeNull()
-    } finally {
-      await one.stop({ graceful: false })
-      await two.stop({ graceful: false })
-      await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`)
-      await admin.end()
-    }
-  }, 30_000)
 })

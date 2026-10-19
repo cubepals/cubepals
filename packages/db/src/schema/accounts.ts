@@ -199,7 +199,8 @@ export const platformAlerts = pgTable('platform_alerts', {
  * How each piece of the platform's recurring work last went: every scheduled job by its name, as the
  * worker that ran it recorded it (`every_seconds` its schedule's interval), and the parts of one that
  * fail on their own (`spend-figure`, the provider read for the spend watchdog; `realtime-certificate`,
- * the realtime role's renewals). The `admin-alerts` sweep and `/api/health` read it.
+ * the realtime role's renewals). The `admin-alerts` sweep and `/api/health` read it. A scheduled job's
+ * row is also where workers take its passes (`claimed_at`, `claimed_until`), so that one runs at a time.
  */
 export const jobHealth = pgTable('job_health', {
   job: text('job').primaryKey(),
@@ -211,4 +212,10 @@ export const jobHealth = pgTable('job_health', {
   lastError: text('last_error'),
   /** Failures in a row since the last success. */
   failures: integer('failures').notNull().default(0),
+  /** When a worker last took the right to run a scheduled job: one pass is taken once a minute. */
+  claimedAt: ts('claimed_at'),
+  /** Until when the pass taken holds the job, if it doesn't end first: the next may not start before. */
+  claimedUntil: ts('claimed_until'),
+  /** When a pass out of schedule was asked for (a script's sweep now): the next minute's claim takes it. */
+  askedAt: ts('run_asked_at'),
 })
