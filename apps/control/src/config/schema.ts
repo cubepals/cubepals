@@ -203,6 +203,39 @@ const AbuseLimits = z
     'ABUSE_LIMITS: extraCeiling.untilRenewed <= extraCeiling.renewed',
   )
 
+/** What the economics report prices a margin with (`domain/account/tuning.ts`), from ECONOMICS_TUNING: private too. */
+const EconomicsTuning = z.strictObject(
+  {
+    paymentFee: z.strictObject({ percent: z.number().min(0).max(100), fixedCents: z.number().nonnegative() }),
+    archiveGbMonthCents: z.number().nonnegative(),
+  },
+  { error: 'ECONOMICS_TUNING is the deployment’s economics figures, as JSON (docs/configuration.md)' },
+)
+
+/**
+ * Files placed on Cubepals' own servers at every start, by path under /data, from
+ * OFFICIAL_SERVER_FILES (`app/servers/own-files.ts`). Never refuses the deployment: settings that
+ * are missing or don't parse leave no files and say why, for an alert.
+ */
+const FilePath = z
+  .string()
+  .min(1)
+  .refine(
+    (path) =>
+      !path.startsWith('/') && !path.includes('\\') && !path.split('/').some((p) => p === '..' || p === ''),
+    'a path under /data',
+  )
+const OfficialServerFiles = z
+  .object({ json: z.unknown(), production: z.boolean() })
+  .transform(({ json, production }) => {
+    if (json === undefined)
+      return { files: {} as Record<string, string>, problem: production ? ('unset' as const) : null }
+    const parsed = z.record(FilePath, z.string()).safeParse(json)
+    return parsed.success
+      ? { files: parsed.data, problem: null }
+      : { files: {} as Record<string, string>, problem: 'invalid' as const }
+  })
+
 /** How room is shared when it runs short (`domain/account/tuning.ts`), from CAPACITY_TUNING: private too. */
 const CapacityTuning = z.strictObject(
   {
@@ -400,6 +433,9 @@ export const DeploymentConfig = z.object({
   freeLinkTuning: FreeLinkTuning,
   abuseLimits: AbuseLimits,
   capacityTuning: CapacityTuning,
+  /** Unset in production leaves the economics report without a margin; elsewhere unset is the defaults. */
+  economicsTuning: EconomicsTuning.nullable(),
+  officialServerFiles: OfficialServerFiles,
   /**
    * Room for new servers (`app/platform/room.ts`): the running places and servers new creates
    * leave for starts and wakes, and how long the oldest create may have waited for a worker

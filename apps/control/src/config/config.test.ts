@@ -6,6 +6,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   DEFAULT_ABUSE_LIMITS,
   DEFAULT_CAPACITY_TUNING,
+  DEFAULT_ECONOMICS_TUNING,
   DEFAULT_FREE_LINK_TUNING,
 } from '../domain/account/tuning.ts'
 import { DEFAULT_ROOM } from '../domain/policy/room.ts'
@@ -430,6 +431,17 @@ describe('private tuning', () => {
     const capacity = { ...DEFAULT_CAPACITY_TUNING, tightIdleMinutes: 4 }
     expect(loadConfig({ ...env, CAPACITY_TUNING: JSON.stringify(capacity) }).capacityTuning).toEqual(capacity)
     expect(loadConfig(env).capacityTuning).toEqual(DEFAULT_CAPACITY_TUNING)
+  })
+
+  test('the economics figures are read from their JSON, default outside production, and are left out when unset there', () => {
+    const economics = { paymentFee: { percent: 4, fixedCents: 20 }, archiveGbMonthCents: 2 }
+    expect(loadConfig({ ...env, ECONOMICS_TUNING: JSON.stringify(economics) }).economicsTuning).toEqual(
+      economics,
+    )
+    expect(loadConfig(env).economicsTuning).toEqual(DEFAULT_ECONOMICS_TUNING)
+    const prod = { ...deployed, ...tuned, DEPLOYMENT_ID: 'prod' }
+    expect(loadConfig(prod).economicsTuning).toBeNull()
+    expect(() => loadConfig({ ...env, ECONOMICS_TUNING: '{"paymentFee":1}' })).toThrow(/economicsTuning/)
   })
 
   test('the room kept for wakes and the wait creates may have are the defaults unless set', () => {

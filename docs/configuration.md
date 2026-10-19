@@ -230,14 +230,31 @@ themselves until there is (`apps/control/src/app/platform/room.ts`).
 
 Numbers that belong to the business, not the code: how free accounts are linked, caps on
 abuse and money, and how room is shared when it runs short. Each is one line of JSON in one variable. Production refuses to start without
-them; elsewhere unset is a harmless default (`apps/control/src/domain/account/tuning.ts`). Any
+them (`ECONOMICS_TUNING` apart); elsewhere unset is a harmless default (`apps/control/src/domain/account/tuning.ts`). Any
 deployment refuses a value that isn't the shape below. The values themselves are kept privately.
 
 | Variable | Local | Staging | Production | Set by | Shape |
 |---|---|---|---|---|---|
 | `FREE_LINK_TUNING` | default | default | secret | secret | `{ "weights": { "mainPlayer", "inbox", "signedUpClose", "network" }, "link", "medium", "high", "signedUpCloseMs", "mainShare", "mainForS", "networkKeptMs" }`: the weights are non-negative; `link`, `medium`, `high` and `mainShare` are in [0, 1], with `link < medium < high`; the rest are positive whole numbers |
 | `ABUSE_LIMITS` | default | default | secret | secret | `{ "chipIn": { "payerDayCents", "serverDayCents" }, "extraCeiling": { "untilRenewed", "renewed" }, "giftsPerDay", "wrongCodesPerHour", "wakesPerHour", "pingWakeHoldHours", "knownAddressDays", "inviteJoinsPerHour" }`: whole numbers, positive but for `untilRenewed`, which is at most `renewed`; `pingWakeHoldHours`, `knownAddressDays` and `inviteJoinsPerHour` may be left out for their defaults |
+| `ECONOMICS_TUNING` | default | default | optional secret | secret | `{ "paymentFee": { "percent", "fixedCents" }, "archiveGbMonthCents" }`: the fee taken from each order, as a percent of its total plus a fixed amount in cents, and what a GB-month of backups costs, in cents. Unset in production, the runtime economics report leaves fees and margin out |
 | `CAPACITY_TUNING` | default | default | secret | secret | `{ "freeShare", "tightShare", "tightIdleMinutes" }`: the share of the room for new servers free plans may fill, the share of running room past which room is tight, and how long a free server nobody is on stays up while it is. The shares are in [0, 1]; the minutes a positive whole number |
+
+### Files for official servers (optional)
+
+`OFFICIAL_SERVER_FILES` is one line of JSON: an object from a path under `/data` to the file's
+content. Servers an operator flags `official` get these files at every start, over the revision's
+files at the same paths. Other servers never do, whatever a revision holds at the same paths.
+The files are never stored in a revision, so no revision read, export or world download has them.
+A change reaches a server at its next start; a running server isn't restarted for it.
+
+```json
+{ "plugins/Example/config.yml": "setting: value\n" }
+```
+
+| Variable | Local | Staging | Production | Set by | Notes |
+|---|---|---|---|---|---|
+| `OFFICIAL_SERVER_FILES` | unset | unset | secret | secret | Paths are relative, with no `..`; contents are text. Unset, or not that shape, official servers start with the public defaults and an admin alert says so. Production alerts for unset only once a server is flagged |
 
 ### Product analytics (optional)
 

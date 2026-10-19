@@ -61,6 +61,7 @@ import { RuntimeEconomics } from './runtimes/economics.ts'
 import type { Runtimes } from './runtimes/router.ts'
 import { RuntimePlacement } from './runtimes/service.ts'
 import type { SecretKeyring } from './secrets.ts'
+import { officialFilesOf } from './servers/own-files.ts'
 import { markNotLoaded } from './servers/persistence.ts'
 import { ServerQueries } from './servers/queries.ts'
 import { MinecraftServerService } from './servers/service.ts'
@@ -136,6 +137,8 @@ export interface ControlPlaneSettings {
   curatedPacks?: readonly CuratedPack[]
   /** Blockly's own packs; the review in `curation/own.ts` unless a test brings its own. */
   ownPacks?: readonly OwnPack[]
+  /** The files placed on servers flagged official at every start (OFFICIAL_SERVER_FILES), and why there are none when there should be. */
+  officialServerFiles?: { files: Readonly<Record<string, string>>; problem: 'unset' | 'invalid' | null }
   /** What new servers leave to the ones people have, and how long creates may wait. */
   room?: { wakeReserve: number; createWaitSeconds: number }
 }
@@ -157,7 +160,9 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
   const policy = new AccessPolicy(ports.capabilities, new CreateRoom({ db, placement, runtime, settings }))
   const transitions = new ServerTransitions(events, ports.jobs)
   const links = new ArtifactLinks(settings.artifactsRuntimeFacingUrl, settings.runtimeSecrets)
-  const specs = new RuntimeSpecs(settings.runtimeSecrets, links, buildBrandPack(formats, settings.webOrigin))
+  const official = officialFilesOf(settings.officialServerFiles?.files ?? {})
+  const brandPack = buildBrandPack(formats, settings.webOrigin)
+  const specs = new RuntimeSpecs(settings.runtimeSecrets, links, brandPack, official)
   // Setups resolve mods through the catalog, which needs revisions, which need servers: the
   // server service reaches for setups only when a server is being made, so it takes a getter.
   let setups: SetupService
@@ -274,15 +279,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     configured: { admins: settings.adminEmails ?? [], signupCap: settings.signupCap ?? true },
   })
   const billing = new BillingService({ ...ports, db, policy, accounts, webOrigin: settings.webOrigin })
-  const backups = new BackupService({
-    db,
-    transitions,
-    events,
-    runtime,
-    policy,
-    artifacts,
-    ports,
-  })
+  const backups = new BackupService({ db, transitions, events, runtime, policy, artifacts, official, ports })
   const worlds = new WorldService({ db, transitions, events, providers: runtime.providers })
   const reconciler = new AccessReconciler({ db, runtime, console: ports.console, profiles, specs, events })
   const consoleService = new ConsoleService({ db, policy, runtime, console: ports.console, specs })
@@ -334,7 +331,12 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
       webOrigin: settings.webOrigin,
     }),
   )
-  const alerts = new PlatformAlerts({ ...ports, ...settings, catalog })
+  const alerts = new PlatformAlerts({
+    ...ports,
+    ...settings,
+    officialFilesProblem: settings.officialServerFiles?.problem,
+    catalog,
+  })
   const waiter = new ServerWaiter(db, events)
   const edge = new EdgeService({
     ...ports,

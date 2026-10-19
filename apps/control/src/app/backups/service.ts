@@ -40,6 +40,7 @@ import { requireWithinPlan, runsOf } from '../revisions/caps.ts'
 import { pinUnpinned } from '../revisions/pins.ts'
 import { acknowledged, type ChangeOptions, draftOf } from '../revisions/service.ts'
 import type { Runtimes } from '../runtimes/router.ts'
+import type { OfficialFiles } from '../servers/own-files.ts'
 import {
   findServer,
   grownStorage,
@@ -134,6 +135,7 @@ export class BackupService {
     runtime: Runtimes
     policy: AccessPolicy
     artifacts: ArtifactService
+    official?: OfficialFiles
     ports: {
       capabilities: DeploymentCapabilities
       formats: FileFormats
@@ -150,7 +152,8 @@ export class BackupService {
     this.#formats = deps.ports.formats
     this.#artifacts = deps.artifacts
     this.#builds = deps.ports.loaderBuilds
-    this.downloads = new WorldDownloads({ db: deps.db, policy: deps.policy, ...deps.ports })
+    const { official, ports } = deps
+    this.downloads = new WorldDownloads({ db: deps.db, policy: deps.policy, official, ...ports })
   }
 
   /** A snapshot now. While the server runs, saving pauses so the world on disk is consistent. */

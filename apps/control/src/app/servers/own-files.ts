@@ -13,6 +13,9 @@
  * added, so turning the moderation tools off stays off; nothing else on the server changes, its
  * world's blocks included, nor anything its owner added.
  *
+ * Servers operators flag official also get files from private configuration (`OfficialFiles`),
+ * placed over the revision's files at those paths and never stored in a revision.
+ *
  * Only a start places them (`specs.ts`): a running server is never restarted for them. One asleep
  * on older ones boots at its next wake, once, to place them, and wakes as it slept after that. Not
  * what a revision holds, which stays as it was made.
@@ -53,13 +56,37 @@ const OWN_SETS: readonly OwnSet[] = [
   },
 ]
 
-/** A revision with every set of files Cubepals owns that it carries as Cubepals has it now; the rest as it was. */
-export function withCurrentOwnFiles(revision: ServerRevision): ServerRevision {
+/** Files private configuration places on the servers operators flag official, at every start. */
+export interface OfficialFiles {
+  forStart(serverId: string): readonly CarriedFile[]
+}
+
+/** No files: what a deployment without the configuration does. */
+export const noOfficialFiles: OfficialFiles = { forStart: () => [] }
+
+/** The files OFFICIAL_SERVER_FILES holds, a path under /data to its content. */
+export const officialFilesOf = (files: Readonly<Record<string, string>>): OfficialFiles => {
+  const placed = Object.entries(files).map(([path, content]): CarriedFile => ({ path, content }))
+  return { forStart: () => placed }
+}
+
+/**
+ * A revision with every set of files Cubepals owns that it carries as Cubepals has it now, and
+ * `official` placed over its files at their paths; the rest as it was.
+ */
+export function withCurrentOwnFiles(
+  revision: ServerRevision,
+  official: readonly CarriedFile[] = [],
+): ServerRevision {
   let files: readonly CarriedFile[] = revision.files
   for (const set of OWN_SETS) {
     const carried = files.filter(set.owns)
     if (carried.length === 0) continue
     files = [...files.filter((file) => !set.owns(file)), ...set.now(carried)]
+  }
+  if (official.length > 0) {
+    const placed = new Set(official.map((file) => file.path))
+    files = [...files.filter((file) => !placed.has(file.path)), ...official]
   }
   return files === revision.files ? revision : { ...revision, files: [...files] }
 }

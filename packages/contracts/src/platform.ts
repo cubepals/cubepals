@@ -118,6 +118,7 @@ export const ALERT_KEYS = [
   'jobs_failing',
   'spend_unread',
   'realtime_certificate_expiring',
+  'official_files',
 ] as const
 export type AlertKey = (typeof ALERT_KEYS)[number]
 

@@ -6,6 +6,7 @@ import { API_PORT, INTERNAL_PORT } from '@blockly/contracts/local'
 import {
   DEFAULT_ABUSE_LIMITS,
   DEFAULT_CAPACITY_TUNING,
+  DEFAULT_ECONOMICS_TUNING,
   DEFAULT_FREE_LINK_TUNING,
 } from '../domain/account/tuning.ts'
 import { DEFAULT_ROOM } from '../domain/policy/room.ts'
@@ -221,7 +222,7 @@ function billingFrom(env: NodeJS.ProcessEnv): { billing: unknown; local: { notes
 }
 
 /**
- * Private tuning, as JSON in one variable (FREE_LINK_TUNING, ABUSE_LIMITS, CAPACITY_TUNING).
+ * Private tuning, as JSON in one variable (FREE_LINK_TUNING, ABUSE_LIMITS, CAPACITY_TUNING, ECONOMICS_TUNING).
  * Production has to set it, so unset there is left for the schema to refuse; elsewhere unset is
  * the harmless default.
  * JSON that doesn't parse is left as text, which the schema refuses too.
@@ -234,6 +235,26 @@ function privateJson(env: NodeJS.ProcessEnv, name: string, fallback: unknown): u
   } catch {
     return value
   }
+}
+
+/** ECONOMICS_TUNING: as `privateJson`, but unset in production is null, which leaves the margin out. */
+function economicsJson(env: NodeJS.ProcessEnv): unknown {
+  if (!env.ECONOMICS_TUNING && environmentOf(env.DEPLOYMENT_ID) === 'production') return null
+  return privateJson(env, 'ECONOMICS_TUNING', DEFAULT_ECONOMICS_TUNING)
+}
+
+/** OFFICIAL_SERVER_FILES as parsed JSON, or the text that didn't parse; the schema judges it. */
+function officialFilesJson(env: NodeJS.ProcessEnv) {
+  const value = env.OFFICIAL_SERVER_FILES
+  let json: unknown = value || undefined
+  if (value) {
+    try {
+      json = JSON.parse(value)
+    } catch {
+      json = value
+    }
+  }
+  return { json, production: environmentOf(env.DEPLOYMENT_ID) === 'production' }
 }
 
 /** What new servers leave to the ones people have, and how long creates may wait (`DEFAULT_ROOM`). */
@@ -343,6 +364,8 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
     freeLinkTuning: privateJson(env, 'FREE_LINK_TUNING', DEFAULT_FREE_LINK_TUNING),
     abuseLimits: privateJson(env, 'ABUSE_LIMITS', DEFAULT_ABUSE_LIMITS),
     capacityTuning: privateJson(env, 'CAPACITY_TUNING', DEFAULT_CAPACITY_TUNING),
+    economicsTuning: economicsJson(env),
+    officialServerFiles: officialFilesJson(env),
     room: roomFrom(env),
   }
 }

@@ -33,6 +33,16 @@ export async function loadListing(q: Queryable, serverId: string): Promise<Listi
   return row ?? null
 }
 
+/** Whether any server is flagged official. */
+export async function anyOfficialServer(q: Queryable): Promise<boolean> {
+  const [row] = await q
+    .select({ id: listings.serverId })
+    .from(listings)
+    .where(eq(listings.official, true))
+    .limit(1)
+  return row !== undefined
+}
+
 /** Public or not: the owner's own switch, and the only thing they set here. */
 export async function setVisibility(
   tx: Tx,

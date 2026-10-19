@@ -5,7 +5,7 @@
 /**
  * The numbers that tune how free accounts are linked, how far abuse and money can go, and how room
  * is shared when it runs short, as types and their defaults. A deployment's own come from private
- * configuration, FREE_LINK_TUNING, ABUSE_LIMITS and CAPACITY_TUNING (`config/load.ts`), installed
+ * configuration, FREE_LINK_TUNING, ABUSE_LIMITS, CAPACITY_TUNING and ECONOMICS_TUNING (`config/load.ts`), installed
  * at startup (`app/tuning.ts`). The defaults here are
  * round, harmless values for development and tests, not a deployment's. Pure.
  */
@@ -67,6 +67,14 @@ export interface AbuseLimits {
   inviteJoinsPerHour: number
 }
 
+/** The figures the runtime economics report prices a margin with (`app/runtimes/economics.ts`). */
+export interface EconomicsTuning {
+  /** The billing provider's fee on an order: a percent of its total, and a fixed amount in cents. */
+  paymentFee: { percent: number; fixedCents: number }
+  /** What a GB-month of backups in the archive store costs, in cents. */
+  archiveGbMonthCents: number
+}
+
 /** How room is shared between plans when it runs short (`domain/policy/room.ts`). */
 export interface CapacityTuning {
   /** The share of the room for new servers that free plans may fill; paid plans create in all of it. */
@@ -97,6 +105,12 @@ export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {
   pingWakeHoldHours: 24,
   knownAddressDays: 7,
   inviteJoinsPerHour: 10,
+}
+
+/** Round figures for development and tests. */
+export const DEFAULT_ECONOMICS_TUNING: EconomicsTuning = {
+  paymentFee: { percent: 3, fixedCents: 30 },
+  archiveGbMonthCents: 1,
 }
 
 /** Nothing set aside for paid plans, and room never tight short of full. */

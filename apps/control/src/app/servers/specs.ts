@@ -33,7 +33,7 @@ import { loadPackContents } from '../packs/persistence.ts'
 import type { InstallSeed, RuntimeSpec } from '../ports/runtime.ts'
 import { acceptedSecrets, deriveServerSecret, type SecretKeyring } from '../secrets.ts'
 import { tooLongForAStart, withCompressedFiles } from './carried-files.ts'
-import { withCurrentOwnFiles } from './own-files.ts'
+import { noOfficialFiles, type OfficialFiles, withCurrentOwnFiles } from './own-files.ts'
 import { grownStorage, loadRevision, loadWorld } from './persistence.ts'
 
 export interface DesiredRuntime {
@@ -114,9 +114,17 @@ export class RuntimeSpecs {
    */
   readonly brandPack: BuiltPack
 
-  constructor(secrets: SecretKeyring, links: ArtifactLinks, brandPack: BuiltPack) {
+  readonly #official: OfficialFiles
+
+  constructor(
+    secrets: SecretKeyring,
+    links: ArtifactLinks,
+    brandPack: BuiltPack,
+    official: OfficialFiles = noOfficialFiles,
+  ) {
     this.#secrets = secrets
     this.#links = links
+    this.#official = official
     this.brandPack = brandPack
   }
 
@@ -178,7 +186,7 @@ export class RuntimeSpecs {
     const placed = await compatFor(q, revision)
     // A start places the files Cubepals owns as they are now (`own-files.ts`); like the Via
     // plugins, they never arrive through drift.
-    const starting = withCurrentOwnFiles(revision)
+    const starting = withCurrentOwnFiles(revision, official ? this.#official.forStart(server.id) : [])
     // Its carried files compressed, and any long list, so that no variable comes near Linux's limit
     // (`carried-files.ts`). One still past it is refused here, before a machine fails on it, in
     // words its owner reads, and not tried again: trying again changes nothing.

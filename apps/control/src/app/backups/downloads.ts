@@ -20,10 +20,12 @@ import { DOWNLOAD_NOTE, downloadNote, inWorldDownload } from '../../minecraft/wo
 import { type Actor, authorize, requestedBy } from '../actor.ts'
 import { type DeploymentCapabilities, requireCapability } from '../capabilities.ts'
 import { NotFound } from '../errors.ts'
+import { loadListing } from '../listings/persistence.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { FileFormats } from '../ports/formats.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { ArchiveTarget, PartsUpload, PutPart } from '../ports/runtime.ts'
+import { noOfficialFiles, type OfficialFiles } from '../servers/own-files.ts'
 import { findServer } from '../servers/persistence.ts'
 import {
   type DownloadRecord,
@@ -59,6 +61,7 @@ export class WorldDownloads {
   readonly #caps: DeploymentCapabilities
   readonly #formats: FileFormats
   readonly #jobs: JobQueue
+  readonly #official: OfficialFiles
 
   constructor(deps: {
     db: Db
@@ -66,12 +69,14 @@ export class WorldDownloads {
     capabilities: DeploymentCapabilities
     formats: FileFormats
     jobs: JobQueue
+    official?: OfficialFiles
   }) {
     this.#db = deps.db
     this.#policy = deps.policy
     this.#caps = deps.capabilities
     this.#formats = deps.formats
     this.#jobs = deps.jobs
+    this.#official = deps.official ?? noOfficialFiles
   }
 
   /**
@@ -124,9 +129,15 @@ export class WorldDownloads {
     const store = requireCapability(this.#caps, 'archives')
     const source = await store.presignGet(archive.archiveKey, MAKING_LINK_SECONDS, 'browser')
     const leftOut: string[] = []
+    // What private configuration placed on an official server is not the owner's to take.
+    const placed = new Set(
+      (await loadListing(this.#db, archive.serverId))?.official === true
+        ? this.#official.forStart(archive.serverId).map((file) => file.path)
+        : [],
+    )
     const body = await this.#formats.filterTarball(source.url, {
       kept: (path) => {
-        if (inWorldDownload(path)) return true
+        if (inWorldDownload(path) && !placed.has(path)) return true
         if (isAddedJar(path)) leftOut.push(path)
         return false
       },

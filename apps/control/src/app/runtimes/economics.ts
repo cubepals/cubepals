@@ -10,6 +10,7 @@ import { isMemoryTier, MEMORY_TIERS, memoryMb } from '../../domain/server/size.t
 import { notTest } from '../accounts/persistence.ts'
 import { PAID_ORDER } from '../billing/persistence.ts'
 import type { RuntimeHandle, RuntimeMachine } from '../ports/runtime.ts'
+import { tuning } from '../tuning.ts'
 import type { Runtimes } from './router.ts'
 
 /**
@@ -24,11 +25,6 @@ import type { Runtimes } from './router.ts'
  * be priced; a machine's price is its operator's label, prorated over the window as if the
  * machines today were there all along.
  */
-
-/** The billing provider's fee on an order, as Polar publishes it (polar.sh/pricing). */
-const PAYMENT_FEE = { percent: 5, fixedCents: 50 } as const
-/** Cloudflare R2 Standard storage, a GB-month, for backups in the archive store. */
-const ARCHIVE_GB_MONTH_CENTS = 1.5
 
 const MONTH_HOURS = 730
 const GB = 1024 ** 3
@@ -113,14 +109,45 @@ interface MachineEconomics extends RuntimeMachine {
   windowCents: number | null
 }
 
+/** A row with the figures that need the deployment's fees, null where it has none. */
+type Unpriced<T> = {
+  [K in keyof T]: K extends 'feeCents' | 'marginCents' | 'marginPercent' ? T[K] | null : T[K]
+}
+
+/** What the report prices fees and backups with; none counts them as nothing, and `unpriced` leaves them out. */
+const figures = () =>
+  tuning().economics ?? { paymentFee: { percent: 0, fixedCents: 0 }, archiveGbMonthCents: 0 }
+
+const feeAssumptions = () => {
+  const { paymentFee, archiveGbMonthCents } = figures()
+  return tuning().economics === null
+    ? { paymentFee: 'not configured: fees and margin are left out', backups: 'not configured: left out' }
+    : {
+        paymentFee: `${paymentFee.percent}% + ${paymentFee.fixedCents}¢ an order, on its total with tax`,
+        backups: `ready backups at ${archiveGbMonthCents}¢ a GB-month, whichever runtime they came from`,
+      }
+}
+
+const unpriced = <T extends { feeCents: number; marginCents: number | null }>(row: T): Unpriced<T> =>
+  (tuning().economics === null
+    ? {
+        ...row,
+        feeCents: null,
+        marginCents: null,
+        ...('marginPercent' in row ? { marginPercent: null } : {}),
+      }
+    : row) as Unpriced<T>
+
+const byProvider = (a: { provider: string }, b: { provider: string }) => a.provider.localeCompare(b.provider)
+
 export interface EconomicsReport {
   from: string
   to: string
   hours: number
   assumptions: Record<string, string>
-  runtimes: RuntimeEconomicsRow[]
+  runtimes: Array<Unpriced<RuntimeEconomicsRow>>
   machines: MachineEconomics[]
-  servers: ServerEconomics[]
+  servers: Array<Unpriced<ServerEconomics>>
   /** Orders from owners with no server to carry them in the window. */
   unattributedRevenueCents: number
 }
@@ -225,7 +252,7 @@ export class RuntimeEconomics {
       .select({
         userId: schema.billingOrders.userId,
         revenue: sql<string>`sum(greatest(${schema.billingOrders.netCents} - ${schema.billingOrders.refundedCents}, 0))`,
-        fees: sql<string>`sum(round(${schema.billingOrders.totalCents} * ${PAYMENT_FEE.percent / 100}::numeric) + ${PAYMENT_FEE.fixedCents}::numeric)`,
+        fees: sql<string>`sum(round(${schema.billingOrders.totalCents} * ${figures().paymentFee.percent / 100}::numeric) + ${figures().paymentFee.fixedCents}::numeric)`,
       })
       .from(schema.billingOrders)
       .where(and(paidBetween(from, to), notTest(this.#db, schema.billingOrders.userId)))
@@ -425,7 +452,7 @@ export class RuntimeEconomics {
       const target = row(server.provider)
       target.revenueCents += server.revenueCents
       target.feeCents += server.feeCents
-      const backup = server.backupGb * months * ARCHIVE_GB_MONTH_CENTS
+      const backup = server.backupGb * months * figures().archiveGbMonthCents
       target.backupCents += backup
       if (server.infraCents !== null)
         server.marginCents = round(server.revenueCents - server.feeCents - server.infraCents - backup)
@@ -473,7 +500,7 @@ export class RuntimeEconomics {
       to: to.toISOString(),
       hours: round(hours),
       assumptions: {
-        paymentFee: `${PAYMENT_FEE.percent}% + ${PAYMENT_FEE.fixedCents}¢ an order, on its total with tax (Polar Starter, 2026-10-01)`,
+        ...feeAssumptions(),
         revenue:
           'orders in the window, after discounts and refunds, before tax; shared among each owner’s servers by the memory-hours each ran',
         usage:
@@ -481,18 +508,18 @@ export class RuntimeEconomics {
         capacity:
           'each machine’s monthly_cost_cents label, prorated over the window, as if today’s machines were there all along',
         idle: 'the share of each machine’s price for memory no server was counted for',
-        backups: `ready backups at ${ARCHIVE_GB_MONTH_CENTS}¢ a GB-month (R2 Standard), whichever runtime they came from`,
         playedHours:
           'minutes with anyone online, from the presence sync once a minute; missed readings count as no play',
         bandwidth: 'not measured: neither the edge nor any runtime counts bytes yet',
         actualUsage: 'per-server memory and CPU in use are not measured; machines report theirs',
       },
-      runtimes: [...byRuntime.values()].sort((a, b) => a.provider.localeCompare(b.provider)),
+      runtimes: [...byRuntime.values()].sort(byProvider).map(unpriced),
       machines,
       servers: [...perServer.values()]
         .filter((s) => s.runningHours > 0 || s.revenueCents > 0 || (s.infraCents ?? 0) > 0)
         .sort((a, b) => (b.infraCents ?? 0) - (a.infraCents ?? 0))
-        .slice(0, limit),
+        .slice(0, limit)
+        .map(unpriced),
       unattributedRevenueCents: round(unattributed),
     }
   }

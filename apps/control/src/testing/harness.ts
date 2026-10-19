@@ -16,7 +16,7 @@ import pg from 'pg'
 import type { PgBoss } from 'pg-boss'
 import type { UserActor } from '../app/actor.ts'
 import type { DeploymentCapabilities } from '../app/capabilities.ts'
-import { type ControlPlane, composeControlPlane } from '../app/control-plane.ts'
+import { type ControlPlane, type ControlPlaneSettings, composeControlPlane } from '../app/control-plane.ts'
 import type { OwnPack } from '../app/curation/own.ts'
 import type { CuratedPack } from '../app/curation/packs.ts'
 import { type OperationRecord, toRecord } from '../app/operations/persistence.ts'
@@ -110,6 +110,8 @@ export interface HarnessOptions {
   /** Or made from the harness's database, for an adapter that keeps its record there. */
   capabilities?: DeploymentCapabilities | ((db: Db) => DeploymentCapabilities)
   mirrorCatalogArtifacts?: boolean
+  /** The files placed on servers flagged official, and why there are none when there should be. */
+  officialServerFiles?: ControlPlaneSettings['officialServerFiles']
   adminEmails?: readonly string[]
   /** How long an operation's attempt may run before the queue gives up on it (default 30 min). */
   operationDeadlineSeconds?: number
@@ -197,8 +199,9 @@ class OfflineFileFormats extends LibraryFileFormats {
   }
 }
 
-/** The settings a test's options decide: how long boots and wakes take, and the room creates leave. */
-const timingsAndRoom = ({ provider, room }: HarnessOptions) => ({
+/** The settings a test's options decide: how long boots and wakes take, the room creates leave, and official files. */
+const settingsFrom = ({ provider, room, officialServerFiles }: HarnessOptions) => ({
+  officialServerFiles,
   bootTimeouts: provider?.bootTimeouts ?? { runningMs: 5_000, readyMs: 3_000, resumeMs: 1_000 },
   wakeWaitMs: provider?.wakeWaitMs ?? 5_000,
   ...(room === undefined ? {} : { room }),
@@ -321,7 +324,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       webOrigin: 'http://localhost:3000',
       curatedPacks: options.curatedPacks ?? [],
       ownPacks: options.ownPacks ?? [],
-      ...timingsAndRoom(options),
+      ...settingsFrom(options),
     },
   )
   runtimeFacing = createRuntimeApp({ artifacts: app.artifacts })

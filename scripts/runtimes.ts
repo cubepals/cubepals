@@ -76,8 +76,8 @@ interface Report {
     idleCents: number
     runningUtilization: number | null
     revenueCents: number
-    feeCents: number
-    marginCents: number
+    feeCents: number | null
+    marginCents: number | null
     marginPercent: number | null
     perServerCents: number | null
     perAllocatedGbMonthCents: number | null
@@ -126,8 +126,8 @@ function printReport(report: Report) {
       dollars(r.infraCents),
       `${dollars(r.idleCents)}${r.runningUtilization === null ? '' : ` (ran ${percent(r.runningUtilization)})`}`,
       dollars(r.revenueCents),
-      dollars(r.feeCents),
-      `${dollars(r.marginCents)} (${percent(r.marginPercent)})`,
+      r.feeCents === null ? '-' : dollars(r.feeCents),
+      r.marginCents === null ? '-' : `${dollars(r.marginCents)} (${percent(r.marginPercent)})`,
       dollars(r.perServerCents),
       dollars(r.perAllocatedGbMonthCents),
       dollars(r.perPlayedHourCents),

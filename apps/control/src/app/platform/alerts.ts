@@ -15,6 +15,7 @@ import type { CatalogSync } from '../catalog/sync.ts'
 import { EDGE_BEHIND_MS, edgesBehind } from '../edge/routed.ts'
 import { adminAlert } from '../emails/admins.ts'
 import { NotFound } from '../errors.ts'
+import { anyOfficialServer } from '../listings/persistence.ts'
 import { markedSince } from '../operations/persistence.ts'
 import { SPEND_FIGURE, SPEND_UNREAD_MS } from '../operations/schedules/spend.ts'
 import type { JobQueue } from '../ports/jobs.ts'
@@ -52,6 +53,7 @@ const WHERE: Record<AlertKey, string> = {
   jobs_failing: '/admin/health',
   spend_unread: '/admin/platform',
   realtime_certificate_expiring: '/admin/health',
+  official_files: '/admin/health',
 }
 
 interface Condition {
@@ -72,6 +74,7 @@ export class PlatformAlerts {
   readonly #mailer: Mailer
   readonly #webOrigin: string
   readonly #inbox: readonly string[]
+  readonly #officialFilesProblem: 'unset' | 'invalid' | null
 
   constructor(deps: {
     db: Db
@@ -81,6 +84,8 @@ export class PlatformAlerts {
     webOrigin: string
     /** ADMIN_ALERT_EMAILS; empty or absent, every admin's own email. */
     adminInbox?: readonly string[]
+    /** Why OFFICIAL_SERVER_FILES gives no files, when it should. */
+    officialFilesProblem?: 'unset' | 'invalid' | null
   }) {
     this.#db = deps.db
     this.#jobs = deps.jobs
@@ -88,6 +93,7 @@ export class PlatformAlerts {
     this.#mailer = deps.mailer
     this.#webOrigin = deps.webOrigin
     this.#inbox = deps.adminInbox ?? []
+    this.#officialFilesProblem = deps.officialFilesProblem ?? null
   }
 
   async active(actor: Actor, now = new Date()): Promise<AlertView[]> {
@@ -179,6 +185,7 @@ export class PlatformAlerts {
       ...(await waitingCondition(this.#db, now)),
       ...(await unknownCondition(this.#db)),
       ...(await linkedCondition(this.#db)),
+      ...(await officialFilesCondition(this.#db, this.#officialFilesProblem)),
     )
     return conditions
   }
@@ -367,6 +374,22 @@ async function unknownCondition(db: Db): Promise<Condition[]> {
     {
       key: 'billing_order_unknown',
       summary: `${orders} unpaid ${one ? 'charge' : 'charges'} carrying extra play ${one ? 'is' : 'are'} unknown to Polar, so ${one ? 'it is' : 'they are'} never owed until Polar knows ${one ? 'it' : 'them'}; each is asked about once a day, and is on its account's audit log as billing.order_unknown.`,
+    },
+  ]
+}
+
+/**
+ * Servers flagged official starting with the public defaults, because the files private
+ * configuration places on them are unset or don't parse (`servers/own-files.ts`). Unset only counts
+ * once a server is flagged.
+ */
+async function officialFilesCondition(db: Db, problem: 'unset' | 'invalid' | null): Promise<Condition[]> {
+  if (problem === null) return []
+  if (problem === 'unset' && !(await anyOfficialServer(db))) return []
+  return [
+    {
+      key: 'official_files',
+      summary: `OFFICIAL_SERVER_FILES is ${problem === 'unset' ? 'not set' : 'not a JSON object of file paths to contents'}, so servers flagged official start without their own files. Servers still start; set it and they have the files at their next start.`,
     },
   ]
 }

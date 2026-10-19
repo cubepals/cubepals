@@ -654,7 +654,7 @@ async function connect(config: DeploymentConfig) {
 async function main(): Promise<void> {
   const config = loadConfig()
   const { freeLinkTuning: freeLinks, abuseLimits: abuse, capacityTuning: capacity } = config
-  installTuning({ freeLinks, abuse, capacity })
+  installTuning({ freeLinks, abuse, capacity, economics: config.economicsTuning })
   for (const note of config.local?.notes ?? []) console.warn(`local: ${note}`)
   const { pool, db, events, boss, ports } = await connect(config)
   const profiles = new MojangProfiles()
@@ -698,6 +698,7 @@ async function main(): Promise<void> {
       bootTimeouts: { runningMs: 120_000, readyMs: 10 * MINUTE_MS },
       wakeWaitMs: 25_000,
       adminEmails: config.auth.admins,
+      officialServerFiles: config.officialServerFiles,
       adminInbox: config.mail.adminInbox,
       webOrigin: config.web.canonicalOrigin,
       signupCap: config.local === null,
