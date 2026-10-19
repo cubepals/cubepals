@@ -16,6 +16,9 @@
  *   after that it is still answered with, for up to `STALE_S`, while a new one is made behind it.
  * - Each deploy of the Worker is a version with its own keys, so a deploy never serves a page
  *   naming the last build's scripts: nothing has to be purged.
+ * - A page the render marked partial (lib/partial-render.ts: its plans couldn't be read) is
+ *   answered as Next made it and never kept, and a good copy already kept stays when a new render
+ *   comes back partial.
  * - The landing page has two forms, the film and a phone's own (next.config.ts sends a phone the
  *   second at the same address), so it is kept once for each.
  *
@@ -24,6 +27,7 @@
  */
 import { DAY_S, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
 import { PHONE_AGENT, PHONE_HINT } from '../landing/phone/agent'
+import { PARTIAL } from './partial-render'
 
 /** The landing page, pricing, the guides and the policies: the same for everyone signed out. */
 const PUBLIC_PAGES = /^\/(?:pricing|guides(?:\/[a-z0-9-]+)?|legal(?:\/[a-z0-9-]+)?)?$/
@@ -71,11 +75,23 @@ function edgeKey(request: Request, version: string | undefined): Request | null 
   )
 }
 
-/** Whether Next's answer may be kept for everyone: a whole page that sets nothing in the browser. */
+/**
+ * Whether Next's answer may be kept for everyone: a whole page, not one marked partial, that sets
+ * nothing in the browser.
+ */
 const keepable = (response: Response) =>
   response.status === 200 &&
+  !response.headers.has(PARTIAL) &&
   !response.headers.has('set-cookie') &&
   (response.headers.get('content-type') ?? '').startsWith('text/html')
+
+/** As the browser is sent a page that isn't kept: Next's own answer, less the Worker's mark. */
+function unkept(response: Response): Response {
+  if (!response.headers.has(PARTIAL)) return response
+  const headers = new Headers(response.headers)
+  headers.delete(PARTIAL)
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+}
 
 /** As the browser is sent a kept page: always asked for again, while the edge keeps it. */
 function answered(response: Response, edge: 'hit' | 'stale' | 'miss'): Response {
@@ -115,7 +131,7 @@ export async function fromEdge(
   },
 ): Promise<Response> {
   const key = edgeKey(request, version)
-  if (!key) return render(request)
+  if (!key) return unkept(await render(request))
   const keep = async (made: Response) => {
     if (keepable(made)) await cache.put(key, kept(made, now()))
   }
@@ -126,7 +142,7 @@ export async function fromEdge(
     return answered(found, fresh ? 'hit' : 'stale')
   }
   const made = await render(request)
-  if (!keepable(made)) return made
+  if (!keepable(made)) return unkept(made)
   later(keep(made.clone()))
   return answered(made, 'miss')
 }

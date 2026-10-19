@@ -11,6 +11,7 @@
 import openNext from './.open-next/worker.js'
 import { beforeNext, toControlPlane } from './src/lib/before-next'
 import { type EdgeCache, fromEdge } from './src/lib/edge-cache'
+import { markingPartial } from './src/lib/partial-render'
 
 /** wrangler.jsonc's version_metadata binding: which deploy of the Worker this is. */
 interface Env {
@@ -29,7 +30,7 @@ export default {
     return fromEdge(next, {
       version: env.CF_VERSION_METADATA?.id,
       cache: (caches as unknown as { default: EdgeCache }).default,
-      render: (page) => openNext.fetch(page, env, context),
+      render: (page) => markingPartial(() => openNext.fetch(page, env, context)),
       later: (work) => context.waitUntil(work),
     })
   },

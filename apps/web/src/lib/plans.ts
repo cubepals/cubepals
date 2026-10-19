@@ -8,6 +8,7 @@
  */
 import type { PublicPlan, PublicSize } from '@blockly/contracts'
 import { planSaid } from '../ui/plans'
+import { markPartial } from './partial-render'
 import { apiUpstream, RENDER_READ_MS } from './upstream'
 
 /**
@@ -16,7 +17,8 @@ import { apiUpstream, RENDER_READ_MS } from './upstream'
  * than failing. Read afresh each time, unless a page says how many seconds a reading may be kept:
  * the landing page does, since it is the page most people load and the table seldom changes.
  * A control plane that doesn't answer within RENDER_READ_MS counts as unreachable: neither a page
- * nor a build that renders these pages waits on a stopped one.
+ * nor a build that renders these pages waits on a stopped one. A page made from an empty answer
+ * isn't kept at the edge (lib/partial-render.ts).
  */
 export async function publicPlans(keptSeconds?: number): Promise<PublicPlan[]> {
   try {
@@ -24,8 +26,11 @@ export async function publicPlans(keptSeconds?: number): Promise<PublicPlan[]> {
       signal: AbortSignal.timeout(RENDER_READ_MS),
       ...(keptSeconds === undefined ? { cache: 'no-store' } : { next: { revalidate: keptSeconds } }),
     })
-    return response.ok ? ((await response.json()) as PublicPlan[]) : []
+    const plans = response.ok ? ((await response.json()) as PublicPlan[]) : []
+    if (plans.length === 0) markPartial()
+    return plans
   } catch {
+    markPartial()
     return []
   }
 }
@@ -40,8 +45,11 @@ export async function publicSizes(keptSeconds: number): Promise<PublicSize[]> {
       signal: AbortSignal.timeout(RENDER_READ_MS),
       next: { revalidate: keptSeconds },
     })
-    return response.ok ? ((await response.json()) as PublicSize[]) : []
+    const sizes = response.ok ? ((await response.json()) as PublicSize[]) : []
+    if (sizes.length === 0) markPartial()
+    return sizes
   } catch {
+    markPartial()
     return []
   }
 }
