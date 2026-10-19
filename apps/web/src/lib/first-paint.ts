@@ -20,15 +20,20 @@ import { type DehydratedState, dehydrate, noop, QueryClient } from '@tanstack/re
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import { createTRPCOptionsProxy } from '@trpc/tanstack-react-query'
 import { headers } from 'next/headers'
+import { cache } from 'react'
 import { apiUpstream } from './upstream'
 
 /** The most the first paint waits on these before the page goes without them. */
 const FIRST_PAINT_BUDGET_MS = 1_500
 
-export async function firstPaint(): Promise<DehydratedState> {
+/**
+ * The reads, asked once per request however many layouts ask for them: the app's frame draws from
+ * them and the admin pages' layout reads from them whether the person is an admin.
+ */
+const firstReads = cache(async () => {
   const queryClient = new QueryClient()
   const cookie = (await headers()).get('cookie')
-  if (!cookie) return dehydrate(queryClient)
+  if (!cookie) return { queryClient, trpc: null }
   const client = createTRPCClient<AppRouter>({
     links: [
       httpBatchLink({
@@ -52,5 +57,21 @@ export async function firstPaint(): Promise<DehydratedState> {
     queryClient.query(trpc.servers.trash.queryOptions()).catch(noop),
     queryClient.query(trpc.billing.plans.queryOptions()).catch(noop),
   ])
-  return dehydrate(queryClient)
+  return { queryClient, trpc }
+})
+
+export async function firstPaint(): Promise<DehydratedState> {
+  return dehydrate((await firstReads()).queryClient)
+}
+
+/**
+ * Whether the person is an admin, from the same read the frame shows the admin link by. When that
+ * read didn't come back in time it is asked once more; one that still fails is "no", which the API
+ * would answer the same way.
+ */
+export async function isAdmin(): Promise<boolean> {
+  const { queryClient, trpc } = await firstReads()
+  if (trpc === null) return false
+  const me = await queryClient.query(trpc.account.me.queryOptions()).catch(() => null)
+  return me?.admin === true
 }

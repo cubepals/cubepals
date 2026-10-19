@@ -283,8 +283,8 @@ export class SharingQueries {
         loader: null,
         mods: [],
       }
-    const theirs = forPlayers(revision.mods)
-    const loaderNeeded = theirs.length > 0 && revision.loader !== 'vanilla' && revision.loader !== 'paper'
+    const theirs = forPlayers(revision.mods, revision.loader)
+    const loaderNeeded = theirs.length > 0 && revision.loader !== 'vanilla'
     return {
       gameVersion: revision.gameVersion,
       joinsNewer: joinsNewer(revision),

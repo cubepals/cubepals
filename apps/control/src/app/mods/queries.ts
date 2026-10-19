@@ -69,7 +69,7 @@ export class ModQueries {
     if (plan.kind === 'conflicts')
       return { kind: 'conflicts', conflicts: plan.conflicts.map(conflictView), movesTo: plan.movesTo ?? null }
     const revoked = new Set(plan.revoked.map(identity))
-    const players = new Set(forPlayers(plan.mods).map(identity))
+    const players = new Set(forPlayers(plan.mods, plan.loader).map(identity))
     const view = (mod: PinnedMod) => modView(mod, plan.loader, revoked, this.#page(mod), players)
     return {
       kind: 'ok',
@@ -87,7 +87,7 @@ export class ModQueries {
     const server = authorize(actor, await findServer(this.#db, serverId))
     const revision = await loadRevision(this.#db, server.desiredRevisionId)
     const revoked = new Set((await revokedIn(this.#db, revision.mods)).map(identity))
-    const players = new Set(forPlayers(revision.mods).map(identity))
+    const players = new Set(forPlayers(revision.mods, revision.loader).map(identity))
     const malware = await quarantinedOf(
       this.#db,
       revision.mods.map((m) => m.artifact.sha512),

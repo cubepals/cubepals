@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { DATAPACK, isDatapack, type PinnedMod } from '../domain/mods/artifact.ts'
+import { DATAPACK, isDatapack, type PinnedMod, runsPlugins } from '../domain/mods/artifact.ts'
 import type { Loader, OtherVersions } from '../domain/revision/revision.ts'
 
 /**
@@ -45,7 +45,7 @@ export function loaderOfPack(tags: readonly string[]): Loader | null {
  */
 export function projectTypesFor(loader: Loader): readonly ('mod' | 'plugin' | 'datapack')[] {
   if (loader === 'vanilla') return [DATAPACK]
-  return [loader === 'paper' ? 'plugin' : 'mod', DATAPACK]
+  return [runsPlugins(loader) ? 'plugin' : 'mod', DATAPACK]
 }
 
 /**
