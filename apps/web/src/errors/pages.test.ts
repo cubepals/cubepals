@@ -5,7 +5,7 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { OPERATOR } from '../legal/operator'
-import { STATIC_PAGES, staticPage } from './pages'
+import { logo, STATIC_PAGES, staticPage } from './pages'
 
 const here = (path: string) => new URL(path, import.meta.url)
 const lockup = readFileSync(here('../../../../brand/lockup-horizontal.svg'), 'utf8').trim()
@@ -24,5 +24,14 @@ describe('the standalone error pages', () => {
   test('Cloudflare’s pages carry the token its docs require for each class', () => {
     expect(STATIC_PAGES['cloudflare-5xx.html'].token).toBe('::CLOUDFLARE_ERROR_500S_BOX::')
     expect(STATIC_PAGES['cloudflare-1xxx.html'].token).toBe('::CLOUDFLARE_ERROR_1000S_BOX::')
+  })
+})
+
+describe('logo', () => {
+  test('puts the class and the title in the svg tag, not at the first > of the file', () => {
+    const drawn = '<?xml version="1.0"?>\n<svg viewBox="0 0 1 1" aria-label="Cubepals"><path d="M0 0"/></svg>'
+    expect(logo(drawn)).toBe(
+      '<?xml version="1.0"?>\n<svg class="logo" viewBox="0 0 1 1" aria-label="Cubepals"><title>Cubepals</title><path d="M0 0"/></svg>',
+    )
   })
 })

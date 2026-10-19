@@ -40,6 +40,10 @@ p{margin:0}
 a{color:inherit;text-underline-offset:.2em}
 `
 
+/** The lockup as the pages carry it: classed for their styles, and titled, inside its own `<svg>` tag. */
+export const logo = (lockup: string): string =>
+  lockup.replace(/<svg\b([^>]*)>/, '<svg class="logo"$1><title>Cubepals</title>')
+
 /**
  * One page as a document; `figure` is the picture as a data URI and `lockup` the brand's drawn
  * lockup (brand/lockup-horizontal.svg), so the page loads alone.
@@ -58,7 +62,7 @@ export function staticPage(file: keyof typeof STATIC_PAGES, figure: string, lock
 </head>
 <body>
 <main>
-${lockup.replace('<svg ', '<svg class="logo" ').replace('>', '><title>Cubepals</title>')}
+${logo(lockup)}
 <img src="${figure}" alt="">
 <h1>${copy.title}</h1>
 <p>${copy.line}</p>
