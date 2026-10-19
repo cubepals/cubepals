@@ -389,7 +389,7 @@ async function officialFilesCondition(db: Db, problem: 'unset' | 'invalid' | nul
   return [
     {
       key: 'official_files',
-      summary: `OFFICIAL_SERVER_FILES is ${problem === 'unset' ? 'not set' : 'not a JSON object of file paths to contents'}, so servers flagged official start without their own files. Servers still start; set it and they have the files at their next start.`,
+      summary: `OFFICIAL_SERVER_FILES is ${problem === 'unset' ? 'not set' : 'not a JSON object of sections (`*`, or a server id or slug) of file paths to contents'}, so servers flagged official start without their own files. Servers still start; set it and they have the files at their next start.`,
     },
   ]
 }

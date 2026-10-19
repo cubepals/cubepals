@@ -242,19 +242,22 @@ deployment refuses a value that isn't the shape below. The values themselves are
 
 ### Files for official servers (optional)
 
-`OFFICIAL_SERVER_FILES` is one line of JSON: an object from a path under `/data` to the file's
-content. Servers an operator flags `official` get these files at every start, over the revision's
-files at the same paths. Other servers never do, whatever a revision holds at the same paths.
-The files are never stored in a revision, so no revision read, export or world download has them.
-A change reaches a server at its next start; a running server isn't restarted for it.
+`OFFICIAL_SERVER_FILES` is one line of JSON: sections, each an object from a path under `/data` to
+the file's content. The `*` section is for every official server; a section named by a server's id
+or slug is for that server, and wins at a path both name. Servers an operator flags `official` get
+their files at every start, over the revision's files at the same paths. Other servers never do,
+whatever a revision holds at the same paths or the settings name for them. The files are never
+stored in a revision, so no revision read or export has them. A world download leaves them out,
+for a server named in the settings even after it stops being official. A change reaches a server at
+its next start; a running server isn't restarted for it.
 
 ```json
-{ "plugins/Example/config.yml": "setting: value\n" }
+{ "*": { "plugins/Example/config.yml": "a: 1\n" }, "<server id or slug>": { "plugins/Example/config.yml": "a: 2\n" } }
 ```
 
 | Variable | Local | Staging | Production | Set by | Notes |
 |---|---|---|---|---|---|
-| `OFFICIAL_SERVER_FILES` | unset | unset | secret | secret | Paths are relative, with no `..`; contents are text. Unset, or not that shape, official servers start with the public defaults and an admin alert says so. Production alerts for unset only once a server is flagged |
+| `OFFICIAL_SERVER_FILES` | unset | unset | secret | secret | Section names are `*`, a server id or a slug; paths are relative, with no `..`; contents are text. Unset, or not that shape, official servers start with the public defaults and an admin alert says so. Production alerts for unset only once a server is flagged |
 
 ### Product analytics (optional)
 

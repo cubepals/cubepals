@@ -186,7 +186,7 @@ export class RuntimeSpecs {
     const placed = await compatFor(q, revision)
     // A start places the files Cubepals owns as they are now (`own-files.ts`); like the Via
     // plugins, they never arrive through drift.
-    const starting = withCurrentOwnFiles(revision, official ? this.#official.forStart(server.id) : [])
+    const starting = withCurrentOwnFiles(revision, official ? this.#official.forStart(server) : [])
     // Its carried files compressed, and any long list, so that no variable comes near Linux's limit
     // (`carried-files.ts`). One still past it is refused here, before a machine fails on it, in
     // words its owner reads, and not tried again: trying again changes nothing.

@@ -130,11 +130,14 @@ export class WorldDownloads {
     const source = await store.presignGet(archive.archiveKey, MAKING_LINK_SECONDS, 'browser')
     const leftOut: string[] = []
     // What private configuration placed on an official server is not the owner's to take.
-    const placed = new Set(
-      (await loadListing(this.#db, archive.serverId))?.official === true
-        ? this.#official.forStart(archive.serverId).map((file) => file.path)
-        : [],
-    )
+    const server = await findServer(this.#db, archive.serverId)
+    const placed =
+      server === null
+        ? new Set<string>()
+        : this.#official.leftOutOfDownload(
+            server,
+            (await loadListing(this.#db, server.id))?.official === true,
+          )
     const body = await this.#formats.filterTarball(source.url, {
       kept: (path) => {
         if (inWorldDownload(path) && !placed.has(path)) return true

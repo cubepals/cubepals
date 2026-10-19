@@ -56,18 +56,50 @@ const OWN_SETS: readonly OwnSet[] = [
   },
 ]
 
+/** A server as OFFICIAL_SERVER_FILES names it: by its id or its slug. */
+interface NamedServer {
+  id: string
+  slug: string
+}
+
 /** Files private configuration places on the servers operators flag official, at every start. */
 export interface OfficialFiles {
-  forStart(serverId: string): readonly CarriedFile[]
+  /** The files for this server alone: the shared ones, then those named for it. The flag is the caller's to check. */
+  forStart(server: NamedServer): readonly CarriedFile[]
+  /**
+   * The paths a world download leaves out: those of an official server, and of one named in the
+   * settings that is no longer official, whose disk still holds what an earlier start placed.
+   */
+  leftOutOfDownload(server: NamedServer, official: boolean): ReadonlySet<string>
 }
 
 /** No files: what a deployment without the configuration does. */
-export const noOfficialFiles: OfficialFiles = { forStart: () => [] }
+export const noOfficialFiles: OfficialFiles = {
+  forStart: () => [],
+  leftOutOfDownload: () => new Set(),
+}
 
-/** The files OFFICIAL_SERVER_FILES holds, a path under /data to its content. */
-export const officialFilesOf = (files: Readonly<Record<string, string>>): OfficialFiles => {
-  const placed = Object.entries(files).map(([path, content]): CarriedFile => ({ path, content }))
-  return { forStart: () => placed }
+/** The shared section of OFFICIAL_SERVER_FILES, for every official server. */
+const SHARED_FILES = '*'
+
+/**
+ * The files OFFICIAL_SERVER_FILES holds: a section for every official server under `*`, and one
+ * for each server by its id or slug, a path under /data to its content. A server's own section
+ * wins at a path both name, its id's over its slug's.
+ */
+export const officialFilesOf = (
+  sections: Readonly<Record<string, Readonly<Record<string, string>>>>,
+): OfficialFiles => {
+  const own = (server: NamedServer) => [sections[server.slug], sections[server.id]]
+  const forStart = (server: NamedServer): readonly CarriedFile[] => {
+    const merged = Object.assign({}, sections[SHARED_FILES], ...own(server))
+    return Object.entries<string>(merged).map(([path, content]): CarriedFile => ({ path, content }))
+  }
+  return {
+    forStart,
+    leftOutOfDownload: (server, official) =>
+      new Set(official || own(server).some(Boolean) ? forStart(server).map((file) => file.path) : []),
+  }
 }
 
 /**

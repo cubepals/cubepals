@@ -138,7 +138,10 @@ export interface ControlPlaneSettings {
   /** Blockly's own packs; the review in `curation/own.ts` unless a test brings its own. */
   ownPacks?: readonly OwnPack[]
   /** The files placed on servers flagged official at every start (OFFICIAL_SERVER_FILES), and why there are none when there should be. */
-  officialServerFiles?: { files: Readonly<Record<string, string>>; problem: 'unset' | 'invalid' | null }
+  officialServerFiles?: {
+    files: Readonly<Record<string, Readonly<Record<string, string>>>>
+    problem: 'unset' | 'invalid' | null
+  }
   /** What new servers leave to the ones people have, and how long creates may wait. */
   room?: { wakeReserve: number; createWaitSeconds: number }
 }

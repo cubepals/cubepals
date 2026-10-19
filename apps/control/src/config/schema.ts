@@ -213,8 +213,9 @@ const EconomicsTuning = z.strictObject(
 )
 
 /**
- * Files placed on Cubepals' own servers at every start, by path under /data, from
- * OFFICIAL_SERVER_FILES (`app/servers/own-files.ts`). Never refuses the deployment: settings that
+ * Files placed on Cubepals' own servers at every start, from OFFICIAL_SERVER_FILES
+ * (`app/servers/own-files.ts`): a section of path under /data to content for `*` (every official
+ * server) and for each server by its id or slug. Never refuses the deployment: settings that
  * are missing or don't parse leave no files and say why, for an alert.
  */
 const FilePath = z
@@ -225,15 +226,19 @@ const FilePath = z
       !path.startsWith('/') && !path.includes('\\') && !path.split('/').some((p) => p === '..' || p === ''),
     'a path under /data',
   )
+const FilesBySection = z.record(
+  z.string().regex(/^(\*|[a-z0-9][a-z0-9-]*)$/, 'a server id, a slug, or *'),
+  z.record(FilePath, z.string()),
+)
 const OfficialServerFiles = z
   .object({ json: z.unknown(), production: z.boolean() })
   .transform(({ json, production }) => {
     if (json === undefined)
-      return { files: {} as Record<string, string>, problem: production ? ('unset' as const) : null }
-    const parsed = z.record(FilePath, z.string()).safeParse(json)
+      return { files: {} as z.infer<typeof FilesBySection>, problem: production ? ('unset' as const) : null }
+    const parsed = FilesBySection.safeParse(json)
     return parsed.success
       ? { files: parsed.data, problem: null }
-      : { files: {} as Record<string, string>, problem: 'invalid' as const }
+      : { files: {} as z.infer<typeof FilesBySection>, problem: 'invalid' as const }
   })
 
 /** How room is shared when it runs short (`domain/account/tuning.ts`), from CAPACITY_TUNING: private too. */
