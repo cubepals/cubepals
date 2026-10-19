@@ -50,7 +50,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'n
 import { dirname, resolve } from 'node:path'
 import { authWorks } from './lib/auth-through-website.ts'
 import { pingIndexNow } from './lib/indexnow.ts'
-import { buildWorker, deployWorker } from './lib/web-worker.ts'
+import { buildWorker } from './lib/web-worker.ts'
 import { edgePlacement, edgeRegions, edgeSourceGaps, type FlyAddress } from './production-edge.ts'
 import { bringUpToDate } from './production-tfvars.ts'
 import {
@@ -69,7 +69,7 @@ import {
   valuesFile,
 } from './production-values.ts'
 import { appsFor, type FlyApp, flyInputs, reachesWebsite, terraformIn } from './production-web.ts'
-import { productionSite, rollbackWebsite } from './production-website.ts'
+import { deployChecked, productionSite, rollbackWebsite } from './production-website.ts'
 import { isNightly, nextVersion, repositoryTags } from './versions.ts'
 
 const say = (line: string) => process.stdout.write(`${line}\n`)
@@ -322,7 +322,7 @@ async function apply(): Promise<void> {
   const label = deployLabel(head)
   for (const app of ['control', 'realtime', 'edge'] as const) deployApp(app, env, { label })
   moveProduction(env)
-  deployWorker(site, head, say)
+  await deployChecked(site, head, say)
   await signInGuard()
   await pingIndexNow(site, say)
   const version = `v${nextVersion(repositoryTags())}`
@@ -369,7 +369,7 @@ async function web(): Promise<void> {
   const site = productionSite(values, environment())
   buildWorker(site, head, say)
   moveProduction(process.env)
-  deployWorker(site, head, say)
+  await deployChecked(site, head, say)
   await signInGuard()
   await pingIndexNow(site, say)
 }
@@ -457,7 +457,7 @@ async function hotfix(): Promise<void> {
   for (const app of apps) deployApp(app, env, { label })
   moveProduction(env)
   if (website) {
-    deployWorker(website, head, say)
+    await deployChecked(website, head, say)
     await signInGuard()
     await pingIndexNow(website, say)
   }

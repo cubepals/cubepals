@@ -9,7 +9,7 @@ import { canonicalOrigin } from '../lib/site'
 import { guideHref, publishedGuides } from './(public)/guides'
 
 /**
- * The pages worth finding: home, pricing, the approved guides, and the policies.
+ * The pages worth finding: home, pricing, contact, the approved guides, and the policies.
  * A date appears only where the page has a real one. Left out on purpose: /browse and public
  * server pages (noindex for now), sign-in and the other auth pages, invites, and the app.
  */
@@ -23,6 +23,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: at('/') },
     { url: at('/pricing') },
+    { url: at('/contact') },
     ...(newest ? [{ url: at('/guides'), lastModified: newest }] : []),
     ...guides.map((guide) => ({ url: at(guideHref(guide)), lastModified: guide.modified })),
     { url: at('/legal'), lastModified: TERMS_VERSION },

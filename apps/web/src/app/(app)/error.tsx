@@ -4,9 +4,10 @@
 
 'use client'
 
+import Link from 'next/link'
 import { useEffect } from 'react'
 import { reportError } from '../../lib/insight'
-import { LoadFailed } from '../../ui'
+import { Lost } from '../../ui/lost'
 
 /**
  * A page of the app that failed to render: said plainly, with a way to try again, and reported to
@@ -20,5 +21,11 @@ export default function AppError({
   reset: () => void
 }) {
   useEffect(() => reportError(error, 'app'), [error])
-  return <LoadFailed error="This page didn’t load. Something went wrong on our side." onRetry={reset} />
+  return (
+    <Lost kind="broken" onRetry={reset}>
+      <Link href="/servers" className="bk-btn bk-btn--outline bk-btn--md">
+        Your servers
+      </Link>
+    </Lost>
+  )
 }

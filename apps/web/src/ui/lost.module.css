@@ -1,0 +1,57 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/* An error page: one narrow column, the figure first, the way out last. The same look as the
+   standalone pages (errors/pages.ts). */
+
+.lost {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  width: 100%;
+  max-width: 34rem;
+  margin-inline: auto;
+  padding-block: var(--space-48);
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 28px;
+}
+.lost p {
+  margin: 0;
+}
+.lost a:not([class]) {
+  color: inherit;
+  text-underline-offset: 0.2em;
+}
+.figure {
+  image-rendering: pixelated;
+  height: auto;
+}
+.title {
+  margin: 0;
+  text-wrap: balance;
+}
+.fine {
+  color: var(--ink-subtle);
+  font-size: 16px;
+  line-height: 24px;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+  margin-block: var(--space-8);
+}
+/* On a phone the buttons stack, each the full width, so none is left alone on a second row. */
+@media (max-width: 520px) {
+  .row {
+    flex-direction: column;
+  }
+  .row > * {
+    justify-content: center;
+    text-align: center;
+  }
+}

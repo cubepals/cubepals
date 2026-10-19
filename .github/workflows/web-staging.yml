@@ -67,6 +67,10 @@ jobs:
           # and keeps the previews' wildcard record.
           CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      # A Worker that deployed can still throw on every request. Retried for three minutes while
+      # Cloudflare moves traffic to the new version.
+      - name: Ask staging for its pages
+        run: bun scripts/site-check.ts https://staging.cubepals.com 180
 
   preview:
     name: Preview the website on staging
