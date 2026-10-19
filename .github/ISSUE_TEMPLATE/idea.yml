@@ -4,7 +4,7 @@
 
 name: Idea
 description: Something Cubepals could do.
-labels: [enhancement]
+labels: [kind/feature, needs-triage]
 assignees: [v0id-user]
 body:
   - type: textarea

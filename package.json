@@ -30,6 +30,7 @@
     "check:move-only": "bun run scripts/check-move-only.ts",
     "check:structure": "bun run scripts/check-structure.ts",
     "gates": "bun run lint && bun run typecheck && bun run check:boundaries && bun run check:structure && bun run check:deprecated && bun test",
+    "labels:install": "bun install --cwd tools/labels --frozen-lockfile",
     "openapi:install": "bun install --cwd tools/openapi --frozen-lockfile",
     "openapi:generate": "bun tools/openapi/openapi.ts generate",
     "openapi:check": "bun tools/openapi/openapi.ts check",
