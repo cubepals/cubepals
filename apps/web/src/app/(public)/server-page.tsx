@@ -4,7 +4,7 @@
 
 'use client'
 
-import type { PublicServerView } from '@blockly/contracts'
+import { type PublicServerView, versionsThatJoin } from '@blockly/contracts'
 import { useMutation } from '@tanstack/react-query'
 import { CopyPlus, ExternalLink } from 'lucide-react'
 import Image from 'next/image'
@@ -91,7 +91,7 @@ export function ServerPage({ view, invitedBy }: { view: PublicServerView; invite
 
       <FormSection
         title="Join"
-        description={joinLine(view.gameVersion, view.needs.modpack, view.needs.joinsNewer)}
+        description={joinLine(view.gameVersion, view.needs.modpack, view.needs.joins)}
       >
         <CopyField value={view.joinAddress} mark={ctaMark('copy_join_address')} />
         {view.players.length > 0 && (
@@ -129,7 +129,8 @@ function Needs({ view }: { view: PublicServerView }) {
   if (loader === null && mods.length === 0)
     return (
       <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-        Nothing to install: plain Minecraft {view.gameVersion} joins this server.
+        Nothing to install: plain Minecraft {versionsThatJoin(view.gameVersion, view.needs.joins)} joins this
+        server.
         {view.loader !== 'vanilla' && ' Its mods run on the server only.'}
       </p>
     )

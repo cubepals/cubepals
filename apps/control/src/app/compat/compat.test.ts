@@ -91,6 +91,10 @@ const smooth = async (name: string) => {
   return { owner, id: server.id }
 }
 
+/** Which versions a server's shared page says join it: what the page and the card under a link word. */
+const pageJoins = async (owner: UserActor, id: string) =>
+  (await h.app.sharingQueries.page((await h.server(id)).slug, owner))?.needs.joins
+
 /** The Via plugins in the server's plugins folder on its disk, by name. */
 const onDisk = (id: string) => {
   const dir = `${h.runtime.machine(id)?.dir ?? ''}/plugins`
@@ -124,7 +128,6 @@ describe.skipIf(!hasDatabase)('the Via plugins every Paper server starts with', 
     // Its page says who joins, with the switch, and lists no plugins.
     const view = await h.app.queries.get(owner, id)
     expect(view.joins).toEqual({ oldest: '1.9', newer: true, otherVersions: 'on' })
-    expect(view.joinsNewer).toBe(true)
     expect((await h.app.accountQueries.overview(owner)).plan.key).toBe('free')
   }, 60_000)
 
@@ -135,7 +138,7 @@ describe.skipIf(!hasDatabase)('the Via plugins every Paper server starts with', 
     expect(templates.find((template) => template.key === 'smooth')?.fits.allowed).toBe(true)
     expect(templates.find((template) => template.key === 'lifesteal')?.fits).toMatchObject({ allowed: false })
     const preview = await h.app.queries.setupPreview(owner, { kind: 'template', key: 'smooth' })
-    expect(preview).toMatchObject({ mods: [], joinsNewer: true })
+    expect(preview).toMatchObject({ mods: [], joins: { oldest: '1.9', newer: true } })
   }, 30_000)
 
   test('switched off, they come off at the next start; switched back, they return', async () => {
@@ -143,6 +146,8 @@ describe.skipIf(!hasDatabase)('the Via plugins every Paper server starts with', 
     const volume = h.runtime.machine(id)?.dir ?? ''
     const before = await placed(id)
     expect(before).toHaveLength(2)
+    const { gameVersion } = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
+    expect(await pageJoins(owner, id)).toEqual({ oldest: '1.9', newer: true })
 
     await h.app.revisions.changeOtherVersions(owner, id, 'off', randomUUID())
     await h.until(id, 'running')
@@ -150,11 +155,14 @@ describe.skipIf(!hasDatabase)('the Via plugins every Paper server starts with', 
     expect(await placed(id)).toEqual([])
     for (const path of before) expect(existsSync(`${volume}/${path}`)).toBe(false)
     expect((await h.app.queries.get(owner, id)).joins).toMatchObject({ newer: false, otherVersions: 'off' })
+    // The page a link opens says one version, and the card under it the same.
+    expect(await pageJoins(owner, id)).toEqual({ oldest: gameVersion, newer: false })
 
     await h.app.revisions.changeOtherVersions(owner, id, 'oldest', randomUUID())
     await h.until(id, 'running')
     await h.settled(id)
     expect(await placed(id)).toHaveLength(3)
+    expect(await pageJoins(owner, id)).toEqual({ oldest: '1.7.2', newer: true })
     expect((await h.app.queries.get(owner, id)).joins).toEqual({
       oldest: '1.7.2',
       newer: true,

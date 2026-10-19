@@ -4,6 +4,7 @@
 
 import { z } from 'zod'
 import type { ReactionsView } from './guestbook.ts'
+import type { JoinRange } from './joins.ts'
 import {
   ADDRESS_MAX_LENGTH,
   ADDRESS_MIN_LENGTH,
@@ -36,10 +37,10 @@ export const JoinThroughInviteInput = z.object({
 
 /** What someone needs in their own game before they can join. */
 export interface JoinNeeds {
-  /** Java Edition, at this exact release, or any newer one where `joinsNewer`. */
+  /** The release the server runs. */
   gameVersion: string
-  /** Whether players on newer Minecraft join too, by a plugin the server carries. */
-  joinsNewer: boolean
+  /** Which players' games join it, by the plugins the server carries. */
+  joins: JoinRange
   /**
    * The modpack the server plays, which is the one thing to install: it brings the loader and
    * every mod with it. When there is one, the loader and mods below are left empty. A pack the

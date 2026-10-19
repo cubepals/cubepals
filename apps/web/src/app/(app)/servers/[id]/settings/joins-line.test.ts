@@ -10,9 +10,9 @@ test('which versions join a server, from what its settings say', () => {
     gameVersion: '26.2',
     joins: { oldest, newer, otherVersions: 'on' as const },
   })
-  expect(joinsLine(on('1.9', true))).toBe('Players on Minecraft 1.9 to 26.2 and newer can join.')
-  expect(joinsLine(on('1.7.2', true))).toBe('Players on Minecraft 1.7.2 to 26.2 and newer can join.')
-  expect(joinsLine(on('26.2', true))).toBe('Players on Minecraft 26.2 and newer can join.')
+  expect(joinsLine(on('1.9', true))).toBe('Players on Minecraft 1.9 or newer can join.')
+  expect(joinsLine(on('1.7.2', true))).toBe('Players on Minecraft 1.7.2 or newer can join.')
+  expect(joinsLine(on('26.2', true))).toBe('Players on Minecraft 26.2 or newer can join.')
   expect(joinsLine(on('26.2', false))).toBe('Only players on Minecraft 26.2 can join.')
   expect(joinsLine({ gameVersion: '27.1', joins: null })).toBe('Only players on Minecraft 27.1 can join.')
 })

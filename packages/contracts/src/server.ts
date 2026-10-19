@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { z } from 'zod'
+import type { JoinRange } from './joins.ts'
 import {
   ADDRESS_MAX_LENGTH,
   ADDRESS_MIN_LENGTH,
@@ -250,8 +251,8 @@ export interface SetupPreview {
   gameVersion: string
   loader: Loader
   loaderLabel: string
-  /** Whether players on newer Minecraft than `gameVersion` join too, by a plugin it carries. */
-  joinsNewer: boolean
+  /** Which players' games join it, by the plugins it carries. */
+  joins: JoinRange
   /** The mods that come with it, their dependencies included. */
   mods: string[]
   /**
@@ -522,9 +523,7 @@ export const ChangeOtherVersionsInput = z.object({ ...change, otherVersions: z.e
  * whose players join, to the one it runs, and any newer one where `newer`. `otherVersions` is the
  * choice behind it, on a server that has one (Paper); null on any other.
  */
-export interface JoinsView {
-  oldest: string
-  newer: boolean
+export interface JoinsView extends JoinRange {
   otherVersions: OtherVersions | null
 }
 export const ChangeVersionInput = z.object({
@@ -662,8 +661,6 @@ export interface ServerView {
    */
   notLoaded: string[]
   gameVersion: string
-  /** Whether players on newer Minecraft than `gameVersion` join too, by a plugin it carries. */
-  joinsNewer: boolean
   /** Which players' games join it; null for a release Cubepals can't tell of. */
   joins: JoinsView | null
   loader: Loader

@@ -395,7 +395,7 @@ describe('joining a server that plays a pack', () => {
 
 describe('joining an older server from newer Minecraft', () => {
   test('a server that carries ViaVersion says newer Minecraft joins, so nobody goes back a version', () => {
-    expect(joinLine('1.21.11', null, true)).toBe(
+    expect(joinLine('1.21.11', null, { oldest: '1.21.11', newer: true })).toBe(
       'In Minecraft: Java Edition 1.21.11 or newer, open Multiplayer → Add Server and paste it. Consoles and phones can’t join.',
     )
   })

@@ -10,13 +10,13 @@ import { forPlayers, type PinnedMod } from '../../domain/mods/artifact.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { formatJoinAddress } from '../../minecraft/address.ts'
-import { joinsNewer } from '../../minecraft/clients.ts'
 import { LOADER_LABELS } from '../../minecraft/versions.ts'
 import { readAccess } from '../access/persistence.ts'
 import { loadControls, loadStanding } from '../accounts/persistence.ts'
 import type { Actor } from '../actor.ts'
 import { offersChipIn } from '../billing/chip-ins.ts'
 import type { DeploymentCapabilities } from '../capabilities.ts'
+import { joinsNow } from '../compat/service.ts'
 import { shownStatus } from '../edge/routed.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { tally } from '../guestbook/persistence.ts'
@@ -245,7 +245,7 @@ export class SharingQueries {
       checksAccounts: revision.settings.onlineMode,
       gameVersion: revision.gameVersion,
       loader: revision.loader,
-      needs: this.#needs(revision),
+      needs: await this.#needs(revision, awake, applied),
       mods: revision.mods.filter((mod) => mod.origin === 'user').map((mod) => mod.name),
       whitelistOnly: access.record.whitelistEnabledPending ?? access.record.whitelistEnabled,
       invited: how.invited,
@@ -270,24 +270,30 @@ export class SharingQueries {
    * What a player installs before joining. Plain Minecraft is enough unless a mod has to be in
    * their game too: a server-side mod is the server's business, not theirs.
    */
-  #needs(revision: ServerRevision): JoinNeeds {
+  async #needs(
+    revision: ServerRevision,
+    running: boolean,
+    applied: Parameters<typeof joinsNow>[2]['applied'],
+  ): Promise<JoinNeeds> {
+    const alone = { oldest: revision.gameVersion, newer: false }
     // A pack the server runs on its own asks nothing of players: plain Minecraft joins.
     if (revision.modpack?.environment === 'server')
-      return { gameVersion: revision.gameVersion, joinsNewer: false, modpack: null, loader: null, mods: [] }
+      return { gameVersion: revision.gameVersion, joins: alone, modpack: null, loader: null, mods: [] }
     // Otherwise the pack is the whole answer: installing it brings the loader and every mod.
     if (revision.modpack !== null)
       return {
         gameVersion: revision.gameVersion,
-        joinsNewer: false,
+        joins: alone,
         modpack: packView(this.#catalog, revision),
         loader: null,
         mods: [],
       }
     const theirs = forPlayers(revision.mods)
     const loaderNeeded = theirs.length > 0 && revision.loader !== 'vanilla' && revision.loader !== 'paper'
+    const { joins } = await joinsNow(this.#db, revision, { running, applied })
     return {
       gameVersion: revision.gameVersion,
-      joinsNewer: joinsNewer(revision),
+      joins: joins === null ? alone : { oldest: joins.oldest, newer: joins.newer },
       modpack: null,
       loader: loaderNeeded
         ? { label: LOADER_LABELS[revision.loader], version: revision.loaderVersion }

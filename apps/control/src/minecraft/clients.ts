@@ -98,6 +98,8 @@ export function joinsOf(
   return range === null ? null : { oldest: range.oldestRelease, newer: range.newest === null, otherVersions }
 }
 
-/** Whether players on newer Minecraft than a revision's server runs join it too. */
-export const joinsNewer = (revision: Parameters<typeof joinsOf>[0]): boolean =>
-  joinsOf(revision)?.newer ?? false
+/** Which players' games a revision's server takes, as pages word them; its own release alone for one the table doesn't know. */
+export const joinRange = (revision: Parameters<typeof joinsOf>[0]): { oldest: string; newer: boolean } => {
+  const joins = joinsOf(revision)
+  return { oldest: joins?.oldest ?? revision.gameVersion, newer: joins?.newer ?? false }
+}

@@ -11,7 +11,7 @@ import { describe, expect, test } from 'bun:test'
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { PNG } from 'pngjs'
-import { FONT, LOCKUP_FILE, serverCard } from './card.ts'
+import { FONT, LOCKUP_FILE, serverCard, versionRow } from './card.ts'
 
 describe('link picture', () => {
   const card = (patch: Partial<Parameters<typeof serverCard>[0]> = {}) =>
@@ -21,6 +21,7 @@ describe('link picture', () => {
       online: 4,
       maxPlayers: 10,
       gameVersion: '26.3',
+      joins: { oldest: '26.3', newer: false },
       serverType: null,
       invited: false,
       ...patch,
@@ -126,3 +127,24 @@ function cellsOf(word: string, scale: number): { on: Cell[]; off: Cell[] } {
     }
   return { on, off }
 }
+
+describe('the versions a card names', () => {
+  const row = (joins: { oldest: string; newer: boolean }) =>
+    versionRow({ gameVersion: '1.21.11', joins, serverType: 'paper' })
+
+  test('one version where other versions are off', () => {
+    expect(row({ oldest: '1.21.11', newer: false })).toBe('MINECRAFT 1.21.11 PAPER')
+  })
+
+  test('newer ones too with other versions on', () => {
+    expect(row({ oldest: '1.21.11', newer: true })).toBe('MINECRAFT 1.21.11 OR NEWER PAPER')
+  })
+
+  test('the oldest that joins, with the oldest-versions choice', () => {
+    expect(row({ oldest: '1.7.2', newer: true })).toBe('MINECRAFT 1.7.2 OR NEWER PAPER')
+  })
+
+  test('every character of it is one the font draws', () => {
+    for (const character of row({ oldest: '1.7.2', newer: true })) expect(FONT[character]).toBeDefined()
+  })
+})

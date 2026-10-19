@@ -42,7 +42,7 @@ import {
   sizeLabel,
 } from '../../domain/server/size.ts'
 import { formatJoinAddress } from '../../minecraft/address.ts'
-import { joinsNewer } from '../../minecraft/clients.ts'
+import { joinRange } from '../../minecraft/clients.ts'
 import { loaderOfPack } from '../../minecraft/mods.ts'
 import { packEnvironment, packTier, suggestedForServers } from '../../minecraft/packs.ts'
 import { settingTakes } from '../../minecraft/settings.ts'
@@ -532,7 +532,7 @@ export class ServerQueries {
       gameVersion: resolved.gameVersion,
       loader: resolved.loader,
       loaderLabel: LOADER_LABELS[resolved.loader],
-      joinsNewer: joinsNewer({
+      joins: joinRange({
         ...resolved,
         settings: { otherVersions: resolved.setup.settings.otherVersions },
       }),

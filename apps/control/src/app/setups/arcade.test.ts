@@ -122,7 +122,7 @@ describe.skipIf(!hasDatabase)('arcade', () => {
       from: 'Arcade',
       loader: 'paper',
       gameVersion: '26.2',
-      joinsNewer: true,
+      joins: { oldest: '1.9', newer: true },
       mods: ['ChatSentinel', 'Grim Anticheat', 'LibertyBans', 'LuckPerms'],
     })
     const { templates } = await h.app.queries.createOptions(await h.user('Lee'))

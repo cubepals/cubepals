@@ -4,6 +4,7 @@
 
 import {
   type ChangeKind,
+  type JoinRange,
   type Loader,
   type ModConflictView,
   type ModPlanView,
@@ -13,6 +14,7 @@ import {
   type RevisionChangeView,
   type RevisionView,
   type ServerView,
+  versionsThatJoin,
   type WorldView,
 } from '@blockly/contracts'
 import { DAY_MS, DAY_S, HOUR_S, MINUTE_S } from '@blockly/contracts/durations'
@@ -517,9 +519,13 @@ export function notLoadedLine(server: Pick<ServerView, 'notLoaded'>): string {
   return `${new Intl.ListFormat('en', { type: 'conjunction' }).format(server.notLoaded)} didn’t load`
 }
 
-/** `orNewer`: the server carries what lets newer Minecraft join, so the line doesn't send anyone back. */
-export function joinLine(gameVersion: string, pack: { name: string } | null = null, orNewer = false): string {
-  const game = `Minecraft: Java Edition ${gameVersion}${orNewer ? ' or newer' : ''}${pack === null ? '' : ` with ${pack.name} installed`}`
+/** `joins`: the versions the server takes, so the line doesn't send anyone to a version they needn't. */
+export function joinLine(
+  gameVersion: string,
+  pack: { name: string } | null = null,
+  joins: JoinRange | null = null,
+): string {
+  const game = `Minecraft: Java Edition ${versionsThatJoin(gameVersion, joins)}${pack === null ? '' : ` with ${pack.name} installed`}`
   return `In ${game}, open Multiplayer → Add Server and paste it. Consoles and phones can’t join.`
 }
 

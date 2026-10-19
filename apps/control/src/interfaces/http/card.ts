@@ -4,6 +4,7 @@
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { type JoinRange, versionsThatJoin } from '@blockly/contracts'
 import { PNG } from 'pngjs'
 
 /**
@@ -58,6 +59,8 @@ export interface CardView {
   online: number
   maxPlayers: number
   gameVersion: string
+  /** Which versions join, as every page words it. */
+  joins: JoinRange
   /** The server type, where it is not plain Minecraft; null says nothing rather than "VANILLA". */
   serverType: string | null
   invited: boolean
@@ -71,6 +74,10 @@ interface Row {
   /** Drawn on a block of this fill with an Ink edge, as the product draws a status. */
   block?: Rgb
 }
+
+/** The line under the state: the versions that join, then the server type. */
+export const versionRow = (view: Pick<CardView, 'gameVersion' | 'joins' | 'serverType'>): string =>
+  `MINECRAFT ${versionsThatJoin(view.gameVersion, view.joins)}${view.serverType === null ? '' : ` ${view.serverType}`}`.toUpperCase()
 
 export function serverCard(view: CardView): Buffer {
   const canvas = new Canvas(WIDTH, HEIGHT, PAPER)
@@ -94,7 +101,7 @@ export function serverCard(view: CardView): Buffer {
       block: state.soft,
     },
     {
-      text: `MINECRAFT ${view.gameVersion}${view.serverType === null ? '' : ` ${view.serverType.toUpperCase()}`}`,
+      text: versionRow(view),
       scale: 4,
       colour: SUBTLE,
       gap: 0,

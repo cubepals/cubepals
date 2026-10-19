@@ -11,6 +11,7 @@ import {
   type SetupSourceInput,
   TEMPLATE_CARDS,
   type TemplateCard,
+  versionsThatJoin,
 } from '@blockly/contracts'
 import { noop, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft } from 'lucide-react'
@@ -696,8 +697,10 @@ function templateLine(
       : from.gameVersion !== undefined || preview.gameVersion === offered[0]?.value
         ? null
         : `Cubepals picked Minecraft ${preview.gameVersion}, the newest that everything in ${preview.from} runs on.`
-  // On an older release, a friend on newer Minecraft would wonder whether they can join.
-  const newer = preview.joinsNewer ? 'Friends on newer Minecraft join too.' : null
+  // On an older release, a friend on another Minecraft would wonder whether they can join.
+  const newer = preview.joins.newer
+    ? `Players on Minecraft ${versionsThatJoin(preview.gameVersion, preview.joins)} can join.`
+    : null
   const line = [picked, newer].filter((part) => part !== null).join(' ')
   return line === '' ? null : line
 }

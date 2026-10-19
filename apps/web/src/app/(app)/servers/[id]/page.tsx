@@ -107,7 +107,7 @@ function Overview({ server }: { server: ServerView }) {
         <div className="bk-stack" style={{ maxWidth: 'var(--width-form)', gap: 'var(--space-8)' }}>
           <CopyField value={server.joinAddress} mark={ctaMark('copy_address')} />
           <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-            {joinLine(server.gameVersion, pack, server.joinsNewer)}
+            {joinLine(server.gameVersion, pack, server.joins)}
           </p>
           {pack && <GetPack pack={pack} gameVersion={server.gameVersion} quiet />}
         </div>
@@ -187,7 +187,7 @@ function Working({
             </span>
             <CopyField value={server.joinAddress} mark={ctaMark('copy_address')} />
             <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-              {joinLine(server.gameVersion, pack, server.joinsNewer)}
+              {joinLine(server.gameVersion, pack, server.joins)}
             </p>
           </div>
           {/* A pack takes a while to get too: the wait for the world is the time to get it. */}

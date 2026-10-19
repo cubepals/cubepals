@@ -135,9 +135,8 @@ export async function joinsNow(
   q: Queryable,
   revision: ServerRevision,
   run: { running: boolean; applied: Pick<AppliedConfigJson, 'revisionId' | 'compat'> | null },
-): Promise<{ joins: ReturnType<typeof joinsOf>; joinsNewer: boolean }> {
+): Promise<{ joins: ReturnType<typeof joinsOf> }> {
   const booted = run.running && run.applied?.revisionId === revision.id
   const placed = booted ? (run.applied?.compat ?? []) : projectsOf(await compatFor(q, revision))
-  const joins = joinsOf(revision, placed)
-  return { joins, joinsNewer: joins?.newer ?? false }
+  return { joins: joinsOf(revision, placed) }
 }

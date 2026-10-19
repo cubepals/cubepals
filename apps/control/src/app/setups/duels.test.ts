@@ -173,7 +173,7 @@ describe.skipIf(!hasDatabase)('duels', () => {
     const owner = await h.user('Noa', 'plus')
     expect(await h.app.queries.setupPreview(owner, { kind: 'template', key: 'duels' })).toMatchObject({
       gameVersion: '1.21.11',
-      joinsNewer: true,
+      joins: { oldest: '1.7.2', newer: true },
       mods: ['ChatSentinel', 'Duels', 'Grim Anticheat', 'LibertyBans', 'LuckPerms', 'OldCombatMechanics'],
     })
     const server = await h.create(owner, { from: { kind: 'template', key: 'duels' } })

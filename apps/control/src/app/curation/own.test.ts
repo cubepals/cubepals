@@ -234,7 +234,7 @@ describe.skipIf(!hasDatabase)('Blockly’s own packs', () => {
     const page = await harness().app.sharingQueries.page(server.slug, owner)
     expect(page?.needs).toEqual({
       gameVersion: '1.21.1',
-      joinsNewer: false,
+      joins: { oldest: '1.21.1', newer: false },
       modpack: null,
       loader: null,
       mods: [],
