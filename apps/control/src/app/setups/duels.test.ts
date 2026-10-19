@@ -32,6 +32,7 @@ import { type Harness, hasDatabase, startHarness } from '../../testing/harness.t
 import { CHAT_FILTER } from '../moderation/chat-filter.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import { listWorlds } from '../worlds/persistence.ts'
+import { DUELS_STRUCTURES } from './duels-structures.ts'
 
 let h: Harness
 const cdn = new Cdn()
@@ -112,7 +113,12 @@ describe.skipIf(!hasDatabase)('duels', () => {
       { catalog: 'hangar', projectId: 'hangar:2087', versionId: 'hangar:31271' },
     ])
     // OldCombatMechanics and Grim play by their own defaults, so they bring no file.
-    expect(revision.files).toEqual([...DUELS_FILES, ...WAITING_FILES, ...moderationFiles(CHAT_FILTER)])
+    expect(revision.files).toEqual([
+      ...DUELS_FILES,
+      ...WAITING_FILES,
+      ...DUELS_STRUCTURES,
+      ...moderationFiles(CHAT_FILTER),
+    ])
     expect(revision.settings).toMatchObject({
       defaultGameMode: 'adventure',
       difficulty: 'easy',
