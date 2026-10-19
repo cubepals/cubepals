@@ -22,10 +22,12 @@ import { PARKOUR_FINISHES } from '../apps/control/src/minecraft/arcade/parkour.t
 import { HALL, PIT_SIGN_POSTS } from '../apps/control/src/minecraft/arcade/pit.ts'
 import { signExtent } from '../apps/control/src/minecraft/arcade/signs.ts'
 import { ARCADE_FILES, ARCADE_LABELS, ARCADE_SIGNS } from '../apps/control/src/minecraft/arcade.ts'
+import { PARKOUR_FINISHES as DUELS_FINISHES } from '../apps/control/src/minecraft/duels-waiting/parkour.ts'
 import {
   BRAND_SIGN,
+  DUELS_LABELS,
   EXIT_MARKER,
-  FINISH,
+  START_SIGNS,
   WAITING_FILES,
 } from '../apps/control/src/minecraft/duels-waiting.ts'
 import { marqueeExtent } from '../apps/control/src/minecraft/marquee.ts'
@@ -91,7 +93,11 @@ const ARCADE_THINGS: Thing[] = [
 ]
 
 const DUELS_THINGS: Thing[] = [
-  { what: 'the sign', from: marqueeExtent(BRAND_SIGN)[0], to: marqueeExtent(BRAND_SIGN)[1] },
+  ...[BRAND_SIGN, ...START_SIGNS].map((sign) => {
+    const [from, to] = marqueeExtent(sign)
+    return { what: `the sign at ${sign.at.join(' ')}`, from, to }
+  }),
+  ...DUELS_LABELS.flatMap((label) => shown(`the label "${labelText(label)}"`, roomOf(label))),
   ...shown('the way out’s marker', markerRoom(EXIT_MARKER)),
   ...signBlocks(WAITING_FILES),
 ]
@@ -156,8 +162,10 @@ describe('nothing Cubepals puts up stands where players play', () => {
           (from[2] + to[2]) / 2 + 0.5,
         ]),
       ).toBe(true)
-    const [fx = 0, fy = 0, fz = 0] = FINISH.split(' ').map(Number)
-    expect(reached(SPACE.duels, [fx + 0.5, fy + 1, fz + 0.5])).toBe(true)
+    for (const { from, to } of DUELS_FINISHES)
+      expect(reached(SPACE.duels, [(from[0] + to[0]) / 2 + 0.5, from[1], (from[2] + to[2]) / 2 + 0.5])).toBe(
+        true,
+      )
   })
 
   test('a thing in the way is found: a block on the parkour’s first start', () => {

@@ -13,32 +13,11 @@
  * Cubepals' changes to those maps, and the parts of the world made from them, are CC BY-SA 4.0 too.
  */
 import type { ModArtifact } from '../../domain/mods/artifact.ts'
+import { type PublishedMap, placedIn } from '../map-credits.ts'
 import type { Block } from './datapack.ts'
 
-export type Licence = 'CC BY 4.0' | 'CC BY-SA 4.0'
-
-export interface ArcadeMap {
-  /** The build's name for it, and its dimension's while the world is built. */
-  key: string
-  /** As its authors published it. */
-  title: string
-  /** Its own name, short, as a sign at it says it: `Jungle`, not `Parkour: Jungle`. */
-  name: string
-  /** Who built it, as its source names them. */
-  builders: readonly string[]
-  /** Who published it under its licence. */
-  publisher: string
-  licence: Licence
-  /** The box of blocks the build takes from it, both corners included, as the map has them. */
-  from: Block
-  to: Block
-  /** Added to every block's position in the Arcade's world. */
-  offset: Block
-  /** What the Arcade uses it for. */
-  role: string
-  /** What Cubepals changed in it, as its licence asks to be told. */
-  changes: readonly string[]
-}
+/** A map the Arcade's world is made of. */
+export type ArcadeMap = PublishedMap
 
 export const ARCADE_MAPS: readonly ArcadeMap[] = [
   {
@@ -150,11 +129,7 @@ export const ARCADE_MAPS: readonly ArcadeMap[] = [
 ]
 
 /** A map's place in the Arcade's world: a position in the map, moved to where the map sits. */
-export function placed(key: string, [x, y, z]: Block): Block {
-  const map = ARCADE_MAPS.find((m) => m.key === key)
-  if (map === undefined) throw new Error(`No Arcade map ${key}`)
-  return [x + map.offset[0], y + map.offset[1], z + map.offset[2]]
-}
+export const placed = (key: string, at: Block): Block => placedIn(ARCADE_MAPS, key, at)
 
 const ARCADE_WORLD_SHA512 =
   '98506635d022b525ba43702f8b12be25916ea4b6ae1c0b254b19e0afdb8102eb9a483f47e6a1c3516e4b28fc88f069b717bef18ec263632a470d028a6605f0c3'

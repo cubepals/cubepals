@@ -8,8 +8,8 @@
  * server made from the Arcade or Duels would keep playing the games as they were on the day it was
  * made. At every start, each set of files Cubepals owns that a server's revision carries is placed
  * as Cubepals has it now: the Arcade's datapack and the maps its signs show, Duels' waiting
- * datapack and its sign's maps, Duels' arena, kit and permissions, and the moderation tools' files,
- * with the chat filter on or off as its owner left it. A set the revision doesn't carry is never
+ * datapack with its maps' structures and its signs' maps, Duels' arena, kit and permissions, and
+ * the moderation tools' files, with the chat filter on or off as its owner left it. A set the revision doesn't carry is never
  * added, so turning the moderation tools off stays off; nothing else on the server changes, its
  * world's blocks included, nor anything its owner added.
  *
@@ -27,6 +27,7 @@ import { DUELS_FILES } from '../../minecraft/duels.ts'
 import { WAITING_DATAPACK, WAITING_FILES } from '../../minecraft/duels-waiting.ts'
 import { isModerationFile, moderationFiles } from '../../minecraft/moderation.ts'
 import { CHAT_FILTER } from '../moderation/chat-filter.ts'
+import { DUELS_STRUCTURES } from '../setups/duels-structures.ts'
 
 /** The chat filter's file, which the moderation tools carry only while the filter is on. */
 const CHAT_FILTER_FILE = 'plugins/ChatSentinel/config.yml'
@@ -47,7 +48,10 @@ const DUELS_PATHS = new Set(DUELS_FILES.map((file) => file.path))
 
 const OWN_SETS: readonly OwnSet[] = [
   { owns: withFiles(ARCADE_DATAPACK, ARCADE_FILES), now: () => ARCADE_FILES },
-  { owns: withFiles(WAITING_DATAPACK, WAITING_FILES), now: () => WAITING_FILES },
+  {
+    owns: withFiles(WAITING_DATAPACK, WAITING_FILES),
+    now: () => [...WAITING_FILES, ...DUELS_STRUCTURES],
+  },
   { owns: (file) => DUELS_PATHS.has(file.path), now: () => DUELS_FILES },
   {
     owns: isModerationFile,

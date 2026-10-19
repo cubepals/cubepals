@@ -10,8 +10,8 @@
  *     JAVA=/path/to/java25 bun scripts/arcade-world.ts
  *
  * 1. Each map's folder is fetched from its repository at the pinned commit, and converted by
- *    Chunker (HiveGamesOSS/Chunker, MIT, at a pinned commit) to Java 26.2: NetherGames' worlds are
- *    Bedrock, Overcast's are old Java worlds.
+ *    Chunker to Java 26.2 (`lib/published-maps.ts`): NetherGames' worlds are Bedrock, Overcast's
+ *    are old Java worlds.
  * 2. A Paper 26.2 server is started on a void world, with each map as a dimension of its own
  *    (a datapack of this build's, `arcadebuild:<key>`). Each map is cloned, slab by slab, into the
  *    overworld at its place, and Minecraft writes every block as 26.2 has it, lit.
@@ -28,9 +28,9 @@
  * Everything is kept under `local/arcade-world/`, so a second run reuses what the first fetched.
  * Not the games: those are the datapack every Arcade server carries (`minecraft/arcade.ts`).
  */
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { creditsText, MAP_SOURCES } from '../apps/control/src/minecraft/arcade/credits.ts'
 import { HUB_SPAWN } from '../apps/control/src/minecraft/arcade/datapack.ts'
@@ -42,14 +42,11 @@ import { GROUND, GROUND_COMMANDS } from './lib/arcade-ground.ts'
 import { HALL_COMMANDS, HALL_LIGHTS } from './lib/arcade-hall.ts'
 import { HOUSE_COMMANDS, INSIDE } from './lib/arcade-house.ts'
 import { LIKENESS_COMMANDS } from './lib/arcade-likeness.ts'
+import { chunker, convert, fetchFolders, run } from './lib/published-maps.ts'
 import { rcon } from './lib/rcon.ts'
 
 const WORK = resolve('local/arcade-world')
 const JAVA = process.env.JAVA ?? 'java'
-const CHUNKER = {
-  repo: 'https://github.com/HiveGamesOSS/Chunker',
-  commit: '50aaf6d82e8b68929279161b790d95fdddfe0a40',
-}
 const PAPER = {
   url: 'https://fill-data.papermc.io/v1/objects/3cce0a4922baf79bd8e1275ee5ff9f073f24675770e09b0d4be9442d513e7a6b/paper-26.2-134.jar',
   sha256: '3cce0a4922baf79bd8e1275ee5ff9f073f24675770e09b0d4be9442d513e7a6b',
@@ -58,53 +55,14 @@ const PASSWORD = 'arcade-build'
 const LEVEL = 'arcade'
 const say = (line: string) => process.stdout.write(`${line}\n`)
 
-function run(command: string, args: string[], cwd = WORK): void {
-  const done = spawnSync(command, args, {
-    cwd,
-    stdio: 'inherit',
-    env: { ...process.env, GIT_LFS_SKIP_SMUDGE: '1' },
-  })
-  if (done.status !== 0) throw new Error(`${command} ${args.join(' ')} exited ${done.status}`)
-}
-
-/** A repository's folders at one commit, without the rest of its history or files. */
-function fetchFolders(repo: string, commit: string, paths: string[]): string {
-  const dir = join(WORK, 'sources', createHash('sha256').update(repo).digest('hex').slice(0, 12))
-  if (!existsSync(join(dir, '.git'))) {
-    mkdirSync(dir, { recursive: true })
-    run('git', ['init', '-q'], dir)
-    run('git', ['config', 'gc.auto', '0'], dir)
-    run('git', ['remote', 'add', 'origin', repo], dir)
-  }
-  run('git', ['fetch', '-q', '--depth', '1', '--filter=blob:none', 'origin', commit], dir)
-  run('git', ['checkout', '-q', commit, '--', ...paths], dir)
-  return dir
-}
-
-function chunker(): string {
-  const dir = join(WORK, 'chunker')
-  if (!existsSync(join(dir, '.git'))) {
-    mkdirSync(dir, { recursive: true })
-    run('git', ['init', '-q'], dir)
-    run('git', ['fetch', '-q', '--depth', '1', CHUNKER.repo, CHUNKER.commit], dir)
-    run('git', ['checkout', '-q', 'FETCH_HEAD'], dir)
-  }
-  const jar = join(dir, 'build/libs')
-  if (!existsSync(jar)) run('./gradlew', ['-q', ':cli:shadowJar', '--no-daemon'], dir)
-  const built = readdirSync(jar).find((name) => name.startsWith('chunker-cli-') && name.endsWith('.jar'))
-  if (built === undefined) throw new Error('Chunker built no CLI jar')
-  return join(jar, built)
-}
-
 /** Each map as a Java 26.2 world of its own. */
-function convert(jar: string, map: ArcadeMap): string {
-  const out = join(WORK, 'java', map.key)
-  if (existsSync(join(out, 'level.dat'))) return out
+function convertMap(jar: string, map: ArcadeMap): string {
   const source = MAP_SOURCES[map.key]
   if (source === undefined) throw new Error(`No source for the Arcade map ${map.key}`)
-  const src = join(fetchFolders(source.repo, source.commit, [source.path]), source.path)
-  run(JAVA, ['-jar', jar, '-i', src, '-f', 'JAVA_26_2', '-o', out])
-  return out
+  const out = join(WORK, 'java', map.key)
+  if (existsSync(join(out, 'level.dat'))) return out
+  const src = join(fetchFolders(WORK, source.repo, source.commit, [source.path]), source.path)
+  return convert(JAVA, jar, src, 'JAVA_26_2', out)
 }
 
 async function paperJar(): Promise<string> {
@@ -272,22 +230,26 @@ function pack(): string {
   // nor its entities, which are only what the build dropped: cloning brings blocks alone. With it,
   // who made each map and what changed, as their licences ask.
   writeFileSync(join(level, 'CREDITS.txt'), creditsText())
-  run('tar', [
-    '--sort=name',
-    '--owner=0',
-    '--group=0',
-    '--numeric-owner',
-    '--mtime=@0',
-    '-czf',
-    out,
-    '-C',
-    level,
-    'level.dat',
-    'data/minecraft',
-    'dimensions/minecraft/overworld/region',
-    'dimensions/minecraft/overworld/data',
-    'CREDITS.txt',
-  ])
+  run(
+    'tar',
+    [
+      '--sort=name',
+      '--owner=0',
+      '--group=0',
+      '--numeric-owner',
+      '--mtime=@0',
+      '-czf',
+      out,
+      '-C',
+      level,
+      'level.dat',
+      'data/minecraft',
+      'dimensions/minecraft/overworld/region',
+      'dimensions/minecraft/overworld/data',
+      'CREDITS.txt',
+    ],
+    WORK,
+  )
   return out
 }
 
@@ -296,8 +258,8 @@ async function main(): Promise<void> {
   if (!HUB_SPAWN.startsWith(`${INSIDE[0] + 0.5} ${INSIDE[1]} ${INSIDE[2] + 0.5} `))
     throw new Error(`HUB_SPAWN (${HUB_SPAWN}) is not inside the house (${INSIDE.join(' ')})`)
   mkdirSync(WORK, { recursive: true })
-  const converter = chunker()
-  const worlds = new Map(ARCADE_MAPS.map((map) => [map.key, convert(converter, map)]))
+  const converter = chunker(WORK)
+  const worlds = new Map(ARCADE_MAPS.map((map) => [map.key, convertMap(converter, map)]))
   prepareServer(worlds)
   const jar = await paperJar()
   await (await startServer(jar))()

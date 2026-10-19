@@ -14,6 +14,7 @@ License. A few files are other people's and stay under their own licences.
 | Typefaces: Press Start 2P, IBM Plex | `apps/web/src/landing/type/`, `docs/architecture/fonts/` | [OFL-1.1](LICENSES/OFL-1.1.txt), their authors' |
 | API descriptions and the types generated from them: Fly's Machines API, Hangar, Modrinth | `apps/control/src/infra/{fly,hangar,modrinth}/` | Apache-2.0, MIT and CC0-1.0, their authors' |
 | AOneBlock's settings, with one change | `apps/control/src/app/setups/aoneblock-config.yml` | [EPL-2.0](LICENSES/EPL-2.0.txt), AOneBlock's authors' |
+| The Duels lobby's published maps, as structures with Cubepals' changes: the Overcast Community's Parkour: Ice and Parkour: Debris, and NetherGames' arena Cramped | `apps/control/assets/duels-lobby/` | [CC-BY-SA-4.0](LICENSES/CC-BY-SA-4.0.txt) for the courses and [CC-BY-4.0](LICENSES/CC-BY-4.0.txt) for the arena, their builders' and Cubepals' |
 | BSkyBlock's settings, with one change | `apps/control/src/app/setups/bskyblock-config.yml` | [EPL-2.0](LICENSES/EPL-2.0.txt), BSkyBlock's authors' |
 | ChatSentinel's settings, with Cubepals' changes | `apps/control/src/app/moderation/chatsentinel-config.yml` | [GPL-3.0-only](LICENSES/GPL-3.0-only.txt), ChatSentinel's authors' |
 | Boat's API description, Hangar's recorded answers, Supabase's root certificate | `apps/control/src/infra/boat/`, `apps/control/src/infra/hangar/fixtures/`, `packages/db/certs/` | Their owners' terms, no licence from us |

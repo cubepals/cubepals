@@ -37,10 +37,10 @@ const FORMAT_NAMESPACES = /^www\.w3\.org$/
 
 /**
  * Addresses a licence asks to be linked: the Creative Commons licences and where each published
- * map is, which the Arcade's credits link to (CC BY 4.0, 3(a)(1)). Never a deployment's. Only the
+ * map is, which the maps' credits link to (CC BY 4.0, 3(a)(1)). Never a deployment's. Only the
  * credits may name them.
  */
-const ATTRIBUTION = { file: 'minecraft/arcade/credits.ts', hosts: /^(creativecommons\.org|github\.com)$/ }
+const ATTRIBUTION = { file: 'minecraft/map-credits.ts', hosts: /^(creativecommons\.org|github\.com)$/ }
 
 /** Each provider's hosts, which only its own adapter may name. */
 const PROVIDER_HOSTS: Record<string, RegExp> = {

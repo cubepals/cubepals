@@ -14,6 +14,7 @@ import { DUELS_FILES } from '../../minecraft/duels.ts'
 import { WAITING_DATAPACK, WAITING_FILES } from '../../minecraft/duels-waiting.ts'
 import { moderationFiles } from '../../minecraft/moderation.ts'
 import { CHAT_FILTER } from '../moderation/chat-filter.ts'
+import { DUELS_STRUCTURES } from '../setups/duels-structures.ts'
 import { withCurrentOwnFiles } from './own-files.ts'
 
 const revision = (files: CarriedFile[]): ServerRevision => ({
@@ -38,7 +39,7 @@ const older = (files: readonly CarriedFile[]) =>
 const byPath = (files: readonly CarriedFile[]) => [...files].sort((a, b) => a.path.localeCompare(b.path))
 
 describe('the files Cubepals owns, at a start', () => {
-  test("a Duels server made earlier gets Duels' arena, kit, permissions and waiting datapack as they are now", () => {
+  test("a Duels server made earlier gets Duels' arena, kit, permissions and waiting datapack as they are now, its maps' structures with it", () => {
     const then = [
       ...older(DUELS_FILES),
       ...older(WAITING_FILES),
@@ -46,7 +47,7 @@ describe('the files Cubepals owns, at a start', () => {
       ...older(moderationFiles(CHAT_FILTER)),
     ]
     expect(byPath(withCurrentOwnFiles(revision(then)).files)).toEqual(
-      byPath([...DUELS_FILES, ...WAITING_FILES, ...moderationFiles(CHAT_FILTER)]),
+      byPath([...DUELS_FILES, ...WAITING_FILES, ...DUELS_STRUCTURES, ...moderationFiles(CHAT_FILTER)]),
     )
   })
 

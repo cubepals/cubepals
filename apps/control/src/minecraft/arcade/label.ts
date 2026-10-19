@@ -32,15 +32,18 @@ const transformation = (scale: readonly number[], translation: readonly number[]
  * across, from two left of where it stands to three right, and ten up from it, forty to a block. A
  * rectangle from `left` to `right` and `bottom` to `top`, in blocks, is that scaled and moved.
  */
-function plateDisplay(shown: Label, turn: string): string {
+function plateDisplay(shown: Label, turn: string, ns: string): string {
   const { left, right, bottom, top } = plateOf(shown)
   const [width, height] = [right - left, top - bottom]
   const middle = (left + right) / 2
-  return `summon minecraft:text_display ${exactly(shown.at)} {Tags:["${NS}.display","${NS}.plate"],${turn},brightness:{block:15,sky:15},text:" ",background:${INK_ARGB},default_background:false,see_through:false,shadow:false,${transformation([8 * width, 4 * height, 1], [middle - width / 10, bottom, -BEHIND])}}`
+  return `summon minecraft:text_display ${exactly(shown.at)} {Tags:["${ns}.display","${ns}.plate"],${turn},brightness:{block:15,sky:15},text:" ",background:${INK_ARGB},default_background:false,see_through:false,shadow:false,${transformation([8 * width, 4 * height, 1], [middle - width / 10, bottom, -BEHIND])}}`
 }
 
 /** The commands that make a label: its plate, then its words. */
-export function label(shown: Label): string[] {
+export const label = (shown: Label): string[] => labelIn(shown, NS)
+
+/** The same, for a label of another datapack than the Arcade's, its displays tagged under `ns`. */
+export function labelIn(shown: Label, ns: string): string[] {
   const scale = shown.scale ?? 1
   const size = scale === 1 ? '' : `,${transformation([scale, scale, scale], [0, 0, 0])}`
   const turn =
@@ -48,7 +51,7 @@ export function label(shown: Label): string[] {
       ? 'billboard:"vertical"'
       : `billboard:"fixed",Rotation:[${YAW[shown.facing]}f,0f]`
   return [
-    plateDisplay(shown, turn),
-    `summon minecraft:text_display ${exactly(shown.at)} {Tags:["${NS}.display","${shown.tag}"],${turn},brightness:{block:15,sky:15},background:0,default_background:false,see_through:false,shadow:false,line_width:${LINE_WIDTH},text:${textOf(shown.text)}${size}}`,
+    plateDisplay(shown, turn, ns),
+    `summon minecraft:text_display ${exactly(shown.at)} {Tags:["${ns}.display","${shown.tag}"],${turn},brightness:{block:15,sky:15},background:0,default_background:false,see_through:false,shadow:false,line_width:${LINE_WIDTH},text:${textOf(shown.text)}${size}}`,
   ]
 }

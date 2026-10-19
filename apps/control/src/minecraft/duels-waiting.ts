@@ -3,47 +3,59 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * What a player alone on a Duels server does while nobody is there to fight: a short parkour off
- * the platform's west edge and a pit off its north edge where everyone fights everyone, and a
- * welcome that points to both and to `/duel join`. Not the arena, the kit or who may play, which
- * are the Duels plugin's (`duels.ts`).
+ * What a player on a Duels server does while nobody is there to fight: a timed parkour over two
+ * published courses off the platform's west edge, a pit in a published arena off its north edge
+ * where everyone fights everyone, and a welcome that points to both and to `/duel join`. Outside
+ * the pit and duels the lobby is peaceful: nobody there hurts or is hurt by anyone. Not the arena,
+ * the kit or who may play, which are the Duels plugin's (`duels.ts`).
  *
  * All of it is one datapack Cubepals writes into the world the server runs, which Minecraft reads
- * on its own, so no plugin is added for it. As the world loads, it builds the course, the pit and
- * Cubepals' sign beside the void world's platform (`duels.ts` says where that is); a world of
- * another kind, whose arena is a room underground, gets none of them, and its welcome says only how
- * to duel. Every tick it welcomes a player it hasn't, opens or closes the pit, gives whoever drops
- * into the pit the pit's kit and tells them the way out, lets out whoever takes it, shows an open
- * door over the way out and the sign's mark, and sends whoever reaches the end of the parkour back
- * to its start.
+ * on its own, so no plugin is added for it; the maps' structures are carried beside its files
+ * (`app/setups/duels-structures.ts`). A moment after the world loads, it places the maps as
+ * structures beside the void world's platform (`duels.ts` says where that is), with their pads and
+ * Cubepals' signs; a world of another kind, whose arena is a room underground, gets none of them,
+ * and its welcome says only how to duel. Scores and the board live in the world's own scoreboard
+ * and storage, so they hold through restarts and sleep.
  *
- * The pit is a fight, so it is open only while two can have one: while fewer than two players are
- * outside a duel, a lid of glass covers it and the sign over it says why. A player is in a duel
- * while they carry the duel kit's bow, which the pit's kit leaves out. The lid closes only over an
- * empty pit, so it never shuts anyone in.
- *
- * The pit is three blocks deep, so a player leaves it by losing, which drops what they hold, or by
- * the green square in its far corner, which takes back the pit's kit and puts them on the platform;
- * what anyone drops in it is cleared. A player who joins a duel from the pit is put back there
- * afterwards with what they had, as the Duels plugin does for everyone.
+ * Parts (`duels-waiting/`):
+ * - `maps.ts`: the published maps, their builders, licences, changes, places and credits.
+ * - `parkour.ts`: the timed parkour over two courses, its checkpoints, best times and board.
+ * - `pit.ts`: the pit, its pad and lid, spawn points, kit and way out.
  *
  * Measured on Paper 1.21.11 with Duels 4.0.6 (data pack format 94.1): the platform is one block
  * thick, with nothing under it, so a void world is told by the air below its middle.
  */
 
-import { type CarriedFile, RUNNING_LEVEL } from '../domain/revision/carried.ts'
-import { MARKERS, type ShownMarker, showMarker } from './brand-pack.ts'
+import type { CarriedFile } from '../domain/revision/carried.ts'
+import type { Part } from './arcade/datapack.ts'
 import { DUELS_ARENA } from './duels.ts'
+import {
+  CREDIT_LINES,
+  CREDITS_TEXT,
+  DUELS_MAPS,
+  NS,
+  placeMap,
+  WAITING_DATAPACK,
+} from './duels-waiting/maps.ts'
+import {
+  BOARD_LABEL,
+  PARKOUR_LOBBY,
+  PARKOUR_PAD,
+  PARKOUR_PART,
+  PARKOUR_START,
+} from './duels-waiting/parkour.ts'
+import { IN_PIT, OUTSIDE, PIT_PART, PIT_SPAWNS } from './duels-waiting/pit.ts'
 import { artFiles, MAPS_1_21_11 } from './map-art.ts'
 import { buildMarquee, clearOldBase, type Frame, footOf, type Marquee } from './marquee.ts'
 
-/** The datapack's folder in the running world, and the name Minecraft lists it by. */
-export const WAITING_DATAPACK = `${RUNNING_LEVEL}/datapacks/cubepals-duels`
+// What outsiders read here, at the path they always have.
+export { WAITING_DATAPACK } from './duels-waiting/maps.ts'
+export { EXIT_MARKER } from './duels-waiting/pit.ts'
 
 /** The void world's platform is one block thick: below its middle there is nothing. */
 const ON_VOID = 'execute if block 8 -62 8 minecraft:air run'
 
-/** The arena's own stone round Cubepals' sign: stone bricks, chiseled at the corners, lit by pale froglights. */
+/** The arena's own stone round Cubepals' signs: stone bricks, chiseled at the corners, lit by pale froglights. */
 const ARENA: Frame = {
   casing: 'stone_bricks',
   corner: 'chiseled_stone_bricks',
@@ -64,14 +76,27 @@ export const BRAND_SIGN: Marquee = {
   frame: ARENA,
   backed: true,
 }
+
 /**
- * Every display the sign has had carries `cubepals.sign`; its maps carry `cubepals.sign.maps` too.
- * A server that showed it as blocks of colour before keeps those displays in its world: they are
- * taken down as the maps go up, and any that load after, as they load.
+ * A smaller sign at the start of each game, beside its pad, facing the platform: the parkour's
+ * south of its pad, the pit's east of its. Both show the same maps.
+ */
+const START_ART = { side: 2, firstId: 9216 }
+export const START_SIGNS: readonly Marquee[] = [
+  { at: [-12, -59, 5], facing: 'east', side: 2, art: START_ART, frame: ARENA, backed: true },
+  { at: [12, -59, -12], facing: 'south', side: 2, art: START_ART, frame: ARENA, backed: true },
+]
+
+/**
+ * Every display the signs have had carries `cubepals.sign`; their maps carry `cubepals.sign.maps`
+ * too. A server that showed the sign as blocks of colour before keeps those displays in its world:
+ * they are taken down as the maps go up, and any that load after, as they load.
  */
 const SIGN_MAPS = 'cubepals.sign.maps'
-const SIGN_PARTS = buildMarquee(BRAND_SIGN, ['cubepals.sign', SIGN_MAPS])
-/** Its blocks, built with the course and the pit; its Paper and mark, shown once someone is here, as the way out's marker is. */
+const SIGN_PARTS = [BRAND_SIGN, ...START_SIGNS].flatMap((sign) =>
+  buildMarquee(sign, ['cubepals.sign', SIGN_MAPS]),
+)
+/** Their blocks, built with the maps; their Paper and mark, shown once someone is here, as the way out's marker is. */
 export const DUELS_SIGN_COMMANDS = [
   // The sign as first built stood a block proud of its base too, off the platform's edge, over the void.
   clearOldBase(BRAND_SIGN),
@@ -81,161 +106,135 @@ const SIGN_DISPLAYS = [
   'kill @e[type=!minecraft:player,tag=cubepals.sign]',
   ...SIGN_PARTS.filter((command) => command.startsWith('summon ')),
 ]
-const SIGN_FOOT = footOf(BRAND_SIGN)
-const SHOW_SIGN = `execute if entity @a if block ${SIGN_FOOT.at.join(' ')} minecraft:${SIGN_FOOT.block} unless entity @e[tag=${SIGN_MAPS}] run function cubepals:sign`
+/**
+ * The maps are shown while someone is here, once the signs are built and the maps of the last of
+ * them, the pit's, are not up: a server whose world shows the first sign alone shows all three.
+ */
+const LAST_SIGN = START_SIGNS.at(-1) ?? BRAND_SIGN
+const SIGN_FOOT = footOf(LAST_SIGN)
+const [lx, ly, lz] = LAST_SIGN.at
+const SHOW_SIGN = `execute if entity @a if block ${SIGN_FOOT.at.join(' ')} minecraft:${SIGN_FOOT.block} unless entity @e[tag=${SIGN_MAPS},x=${lx},y=${ly},z=${lz + 1},distance=..1] run function cubepals:sign`
 const OLD_SIGN_DISPLAYS = `kill @e[type=!minecraft:player,tag=cubepals.sign,tag=!${SIGN_MAPS}]`
 
-/** Where a player is in the pit: inside its walls, from its floor up through its rim. */
-const IN_PIT = 'x=-6,y=-64,z=-26,dx=14,dy=3,dz=14'
+/** Every label the datapack makes: the parkour's board. */
+export const DUELS_LABELS = [BOARD_LABEL]
 
-/** The pit's inside at its rim, where the lid lies while it is closed. */
-const LID = 'fill -6 -61 -26 8 -61 -12'
-
-/** The middle of the lid, which says whether the pit is open: air if it is, glass if it isn't. */
-const LID_MIDDLE = '1 -61 -19'
-
-/**
- * The sign on the outside of the pit's wall beside the bridge, just under its rim, facing the
- * platform: on the wall, not standing on its top, where players walk round the pit.
- */
-const SIGN = '2 -62 -10'
-
-/** Where the sign stood before, on the wall's top: taken away as the pit is built. */
-const OLD_SIGN = '2 -60 -11'
-
-/** What the sign says, a line to a row, while the pit is closed and while it is open. */
-const CLOSED_SIGN = `data merge block ${SIGN} {front_text:{messages:["the pit is closed:","it opens when","two can fight",""]}}`
-const OPEN_SIGN = `data merge block ${SIGN} {front_text:{messages:["the pit:","everyone fights","everyone",""]}}`
-
-/** The way out: a green square in the corner across the pit from the bridge. */
-const EXIT = 'fill 7 -64 -26 8 -64 -25 minecraft:lime_concrete'
+/** Every place a player is put on a Duels server: the arena's, the parkour's start and the ways back. */
+export const DUELS_PLACES: readonly string[] = [
+  ...Object.values(DUELS_ARENA),
+  PARKOUR_START,
+  PARKOUR_LOBBY,
+  OUTSIDE,
+]
 
 /**
- * Over the way out, on the pit's wall beside it at eye height, an open door (`brand-pack.ts`). It
- * is shown while someone is on the server, once the world's entities are surely in, and only once.
+ * What the lobby first had, built block by block: a course of stepping stones off the platform's
+ * west edge and a box of a pit off its north edge, with its bridge, sign and way out. Taken down
+ * before the maps go in, where they don't cover it.
  */
-export const EXIT_MARKER: ShownMarker = {
-  marker: MARKERS.wayOut,
-  at: [8.97, -62, -25],
-  facing: 'west',
-  scale: 0.8,
+const OLD_BUILDS = [
+  'fill -33 -61 -2 -11 -55 2 minecraft:air',
+  'fill -7 -64 -27 9 -60 -9 minecraft:air',
+  'kill @e[type=minecraft:item_display,tag=cubepals.exit]',
+]
+
+/** The chunks the lobby is in, kept loaded: the courses, the pit, the pads and the signs. */
+const CHUNKS = 'forceload add -53 -58 30 27'
+
+/** How long after the world loads its chunks are built in, in ticks, so no block is missed. */
+const BUILD_AFTER = 40
+
+/** The lobby's credits, by `/trigger credits`. */
+const CREDITS = 'credits'
+
+/**
+ * Peaceful outside the pit and duels: a player in neither is in adventure mode, and deals and takes
+ * no harm, as weakness and resistance at their utmost, hidden, do. The void still takes whoever
+ * falls into it. A player who dies loses both, and gets them again at once if still outside.
+ */
+const CALM = `${NS}.calm`
+const OUTSIDE_FIGHTS = `@a[tag=!${CALM},tag=!${NS}.pit,gamemode=!spectator,gamemode=!creative]`
+const CALM_PART: Part = {
+  functions: {
+    calm: [
+      `tag @s add ${CALM}`,
+      'gamemode adventure @s[gamemode=survival]',
+      'effect give @s minecraft:weakness infinite 255 true',
+      'effect give @s minecraft:resistance infinite 4 true',
+    ],
+    uncalm: [
+      `tag @s remove ${CALM}`,
+      'effect clear @s minecraft:weakness',
+      'effect clear @s minecraft:resistance',
+    ],
+  },
+  load: [],
+  build: [],
+  tick: [
+    `execute as @a[tag=${CALM}] if items entity @s container.* minecraft:bow run function ${NS}:uncalm`,
+    `execute as @a[tag=${CALM},${IN_PIT}] run function ${NS}:uncalm`,
+    `execute as ${OUTSIDE_FIGHTS} unless items entity @s container.* minecraft:bow unless entity @s[${IN_PIT}] run function ${NS}:calm`,
+  ],
 }
-const SHOW_EXIT = `execute if entity @a if block 7 -64 -26 minecraft:lime_concrete unless entity @e[type=minecraft:item_display,tag=cubepals.exit] run ${showMarker(EXIT_MARKER, ['cubepals.exit'])}`
-
-/** Where the way out puts a player: on the platform by the bridge, facing away from the pit. */
-const OUTSIDE = '1.0 -60 -6.5 0 0'
-
-/** The gold block at the end of the parkour, which also says the course is there. */
-export const FINISH = '-32 -55 0'
-
-/** Where the parkour starts: the platform's edge, facing the first jump. */
-const START = '-7.5 -60 0.5 90 0'
-
-/** Every place a player is put on a Duels server: the arena's, the parkour's start and the way out of the pit. */
-export const DUELS_PLACES: readonly string[] = [...Object.values(DUELS_ARENA), START, OUTSIDE]
-
-/**
- * The course, west of the platform, which ends at x -8: stepping stones two blocks apart, most a
- * block higher than the last, to a pad with the gold block in its middle.
- */
-const PARKOUR = [
-  'setblock -11 -61 0 minecraft:light_blue_concrete',
-  'setblock -14 -60 0 minecraft:light_blue_concrete',
-  'setblock -17 -59 1 minecraft:light_blue_concrete',
-  'setblock -20 -58 0 minecraft:light_blue_concrete',
-  'setblock -23 -58 -2 minecraft:light_blue_concrete',
-  'setblock -26 -57 -2 minecraft:light_blue_concrete',
-  'setblock -29 -56 0 minecraft:light_blue_concrete',
-  'fill -33 -55 -1 -31 -55 1 minecraft:light_blue_concrete',
-  `setblock ${FINISH} minecraft:gold_block`,
-]
-
-/**
- * The pit, north of the platform, which ends at z -8: walls of stone bricks whose top is level
- * with the platform, a floor three blocks below it at the bottom of the world with the way out in
- * a corner, a bridge from the platform to its rim, and the sign. Its inside is cleared each time,
- * so it is always empty, and closed, since nobody is on a server as it loads.
- */
-const PIT = [
-  'fill -7 -64 -27 9 -61 -11 minecraft:stone_bricks',
-  'fill -6 -63 -26 8 -62 -12 minecraft:air',
-  `${LID} minecraft:white_stained_glass`,
-  'fill -6 -64 -26 8 -64 -12 minecraft:smooth_stone',
-  EXIT,
-  'fill 0 -61 -10 1 -61 -9 minecraft:smooth_stone',
-  `execute if block ${OLD_SIGN} minecraft:oak_sign run setblock ${OLD_SIGN} minecraft:air`,
-  `setblock ${SIGN} minecraft:oak_wall_sign[facing=south]{is_waxed:1b}`,
-  CLOSED_SIGN,
-]
-
-/** Opening the pit, and closing it. */
-const OPEN = [`${LID} minecraft:air replace minecraft:white_stained_glass`, OPEN_SIGN]
-const CLOSE = [`${LID} minecraft:white_stained_glass replace minecraft:air`, CLOSED_SIGN]
-
-/** Leaving by the way out: the pit's kit stays behind, and the player is on the platform again. */
-const LEAVE = ['clear @s', 'tag @s remove cubepals.pit', `tp @s ${OUTSIDE}`]
-
-/**
- * As the world loads: its chunks kept loaded, the scoreboards of deaths and of who could fight in
- * the pit, and on void, the course and pit.
- */
-const LOAD = [
-  'forceload add -34 -28 9 1',
-  'forceload add 6 25 11 27',
-  'scoreboard objectives add cubepals.died deathCount',
-  'scoreboard objectives add cubepals.waiting dummy',
-  `${ON_VOID} function cubepals:build`,
-]
-
-/** The pit's kit: iron and food, the duel kit without the bow. */
-const PIT_KIT = [
-  `item replace entity @a[tag=!cubepals.pit,${IN_PIT}] armor.head with minecraft:iron_helmet`,
-  `item replace entity @a[tag=!cubepals.pit,${IN_PIT}] armor.chest with minecraft:iron_chestplate`,
-  `item replace entity @a[tag=!cubepals.pit,${IN_PIT}] armor.legs with minecraft:iron_leggings`,
-  `item replace entity @a[tag=!cubepals.pit,${IN_PIT}] armor.feet with minecraft:iron_boots`,
-  `give @a[tag=!cubepals.pit,${IN_PIT}] minecraft:iron_sword`,
-  `give @a[tag=!cubepals.pit,${IN_PIT}] minecraft:cooked_beef 8`,
-]
 
 /** The welcome, once for each player in each world: how to duel, and, where they exist, the rest. */
 const WELCOME = [
   'tellraw @a[tag=!cubepals.welcomed] ["Type ",{"text":"/duel join","color":"gold"}," to fight the next player who types it too."]',
-  `execute if block ${FINISH} minecraft:gold_block run tellraw @a[tag=!cubepals.welcomed] "While you wait, try the blue parkour, or drop into the pit to fight everyone at once."`,
+  `execute if block ${PARKOUR_PAD.from.join(' ')} minecraft:yellow_concrete run tellraw @a[tag=!cubepals.welcomed] "While you wait, step on a yellow pad: west for the parkour, north for the pit, where everyone fights everyone."`,
+  `execute if block ${PARKOUR_PAD.from.join(' ')} minecraft:yellow_concrete run tellraw @a[tag=!cubepals.welcomed] ["",{"text":"Type ","color":"gray"},{"text":"/trigger credits","color":"gold"},{"text":" for who built the maps.","color":"gray"}]`,
   'tag @a[tag=!cubepals.welcomed] add cubepals.welcomed',
 ]
 
+/** The parts, in the order each tick runs them. */
+const PARTS: readonly Part[] = [PARKOUR_PART, PIT_PART, CALM_PART]
+
 /**
- * Whether two can fight in the pit, counted as players outside a duel, and the pit opened or closed
- * to match. Only where the pit is built: its floor is smooth stone, and its lid glass or air.
+ * As the world loads: its chunks kept loaded, the scoreboards of deaths and credits and each
+ * part's, and, on void, the build a moment later.
  */
-const LID_TICK = [
-  'scoreboard players set #waiting cubepals.waiting 0',
-  'execute as @a[gamemode=!spectator] unless items entity @s container.* minecraft:bow run scoreboard players add #waiting cubepals.waiting 1',
-  `execute if score #waiting cubepals.waiting matches 2.. if block ${LID_MIDDLE} minecraft:white_stained_glass run function cubepals:open`,
-  `execute if score #waiting cubepals.waiting matches ..1 if block ${LID_MIDDLE} minecraft:air if block -6 -64 -26 minecraft:smooth_stone unless entity @a[${IN_PIT}] run function cubepals:close`,
+const LOAD = [
+  CHUNKS,
+  'scoreboard objectives add cubepals.died deathCount',
+  `scoreboard objectives add ${CREDITS} trigger`,
+  ...PARTS.flatMap((part) => part.load),
+  `${ON_VOID} scoreboard players set #build ${NS}.waiting ${BUILD_AFTER}`,
 ]
 
-/** Every tick: the welcome, the lid, the pit, its way out and the marker over it, and the end of the parkour. */
+/** The build, once the chunks are in: the old lobby down, the maps placed, then each part's own. */
+const BUILD = [
+  ...OLD_BUILDS,
+  ...DUELS_MAPS.map(({ key }) => placeMap(key)),
+  ...PARTS.flatMap((part) => part.build),
+  ...DUELS_SIGN_COMMANDS,
+]
+
+/** Every tick: the build when it is due, the welcome, credits, each part, and the signs. */
 const TICK = [
+  `execute if score #build ${NS}.waiting matches 1.. run scoreboard players remove #build ${NS}.waiting 1`,
+  `execute if score #build ${NS}.waiting matches 0 run function ${NS}:build`,
+  `execute if score #build ${NS}.waiting matches 0 run scoreboard players set #build ${NS}.waiting -1`,
   ...WELCOME,
-  ...LID_TICK,
-  // A player who lost, in the pit or anywhere, gets the pit's kit again next time they drop in.
-  'tag @a[scores={cubepals.died=1..}] remove cubepals.pit',
+  // A player who died gets the pit's kit again next time they arrive, and is calmed again outside.
+  `tag @a[scores={cubepals.died=1..}] remove ${NS}.pit`,
+  `tag @a[scores={cubepals.died=1..}] remove ${CALM}`,
   'scoreboard players reset @a[scores={cubepals.died=1..}] cubepals.died',
-  `clear @a[tag=!cubepals.pit,${IN_PIT}]`,
-  ...PIT_KIT,
-  `tellraw @a[tag=!cubepals.pit,${IN_PIT}] "To leave the pit, stand on the green square in its far corner. The kit stays here."`,
-  `tag @a[tag=!cubepals.pit,${IN_PIT}] add cubepals.pit`,
-  `execute as @a[${IN_PIT}] at @s if block ~ ~-1 ~ minecraft:lime_concrete run function cubepals:leave`,
-  SHOW_EXIT,
+  `scoreboard players enable @a ${CREDITS}`,
+  `execute as @a[scores={${CREDITS}=1..}] run function ${NS}:credits`,
+  ...PARTS.flatMap((part) => part.tick),
   SHOW_SIGN,
   OLD_SIGN_DISPLAYS,
-  `kill @e[type=minecraft:item,${IN_PIT}]`,
-  `execute as @a at @s if block ~ ~-1 ~ minecraft:gold_block run tellraw @s "You finished the parkour."`,
-  `execute as @a at @s if block ~ ~-1 ~ minecraft:gold_block run tp @s ${START}`,
 ]
 
 const lines = (commands: readonly string[]) => `${commands.join('\n')}\n`
+
+const FUNCTIONS: Record<string, readonly string[]> = {
+  load: LOAD,
+  build: BUILD,
+  sign: SIGN_DISPLAYS,
+  tick: TICK,
+  credits: [`scoreboard players reset @s ${CREDITS}`, ...CREDIT_LINES.map((line) => `tellraw @s ${line}`)],
+  ...Object.assign({}, ...PARTS.map((part) => part.functions)),
+}
 
 /**
  * The datapack's files. It is for 1.21.9 and later (data pack format 88 and up), which name a
@@ -248,22 +247,25 @@ export const WAITING_FILES: readonly CarriedFile[] = [
   },
   {
     path: `${WAITING_DATAPACK}/data/minecraft/tags/function/load.json`,
-    content: '{ "values": ["cubepals:load"] }\n',
+    content: `{ "values": ["${NS}:load"] }\n`,
   },
   {
     path: `${WAITING_DATAPACK}/data/minecraft/tags/function/tick.json`,
-    content: '{ "values": ["cubepals:tick"] }\n',
+    content: `{ "values": ["${NS}:tick"] }\n`,
   },
-  { path: `${WAITING_DATAPACK}/data/cubepals/function/load.mcfunction`, content: lines(LOAD) },
-  {
-    path: `${WAITING_DATAPACK}/data/cubepals/function/build.mcfunction`,
-    content: lines([...PARKOUR, ...PIT, ...DUELS_SIGN_COMMANDS]),
-  },
-  { path: `${WAITING_DATAPACK}/data/cubepals/function/sign.mcfunction`, content: lines(SIGN_DISPLAYS) },
-  { path: `${WAITING_DATAPACK}/data/cubepals/function/tick.mcfunction`, content: lines(TICK) },
-  { path: `${WAITING_DATAPACK}/data/cubepals/function/open.mcfunction`, content: lines(OPEN) },
-  { path: `${WAITING_DATAPACK}/data/cubepals/function/close.mcfunction`, content: lines(CLOSE) },
-  { path: `${WAITING_DATAPACK}/data/cubepals/function/leave.mcfunction`, content: lines(LEAVE) },
-  // The maps the sign shows, in the world's data beside the datapack, as 1.21.11 keeps them.
+  ...PARTS.flatMap((part) =>
+    Object.entries(part.data ?? {}).map(([name, json]) => ({
+      path: `${WAITING_DATAPACK}/data/${NS}/${name}`,
+      content: `${JSON.stringify(json, null, 2)}\n`,
+    })),
+  ),
+  ...Object.entries(FUNCTIONS).map(([name, commands]) => ({
+    path: `${WAITING_DATAPACK}/data/${NS}/function/${name}.mcfunction`,
+    content: lines(commands),
+  })),
+  // Who built the maps, beside them; the maps' structures are carried with these (`DUELS_STRUCTURES`).
+  { path: `${WAITING_DATAPACK}/CREDITS.txt`, content: `${CREDITS_TEXT}\n` },
+  // The maps the signs show, in the world's data beside the datapack, as 1.21.11 keeps them.
   ...artFiles(BRAND_SIGN.art, MAPS_1_21_11),
+  ...artFiles(START_ART, MAPS_1_21_11),
 ]

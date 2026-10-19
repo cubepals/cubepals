@@ -9,21 +9,24 @@
  *     bun scripts/play-space.ts [archive]
  *
  * `archive` is the Arcade's world as `ARCADE_WORLD` names it, by its very bytes, as
- * `scripts/arcade-clearance.ts` takes it. The Arcade is read as its datapack leaves it, the maps'
+ * `scripts/arcade-clearance.ts` takes it; without one, the Arcade's room is kept as the file has it
+ * and Duels' alone is worked out again. The Arcade is read as its datapack leaves it, the maps'
  * blocks with the datapack's own laid over them, its signs left out; Duels as its waiting datapack
- * builds beside the void world's platform, its sign left out. A published course or arena is room
- * all through, every block of it a place a jump may land: the parkour's three courses, the
- * market and the falling floor's floors. Everywhere else, from every place a game puts a player
+ * builds beside the void world's platform, its maps' structures placed and its signs left out. A
+ * published course is room all through, every block of it a place a jump may land: the Arcade's
+ * three courses, the market and the falling floor's floors, and Duels' two courses. Everywhere else, from every place a game puts a player
  * (spawns, arrivals, pads, machines), it walks where a player can go (`lib/play-reach.ts`). It
  * writes that room as boxes. It writes no block of the maps, which stay
  * out of this repository. Run it again when a game's places, the build or the world change.
  */
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { gzipSync } from 'node:zlib'
+import { gunzipSync, gzipSync } from 'node:zlib'
+import nbt from 'prismarine-nbt'
+import { STRUCTURES_DIR } from '../apps/control/src/app/setups/duels-structures.ts'
 import { HUB_SPAWN } from '../apps/control/src/minecraft/arcade/datapack.ts'
 import { FLOOR_ARRIVAL, FLOOR_DISC } from '../apps/control/src/minecraft/arcade/floor.ts'
 import { PASSAGE } from '../apps/control/src/minecraft/arcade/hub.ts'
@@ -32,11 +35,11 @@ import { ARCADE_MAPS, ARCADE_WORLD, placed } from '../apps/control/src/minecraft
 import { buildSign } from '../apps/control/src/minecraft/arcade/signs.ts'
 import { GAMES } from '../apps/control/src/minecraft/arcade/ways-in.ts'
 import { ARCADE_FILES, ARCADE_SIGNS } from '../apps/control/src/minecraft/arcade.ts'
-import {
-  DUELS_PLACES,
-  DUELS_SIGN_COMMANDS,
-  WAITING_FILES,
-} from '../apps/control/src/minecraft/duels-waiting.ts'
+import { DUELS_ARENA } from '../apps/control/src/minecraft/duels.ts'
+import { DUELS_MAPS, placed as placedBeside } from '../apps/control/src/minecraft/duels-waiting/maps.ts'
+import { PARKOUR_LOBBY } from '../apps/control/src/minecraft/duels-waiting/parkour.ts'
+import { OUTSIDE, PIT_SPAWNS } from '../apps/control/src/minecraft/duels-waiting/pit.ts'
+import { DUELS_SIGN_COMMANDS, WAITING_FILES } from '../apps/control/src/minecraft/duels-waiting.ts'
 import { blocksSet, laidOver } from './lib/build-blocks.ts'
 import { HEADROOM, playRoom, type RoomBox, roomBoxes } from './lib/play-reach.ts'
 import { blocksIn } from './lib/region-blocks.ts'
@@ -124,17 +127,59 @@ function voidPlatform(): Map<string, string> {
   return blocks
 }
 
-function duels(): Record<string, RoomBox[]> {
-  const built = blocksSet(buildOf(WAITING_FILES, new Set(DUELS_SIGN_COMMANDS)))
-  const read = (from: Block, to: Block) => laidOver(voidPlatform(), built, from, to)
-  return { duels: roomIn(read, [-40, -64, -32], [30, -40, 30], DUELS_PLACES.map(blockOf)) }
+/** Duels' maps' blocks, where the waiting datapack places them, read from their structures. */
+function placedMaps(): Map<string, string> {
+  const blocks = new Map<string, string>()
+  for (const map of DUELS_MAPS) {
+    const root = nbt.simplify(
+      nbt.parseUncompressed(gunzipSync(readFileSync(`${STRUCTURES_DIR}${map.key}.nbt`))),
+    )
+    const palette = root.palette as { Name: string }[]
+    const [ox, oy, oz] = placedBeside(map.key, map.from)
+    for (const { state, pos } of root.blocks as { state: number; pos: [number, number, number] }[])
+      blocks.set(`${pos[0] + ox} ${pos[1] + oy} ${pos[2] + oz}`, palette[state]?.Name ?? 'minecraft:stone')
+  }
+  return blocks
 }
 
+/** A Duels map's box beside the platform. */
+function besideMap(key: string): [Block, Block] {
+  const map = DUELS_MAPS.find((candidate) => candidate.key === key)
+  if (map === undefined) throw new Error(`No Duels map ${key}`)
+  return [placedBeside(key, map.from), placedBeside(key, map.to)]
+}
+
+function duels(): Record<string, RoomBox[]> {
+  // What the build sets once the maps are in: it clears the old lobby before placing them.
+  const build = buildOf(WAITING_FILES, new Set(DUELS_SIGN_COMMANDS))
+  const built = blocksSet(
+    build.slice(build.findLastIndex((command) => command.startsWith('place template '))),
+  )
+  const world = new Map([...voidPlatform(), ...placedMaps()])
+  const read = (from: Block, to: Block) => laidOver(new Map(world), built, from, to)
+  const [pitFrom, pitTo] = besideMap('cramped')
+  const onPlatform = [...Object.values(DUELS_ARENA), PARKOUR_LOBBY, OUTSIDE].map(blockOf)
+  return {
+    duels: [
+      // The platform and its pads, from every place a player is put on it.
+      ...roomIn(read, [-40, -64, -32], [30, -40, 30], onPlatform),
+      // Both courses, all of them.
+      ...['ice', 'debris'].map((key) => whole(...besideMap(key))),
+      // The pit, where its fighters can go from its spawn points.
+      ...roomIn(read, pitFrom, pitTo, PIT_SPAWNS.map(blockOf)),
+    ],
+  }
+}
+
+/** The Arcade's room as the file already has it, for a run without its world. */
+function keptArcade(): Record<string, unknown> {
+  const kept = JSON.parse(gunzipSync(readFileSync(OUT)).toString()) as { arcade: Record<string, unknown> }
+  return kept.arcade
+}
+
+const archive = process.argv[2] ?? 'local/arcade-world/arcade-world.tar.gz'
 const rooms = {
-  arcade: {
-    world: ARCADE_WORLD.sha512,
-    ...arcade(process.argv[2] ?? 'local/arcade-world/arcade-world.tar.gz'),
-  },
+  arcade: existsSync(archive) ? { world: ARCADE_WORLD.sha512, ...arcade(archive) } : keptArcade(),
   ...duels(),
 }
 // Gzipped: the hub's grass alone is thousands of columns, each its own height.

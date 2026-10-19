@@ -10,7 +10,7 @@
  */
 import { describe, expect, test } from 'bun:test'
 import { ARCADE_FILES, ARCADE_LABELS } from '../arcade.ts'
-import { WAITING_FILES } from '../duels-waiting.ts'
+import { DUELS_LABELS, WAITING_FILES } from '../duels-waiting.ts'
 import clearance from './clearance.json' with { type: 'json' }
 import { INK, type Label, PAPER } from './datapack.ts'
 import { HUB_MARKERS } from './hub.ts'
@@ -36,12 +36,12 @@ const label = (text: string, more: Partial<Label> = {}): Label => ({
 
 describe('the floating words on the Arcade and Duels', () => {
   test('every one is a text display the game hides behind blocks, its words on a plate of Ink; none is a name over an entity', () => {
-    const plates = everyCommand.filter((command) => command.includes('"arcade.plate"'))
+    const plates = everyCommand.filter((command) => /"(arcade|cubepals)\.plate"/.test(command))
     const words = everyCommand.filter(
       (command) => command.startsWith('summon minecraft:text_display') && !command.includes('text:" "'),
     )
-    expect(words).toHaveLength(ARCADE_LABELS.length)
-    expect(plates).toHaveLength(ARCADE_LABELS.length)
+    expect(words).toHaveLength(ARCADE_LABELS.length + DUELS_LABELS.length)
+    expect(plates).toHaveLength(ARCADE_LABELS.length + DUELS_LABELS.length)
     for (const text of words) {
       expect(text).toContain('see_through:false')
       // No shadow: on the plate it would fall a pixel past the words, onto its edge.

@@ -134,3 +134,24 @@ path = "packages/db/certs/supabase-root-2021.crt"
 precedence = "closest"
 SPDX-FileCopyrightText = "Supabase Inc"
 SPDX-License-Identifier = "LicenseRef-Upstream-Terms"
+
+# The Duels lobby's parkour courses, published by the Overcast Community, as structures with
+# Cubepals' changes (scripts/duels-lobby.ts, minecraft/duels-waiting/maps.ts).
+[[annotations]]
+path = ["apps/control/assets/duels-lobby/ice.nbt"]
+precedence = "closest"
+SPDX-FileCopyrightText = ["Crazy_, ViceTechnicolour (Overcast Community)", "2026 The Cubepals Authors"]
+SPDX-License-Identifier = "CC-BY-SA-4.0"
+
+[[annotations]]
+path = ["apps/control/assets/duels-lobby/debris.nbt"]
+precedence = "closest"
+SPDX-FileCopyrightText = ["gobernment, ViceTechnicolour (Overcast Community)", "2026 The Cubepals Authors"]
+SPDX-License-Identifier = "CC-BY-SA-4.0"
+
+# The Duels lobby's pit, NetherGames' arena Cramped, as a structure with Cubepals' changes.
+[[annotations]]
+path = ["apps/control/assets/duels-lobby/cramped.nbt"]
+precedence = "closest"
+SPDX-FileCopyrightText = ["PROP11TH (NetherGames)", "2026 The Cubepals Authors"]
+SPDX-License-Identifier = "CC-BY-4.0"

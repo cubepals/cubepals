@@ -12,6 +12,7 @@ import { CHATSENTINEL, LIBERTYBANS, LUCKPERMS, moderationFiles } from '../../min
 import { ARCADE_LEVEL } from '../../minecraft/starter.ts'
 import { VOID_LEVEL } from '../../minecraft/worlds.ts'
 import { CHAT_FILTER } from '../moderation/chat-filter.ts'
+import { DUELS_STRUCTURES } from './duels-structures.ts'
 
 /**
  * What Blockly offers when it asks "what do you want to play?" (§15.6). Each one is a setup with
@@ -150,7 +151,7 @@ const SETUPS: Record<TemplateKey, Template['setup']> = {
       { catalog: 'hangar', projectId: 'hangar:2087' },
       ...FOR_STRANGERS,
     ],
-    files: [...DUELS_FILES, ...WAITING_FILES, ...moderationFiles(CHAT_FILTER)],
+    files: [...DUELS_FILES, ...WAITING_FILES, ...DUELS_STRUCTURES, ...moderationFiles(CHAT_FILTER)],
     // Adventure, so nobody breaks the platform; Easy, since there is nothing to eat between fights.
     settings: {
       defaultGameMode: 'adventure',
