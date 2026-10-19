@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+name: Website uptime
+
+# cubepals.com's pages, hq. and rt., asked from GitHub's machines every five minutes
+# (scripts/site-uptime.ts). GitHub's shortest schedule is five minutes, and runs can start late
+# when Actions is busy; the minutes below avoid the top of the hour, where it is busiest. Two
+# failing asks half a minute apart roll the `blockly-web` Worker back to the version before the
+# current one, open (or comment on) one issue, "cubepals.com is down", and fail the run; when the
+# site answers again the issue is closed.
+#
+# Needs the repository secrets CLOUDFLARE_WORKERS_API_TOKEN (Workers Scripts: Edit on the account,
+# which rolls back and tails) and CLOUDFLARE_ACCOUNT_ID. Without them the check still runs and the
+# issue says nothing was rolled back.
+#
+# GitHub turns scheduled workflows off after 60 days with no activity in a public repository.
+# Main's commits, Dependabot's pull requests and the nightly's releases keep it on; if it is ever
+# turned off, Actions → Website uptime → Enable.
+on:
+  schedule:
+    - cron: '3-58/5 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+# One check at a time: a slow one never overlaps the next, which would roll back twice.
+concurrency:
+  group: site-uptime
+  cancel-in-progress: false
+
+jobs:
+  uptime:
+    name: Ask cubepals.com for its pages
+    if: github.repository == 'cubepals/cubepals'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - run: bun scripts/site-uptime.ts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

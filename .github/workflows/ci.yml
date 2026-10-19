@@ -91,9 +91,11 @@ jobs:
             terraform -chdir=infra/terraform/environments/$env validate
           done
 
-  # The website as the Cloudflare Worker production runs: OpenNext's build, then wrangler's bundle of
-  # the Worker's entry, uploading nothing. A Next or adapter update that breaks either fails here,
-  # not at the next deploy. The values are stand-ins; deploys build with their own.
+  # The website as the Cloudflare Worker production runs: OpenNext's build, wrangler's bundle of the
+  # Worker's entry, uploading nothing, then the built Worker started locally and asked for the
+  # site's pages (scripts/worker-smoke.ts). A Next or adapter update that breaks any of these fails
+  # here, not at the next deploy: Next 16.4.0 built and bundled, then threw on every request. The
+  # values are stand-ins; deploys build with their own.
   worker:
     name: Web app builds as a Worker
     needs: changes
@@ -133,6 +135,11 @@ jobs:
         run: |
           ../../node_modules/.bin/wrangler deploy --dry-run --env= --outdir "$RUNNER_TEMP/worker"
           ../../node_modules/.bin/wrangler deploy --dry-run --env=staging --outdir "$RUNNER_TEMP/worker-staging"
+      # Any page that isn't 2xx or 3xx, or an exception in the Worker's output, fails the job.
+      - name: Run the built Worker and ask for its pages
+        env:
+          WRANGLER_SEND_METRICS: 'false'
+        run: bun scripts/worker-smoke.ts
 
   # The images deploys run, built from their Dockerfiles and started. The control plane's `--check`
   # loads every module its start does and exits before configuration or a database are needed; the

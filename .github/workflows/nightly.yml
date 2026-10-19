@@ -73,6 +73,10 @@ jobs:
           AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.AUTH_GOOGLE_CLIENT_SECRET }}
           STAGING_DEVELOPERS: ${{ secrets.STAGING_DEVELOPERS }}
           STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      # The tag below needs this to pass: no nightly is made while staging's website is broken.
+      - name: Ask staging for its pages
+        if: steps.new.outputs.run == 'true'
+        run: bun scripts/site-check.ts https://staging.cubepals.com 180
       - name: Staging check
         if: steps.new.outputs.run == 'true'
         run: bun scripts/staging-check.ts
