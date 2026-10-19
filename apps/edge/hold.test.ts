@@ -64,3 +64,15 @@ test('a join turned away is told why, as login’s disconnect', () => {
     packet(0, string(JSON.stringify({ text: 'Still starting · join again in a moment' }))),
   )
 })
+
+test('a held join names who it logs in as, once its Login Start has arrived whole', () => {
+  expect(new Held(join()).name).toBe('Steve')
+  const early = new Held({ ...join(), bytes: handshake })
+  expect(early.name).toBeUndefined()
+  early.receive(login.slice(0, 4))
+  expect(early.name).toBeUndefined()
+  early.receive(login.slice(4))
+  expect(early.name).toBe('Steve')
+  // Not a Login Start: no name is read from it.
+  expect(new Held({ ...join(), bytes: Uint8Array.from([...handshake, ...packet(1, [0])]) }).name).toBeNull()
+})

@@ -24,6 +24,8 @@ const QUERY = 0x04
 const ANSWER = 0x02
 /** A channel no client knows, so every one answers that it didn't understand, and nothing more. */
 const CHANNEL = 'blockly:wake'
+/** The longest name a Login Start carries, 16 characters, in bytes. */
+const NAME_BYTES = 16 * 4
 /** Far more than a handshake and a login ever take: past this, the client is sending something else. */
 const MOST_PENDING = 64 * 1024
 
@@ -76,6 +78,23 @@ export class Held {
   /** Whether what the client sent is no longer a login waiting to go on, so nothing wakes for it. */
   get refused(): boolean {
     return this.#refused
+  }
+
+  /**
+   * The name the client gave as it began to log in, from its Login Start, the packet after the
+   * handshake: undefined until that has arrived whole, null where it doesn't read as a name.
+   * Claimed by the client, like everything it sends.
+   */
+  get name(): string | null | undefined {
+    const start = this.#kept[1]
+    if (start === undefined) return undefined
+    const length = readVarInt(start, 0)
+    const id = length === null ? null : readVarInt(start, length.next)
+    if (id?.value !== 0) return null
+    const size = readVarInt(start, id.next)
+    if (size === null || size.value < 1 || size.value > NAME_BYTES || size.next + size.value > start.length)
+      return null
+    return new TextDecoder().decode(start.subarray(size.next, size.next + size.value))
   }
 
   /** Whether every query has been answered, so nothing of the hold's is still on its way. */

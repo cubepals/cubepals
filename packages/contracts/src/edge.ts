@@ -96,10 +96,17 @@ export type EdgeRoutes = z.infer<typeof EdgeRoutes>
 
 /**
  * `understands`: answers newer than the edge protocol's first that this edge can word for a
- * player (`NEWER_REASONS`, in `edge-poll.ts`). An edge that doesn't name one is answered as before
- * it was added.
+ * player (`NEWER_REASONS` and `NEWER_OUTCOMES`, in `edge-poll.ts`). An edge that doesn't name one
+ * is answered as before it was added.
+ *
+ * `name`: the name the joining client gave as it began to log in, where it gave one. Claimed by the
+ * client: it only chooses which wakes a server's hour counts it among, never who may join.
  */
-export const WakeRequest = z.object({ hostname: z.string(), understands: z.array(z.string()).optional() })
+export const WakeRequest = z.object({
+  hostname: z.string(),
+  understands: z.array(z.string()).optional(),
+  name: z.string().max(16).optional(),
+})
 export const WakeResult = z.discriminatedUnion('outcome', [
   /** `proxyProtocol` as on the server's route, for the run it is in now. */
   z.object({
@@ -115,6 +122,8 @@ export const WakeResult = z.discriminatedUnion('outcome', [
   z.object({ outcome: z.literal('starting'), behind: z.enum(['rest', 'stop', 'backup']).optional() }),
   /** Still on its way back from a restart after as long as a joining client waits. */
   z.object({ outcome: z.literal('restarting') }),
+  /** Left asleep: this join starts nothing now, and its player is told the server sleeps. */
+  z.object({ outcome: z.literal('asleep') }),
   z.object({
     outcome: z.literal('denied'),
     /**

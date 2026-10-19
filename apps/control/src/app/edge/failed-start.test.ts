@@ -135,7 +135,7 @@ describe.skipIf(!hasDatabase)('a join after a start that failed for good', () =>
         requestedBy: 'system:wake',
         idempotencyKey: `start:${randomUUID()}`,
       })
-    expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({ outcome: 'denied', reason: 'quota' })
+    expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({ outcome: 'asleep' })
     expect((await h.server(id)).lifecycle.status).toBe('stopped')
   }, 60_000)
 })

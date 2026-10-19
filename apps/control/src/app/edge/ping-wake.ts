@@ -17,7 +17,7 @@
  *
  * Bounded besides: the same policy as any start (its owner must be able to start it), a woken run
  * nobody joins sleeps after the probation (`domain/server/idle.ts`) and counts toward no hours
- * (`countedFrom`, `accounts/persistence.ts`), the hourly cap on wakes a connection asks for counts
+ * (`countedFrom`, `accounts/persistence.ts`), the hourly cap on wakes nobody joined counts
  * it, none starts once the owner's included hours are used, and after one nobody joined, pings wake
  * the server again only once `AbuseLimits.pingWakeHoldHours` have passed. Not for the join's own
  * wake, which waits for the server (`service.ts`), or for what the edge says to the ping
@@ -36,7 +36,7 @@ import type { PlayAddressing } from '../ports/platform.ts'
 import type { SecretKeyring } from '../secrets.ts'
 import { findLiveBySlug, memoryKept } from '../servers/persistence.ts'
 import type { MinecraftServerService } from '../servers/service.ts'
-import { lastActivity, lastPingWake, PING_WAKE_KEY, wakesInLastHour } from '../servers/usage.ts'
+import { lastActivity, lastPingWake, PING_WAKE_KEY, unjoinedWakes } from '../servers/usage.ts'
 import { tuning } from '../tuning.ts'
 import { knownAddress } from './known-addresses.ts'
 
@@ -95,7 +95,7 @@ async function worthWaking(
   if (server.lifecycle.status !== 'stopped' || (await memoryKept(db, server.id))) return false
   if (!(await knownAddress(db, keyring, server.id, address, now))) return false
   const limits = tuning().abuse
-  if ((await wakesInLastHour(db, server.id, now)) >= limits.wakesPerHour) return false
+  if ((await unjoinedWakes(db, server.id, now)) >= limits.wakesPerHour) return false
   // The last one nobody joined holds off the next, so a player whose list pings it on the way to
   // other servers wakes it once in that while.
   const last = await lastPingWake(db, server.id)

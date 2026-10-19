@@ -63,7 +63,7 @@ export const powerIntervals = pgTable(
      * until somebody joins it, from `joinedAt`; one nobody joined counts nothing.
      */
     pinged: boolean('pinged').notNull().default(false),
-    /** When the server itself first saw a player on a `pinged` run; null until then, and on any other. */
+    /** When the server itself first saw a player on the run; null until then. */
     joinedAt: ts('joined_at'),
   },
   (t) => [

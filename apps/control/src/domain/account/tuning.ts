@@ -45,7 +45,10 @@ export interface AbuseLimits {
   /** Gifts one account may buy a day, and wrong gift codes it may enter an hour. */
   giftsPerDay: number
   wrongCodesPerHour: number
-  /** Wakes the edge asks of one server an hour. */
+  /**
+   * Wakes of one server an hour that nobody joined, past which a join from a name the server hasn't
+   * seen leaves it asleep (`app/edge/service.ts`).
+   */
   wakesPerHour: number
   /**
    * How long a server-list ping may not wake a server again after its last such wake went unjoined

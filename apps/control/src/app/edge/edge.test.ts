@@ -136,7 +136,7 @@ describe.skipIf(!hasDatabase)('edge', () => {
     await h.settled(id)
   }, 30_000)
 
-  test('a server woken over and over in an hour stops being woken at all', async () => {
+  test('a server woken over and over in an hour that nobody joined is left asleep', async () => {
     const [{ id, slug }, wakes] = [await sleeping(), tuning().abuse.wakesPerHour]
     // As many runs as an hour allows that a connection woke and that are over: what a flood leaves.
     for (let i = 1; i <= wakes; i++) {
@@ -149,7 +149,7 @@ describe.skipIf(!hasDatabase)('edge', () => {
         woken: true,
       })
     }
-    expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({ outcome: 'denied', reason: 'quota' })
+    expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({ outcome: 'asleep' })
     expect((await h.server(id)).lifecycle.status).toBe('stopped')
   }, 30_000)
 

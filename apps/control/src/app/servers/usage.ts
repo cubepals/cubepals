@@ -4,7 +4,7 @@
 
 import { HOUR_MS, MINUTE_MS, MINUTE_S } from '@blockly/contracts/durations'
 import { type Queryable, schema } from '@blockly/db'
-import { and, asc, count, desc, eq, gt, gte, inArray, isNull, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
 import { loadStanding } from '../accounts/persistence.ts'
 import { requestedBy } from '../actor.ts'
 import { serverRan } from '../insight/record.ts'
@@ -161,18 +161,12 @@ export async function replacePresence(
       .onConflictDoNothing()
     await rememberPlayers(q, serverId, players, at, 'server')
     await touchActivity(q, serverId, at)
-    // A run a ping woke counts from the first player the server itself sees on it.
+    // The run is joined from the first player the server itself sees on it: a run a ping woke
+    // counts from then, and a woken one stops counting toward the hour's unjoined wakes.
     await q
       .update(intervals)
       .set({ joinedAt: at })
-      .where(
-        and(
-          eq(intervals.serverId, serverId),
-          isNull(intervals.stoppedAt),
-          eq(intervals.pinged, true),
-          isNull(intervals.joinedAt),
-        ),
-      )
+      .where(and(eq(intervals.serverId, serverId), isNull(intervals.stoppedAt), isNull(intervals.joinedAt)))
     // Somebody the server itself says is on: the one reading nobody outside can forge, and so
     // the one that keeps a world from resting. At most one write in ten minutes.
     await markActive(q, serverId, at, 10)
@@ -285,18 +279,21 @@ export async function lastRunEnded(q: Queryable, serverId: string): Promise<Date
 }
 
 /**
- * How many times a connection woke this server in the last hour: the runs one woke, or the starts
- * one asked for, whichever is more, so starts that never came up count too (a wake its host
- * refuses, a failed start a join asked again), and so do the stops and moves a join tried again
- * on its way to a start (`EdgeService.#start`). A start its runtime had no room for (`no_room`, a
- * Boat plan's starts spent) cost nothing and doesn't count: a waiting join asks again every few
- * seconds while there is none. It bounds what a flood can cost when every other defence is off — a
- * public server with no whitelist, waking for anyone.
+ * How many times a connection woke this server in the last hour and nobody joined: the runs one
+ * woke, or the starts one asked for, whichever is more, less the woken runs a player joined. So
+ * starts that never came up count too (a wake its host refuses, a failed start a join asked again),
+ * and so do the stops and moves a join tried again on its way to a start (`EdgeService.#start`). A
+ * start its runtime had no room for (`no_room`, a Boat plan's starts spent) cost nothing and doesn't
+ * count: a waiting join asks again every few seconds while there is none. A run is joined once the
+ * server itself sees a player on it (`replacePresence`).
  */
-export async function wakesInLastHour(q: Queryable, serverId: string, now: Date): Promise<number> {
+export async function unjoinedWakes(q: Queryable, serverId: string, now: Date): Promise<number> {
   const since = new Date(now.getTime() - HOUR_MS)
   const [runs] = await q
-    .select({ count: count() })
+    .select({
+      unjoined: sql<number>`count(*) filter (where ${intervals.joinedAt} is null)`.mapWith(Number),
+      joined: sql<number>`count(*) filter (where ${intervals.joinedAt} is not null)`.mapWith(Number),
+    })
     .from(intervals)
     .where(and(eq(intervals.serverId, serverId), eq(intervals.woken, true), gte(intervals.startedAt, since)))
   const [asked] = await q
@@ -311,7 +308,26 @@ export async function wakesInLastHour(q: Queryable, serverId: string, now: Date)
         sql`not coalesce(${operations.steps} @> '[{"step":"no_room"}]'::jsonb, false)`,
       ),
     )
-  return Math.max(runs?.count ?? 0, asked?.count ?? 0)
+  return Math.max(runs?.unjoined ?? 0, (asked?.count ?? 0) - (runs?.joined ?? 0))
+}
+
+/**
+ * Whether `name` is a player the server itself has seen on it: the name a join claims, matched as
+ * Minecraft matches names, regardless of case.
+ */
+export async function playedHere(q: Queryable, serverId: string, name: string): Promise<boolean> {
+  const [row] = await q
+    .select({ uuid: played.playerUuid })
+    .from(played)
+    .where(
+      and(
+        eq(played.serverId, serverId),
+        isNotNull(played.confirmedAt),
+        sql`lower(${played.playerName}) = lower(${name})`,
+      ),
+    )
+    .limit(1)
+  return row !== undefined
 }
 
 /**

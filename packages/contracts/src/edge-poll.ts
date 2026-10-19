@@ -22,3 +22,9 @@ export const ROUTES_HELD_HEADER = 'x-routes-held'
  * words them for a player (`edge.ts`); an edge from before them names neither.
  */
 export const NEWER_REASONS = ['failed', 'broken'] as const
+
+/**
+ * The answers to a wake, beside `denied` and its reasons, that an edge names in its wake request's
+ * `understands` once it words them for a player; an edge from before them names none.
+ */
+export const NEWER_OUTCOMES = ['asleep'] as const

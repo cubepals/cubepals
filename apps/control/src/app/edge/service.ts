@@ -31,7 +31,13 @@ import type { Runtimes } from '../runtimes/router.ts'
 import type { SecretKeyring } from '../secrets.ts'
 import { findLiveBySlug, findRuntime, findServer, heldByDeleted } from '../servers/persistence.ts'
 import type { MinecraftServerService } from '../servers/service.ts'
-import { presenceFor, recordDomainJoin, recordEdgePresence, wakesInLastHour } from '../servers/usage.ts'
+import {
+  playedHere,
+  presenceFor,
+  recordDomainJoin,
+  recordEdgePresence,
+  unjoinedWakes,
+} from '../servers/usage.ts'
 import type { ServerWaiter } from '../servers/waiter.ts'
 import { tuning } from '../tuning.ts'
 import { type Fingerprint, fingerprint, type RouteInputs, type RouteServer, readInputs } from './inputs.ts'
@@ -86,6 +92,9 @@ const MOVED_ON = Symbol('moved on')
 /** Who a start a join asked for is requested by. */
 const WAKE = { kind: 'system', reason: 'wake' } as const
 
+/** What a join that starts nothing is told: the server sleeps. */
+const LEFT_ASLEEP: WakeResult = { outcome: 'asleep' }
+
 /** A route's word that its server reads a PROXY header, where the run it is in does. */
 const headerRead = (applied: AppliedConfigJson | null | undefined): { proxyProtocol?: true } =>
   applied?.proxyProtocol ? { proxyProtocol: true } : {}
@@ -119,6 +128,8 @@ export class EdgeService {
   readonly #saidAt = new Map<string, number>()
   /** When this process last let go of edges gone quiet. */
   #forgotAt = 0
+  /** Starts joins asked for that are under way, by server: joins that arrive together share one. */
+  readonly #starts = new Map<string, Promise<WakeResult | null>>()
 
   constructor(deps: {
     db: Db
@@ -318,9 +329,10 @@ export class EdgeService {
    * `wakeWaitMs`, which the edge outlasts: it gives up on its request after 30 s. `retries`: a
    * start that failed for good in waking is tried again, which only an edge that words such a
    * failure asks for; an older one, told the server still starts, would ask again every few
-   * seconds, and start it again each time.
+   * seconds, and start it again each time. `name`: the name the join gave as it began to log in,
+   * which only chooses whether its wake counts among the hour's (`#mayStart`).
    */
-  async wake(hostname: string, retries = true): Promise<WakeResult> {
+  async wake(hostname: string, retries = true, name?: string): Promise<WakeResult> {
     const deadline = Date.now() + this.#wakeWaitMs
     const left = () => Math.max(0, deadline - Date.now())
     const slug = this.#addressing.slugFor(hostname)
@@ -336,12 +348,7 @@ export class EdgeService {
     if (typeof settled === 'object') return settled
 
     if (settled !== 'running') {
-      // Nothing about a connection proves who sent it, so wakes from the edge are capped an hour
-      // (`AbuseLimits.wakesPerHour`); with the probation on each (WAKE_PROBATION_MS), that bounds
-      // what a flood of connections can wake.
-      if ((await wakesInLastHour(this.#db, server.id, new Date())) >= tuning().abuse.wakesPerHour)
-        return { outcome: 'denied', reason: 'quota' }
-      const unstarted = await this.#start(server, left, retries)
+      const unstarted = await this.#shared(server, settled, name, left, retries)
       if (unstarted !== null) return unstarted
     }
 
@@ -352,6 +359,44 @@ export class EdgeService {
       destination: destinationOf(this.#runtime.endpoint(binding.handle, PORT_NAMES.game, 'edge')),
       ...headerRead(binding.applied),
     }
+  }
+
+  /**
+   * Starts `server` for a join, or waits on the start another join asked for that is under way:
+   * null once it runs, or what the join is told. Where the other join's wake started nothing, this
+   * one is weighed for itself.
+   */
+  async #shared(
+    server: MinecraftServer,
+    status: ServerStatus,
+    name: string | undefined,
+    left: () => number,
+    retries: boolean,
+  ): Promise<WakeResult | null> {
+    for (;;) {
+      const under = this.#starts.get(server.id)
+      if (under === undefined) break
+      const shared = await under
+      if (shared?.outcome !== 'asleep') return shared
+    }
+    const start = this.#mayStart(server.id, status, name)
+      .then((may) => (may ? this.#start(server, left, retries) : LEFT_ASLEEP))
+      .finally(() => this.#starts.delete(server.id))
+    this.#starts.set(server.id, start)
+    return start
+  }
+
+  /**
+   * Whether a join may start the server. One already starting starts nothing new. A player the
+   * server itself has seen on it before always may; the hours its owner's plan includes bound what
+   * their wakes run. Every other join shares the hour's wakes nobody joined
+   * (`AbuseLimits.wakesPerHour`), and once those are used, the server is left asleep; a woken run
+   * nobody joins sleeps after the probation (WAKE_PROBATION_MS).
+   */
+  async #mayStart(serverId: string, status: ServerStatus, name: string | undefined): Promise<boolean> {
+    if (status === 'starting') return true
+    if (name !== undefined && (await playedHere(this.#db, serverId, name))) return true
+    return (await unjoinedWakes(this.#db, serverId, new Date())) < tuning().abuse.wakesPerHour
   }
 
   /**

@@ -11,7 +11,7 @@ import { hostname } from 'node:os'
 import type { EdgeRoutes, PingWakeResult, SessionEvent, WakeResult } from '@blockly/contracts/edge'
 // Copied into the image beside the agent (Dockerfile): the one place play coming back is worded.
 import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
-import { EDGE_ID_HEADER, NEWER_REASONS } from '../../packages/contracts/src/edge-poll.ts'
+import { EDGE_ID_HEADER, NEWER_OUTCOMES, NEWER_REASONS } from '../../packages/contracts/src/edge-poll.ts'
 import { LOCAL_HEADER, readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
 import { OWN_ICON_MAX_BYTES } from '../../packages/contracts/src/server-list.ts'
 import { GAME_PORT } from '../control/src/minecraft/ports.ts'
@@ -80,6 +80,7 @@ const TURNED_AWAY = {
   paused: env('PAUSED_JOIN', 'Cubepals isn’t starting servers right now · try again soon'),
   suspended: env('REFUSED_JOIN', 'This server can’t start right now · its owner can see why on Cubepals'),
   quota: env('REFUSED_JOIN', 'This server can’t start right now · its owner can see why on Cubepals'),
+  asleep: env('ASLEEP_JOIN', 'This server is asleep right now · try again later'),
 } as const
 
 /** Where players connect: the agent's front door, which hands what it lets in to mc-router. */
@@ -296,21 +297,28 @@ async function wake(serverAddress: string): Promise<Response> {
   return Response.json({ backend: unreachable.has(result.destination) ? NOTICE : result.destination })
 }
 
-/** Wakes in flight, by hostname: joins that arrive together share one. */
-const waking = new Map<string, Promise<WakeResult>>()
+/** Wakes in flight, by hostname, with the name each join gave: joins that arrive together share one. */
+const waking = new Map<string, { name: string | undefined; asked: Promise<WakeResult> }>()
 
-/** Asks the control plane to wake a server, which waits up to 25 s for it to come up. */
-function wakeOnce(hostname: string): Promise<WakeResult> {
+/**
+ * Asks the control plane to wake a server for a join that gave `name`, which waits up to 25 s for
+ * it to come up. Where the wake it shared left the server asleep for another name, it asks for its own.
+ */
+async function wakeOnce(hostname: string, name?: string): Promise<WakeResult> {
   const inFlight = waking.get(hostname)
-  if (inFlight) return inFlight
-  const body = JSON.stringify({ hostname, understands: NEWER_REASONS })
+  if (inFlight) {
+    const shared = await inFlight.asked
+    return shared.outcome === 'asleep' && inFlight.name !== name ? wakeOnce(hostname, name) : shared
+  }
+  const understands = [...NEWER_REASONS, ...NEWER_OUTCOMES]
+  const body = JSON.stringify({ hostname, understands, ...(name === undefined ? {} : { name }) })
   const asked = control('/wake', { method: 'POST', body })
     .then(async (response) => {
       if (!response.ok) throw new Error(`wake answered ${response.status}`)
       return (await response.json()) as WakeResult
     })
     .finally(() => waking.delete(hostname))
-  waking.set(hostname, asked)
+  waking.set(hostname, { name, asked })
   return asked
 }
 
@@ -522,8 +530,9 @@ async function hold(client: Socket, join: Join, header: Uint8Array | null): Prom
   // A client from before 1.13 can't be spoken to while it waits, so it waits only as long as it would.
   const speaks = join.protocol >= LOGIN_QUERIES
   const keepAlive = speaks ? setInterval(() => client.write(held.ask()), 10_000) : undefined
-  const result = await wakeWhile(client, hostnameOf(join), Date.now() + (speaks ? HOLD_MS : 0)).finally(() =>
-    clearInterval(keepAlive),
+  const name = await nameOf(client, held)
+  const result = await wakeWhile(client, hostnameOf(join), name, Date.now() + (speaks ? HOLD_MS : 0)).finally(
+    () => clearInterval(keepAlive),
   )
   if (client.destroyed) return
   if (result?.outcome === 'ready' && (await settle(client, held))) {
@@ -555,11 +564,30 @@ function refusal(result: WakeResult | null, route: EdgeRoutes['routes'][number] 
   return resting === null ? TURNED_AWAY.quota : restingJoin(resting, route?.name, new Date())
 }
 
-/** Asks for the wake until the server is up, is refused, the client leaves, or `deadline` passes. */
-async function wakeWhile(client: Socket, hostname: string, deadline: number): Promise<WakeResult | null> {
+/**
+ * The name a held join gave in its Login Start, which a client sends with its handshake: waited
+ * for a moment, and left out where none came, or one longer than a name can be.
+ */
+async function nameOf(client: Socket, held: Held): Promise<string | undefined> {
+  const deadline = Date.now() + 2_000
+  while (held.name === undefined && !client.destroyed && Date.now() < deadline) await Bun.sleep(50)
+  const { name } = held
+  return typeof name === 'string' && name.length <= 16 ? name : undefined
+}
+
+/**
+ * Asks for the wake until the server is up, is refused or left asleep, the client leaves, or
+ * `deadline` passes.
+ */
+async function wakeWhile(
+  client: Socket,
+  hostname: string,
+  name: string | undefined,
+  deadline: number,
+): Promise<WakeResult | null> {
   for (;;) {
-    const result = await wakeOnce(hostname).catch(() => null)
-    const over = result?.outcome === 'ready' || result?.outcome === 'denied'
+    const result = await wakeOnce(hostname, name).catch(() => null)
+    const over = result?.outcome === 'ready' || result?.outcome === 'denied' || result?.outcome === 'asleep'
     if (over || client.destroyed || Date.now() >= deadline) return result
     await Bun.sleep(2_000)
   }
@@ -577,6 +605,7 @@ function whyNot(result: WakeResult | null): keyof typeof TURNED_AWAY {
   if (result === null) return 'unreachable'
   if (result.outcome === 'denied') return result.reason
   if (result.outcome === 'starting') return result.behind ?? 'starting'
+  if (result.outcome === 'asleep') return 'asleep'
   return result.outcome === 'restarting' ? 'restarting' : 'starting'
 }
 

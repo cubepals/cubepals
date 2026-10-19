@@ -55,7 +55,11 @@ export function createInternalApp(deps: { edge: EdgeService; token: string }): H
     const request = WakeRequest.safeParse(await c.req.json().catch(() => null))
     if (!request.success) return c.json({ error: 'bad request' }, 400)
     const understands = request.data.understands ?? []
-    const woken = await deps.edge.wake(request.data.hostname, understands.includes('failed'))
+    const woken = await deps.edge.wake(
+      request.data.hostname,
+      understands.includes('failed'),
+      request.data.name,
+    )
     return c.json(forEdge(woken, understands))
   })
 
@@ -87,9 +91,10 @@ export function createInternalApp(deps: { edge: EdgeService; token: string }): H
  * A wake's answer in words the asking edge has. An edge from before a reason had words would turn
  * the player away with none, so it hears what it did then: a start that failed for good in waking
  * is still starting, and one that failed over what the server runs can't start right now, which is
- * how it words a suspended server.
+ * how it words a suspended server. A server left asleep is still starting to it too.
  */
 export function forEdge(woken: WakeResult, understands: readonly string[]): WakeResult {
+  if (woken.outcome === 'asleep') return understands.includes(woken.outcome) ? woken : { outcome: 'starting' }
   if (woken.outcome !== 'denied' || !NEWER_REASONS.some((r) => r === woken.reason)) return woken
   if (understands.includes(woken.reason)) return woken
   return woken.reason === 'failed' ? { outcome: 'starting' } : { outcome: 'denied', reason: 'suspended' }
