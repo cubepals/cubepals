@@ -37,7 +37,7 @@ import { tuning } from '../tuning.ts'
 import { type Fingerprint, fingerprint, type RouteInputs, type RouteServer, readInputs } from './inputs.ts'
 import { forgetAddresses, joinEnded } from './known-addresses.ts'
 import { pingWake } from './ping-wake.ts'
-import { forgetQuietEdges, markListed, sawEdge, seen } from './routed.ts'
+import { EDGE_SAID_EVERY_MS, forgetQuietEdges, markListed, sawEdge, seen } from './routed.ts'
 import { restingFor, turnedAway } from './turned-away.ts'
 
 /**
@@ -59,12 +59,6 @@ const REFUSED: Partial<Record<AppErrorCode, Extract<WakeResult, { outcome: 'deni
   not_entitled: 'quota',
   payment_due: 'quota',
 }
-
-/**
- * How often an edge's word is written while no server waits on the edges: well inside the time
- * it counts for after it last asked, and the time its version may fall behind (`routed.ts`).
- */
-const SAID_EVERY_MS = 3 * SECOND_MS
 
 /**
  * The longest the route inputs' fingerprint goes unread while the database says none of them
@@ -276,7 +270,7 @@ export class EdgeService {
   /**
    * Edge `edgeId` asked for its routes, holding the list read from `syncedTo` on, or a list it
    * would not be handed now (null). While no server waits on the edges (`unrouted` false), its
-   * word is written only every `SAID_EVERY_MS`, which keeps it counted: nothing reads its
+   * word is written only every `EDGE_SAID_EVERY_MS`, which keeps it counted: nothing reads its
    * version but a server that waits.
    */
   async seen(edgeId: string, syncedTo: Date | null, unrouted = true): Promise<void> {
@@ -286,7 +280,7 @@ export class EdgeService {
       await seen(this.#db, this.#events, edgeId, syncedTo)
       return
     }
-    if (now - (this.#saidAt.get(edgeId) ?? 0) < SAID_EVERY_MS) return
+    if (now - (this.#saidAt.get(edgeId) ?? 0) < EDGE_SAID_EVERY_MS) return
     this.#saidAt.set(edgeId, now)
     await sawEdge(this.#db, edgeId, syncedTo)
     if (now - this.#forgotAt < HOUR_MS) return
