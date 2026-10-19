@@ -45,3 +45,13 @@
   gap: var(--space-12);
   margin-block: var(--space-8);
 }
+/* On a phone the buttons stack, each the full width, so none is left alone on a second row. */
+@media (max-width: 520px) {
+  .row {
+    flex-direction: column;
+  }
+  .row > * {
+    justify-content: center;
+    text-align: center;
+  }
+}

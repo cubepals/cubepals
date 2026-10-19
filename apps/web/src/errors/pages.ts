@@ -15,8 +15,13 @@ import { LOST, type LostKind, SERVERS_LINE, SUPPORT } from './copy'
 export const STATIC_PAGES = {
   'unavailable.html': { kind: 'unavailable', token: '' },
   'cloudflare-5xx.html': { kind: 'unreachable', token: '::CLOUDFLARE_ERROR_500S_BOX::' },
-  'cloudflare-1xxx.html': { kind: 'unreachable', token: '::CLOUDFLARE_ERROR_1000S_BOX::' },
+  // 1xxx is Cloudflare unable to route to us (DNS or configuration), which may touch the game
+  // addresses too, so this page doesn't promise they work.
+  'cloudflare-1xxx.html': { kind: 'misrouted', token: '::CLOUDFLARE_ERROR_1000S_BOX::' },
 } as const satisfies Record<string, { kind: LostKind; token: string }>
+
+/** The pages that say game servers should keep working: not when the site's own address is what failed. */
+const SAYS_SERVERS = new Set<LostKind>(['unavailable', 'unreachable'])
 
 const STYLE = `
 :root{color-scheme:light;--ink:#0d0d0d;--muted:#5b5954;--paper:#f8f7f5}
@@ -24,6 +29,8 @@ const STYLE = `
 body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:24px 16px;background:var(--paper);color:var(--ink);font:18px/28px system-ui,-apple-system,"Segoe UI",sans-serif}
 main{width:100%;max-width:34rem;display:flex;flex-direction:column;gap:16px}
 img{width:78px;height:auto;image-rendering:pixelated}
+.logo{display:block;width:auto;height:28px;margin-bottom:8px}
+.box{margin-top:8px;font-size:13px;line-height:20px;color:var(--muted);overflow-wrap:anywhere}
 h1{margin:0;font-size:36px;line-height:40px;font-weight:800;letter-spacing:-.05em;text-wrap:balance}
 p{margin:0}
 .fine{color:var(--muted);font-size:16px;line-height:24px}
@@ -31,11 +38,13 @@ p{margin:0}
 .go{display:inline-block;padding:10px 18px;border:2px solid var(--ink);border-radius:8px;color:var(--ink);font-weight:700;text-decoration:none}
 .go.first{background:var(--ink);color:var(--paper)}
 a{color:inherit;text-underline-offset:.2em}
-.mark{font-weight:700;letter-spacing:-.07em}
 `
 
-/** One page as a document; `figure` is the picture as a data URI, so the page loads alone. */
-export function staticPage(file: keyof typeof STATIC_PAGES, figure: string): string {
+/**
+ * One page as a document; `figure` is the picture as a data URI and `lockup` the brand's drawn
+ * lockup (brand/lockup-horizontal.svg), so the page loads alone.
+ */
+export function staticPage(file: keyof typeof STATIC_PAGES, figure: string, lockup: string): string {
   const { kind, token } = STATIC_PAGES[file]
   const copy = LOST[kind]
   return `<!doctype html>
@@ -49,13 +58,13 @@ export function staticPage(file: keyof typeof STATIC_PAGES, figure: string): str
 </head>
 <body>
 <main>
-<p class="mark">cubepals</p>
+${lockup.replace('<svg ', '<svg class="logo" ').replace('>', '><title>Cubepals</title>')}
 <img src="${figure}" alt="">
 <h1>${copy.title}</h1>
 <p>${copy.line}</p>
-<p class="fine">${SERVERS_LINE}</p>
+${SAYS_SERVERS.has(kind) ? `<p class="fine">${SERVERS_LINE}</p>\n` : ''}
 <p class="row"><a class="go first" href="?">Try again</a><a class="go" href="https://cubepals.com/">Go home</a></p>
-<p class="fine">Still stuck? Write to <a href="mailto:${SUPPORT}">${SUPPORT}</a>. We read every message.</p>${token ? `\n${token}` : ''}
+<p class="fine">Still stuck? Write to <a href="mailto:${SUPPORT}">${SUPPORT}</a>. We read every message.</p>${token ? `\n<div class="box">${token}</div>` : ''}
 </main>
 </body>
 </html>

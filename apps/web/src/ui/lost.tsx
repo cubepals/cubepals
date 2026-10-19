@@ -33,8 +33,16 @@ export function Lost({
   const copy = LOST[kind]
   return (
     <section className={styles.lost} aria-labelledby="lost-title">
-      {/* biome-ignore lint/performance/noImgElement: a fixed-size dithered figure, which Next's image pipeline would blur */}
-      <img src={FIGURE[kind]} alt="" width={78} height={105} className={styles.figure} draggable={false} />
+      {/* biome-ignore lint/performance/noImgElement: a fixed-size dithered figure, which Next's image pipeline would blur; lazy, so a page that only carries this one in its tree for a 404 never preloads it */}
+      <img
+        src={FIGURE[kind]}
+        alt=""
+        width={78}
+        height={105}
+        loading="lazy"
+        className={styles.figure}
+        draggable={false}
+      />
       <h1 id="lost-title" className={`type-display-md ${styles.title}`}>
         {copy.title}
       </h1>

@@ -10,7 +10,7 @@
  */
 import { OPERATOR } from '../legal/operator'
 
-export type LostKind = 'notFound' | 'broken' | 'unavailable' | 'unreachable'
+export type LostKind = 'notFound' | 'broken' | 'unavailable' | 'unreachable' | 'misrouted'
 
 export const LOST: Record<LostKind, { status: number; title: string; line: string }> = {
   notFound: {
@@ -32,6 +32,11 @@ export const LOST: Record<LostKind, { status: number; title: string; line: strin
     status: 502,
     title: 'Cubepals can’t be reached right now',
     line: 'That’s on us, not you. Something between you and our servers tripped.',
+  },
+  misrouted: {
+    status: 530,
+    title: 'Cubepals is pointed the wrong way for a moment',
+    line: 'That’s on us, not you. Something in how our address finds us slipped, and we’re on it.',
   },
 }
 

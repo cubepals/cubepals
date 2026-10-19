@@ -9,7 +9,8 @@
       "!**/infra/*/generated",
       "!**/infra/*/*.openapi.json",
       "!apps/control/src/infra/fleet/daemon.json",
-      "!**/*.svg"
+      "!**/*.svg",
+      "!apps/web/public/errors/*.html"
     ]
   },
   "formatter": {

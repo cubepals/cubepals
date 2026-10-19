@@ -2,22 +2,24 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import type { Metadata } from 'next'
 import Link from 'next/link'
-import { Lockup } from '../ui/brand'
+import { currentSession } from '../lib/session'
 import { Lost } from '../ui/lost'
+import { SiteHeader } from './(public)/header'
+
+export const metadata: Metadata = { title: 'Page not found' }
 
 /**
  * Every address the site doesn't have, and every `notFound()`: a Cubepals page with the 404 status
- * Next gives it, in place of the default. The root layout frames it, with no header of the site's.
+ * Next gives it, in place of the default. The root layout frames it, under the same header as the
+ * public pages (beta tag, Browse, Pricing, Sign in).
  */
-export default function NotFound() {
+export default async function NotFound() {
+  const session = await currentSession()
   return (
     <div className="bk-page">
-      <header className="bk-topnav">
-        <Link href="/" className="bk-wordmark" aria-label="Cubepals">
-          <Lockup />
-        </Link>
-      </header>
+      <SiteHeader signedIn={session !== null} />
       <main>
         <Lost kind="notFound">
           <Link href="/browse" className="bk-btn bk-btn--outline bk-btn--md">

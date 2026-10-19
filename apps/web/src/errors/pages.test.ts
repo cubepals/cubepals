@@ -8,14 +8,16 @@ import { OPERATOR } from '../legal/operator'
 import { STATIC_PAGES, staticPage } from './pages'
 
 const here = (path: string) => new URL(path, import.meta.url)
+const lockup = readFileSync(here('../../../../brand/lockup-horizontal.svg'), 'utf8').trim()
 const figure = `data:image/png;base64,${readFileSync(here('../../public/errors/kai-shrugging.png')).toString('base64')}`
 
 describe('the standalone error pages', () => {
   for (const [file, { token }] of Object.entries(STATIC_PAGES)) {
     test(`${file} is as pages.ts writes it, with the support address`, () => {
       const written = readFileSync(here(`../../public/errors/${file}`), 'utf8')
-      expect(written).toBe(staticPage(file as keyof typeof STATIC_PAGES, figure))
+      expect(written).toBe(staticPage(file as keyof typeof STATIC_PAGES, figure, lockup))
       expect(written).toContain(`mailto:${OPERATOR.emails.support}`)
+      expect(written).toContain('aria-label="Cubepals"')
       if (token) expect(written).toContain(token)
     })
   }
