@@ -57,7 +57,9 @@ describe.skipIf(!hasDatabase)('the economics report without figures for fees', (
     for (const row of bare.runtimes)
       expect([row.feeCents, row.marginCents, row.marginPercent]).toEqual([null, null, null])
     for (const server of bare.servers) expect([server.feeCents, server.marginCents]).toEqual([null, null])
-    expect(bare.servers.map((s) => s.revenueCents)).toEqual(priced.servers.map((s) => s.revenueCents))
+    const withoutFees = ({ feeCents: _fee, marginCents: _margin, ...rest }: (typeof bare.servers)[number]) =>
+      rest
+    expect(bare.servers.map(withoutFees)).toEqual(priced.servers.map(withoutFees))
     expect(bare.assumptions.paymentFee).toMatch(/not configured/)
   }, 60_000)
 })
