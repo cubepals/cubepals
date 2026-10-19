@@ -6,7 +6,7 @@
 
 import { describe, expect, test } from 'bun:test'
 import type { PinnedMod } from '../domain/mods/artifact.ts'
-import { clientRange, protocolOf, RELEASES } from './clients.ts'
+import { clientRange, protocolOf, RELEASES, VIABACKWARDS_OLDEST, VIAREWIND_OLDEST } from './clients.ts'
 import { VIABACKWARDS, VIAREWIND, VIAVERSION } from './mods.ts'
 
 const plugin = (projectId: string, name: string, catalog = 'modrinth'): PinnedMod => ({
@@ -40,6 +40,15 @@ describe('which clients a server takes', () => {
     expect(protocolOf('1.7.2')).toBe(4)
     expect(protocolOf('26.4-snapshot-1')).toBeNull()
     expect(RELEASES.every((release) => /^\d+\.\d+(\.\d+)?$/.test(release.name))).toBe(true)
+  })
+
+  test('the floors are the oldest protocols the pinned jars ship', () => {
+    // ViaBackwards 5.12.1: com/viaversion/viabackwards/protocol/v1_9_1to1_9, the 1.9 client.
+    expect(VIABACKWARDS_OLDEST).toBe('1.9')
+    expect(protocolOf(VIABACKWARDS_OLDEST)).toBe(107)
+    // ViaRewind 4.2.0: com/viaversion/viarewind/protocol/v1_7_6_10to1_7_2_5, 1.7.2 to 1.7.5.
+    expect(VIAREWIND_OLDEST).toBe('1.7.2')
+    expect(protocolOf(VIAREWIND_OLDEST)).toBe(4)
   })
 
   test('its own release alone, without the Via plugins', () => {

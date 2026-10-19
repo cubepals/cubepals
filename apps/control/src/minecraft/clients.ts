@@ -27,11 +27,14 @@ import published from './protocol-versions.json' with { type: 'json' }
 export const RELEASES: ReadonlyArray<{ name: string; protocol: number }> = published.releases
 
 /**
- * The oldest releases whose clients ViaBackwards and ViaRewind let in, as their own pages say:
- * ViaBackwards back to 1.9, and ViaRewind, beside it, to 1.8 and 1.7.
+ * The oldest releases whose clients ViaBackwards and ViaRewind let in, as the jars Cubepals pins
+ * prove: the oldest protocol package in ViaBackwards 5.12.1 is
+ * `com/viaversion/viabackwards/protocol/v1_9_1to1_9` (the 1.9 client, protocol 107), and in ViaRewind
+ * 4.2.0 `com/viaversion/viarewind/protocol/v1_7_6_10to1_7_2_5` (1.7.2 to 1.7.5, protocol 4). A newer
+ * jar that reaches further back is a reason to change these.
  */
-const VIABACKWARDS_OLDEST = '1.9'
-const VIAREWIND_OLDEST = '1.7.2'
+export const VIABACKWARDS_OLDEST = '1.9'
+export const VIAREWIND_OLDEST = '1.7.2'
 
 /** The clients a server takes. */
 export interface ClientRange {
