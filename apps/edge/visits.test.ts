@@ -11,6 +11,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { type AddressInfo, connect, createServer, type Server, type Socket } from 'node:net'
 import { join } from 'node:path'
+import { HOUR_MS } from '../../packages/contracts/src/durations.ts'
 import type { VisitReport } from '../../packages/contracts/src/join-records.ts'
 import { packet, statusRequest, string, varInt } from './notice.ts'
 import { ROUTER_BIN } from './router-under-test.ts'
@@ -57,6 +58,23 @@ describe('visits', () => {
   test('a join turned away at the door is sent whole, at once', () => {
     visits.refused('192.0.2.7:900', { address: 'c.play.test', protocol: 47 }, 'wrong_game')
     expect(sent.at(-1)).toMatchObject({ phase: 'close', path: 'refused', leftReason: 'refused:wrong_game' })
+  })
+
+  test('an address’s hour of looks is let go once it is over, whatever was pinged', async () => {
+    let clock = Date.parse('2026-10-20T10:00:00Z')
+    const kept = new Visits(
+      () => undefined,
+      EDGE,
+      TIMES,
+      () => new Date(clock),
+    )
+    for (const address of ['a.play.test', 'b.play.test', 'c.play.test']) kept.pinged('192.0.2.1:1', address)
+    await settle()
+    expect(kept.held()).toEqual({ visits: 0, pings: 0, looks: 3 })
+    clock += 2 * HOUR_MS
+    kept.pinged('192.0.2.1:2', 'd.play.test')
+    await settle()
+    expect(kept.held().looks).toBe(1)
   })
 
   test('an IPv6 source is one key however it is spelt', () => {
@@ -113,26 +131,30 @@ async function halves(name: string): Promise<VisitReport[]> {
 const ordered = (...times: (string | undefined)[]) =>
   times.every((t, i) => t !== undefined && (i === 0 || Date.parse(t) >= Date.parse(times[i - 1] ?? '')))
 
+/** A stand-in game server: says a byte back to anything, which is enough to be up. Where it listens. */
+async function standInGame(servers: Server[]): Promise<string> {
+  const game = createServer((socket) => {
+    socket.on('error', () => socket.destroy())
+    socket.on('data', (chunk) => {
+      const named = Buffer.from(chunk)
+        .toString('latin1')
+        .match(/Visitor\w+/)?.[0]
+      if (named) reached.add(named)
+      socket.write(Uint8Array.of(1, 0))
+    })
+  }).listen(0, '127.0.0.1')
+  await new Promise((resolve) => game.once('listening', resolve))
+  servers.push(game)
+  return `127.0.0.1:${(game.address() as AddressInfo).port}`
+}
+
 describe.skipIf(ROUTER_BIN === '')('the agent’s visits', () => {
   const servers: Server[] = []
   let agent: ReturnType<typeof Bun.spawn> | undefined
   let control: ReturnType<typeof Bun.serve> | undefined
 
   beforeAll(async () => {
-    // A stand-in game server: says a byte back to anything, which is enough to be up.
-    const game = createServer((socket) => {
-      socket.on('error', () => socket.destroy())
-      socket.on('data', (chunk) => {
-        const named = Buffer.from(chunk)
-          .toString('latin1')
-          .match(/Visitor\w+/)?.[0]
-        if (named) reached.add(named)
-        socket.write(Uint8Array.of(1, 0))
-      })
-    }).listen(0, '127.0.0.1')
-    await new Promise((resolve) => game.once('listening', resolve))
-    servers.push(game)
-    const destination = `127.0.0.1:${(game.address() as AddressInfo).port}`
+    const destination = await standInGame(servers)
     const routes = [
       { hostname: 'direct.play.test', destination, proxyProtocol: true },
       { hostname: 'looked.play.test', destination, proxyProtocol: true },
@@ -221,7 +243,7 @@ describe.skipIf(ROUTER_BIN === '')('the agent’s visits', () => {
     expect(close?.bytesUp).toBeGreaterThan(0)
   }, 20_000)
 
-  test('a ping, then a join; a ping after leaving; and a ping alone, a look', async () => {
+  test('a ping, then a join; one after leaving; one alone, a look; one at a name nobody has, nothing', async () => {
     await pinged(front, 'direct.play.test')
     await joins('direct.play.test', 'VisitorPinged')
     await pinged(front, 'direct.play.test')
@@ -236,6 +258,9 @@ describe.skipIf(ROUTER_BIN === '')('the agent’s visits', () => {
     )
       await Bun.sleep(100)
     expect(reports.filter((r) => r.phase === 'look' && r.address === 'looked.play.test')).toHaveLength(1)
+    await pinged(front, 'nobody-here.play.test')
+    await Bun.sleep(1_500)
+    expect(reports.filter((r) => r.address === 'nobody-here.play.test')).toEqual([])
   }, 20_000)
 })
 

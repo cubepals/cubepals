@@ -83,6 +83,11 @@ export class Visits {
     this.#now = now
   }
 
+  /** How many visits, pings and addresses' hours of looks it holds now: what it keeps in memory. */
+  held(): { visits: number; pings: number; looks: number } {
+    return { visits: this.#visits.size, pings: this.#pings.size, looks: this.#looks.size }
+  }
+
   /** A join arrived from `source` for `address`: its visit begins. */
   arrived(source: string, handshake: { address: string; protocol: number }): Visit {
     const ping = this.#pings.get(`${ipOf(source)} ${handshake.address}`)
@@ -165,6 +170,8 @@ export class Visits {
   /** A ping no join followed: a look, unless one went for it lately or the hour's are used. */
   #look(key: string, address: string, ping: Ping): void {
     const now = this.#now().getTime()
+    // An address's hour is over: what it counted goes, so addresses nobody pings any more are let go.
+    for (const [counted, its] of this.#looks) if (now - its.since >= HOUR_MS) this.#looks.delete(counted)
     const hour = this.#looks.get(address)
     const count = hour === undefined || now - hour.since >= HOUR_MS ? { since: now, sent: 0, more: 0 } : hour
     this.#looks.set(address, count)

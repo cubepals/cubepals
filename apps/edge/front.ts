@@ -265,8 +265,11 @@ class Arrival {
     if (visits === undefined || this.#source === null || handshake.hostname === '') return null
     const source = sourceKey(this.#source.address, this.#source.port)
     const dialled = { address: handshake.hostname, protocol: handshake.protocol }
-    if (!handshake.joining)
+    if (!handshake.joining) {
+      // Only a server's own address: anyone can ping a name nobody has, as often as they like.
+      if (!this.#options.known(handshake.hostname)) return null
       return { refused: () => {}, admitted: () => visits.pinged(source, handshake.hostname) }
+    }
     return {
       refused: (why) => visits.refused(source, dialled, why),
       admitted: (toRouter) => {
