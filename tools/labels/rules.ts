@@ -65,6 +65,7 @@ const risks = {
 
 const statuses = {
   'needs-triage': 'Waiting for a kind and an area',
+  'needs-second-eye': 'A second reviewer reads it (second-eye.yml)',
   'status/accepted': 'We mean to do this',
   'status/needs-info': 'Waiting on the person who opened it',
   'status/duplicate': 'Covered by another issue or pull request',
