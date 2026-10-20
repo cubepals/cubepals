@@ -21,6 +21,7 @@ import { takes, wrongGame } from './clients.ts'
 import { front, pipe } from './front.ts'
 import { forServer, Unwrap } from './header.ts'
 import { Held, LOGIN_QUERIES, turnAway } from './hold.ts'
+import { JoinTrace } from './join-trace.ts'
 import { Gate } from './limits.ts'
 import { mappings } from './mappings.ts'
 import { hostnameOf, type Join, Notice, type NoticeText, pingOf, statusRequest } from './notice.ts'
@@ -524,6 +525,13 @@ asleepAt(SLEEPING)
 async function hold(client: Socket, join: Join, header: Uint8Array | null): Promise<void> {
   const held = new Held(join)
   if (held.refused) return void client.destroy()
+  // One line per held join, as it ends (`join-trace.ts`).
+  const trace = new JoinTrace(hostnameOf(join))
+  client.once('close', () =>
+    console.error(
+      JSON.stringify({ join: trace.record({ fromPlayer: client.bytesRead, toPlayer: client.bytesWritten }) }),
+    ),
+  )
   client.on('data', (chunk: Buffer) => {
     if (!held.receive(chunk)) client.destroy()
   })
@@ -531,10 +539,13 @@ async function hold(client: Socket, join: Join, header: Uint8Array | null): Prom
   const speaks = join.protocol >= LOGIN_QUERIES
   const keepAlive = speaks ? setInterval(() => client.write(held.ask()), 10_000) : undefined
   const name = await nameOf(client, held)
+  trace.named(name)
+  trace.mark('wakeAsked')
   const result = await wakeWhile(client, hostnameOf(join), name, Date.now() + (speaks ? HOLD_MS : 0)).finally(
     () => clearInterval(keepAlive),
   )
   if (client.destroyed) return
+  if (result?.outcome === 'ready') trace.mark('up')
   if (result?.outcome === 'ready' && (await settle(client, held))) {
     client.removeAllListeners('data')
     pipe(
@@ -543,9 +554,12 @@ async function hold(client: Socket, join: Join, header: Uint8Array | null): Prom
       forServer(result.proxyProtocol === true, header, held.replay()),
       TIMEOUTS,
     )
+    trace.mark('forwarded')
+    trace.ended('let in')
     return
   }
   const route = routes.find((r) => r.hostname === hostnameOf(join))
+  trace.ended(`turned away: ${whyNot(result)}`)
   client.end(turnAway(refusal(result, route)))
 }
 
