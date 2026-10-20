@@ -19,8 +19,7 @@ const BREAK = /[\p{Cc}\p{Zl}\p{Zp}]/u
  * Text on one line: each run of spaces holding a control character, a line break among them,
  * becomes one space; the spaces between words stay as typed.
  */
-export const oneLine = (text: string): string =>
-  text.replace(SPACES, (run) => (BREAK.test(run) ? ' ' : run))
+export const oneLine = (text: string): string => text.replace(SPACES, (run) => (BREAK.test(run) ? ' ' : run))
 
 /** Every control character but the line break, which a description keeps between its lines. */
 const INVISIBLE = /(?!\n)\p{Cc}/gu
