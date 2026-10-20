@@ -76,6 +76,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # The job's own token, limited to the permissions above, in place of the Claude app's.
           github_token: ${{ github.token }}
+          show_full_output: true
           claude_args: >-
             --max-turns 40
             --allowedTools "Read,Glob,Grep,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(git show:*),Bash(git log:*)"
