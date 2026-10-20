@@ -6,7 +6,7 @@
  * A Minecraft client just far enough to be a player at the edge: the handshake and login the
  * game sends when someone clicks Join, and a status ping. The smoke test and the staging check
  * use it against whichever edge they test, and the suspend bench's probe (`suspend-probe.ts`)
- * speaks its packets.
+ * speaks its packets. A join all the way into the world is `into-world.ts`'s.
  */
 import { Socket } from 'node:net'
 import { GAME_PORT } from '../../apps/control/src/minecraft/ports.ts'
@@ -116,7 +116,7 @@ function attempt(edge: Edge, address: string, name: string, timeoutMs: number): 
   })
 }
 
-const readVarInt = (bytes: Buffer, at: number): [number, number] => {
+export const readVarInt = (bytes: Buffer, at: number): [number, number] => {
   let value = 0
   let shift = 0
   let i = at

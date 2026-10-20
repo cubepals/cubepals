@@ -52,6 +52,7 @@ import { runScheduledNow } from '../apps/control/src/infra/pg/jobs.ts'
 import { GAME_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { Progress, type StepResult, seconds, summaryTable } from './lib/check-progress.ts'
 import { type Edge, join, login } from './lib/minecraft.ts'
+import { ownGameJoins } from './lib/own-game-joins.ts'
 import { type Api, people } from './lib/people.ts'
 import { verifiedAgainstSupabase } from './lib/supabase-root.ts'
 
@@ -688,6 +689,10 @@ async function ownTemplate(j: Journey, own: (typeof OWN_TEMPLATES)[number]): Pro
     await answers()
     return `${slept} while asleep; woke in ${took}, its datapack answering again`
   })
+
+  await j.step('a player is in the world within moments of logging in, awake and woken by the join', () =>
+    ownGameJoins(j, EDGE, sql),
+  )
 
   await j.trash()
 }
