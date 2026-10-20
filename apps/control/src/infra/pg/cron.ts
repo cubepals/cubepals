@@ -50,6 +50,8 @@ export const CRON: Record<ScheduledJob | WorkerHeartbeat, string> = {
   'known-addresses': '31 * * * *',
   // Joins past their days go, and a join's client address never outlives its hour.
   'joins-sweep': '*/10 * * * *',
+  // What looked wrong in joins, raised within a minute (`app/joins/signals.ts`).
+  signals: '* * * * *',
   // A day's spend against its limit. At the most the platform runs at
   // once, ten minutes between passes is about 35 cents past the limit before it pauses.
   'spend-watchdog': '*/10 * * * *',

@@ -89,6 +89,7 @@ describe.skipIf(!hasDatabase)('a worker that starts after being stopped for hour
         'free-play-links',
         'known-addresses',
         'joins-sweep',
+        'signals',
         'spend-watchdog',
         'creates-room',
         'usage-close',

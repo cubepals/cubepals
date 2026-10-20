@@ -72,24 +72,27 @@ const raise = (kind: SignalKind, row: JoinRow, which: string, at: Date, extra: R
   detail: { ...about(row), ...extra },
 })
 
-/** From login to in the world, and from connecting to in the world after a wake, past their limits. */
-function slowJoin(config: SignalsConfig, rows: readonly JoinRow[], now: Date): Raised[] {
+/** From login to in the world (or to now, while it isn't), past its limit; Cubepals' own servers' where set. */
+function slowLogin(config: SignalsConfig, rows: readonly JoinRow[], now: Date): Raised[] {
   const slow = config.slowJoin
   if (slow === undefined) return []
   return rows.flatMap((row) => {
-    const out: Raised[] = []
-    const loginLimit = row.ours ? (slow.loginToWorldOursS ?? slow.loginToWorldS) : slow.loginToWorldS
-    if (loginLimit !== undefined && row.loginAt !== null) {
-      const figure = seconds(row.loginAt, row.inWorldAt ?? now)
-      if (figure > loginLimit) out.push(raise('slow_join', row, 'login', now, { figure, limit: loginLimit }))
-    }
-    const connectLimit = row.wake === null ? undefined : slow.connectToWorldS?.[row.wake]
-    if (connectLimit !== undefined && row.inWorldAt !== null) {
-      const figure = seconds(row.connectedAt, row.inWorldAt)
-      if (figure > connectLimit)
-        out.push(raise('slow_join', row, 'connect', now, { figure, limit: connectLimit, wake: row.wake }))
-    }
-    return out
+    const limit = row.ours ? (slow.loginToWorldOursS ?? slow.loginToWorldS) : slow.loginToWorldS
+    if (limit === undefined || row.loginAt === null) return []
+    const figure = seconds(row.loginAt, row.inWorldAt ?? now)
+    return figure > limit ? [raise('slow_join', row, 'login', now, { figure, limit })] : []
+  })
+}
+
+/** From connecting to in the world, past the limit for how its wake found the server. */
+function slowConnect(config: SignalsConfig, rows: readonly JoinRow[], now: Date): Raised[] {
+  const limits = config.slowJoin?.connectToWorldS
+  if (limits === undefined) return []
+  return rows.flatMap((row) => {
+    const limit = row.wake === null ? undefined : limits[row.wake]
+    if (limit === undefined || row.inWorldAt === null) return []
+    const figure = seconds(row.connectedAt, row.inWorldAt)
+    return figure > limit ? [raise('slow_join', row, 'connect', now, { figure, limit, wake: row.wake })] : []
   })
 }
 
@@ -250,7 +253,8 @@ function slowTick(config: SignalsConfig, rows: readonly JoinRow[], now: Date): R
 /** Every signal the joins raise under `config` at `now`. */
 export function fromJoins(config: SignalsConfig, rows: readonly JoinRow[], now: Date): Raised[] {
   return [
-    slowJoin,
+    slowLogin,
+    slowConnect,
     leftWhileLoading,
     shortStay,
     lookedBack,

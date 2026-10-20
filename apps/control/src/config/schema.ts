@@ -448,7 +448,10 @@ export const DeploymentConfig = z.object({
    * `app/artifacts/reporter.ts`), and the signals raised on them (SIGNALS, private, read as
    * `SignalsConfig` by `app/joins/signals.ts`, which judges it: unset or not that shape, none run).
    */
-  joins: z.object({ reporter: z.enum(['off', 'official', 'all']).default('off'), signals: z.unknown() }),
+  joins: z.object({
+    reporter: z.enum(['off', 'official', 'all']).default('off'),
+    signals: z.unknown().optional(),
+  }),
   /**
    * Room for new servers (`app/platform/room.ts`): the running places and servers new creates
    * leave for starts and wakes, and how long the oldest create may have waited for a worker

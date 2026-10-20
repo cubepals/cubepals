@@ -42,6 +42,7 @@ const JOBS: ScheduledJob[] = [
   'free-play-links',
   'known-addresses',
   'joins-sweep',
+  'signals',
   'spend-watchdog',
   'creates-room',
   'usage-close',

@@ -20,6 +20,7 @@ import type { PlayAddressing } from '../ports/platform.ts'
 import type { SecretKeyring } from '../secrets.ts'
 import { tuning } from '../tuning.ts'
 import { recordServerEvents } from './server-events.ts'
+import { raiseSignals } from './signals.ts'
 import { recordVisits } from './visits.ts'
 
 /** How long joins and the signals raised on them are kept. */
@@ -74,6 +75,11 @@ export class JoinService {
     return this.#db.transaction(async (tx) =>
       putTogether(tx, await recordServerEvents(tx, this.#addressing, serverId, events)),
     )
+  }
+
+  /** `signals`: raises what the `SIGNALS` setting finds, and closes what has been open a day. */
+  raiseSignals(now = new Date()): Promise<number> {
+    return raiseSignals(this.#db, now)
   }
 
   /**
