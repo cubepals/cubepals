@@ -12,17 +12,18 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { ArtifactForbidden, type ArtifactService } from '../../app/artifacts/service.ts'
 import type { JoinService } from '../../app/joins/service.ts'
+import { tuning } from '../../app/tuning.ts'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
-/** The most one request may carry. */
-const MOST_BYTES = 64 * 1024
 /** Mounted by `createRuntimeApp`, beside the jar links, on the same public listener. */
 export function createJoinsApp(deps: { artifacts: ArtifactService; joins: JoinService }): Hono {
   const app = new Hono()
   app.post(
     '/runtime/v1/servers/:serverId/joins',
-    bodyLimit({ maxSize: MOST_BYTES, onError: (c) => c.body(null, 413) }),
+    // As much as one request may carry: the deployment's own limit, read as each comes.
+    (c, next) =>
+      bodyLimit({ maxSize: tuning().abuse.joinReportBytes, onError: (d) => d.body(null, 413) })(c, next),
     async (c) => {
       const serverId = c.req.param('serverId') ?? ''
       if (!UUID.test(serverId)) return c.body(null, 404)

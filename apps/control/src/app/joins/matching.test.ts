@@ -9,13 +9,14 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
-import { DAY_MS, HOUR_MS, SECOND_MS } from '@blockly/contracts/durations'
+import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { ServerJoinEvent, VisitReport } from '@blockly/contracts/join-records'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { createJoinsApp } from '../../interfaces/runtime/joins.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { deriveServerSecret, singleKey } from '../secrets.ts'
+import { installTuning, tuning } from '../tuning.ts'
 
 const STEVE = { name: 'Steve', uuid: '8667ba71-b85a-4004-af54-457a9734eed7' }
 const ALEX = { name: 'Alex', uuid: '6ab43178-89fd-4905-8c45-9f2f4ad1c2a5' }
@@ -154,6 +155,45 @@ describe.skipIf(!hasDatabase)('the halves of a join', () => {
     expect(left.leftReason).toBe('disconnected')
     expect(left.pingedAfterAt?.toISOString()).toBe(at(1_300_000))
     expect([left.bytesUp, left.bytesDown]).toEqual([4_000, 900_000])
+    // Both halves told, and the player gone: the source was kept only to put them together.
+    expect(left.source).toBeNull()
+  })
+})
+
+describe.skipIf(!hasDatabase)('when the edge’s close comes first', () => {
+  test('the server’s events still find the join, by source or by the player, and nothing else', async () => {
+    const id = randomUUID()
+    const source = '203.0.113.40:52000'
+    const before = (await h.db.select().from(schema.joins)).length
+    await h.app.joins.recordVisits([
+      visit(id, {
+        source,
+        player: STEVE,
+        path: 'direct',
+        connectedAt: at(3_000_000),
+        handedAt: at(3_000_050),
+      }),
+      visit(id, {
+        phase: 'close',
+        source,
+        leftAt: at(3_030_000),
+        leftReason: 'closed',
+        bytesUp: 1,
+        bytesDown: 2,
+      }),
+    ])
+    // A batch the server sent late: its login (no address), in the world, and leaving.
+    await h.app.joins.recordServerEvents(serverId, [
+      event('login', 3_000_400),
+      event('in_world', 3_002_000, { address: source }),
+      event('left', 3_029_900, { address: source, reason: 'disconnected' }),
+    ])
+    const joined = await row(id)
+    expect(joined).toMatchObject({ serverSide: 'reported', leftReason: 'closed', source: null })
+    expect(joined.loginAt?.toISOString()).toBe(at(3_000_400))
+    expect(joined.inWorldAt?.toISOString()).toBe(at(3_002_000))
+    expect(joined.leftAt?.toISOString()).toBe(at(3_029_900))
+    expect((await h.db.select().from(schema.joins)).length).toBe(before + 1)
   })
 })
 
@@ -174,10 +214,11 @@ describe.skipIf(!hasDatabase)('looks, addresses and forgetting', () => {
     expect(await row(id)).toMatchObject({ serverId, addressKind: 'old_domain' })
   })
 
-  test('the sweep forgets sources put together or past the hour, and rows past 35 days', async () => {
+  test('the sweep forgets sources before they are an hour old, and rows past 35 days', async () => {
     const now = new Date()
     const recent = randomUUID()
     const hourOld = randomUUID()
+    const nearlyHour = randomUUID()
     const old = randomUUID()
     await h.app.joins.recordVisits([
       visit(recent, {
@@ -187,6 +228,11 @@ describe.skipIf(!hasDatabase)('looks, addresses and forgetting', () => {
       visit(hourOld, {
         source: '203.0.113.31:1',
         connectedAt: new Date(now.getTime() - 2 * HOUR_MS).toISOString(),
+      }),
+      // An hour old before the next sweep, ten minutes on.
+      visit(nearlyHour, {
+        source: '203.0.113.33:1',
+        connectedAt: new Date(now.getTime() - 55 * MINUTE_MS).toISOString(),
       }),
       visit(old, {
         source: '203.0.113.32:1',
@@ -199,16 +245,13 @@ describe.skipIf(!hasDatabase)('looks, addresses and forgetting', () => {
     expect(await h.app.joins.sweep(now)).toBeGreaterThanOrEqual(3)
     expect((await row(recent)).source).toBe('203.0.113.30:1')
     expect((await row(hourOld)).source).toBeNull()
+    expect((await row(nearlyHour)).source).toBeNull()
     expect(await h.db.select().from(schema.joins).where(eq(schema.joins.id, old))).toEqual([])
     expect(
       await h.db
         .select()
         .from(schema.signals)
         .where(eq(schema.signals.key, `old:${old}`)),
-    ).toEqual([])
-    // A join both halves have told of, and that has ended, needs its source no more.
-    expect(
-      await h.db.select().from(schema.joins).where(eq(schema.joins.source, '203.0.113.20:51000')),
     ).toEqual([])
   })
 })
@@ -235,8 +278,23 @@ describe.skipIf(!hasDatabase)('the reporter’s route', () => {
       .from(schema.serverReports)
       .where(eq(schema.serverReports.serverId, serverId))
     expect(report?.detail).toEqual(boot.detail)
-    expect((await post({ events: [{ ...boot, detail: { pad: 'x'.repeat(70_000) } }] })).status).toBe(413)
+    const padded = (n: number) => ({ events: [{ ...boot, detail: { pad: 'x'.repeat(n) } }] })
+    expect((await post(padded(70_000))).status).toBe(413)
     const statuses = await Promise.all(Array.from({ length: 12 }, () => post({ events: [] })))
     expect(statuses.filter((r) => r.status === 429).length).toBeGreaterThan(0)
+    // The limits are the deployment's own, from ABUSE_LIMITS.
+    const deployed = tuning()
+    installTuning({
+      ...deployed,
+      abuse: { ...deployed.abuse, joinReportBytes: 1_000, joinReportsPerSecond: 1 },
+    })
+    try {
+      expect((await post(padded(2_000))).status).toBe(413)
+      await Bun.sleep(SECOND_MS)
+      const [first, second] = [await post({ events: [] }), await post({ events: [] })]
+      expect([first.status, second.status]).toEqual([204, 429])
+    } finally {
+      installTuning(deployed)
+    }
   })
 })
