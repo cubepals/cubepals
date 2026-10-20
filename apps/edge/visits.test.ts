@@ -11,6 +11,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { type AddressInfo, connect, createServer, type Server, type Socket } from 'node:net'
 import { join } from 'node:path'
+import { HOUR_MS } from '../../packages/contracts/src/durations.ts'
 import type { VisitReport } from '../../packages/contracts/src/join-records.ts'
 import { packet, statusRequest, string, varInt } from './notice.ts'
 import { ROUTER_BIN } from './router-under-test.ts'
@@ -57,6 +58,23 @@ describe('visits', () => {
   test('a join turned away at the door is sent whole, at once', () => {
     visits.refused('192.0.2.7:900', { address: 'c.play.test', protocol: 47 }, 'wrong_game')
     expect(sent.at(-1)).toMatchObject({ phase: 'close', path: 'refused', leftReason: 'refused:wrong_game' })
+  })
+
+  test('an address’s hour of looks is let go once it is over, whatever was pinged', async () => {
+    let clock = Date.parse('2026-10-20T10:00:00Z')
+    const kept = new Visits(
+      () => undefined,
+      EDGE,
+      TIMES,
+      () => new Date(clock),
+    )
+    for (const address of ['a.play.test', 'b.play.test', 'c.play.test']) kept.pinged('192.0.2.1:1', address)
+    await settle()
+    expect(kept.held()).toEqual({ visits: 0, pings: 0, looks: 3 })
+    clock += 2 * HOUR_MS
+    kept.pinged('192.0.2.1:2', 'd.play.test')
+    await settle()
+    expect(kept.held().looks).toBe(1)
   })
 
   test('an IPv6 source is one key however it is spelt', () => {
@@ -236,6 +254,10 @@ describe.skipIf(ROUTER_BIN === '')('the agent’s visits', () => {
     )
       await Bun.sleep(100)
     expect(reports.filter((r) => r.phase === 'look' && r.address === 'looked.play.test')).toHaveLength(1)
+    // A name no server has is pinged for nothing: no look, and nothing kept.
+    await pinged(front, 'nobody-here.play.test')
+    await Bun.sleep(1_500)
+    expect(reports.filter((r) => r.address === 'nobody-here.play.test')).toEqual([])
   }, 20_000)
 })
 
