@@ -29,7 +29,8 @@ const sha512 = createHash('sha512').update(jar).digest('hex')
 describe.skipIf(!hasDatabase)('the join reporter', () => {
   let h: Harness
   const deployed = tuning()
-  const placing = (joinReporter: 'off' | 'official' | 'all') => installTuning({ ...deployed, joinReporter })
+  const placing = (joinReporter: 'off' | 'official' | 'all') =>
+    installTuning({ ...deployed, joins: { reporter: joinReporter } })
 
   beforeAll(async () => {
     writeFileSync(join(folder, 'cubepals-reporter.jar'), jar)

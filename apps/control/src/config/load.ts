@@ -243,6 +243,17 @@ function economicsJson(env: NodeJS.ProcessEnv): unknown {
   return privateJson(env, 'ECONOMICS_TUNING', DEFAULT_ECONOMICS_TUNING)
 }
 
+/** JOIN_REPORTER as given, and SIGNALS as parsed JSON, or the text that didn't parse. */
+function joinsFrom(env: NodeJS.ProcessEnv) {
+  const signals = env.SIGNALS
+  if (signals === undefined) return { reporter: env.JOIN_REPORTER }
+  try {
+    return { reporter: env.JOIN_REPORTER, signals: JSON.parse(signals) as unknown }
+  } catch {
+    return { reporter: env.JOIN_REPORTER, signals }
+  }
+}
+
 /** OFFICIAL_SERVER_FILES as parsed JSON, or the text that didn't parse; the schema judges it. */
 function officialFilesJson(env: NodeJS.ProcessEnv) {
   const value = env.OFFICIAL_SERVER_FILES
@@ -366,7 +377,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
     capacityTuning: privateJson(env, 'CAPACITY_TUNING', DEFAULT_CAPACITY_TUNING),
     economicsTuning: economicsJson(env),
     officialServerFiles: officialFilesJson(env),
-    joinReporter: env.JOIN_REPORTER,
+    joins: joinsFrom(env),
     room: roomFrom(env),
   }
 }

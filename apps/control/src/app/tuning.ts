@@ -30,8 +30,11 @@ interface Tuning {
   capacity: CapacityTuning
   /** Null leaves fees and margin out of the economics report. */
   economics: EconomicsTuning | null
-  /** Optional, so a caller from before it installs none: no server gets the reporter. */
-  joinReporter?: JoinReporter
+  /**
+   * Which servers get the join reporter, and the `SIGNALS` setting as given, which the signals
+   * judge (`joins/signals.ts`). Absent, as in tests, no server gets it and no signal runs.
+   */
+  joins?: { reporter: JoinReporter; signals?: unknown }
 }
 
 let installed: Tuning = {

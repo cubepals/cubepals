@@ -290,7 +290,7 @@ async function withWhatItsPackLearned(q: Queryable, revision: ServerRevision): P
  * memory stays one (`resumesOn` leaves it out).
  */
 async function reporterFor(q: Queryable, revision: ServerRevision, official: boolean): Promise<PinnedMod[]> {
-  const placing = tuning().joinReporter ?? 'off'
+  const placing = tuning().joins?.reporter ?? 'off'
   if (revision.loader !== 'paper' || revision.modpack !== null) return []
   if (placing === 'off' || (placing === 'official' && !official)) return []
   const pin = await reporterPin(q)
