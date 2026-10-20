@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { oneLine } from '@blockly/contracts/plain-text'
 import { isString, list, record, text } from './plain-data.ts'
 import { compareVersions } from './versions.ts'
 import { isLevelName, LEVEL_TYPES, type LevelType } from './worlds.ts'
@@ -368,7 +369,7 @@ export function uploadedWorld(
   return {
     levelName,
     levelType: levelTypeOf(properties['level-type']),
-    seed: properties['level-seed']?.trim() || null,
+    seed: oneLine(properties['level-seed'] ?? '').trim() || null,
     hardcore: properties.hardcore?.trim() === 'true',
     gameVersion: version,
   }

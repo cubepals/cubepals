@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { z } from 'zod'
+import { oneLine } from './plain-text.ts'
 import { ServerId } from './server.ts'
 
 /**
@@ -13,7 +14,7 @@ import { ServerId } from './server.ts'
 
 /** Starting an upload: what the browser knows about the file before sending it. */
 export const BeginPackUploadInput = z.object({
-  fileName: z.string().trim().min(1).max(255),
+  fileName: z.string().overwrite(oneLine).trim().min(1).max(255),
   sizeBytes: z.number().int().positive(),
 })
 
