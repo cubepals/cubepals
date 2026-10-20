@@ -108,18 +108,26 @@ export const WakeRequest = z.object({
   name: z.string().max(16).optional(),
 })
 export const WakeResult = z.discriminatedUnion('outcome', [
-  /** `proxyProtocol` as on the server's route, for the run it is in now. */
+  /**
+   * `proxyProtocol` as on the server's route, for the run it is in now. `wakeOperationId`, here and
+   * on `starting`: the start this wake asked for or found under way, where there was one.
+   */
   z.object({
     outcome: z.literal('ready'),
     destination: z.string(),
     proxyProtocol: z.literal(true).optional(),
+    wakeOperationId: z.string().optional(),
   }),
   /**
    * `behind`: the start waits for other work on the server to finish first, which the player is
    * told when the join can't wait any longer: its world being put to rest (`rest`), the server
    * going to sleep (`stop`), or a backup.
    */
-  z.object({ outcome: z.literal('starting'), behind: z.enum(['rest', 'stop', 'backup']).optional() }),
+  z.object({
+    outcome: z.literal('starting'),
+    behind: z.enum(['rest', 'stop', 'backup']).optional(),
+    wakeOperationId: z.string().optional(),
+  }),
   /** Still on its way back from a restart after as long as a joining client waits. */
   z.object({ outcome: z.literal('restarting') }),
   /** Left asleep: this join starts nothing now, and its player is told the server sleeps. */

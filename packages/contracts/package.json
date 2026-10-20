@@ -8,6 +8,7 @@
     "./realtime": "./src/realtime.ts",
     "./edge": "./src/edge.ts",
     "./edge-poll": "./src/edge-poll.ts",
+    "./join-records": "./src/join-records.ts",
     "./durations": "./src/durations.ts",
     "./limits": "./src/limits.ts",
     "./server-list": "./src/server-list.ts",

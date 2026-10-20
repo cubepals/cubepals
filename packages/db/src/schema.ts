@@ -33,6 +33,7 @@
  * - `realtime.ts`: the realtime endpoint's pinned certificate.
  * - `fleet.ts`: the fleet runtime's own state.
  * - `edge.ts`: the edges that route players, and how far each one's routes go.
+ * - `joins.ts`: every join as one row, the signals raised on them, and each server's last boot report.
  */
 
 export * from './schema/access.ts'
@@ -50,6 +51,7 @@ export * from './schema/free-play.ts'
 export * from './schema/gifts.ts'
 export * from './schema/insight.ts'
 export * from './schema/jar-checks.ts'
+export * from './schema/joins.ts'
 export * from './schema/listings.ts'
 export * from './schema/placement.ts'
 export * from './schema/players.ts'
