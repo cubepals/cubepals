@@ -68,6 +68,12 @@ export interface AbuseLimits {
    * cost its holder little and its owner nothing. A class or a club joining at once needs more.
    */
   inviteJoinsPerHour: number
+  /**
+   * What one game server's join reporter may post (`interfaces/runtime/joins.ts`): requests a
+   * second, and bytes a request. Past them its posts are refused, and its reporter drops them.
+   */
+  joinReportsPerSecond: number
+  joinReportBytes: number
 }
 
 /** The figures the runtime economics report prices a margin with (`app/runtimes/economics.ts`). */
@@ -108,6 +114,8 @@ export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {
   pingWakeHoldHours: 24,
   knownAddressDays: 7,
   inviteJoinsPerHour: 10,
+  joinReportsPerSecond: 10,
+  joinReportBytes: 65_536,
 }
 
 /** Round figures for development and tests. */
