@@ -123,7 +123,7 @@ jobs:
   comment:
     name: Comment
     needs: review
-    if: needs.review.outputs.review != ''
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
