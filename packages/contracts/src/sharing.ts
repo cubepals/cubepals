@@ -11,6 +11,7 @@ import {
   PLAYER_NAME_MAX_LENGTH,
   PLAYER_NAME_MIN_LENGTH,
 } from './limits.ts'
+import { oneLine } from './plain-text.ts'
 import { InviteCode, type Loader, type PackView, type ServerIcon, ServerId } from './server.ts'
 import type { TemplateCredits } from './templates.ts'
 
@@ -32,7 +33,7 @@ export const SetCopyableInput = z.object({ serverId: ServerId, copyable: z.boole
 /** An invitee puts themselves on the whitelist: their Minecraft name, nothing else. */
 export const JoinThroughInviteInput = z.object({
   code: InviteCode,
-  playerName: z.string().trim().min(PLAYER_NAME_MIN_LENGTH).max(PLAYER_NAME_MAX_LENGTH),
+  playerName: z.string().overwrite(oneLine).trim().min(PLAYER_NAME_MIN_LENGTH).max(PLAYER_NAME_MAX_LENGTH),
 })
 
 /** What someone needs in their own game before they can join. */

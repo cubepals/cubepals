@@ -246,8 +246,8 @@ describe('uploaded worlds', () => {
   })
 
   test('a seed with line breaks in its properties comes back on one line', () => {
-    expect(uploadedWorld({ ...properties, 'level-seed': '42\nmotd=x\u0000' }, levelDat)).toMatchObject({
-      seed: '42 motd=x',
+    expect(uploadedWorld({ ...properties, 'level-seed': '42\n34\u0000' }, levelDat)).toMatchObject({
+      seed: '42 34',
     })
     expect(uploadedWorld({ ...properties, 'level-seed': '\n\u0000' }, levelDat)).toMatchObject({ seed: null })
   })

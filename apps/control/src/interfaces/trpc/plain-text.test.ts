@@ -14,6 +14,7 @@ import {
   CreateServerInput,
   CreateWorldInput,
   FinishWorldUploadInput,
+  JoinThroughInviteInput,
   SaveIdentityInput,
   SuggestAddressInput,
 } from '@blockly/contracts'
@@ -23,9 +24,12 @@ const serverId = '00000000-0000-4000-8000-000000000001'
 const change = { serverId, requestId: '00000000-0000-4000-8000-000000000002', version: 1 }
 const sha512 = 'a'.repeat(128)
 
-/** What people type that has no business being more than one line. */
-const TYPED = 'Fun;(whoami; id) `id` $(id)\nmotd=hi\r\n\u0000 end'
-const ONE_LINE = 'Fun;(whoami; id) `id` $(id) motd=hi end'
+/** The line separator, which some keyboards and pastes put in text. */
+const SEPARATOR = String.fromCodePoint(0x2028)
+
+/** A name typed over more than one line, with a character that shows nothing in it. */
+const TYPED = `Steve’s World, v2!\nOur\r\n\u0000${SEPARATOR} World`
+const ONE_LINE = 'Steve’s World, v2! Our World'
 
 describe('one line', () => {
   test('control characters and line breaks become one space, and nothing else changes', () => {
@@ -35,8 +39,8 @@ describe('one line', () => {
       'Steve’s World',
       'Ünïcödé 🌍 ✨',
       'a  b',
-      '$HOME; rm -rf /',
-      '../../etc',
+      'Steve’s World, v2!',
+      'Our (very) own: world #1 & co.',
       '日本のサーバー',
     ])
       expect(oneLine(name)).toBe(name)
@@ -65,13 +69,20 @@ describe('one line', () => {
     const world = CreateWorldInput.parse({
       ...change,
       name: TYPED,
-      seed: '-7\nlevel-type=flat',
+      seed: '-7\n12',
       levelType: 'minecraft:normal',
       hardcore: false,
     })
     expect(world.name).toBe(ONE_LINE)
-    expect(world.seed).toBe('-7 level-type=flat')
+    expect(world.seed).toBe('-7 12')
     expect(FinishWorldUploadInput.parse({ serverId, ticket: serverId, name: TYPED }).name).toBe(ONE_LINE)
+  })
+
+  test('a name typed on an invitation is one line, and a Minecraft name stays as it is', () => {
+    const code = 'abcdefghjkmn'
+    expect(JoinThroughInviteInput.parse({ code, playerName: 'Steve\n\u0000' }).playerName).toBe('Steve')
+    expect(JoinThroughInviteInput.parse({ code, playerName: 'Our\u0000World' }).playerName).toBe('Our World')
+    expect(JoinThroughInviteInput.parse({ code, playerName: 'Steve_2' }).playerName).toBe('Steve_2')
   })
 
   test('an uploaded file’s name is one line', () => {
@@ -84,8 +95,10 @@ describe('one line', () => {
 
 describe('lines of text', () => {
   test('a description keeps its lines and loses the rest', () => {
-    expect(plainLines('one\r\ntwo\rthree four\tfive\u0000\u001b[31m')).toBe('one\ntwo\nthree\nfour five[31m')
-    const description = 'Line one.\n\nLine two, with $(id) and `id`.'
+    expect(plainLines(`one\r\ntwo\rthree${SEPARATOR}four\tfive\u0000\u0007!`)).toBe(
+      'one\ntwo\nthree\nfour five!',
+    )
+    const description = 'Line one.\n\nLine two, with “quotes”, commas & (brackets).'
     expect(SaveIdentityInput.parse({ serverId, description }).description).toBe(description)
     expect(SaveIdentityInput.parse({ serverId, description: '\u0000 Hi\r\nthere \u0007' }).description).toBe(
       'Hi\nthere',
