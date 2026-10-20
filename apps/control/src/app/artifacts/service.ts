@@ -212,7 +212,7 @@ export class ArtifactService {
    * bytes one of its revisions pins; everything a HEAD needs comes from the database.
    */
   async locate(serverId: string, sha512: string, token: string): Promise<LocatedArtifact> {
-    this.#authorize(serverId, token)
+    this.authorize(serverId, token)
     // Malware is handed to no server, whatever pins it (`mods/jar-checks.ts`).
     if ((await quarantinedOf(this.#db, [sha512])).size > 0) throw new ArtifactNotFound()
     const found = await pinnedBy(this.#db, serverId, sha512)
@@ -257,11 +257,15 @@ export class ArtifactService {
    * takes the server's own token too, and is looked for under that server only.
    */
   async ownIcon(serverId: string, sha256: string, token: string): Promise<Buffer | null> {
-    this.#authorize(serverId, token)
+    this.authorize(serverId, token)
     return loadOwnIcon(this.#db, serverId, sha256)
   }
 
-  #authorize(serverId: string, token: string): void {
+  /**
+   * Refuses (`ArtifactForbidden`) a token that isn't `serverId`'s own: what a game runtime asks for
+   * its jars with, and reports its joins with (`interfaces/runtime/joins.ts`).
+   */
+  authorize(serverId: string, token: string): void {
     // During a rotation a server not yet moved onto the new key still asks with its old token.
     const given = Buffer.from(token)
     const accepted = acceptedSecrets(this.#secrets, serverId, 'artifacts').map((secret) =>

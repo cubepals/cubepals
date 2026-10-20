@@ -61,7 +61,10 @@ describe.skipIf(!hasDatabase)('a kept address', () => {
     const woken = await h.app.edge.wake('sunset-valley.play.test')
     expect(woken).toMatchObject({ outcome: 'ready', destination: expect.stringContaining(':') })
     expect((await h.server(made.id)).lifecycle.status).toBe('running')
-    expect(await h.app.edge.wake('arcade.play.test')).toEqual(woken)
+    expect(await h.app.edge.wake('arcade.play.test')).toEqual({
+      outcome: 'ready',
+      destination: (woken as { destination: string }).destination,
+    })
     const running = (await h.app.edge.routes()).routes
     const destination = running.find((r) => r.hostname === 'arcade.play.test')?.destination
     expect(running.find((r) => r.hostname === 'sunset-valley.play.test')?.destination).toBe(destination)

@@ -98,7 +98,7 @@ describe.skipIf(!hasDatabase)('a join after a start that failed for good', () =>
     await h.until(id, 'failed', 30_000)
     await h.settled(id)
     h.runtime.sleeps.fillHost(id)
-    const edge = createInternalApp({ edge: h.app.edge, token: 'edge-token' })
+    const edge = createInternalApp({ edge: h.app.edge, joins: h.app.joins, token: 'edge-token' })
     const wake = await edge.request(`${EDGE_PROTOCOL_BASE}/wake`, {
       method: 'POST',
       headers: { authorization: 'Bearer edge-token', 'content-type': 'application/json' },
@@ -114,7 +114,10 @@ describe.skipIf(!hasDatabase)('a join after a start that failed for good', () =>
     h.runtime.full("the plan's starts for this hour are used up")
     try {
       for (let ask = 0; ask <= tuning().abuse.wakesPerHour; ask++)
-        expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({ outcome: 'starting' })
+        expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({
+          outcome: 'starting',
+          wakeOperationId: expect.any(String),
+        })
       await h.settled(id)
     } finally {
       h.runtime.full(null)

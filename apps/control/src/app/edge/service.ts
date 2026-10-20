@@ -21,7 +21,7 @@ import { outOf, playToday } from '../accounts/play-today.ts'
 import { playTotal, trialOver } from '../accounts/play-total.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
 import { AppError, type AppErrorCode } from '../errors.ts'
-import { failedWaking, loadOperation, openOfKinds } from '../operations/persistence.ts'
+import { failedWaking, loadOperation, openOfKinds, wakeStarts } from '../operations/persistence.ts'
 import type { IdleDecision, Schedules } from '../operations/schedules.ts'
 import type { ChangeSignal } from '../ports/changes.ts'
 import type { EventBus } from '../ports/events.ts'
@@ -343,7 +343,20 @@ export class EdgeService {
       const deleted = slug !== null && (await heldByDeleted(this.#db, slug))
       return { outcome: 'denied', reason: deleted ? 'deleted' : 'unknown' }
     }
+    const began = new Date()
+    const result = await this.#woken(server, left, retries, name)
+    if (result.outcome !== 'ready' && result.outcome !== 'starting') return result
+    const [start] = await wakeStarts(this.#db, server.id, began)
+    return start === undefined ? result : { ...result, wakeOperationId: start.id }
+  }
 
+  /** What a join to `server` is told, once it is up or the wait is over. */
+  async #woken(
+    server: MinecraftServer,
+    left: () => number,
+    retries: boolean,
+    name: string | undefined,
+  ): Promise<WakeResult> {
     const settled = await this.#settled(server, left)
     if (typeof settled === 'object') return settled
 

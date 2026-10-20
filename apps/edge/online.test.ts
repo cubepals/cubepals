@@ -34,7 +34,10 @@ describe.skipIf(!hasDatabase || ROUTER_BIN === '')('a server that reads as runni
     router = await startRouter()
     const routes = new RouterRoutes(router.api)
     await routes.ready(10_000)
-    control = Bun.serve({ port: 0, fetch: createInternalApp({ edge: h.app.edge, token: 'edge' }).fetch })
+    control = Bun.serve({
+      port: 0,
+      fetch: createInternalApp({ edge: h.app.edge, joins: h.app.joins, token: 'edge' }).fetch,
+    })
     // Every running server's route leads to the stand-in, and every other to a notice that isn't it.
     const server = await answering('the server itself', servers)
     const notice = await answering('a notice', servers)

@@ -339,6 +339,26 @@ export async function openOfKinds(
   return rows.map(toRecord)
 }
 
+/**
+ * The starts a wake that began at `since` asked for or found under way, newest first: those still
+ * open, and those made since. A join's record names it, so its steps can be read beside the join.
+ */
+export async function wakeStarts(q: Queryable, serverId: string, since: Date): Promise<OperationRecord[]> {
+  const rows = await q
+    .select()
+    .from(operations)
+    .where(
+      and(
+        eq(operations.serverId, serverId),
+        inArray(operations.kind, ['start', 'unstore']),
+        or(inArray(operations.status, ['queued', 'running']), gte(operations.createdAt, since)),
+      ),
+    )
+    .orderBy(desc(operations.createdAt))
+    .limit(1)
+  return rows.map(toRecord)
+}
+
 /** Whether work of one kind is waiting or under way for a server, such as a backup being taken. */
 export async function pendingOfKind(q: Queryable, serverId: string, kind: OperationKind): Promise<boolean> {
   const [row] = await q

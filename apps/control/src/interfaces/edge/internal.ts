@@ -17,14 +17,16 @@ import {
   ROUTES_HELD_HEADER,
   ROUTES_VERSION_HEADER,
 } from '@blockly/contracts/edge-poll'
+import { VisitBatch } from '@blockly/contracts/join-records'
 import { Hono } from 'hono'
 import type { EdgeService } from '../../app/edge/service.ts'
+import type { JoinService } from '../../app/joins/service.ts'
 
 /**
  * The edge protocol, served on the internal listener only. The edge asks for routes and reports
  * joins; everything it receives is already resolved.
  */
-export function createInternalApp(deps: { edge: EdgeService; token: string }): Hono {
+export function createInternalApp(deps: { edge: EdgeService; joins: JoinService; token: string }): Hono {
   const app = new Hono()
   const expected = Buffer.from(`Bearer ${deps.token}`)
 
@@ -81,6 +83,14 @@ export function createInternalApp(deps: { edge: EdgeService; token: string }): H
     const event = SessionEvent.safeParse(await c.req.json().catch(() => null))
     if (!event.success) return c.json({ error: 'bad request' }, 400)
     await deps.edge.recordSession(event.data)
+    return c.body(null, 204)
+  })
+
+  // Each connection the edge saw, in halves: written into its join's row (`app/joins/`).
+  app.post(`${EDGE_PROTOCOL_BASE}/visits`, async (c) => {
+    const batch = VisitBatch.safeParse(await c.req.json().catch(() => null))
+    if (!batch.success) return c.json({ error: 'bad request' }, 400)
+    await deps.joins.recordVisits(batch.data.reports)
     return c.body(null, 204)
   })
 

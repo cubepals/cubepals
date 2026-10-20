@@ -24,6 +24,7 @@ import { PackCuration } from './curation/service.ts'
 import { EdgeService } from './edge/service.ts'
 import { GuestbookService } from './guestbook/service.ts'
 import { InsightService } from './insight/service.ts'
+import { JoinService } from './joins/service.ts'
 import { ListingQueries } from './listings/queries.ts'
 import { ListingService } from './listings/service.ts'
 import { JarChecks } from './mods/jar-checks.ts'
@@ -341,14 +342,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     catalog,
   })
   const waiter = new ServerWaiter(db, events)
-  const edge = new EdgeService({
-    ...ports,
-    service: servers,
-    waiter,
-    schedules,
-    links,
-    ...settings,
-  })
+  const edge = new EdgeService({ ...ports, service: servers, waiter, schedules, links, ...settings })
 
   return {
     policy,
@@ -412,6 +406,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     /** Start it before the edge's wakes are served. */
     waiter,
     edge,
+    joins: new JoinService({ ...ports, ...settings }),
     feed: new ConsoleFeed(db, ports.logs, runtime.providers),
   }
 }

@@ -33,6 +33,7 @@ export type ScheduledJob =
   | 'admin-alerts'
   | 'free-play-links'
   | 'known-addresses'
+  | 'joins-sweep'
   | 'spend-watchdog'
   | 'creates-room'
   | 'usage-close'

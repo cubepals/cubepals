@@ -55,10 +55,10 @@ describe.skipIf(!hasDatabase)('edge', () => {
     expect(woken).toMatchObject({ outcome: 'ready', destination: expect.stringContaining(':') })
     expect((await h.server(id)).lifecycle.status).toBe('running')
     const [start] = (await h.operations(id)).filter((o) => o.kind === 'start')
-    expect(start?.requestedBy).toBe('system:wake')
+    expect([start?.requestedBy, start?.id]).toEqual(['system:wake', Reflect.get(woken, 'wakeOperationId')])
 
     // Running already: the alias answers with the same destination at once.
-    expect(await h.app.edge.wake(`${slug}.play.old.test`)).toEqual(woken)
+    expect(woken).toMatchObject(await h.app.edge.wake(`${slug}.play.old.test`))
     const { routes } = await h.app.edge.routes()
     expect(routes.filter((r) => r.hostname.startsWith(`${slug}.`)).map((r) => r.hostname)).toEqual([
       `${slug}.play.old.test`,
@@ -365,7 +365,11 @@ describe.skipIf(!hasDatabase)('edge, where addresses move', () => {
     await h.settled(created.id)
     expect(woken).toMatchObject({ outcome: 'ready' })
     const second = await routeOf(created.slug)
-    expect(woken).toEqual({ outcome: 'ready', destination: second ?? '' })
+    expect(woken).toEqual({
+      outcome: 'ready',
+      destination: second ?? '',
+      wakeOperationId: expect.any(String),
+    })
     expect(second).not.toBe(first)
     expect(second).not.toBe(NOWHERE)
   }, 30_000)
@@ -396,7 +400,10 @@ describe.skipIf(!hasDatabase)('edge, where addresses move', () => {
 
     // On Boat, the plan's starts for the day are spent.
     h.runtime.full("the plan's starts for this day are used up")
-    expect(await h.app.edge.wake(`${created.slug}.play.test`)).toEqual({ outcome: 'starting' })
+    expect(await h.app.edge.wake(`${created.slug}.play.test`)).toEqual({
+      outcome: 'starting',
+      wakeOperationId: expect.any(String),
+    })
     await h.settled(created.id)
     const asleep = await h.server(created.id)
     expect(asleep.lifecycle).toMatchObject({ status: 'stopped', stopReason: 'idle', failure: null })

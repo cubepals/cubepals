@@ -723,7 +723,7 @@ async function main(): Promise<void> {
       services,
     })
     // Game runtimes fetch their jars from the same public listener, under /runtime (§15.2).
-    api.route('/', createRuntimeApp({ artifacts: app.artifacts }))
+    api.route('/', createRuntimeApp({ artifacts: app.artifacts, joins: app.joins }))
     // The billing provider's webhooks, reaching the same listener as the web app's /api.
     api.route('/', billingRoutes(app.billing, capabilities.billing))
     const apiServer = serve({
@@ -733,7 +733,7 @@ async function main(): Promise<void> {
     })
 
     await app.waiter.start()
-    const internal = createInternalApp({ edge: app.edge, token: config.edge.token })
+    const internal = createInternalApp({ edge: app.edge, joins: app.joins, token: config.edge.token })
     // Operators' APIs, beside the edge's, on the internal listener only: where servers run, and
     // accounts, their servers and the platform.
     if (config.operatorToken !== null) internal.route('/', operatorApis(app, services, config.operatorToken))

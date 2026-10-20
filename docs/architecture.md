@@ -1273,6 +1273,7 @@ export type WakeResult =
 // POST /edge/v1/ping-wake { hostname }                 → { waking: boolean } (at once; may start it)
 // POST /edge/v1/idle      { hostname }                 → 204      (a hint; the control plane decides)
 // POST /edge/v1/sessions  { edgeId, hostname, event: 'connect' | 'disconnect', player?: { name, uuid }, at } → 204
+// POST /edge/v1/visits    { reports: VisitReport[] } (≤ 200)  → 204   (each connection, in halves: app/joins/)
 ```
 
 The protocol is authenticated with `Authorization: Bearer <edge token>`. It's served only on

@@ -104,7 +104,13 @@ describe('on the public listener', () => {
     origins: ['https://blockly.test'],
     services,
   })
-  api.route('/', createRuntimeApp({ artifacts: {} as Parameters<typeof createRuntimeApp>[0]['artifacts'] }))
+  api.route(
+    '/',
+    createRuntimeApp({
+      artifacts: {} as Parameters<typeof createRuntimeApp>[0]['artifacts'],
+      joins: {} as Parameters<typeof createRuntimeApp>[0]['joins'],
+    }),
+  )
   api.route(
     '/',
     createBillingWebhook({ billing: {} as Parameters<typeof createBillingWebhook>[0]['billing'] }),

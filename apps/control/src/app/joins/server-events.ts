@@ -1,0 +1,156 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * The game server's half of each join, from its reporter plugin, matched to the row the edge began:
+ * by the client's `ip:port` where the server knew it, which is the edge's own `source` on a server
+ * that reads a PROXY header; else by the player's UUID on a join the edge handed over moments
+ * before, or one this server already reported on; else a row of its own, saying the edge's half is
+ * missing. A `boot` keeps the server's latest word on what it runs.
+ *
+ * Not for the edge's half: that is `visits.ts`.
+ */
+import { MINUTE_MS } from '@blockly/contracts/durations'
+import type { ServerJoinEvent } from '@blockly/contracts/join-records'
+import { type Queryable, schema } from '@blockly/db'
+import { and, desc, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm'
+import type { PlayAddressing } from '../ports/platform.ts'
+import { findServer } from '../servers/persistence.ts'
+import { sourceOf } from './sources.ts'
+import { uuidOf } from './visits.ts'
+
+const joins = schema.joins
+
+/** How soon after the edge hands a join over the server's first word of it comes, at the most. */
+const HANDED_WITHIN_MS = 2 * MINUTE_MS
+
+/** Which column each kind of event fills. */
+const MOMENTS = {
+  login: 'loginAt',
+  configure_started: 'configureStartedAt',
+  configured: 'configuredAt',
+  in_world: 'inWorldAt',
+  left: 'leftAt',
+} as const satisfies Record<Exclude<ServerJoinEvent['kind'], 'boot'>, keyof typeof joins.$inferInsert>
+
+/** Writes a server's events, in the order they happened. */
+export async function recordServerEvents(
+  q: Queryable,
+  addressing: PlayAddressing,
+  serverId: string,
+  events: readonly ServerJoinEvent[],
+): Promise<void> {
+  const ordered = [...events].sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+  for (const event of ordered) {
+    if (event.kind === 'boot') await recordBoot(q, serverId, event)
+    else await recordMoment(q, addressing, serverId, { ...event, kind: event.kind })
+  }
+}
+
+async function recordBoot(q: Queryable, serverId: string, event: ServerJoinEvent): Promise<void> {
+  const row = { serverId, reportedAt: new Date(event.at), detail: event.detail ?? {} }
+  await q
+    .insert(schema.serverReports)
+    .values(row)
+    .onConflictDoUpdate({
+      target: schema.serverReports.serverId,
+      set: { reportedAt: row.reportedAt, detail: row.detail },
+    })
+}
+
+async function recordMoment(
+  q: Queryable,
+  addressing: PlayAddressing,
+  serverId: string,
+  event: ServerJoinEvent & { kind: keyof typeof MOMENTS },
+): Promise<void> {
+  const at = new Date(event.at)
+  const uuid = uuidOf(event.uuid)
+  const source = sourceOf(event.address)
+  const id =
+    (await matching(q, serverId, source, uuid, at, event.kind === 'login')) ??
+    (await begun(q, addressing, serverId, source, at))
+  if (id === null) return
+  const column = joins[MOMENTS[event.kind]]
+  await q
+    .update(joins)
+    .set({
+      serverSide: 'reported',
+      [MOMENTS[event.kind]]:
+        event.kind === 'left'
+          ? sql`least(${column}, ${at.toISOString()}::timestamptz)`
+          : sql`coalesce(${column}, ${at.toISOString()}::timestamptz)`,
+      playerUuid: sql`coalesce(${joins.playerUuid}, ${uuid}::uuid)`,
+      playerName: sql`coalesce(${joins.playerName}, ${event.name ?? null})`,
+      ...(event.kind === 'left'
+        ? { leftReason: sql`coalesce(${joins.leftReason}, ${event.reason ?? null})` }
+        : {}),
+      ...(event.kind === 'in_world' && event.tick ? { tick: event.tick } : {}),
+    })
+    .where(eq(joins.id, id))
+}
+
+/** The join an event belongs to: by its source, else by the player's UUID; null for none. */
+async function matching(
+  q: Queryable,
+  serverId: string,
+  source: string | null,
+  uuid: string | null,
+  at: Date,
+  /** A login begins a join: it never follows one the server already told of. */
+  begins: boolean,
+): Promise<string | null> {
+  const open = and(eq(joins.serverId, serverId), eq(joins.kind, 'join'), isNull(joins.leftAt))
+  if (source !== null) {
+    const [bySource] = await q
+      .select({ id: joins.id })
+      .from(joins)
+      .where(and(open, eq(joins.source, source)))
+      .orderBy(desc(joins.connectedAt))
+      .limit(1)
+    if (bySource !== undefined) return bySource.id
+  }
+  if (uuid === null) return null
+  const handed = sql`coalesce(${joins.handedAt}, ${joins.connectedAt})`
+  const [byPlayer] = await q
+    .select({ id: joins.id })
+    .from(joins)
+    .where(
+      and(
+        open,
+        eq(joins.playerUuid, uuid),
+        // Handed over moments before; or, after its login, a join the server already told of.
+        begins
+          ? gt(handed, new Date(at.getTime() - HANDED_WITHIN_MS))
+          : or(gt(handed, new Date(at.getTime() - HANDED_WITHIN_MS)), isNotNull(joins.loginAt)),
+      ),
+    )
+    .orderBy(desc(handed))
+    .limit(1)
+  return byPlayer?.id ?? null
+}
+
+/** A row for a join the edge said nothing of, at the server's own address; null for no server. */
+async function begun(
+  q: Queryable,
+  addressing: PlayAddressing,
+  serverId: string,
+  source: string | null,
+  at: Date,
+): Promise<string | null> {
+  const server = await findServer(q, serverId)
+  if (server === null) return null
+  const id = crypto.randomUUID()
+  await q.insert(joins).values({
+    id,
+    kind: 'join',
+    serverId,
+    address: addressing.primary(server.slug).hostname,
+    addressKind: 'own',
+    source,
+    connectedAt: at,
+    detail: { edge: 'missing' },
+  })
+  return id
+}

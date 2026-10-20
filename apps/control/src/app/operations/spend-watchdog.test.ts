@@ -129,7 +129,7 @@ describe.skipIf(!hasDatabase)('spend watchdog: the day’s figure, and the trip 
 describe.skipIf(!hasDatabase)('spend watchdog: what the trip stops, and an admin’s say over it', () => {
   test('paused by the watchdog, nothing starts: not the Start button, not a player joining through the edge', async () => {
     expect(await loadControls(h.db)).toMatchObject({ startsEnabled: false, provisioningEnabled: false })
-    const edge = createInternalApp({ edge: h.app.edge, token: 'edge-token' })
+    const edge = createInternalApp({ edge: h.app.edge, joins: h.app.joins, token: 'edge-token' })
     const wake = await edge.request(`${EDGE_PROTOCOL_BASE}/wake`, {
       method: 'POST',
       headers: { authorization: 'Bearer edge-token', 'content-type': 'application/json' },

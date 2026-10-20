@@ -54,6 +54,11 @@ export function scheduledJobs(
       },
     },
     { job: 'backup-schedule', run: () => app.schedules.backups() },
+    {
+      job: 'joins-sweep',
+      run: () => app.joins.sweep(),
+      says: (n) => `forgot ${n} joins, signals and addresses`,
+    },
     { job: 'listing-eligibility-sweep', run: () => app.listings.sweep() },
     {
       job: 'standing-sweep',

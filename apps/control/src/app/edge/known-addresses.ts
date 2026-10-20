@@ -35,9 +35,14 @@ const SEEN_WITHIN_MS = 5 * MINUTE_MS
 
 /**
  * What `address` is kept as for `serverId`: its network's hash, an IPv6 address by its /64, so a
- * phone or home whose IPv6 address changes every day still counts. Null for no address.
+ * phone or home whose IPv6 address changes every day still counts. Null for no address. A join's
+ * record keeps its network the same way (`app/joins/`).
  */
-function addressHash(ring: SecretKeyring, serverId: string, address: string | undefined): string | null {
+export function addressHash(
+  ring: SecretKeyring,
+  serverId: string,
+  address: string | undefined,
+): string | null {
   const network = addressKey(address)
   if (network === null) return null
   const key = deriveServerSecret(ring.current.key, serverId, 'addresses')
