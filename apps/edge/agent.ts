@@ -29,6 +29,8 @@ import { PingWakes } from './ping-wake.ts'
 import { RoutesPoll } from './poll.ts'
 import { type Resting, restingJoin, restingStatus } from './resting.ts'
 import { RouterRoutes } from './router.ts'
+import { VisitReporter } from './visit-reporter.ts'
+import { sourceKey, VISIT_TIMES, Visits } from './visits.ts'
 
 const env = (name: string, fallback?: string): string => {
   const value = process.env[name] ?? fallback
@@ -124,6 +126,18 @@ const control = (path: string, init: RequestInit = {}) =>
     },
     signal: AbortSignal.timeout(30_000),
   })
+
+// ─── Visits: one per connection, reported in halves (`visits.ts`) ───────────────────────────
+
+const reporter = new VisitReporter((body) => control('/visits', { method: 'POST', body }))
+const visits = new Visits(
+  (report) => reporter.send(report),
+  {
+    edgeId: EDGE_ID,
+    region: env('FLY_REGION', ''),
+  },
+  { ...VISIT_TIMES, lingerMs: Number(env('VISIT_LINGER_MS', String(VISIT_TIMES.lingerMs))) },
+)
 
 // ─── Routes: pulled, so every edge machine converges and a restart loses nothing ────────────
 
@@ -330,11 +344,12 @@ interface RouterSession {
   server?: string
   player?: { name?: string; uuid?: string }
   /** Where the client connected from: the front door's PROXY header, which mc-router trusts. */
-  client?: { host?: string }
+  client?: { host?: string; port?: number }
   backend?: string
 }
 
 async function session(body: RouterSession): Promise<void> {
+  visited(body)
   // Told it is restarting is not a join, and must not keep the server up as one.
   if (body.backend === NOTICE) return
   // Every connection, a server list's included, is a chance to notice a server that stopped answering.
@@ -351,6 +366,23 @@ async function session(body: RouterSession): Promise<void> {
     at: body.timestamp ? new Date(body.timestamp).toISOString() : new Date().toISOString(),
   }
   await control('/sessions', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+/**
+ * What mc-router says of a join goes on its visit: who it is, and, sent straight to a running
+ * server, that it was handed over then. The waiting room tells of the joins it holds itself.
+ */
+function visited(body: RouterSession): void {
+  const { host, port } = body.client ?? {}
+  if (body.event !== 'connect' || !host || !port || !body.player?.name) return
+  const source = sourceKey(host, port)
+  const player = { name: body.player.name, ...(body.player.uuid ? { uuid: body.player.uuid } : {}) }
+  const at = body.timestamp ? new Date(body.timestamp).toISOString() : new Date().toISOString()
+  visits.update(source, { player })
+  if (body.backend === WAITING) return
+  const told = body.backend === NOTICE ? { path: 'refused' as const, leftReason: 'refused:restarting' } : null
+  visits.update(source, told ?? { path: 'direct', handedAt: at })
+  visits.open(source)
 }
 
 Bun.serve({
@@ -525,8 +557,10 @@ asleepAt(SLEEPING)
 async function hold(client: Socket, join: Join, header: Uint8Array | null): Promise<void> {
   const held = new Held(join)
   if (held.refused) return void client.destroy()
-  // One line per held join, as it ends (`join-trace.ts`).
+  // One line per held join, as it ends (`join-trace.ts`), and its visit (`visits.ts`).
   const trace = new JoinTrace(hostnameOf(join))
+  const visit = heldVisit(header)
+  visit.seen({ path: 'held' })
   client.once('close', () =>
     console.error(
       JSON.stringify({ join: trace.record({ fromPlayer: client.bytesRead, toPlayer: client.bytesWritten }) }),
@@ -541,10 +575,16 @@ async function hold(client: Socket, join: Join, header: Uint8Array | null): Prom
   const name = await nameOf(client, held)
   trace.named(name)
   trace.mark('wakeAsked')
+  visit.seen({ wakeAskedAt: new Date().toISOString() })
   const result = await wakeWhile(client, hostnameOf(join), name, Date.now() + (speaks ? HOLD_MS : 0)).finally(
     () => clearInterval(keepAlive),
   )
-  if (client.destroyed) return
+  const ready = result?.outcome === 'ready'
+  visit.seen({
+    ...(result !== null && 'wakeOperationId' in result ? { wakeOperationId: result.wakeOperationId } : {}),
+    ...(ready ? { readyAt: new Date().toISOString() } : {}),
+  })
+  if (client.destroyed) return visit.ended('gave_up_waiting')
   if (result?.outcome === 'ready') trace.mark('up')
   if (result?.outcome === 'ready' && (await settle(client, held))) {
     client.removeAllListeners('data')
@@ -556,11 +596,32 @@ async function hold(client: Socket, join: Join, header: Uint8Array | null): Prom
     )
     trace.mark('forwarded')
     trace.ended('let in')
+    visit.ended(null)
     return
   }
   const route = routes.find((r) => r.hostname === hostnameOf(join))
   trace.ended(`turned away: ${whyNot(result)}`)
+  visit.ended(client.destroyed ? 'gave_up_waiting' : `refused:${whyNot(result)}`)
   client.end(turnAway(refusal(result, route)))
+}
+
+/**
+ * The visit of a held join, found by the source in the PROXY header it came with: what the waiting
+ * room saw of it goes on it, and it is sent once the join is handed over (`ended(null)`, as it is
+ * piped) or turned away, with why.
+ */
+function heldVisit(header: Uint8Array | null) {
+  const read = header === null ? null : readProxyHeader(header)
+  const from = read !== null && typeof read === 'object' ? read.source : undefined
+  const source = from ? sourceKey(from.address, from.port) : null
+  return {
+    seen: (fields: Parameters<Visits['update']>[1]) => source !== null && visits.update(source, fields),
+    ended: (why: string | null) => {
+      if (source === null) return
+      visits.update(source, why === null ? { handedAt: new Date().toISOString() } : { leftReason: why })
+      visits.open(source)
+    },
+  }
 }
 
 /**
@@ -697,6 +758,7 @@ front({
   router: ROUTER_PORT,
   proxied: env('PROXY_PROTOCOL', '') === '1',
   gate: new Gate(LIMITS),
+  visits,
   known: (name) => hostnames.has(name),
   plain: (name) => plain.has(name),
   busy: env('BUSY_JOIN', 'This server is busy right now · join again in a moment'),

@@ -26,6 +26,7 @@ import { LOCAL_HEADER, proxyHeader, unmapped } from '../../packages/contracts/sr
 import { turnAway } from './hold.ts'
 import type { Gate } from './limits.ts'
 import { hostnameOf, readVarInt } from './notice.ts'
+import { sourceKey, type Visits } from './visits.ts'
 
 export interface FrontOptions {
   port: number
@@ -50,6 +51,8 @@ export interface FrontOptions {
    */
   refuse: (hostname: string, protocol: number) => string | null
   timeouts: Timeouts
+  /** Where each join and ping is recorded (`visits.ts`); nothing is, without it. */
+  visits?: Visits
 }
 
 /** How long a connection the edge makes may wait, to connect and then with nothing said. */
@@ -134,7 +137,7 @@ function headerFor(source: Source | null, port: number): Uint8Array {
  * Connects `client` to the server at `destination`, which first gets what the client sent so far.
  * A server that doesn't take it in time, or a connection gone quiet both ways, is closed.
  */
-export function pipe(client: Socket, destination: string, sent: Uint8Array, timeouts: Timeouts): void {
+export function pipe(client: Socket, destination: string, sent: Uint8Array, timeouts: Timeouts): Socket {
   const colon = destination.lastIndexOf(':')
   const server = connect({
     host: destination.slice(0, colon).replace(/^\[|\]$/g, ''),
@@ -156,6 +159,7 @@ export function pipe(client: Socket, destination: string, sent: Uint8Array, time
   server.once('close', () => client.destroy())
   client.once('error', () => server.destroy())
   server.once('error', () => client.destroy())
+  return server
 }
 
 /** One connection from the moment it opens until the gate has let it through or turned it away. */
@@ -220,15 +224,20 @@ class Arrival {
 
   #admit(handshake: Handshake): void {
     const { gate, known, plain, busy, refuse, router, port, timeouts } = this.#options
+    const visit = this.#visit(handshake)
     // A game the server can't take hears so now, before it is counted, dialled or woken. A ping
     // goes on: what answers it says which Minecraft the server runs, and the list marks it.
     const refused = handshake.joining ? refuse(handshake.hostname, handshake.protocol) : null
-    if (refused !== null) return void this.#client.end(turnAway(refused))
+    if (refused !== null) {
+      visit?.refused('wrong_game')
+      return void this.#client.end(turnAway(refused))
+    }
     const admitted = gate.admit(known(handshake.hostname) ? handshake.hostname : '')
     if (!admitted) {
       // A ping just goes unanswered; a join hears why, in Cubepals' words.
       if (handshake.joining) this.#client.end(turnAway(busy))
       else this.#client.destroy()
+      visit?.refused('busy')
       return
     }
     this.#client.once('close', admitted)
@@ -241,7 +250,36 @@ class Arrival {
         return void this.#client.destroy()
       }
     }
-    pipe(this.#client, `127.0.0.1:${router}`, sent, timeouts)
+    const toRouter = pipe(this.#client, `127.0.0.1:${router}`, sent, timeouts)
+    visit?.admitted(toRouter)
+  }
+
+  /**
+   * How this connection is recorded (`visits.ts`): a join from where it came, once let in or turned
+   * away, and what passed each way once it closes; a ping, that it was made. Null for neither.
+   */
+  #visit(
+    handshake: Handshake,
+  ): { refused: (why: string) => void; admitted: (toRouter: Socket) => void } | null {
+    const { visits } = this.#options
+    if (visits === undefined || this.#source === null || handshake.hostname === '') return null
+    const source = sourceKey(this.#source.address, this.#source.port)
+    const dialled = { address: handshake.hostname, protocol: handshake.protocol }
+    if (!handshake.joining)
+      return { refused: () => {}, admitted: () => visits.pinged(source, handshake.hostname) }
+    return {
+      refused: (why) => visits.refused(source, dialled, why),
+      admitted: (toRouter) => {
+        visits.arrived(source, dialled)
+        // A connection that carries no PROXY header reaches mc-router from this end of it.
+        toRouter.once('connect', () =>
+          visits.alias(sourceKey(toRouter.localAddress ?? '', toRouter.localPort ?? 0), source),
+        )
+        // `bytesRead` came from the player, `bytesWritten` went back to them.
+        const client = this.#client
+        client.once('close', () => visits.closed(source, { up: client.bytesRead, down: client.bytesWritten }))
+      },
+    }
   }
 }
 

@@ -1468,6 +1468,14 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
     answers non-2xx: mc-router closes a join it can't wake without a word.
   - `down` → `/idle`. Connect/disconnect → `/sessions`, except connections to the notice: being
     told a server is restarting isn't a join, and never keeps a server up.
+- **Visits** (`apps/edge/visits.ts`). Every connection the front door lets in or turns away is a
+  visit, reported to `POST /edge/v1/visits` in halves sharing a `joinId`: `open` once the join is
+  handed to its server, through the waiting room or straight away, or turned away; `close` two
+  minutes after it ends, with what passed each way and whether the player pinged the server again.
+  A server-list ping no join from the same address follows within two minutes is a `look`, at most
+  one per address every 10 minutes and 60 per server address an hour. The control plane puts each
+  join together with the server's own report of it (`app/joins/`). Reports go once a second from a
+  queue of 1,000; what can't be sent in three tries is dropped and counted in the log.
 - MOTD copy and `-auto-scale-down-after` are edge config.
 - Several edge machines can run behind the same IPs. Routes are pulled, so every machine
   converges, and session events carry `edgeId`.
