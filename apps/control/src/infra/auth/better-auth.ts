@@ -85,8 +85,8 @@ const IMPERSONATION_SECONDS = HOUR_S
 /**
  * How long a sign-in with a provider may take: Better Auth keeps its state ten minutes
  * (`generateState` in better-auth/dist/oauth2/state.mjs, which exports no constant for it), but
- * the browser's half of it, the `state` cookie, only five. Someone new to Google, signing in to it
- * and agreeing to share their name, can take longer than that, and came back refused.
+ * the browser's half of it, the `state` cookie, only five. A trip to the provider that takes longer
+ * comes back without the cookie and is refused.
  */
 const SIGN_IN_STATE_SECONDS = 10 * MINUTE_S
 
