@@ -108,9 +108,9 @@ export class RuntimeSpecs {
   readonly #secrets: SecretKeyring
   readonly #links: ArtifactLinks
   /**
-   * Cubepals' resource pack, which the site serves, and which a server offers only when it runs one
-   * of Cubepals' own games and Cubepals runs it itself (marked official): its look is Cubepals'
-   * alone, so a player's server made from the same template never looks like an official one.
+   * Cubepals' resource pack, which the site serves. A server that runs one of Cubepals' own games
+   * and that Cubepals runs itself (marked official) once offered it as players joined, and is now
+   * started with it cleared (`runtime-spec.ts`, `brandPackEnv`).
    */
   readonly brandPack: BuiltPack
 

@@ -6,12 +6,13 @@
  * Cubepals' resource pack: the look of the ways in and out on Cubepals' own games, the Arcade and
  * Duels, as one family. Its files are described here, as JSON and pictures (`brand-art.ts`); the
  * zip is put together and hashed where files are written (`infra/formats/brand-pack-zip.ts`), and
- * offered by the server as it starts (`runtime-spec.ts`).
+ * served by the site. No server offers it as a player joins: the game would hold them out of the
+ * world until they answered whether to take it (`runtime-spec.ts`).
  *
  * The pack changes nothing a player sees anywhere else. Every marker is an oak door item, which
  * the games show as an item, never placed, so the pack retextures only an oak door marked with one
  * of its own names (`custom_model_data`), and any other oak door draws as vanilla's. The pack is
- * never required: a player who turns it down sees a plain oak door where a marker is, still a way
+ * never required: a player without it sees a plain oak door where a marker is, still a way
  * through, and every label's words are the same.
  */
 import { exactly, type Facing, YAW } from './arcade/datapack.ts'
@@ -63,15 +64,6 @@ export function showMarker(shown: ShownMarker, tags: readonly string[]): string 
  * read, and as `pack_format` and `supported_formats`, which those before do.
  */
 export const RESOURCE_FORMATS = { min: 46, max: 1000 } as const
-
-/** What the game's screen asks each player as they join, under its own words: whether to take it. */
-export const PROMPT = 'Cubepals’ own look for doors and markers. Without it, everything works just the same.'
-
-/**
- * The pack's id, the same for every server that offers it, so a player's game keeps one copy for
- * the Arcade and Duels both.
- */
-export const PACK_ID = '834b276d-e113-41cd-934d-e06766c308a7'
 
 export type PackFile = { path: string; json: unknown } | { path: string; picture: Picture }
 

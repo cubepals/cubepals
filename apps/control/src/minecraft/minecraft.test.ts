@@ -5,7 +5,6 @@
 import { describe, expect, test } from 'bun:test'
 import { accessCommand, parseAccessFiles } from './access.ts'
 import { ARCADE_FILES } from './arcade.ts'
-import { PACK_ID, PROMPT } from './brand-pack.ts'
 import { announce, normalizeUuid, parseOnlinePlayers, refusedCommand } from './console.ts'
 import { WAITING_FILES } from './duels-waiting.ts'
 import { installCheck, installProblems, parseInstalled } from './install-check.ts'
@@ -132,17 +131,16 @@ describe('the server list message in a runtime spec', () => {
 })
 
 describe("Cubepals' resource pack in a runtime spec", () => {
-  test("Cubepals' own games offer its resource pack in Cubepals' words, never requiring it; other servers don't", () => {
+  test("Cubepals' own games offer no resource pack as a player joins, and clear the one they offered; other servers set nothing", () => {
     const brandPack = { url: 'https://cubepals.test/api/public/pack/ab12.zip', sha1: 'ab12' }
     for (const files of [ARCADE_FILES, WAITING_FILES]) {
       const env = toRuntimeSpec({ ...input, revision: { ...revision, files: [...files] }, brandPack }).env
-      expect(env.RESOURCE_PACK).toBe(brandPack.url)
-      expect(env.RESOURCE_PACK_SHA1).toBe('ab12')
+      // Written empty, not left out: the image keeps a setting it is no longer given.
+      expect(env.RESOURCE_PACK).toBe('')
+      expect(env.RESOURCE_PACK_SHA1).toBe('')
+      expect(env.RESOURCE_PACK_ID).toBe('')
+      expect(env.RESOURCE_PACK_PROMPT).toBe('')
       expect(env.RESOURCE_PACK_ENFORCE).toBe('FALSE')
-      expect(env.RESOURCE_PACK_ID).toBe(PACK_ID)
-      // The game reads the prompt as JSON; written in ASCII, it reads the same however it is decoded.
-      expect(env.RESOURCE_PACK_PROMPT).toMatch(/^[\x20-\x7e]+$/)
-      expect(JSON.parse(env.RESOURCE_PACK_PROMPT ?? '')).toBe(PROMPT)
     }
     expect(toRuntimeSpec({ ...input, revision, brandPack }).env.RESOURCE_PACK).toBeUndefined()
     const arcade = { ...revision, files: [...ARCADE_FILES] }

@@ -14,7 +14,6 @@ import {
 import { type MemoryTier, memoryMb } from '../domain/server/size.ts'
 import type { World } from '../domain/world/world.ts'
 import { ARCADE_DATAPACK } from './arcade.ts'
-import { PACK_ID, PROMPT } from './brand-pack.ts'
 import { CARRIED_STEP, carriedEnv, placesFiles } from './carried.ts'
 import { DATAPACKS_STEP, datapacksEnv, datapacksOf } from './datapacks.ts'
 import { WAITING_DATAPACK } from './duels-waiting.ts'
@@ -55,7 +54,8 @@ export interface RuntimeSpecInput {
   iconUrl: string | null
   /**
    * Where players' games download Cubepals' resource pack, and its SHA-1; null where none is served,
-   * and on any server Cubepals doesn't run itself.
+   * and on any server Cubepals doesn't run itself. Set, it clears the pack such a server once
+   * offered as players joined (`brandPackEnv`).
    */
   brandPack: { url: string; sha1: string } | null
   /**
@@ -219,21 +219,20 @@ function settingsEnv(settings: ServerSettings): Record<string, string> {
 const OWN_GAMES = [ARCADE_DATAPACK, WAITING_DATAPACK]
 
 /**
- * Cubepals' resource pack, on a server running one of Cubepals' own games: offered as a player
- * joins, in Cubepals' words, never required (`brand-pack.ts`). The game reads the prompt as JSON,
- * kept to ASCII with JSON's own escapes, so it reads the same however the properties are decoded.
+ * No resource pack, on a server Cubepals runs of one of its own games. A pack in
+ * `server.properties` is offered while the player joins, and the game holds them out of the world
+ * until they answer its prompt, however long that takes. These servers offered Cubepals' pack
+ * there once, so the settings are written empty, which clears it from a world that still has it:
+ * the image keeps a setting it is no longer given.
  */
 function brandPackEnv(input: Pick<RuntimeSpecInput, 'revision' | 'brandPack'>): Record<string, string> {
   const ours = input.revision.files.some((file) => OWN_GAMES.some((pack) => file.path.startsWith(`${pack}/`)))
   if (input.brandPack === null || !ours) return {}
   return {
-    RESOURCE_PACK: input.brandPack.url,
-    RESOURCE_PACK_SHA1: input.brandPack.sha1,
-    RESOURCE_PACK_ID: PACK_ID,
-    RESOURCE_PACK_PROMPT: JSON.stringify(PROMPT).replace(
-      /[^\x20-\x7e]/g,
-      (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
-    ),
+    RESOURCE_PACK: '',
+    RESOURCE_PACK_SHA1: '',
+    RESOURCE_PACK_ID: '',
+    RESOURCE_PACK_PROMPT: '',
     RESOURCE_PACK_ENFORCE: 'FALSE',
   }
 }

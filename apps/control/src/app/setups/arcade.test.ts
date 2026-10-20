@@ -7,7 +7,7 @@
  * chat filter and the Grim anticheat, and Cubepals' Via plugins beside them, never among them; offered
  * with Plus; and a server of it starting on the Arcade's world, fetched through its own link,
  * with the games' datapack and the moderation files, the datapack following the server onto a fresh world,
- * and Cubepals' resource pack offered only where Cubepals runs it itself.
+ * and no resource pack offered as a player joins, the one Cubepals' own Arcade offered cleared.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -247,7 +247,7 @@ describe.skipIf(!hasDatabase)("Cubepals' resource pack on an Arcade", () => {
   beforeAll(begin, 30_000)
   afterAll(end)
 
-  test("only a server Cubepals runs itself offers Cubepals' resource pack; a player's Arcade never does", async () => {
+  test('no Arcade offers a resource pack as a player joins; one Cubepals runs itself clears the pack it offered', async () => {
     const admin: Actor = { kind: 'admin', userId: (await h.user('Admin')).userId }
     await h.db.insert(schema.platformAdmins).values({ userId: admin.userId, grantedBy: 'test' })
     const owner = await h.user('Noor', 'plus')
@@ -263,10 +263,10 @@ describe.skipIf(!hasDatabase)("Cubepals' resource pack on an Arcade", () => {
     )
     expect((await env()).RESOURCE_PACK).toBeUndefined()
     expect((await env()).RESOURCE_PACK_SHA1).toBeUndefined()
-    // Marked official, as `ops.ts official on` marks it: the pack, by its link and hash.
+    // Marked official, as `ops.ts official on` marks it: the pack it offered once, cleared.
     await h.app.listings.markOfficial(admin, server.id, true, 'Cubepals runs it')
-    expect((await env()).RESOURCE_PACK).toBe(h.app.specs.brandPack.url)
-    expect((await env()).RESOURCE_PACK_SHA1).toBe(h.app.specs.brandPack.sha1)
+    expect((await env()).RESOURCE_PACK).toBe('')
+    expect((await env()).RESOURCE_PACK_SHA1).toBe('')
     await h.app.listings.markOfficial(admin, server.id, false, 'Not ours any more')
     expect((await env()).RESOURCE_PACK).toBeUndefined()
   }, 30_000)

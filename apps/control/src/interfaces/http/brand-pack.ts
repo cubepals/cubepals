@@ -7,7 +7,7 @@ import { Hono } from 'hono'
 import { type BuiltPack, brandPackPath } from '../../app/artifacts/brand-pack.ts'
 
 /**
- * Cubepals' resource pack, which a player's game downloads as it joins one of Cubepals' own games
+ * Cubepals' resource pack, served for players' games to download
  * (`app/artifacts/brand-pack.ts`). Its link names its SHA-1, so a game may keep it for as long as
  * it likes.
  */
