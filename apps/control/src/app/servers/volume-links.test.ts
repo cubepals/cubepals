@@ -61,7 +61,6 @@ const input = {
   artifactUrl: () => 'http://127.0.0.1:1/x.jar',
   limits: { playerIdleKickMinutes: null, worldRadius: null, storageGb: 5 },
   iconUrl: null,
-  brandPack: null,
   compat: [],
 }
 

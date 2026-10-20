@@ -108,9 +108,8 @@ export class RuntimeSpecs {
   readonly #secrets: SecretKeyring
   readonly #links: ArtifactLinks
   /**
-   * Cubepals' resource pack, which the site serves. A server that runs one of Cubepals' own games
-   * and that Cubepals runs itself (marked official) once offered it as players joined, and is now
-   * started with it cleared (`runtime-spec.ts`, `brandPackEnv`).
+   * Cubepals' resource pack, which the site serves. No server offers it as a player joins
+   * (`runtime-spec.ts`, `brandPackEnv`).
    */
   readonly brandPack: BuiltPack
 
@@ -177,7 +176,6 @@ export class RuntimeSpecs {
         server.ownIcon === null
           ? this.#links.icon(server.icon ?? BLOCKLY_ICON)
           : this.#links.ownIcon(server.id, server.ownIcon),
-      brandPack: official ? this.brandPack : null,
     }
     const label = (spec: RuntimeSpec) => ({
       ...spec,

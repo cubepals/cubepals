@@ -93,7 +93,6 @@ const input = {
   artifactUrl: () => 'https://example.test/a.jar',
   limits: { playerIdleKickMinutes: null, worldRadius: null, storageGb: 5 },
   iconUrl: null,
-  brandPack: null,
 }
 const revision = {
   id: 'r',
@@ -131,10 +130,9 @@ describe('the server list message in a runtime spec', () => {
 })
 
 describe("Cubepals' resource pack in a runtime spec", () => {
-  test("Cubepals' own games offer no resource pack as a player joins, and clear the one they offered; other servers set nothing", () => {
-    const brandPack = { url: 'https://cubepals.test/api/public/pack/ab12.zip', sha1: 'ab12' }
+  test("every server of Cubepals' own games offers no resource pack as a player joins, and clears one it offered; other servers set nothing", () => {
     for (const files of [ARCADE_FILES, WAITING_FILES]) {
-      const env = toRuntimeSpec({ ...input, revision: { ...revision, files: [...files] }, brandPack }).env
+      const env = toRuntimeSpec({ ...input, revision: { ...revision, files: [...files] } }).env
       // Written empty, not left out: the image keeps a setting it is no longer given.
       expect(env.RESOURCE_PACK).toBe('')
       expect(env.RESOURCE_PACK_SHA1).toBe('')
@@ -142,9 +140,7 @@ describe("Cubepals' resource pack in a runtime spec", () => {
       expect(env.RESOURCE_PACK_PROMPT).toBe('')
       expect(env.RESOURCE_PACK_ENFORCE).toBe('FALSE')
     }
-    expect(toRuntimeSpec({ ...input, revision, brandPack }).env.RESOURCE_PACK).toBeUndefined()
-    const arcade = { ...revision, files: [...ARCADE_FILES] }
-    expect(toRuntimeSpec({ ...input, revision: arcade }).env.RESOURCE_PACK).toBeUndefined()
+    expect(toRuntimeSpec({ ...input, revision }).env.RESOURCE_PACK).toBeUndefined()
   })
 })
 

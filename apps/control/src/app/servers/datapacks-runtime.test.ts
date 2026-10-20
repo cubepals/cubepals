@@ -80,7 +80,6 @@ const input = {
     `https://control.test/a/${encodeURIComponent(artifact.fileName)}`,
   limits: { playerIdleKickMinutes: null, worldRadius: null, storageGb: 5 },
   iconUrl: null,
-  brandPack: null,
 }
 const revision: ServerRevision = {
   id: 'r',

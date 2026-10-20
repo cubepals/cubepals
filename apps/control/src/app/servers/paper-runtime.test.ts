@@ -35,7 +35,6 @@ const input = {
   artifactUrl: () => 'https://example.test/a.jar',
   limits: { playerIdleKickMinutes: null, worldRadius: null, storageGb: 5 },
   iconUrl: null,
-  brandPack: null,
 }
 const revision: ServerRevision = {
   id: 'r',

@@ -49,7 +49,6 @@ const input = {
   artifactUrl: () => 'http://x/x.jar',
   limits: { playerIdleKickMinutes: null, worldRadius: null, storageGb: 5 },
   iconUrl: 'http://x/icon.png',
-  brandPack: null,
 }
 
 const drift = (spec: ReturnType<typeof toRuntimeSpec>) => specDigest(withoutPlanLimits(spec))

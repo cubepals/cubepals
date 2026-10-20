@@ -86,7 +86,6 @@ const plainOf = (count: number) =>
     artifactUrl: links.forServer(SERVER),
     limits: { playerIdleKickMinutes: null, worldRadius: null, storageGb: 20 },
     iconUrl: null,
-    brandPack: null,
   })
 
 /** The spec as a start is given it. */
