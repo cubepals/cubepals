@@ -239,7 +239,7 @@ describe.skipIf(ROUTER_BIN === '')('the agent’s visits', () => {
     expect(close?.bytesUp).toBeGreaterThan(0)
   }, 20_000)
 
-  test('a ping, then a join; a ping after leaving; and a ping alone, a look', async () => {
+  test('a ping, then a join; one after leaving; one alone, a look; one at a name nobody has, nothing', async () => {
     await pinged(front, 'direct.play.test')
     await joins('direct.play.test', 'VisitorPinged')
     await pinged(front, 'direct.play.test')
@@ -254,7 +254,6 @@ describe.skipIf(ROUTER_BIN === '')('the agent’s visits', () => {
     )
       await Bun.sleep(100)
     expect(reports.filter((r) => r.phase === 'look' && r.address === 'looked.play.test')).toHaveLength(1)
-    // A name no server has is pinged for nothing: no look, and nothing kept.
     await pinged(front, 'nobody-here.play.test')
     await Bun.sleep(1_500)
     expect(reports.filter((r) => r.address === 'nobody-here.play.test')).toEqual([])
