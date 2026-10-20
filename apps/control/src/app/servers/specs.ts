@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto'
 import { BLOCKLY_ICON } from '@blockly/contracts'
 import type { Queryable } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import type { CarriedFile } from '../../domain/revision/carried.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
@@ -18,6 +19,7 @@ import {
   installOf,
   PLAN_ENV,
   PROXY_ENV,
+  REPORT_ENV,
   toRuntimeSpec,
   usesProxyProtocol,
   withoutOwnSteps,
@@ -25,6 +27,7 @@ import {
 import { loadStanding } from '../accounts/persistence.ts'
 import type { BuiltPack } from '../artifacts/brand-pack.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
+import { reporterPin } from '../artifacts/reporter.ts'
 import { compatFor, projectsOf } from '../compat/service.ts'
 import { PermanentFailure } from '../errors.ts'
 import { loadListing } from '../listings/persistence.ts'
@@ -32,6 +35,7 @@ import { quarantinedOf } from '../mods/jar-check-records.ts'
 import { loadPackContents } from '../packs/persistence.ts'
 import type { InstallSeed, RuntimeSpec } from '../ports/runtime.ts'
 import { acceptedSecrets, deriveServerSecret, type SecretKeyring } from '../secrets.ts'
+import { tuning } from '../tuning.ts'
 import { tooLongForAStart, withCompressedFiles } from './carried-files.ts'
 import { noOfficialFiles, type OfficialFiles, withCurrentOwnFiles } from './own-files.ts'
 import { grownStorage, loadRevision, loadWorld } from './persistence.ts'
@@ -77,11 +81,11 @@ export function specDigest(spec: RuntimeSpec): string {
 /**
  * The spec as drift sees it: without what the owner's plan sets, the picture they chose, Paper's
  * reading a PROXY protocol header, which a server running from before it was asked takes at its
- * next start, or Blockly's own steps before the image starts (`withoutOwnSteps`), whose text can
+ * next start, where its join reporter reports, or Blockly's own steps before the image starts (`withoutOwnSteps`), whose text can
  * change without changing what a server runs.
  */
 export function withoutPlanLimits(spec: RuntimeSpec): RuntimeSpec {
-  const ignored = [...PLAN_ENV, ...IDENTITY_ENV, PROXY_ENV]
+  const ignored = [...PLAN_ENV, ...IDENTITY_ENV, PROXY_ENV, REPORT_ENV]
   const { entrypoint: _entrypoint, ...rest } = spec
   const entrypoint = withoutOwnSteps(spec.entrypoint)
   return {
@@ -182,15 +186,18 @@ export class RuntimeSpecs {
       labels: { ...spec.labels, [SECRETS_VERSION_LABEL]: String(current.version) },
     })
     const placed = await compatFor(q, revision)
+    // The join reporter too, where JOIN_REPORTER places it, with where it reports.
+    const reporter = await reporterFor(q, revision, official)
+    const report: Record<string, string> =
+      reporter.length === 0 ? {} : { [REPORT_ENV]: this.#links.joinsReport(server.id) }
     // A start places the files Cubepals owns as they are now (`own-files.ts`); like the Via
     // plugins, they never arrive through drift.
     const starting = withCurrentOwnFiles(revision, official ? this.#official.forStart(server) : [])
     // Its carried files compressed, and any long list, so that no variable comes near Linux's limit
     // (`carried-files.ts`). One still past it is refused here, before a machine fails on it, in
     // words its owner reads, and not tried again: trying again changes nothing.
-    const labelled = label(
-      withCompressedFiles(toRuntimeSpec({ ...input, revision: starting, compat: placed })),
-    )
+    const built = toRuntimeSpec({ ...input, revision: starting, compat: [...placed, ...reporter] })
+    const labelled = label(withCompressedFiles({ ...built, env: { ...built.env, ...report } }))
     const refused = tooLongForAStart(labelled)
     if (refused !== null) throw new PermanentFailure(refused)
     // The Via plugins arrive at a start, never through drift: a running server isn't restarted
@@ -274,4 +281,18 @@ async function withWhatItsPackLearned(q: Queryable, revision: ServerRevision): P
       ...(forceInclude.length === 0 ? {} : { forceInclude }),
     },
   }
+}
+
+/**
+ * The join reporter, on a Paper server playing no modpack, where `JOIN_REPORTER` places it: on
+ * every such server, or on official ones only. Like the Via plugins it arrives at a full boot, but
+ * unlike them a sleeping server never boots for it: it gets it at its next boot, and a wake from
+ * memory stays one (`resumesOn` leaves it out).
+ */
+async function reporterFor(q: Queryable, revision: ServerRevision, official: boolean): Promise<PinnedMod[]> {
+  const placing = tuning().joinReporter ?? 'off'
+  if (revision.loader !== 'paper' || revision.modpack !== null) return []
+  if (placing === 'off' || (placing === 'official' && !official)) return []
+  const pin = await reporterPin(q)
+  return pin === null ? [] : [pin]
 }

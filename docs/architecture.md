@@ -1861,6 +1861,18 @@ directory.
   - A mirror makes it guaranteed.
   - Installed jars also live on the volume and in every snapshot.
 
+**A second inbound route: joins.** Game runtimes reach the control plane one more way: a Paper
+server's join reporter (`apps/reporter`), which Cubepals places beside its plugins where
+`JOIN_REPORTER` says, posts its players' steps of joining to
+`POST /runtime/v1/servers/{serverId}/joins?t={token}`, with the same token as its jar links
+(`ArtifactService.authorize`). A request holds at most 200 events, and a server's are limited in
+size and rate (`ABUSE_LIMITS`); past them a post is refused, and the plugin drops it. The jar is built
+into the control plane's image, stored by its SHA-512 as the control plane starts
+(`app/artifacts/reporter.ts`), never collected as unused, and placed at a full boot only: it is
+left out of drift and of what a sleeping server compares as it wakes, so it never turns a wake
+from memory into a boot. The control plane puts each server's events together with the edge's
+visits into one row per join (`app/joins/`).
+
 **A second catalog: Hangar.** Some Paper plugins are published on Hangar (hangar.papermc.io),
 PaperMC's catalog, and not on Modrinth: OldCombatMechanics and VaultUnlocked among them.
 - `HangarCatalog` (`infra/hangar/`) answers the same port from Hangar's public `/api/v1`, on a

@@ -28,6 +28,7 @@ import {
   storedArtifact,
   unreferencedStored,
 } from './persistence.ts'
+import { reporterJar, reporterPin, storeReporter } from './reporter.ts'
 
 export type UnavailableReason = 'no_archive_store' | 'not_stored' | 'revoked'
 
@@ -112,6 +113,10 @@ export class ArtifactService {
     this.#mirror = deps.mirror
     this.#jobs = deps.jobs
     this.#locks = deps.locks
+    // The join reporter this build carries, kept where servers fetch it from, as it starts.
+    void storeReporter(this.#db, this.#archive).catch((error: unknown) =>
+      console.error('artifacts: the join reporter could not be stored', error),
+    )
   }
 
   /**
@@ -147,7 +152,10 @@ export class ArtifactService {
       if (cleared) uploads++
     }
     let blobs = 0
+    // No revision pins the join reporter: it is placed at each start (`reporter.ts`).
+    const reporter = (await reporterJar())?.sha512
     for (const blob of await unreferencedStored(this.#db, new Date(now.getTime() - GC_GRACE_MS))) {
+      if (blob.sha512 === reporter) continue
       if (!(await this.#db.transaction((tx) => forgetStored(tx, blob.sha512)))) continue
       await store.delete(blob.key)
       blobs++
@@ -231,9 +239,21 @@ export class ArtifactService {
     }
   }
 
-  /** A Via plugin of Cubepals' compatibility layer, or else the archive a world starts on. */
+  /**
+   * A Via plugin of Cubepals' compatibility layer, the join reporter, or else the archive a world
+   * starts on.
+   */
   async #compat(serverId: string, sha512: string): Promise<LocatedArtifact> {
     const via = await compatPinned(this.#db, sha512)
+    const reporter = via === null ? await reporterPin(this.#db) : null
+    // Its name on disk changes with its bytes, so a copy a server has is never older than it.
+    if (reporter?.artifact.sha512 === sha512)
+      return {
+        artifact: reporter.artifact,
+        pinned: reporter,
+        name: diskName(reporter.artifact),
+        lastModified: new Date(0),
+      }
     if (via === null) return this.#starter(serverId, sha512)
     return {
       artifact: via.mod.artifact,

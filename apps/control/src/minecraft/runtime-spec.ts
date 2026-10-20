@@ -91,6 +91,13 @@ export const IDENTITY_ENV: readonly string[] = ['ICON', 'OVERRIDE_ICON', 'MOTD']
 export const PROXY_ENV = 'USES_PROXY_PROTOCOL'
 
 /**
+ * Where the join reporter Cubepals places on a Paper server posts its players' joins
+ * (`app/artifacts/reporter.ts`). Left out of what drift compares: it arrives at a start, never by
+ * restarting a server that runs.
+ */
+export const REPORT_ENV = 'CUBEPALS_REPORT_URL'
+
+/**
  * Whether a server of `revision` reads a PROXY protocol header before each connection: Paper does,
  * so it sees each player's own address rather than the edge's. Minecraft itself and the mod
  * loaders have no such setting, and a header sent to them breaks the connection.

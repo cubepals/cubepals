@@ -259,6 +259,20 @@ its next start; a running server isn't restarted for it.
 |---|---|---|---|---|---|
 | `OFFICIAL_SERVER_FILES` | unset | unset | secret | secret | Section names are `*`, a server id or a slug; paths are relative, with no `..`; contents are text. Unset, or not that shape, official servers start with the public defaults and an admin alert says so. Production alerts for unset only once a server is flagged |
 
+### Join reporter (optional)
+
+The join reporter is a Paper plugin Cubepals builds (`apps/reporter`) and places beside a server's
+own plugins, so the server tells the control plane its half of each join: when the player logged
+in, finished configuring, came into the world and left. It goes on Paper servers that play no
+modpack, at their next full boot: a running server isn't restarted for it, and a sleeping one
+still wakes from memory and gets it at the boot after. It posts to `/runtime/v1/servers/<id>/joins`
+with the server's own token, as the server's jar links carry. With `CUBEPALS_REPORT_URL` unset the
+plugin does nothing.
+
+| Variable | Local | Staging | Production | Set by | Notes |
+|---|---|---|---|---|---|
+| `JOIN_REPORTER` | `off` | `off` | `off` | config | `off`, `official` (the servers flagged official) or `all`. Needs an archive store, where the jar is kept |
+
 ### Product analytics (optional)
 
 PostHog's EU cloud. Production alone sends anything; staging and local stay off unless someone

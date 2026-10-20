@@ -19,6 +19,9 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.bukkit.Bukkit;
+import org.bukkit.Server;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -27,6 +30,25 @@ import org.junit.jupiter.api.Test;
  */
 class ListenersTest {
     private static final UUID ALEX = UUID.fromString("6ab43178-89fd-4905-8c45-9f2f4ad1c2a5");
+
+    /** Paper's events ask the server which thread they are on as they are made: a stand-in answers. */
+    @BeforeAll
+    static void aServer() throws ReflectiveOperationException {
+        if (Bukkit.getServer() != null) return;
+        // Set as `Bukkit.setServer` would, without the build information only a real server has.
+        var field = Bukkit.class.getDeclaredField("server");
+        field.setAccessible(true);
+        field.set(null, Proxy.newProxyInstance(
+                Server.class.getClassLoader(), new Class<?>[] {Server.class}, (proxy, method, args) -> {
+                    Class<?> returns = method.getReturnType();
+                    if (method.getName().equals("getLogger")) return java.util.logging.Logger.getLogger("test");
+                    if (method.getName().equals("isPrimaryThread")) return true;
+                    if (returns == String.class) return "test";
+                    if (returns == boolean.class) return false;
+                    if (returns == int.class || returns == long.class || returns == double.class) return 0;
+                    return null;
+                }));
+    }
 
     @SuppressWarnings("unchecked")
     private static <T> T standIn(Class<T> type, java.util.Map<String, Object> answers) {

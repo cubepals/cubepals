@@ -4,8 +4,8 @@
 
 /**
  * The deployment's free-link tuning, abuse limits, capacity tuning and economics figures (`domain/account/tuning.ts`),
- * installed once at startup from private configuration and read wherever they are needed. Until
- * installed, as in tests, the defaults apply.
+ * and which servers get the join reporter, installed once at startup from configuration and read
+ * wherever they are needed. Until installed, as in tests, the defaults apply.
  */
 import {
   type AbuseLimits,
@@ -18,12 +18,20 @@ import {
   type FreeLinkTuning,
 } from '../domain/account/tuning.ts'
 
+/**
+ * Which Paper servers get the join reporter at their next full boot (`JOIN_REPORTER`): none, the
+ * official ones, or all of them.
+ */
+type JoinReporter = 'off' | 'official' | 'all'
+
 interface Tuning {
   freeLinks: FreeLinkTuning
   abuse: AbuseLimits
   capacity: CapacityTuning
   /** Null leaves fees and margin out of the economics report. */
   economics: EconomicsTuning | null
+  /** Optional, so a caller from before it installs none: no server gets the reporter. */
+  joinReporter?: JoinReporter
 }
 
 let installed: Tuning = {

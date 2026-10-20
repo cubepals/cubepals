@@ -366,6 +366,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
     capacityTuning: privateJson(env, 'CAPACITY_TUNING', DEFAULT_CAPACITY_TUNING),
     economicsTuning: economicsJson(env),
     officialServerFiles: officialFilesJson(env),
+    joinReporter: env.JOIN_REPORTER,
     room: roomFrom(env),
   }
 }

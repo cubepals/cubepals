@@ -13,6 +13,15 @@
 # moves this line and the copies of the release's files beside the fleet adapter together.
 FROM ghcr.io/cubepals/blocklyd:0.3.3@sha256:cecec09a52ec48cda3a5053bc896de3e77f355801bb1c47135dbdd500dd283fd AS blocklyd
 
+# The join reporter, the Paper plugin Cubepals places on servers (apps/reporter): built here from
+# its sources with the Gradle its wrapper names, and stored as an artifact as the control plane
+# starts. Its tests run in CI's own job.
+FROM mirror.gcr.io/library/gradle:8.14.3-jdk21@sha256:21bd311ed01360c189b8870c6b6e988199ff10f72d445d02fb39d3cff9da91d7 AS reporter
+WORKDIR /build
+COPY apps/reporter/settings.gradle.kts apps/reporter/build.gradle.kts ./
+COPY apps/reporter/src src
+RUN gradle jar --no-daemon --console=plain
+
 FROM mirror.gcr.io/library/node:22.23.2-trixie-slim@sha256:c5849ff9c9ebcd66615412f0b548ca5b8ecaef84003dc9ac2e077ebe46aaa3f6 AS deps
 COPY --from=mirror.gcr.io/oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
@@ -43,6 +52,7 @@ COPY apps/control/package.json apps/control/
 COPY apps/control/src apps/control/src
 # The server icons game runtimes download as they start: without them every server fails to boot.
 COPY apps/control/assets apps/control/assets
+COPY --from=reporter /build/build/libs/cubepals-reporter.jar apps/control/assets/reporter/cubepals-reporter.jar
 # Cubepals' lockup, which every shared link's picture carries (src/interfaces/http/card.ts).
 COPY brand/png/lockup-horizontal.png brand/png/lockup-horizontal.png
 # What the node endpoint serves joining hosts: join.sh and daemon.json are in src/infra/fleet, and

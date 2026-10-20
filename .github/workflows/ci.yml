@@ -22,6 +22,7 @@ jobs:
       pull-requests: read
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      reporter: ${{ steps.filter.outputs.reporter }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -40,6 +41,9 @@ jobs:
               - '!.github/CODEOWNERS'
               - '!.github/pull_request_template.md'
               - '!.github/dependabot.yml'
+            reporter:
+              - 'apps/reporter/**'
+              - '.github/workflows/ci.yml'
 
   static:
     name: Lint, types and structure
@@ -183,6 +187,25 @@ jobs:
           fi
           echo "$out"
           grep -q 'CONTROL_URL is required' <<<"$out"
+
+  # The reporter plugin Cubepals places on Paper servers (apps/reporter): Java, with Gradle's own
+  # wrapper. Built with JDK 21 for Java 17, the oldest Paper Cubepals offers runs on.
+  reporter:
+    name: Reporter plugin builds and passes its tests
+    needs: changes
+    if: needs.changes.outputs.reporter == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build and test
+        working-directory: apps/reporter
+        run: ./gradlew build --no-daemon --console=plain
 
   # The suite spends most of its time waiting on the job queue's half-second poll, test after test,
   # so it is split across machines: every fourth file to each, each with its own services.
@@ -336,7 +359,7 @@ jobs:
 
   # The one check branch protection requires. It passes when every part passed or was skipped.
   check:
-    needs: [changes, licenses, static, test, worker, images]
+    needs: [changes, licenses, static, test, worker, images, reporter]
     if: always()
     runs-on: ubuntu-latest
     steps:

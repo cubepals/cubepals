@@ -155,3 +155,10 @@ path = ["apps/control/assets/duels-lobby/cramped.nbt"]
 precedence = "closest"
 SPDX-FileCopyrightText = ["PROP11TH (NetherGames)", "2026 The Cubepals Authors"]
 SPDX-License-Identifier = "CC-BY-4.0"
+
+# Gradle's wrapper, as `gradle wrapper` writes it for the join reporter's build.
+[[annotations]]
+path = ["apps/reporter/gradlew", "apps/reporter/gradlew.bat", "apps/reporter/gradle/wrapper/**"]
+precedence = "override"
+SPDX-FileCopyrightText = "2015 the original authors"
+SPDX-License-Identifier = "Apache-2.0"

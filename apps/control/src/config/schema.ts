@@ -443,6 +443,8 @@ export const DeploymentConfig = z.object({
   /** Unset in production leaves the economics report without a margin; elsewhere unset is the defaults. */
   economicsTuning: EconomicsTuning.nullable(),
   officialServerFiles: OfficialServerFiles,
+  /** Which Paper servers get the join reporter at their next full boot (`app/artifacts/reporter.ts`). */
+  joinReporter: z.enum(['off', 'official', 'all']).default('off'),
   /**
    * Room for new servers (`app/platform/room.ts`): the running places and servers new creates
    * leave for starts and wakes, and how long the oldest create may have waited for a worker

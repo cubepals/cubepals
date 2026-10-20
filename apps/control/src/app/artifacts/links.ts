@@ -37,6 +37,12 @@ export class ArtifactLinks {
     return `${this.#base}/runtime/v1/icons/${serverId}/${sha256}.png?t=${token}`
   }
 
+  /** Where the server's join reporter posts its players' joins, with its own token as its jars have. */
+  joinsReport(serverId: string): string {
+    const token = deriveServerSecret(this.#secrets.current.key, serverId, 'artifacts')
+    return `${this.#base}/runtime/v1/servers/${serverId}/joins?t=${token}`
+  }
+
   /** Links signed with the current key; links from earlier keys still work during a rotation. */
   forServer(serverId: string): (artifact: ModArtifact) => string {
     const token = deriveServerSecret(this.#secrets.current.key, serverId, 'artifacts')

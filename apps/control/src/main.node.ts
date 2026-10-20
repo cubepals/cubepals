@@ -653,8 +653,8 @@ async function connect(config: DeploymentConfig) {
 
 async function main(): Promise<void> {
   const config = loadConfig()
-  const { freeLinkTuning: freeLinks, abuseLimits: abuse, capacityTuning: capacity } = config
-  installTuning({ freeLinks, abuse, capacity, economics: config.economicsTuning })
+  const { freeLinkTuning: freeLinks, abuseLimits: abuse, capacityTuning: capacity, joinReporter } = config
+  installTuning({ freeLinks, abuse, capacity, economics: config.economicsTuning, joinReporter })
   for (const note of config.local?.notes ?? []) console.warn(`local: ${note}`)
   const { pool, db, events, boss, ports } = await connect(config)
   const profiles = new MojangProfiles()
