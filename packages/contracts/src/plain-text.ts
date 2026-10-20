@@ -9,11 +9,18 @@
  * name that is valid without them stays exactly as typed.
  */
 
-/** Control characters and the line and paragraph separators, with the spaces around them. */
-const BREAKS = /\s*[\p{Cc}\p{Zl}\p{Zp}]+\s*/gu
+/** A run of spaces and control characters, read once from end to end. */
+const SPACES = /[\s\p{Cc}]+/gu
 
-/** Text on one line: each run of control characters, line breaks among them, becomes one space. */
-export const oneLine = (text: string): string => text.replace(BREAKS, ' ')
+/** Control characters and the line and paragraph separators. */
+const BREAK = /[\p{Cc}\p{Zl}\p{Zp}]/u
+
+/**
+ * Text on one line: each run of spaces holding a control character, a line break among them,
+ * becomes one space; the spaces between words stay as typed.
+ */
+export const oneLine = (text: string): string =>
+  text.replace(SPACES, (run) => (BREAK.test(run) ? ' ' : run))
 
 /** Every control character but the line break, which a description keeps between its lines. */
 const INVISIBLE = /(?!\n)\p{Cc}/gu
