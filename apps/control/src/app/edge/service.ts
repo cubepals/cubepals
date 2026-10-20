@@ -21,7 +21,13 @@ import { outOf, playToday } from '../accounts/play-today.ts'
 import { playTotal, trialOver } from '../accounts/play-total.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
 import { AppError, type AppErrorCode } from '../errors.ts'
-import { failedWaking, loadOperation, openOfKinds, wakeStarts } from '../operations/persistence.ts'
+import {
+  databaseNow,
+  failedWaking,
+  loadOperation,
+  openOfKinds,
+  wakeStarts,
+} from '../operations/persistence.ts'
 import type { IdleDecision, Schedules } from '../operations/schedules.ts'
 import type { ChangeSignal } from '../ports/changes.ts'
 import type { EventBus } from '../ports/events.ts'
@@ -343,7 +349,8 @@ export class EdgeService {
       const deleted = slug !== null && (await heldByDeleted(this.#db, slug))
       return { outcome: 'denied', reason: deleted ? 'deleted' : 'unknown' }
     }
-    const began = new Date()
+    // By the database's clock, which writes the starts this wake may ask for: this one may differ.
+    const began = await databaseNow(this.#db)
     const result = await this.#woken(server, left, retries, name)
     if (result.outcome !== 'ready' && result.outcome !== 'starting') return result
     const [start] = await wakeStarts(this.#db, server.id, began)

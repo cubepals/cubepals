@@ -109,6 +109,11 @@ describe.skipIf(!hasDatabase)('the halves of a join', () => {
     expect(orphan).toHaveLength(1)
     expect(orphan[0]?.detail).toEqual({ edge: 'missing' })
     expect(orphan[0]?.address).toBe(address)
+    // A signal raised on the server's row before the edge's half came.
+    const key = `slow_join:${orphan[0]?.id}:login`
+    await h.db
+      .insert(schema.signals)
+      .values({ kind: 'slow_join', key, at: new Date(), joinId: orphan[0]?.id })
 
     const id = randomUUID()
     await h.app.joins.recordVisits([
@@ -123,6 +128,8 @@ describe.skipIf(!hasDatabase)('the halves of a join', () => {
     expect(joined.detail).toEqual({})
     expect(joined.connectedAt.toISOString()).toBe(at(599_800))
     expect(joined.loginAt?.toISOString()).toBe(at(600_000))
+    const [signal] = await h.db.select().from(schema.signals).where(eq(schema.signals.key, key))
+    expect(signal?.joinId).toBe(id)
     expect((await h.db.select().from(schema.joins)).length).toBe(before.length + 1)
   })
 
