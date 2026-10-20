@@ -195,6 +195,8 @@ const AbuseLimits = z
       inviteJoinsPerHour: Count.default(DEFAULT_ABUSE_LIMITS.inviteJoinsPerHour),
       pingWakeHoldHours: Count.default(DEFAULT_ABUSE_LIMITS.pingWakeHoldHours),
       knownAddressDays: Count.default(DEFAULT_ABUSE_LIMITS.knownAddressDays),
+      joinReportsPerSecond: Count.default(DEFAULT_ABUSE_LIMITS.joinReportsPerSecond),
+      joinReportBytes: Count.default(DEFAULT_ABUSE_LIMITS.joinReportBytes),
     },
     { error: 'ABUSE_LIMITS is the deployment’s abuse limits, as JSON (docs/configuration.md)' },
   )

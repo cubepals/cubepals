@@ -339,9 +339,16 @@ export async function openOfKinds(
   return rows.map(toRecord)
 }
 
+/** The database's clock now, which operations' `created_at` is written by. */
+export async function databaseNow(q: Queryable): Promise<Date> {
+  const { rows } = await q.execute<{ now: Date | string }>(sql`select clock_timestamp() as now`)
+  return new Date(rows[0]?.now ?? Date.now())
+}
+
 /**
- * The starts a wake that began at `since` asked for or found under way, newest first: those still
- * open, and those made since. A join's record names it, so its steps can be read beside the join.
+ * The starts a wake that began at `since`, by the database's clock (`databaseNow`), asked for or
+ * found under way, newest first: those still open, and those made since. A join's record names it,
+ * so its steps can be read beside the join.
  */
 export async function wakeStarts(q: Queryable, serverId: string, since: Date): Promise<OperationRecord[]> {
   const rows = await q

@@ -5,6 +5,7 @@
 import { z } from 'zod'
 import type { Availability } from './errors.ts'
 import { NAME_MAX_LENGTH, SEED_MAX_LENGTH } from './limits.ts'
+import { oneLine } from './plain-text.ts'
 import { type Loader, ServerId } from './server.ts'
 
 const change = { serverId: ServerId, requestId: z.uuid() }
@@ -59,7 +60,7 @@ export const ArchiveBackupInput = z.object({ ...change, backupId: z.uuid() })
 /** A world download to bring back, before it is sent. */
 export const BeginWorldUploadInput = z.object({
   serverId: ServerId,
-  fileName: z.string().trim().min(1).max(255),
+  fileName: z.string().overwrite(oneLine).trim().min(1).max(255),
   sizeBytes: z.number().int().positive(),
 })
 export const FinishWorldUploadInput = z.object({
@@ -67,7 +68,7 @@ export const FinishWorldUploadInput = z.object({
   /** From `beginUpload`. */
   ticket: z.uuid(),
   /** What to call the world, if the server has never had it. */
-  name: z.string().trim().max(NAME_MAX_LENGTH).optional(),
+  name: z.string().overwrite(oneLine).trim().max(NAME_MAX_LENGTH).optional(),
 })
 export const RestoreBackupInput = z.object({
   ...change,
@@ -122,8 +123,8 @@ export interface WorldView {
 
 export const CreateWorldInput = z.object({
   ...change,
-  name: z.string().trim().min(1).max(NAME_MAX_LENGTH),
-  seed: z.string().trim().max(SEED_MAX_LENGTH).optional(),
+  name: z.string().overwrite(oneLine).trim().min(1).max(NAME_MAX_LENGTH),
+  seed: z.string().overwrite(oneLine).trim().max(SEED_MAX_LENGTH).optional(),
   levelType: z.enum(LEVEL_TYPES),
   hardcore: z.boolean(),
 })

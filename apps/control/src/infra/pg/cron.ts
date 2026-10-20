@@ -48,8 +48,8 @@ export const CRON: Record<ScheduledJob | WorkerHeartbeat, string> = {
   'free-play-links': '*/5 * * * *',
   // Networks that no longer wake a server with a ping, forgotten: counted by the day, so hourly.
   'known-addresses': '31 * * * *',
-  // Joins past their days go, and a join's client address goes within the hour it is kept.
-  'joins-sweep': '17 * * * *',
+  // Joins past their days go, and a join's client address never outlives its hour.
+  'joins-sweep': '*/10 * * * *',
   // A day's spend against its limit. At the most the platform runs at
   // once, ten minutes between passes is about 35 cents past the limit before it pauses.
   'spend-watchdog': '*/10 * * * *',

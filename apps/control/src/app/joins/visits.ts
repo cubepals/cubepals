@@ -170,4 +170,6 @@ async function adopt(
     .update(joins)
     .set({ id: row.id, connectedAt: row.connectedAt, detail: sql`${joins.detail} - 'edge'` })
     .where(eq(joins.id, orphan.id))
+  // A signal already raised on it goes with it: nothing else names a join by its id.
+  await q.update(schema.signals).set({ joinId: row.id }).where(eq(schema.signals.joinId, orphan.id))
 }

@@ -22,7 +22,10 @@ import { uuidOf } from './visits.ts'
 
 const joins = schema.joins
 
-/** How soon after the edge hands a join over the server's first word of it comes, at the most. */
+/**
+ * How soon after the edge hands a join over the server's first word of it comes, at the most; and
+ * how long after the edge's word that it ended the server's may still come.
+ */
 const HANDED_WITHIN_MS = 2 * MINUTE_MS
 
 /** Which column each kind of event fills. */
@@ -34,18 +37,20 @@ const MOMENTS = {
   left: 'leftAt',
 } as const satisfies Record<Exclude<ServerJoinEvent['kind'], 'boot'>, keyof typeof joins.$inferInsert>
 
-/** Writes a server's events, in the order they happened. */
+/** Writes a server's events, in the order they happened; the joins they went on. */
 export async function recordServerEvents(
   q: Queryable,
   addressing: PlayAddressing,
   serverId: string,
   events: readonly ServerJoinEvent[],
-): Promise<void> {
+): Promise<string[]> {
   const ordered = [...events].sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+  const touched: string[] = []
   for (const event of ordered) {
     if (event.kind === 'boot') await recordBoot(q, serverId, event)
-    else await recordMoment(q, addressing, serverId, { ...event, kind: event.kind })
+    else touched.push(...(await recordMoment(q, addressing, serverId, { ...event, kind: event.kind })))
   }
+  return touched
 }
 
 async function recordBoot(q: Queryable, serverId: string, event: ServerJoinEvent): Promise<void> {
@@ -64,14 +69,14 @@ async function recordMoment(
   addressing: PlayAddressing,
   serverId: string,
   event: ServerJoinEvent & { kind: keyof typeof MOMENTS },
-): Promise<void> {
+): Promise<string[]> {
   const at = new Date(event.at)
   const uuid = uuidOf(event.uuid)
   const source = sourceOf(event.address)
   const id =
     (await matching(q, serverId, source, uuid, at, event.kind === 'login')) ??
     (await begun(q, addressing, serverId, source, at))
-  if (id === null) return
+  if (id === null) return []
   const column = joins[MOMENTS[event.kind]]
   await q
     .update(joins)
@@ -89,6 +94,7 @@ async function recordMoment(
       ...(event.kind === 'in_world' && event.tick ? { tick: event.tick } : {}),
     })
     .where(eq(joins.id, id))
+  return [id]
 }
 
 /** The join an event belongs to: by its source, else by the player's UUID; null for none. */
@@ -101,12 +107,14 @@ async function matching(
   /** A login begins a join: it never follows one the server already told of. */
   begins: boolean,
 ): Promise<string | null> {
-  const open = and(eq(joins.serverId, serverId), eq(joins.kind, 'join'), isNull(joins.leftAt))
+  const ours = and(eq(joins.serverId, serverId), eq(joins.kind, 'join'))
+  // The edge's close may come first: its leaving is no reason to look past it. A connection's
+  // source is its own while it is kept, so it matches whether or not the join has ended.
   if (source !== null) {
     const [bySource] = await q
       .select({ id: joins.id })
       .from(joins)
-      .where(and(open, eq(joins.source, source)))
+      .where(and(ours, eq(joins.source, source)))
       .orderBy(desc(joins.connectedAt))
       .limit(1)
     if (bySource !== undefined) return bySource.id
@@ -118,7 +126,9 @@ async function matching(
     .from(joins)
     .where(
       and(
-        open,
+        ours,
+        // Still on, or left moments before the server's word of it came.
+        or(isNull(joins.leftAt), gt(joins.leftAt, new Date(at.getTime() - HANDED_WITHIN_MS))),
         eq(joins.playerUuid, uuid),
         // Handed over moments before; or, after its login, a join the server already told of.
         begins

@@ -5,6 +5,7 @@
 import { z } from 'zod'
 import type { Availability } from './errors.ts'
 import type { PackUpdateView } from './packs.ts'
+import { oneLine } from './plain-text.ts'
 import { Loader, type PackView, ServerId } from './server.ts'
 
 const SHA512 = /^[0-9a-f]{128}$/
@@ -165,7 +166,7 @@ export type ModPlanView =
 
 export const BeginModUploadInput = z.object({
   serverId: ServerId,
-  fileName: z.string().trim().min(1).max(255),
+  fileName: z.string().overwrite(oneLine).trim().min(1).max(255),
   sizeBytes: z.number().int().positive(),
   /** Hex SHA-512 of the file, computed in the browser. */
   sha512: z.string().regex(SHA512),
