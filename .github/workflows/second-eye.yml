@@ -1,0 +1,158 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+name: Second eye
+
+# A second reviewer for a sensitive pull request, run on the maintainer's Claude subscription
+# (CLAUDE_CODE_OAUTH_TOKEN). It runs only when v0id-user asks: by adding the needs-second-eye
+# label, by a comment with a line starting "@claude review", or with
+# `gh workflow run second-eye.yml -f pr=<number>`. Anyone else's label, comment or re-run skips
+# it, so nobody else can spend the subscription. What the reviewer looks for and how it answers
+# is .github/second-eye.md, which is its whole prompt.
+#
+# Two jobs, so the token that can write never meets Claude. The review job holds read-only tokens:
+# it checks out the commit this workflow came from (the default branch, or for a label the pull
+# request itself, which already wrote this file), saves the pull request's description and diff
+# as data in .second-eye/, and runs Claude with no shell and no tool but reading files in the
+# workspace. Its answer is JSON in a fixed shape. The comment job writes it as Cubepals' bot
+# (github-actions[bot] without the app), editing its earlier review instead of adding one.
+#
+# A label on a fork's pull request starts a run without secrets, and a run by hand refuses a
+# fork's; a comment reviews a fork's pull request the same way as any, from the default branch.
+on:
+  pull_request:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to review
+        type: number
+        required: true
+
+permissions: {}
+
+jobs:
+  review:
+    name: Review
+    if: >-
+      github.repository == 'cubepals/cubepals'
+      && github.actor == 'v0id-user'
+      && github.triggering_actor == 'v0id-user'
+      && (
+        (github.event_name == 'pull_request'
+          && github.event.label.name == 'needs-second-eye'
+          && github.event.pull_request.head.repo.full_name == github.repository)
+        || (github.event_name == 'issue_comment'
+          && github.event.issue.pull_request
+          && github.event.comment.user.login == 'v0id-user'
+          && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+          && (startsWith(github.event.comment.body, '@claude review')
+            || contains(github.event.comment.body, fromJSON('"\n@claude review"'))))
+        || github.event_name == 'workflow_dispatch'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # A second label or comment on the same pull request cancels the review still running. At the
+    # job level, so events the if skips (anyone else's comment) cancel nothing.
+    concurrency:
+      group: second-eye-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      review: ${{ steps.claude.outputs.structured_output }}
+    env:
+      PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      # The pull request as data for Claude to read: never fetched as a ref, checked out or run.
+      - name: Read the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          mkdir .second-eye
+          gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json number,title,body,files,isCrossRepository > .second-eye/pr.json
+          if [ "$EVENT" = workflow_dispatch ] && [ "$(jq .isCrossRepository .second-eye/pr.json)" = true ]; then
+            echo "::error::#$PR is from a fork; review it with a comment instead."
+            exit 1
+          fi
+          gh pr diff "$PR" -R "$GITHUB_REPOSITORY" > .second-eye/pr.diff
+      - name: Load the rules
+        id: rules
+        run: |
+          delimiter="rules-$(openssl rand -hex 16)"
+          { echo "prompt<<$delimiter"; cat .github/second-eye.md; echo "$delimiter"; } >> "$GITHUB_OUTPUT"
+      # Claude may read files in the workspace and nothing else: no shell, no edits, no web, and
+      # no path where a secret lives (the process's environment, the home directory's settings,
+      # the runner's files, the git config the action writes its token into).
+      - id: claude
+        uses: anthropics/claude-code-action@db77d4d3c98f3f6380e7cd45ffba2342a3dbde3c # v1.0.254
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The job's own read-only token, in place of the Claude app's; Claude has no tool to use it.
+          github_token: ${{ github.token }}
+          prompt: ${{ steps.rules.outputs.prompt }}
+          claude_args: >-
+            --max-turns 40
+            --permission-mode dontAsk
+            --allowedTools "Read(./**)"
+            --disallowedTools "Bash,Edit,MultiEdit,Write,NotebookEdit,WebFetch,WebSearch,Read(./.git/**),Read(//proc/**),Read(//sys/**),Read(//dev/**),Read(//etc/**),Read(//root/**),Read(//tmp/**),Read(//var/**),Read(//run/**),Read(//opt/**),Read(~/.*),Read(~/.*/**),Read(//home/runner/work/_temp/**),Read(//home/runner/work/_actions/**),Read(//home/runner/runners/**),Read(//home/runner/actions-runner/**)"
+            --json-schema '{"type":"object","additionalProperties":false,"required":["verdict","findings"],"properties":{"verdict":{"enum":["merge","fix first"]},"findings":{"type":"array","maxItems":8,"items":{"type":"object","additionalProperties":false,"required":["severity","file","line","problem","fix"],"properties":{"severity":{"enum":["high","medium","low"]},"file":{"type":"string","maxLength":200},"line":{"type":"integer","minimum":1},"problem":{"type":"string","maxLength":300},"fix":{"type":"string","maxLength":300}}}}}}'
+      # The action hides Claude's output. This prints only how long it took, which tools were
+      # refused and on what path, and on failure the result's error (a bad token reads "401 OAuth
+      # access token is invalid"), each on one line so none is taken as a workflow command.
+      - name: Report the run
+        if: always() && steps.claude.outputs.execution_file != ''
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          jq -r '[.[] | select(.type == "result")] | last // {}
+            | "Turns: \(.num_turns // 0), \((.duration_ms // 0) / 1000 | floor) s",
+              (.permission_denials // [] | .[] | "Refused: \(.tool_name) \(.tool_input.file_path // .tool_input.path // .tool_input.pattern // "" | gsub("[\\r\\n]+"; " "))"),
+              (select(.is_error == true) | "::error::\(.result // "no result" | gsub("[\\r\\n]+"; " ")) (\(.terminal_reason // .subtype // "unknown"), HTTP \(.api_error_status // "none"))")' \
+            "$EXECUTION_FILE"
+
+  comment:
+    name: Comment
+    needs: review
+    if: needs.review.outputs.review != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      # For github-actions[bot] when the Cubepals app isn't configured.
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: scripts
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      # Cubepals' own bot writes the review where the repository has its app (CUBEPALS_APP_CLIENT_ID
+      # and CUBEPALS_APP_PRIVATE_KEY); without them, or if it fails, github-actions[bot] does.
+      - name: Cubepals' bot
+        id: bot
+        if: vars.CUBEPALS_APP_CLIENT_ID != ''
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.CUBEPALS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CUBEPALS_APP_PRIVATE_KEY }}
+      - name: Write the review
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
+          COMMENT_AUTHOR: ${{ steps.bot.outputs.app-slug && format('{0}[bot]', steps.bot.outputs.app-slug) || 'github-actions[bot]' }}
+          REVIEW: ${{ needs.review.outputs.review }}
+          REPO: ${{ github.repository }}
+          PULL: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+        run: bun scripts/second-eye-comment.ts

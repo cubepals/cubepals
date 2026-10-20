@@ -121,8 +121,10 @@ test('a server that never greets fails the send instead of holding it', async ()
   )
   const started = Date.now()
   try {
+    // Nodemailer reports the silent server as "Greeting never received" or as a timeout,
+    // depending on which of its timers fires first on a busy runner.
     await expect(mailer.send({ to: 'player@example.test', subject: 'Hi', text: 'Hi.' })).rejects.toThrow(
-      /timeout/i,
+      /timeout|greeting never received/i,
     )
     expect(Date.now() - started).toBeLessThan(5_000)
   } finally {

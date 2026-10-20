@@ -15,6 +15,7 @@ import { AgreementNote } from './agreement'
 import styles from './auth.module.css'
 import { GitHubMark } from './github-mark'
 import { GoogleMark } from './google-mark'
+import { INTERRUPTED, lastTrip, rememberTrip, restartWith } from './restart'
 import { type Flow, failed, started } from './steps'
 
 /** A way in besides email: each a switch in `AuthMethods`. */
@@ -28,6 +29,7 @@ const PROVIDERS: { id: Provider; name: string; mark: ReactNode }[] = [
 
 /** What a round trip to `provider` that came back with `?error=` means, and what to do next. */
 function failureCopy(code: string, provider: string): string {
+  if (INTERRUPTED.has(code)) return 'That sign-in was interrupted before it finished. Start it again.'
   switch (code) {
     case 'access_denied':
       return `${provider} sign-in was cancelled. Try again when you are ready, or use your email.`
@@ -39,12 +41,6 @@ function failureCopy(code: string, provider: string): string {
       return `${provider} did not share an email address, and your Cubepals account needs one. Try another ${provider} account, or use your email.`
     case SIGNUPS_FULL:
       return `Cubepals is full for now, so ${provider} couldn't make you a new account. Leave your email on the sign-up page and we'll tell you when there's room.`
-    case 'state_not_found':
-    case 'state_mismatch':
-    case 'please_restart_the_process':
-    case 'invalid_code':
-    case 'no_code':
-      return 'That sign-in was interrupted before it finished. Start it again.'
     default:
       return `We could not sign you in with ${provider}. Try again, or use your email.`
   }
@@ -101,6 +97,10 @@ export function AuthEntry({
   const opening = useRef(false)
   const [redirecting, setRedirecting] = useState<Provider | null>(null)
   const [socialError, setSocialError] = useState<string | null>(null)
+  // A round trip that lost its place starts again once, quietly (restart.ts): its note waits until
+  // the page knows whether it will.
+  const [deciding, setDeciding] = useState(failure !== null && INTERRUPTED.has(failure))
+  const restarted = useRef(false)
 
   // A provider that sent them back refused: its code, once the page shows it.
   useEffect(() => {
@@ -121,9 +121,15 @@ export function AuthEntry({
     return () => window.removeEventListener('pageshow', restored)
   }, [])
 
-  const continueWith = async (provider: (typeof PROVIDERS)[number]) => {
+  const continueWith = async (provider: (typeof PROVIDERS)[number], again = false) => {
     setRedirecting(provider.id)
     setSocialError(null)
+    // A quiet second try the tab can't remember could be followed by another, and another.
+    if (!rememberTrip({ provider: provider.id, again }) && again) {
+      setRedirecting(null)
+      setDeciding(false)
+      return
+    }
     started(flow, provider.id)
     // On success the browser is already on its way to the provider. It carries the Terms agreed
     // to, without which the control plane makes no new account.
@@ -136,9 +142,20 @@ export function AuthEntry({
     if (error) {
       failed(flow, provider.id, 'unreachable')
       setRedirecting(null)
+      setDeciding(false)
       setSocialError(`We could not open ${provider.name} sign-in. Try again in a moment, or use your email.`)
     }
   }
+
+  // Once, on the page a lost round trip came back to: start it again, or show the note.
+  useEffect(() => {
+    if (!deciding || restarted.current) return
+    restarted.current = true
+    const offeredIds = offered.map((provider) => provider.id)
+    const provider = PROVIDERS.find((p) => p.id === restartWith(failure, failedVia, lastTrip(), offeredIds))
+    if (provider) void continueWith(provider, true)
+    else setDeciding(false)
+  })
 
   return (
     <div className={styles.entry}>
@@ -149,7 +166,7 @@ export function AuthEntry({
         {description && <p className={`type-body ${styles.muted}`}>{description}</p>}
       </header>
 
-      {failure && (
+      {failure && !deciding && (
         <div className={styles.failure}>
           <Note tone="danger">{failureCopy(failure, failedWith?.name ?? 'Google')}</Note>
         </div>

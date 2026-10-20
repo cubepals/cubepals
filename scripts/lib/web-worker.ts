@@ -103,7 +103,7 @@ function buildEnv(site: WorkerSite, sha: string): Record<string, string> {
   }
 }
 
-function wranglerEnv(site: WorkerSite): Record<string, string> {
+function wranglerEnv(site: WorkerAccess): Record<string, string> {
   if (!site.cloudflare.token || !site.cloudflare.accountId)
     throw new Error('Deploying the website needs a Cloudflare Workers token and the account id')
   return {
@@ -115,9 +115,12 @@ function wranglerEnv(site: WorkerSite): Record<string, string> {
   }
 }
 
+/** What listing and rolling back versions need of a site: the Worker and the account's token. */
+export type WorkerAccess = Pick<WorkerSite, 'env' | 'cloudflare'>
+
 /** wrangler.jsonc's environment, named even when it is the top level (`--env=`), as wrangler asks. */
-const envArgs = (site: WorkerSite) => [`--env=${site.env ?? ''}`]
-const workerName = (site: WorkerSite) => (site.env ? `blockly-web-${site.env}` : 'blockly-web')
+const envArgs = (site: WorkerAccess) => [`--env=${site.env ?? ''}`]
+const workerName = (site: WorkerAccess) => (site.env ? `blockly-web-${site.env}` : 'blockly-web')
 
 /** What's wrong with a build for this site, if anything: robots.txt and the /api rewrite's target. */
 export function buildProblems(site: WorkerSite, nextDir = join(WEB, '.next')): string[] {
@@ -315,7 +318,7 @@ export function previewUpload(output: string): PreviewUpload {
 }
 
 /** A wrangler command's JSON answer. */
-function wranglerJson<T>(site: WorkerSite, args: string[]): T {
+function wranglerJson<T>(site: WorkerAccess, args: string[]): T {
   const result = spawnSync(join(BIN, 'wrangler'), [...args, ...envArgs(site), '--json'], {
     cwd: WEB,
     env: wranglerEnv(site),
@@ -334,7 +337,7 @@ export interface LiveVersion {
 }
 
 /** The versions that have been live, the current one first, each once in a row. */
-export function liveVersions(site: WorkerSite): LiveVersion[] {
+export function liveVersions(site: WorkerAccess): LiveVersion[] {
   const deployments = wranglerJson<{ versions: { version_id: string; percentage: number }[] }[]>(site, [
     'deployments',
     'list',
@@ -354,7 +357,7 @@ export function liveVersions(site: WorkerSite): LiveVersion[] {
 }
 
 /** A version that ran before live again, at once and without a build. */
-export function rollbackWorker(site: WorkerSite, to: LiveVersion, say: (line: string) => void): void {
+export function rollbackWorker(site: WorkerAccess, to: LiveVersion, say: (line: string) => void): void {
   const commit = to.commit?.slice(0, 8) ?? 'an earlier commit'
   const result = spawnSync(
     join(BIN, 'wrangler'),

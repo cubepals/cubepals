@@ -6,7 +6,7 @@
  * GitHub's REST API with the workflow's token, and the one comment a script keeps on a pull
  * request: found by the marker its body opens with and the account that writes it (COMMENT_AUTHOR,
  * the Cubepals app's bot where the workflow has its token, else github-actions[bot]), edited in
- * place, written new only when there is none. Used by preview-comment.ts and ci-comment.ts. It imports nothing, so it runs before
+ * place, written new only when there is none. Used by preview-comment.ts, ci-comment.ts and second-eye-comment.ts. It imports nothing, so it runs before
  * `bun install`. Not for what a comment says: each script writes its own.
  */
 

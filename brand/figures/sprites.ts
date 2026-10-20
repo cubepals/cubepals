@@ -7,7 +7,7 @@
  * game's own proportions (a head 8 pixels square, a body 8 by 12, arms and legs 4 by 12), each
  * part in the grey its model gives it (apps/web/src/landing/engine/models.ts) and printed in one-bit dither like the
  * landing's chunk. Three poses: waving, checking a clipboard, and hanging by the hands from the
- * top edge of an email's card.
+ * top edge of an email's card. The error pages (apps/web/src/ui/lost.tsx) add a fourth: a shrug.
  *
  * Written straight to PNG, and to GIF for the wave: mail apps don't show SVG, and GIF is the only
  * moving picture they all play (Outlook on Windows shows the first frame, a raised hand). An ink
@@ -193,6 +193,22 @@ function wavingPose(look: Look, degrees: number): Canvas {
   const limb = new Canvas()
   arm(limb, look, column(12, -2, 9), 'arm-r')
   c.turned.push({ limb, px: 12.5, py: 9.5, degrees })
+  return c
+}
+
+/** Standing, both hands up and a little out, the arms turned `degrees` from the shoulders: a shrug. */
+function shruggingPose(look: Look, degrees: number): Canvas {
+  const c = new Canvas()
+  head(c, look, 4, 0, 'ahead')
+  torso(c, look, 4, 8)
+  for (const [x, px, turn] of [
+    [0, 3.5, -degrees],
+    [12, 12.5, degrees],
+  ] as const) {
+    const limb = new Canvas()
+    arm(limb, look, column(x, -2, 9), x === 0 ? 'arm-l' : 'arm-r')
+    c.turned.push({ limb, px, py: 9.5, degrees: turn })
+  }
   return c
 }
 
@@ -424,6 +440,8 @@ const still = (c: Canvas, flush: 'top' | 'bottom'): Figure => {
 }
 
 export const hanging = (look: Look): Figure => still(hangingPose(look), 'top')
+
+export const shrugging = (look: Look): Figure => still(shruggingPose(look, 20), 'bottom')
 
 export const clipboard = (look: Look): Figure => still(clipboardPose(look), 'bottom')
 

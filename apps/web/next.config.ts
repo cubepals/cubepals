@@ -71,7 +71,11 @@ export default {
   // Where a password manager sends someone to change a saved password (w3c.github.io/
   // webappsec-change-password-url). A password is changed by a reset link, so it is that page.
   async redirects() {
-    return [{ source: '/.well-known/change-password', destination: '/forgot-password', permanent: false }]
+    return [
+      { source: '/.well-known/change-password', destination: '/forgot-password', permanent: false },
+      // Where someone looking for us tries first.
+      { source: '/contact-us', destination: '/contact', permanent: true },
+    ]
   },
   async rewrites() {
     return {

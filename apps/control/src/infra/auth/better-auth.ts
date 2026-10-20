@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { DISPOSABLE_EMAIL, PASSWORD_MIN_LENGTH, SIGNUPS_FULL, type SignUpAgreement } from '@blockly/contracts'
-import { HOUR_S } from '@blockly/contracts/durations'
+import { HOUR_S, MINUTE_S } from '@blockly/contracts/durations'
 import { type Db, schema } from '@blockly/db'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
@@ -81,6 +81,14 @@ const RESET_LINK_SECONDS = HOUR_S
 
 /** How long an admin may use a test account before signing in again (app/accounts/impersonation.ts). */
 const IMPERSONATION_SECONDS = HOUR_S
+
+/**
+ * How long a sign-in with a provider may take: Better Auth keeps its state ten minutes
+ * (`generateState` in better-auth/dist/oauth2/state.mjs, which exports no constant for it), but
+ * the browser's half of it, the `state` cookie, only five. A trip to the provider that takes longer
+ * comes back without the cookie and is refused.
+ */
+const SIGN_IN_STATE_SECONDS = 10 * MINUTE_S
 
 /**
  * Better Auth's admin plugin, for its impersonation only: the session it makes for the test
@@ -182,6 +190,8 @@ export function createAuth(options: AuthOptions) {
     advanced: {
       cookiePrefix: options.cookiePrefix,
       useSecureCookies: secure,
+      // The browser keeps its half of a provider's sign-in as long as the server keeps the rest.
+      cookies: { state: { attributes: { maxAge: SIGN_IN_STATE_SECONDS } } },
       // Better Auth turns origin and callback checks off when NODE_ENV is `test`; they stay on
       // here, so tests run the checks production runs.
       disableOriginCheck: false,
