@@ -20,6 +20,7 @@
     "./meter": "./src/meter.ts",
     "./names": "./src/names.ts",
     "./seal": "./src/seal.ts",
+    "./plain-text": "./src/plain-text.ts",
     "./proxy-header": "./src/proxy-header.ts"
   },
   "dependencies": {
