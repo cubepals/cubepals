@@ -131,26 +131,30 @@ async function halves(name: string): Promise<VisitReport[]> {
 const ordered = (...times: (string | undefined)[]) =>
   times.every((t, i) => t !== undefined && (i === 0 || Date.parse(t) >= Date.parse(times[i - 1] ?? '')))
 
+/** A stand-in game server: says a byte back to anything, which is enough to be up. Where it listens. */
+async function standInGame(servers: Server[]): Promise<string> {
+  const game = createServer((socket) => {
+    socket.on('error', () => socket.destroy())
+    socket.on('data', (chunk) => {
+      const named = Buffer.from(chunk)
+        .toString('latin1')
+        .match(/Visitor\w+/)?.[0]
+      if (named) reached.add(named)
+      socket.write(Uint8Array.of(1, 0))
+    })
+  }).listen(0, '127.0.0.1')
+  await new Promise((resolve) => game.once('listening', resolve))
+  servers.push(game)
+  return `127.0.0.1:${(game.address() as AddressInfo).port}`
+}
+
 describe.skipIf(ROUTER_BIN === '')('the agent’s visits', () => {
   const servers: Server[] = []
   let agent: ReturnType<typeof Bun.spawn> | undefined
   let control: ReturnType<typeof Bun.serve> | undefined
 
   beforeAll(async () => {
-    // A stand-in game server: says a byte back to anything, which is enough to be up.
-    const game = createServer((socket) => {
-      socket.on('error', () => socket.destroy())
-      socket.on('data', (chunk) => {
-        const named = Buffer.from(chunk)
-          .toString('latin1')
-          .match(/Visitor\w+/)?.[0]
-        if (named) reached.add(named)
-        socket.write(Uint8Array.of(1, 0))
-      })
-    }).listen(0, '127.0.0.1')
-    await new Promise((resolve) => game.once('listening', resolve))
-    servers.push(game)
-    const destination = `127.0.0.1:${(game.address() as AddressInfo).port}`
+    const destination = await standInGame(servers)
     const routes = [
       { hostname: 'direct.play.test', destination, proxyProtocol: true },
       { hostname: 'looked.play.test', destination, proxyProtocol: true },
