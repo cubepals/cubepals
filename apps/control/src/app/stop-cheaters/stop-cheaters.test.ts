@@ -200,6 +200,8 @@ describe.skipIf(!hasDatabase)('what changes the setting', () => {
     await h.app.listings.setPublic(other.owner, other.id, true)
     await h.app.stopCheaters.set(other.owner, other.id, true, randomUUID())
     expect(await setting(other.id)).toMatchObject({ setting: 'on', reason: null })
+    // It already ran: the owner's choice restarts nothing.
+    expect(await applies(other.id)).toBe(0)
   }, 60_000)
 
   test('the migration turns on only published servers left at auto, and restarts none', async () => {

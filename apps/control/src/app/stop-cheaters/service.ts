@@ -110,7 +110,10 @@ export class StopCheatersService {
       on ? 'moderation.stop_cheaters_on' : 'moderation.stop_cheaters_off',
       async (tx, desired) => {
         if (on && (await grimFor(tx, desired)).kind === 'modded') throw new AppError('invalid_choice', MODDED)
+        const was = effective(await loadStopCheaters(tx, serverId)).on
         await saveStopCheaters(tx, serverId, { setting: on ? 'on' : 'off', reason: null, takeOver: false })
+        // Made the owner's choice where it already ran that way: nothing to restart for.
+        return was !== on
       },
     )
   }
@@ -121,6 +124,7 @@ export class StopCheatersService {
       if (!effective(await loadStopCheaters(tx, serverId)).on)
         throw new AppError('invalid_choice', 'Turn on Stop cheaters first.')
       await saveStopCheaters(tx, serverId, { takeOver: true })
+      return true
     })
   }
 
@@ -219,12 +223,13 @@ export class StopCheatersService {
     serverId: string,
     requestId: string,
     action: string,
-    apply: (tx: Tx, desired: ServerRevision) => Promise<void>,
+    /** Whether a running server restarts for it. */
+    apply: (tx: Tx, desired: ServerRevision) => Promise<boolean>,
   ): Promise<void> {
     await this.#db.transaction(async (tx) => {
       const server = authorize(actor, await lockServer(tx, serverId))
       if (actor.kind === 'user') await this.#policy.require(tx, server.ownerId, { kind: 'manage_access' })
-      await apply(tx, await loadRevision(tx, server.desiredRevisionId))
+      const restarts = await apply(tx, await loadRevision(tx, server.desiredRevisionId))
       await tx.insert(schema.auditLog).values({
         actor: requestedBy(actor),
         action,
@@ -232,7 +237,7 @@ export class StopCheatersService {
         subjectId: serverId,
       })
       const moved =
-        server.lifecycle.status === 'running'
+        restarts && server.lifecycle.status === 'running'
           ? (
               await this.#transitions.command(
                 tx,
