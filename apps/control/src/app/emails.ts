@@ -29,6 +29,8 @@
  * - `billing.ts`: a payment carrying extra play that failed, one still owed after that, and a
  *   year of Plus about to end.
  * - `gifts.ts`: a gift's code, to whoever bought it.
+ * - `notices.ts`: what Cubepals itself changed on someone's server, from the address nobody reads
+ *   (MAIL_NOTICE_FROM): a new address, out of Browse.
  * - `play.ts`: the warnings as a month's included play runs out, and as extra play is used.
  * - `servers.ts`: what happened to one server: off the directory, an idle world, a rebuild.
  */
@@ -140,6 +142,8 @@ export function layout(input: {
   action?: Action
   after?: string
   why: string
+  /** From the address nobody reads (MAIL_NOTICE_FROM): the footer says so instead of offering a reply. */
+  unread?: true
 }): string {
   const { origin } = input
   const stand = input.figure && !input.figure.hang ? input.figure.name : undefined
@@ -184,7 +188,7 @@ ${input.preheader === undefined ? '' : `<div style="display:none;max-height:0;ov
       ${fallback}
     </td></tr>
     <tr><td style="padding:20px 2px 0;font:400 13px/1.55 ${SANS};color:${SUBTLE}">
-      ${input.why} Reply to this email to reach a person.<br>
+      ${input.why} ${input.unread ? 'This mailbox isn’t read.' : 'Reply to this email to reach a person.'}<br>
       <a href="${origin}" style="color:${SUBTLE}">cubepals.com</a>
     </td></tr>
   </table>

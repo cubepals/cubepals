@@ -11,6 +11,7 @@ import { describe, expect, test } from 'bun:test'
 import { passwordChanged, resetPassword, verifyEmail, welcome } from './emails/account.ts'
 import { adminAlert, spendLimit } from './emails/admins.ts'
 import { paymentFailed, paymentOwed } from './emails/billing.ts'
+import { addressChanged, unlisted } from './emails/notices.ts'
 import { extraWarning, playWarning } from './emails/play.ts'
 import { keepingWorld, listingRemoved, serverRebuilt } from './emails/servers.ts'
 import { type Email, esc, INK, meter } from './emails.ts'
@@ -136,6 +137,26 @@ const EMAILS: Array<{
     name: 'rebuilt',
     email: serverRebuilt({ server: bay, backupAt: 'Fri, 10 Oct 2026 06:13:00 GMT', origin: ORIGIN }),
     subject: '“Sunrise <Bay>” was moved after the computer it ran on failed',
+    shape: 'layout',
+    link: `${ORIGIN}/servers/srv_7Kq2`,
+  },
+  {
+    name: 'new address',
+    email: addressChanged({
+      server: bay,
+      slug: 'test',
+      from: 'test.play.cubepals.com',
+      to: 'sunrise-bay.play.cubepals.com',
+      origin: ORIGIN,
+    }),
+    subject: 'Your server has a new address',
+    shape: 'layout',
+    link: `${ORIGIN}/servers/srv_7Kq2`,
+  },
+  {
+    name: 'unlisted',
+    email: unlisted({ server: bay, join: 'sunrise-bay.play.cubepals.com', origin: ORIGIN }),
+    subject: 'Your server is no longer listed in Browse',
     shape: 'layout',
     link: `${ORIGIN}/servers/srv_7Kq2`,
   },
@@ -286,6 +307,20 @@ describe('emails', () => {
     expect(meter(96, 120, 'left')).toContain('96 of 120 hours left')
     expect(meter(12.34, 20)).toContain('12.3 of 20 hours</p>')
   })
+})
+
+describe('notices', () => {
+  test.each(EMAILS.filter((e) => ['new address', 'unlisted'].includes(e.name)))(
+    '$name: says nobody reads replies instead of offering one, and keeps each address on one line',
+    (e) => {
+      const { html, text } = e.email
+      expect(text).toContain('\n\nThis mailbox isn’t read.\n\nCubepals')
+      expect(html).toContain('You get this because you own this server on Cubepals. This mailbox isn’t read.')
+      expect(html).not.toContain('Reply to this email')
+      expect(html).toContain('white-space:nowrap">sunrise-bay.play.cubepals.com</strong>')
+      expect(html).toContain('>Open your server</a>')
+    },
+  )
 })
 
 describe('account emails', () => {
