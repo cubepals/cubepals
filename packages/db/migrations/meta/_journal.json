@@ -638,6 +638,13 @@
       "when": 1792519277822,
       "tag": "0090_joins",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1792544292621,
+      "tag": "0091_joins_connected",
+      "breakpoints": true
     }
   ]
 }

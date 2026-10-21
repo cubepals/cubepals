@@ -66,6 +66,8 @@ export const joins = pgTable(
     index('joins_player_name').on(sql`lower(${t.playerName})`, t.connectedAt.desc()),
     index('joins_address').on(t.address, t.connectedAt.desc()),
     index('joins_source').on(t.source).where(sql`${t.source} is not null`),
+    // The signals job reads every join of the last few minutes, whatever its server or player.
+    index('joins_connected').on(t.connectedAt),
   ],
 )
 
