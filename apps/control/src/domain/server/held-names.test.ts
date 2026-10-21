@@ -37,9 +37,10 @@ describe('held names', () => {
       expect(holdOn(slug)).toBe('cubepals')
   })
 
-  test('so is the address test, which reads as Cubepals’ own, and a name that starts with it is anyone’s', () => {
-    expect(holdOn('test')).toBe('cubepals')
-    expect(holdOn('testudo-farm')).toBeNull()
+  test('so are words that read as Cubepals’ own stage, site page or plan', () => {
+    for (const slug of ['test', 'testing', 'beta', 'staging', 'login', 'pro'])
+      expect(holdOn(slug)).toBe('cubepals')
+    for (const slug of ['testudo-farm', 'beta-builders', 'sandbox', 'trial']) expect(holdOn(slug)).toBeNull()
   })
 
   test('a name that only contains one of them is anyone’s', () => {
