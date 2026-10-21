@@ -27,17 +27,30 @@ export interface ReactionsView {
   yours: boolean
 }
 
+/**
+ * Every way a note writer's picture can be drawn. A style stays listed once anyone has it, so their
+ * picture can always be drawn again; which styles new writers are given is the API's choice.
+ */
+export const AVATAR_STYLES = ['mark', 'identicon', 'pixel', 'bauhaus', 'minidenticon'] as const
+export type AvatarStyle = (typeof AVATAR_STYLES)[number]
+
+/**
+ * A writer's picture: the style they were given the first time it was drawn, kept for good, and
+ * what it is drawn from, a hash of who they are that tells nothing about them.
+ */
+export interface AvatarView {
+  style: AvatarStyle
+  seed: string
+}
+
 export interface NoteView {
   id: string
   body: string
   at: string
   /** Its writer as strangers read them, "Davi H."; null for a note left as anonymous or nameless. */
   author: string | null
-  /**
-   * What the writer's picture is drawn from: a hash of who they are, so it is the same on every
-   * note of theirs and tells nothing about them. Every anonymous note shares one.
-   */
-  avatar: string
+  /** The writer's picture. Every anonymous note shares one. */
+  avatar: AvatarView
   /** Written by the person reading. */
   yours: boolean
   /** Written by the server's owner. */

@@ -121,3 +121,18 @@ export const serverNotes = pgTable(
     check('server_notes_body_length', sql`char_length(${t.body}) between 1 and 128`),
   ],
 )
+
+/**
+ * The picture style each note writer was given the first time their picture was drawn, kept for
+ * good: changing which styles new writers get never changes anyone's. Drawn from a hash of the
+ * account's id, never its name, so renaming changes nothing either. Goes with the account when it
+ * is closed.
+ */
+export const writerAvatars = pgTable('writer_avatars', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => users.id),
+  /** One of the styles the contracts list (`AVATAR_STYLES`). */
+  style: text('style').notNull(),
+  createdAt: createdAt(),
+})

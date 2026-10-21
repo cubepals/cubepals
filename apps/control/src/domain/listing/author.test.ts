@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test'
-import { shownName } from './author.ts'
+import { pickStyle, shownName } from './author.ts'
 
 describe('who left a note', () => {
   test('is a first name and the first letter of the last', () => {
@@ -30,5 +30,20 @@ describe('who left a note', () => {
   test('hides nothing and carries no check mark', () => {
     expect(shownName(`Da${String.fromCodePoint(0x202e)}vi Hernandez`)).toBe('Davi H.')
     expect(shownName('Davi ✅')).toBeNull()
+  })
+})
+
+describe('the picture style a new writer is given', () => {
+  const seeds = Array.from({ length: 200 }, (_, i) =>
+    (((i + 1) * 2654435761) >>> 0).toString(16).padStart(8, '0').padEnd(32, '0'),
+  )
+  const styles = ['mark', 'identicon', 'pixel', 'bauhaus', 'minidenticon'] as const
+
+  test('is the same for the same seed', () => {
+    for (const seed of seeds) expect(pickStyle(seed, styles)).toBe(pickStyle(seed, styles))
+  })
+
+  test('gives every style to someone', () => {
+    expect(new Set(seeds.map((seed) => pickStyle(seed, styles)))).toEqual(new Set(styles))
   })
 })

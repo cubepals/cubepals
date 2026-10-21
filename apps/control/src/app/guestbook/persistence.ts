@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { type Queryable, schema, type Tx } from '@blockly/db'
-import { and, count, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq, inArray } from 'drizzle-orm'
 
 const stars = schema.serverStars
 const notes = schema.serverNotes
+const avatars = schema.writerAvatars
 
 export interface NoteRecord {
   id: string
@@ -122,8 +123,27 @@ export async function deleteNote(tx: Tx, id: string): Promise<boolean> {
   return (await tx.delete(notes).where(eq(notes.id, id)).returning({ id: notes.id })).length > 0
 }
 
-/** What a closed account left on other people's servers: its stars and its notes. */
+/** What a closed account left on other people's servers: its stars, its notes and its picture. */
 export async function forgetAccount(tx: Tx, userId: string): Promise<void> {
   await tx.delete(stars).where(eq(stars.userId, userId))
   await tx.delete(notes).where(eq(notes.authorId, userId))
+  await tx.delete(avatars).where(eq(avatars.userId, userId))
+}
+
+/** The picture style kept for each of these writers that has one, by account. */
+export async function keptAvatarStyles(q: Queryable, userIds: string[]): Promise<Map<string, string>> {
+  if (userIds.length === 0) return new Map()
+  const rows = await q
+    .select({ userId: avatars.userId, style: avatars.style })
+    .from(avatars)
+    .where(inArray(avatars.userId, userIds))
+  return new Map(rows.map((row) => [row.userId, row.style]))
+}
+
+/** Keeps each writer's first picture style. One kept already stays as it is. */
+export async function keepAvatarStyles(
+  q: Queryable,
+  given: { userId: string; style: string }[],
+): Promise<void> {
+  if (given.length > 0) await q.insert(avatars).values(given).onConflictDoNothing()
 }

@@ -8,7 +8,9 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { schema } from '@blockly/db'
+import { eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { GuestbookService } from './service.ts'
 
 describe.skipIf(!hasDatabase)('who left a note', () => {
   let h: Harness
@@ -51,13 +53,55 @@ describe.skipIf(!hasDatabase)('who left a note', () => {
     expect(by('Old')?.author).toBeNull()
     expect(by('Older')?.author).toBeNull()
     // The same writer has the same picture on every note; it isn't their id, nor anyone else's.
-    expect(by('Great builds')?.avatar).toBe(by('Back again')?.avatar as string)
-    expect(by('Great builds')?.avatar).not.toContain(davi.userId)
-    expect(by('Great builds')?.avatar).not.toBe(by('Friendly folks')?.avatar as string)
+    expect(by('Great builds')?.avatar).toEqual(by('Back again')?.avatar)
+    expect(by('Great builds')?.avatar.seed).not.toContain(davi.userId)
+    expect(by('Great builds')?.avatar.seed).not.toBe(by('Friendly folks')?.avatar.seed)
     // Every anonymous note shares one picture, whoever wrote it, and it is nobody's own.
-    expect(by('Old')?.avatar).toBe(by('Older')?.avatar as string)
-    expect(by('Old')?.avatar).not.toBe(by('Great builds')?.avatar as string)
+    expect(by('Old')?.avatar).toEqual(by('Older')?.avatar)
+    expect(by('Old')?.avatar.seed).not.toBe(by('Great builds')?.avatar.seed)
 
     expect((await h.app.guestbook.notes(nameless, id)).signature).toBeNull()
+  }, 30_000)
+
+  const written = (authorId: string, body: string) =>
+    h.db.insert(schema.serverNotes).values({ serverId: id, authorId, body })
+
+  /** The guestbook as it reads with only these picture styles on offer for new writers. */
+  const offering = (...avatarStyles: ('identicon' | 'pixel' | 'minidenticon')[]) =>
+    // Reading notes never asks the access policy.
+    new GuestbookService({ db: h.db, policy: undefined as never, avatarStyles })
+
+  test('a picture is kept for good: other styles on offer later change nobody’s', async () => {
+    const kit = await h.user('Kit Marlowe')
+    // Written straight in, so this reading is the first time anyone is shown it.
+    await written(kit.userId, 'Kept for good')
+    const reader = await h.user('Reader')
+    const first = (await offering('identicon').notes(reader, id)).notes.find(
+      (n) => n.body === 'Kept for good',
+    )
+    expect(first?.avatar.style).toBe('identicon')
+
+    const later = offering('pixel')
+    const again = (await later.notes(reader, id)).notes.find((n) => n.body === 'Kept for good')
+    expect(again?.avatar).toEqual(first?.avatar)
+    // Someone shown for the first time gets a style from what is on offer now.
+    const lee = await h.user('Lee')
+    await written(lee.userId, 'New here')
+    const lees = (await later.notes(reader, id)).notes.find((n) => n.body === 'New here')
+    expect(lees?.avatar.style).toBe('pixel')
+  }, 30_000)
+
+  test('a new name changes the name shown, never the picture', async () => {
+    const mo = await h.user('Mo Rahman')
+    await h.app.guestbook.addNote(mo, id, 'Renamed later')
+    const reader = await h.user('Reader')
+    const mine = async () =>
+      (await h.app.guestbook.notes(reader, id)).notes.find((n) => n.body === 'Renamed later')
+    const before = await mine()
+    await h.db.update(schema.users).set({ name: 'Morgan Lee' }).where(eq(schema.users.id, mo.userId))
+    const after = await mine()
+    expect(before?.author).toBe('Mo R.')
+    expect(after?.author).toBe('Morgan L.')
+    expect(after?.avatar).toEqual(before?.avatar)
   }, 30_000)
 })

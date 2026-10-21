@@ -652,6 +652,13 @@
       "when": 1792554964873,
       "tag": "0092_signed_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1792557296518,
+      "tag": "0093_writer_avatars",
+      "breakpoints": true
     }
   ]
 }

@@ -19,3 +19,13 @@ export function shownName(name: string): string | null {
   const [initial = ''] = words.at(-1) as string
   return `${first} ${initial.toLocaleUpperCase()}.`
 }
+
+/**
+ * The picture style a new writer is given, from their seed (a hash, so its first digits are as good
+ * as random). Only ever used once per writer: what it gives is then kept, so a different list of
+ * styles later gives nobody a new picture.
+ */
+export function pickStyle<Style>(seed: string, styles: readonly Style[]): Style {
+  if (styles.length === 0) throw new Error('There is no picture style to give')
+  return styles[Number.parseInt(seed.slice(0, 8), 16) % styles.length] as Style
+}
