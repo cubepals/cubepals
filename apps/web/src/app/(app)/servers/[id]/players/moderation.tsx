@@ -70,16 +70,18 @@ export function Moderation({
   return (
     <FormSection title="Moderation">
       {cheaters}
-      <Toggle
-        label="Moderation tools"
-        checked={enabled}
-        disabled={set.isPending}
-        onChange={(next) => change({ enabled: next, chatFilter: next && chatFilter })}
-      />
-      <p className="bk-field__help">
-        Warnings, mutes and bans, given here or by helpers in the game. Brings the LibertyBans and LuckPerms
-        plugins along.
-      </p>
+      <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
+        <Toggle
+          label="Moderation tools"
+          checked={enabled}
+          disabled={set.isPending}
+          onChange={(next) => change({ enabled: next, chatFilter: next && chatFilter })}
+        />
+        <p className="bk-field__help">
+          Warnings, mutes and bans, given here or by helpers in the game. Brings the LibertyBans and LuckPerms
+          plugins along.
+        </p>
+      </div>
       {enabled && (
         <Toggle
           label="Filter chat"
