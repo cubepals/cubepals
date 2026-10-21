@@ -16,7 +16,8 @@ name: Second eye
 # request itself, which already wrote this file), saves the pull request's description and diff
 # as data in .second-eye/, and runs Claude with no shell and no tool but reading files in the
 # workspace. Its answer is JSON in a fixed shape. The comment job writes it as Cubepals' bot
-# (github-actions[bot] without the app), editing its earlier review instead of adding one.
+# (github-actions[bot] without the app), editing its earlier review instead of adding one, and
+# labels the pull request review/ai-merge or review/ai-fix-first.
 #
 # A label on a fork's pull request starts a run without secrets, and a run by hand refuses a
 # fork's; a comment reviews a fork's pull request the same way as any, from the default branch.
@@ -65,6 +66,8 @@ jobs:
       pull-requests: read
     outputs:
       review: ${{ steps.claude.outputs.structured_output }}
+      reviewed: ${{ steps.pull.outputs.reviewed }}
+      model: ${{ steps.model.outputs.model }}
     env:
       PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
     steps:
@@ -74,17 +77,19 @@ jobs:
           persist-credentials: false
       # The pull request as data for Claude to read: never fetched as a ref, checked out or run.
       - name: Read the pull request
+        id: pull
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
         run: |
           mkdir .second-eye
-          gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json number,title,body,files,isCrossRepository > .second-eye/pr.json
+          gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json number,title,body,files,isCrossRepository,headRefOid,additions,deletions,changedFiles > .second-eye/pr.json
           if [ "$EVENT" = workflow_dispatch ] && [ "$(jq .isCrossRepository .second-eye/pr.json)" = true ]; then
             echo "::error::#$PR is from a fork; review it with a comment instead."
             exit 1
           fi
           gh pr diff "$PR" -R "$GITHUB_REPOSITORY" > .second-eye/pr.diff
+          echo "reviewed=$(jq -c '{sha: .headRefOid, files: .changedFiles, additions, deletions}' .second-eye/pr.json)" >> "$GITHUB_OUTPUT"
       - name: Load the rules
         id: rules
         run: |
@@ -105,7 +110,7 @@ jobs:
             --permission-mode dontAsk
             --allowedTools "Read(./**)"
             --disallowedTools "Bash,Edit,MultiEdit,Write,NotebookEdit,WebFetch,WebSearch,Read(./.git/**),Read(//proc/**),Read(//sys/**),Read(//dev/**),Read(//etc/**),Read(//root/**),Read(//tmp/**),Read(//var/**),Read(//run/**),Read(//opt/**),Read(~/.*),Read(~/.*/**),Read(//home/runner/work/_temp/**),Read(//home/runner/work/_actions/**),Read(//home/runner/runners/**),Read(//home/runner/actions-runner/**)"
-            --json-schema '{"type":"object","additionalProperties":false,"required":["verdict","findings"],"properties":{"verdict":{"enum":["merge","fix first"]},"findings":{"type":"array","maxItems":8,"items":{"type":"object","additionalProperties":false,"required":["severity","file","line","problem","fix"],"properties":{"severity":{"enum":["high","medium","low"]},"file":{"type":"string","maxLength":200},"line":{"type":"integer","minimum":1},"problem":{"type":"string","maxLength":300},"fix":{"type":"string","maxLength":300}}}}}}'
+            --json-schema '{"type":"object","additionalProperties":false,"required":["verdict","findings"],"properties":{"verdict":{"enum":["merge","fix first"]},"findings":{"type":"array","maxItems":8,"items":{"type":"object","additionalProperties":false,"required":["severity","file","line","problem","fix","why"],"properties":{"severity":{"enum":["high","medium","low"]},"file":{"type":"string","maxLength":200},"line":{"type":"integer","minimum":1},"problem":{"type":"string","maxLength":300},"fix":{"type":"string","maxLength":300},"why":{"type":"string","maxLength":600}}}}}}'
       # The action hides Claude's output. This prints only how long it took, which tools were
       # refused and on what path, and on failure the result's error (a bad token reads "401 OAuth
       # access token is invalid"), each on one line so none is taken as a workflow command.
@@ -119,6 +124,16 @@ jobs:
               (.permission_denials // [] | .[] | "Refused: \(.tool_name) \(.tool_input.file_path // .tool_input.path // .tool_input.pattern // "" | gsub("[\\r\\n]+"; " "))"),
               (select(.is_error == true) | "::error::\(.result // "no result" | gsub("[\\r\\n]+"; " ")) (\(.terminal_reason // .subtype // "unknown"), HTTP \(.api_error_status // "none"))")' \
             "$EXECUTION_FILE"
+      # The model the run's first message names, for the comment; only the characters a model's
+      # name has, so nothing else reaches it.
+      - name: Name the model
+        id: model
+        if: steps.claude.outputs.execution_file != ''
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          model="$(jq -r '[.[] | select(.type == "system" and .subtype == "init")][0].model // ""' "$EXECUTION_FILE" | tr -cd '[:alnum:]._-')"
+          echo "model=$model" >> "$GITHUB_OUTPUT"
 
   comment:
     name: Comment
@@ -127,13 +142,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      # For github-actions[bot] when the Cubepals app isn't configured.
+      # For github-actions[bot] when the Cubepals app isn't configured: the comment and the label.
       pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
-          sparse-checkout: scripts
+          sparse-checkout: |
+            scripts
+            .github
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -153,6 +170,8 @@ jobs:
           GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
           COMMENT_AUTHOR: ${{ steps.bot.outputs.app-slug && format('{0}[bot]', steps.bot.outputs.app-slug) || 'github-actions[bot]' }}
           REVIEW: ${{ needs.review.outputs.review }}
+          REVIEWED: ${{ needs.review.outputs.reviewed }}
+          MODEL: ${{ needs.review.outputs.model }}
           REPO: ${{ github.repository }}
           PULL: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
         run: bun scripts/second-eye-comment.ts

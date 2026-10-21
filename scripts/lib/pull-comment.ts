@@ -46,14 +46,22 @@ async function existing(repo: string, pull: number | string, marker: string): Pr
   }
 }
 
-/** Edits the comment that opens with `marker` to `body`, or writes it when there is none yet. */
-export async function keepComment(repo: string, pull: number | string, marker: string, body: string) {
+/**
+ * Edits the comment that opens with `marker` to `body`, or writes it when there is none yet. A
+ * function for `body` is told whether it edits an earlier comment.
+ */
+export async function keepComment(
+  repo: string,
+  pull: number | string,
+  marker: string,
+  body: string | ((updating: boolean) => string),
+) {
   const id = await existing(repo, pull, marker)
   await github(
     id === undefined ? `repos/${repo}/issues/${pull}/comments` : `repos/${repo}/issues/comments/${id}`,
     {
       method: id === undefined ? 'POST' : 'PATCH',
-      body: JSON.stringify({ body }),
+      body: JSON.stringify({ body: typeof body === 'string' ? body : body(id !== undefined) }),
     },
   )
 }

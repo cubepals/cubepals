@@ -33,6 +33,7 @@ formatting, failing tests).
     in a case that will happen), `low` (wrong in a rare case);
   - `file` and `line`: where it is on the pull request's side of the diff;
   - `problem`: what goes wrong and when, in one sentence;
-  - `fix`: the fix, in one sentence.
+  - `fix`: the fix, in one sentence;
+  - `why`: how you know, the path you traced through the code, in at most three sentences.
 
 Nothing found: verdict `merge` and no findings.

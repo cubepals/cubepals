@@ -109,6 +109,17 @@ export const LABELS: Label[] = [
           ? { ...label, color: 'f143ab' }
           : label,
   ),
+  // The second eye's verdict, one or the other (second-eye.yml).
+  {
+    name: 'review/ai-merge',
+    color: '2ea44f',
+    description: 'The AI second eye found nothing that stops the merge',
+  },
+  {
+    name: 'review/ai-fix-first',
+    color: 'd93f0b',
+    description: 'The AI second eye found something to fix before the merge',
+  },
 ]
 
 /** Old names renamed in place, so each keeps its history on past issues and pull requests. */
