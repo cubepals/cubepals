@@ -7,7 +7,14 @@
  * why, who else handles it, how long it is kept and how to use your rights. Every line matches
  * what the code does; nothing here is aspiration.
  */
-import { DELETION_WARNINGS_DAYS, FREE, KNOWN_NETWORK_DAYS, PLUS } from './figures'
+import {
+  DELETION_WARNINGS_DAYS,
+  FREE,
+  JOIN_ADDRESS_MINUTES,
+  JOIN_RECORD_DAYS,
+  KNOWN_NETWORK_DAYS,
+  PLUS,
+} from './figures'
 import type { Policy } from './policy'
 
 export const PRIVACY: Policy = {
@@ -68,6 +75,11 @@ export const PRIVACY: Policy = {
                 '**Players on your servers:** Minecraft usernames and player IDs (UUIDs) of people who join, when each was first and last seen, who is on right now, and your allow list, operator list and bans (with any reason you give). Minecraft also keeps its own files and logs inside the world, which include player names, positions and chat.',
                 'To run the server you asked for, show who is on, and manage who may join.',
                 'Contract (for you) and legitimate interests (for the players, who expect the server to work)',
+              ],
+              [
+                '**How players reach your servers:** each time someone joins one, or their game’s server list checks it: the address they typed, their Minecraft username and player ID, their game version, when each step happened (connecting, the server starting, logging in, loading, arriving in the world, leaving), why they left, how much data passed, and how smoothly the server was running. The IP address and port they came from are kept only while we match what our network saw with what the server saw (section 4).',
+                'To find and fix joins that are slow or fail, and to notice servers or addresses being misused.',
+                'Legitimate interests (yours and the players’, who expect joining to work)',
               ],
               [
                 '**Public listings:** if you publish a server, the details shown on its public page and in the directory, including the names of players on right now (only if the server checks accounts). Stars and short notes left by signed-in visitors.',
@@ -140,6 +152,7 @@ export const PRIVACY: Policy = {
         'You don’t need a {brand} account to join a server. When you join one, we process your Minecraft username and player ID, when you were on, and anything the server’s owner adds about you (for example a ban reason). The server’s own files and logs keep what Minecraft records, such as your position and chat. If the server is published, its public page shows your Minecraft name while you are on it, if the server checks accounts.',
         'If you join with an invite link, we check the name you type with Mojang so the owner can add you.',
         `When you leave a server, we keep a scrambled code made from the network you joined it from (your IP address, or the first half of an IPv6 address), not the address itself. It lets that server start as soon as your game’s server list checks it, before you press Join. The code is different on every server, can’t be turned back into your address, and is deleted ${KNOWN_NETWORK_DAYS} days after your last visit.`,
+        `Each time you join a server, or your game’s server list checks it, we also keep a record of how it went: the address you typed, your Minecraft username and player ID, your game version, when each step happened, why you left, and how smoothly the server ran. We use it to find and fix joins that are slow or fail. The IP address and port you came from stay with the record for ${JOIN_ADDRESS_MINUTES} minutes at most, only to match what our network saw with what the server saw; after that only the scrambled code above is left. The record is deleted ${JOIN_RECORD_DAYS} days after you joined.`,
         'You can use the rights in section 9 for this data too: email {privacy} with your Minecraft name. The server’s owner controls who plays and what happens on their server, so we may pass your request on to them.',
       ],
     },
@@ -229,6 +242,7 @@ export const PRIVACY: Policy = {
             '**Sign-in sessions** last 7 days from when you last used {brand}. Session records, with the IP address and browser they came from, are kept with your account.',
             '**The network you signed up from** is deleted after two days.',
             `**The networks players joined a server from** are kept, as a scrambled code, for ${KNOWN_NETWORK_DAYS} days after each player’s last visit to that server.`,
+            `**Records of joins to servers** are kept for ${JOIN_RECORD_DAYS} days, with anything they showed going wrong. The IP address and port a player came from are deleted from them within ${JOIN_ADDRESS_MINUTES} minutes.`,
             '**Server console output** is streamed from our hosting provider’s logs, which keep it for a short time; we don’t store it. The game’s own log files stay inside the world until you delete them or the server.',
             '**Usage counts, errors and feedback** sent to PostHog are kept for one year.',
             '**Billing and order records** are kept for as long as tax and accounting law requires, which can be up to 10 years under the law where we are, even after an account is deleted.',

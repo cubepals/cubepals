@@ -97,6 +97,15 @@ export const AFK_KICK_MINUTES = 15
  */
 export const KNOWN_NETWORK_DAYS = 7
 
+/** Days a record of a join to a server is kept, with what it showed going wrong (`app/joins/service.ts`). */
+export const JOIN_RECORD_DAYS = 35
+
+/**
+ * Minutes, at most, a record of a join keeps the IP address and port the player joined from: only
+ * while what the edge saw is matched with what the server saw (`app/joins/service.ts`).
+ */
+export const JOIN_ADDRESS_MINUTES = 60
+
 /** Days before a year paid at once ends that its owner is emailed (`billing/years.ts`). */
 export const YEAR_REMINDER_DAYS = [14, 3] as const
 

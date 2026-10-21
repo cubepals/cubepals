@@ -34,8 +34,8 @@ import { recordServerEvents } from './server-events.ts'
 import { raiseSignals } from './signals.ts'
 import { recordVisits } from './visits.ts'
 
-/** How long joins and the signals raised on them are kept. */
-const JOINS_KEPT_DAYS = 35
+/** How long joins and the signals raised on them are kept; the Privacy Policy states it. */
+export const JOINS_KEPT_DAYS = 35
 /** How often `joins-sweep` runs (`infra/pg/cron.ts`). */
 const SWEPT_EVERY_MS = 10 * MINUTE_MS
 /**
@@ -43,6 +43,8 @@ const SWEPT_EVERY_MS = 10 * MINUTE_MS
  * next sweep comes. A join put together and over loses it at once (`putTogether`).
  */
 const SOURCE_KEPT_MS = HOUR_MS - SWEPT_EVERY_MS
+/** The longest a join's source can be kept, the Privacy Policy's figure: one sweep past its age. */
+export const SOURCE_KEPT_AT_MOST_MS = SOURCE_KEPT_MS + SWEPT_EVERY_MS
 const UUID = z.uuid()
 
 export class JoinService {

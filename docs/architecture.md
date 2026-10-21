@@ -541,6 +541,19 @@ export const publicListings = pgTable('public_listings', {
 //   source text /* edge|rcon */, seen_at timestamptz, PRIMARY KEY (server_id, player_uuid));
 // CREATE UNLOGGED TABLE server_activity (server_id uuid PRIMARY KEY, last_player_at timestamptz);
 
+// ── joins and signals (§12 Visits, `app/joins/`): kept 35 days ───────────────
+// joins(id /* the edge's joinId */, kind /* join|look */, server_id, edge_id, edge_region,
+//       address, address_kind, protocol, player_name, player_uuid,
+//       network /* keyed hash, as known_addresses */, source /* ip:port, an hour at most */,
+//       path /* direct|held|refused */, pinged_at, connected_at, wake_asked_at, wake_operation_id,
+//       ready_at, handed_at, login_at, configure_started_at, configured_at, in_world_at, left_at,
+//       left_reason, pinged_after_at, bytes_up, bytes_down, tick jsonb, server_side, detail jsonb)
+//   indexes (server_id, connected_at), (player_uuid, …), (lower(player_name), …),
+//   (address, …), (source) where set, (connected_at)
+// signals(id, kind, server_id, join_id, key unique, at, detail jsonb, closed_at, closed_by)
+// server_reports(server_id pk, reported_at, detail jsonb): the latest `boot` a server's reporter
+//   sent, its Paper and the plugins listening at login; goes with the server
+
 // ── facts, billing, moderation ──────────────────────────────────────────────
 // power_intervals(id, server_id, memory_tier, started_at, stopped_at)   index (server_id, started_at)
 // billing_subscriptions(user_id, provider, external_customer_id, external_subscription_id unique,
@@ -576,6 +589,12 @@ or sha512 X". That query drives catalog revocation, eligibility re-evaluation an
 - **Catalog state.** External facts that can't be re-derived offline. Only the tracked set is kept
   and only the trust-relevant fields.
 - **Access entries.** The only copy that survives a volume replacement.
+- **Joins.** The edge and the server each see half of a join and neither keeps it, so the row is
+  the only record of how a join went. A row and the signals raised on it go after 35 days. The
+  client's `ip:port` (`source`) is kept only to match the two halves: cleared once both are in and
+  the player has left, and by `joins-sweep` from any row older than 50 minutes, so never past the
+  hour the Privacy Policy states. After that only the network's keyed hash is left. Operators read
+  joins without either (`app/joins/queries.ts`).
 
 ---
 
@@ -1017,6 +1036,11 @@ Outcomes are written down in `job_health`, the successes of a minute together:
 - `disk-check`: every 10 minutes. Running servers whose plan grows disks are measured; one that
   needs room now is told in game and restarted onto a bigger disk (§15.5 storage).
 - `retention-sweep`: daily. Warns, then deletes Free worlds unplayed for a year (§15.5 retention).
+- `joins-sweep`: every 10 minutes. Deletes joins and signals older than 35 days, and clears a
+  join's `source` once it is 50 minutes old (§5 Joins).
+- `signals`: every minute. Judges the joins, wakes and boot reports of the last hours against
+  `SIGNALS` and raises each signal once; one left open a day closes as expired. Unset, nothing runs
+  (`app/joins/signals.ts`).
 - `catalog-refresh`: hourly bulk state poll of the tracked set (§15.3).
 - `pack-checks`: hourly, and as a worker starts. The default modpack list's packs with no
   verdict from the last day are checked the way picking them would be (§15.6).
