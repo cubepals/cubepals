@@ -39,7 +39,7 @@ const finding = (severity: Finding['severity'], line: number): Finding => ({
   why: 'The retry calls charge() again.',
 })
 
-const findingRows = (body: string) => body.split('\n').filter((line) => /^\| (🔴|🟠|🟡) /.test(line))
+const findingRows = (body: string) => body.split('\n').filter((line) => /^\| (🔴|🟠|🟡)&nbsp;/.test(line))
 
 describe('secondEyeComment', () => {
   test('nothing found reads as an AI review that says merge', () => {
@@ -70,9 +70,9 @@ describe('secondEyeComment', () => {
     const link = (line: number) =>
       `[\`apps/control/src/billing.ts:${line}\`](https://github.com/cubepals/cubepals/blob/${SHA}/apps/control/src/billing.ts#L${line})`
     expect(findingRows(body)).toEqual([
-      `| 🔴 High | ${link(1)} | Hours are charged twice when the stop retries. |`,
-      `| 🟠 Medium | ${link(2)} | Hours are charged twice when the stop retries. |`,
-      `| 🟡 Low | ${link(3)} | Hours are charged twice when the stop retries. |`,
+      `| 🔴&nbsp;High | ${link(1)} | Hours are charged twice when the stop retries. |`,
+      `| 🟠&nbsp;Medium | ${link(2)} | Hours are charged twice when the stop retries. |`,
+      `| 🟡&nbsp;Low | ${link(3)} | Hours are charged twice when the stop retries. |`,
     ])
     const details = body.slice(body.indexOf('<details>'), body.indexOf('</details>'))
     expect(details).toContain(

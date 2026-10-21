@@ -62,7 +62,8 @@ const MOST_FINDINGS = 8
 export const LABELS = { merge: 'review/ai-merge', 'fix first': 'review/ai-fix-first' } as const
 
 const RANK: Record<Severity, number> = { high: 0, medium: 1, low: 2 }
-const TAG: Record<Severity, string> = { high: '🔴 High', medium: '🟠 Medium', low: '🟡 Low' }
+/** A severity's tag, kept on one line in its cell. */
+const TAG: Record<Severity, string> = { high: '🔴&nbsp;High', medium: '🟠&nbsp;Medium', low: '🟡&nbsp;Low' }
 
 /** The verdict's badge: an emoji, which renders everywhere and fetches nothing. */
 const BADGE = { merge: '✅', 'fix first': '⚠️' } as const
