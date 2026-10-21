@@ -28,7 +28,7 @@ import {
   storedArtifact,
   unreferencedStored,
 } from './persistence.ts'
-import { reporterJar, reporterPin, storeReporter } from './reporter.ts'
+import { keepReporterStored, reporterJar, reporterPin } from './reporter.ts'
 
 export type UnavailableReason = 'no_archive_store' | 'not_stored' | 'revoked'
 
@@ -114,9 +114,7 @@ export class ArtifactService {
     this.#jobs = deps.jobs
     this.#locks = deps.locks
     // The join reporter this build carries, kept where servers fetch it from, as it starts.
-    void storeReporter(this.#db, this.#archive).catch((error: unknown) =>
-      console.error('artifacts: the join reporter could not be stored', error),
-    )
+    keepReporterStored(this.#db, this.#archive)
   }
 
   /**

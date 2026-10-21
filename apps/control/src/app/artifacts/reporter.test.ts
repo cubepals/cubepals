@@ -5,7 +5,8 @@
 /**
  * The join reporter (`reporter.ts`): stored as the control plane starts, placed on a Paper server
  * at its start where `JOIN_REPORTER` says, with where it reports, handed to that server over its own
- * link, and never a reason for a sleeping server to boot rather than wake, or for drift.
+ * link, and never a reason for a sleeping server to boot rather than wake, or for drift; and stored
+ * on a later try where the store fails first.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { createHash, randomBytes } from 'node:crypto'
@@ -20,7 +21,7 @@ import { MemoryStore } from '../../testing/memory-store.ts'
 import { deriveServerSecret, singleKey } from '../secrets.ts'
 import { installTuning, tuning } from '../tuning.ts'
 import { storedArtifact } from './persistence.ts'
-import { useReporterJar } from './reporter.ts'
+import { keepReporterStored, useReporterJar } from './reporter.ts'
 
 const folder = mkdtempSync(join(tmpdir(), 'reporter-'))
 const jar = randomBytes(2_000)
@@ -97,4 +98,25 @@ describe.skipIf(!hasDatabase)('the join reporter', () => {
     expect(reporterLine((await desired(theirs)).spec.env)).toBeUndefined()
     expect(reporterLine((await desired(ours)).spec.env)).toBeDefined()
   }, 30_000)
+
+  test('is stored on a later try when the store fails first', async () => {
+    const newer = randomBytes(2_000)
+    const newerSha = createHash('sha512').update(newer).digest('hex')
+    writeFileSync(join(folder, 'newer.jar'), newer)
+    useReporterJar(join(folder, 'newer.jar'))
+    const store = new MemoryStore()
+    let tries = 0
+    const ingest = store.ingestFile.bind(store)
+    store.ingestFile = (path, sha) =>
+      ++tries === 1 ? Promise.reject(new Error('store down')) : ingest(path, sha)
+    try {
+      keepReporterStored(h.db, store, 20)
+      const deadline = Date.now() + 5_000
+      while ((await storedArtifact(h.db, newerSha)) === null && Date.now() < deadline) await Bun.sleep(20)
+      expect(tries).toBe(2)
+      expect(await storedArtifact(h.db, newerSha)).not.toBeNull()
+    } finally {
+      useReporterJar(join(folder, 'cubepals-reporter.jar'))
+    }
+  })
 })

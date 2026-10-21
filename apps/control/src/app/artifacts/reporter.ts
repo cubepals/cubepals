@@ -14,6 +14,7 @@
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { HOUR_MS, MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { Queryable } from '@blockly/db'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import type { ArchiveStore } from '../ports/optional.ts'
@@ -42,11 +43,26 @@ export function reporterJar(): Promise<{ sha512: string; sizeBytes: number } | n
 }
 
 /** Keeps the jar in the archive store, unless it is there already. */
-export async function storeReporter(q: Queryable, store: ArchiveStore | null): Promise<void> {
+async function storeReporter(q: Queryable, store: ArchiveStore | null): Promise<void> {
   const jar = await reporterJar()
   if (jar === null || store === null || (await storedArtifact(q, jar.sha512)) !== null) return
   const key = await store.ingestFile(jarPath, jar.sha512)
   await recordStored(q, { ...jar, key, source: 'built' })
+}
+
+/**
+ * Stores the jar, and where that fails (the archive store down as the control plane starts), tries
+ * again later, each wait twice the last up to an hour, until it is stored: until then no server
+ * gets the reporter.
+ */
+export function keepReporterStored(q: Queryable, store: ArchiveStore | null, wait = MINUTE_MS): void {
+  storeReporter(q, store).catch((error: unknown) => {
+    console.error(
+      `artifacts: the join reporter could not be stored; trying again in ${wait / SECOND_MS}s`,
+      error,
+    )
+    setTimeout(() => keepReporterStored(q, store, Math.min(wait * 2, HOUR_MS)), wait).unref()
+  })
 }
 
 /** The reporter as a server's plugins pin it, once it is stored; null before then, or with no jar. */
