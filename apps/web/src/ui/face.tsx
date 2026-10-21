@@ -175,8 +175,11 @@ function paths(rows: string[][]): Map<string, string> {
   return out
 }
 
-/** A small seeded generator (FNV-1a into mulberry32): the same name, the same face, everywhere. */
-function random(seed: string): () => number {
+/**
+ * A small seeded generator (FNV-1a into mulberry32): the same name, the same face, everywhere. A
+ * note writer's mark draws from it too.
+ */
+export function random(seed: string): () => number {
   let h = 0x811c9dc5
   for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 0x01000193)
   let state = h >>> 0

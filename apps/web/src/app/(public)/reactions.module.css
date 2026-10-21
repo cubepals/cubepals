@@ -38,9 +38,18 @@
   transition-duration: var(--quick);
   transition-timing-function: var(--ease);
 }
-/* Nothing to press in an owner's own count: a press goes through to the card's link. */
+/*
+ * An owner's own count: nothing to press, so no hover fill and no press. The tip's dashed underline
+ * and help cursor say a line explains it, which a button never shows.
+ */
 .count {
-  pointer-events: none;
+  color: var(--ink-subtle);
+}
+/* The tip (`Tip`) the count sits in, laid out as the button's icon and number are. */
+.count > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
 }
 /* Starred: the star fills, in the colour a link has. */
 .button[aria-pressed="true"] {
@@ -85,26 +94,64 @@
   list-style: none;
 }
 
+/*
+ * Who left it, then what it says. The mark is as tall as a line of the note's text (20px, type-body-sm),
+ * so its 2×2 grid falls on whole pixels, and it sits as far from the name as the delete button
+ * sits from the text (--space-8). The text hangs under the name, not under the mark.
+ */
 .note {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
   column-gap: var(--space-8);
   align-items: start;
 }
 
-.body {
+.avatar {
   grid-column: 1;
+  grid-row: 1;
+  display: block;
+  width: 20px;
+  height: 20px;
+  background: var(--surface-sand);
+  /* Edged as the composer is, outside the picture so its shapes keep their whole pixels. */
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+
+/* The name runs out of room before the time does. */
+.byline {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 20px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.author {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.meta {
+  flex: none;
+  color: var(--ink-subtle);
+}
+
+.body {
+  grid-column: 2;
+  grid-row: 2;
+  margin: 0;
   color: var(--ink);
   overflow-wrap: anywhere;
 }
 
-.meta {
-  grid-column: 1;
-  color: var(--ink-subtle);
-}
-
 .remove {
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 1 / span 2;
   display: inline-grid;
   place-items: center;

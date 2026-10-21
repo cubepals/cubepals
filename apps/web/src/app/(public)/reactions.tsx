@@ -8,6 +8,7 @@ import {
   type ListingCardView,
   NOTE_MAX_LENGTH,
   type NotesView,
+  type NoteView,
   type PublicServerView,
   type ReactionsView,
 } from '@blockly/contracts'
@@ -20,14 +21,18 @@ import { timeAgo } from '../../lib/present'
 import { noted, shortCount, starred } from '../../lib/reactions'
 import * as rules from '../../lib/rules'
 import { behindSignIn, useSignedIn } from '../../lib/viewer'
-import { Button, Popover, Skeleton } from '../../ui'
+import { Button, Popover, Skeleton, Tip } from '../../ui'
 import styles from './reactions.module.css'
+import { WriterMark } from './writer-mark'
 
 /** How close to the most a note says the composer starts counting down what is left. */
 const COUNT_FROM = 20
 
 /** How long a star that didn't take says why, before it goes by itself. */
 const FAILURE_SHOWN_MS = 4000
+
+/** Who a note is from when it shows no name: left as anonymous, or from an account without one. */
+const NO_NAME = 'A player'
 
 /**
  * A server's stars and notes, on its card in the directory and on its own page: a guestbook,
@@ -94,13 +99,16 @@ function StarButton({ reactions }: { reactions: ReactionsView }) {
     return () => clearTimeout(timer)
   }, [open, failure])
 
-  // An owner doesn't star their own server: the count is there, with nothing to press.
+  // An owner doesn't star their own server: the count is there, with nothing to press, and says
+  // why on hover, focus or a tap, so it never reads as a button that didn't work.
   if (reactions.yours)
     return (
       <span className={styles.count}>
-        <Star size={16} strokeWidth={1.75} aria-hidden />
-        <span className="type-caption bk-num">{shortCount(stars)}</span>
-        <span className="bk-visually-hidden">{noun}</span>
+        <Tip tip="Your server. Stars come from other players.">
+          <Star size={16} strokeWidth={1.75} aria-hidden />
+          <span className="type-caption bk-num">{shortCount(stars)}</span>
+          <span className="bk-visually-hidden">{noun}</span>
+        </Tip>
       </span>
     )
 
@@ -252,6 +260,7 @@ function Notes({
   const said = invalid ?? (remove.isError ? messageOf(remove.error) : null)
   const field = `${ids}-note`
   const error = `${ids}-error`
+  const signed = `${ids}-signed`
   const more = notes.data ? notes.data.total - notes.data.notes.length : 0
 
   return (
@@ -265,28 +274,13 @@ function Notes({
       ) : (
         <ul className={styles.notes}>
           {notes.data.notes.map((note) => (
-            <li key={note.id} className={styles.note}>
-              <p className={`type-body-sm ${styles.body}`} dir="auto">
-                {note.body}
-              </p>
-              <span className={`type-caption ${styles.meta}`}>
-                {note.yours ? 'You · ' : note.byOwner ? 'Owner · ' : ''}
-                {timeAgo(note.at, now)}
-              </span>
-              {note.canDelete && (
-                <button
-                  type="button"
-                  className={styles.remove}
-                  aria-label="Delete note"
-                  aria-disabled={remove.isPending || undefined}
-                  onClick={() => {
-                    if (!remove.isPending) remove.mutate({ noteId: note.id })
-                  }}
-                >
-                  <X size={14} strokeWidth={1.75} aria-hidden />
-                </button>
-              )}
-            </li>
+            <NoteRow
+              key={note.id}
+              note={note}
+              now={now}
+              deleting={remove.isPending}
+              onDelete={() => remove.mutate({ noteId: note.id })}
+            />
           ))}
         </ul>
       )}
@@ -307,7 +301,7 @@ function Notes({
           // Read-only rather than disabled while it sends, so focus stays in the field.
           readOnly={add.isPending}
           aria-invalid={invalid !== null || undefined}
-          aria-describedby={invalid !== null ? error : undefined}
+          aria-describedby={invalid !== null ? `${signed} ${error}` : signed}
           onChange={(event) => {
             onDraft(event.target.value)
             setProblem(null)
@@ -325,12 +319,66 @@ function Notes({
           <ArrowUp size={16} strokeWidth={2} aria-hidden />
         </button>
       </form>
+      <Signature id={signed} notes={notes.data} />
       {said !== null && (
         <p id={error} className={`type-caption ${styles.error}`} role="alert">
           {said}
         </p>
       )}
     </div>
+  )
+}
+
+/** Under the note box, what a note the reader leaves will show, once the notes have come. */
+function Signature({ id, notes }: { id: string; notes: NotesView | undefined }) {
+  if (notes === undefined) return null
+  return (
+    <p id={id} className={`type-caption ${styles.quiet}`}>
+      Your note shows as {notes.signature ?? NO_NAME}.
+    </p>
+  )
+}
+
+/** One note: who left it and when, what it says, and a way to delete it for whoever may. */
+function NoteRow({
+  note,
+  now,
+  deleting,
+  onDelete,
+}: {
+  note: NoteView
+  now: number
+  deleting: boolean
+  onDelete: () => void
+}) {
+  return (
+    <li className={styles.note}>
+      <WriterMark seed={note.avatar} className={styles.avatar} />
+      <p className={`type-caption ${styles.byline}`}>
+        <span className={styles.author} dir="auto">
+          {note.author ?? NO_NAME}
+        </span>
+        <span className={styles.meta}>
+          {note.yours ? ' · You' : note.byOwner ? ' · Owner' : ''} · {timeAgo(note.at, now)}
+        </span>
+      </p>
+      <p className={`type-body-sm ${styles.body}`} dir="auto">
+        {note.body}
+      </p>
+      {note.canDelete && (
+        <button
+          type="button"
+          className={styles.remove}
+          aria-label="Delete note"
+          aria-disabled={deleting || undefined}
+          onClick={() => {
+            if (!deleting) onDelete()
+          }}
+        >
+          <X size={14} strokeWidth={1.75} aria-hidden />
+        </button>
+      )}
+    </li>
   )
 }
 
