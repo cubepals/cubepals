@@ -6,8 +6,9 @@
 
 /**
  * Stop cheaters, first in the Players page's Moderation section: one switch wherever the server
- * can run it, with or without the moderation tools; one line where it can't; and the players it
- * removed, each opening their own page. Not for the tools themselves (`moderation.tsx`).
+ * can run it, with or without the moderation tools, and what it does; one line where it can't; and
+ * the players it removed, each opening their own page. Not for the tools themselves, or the line on
+ * restarting, which the section says once for every switch in it (`moderation.tsx`).
  */
 import { REMOVAL_MESSAGES, type RemovalReason, type StopCheatersView } from '@blockly/contracts'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -29,13 +30,11 @@ export function StopCheaters({
   serverId,
   view,
   tools,
-  running,
 }: {
   serverId: string
   view: StopCheatersView
   /** Whether the moderation tools are on, which add the ban. */
   tools: boolean
-  running: boolean
 }) {
   const trpc = useTRPC()
   const queries = useQueryClient()
@@ -56,9 +55,6 @@ export function StopCheaters({
       </p>
     )
 
-  const restarts = running
-    ? 'Turning this on or off restarts the server.'
-    : 'It arrives when the server next starts.'
   return (
     <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
       <Toggle
@@ -69,13 +65,11 @@ export function StopCheaters({
       />
       {available.kind === 'release' ? (
         <p className="bk-field__help">Arrives when it runs on Minecraft {available.release}.</p>
-      ) : view.effective ? (
+      ) : (
         <p className="bk-field__help">
           Moves the game can’t make are undone, and a player who keeps cheating is removed. They can rejoin.
           {tools && ' Someone who keeps sending what no game can is banned for a day.'}
         </p>
-      ) : (
-        <p className="bk-field__help">{restarts}</p>
       )}
       {view.effective && view.why !== null && WHY[view.why] && (
         <p className="bk-field__help">{WHY[view.why]}</p>

@@ -51,15 +51,24 @@ export function Moderation({
   const { enabled, chatFilter, available, stopCheaters } = view.data
   const change = (next: { enabled: boolean; chatFilter: boolean }) =>
     set.mutate({ serverId, ...next, requestId: crypto.randomUUID() })
-  const cheaters = <StopCheaters serverId={serverId} view={stopCheaters} tools={enabled} running={running} />
+  const cheaters = <StopCheaters serverId={serverId} view={stopCheaters} tools={enabled} />
+  // Said once for the section: every switch in it restarts a running server.
+  const restarts = (
+    <p className="bk-field__help">
+      {running ? 'Turning these on or off restarts the server.' : 'They arrive when the server next starts.'}
+    </p>
+  )
   // Where the tools can't run, Stop cheaters' line is all the section says.
-  if (!available) return <FormSection title="Moderation">{cheaters}</FormSection>
+  if (!available)
+    return (
+      <FormSection title="Moderation">
+        {cheaters}
+        {stopCheaters.available.kind === 'yes' && restarts}
+      </FormSection>
+    )
 
   return (
-    <FormSection
-      title="Moderation"
-      description="Warnings, mutes and bans, given here or by helpers in the game. Brings the LibertyBans and LuckPerms plugins along."
-    >
+    <FormSection title="Moderation">
       {cheaters}
       <Toggle
         label="Moderation tools"
@@ -67,6 +76,10 @@ export function Moderation({
         disabled={set.isPending}
         onChange={(next) => change({ enabled: next, chatFilter: next && chatFilter })}
       />
+      <p className="bk-field__help">
+        Warnings, mutes and bans, given here or by helpers in the game. Brings the LibertyBans and LuckPerms
+        plugins along.
+      </p>
       {enabled && (
         <Toggle
           label="Filter chat"
@@ -75,13 +88,13 @@ export function Moderation({
           onChange={(next) => change({ enabled, chatFilter: next })}
         />
       )}
-      <p className="bk-field__help">
-        {enabled && chatFilter
-          ? 'Swearing, advertising and spam are blocked. After three blocked messages, the player is muted for an hour.'
-          : running
-            ? 'Turning these on or off restarts the server.'
-            : 'They arrive when the server next starts.'}
-      </p>
+      {enabled && chatFilter && (
+        <p className="bk-field__help">
+          Swearing, advertising and spam are blocked. After three blocked messages, the player is muted for an
+          hour.
+        </p>
+      )}
+      {restarts}
       {set.isError && <Note tone="danger">{messageOf(set.error)}</Note>}
       {enabled && (
         <>
