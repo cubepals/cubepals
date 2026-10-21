@@ -37,6 +37,13 @@ describe('held names', () => {
       expect(holdOn(slug)).toBe('cubepals')
   })
 
+  test('so are words that read as Cubepals’ own stage, site page or plan', () => {
+    for (const slug of ['test', 'testing', 'beta', 'staging', 'login', 'store'])
+      expect(holdOn(slug)).toBe('cubepals')
+    for (const slug of ['testudo-farm', 'beta-builders', 'sandbox', 'trial', 'pro', 'server'])
+      expect(holdOn(slug)).toBeNull()
+  })
+
   test('a name that only contains one of them is anyone’s', () => {
     for (const slug of [
       'duels-with-friends',
