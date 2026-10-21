@@ -499,6 +499,16 @@ describe('mail', () => {
     })
   })
 
+  test('notices come from their own sender, or the everyday one without it', () => {
+    expect(loadConfig(env).mail.noticeFrom).toBe('Cubepals <hello@localhost>')
+    expect(loadConfig({ ...env, MAIL_NOTICE_FROM: '' }).mail.noticeFrom).toBe('Cubepals <hello@localhost>')
+    expect(loadConfig({ ...env, MAIL_NOTICE_FROM: 'Cubepals <noreply@localhost>' }).mail).toMatchObject({
+      from: 'Cubepals <hello@localhost>',
+      accountFrom: 'Cubepals <hello@localhost>',
+      noticeFrom: 'Cubepals <noreply@localhost>',
+    })
+  })
+
   test('admin mail has its own inbox when one is named, apart from who is an admin', () => {
     const config = loadConfig({
       ...env,

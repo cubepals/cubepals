@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/** The deployment around the application: its play addresses, regions, server logs and mail. */
 import type { RuntimeHandle } from './runtime.ts'
 
 /** A deployment's addressing. The only address knowledge the application layer has. */
@@ -49,6 +50,9 @@ export interface LogSource {
 }
 
 export interface Mailer {
-  /** One email: with `html`, both parts, and the text is what a mail app without HTML shows. */
-  send(message: { to: string; subject: string; text: string; html?: string }): Promise<void>
+  /**
+   * One email: with `html`, both parts, and the text is what a mail app without HTML shows. With
+   * `notice`, it comes from the address nobody reads (MAIL_NOTICE_FROM), and offers no reply.
+   */
+  send(message: { to: string; subject: string; text: string; html?: string; notice?: true }): Promise<void>
 }

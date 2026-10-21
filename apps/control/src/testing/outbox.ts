@@ -5,7 +5,7 @@
 import * as accountEmails from '../app/emails/account.ts'
 import type { Mailer } from '../app/ports/platform.ts'
 
-type Sent = { to: string; subject: string; text: string; html?: string }
+type Sent = { to: string; subject: string; text: string; html?: string; notice?: true }
 
 /** Every email the application sends, in order, instead of an SMTP server. */
 export class Outbox implements Mailer {

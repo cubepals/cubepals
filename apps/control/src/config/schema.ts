@@ -366,6 +366,8 @@ export const DeploymentConfig = z.object({
     from: z.string().min(3),
     /** Who sign-in's own emails (confirming, a reset, a changed password) come from. */
     accountFrom: z.string().min(3),
+    /** Who the notices of what Cubepals changed on a server come from: an address nobody reads. */
+    noticeFrom: z.string().min(3),
     /** What every subject starts with: `[Staging] ` on staging, so its mail never passes for production's. */
     subjectPrefix: z.string(),
     /**

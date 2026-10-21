@@ -78,14 +78,15 @@ const suspendsOn = (env: NodeJS.ProcessEnv) =>
     : env.FLY_SUSPEND === 'true'
 
 /**
- * The SMTP server and the senders, the account's falling back to the everyday one; staging's
- * subjects say they are staging's, by the deployment's own id. Admin mail goes to
+ * The SMTP server and the senders, the account's and the notices' falling back to the everyday
+ * one; staging's subjects say they are staging's, by the deployment's own id. Admin mail goes to
  * ADMIN_ALERT_EMAILS when it lists any.
  */
 const mailFrom = (env: NodeJS.ProcessEnv) => ({
   smtpUrl: env.SMTP_URL,
   from: env.MAIL_FROM,
   accountFrom: env.MAIL_ACCOUNT_FROM || env.MAIL_FROM,
+  noticeFrom: env.MAIL_NOTICE_FROM || env.MAIL_FROM,
   subjectPrefix: environmentOf(env.DEPLOYMENT_ID) === 'staging' ? '[Staging] ' : '',
   adminInbox: list(env.ADMIN_ALERT_EMAILS),
 })

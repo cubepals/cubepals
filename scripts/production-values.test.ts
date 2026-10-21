@@ -349,3 +349,11 @@ describe('join records', () => {
     ])
   })
 })
+
+describe('the notices’ sender', () => {
+  test('is one of the environment’s settings, not a value kept in production.env', () => {
+    expect(example.settings.MAIL_NOTICE_FROM).toBe('Cubepals <noreply@beacon.cubepals.com>')
+    expect(VALUES.map((v) => v.name)).not.toContain('MAIL_NOTICE_FROM')
+    expect(problemsOf(complete, example).wrong).toEqual([])
+  })
+})

@@ -30,6 +30,7 @@
     "ARCHIVE_S3_REGION": "auto",
     "MAIL_FROM": "Cubepals <hello@cubepals.com>",
     "MAIL_ACCOUNT_FROM": "Cubepals <account@cubepals.com>",
+    "MAIL_NOTICE_FROM": "Cubepals <noreply@beacon.cubepals.com>",
     "POLAR_SERVER": "production",
     "POSTHOG_TOKEN": "phc_your-posthog-project-token"
   },

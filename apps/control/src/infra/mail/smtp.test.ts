@@ -110,6 +110,33 @@ test('no email carries a bulk-mail header, and a reply goes where it is told', a
     )
 })
 
+test('a notice comes from the notices’ sender, with no Reply-To, and nothing else does', async () => {
+  const both = new SmtpMailer({
+    smtpUrl: `smtp://127.0.0.1:${port}`,
+    from: 'Cubepals <account@blockly.test>',
+    noticeFrom: 'Cubepals <noreply@blockly.test>',
+    replyTo: 'Cubepals <hello@blockly.test>',
+    subjectPrefix: '',
+  })
+  await both.send({
+    to: 'player@example.test',
+    subject: 'Moved',
+    text: 'A notice.',
+    html: '<p>A notice.</p>',
+    notice: true,
+  })
+  const notice = received.at(-1) ?? ''
+  expect(notice).toMatch(/^From: Cubepals <noreply@blockly\.test>$/m)
+  expect(notice).not.toMatch(/^Reply-To:/im)
+  await both.send({ to: 'player@example.test', subject: 'Reset', text: 'A link.' })
+  const account = received.at(-1) ?? ''
+  expect(account).toMatch(/^From: Cubepals <account@blockly\.test>$/m)
+  expect(account).toMatch(/^Reply-To: Cubepals <hello@blockly\.test>$/m)
+  // Without a sender of its own, a notice comes from the everyday one.
+  await mailer('').send({ to: 'player@example.test', subject: 'Moved', text: 'A notice.', notice: true })
+  expect(received.at(-1) ?? '').toMatch(/^From: Cubepals <hello@blockly\.test>$/m)
+})
+
 test('a server that never greets fails the send instead of holding it', async () => {
   const silent = createServer(() => undefined)
   await new Promise<void>((resolve) => silent.listen(0, '127.0.0.1', resolve))

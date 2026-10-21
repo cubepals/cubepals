@@ -117,6 +117,7 @@ Terraform stack.
 | `SMTP_URL` | Mailpit | secret | secret | secret | Holds the mail provider's credentials |
 | `MAIL_FROM` | `Cubepals <hello@blockly.localhost>` | `Cubepals Staging <hello@staging.cubepals.com>` | `Cubepals <hello@cubepals.com>` | tf | Every email is HTML with its plain text beside it; its pictures load from `WEB_CANONICAL_ORIGIN` under `/email/`. Staging's subjects also start with `[Staging] `, from `DEPLOYMENT_ID`, with no variable of their own |
 | `MAIL_ACCOUNT_FROM` | `MAIL_FROM` | `MAIL_FROM` | `Cubepals <account@cubepals.com>` | tf | Who confirming an email, a reset and a changed password come from, an address of their own apart from the everyday mail. A reply goes to `MAIL_FROM`. Unset or empty, it is `MAIL_FROM`. The address needs the same domain the provider already sends `MAIL_FROM` from |
+| `MAIL_NOTICE_FROM` | `MAIL_FROM` | `MAIL_FROM` | `Cubepals <noreply@beacon.cubepals.com>` | tf | Who the notices of what Cubepals changed on someone's server come from (a new address, out of Browse): an address nobody reads, so they carry no Reply-To and say so. Production's subdomain has a null MX, so a reply bounces. Unset or empty, it is `MAIL_FROM`. The provider must already send from its domain |
 
 ### Realtime
 
