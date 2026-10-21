@@ -43,8 +43,8 @@ const BRAND: ReadonlySet<string> = new Set([
 /**
  * The plain words for game modes and hubs, held for Cubepals' own public servers
  * (the first is Duels, at the address `duels`), and words that read as Cubepals' own stage, site
- * page or plan (`test`, `beta`, `login`, `pro`). Taking one is like taking an address another
- * server has; an operator or a platform admin gives one to a server.
+ * page or plan (`test`, `beta`, `login`, `premium`). Taking one is like taking an address
+ * another server has; an operator or a platform admin gives one to a server.
  */
 export const HELD_FOR_CUBEPALS: ReadonlySet<string> = new Set([
   'about',
@@ -79,7 +79,6 @@ export const HELD_FOR_CUBEPALS: ReadonlySet<string> = new Set([
   'manhunt',
   'minigames',
   'modded',
-  'new',
   'news',
   'nightly',
   'oneblock',
@@ -93,15 +92,12 @@ export const HELD_FOR_CUBEPALS: ReadonlySet<string> = new Set([
   'pricing',
   'prison',
   'privacy',
-  'pro',
   'prod',
   'production',
   'pvp',
   'register',
   'release',
   'sample',
-  'server',
-  'servers',
   'settings',
   'shop',
   'signin',
