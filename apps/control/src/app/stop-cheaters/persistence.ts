@@ -30,7 +30,6 @@ export async function loadStopCheaters(q: Queryable, serverId: string): Promise<
       reason: rows.reason,
       template: templateOf,
       takeOver: rows.takeOver,
-      removalsSeenAt: rows.removalsSeenAt,
       official: schema.publicListings.official,
     })
     .from(servers)
@@ -42,7 +41,6 @@ export async function loadStopCheaters(q: Queryable, serverId: string): Promise<
     reason: row?.reason ?? null,
     template: row?.template ?? null,
     takeOver: row?.takeOver ?? false,
-    removalsSeenAt: row?.removalsSeenAt ?? null,
     official: row?.official ?? false,
   }
 }
@@ -51,7 +49,7 @@ export async function loadStopCheaters(q: Queryable, serverId: string): Promise<
 export async function saveStopCheaters(
   q: Queryable,
   serverId: string,
-  set: Partial<Pick<typeof rows.$inferInsert, 'setting' | 'reason' | 'takeOver' | 'removalsSeenAt'>>,
+  set: Partial<Pick<typeof rows.$inferInsert, 'setting' | 'reason' | 'takeOver'>>,
 ): Promise<void> {
   await q
     .insert(rows)

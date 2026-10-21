@@ -28,7 +28,7 @@ import type { UserActor } from '../actor.ts'
 import { grimFor } from '../compat/service.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import { installTuning, tuning } from '../tuning.ts'
-import { recordStartMark } from './persistence.ts'
+import { countRemovals, recordStartMark } from './persistence.ts'
 import { BAN_REASON, STOP_CHEATERS_ACTOR } from './service.ts'
 import { stopCheatersAtStart } from './start.ts'
 
@@ -374,7 +374,7 @@ describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
     h.db.select().from(schema.serverModerationActions).where(eq(schema.serverModerationActions.serverId, id))
 
   test('with the moderation tools, impossible removals reaching the rule bring one ban for a day', async () => {
-    const { owner, id } = await running('Tam')
+    const { id } = await running('Tam')
     await withTools(id)
     const before = tuning()
     installTuning({ ...before, stopCheaters: FIXTURE })
@@ -401,9 +401,6 @@ describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
       expect(history.removals).toHaveLength(6)
       expect(history.removals[0]?.player).toEqual({ uuid, name: 'Cheater' })
       expect(history.today).toBe(6)
-      expect(await h.app.stopCheaters.unseen(id)).toBe(6)
-      await h.app.stopCheaters.seen(owner, id)
-      expect(await h.app.stopCheaters.unseen(id)).toBe(0)
     } finally {
       installTuning(before)
     }
@@ -425,7 +422,7 @@ describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
     await h.app.stopCheaters.recordRemovals(other.id, events)
     expect(await bans(id)).toHaveLength(0)
     expect(await bans(other.id)).toHaveLength(0)
-    expect(await h.app.stopCheaters.unseen(id)).toBe(5)
+    expect(await countRemovals(h.db, id, null)).toBe(5)
   }, 60_000)
 
   test('what isn’t a removal is passed over', async () => {
@@ -435,7 +432,7 @@ describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
       removed(randomUUID(), 'flying'),
       { kind: 'left', at: new Date().toISOString(), uuid: randomUUID(), reason: 'speed' },
     ])
-    expect(await h.app.stopCheaters.unseen(id)).toBe(0)
+    expect(await countRemovals(h.db, id, null)).toBe(0)
   }, 30_000)
 })
 

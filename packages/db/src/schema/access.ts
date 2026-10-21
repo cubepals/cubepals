@@ -110,8 +110,6 @@ export const serverStopCheaters = pgTable('server_stop_cheaters', {
    * moves theirs aside, and the access sync after it, which reads that it did, clears this.
    */
   takeOver: boolean('take_over').notNull().default(false),
-  /** When its owner last opened the Players page, which the tab counts removals since. */
-  removalsSeenAt: ts('removals_seen_at'),
 })
 
 /** Each player Stop cheaters removed from a server, as the server's reporter told it. */

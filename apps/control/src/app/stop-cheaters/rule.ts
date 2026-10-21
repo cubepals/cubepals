@@ -19,7 +19,6 @@ export interface StopCheatersRow {
   reason: 'browse' | null
   template: string | null
   takeOver: boolean
-  removalsSeenAt: Date | null
   official: boolean
 }
 

@@ -135,18 +135,6 @@ export class StopCheatersService {
     return (await removalsOf(this.#db, serverId, playerUuid)).map(removalView)
   }
 
-  /** The owner opened the Players page: its tab counts removals from now. */
-  async seen(actor: Actor, serverId: string, now = new Date()): Promise<void> {
-    authorize(actor, await findServer(this.#db, serverId))
-    await saveStopCheaters(this.#db, serverId, { removalsSeenAt: now })
-  }
-
-  /** How many players were removed since the owner last opened the Players page. */
-  async unseen(serverId: string): Promise<number> {
-    const row = await loadStopCheaters(this.#db, serverId)
-    return countRemovals(this.#db, serverId, row.removalsSeenAt)
-  }
-
   /**
    * The `removed` events a server's reporter posted: each kept, and a player whose removals for
    * sending what no game can reach the configured rule banned, where the moderation tools run.

@@ -499,21 +499,12 @@ const moderation = router({
     await ctx.services.stopCheaters.useOurs(ctx.actor, input.serverId, input.requestId)
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
-  /** The owner opened the Players page: its tab counts removals from now. */
-  seenRemovals: authedProcedure
-    .input(ServerRef)
-    .mutation(({ ctx, input }) => ctx.services.stopCheaters.seen(ctx.actor, input.serverId)),
   /** One player's removals on the server, newest first, for their page. */
   removalsOf: authedProcedure
     .input(PlayerInput)
     .query(({ ctx, input }) =>
       ctx.services.stopCheaters.removalsOf(ctx.actor, input.serverId, input.playerUuid),
     ),
-  /** How many players Stop cheaters removed since the owner last opened the Players page. */
-  unseenRemovals: authedProcedure.input(ServerRef).query(async ({ ctx, input }) => {
-    await ctx.services.queries.get(ctx.actor, input.serverId)
-    return ctx.services.stopCheaters.unseen(input.serverId)
-  }),
 })
 
 /** One player's page: what they are up to, and what the owner can do for them. */

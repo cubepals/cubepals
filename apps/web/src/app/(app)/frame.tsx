@@ -123,12 +123,6 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
     refetchInterval: 120_000,
   })
 
-  // Players Stop cheaters removed since the owner last opened the Players page, beside who is on.
-  const unseen = useQuery({
-    ...trpc.moderation.unseenRemovals.queryOptions({ serverId: serverId ?? '' }),
-    enabled: Boolean(serverId),
-    refetchInterval: 120_000,
-  })
   const serverItems: NavEntry[] = serverId
     ? [
         { href: `/servers/${serverId}`, label: 'Overview', icon: LayoutGrid },
@@ -136,7 +130,7 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
           href: `/servers/${serverId}/players`,
           label: 'Players',
           icon: Users,
-          trailing: playersTrailing(view?.players?.online, unseen.data),
+          trailing: view?.players ? String(view.players.online) : undefined,
         },
         {
           href: `/servers/${serverId}/mods`,
@@ -269,13 +263,6 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
 const BAR_PAGES = 3
 
 const labelOf = (label: string | undefined) => (label === undefined ? {} : { label })
-
-/** The Players tab's count: who is on, and who Stop cheaters removed since the owner last looked. */
-function playersTrailing(online: number | undefined, removed: number | undefined): string | undefined {
-  const parts = [online === undefined ? null : String(online), removed ? `${removed} removed` : null]
-  const said = parts.filter((part) => part !== null)
-  return said.length === 0 ? undefined : said.join(' · ')
-}
 
 /** Until the account confirms its email it can't create servers, so every page says how. */
 function ConfirmEmail({ email }: { email: string }) {
