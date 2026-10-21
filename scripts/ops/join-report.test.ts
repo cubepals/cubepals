@@ -162,3 +162,9 @@ test('a join on one line', () => {
     `2026-10-20 15:43:21 ${JOIN.id} Castle · Steve via castle.play.example · held · in the world in 89 s · disconnected`,
   )
 })
+
+test('a join the server reported without its login says the login is missing', () => {
+  const lines = joinReport({ ...VIEW, join: { ...JOIN, loginAt: null } })
+  expect(lines).toContain('- No login time: the server’s word of it didn’t reach this join.')
+  expect(lines).not.toContain('Nothing: both halves told of every step.')
+})

@@ -111,6 +111,8 @@ function unknowns(view: JoinDetailView): string[] {
     )
   else if (join.configureStartedAt === null && join.configuredAt === null)
     lines.push('- No configuration times: Paper older than 1.21.7 doesn’t report them.')
+  if (join.serverSide === 'reported' && join.loginAt === null)
+    lines.push('- No login time: the server’s word of it didn’t reach this join.')
   if (join.pingedAt === null) lines.push('- No server-list ping before the join.')
   if (join.serverSide === 'reported' && join.inWorldAt === null)
     lines.push('- Never reached the world, by the server’s word.')
