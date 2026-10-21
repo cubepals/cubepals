@@ -18,7 +18,7 @@ import { and, desc, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm'
 import type { PlayAddressing } from '../ports/platform.ts'
 import { findServer } from '../servers/persistence.ts'
 import { sourceOf } from './sources.ts'
-import { uuidOf } from './visits.ts'
+import { samePlayer, uuidOf } from './visits.ts'
 
 const joins = schema.joins
 
@@ -74,7 +74,7 @@ async function recordMoment(
   const uuid = uuidOf(event.uuid)
   const source = sourceOf(event.address)
   const id =
-    (await matching(q, serverId, source, uuid, at, event.kind === 'login')) ??
+    (await matching(q, serverId, source, { uuid, name: event.name ?? null }, at, event.kind === 'login')) ??
     (await begun(q, addressing, serverId, source, at))
   if (id === null) return []
   const column = joins[MOMENTS[event.kind]]
@@ -97,12 +97,16 @@ async function recordMoment(
   return [id]
 }
 
-/** The join an event belongs to: by its source, else by the player's UUID; null for none. */
+/**
+ * The join an event belongs to: by its source, else by the player, their UUID or their name; null
+ * for none. A server that doesn't check accounts gives a player its own UUID, not the one the
+ * client told the edge, so the name, which no two players on a server share at once, matches too.
+ */
 async function matching(
   q: Queryable,
   serverId: string,
   source: string | null,
-  uuid: string | null,
+  player: { uuid: string | null; name: string | null },
   at: Date,
   /** A login begins a join: it never follows one the server already told of. */
   begins: boolean,
@@ -119,7 +123,8 @@ async function matching(
       .limit(1)
     if (bySource !== undefined) return bySource.id
   }
-  if (uuid === null) return null
+  const same = samePlayer(player)
+  if (same === undefined) return null
   const handed = sql`coalesce(${joins.handedAt}, ${joins.connectedAt})`
   const [byPlayer] = await q
     .select({ id: joins.id })
@@ -129,7 +134,7 @@ async function matching(
         ours,
         // Still on, or left moments before the server's word of it came.
         or(isNull(joins.leftAt), gt(joins.leftAt, new Date(at.getTime() - HANDED_WITHIN_MS))),
-        eq(joins.playerUuid, uuid),
+        same,
         // Handed over moments before; or, after its login, a join the server already told of.
         begins
           ? gt(handed, new Date(at.getTime() - HANDED_WITHIN_MS))

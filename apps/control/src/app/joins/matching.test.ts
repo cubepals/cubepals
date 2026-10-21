@@ -305,3 +305,39 @@ describe.skipIf(!hasDatabase)('the reporter’s route', () => {
     }
   })
 })
+
+describe.skipIf(!hasDatabase)('a server that doesn’t check accounts', () => {
+  // It gives each player a UUID of its own, not the one the client told the edge, as staging showed.
+  const told = { name: 'TraceBot', uuid: '00000000-0000-0000-0000-000000000000' }
+  const own = { uuid: '5b782a77-1327-30ea-9f07-b18ec415fe82', name: 'tracebot' }
+
+  test('the server’s login first, then the edge: one row, found by the name', async () => {
+    const before = (await h.db.select().from(schema.joins)).length
+    await h.app.joins.recordServerEvents(serverId, [event('login', 900_100, own)])
+    const id = randomUUID()
+    const source = '198.51.100.7:40007'
+    await h.app.joins.recordVisits([
+      visit(id, { source, player: told, connectedAt: at(898_500), handedAt: at(900_020) }),
+    ])
+    await h.app.joins.recordServerEvents(serverId, [event('in_world', 917_000, { ...own, address: source })])
+    const joined = await row(id)
+    expect(joined.detail).toEqual({})
+    expect(joined.loginAt?.toISOString()).toBe(at(900_100))
+    expect(joined.inWorldAt?.toISOString()).toBe(at(917_000))
+    expect((await h.db.select().from(schema.joins)).length).toBe(before + 1)
+  })
+
+  test('the edge first, then the server’s login: found by the name', async () => {
+    const id = randomUUID()
+    await h.app.joins.recordVisits([
+      visit(id, {
+        source: '198.51.100.8:40008',
+        player: told,
+        connectedAt: at(1_200_000),
+        handedAt: at(1_201_000),
+      }),
+    ])
+    await h.app.joins.recordServerEvents(serverId, [event('login', 1_201_100, own)])
+    expect((await row(id)).loginAt?.toISOString()).toBe(at(1_201_100))
+  })
+})

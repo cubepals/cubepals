@@ -134,7 +134,8 @@ const SAME_JOIN_MS = 2 * MINUTE_MS
 
 /**
  * Where the server reported a join before the edge did, its row is the edge's from now on: it
- * takes the edge's id, so both halves are one row. Found by source, else by player, near in time.
+ * takes the edge's id, so both halves are one row. Found by source, else by the player's UUID or
+ * name (`samePlayer`), near in time.
  */
 async function adopt(
   q: Queryable,
@@ -143,6 +144,7 @@ async function adopt(
     serverId: string | null
     source: string | null
     playerUuid: string | null
+    playerName: string | null
     connectedAt: Date
   },
 ): Promise<void> {
@@ -155,7 +157,7 @@ async function adopt(
   )
   const same = or(
     row.source === null ? undefined : eq(joins.source, row.source),
-    row.playerUuid === null ? undefined : eq(joins.playerUuid, row.playerUuid),
+    samePlayer({ uuid: row.playerUuid, name: row.playerName }),
   )
   if (same === undefined) return
   const [orphan] = await q
@@ -172,4 +174,12 @@ async function adopt(
     .where(eq(joins.id, orphan.id))
   // A signal already raised on it goes with it: nothing else names a join by its id.
   await q.update(schema.signals).set({ joinId: row.id }).where(eq(schema.signals.joinId, orphan.id))
+}
+
+/** The rows of the same player: their UUID, or their name in any case; undefined knowing neither. */
+export function samePlayer(player: { uuid: string | null; name: string | null }) {
+  return or(
+    player.uuid === null ? undefined : eq(joins.playerUuid, player.uuid),
+    player.name === null ? undefined : sql`lower(${joins.playerName}) = lower(${player.name})`,
+  )
 }
