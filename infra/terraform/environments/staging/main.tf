@@ -40,6 +40,10 @@ variable "fly_org" { type = string }
 variable "fly_machine_limit" { type = number }
 variable "settings" { type = map(string) }
 variable "secret_names" { type = list(string) }
+variable "optional_secret_names" {
+  type    = list(string)
+  default = []
+}
 variable "web" {
   type = object({
     # As apps/web/wrangler.jsonc names staging's Worker.
@@ -101,6 +105,7 @@ module "environment" {
   settings              = var.settings
   operator_settings     = var.operator_settings
   secret_names          = var.secret_names
+  optional_secret_names = var.optional_secret_names
   secrets               = var.secrets
   secret_versions       = var.secret_versions
   cloudflare_account_id = var.cloudflare_account_id

@@ -239,7 +239,7 @@ deployment refuses a value that isn't the shape below. The values themselves are
 | `ABUSE_LIMITS` | default | default | secret | secret | `{ "chipIn": { "payerDayCents", "serverDayCents" }, "extraCeiling": { "untilRenewed", "renewed" }, "giftsPerDay", "wrongCodesPerHour", "wakesPerHour", "pingWakeHoldHours", "knownAddressDays", "inviteJoinsPerHour", "joinReportsPerSecond", "joinReportBytes" }`: whole numbers, positive but for `untilRenewed`, which is at most `renewed`; `pingWakeHoldHours`, `knownAddressDays`, `inviteJoinsPerHour`, `joinReportsPerSecond` and `joinReportBytes` may be left out for their defaults |
 | `ECONOMICS_TUNING` | default | default | optional secret | secret | `{ "paymentFee": { "percent", "fixedCents" }, "archiveGbMonthCents" }`: the fee taken from each order, as a percent of its total plus a fixed amount in cents, and what a GB-month of backups costs, in cents. Unset in production, the runtime economics report leaves fees and margin out |
 | `CAPACITY_TUNING` | default | default | secret | secret | `{ "freeShare", "tightShare", "tightIdleMinutes" }`: the share of the room for new servers free plans may fill, the share of running room past which room is tight, and how long a free server nobody is on stays up while it is. The shares are in [0, 1]; the minutes a positive whole number |
-| `SIGNALS` | unset | unset | secret | secret | `SignalsConfig` in `packages/contracts/src/join-records.ts`: which kinds of join signal run, each by its key, with its limits, and the watched addresses. Optional everywhere: unset, or not that shape, no signal runs and the log says so once |
+| `SIGNALS` | unset | optional secret | optional secret | secret | `SignalsConfig` in `packages/contracts/src/join-records.ts`: which kinds of join signal run, each by its key, with its limits, and the watched addresses. Optional everywhere: unset, or not that shape, no signal runs and the log says so once |
 
 ### Files for official servers (optional)
 
@@ -272,7 +272,7 @@ plugin does nothing.
 
 | Variable | Local | Staging | Production | Set by | Notes |
 |---|---|---|---|---|---|
-| `JOIN_REPORTER` | `off` | `off` | `off` | config | `off`, `official` (the servers flagged official) or `all`. Needs an archive store, where the jar is kept |
+| `JOIN_REPORTER` | `off` | optional | optional | op | `off`, `official` (the servers flagged official) or `all`; unset is `off`. Needs an archive store, where the jar is kept |
 
 ### Product analytics (optional)
 

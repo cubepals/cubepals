@@ -320,3 +320,32 @@ describe('the optional tuning and official files', () => {
     expect(secrets.FLY_API_TOKEN).toBe(complete.FLY_API_TOKEN)
   })
 })
+
+describe('join records', () => {
+  test('left out, nothing reaches the control plane: no reporter and no signals', () => {
+    expect(problemsOf(complete, example)).toEqual({ missing: [], wrong: [], bucketFirst: false })
+    const env = terraformEnv(complete)
+    expect(JSON.parse(env.TF_VAR_secrets ?? '{}')).not.toHaveProperty('SIGNALS')
+    expect(JSON.parse(env.TF_VAR_operator_settings ?? '{}')).not.toHaveProperty('JOIN_REPORTER')
+  })
+
+  test('given, the reporter is an operator setting and the signals a secret', () => {
+    // `{}` turns no kind of signal on: the shape only, no limits.
+    const given = { JOIN_REPORTER: 'official', SIGNALS: '{}' }
+    expect(problemsOf({ ...complete, ...given }, example).wrong).toEqual([])
+    const env = terraformEnv({ ...complete, ...given })
+    expect(JSON.parse(env.TF_VAR_operator_settings ?? '{}')).toMatchObject({ JOIN_REPORTER: 'official' })
+    expect(JSON.parse(env.TF_VAR_secrets ?? '{}')).toMatchObject({ SIGNALS: '{}' })
+    expect(JSON.parse(env.TF_VAR_secrets ?? '{}')).not.toHaveProperty('JOIN_REPORTER')
+  })
+
+  test('a reporter setting or signals the control plane would not read are named before anything is made', () => {
+    expect(problemsOf({ ...complete, JOIN_REPORTER: 'some' }, example).wrong.join('\n')).toContain('reporter')
+    expect(problemsOf({ ...complete, SIGNALS: '{"slowJoin":' }, example).wrong).toEqual([
+      'SIGNALS is one line of JSON.',
+    ])
+    expect(problemsOf({ ...complete, SIGNALS: '{"slowJoin":"fast"}' }, example).wrong).toEqual([
+      'SIGNALS is not in the shape the signals job reads.',
+    ])
+  })
+})

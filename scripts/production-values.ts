@@ -14,6 +14,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { SignalsConfig } from '@blockly/contracts/join-records'
 import { parse } from 'smol-toml'
 import { loadConfig } from '../apps/control/src/config/load.ts'
 
@@ -61,6 +62,16 @@ const json = (value: string): string | null => {
   } catch {
     return 'is one line of JSON'
   }
+}
+/** The signals' limits: JSON, and the shape the signals job reads (`app/joins/signals.ts`). */
+const signalsShape = (value: string): string | null => {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    return 'is one line of JSON'
+  }
+  return SignalsConfig.safeParse(parsed).success ? null : 'is not in the shape the signals job reads'
 }
 const startsWith =
   (prefixes: string[], what: string) =>
@@ -206,6 +217,14 @@ export const VALUES: Value[] = [
     optional: 'official files',
     shape: json,
   },
+  {
+    name: 'SIGNALS',
+    goes: ['secret'],
+    where:
+      'only to raise signals on joins: the private records, production’s signal limits, as one line of JSON (docs/configuration.md); left out, none is raised',
+    optional: 'signals',
+    shape: signalsShape,
+  },
   { name: 'AUTH_SECRET', goes: ['secret'], where: '', generate: random },
   { name: 'WEB_PROXY_SECRET', goes: ['secret'], where: '', generate: random },
   { name: 'REALTIME_TICKET_SECRET', goes: ['secret'], where: '', generate: random },
@@ -223,6 +242,13 @@ export const VALUES: Value[] = [
     goes: ['operator'],
     where: "where admin mail goes instead of the admins' own emails; comma-separate more",
     optional: 'admin inbox',
+  },
+  {
+    name: 'JOIN_REPORTER',
+    goes: ['operator'],
+    where:
+      'which Paper servers get the join reporter at their next full boot: official (Cubepals’ own) or all; left out, none',
+    optional: 'join reporter',
   },
   {
     name: 'ACME_EMAIL',

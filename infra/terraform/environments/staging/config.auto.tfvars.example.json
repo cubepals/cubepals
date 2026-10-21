@@ -39,5 +39,6 @@
     "ARCHIVE_S3_SECRET_ACCESS_KEY",
     "POLAR_ACCESS_TOKEN",
     "POLAR_WEBHOOK_SECRET"
-  ]
+  ],
+  "optional_secret_names": ["SIGNALS"]
 }

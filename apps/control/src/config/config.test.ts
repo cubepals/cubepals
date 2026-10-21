@@ -534,3 +534,15 @@ describe("staging's pull request previews", () => {
     expect(loadConfig({ ...env, WEB_TRUSTED_ORIGINS: commits }).web.trustedOrigins).toEqual([commits])
   })
 })
+
+describe('join records', () => {
+  test('unset, no server gets the reporter and no signal is judged', () => {
+    expect(loadConfig(env).joins).toEqual({ reporter: 'off' })
+  })
+
+  test('JOIN_REPORTER picks the servers, and SIGNALS is read as JSON for the signals job to judge', () => {
+    const config = loadConfig({ ...env, JOIN_REPORTER: 'official', SIGNALS: '{"watchedAddresses":["x"]}' })
+    expect(config.joins).toEqual({ reporter: 'official', signals: { watchedAddresses: ['x'] } })
+    expect(() => loadConfig({ ...env, JOIN_REPORTER: 'some' })).toThrow()
+  })
+})

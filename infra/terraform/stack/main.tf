@@ -41,7 +41,7 @@ variable "settings" {
 }
 
 variable "operator_settings" {
-  description = "Non-secret values only the operator has: ids, admin emails, accepted terms."
+  description = "Non-secret values only the operator has: ids, admin emails, accepted terms, which servers get the join reporter."
   type        = map(string)
   default     = {}
 }
