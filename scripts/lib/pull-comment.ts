@@ -33,15 +33,19 @@ export async function github(path: string, init: RequestInit = {}): Promise<Resp
 /** The account the comments are written as: only its own comment can be edited. */
 const author = (): string => process.env.COMMENT_AUTHOR || 'github-actions[bot]'
 
-/** The id of the comment the workflow wrote on the pull request before, found by its marker. */
-async function existing(repo: string, pull: number | string, marker: string): Promise<number | undefined> {
+/** The comment the workflow wrote on the pull request before, found by its marker. */
+export async function ourComment(
+  repo: string,
+  pull: number | string,
+  marker: string,
+): Promise<{ id: number; body: string } | undefined> {
   for (let page = 1; ; page++) {
     const response = await github(`repos/${repo}/issues/${pull}/comments?per_page=100&page=${page}`)
     const comments = (await response.json()) as { id: number; body?: string; user?: { login?: string } }[]
     const ours = comments.find(
       (comment) => comment.user?.login === author() && comment.body?.startsWith(marker),
     )
-    if (ours) return ours.id
+    if (ours) return { id: ours.id, body: ours.body ?? '' }
     if (comments.length < 100) return undefined
   }
 }
@@ -56,7 +60,7 @@ export async function keepComment(
   marker: string,
   body: string | ((updating: boolean) => string),
 ) {
-  const id = await existing(repo, pull, marker)
+  const id = (await ourComment(repo, pull, marker))?.id
   await github(
     id === undefined ? `repos/${repo}/issues/${pull}/comments` : `repos/${repo}/issues/comments/${id}`,
     {

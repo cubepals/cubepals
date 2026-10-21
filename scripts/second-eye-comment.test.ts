@@ -11,11 +11,16 @@ import {
   labelFor,
   lookedAt,
   MARKER,
+  noticeLine,
   type Run,
+  reviewedIn,
   secondEyeComment,
+  withNotice,
 } from './second-eye-comment.ts'
 
 const SHA = '0123456789abcdef0123456789abcdef01234567'
+const HEAD = 'fedcba9876543210fedcba9876543210fedcba98'
+const headLink = `[\`fedcba9\`](https://github.com/cubepals/cubepals/commit/${HEAD})`
 
 const run: Run = {
   repo: 'cubepals/cubepals',
@@ -143,5 +148,65 @@ describe('lookedAt', () => {
       'data or money mistakes',
       'broken rules from `CLAUDE.md` and `AGENTS.md`',
     ])
+  })
+})
+
+describe('a review the pull request has moved past', () => {
+  const body = secondEyeComment({ verdict: 'fix first', findings: [finding('high', 1)] }, run)
+
+  test('finds the commit a comment reviewed', () => {
+    expect(reviewedIn(body)).toBe(SHA)
+    expect(reviewedIn(secondEyeComment({ verdict: 'merge', findings: [] }, { ...run, updating: true }))).toBe(
+      SHA,
+    )
+    expect(reviewedIn(`${MARKER}\nNothing here.`)).toBeUndefined()
+  })
+
+  test('each notice, in plain words, naming the new head', () => {
+    const repo = 'cubepals/cubepals'
+    expect(noticeLine('running', repo, SHA, HEAD)).toBe(
+      `> ⏳ **Reviewed an older commit.** A new review of ${headLink} is running.`,
+    )
+    expect(noticeLine('running', repo, HEAD, HEAD)).toBe(`> ⏳ **A new review of ${headLink} is running.**`)
+    expect(noticeLine('running', repo, undefined, HEAD)).toBe(
+      `> ⏳ **Reviewed an older commit.** A new review of ${headLink} is running.`,
+    )
+    expect(noticeLine('draft', repo, SHA, HEAD)).toBe(
+      '> ⏸️ **Reviewed an older commit.** A new review starts when the pull request is ready for review.',
+    )
+    expect(noticeLine('failed', repo, SHA, HEAD)).toBe(
+      `> ⚠️ **Reviewed an older commit.** The new review of ${headLink} didn't finish.`,
+    )
+    expect(noticeLine('moved', repo, SHA, HEAD)).toBe(
+      `> ⚠️ **Reviewed an older commit.** The pull request is now at ${headLink}.`,
+    )
+  })
+
+  test('the notice goes under the marker, above the review, and keeps it whole', () => {
+    const line = noticeLine('running', 'cubepals/cubepals', SHA, HEAD)
+    const marked = withNotice(body, line)
+    const lines = marked.split('\n')
+    expect(lines[0]).toBe(MARKER)
+    expect(lines[1]).toBe(line)
+    expect(lines[2]).toBe('')
+    expect(lines.slice(3).join('\n')).toBe(body.split('\n').slice(1).join('\n'))
+    expect(reviewedIn(marked)).toBe(SHA)
+  })
+
+  test('a newer notice replaces the older one, and none takes it off', () => {
+    const running = withNotice(body, noticeLine('running', 'cubepals/cubepals', SHA, HEAD))
+    const failed = noticeLine('failed', 'cubepals/cubepals', SHA, HEAD)
+    expect(withNotice(running, failed)).toBe(withNotice(body, failed))
+    expect(withNotice(running)).toBe(body)
+    expect(withNotice(body)).toBe(body)
+  })
+
+  test('a comment edited for its commit keeps its line under the notice', () => {
+    const updated = secondEyeComment({ verdict: 'merge', findings: [] }, { ...run, updating: true })
+    const lines = withNotice(updated, noticeLine('draft', 'cubepals/cubepals', SHA, HEAD)).split('\n')
+    expect(lines[1]?.startsWith('> ⏸️')).toBe(true)
+    expect(lines[3]).toBe(
+      `<sub>Updated for [\`0123456\`](https://github.com/cubepals/cubepals/commit/${SHA})</sub>`,
+    )
   })
 })

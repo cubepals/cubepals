@@ -11,19 +11,26 @@ name: Second eye
 # it, so nobody else can spend the subscription. What the reviewer looks for and how it answers
 # is .github/second-eye.md, which is its whole prompt.
 #
-# Two jobs, so the token that can write never meets Claude. The review job holds read-only tokens:
-# it checks out the commit this workflow came from (the default branch, or for a label the pull
+# The jobs that can write never meet Claude. The review job holds read-only tokens: it checks out
+# the commit this workflow came from (the default branch, or for a label or a push the pull
 # request itself, which already wrote this file), saves the pull request's description and diff
 # as data in .second-eye/, and runs Claude with no shell and no tool but reading files in the
 # workspace. Its answer is JSON in a fixed shape. The comment job writes it as Cubepals' bot
 # (github-actions[bot] without the app), editing its earlier review instead of adding one, and
 # labels the pull request review/ai-merge or review/ai-fix-first.
 #
-# A label on a fork's pull request starts a run without secrets, and a run by hand refuses a
-# fork's; a comment reviews a fork's pull request the same way as any, from the default branch.
+# It follows the pull request: once it has been asked for (the pull request carries
+# needs-second-eye, or a verdict label), each push v0id-user makes reviews the new head again. The
+# mark job says first, at the top of the comment, that the review is for an older commit, and takes
+# the verdict's label off until the new one lands. The review then waits QUIET_MINUTES for the
+# pushes to stop: a newer push cancels it, waiting or reviewing, so one review covers a burst of
+# fixes. A draft's push only marks the review stale; the review runs when it is ready for review.
+#
+# A label or push on a fork's pull request starts nothing, and a run by hand refuses a fork's; a
+# comment reviews a fork's pull request the same way as any, from the default branch.
 on:
   pull_request:
-    types: [labeled]
+    types: [labeled, synchronize, ready_for_review]
   issue_comment:
     types: [created]
   workflow_dispatch:
@@ -36,16 +43,24 @@ on:
 permissions: {}
 
 jobs:
-  review:
-    name: Review
+  # Asked for, by whom, and on which branch. Every job after it needs it, so an event it skips
+  # (anyone else's comment, a push to a pull request nobody asked to review) runs nothing and
+  # cancels nothing.
+  mark:
+    name: Say a new review is coming
     if: >-
       github.repository == 'cubepals/cubepals'
       && github.actor == 'v0id-user'
       && github.triggering_actor == 'v0id-user'
       && (
         (github.event_name == 'pull_request'
-          && github.event.label.name == 'needs-second-eye'
-          && github.event.pull_request.head.repo.full_name == github.repository)
+          && github.event.pull_request.head.repo.full_name == github.repository
+          && (
+            (github.event.action == 'labeled' && github.event.label.name == 'needs-second-eye')
+            || (github.event.action != 'labeled'
+              && (contains(github.event.pull_request.labels.*.name, 'needs-second-eye')
+                || contains(github.event.pull_request.labels.*.name, 'review/ai-merge')
+                || contains(github.event.pull_request.labels.*.name, 'review/ai-fix-first')))))
         || (github.event_name == 'issue_comment'
           && github.event.issue.pull_request
           && github.event.comment.user.login == 'v0id-user'
@@ -55,9 +70,53 @@ jobs:
         || github.event_name == 'workflow_dispatch'
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # A second label or comment on the same pull request cancels the review still running. At the
-    # job level, so events the if skips (anyone else's comment) cancel nothing.
+    timeout-minutes: 5
+    # One group a pull request for every job here: a newer run's job cancels an older run's, waiting
+    # or running, so an older review never lands after a newer push. Jobs of one run follow each
+    # other, so they never cancel themselves.
+    concurrency:
+      group: second-eye-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+      cancel-in-progress: true
+    permissions:
+      pull-requests: write
+    outputs:
+      # A draft's push waits for ready_for_review; everything else is reviewed now.
+      review: ${{ !(github.event.action == 'synchronize' && github.event.pull_request.draft) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: |
+            scripts
+            .github
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - name: Cubepals' bot
+        id: bot
+        if: vars.CUBEPALS_APP_CLIENT_ID != ''
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.CUBEPALS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CUBEPALS_APP_PRIVATE_KEY }}
+      - name: Say a new review is coming
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
+          COMMENT_AUTHOR: ${{ steps.bot.outputs.app-slug && format('{0}[bot]', steps.bot.outputs.app-slug) || 'github-actions[bot]' }}
+          NOTICE: ${{ github.event.action == 'synchronize' && github.event.pull_request.draft && 'draft' || 'running' }}
+          REPO: ${{ github.repository }}
+          PULL: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+        run: bun scripts/second-eye-comment.ts
+
+  review:
+    name: Review
+    needs: mark
+    if: needs.mark.outputs.review == 'true'
+    runs-on: ubuntu-latest
+    # The quiet window and the review.
+    timeout-minutes: 45
     concurrency:
       group: second-eye-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
       cancel-in-progress: true
@@ -71,6 +130,14 @@ jobs:
     env:
       PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
     steps:
+      # A push waits for the pushes after it: a fix loop pushes again once CI has run and the fix is
+      # made, and a newer push cancels this job while it sleeps. A label, a comment or a run by hand
+      # is someone asking now, so it starts at once.
+      - name: Wait for the pushes to stop
+        if: github.event.action == 'synchronize'
+        env:
+          QUIET_MINUTES: 20
+        run: sleep "${QUIET_MINUTES}m"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
@@ -141,6 +208,9 @@ jobs:
     if: needs.review.outputs.review != ''
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    concurrency:
+      group: second-eye-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+      cancel-in-progress: true
     permissions:
       # For github-actions[bot] when the Cubepals app isn't configured: the comment and the label.
       pull-requests: write
@@ -172,6 +242,51 @@ jobs:
           REVIEW: ${{ needs.review.outputs.review }}
           REVIEWED: ${{ needs.review.outputs.reviewed }}
           MODEL: ${{ needs.review.outputs.model }}
+          REPO: ${{ github.repository }}
+          PULL: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+        run: bun scripts/second-eye-comment.ts
+
+  # A review that failed, or answered nothing, says so on the comment in place of "running". One
+  # a newer push cancelled says nothing: the newer run writes the comment.
+  failed:
+    name: Say the review didn't finish
+    needs: [mark, review]
+    if: >-
+      always()
+      && needs.mark.outputs.review == 'true'
+      && (needs.review.result == 'failure'
+        || (needs.review.result == 'success' && needs.review.outputs.review == ''))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: second-eye-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+      cancel-in-progress: true
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: |
+            scripts
+            .github
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - name: Cubepals' bot
+        id: bot
+        if: vars.CUBEPALS_APP_CLIENT_ID != ''
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.CUBEPALS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CUBEPALS_APP_PRIVATE_KEY }}
+      - name: Say the review didn't finish
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
+          COMMENT_AUTHOR: ${{ steps.bot.outputs.app-slug && format('{0}[bot]', steps.bot.outputs.app-slug) || 'github-actions[bot]' }}
+          NOTICE: failed
           REPO: ${{ github.repository }}
           PULL: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
         run: bun scripts/second-eye-comment.ts
