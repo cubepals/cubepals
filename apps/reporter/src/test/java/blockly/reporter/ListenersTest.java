@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.Server;
+import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -43,6 +44,9 @@ class ListenersTest {
                     Class<?> returns = method.getReturnType();
                     if (method.getName().equals("getLogger")) return java.util.logging.Logger.getLogger("test");
                     if (method.getName().equals("isPrimaryThread")) return true;
+                    // An event made with a name and a uuid asks the server for the profile they make.
+                    if (method.getName().equals("createProfile"))
+                        return standIn(PlayerProfile.class, java.util.Map.of("getId", ALEX, "getName", "Alex"));
                     if (returns == String.class) return "test";
                     if (returns == boolean.class) return false;
                     if (returns == int.class || returns == long.class || returns == double.class) return 0;
@@ -82,6 +86,20 @@ class ListenersTest {
         assertEquals(ALEX.toString(), event.get("uuid").getAsString());
         assertEquals("Alex", event.get("name").getAsString());
         assertEquals("198.51.100.4:40001", event.get("address").getAsString());
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    void aLoginIsQueuedOnlyWhenItIsAllowed() throws java.net.UnknownHostException {
+        List<JsonObject> queued = new ArrayList<>();
+        Listeners listeners = new Listeners(queued::add);
+        var address = java.net.InetAddress.getByName("198.51.100.4");
+        var refused = new AsyncPlayerPreLoginEvent("Alex", address, ALEX);
+        refused.disallow(AsyncPlayerPreLoginEvent.Result.KICK_BANNED, net.kyori.adventure.text.Component.text("banned"));
+        listeners.login(refused);
+        assertEquals(0, queued.size());
+        listeners.login(new AsyncPlayerPreLoginEvent("Alex", address, ALEX));
+        assertEquals("login", queued.get(0).get("kind").getAsString());
     }
 
     @Test

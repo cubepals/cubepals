@@ -71,20 +71,35 @@
  *                                 [--status failed] [--limit n] [--json]
  *                                                   operations, the newest first
  *   bun scripts/ops.ts operation <op>               one operation, and where its time went
+ *   bun scripts/ops.ts joins [--server <id|slug>] [--player <name|uuid>] [--address <name>]
+ *                            [--since 24h|7d|<ISO>] [--limit n] [--json]
+ *                                                   joins, the newest first, one a line
+ *   bun scripts/ops.ts join <join id|name|uuid> [--at <ISO>] [--markdown|--json]
+ *                                                   one join as an incident report: by its id, or a
+ *                                                   player's nearest --at, or their latest
+ *   bun scripts/ops.ts signals [--since 7d|<ISO>] [--json] | signals close <id>
+ *                                                   the open signals, oldest first, one a line, and
+ *                                                   nothing at all while none is open; --since adds
+ *                                                   those closed since
  *
  * With --production, it reaches production through `fly proxy` with production's own values
  * (scripts/lib/production-reach.ts). Otherwise OPERATOR_API and OPERATOR_TOKEN say where, as for
  * `scripts/runtimes.ts`. OPERATOR (or USER) is who the audit log says acted, as `operator:<name>`.
  * What takes something away from someone is named again with --confirm first, and a server, an
  * operation and a console command are checked before anything is called (lib/operator-inputs.ts).
+ *
+ * Parts (`ops/`):
+ * - `join-report.ts`: a join as an incident report, and the one-line forms of joins and signals.
  */
 import type { HealthOperationView, HealthView, HealthWindow, OperationStepsView } from '@blockly/contracts'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
+import type { JoinDetailView, JoinView, SignalView } from '@blockly/contracts/join-records'
 import { z } from 'zod'
 import { healthReport, operationLine, stepsReport } from './lib/health-report.ts'
 import { flags, operatorCli, withoutSecrets } from './lib/operator-cli.ts'
 import { ConsoleCommand, namesServer, PLATFORM } from './lib/operator-inputs.ts'
 import { reachProduction } from './lib/production-reach.ts'
+import { joinLine, joinReport, signalLine } from './ops/join-report.ts'
 
 const [command = 'help', ...rest] = process.argv.slice(2).filter((arg) => arg !== '--production')
 
@@ -419,9 +434,48 @@ switch (command) {
     else for (const line of stepsReport(op)) say(line)
     break
   }
+  case 'joins': {
+    const query = new URLSearchParams()
+    for (const name of ['server', 'player', 'address', 'limit']) {
+      const given = option(name)
+      if (given !== undefined) query.set(name, given)
+    }
+    const from = option('since')
+    if (from !== undefined) query.set('since', since(from))
+    const { joins } = (await api('GET', `/joins?${query}`)) as { joins: JoinView[] }
+    if (option('json')) show(joins)
+    else for (const join of joins) say(joinLine(join))
+    break
+  }
+  case 'join': {
+    const ref = first('a join id, or a player’s name or uuid')
+    // The API tells a join's id from a player's: both can be any version of uuid.
+    const at = option('at')
+    const query = new URLSearchParams({ player: ref, ...(at === undefined ? {} : { at: since(at) }) })
+    const view = (await api('GET', `/joins/find?${query}`)) as JoinDetailView
+    if (option('json')) show(view)
+    else for (const line of joinReport(view)) say(line)
+    break
+  }
+  case 'signals': {
+    if (positional[0] === 'close') {
+      const id = Number(second('a signal’s number'))
+      if (!Number.isInteger(id) || id <= 0)
+        fail('signals close takes a signal’s number, as signals prints it')
+      show(await api('POST', `/signals/${id}/close`))
+      break
+    }
+    const from = option('since')
+    const query = from === undefined ? '' : `?since=${encoded(since(from))}`
+    const { signals } = (await api('GET', `/signals${query}`)) as { signals: SignalView[] }
+    // Nothing else: a script that polls this sees a change only when a signal opens or closes.
+    if (option('json')) show(signals)
+    else for (const signal of signals) say(signalLine(signal))
+    break
+  }
   default:
     say(
-      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|retry|trash|untrash|rest|purge|console|identity|message|mods|players|whitelist|operator|helper|ban|pardon|moderation|listing|official|allowlist|platform|jars|health|operations|operation',
+      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|retry|trash|untrash|rest|purge|console|identity|message|mods|players|whitelist|operator|helper|ban|pardon|moderation|listing|official|allowlist|platform|jars|health|operations|operation|joins|join|signals',
     )
     say('See the top of scripts/ops.ts, and docs/production.md.')
     if (command !== 'help') process.exit(1)

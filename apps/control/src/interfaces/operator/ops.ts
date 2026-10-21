@@ -9,7 +9,7 @@
  * (as its owner's Try again does), sent to the trash and taken back out, rested in the archive
  * store now, or purged now. What an owner does on a server's own pages is
  * `server-pages.ts`'s; Browse and its allowlist are `listings.ts`'s; the admins' platform switches
- * are `platform.ts`'s; uploaded jars' malware checks are `jar-checks.ts`'s. All of it is under `/ops/v1`. `scripts/ops.ts` is its command line, and `scripts/production-check.ts`
+ * are `platform.ts`'s; uploaded jars' malware checks are `jar-checks.ts`'s; joins and their signals are `joins.ts`'s. All of it is under `/ops/v1`. `scripts/ops.ts` is its command line, and `scripts/production-check.ts`
  * runs a server's whole life through it. Production's health reads as the admin Health page
  * reads it (`app/platform/health.ts`): `/health`, `/operations` and one operation's steps. Every
  * route goes through the services the web app's own routes use, as the operator the `x-operator`
@@ -35,6 +35,7 @@ import type { MinecraftServerService } from '../../app/servers/service.ts'
 import type { UpkeepNow } from '../../app/servers/upkeep-now.ts'
 import { bodyOf, gate, OPS_BASE, operatorOf } from './gate.ts'
 import { type JarCheckOptions, jarCheckRoutes } from './jar-checks.ts'
+import { type JoinOptions, joinRoutes } from './joins.ts'
 import { type ListingsOptions, listingRoutes } from './listings.ts'
 import { type PlatformOptions, platformRoutes } from './platform.ts'
 import { type ServerPagesOptions, serverPageRoutes } from './server-pages.ts'
@@ -42,6 +43,7 @@ import { type ServerPagesOptions, serverPageRoutes } from './server-pages.ts'
 export type OpsApiOptions = ServerPagesOptions &
   ListingsOptions &
   JarCheckOptions &
+  JoinOptions &
   PlatformOptions & {
     accounts: Pick<AccountService, 'setPlan' | 'setLimits' | 'createAccount'>
     accountQueries: Pick<AccountQueries, 'list' | 'get'>
@@ -108,6 +110,7 @@ export function createOpsApi(options: OpsApiOptions): Hono {
   listingRoutes(app, options)
   platformRoutes(app, options)
   jarCheckRoutes(app, options)
+  joinRoutes(app, options)
   healthRoutes(app, options)
   return app
 }

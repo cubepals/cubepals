@@ -9,16 +9,27 @@
  * are matched, an hour at most; then only a hash of its network remains. Rows go after 35 days.
  *
  * The edge's half is written by `visits.ts`, the server's matched to it by `server-events.ts`, and
- * a client's `ip:port` spelt one way by `sources.ts`.
+ * a client's `ip:port` spelt one way by `sources.ts`; signals are raised by `signals.ts`, and
+ * operators read all of it through `queries.ts`.
  */
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
-import type { ServerJoinEvent, VisitReport } from '@blockly/contracts/join-records'
+import type {
+  JoinDetailView,
+  JoinView,
+  ServerJoinEvent,
+  SignalView,
+  VisitReport,
+} from '@blockly/contracts/join-records'
 import { type Db, schema, type Tx } from '@blockly/db'
 import { and, eq, inArray, isNotNull, lt } from 'drizzle-orm'
+import { z } from 'zod'
+import { type OperatorActor, requestedBy } from '../actor.ts'
+import { NotFound } from '../errors.ts'
 import type { Limits } from '../ports/limits.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import type { SecretKeyring } from '../secrets.ts'
 import { tuning } from '../tuning.ts'
+import { closeSignal, findJoin, type JoinFilter, joinDetail, listJoins, listSignals } from './queries.ts'
 import { recordServerEvents } from './server-events.ts'
 import { raiseSignals } from './signals.ts'
 import { recordVisits } from './visits.ts'
@@ -32,6 +43,7 @@ const SWEPT_EVERY_MS = 10 * MINUTE_MS
  * next sweep comes. A join put together and over loses it at once (`putTogether`).
  */
 const SOURCE_KEPT_MS = HOUR_MS - SWEPT_EVERY_MS
+const UUID = z.uuid()
 
 export class JoinService {
   readonly #db: Db
@@ -77,6 +89,38 @@ export class JoinService {
     )
   }
 
+  /** Joins, the newest first, as an operator narrows them. */
+  list(filter: JoinFilter): Promise<JoinView[]> {
+    return listJoins(this.#db, filter)
+  }
+
+  /** One join with what explains it: its wake's start, its signals and how often its player came. */
+  async detail(id: string): Promise<JoinDetailView> {
+    return (await joinDetail(this.#db, id)) ?? notFound('Join')
+  }
+
+  /**
+   * The join `ref` names: a join's own id, whatever version of uuid it is (a join only the server
+   * reported has a random one, as a player's is), or else a player's join nearest `at`, or their
+   * latest.
+   */
+  async find(ref: string, at?: Date): Promise<JoinDetailView> {
+    const own = UUID.safeParse(ref).success ? await joinDetail(this.#db, ref) : null
+    if (own !== null) return own
+    const id = await findJoin(this.#db, ref, at)
+    return id === null ? notFound('Join') : this.detail(id)
+  }
+
+  /** The open signals, oldest first; with `since`, those closed since then too. */
+  signals(since?: Date): Promise<SignalView[]> {
+    return listSignals(this.#db, since)
+  }
+
+  /** An operator closes a signal they have looked at. */
+  async closeSignal(operator: OperatorActor, id: number): Promise<SignalView> {
+    return (await closeSignal(this.#db, id, requestedBy(operator), new Date())) ?? notFound('Signal')
+  }
+
   /** `signals`: raises what the `SIGNALS` setting finds, and closes what has been open a day. */
   raiseSignals(now = new Date()): Promise<number> {
     return raiseSignals(this.#db, now)
@@ -119,4 +163,8 @@ async function putTogether(q: Tx, ids: readonly string[]): Promise<void> {
         isNotNull(joins.leftAt),
       ),
     )
+}
+
+const notFound = (what: string): never => {
+  throw new NotFound(what)
 }

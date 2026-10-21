@@ -48,6 +48,8 @@ final class Listeners implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
     public void login(AsyncPlayerPreLoginEvent event) {
+        // A login refused here (a ban, the whitelist, a full server) is no join.
+        if (event.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) return;
         // This event knows the address without its port, which can't name the connection: the
         // control plane matches it by the player instead.
         queue.accept(Events.event("login", Instant.now(), event.getUniqueId(), event.getName(), null));
