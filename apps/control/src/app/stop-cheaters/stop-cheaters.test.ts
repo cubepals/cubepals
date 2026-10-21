@@ -43,9 +43,9 @@ const FIXTURE = {
 }
 
 /** A control plane of its own for each group, with Grim on the catalog and pinned for every release. */
-async function begin(): Promise<void> {
+async function begin(options: Parameters<typeof startHarness>[0] = {}): Promise<void> {
   await cdn.start()
-  h = await startHarness()
+  h = await startHarness(options)
   h.catalog.publish(
     {
       projectId: GRIM,
@@ -477,18 +477,26 @@ describe.skipIf(!hasDatabase)('a server that sleeps instead of stopping', () => 
 })
 
 describe.skipIf(!hasDatabase)('STOP_CHEATERS unset in production', () => {
-  let unset: Harness
-  beforeAll(async () => {
-    unset = await startHarness({ stopCheatersProblem: 'unset' })
-  }, 30_000)
-  afterAll(() => unset.close())
+  beforeAll(() => begin({ stopCheatersProblem: 'unset' }), 30_000)
+  afterAll(end)
 
-  test('an admin alert says so once any server has Stop cheaters on, and only then', async () => {
-    const owner: UserActor = await unset.user('Xan')
-    const created = await unset.create(owner, { from: { kind: 'template', key: 'smooth' } })
-    await unset.until(created.id, 'running')
-    expect((await unset.app.alerts.sweep()).raised).not.toContain('stop_cheaters_default')
-    await unset.app.listings.setPublic(owner, created.id, true)
-    expect((await unset.app.alerts.sweep()).raised).toContain('stop_cheaters_default')
-  }, 60_000)
+  const raised = async () => (await h.app.alerts.sweep()).raised.includes('stop_cheaters_default')
+
+  test('an admin alert says so only once a server runs Stop cheaters, with Grim placed', async () => {
+    const paper = await running('Xan')
+    expect(await raised()).toBe(false)
+    // On, but where Grim can't run: a modded server, and a release with no Grim build yet.
+    const modded = await running('Yul', 'plus', 'fabric')
+    await h.app.listings.setPublic(modded.owner, modded.id, true)
+    expect(await raised()).toBe(false)
+    const { gameVersion } = await loadRevision(h.db, (await h.server(paper.id)).desiredRevisionId)
+    await h.db
+      .delete(schema.compatPlugins)
+      .where(and(eq(schema.compatPlugins.projectId, GRIM), eq(schema.compatPlugins.gameVersion, gameVersion)))
+    await h.app.listings.setPublic(paper.owner, paper.id, true)
+    expect(await raised()).toBe(false)
+    // Grim pinned for its release again: it runs at the next start, and the alert says so.
+    await h.app.setups.compat.refresh()
+    expect(await raised()).toBe(true)
+  }, 90_000)
 })

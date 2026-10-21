@@ -161,7 +161,7 @@ export const TERMS: Policy = {
       heading: '12. Public listings and moderation',
       blocks: [
         'Servers are private until you choose to publish one. A published server gets a public page and may appear in the server directory. Its page shows its name, description, icon, version and mods, how many players are on, and, if it checks accounts, the Minecraft names of the players on right now. People signed in to {brand} can star a server and leave a short note on it.',
-        'A server with Stop cheaters on can remove a player automatically when its cheat check sees moves or data the game can’t make. Where the server’s owner uses the moderation tools, it can also ban that player from the server for a day if it keeps happening. The owner can lift the ban.',
+        'A server with Stop cheaters on can remove a player automatically when its cheat check sees moves or data the game can’t make. Where the server’s owner uses the moderation tools, it can also ban that player from the server for a while if it keeps happening. The owner can lift the ban.',
         'Anyone signed in can report a listing. We review reports and may remove a listing, with a note to its owner saying why. We may also remove listings or notes on our own if they break these Terms or the law. If you disagree with a decision, reply to our email or write to {support} and we will look at it again.',
       ],
     },

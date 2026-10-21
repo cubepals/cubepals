@@ -9,7 +9,9 @@
  */
 import type { RemovalReason } from '@blockly/contracts'
 import { type Queryable, schema } from '@blockly/db'
-import { and, desc, eq, gte, isNotNull, isNull, or, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
+import { grimFor } from '../compat/service.ts'
+import { loadRevision } from '../servers/persistence.ts'
 import { effective, STRANGERS_TEMPLATES, type StopCheatersRow } from './rule.ts'
 
 const rows = schema.serverStopCheaters
@@ -72,16 +74,24 @@ export async function onAtPublish(q: Queryable, serverId: string): Promise<void>
     })
 }
 
-/** Whether any live server has Stop cheaters on, by its setting, the template it came from or the flag. */
+/**
+ * Whether any live server runs Stop cheaters at its next start: on by its setting, the template it
+ * came from or the flag, and Grim placed there, so not a modded server, a pack or a release with no
+ * Grim build yet.
+ */
 export async function anyStopCheatersOn(q: Queryable): Promise<boolean> {
-  const [row] = await q
-    .select({ id: servers.id })
+  const revisions = schema.serverRevisions
+  const candidates = await q
+    .select({ revisionId: revisions.id })
     .from(servers)
+    .innerJoin(revisions, eq(revisions.id, servers.desiredRevisionId))
     .leftJoin(rows, eq(rows.serverId, servers.id))
     .leftJoin(schema.publicListings, eq(schema.publicListings.serverId, servers.id))
     .where(
       and(
         isNull(servers.deletedAt),
+        isNull(revisions.modpack),
+        inArray(revisions.loader, ['paper', 'vanilla']),
         or(
           eq(rows.setting, 'on'),
           and(
@@ -97,8 +107,9 @@ export async function anyStopCheatersOn(q: Queryable): Promise<boolean> {
         ),
       ),
     )
-    .limit(1)
-  return row !== undefined
+  for (const { revisionId } of candidates)
+    if ((await grimFor(q, await loadRevision(q, revisionId))).kind === 'placed') return true
+  return false
 }
 
 /** One removal, as the server's reporter told it. */

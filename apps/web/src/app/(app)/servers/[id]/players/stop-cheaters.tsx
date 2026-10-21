@@ -71,7 +71,7 @@ export function StopCheaters({
       ) : (
         <p className="bk-field__help">
           Moves the game can’t make are undone, and a player who keeps cheating is removed. They can rejoin.
-          {tools && ' Someone who keeps sending what no game can is banned for a day.'}
+          {tools && ' Someone who keeps sending what no game can is banned for a while.'}
         </p>
       )}
       {view.effective && view.why !== null && WHY[view.why] && (
