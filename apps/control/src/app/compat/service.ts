@@ -62,6 +62,7 @@ export class CompatPlugins {
         .resolveNew({ gameVersion, loader: 'paper' }, [{ projectId: GRIM }])
         .catch(() => null)
       if (grim?.kind === 'ok') await this.#pin(gameVersion, grim.mods, [GRIM])
+      let via = false
       for (const wanted of TRIES) {
         const plan = await this.#mods
           .resolveNew(
@@ -71,9 +72,10 @@ export class CompatPlugins {
           .catch(() => null)
         if (plan?.kind !== 'ok') continue
         await this.#pin(gameVersion, plan.mods, TRIES[0] ?? [])
-        pinned++
+        via = true
         break
       }
+      if (via || grim?.kind === 'ok') pinned++
     }
     return pinned
   }

@@ -261,10 +261,18 @@ describe('what Terraform gets', () => {
 })
 
 describe('the optional tuning and official files', () => {
-  test('the economics tuning and official files are optional secrets, each on its own', () => {
+  test('the economics tuning, official files and Stop cheaters are optional secrets, each on its own', () => {
     const economics = JSON.stringify(DEFAULT_ECONOMICS_TUNING)
     const files = JSON.stringify({ '*': { 'server.properties': 'motd=Cubepals\n' } })
-    for (const given of [{ ECONOMICS_TUNING: economics }, { OFFICIAL_SERVER_FILES: files }]) {
+    const stopCheaters = JSON.stringify({
+      punishments: 'Punishments: {}\n',
+      ban: { reason: 'impossible', removals: 1, withinMinutes: 1, minutes: 1 },
+    })
+    for (const given of [
+      { ECONOMICS_TUNING: economics },
+      { OFFICIAL_SERVER_FILES: files },
+      { STOP_CHEATERS: stopCheaters },
+    ]) {
       expect(problemsOf({ ...complete, ...given }, example).wrong).toEqual([])
       expect(JSON.parse(terraformEnv({ ...complete, ...given }).TF_VAR_secrets ?? '{}')).toMatchObject(given)
     }

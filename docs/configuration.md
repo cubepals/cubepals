@@ -261,6 +261,29 @@ its next start; a running server isn't restarted for it.
 |---|---|---|---|---|---|
 | `OFFICIAL_SERVER_FILES` | unset | unset | secret | secret | Section names are `*`, a server id or a slug; paths are relative, with no `..`; contents are text. Unset, or not that shape, official servers start with the public defaults and an admin alert says so. Production alerts for unset only once a server is flagged |
 
+### Stop cheaters (optional)
+
+`STOP_CHEATERS` is one line of JSON: the punishments file Stop cheaters writes for Grim on servers
+where it is on (`plugins/GrimAC/punishments.yml`), and when a player's removals become a ban.
+
+```json
+{ "punishments": "<Grim's punishments.yml as text>", "ban": { "reason": "impossible", "removals": 1, "withinMinutes": 1, "minutes": 1440 } }
+```
+
+The file's commands remove a player through the join reporter's console command,
+`cubepals-remove %player% <movement|speed|impossible>`, which kicks them with words saying they can
+rejoin and tells the control plane. When a player's `impossible` removals on one server reach
+`removals` within `withinMinutes`, and the server runs the moderation tools, Cubepals bans them
+from that server for `minutes`, recorded as any ban is and liftable from the player's page. The
+numbers above only show the shape; the real ones are in the private records. The file is written
+at every start where Stop cheaters is on, never stored in a revision, and left out of world
+downloads; on an official server, `OFFICIAL_SERVER_FILES` at the same path wins. A change reaches a
+server at its next start; a running server isn't restarted for it.
+
+| Variable | Local | Staging | Production | Set by | Notes |
+|---|---|---|---|---|---|
+| `STOP_CHEATERS` | unset | unset | secret | secret | Unset, or not that shape, servers get the public default: Grim's own groups with alerts and logs only, and no removal or ban. In production an admin alert says so while any server has Stop cheaters on |
+
 ### Join reporter (optional)
 
 The join reporter is a Paper plugin Cubepals builds (`apps/reporter`) and places beside a server's

@@ -59,7 +59,7 @@ import {
   pardonIp,
   whitelist,
 } from './fake-minecraft/access-commands.ts'
-import { installJars, installPack, jarDir, placeCarried } from './fake-minecraft/image.ts'
+import { installJars, installPack, jarDir, placeCarried, placeStopCheaters } from './fake-minecraft/image.ts'
 import { AccessLists } from './fake-minecraft/lists.ts'
 import { ServerLog } from './fake-minecraft/log.ts'
 import { checksAccounts, dashed, NameCache, offlineUuid } from './fake-minecraft/names.ts'
@@ -129,6 +129,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
     await server.names.load(server.dir)
     const say = (text: string) => server.log.say(text)
     await placeCarried(server.dir, server.env, say)
+    await placeStopCheaters(server.dir, server.env)
     await installJars(server.dir, server.env, say)
     await installPack(server.dir, server.env, say)
     await this.#loadJars(server)

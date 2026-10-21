@@ -5,13 +5,13 @@
 /**
  * Prepares a fake server's volume the way the itzg image does before the game starts, as
  * mc-image-helper 1.68.0 does it: the jars its environment lists, then the Modrinth pack it names;
- * and, before either, what Blockly's own start step places (`placeCarried`).
+ * and, before either, what Blockly's own start steps place (`placeCarried`, `placeStopCheaters`).
  * It does not load the jars or write the server's properties: the game's loader and the server do
  * (`fake-minecraft.ts`, `properties.ts`).
  */
 
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import { strFromU8, strToU8, unzipSync } from 'fflate'
@@ -179,6 +179,41 @@ export async function placeCarried(volume: string, env: Env, say: (text: string)
     await writeFile(join(volume, path), Buffer.from(data, 'base64'))
   }
   await writeFile(mark, `${placed.join('\n')}\n`)
+}
+
+/**
+ * Blockly's start step for Stop cheaters' punishments file (`minecraft/stop-cheaters.ts`), as its
+ * variables say it: on, Cubepals' file in place of none, its own, or one of Grim's own actions only,
+ * the last kept aside first; any other left as the owner's, unless they asked for Cubepals'. Off,
+ * where it was on, Cubepals' file goes and the kept one comes back. The step itself runs in a real
+ * shell in `app/stop-cheaters/placing.test.ts`.
+ */
+export async function placeStopCheaters(volume: string, env: Env): Promise<void> {
+  const file = join(volume, 'plugins/GrimAC/punishments.yml')
+  const kept = `${file}.before-cubepals`
+  const mark = join(volume, '.blockly-stop-cheaters')
+  const there = await readFile(file, 'utf8').catch(() => null)
+  const ours = there?.startsWith('# Written by Cubepals') === true
+  const commands = (there ?? '').split('\n').filter((line) => /^\s*-\s*["']?[0-9]+:[0-9]+\s/.test(line))
+  const builtIn = commands.every((line) => /[0-9]+:[0-9]+\s+\[(alert|log|webhook|proxy)\]/.test(line))
+  const wanted = env.BLOCKLY_STOP_CHEATERS
+  if (wanted === undefined) {
+    if ((await readFile(mark, 'utf8').catch(() => null)) === null) return
+    if (ours) {
+      await rm(file, { force: true })
+      await rename(kept, file).catch(() => undefined)
+    }
+    await rm(mark, { force: true })
+    return
+  }
+  if (there !== null && !ours && !builtIn && env.BLOCKLY_STOP_CHEATERS_OURS !== 'TRUE') {
+    await writeFile(mark, 'own\n')
+    return
+  }
+  await mkdir(dirname(file), { recursive: true })
+  if (there !== null && !ours && (await stat(kept).catch(() => null)) === null) await rename(file, kept)
+  await writeFile(file, Buffer.from(wanted, 'base64'))
+  await writeFile(mark, 'ours\n')
 }
 
 /** Where the image puts jars: plugins for plugin servers, mods for the rest. */

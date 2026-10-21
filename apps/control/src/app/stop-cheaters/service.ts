@@ -231,7 +231,11 @@ export class StopCheatersService {
                 tx,
                 server,
                 { type: 'apply' },
-                { requestedBy: requestedBy(actor), idempotencyKey: `apply:${requestId}`, input: {} },
+                {
+                  requestedBy: requestedBy(actor),
+                  idempotencyKey: `apply:${requestId}`,
+                  input: { boot: true },
+                },
               )
             ).server
           : server

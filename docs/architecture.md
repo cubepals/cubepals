@@ -2402,8 +2402,8 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   both and to `/duel join`: one datapack Cubepals carries into the running world, which vanilla
   reads, so no plugin is added (`minecraft/duels-waiting.ts`). It builds only on a void world. A
   Duels server is made for strangers, so it also comes with the moderation tools and chat filter on,
-  which the Players page can turn off, and the Grim anticheat, which by its own defaults only undoes
-  a move it can't believe and tells helpers. Its server list message names the mode.
+  which the Players page can turn off, and Stop cheaters on through its setting (below). Its server
+  list message names the mode.
   It lets in Minecraft 1.8 and 1.7 too (`otherVersions: 'oldest'`), since 1.8 PvP players
   play on 1.8 itself.
 - Arcade is short games with leaderboards, fun alone or with two or three friends, on a world made
@@ -2433,7 +2433,8 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   builders; and the server's public page says, in one line after its description, whose maps it
   is built on, linked to where they are published, from the template card's `credits`
   (`TemplateCredits`), for any server running a world of that template's type. It comes with the same moderation tools,
-  chat filter and Grim as Duels, so it is Paper on the newest release those run on.
+  chat filter as Duels, so it is Paper on the newest release those run on, and Stop cheaters on
+  through its setting, as Duels has.
 - **Other versions.** Every Paper server, with plugins or none, starts with ViaVersion and
   ViaBackwards, so players on newer and older Minecraft join it, and ViaRewind too where its owner
   lets in 1.8 and 1.7 (`ServerSettings.otherVersions`: `on` by default, `off`, or `oldest`). They
@@ -2452,8 +2453,36 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   release that its choice asks for otherwise, so neither says more than its disk holds.
   The settings page says who joins in one line ("Players on Minecraft 1.9 to 26.2 and newer can
   join") with the switch, and a second one for 1.8 and 1.7; turned off, the step takes the jars
-  away at the next boot. Grim warns that ViaBackwards' older clients misbehave in vehicles on
-  1.21.2 and later: Grim comes only on Duels and Arcade, whose games ride nothing.
+  away at the next boot.
+- **Stop cheaters.** The same layer carries Grim (GPL-3.0-or-later, Modrinth `LJNGWSvH`), the
+  anticheat behind the Players page's Stop cheaters switch (`app/stop-cheaters/`): pinned per
+  release with the Via plugins (`compat_plugins`, `compat-pins`), placed at a boot by Cubepals' own
+  step, in no revision, counted by no plan rule, and never on the Plugins page. It runs on Paper and
+  on plain Minecraft run on Paper, playing no pack, on every release Grim has a build for; elsewhere
+  the page says why in one line, and on a release with no build yet that it arrives when Grim runs
+  there. The setting (`server_stop_cheaters`, beside the server rather than in a revision, so going
+  back to a revision never undoes it) is `auto`, `on` or `off`. At `auto` it is on for servers flagged
+  official and those made from Duels or Arcade; publishing turns `auto` into `on` (`browse`), and
+  unpublishing leaves it, so the rule never reads whether a server is published. `off` is the
+  owner's, and nothing automatic changes it. The owner's switch restarts a running server, as the
+  moderation switches do; publishing, and the one-time migration that turned on servers already
+  published, never restart one: it arrives at the next start, and a sleeping server boots once at
+  its next wake (`resumesOn`). The step writes `plugins/GrimAC/punishments.yml` from `STOP_CHEATERS`
+  (docs/configuration.md) where there is no file, where Cubepals wrote the one there, or where it
+  holds only Grim's own actions; such a file that isn't Cubepals' is kept as
+  `punishments.yml.before-cubepals` first, never over one kept already, and put back when Stop
+  cheaters goes off. Any other file is the owner's: it is left, the access sync reads back that it
+  was (`server_runtimes.applied.stopCheaters`), and the page offers Cubepals' settings in its
+  place. A Grim the owner runs as their own plugin is never placed twice. Removals go through the
+  join reporter's console command (`cubepals-remove`, apps/reporter), which kicks the player in
+  words they read and reports a `removed` event; the control plane keeps them per server and player
+  (`server_removals`), and, where the moderation tools run, turns removals for sending what no game
+  can into a ban recorded through moderation, delivered by the next access sync. So the reporter is
+  placed wherever Stop cheaters runs, whatever `JOIN_REPORTER` says. The owner can leave a player
+  unchecked (`grim.exempt` through LuckPerms, the `unchecked` access list). Grim warns that
+  ViaBackwards' older clients misbehave in vehicles on 1.21.2 and later, which Grim may undo as
+  impossible moves. Grim exempts Bedrock players only where it sees Floodgate, so when Bedrock
+  joins ship, every server with Stop cheaters on must run Floodgate.
 - A curated pack can stand for a way to play (`CuratedPack.way`): its card carries the way's name
   and picture, with the pack's own name and authors under it. The card is the pack's, so it shows
   only while a release is published, and picking it is picking the pack. None does today: SkyBlock

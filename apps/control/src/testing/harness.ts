@@ -112,6 +112,8 @@ export interface HarnessOptions {
   mirrorCatalogArtifacts?: boolean
   /** The files placed on servers flagged official, and why there are none when there should be. */
   officialServerFiles?: ControlPlaneSettings['officialServerFiles']
+  /** Why STOP_CHEATERS gives the public default, as production's configuration would say. */
+  stopCheatersProblem?: ControlPlaneSettings['stopCheatersProblem']
   adminEmails?: readonly string[]
   /** How long an operation's attempt may run before the queue gives up on it (default 30 min). */
   operationDeadlineSeconds?: number
@@ -199,9 +201,10 @@ class OfflineFileFormats extends LibraryFileFormats {
   }
 }
 
-/** The settings a test's options decide: how long boots and wakes take, the room creates leave, and official files. */
-const settingsFrom = ({ provider, room, officialServerFiles }: HarnessOptions) => ({
+/** The settings a test's options decide: how long boots and wakes take, the room creates leave, official files and Stop cheaters' configuration. */
+const settingsFrom = ({ provider, room, officialServerFiles, stopCheatersProblem }: HarnessOptions) => ({
   officialServerFiles,
+  stopCheatersProblem,
   bootTimeouts: provider?.bootTimeouts ?? { runningMs: 5_000, readyMs: 3_000, resumeMs: 1_000 },
   wakeWaitMs: provider?.wakeWaitMs ?? 5_000,
   ...(room === undefined ? {} : { room }),

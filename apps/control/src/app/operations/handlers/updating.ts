@@ -37,6 +37,11 @@ interface UpdateInput {
   fromFailure?: boolean
   /** A new season (`WorldService.freshStart`): everyone's hearts go with the world it leaves. */
   resetHearts?: boolean
+  /**
+   * The owner switched something only a start places (Stop cheaters): the server boots for it
+   * though its configuration is the same, rather than taking it live.
+   */
+  boot?: boolean
 }
 
 /**
@@ -157,6 +162,7 @@ export function updating(deps: {
       // Settings the game takes as people play reach it without a restart.
       if (
         !fromFailure &&
+        input.boot !== true &&
         (await takeLive(deps, server, consoleTarget(server, binding.handle), previous, desired))
       )
         return { status: 'succeeded' }

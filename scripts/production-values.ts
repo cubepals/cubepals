@@ -218,6 +218,14 @@ export const VALUES: Value[] = [
     shape: json,
   },
   {
+    name: 'STOP_CHEATERS',
+    goes: ['secret'],
+    where:
+      'only for Stop cheaters’ punishments and ban rule: the private records, as one line of JSON (docs/configuration.md § Stop cheaters); left out, the public default, alerts and logs only',
+    optional: 'stop cheaters',
+    shape: json,
+  },
+  {
     name: 'SIGNALS',
     goes: ['secret'],
     where:
