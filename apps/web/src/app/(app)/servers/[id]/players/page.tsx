@@ -5,7 +5,7 @@
 'use client'
 
 import type { AccessEntryView, AccessList, AccessView, ServerView } from '@blockly/contracts'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
 import { said, useOutcome } from '../../../../../lib/outcome'
@@ -34,11 +34,22 @@ export default function PlayersPage() {
   const trpc = useTRPC()
   const access = useQuery(trpc.access.get.queryOptions({ serverId: server.id }))
   const { mutate: refresh } = useMutation(trpc.access.refresh.mutationOptions())
+  const queries = useQueryClient()
+  const { mutate: seen } = useMutation(
+    trpc.moderation.seenRemovals.mutationOptions({
+      onSuccess: () =>
+        void queries.invalidateQueries({
+          queryKey: trpc.moderation.unseenRemovals.queryKey({ serverId: server.id }),
+        }),
+    }),
+  )
 
   // Opening the page asks the server what changed in game; the list updates when the sync lands.
+  // It also counts as seeing who Stop cheaters removed, which the tab counts until then.
   useEffect(() => {
     refresh({ serverId: server.id })
-  }, [refresh, server.id])
+    seen({ serverId: server.id })
+  }, [refresh, seen, server.id])
 
   if (server.isPending || access.isPending) return <PageSkeleton title="Players" sections={[1, 3]} />
   if (server.isError || access.isError)

@@ -163,6 +163,20 @@ describe.skipIf(!hasDatabase)('who has Stop cheaters on', () => {
     )
   }, 60_000)
 
+  test('servers made from Duels or Arcade have it on at auto, as their creation says', async () => {
+    const { id } = await running('Yara')
+    await h.db
+      .update(schema.auditLog)
+      .set({ data: sql`${schema.auditLog.data} || '{"template":"arcade"}'::jsonb` })
+      .where(and(eq(schema.auditLog.subjectId, id), eq(schema.auditLog.action, 'server.created')))
+    expect(await view(id)).toMatchObject({ effective: true, setting: 'auto', why: 'template' })
+  }, 30_000)
+})
+
+describe.skipIf(!hasDatabase)('what changes the setting', () => {
+  beforeAll(begin, 30_000)
+  afterAll(end)
+
   test('publishing turns auto on, saying Browse did it, and restarts nothing; unpublishing leaves it on', async () => {
     const { owner, id } = await running('Gale')
     const drift = (await h.app.specs.desired(h.db, await h.server(id))).driftDigest
@@ -197,10 +211,7 @@ describe.skipIf(!hasDatabase)('who has Stop cheaters on', () => {
         .insert(schema.publicListings)
         .values({ serverId: server.id, visibility: 'published' })
         .onConflictDoUpdate({ target: schema.publicListings.serverId, set: { visibility: 'published' } })
-    await h.db
-      .update(schema.serverStopCheaters)
-      .set({ setting: 'off' })
-      .where(eq(schema.serverStopCheaters.serverId, off.id))
+    await h.db.insert(schema.serverStopCheaters).values({ serverId: off.id, setting: 'off' })
     const migration = readFileSync(
       new URL('../../../../../packages/db/migrations/0094_stop_cheaters.sql', import.meta.url),
       'utf8',
@@ -208,7 +219,7 @@ describe.skipIf(!hasDatabase)('who has Stop cheaters on', () => {
     const once = migration.split('--> statement-breakpoint').at(-1) ?? ''
     await h.db.execute(sql.raw(once))
     expect(await setting(published.id)).toMatchObject({ setting: 'on', reason: 'browse' })
-    expect(await setting(unpublished.id)).toMatchObject({ setting: 'auto', reason: null })
+    expect(await setting(unpublished.id)).toBeUndefined()
     expect(await setting(off.id)).toMatchObject({ setting: 'off', reason: null })
     for (const server of [published, unpublished, off]) {
       expect(await applies(server.id)).toBe(0)

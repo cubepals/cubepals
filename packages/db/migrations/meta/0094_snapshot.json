@@ -451,12 +451,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "template": {
-          "name": "template",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "take_over": {
           "name": "take_over",
           "type": "boolean",

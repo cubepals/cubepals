@@ -11,7 +11,6 @@
 import { z } from 'zod'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from './durations.ts'
 import { ServerId } from './server.ts'
-import type { StopCheatersView } from './stop-cheaters.ts'
 
 export const MODERATION_KINDS = ['warn', 'mute', 'ban'] as const
 export type ModerationKind = (typeof MODERATION_KINDS)[number]
@@ -110,8 +109,6 @@ export interface ModerationView {
   ownLadder: boolean
   /** Newest first. */
   actions: ModerationActionView[]
-  /** Stop cheaters, which shows wherever the server can run it, with the tools or without. */
-  stopCheaters: StopCheatersView
 }
 
 /**

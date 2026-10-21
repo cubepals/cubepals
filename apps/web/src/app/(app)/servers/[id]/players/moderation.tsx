@@ -5,8 +5,9 @@
 'use client'
 
 /**
- * Moderation on the Players tab: the tools and the chat filter switched on or off, the helpers the
- * page passes in, and, out of the way, the escalation that picks what a player's next offence gets.
+ * Moderation on the Players tab: Stop cheaters first (`stop-cheaters.tsx`), then the tools and the
+ * chat filter switched on or off, the helpers the page passes in, and, out of the way, the
+ * escalation that picks what a player's next offence gets.
  * Warnings, mutes and bans themselves are given on each player's own page (`[uuid]/moderation.tsx`).
  */
 import {
@@ -22,6 +23,7 @@ import { messageOf, useTRPC } from '../../../../../lib/api'
 import { lengthLabel, stepLabel } from '../../../../../lib/moderation'
 import { Button, FormSection, Note, Select, Toggle } from '../../../../../ui'
 import { useChanged } from '../settings/shared'
+import { StopCheaters } from './stop-cheaters'
 
 export function Moderation({
   serverId,
@@ -45,16 +47,20 @@ export function Moderation({
       },
     }),
   )
-  if (!view.isSuccess || !view.data.available) return null
-  const { enabled, chatFilter } = view.data
+  if (!view.isSuccess) return null
+  const { enabled, chatFilter, available, stopCheaters } = view.data
   const change = (next: { enabled: boolean; chatFilter: boolean }) =>
     set.mutate({ serverId, ...next, requestId: crypto.randomUUID() })
+  const cheaters = <StopCheaters serverId={serverId} view={stopCheaters} tools={enabled} running={running} />
+  // Where the tools can't run, Stop cheaters' line is all the section says.
+  if (!available) return <FormSection title="Moderation">{cheaters}</FormSection>
 
   return (
     <FormSection
       title="Moderation"
       description="Warnings, mutes and bans, given here or by helpers in the game. Brings the LibertyBans and LuckPerms plugins along."
     >
+      {cheaters}
       <Toggle
         label="Moderation tools"
         checked={enabled}

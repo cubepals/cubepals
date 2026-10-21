@@ -94,7 +94,8 @@ export const serverModerationActions = pgTable(
 /**
  * Whether a server runs Stop cheaters (`app/stop-cheaters/`): kept beside the server rather than in a
  * revision, so publishing and the owner's switch change it without a new revision, and going back to
- * an older revision never undoes it. A server with no row is `auto`, made from no template.
+ * an older revision never undoes it. A server with no row is `auto`. Which template a server was
+ * made from is read from its creation in the audit log.
  */
 export const serverStopCheaters = pgTable('server_stop_cheaters', {
   serverId: uuid('server_id')
@@ -104,8 +105,6 @@ export const serverStopCheaters = pgTable('server_stop_cheaters', {
   setting: text('setting').$type<'auto' | 'on' | 'off'>().notNull().default('auto'),
   /** `browse` where publishing turned `auto` into `on`; null otherwise, and once the owner chooses. */
   reason: text('reason').$type<'browse'>(),
-  /** The template it was made from, where that was one; strangers join Duels and Arcade. */
-  template: text('template'),
   /**
    * The owner asked for Cubepals' punishments in place of their own Grim settings: the next start
    * moves theirs aside, and the access sync after it, which reads that it did, clears this.

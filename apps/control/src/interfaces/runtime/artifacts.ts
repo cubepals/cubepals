@@ -33,11 +33,14 @@ const SHA256 = /^[0-9a-f]{64}$/
 const ICONS = fileURLToPath(new URL('../../../assets/server-icons/', import.meta.url))
 const ICON_KEY = /^[a-z]{3,16}$/
 
-export function createRuntimeApp(deps: {
+/** What the runtime-facing routes reach: the jar links, the joins, and Stop cheaters' removals. */
+type RuntimeDeps = {
   artifacts: ArtifactService
   joins: JoinService
   stopCheaters: Pick<StopCheatersService, 'recordRemovals'>
-}): Hono {
+}
+
+export function createRuntimeApp(deps: RuntimeDeps): Hono {
   // The image stops a server's start when its icon can't be downloaded, so a build without them
   // fails here, once, rather than every server failing to boot (seen on the first staging run).
   if (!existsSync(`${ICONS}${BLOCKLY_ICON}.png`))

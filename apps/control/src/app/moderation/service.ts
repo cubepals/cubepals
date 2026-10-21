@@ -41,7 +41,6 @@ import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
 import { findServer, loadRevision, lockServer } from '../servers/persistence.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
-import type { StopCheatersService } from '../stop-cheaters/service.ts'
 import { CHAT_FILTER } from './chat-filter.ts'
 import { endOf } from './delivery.ts'
 
@@ -56,7 +55,6 @@ export class ModerationService {
   readonly #transitions: ServerTransitions
   readonly #events: EventBus
   readonly #mods: ModService
-  readonly #stopCheaters: Pick<StopCheatersService, 'view'>
 
   constructor(deps: {
     db: Db
@@ -64,14 +62,12 @@ export class ModerationService {
     transitions: ServerTransitions
     events: EventBus
     mods: ModService
-    stopCheaters: Pick<StopCheatersService, 'view'>
   }) {
     this.#db = deps.db
     this.#policy = deps.policy
     this.#transitions = deps.transitions
     this.#events = deps.events
     this.#mods = deps.mods
-    this.#stopCheaters = deps.stopCheaters
   }
 
   async view(actor: Actor, serverId: string, now = new Date()): Promise<ModerationView> {
@@ -94,7 +90,6 @@ export class ModerationService {
       ladder: head?.ladder ?? [...DEFAULT_LADDER],
       ownLadder: (head?.ladder ?? null) !== null,
       actions: rows.map((row) => actionView(row, now)),
-      stopCheaters: await this.#stopCheaters.view(server, desired, now),
     }
   }
 

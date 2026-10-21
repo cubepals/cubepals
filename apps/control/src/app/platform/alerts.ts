@@ -88,7 +88,7 @@ export class PlatformAlerts {
     /** ADMIN_ALERT_EMAILS; empty or absent, every admin's own email. */
     adminInbox?: readonly string[]
     /** Why OFFICIAL_SERVER_FILES gives no files, when it should. */
-    officialFilesProblem?: 'unset' | 'invalid' | null
+    officialServerFiles?: { problem: 'unset' | 'invalid' | null } | undefined
     /** Why STOP_CHEATERS gives the public default, where production should have its own. */
     stopCheatersProblem?: 'unset' | 'invalid' | null
   }) {
@@ -98,7 +98,7 @@ export class PlatformAlerts {
     this.#mailer = deps.mailer
     this.#webOrigin = deps.webOrigin
     this.#inbox = deps.adminInbox ?? []
-    this.#officialFilesProblem = deps.officialFilesProblem ?? null
+    this.#officialFilesProblem = deps.officialServerFiles?.problem ?? null
     this.#stopCheatersProblem = deps.stopCheatersProblem ?? null
   }
 

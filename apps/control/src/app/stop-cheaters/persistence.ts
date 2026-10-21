@@ -4,16 +4,23 @@
 
 /**
  * Stop cheaters as the database keeps it: each server's setting beside it (`server_stop_cheaters`,
- * no row being `auto`), whether it runs, by the rule in `rule.ts`, and the players it removed
- * (`server_removals`).
+ * no row being `auto`), the template it was made from, as its creation was audited, whether it runs,
+ * by the rule in `rule.ts`, and the players it removed (`server_removals`).
  */
 import type { RemovalReason } from '@blockly/contracts'
 import { type Queryable, schema } from '@blockly/db'
-import { and, desc, eq, gte, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, isNotNull, isNull, or, sql } from 'drizzle-orm'
 import { effective, STRANGERS_TEMPLATES, type StopCheatersRow } from './rule.ts'
 
 const rows = schema.serverStopCheaters
 const removals = schema.serverRemovals
+const servers = schema.minecraftServers
+const audit = schema.auditLog
+
+/** The template a server was made from, from the audit of its creation; null for none. */
+const templateOf = sql<string | null>`(select ${audit.data}->>'template' from ${audit}
+  where ${audit.subjectType} = 'server' and ${audit.subjectId} = ${servers.id}::text
+  and ${audit.action} = 'server.created' limit 1)`
 
 /** A server's setting, Cubepals' default where it has no row, and whether it is flagged official. */
 export async function loadStopCheaters(q: Queryable, serverId: string): Promise<StopCheatersRow> {
@@ -21,15 +28,15 @@ export async function loadStopCheaters(q: Queryable, serverId: string): Promise<
     .select({
       setting: rows.setting,
       reason: rows.reason,
-      template: rows.template,
+      template: templateOf,
       takeOver: rows.takeOver,
       removalsSeenAt: rows.removalsSeenAt,
       official: schema.publicListings.official,
     })
-    .from(schema.minecraftServers)
-    .leftJoin(rows, eq(rows.serverId, schema.minecraftServers.id))
-    .leftJoin(schema.publicListings, eq(schema.publicListings.serverId, schema.minecraftServers.id))
-    .where(eq(schema.minecraftServers.id, serverId))
+    .from(servers)
+    .leftJoin(rows, eq(rows.serverId, servers.id))
+    .leftJoin(schema.publicListings, eq(schema.publicListings.serverId, servers.id))
+    .where(eq(servers.id, serverId))
   return {
     setting: row?.setting ?? 'auto',
     reason: row?.reason ?? null,
@@ -70,18 +77,24 @@ export async function onAtPublish(q: Queryable, serverId: string): Promise<void>
 /** Whether any live server has Stop cheaters on, by its setting, the template it came from or the flag. */
 export async function anyStopCheatersOn(q: Queryable): Promise<boolean> {
   const [row] = await q
-    .select({ id: schema.minecraftServers.id })
-    .from(schema.minecraftServers)
-    .leftJoin(rows, eq(rows.serverId, schema.minecraftServers.id))
-    .leftJoin(schema.publicListings, eq(schema.publicListings.serverId, schema.minecraftServers.id))
+    .select({ id: servers.id })
+    .from(servers)
+    .leftJoin(rows, eq(rows.serverId, servers.id))
+    .leftJoin(schema.publicListings, eq(schema.publicListings.serverId, servers.id))
     .where(
       and(
-        isNull(schema.minecraftServers.deletedAt),
+        isNull(servers.deletedAt),
         or(
           eq(rows.setting, 'on'),
           and(
             sql`coalesce(${rows.setting}, 'auto') = 'auto'`,
-            or(eq(schema.publicListings.official, true), inArray(rows.template, [...STRANGERS_TEMPLATES])),
+            or(
+              eq(schema.publicListings.official, true),
+              sql`${templateOf} in (${sql.join(
+                STRANGERS_TEMPLATES.map((t) => sql`${t}`),
+                sql`, `,
+              )})`,
+            ),
           ),
         ),
       ),

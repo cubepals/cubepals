@@ -24,6 +24,7 @@ import { Button, EmptyState, FormSection, ICON, Note, PlayerFace, Skeleton, Tabs
 import { useServer } from '../../use-server'
 import { Inventory } from './inventory'
 import { PlayerModeration } from './moderation'
+import { PlayerRemovals } from './removals'
 import { AccessSwitches } from './switches'
 
 export default function PlayerPage() {
@@ -79,6 +80,7 @@ export default function PlayerPage() {
       )}
       <AccessSwitches serverId={server.id} player={p} running={running} />
       <PlayerModeration serverId={server.id} player={p} running={running} />
+      <PlayerRemovals serverId={server.id} player={p} />
     </>
   )
 }

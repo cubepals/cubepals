@@ -20,7 +20,7 @@ import { WAITING_DATAPACK } from './duels-waiting.ts'
 import { DATA_DIR, JAR_LISTS, jarsOf } from './jars.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
 import { STARTER_STEP, starterEnv, starterOf } from './starter.ts'
-import { STOP_CHEATERS_STEP, stopCheatersEnv } from './stop-cheaters.ts'
+import { STOP_CHEATERS_STEP } from './stop-cheaters.ts'
 import { javaFor } from './versions.ts'
 import { UNLINKED } from './volume-links.ts'
 import { WAKE_STEP } from './wake-step.ts'
@@ -59,11 +59,6 @@ export interface RuntimeSpecInput {
    * reads them.
    */
   compat?: readonly PinnedMod[]
-  /**
-   * Stop cheaters' punishments file where it is on (`stop-cheaters.ts`), and whether the owner's own
-   * makes way for it. Given with `compat` only: like the Via plugins, a start's and never drift's.
-   */
-  stopCheaters?: { punishments: string; takeOver: boolean } | null
 }
 
 interface PlanLimits {
@@ -558,10 +553,8 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
   // A server on Paper told which it starts with runs the step even with none, so the ones an
   // earlier start placed go when they are turned off; so does Stop cheaters' step.
   const placing = { ...revision, mods: [...revision.mods, ...(input.compat ?? [])] }
-  const viaPlaced =
-    input.compat !== undefined &&
-    (revision.loader === 'paper' || runsOnPaper(revision)) &&
-    revision.modpack === null
+  // Paper, or plain Minecraft run on Paper, with no pack: the servers that read a PROXY header.
+  const viaPlaced = input.compat !== undefined && usesProxyProtocol(revision)
   const totalMb = memoryMb(memoryTier)
   const onPaper = runsOnPaper(revision)
   const loaderVersionVar = onPaper ? LOADER_VERSION_VARS.paper : LOADER_VERSION_VARS[revision.loader]
@@ -597,9 +590,6 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       ...modsEnv(input),
       ...datapacksEnv(revision, input.artifactUrl),
       ...carriedEnv(revision, world.levelName, input.artifactUrl, viaPlaced ? input.compat : undefined),
-      ...(viaPlaced && input.stopCheaters
-        ? stopCheatersEnv(input.stopCheaters.punishments, input.stopCheaters.takeOver)
-        : {}),
       ...limitsEnv(input.limits),
       ...brandPackEnv(input),
       // OVERRIDE_ICON, or the image keeps the first icon a world ever had.

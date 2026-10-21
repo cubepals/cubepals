@@ -387,6 +387,16 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
   }
 }
 
+/** The deployment's private tuning, as `app/tuning.ts` installs it at startup. */
+export const tuningOf = (config: DeploymentConfig) => ({
+  freeLinks: config.freeLinkTuning,
+  abuse: config.abuseLimits,
+  capacity: config.capacityTuning,
+  economics: config.economicsTuning,
+  joins: config.joins,
+  stopCheaters: config.stopCheaters.tuning,
+})
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): DeploymentConfig {
   const parsed = DeploymentConfig.safeParse(configFromEnv(env))
   if (!parsed.success) {

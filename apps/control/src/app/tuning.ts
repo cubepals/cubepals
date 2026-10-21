@@ -43,7 +43,7 @@ interface Tuning {
 }
 
 /** Grim's punishments file as text, and when removals for sending what no game can become a day's ban. */
-export interface StopCheatersTuning {
+interface StopCheatersTuning {
   punishments: string
   ban: { reason: 'impossible'; removals: number; withinMinutes: number; minutes: number }
 }

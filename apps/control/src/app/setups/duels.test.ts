@@ -187,15 +187,6 @@ describe.skipIf(!hasDatabase)('duels', () => {
     const { spec } = await h.app.specs.desired(h.db, await h.server(server.id))
     // ViaVersion, ViaBackwards and ViaRewind, and Grim for Stop cheaters, placed by Cubepals' own step.
     expect(spec.env.BLOCKLY_JARS?.split('\n').filter((line) => line.startsWith('plugins/'))).toHaveLength(4)
-    // Strangers join Duels, so Stop cheaters is on, through its setting, not its plugins.
-    expect(
-      (
-        await h.app.stopCheaters.view(
-          await h.server(server.id),
-          await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId),
-        )
-      ).why,
-    ).toBe('template')
     // 1.8 PvP players get in: down to 1.7.
     expect((await h.app.queries.get(owner, server.id)).joins).toEqual({
       oldest: '1.7.2',

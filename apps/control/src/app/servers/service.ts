@@ -176,11 +176,6 @@ export class MinecraftServerService {
         world,
       )
       await createAccess(tx, created.server.id)
-      // Which template it came from, where one: Stop cheaters is on by default where strangers play.
-      if (typeof origin.template === 'string')
-        await tx
-          .insert(schema.serverStopCheaters)
-          .values({ serverId: created.server.id, template: origin.template })
       await this.#audit(tx, madeBy, 'server.created', created.server.id, {
         slug,
         gameVersion: revision.gameVersion,

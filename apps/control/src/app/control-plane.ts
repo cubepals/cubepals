@@ -337,12 +337,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
       webOrigin: settings.webOrigin,
     }),
   )
-  const alerts = new PlatformAlerts({
-    ...ports,
-    ...settings,
-    officialFilesProblem: settings.officialServerFiles?.problem,
-    catalog,
-  })
+  const alerts = new PlatformAlerts({ ...ports, ...settings, catalog })
   const waiter = new ServerWaiter(db, events)
   const edge = new EdgeService({ ...ports, service: servers, waiter, schedules, links, ...settings })
 

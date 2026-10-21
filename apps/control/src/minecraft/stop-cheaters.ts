@@ -42,7 +42,7 @@ const KEPT_FILE = `${PUNISHMENTS_FILE}.before-cubepals`
 const MARK = '.blockly-stop-cheaters'
 
 /** The first line of every file Cubepals writes, which is how a later start knows it as Cubepals'. */
-export const WRITTEN_BY_CUBEPALS = '# Written by Cubepals'
+const WRITTEN_BY_CUBEPALS = '# Written by Cubepals'
 
 /** Grim's own actions: a punishments file of only these punishes nobody. */
 const BUILT_IN_ACTIONS = ['alert', 'log', 'webhook', 'proxy'] as const
@@ -83,7 +83,7 @@ ${[
 `
 
 /** A file as Cubepals writes it: with its first line, so the next start knows it as Cubepals'. */
-export const asWritten = (punishments: string): string =>
+const asWritten = (punishments: string): string =>
   punishments.startsWith(WRITTEN_BY_CUBEPALS)
     ? punishments
     : `${WRITTEN_BY_CUBEPALS} at every start while Stop cheaters is on.\n${punishments}`
@@ -91,14 +91,16 @@ export const asWritten = (punishments: string): string =>
 /** The file's text in base64; set only while Stop cheaters is on. */
 export const STOP_CHEATERS_ENV = 'BLOCKLY_STOP_CHEATERS'
 /** Set once, after "Use Cubepals' settings": the owner's own file makes way too. */
-export const STOP_CHEATERS_OURS_ENV = 'BLOCKLY_STOP_CHEATERS_OURS'
+const STOP_CHEATERS_OURS_ENV = 'BLOCKLY_STOP_CHEATERS_OURS'
 
 /** The variables the step reads: the file where Stop cheaters is on, and whether to take over the owner's. */
-export function stopCheatersEnv(punishments: string | null, takeOver: boolean): Record<string, string> {
-  if (punishments === null) return {}
+export function stopCheatersEnv(
+  placed: { punishments: string; takeOver: boolean } | null,
+): Record<string, string> {
+  if (placed === null) return {}
   return {
-    [STOP_CHEATERS_ENV]: Buffer.from(asWritten(punishments), 'utf8').toString('base64'),
-    ...(takeOver ? { [STOP_CHEATERS_OURS_ENV]: 'TRUE' } : {}),
+    [STOP_CHEATERS_ENV]: Buffer.from(asWritten(placed.punishments), 'utf8').toString('base64'),
+    ...(placed.takeOver ? { [STOP_CHEATERS_OURS_ENV]: 'TRUE' } : {}),
   }
 }
 

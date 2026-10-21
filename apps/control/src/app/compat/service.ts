@@ -161,9 +161,8 @@ export async function grimFor(
 }
 
 /** A server Grim can run on: Paper, or plain Minecraft run on Paper, with no pack. */
-export const runsGrim = (
-  revision: Pick<ServerRevision, 'loader' | 'loaderVersion' | 'mods' | 'modpack'>,
-): boolean => revision.modpack === null && (revision.loader === 'paper' || runsOnPaper(revision))
+const runsGrim = (revision: Pick<ServerRevision, 'loader' | 'loaderVersion' | 'mods' | 'modpack'>): boolean =>
+  revision.modpack === null && (revision.loader === 'paper' || runsOnPaper(revision))
 
 /** Which Via plugins `placed` holds, by Modrinth project id, as a boot's record and the edge name them. */
 export const projectsOf = (placed: readonly PinnedMod[]): string[] =>

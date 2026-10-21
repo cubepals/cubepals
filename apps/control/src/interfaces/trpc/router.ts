@@ -456,13 +456,26 @@ const access = router({
     .mutation(({ ctx, input }) =>
       ctx.services.access.remove(ctx.actor, input.serverId, 'helper', input.playerUuid),
     ),
+  /** Stop cheaters leaves a player unchecked, where the moderation tools run (`grim.exempt`). */
+  addUnchecked: authedProcedure
+    .input(AddPlayerInput)
+    .mutation(({ ctx, input }) =>
+      ctx.services.access.add(ctx.actor, input.serverId, 'unchecked', input.name),
+    ),
+  removeUnchecked: authedProcedure
+    .input(PlayerInput)
+    .mutation(({ ctx, input }) =>
+      ctx.services.access.remove(ctx.actor, input.serverId, 'unchecked', input.playerUuid),
+    ),
 })
 
 /** Warnings, mutes and bans from the server's page, the plugins that give them, and the chat filter. */
 const moderation = router({
-  get: authedProcedure
-    .input(ServerRef)
-    .query(({ ctx, input }) => ctx.services.moderation.view(ctx.actor, input.serverId)),
+  /** With Stop cheaters, which shows wherever the server can run it, with the tools or without. */
+  get: authedProcedure.input(ServerRef).query(async ({ ctx, input }) => ({
+    ...(await ctx.services.moderation.view(ctx.actor, input.serverId)),
+    stopCheaters: await ctx.services.stopCheaters.viewOf(ctx.actor, input.serverId),
+  })),
   setTools: authedProcedure.input(SetModerationInput).mutation(async ({ ctx, input }) => {
     await ctx.services.moderation.setTools(ctx.actor, input.serverId, input, input.requestId)
     return ctx.services.queries.get(ctx.actor, input.serverId)
@@ -490,6 +503,12 @@ const moderation = router({
   seenRemovals: authedProcedure
     .input(ServerRef)
     .mutation(({ ctx, input }) => ctx.services.stopCheaters.seen(ctx.actor, input.serverId)),
+  /** One player's removals on the server, newest first, for their page. */
+  removalsOf: authedProcedure
+    .input(PlayerInput)
+    .query(({ ctx, input }) =>
+      ctx.services.stopCheaters.removalsOf(ctx.actor, input.serverId, input.playerUuid),
+    ),
   /** How many players Stop cheaters removed since the owner last opened the Players page. */
   unseenRemovals: authedProcedure.input(ServerRef).query(async ({ ctx, input }) => {
     await ctx.services.queries.get(ctx.actor, input.serverId)

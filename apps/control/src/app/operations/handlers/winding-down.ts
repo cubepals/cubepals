@@ -216,10 +216,8 @@ export function windingDown(deps: {
         if (locked === null || locked.lifecycle.status !== 'deleted') return
         await saveHandle(tx, server.id, null)
         await tx.delete(schema.serverAccessEntries).where(eq(schema.serverAccessEntries.serverId, server.id))
-        await tx
-          .delete(schema.serverModerationActions)
-          .where(eq(schema.serverModerationActions.serverId, server.id))
-        await tx.delete(schema.serverRemovals).where(eq(schema.serverRemovals.serverId, server.id))
+        for (const given of [schema.serverModerationActions, schema.serverRemovals])
+          await tx.delete(given).where(eq(given.serverId, server.id))
         // Who played there goes with who could: with the server gone, nothing needs their names.
         await tx.delete(schema.serverPlayers).where(eq(schema.serverPlayers.serverId, server.id))
         await forgetPlayers(tx, server.id)

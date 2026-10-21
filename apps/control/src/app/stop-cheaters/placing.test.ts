@@ -16,7 +16,7 @@ import { join } from 'node:path'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import { defaultSettings, type ServerRevision } from '../../domain/revision/revision.ts'
 import { toRuntimeSpec } from '../../minecraft/runtime-spec.ts'
-import { DEFAULT_PUNISHMENTS, PUNISHMENTS_FILE } from '../../minecraft/stop-cheaters.ts'
+import { DEFAULT_PUNISHMENTS, PUNISHMENTS_FILE, stopCheatersEnv } from '../../minecraft/stop-cheaters.ts'
 
 const JAR = Buffer.from('grim jar')
 const sha512 = (bytes: Buffer) => createHash('sha512').update(bytes).digest('hex')
@@ -86,12 +86,9 @@ const OURS =
 
 /** Starts a server on `data` as far as the image's own start: on with `punishments`, or off with null. */
 async function start(data: string, punishments: string | null, takeOver = false): Promise<number> {
-  const spec = toRuntimeSpec({
-    ...input,
-    revision,
-    compat: punishments === null ? [] : [grim],
-    stopCheaters: punishments === null ? null : { punishments, takeOver },
-  })
+  const spec = toRuntimeSpec({ ...input, revision, compat: punishments === null ? [] : [grim] })
+  // As `servers/specs.ts` adds them.
+  Object.assign(spec.env, stopCheatersEnv(punishments === null ? null : { punishments, takeOver }))
   const step = (spec.entrypoint?.[2] ?? '')
     .replaceAll('/data', data)
     .replace('exec /image/scripts/start "$@"', 'true')

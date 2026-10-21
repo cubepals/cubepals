@@ -267,7 +267,6 @@ const StopCheaters = z
       ? { tuning: parsed.data, problem: null }
       : { tuning: null, problem: 'invalid' as const }
   })
-export type StopCheatersTuning = z.infer<typeof StopCheatersShape>
 
 /** How room is shared when it runs short (`domain/account/tuning.ts`), from CAPACITY_TUNING: private too. */
 const CapacityTuning = z.strictObject(

@@ -24,11 +24,12 @@ import {
   usesProxyProtocol,
   withoutOwnSteps,
 } from '../../minecraft/runtime-spec.ts'
+import { stopCheatersEnv } from '../../minecraft/stop-cheaters.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import type { BuiltPack } from '../artifacts/brand-pack.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
 import { reporterPin } from '../artifacts/reporter.ts'
-import { compatFor, grimFor, projectsOf } from '../compat/service.ts'
+import { compatFor, projectsOf } from '../compat/service.ts'
 import { PermanentFailure } from '../errors.ts'
 import { loadListing } from '../listings/persistence.ts'
 import { quarantinedOf } from '../mods/jar-check-records.ts'
@@ -208,9 +209,10 @@ export class RuntimeSpecs {
       ...input,
       revision: starting,
       compat: [...placed, ...reporter, ...(stop.placed?.jar ? [stop.placed.jar] : [])],
-      stopCheaters: stop.placed,
     })
-    const labelled = label(withCompressedFiles({ ...built, env: { ...built.env, ...report } }))
+    // With the punishments file its step writes (`minecraft/stop-cheaters.ts`) where it runs.
+    const env = { ...built.env, ...report, ...stopCheatersEnv(stop.placed) }
+    const labelled = label(withCompressedFiles({ ...built, env }))
     const refused = tooLongForAStart(labelled)
     if (refused !== null) throw new PermanentFailure(refused)
     // The Via plugins arrive at a start, never through drift: a running server isn't restarted

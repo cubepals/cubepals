@@ -39,6 +39,7 @@ import {
   insertRemoval,
   loadStopCheaters,
   recentRemovals,
+  removalsOf,
   saveStopCheaters,
 } from './persistence.ts'
 import { effective } from './rule.ts'
@@ -65,6 +66,12 @@ export class StopCheatersService {
     this.#events = deps.events
   }
 
+  /** The switch as the Players page shows it. */
+  async viewOf(actor: Actor, serverId: string): Promise<StopCheatersView> {
+    const server = authorize(actor, await findServer(this.#db, serverId))
+    return this.view(server, await loadRevision(this.#db, server.desiredRevisionId))
+  }
+
   /** The switch as the Players page shows it, for a server already authorized. */
   async view(server: MinecraftServer, desired: ServerRevision, now = new Date()): Promise<StopCheatersView> {
     const row = await loadStopCheaters(this.#db, server.id)
@@ -86,13 +93,7 @@ export class StopCheatersService {
           : grim.kind === 'release'
             ? { kind: 'release', release: desired.gameVersion }
             : { kind: 'modded' },
-      removals: recent.map(
-        (r): RemovalView => ({
-          player: { uuid: r.playerUuid, name: r.playerName },
-          reason: r.reason,
-          at: r.at.toISOString(),
-        }),
-      ),
+      removals: recent.map(removalView),
       today: await countRemovals(this.#db, server.id, new Date(now.getTime() - (now.getTime() % DAY_MS))),
     }
   }
@@ -121,6 +122,12 @@ export class StopCheatersService {
         throw new AppError('invalid_choice', 'Turn on Stop cheaters first.')
       await saveStopCheaters(tx, serverId, { takeOver: true })
     })
+  }
+
+  /** One player's removals on a server, newest first, for their page. */
+  async removalsOf(actor: Actor, serverId: string, playerUuid: string): Promise<RemovalView[]> {
+    authorize(actor, await findServer(this.#db, serverId))
+    return (await removalsOf(this.#db, serverId, playerUuid)).map(removalView)
   }
 
   /** The owner opened the Players page: its tab counts removals from now. */
@@ -249,6 +256,12 @@ export class StopCheatersService {
     })
   }
 }
+
+const removalView = (r: typeof schema.serverRemovals.$inferSelect): RemovalView => ({
+  player: { uuid: r.playerUuid, name: r.playerName },
+  reason: r.reason,
+  at: r.at.toISOString(),
+})
 
 const MODDED =
   'Stop cheaters runs on plain Minecraft and Paper servers. Mods change how players move, so it can’t tell a cheat from a mod here.'
