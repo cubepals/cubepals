@@ -37,6 +37,11 @@ describe('held names', () => {
       expect(holdOn(slug)).toBe('cubepals')
   })
 
+  test('so is the address test, which reads as Cubepals’ own, and a name that starts with it is anyone’s', () => {
+    expect(holdOn('test')).toBe('cubepals')
+    expect(holdOn('testudo-farm')).toBeNull()
+  })
+
   test('a name that only contains one of them is anyone’s', () => {
     for (const slug of [
       'duels-with-friends',

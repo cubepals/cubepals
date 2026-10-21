@@ -42,8 +42,9 @@ const BRAND: ReadonlySet<string> = new Set([
 
 /**
  * The plain words for game modes and hubs, held for Cubepals' own public servers
- * (the first is Duels, at the address `duels`). Taking one is like taking an address another
- * server has; an operator or a platform admin gives one to a server.
+ * (the first is Duels, at the address `duels`), and `test`, which reads as Cubepals' own. Taking
+ * one is like taking an address another server has; an operator or a platform admin gives one to
+ * a server.
  */
 export const HELD_FOR_CUBEPALS: ReadonlySet<string> = new Set([
   'arena',
@@ -68,6 +69,7 @@ export const HELD_FOR_CUBEPALS: ReadonlySet<string> = new Set([
   'smp',
   'spawn',
   'survival',
+  'test',
   'vanilla',
 ])
 
