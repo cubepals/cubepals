@@ -47,9 +47,7 @@ describe('secondEyeComment', () => {
     const lines = body.split('\n')
     expect(lines[0]).toBe(MARKER)
     expect(lines[1]).toBe('### 🤖 Second eye · AI review by Claude')
-    expect(lines[3]).toBe(
-      '![Merge](https://img.shields.io/badge/AI_review-merge-2ea44f) **Verdict: Merge.** No findings.',
-    )
+    expect(lines[3]).toBe('✅ **Verdict: Merge.** No findings.')
     expect(body).toContain(
       `| **Reviewed** | [\`0123456\`](https://github.com/cubepals/cubepals/commit/${SHA}) · 3 files, +120 −14 lines |`,
     )
@@ -68,8 +66,7 @@ describe('secondEyeComment', () => {
       { verdict: 'fix first', findings: [finding('low', 3), finding('high', 1), finding('medium', 2)] },
       run,
     )
-    expect(body).toContain('**Verdict: Fix first.** 3 findings.')
-    expect(body).toContain('![Fix first](https://img.shields.io/badge/AI_review-fix_first-d93f0b)')
+    expect(body).toContain('⚠️ **Verdict: Fix first.** 3 findings.')
     const link = (line: number) =>
       `[\`apps/control/src/billing.ts:${line}\`](https://github.com/cubepals/cubepals/blob/${SHA}/apps/control/src/billing.ts#L${line})`
     expect(findingRows(body)).toEqual([

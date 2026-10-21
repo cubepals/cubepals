@@ -64,11 +64,8 @@ export const LABELS = { merge: 'review/ai-merge', 'fix first': 'review/ai-fix-fi
 const RANK: Record<Severity, number> = { high: 0, medium: 1, low: 2 }
 const TAG: Record<Severity, string> = { high: '🔴 High', medium: '🟠 Medium', low: '🟡 Low' }
 
-/** A shields.io static badge: its address carries only the verdict, never the pull request's data. */
-const BADGE = {
-  merge: '![Merge](https://img.shields.io/badge/AI_review-merge-2ea44f)',
-  'fix first': '![Fix first](https://img.shields.io/badge/AI_review-fix_first-d93f0b)',
-} as const
+/** The verdict's badge: an emoji, which renders everywhere and fetches nothing. */
+const BADGE = { merge: '✅', 'fix first': '⚠️' } as const
 
 /** Claude's text on one line, with no code spans to break out of and nobody mentioned. */
 const plain = (text: unknown): string =>
@@ -132,7 +129,6 @@ export function secondEyeComment(review: Review, run: Run): string {
     ['Looked at', areas ? areas.charAt(0).toUpperCase() + areas.slice(1) : 'Unknown'],
     ['Model', `${run.model ? `\`${plain(run.model)}\`` : 'Unknown'} · [Workflow run](${run.runUrl})`],
   ]
-  const [head, ...rows] = summary.map(([name, value]) => `| **${name}** | ${value} |`)
   return [
     MARKER,
     ...(run.updating ? [`<sub>Updated for ${commitLink(run)}</sub>`, ''] : []),
@@ -142,9 +138,10 @@ export function secondEyeComment(review: Review, run: Run): string {
       findings.length ? `${count(findings.length, 'finding', 'findings')}.` : 'No findings.'
     }`,
     '',
-    head,
+    // An empty header row, so the first row reads like the others.
+    '| | |',
     '| --- | --- |',
-    ...rows,
+    ...summary.map(([name, value]) => `| **${name}** | ${value} |`),
     '',
     ...(findings.length
       ? [
