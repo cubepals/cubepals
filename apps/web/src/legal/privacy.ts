@@ -82,7 +82,7 @@ export const PRIVACY: Policy = {
                 'Legitimate interests (yours and the players’, who expect joining to work)',
               ],
               [
-                '**Public listings:** if you publish a server, the details shown on its public page and in the directory, including the names of players on right now (only if the server checks accounts). Stars and short notes left by signed-in visitors.',
+                '**Public listings:** if you publish a server, the details shown on its public page and in the directory, including the names of players on right now (only if the server checks accounts). Stars and short notes left by signed-in visitors. A note shows its writer’s first name and the first letter of their last name, never their email.',
                 'To show the servers people chose to publish.',
                 'Contract',
               ],
@@ -136,7 +136,7 @@ export const PRIVACY: Policy = {
         {
           list: [
             '**What we receive from Google:** your name, your email address, whether Google has confirmed that email address, the address of your profile picture, and your Google account ID, with the sign-in tokens Google gives us for it.',
-            '**What we use it for:** only to create your {brand} account and sign you in to it, to keep your name and picture with your account, and to email you about your account and servers. Your Google account ID is how we know it’s you the next time you sign in with Google.',
+            '**What we use it for:** only to create your {brand} account and sign you in to it, to keep your name and picture with your account, to show your first name and last initial on notes you leave on public servers, and to email you about your account and servers. Your Google account ID is how we know it’s you the next time you sign in with Google.',
             '**Who we share it with:** no one, except the providers that store our database and run {brand} for us (section 5), who keep it on our behalf. We don’t sell it, use it for advertising, or use it to train AI models, and no person reads it except to answer you or to keep {brand} safe.',
             '**How we keep it safe:** it is stored in our database in Frankfurt, Germany, encrypted in transit, and only we have access to it (section 8).',
             '**How long we keep it, and how to remove it:** for as long as you have your account. Delete your account, or email {privacy}, and we delete what Google gave us with it within 30 days. You can also remove {brand}’s access at any time from your Google account, at myaccount.google.com/permissions; you then can’t sign in with Google until you allow it again.',
