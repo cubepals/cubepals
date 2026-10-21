@@ -560,7 +560,7 @@ describe('join records', () => {
 describe('STOP_CHEATERS', () => {
   const fixture = {
     punishments: 'Punishments: {}\n',
-    ban: { reason: 'impossible', removals: 3, withinMinutes: 60, minutes: 1440 },
+    ban: { reason: 'impossible' as const, removals: 3, withinMinutes: 60, minutes: 1440 },
   }
 
   test('is read from its JSON; unset or unreadable is the public default, with the reason', () => {
