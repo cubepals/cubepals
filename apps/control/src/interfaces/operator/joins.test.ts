@@ -146,5 +146,7 @@ describe.skipIf(!hasDatabase)('joins and signals through the operators’ API', 
     expect(closed.closedBy).toBe('operator:ada')
     expect(((await call('GET', '/signals')).body as { signals: SignalView[] }).signals).toEqual([])
     expect((await call('POST', `/signals/${id}/close`)).status).toBe(404)
+    // One past Postgres' bigint: refused as asked wrong, before the database.
+    expect((await call('POST', '/signals/9223372036854775808/close')).status).toBe(400)
   })
 })
