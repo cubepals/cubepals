@@ -109,11 +109,12 @@ export class StopCheatersService {
       requestId,
       on ? 'moderation.stop_cheaters_on' : 'moderation.stop_cheaters_off',
       async (tx, desired) => {
-        if (on && (await grimFor(tx, desired)).kind === 'modded') throw new AppError('invalid_choice', MODDED)
+        const grim = (await grimFor(tx, desired)).kind
+        if (on && grim === 'modded') throw new AppError('invalid_choice', MODDED)
         const was = effective(await loadStopCheaters(tx, serverId)).on
         await saveStopCheaters(tx, serverId, { setting: on ? 'on' : 'off', reason: null, takeOver: false })
-        // Made the owner's choice where it already ran that way: nothing to restart for.
-        return was !== on
+        // Nothing to restart for where it already ran that way, or where its release has no Grim yet.
+        return was !== on && grim === 'placed'
       },
     )
   }

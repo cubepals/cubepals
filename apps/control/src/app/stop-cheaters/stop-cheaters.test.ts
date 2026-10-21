@@ -276,7 +276,6 @@ describe.skipIf(!hasDatabase)('what a start places', () => {
   test('a release Grim has no build for yet says so, and places nothing', async () => {
     const { owner, id } = await running('Quin')
     const revision = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
-    await h.app.stopCheaters.set(owner, id, true, randomUUID())
     await h.db
       .delete(schema.compatPlugins)
       .where(
@@ -285,6 +284,9 @@ describe.skipIf(!hasDatabase)('what a start places', () => {
           eq(schema.compatPlugins.gameVersion, revision.gameVersion),
         ),
       )
+    // The switch takes, and restarts nothing: there is nothing to place yet.
+    await h.app.stopCheaters.set(owner, id, true, randomUUID())
+    expect(await applies(id)).toBe(0)
     expect((await view(id)).available).toEqual({ kind: 'release', release: revision.gameVersion })
     expect((await h.app.specs.desired(h.db, await h.server(id))).spec.env[STOP_CHEATERS_ENV]).toBeUndefined()
     await h.app.setups.compat.refresh()
