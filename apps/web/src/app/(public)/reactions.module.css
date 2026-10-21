@@ -140,6 +140,8 @@
 .meta {
   flex: none;
   color: var(--ink-subtle);
+  /* Keeps the space before its first dot, which a flex item would otherwise trim. */
+  white-space: pre;
 }
 
 .body {

@@ -332,9 +332,12 @@ function Notes({
 /** Under the note box, what a note the reader leaves will show, once the notes have come. */
 function Signature({ id, notes }: { id: string; notes: NotesView | undefined }) {
   if (notes === undefined) return null
+  const name = notes.signature ?? NO_NAME
+  // "Davi H." already ends the sentence.
   return (
     <p id={id} className={`type-caption ${styles.quiet}`}>
-      Your note shows as {notes.signature ?? NO_NAME}.
+      Your note shows as {name}
+      {name.endsWith('.') ? '' : '.'}
     </p>
   )
 }
