@@ -51,6 +51,8 @@ describe('secondEyeComment', () => {
     expect(body).toContain(
       `| **Reviewed** | [\`0123456\`](https://github.com/cubepals/cubepals/commit/${SHA}) · 3 files, +120 −14 lines |`,
     )
+    expect(body).toContain('| Run | Details |\n| :--- | :--- |\n| **Reviewed** |')
+    expect(body).not.toContain('| | |')
     expect(body).toContain('| **Looked at** | Bugs, security |')
     expect(body).toContain(
       '| **Model** | `claude-test-model` · [Workflow run](https://github.com/cubepals/cubepals/actions/runs/7) |',

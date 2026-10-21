@@ -139,9 +139,8 @@ export function secondEyeComment(review: Review, run: Run): string {
       findings.length ? `${count(findings.length, 'finding', 'findings')}.` : 'No findings.'
     }`,
     '',
-    // An empty header row, so the first row reads like the others.
-    '| | |',
-    '| --- | --- |',
+    '| Run | Details |',
+    '| :--- | :--- |',
     ...summary.map(([name, value]) => `| **${name}** | ${value} |`),
     '',
     ...(findings.length
