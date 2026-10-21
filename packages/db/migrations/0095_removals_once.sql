@@ -1,0 +1,2 @@
+-- One row for each removal Stop cheaters made, however many times a reporter sends the batch that holds it.
+CREATE UNIQUE INDEX "server_removals_once" ON "server_removals" USING btree ("server_id","player_uuid","at","reason");

@@ -112,12 +112,16 @@ export async function anyStopCheatersOn(q: Queryable): Promise<boolean> {
   return false
 }
 
-/** One removal, as the server's reporter told it. */
+/**
+ * One removal, as the server's reporter told it; whether it is new. A reporter sends a batch again
+ * when it hears no answer, so a removal already kept is kept once.
+ */
 export async function insertRemoval(
   q: Queryable,
   removal: { serverId: string; playerUuid: string; playerName: string; reason: RemovalReason; at: Date },
-): Promise<void> {
-  await q.insert(removals).values(removal)
+): Promise<boolean> {
+  const added = await q.insert(removals).values(removal).onConflictDoNothing().returning({ id: removals.id })
+  return added.length > 0
 }
 
 /** A server's newest removals, newest first. */

@@ -8,7 +8,18 @@
  * Cubepals, with how a server's punishments escalate; and Stop cheaters, the anticheat Cubepals
  * places itself: whether a server runs it, and the players it removed.
  */
-import { boolean, index, integer, jsonb, pgEnum, pgTable, primaryKey, text, uuid } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import type { AccessDetailsJson, ModerationStepJson } from '../json.ts'
 import { createdAt, ts, updatedAt } from './columns.ts'
 import { minecraftServers } from './servers.ts'
@@ -128,5 +139,7 @@ export const serverRemovals = pgTable(
   (t) => [
     index('server_removals_server_at').on(t.serverId, t.at),
     index('server_removals_player').on(t.serverId, t.playerUuid, t.at),
+    // One row for each removal, however many times a reporter sends the batch that holds it.
+    uniqueIndex('server_removals_once').on(t.serverId, t.playerUuid, t.at, t.reason),
   ],
 )

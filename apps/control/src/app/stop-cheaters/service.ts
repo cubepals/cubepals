@@ -147,8 +147,15 @@ export class StopCheatersService {
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(uuid)) continue
       await this.#db.transaction(async (tx) => {
         const at = new Date(event.at)
-        await insertRemoval(tx, { serverId, playerUuid: uuid, playerName: event.name ?? '', reason, at })
-        await this.#maybeBan(tx, serverId, { uuid, name: event.name ?? '' }, reason, at)
+        const added = await insertRemoval(tx, {
+          serverId,
+          playerUuid: uuid,
+          playerName: event.name ?? '',
+          reason,
+          at,
+        })
+        // A batch sent again brings nothing new to count towards a ban.
+        if (added) await this.#maybeBan(tx, serverId, { uuid, name: event.name ?? '' }, reason, at)
       })
     }
   }

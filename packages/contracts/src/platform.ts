@@ -120,6 +120,7 @@ export const ALERT_KEYS = [
   'realtime_certificate_expiring',
   'official_files',
   'stop_cheaters_default',
+  'stop_cheaters_no_reporter',
 ] as const
 export type AlertKey = (typeof ALERT_KEYS)[number]
 
