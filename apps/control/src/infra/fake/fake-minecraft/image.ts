@@ -195,7 +195,9 @@ export async function placeStopCheaters(volume: string, env: Env): Promise<void>
   const there = await readFile(file, 'utf8').catch(() => null)
   const ours = there?.startsWith('# Written by Cubepals') === true
   const commands = (there ?? '').split('\n').filter((line) => /^\s*-\s*["']?[0-9]+:[0-9]+\s/.test(line))
-  const builtIn = commands.every((line) => /[0-9]+:[0-9]+\s+\[(alert|log|webhook|proxy)\]/.test(line))
+  const builtIn =
+    commands.length > 0 &&
+    commands.every((line) => /[0-9]+:[0-9]+\s+\[(alert|log|webhook|proxy)\]/.test(line))
   const wanted = env.BLOCKLY_STOP_CHEATERS
   if (wanted === undefined) {
     if ((await readFile(mark, 'utf8').catch(() => null)) === null) return

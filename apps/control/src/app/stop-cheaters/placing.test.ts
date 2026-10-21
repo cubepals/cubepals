@@ -194,6 +194,20 @@ describe('Stop cheaters at a start', () => {
     expect(read(data, PUNISHMENTS_FILE)).toBe(theirs)
   })
 
+  test('a file with no command lines it can read is the owner’s, and stays', async () => {
+    const data = volume()
+    for (const theirs of [
+      'Punishments:\n  Reach:\n    checks: [Reach]\n    commands: ["5:5 kick %player% reach"]\n',
+      'Punishments: {}\n',
+    ]) {
+      writeFileSync(join(data, PUNISHMENTS_FILE), theirs)
+      await start(data, OURS)
+      expect(read(data, PUNISHMENTS_FILE)).toBe(theirs)
+      expect(read(data, KEPT)).toBeNull()
+      expect(mark(data)).toBe('own')
+    }
+  })
+
   test('off on a server that never ran it changes nothing', async () => {
     const data = volume()
     writeFileSync(join(data, PUNISHMENTS_FILE), 'x: 1\n')

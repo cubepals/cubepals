@@ -109,17 +109,19 @@ const COMMAND_LINE = `^[[:space:]]*-[[:space:]]*["']?[0-9]+:[0-9]+[[:space:]]`
 const BUILT_IN_LINE = `[0-9]+:[0-9]+[[:space:]]+\\[(${BUILT_IN_ACTIONS.join('|')})\\]`
 
 /**
- * The step, on a server that can run Grim. On: a file Cubepals wrote, none, or one of Grim's own
- * actions only is replaced (kept first as `.before-cubepals` where it isn't Cubepals', or under a
- * timestamped name where one is kept already), and `own` is marked for any other. Off, where a start marked it on: Cubepals' file
- * goes and the kept one comes back. Runs as root, so what it writes is handed to the volume's owner,
+ * The step, on a server that can run Grim. On: a file Cubepals wrote, none, or one whose commands
+ * are all Grim's own actions is replaced (kept first as `.before-cubepals` where it isn't Cubepals',
+ * or under a timestamped name where one is kept already), and `own` is marked for any other, one
+ * with no command lines it can read included. Off, where a start marked it on: Cubepals' file goes
+ * and the kept one comes back. Runs as root, so what it writes is handed to the volume's owner,
  * and it replaces any link on the way (`volume-links.ts`).
  */
 export const STOP_CHEATERS_STEP = [
   `unlinked ${PUNISHMENTS_FILE}; unlinked ${KEPT_FILE}; unlinked ${MARK};`,
   `p=${DATA_DIR}/${PUNISHMENTS_FILE}; k=${DATA_DIR}/${KEPT_FILE}; m=${DATA_DIR}/${MARK};`,
   `ours() { head -n 1 "$p" 2>/dev/null | grep -q '^${WRITTEN_BY_CUBEPALS}'; };`,
-  `builtin() { ! grep -E '${COMMAND_LINE.replaceAll("'", `'"'"'`)}' "$p" | grep -Evq '${BUILT_IN_LINE}'; };`,
+  `cmds() { grep -E '${COMMAND_LINE.replaceAll("'", `'"'"'`)}' "$p"; };`,
+  `builtin() { cmds >/dev/null && ! cmds | grep -Evq '${BUILT_IN_LINE}'; };`,
   `if [ -n "$${STOP_CHEATERS_ENV}" ]; then`,
   `if [ -f "$p" ] && ! ours && ! builtin && [ "$${STOP_CHEATERS_OURS_ENV}" != TRUE ]; then echo own > "$m";`,
   `else mkdir -p "$(dirname "$p")" && { [ ! -f "$p" ] || ours || { if [ -e "$k" ]; then mv -fT "$p" "$k.$(date +%s)";`,
