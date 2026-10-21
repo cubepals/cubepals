@@ -92,8 +92,8 @@ export const serverStars = pgTable(
 )
 
 /**
- * Short notes left on a public server, a guestbook: flat, a line each, anonymous apart from who
- * wrote it being its author or the owner. Deleted outright by their author, the server's owner or
+ * Short notes left on a public server, a guestbook: flat, a line each, shown with the first name
+ * and last initial of whoever wrote it. Deleted outright by their author, the server's owner or
  * an admin; purging the server, or closing the author's account, removes them too.
  */
 export const serverNotes = pgTable(
@@ -108,6 +108,11 @@ export const serverNotes = pgTable(
       .references(() => users.id),
     /** As shown: cleaned to one line, 1 to 128 characters as a browser counts them. */
     body: text('body').notNull(),
+    /**
+     * Written where the note box said it shows its writer's name, so it shows the name the account
+     * has when it is read. Notes from before that were left as anonymous and stay that way.
+     */
+    signed: boolean('signed').notNull().default(true),
     createdAt: createdAt(),
   },
   (t) => [
