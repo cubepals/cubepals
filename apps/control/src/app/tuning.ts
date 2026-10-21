@@ -42,7 +42,7 @@ interface Tuning {
   stopCheaters?: StopCheatersTuning | null
 }
 
-/** Grim's punishments file as text, and when removals for sending what no game can become a day's ban. */
+/** Grim's punishments file as text, and when removals for sending what no game can become a ban. */
 interface StopCheatersTuning {
   punishments: string
   ban: { reason: 'impossible'; removals: number; withinMinutes: number; minutes: number }

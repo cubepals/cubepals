@@ -267,7 +267,7 @@ its next start; a running server isn't restarted for it.
 where it is on (`plugins/GrimAC/punishments.yml`), and when a player's removals become a ban.
 
 ```json
-{ "punishments": "<Grim's punishments.yml as text>", "ban": { "reason": "impossible", "removals": 1, "withinMinutes": 1, "minutes": 1440 } }
+{ "punishments": "<Grim's punishments.yml as text>", "ban": { "reason": "impossible", "removals": 1, "withinMinutes": 1, "minutes": 1 } }
 ```
 
 The file's commands remove a player through the join reporter's console command,

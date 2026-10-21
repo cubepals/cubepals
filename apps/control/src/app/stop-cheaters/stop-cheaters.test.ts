@@ -43,7 +43,7 @@ const cdn = new Cdn()
 const FIXTURE = {
   punishments:
     'Punishments:\n  BadPackets:\n    commands:\n      - "1:1 cubepals-remove %player% impossible"\n',
-  ban: { reason: 'impossible' as const, removals: 3, withinMinutes: 60, minutes: 24 * 60 },
+  ban: { reason: 'impossible' as const, removals: 4, withinMinutes: 45, minutes: 90 },
 }
 
 /** A control plane of its own for each group, with Grim on the catalog and pinned for every release. */
@@ -413,7 +413,7 @@ describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
   const bans = (id: string) =>
     h.db.select().from(schema.serverModerationActions).where(eq(schema.serverModerationActions.serverId, id))
 
-  test('with the moderation tools, impossible removals reaching the rule bring one ban for a day', async () => {
+  test('with the moderation tools, impossible removals reaching the rule bring one ban for the rule’s length', async () => {
     const { id } = await running('Tam')
     await withTools(id)
     const before = tuning()
