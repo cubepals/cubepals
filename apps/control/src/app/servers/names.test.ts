@@ -112,6 +112,14 @@ describe.skipIf(!hasDatabase)('held and offensive names', () => {
     expect(routes.map((r) => r.hostname)).toContain('survival.play.test')
   })
 
+  test('a server that already has an address held for Cubepals’ own keeps it', async () => {
+    const owner = await h.user()
+    const made = await h.create(owner, { name: 'Testing grounds' })
+    await had(made.id, { slug: 'testing' as Slug })
+    expect(String((await h.app.servers.changeAddress(owner, made.id, 'testing')).slug)).toBe('testing')
+    expect(String((await h.server(made.id)).slug)).toBe('testing')
+  })
+
   test('Browse leaves out a listing whose name is offensive, and tells its owner to pick another', async () => {
     const owner = await h.user()
     const made = await h.create(owner, { name: 'Castle Builders' })
