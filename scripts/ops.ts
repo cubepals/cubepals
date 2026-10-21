@@ -449,11 +449,10 @@ switch (command) {
   }
   case 'join': {
     const ref = first('a join id, or a player’s name or uuid')
-    // A join's id is a version 7 uuid; a player's, a version 4 one (or 3, offline).
-    const byId = z.uuid().safeParse(ref).success && ref[14] === '7'
+    // The API tells a join's id from a player's: both can be any version of uuid.
     const at = option('at')
     const query = new URLSearchParams({ player: ref, ...(at === undefined ? {} : { at: since(at) }) })
-    const view = (await api('GET', byId ? `/joins/${ref}` : `/joins/find?${query}`)) as JoinDetailView
+    const view = (await api('GET', `/joins/find?${query}`)) as JoinDetailView
     if (option('json')) show(view)
     else for (const line of joinReport(view)) say(line)
     break

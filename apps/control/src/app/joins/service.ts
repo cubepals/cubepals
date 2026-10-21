@@ -22,6 +22,7 @@ import type {
 } from '@blockly/contracts/join-records'
 import { type Db, schema, type Tx } from '@blockly/db'
 import { and, eq, inArray, isNotNull, lt } from 'drizzle-orm'
+import { z } from 'zod'
 import { type OperatorActor, requestedBy } from '../actor.ts'
 import { NotFound } from '../errors.ts'
 import type { Limits } from '../ports/limits.ts'
@@ -42,6 +43,7 @@ const SWEPT_EVERY_MS = 10 * MINUTE_MS
  * next sweep comes. A join put together and over loses it at once (`putTogether`).
  */
 const SOURCE_KEPT_MS = HOUR_MS - SWEPT_EVERY_MS
+const UUID = z.uuid()
 
 export class JoinService {
   readonly #db: Db
@@ -97,9 +99,15 @@ export class JoinService {
     return (await joinDetail(this.#db, id)) ?? notFound('Join')
   }
 
-  /** `player`'s join nearest `at`, or their latest. */
-  async find(player: string, at?: Date): Promise<JoinDetailView> {
-    const id = await findJoin(this.#db, player, at)
+  /**
+   * The join `ref` names: a join's own id, whatever version of uuid it is (a join only the server
+   * reported has a random one, as a player's is), or else a player's join nearest `at`, or their
+   * latest.
+   */
+  async find(ref: string, at?: Date): Promise<JoinDetailView> {
+    const own = UUID.safeParse(ref).success ? await joinDetail(this.#db, ref) : null
+    if (own !== null) return own
+    const id = await findJoin(this.#db, ref, at)
     return id === null ? notFound('Join') : this.detail(id)
   }
 

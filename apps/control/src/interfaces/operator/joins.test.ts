@@ -128,6 +128,10 @@ describe.skipIf(!hasDatabase)('joins and signals through the operators’ API', 
     expect(nearest.join.id).toBe(ids.first)
     const latest = (await call('GET', '/joins/find?player=Steve')).body as JoinDetailView
     expect(latest.join.id).toBe(ids.second)
+    // A join only the server reported has a random (version 4) id, as a player does.
+    expect(ids.first[14]).toBe('4')
+    const byId = (await call('GET', `/joins/find?player=${ids.first}`)).body as JoinDetailView
+    expect(byId.join.id).toBe(ids.first)
   })
 
   test('open signals oldest first, closed ones since a moment, and one closed by its operator', async () => {

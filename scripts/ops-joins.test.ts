@@ -13,7 +13,8 @@ import type { SignalView } from '@blockly/contracts/join-records'
 
 const SECRET = 'operator-secret-0123456789'
 const OPS = join(import.meta.dir, 'ops.ts')
-const JOIN_ID = '01900000-0000-7000-8000-000000000001'
+// A version 4 id, as a join only the server reported has.
+const JOIN_ID = '0b9d3c2e-4f1a-4c6b-9e2d-000000000001'
 
 const SIGNAL: SignalView = {
   id: 12,
@@ -111,7 +112,7 @@ describe('ops.ts join and joins', () => {
     await ops(['join', '8667ba71-b85a-4004-af54-457a9734eed7', '--at', '2026-10-20T09:00:00.000Z', '--json'])
     await ops(['joins', '--server', 'castle', '--player', 'Steve', '--limit', '5'])
     expect(paths).toEqual([
-      `GET /ops/v1/joins/${JOIN_ID}`,
+      `GET /ops/v1/joins/find?player=${JOIN_ID}`,
       'GET /ops/v1/joins/find?player=Steve',
       'GET /ops/v1/joins/find?player=8667ba71-b85a-4004-af54-457a9734eed7&at=2026-10-20T09%3A00%3A00.000Z',
       'GET /ops/v1/joins?server=castle&player=Steve&limit=5',
