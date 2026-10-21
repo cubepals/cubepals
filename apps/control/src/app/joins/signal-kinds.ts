@@ -72,13 +72,17 @@ const raise = (kind: SignalKind, row: JoinRow, which: string, at: Date, extra: R
   detail: { ...about(row), ...extra },
 })
 
-/** From login to in the world (or to now, while it isn't), past its limit; Cubepals' own servers' where set. */
+/**
+ * From login to in the world (or to now, while it is still waiting), past its limit; Cubepals' own
+ * servers' where set. A join gone before the world is `left_while_loading`'s, not this.
+ */
 function slowLogin(config: SignalsConfig, rows: readonly JoinRow[], now: Date): Raised[] {
   const slow = config.slowJoin
   if (slow === undefined) return []
   return rows.flatMap((row) => {
     const limit = row.ours ? (slow.loginToWorldOursS ?? slow.loginToWorldS) : slow.loginToWorldS
     if (limit === undefined || row.loginAt === null) return []
+    if (row.inWorldAt === null && row.leftAt !== null) return []
     const figure = seconds(row.loginAt, row.inWorldAt ?? now)
     return figure > limit ? [raise('slow_join', row, 'login', now, { figure, limit })] : []
   })

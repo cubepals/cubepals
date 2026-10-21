@@ -56,6 +56,8 @@ describe('signals judged from joins', () => {
       row('fine', { loginAt: at(100), inWorldAt: at(95) }),
       row('ours', { loginAt: at(100), inWorldAt: at(93), ours: true }),
       row('waiting', { loginAt: at(60) }),
+      // Gone before the world: not still waiting, and left_while_loading's to tell.
+      row('gone', { loginAt: at(60), leftAt: at(55) }),
       row('woke', { connectedAt: at(200), inWorldAt: at(140), wake: 'stopped' }),
       row('resumed', { connectedAt: at(200), inWorldAt: at(140), wake: 'memory' }),
     ]
