@@ -2470,8 +2470,9 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   its next wake (`resumesOn`). The step writes `plugins/GrimAC/punishments.yml` from `STOP_CHEATERS`
   (docs/configuration.md) where there is no file, where Cubepals wrote the one there, or where it
   holds only Grim's own actions; such a file that isn't Cubepals' is kept as
-  `punishments.yml.before-cubepals` first, never over one kept already, and put back when Stop
-  cheaters goes off. Any other file is the owner's: it is left, the access sync reads back that it
+  `punishments.yml.before-cubepals` first, and put back when Stop cheaters goes off. One kept
+  already is never written over: the newer is kept under a timestamped name, so nothing an owner
+  wrote is lost. Any other file is the owner's: it is left, the access sync reads back that it
   was (`server_runtimes.applied.stopCheaters`), and the page offers Cubepals' settings in its
   place. A Grim the owner runs as their own plugin is never placed twice. Removals go through the
   join reporter's console command (`cubepals-remove`, apps/reporter), which kicks the player in

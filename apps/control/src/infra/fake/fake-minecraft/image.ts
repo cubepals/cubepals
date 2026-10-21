@@ -184,7 +184,7 @@ export async function placeCarried(volume: string, env: Env, say: (text: string)
 /**
  * Blockly's start step for Stop cheaters' punishments file (`minecraft/stop-cheaters.ts`), as its
  * variables say it: on, Cubepals' file in place of none, its own, or one of Grim's own actions only,
- * the last kept aside first; any other left as the owner's, unless they asked for Cubepals'. Off,
+ * the last kept aside first (by its time, where one is kept already); any other left as the owner's, unless they asked for Cubepals'. Off,
  * where it was on, Cubepals' file goes and the kept one comes back. The step itself runs in a real
  * shell in `app/stop-cheaters/placing.test.ts`.
  */
@@ -211,7 +211,10 @@ export async function placeStopCheaters(volume: string, env: Env): Promise<void>
     return
   }
   await mkdir(dirname(file), { recursive: true })
-  if (there !== null && !ours && (await stat(kept).catch(() => null)) === null) await rename(file, kept)
+  // Nothing the owner wrote is lost: one kept already stays, and the newer is kept by its time.
+  const keptAlready = (await stat(kept).catch(() => null)) !== null
+  if (there !== null && !ours)
+    await rename(file, keptAlready ? `${kept}.${Math.floor(Date.now() / 1000)}` : kept)
   await writeFile(file, Buffer.from(wanted, 'base64'))
   await writeFile(mark, 'ours\n')
 }

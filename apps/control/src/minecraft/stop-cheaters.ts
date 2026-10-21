@@ -11,8 +11,9 @@
  *
  * The file is the owner's where they made it their own: a file Cubepals didn't write, whose
  * commands are more than Grim's own actions, is left as it is, and the start says so (`own`). A file
- * Cubepals replaces that it didn't write is kept beside it as `.before-cubepals`, never over one
- * already kept, and put back when Stop cheaters goes off.
+ * Cubepals replaces that it didn't write is kept beside it as `.before-cubepals`, and put back when
+ * Stop cheaters goes off. One already kept is never written over: the newer is kept as
+ * `.before-cubepals.<seconds since 1970>` instead, so nothing an owner wrote is lost.
  *
  * Not for which servers run it or the jar: that is `app/stop-cheaters/` and `app/compat/`.
  */
@@ -109,8 +110,8 @@ const BUILT_IN_LINE = `[0-9]+:[0-9]+[[:space:]]+\\[(${BUILT_IN_ACTIONS.join('|')
 
 /**
  * The step, on a server that can run Grim. On: a file Cubepals wrote, none, or one of Grim's own
- * actions only is replaced (kept first as `.before-cubepals` where it isn't Cubepals', unless one is
- * kept already), and `own` is marked for any other. Off, where a start marked it on: Cubepals' file
+ * actions only is replaced (kept first as `.before-cubepals` where it isn't Cubepals', or under a
+ * timestamped name where one is kept already), and `own` is marked for any other. Off, where a start marked it on: Cubepals' file
  * goes and the kept one comes back. Runs as root, so what it writes is handed to the volume's owner,
  * and it replaces any link on the way (`volume-links.ts`).
  */
@@ -121,7 +122,8 @@ export const STOP_CHEATERS_STEP = [
   `builtin() { ! grep -E '${COMMAND_LINE.replaceAll("'", `'"'"'`)}' "$p" | grep -Evq '${BUILT_IN_LINE}'; };`,
   `if [ -n "$${STOP_CHEATERS_ENV}" ]; then`,
   `if [ -f "$p" ] && ! ours && ! builtin && [ "$${STOP_CHEATERS_OURS_ENV}" != TRUE ]; then echo own > "$m";`,
-  `else mkdir -p "$(dirname "$p")" && { [ ! -f "$p" ] || ours || [ -e "$k" ] || mv -fT "$p" "$k"; }`,
+  `else mkdir -p "$(dirname "$p")" && { [ ! -f "$p" ] || ours || { if [ -e "$k" ]; then mv -fT "$p" "$k.$(date +%s)";`,
+  `else mv -fT "$p" "$k"; fi; }; }`,
   `&& printf %s "$${STOP_CHEATERS_ENV}" | base64 -d > "$p" && echo ours > "$m"`,
   `&& chown -h "$(ls -nd ${DATA_DIR} | awk '{ print $3 ":" $4 }')" "$(dirname "$p")" "$p" || exit 1; fi;`,
   `elif [ -f "$m" ]; then if ours; then rm -f "$p"; if [ -f "$k" ]; then mv -fT "$k" "$p"; fi; fi; rm -f "$m"; fi;`,

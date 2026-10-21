@@ -108,6 +108,9 @@ const read = (data: string, path: string) =>
   existsSync(join(data, path)) ? readFileSync(join(data, path), 'utf8') : null
 const KEPT = `${PUNISHMENTS_FILE}.before-cubepals`
 const mark = (data: string) => read(data, '.blockly-stop-cheaters')?.trim() ?? null
+/** The files kept aside by their time, where one was kept already. */
+const timestamped = (data: string) =>
+  readdirSync(join(data, 'plugins/GrimAC')).filter((name) => /\.before-cubepals\.\d+$/.test(name))
 const grimJars = (data: string) => readdirSync(join(data, 'plugins')).filter((name) => name.endsWith('.jar'))
 
 describe('Stop cheaters at a start', () => {
@@ -146,16 +149,30 @@ describe('Stop cheaters at a start', () => {
     expect(grimJars(data)).toEqual([])
   })
 
-  test('a file kept aside before is never written over', async () => {
+  test('a file kept aside before is never written over, and the newer one is kept by its time', async () => {
     const data = volume()
+    const newer = 'Punishments:\n  Reach:\n    commands:\n      - "5:5 [log]"\n'
     writeFileSync(join(data, KEPT), 'the first one\n')
-    writeFileSync(
-      join(data, PUNISHMENTS_FILE),
-      'Punishments:\n  Reach:\n    commands:\n      - "5:5 [log]"\n',
-    )
+    writeFileSync(join(data, PUNISHMENTS_FILE), newer)
     await start(data, OURS)
     expect(read(data, KEPT)).toBe('the first one\n')
     expect(read(data, PUNISHMENTS_FILE)).toContain('cubepals-remove')
+    expect(timestamped(data).map((name) => read(data, `plugins/GrimAC/${name}`))).toEqual([newer])
+  })
+
+  test('taking over with a file kept already loses neither the kept one nor the owner’s new one', async () => {
+    const data = volume()
+    const theirs = 'Punishments:\n  Reach:\n    commands:\n      - "5:5 kick %player% reach"\n'
+    writeFileSync(join(data, KEPT), 'kept earlier\n')
+    writeFileSync(join(data, PUNISHMENTS_FILE), theirs)
+    await start(data, OURS)
+    expect(mark(data)).toBe('own')
+    await start(data, OURS, true)
+    expect(mark(data)).toBe('ours')
+    expect(read(data, KEPT)).toBe('kept earlier\n')
+    const [stamped = ''] = timestamped(data)
+    expect(stamped).toMatch(/^punishments\.yml\.before-cubepals\.\d+$/)
+    expect(read(data, `plugins/GrimAC/${stamped}`)).toBe(theirs)
   })
 
   test('the owner’s own is left, marked own; “Use Cubepals’ settings” moves it aside', async () => {
