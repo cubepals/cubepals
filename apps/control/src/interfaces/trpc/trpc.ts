@@ -41,6 +41,7 @@ import type { SessionSwitch } from '../../app/ports/auth.ts'
 import type { RealtimeTickets } from '../../app/ports/tickets.ts'
 import type { RevisionService } from '../../app/revisions/service.ts'
 import type { ServerIcons } from '../../app/server-icons/service.ts'
+import type { OwnerNotices } from '../../app/servers/owner-notices.ts'
 import type { ServerQueries } from '../../app/servers/queries.ts'
 import type { MinecraftServerService } from '../../app/servers/service.ts'
 import type { SharingQueries } from '../../app/sharing/queries.ts'
@@ -51,6 +52,8 @@ import type { WorldService } from '../../app/worlds/service.ts'
 /** What procedures may call. Each procedure calls exactly one of these methods. */
 export interface Services {
   servers: MinecraftServerService
+  /** A new address goes through here, so its owner hears when someone else gave it. */
+  notices: OwnerNotices
   accounts: AccountService
   accountQueries: AccountQueries
   impersonation: Impersonation

@@ -8,8 +8,9 @@
  * icon or picture, tags and address) and the server list message, the mods page (list, search,
  * plan, add and remove) and the players page (the whitelist, operators, bans and helpers, and the
  * moderation tools). Each route calls the service the web's own route calls, as the operator, so
- * the audit log says `operator:<name>`. The server's life itself (made, started, trashed) is
- * `ops.ts`'s.
+ * the audit log says `operator:<name>`. Beside them, the notice an owner gets when Cubepals changes
+ * their server, sent again for a change made before notices existed. The server's life itself
+ * (made, started, trashed) is `ops.ts`'s.
  */
 import { randomUUID } from 'node:crypto'
 import {
@@ -35,6 +36,7 @@ import type { ModerationService } from '../../app/moderation/service.ts'
 import type { ModQueries } from '../../app/mods/queries.ts'
 import type { ModService } from '../../app/mods/service.ts'
 import type { RevisionService } from '../../app/revisions/service.ts'
+import type { OwnerNotices } from '../../app/servers/owner-notices.ts'
 import type { ServerQueries } from '../../app/servers/queries.ts'
 import type { MinecraftServerService } from '../../app/servers/service.ts'
 import { ownIcon } from '../trpc/own-icon.ts'
@@ -43,7 +45,8 @@ import { bodyOf, OPS_BASE, operatorOf } from './gate.ts'
 export interface ServerPagesOptions {
   console: Pick<ConsoleService, 'run'>
   feed: Pick<ConsoleFeed, 'recent'>
-  servers: Pick<MinecraftServerService, 'saveIdentity' | 'changeAddress'>
+  servers: Pick<MinecraftServerService, 'saveIdentity'>
+  notices: Pick<OwnerNotices, 'changeAddress' | 'addressChanged' | 'unlisted'>
   revisions: Pick<RevisionService, 'changeSettings'>
   queries: Pick<ServerQueries, 'get' | 'access'>
   mods: Pick<ModService, 'search' | 'plan' | 'apply'>
@@ -57,6 +60,11 @@ const LinesQuery = z.coerce.number().int().min(1).max(500).default(100)
 const IdentityBody = SaveIdentityInput.omit({ serverId: true })
 const AddressBody = ChangeAddressInput.omit({ serverId: true })
 const MessageBody = ServerSettingsInput.pick({ motd: true })
+/** Which notice: a new address, with the one it had before, or out of Browse. */
+const NoticeBody = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('address'), from: z.string().regex(/^[a-z0-9-]{1,63}$/) }),
+  z.object({ kind: z.literal('unlisted') }),
+])
 const SearchQuery = ModSearchInput.omit({ serverId: true }).extend({
   offset: z.coerce.number().int().min(0).default(0),
 })
@@ -95,7 +103,7 @@ function consoleRoutes(app: Hono, { console, feed, queries }: ServerPagesOptions
   })
 }
 
-function identityRoutes(app: Hono, { servers, revisions, queries }: ServerPagesOptions): void {
+function identityRoutes(app: Hono, { servers, revisions, queries, notices }: ServerPagesOptions): void {
   app.patch(`${SERVER}/identity`, async (c) => {
     const operator = operatorOf(c)
     const { picture, ...identity } = IdentityBody.parse(await bodyOf(c))
@@ -107,8 +115,16 @@ function identityRoutes(app: Hono, { servers, revisions, queries }: ServerPagesO
   app.put(`${SERVER}/address`, async (c) => {
     const operator = operatorOf(c)
     const { slug } = AddressBody.parse(await bodyOf(c))
-    await servers.changeAddress(operator, c.req.param('id'), slug)
+    await notices.changeAddress(operator, c.req.param('id'), slug)
     return c.json(await queries.get(operator, c.req.param('id')))
+  })
+  // The owner told of a change made before notices existed, as if it had just been stored.
+  app.post(`${SERVER}/notice`, async (c) => {
+    const operator = operatorOf(c)
+    const notice = NoticeBody.parse(await bodyOf(c))
+    if (notice.kind === 'address') await notices.addressChanged(operator, c.req.param('id'), notice.from)
+    else await notices.unlisted(operator, c.req.param('id'))
+    return c.json({ sent: notice.kind })
   })
   // The message under its name in players' server lists: one of its settings, the rest kept as they are.
   app.put(`${SERVER}/message`, async (c) => {

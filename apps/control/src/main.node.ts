@@ -408,6 +408,7 @@ function apiServices(
 ): Services {
   return {
     servers: app.servers,
+    notices: app.notices,
     accounts: app.accounts,
     accountQueries: app.accountQueries,
     impersonation: new Impersonation({ db }),

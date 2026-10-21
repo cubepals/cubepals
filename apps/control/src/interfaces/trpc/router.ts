@@ -164,7 +164,8 @@ const servers = router({
     return ctx.services.sharingQueries.share(ctx.actor, input.serverId)
   }),
   changeAddress: ownerOrAdminProcedure.input(ChangeAddressInput).mutation(async ({ ctx, input }) => {
-    await ctx.services.servers.changeAddress(ctx.actor, input.serverId, input.slug)
+    // Through the notices: an admin's new address for someone else's server is told to its owner.
+    await ctx.services.notices.changeAddress(ctx.actor, input.serverId, input.slug)
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
   settingsOptions: authedProcedure

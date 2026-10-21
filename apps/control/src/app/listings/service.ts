@@ -17,6 +17,7 @@ import { CatalogUnavailable, type ModCatalog } from '../ports/catalog.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { Mailer } from '../ports/platform.ts'
+import type { OwnerNotices } from '../servers/owner-notices.ts'
 import { findServer, loadRevision, loadRuntime, lockServer } from '../servers/persistence.ts'
 import { catalogViewOf, trustOf } from './judge.ts'
 import {
@@ -59,6 +60,7 @@ export class ListingService {
   readonly #catalog: ModCatalog
   readonly #sync: CatalogSync
   readonly #mailer: Mailer
+  readonly #notices: OwnerNotices
   readonly #webOrigin: string
   readonly #providers: readonly string[]
 
@@ -72,6 +74,8 @@ export class ListingService {
     /** The runtimes this deployment runs: a binding to another is foreign. */
     providers: readonly string[]
     mailer: Mailer
+    /** Telling an owner when Cubepals took their server out of Browse. */
+    notices: OwnerNotices
     webOrigin: string
   }) {
     this.#db = deps.db
@@ -81,6 +85,7 @@ export class ListingService {
     this.#catalog = deps.catalog
     this.#sync = deps.sync
     this.#mailer = deps.mailer
+    this.#notices = deps.notices
     this.#webOrigin = deps.webOrigin
     this.#providers = deps.providers
   }
@@ -90,14 +95,21 @@ export class ListingService {
    * a place in the directory. Private means neither; an invite link still works either way.
    */
   async setPublic(actor: Actor, serverId: string, wanted: boolean): Promise<void> {
-    await this.#db.transaction(async (tx) => {
+    const unlisted = await this.#db.transaction(async (tx) => {
       const server = authorize(actor, await lockServer(tx, serverId))
       if (wanted) await this.#policy.require(tx, server.ownerId, { kind: 'list_publicly' })
+      const was = (await loadListing(tx, server.id))?.visibility
       await setVisibility(tx, server.id, wanted ? 'published' : 'unpublished')
       await this.#audit(tx, actor, wanted ? 'listing.published' : 'listing.unpublished', server.id, {})
       await this.#changed(tx, server.id, server.ownerId)
+      return !wanted && was === 'published'
     })
     await this.reevaluate([serverId])
+    // Stored either way: a notice that fails is logged, and `ops notice` can send it again.
+    if (unlisted)
+      await this.#notices
+        .unlisted(actor, serverId)
+        .catch((error) => console.error(`unlisted notice for ${serverId} failed`, error))
   }
 
   /**

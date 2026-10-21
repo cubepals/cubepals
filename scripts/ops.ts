@@ -51,6 +51,10 @@
  *                                                   the moderation tools, read or turned on or off
  *   bun scripts/ops.ts listing <server> [publish | unlist --confirm <its name>]
  *                                                   where it stands in Browse, or put in or out
+ *   bun scripts/ops.ts notice <server> address --from <old address> | notice <server> unlisted
+ *                                                   the owner's email for a new address or for
+ *                                                   leaving Browse, for a change made before
+ *                                                   Cubepals sent it on its own
  *   bun scripts/ops.ts official <server> on|off --reason <why>
  *                                                   the "Run by Cubepals" mark
  *   bun scripts/ops.ts allowlist [add <project> [--note <text>] | remove <catalog> <project>]
@@ -342,6 +346,15 @@ switch (command) {
     } else fail('listing takes publish or unlist')
     break
   }
+  case 'notice': {
+    const notice = `/servers/${serverId()}/notice`
+    const kind = positional[1]
+    if (kind === 'address')
+      show(await api('POST', notice, { kind, from: option('from') ?? fail('notice address needs --from') }))
+    else if (kind === 'unlisted') show(await api('POST', notice, { kind }))
+    else fail('notice takes address or unlisted')
+    break
+  }
   case 'official': {
     const official = onOff(positional[1], 'official')
     const reason = option('reason') ?? fail('official needs --reason, which the audit log keeps')
@@ -475,7 +488,7 @@ switch (command) {
   }
   default:
     say(
-      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|retry|trash|untrash|rest|purge|console|identity|message|mods|players|whitelist|operator|helper|ban|pardon|moderation|listing|official|allowlist|platform|jars|health|operations|operation|joins|join|signals',
+      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|retry|trash|untrash|rest|purge|console|identity|message|mods|players|whitelist|operator|helper|ban|pardon|moderation|listing|notice|official|allowlist|platform|jars|health|operations|operation|joins|join|signals',
     )
     say('See the top of scripts/ops.ts, and docs/production.md.')
     if (command !== 'help') process.exit(1)

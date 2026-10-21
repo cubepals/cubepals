@@ -63,6 +63,7 @@ import type { Runtimes } from './runtimes/router.ts'
 import { RuntimePlacement } from './runtimes/service.ts'
 import type { SecretKeyring } from './secrets.ts'
 import { officialFilesOf } from './servers/own-files.ts'
+import { OwnerNotices } from './servers/owner-notices.ts'
 import { markNotLoaded } from './servers/persistence.ts'
 import { ServerQueries } from './servers/queries.ts'
 import { MinecraftServerService } from './servers/service.ts'
@@ -107,7 +108,7 @@ export interface ControlPlanePorts {
   capabilities: DeploymentCapabilities
   addressing: PlayAddressing
   regions: RegionCatalog
-  /** Email: admin alerts. */
+  /** Email: admin alerts, and the notices of what Cubepals changed on a server. */
   mailer: Mailer
 }
 
@@ -182,6 +183,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     loaderBuilds: ports.loaderBuilds,
     setups: () => setups,
   })
+  const notices = new OwnerNotices({ ...ports, ...settings, servers })
 
   const artifacts = new ArtifactService({
     db,
@@ -202,14 +204,11 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
   })
   const catalog = new CatalogSync({ db, catalog: ports.catalog })
   const listings = new ListingService({
-    db,
+    ...ports,
     policy,
-    events,
-    jobs: ports.jobs,
-    catalog: ports.catalog,
     sync: catalog,
     providers: runtime.providers,
-    mailer: ports.mailer,
+    notices,
     webOrigin: settings.webOrigin,
   })
   const jarChecks = new JarChecks({ ...ports, webOrigin: settings.webOrigin })
@@ -349,6 +348,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     transitions,
     specs,
     servers,
+    notices,
     accounts,
     accountQueries: new AccountQueries({ db, policy }),
     billing,

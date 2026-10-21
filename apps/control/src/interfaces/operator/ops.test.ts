@@ -96,6 +96,11 @@ function recordingApi(calls: Array<[string, ...unknown[]]>) {
       deleteServer: record('servers.deleteServer'),
       undeleteServer: record('servers.undeleteServer'),
     } as unknown as OpsApiOptions['servers'],
+    notices: {
+      changeAddress: record('notices.changeAddress'),
+      addressChanged: record('notices.addressChanged'),
+      unlisted: record('notices.unlisted'),
+    } as unknown as OpsApiOptions['notices'],
     queries: {
       get: record('queries.get', { id: SERVER, status: 'running', version: 4, settings: SETTINGS }),
       access: record('queries.access', {
@@ -355,8 +360,8 @@ describe('the operators’ API: a server’s console, identity and mods', () => 
     expect((await call('PUT', `/servers/${SERVER}/address`, { slug: 'Island-Home' })).status).toBe(200)
     expect(calls.filter(([name]) => name.startsWith('servers.'))).toEqual([
       ['servers.saveIdentity', ADA, SERVER, identity],
-      ['servers.changeAddress', ADA, SERVER, 'island-home'],
     ])
+    expect(named('notices.changeAddress')).toEqual([['notices.changeAddress', ADA, SERVER, 'island-home']])
     expect((await call('PATCH', `/servers/${SERVER}/identity`, { icon: 'no-such-icon' })).status).toBe(400)
     // A picture of its own is read as the web reads one, so one that isn't a picture is refused.
     const picture = Buffer.from('not a picture').toString('base64')
@@ -377,6 +382,20 @@ describe('the operators’ API: a server’s console, identity and mods', () => 
       ],
     ])
     expect((await call('PUT', `/servers/${SERVER}/message`, { motd: 'x'.repeat(201) })).status).toBe(400)
+  })
+
+  test('tells an owner of a new address or of leaving Browse, for a change made before notices', async () => {
+    expect((await call('POST', `/servers/${SERVER}/notice`, { kind: 'address', from: 'test' })).status).toBe(
+      200,
+    )
+    expect((await call('POST', `/servers/${SERVER}/notice`, { kind: 'unlisted' })).status).toBe(200)
+    expect(calls.filter(([name]) => name.startsWith('notices.'))).toEqual([
+      ['notices.addressChanged', ADA, SERVER, 'test'],
+      ['notices.unlisted', ADA, SERVER],
+    ])
+    expect((await call('POST', `/servers/${SERVER}/notice`, { kind: 'address' })).status).toBe(400)
+    expect((await call('POST', `/servers/${SERVER}/notice`, { kind: 'renamed' })).status).toBe(400)
+    expect(named('notices.addressChanged')).toHaveLength(1)
   })
 
   test('lists, searches, plans, adds and removes mods as the mods page does', async () => {
