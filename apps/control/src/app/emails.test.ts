@@ -144,8 +144,8 @@ const EMAILS: Array<{
     name: 'new address',
     email: addressChanged({
       server: bay,
-      slug: 'test',
-      from: 'test.play.cubepals.com',
+      slug: 'beta',
+      from: 'beta.play.cubepals.com',
       to: 'sunrise-bay.play.cubepals.com',
       origin: ORIGIN,
     }),

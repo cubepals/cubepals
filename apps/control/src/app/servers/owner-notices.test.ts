@@ -35,16 +35,16 @@ describe.skipIf(!hasDatabase)('owner notices', () => {
   const noticesTo = (to: string) => h.mail.to(to).filter((m) => m.notice)
 
   test('an operator’s new address tells the owner once, after it is stored', async () => {
-    const owner = await h.user('Larsen')
-    const made = await h.create(owner, { name: 'Larsens test', slug: 'larsens-old' })
-    await h.app.notices.changeAddress(operator, made.id, 'larsens-test')
+    const owner = await h.user('Maple')
+    const made = await h.create(owner, { name: 'Maple Hollow', slug: 'maple-old' })
+    await h.app.notices.changeAddress(operator, made.id, 'maple-hollow')
     const to = await emailOf(owner.userId)
     const [notice, ...more] = noticesTo(to)
     expect(more).toEqual([])
     expect(notice?.subject).toBe('Your server has a new address')
     expect(notice?.text).toBe(
       [
-        'Your server “Larsens test” moved from larsens-old.play.test to larsens-test.play.test. Short addresses like “larsens-old” are kept for Cubepals, so nobody mistakes a server for ours.',
+        'Your server “Maple Hollow” moved from maple-old.play.test to maple-hollow.play.test. Short addresses like “maple-old” are kept for Cubepals, so nobody mistakes a server for ours.',
         '',
         'Your world and settings didn’t change. You can pick another address in your server’s settings.',
         `http://localhost:3000/servers/${made.id}`,
@@ -60,7 +60,7 @@ describe.skipIf(!hasDatabase)('owner notices', () => {
     expect(h.mail.to(to)).toHaveLength(1)
 
     // The same address again changes nothing, so says nothing.
-    await h.app.notices.changeAddress(operator, made.id, 'larsens-test')
+    await h.app.notices.changeAddress(operator, made.id, 'maple-hollow')
     expect(noticesTo(to)).toHaveLength(1)
   })
 
@@ -115,8 +115,8 @@ describe.skipIf(!hasDatabase)('owner notices', () => {
     const owner = await h.user('Kim')
     const made = await h.create(owner, { name: 'Moved before' })
     const to = await emailOf(owner.userId)
-    await h.app.notices.addressChanged(operator, made.id, 'test')
-    expect(noticesTo(to).at(-1)?.text).toContain(`moved from test.play.test to ${made.slug}.play.test`)
+    await h.app.notices.addressChanged(operator, made.id, 'beta')
+    expect(noticesTo(to).at(-1)?.text).toContain(`moved from beta.play.test to ${made.slug}.play.test`)
     expect(await refusal(h.app.notices.addressChanged(operator, made.id, made.slug))).toBe(
       `invalid_choice: The server's address is still ${made.slug}.`,
     )

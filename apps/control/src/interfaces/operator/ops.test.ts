@@ -385,12 +385,12 @@ describe('the operators’ API: a server’s console, identity and mods', () => 
   })
 
   test('tells an owner of a new address or of leaving Browse, for a change made before notices', async () => {
-    expect((await call('POST', `/servers/${SERVER}/notice`, { kind: 'address', from: 'test' })).status).toBe(
+    expect((await call('POST', `/servers/${SERVER}/notice`, { kind: 'address', from: 'beta' })).status).toBe(
       200,
     )
     expect((await call('POST', `/servers/${SERVER}/notice`, { kind: 'unlisted' })).status).toBe(200)
     expect(calls.filter(([name]) => name.startsWith('notices.'))).toEqual([
-      ['notices.addressChanged', ADA, SERVER, 'test'],
+      ['notices.addressChanged', ADA, SERVER, 'beta'],
       ['notices.unlisted', ADA, SERVER],
     ])
     expect((await call('POST', `/servers/${SERVER}/notice`, { kind: 'address' })).status).toBe(400)
