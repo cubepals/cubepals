@@ -23,7 +23,7 @@ import * as rules from '../../lib/rules'
 import { behindSignIn, useSignedIn } from '../../lib/viewer'
 import { Button, Popover, Skeleton, Tip } from '../../ui'
 import styles from './reactions.module.css'
-import { WriterMark } from './writer-mark'
+import { WriterAvatar } from './writer-avatar'
 
 /** How close to the most a note says the composer starts counting down what is left. */
 const COUNT_FROM = 20
@@ -356,7 +356,7 @@ function NoteRow({
 }) {
   return (
     <li className={styles.note}>
-      <WriterMark seed={note.avatar} className={styles.avatar} />
+      <WriterAvatar avatar={note.avatar} className={styles.avatar} />
       <p className={`type-caption ${styles.byline}`}>
         <span className={styles.author} dir="auto">
           {note.author ?? NO_NAME}

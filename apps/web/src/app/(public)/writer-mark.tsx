@@ -5,19 +5,14 @@
 'use client'
 
 /**
- * The small picture beside a note's writer: the mark's own language, four flat shapes on a 2×2
+ * Cubepals' own style of note writer's picture: the mark's language, four flat shapes on a 2×2
  * grid, each a square, a circle or a square with one corner rounded, all in one of the site's
- * colours on sand. Drawn here from a seed the API gives (a hash of who wrote it), so the same
- * writer always has the same one, nothing leaves Cubepals to draw it, and nothing about the writer
- * can be read from it. The colours are the theme's own, so it changes with the page in dark mode.
- * Not the Cubepals mark: it never draws the mark's notched shape, and is not for anywhere the
- * product names itself.
+ * colours on sand. Never in ink, and never the mark's notched shape, so no picture reads as the
+ * Cubepals logo. One of the styles `writer-avatar.tsx` draws.
  */
 
 import { random } from '../../ui/face'
-
-/** The site's colours a writer's shapes may take: ink and the theme's few accents. */
-const INKS = ['var(--ink)', 'var(--accent)', 'var(--dusk)', 'var(--status-online)', 'var(--danger)'] as const
+import { COLOURS, PAPER } from './avatar-colours'
 
 /** Each of the four cells, left to right and top to bottom, as its corner in a 20-unit square. */
 const CELLS = [
@@ -41,23 +36,24 @@ const SHAPES = {
 type Shape = keyof typeof SHAPES
 
 /** What a seed draws: one colour, and a shape for each cell. */
-export function markOf(seed: string): { ink: string; shapes: Shape[] } {
+export function markOf(seed: string): { colour: string; shapes: Shape[] } {
   const next = random(seed)
   const pick = <T,>(list: readonly T[]): T => list[Math.floor(next() * list.length)] as T
   const kinds = Object.keys(SHAPES) as Shape[]
-  const ink = pick(INKS)
-  return { ink, shapes: CELLS.map(() => pick(kinds)) }
+  const colour = pick(COLOURS)
+  return { colour, shapes: CELLS.map(() => pick(kinds)) }
 }
 
 export function WriterMark({ seed, className }: { seed: string; className?: string }) {
-  const { ink, shapes } = markOf(seed)
+  const { colour, shapes } = markOf(seed)
   const d = shapes.map((shape, i) => {
     const [x, y] = CELLS[i] as (typeof CELLS)[number]
     return SHAPES[shape](x, y)
   })
   return (
     <svg className={className} viewBox="0 0 20 20" aria-hidden>
-      <path style={{ fill: ink }} d={d.join('')} />
+      <rect width="20" height="20" fill={PAPER} />
+      <path fill={colour} d={d.join('')} />
     </svg>
   )
 }

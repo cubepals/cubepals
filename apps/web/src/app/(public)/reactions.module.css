@@ -95,8 +95,8 @@
 }
 
 /*
- * Who left it, then what it says. The mark is as tall as a line of the note's text (20px, type-body-sm),
- * so its 2×2 grid falls on whole pixels, and it sits as far from the name as the delete button
+ * Who left it, then what it says. The picture is as tall as a line of the note's text (20px, type-body-sm),
+ * so the mark's 2×2 grid falls on whole pixels, and it sits as far from the name as the delete button
  * sits from the text (--space-8). The text hangs under the name, not under the mark.
  */
 .note {
@@ -115,6 +115,10 @@
   background: var(--surface-sand);
   /* Edged as the composer is, outside the picture so its shapes keep their whole pixels. */
   box-shadow: 0 0 0 1px var(--border-strong);
+}
+/* A picture a library draws as its own element, laid out as the others are. */
+.avatar > svg {
+  display: block;
 }
 
 /* The name runs out of room before the time does. */
