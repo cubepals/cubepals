@@ -230,6 +230,26 @@ Each operation keeps every step its handler reported, with when it began
 until the next one's `at`, the last until `finished_at`, and the wait in the queue is `created_at`
 to the first. Operations from before the steps were kept have none.
 
+Joins read the same way. Each one puts together what the edge saw (the address, the hostname
+asked for, the wake it started, when it was handed over and left) with what the server's own
+reporter plugin saw (logging in, configuring, arriving in the world, leaving), where
+`JOIN_REPORTER` lets the plugin run. A join is kept 35 days.
+
+```sh
+bun scripts/ops.ts --production joins --server <server> --since 24h   # one a line, the newest first
+bun scripts/ops.ts --production join <player> --at 2026-10-20T21:14Z --markdown
+bun scripts/ops.ts --production signals [--since 7d]       # what is open; `signals close <n>`
+```
+
+`join` takes a join's id, or a player's name or uuid for their join nearest `--at` (their latest
+without it), and prints it as an incident report: who joined, how they reached the server, each
+step in order with its time, what crossed a limit, and what nobody recorded. That report is meant
+to be pasted into an incident as it is. A signal is a join, a wake or a server that looked wrong
+(a slow join, a player leaving while loading, wakes nobody joined), with its figure and the limit
+it crossed. The limits come from `SIGNALS` ([configuration](configuration.md)); with none set, no
+signal is raised, and the log says so once. A signal left open a day closes as expired; one dealt
+with sooner is closed with `signals close`. The MCP server's `joins_list`, `join_get` and `signals_list` answer the same.
+
 The top of `scripts/ops.ts` lists every command. `--production` opens `fly proxy` to
 `bly-prod-control`'s internal listener with production's own `FLY_API_TOKEN` and `OPERATOR_TOKEN`,
 read from `local/production/production.env`; neither is printed, and a shell's own Fly token never

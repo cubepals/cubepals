@@ -122,46 +122,68 @@ function unknowns(view: JoinDetailView): string[] {
 /** The join as an incident report, in Markdown. */
 export function joinReport(view: JoinDetailView): string[] {
   const { join } = view
-  const started = Date.parse(join.connectedAt)
-  const moments = timeline(view)
   return [
     `# ${join.serverName ?? join.address}: ${join.playerName ?? 'unknown player'}, ${join.connectedAt.slice(0, 10)} ${time(join.connectedAt)} UTC`,
-    '',
-    '## Who',
-    '',
-    `- ${join.playerName ?? 'Unknown'}${join.playerUuid === null ? '' : ` (${join.playerUuid})`}`,
-    `- Game protocol: ${join.protocol ?? 'unknown'}`,
-    `- Joins of this server in the last 35 days: ${view.joinsOnServer}`,
-    '',
-    '## How they reached us',
-    '',
-    `- Address: ${join.address}${join.addressKind === null || join.addressKind === 'own' ? '' : ` (${join.addressKind === 'kept' ? 'a kept address' : 'an old play domain'})`}`,
-    `- Edge: ${join.edgeId ?? 'none reported'}${join.edgeRegion ? ` in ${join.edgeRegion}` : ''}`,
-    `- Path: ${PATHS[join.path ?? ''] ?? 'not reported'}`,
-    ...(view.wake === null ? [] : [`- Wake: ${view.wake.kind} ${view.wake.id}, ${view.wake.status}`]),
-    ...(join.bytesUp === null ? [] : [`- Sent: ${join.bytesUp} bytes up, ${join.bytesDown ?? 0} down`]),
-    '',
-    '## Timeline (UTC)',
-    '',
-    '| Time | +s | Where | Event |',
-    '|---|---|---|---|',
-    ...moments.map(
-      (m) =>
-        `| ${time(m.at)}.${m.at.slice(20, 23)} | ${seconds(new Date(started).toISOString(), m.at)} | ${m.where} | ${m.what} |`,
-    ),
-    '',
-    '## What looked wrong',
-    '',
-    ...(view.signals.length === 0
-      ? ['Nothing crossed a limit.']
-      : view.signals.map(
-          (s) => `- ${kindOf(s.kind)}${figure(s.detail) === null ? '' : `: ${figure(s.detail)}`}`,
-        )),
+    ...who(view),
+    ...howTheyCame(view),
+    ...timelineTable(view),
+    ...lookedWrong(view),
     '',
     '## What we don’t know',
     '',
     ...(unknowns(view).length === 0 ? ['Nothing: both halves told of every step.'] : unknowns(view)),
   ]
+}
+
+function who({ join, joinsOnServer }: JoinDetailView): string[] {
+  return [
+    '',
+    '## Who',
+    '',
+    `- ${join.playerName ?? 'Unknown'}${join.playerUuid === null ? '' : ` (${join.playerUuid})`}`,
+    `- Game protocol: ${join.protocol ?? 'unknown'}`,
+    `- Joins of this server in the last 35 days: ${joinsOnServer}`,
+  ]
+}
+
+const ADDRESS_KINDS: Record<string, string> = {
+  kept: ' (a kept address)',
+  old_domain: ' (an old play domain)',
+}
+
+function howTheyCame({ join, wake }: JoinDetailView): string[] {
+  return [
+    '',
+    '## How they reached us',
+    '',
+    `- Address: ${join.address}${ADDRESS_KINDS[join.addressKind ?? ''] ?? ''}`,
+    `- Edge: ${join.edgeId ?? 'none reported'}${join.edgeRegion ? ` in ${join.edgeRegion}` : ''}`,
+    `- Path: ${PATHS[join.path ?? ''] ?? 'not reported'}`,
+    ...(wake === null ? [] : [`- Wake: ${wake.kind} ${wake.id}, ${wake.status}`]),
+    ...(join.bytesUp === null ? [] : [`- Sent: ${join.bytesUp} bytes up, ${join.bytesDown ?? 0} down`]),
+  ]
+}
+
+function timelineTable(view: JoinDetailView): string[] {
+  const started = new Date(Date.parse(view.join.connectedAt)).toISOString()
+  return [
+    '',
+    '## Timeline (UTC)',
+    '',
+    '| Time | +s | Where | Event |',
+    '|---|---|---|---|',
+    ...timeline(view).map(
+      (m) => `| ${time(m.at)}.${m.at.slice(20, 23)} | ${seconds(started, m.at)} | ${m.where} | ${m.what} |`,
+    ),
+  ]
+}
+
+function lookedWrong({ signals }: JoinDetailView): string[] {
+  const lines = signals.map((s) => {
+    const shown = figure(s.detail)
+    return `- ${kindOf(s.kind)}${shown === null ? '' : `: ${shown}`}`
+  })
+  return ['', '## What looked wrong', '', ...(lines.length === 0 ? ['Nothing crossed a limit.'] : lines)]
 }
 
 const PATHS: Record<string, string> = {
