@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { schema } from '@blockly/db'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import { LIBERTYBANS, LUCKPERMS } from '../../minecraft/moderation.ts'
 import {
@@ -433,6 +433,46 @@ describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
     ])
     expect(await h.app.stopCheaters.unseen(id)).toBe(0)
   }, 30_000)
+})
+
+describe.skipIf(!hasDatabase)('a server that sleeps instead of stopping', () => {
+  beforeAll(async () => {
+    await begin()
+    h.runtime.sleeps.on = true
+  }, 30_000)
+  afterAll(end)
+
+  const sleep = async (owner: UserActor, id: string) => {
+    await h.app.servers.stop(owner, id, randomUUID(), 'idle')
+    await h.until(id, 'stopped')
+    await h.settled(id)
+    expect(h.runtime.machine(id)?.state).toBe('suspended')
+  }
+
+  /** Wakes it: whether it booted, rather than resumed as it slept. */
+  const wake = async (owner: UserActor, id: string) => {
+    await h.app.servers.start(owner, id, randomUUID())
+    await h.until(id, 'running')
+    await h.settled(id)
+    const [last] = await h.db
+      .select({ steps: schema.serverOperations.steps })
+      .from(schema.serverOperations)
+      .where(and(eq(schema.serverOperations.serverId, id), eq(schema.serverOperations.kind, 'start')))
+      .orderBy(desc(schema.serverOperations.createdAt))
+      .limit(1)
+    return (last?.steps ?? []).some((entry) => entry.step === 'booting')
+  }
+
+  test('published while asleep, it boots once at its next wake to place it, then wakes as it slept', async () => {
+    const { owner, id } = await running('Zed')
+    await sleep(owner, id)
+    await h.app.listings.setPublic(owner, id, true)
+    expect(await wake(owner, id)).toBe(true)
+    expect(punishments(id)).toBe(DEFAULT_PUNISHMENTS)
+    await sleep(owner, id)
+    expect(await wake(owner, id)).toBe(false)
+    expect(await applies(id)).toBe(0)
+  }, 60_000)
 })
 
 describe.skipIf(!hasDatabase)('STOP_CHEATERS unset in production', () => {

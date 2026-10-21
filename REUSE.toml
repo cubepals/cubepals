@@ -29,6 +29,7 @@ path = [
   "apps/web/src/app/opengraph-image.png",
   "apps/web/src/app/opengraph-image.alt.txt",
   "docs/emails/*.png",
+  "docs/players/*.png",
   "docs/architecture/previews/*.png",
 ]
 precedence = "closest"

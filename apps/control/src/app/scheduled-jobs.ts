@@ -100,7 +100,7 @@ export function scheduledJobs(
     {
       job: 'compat-pins',
       run: () => app.setups.compat.refresh(),
-      says: (n) => `pinned the Via plugins for ${n} releases`,
+      says: (n) => `pinned the Via plugins and Grim for ${n} releases`,
     },
     {
       job: 'malware-lists',
