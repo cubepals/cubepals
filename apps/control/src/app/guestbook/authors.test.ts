@@ -104,4 +104,20 @@ describe.skipIf(!hasDatabase)('who left a note', () => {
     expect(after?.author).toBe('Morgan L.')
     expect(after?.avatar).toEqual(before?.avatar)
   }, 30_000)
+
+  test('a name that passes for Cubepals shows as anonymous', async () => {
+    const reader = await h.user('Reader')
+    for (const [name, body] of [
+      ['Cubepals Team', 'From the team'],
+      ['Official Ana', 'Official word'],
+      ['Ana St4ff', 'Staff here'],
+    ] as const) {
+      const writer = await h.user(name)
+      await written(writer.userId, body)
+    }
+    const read = await h.app.guestbook.notes(reader, id)
+    for (const body of ['From the team', 'Official word', 'Staff here'])
+      expect(read.notes.find((n) => n.body === body)?.author).toBeNull()
+    expect((await h.app.guestbook.notes(await h.user('Cubepals'), id)).signature).toBeNull()
+  }, 30_000)
 })

@@ -12,9 +12,11 @@ import {
   type StarView,
 } from '@blockly/contracts'
 import { DAY_MS } from '@blockly/contracts/durations'
+import { offensive } from '@blockly/contracts/names'
 import { type Db, type Queryable, schema, type Tx } from '@blockly/db'
 import { pickStyle, shownName } from '../../domain/listing/author.ts'
 import { cleanNote, sameNote } from '../../domain/listing/note.ts'
+import { saysOfficial } from '../../domain/server/held-names.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { actionsSince, isAdmin, loadControls, loadStanding } from '../accounts/persistence.ts'
 import { type Actor, requestedBy } from '../actor.ts'
@@ -131,7 +133,7 @@ export class GuestbookService {
       // Where strangers can't read the guestbook any more, its author sees only that theirs went.
       return owner || admin || (await isShown(tx, server))
         ? notesView(tx, server, userId, admin, this.#avatarStyles)
-        : { notes: [], total: 0, signature: shownName(await accountName(tx, userId)) }
+        : { notes: [], total: 0, signature: noteName(await accountName(tx, userId)) }
     })
   }
 }
@@ -194,16 +196,24 @@ async function notesView(
       id: note.id,
       body: note.body,
       at: note.createdAt.toISOString(),
-      author: note.signed ? shownName(note.authorName) : null,
+      author: note.signed ? noteName(note.authorName) : null,
       avatar: (note.signed && pictures.get(note.authorId)) || ANONYMOUS_AVATAR,
       yours: note.authorId === viewerId,
       byOwner: note.authorId === server.ownerId,
       canDelete: note.authorId === viewerId || server.ownerId === viewerId || admin,
     })),
     total: await countNotes(q, server.id),
-    signature: shownName(await accountName(q, viewerId)),
+    signature: noteName(await accountName(q, viewerId)),
   }
 }
+
+/**
+ * The name a note shows for an account, held to the rule a server's name is: nothing offensive,
+ * and nothing that says Cubepals, Official, Verified or Staff, so no note passes for ours. Such an
+ * account's notes show as anonymous ones do.
+ */
+const noteName = (name: string): string | null =>
+  offensive(name) || saysOfficial(name) ? null : shownName(name)
 
 /**
  * A writer's picture seed: a hash of their account's id, so the same writer has the same picture on
