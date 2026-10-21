@@ -22,6 +22,7 @@ import type { JobQueue } from '../ports/jobs.ts'
 import type { Mailer } from '../ports/platform.ts'
 import { CERTIFICATE_RENEWAL, CERTIFICATE_WARN_MS, storedAcmeCertificate } from '../realtime/certificate.ts'
 import { KEEP_MS, serversKeepingStorage } from '../servers/kept-storage.ts'
+import { anyStopCheatersOn } from '../stop-cheaters/persistence.ts'
 import { FAILING_IN_A_ROW, overdue, quietSince } from './job-record.ts'
 import {
   alertNotified,
@@ -54,6 +55,7 @@ const WHERE: Record<AlertKey, string> = {
   spend_unread: '/admin/platform',
   realtime_certificate_expiring: '/admin/health',
   official_files: '/admin/health',
+  stop_cheaters_default: '/admin/health',
 }
 
 interface Condition {
@@ -75,6 +77,7 @@ export class PlatformAlerts {
   readonly #webOrigin: string
   readonly #inbox: readonly string[]
   readonly #officialFilesProblem: 'unset' | 'invalid' | null
+  readonly #stopCheatersProblem: 'unset' | 'invalid' | null
 
   constructor(deps: {
     db: Db
@@ -86,6 +89,8 @@ export class PlatformAlerts {
     adminInbox?: readonly string[]
     /** Why OFFICIAL_SERVER_FILES gives no files, when it should. */
     officialFilesProblem?: 'unset' | 'invalid' | null
+    /** Why STOP_CHEATERS gives the public default, where production should have its own. */
+    stopCheatersProblem?: 'unset' | 'invalid' | null
   }) {
     this.#db = deps.db
     this.#jobs = deps.jobs
@@ -94,6 +99,7 @@ export class PlatformAlerts {
     this.#webOrigin = deps.webOrigin
     this.#inbox = deps.adminInbox ?? []
     this.#officialFilesProblem = deps.officialFilesProblem ?? null
+    this.#stopCheatersProblem = deps.stopCheatersProblem ?? null
   }
 
   async active(actor: Actor, now = new Date()): Promise<AlertView[]> {
@@ -186,6 +192,7 @@ export class PlatformAlerts {
       ...(await unknownCondition(this.#db)),
       ...(await linkedCondition(this.#db)),
       ...(await officialFilesCondition(this.#db, this.#officialFilesProblem)),
+      ...(await stopCheatersCondition(this.#db, this.#stopCheatersProblem)),
     )
     return conditions
   }
@@ -390,6 +397,20 @@ async function officialFilesCondition(db: Db, problem: 'unset' | 'invalid' | nul
     {
       key: 'official_files',
       summary: `OFFICIAL_SERVER_FILES is ${problem === 'unset' ? 'not set' : 'not a JSON object of sections (`*`, or a server id or slug) of file paths to contents'}, so servers flagged official start without their own files. Servers still start; set it and they have the files at their next start.`,
+    },
+  ]
+}
+
+/**
+ * Servers with Stop cheaters on running the public default, which only alerts and logs, because
+ * STOP_CHEATERS is unset or doesn't parse (`app/stop-cheaters/`). Only while any server has it on.
+ */
+async function stopCheatersCondition(db: Db, problem: 'unset' | 'invalid' | null): Promise<Condition[]> {
+  if (problem === null || !(await anyStopCheatersOn(db))) return []
+  return [
+    {
+      key: 'stop_cheaters_default',
+      summary: `STOP_CHEATERS is ${problem === 'unset' ? 'not set' : 'not a JSON object of punishments and a ban rule'}, so servers with Stop cheaters on start with the public default, which only alerts and logs. Servers still start; set it and they have it at their next start.`,
     },
   ]
 }

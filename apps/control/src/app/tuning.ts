@@ -4,7 +4,7 @@
 
 /**
  * The deployment's free-link tuning, abuse limits, capacity tuning and economics figures (`domain/account/tuning.ts`),
- * and which servers get the join reporter, installed once at startup from configuration and read
+ * which servers get the join reporter, and Stop cheaters' punishments and ban rule, installed once at startup from configuration and read
  * wherever they are needed. Until installed, as in tests, the defaults apply.
  */
 import {
@@ -35,6 +35,17 @@ interface Tuning {
    * judge (`joins/signals.ts`). Absent, as in tests, no server gets it and no signal runs.
    */
   joins?: { reporter: JoinReporter; signals?: unknown }
+  /**
+   * Stop cheaters' punishments file and ban rule (`STOP_CHEATERS`, `app/stop-cheaters/`). Absent or
+   * null, servers get the public default: alerts and logs, and no removal or ban.
+   */
+  stopCheaters?: StopCheatersTuning | null
+}
+
+/** Grim's punishments file as text, and when removals for sending what no game can become a day's ban. */
+export interface StopCheatersTuning {
+  punishments: string
+  ban: { reason: 'impossible'; removals: number; withinMinutes: number; minutes: number }
 }
 
 let installed: Tuning = {

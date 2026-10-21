@@ -40,6 +40,7 @@ beforeAll(async () => {
     policy: h.app.policy,
     transitions: h.app.transitions,
     mods: h.app.mods,
+    stopCheaters: h.app.stopCheaters,
   })
   for (const [projectId, name] of [
     [LIBERTYBANS, 'LibertyBans'],

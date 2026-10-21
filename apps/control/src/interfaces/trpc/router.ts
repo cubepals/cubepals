@@ -64,6 +64,7 @@ import {
   SetLadderInput,
   SetModerationInput,
   SetPublicInput,
+  SetStopCheatersInput,
   SetTimeZoneInput,
   SetupRef,
   StarInput,
@@ -71,6 +72,7 @@ import {
   SwitchWorldInput,
   TeleportInput,
   TemplateRef,
+  UseOurStopCheatersInput,
   WaitingInput,
   WhitelistModeInput,
   WorldRef,
@@ -474,6 +476,25 @@ const moderation = router({
   setLadder: authedProcedure
     .input(SetLadderInput)
     .mutation(({ ctx, input }) => ctx.services.moderation.setLadder(ctx.actor, input.serverId, input.ladder)),
+  /** Stop cheaters on or off, which restarts a running server. */
+  setStopCheaters: authedProcedure.input(SetStopCheatersInput).mutation(async ({ ctx, input }) => {
+    await ctx.services.stopCheaters.set(ctx.actor, input.serverId, input.on, input.requestId)
+    return ctx.services.queries.get(ctx.actor, input.serverId)
+  }),
+  /** Cubepals' punishments in place of the owner's own Grim settings. */
+  useOurStopCheaters: authedProcedure.input(UseOurStopCheatersInput).mutation(async ({ ctx, input }) => {
+    await ctx.services.stopCheaters.useOurs(ctx.actor, input.serverId, input.requestId)
+    return ctx.services.queries.get(ctx.actor, input.serverId)
+  }),
+  /** The owner opened the Players page: its tab counts removals from now. */
+  seenRemovals: authedProcedure
+    .input(ServerRef)
+    .mutation(({ ctx, input }) => ctx.services.stopCheaters.seen(ctx.actor, input.serverId)),
+  /** How many players Stop cheaters removed since the owner last opened the Players page. */
+  unseenRemovals: authedProcedure.input(ServerRef).query(async ({ ctx, input }) => {
+    await ctx.services.queries.get(ctx.actor, input.serverId)
+    return ctx.services.stopCheaters.unseen(input.serverId)
+  }),
 })
 
 /** One player's page: what they are up to, and what the owner can do for them. */

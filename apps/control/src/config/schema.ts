@@ -243,6 +243,32 @@ const OfficialServerFiles = z
       : { files: {} as z.infer<typeof FilesBySection>, problem: 'invalid' as const }
   })
 
+/**
+ * Stop cheaters' punishments and ban rule, from STOP_CHEATERS (`app/stop-cheaters/`): Grim's
+ * `punishments.yml` as text, and when a player's removals for sending what no game can turn into a
+ * ban. Never refuses the deployment: unset, or not this shape, servers get the public default (alerts
+ * and logs only, no removal or ban), and in production an alert says so while any server has it on.
+ */
+const StopCheatersShape = z.strictObject({
+  punishments: z.string().min(1),
+  ban: z.strictObject({
+    reason: z.literal('impossible'),
+    removals: z.number().int().positive(),
+    withinMinutes: z.number().int().positive(),
+    minutes: z.number().int().positive(),
+  }),
+})
+const StopCheaters = z
+  .object({ json: z.unknown(), production: z.boolean() })
+  .transform(({ json, production }) => {
+    if (json === undefined) return { tuning: null, problem: production ? ('unset' as const) : null }
+    const parsed = StopCheatersShape.safeParse(json)
+    return parsed.success
+      ? { tuning: parsed.data, problem: null }
+      : { tuning: null, problem: 'invalid' as const }
+  })
+export type StopCheatersTuning = z.infer<typeof StopCheatersShape>
+
 /** How room is shared when it runs short (`domain/account/tuning.ts`), from CAPACITY_TUNING: private too. */
 const CapacityTuning = z.strictObject(
   {
@@ -445,6 +471,7 @@ export const DeploymentConfig = z.object({
   /** Unset in production leaves the economics report without a margin; elsewhere unset is the defaults. */
   economicsTuning: EconomicsTuning.nullable(),
   officialServerFiles: OfficialServerFiles,
+  stopCheaters: StopCheaters,
   /**
    * Joins: which Paper servers get the join reporter at their next full boot (JOIN_REPORTER,
    * `app/artifacts/reporter.ts`), and the signals raised on them (SIGNALS, private, read as

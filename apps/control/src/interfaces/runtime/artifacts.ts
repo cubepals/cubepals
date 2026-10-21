@@ -16,6 +16,7 @@ import {
   ArtifactUnavailable,
 } from '../../app/artifacts/service.ts'
 import type { JoinService } from '../../app/joins/service.ts'
+import type { StopCheatersService } from '../../app/stop-cheaters/service.ts'
 import { createJoinsApp } from './joins.ts'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -32,7 +33,11 @@ const SHA256 = /^[0-9a-f]{64}$/
 const ICONS = fileURLToPath(new URL('../../../assets/server-icons/', import.meta.url))
 const ICON_KEY = /^[a-z]{3,16}$/
 
-export function createRuntimeApp(deps: { artifacts: ArtifactService; joins: JoinService }): Hono {
+export function createRuntimeApp(deps: {
+  artifacts: ArtifactService
+  joins: JoinService
+  stopCheaters: Pick<StopCheatersService, 'recordRemovals'>
+}): Hono {
   // The image stops a server's start when its icon can't be downloaded, so a build without them
   // fails here, once, rather than every server failing to boot (seen on the first staging run).
   if (!existsSync(`${ICONS}${BLOCKLY_ICON}.png`))

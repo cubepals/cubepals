@@ -327,7 +327,11 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       ...settingsFrom(options),
     },
   )
-  runtimeFacing = createRuntimeApp({ artifacts: app.artifacts, joins: app.joins })
+  runtimeFacing = createRuntimeApp({
+    artifacts: app.artifacts,
+    joins: app.joins,
+    stopCheaters: app.stopCheaters,
+  })
   const [worker] = await Promise.all([workQueues(boss, app, url.toString()), app.waiter.start()])
 
   const server = async (serverId: string) => {

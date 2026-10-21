@@ -219,6 +219,7 @@ export function windingDown(deps: {
         await tx
           .delete(schema.serverModerationActions)
           .where(eq(schema.serverModerationActions.serverId, server.id))
+        await tx.delete(schema.serverRemovals).where(eq(schema.serverRemovals.serverId, server.id))
         // Who played there goes with who could: with the server gone, nothing needs their names.
         await tx.delete(schema.serverPlayers).where(eq(schema.serverPlayers.serverId, server.id))
         await forgetPlayers(tx, server.id)

@@ -10,6 +10,9 @@
  * plan, limit or price that counts plugins counts them, and the owner's plugin list never shows
  * them. The settings page says which versions join, and the switch is the way back.
  *
+ * Grim, which Stop cheaters runs, is pinned and placed the same way (`grimFor`), wherever the
+ * server's Stop cheaters is on (`app/stop-cheaters/`), on plain Minecraft run on Paper too.
+ *
  * Each release's jars are pinned once from the catalog (`refresh`, a scheduled job), so every
  * server on it starts with the same ones, and a start never waits on the catalog. A release with
  * none pinned yet starts without them. A sleeping server's wake boots once where it slept without
@@ -19,9 +22,10 @@
 import { type AppliedConfigJson, type Db, type Queryable, schema } from '@blockly/db'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
-import { otherVersionsOf, type ServerRevision } from '../../domain/revision/revision.ts'
+import { otherVersionsOf, runsOnPaper, type ServerRevision } from '../../domain/revision/revision.ts'
 import { joinsOf } from '../../minecraft/clients.ts'
 import { COMPAT, runsPlugin, VIABACKWARDS, VIAREWIND, VIAVERSION } from '../../minecraft/mods.ts'
+import { GRIM, runsOwnGrim } from '../../minecraft/stop-cheaters.ts'
 import { offeredVersions, supports } from '../../minecraft/versions.ts'
 import type { ModService } from '../mods/service.ts'
 
@@ -48,12 +52,16 @@ export class CompatPlugins {
 
   /**
    * `compat-pins`: the Via plugins pinned again for each release Cubepals offers Paper on and each
-   * one a Paper server runs. A release the catalog can't answer for keeps what it had. How many
-   * releases were pinned.
+   * one a Paper server runs, and Grim for each where Grim publishes a build. A release the catalog
+   * can't answer for keeps what it had. How many releases were pinned.
    */
   async refresh(): Promise<number> {
     let pinned = 0
     for (const gameVersion of await this.#releases()) {
+      const grim = await this.#mods
+        .resolveNew({ gameVersion, loader: 'paper' }, [{ projectId: GRIM }])
+        .catch(() => null)
+      if (grim?.kind === 'ok') await this.#pin(gameVersion, grim.mods, [GRIM])
       for (const wanted of TRIES) {
         const plan = await this.#mods
           .resolveNew(
@@ -62,7 +70,7 @@ export class CompatPlugins {
           )
           .catch(() => null)
         if (plan?.kind !== 'ok') continue
-        await this.#pin(gameVersion, plan.mods)
+        await this.#pin(gameVersion, plan.mods, TRIES[0] ?? [])
         pinned++
         break
       }
@@ -70,24 +78,32 @@ export class CompatPlugins {
     return pinned
   }
 
-  /** The releases to pin for: every one Paper is offered on, and every one a live Paper server runs. */
+  /**
+   * The releases to pin for: every one Paper is offered on, and every one a live server runs on
+   * Paper or plain Minecraft, which runs on Paper.
+   */
   async #releases(): Promise<string[]> {
     const running = await this.#db
       .selectDistinct({ gameVersion: revisions.gameVersion })
       .from(revisions)
       .innerJoin(servers, eq(servers.desiredRevisionId, revisions.id))
-      .where(and(eq(revisions.loader, 'paper'), isNull(servers.deletedAt)))
+      .where(and(inArray(revisions.loader, ['paper', 'vanilla']), isNull(servers.deletedAt)))
     const offered = offeredVersions()
       .map((version) => version.id)
       .filter((id) => supports(id, 'paper'))
     return [...new Set([...offered, ...running.map((row) => row.gameVersion)])]
   }
 
-  async #pin(gameVersion: string, mods: readonly PinnedMod[]): Promise<void> {
-    const via = mods.filter((mod) => 'projectId' in mod.source && TRIES[0]?.includes(mod.source.projectId))
+  /** `projects`' pins for a release, in place of the ones it had; any other project's stay. */
+  async #pin(gameVersion: string, mods: readonly PinnedMod[], projects: readonly string[]): Promise<void> {
+    const kept = mods.filter((mod) => 'projectId' in mod.source && projects.includes(mod.source.projectId))
     await this.#db.transaction(async (tx) => {
-      await tx.delete(compatPlugins).where(eq(compatPlugins.gameVersion, gameVersion))
-      for (const mod of via)
+      await tx
+        .delete(compatPlugins)
+        .where(
+          and(eq(compatPlugins.gameVersion, gameVersion), inArray(compatPlugins.projectId, [...projects])),
+        )
+      for (const mod of kept)
         await tx.insert(compatPlugins).values({
           gameVersion,
           projectId: (mod.source as { projectId: string }).projectId,
@@ -121,6 +137,31 @@ export async function compatFor(
   if (!runsPlugin([...revision.mods, ...pins], VIAVERSION)) return []
   return pins.map((mod) => ({ ...mod, dir: PLUGINS_DIR }))
 }
+
+/**
+ * Grim as a start places it where Stop cheaters is on: on Paper, or plain Minecraft run on Paper,
+ * playing no pack, as pinned for its release. None where the owner runs Grim as their own plugin:
+ * theirs runs, and its punishments file is still written. `release` where Grim has no build pinned
+ * for the release yet, and `modded` on any other server type.
+ */
+export async function grimFor(
+  q: Queryable,
+  revision: Pick<ServerRevision, 'gameVersion' | 'loader' | 'loaderVersion' | 'mods' | 'modpack'>,
+): Promise<{ kind: 'placed'; jar: PinnedMod | null } | { kind: 'release' } | { kind: 'modded' }> {
+  if (!runsGrim(revision)) return { kind: 'modded' }
+  if (runsOwnGrim(revision.mods)) return { kind: 'placed', jar: null }
+  const [row] = await q
+    .select({ pinned: compatPlugins.pinned })
+    .from(compatPlugins)
+    .where(and(eq(compatPlugins.gameVersion, revision.gameVersion), eq(compatPlugins.projectId, GRIM)))
+  if (row === undefined) return { kind: 'release' }
+  return { kind: 'placed', jar: { ...(row.pinned as PinnedMod), dir: PLUGINS_DIR } }
+}
+
+/** A server Grim can run on: Paper, or plain Minecraft run on Paper, with no pack. */
+export const runsGrim = (
+  revision: Pick<ServerRevision, 'loader' | 'loaderVersion' | 'mods' | 'modpack'>,
+): boolean => revision.modpack === null && (revision.loader === 'paper' || runsOnPaper(revision))
 
 /** Which Via plugins `placed` holds, by Modrinth project id, as a boot's record and the edge name them. */
 export const projectsOf = (placed: readonly PinnedMod[]): string[] =>

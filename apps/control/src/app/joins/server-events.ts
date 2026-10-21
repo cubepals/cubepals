@@ -35,7 +35,10 @@ const MOMENTS = {
   configured: 'configuredAt',
   in_world: 'inWorldAt',
   left: 'leftAt',
-} as const satisfies Record<Exclude<ServerJoinEvent['kind'], 'boot'>, keyof typeof joins.$inferInsert>
+} as const satisfies Record<
+  Exclude<ServerJoinEvent['kind'], 'boot' | 'removed'>,
+  keyof typeof joins.$inferInsert
+>
 
 /** Writes a server's events, in the order they happened; the joins they went on. */
 export async function recordServerEvents(
@@ -48,6 +51,8 @@ export async function recordServerEvents(
   const touched: string[] = []
   for (const event of ordered) {
     if (event.kind === 'boot') await recordBoot(q, serverId, event)
+    // Stop cheaters' own (`stop-cheaters/service.ts`): no moment of a join.
+    else if (event.kind === 'removed') continue
     else touched.push(...(await recordMoment(q, addressing, serverId, { ...event, kind: event.kind })))
   }
   return touched

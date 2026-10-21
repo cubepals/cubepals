@@ -37,12 +37,14 @@ function observedEntries(observed: ObservedAccess): ObservedEntry[] {
       },
     })),
     ...(observed.helpers ?? []).map((player) => ({ list: 'helper' as const, player, details: {} })),
+    ...(observed.unchecked ?? []).map((player) => ({ list: 'unchecked' as const, player, details: {} })),
   ]
 }
 
-/** An entry the server can't show: a helper where it doesn't run the moderation tools. */
+/** An entry the server can't show: a helper or an unchecked player where LuckPerms doesn't run. */
 const unseen = (entry: AccessEntry, observed: ObservedAccess) =>
-  entry.list === 'helper' && observed.helpers === null
+  (entry.list === 'helper' && observed.helpers === null) ||
+  (entry.list === 'unchecked' && observed.unchecked === null)
 
 /**
  * The player as the files name them, or by the record's name where they name nobody: LuckPerms
@@ -131,6 +133,12 @@ export function planDelivery(observed: ObservedAccess, record: AccessRecord): Ac
       : [
           ...add('helper').map((e) => ({ type: 'helper_add' as const, player: e.player })),
           ...remove('helper').map((o) => ({ type: 'helper_remove' as const, player: o.player })),
+        ]),
+    ...(observed.unchecked === null
+      ? []
+      : [
+          ...add('unchecked').map((e) => ({ type: 'unchecked_add' as const, player: e.player })),
+          ...remove('unchecked').map((o) => ({ type: 'unchecked_remove' as const, player: o.player })),
         ]),
   ]
   if (observed.whitelistEnabled !== target.whitelistEnabled) {
@@ -300,6 +308,8 @@ function reverse(entry: ObservedEntry): AccessCommand {
       return { type: 'pardon', player: entry.player }
     case 'helper':
       return { type: 'helper_remove', player: entry.player }
+    case 'unchecked':
+      return { type: 'unchecked_remove', player: entry.player }
   }
 }
 
@@ -318,6 +328,9 @@ export function commandKey(command: AccessCommand): string | null {
     case 'helper_add':
     case 'helper_remove':
       return entryKey('helper', command.player.uuid)
+    case 'unchecked_add':
+    case 'unchecked_remove':
+      return entryKey('unchecked', command.player.uuid)
     case 'whitelist_mode':
     case 'pardon_ip':
     case 'whitelist_reload':

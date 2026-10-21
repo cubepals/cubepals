@@ -42,15 +42,14 @@ const WORLD = { levelType: 'minecraft:normal', hardcore: false }
 
 /**
  * What a template made to have strangers on it comes with: the moderation tools and the chat
- * filter, on as the Players page turns them on, and off again there, and the Grim anticheat
- * (GPL-3.0-or-later), which by its own defaults undoes a move it can't believe and tells helpers,
- * and never kicks or bans by itself, so nothing is configured.
+ * filter, on as the Players page turns them on, and off again there. Stop cheaters isn't among its
+ * plugins: a server made from Duels or Arcade has it on through its setting (`app/stop-cheaters/`),
+ * as Cubepals' own layer, which its owner turns off on the Players page.
  */
 const FOR_STRANGERS: Template['setup']['mods'] = [
   { catalog: 'modrinth', projectId: LIBERTYBANS },
   { catalog: 'modrinth', projectId: LUCKPERMS },
   { catalog: 'modrinth', projectId: CHATSENTINEL },
-  { catalog: 'modrinth', projectId: 'LJNGWSvH' },
 ]
 
 const BENTOBOX_ADDONS = 'plugins/BentoBox/addons'

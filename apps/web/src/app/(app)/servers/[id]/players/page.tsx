@@ -284,6 +284,7 @@ const REMOVE: Record<AccessList, string> = {
   operator: 'Remove',
   ban: 'Unban',
   helper: 'Remove',
+  unchecked: 'Check them again',
 }
 
 function AccessSection({

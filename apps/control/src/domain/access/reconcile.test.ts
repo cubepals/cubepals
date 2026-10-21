@@ -26,6 +26,8 @@ const files = (patch: Partial<ObservedAccess> = {}): ObservedAccess => ({
   bans: [],
   ipBans: [],
   helpers: null,
+  unchecked: null,
+  stopCheaters: null,
   pluginBans: false,
   ...patch,
 })

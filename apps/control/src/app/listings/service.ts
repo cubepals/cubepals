@@ -19,6 +19,7 @@ import type { JobQueue } from '../ports/jobs.ts'
 import type { Mailer } from '../ports/platform.ts'
 import type { OwnerNotices } from '../servers/owner-notices.ts'
 import { findServer, loadRevision, loadRuntime, lockServer } from '../servers/persistence.ts'
+import { onAtPublish } from '../stop-cheaters/persistence.ts'
 import { catalogViewOf, trustOf } from './judge.ts'
 import {
   allowlisted,
@@ -100,6 +101,9 @@ export class ListingService {
       if (wanted) await this.#policy.require(tx, server.ownerId, { kind: 'list_publicly' })
       const was = (await loadListing(tx, server.id))?.visibility
       await setVisibility(tx, server.id, wanted ? 'published' : 'unpublished')
+      // Strangers find it on Browse now: Stop cheaters goes on where its owner left it to Cubepals.
+      // Unpublishing leaves it as it is. It arrives at the next start; nothing restarts for it.
+      if (wanted) await onAtPublish(tx, server.id)
       await this.#audit(tx, actor, wanted ? 'listing.published' : 'listing.unpublished', server.id, {})
       await this.#changed(tx, server.id, server.ownerId)
       return !wanted && was === 'published'

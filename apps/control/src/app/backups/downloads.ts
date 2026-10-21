@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { DAY_MS, HOUR_S, MINUTE_S } from '@blockly/contracts/durations'
 import { type Db, schema, type Tx } from '@blockly/db'
+import { PUNISHMENTS_FILE } from '../../minecraft/stop-cheaters.ts'
 import { isAddedJar } from '../../minecraft/uploads.ts'
 import { DOWNLOAD_NOTE, downloadNote, inWorldDownload } from '../../minecraft/world-download.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
@@ -27,6 +28,7 @@ import type { JobQueue } from '../ports/jobs.ts'
 import type { ArchiveTarget, PartsUpload, PutPart } from '../ports/runtime.ts'
 import { noOfficialFiles, type OfficialFiles } from '../servers/own-files.ts'
 import { findServer } from '../servers/persistence.ts'
+import { cubepalsWrotePunishments } from '../stop-cheaters/persistence.ts'
 import {
   type DownloadRecord,
   insertDownload,
@@ -134,10 +136,14 @@ export class WorldDownloads {
     const placed =
       server === null
         ? new Set<string>()
-        : this.#official.leftOutOfDownload(
-            server,
-            (await loadListing(this.#db, server.id))?.official === true,
-          )
+        : new Set([
+            ...this.#official.leftOutOfDownload(
+              server,
+              (await loadListing(this.#db, server.id))?.official === true,
+            ),
+            // Nor Stop cheaters' punishments file, where Cubepals wrote it.
+            ...((await cubepalsWrotePunishments(this.#db, server.id)) ? [PUNISHMENTS_FILE] : []),
+          ])
     const body = await this.#formats.filterTarball(source.url, {
       kept: (path) => {
         if (inWorldDownload(path) && !placed.has(path)) return true

@@ -6,7 +6,8 @@
  * Live administration: who can join, who operates the server, who is banned, and who helps
  * moderate it. Changed while the server runs, never through a revision. Two writers exist — Blockly
  * and in-game operators — and the server's own files are the working copy both write to
- * (docs/architecture.md §15.1). Helpers exist only where the moderation tools run.
+ * (docs/architecture.md §15.1). Helpers exist only where the moderation tools run, and so do the
+ * players Stop cheaters leaves unchecked, which LuckPerms holds too.
  */
 
 export interface PlayerRef {
@@ -15,7 +16,7 @@ export interface PlayerRef {
   name: string
 }
 
-export type AccessList = 'whitelist' | 'operator' | 'ban' | 'helper'
+export type AccessList = 'whitelist' | 'operator' | 'ban' | 'helper' | 'unchecked'
 type EntryState = 'active' | 'pending_add' | 'pending_remove' | 'rejected'
 
 export interface EntryDetails {
@@ -62,6 +63,10 @@ export interface ObservedAccess {
    * its helpers are then left as they are, neither read nor delivered.
    */
   helpers: PlayerRef[] | null
+  /** The players Stop cheaters leaves unchecked (`grim.exempt`), or null where LuckPerms doesn't run. */
+  unchecked: PlayerRef[] | null
+  /** What the last start did with Stop cheaters' punishments file, where it marked anything. */
+  stopCheaters: 'ours' | 'own' | null
   /**
    * Whether a plugin answers to `ban` (LibertyBans does), so the game's own ban list is reached by
    * its full name, `minecraft:ban`.
@@ -80,6 +85,8 @@ export type AccessCommand =
   | { type: 'pardon_ip'; ip: string }
   | { type: 'helper_add'; player: PlayerRef }
   | { type: 'helper_remove'; player: PlayerRef }
+  | { type: 'unchecked_add'; player: PlayerRef }
+  | { type: 'unchecked_remove'; player: PlayerRef }
   /** The server reads its whitelist file again, which Blockly has just written. */
   | { type: 'whitelist_reload' }
 

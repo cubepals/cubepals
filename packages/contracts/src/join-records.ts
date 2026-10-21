@@ -59,10 +59,11 @@ export type VisitBatch = z.infer<typeof VisitBatch>
 
 /**
  * One moment of a join as the game server saw it, from the reporter plugin, or the server's own
- * `boot`. `address` is the client's `ip:port` where the server knew it.
+ * `boot`. `address` is the client's `ip:port` where the server knew it. `removed` is Stop cheaters
+ * removing a player, with its reason (`REMOVAL_REASONS` in `stop-cheaters.ts`).
  */
 export const ServerJoinEvent = z.object({
-  kind: z.enum(['boot', 'login', 'configure_started', 'configured', 'in_world', 'left']),
+  kind: z.enum(['boot', 'login', 'configure_started', 'configured', 'in_world', 'left', 'removed']),
   at: At,
   uuid: z.string().optional(),
   name: z.string().max(16).optional(),

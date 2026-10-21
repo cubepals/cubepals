@@ -4,14 +4,15 @@
 
 /**
  * A server's access lists, as the API takes and shows them: who may join (the whitelist), who is
- * an operator and who is banned, each by their Minecraft name.
+ * an operator and who is banned, each by their Minecraft name; and who Stop cheaters leaves
+ * unchecked (`unchecked`).
  */
 
 import { z } from 'zod'
 import { PLAYER_NAME_MAX_LENGTH, PLAYER_NAME_MIN_LENGTH } from './limits.ts'
 import { ServerId } from './server.ts'
 
-export const ACCESS_LISTS = ['whitelist', 'operator', 'ban', 'helper'] as const
+export const ACCESS_LISTS = ['whitelist', 'operator', 'ban', 'helper', 'unchecked'] as const
 export type AccessList = (typeof ACCESS_LISTS)[number]
 
 /** A Minecraft Java name: letters, digits and underscore, as long as Mojang allows. */

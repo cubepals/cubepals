@@ -36,6 +36,7 @@ import type { PlayerProfiles, ServerConsole } from '../ports/minecraft.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
 import type { RuntimeSpecs } from '../servers/specs.ts'
+import { recordStartMark } from '../stop-cheaters/persistence.ts'
 import { identityFor, keyedFor } from './identity.ts'
 import { readAccess, saveReconciled } from './persistence.ts'
 
@@ -90,6 +91,8 @@ export class AccessReconciler {
   ): Promise<{ restart: boolean }> {
     const before = await readAccess(this.#db, server.id)
     const observed = await this.#readFiles(handle)
+    // What the start did with Stop cheaters' file, which only the server's disk says.
+    await recordStartMark(this.#db, server.id, observed.stopCheaters)
 
     if (mode === 'import') {
       // Files that are about to be replaced or stop being observable: keep what players did in game.
@@ -268,7 +271,8 @@ const LUCKPERMS_SAVES_MS = 3 * SECOND_MS
 
 /** LuckPerms saves a helper's file on its own time, a moment after the command (moderation.ts). */
 async function luckPermsSaved(commands: readonly AccessCommand[]): Promise<void> {
-  if (commands.some((c) => c.type === 'helper_add' || c.type === 'helper_remove'))
+  const luckPerms = ['helper_add', 'helper_remove', 'unchecked_add', 'unchecked_remove']
+  if (commands.some((c) => luckPerms.includes(c.type)))
     await new Promise((resolve) => setTimeout(resolve, LUCKPERMS_SAVES_MS))
 }
 

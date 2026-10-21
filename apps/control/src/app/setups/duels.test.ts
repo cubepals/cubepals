@@ -4,7 +4,7 @@
 
 /**
  * The Duels template: Paper 1.21.11 with Duels from Modrinth and OldCombatMechanics from Hangar,
- * the moderation tools with the chat filter and the Grim anticheat, offered with Plus, and a server
+ * the moderation tools with the chat filter, offered with Plus, Stop cheaters on through its setting, and a server
  * of it starting on a void world with the arena, the kit, the permissions, the parkour and pit and
  * the moderation files Cubepals writes, and all of it following the server onto a fresh world.
  */
@@ -91,7 +91,7 @@ describe.skipIf(!hasDatabase)('duels', () => {
     expect(await h.app.queries.setupPreview(owner, { kind: 'template', key: 'duels' })).toMatchObject({
       loader: 'paper',
       gameVersion: '1.21.11',
-      mods: ['ChatSentinel', 'Duels', 'Grim Anticheat', 'LibertyBans', 'LuckPerms', 'OldCombatMechanics'],
+      mods: ['ChatSentinel', 'Duels', 'LibertyBans', 'LuckPerms', 'OldCombatMechanics'],
     })
     const { templates } = await h.app.queries.createOptions(await h.user('Lee'))
     expect(templates.find((template) => template.key === 'duels')?.fits).toEqual({
@@ -107,12 +107,11 @@ describe.skipIf(!hasDatabase)('duels', () => {
     expect(revision.mods.map((m) => m.source)).toEqual([
       { catalog: 'modrinth', projectId: CHATSENTINEL, versionId: 'uWt04znt' },
       { catalog: 'modrinth', projectId: 'pZyHIvCK', versionId: 'pZyHIvCK-1' },
-      { catalog: 'modrinth', projectId: 'LJNGWSvH', versionId: '1FIGlM6Q' },
       { catalog: 'modrinth', projectId: LIBERTYBANS, versionId: '7WLjonzv' },
       { catalog: 'modrinth', projectId: LUCKPERMS, versionId: 'b0mk8uS6' },
       { catalog: 'hangar', projectId: 'hangar:2087', versionId: 'hangar:31271' },
     ])
-    // OldCombatMechanics and Grim play by their own defaults, so they bring no file.
+    // OldCombatMechanics plays by its own defaults, so it brings no file.
     expect(revision.files).toEqual([
       ...DUELS_FILES,
       ...WAITING_FILES,
@@ -180,14 +179,23 @@ describe.skipIf(!hasDatabase)('duels', () => {
     expect(await h.app.queries.setupPreview(owner, { kind: 'template', key: 'duels' })).toMatchObject({
       gameVersion: '1.21.11',
       joins: { oldest: '1.7.2', newer: true },
-      mods: ['ChatSentinel', 'Duels', 'Grim Anticheat', 'LibertyBans', 'LuckPerms', 'OldCombatMechanics'],
+      mods: ['ChatSentinel', 'Duels', 'LibertyBans', 'LuckPerms', 'OldCombatMechanics'],
     })
     const server = await h.create(owner, { from: { kind: 'template', key: 'duels' } })
     await h.until(server.id, 'running')
     await h.settled(server.id)
     const { spec } = await h.app.specs.desired(h.db, await h.server(server.id))
-    // ViaVersion, ViaBackwards and ViaRewind, placed by Cubepals' own step.
-    expect(spec.env.BLOCKLY_JARS?.split('\n').filter((line) => line.startsWith('plugins/'))).toHaveLength(3)
+    // ViaVersion, ViaBackwards and ViaRewind, and Grim for Stop cheaters, placed by Cubepals' own step.
+    expect(spec.env.BLOCKLY_JARS?.split('\n').filter((line) => line.startsWith('plugins/'))).toHaveLength(4)
+    // Strangers join Duels, so Stop cheaters is on, through its setting, not its plugins.
+    expect(
+      (
+        await h.app.stopCheaters.view(
+          await h.server(server.id),
+          await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId),
+        )
+      ).why,
+    ).toBe('template')
     // 1.8 PvP players get in: down to 1.7.
     expect((await h.app.queries.get(owner, server.id)).joins).toEqual({
       oldest: '1.7.2',

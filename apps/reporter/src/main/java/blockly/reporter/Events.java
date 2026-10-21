@@ -47,6 +47,13 @@ final class Events {
         return event;
     }
 
+    /** Stop cheaters removed a player, for `reason`: `movement`, `speed` or `impossible`. */
+    static JsonObject removed(Instant at, UUID uuid, String name, String reason) {
+        JsonObject event = event("removed", at, uuid, name, null);
+        event.addProperty("reason", reason);
+        return event;
+    }
+
     /** How the server ticked as a player came into the world. */
     static JsonObject tick(double tps, double mspt, int online) {
         JsonObject tick = new JsonObject();

@@ -255,9 +255,12 @@ function joinsFrom(env: NodeJS.ProcessEnv) {
   }
 }
 
-/** OFFICIAL_SERVER_FILES as parsed JSON, or the text that didn't parse; the schema judges it. */
-function officialFilesJson(env: NodeJS.ProcessEnv) {
-  const value = env.OFFICIAL_SERVER_FILES
+/**
+ * A setting of one line of JSON as parsed (OFFICIAL_SERVER_FILES, STOP_CHEATERS), or the text that
+ * didn't parse, and whether this is production; the schema judges it.
+ */
+function jsonSetting(env: NodeJS.ProcessEnv, name: 'OFFICIAL_SERVER_FILES' | 'STOP_CHEATERS') {
+  const value = env[name]
   let json: unknown = value || undefined
   if (value) {
     try {
@@ -377,7 +380,8 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
     abuseLimits: privateJson(env, 'ABUSE_LIMITS', DEFAULT_ABUSE_LIMITS),
     capacityTuning: privateJson(env, 'CAPACITY_TUNING', DEFAULT_CAPACITY_TUNING),
     economicsTuning: economicsJson(env),
-    officialServerFiles: officialFilesJson(env),
+    officialServerFiles: jsonSetting(env, 'OFFICIAL_SERVER_FILES'),
+    stopCheaters: jsonSetting(env, 'STOP_CHEATERS'),
     joins: joinsFrom(env),
     room: roomFrom(env),
   }

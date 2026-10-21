@@ -28,13 +28,14 @@ import { loadStanding } from '../accounts/persistence.ts'
 import type { BuiltPack } from '../artifacts/brand-pack.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
 import { reporterPin } from '../artifacts/reporter.ts'
-import { compatFor, projectsOf } from '../compat/service.ts'
+import { compatFor, grimFor, projectsOf } from '../compat/service.ts'
 import { PermanentFailure } from '../errors.ts'
 import { loadListing } from '../listings/persistence.ts'
 import { quarantinedOf } from '../mods/jar-check-records.ts'
 import { loadPackContents } from '../packs/persistence.ts'
 import type { InstallSeed, RuntimeSpec } from '../ports/runtime.ts'
 import { acceptedSecrets, deriveServerSecret, type SecretKeyring } from '../secrets.ts'
+import { stopCheatersAtStart } from '../stop-cheaters/start.ts'
 import { tuning } from '../tuning.ts'
 import { tooLongForAStart, withCompressedFiles } from './carried-files.ts'
 import { noOfficialFiles, type OfficialFiles, withCurrentOwnFiles } from './own-files.ts'
@@ -59,6 +60,8 @@ export interface DesiredRuntime {
   proxyProtocol: boolean
   /** Which of Cubepals' Via plugins its boot places, by Modrinth project id (`app/compat/`). */
   compat: string[]
+  /** Whether its boot runs Stop cheaters (`app/stop-cheaters/`). */
+  stopCheaters: boolean
 }
 
 /** The spec says which key its secrets come from, so a rotation changes every digest and drift applies it. */
@@ -186,17 +189,27 @@ export class RuntimeSpecs {
       labels: { ...spec.labels, [SECRETS_VERSION_LABEL]: String(current.version) },
     })
     const placed = await compatFor(q, revision)
-    // The join reporter too, where JOIN_REPORTER places it, with where it reports.
-    const reporter = await reporterFor(q, revision, official)
+    // Stop cheaters where it is on: Grim, unless the owner runs their own, and its punishments
+    // file, an official server's own where its files name one (`stop-cheaters/start.ts`).
+    const officialFiles = official ? this.#official.forStart(server) : []
+    const stop = await stopCheatersAtStart(q, server.id, revision, officialFiles)
+    // The join reporter too, where JOIN_REPORTER places it or Stop cheaters removes players
+    // through it, with where it reports.
+    const reporter = await reporterFor(q, revision, official, stop.placed !== null)
     const report: Record<string, string> =
       reporter.length === 0 ? {} : { [REPORT_ENV]: this.#links.joinsReport(server.id) }
     // A start places the files Cubepals owns as they are now (`own-files.ts`); like the Via
     // plugins, they never arrive through drift.
-    const starting = withCurrentOwnFiles(revision, official ? this.#official.forStart(server) : [])
+    const starting = withCurrentOwnFiles(revision, stop.officialFiles)
     // Its carried files compressed, and any long list, so that no variable comes near Linux's limit
     // (`carried-files.ts`). One still past it is refused here, before a machine fails on it, in
     // words its owner reads, and not tried again: trying again changes nothing.
-    const built = toRuntimeSpec({ ...input, revision: starting, compat: [...placed, ...reporter] })
+    const built = toRuntimeSpec({
+      ...input,
+      revision: starting,
+      compat: [...placed, ...reporter, ...(stop.placed?.jar ? [stop.placed.jar] : [])],
+      stopCheaters: stop.placed,
+    })
     const labelled = label(withCompressedFiles({ ...built, env: { ...built.env, ...report } }))
     const refused = tooLongForAStart(labelled)
     if (refused !== null) throw new PermanentFailure(refused)
@@ -215,7 +228,9 @@ export class RuntimeSpecs {
     // after that it wakes as it slept again, until Cubepals' files change once more.
     const newer =
       filesDigest(starting.files) === filesDigest(revision.files) ? [] : [filesDigest(starting.files)]
-    const startOnly = [...(compat.length === 0 ? [] : [compat.join(','), COMPAT_PREFIX]), ...newer]
+    // Stop cheaters the same way: on, or turned off, a machine asleep boots once for it.
+    const grim = stop.placed === null ? [] : [`stop-cheaters:${stop.placed.jar?.artifact.sha512 ?? 'own'}`]
+    const startOnly = [...(compat.length === 0 ? [] : [compat.join(','), COMPAT_PREFIX]), ...grim, ...newer]
     const resumesOn =
       startOnly.length === 0
         ? driftDigest
@@ -233,6 +248,7 @@ export class RuntimeSpecs {
       install: installOf(revision),
       proxyProtocol: usesProxyProtocol(revision),
       compat,
+      stopCheaters: stop.placed !== null,
     }
   }
 }
@@ -285,14 +301,20 @@ async function withWhatItsPackLearned(q: Queryable, revision: ServerRevision): P
 
 /**
  * The join reporter, on a Paper server playing no modpack, where `JOIN_REPORTER` places it: on
- * every such server, or on official ones only. Like the Via plugins it arrives at a full boot, but
+ * every such server, or on official ones only; and wherever Stop cheaters runs, whose removals go
+ * through its `cubepals-remove`. Like the Via plugins it arrives at a full boot, but
  * unlike them a sleeping server never boots for it: it gets it at its next boot, and a wake from
  * memory stays one (`resumesOn` leaves it out).
  */
-async function reporterFor(q: Queryable, revision: ServerRevision, official: boolean): Promise<PinnedMod[]> {
+async function reporterFor(
+  q: Queryable,
+  revision: ServerRevision,
+  official: boolean,
+  removes: boolean,
+): Promise<PinnedMod[]> {
   const placing = tuning().joins?.reporter ?? 'off'
-  if (revision.loader !== 'paper' || revision.modpack !== null) return []
-  if (placing === 'off' || (placing === 'official' && !official)) return []
+  if (revision.modpack !== null || !(revision.loader === 'paper' || removes)) return []
+  if (!removes && (placing === 'off' || (placing === 'official' && !official))) return []
   const pin = await reporterPin(q)
   return pin === null ? [] : [pin]
 }

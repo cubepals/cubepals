@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The Arcade template: Paper on the newest release the moderation tools run on, with them, the
- * chat filter and the Grim anticheat, and Cubepals' Via plugins beside them, never among them; offered
+ * The Arcade template: Paper on the newest release the moderation tools run on, with them and the
+ * chat filter, and Cubepals' Via plugins and Stop cheaters beside them, never among them; offered
  * with Plus; and a server of it starting on the Arcade's world, fetched through its own link,
  * with the games' datapack and the moderation files, the datapack following the server onto a fresh world,
  * and no resource pack offered as a player joins, the one Cubepals' own Arcade offered cleared.
@@ -78,7 +78,7 @@ async function begin(): Promise<void> {
   await store.start()
   h = await startHarness({ capabilities: { archives: store, billing: null } })
   // As Modrinth listed them on 2026-10-14: ChatSentinel 2.0.3 and Grim 2.3.74 stop at 26.2,
-  // LibertyBans and LuckPerms run on 26.3 too.
+  // LibertyBans and LuckPerms run on 26.3 too. Grim is Stop cheaters', pinned beside the plugins.
   plugin(LIBERTYBANS, 'LibertyBans', ['1.21.11', '26.2', '26.3'], 'libertybans-1')
   plugin(LUCKPERMS, 'LuckPerms', ['1.21.11', '26.2', '26.3'], 'luckperms-1')
   plugin(CHATSENTINEL, 'ChatSentinel', ['1.21.11', '26.2'], 'chatsentinel-1')
@@ -123,7 +123,7 @@ describe.skipIf(!hasDatabase)('arcade', () => {
       loader: 'paper',
       gameVersion: '26.2',
       joins: { oldest: '1.9', newer: true },
-      mods: ['ChatSentinel', 'Grim Anticheat', 'LibertyBans', 'LuckPerms'],
+      mods: ['ChatSentinel', 'LibertyBans', 'LuckPerms'],
     })
     const { templates } = await h.app.queries.createOptions(await h.user('Lee'))
     expect(templates.find((template) => template.key === 'arcade')?.fits).toEqual({
@@ -141,7 +141,7 @@ describe.skipIf(!hasDatabase)('arcade', () => {
     const revision = await loadRevision(h.db, server.desiredRevisionId)
     // Every game is the datapack, so the only plugins are the ones for strangers.
     expect(revision.mods.map((m) => ('projectId' in m.source ? m.source.projectId : '')).sort()).toEqual(
-      [CHATSENTINEL, 'LJNGWSvH', LIBERTYBANS, LUCKPERMS].sort(),
+      [CHATSENTINEL, LIBERTYBANS, LUCKPERMS].sort(),
     )
     expect(revision.files).toEqual([...ARCADE_FILES, ...moderationFiles(CHAT_FILTER)])
     expect(revision.settings).toMatchObject({

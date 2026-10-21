@@ -265,7 +265,11 @@ describe.skipIf(!hasDatabase)('looks, addresses and forgetting', () => {
 
 describe.skipIf(!hasDatabase)('the reporter’s route', () => {
   test('the reporter’s route takes the server’s own token, so much and so often', async () => {
-    const app = createJoinsApp({ artifacts: h.app.artifacts, joins: h.app.joins })
+    const app = createJoinsApp({
+      artifacts: h.app.artifacts,
+      joins: h.app.joins,
+      stopCheaters: h.app.stopCheaters,
+    })
     const token = deriveServerSecret(
       singleKey('test-runtime-secrets-key-0123456789').current.key,
       serverId,

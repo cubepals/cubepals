@@ -19,7 +19,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 /**
  * The plugin Cubepals places on Paper servers so each join can be followed from the edge into the
  * world: it reports the server's own steps of each join to the control plane, at
- * `CUBEPALS_REPORT_URL`. With no such address it does nothing at all.
+ * `CUBEPALS_REPORT_URL`. It also gives Stop cheaters its console command, `cubepals-remove`
+ * (`Removals`), which kicks a player and reports it. With no address it only kicks.
  */
 public final class Reporter extends JavaPlugin {
     private static final String CONFIGURE =
@@ -30,8 +31,11 @@ public final class Reporter extends JavaPlugin {
     @Override
     public void onEnable() {
         String url = System.getenv("CUBEPALS_REPORT_URL");
-        if (url == null || url.isBlank()) return;
-        queue = new Queue(Queue.http(URI.create(url)), Duration.ofSeconds(1));
+        boolean reports = url != null && !url.isBlank();
+        if (reports) queue = new Queue(Queue.http(URI.create(url)), Duration.ofSeconds(1));
+        var remove = getCommand("cubepals-remove");
+        if (remove != null) remove.setExecutor(new Removals(reports ? queue::offer : null));
+        if (!reports) return;
         queue.start();
         new Listeners(queue::offer).register(this);
         // Once every plugin is enabled, so the listeners named are all there.

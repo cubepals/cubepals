@@ -2,11 +2,16 @@
 #
 # SPDX-License-Identifier: AGPL-3.0-only
 
-# Cubepals places this plugin on Paper servers to report when players join and leave. It does
-# nothing unless the server was started with CUBEPALS_REPORT_URL.
+# Cubepals places this plugin on Paper servers to report when players join and leave, and to give
+# Stop cheaters its console command. It reports nothing unless the server was started with
+# CUBEPALS_REPORT_URL.
 name: Cubepals
 version: "1"
 main: blockly.reporter.Reporter
 api-version: "1.20"
 folia-supported: false
 description: Tells Cubepals when players join and leave, so slow joins can be found and fixed.
+commands:
+  cubepals-remove:
+    description: Removes a player for Stop cheaters. The console only.
+    usage: /cubepals-remove <player> <movement|speed|impossible>

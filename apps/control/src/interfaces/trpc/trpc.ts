@@ -46,6 +46,7 @@ import type { ServerQueries } from '../../app/servers/queries.ts'
 import type { MinecraftServerService } from '../../app/servers/service.ts'
 import type { SharingQueries } from '../../app/sharing/queries.ts'
 import type { SharingService } from '../../app/sharing/service.ts'
+import type { StopCheatersService } from '../../app/stop-cheaters/service.ts'
 import type { WorldQueries } from '../../app/worlds/queries.ts'
 import type { WorldService } from '../../app/worlds/service.ts'
 
@@ -77,6 +78,7 @@ export interface Services {
   queries: ServerQueries
   access: AccessService
   moderation: ModerationService
+  stopCheaters: StopCheatersService
   players: PlayerService
   items: ItemIcons
   faces: PlayerFaces

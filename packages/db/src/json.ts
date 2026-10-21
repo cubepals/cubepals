@@ -192,6 +192,12 @@ export interface AppliedConfigJson {
    * other versions' players the edge lets in. Absent before a boot said so.
    */
   compat?: string[]
+  /**
+   * What its boot did with Stop cheaters' punishments file, as the server's next access sync read it:
+   * `ours` where Cubepals' is in place, `own` where the owner's own Grim settings were left. Absent
+   * where Stop cheaters isn't on, and before the sync read it.
+   */
+  stopCheaters?: 'ours' | 'own'
 }
 
 export interface ObservedJson {

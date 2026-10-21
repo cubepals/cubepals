@@ -73,6 +73,7 @@ import { ServerWaiter } from './servers/waiter.ts'
 import { SetupService } from './setups/service.ts'
 import { SharingQueries } from './sharing/queries.ts'
 import { SharingService } from './sharing/service.ts'
+import { StopCheatersService } from './stop-cheaters/service.ts'
 import { WorldQueries } from './worlds/queries.ts'
 import { WorldService } from './worlds/service.ts'
 
@@ -144,6 +145,8 @@ export interface ControlPlaneSettings {
     files: Readonly<Record<string, Readonly<Record<string, string>>>>
     problem: 'unset' | 'invalid' | null
   }
+  /** Why STOP_CHEATERS gives the public default where production should have its own. */
+  stopCheatersProblem?: 'unset' | 'invalid' | null
   /** What new servers leave to the ones people have, and how long creates may wait. */
   room?: { wakeReserve: number; createWaitSeconds: number }
 }
@@ -407,6 +410,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     waiter,
     edge,
     joins: new JoinService({ ...ports, ...settings }),
+    stopCheaters: new StopCheatersService({ db, policy, transitions, events }),
     feed: new ConsoleFeed(db, ports.logs, runtime.providers),
   }
 }

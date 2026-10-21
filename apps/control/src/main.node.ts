@@ -437,7 +437,9 @@ function apiServices(
       policy: app.policy,
       transitions: app.transitions,
       mods: app.mods,
+      stopCheaters: app.stopCheaters,
     }),
+    stopCheaters: app.stopCheaters,
     players: app.players,
     items: new ItemIcons({
       assets: new MojangClientAssets({ root: join(tmpdir(), 'blockly-client-assets') }),
@@ -655,7 +657,14 @@ async function connect(config: DeploymentConfig) {
 async function main(): Promise<void> {
   const config = loadConfig()
   const { freeLinkTuning: freeLinks, abuseLimits: abuse, capacityTuning: capacity, joins } = config
-  installTuning({ freeLinks, abuse, capacity, economics: config.economicsTuning, joins })
+  installTuning({
+    freeLinks,
+    abuse,
+    capacity,
+    economics: config.economicsTuning,
+    joins,
+    stopCheaters: config.stopCheaters.tuning,
+  })
   for (const note of config.local?.notes ?? []) console.warn(`local: ${note}`)
   const { pool, db, events, boss, ports } = await connect(config)
   const profiles = new MojangProfiles()
@@ -700,6 +709,7 @@ async function main(): Promise<void> {
       wakeWaitMs: 25_000,
       adminEmails: config.auth.admins,
       officialServerFiles: config.officialServerFiles,
+      stopCheatersProblem: config.stopCheaters.problem,
       adminInbox: config.mail.adminInbox,
       webOrigin: config.web.canonicalOrigin,
       signupCap: config.local === null,
@@ -724,7 +734,10 @@ async function main(): Promise<void> {
       services,
     })
     // Game runtimes fetch their jars from the same public listener, under /runtime (§15.2).
-    api.route('/', createRuntimeApp({ artifacts: app.artifacts, joins: app.joins }))
+    api.route(
+      '/',
+      createRuntimeApp({ artifacts: app.artifacts, joins: app.joins, stopCheaters: app.stopCheaters }),
+    )
     // The billing provider's webhooks, reaching the same listener as the web app's /api.
     api.route('/', billingRoutes(app.billing, capabilities.billing))
     const apiServer = serve({

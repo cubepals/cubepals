@@ -659,6 +659,13 @@
       "when": 1792557296518,
       "tag": "0093_writer_avatars",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1792561437916,
+      "tag": "0094_stop_cheaters",
+      "breakpoints": true
     }
   ]
 }

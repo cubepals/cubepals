@@ -13,6 +13,13 @@ import {
   parseHelpers,
   USER_MARK,
 } from './moderation.ts'
+import {
+  EXEMPT,
+  PRINT_MARK,
+  parseUnchecked,
+  readStopCheatersMark,
+  uncheckedCommand,
+} from './stop-cheaters.ts'
 
 /**
  * How live administration reaches a running server: console commands out, the server's own
@@ -50,6 +57,10 @@ export function accessCommand(command: AccessCommand, pluginBans = false): strin
       return helperCommand(command.player.uuid, true)
     case 'helper_remove':
       return helperCommand(command.player.uuid, false)
+    case 'unchecked_add':
+      return uncheckedCommand(command.player.uuid, true)
+    case 'unchecked_remove':
+      return uncheckedCommand(command.player.uuid, false)
   }
 }
 
@@ -69,6 +80,10 @@ const PROPERTY_MARK = 'server.properties'
 const HELPERS_MARK = 'helpers'
 /** Where LibertyBans' jar is, which answers to `ban`. */
 const PLUGIN_BANS_MARK = 'plugin-bans'
+/** Where LuckPerms runs: the users Stop cheaters leaves unchecked. */
+const UNCHECKED_MARK = 'unchecked'
+/** What the last start did with Stop cheaters' punishments file. */
+const STOP_CHEATERS_MARK = 'stop-cheaters'
 
 /**
  * One exec that prints every access file between markers, plus the whitelist property, and where
@@ -81,7 +96,9 @@ export const READ_ACCESS_FILES: readonly string[] = [
     `cd ${DATA_DIR}`,
     `for f in ${FILES.join(' ')}; do printf '@@%s@@\\n' "$f"; cat "$f" 2>/dev/null || printf '[]'; printf '\\n'; done`,
     `if ls plugins/*-LuckPerms*.jar >/dev/null 2>&1 && [ -f ${HELPER_GROUP_FILE} ]; then printf '@@${HELPERS_MARK}@@\\n'; for f in $(grep -l -- '- ${HELPER_GROUP}' ${LUCKPERMS_USERS}/*.yml 2>/dev/null); do printf '${USER_MARK}\\n'; cat "$f"; printf '\\n'; done; fi`,
+    `if ls plugins/*-LuckPerms*.jar >/dev/null 2>&1 && [ -f ${HELPER_GROUP_FILE} ]; then printf '@@${UNCHECKED_MARK}@@\\n'; for f in $(grep -l -- '- ${EXEMPT}' ${LUCKPERMS_USERS}/*.yml 2>/dev/null); do printf '${USER_MARK}\\n'; cat "$f"; printf '\\n'; done; fi`,
     `if ls plugins/*-LibertyBans*.jar >/dev/null 2>&1; then printf '@@${PLUGIN_BANS_MARK}@@\\n'; fi`,
+    `printf '@@${STOP_CHEATERS_MARK}@@\\n'; ${PRINT_MARK}`,
     `printf '@@${PROPERTY_MARK}@@\\n'`,
     `grep -E '^(white-list|online-mode)=' server.properties 2>/dev/null || true`,
   ].join('; '),
@@ -174,6 +191,13 @@ export function parseAccessFiles(stdout: string): ObservedAccess {
           name: h.name,
         }))
       : null,
+    unchecked: parts.has(UNCHECKED_MARK)
+      ? parseUnchecked(parts.get(UNCHECKED_MARK) ?? '').map((p) => ({
+          uuid: normalizeUuid(p.uuid),
+          name: p.name,
+        }))
+      : null,
+    stopCheaters: readStopCheatersMark(parts.get(STOP_CHEATERS_MARK)),
     pluginBans: parts.has(PLUGIN_BANS_MARK),
   }
 }

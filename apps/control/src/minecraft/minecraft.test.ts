@@ -410,6 +410,8 @@ describe('access files', () => {
       ],
       ipBans: [],
       helpers: null,
+      unchecked: null,
+      stopCheaters: null,
       pluginBans: false,
     })
   })
@@ -439,6 +441,33 @@ describe('access files', () => {
     expect(observed.helpers).toEqual([{ uuid: '10920508-d5d8-3eed-93d2-92f193afe7d7', name: 'Alice' }])
     expect(observed.pluginBans).toBe(true)
     expect(parseAccessFiles('@@server.properties@@\n').helpers).toBeNull()
+  })
+
+  test('reads who Stop cheaters leaves unchecked, and what the last start did with its file', () => {
+    const stdout = [
+      '@@unchecked@@',
+      '==user==',
+      'uuid: 10920508-d5d8-3eed-93d2-92f193afe7d7',
+      'name: Alice',
+      'permissions:',
+      '- grim.exempt',
+      '==user==',
+      'uuid: 8667ba71-b85a-4004-af54-457a9734eed7',
+      'name: Bob',
+      'permissions:',
+      '- grim.exempt:',
+      '    value: false',
+      '@@stop-cheaters@@',
+      'own',
+      '@@server.properties@@',
+    ].join('\n')
+    const observed = parseAccessFiles(stdout)
+    expect(observed.unchecked).toEqual([{ uuid: '10920508-d5d8-3eed-93d2-92f193afe7d7', name: 'Alice' }])
+    expect(observed.stopCheaters).toBe('own')
+    expect(parseAccessFiles('@@stop-cheaters@@\n@@server.properties@@\n')).toMatchObject({
+      unchecked: null,
+      stopCheaters: null,
+    })
   })
 
   test('a missing file reads as empty; unreadable output throws', () => {
