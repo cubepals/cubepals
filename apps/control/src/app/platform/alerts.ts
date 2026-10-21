@@ -9,6 +9,7 @@ import { entitlementsFor, PLAN_KEYS } from '../../domain/account/entitlements.ts
 import { unreviewedLinks } from '../accounts/free-play.ts'
 import { adminInbox, loadStanding } from '../accounts/persistence.ts'
 import type { Actor } from '../actor.ts'
+import { reporterPin } from '../artifacts/reporter.ts'
 import { unsentExtra, waitingExtra } from '../billing/extra-usage.ts'
 import { unknownOrders } from '../billing/persistence.ts'
 import type { CatalogSync } from '../catalog/sync.ts'
@@ -56,6 +57,7 @@ const WHERE: Record<AlertKey, string> = {
   realtime_certificate_expiring: '/admin/health',
   official_files: '/admin/health',
   stop_cheaters_default: '/admin/health',
+  stop_cheaters_no_reporter: '/admin/health',
 }
 
 interface Condition {
@@ -193,6 +195,7 @@ export class PlatformAlerts {
       ...(await linkedCondition(this.#db)),
       ...(await officialFilesCondition(this.#db, this.#officialFilesProblem)),
       ...(await stopCheatersCondition(this.#db, this.#stopCheatersProblem)),
+      ...(await noReporterCondition(this.#db)),
     )
     return conditions
   }
@@ -411,6 +414,22 @@ async function stopCheatersCondition(db: Db, problem: 'unset' | 'invalid' | null
     {
       key: 'stop_cheaters_default',
       summary: `STOP_CHEATERS is ${problem === 'unset' ? 'not set' : 'not a JSON object of punishments and a ban rule'}, so servers with Stop cheaters on start with the public default, which only alerts and logs. Servers still start; set it and they have it at their next start.`,
+    },
+  ]
+}
+
+/**
+ * Servers running Stop cheaters while the join reporter isn't stored yet (`artifacts/reporter.ts`):
+ * every removal goes through its `cubepals-remove`, so their starts write the public default, alerts
+ * and logs only, rather than a file that would remove nobody (`stop-cheaters/start.ts`).
+ */
+async function noReporterCondition(db: Db): Promise<Condition[]> {
+  if ((await reporterPin(db)) !== null || !(await anyStopCheatersOn(db))) return []
+  return [
+    {
+      key: 'stop_cheaters_no_reporter',
+      summary:
+        'The join reporter isn’t stored, so servers with Stop cheaters on can’t remove anyone: their starts write the public default, which only alerts and logs. It is stored as the control plane starts, given an archive store; once it is, they have it at their next start.',
     },
   ]
 }

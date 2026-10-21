@@ -10,7 +10,9 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { schema } from '@blockly/db'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
@@ -25,6 +27,8 @@ import { offeredVersions } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
+import { recordStored } from '../artifacts/persistence.ts'
+import { reporterJar, useReporterJar } from '../artifacts/reporter.ts'
 import { grimFor } from '../compat/service.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import { installTuning, tuning } from '../tuning.ts'
@@ -78,6 +82,22 @@ async function begin(options: Parameters<typeof startHarness>[0] = {}): Promise<
 async function end(): Promise<void> {
   await h.close()
   cdn.close()
+}
+
+/** Runs `then` with the join reporter's jar stored, as a deployment stores it at startup. */
+async function withReporter(then: () => Promise<void>): Promise<void> {
+  const dir = mkdtempSync(join(tmpdir(), 'reporter-'))
+  const jar = join(dir, 'cubepals-reporter.jar')
+  writeFileSync(jar, `reporter ${randomUUID()}`)
+  useReporterJar(jar)
+  try {
+    const read = await reporterJar()
+    if (read === null) throw new Error('The test jar was not read')
+    await recordStored(h.db, { ...read, key: `built/${read.sha512}`, source: 'built' })
+    await then()
+  } finally {
+    useReporterJar()
+  }
 }
 
 /** A running server: Smooth (Paper, no plugins) unless a loader is named. */
@@ -292,6 +312,24 @@ describe.skipIf(!hasDatabase)('what a start places', () => {
     await h.app.setups.compat.refresh()
   }, 60_000)
 
+  test('without the join reporter, a start writes the public default: nothing removes nobody', async () => {
+    const { owner, id } = await running('Bea')
+    await h.app.stopCheaters.set(owner, id, true, randomUUID())
+    const written = async () => {
+      const env = (await h.app.specs.desired(h.db, await h.server(id))).spec.env
+      return Buffer.from(env[STOP_CHEATERS_ENV] ?? '', 'base64').toString('utf8')
+    }
+    const before = tuning()
+    installTuning({ ...before, stopCheaters: FIXTURE })
+    try {
+      // No reporter stored, as in development: the configured removals would go nowhere.
+      expect(await written()).toBe(DEFAULT_PUNISHMENTS)
+      await withReporter(async () => expect(await written()).toContain(FIXTURE.punishments))
+    } finally {
+      installTuning(before)
+    }
+  }, 60_000)
+
   test('the configured file, and an official server’s own at the same path, which wins', async () => {
     const { owner, id } = await running('Rae')
     await h.app.stopCheaters.set(owner, id, true, randomUUID())
@@ -337,7 +375,9 @@ describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
   beforeAll(begin, 30_000)
   afterAll(end)
 
-  const removed = (uuid: string, reason: string, at = new Date()) => ({
+  // Each removal a moment of its own, as a server reports them.
+  let moment = Date.now()
+  const removed = (uuid: string, reason: string, at = new Date(++moment)) => ({
     kind: 'removed' as const,
     at: at.toISOString(),
     uuid,
@@ -425,6 +465,25 @@ describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
     expect(await countRemovals(h.db, id, null)).toBe(5)
   }, 60_000)
 
+  test('a batch sent again keeps each removal once, and brings no ban the player didn’t earn', async () => {
+    const { id } = await running('Ash')
+    await withTools(id)
+    const before = tuning()
+    installTuning({ ...before, stopCheaters: FIXTURE })
+    try {
+      const uuid = randomUUID()
+      const batch = [removed(uuid, 'impossible', new Date(1000)), removed(uuid, 'impossible', new Date(2000))]
+      await h.app.stopCheaters.recordRemovals(id, batch)
+      // The reporter heard no answer and sent the same batch twice more.
+      await h.app.stopCheaters.recordRemovals(id, batch)
+      await h.app.stopCheaters.recordRemovals(id, batch)
+      expect(await countRemovals(h.db, id, null)).toBe(2)
+      expect(await bans(id)).toHaveLength(0)
+    } finally {
+      installTuning(before)
+    }
+  }, 60_000)
+
   test('what isn’t a removal is passed over', async () => {
     const { id } = await running('Wren')
     await h.app.stopCheaters.recordRemovals(id, [
@@ -495,8 +554,14 @@ describe.skipIf(!hasDatabase)('STOP_CHEATERS unset in production', () => {
       .where(and(eq(schema.compatPlugins.projectId, GRIM), eq(schema.compatPlugins.gameVersion, gameVersion)))
     await h.app.listings.setPublic(paper.owner, paper.id, true)
     expect(await raised()).toBe(false)
-    // Grim pinned for its release again: it runs at the next start, and the alert says so.
+    // Grim pinned for its release again: it runs at the next start, and the alert says so. With no
+    // join reporter stored, another says it removes nobody; once one is, that one clears.
     await h.app.setups.compat.refresh()
-    expect(await raised()).toBe(true)
+    const swept = await h.app.alerts.sweep()
+    expect(swept.raised).toContain('stop_cheaters_default')
+    expect(swept.raised).toContain('stop_cheaters_no_reporter')
+    await withReporter(async () =>
+      expect((await h.app.alerts.sweep()).cleared).toContain('stop_cheaters_no_reporter'),
+    )
   }, 90_000)
 })

@@ -36,7 +36,7 @@ import { quarantinedOf } from '../mods/jar-check-records.ts'
 import { loadPackContents } from '../packs/persistence.ts'
 import type { InstallSeed, RuntimeSpec } from '../ports/runtime.ts'
 import { acceptedSecrets, deriveServerSecret, type SecretKeyring } from '../secrets.ts'
-import { stopCheatersAtStart } from '../stop-cheaters/start.ts'
+import { stopCheatersAtStart, withRemovals } from '../stop-cheaters/start.ts'
 import { tuning } from '../tuning.ts'
 import { tooLongForAStart, withCompressedFiles } from './carried-files.ts'
 import { noOfficialFiles, type OfficialFiles, withCurrentOwnFiles } from './own-files.ts'
@@ -211,7 +211,11 @@ export class RuntimeSpecs {
       compat: [...placed, ...reporter, ...(stop.placed?.jar ? [stop.placed.jar] : [])],
     })
     // With the punishments file its step writes (`minecraft/stop-cheaters.ts`) where it runs.
-    const env = { ...built.env, ...report, ...stopCheatersEnv(stop.placed) }
+    const env = {
+      ...built.env,
+      ...report,
+      ...stopCheatersEnv(withRemovals(stop.placed, reporter.length > 0)),
+    }
     const labelled = label(withCompressedFiles({ ...built, env }))
     const refused = tooLongForAStart(labelled)
     if (refused !== null) throw new PermanentFailure(refused)

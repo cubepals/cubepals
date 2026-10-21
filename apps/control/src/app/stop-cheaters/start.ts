@@ -46,3 +46,16 @@ export async function stopCheatersAtStart(
     officialFiles: officialFiles.filter((file) => file.path !== PUNISHMENTS_FILE),
   }
 }
+
+/**
+ * The punishments a start writes, given whether it places the join reporter, whose `cubepals-remove`
+ * every removal goes through. Without it a file that removes would remove nobody, so the start writes
+ * the public default instead, alerts and logs only, and an admin alert says why
+ * (`stop_cheaters_no_reporter`).
+ */
+export function withRemovals(
+  placed: StopCheatersStart['placed'],
+  reporter: boolean,
+): StopCheatersStart['placed'] {
+  return placed === null || reporter ? placed : { ...placed, punishments: DEFAULT_PUNISHMENTS }
+}

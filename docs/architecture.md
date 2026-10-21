@@ -2479,7 +2479,10 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   words they read and reports a `removed` event; the control plane keeps them per server and player
   (`server_removals`), and, where the moderation tools run, turns removals for sending what no game
   can into a ban recorded through moderation, delivered by the next access sync. So the reporter is
-  placed wherever Stop cheaters runs, whatever `JOIN_REPORTER` says. The owner can leave a player
+  placed wherever Stop cheaters runs, whatever `JOIN_REPORTER` says; while its jar isn't stored, a
+  start writes the public default rather than a file that would remove nobody, and an admin alert
+  (`stop_cheaters_no_reporter`) says so. A removal a reporter sends twice is kept once
+  (`server_removals_once`), so a retried batch never counts towards a ban. The owner can leave a player
   unchecked (`grim.exempt` through LuckPerms, the `unchecked` access list). Grim warns that
   ViaBackwards' older clients misbehave in vehicles on 1.21.2 and later, which Grim may undo as
   impossible moves. Grim exempts Bedrock players only where it sees Floodgate, so when Bedrock
