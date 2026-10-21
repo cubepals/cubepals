@@ -56,21 +56,35 @@ export function WriterAvatar({ avatar, className }: { avatar: AvatarView; classN
         className,
       )
     case 'minidenticon':
-      // minidenticons colours a picture from a wheel of its own; it is given one of ours instead.
+      // minidenticons colours a picture from a wheel of its own; it is given one of ours instead,
+      // and none of its own margin, so its 5×5 cells fill the frame on whole pixels as identicon's do.
       return asImage(
         minidenticon(seed)
+          .replace(/viewBox="[^"]*"/, 'viewBox="0 0 5 5"')
           .replace(/fill="[^"]*"/, `fill="${first}"`)
-          .replace(/(<svg[^>]*>)/, `$1<rect x="-1.5" y="-1.5" width="8" height="8" fill="${PAPER}"/>`),
+          .replace(/(<svg[^>]*>)/, `$1<rect width="5" height="5" fill="${PAPER}"/>`),
         className,
       )
     case 'pixel':
+      // Sand twice, so the ground stays sand and ink is one small accent among the pixels.
+      return (
+        <span className={className}>
+          <Boring
+            name={seed}
+            variant="pixel"
+            square
+            size={SIZE}
+            colors={[PAPER, first, PAPER, second, INK]}
+          />
+        </span>
+      )
     case 'bauhaus':
       // Sand first, as the ground; ink only as one colour among several, never on its own.
       return (
         <span className={className}>
           <Boring
             name={seed}
-            variant={style}
+            variant="bauhaus"
             square
             size={SIZE}
             colors={[PAPER, first, second, INK, third]}
