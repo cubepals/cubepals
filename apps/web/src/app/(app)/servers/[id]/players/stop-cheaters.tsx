@@ -20,6 +20,9 @@ import { useChanged } from '../settings/shared'
 /** What the page says of a removal: what the player read, without the part that is only theirs. */
 export const removalLine = (reason: RemovalReason) => REMOVAL_MESSAGES[reason].replace(' You can rejoin.', '')
 
+/** A sentence's start: "just now" after a full stop reads "Just now". */
+export const upper = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+
 /** Why Cubepals turned it on, where it did and says so. */
 const WHY: Partial<Record<NonNullable<StopCheatersView['why']>, string>> = {
   browse: 'Cubepals turned this on when your server joined Browse.',
@@ -109,7 +112,7 @@ function Removed({ serverId, view }: { serverId: string; view: StopCheatersView 
             name={removal.player.name || 'A player'}
             uuid={removal.player.uuid}
             online={false}
-            meta={`${removalLine(removal.reason)} ${timeAgo(removal.at, now)}`}
+            meta={`${removalLine(removal.reason)} ${upper(timeAgo(removal.at, now))}.`}
             href={`/servers/${serverId}/players/${removal.player.uuid}`}
           />
         ))}

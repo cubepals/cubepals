@@ -14,7 +14,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { messageOf, useTRPC } from '../../../../../../lib/api'
 import { timeAgo } from '../../../../../../lib/present'
 import { Button, FormSection, Note } from '../../../../../../ui'
-import { removalLine } from '../stop-cheaters'
+import { removalLine, upper } from '../stop-cheaters'
 
 export function PlayerRemovals({ serverId, player }: { serverId: string; player: PlayerView }) {
   const trpc = useTRPC()
@@ -40,7 +40,7 @@ export function PlayerRemovals({ serverId, player }: { serverId: string; player:
                 {removalLine(removal.reason)}
               </span>
               <span className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-                {timeAgo(removal.at, now)}
+                {upper(timeAgo(removal.at, now))}
               </span>
             </li>
           ))}
