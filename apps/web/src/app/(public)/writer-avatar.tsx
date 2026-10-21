@@ -14,15 +14,30 @@
  */
 
 import type { AvatarView } from '@blockly/contracts'
-import { Avatar, Style } from '@dicebear/core'
-import identiconStyle from '@dicebear/styles/identicon.json'
 import Boring from 'boring-avatars'
 import { minidenticon } from 'minidenticons'
+import { useEffect, useState } from 'react'
 import { random } from '../../ui/face'
 import { COLOURS, INK, PAPER } from './avatar-colours'
 import { WriterMark } from './writer-mark'
 
-const IDENTICON = new Style(identiconStyle)
+/**
+ * DiceBear and its identicon style, fetched the first time an identicon is on screen and kept: most
+ * of what the pictures weigh, so a page without one never loads it.
+ */
+let identicon: Promise<(seed: string, colour: string) => string> | undefined
+
+/** An identicon's drawing, once DiceBear has loaded. */
+export function identiconSvg(seed: string, colour: string): Promise<string> {
+  identicon ??= Promise.all([import('@dicebear/core'), import('@dicebear/styles/identicon.json')]).then(
+    ([{ Avatar, Style }, definition]) => {
+      const style = new Style(definition.default)
+      return (seed, colour) =>
+        new Avatar(style, { seed, size: SIZE, rowColor: [colour], backgroundColor: [PAPER] }).toString()
+    },
+  )
+  return identicon.then((draw) => draw(seed, colour))
+}
 
 /** Pictures are drawn at the size they are shown, so each library lays its shapes on whole pixels. */
 const SIZE = 20
@@ -51,10 +66,7 @@ export function WriterAvatar({ avatar, className }: { avatar: AvatarView; classN
     case 'mark':
       return <WriterMark seed={seed} className={className} />
     case 'identicon':
-      return asImage(
-        new Avatar(IDENTICON, { seed, size: SIZE, rowColor: [first], backgroundColor: [PAPER] }).toString(),
-        className,
-      )
+      return <Identicon seed={seed} colour={first} className={className} />
     case 'minidenticon':
       // minidenticons colours a picture from a wheel of its own; it is given one of ours instead,
       // and none of its own margin, so its 5×5 cells fill the frame on whole pixels as identicon's do.
@@ -93,3 +105,22 @@ export function WriterAvatar({ avatar, className }: { avatar: AvatarView; classN
       )
   }
 }
+
+/** An identicon, drawn once DiceBear has loaded; until then, the sand it will be drawn on. */
+function Identicon({ seed, colour, className }: { seed: string; colour: string; className?: string }) {
+  const [drawn, setDrawn] = useState<{ key: string; svg: string } | null>(null)
+  const key = `${seed}:${colour}`
+  useEffect(() => {
+    let current = true
+    void identiconSvg(seed, colour).then((svg) => {
+      if (current) setDrawn({ key, svg })
+    })
+    return () => {
+      current = false
+    }
+  }, [seed, colour, key])
+  return asImage(drawn?.key === key ? drawn.svg : SAND, className)
+}
+
+/** The sand alone, shown where a picture is still on its way. */
+const SAND = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1" fill="${PAPER}"/></svg>`
