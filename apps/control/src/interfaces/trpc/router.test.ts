@@ -190,9 +190,9 @@ describe('stars and notes', () => {
   const services = {
     guestbook: {
       star: async () => ({ stars: 1, starred: true }),
-      notes: async () => ({ notes: [], total: 0 }),
-      addNote: async () => ({ notes: [], total: 1 }),
-      deleteNote: async () => ({ notes: [], total: 0 }),
+      notes: async () => ({ notes: [], total: 0, signature: null }),
+      addNote: async () => ({ notes: [], total: 1, signature: null }),
+      deleteNote: async () => ({ notes: [], total: 0, signature: null }),
     },
   } as unknown as Services
   const serverId = '00000000-0000-4000-8000-000000000000'
@@ -209,7 +209,7 @@ describe('stars and notes', () => {
 
     const signedIn = appRouter.createCaller({ actor: { kind: 'user', userId: 'u-1' }, services })
     expect(await signedIn.listings.star({ serverId, starred: true })).toEqual({ stars: 1, starred: true })
-    expect(await signedIn.listings.notes({ serverId })).toEqual({ notes: [], total: 0 })
+    expect(await signedIn.listings.notes({ serverId })).toEqual({ notes: [], total: 0, signature: null })
   })
 })
 

@@ -61,14 +61,38 @@ export async function tally(
   }
 }
 
+/** A note as it is shown: whether it was signed, and its writer's name as their account has it now. */
+export interface ShownNoteRecord extends NoteRecord {
+  signed: boolean
+  authorName: string
+}
+
 /** The latest notes on a server, newest first (`server_notes_server`). */
-export async function latestNotes(q: Queryable, serverId: string, limit: number): Promise<NoteRecord[]> {
+export async function latestNotes(q: Queryable, serverId: string, limit: number): Promise<ShownNoteRecord[]> {
   return q
-    .select()
+    .select({
+      id: notes.id,
+      serverId: notes.serverId,
+      authorId: notes.authorId,
+      body: notes.body,
+      createdAt: notes.createdAt,
+      signed: notes.signed,
+      authorName: schema.users.name,
+    })
     .from(notes)
+    .innerJoin(schema.users, eq(schema.users.id, notes.authorId))
     .where(eq(notes.serverId, serverId))
     .orderBy(desc(notes.createdAt))
     .limit(limit)
+}
+
+/** The name an account has, as it signed up or as its sign-in provider gave it; empty when none. */
+export async function accountName(q: Queryable, userId: string): Promise<string> {
+  const [row] = await q
+    .select({ name: schema.users.name })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+  return row?.name ?? ''
 }
 
 /** What one person has left on one server and not deleted. */

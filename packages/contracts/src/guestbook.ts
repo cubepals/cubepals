@@ -9,7 +9,8 @@ import { ServerId } from './server.ts'
 /**
  * Stars and short notes on public servers: a guestbook, never a community. A signed-in person
  * stars a server in one click, and leaves a note of a line; nothing replies, likes, sorts or
- * threads, and nobody has a profile. Notes are anonymous apart from "you" and "the owner".
+ * threads, and nobody has a profile. A note shows its writer's first name and last initial, beside
+ * a small picture drawn from a seed; notes from before names were shown stay anonymous.
  */
 
 /** The notes a popover shows: the latest few, never a page of them. */
@@ -30,6 +31,13 @@ export interface NoteView {
   id: string
   body: string
   at: string
+  /** Its writer as strangers read them, "Davi H."; null for a note left as anonymous or nameless. */
+  author: string | null
+  /**
+   * What the writer's picture is drawn from: a hash of who they are, so it is the same on every
+   * note of theirs and tells nothing about them. Every anonymous note shares one.
+   */
+  avatar: string
   /** Written by the person reading. */
   yours: boolean
   /** Written by the server's owner. */
@@ -38,10 +46,12 @@ export interface NoteView {
   canDelete: boolean
 }
 
-/** The latest notes, newest first, and how many there are in all. */
+/** The latest notes, newest first, how many there are in all, and what the reader's own show. */
 export interface NotesView {
   notes: NoteView[]
   total: number
+  /** The name a note the reader leaves shows; null when their account has none to show. */
+  signature: string | null
 }
 
 /** A star set on or off: setting, not toggling, so a retry or a double click changes nothing. */

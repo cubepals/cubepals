@@ -2,9 +2,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { createHash } from 'node:crypto'
 import { NOTES_SHOWN, type NotesView, type StarView } from '@blockly/contracts'
 import { DAY_MS } from '@blockly/contracts/durations'
 import { type Db, type Queryable, schema, type Tx } from '@blockly/db'
+import { shownName } from '../../domain/listing/author.ts'
 import { cleanNote, sameNote } from '../../domain/listing/note.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { actionsSince, isAdmin, loadControls, loadStanding } from '../accounts/persistence.ts'
@@ -14,6 +16,7 @@ import { loadListing } from '../listings/persistence.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import { findServer } from '../servers/persistence.ts'
 import {
+  accountName,
   countNotes,
   countStars,
   deleteNote,
@@ -29,6 +32,9 @@ const NOTES_A_DAY = 20
 
 /** Notes one person keeps on one server: a guestbook signed, not a conversation. */
 const NOTES_KEPT = 3
+
+/** The seed every note without a writer to show shares, so none of them looks like someone's. */
+const ANONYMOUS_AVATAR = 'a-player'
 
 /**
  * Stars and short notes on public servers: a guestbook, never a community. Only a server
@@ -113,7 +119,7 @@ export class GuestbookService {
       // Where strangers can't read the guestbook any more, its author sees only that theirs went.
       return owner || admin || (await isShown(tx, server))
         ? notesView(tx, server, userId, admin)
-        : { notes: [], total: 0 }
+        : { notes: [], total: 0, signature: shownName(await accountName(tx, userId)) }
     })
   }
 }
@@ -154,7 +160,10 @@ async function isShown(q: Queryable, server: MinecraftServer): Promise<boolean> 
   )
 }
 
-/** The latest notes as one person reads them: whose they are, and which they may delete. */
+/**
+ * The latest notes as one person reads them: who left each, and which they may delete. A note left
+ * as anonymous shows no name and the shared picture, whoever wrote it.
+ */
 async function notesView(
   q: Queryable,
   server: MinecraftServer,
@@ -167,13 +176,23 @@ async function notesView(
       id: note.id,
       body: note.body,
       at: note.createdAt.toISOString(),
+      author: note.signed ? shownName(note.authorName) : null,
+      avatar: note.signed ? avatarSeed(note.authorId) : ANONYMOUS_AVATAR,
       yours: note.authorId === viewerId,
       byOwner: note.authorId === server.ownerId,
       canDelete: note.authorId === viewerId || server.ownerId === viewerId || admin,
     })),
     total: await countNotes(q, server.id),
+    signature: shownName(await accountName(q, viewerId)),
   }
 }
+
+/**
+ * A writer's picture seed: a hash of their account's id, so the same writer has the same picture on
+ * every note and nothing about them can be read back from it.
+ */
+const avatarSeed = (authorId: string): string =>
+  createHash('sha256').update(authorId).digest('hex').slice(0, 32)
 
 async function audit(
   tx: Tx,

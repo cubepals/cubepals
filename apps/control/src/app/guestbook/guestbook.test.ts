@@ -261,7 +261,7 @@ describe.skipIf(!hasDatabase)('guestbook', () => {
 
     expect(await refusal(h.app.guestbook.deleteNote(stranger, first.id))).toBe('NotFound')
     // Its author takes it back quietly.
-    expect(await h.app.guestbook.deleteNote(alex, first.id)).toEqual({ notes: [], total: 0 })
+    expect(await h.app.guestbook.deleteNote(alex, first.id)).toMatchObject({ notes: [], total: 0 })
     expect(await audited('listing.note_removed')).toEqual([])
     expect(await refusal(h.app.guestbook.deleteNote(alex, first.id))).toBe('NotFound')
 
@@ -271,7 +271,7 @@ describe.skipIf(!hasDatabase)('guestbook', () => {
     if (second === undefined || third === undefined) throw new Error('A note is missing')
     const left = await h.app.guestbook.deleteNote(owner, second.id)
     expect(left).toMatchObject({ total: 1, notes: [{ id: third.id, canDelete: true, yours: false }] })
-    expect(await h.app.guestbook.deleteNote(adminUser, third.id)).toEqual({ notes: [], total: 0 })
+    expect(await h.app.guestbook.deleteNote(adminUser, third.id)).toMatchObject({ notes: [], total: 0 })
     const removed = await audited('listing.note_removed')
     expect(removed.map((row) => [row.actor, row.data])).toEqual([
       [`user:${owner.userId}`, { noteId: second.id, authorId: alex.userId, body: 'Again from Alex' }],
@@ -309,7 +309,7 @@ describe.skipIf(!hasDatabase)('guestbook', () => {
     expect(await refusal(h.app.guestbook.notes(alex, id))).toBe('NotFound')
     // A note can still be taken back where nobody can read it any more, and taking it back shows
     // nobody else's; its owner still sees what is left, to clean up.
-    expect(await h.app.guestbook.deleteNote(alex, note.id)).toEqual({ notes: [], total: 0 })
+    expect(await h.app.guestbook.deleteNote(alex, note.id)).toMatchObject({ notes: [], total: 0 })
     const left = await h.db.select().from(schema.serverNotes).where(eq(schema.serverNotes.serverId, id))
     const sams = left.find((n) => n.body === 'Farewell from Sam')
     if (sams === undefined) throw new Error("Sam's note is missing")
