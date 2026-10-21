@@ -140,3 +140,72 @@ export const SignalsConfig = z.object({
   legacyLoginListener: z.object({ oursOnly: z.boolean().optional() }).optional(),
 })
 export type SignalsConfig = z.infer<typeof SignalsConfig>
+
+// ─── As operators read them (`/ops/v1/joins`, `/ops/v1/signals`) ────────────────────────────────
+
+/**
+ * A join as an operator reads it: every column but the client's address and its network's hash,
+ * with the server's name. Moments are ISO, null where nobody said.
+ */
+export interface JoinView {
+  id: string
+  kind: 'join' | 'look'
+  serverId: string | null
+  serverName: string | null
+  edgeId: string | null
+  edgeRegion: string | null
+  address: string
+  addressKind: 'own' | 'kept' | 'old_domain' | null
+  protocol: number | null
+  playerName: string | null
+  playerUuid: string | null
+  path: 'direct' | 'held' | 'refused' | null
+  pingedAt: string | null
+  connectedAt: string
+  wakeAskedAt: string | null
+  wakeOperationId: string | null
+  readyAt: string | null
+  handedAt: string | null
+  loginAt: string | null
+  configureStartedAt: string | null
+  configuredAt: string | null
+  inWorldAt: string | null
+  leftAt: string | null
+  leftReason: string | null
+  pingedAfterAt: string | null
+  bytesUp: number | null
+  bytesDown: number | null
+  tick: { tps: number; mspt: number; online: number } | null
+  serverSide: 'not_reported' | 'reported'
+  detail: Record<string, unknown>
+}
+
+/** A signal: what it is about, when it was raised, and whether and by whom it was closed. */
+export interface SignalView {
+  id: number
+  kind: string
+  serverId: string | null
+  joinId: string | null
+  at: string
+  detail: Record<string, unknown>
+  closedAt: string | null
+  closedBy: string | null
+}
+
+/**
+ * One join with what explains it: the start its wake asked for, step by step, the signals raised
+ * on it, and how many times its player joined that server in the days joins are kept.
+ */
+export interface JoinDetailView {
+  join: JoinView
+  wake: {
+    id: string
+    kind: string
+    status: string
+    createdAt: string
+    finishedAt: string | null
+    steps: { step: string; at: string }[]
+  } | null
+  signals: SignalView[]
+  joinsOnServer: number
+}

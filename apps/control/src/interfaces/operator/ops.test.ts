@@ -68,6 +68,13 @@ function recordingApi(calls: Array<[string, ...unknown[]]>) {
     }
   return createOpsApi({
     token: 'operator-token',
+    joins: {
+      list: record('joins.list', []),
+      detail: record('joins.detail', {}),
+      find: record('joins.find', {}),
+      signals: record('signals.list', []),
+      closeSignal: record('signals.close', {}),
+    } as unknown as OpsApiOptions['joins'],
     accountQueries: {
       list: record('accounts.list', { total: 1, accounts: [detail] }),
       get: record('accounts.get', detail),

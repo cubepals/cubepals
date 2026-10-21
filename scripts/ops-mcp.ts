@@ -10,7 +10,7 @@
  *
  * One tool for each `scripts/ops.ts` command: accounts, a server's life, its console, identity,
  * mods and players pages, Browse and its allowlist, the platform switches, uploaded jars' malware
- * checks, and production's health.
+ * checks, joins and their signals, and production's health.
  * Each calls the same `/ops/v1` route the command does, and answers with the API's JSON. Tools that
  * can't be undone, or take something away from a player, say so first in their description, and
  * take a `confirm` that names what they act on again (`lib/operator-inputs.ts`): nothing is called
@@ -494,6 +494,45 @@ tool(
     if (a.confirm !== a.sha512) throw new Error('Not done: confirm is not the jar’s sha512.')
     return ['POST', `/jar-checks/${a.sha512}/release`]
   },
+)
+
+// ─── Joins ──────────────────────────────────────────────────────────────────────────────────────
+
+const moment = Line.describe('An ISO moment')
+tool(
+  'joins_list',
+  'Joins, the newest first: each with its server, player, address, how it reached the server, when each step came and how it ended.',
+  {
+    server: Line.optional().describe('A server’s id, or its address’s slug'),
+    player: player.optional(),
+    address: Line.optional().describe('A whole address, or its first label'),
+    since: moment.optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+  },
+  (a) => ['GET', `/joins${query(a)}`],
+  read,
+)
+tool(
+  'join_get',
+  'One join with what explains it: every step with its time, the start its wake asked for step by step, the signals raised on it, and how often the player joined that server. By the join’s id, or a player’s join nearest a moment, or their latest.',
+  {
+    join: z.uuid().optional().describe('The join’s id, as joins_list gives it'),
+    player: player.optional(),
+    at: moment.optional(),
+  },
+  (a) => {
+    if (a.join !== undefined) return ['GET', `/joins/${a.join}`]
+    if (a.player === undefined) throw new Error('Not done: name a join, or a player.')
+    return ['GET', `/joins/find${query({ player: a.player, at: a.at })}`]
+  },
+  read,
+)
+tool(
+  'signals_list',
+  'The signals still open, oldest first: what looked wrong in joins, wakes and servers, each with its figure and limit. With since, those closed since then too.',
+  { since: moment.optional() },
+  (a) => ['GET', `/signals${query({ since: a.since })}`],
+  read,
 )
 
 // ─── Health ─────────────────────────────────────────────────────────────────────────────────────
