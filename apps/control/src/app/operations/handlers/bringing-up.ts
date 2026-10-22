@@ -15,12 +15,12 @@ import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { aside, inFull, PermanentFailure } from '../../errors.ts'
 import type { AccessPolicy } from '../../policy/access-policy.ts'
 import { RuntimeFull, type RuntimeHandle, type RuntimeSpec, runtimeKey } from '../../ports/runtime.ts'
-import { runsOf } from '../../revisions/caps.ts'
 import { switchNeverBooted, switchUnstarted } from '../../runtimes/persistence.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import type { RuntimePlacement } from '../../runtimes/service.ts'
 import { heldStorage } from '../../servers/kept-storage.ts'
 import { loadRevision, lockServer, type RuntimeBinding, saveHandle } from '../../servers/persistence.ts'
+import { desiredRuns } from '../../servers/revision-reads.ts'
 import type { DesiredRuntime, RuntimeSpecs } from '../../servers/specs.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { clearPresence, closeInterval, openInterval } from '../../servers/usage.ts'
@@ -361,7 +361,7 @@ export function bringingUp(deps: {
           await closeInterval(tx, server.id, new Date())
           const decision = await deps.policy.check(tx, locked.ownerId, {
             kind: 'restart_server',
-            runs: runsOf(locked.memoryTier, await loadRevision(tx, locked.desiredRevisionId)),
+            runs: await desiredRuns(tx, locked),
           })
           if (decision.ok) await transitions.outcome(tx, locked, { type: 'restarting' })
           else {

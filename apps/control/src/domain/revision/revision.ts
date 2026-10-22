@@ -179,7 +179,20 @@ export type RevisionChange =
   | { field: 'files'; added: string[]; removed: string[]; changed: string[] }
 
 /** What differs from one revision to the next, in the order a person would read it. */
-export function describeChanges(from: RevisionDraft, to: RevisionDraft): RevisionChange[] {
+/**
+ * What `describeChanges` reads of a revision, so a page comparing many need not load them whole:
+ * mods by identity, a pack by name, and files by `content` that may be a digest of the text, as
+ * two files are told apart by comparing it.
+ */
+export type ChangeFacts = Pick<RevisionDraft, 'gameVersion' | 'loader' | 'loaderVersion' | 'settings'> & {
+  modpack: Pick<PinnedModpack, 'catalog' | 'versionId' | 'name' | 'versionLabel'> | null
+  mods: Array<
+    Pick<PinnedMod, 'source' | 'name' | 'loaders'> & { artifact: Pick<PinnedMod['artifact'], 'sha512'> }
+  >
+  files: Array<Pick<CarriedFile, 'path' | 'content'>>
+}
+
+export function describeChanges(from: ChangeFacts, to: ChangeFacts): RevisionChange[] {
   const changes: RevisionChange[] = []
   if (from.gameVersion !== to.gameVersion)
     changes.push({ field: 'gameVersion', from: from.gameVersion, to: to.gameVersion })
@@ -199,7 +212,7 @@ export function describeChanges(from: RevisionDraft, to: RevisionDraft): Revisio
   for (const key of keys)
     if (settingOf(from.settings, key) !== settingOf(to.settings, key))
       changes.push({ field: key, from: settingOf(from.settings, key), to: settingOf(to.settings, key) })
-  const identity = ({ source }: PinnedMod) =>
+  const identity = ({ source }: Pick<PinnedMod, 'source'>) =>
     'uploadId' in source ? `upload:${source.uploadId}` : `${source.catalog}:${source.projectId}`
   const before = new Map(from.mods.map((m) => [identity(m), m]))
   const after = new Map(to.mods.map((m) => [identity(m), m]))
@@ -234,7 +247,7 @@ export function changeKind(changes: readonly RevisionChange[], sameWorld: boolea
   return sameWorld ? 'settings' : 'world'
 }
 
-const packLabel = (pack: PinnedModpack | null): string | null =>
+const packLabel = (pack: Pick<PinnedModpack, 'name' | 'versionLabel'> | null): string | null =>
   pack === null ? null : `${pack.name} ${pack.versionLabel}`
 
 type Booted = Pick<RevisionDraft, 'gameVersion' | 'loader'> &
@@ -267,7 +280,10 @@ export function rewritesWorld(from: Booted, to: Booted): boolean {
  */
 export function runsOnPaper(
   revision: Pick<RevisionDraft, 'loader'> &
-    Partial<Pick<RevisionDraft, 'modpack' | 'loaderVersion' | 'mods'>>,
+    Partial<Pick<RevisionDraft, 'loaderVersion'>> & {
+      modpack?: unknown
+      mods?: ReadonlyArray<Pick<PinnedMod, 'loaders'>>
+    },
 ): boolean {
   return (
     revision.loader === 'vanilla' &&

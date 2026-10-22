@@ -10,8 +10,8 @@
 import type { RemovalReason } from '@blockly/contracts'
 import { type Queryable, schema } from '@blockly/db'
 import { and, desc, eq, gte, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
-import { grimFor } from '../compat/service.ts'
-import { loadRevision } from '../servers/persistence.ts'
+import { GRIM_FIELDS, grimFor } from '../compat/service.ts'
+import { loadRevisionFields } from '../servers/revision-reads.ts'
 import { effective, STRANGERS_TEMPLATES, type StopCheatersRow } from './rule.ts'
 
 const rows = schema.serverStopCheaters
@@ -108,7 +108,8 @@ export async function anyStopCheatersOn(q: Queryable): Promise<boolean> {
       ),
     )
   for (const { revisionId } of candidates)
-    if ((await grimFor(q, await loadRevision(q, revisionId))).kind === 'placed') return true
+    if ((await grimFor(q, await loadRevisionFields(q, revisionId, GRIM_FIELDS))).kind === 'placed')
+      return true
   return false
 }
 

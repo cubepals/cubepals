@@ -123,7 +123,9 @@ export class CompatPlugins {
  */
 export async function compatFor(
   q: Queryable,
-  revision: Pick<ServerRevision, 'gameVersion' | 'loader' | 'mods' | 'modpack' | 'settings'>,
+  revision: Pick<ServerRevision, 'gameVersion' | 'loader' | 'modpack' | 'settings'> & {
+    mods: ReadonlyArray<Pick<PinnedMod, 'source' | 'name'>>
+  },
 ): Promise<PinnedMod[]> {
   if (revision.loader !== 'paper' || revision.modpack !== null) return []
   const wanted = COMPAT[otherVersionsOf(revision.settings)].filter((id) => !runsPlugin(revision.mods, id))
@@ -140,6 +142,16 @@ export async function compatFor(
   return pins.map((mod) => ({ ...mod, dir: PLUGINS_DIR }))
 }
 
+/** What `grimFor` reads of a revision. */
+export const GRIM_FIELDS = [
+  'gameVersion',
+  'loader',
+  'loaderVersion',
+  'mods',
+  'modpack',
+] as const satisfies ReadonlyArray<keyof ServerRevision>
+export type GrimFacts = Pick<ServerRevision, (typeof GRIM_FIELDS)[number]>
+
 /**
  * Grim as a start places it where Stop cheaters is on: on Paper, or plain Minecraft run on Paper,
  * playing no pack, as pinned for its release. None where the owner runs Grim as their own plugin:
@@ -148,7 +160,7 @@ export async function compatFor(
  */
 export async function grimFor(
   q: Queryable,
-  revision: Pick<ServerRevision, 'gameVersion' | 'loader' | 'loaderVersion' | 'mods' | 'modpack'>,
+  revision: GrimFacts,
 ): Promise<{ kind: 'placed'; jar: PinnedMod | null } | { kind: 'release' } | { kind: 'modded' }> {
   if (!runsGrim(revision)) return { kind: 'modded' }
   if (runsOwnGrim(revision.mods)) return { kind: 'placed', jar: null }
@@ -175,7 +187,9 @@ export const projectsOf = (placed: readonly PinnedMod[]): string[] =>
  */
 export async function joinsNow(
   q: Queryable,
-  revision: ServerRevision,
+  revision: Pick<ServerRevision, 'id' | 'gameVersion' | 'loader' | 'modpack' | 'settings'> & {
+    mods: ReadonlyArray<Pick<PinnedMod, 'source' | 'name'>>
+  },
   run: { running: boolean; applied: Pick<AppliedConfigJson, 'revisionId' | 'compat'> | null },
 ): Promise<{ joins: ReturnType<typeof joinsOf> }> {
   const booted = run.running && run.applied?.revisionId === revision.id

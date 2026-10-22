@@ -28,7 +28,8 @@ import type { PackContents } from '../packs/contents.ts'
 import type { PackService } from '../packs/service.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { ModCatalog } from '../ports/catalog.ts'
-import { findServer, loadRevision } from '../servers/persistence.ts'
+import { findServer } from '../servers/persistence.ts'
+import { loadRevisionFields } from '../servers/revision-reads.ts'
 import { checksOf, quarantinedOf, refusalOf } from './jar-check-records.ts'
 import { packView } from './pack.ts'
 import { identity, type ModPlan } from './service.ts'
@@ -85,7 +86,12 @@ export class ModQueries {
   /** The mods the server should run: its desired revision's, each with whether it was taken down. */
   async list(actor: Actor, serverId: string): Promise<ModsView> {
     const server = authorize(actor, await findServer(this.#db, serverId))
-    const revision = await loadRevision(this.#db, server.desiredRevisionId)
+    const revision = await loadRevisionFields(this.#db, server.desiredRevisionId, [
+      'gameVersion',
+      'loader',
+      'mods',
+      'modpack',
+    ])
     const revoked = new Set((await revokedIn(this.#db, revision.mods)).map(identity))
     const players = new Set(forPlayers(revision.mods, revision.loader).map(identity))
     const malware = await quarantinedOf(
@@ -130,7 +136,9 @@ export class ModQueries {
    * The newer pack a server may move to. A curated one is offered its review's next published
    * release and nothing else, never whatever its catalog published since; a world never moves back.
    */
-  async #packUpdate(revision: ServerRevision): Promise<PackUpdateView | null> {
+  async #packUpdate(
+    revision: Pick<ServerRevision, 'modpack' | 'gameVersion'>,
+  ): Promise<PackUpdateView | null> {
     if (revision.modpack?.curated === undefined) return this.#packs.updateFor(revision)
     const newer = await this.#curation.newerFor(revision.modpack)
     if (newer === null) return null
@@ -163,7 +171,7 @@ export class ModQueries {
    */
   async uploads(actor: Actor, serverId: string): Promise<ModUploadView[]> {
     const server = authorize(actor, await findServer(this.#db, serverId))
-    const revision = await loadRevision(this.#db, server.desiredRevisionId)
+    const revision = await loadRevisionFields(this.#db, server.desiredRevisionId, ['gameVersion', 'loader'])
     // As in `list`: a vanilla world is judged by the type it would move to.
     const loaders = catalogLoadersFor(
       (revision.loader === 'vanilla' ? loaderForMods(revision.gameVersion) : null) ?? revision.loader,

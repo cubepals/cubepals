@@ -26,8 +26,8 @@ import { FUNNEL, noteOnce } from '../insight/record.ts'
 import { listingsOfOwner } from '../listings/persistence.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { Mailer } from '../ports/platform.ts'
-import { runsOf } from '../revisions/caps.ts'
-import { listOwned, listUnpurged, loadRevision } from '../servers/persistence.ts'
+import { listOwned, listUnpurged } from '../servers/persistence.ts'
+import { desiredRuns } from '../servers/revision-reads.ts'
 import type { MinecraftServerService } from '../servers/service.ts'
 import { openIntervalStart } from '../servers/usage.ts'
 import { tuning } from '../tuning.ts'
@@ -547,8 +547,7 @@ export class AccountService {
     // such as a modpack after Plus ends. Stopped, never changed: it starts again with the plan.
     const runnable = new Map<string, boolean>()
     for (const server of running) {
-      const revision = await loadRevision(this.#db, server.desiredRevisionId)
-      runnable.set(server.id, planGap(allowed, runsOf(server.memoryTier, revision), 'startable') === null)
+      runnable.set(server.id, planGap(allowed, await desiredRuns(this.#db, server), 'startable') === null)
     }
     const unrunnable = running.filter((s) => !runnable.get(s.id))
     const fitting = running.filter((s) => runnable.get(s.id))

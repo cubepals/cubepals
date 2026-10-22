@@ -12,7 +12,8 @@ import { loadStanding } from '../accounts/persistence.ts'
 import type { Actor } from '../actor.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { loadListing } from '../listings/persistence.ts'
-import { findByInvite, loadRevision } from '../servers/persistence.ts'
+import { findByInvite } from '../servers/persistence.ts'
+import { loadRevisionFields } from '../servers/revision-reads.ts'
 import { tuning } from '../tuning.ts'
 
 /** Whoever holds the link acts for themselves, not for the owner. */
@@ -49,7 +50,8 @@ export class SharingService {
     // and it isn't counted: the link's hour is for letting people in, and they are in. A server
     // that checks accounts knows a name whatever its capitals, as Minecraft does; one that doesn't
     // treats each spelling as a player of its own.
-    const { onlineMode } = (await loadRevision(this.#db, server.desiredRevisionId)).settings
+    const { onlineMode } = (await loadRevisionFields(this.#db, server.desiredRevisionId, ['settings']))
+      .settings
     const listed = access.record.entries.find(
       (entry) =>
         entry.list === 'whitelist' &&

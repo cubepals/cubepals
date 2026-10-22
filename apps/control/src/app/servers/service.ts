@@ -24,7 +24,6 @@ import type { EventBus } from '../ports/events.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { LoaderBuilds } from '../ports/loaders.ts'
 import type { PlayAddressing, RegionCatalog } from '../ports/platform.ts'
-import { runsOf } from '../revisions/caps.ts'
 import { draftOf } from '../revisions/service.ts'
 import { loadRules } from '../runtimes/persistence.ts'
 import type { RuntimePlacement } from '../runtimes/service.ts'
@@ -52,6 +51,7 @@ import {
   slugAvailable,
   slugClaimable,
 } from './persistence.ts'
+import { desiredRuns } from './revision-reads.ts'
 import { TEMPORARY_HOURS } from './temporary.ts'
 import type { ServerTransitions } from './transitions.ts'
 import { UpkeepNow } from './upkeep-now.ts'
@@ -680,7 +680,7 @@ const PLATFORM: Actor = { kind: 'system', reason: 'reconcile' }
  */
 const booting = async (tx: Tx, server: MinecraftServer, kind: 'start_server' | 'restart_server') => ({
   kind,
-  runs: runsOf(server.memoryTier, await loadRevision(tx, server.desiredRevisionId)),
+  runs: await desiredRuns(tx, server),
   serverId: server.id,
 })
 
