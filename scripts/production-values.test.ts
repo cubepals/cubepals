@@ -94,7 +94,6 @@ describe('the values file', () => {
       [
         'AUTH_SECRET',
         'EDGE_TOKEN',
-        'FLOODGATE_KEY',
         'OPERATOR_TOKEN',
         'REALTIME_TICKET_SECRET',
         'RUNTIME_SECRETS_KEY',
@@ -102,7 +101,6 @@ describe('the values file', () => {
       ].sort(),
     )
     expect(made.RUNTIME_SECRETS_KEY).toMatch(/^1:.{40,}$/)
-    expect(Buffer.from(made.FLOODGATE_KEY ?? '', 'base64')).toHaveLength(16)
     expect(parseValues(valuesFile({})).AUTH_SECRET).not.toBe(made.AUTH_SECRET)
 
     const kept = { ADMIN_EMAILS: 'owner@example.test', ADMIN_ALERT_EMAILS: 'ops@example.test' }
@@ -356,6 +354,28 @@ describe('join records', () => {
     ])
     expect(problemsOf({ ...complete, SIGNALS: '{"slowJoin":"fast"}' }, example).wrong).toEqual([
       'SIGNALS is not in the shape the signals job reads.',
+    ])
+  })
+})
+
+describe('the Bedrock key', () => {
+  const key = Buffer.alloc(16, 3).toString('base64')
+
+  test('left out, apply runs and writes no secret: no server is given Floodgate', () => {
+    expect(complete).not.toHaveProperty('FLOODGATE_KEY')
+    expect(problemsOf(complete, example)).toEqual({ missing: [], wrong: [], bucketFirst: false })
+    expect(JSON.parse(terraformEnv(complete).TF_VAR_secrets ?? '{}')).not.toHaveProperty('FLOODGATE_KEY')
+  })
+
+  test('given, it is a secret; 16 bytes as base64 is the only shape the control plane reads', () => {
+    expect(problemsOf({ ...complete, FLOODGATE_KEY: key }, example).wrong).toEqual([])
+    expect(
+      JSON.parse(terraformEnv({ ...complete, FLOODGATE_KEY: key }).TF_VAR_secrets ?? '{}'),
+    ).toMatchObject({
+      FLOODGATE_KEY: key,
+    })
+    expect(problemsOf({ ...complete, FLOODGATE_KEY: 'not-a-key' }, example).wrong).toEqual([
+      'FLOODGATE_KEY is not 16 bytes as base64.',
     ])
   })
 })

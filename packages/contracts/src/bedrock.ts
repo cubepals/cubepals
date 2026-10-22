@@ -46,5 +46,8 @@ export const shownName = (player: { uuid: string; name: string }): string =>
   isBedrockUuid(player.uuid) ? bedrockDisplayName(player.name) : player.name
 
 /** Whether Bedrock players can join a server now: its choice is on and its other versions leave room for it. */
-export const letsBedrockIn = (server: { bedrock: BedrockView | null }): boolean =>
-  server.bedrock?.on === true && !server.bedrock.needsOtherVersions
+export const letsBedrockIn = (server: { bedrock: BedrockView | null | false }): boolean =>
+  server.bedrock !== null &&
+  server.bedrock !== false &&
+  server.bedrock.on &&
+  !server.bedrock.needsOtherVersions

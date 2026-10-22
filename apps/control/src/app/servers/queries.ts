@@ -53,7 +53,6 @@ import { loadControls, loadStanding } from '../accounts/persistence.ts'
 import { playToday, todayView } from '../accounts/play-today.ts'
 import { playTotal, totalView } from '../accounts/play-total.ts'
 import { type Actor, authorize } from '../actor.ts'
-import { joinsNow } from '../compat/service.ts'
 import type { PackCuration } from '../curation/service.ts'
 import { type Shown, shownOf } from '../edge/routed.ts'
 import { cameByView } from '../edge/turned-away.ts'
@@ -651,7 +650,7 @@ export class ServerQueries {
         : null,
       notLoaded: [...server.notLoaded],
       gameVersion: revision.gameVersion,
-      ...(await joinsNow(this.#db, revision, { running, applied })),
+      ...(await this.#setups.compat.joins(this.#db, revision, { running, applied })),
       loader: revision.loader,
       loaderVersion: revision.loaderVersion,
       maxPlayers: revision.settings.maxPlayers,

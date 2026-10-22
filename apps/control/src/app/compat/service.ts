@@ -58,6 +58,14 @@ export class CompatPlugins {
   readonly #mods: Pick<ModService, 'resolveNew'>
   readonly #geyser: GeyserMc | null
 
+  /**
+   * Which players' games a server takes and whether Bedrock players join it (`joinsNow`). A
+   * deployment without the Bedrock key lets none in, and no page says anything of them.
+   */
+  joins(q: Queryable, revision: Parameters<typeof joinsNow>[1], run: Parameters<typeof joinsNow>[2]) {
+    return joinsNow(q, revision, { ...run, offered: this.#geyser !== null })
+  }
+
   constructor(deps: { db: Db; mods: Pick<ModService, 'resolveNew'>; geyser: GeyserMc | null }) {
     this.#db = deps.db
     this.#mods = deps.mods
@@ -243,13 +251,18 @@ export async function joinsNow(
   revision: Pick<ServerRevision, 'id' | 'gameVersion' | 'loader' | 'modpack' | 'settings'> & {
     mods: ReadonlyArray<Pick<PinnedMod, 'source' | 'name'>>
   },
-  run: { running: boolean; applied: Pick<AppliedConfigJson, 'revisionId' | 'compat'> | null },
-): Promise<{ joins: ReturnType<typeof joinsOf>; bedrock: BedrockView | null }> {
+  run: {
+    running: boolean
+    applied: Pick<AppliedConfigJson, 'revisionId' | 'compat'> | null
+    /** Whether the deployment lets Bedrock players in; without it a page says nothing of them. */
+    offered?: boolean
+  },
+): Promise<{ joins: ReturnType<typeof joinsOf>; bedrock: BedrockView | null | false }> {
   const booted = run.running && run.applied?.revisionId === revision.id
   const placed = booted ? (run.applied?.compat ?? []) : projectsOf(await compatFor(q, revision))
   // Whether it lets Bedrock players in, as its choice says, and whether its other versions stop them.
   const chooses = revision.loader === 'paper' && revision.modpack === null
   const on = bedrockOf(revision.settings)
   const bedrock = chooses ? { on, needsOtherVersions: on && !bedrockWanted(revision) } : null
-  return { joins: joinsOf(revision, placed), bedrock }
+  return { joins: joinsOf(revision, placed), bedrock: run.offered === true ? bedrock : false }
 }

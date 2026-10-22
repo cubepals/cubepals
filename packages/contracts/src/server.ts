@@ -698,9 +698,9 @@ export interface ServerView {
   settings: ServerSettingsView
   /**
    * Whether it lets Bedrock players in (phones, tablets and Windows): on or off on a Paper server
-   * that plays no pack, null on any other, where they can't join.
+   * that plays no pack, null on any other, where they can't join; false where the deployment lets none in.
    */
-  bedrock: BedrockView | null
+  bedrock: BedrockView | null | false
   partySize: PartySize
   /** Stopped with changes that apply when it next starts. */
   pendingRestart: boolean

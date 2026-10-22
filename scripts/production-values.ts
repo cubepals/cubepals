@@ -240,8 +240,14 @@ export const VALUES: Value[] = [
   /** The operators' API's bearer (scripts/ops.ts, scripts/production-check.ts). */
   { name: 'OPERATOR_TOKEN', goes: ['secret'], where: '', generate: random },
   { name: 'RUNTIME_SECRETS_KEY', goes: ['secret'], where: '', generate: () => `1:${random()}` },
-  /** Shared with the edge: 16 bytes as base64, the key Floodgate takes Bedrock players in with. */
-  { name: 'FLOODGATE_KEY', goes: ['secret'], where: '', generate: () => randomBytes(16).toString('base64') },
+  {
+    name: 'FLOODGATE_KEY',
+    goes: ['secret'],
+    where:
+      'only to let Bedrock players in: 16 random bytes as base64, the same key the edge uses (docs/configuration.md); left out, no server is given Floodgate and no page mentions Bedrock joining',
+    optional: 'bedrock',
+    shape: (value) => (/^[A-Za-z0-9+/]{22}==$/.test(value) ? null : 'is not 16 bytes as base64'),
+  },
   {
     name: 'ADMIN_EMAILS',
     goes: ['operator'],

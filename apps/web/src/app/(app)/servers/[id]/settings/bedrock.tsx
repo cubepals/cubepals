@@ -21,6 +21,7 @@ import { ConfirmChange, changeable, useChanged, whatHappens } from './shared'
 
 export function BedrockSetting({ view }: { view: ServerView }) {
   const bedrock = view.bedrock
+  if (bedrock === false) return null
   if (bedrock === null)
     return (
       <FormSection
