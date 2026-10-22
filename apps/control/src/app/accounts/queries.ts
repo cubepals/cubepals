@@ -90,6 +90,8 @@ export interface AccountOverview {
       planKey: string
       pastDueUntil: Date | null
       endedFor: EndedFor | null
+      /** A smaller plan it moves to at the end of the period paid for; null: it stays. */
+      movesTo: { plan: string; at: Date } | null
     } | null
     /**
      * The plan paid for a year at once: when the first year still to run starts, when the last
@@ -240,6 +242,7 @@ export class AccountQueries {
                     ? new Date(subscription.pastDueAt.getTime() + PAST_DUE_GRACE_MS)
                     : null,
                 endedFor: await endedFor(this.#db, subscription),
+                movesTo: movesOf(subscription),
               },
         year: await yearView(this.#db, userId, now),
         gifted,
@@ -368,6 +371,10 @@ export class AccountQueries {
     return { planUntil: null, planRenews: false }
   }
 }
+
+/** The smaller plan a subscription moves to at the end of its period, and when; null if it stays. */
+const movesOf = (s: { movesToPlan: string | null; movesAt: Date | null }) =>
+  s.movesToPlan !== null && s.movesAt !== null ? { plan: s.movesToPlan, at: s.movesAt } : null
 
 /**
  * Every plan as the pricing page shows it, from the plan table itself: the page reads

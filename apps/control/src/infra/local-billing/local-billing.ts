@@ -124,6 +124,15 @@ export class LocalBilling implements BillingProvider {
     return true
   }
 
+  /** The move is the record `BillingService` writes; here nothing else applies it, and a plan runs its year. */
+  async moveToPlan(externalSubscriptionId: string): Promise<{ appliesAt: Date }> {
+    const [row] = await this.#db
+      .select({ end: schema.billingSubscriptions.currentPeriodEnd })
+      .from(schema.billingSubscriptions)
+      .where(eq(schema.billingSubscriptions.externalSubscriptionId, externalSubscriptionId))
+    return { appliesAt: row?.end ?? new Date() }
+  }
+
   /** Its record of who pays is `billing_subscriptions` itself, so the cancel is written there. */
   async stopRenewing(externalSubscriptionId: string): Promise<void> {
     await this.#db

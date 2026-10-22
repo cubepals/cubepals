@@ -4,10 +4,10 @@
 
 /**
  * How a request to Polar fails, for PolarBilling: Polar out of reach as BillingUnavailable, and a
- * refusal in Polar's own words. The requests themselves are PolarBilling's.
+ * refusal in Polar's own words; and the few requests and choices too small for a file of their own.
  */
 import { PolarClientError, PolarError, PolarRateLimitError } from '@polar-sh/sdk'
-import type { models } from '@polar-sh/sdk/2026-10'
+import type { createPolar, models } from '@polar-sh/sdk/2026-10'
 import { BillingUnavailable } from '../../app/ports/optional.ts'
 
 /**
@@ -49,4 +49,23 @@ export function largestPaying<T extends { product_id: string }>(
 ): T | undefined {
   const rank = (subscription: T) => products.indexOf(subscription.product_id)
   return subscriptions.filter((each) => rank(each) >= 0).sort((a, b) => rank(b) - rank(a))[0]
+}
+
+/**
+ * A subscription changed to another plan's product when the period paid for ends
+ * (`proration_behavior: next_period`): it keeps its own until then, and Polar holds the change as
+ * the subscription's pending update, whose `applies_at` says when. No plan's product, no change.
+ */
+export async function moveSubscription(
+  polar: ReturnType<typeof createPolar>,
+  product: string | undefined,
+  id: string,
+): Promise<{ appliesAt: Date }> {
+  if (product === undefined) throw new Error('No Polar product sells that plan')
+  const held = await call('moving a subscription to another plan', () =>
+    polar.subscriptions.update(id, { product_id: product, proration_behavior: 'next_period' }),
+  )
+  const at = held.pending_update?.applies_at ?? held.current_period_end
+  if (!at) throw new Error('Polar took the move but says no day it applies')
+  return { appliesAt: new Date(at) }
 }

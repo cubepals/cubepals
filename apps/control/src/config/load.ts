@@ -224,6 +224,11 @@ function billingFrom(env: NodeJS.ProcessEnv): { billing: unknown; local: { notes
           products: smallestFirst(record(env.POLAR_PRODUCTS)),
         }
       : null
+  const unsold = polar === null ? [] : PAID_PLANS.filter((plan) => !(plan in polar.products))
+  for (const plan of unsold)
+    console.warn(
+      `billing: no Polar product sells the ${plan} plan, so it is not for sale. Add it to POLAR_PRODUCTS.`,
+    )
   if (!isLocalDeployment(env)) return { billing: env.POLAR_ACCESS_TOKEN ? polar : null, local: null }
   const { billing, note } = localBilling(polar, env.LOCAL_BILLING)
   return { billing, local: { notes: [note, ...localNotes(env)] } }

@@ -23,7 +23,7 @@ import {
 import { discountBody, discountOf } from './polar-discounts.ts'
 import { GIFT_METADATA, giftOf } from './polar-gifts.ts'
 import type { Fields } from './polar-models.ts'
-import { call, largestPaying, refusal } from './polar-requests.ts'
+import { call, largestPaying, moveSubscription, refusal } from './polar-requests.ts'
 
 /**
  * Polar through its official TypeScript SDK, pinned to API version 2026-10 for requests and for
@@ -345,13 +345,10 @@ export class PolarBilling implements BillingProvider {
     return checkout.url
   }
 
-  sells(planKey: string): boolean {
-    return Object.hasOwn(this.#products, planKey)
-  }
+  sells = (planKey: string) => Object.hasOwn(this.#products, planKey)
+  moveToPlan = (id: string, planKey: string) => moveSubscription(this.#polar, this.#products[planKey], id)
 
-  async sellsYear(planKey: string): Promise<boolean> {
-    return (await this.#yearProduct(planKey)) !== undefined
-  }
+  sellsYear = async (planKey: string) => (await this.#yearProduct(planKey)) !== undefined
 
   /** The one-time product that sells a year of the plan, if there is one. */
   async #yearProduct(planKey: string): Promise<string | undefined> {

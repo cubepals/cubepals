@@ -55,7 +55,13 @@ export const YEAR = '0f6f9a52-3b8c-4d0e-9a51-1f0ab2a1c004'
 /** The one-time product friends chip in to a server with, found by its metadata. */
 export const CHIP_IN = '0f6f9a52-3b8c-4d0e-9a51-1f0ab2a1c005'
 
+/** The rest of a pending update Polar holds. */
+const PENDING = { id: 'pending-update', created_at: '2026-10-01T00:00:00Z', modified_at: null, seats: null }
+
 const list = (items: unknown[]): Answer => ({ status: 200, body: page(items) })
+
+/** What is asked of a subscription: a cancel at the period's end, or another product from the next. */
+type SubscriptionChange = models.SubscriptionUpdateBase & { cancel_at_period_end?: boolean }
 
 export class PolarWorld {
   readonly polar = new PolarStandIn()
@@ -72,7 +78,7 @@ export class PolarWorld {
   /** Refunds asked for, as their request bodies. */
   readonly refunds: models.RefundCreate[] = []
   /** Changes asked of a subscription (a cancel at the period's end), as their request bodies, by id. */
-  readonly updates: Array<{ id: string; body: models.SubscriptionUpdate }> = []
+  readonly updates: Array<{ id: string; body: SubscriptionChange }> = []
 
   get h(): Harness {
     if (this.#h === null) throw new Error('PolarWorld is not started')
@@ -138,10 +144,23 @@ export class PolarWorld {
 
   /** A change to a subscription kept as it was asked, and answered with the subscription as it is now. */
   #update(sub: string, body: string): Answer {
-    const asked = JSON.parse(body) as models.SubscriptionUpdate
+    const asked = JSON.parse(body) as SubscriptionChange
     this.updates.push({ id: sub, body: asked })
     const held = this.subscriptions.get(sub) ?? subscription(sub, { status: 'active', ended_at: null })
-    const updated = { ...held, ...asked } as models.Subscription
+    // A product change for the next period is held as the pending update, as Polar answers it.
+    const later = asked.product_id != null && asked.proration_behavior === 'next_period'
+    const updated = {
+      ...held,
+      ...(later
+        ? {
+            pending_update: {
+              ...PENDING,
+              applies_at: held.current_period_end ?? '',
+              product_id: asked.product_id,
+            },
+          }
+        : asked),
+    } as models.Subscription
     this.subscriptions.set(sub, updated)
     return { status: 200, body: updated }
   }

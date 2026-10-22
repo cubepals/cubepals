@@ -666,10 +666,6 @@ async function main(): Promise<void> {
   const suspend = new SuspendSwitch({ db, fallback: fly?.suspend ?? null })
   const provider = await runtimesFor(config, pool, db, profiles, suspend)
   const capabilities = capabilitiesFor(config, db)
-  for (const plan of supportOf(capabilities).unsoldPlans)
-    console.warn(
-      `billing: no Polar product sells the ${plan} plan, so it is not for sale. Add it to POLAR_PRODUCTS.`,
-    )
   const stranded = await archivesMissing(db, capabilities)
   if (stranded !== null) console.warn(stranded)
 

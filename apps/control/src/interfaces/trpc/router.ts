@@ -595,6 +595,7 @@ const account = router({
                 ...billed,
                 periodEnd: billed.periodEnd?.toISOString() ?? null,
                 pastDueUntil: billed.pastDueUntil?.toISOString() ?? null,
+                movesTo: billed.movesTo && { ...billed.movesTo, at: billed.movesTo.at.toISOString() },
               },
         year:
           overview.plan.year === null
@@ -649,6 +650,10 @@ const billing = router({
       ...(input.next === undefined ? {} : { next: input.next }),
     }),
   ),
+  /** A smaller plan from the month's end, the plan now staying until then (`plan-moves.ts`). */
+  moveTo: authedProcedure
+    .input(z.object({ plan: z.string().trim().min(1).max(40) }))
+    .mutation(({ ctx, input }) => ctx.services.billing.moveToSmaller(ctx.actor, input.plan)),
   portal: authedProcedure.mutation(({ ctx }) => ctx.services.billing.customerPortal(ctx.actor)),
   /** What is owed and can no longer be retried, paid at once (`BillingService.settleBalance`). */
   settle: authedProcedure.mutation(({ ctx }) => ctx.services.billing.settleBalance(ctx.actor)),

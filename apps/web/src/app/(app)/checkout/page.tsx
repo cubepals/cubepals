@@ -38,13 +38,14 @@ function Checkout() {
   const ask = checkoutOf(params)
   const trpc = useTRPC()
   const overview = useQuery(trpc.account.overview.queryOptions())
+  const listed = useQuery(trpc.billing.plans.queryOptions())
   if (ask === null)
     return (
       <Note tone="info">
         Choose a plan on the <Link href="/pricing">Pricing</Link> page.
       </Note>
     )
-  if (overview.isPending) return <Skeleton width={240} height={36} />
+  if (overview.isPending || listed.isPending) return <Skeleton width={240} height={36} />
   if (overview.isError)
     return <LoadFailed error={messageOf(overview.error)} onRetry={() => overview.refetch()} />
   const billing = overview.data.features.find((f) => f.feature === 'billing')
@@ -57,6 +58,13 @@ function Checkout() {
       <Note tone="info">
         Your next year of {name} is paid for already. <Link href="/account">Your account</Link> says when it
         ends.
+      </Note>
+    )
+  // A plan nothing sells here yet: said, with where it will be, never an error.
+  if (listed.data?.find((p) => p.key === ask.plan)?.available === false)
+    return (
+      <Note tone="info">
+        {name} isn’t available yet. <Link href="/pricing">Pricing</Link> has the plans you can get now.
       </Note>
     )
   if (!year && plan.key === ask.plan)

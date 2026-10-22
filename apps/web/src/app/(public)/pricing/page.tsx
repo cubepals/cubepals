@@ -74,6 +74,7 @@ export default async function PricingPage() {
                 name={plan.name}
                 paid={plan.monthlyPriceCents > 0}
                 yearlyCents={plan.yearlyPriceCents}
+                available={plan.available}
               />
             }
           />

@@ -31,6 +31,7 @@ import { ctaMark, planMark, seenMark } from '../../(public)/steps'
 import { FreeHoursUsed } from '../free-hours-used'
 import { OutForToday } from '../out-for-today'
 import { PlusOffer } from '../plus-offer'
+import { planAction } from './plan-action'
 
 /** The signed-in person's plan: what it allows, what they use of it, and upgrading or managing it. */
 export default function AccountPage() {
@@ -501,6 +502,8 @@ function planSummary(overview: AccountOverviewView): string {
   const paying = billed !== null && billed.status !== 'ended' && billed.planKey === key
   if (paying && billed.pastDueUntil)
     return `Your last payment didn’t go through. Update your card in Manage billing by ${dayOf(billed.pastDueUntil)} to keep ${title(key)}.`
+  if (paying && billed.movesTo)
+    return `${title(billed.movesTo.plan)} from ${dayOf(billed.movesTo.at)}. You keep ${title(key)} until then.`
   if (paying && billed.periodEnd && !billed.cancelAtPeriodEnd && giftNext !== null)
     return `Renews on ${dayOf(billed.periodEnd)}. ${giftWaits(giftNext)}`
   if (paying && billed.periodEnd)
@@ -679,21 +682,7 @@ function Plans({ overview }: { overview: AccountOverviewView }) {
             // Only the player's own plan is dark, so the eye lands on theirs.
             solid={plan.key === overview.plan.key}
             mark={seenMark(`plan_${plan.key}`)}
-            action={
-              // A smaller plan isn't bought over a larger one: ending the larger comes first.
-              sells &&
-              plan.monthlyPriceCents > 0 &&
-              plan.key !== overview.plan.key &&
-              plan.monthlyPriceCents > overview.entitlements.monthlyPriceCents ? (
-                <Button
-                  variant="primary"
-                  href={checkoutHref({ plan: plan.key, reason: 'account' })}
-                  {...planMark(plan.key, 'month')}
-                >
-                  Get {plan.name}
-                </Button>
-              ) : undefined
-            }
+            action={planAction(plan, overview, sells)}
           />
         ))}
       </div>

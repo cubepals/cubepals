@@ -221,6 +221,11 @@ export interface BillingProvider {
    */
   stopRenewing(externalSubscriptionId: string): Promise<void>
   /**
+   * The subscription changes to another plan's product when the period paid for ends, and keeps
+   * its own until then (Plus to Core). Answers when it applies.
+   */
+  moveToPlan(externalSubscriptionId: string, planKey: string): Promise<{ appliesAt: Date }>
+  /**
    * The subscription ends now, and nothing more is charged for it: its first month was withdrawn,
    * or its renewal is still unpaid when the plan's grace runs out. One ended already stays ended.
    */

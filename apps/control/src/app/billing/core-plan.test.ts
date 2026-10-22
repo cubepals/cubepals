@@ -11,7 +11,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { TERMS_VERSION } from '@blockly/contracts'
-import { HOUR_MS } from '@blockly/contracts/durations'
+import { DAY_MS, HOUR_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
 import { hasDatabase } from '../../testing/harness.ts'
@@ -23,6 +23,7 @@ import {
   orderItem,
   PLUS_PRODUCT,
   stateChanged,
+  subscription,
 } from '../../testing/polar.ts'
 import { PolarWorld } from '../../testing/polar-world.ts'
 import { loadStanding } from '../accounts/persistence.ts'
@@ -157,14 +158,14 @@ describe.skipIf(!hasDatabase)('buying Core and Plus over it', () => {
     })
   })
 
-  test('Core is not bought over Plus: ending Plus comes first, and nothing is paid twice', async () => {
+  test('Core is not bought over Plus: the move to it is from the account, and nothing is paid twice', async () => {
     const owner = await w.h.user('Cy')
     await pays(owner, [{ sub: randomUUID(), product: PLUS_PRODUCT, at: '2026-10-01T00:00:00Z' }])
     const asked = w.polar.requests.length
     const refused = await refusal(w.h.app.billing.startCheckout(owner, 'core'))
     expect(refused).toMatchObject({ code: 'invalid_choice' })
     expect(refused?.message).toBe(
-      'You have Plus now. To move to Core, end Plus in Manage billing first. Your servers and worlds stay as they are.',
+      'You have Plus now. Move to Core from your account: it starts when the month you paid for ends, and Plus stays until then.',
     )
     expect(w.polar.requests.slice(asked).some((request) => request.path.startsWith('/v1/checkouts'))).toBe(
       false,
@@ -303,5 +304,65 @@ describe.skipIf(!hasDatabase)('Core’s extra play', () => {
       )
     // Five hours played: one included, two allowed and counted, the rest not billed.
     expect(row?.accruedMilli).toBe(2000)
+  }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('moving from Plus to Core at the month’s end', () => {
+  test('Plus stays until Polar applies the move, then Core’s limits apply and nothing is lost', async () => {
+    const owner = await w.h.user('Ida')
+    const sub = randomUUID()
+    const end = new Date(Date.now() + 10 * DAY_MS)
+    await pays(owner, [{ sub, product: PLUS_PRODUCT, at: '2026-10-01T00:00:00Z' }])
+    w.subscriptions.set(
+      sub,
+      subscription(sub, {
+        status: 'active',
+        current_period_end: end.toISOString(),
+        ended_at: null,
+        canceled_at: null,
+      }),
+    )
+    const modded = await create(owner, { name: 'Modded', loader: 'fabric', gameVersion: '26.2' })
+    await w.h.until(modded.id, 'running')
+
+    // Core over Plus is not a second payment: the checkout points at the move.
+    expect(await refusal(w.h.app.billing.startCheckout(owner, 'core'))).toMatchObject({
+      code: 'invalid_choice',
+      message: expect.stringContaining('Move to Core from your account'),
+    })
+    expect(await w.h.app.billing.moveToSmaller(owner, 'core')).toEqual({ plan: 'core', at: end })
+    // Asked of Polar as the next period's change; the subscription keeps its product until then.
+    expect(w.updates).toContainEqual({
+      id: sub,
+      body: { product_id: CORE_PRODUCT, proration_behavior: 'next_period' },
+    })
+    expect((await loadStanding(w.h.db, owner.userId)).plan).toBe('plus')
+    const { plan } = await w.h.app.accountQueries.overview(owner)
+    expect(plan).toMatchObject({
+      key: 'plus',
+      billed: { planKey: 'plus', movesTo: { plan: 'core', at: end } },
+    })
+    expect((await w.h.server(modded.id)).lifecycle.status).toBe('running')
+    expect((await w.audited(owner, 'billing.plan_move_scheduled'))[0]).toMatchObject({
+      from: 'plus',
+      to: 'core',
+    })
+
+    // Nothing else moves: not a larger plan, not a free account, not twice over a cancel.
+    expect(await refusal(w.h.app.billing.moveToSmaller(owner, 'plus'))).toMatchObject({
+      code: 'invalid_choice',
+    })
+    const free = await w.h.user('Jon')
+    expect(await refusal(w.h.app.billing.moveToSmaller(free, 'core'))).toMatchObject({
+      code: 'invalid_choice',
+    })
+
+    // The month ends and Polar says the same subscription is Core's now.
+    await pays(owner, [{ sub, product: CORE_PRODUCT, at: '2026-10-01T00:00:00Z' }])
+    expect((await loadStanding(w.h.db, owner.userId)).plan).toBe('core')
+    const after = await w.h.app.accountQueries.overview(owner)
+    expect(after.plan.billed).toMatchObject({ planKey: 'core', movesTo: null })
+    // As on any move down: the modded server stops whole and says which plan runs it.
+    expect((await w.h.until(modded.id, 'stopped')).lifecycle.stopReason).toBe('entitlement')
   }, 60_000)
 })

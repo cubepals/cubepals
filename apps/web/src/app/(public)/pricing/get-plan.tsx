@@ -22,17 +22,26 @@ export function GetPlan({
   name,
   paid,
   yearlyCents = null,
+  available = true,
 }: {
   plan: string
   name: string
   paid: boolean
   yearlyCents?: number | null
+  /** False for a paid plan nothing sells here yet. */
+  available?: boolean
 }) {
   const signedIn = useSignedIn()
   if (!paid)
     return (
       <Button variant="outline" href={behindSignUp(signedIn, '/servers/new')} {...ctaMark('pricing_create')}>
         Create a server
+      </Button>
+    )
+  if (!available)
+    return (
+      <Button variant="outline" disabled>
+        Not available yet
       </Button>
     )
   const href = (term: 'month' | 'year') =>

@@ -257,6 +257,8 @@ export interface AccountOverviewView {
       pastDueUntil: string | null
       /** Cubepals ended it itself: its first month was withdrawn, or its renewal stayed unpaid. */
       endedFor: 'withdrawal' | 'unpaid' | null
+      /** A smaller plan it moves to at the end of the period paid for; null: it stays. */
+      movesTo: { plan: string; at: string } | null
     } | null
     /**
      * The plan paid for a year at once: when the first year still to run starts (later than now

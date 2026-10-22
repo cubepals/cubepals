@@ -108,13 +108,19 @@ export function PlansSaid({
                   </li>
                 ))}
               </ul>
-              <Link
-                href={isPaid ? getPlan(plan.key) : create}
-                className={`bl-btn ${isPaid ? 'bl-btn--lit' : ''} ${styles.action}`}
-                {...(isPaid ? planMark(plan.key, 'month') : ctaMark('plans_create'))}
-              >
-                {isPaid ? `Get ${plan.name}` : 'Create a server'}
-              </Link>
+              {isPaid && !plan.available ? (
+                <span className={`bl-btn ${styles.action}`} aria-disabled="true">
+                  Not available yet
+                </span>
+              ) : (
+                <Link
+                  href={isPaid ? getPlan(plan.key) : create}
+                  className={`bl-btn ${isPaid ? 'bl-btn--lit' : ''} ${styles.action}`}
+                  {...(isPaid ? planMark(plan.key, 'month') : ctaMark('plans_create'))}
+                >
+                  {isPaid ? `Get ${plan.name}` : 'Create a server'}
+                </Link>
+              )}
             </section>
           )
         })}

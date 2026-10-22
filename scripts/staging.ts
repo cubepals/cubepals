@@ -48,6 +48,7 @@ import { createPolar } from '@polar-sh/sdk/2026-10'
 import { GAME_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { pointRecord } from './lib/cloudflare-dns.ts'
 import { afterStop, asleep, awake, type Machine, serve } from './lib/control-wake.ts'
+import { stagingProducts } from './lib/polar-products.ts'
 import { DATABASE_APP, databaseKind, ensureDatabase, startDatabase } from './lib/staging-database.ts'
 import { buildWorker, deployWorker } from './lib/web-worker.ts'
 import { allowing, type Bucket, changeCors, sharePreviewKeys } from './preview-uploads.ts'
@@ -320,7 +321,7 @@ const webAnswers = () =>
 
 async function up(): Promise<void> {
   if (!process.env.POLAR_PRODUCTS)
-    throw new Error('POLAR_PRODUCTS (core:<sandbox product id>,plus:<sandbox product id>) is not in .env')
+    throw new Error('POLAR_PRODUCTS (plus:<sandbox product id>) is not in .env')
   const state = loadState()
   saveState(state)
 
@@ -467,7 +468,7 @@ async function up(): Promise<void> {
     POLAR_ACCESS_TOKEN: process.env.POLAR_ACCESS_TOKEN ?? '',
     POLAR_WEBHOOK_SECRET: state.webhook.secret,
     POLAR_SERVER: 'sandbox',
-    POLAR_PRODUCTS: process.env.POLAR_PRODUCTS,
+    POLAR_PRODUCTS: stagingProducts(),
   }
   const lines = Object.entries(config)
     .map(([name, value]) => `${name}=${value}`)
@@ -759,7 +760,7 @@ function env(): void {
     FLY_API_TOKEN: state.operatorToken,
     POLAR_SERVER: 'sandbox',
     POLAR_ACCESS_TOKEN: process.env.POLAR_ACCESS_TOKEN ?? '',
-    POLAR_PRODUCTS: process.env.POLAR_PRODUCTS ?? '',
+    POLAR_PRODUCTS: stagingProducts(),
     STAGING_STATE: JSON.stringify(state),
   }
   const file = 'local/staging/cloud.env'

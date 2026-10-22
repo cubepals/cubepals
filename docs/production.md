@@ -173,7 +173,9 @@ before it, and the apps it didn't change stay as they are; it says which. A seco
 goes back one deploy further. The `production` branch moves back to the commit that is live
 again. The website goes to the Worker version that was live before, at once and without a build
 (`wrangler rollback`; any of the last 100 versions). A rollback doesn't undo a migration or a
-secret: fix forward, then deploy again.
+secret: fix forward, then deploy again. A release that sells Core has `core:<id>` in
+`POLAR_PRODUCTS`, which older code refuses as not a paid plan: remove `core:<id>` from
+`POLAR_PRODUCTS` before rolling back past the Core release, and put it back after going forward.
 
 Until the first `apply` or `hotfix` built with this tagging has run, the images the Fly apps run
 don't say which deploy made them, so a bare `rollback` or `rollback fly` leaves every Fly app as

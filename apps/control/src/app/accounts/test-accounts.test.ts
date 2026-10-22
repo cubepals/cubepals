@@ -31,6 +31,7 @@ const billing: BillingProvider = {
   sells: () => true,
   sellsYear: async () => false,
   stopRenewing: async () => {},
+  moveToPlan: async () => ({ appliesAt: new Date() }),
   endSubscription: async () => {},
   refundedAsWithdrawal: async () => false,
   portalUrl: async () => 'https://billing.test/portal',

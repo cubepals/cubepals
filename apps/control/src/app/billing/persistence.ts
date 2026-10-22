@@ -73,6 +73,9 @@ export interface SubscriptionRecord {
   cancelAtPeriodEnd: boolean
   pastDueAt: Date | null
   canceledAt: Date | null
+  /** A smaller plan it moves to at `movesAt`, the end of the period paid for; null: it stays. */
+  movesToPlan: string | null
+  movesAt: Date | null
   createdAt: Date
   updatedAt: Date
 }
@@ -204,7 +207,12 @@ export async function latestSubscription(q: Queryable, userId: string): Promise<
  */
 export async function saveSubscription(
   tx: Tx,
-  subscription: Omit<SubscriptionRecord, 'updatedAt' | 'pastDueAt' | 'createdAt'> & { createdAt?: Date },
+  subscription: Omit<
+    SubscriptionRecord,
+    'updatedAt' | 'pastDueAt' | 'createdAt' | 'movesToPlan' | 'movesAt'
+  > & {
+    createdAt?: Date
+  },
 ): Promise<void> {
   const made = subscription.createdAt === undefined ? {} : { createdAt: subscription.createdAt }
   // Set to end: when the provider says, or else the first Blockly heard of it. Renewing: never.
@@ -227,9 +235,31 @@ export async function saveSubscription(
             ? sql`coalesce(${subscriptions.canceledAt}, ${canceledAt})`
             : canceledAt,
         pastDueAt: null,
+        // A move to a smaller plan is done once the provider says the subscription is on it.
+        movesToPlan: sql`case when ${subscriptions.movesToPlan} = ${subscription.planKey} then null else ${subscriptions.movesToPlan} end`,
+        movesAt: sql`case when ${subscriptions.movesToPlan} = ${subscription.planKey} then null else ${subscriptions.movesAt} end`,
         updatedAt: new Date(),
       },
     })
+}
+
+/** A move to a smaller plan at `at`, the end of the period paid for, as the provider took it. */
+export async function recordMove(
+  q: Queryable,
+  provider: string,
+  externalSubscriptionId: string,
+  plan: string,
+  at: Date,
+): Promise<void> {
+  await q
+    .update(subscriptions)
+    .set({ movesToPlan: plan, movesAt: at, updatedAt: new Date() })
+    .where(
+      and(
+        eq(subscriptions.provider, provider),
+        eq(subscriptions.externalSubscriptionId, externalSubscriptionId),
+      ),
+    )
 }
 
 const otherOpen = (userId: string, provider: string, keep: string | null) =>

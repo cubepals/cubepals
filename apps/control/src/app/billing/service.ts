@@ -53,7 +53,7 @@ import {
   UNPAID_ORDER,
   untoldAbout,
 } from './persistence.ts'
-import { requireNotSmaller, smallerRenewing } from './plan-moves.ts'
+import { moveToSmaller, requireNotSmaller, smallerRenewing } from './plan-moves.ts'
 import {
   accountsWithYearsEnded,
   markReminded,
@@ -250,6 +250,14 @@ export class BillingService {
       data: { cents: owed.cents, totalCents: owed.totalCents, orders: owed.orders },
     })
     return { url }
+  }
+
+  /** Plus down to Core and the like: at the month's end, Plus until then (`plan-moves.ts`). */
+  async moveToSmaller(actor: Actor, planKey: string): Promise<{ plan: string; at: Date }> {
+    const user = await this.#person(actor)
+    await this.#db.transaction((tx) => this.#policy.require(tx, user.id, { kind: 'billing' }))
+    const billing = requireCapability(this.#caps, 'billing')
+    return moveToSmaller(this.#db, billing, user.id, planKey, actor, (call) => this.#reach(call))
   }
 
   /** The provider's page for changing or cancelling a subscription. */
