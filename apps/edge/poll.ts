@@ -58,6 +58,11 @@ export class RoutesPoll {
     return true
   }
 
+  /** Whether a list has been held whole since this agent started. */
+  heldOnce(): boolean {
+    return this.#version !== null
+  }
+
   /** Whether the list held was the control plane's newest when it was last asked, within `withinMs`. */
   current(withinMs = 5_000): boolean {
     return this.#currentAt !== null && Date.now() - this.#currentAt <= withinMs

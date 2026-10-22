@@ -50,12 +50,15 @@ async function drainState(app: string, machine: Machine, env: NodeJS.ProcessEnv)
         if (answer.ok) return (await answer.json()) as { players: number; routesCurrent: boolean }
         throw new Error(`answered ${answer.status}`)
       } catch (error) {
-        if (attempt >= 5) throw error
+        if (attempt >= 15) throw error
         await clock.sleep(1_000)
       }
     }
   } finally {
+    // Gone before the next question reuses the port.
+    const exited = new Promise((resolve) => proxy.once('exit', resolve))
     proxy.kill()
+    await exited
   }
 }
 
@@ -117,7 +120,8 @@ export async function rollEdgeApp(
     },
     othersReady: async (region) => {
       const others = machinesOf(app, env).filter((m) => m.region !== region)
-      for (const other of others) if ((await drainState(app, other, env))?.routesCurrent === true) return true
+      for (const other of others)
+        if ((await drainState(app, other, env).catch(() => null))?.routesCurrent === true) return true
       return false
     },
     uncordon: async (region) => fly('machine', 'uncordon', machineIn(region).id, '--app', app),

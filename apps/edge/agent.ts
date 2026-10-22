@@ -700,6 +700,7 @@ let bedrock: Bedrock | null = null
 if (WEB_ORIGIN && PLAY_DOMAINS.length > 0)
   browserRedirect({
     bedrock: () => bedrock?.status() ?? null,
+    holdsRoutes: () => poll.heldOnce(),
     port: Number(env('BROWSER_PORT', '8080')),
     domains: PLAY_DOMAINS,
     web: WEB_ORIGIN,

@@ -180,3 +180,16 @@ test('the drain status is not served here: its path is redirected like any other
   expect(answer).toContain(`location: ${WEB}/server/arcade\r\n`)
   expect(answer).not.toContain('players')
 })
+
+test('the edge’s health fails until it holds routes, then stays well', async () => {
+  let held = false
+  const server = browserRedirect({ ...PAGES, port: 0, hostname: '127.0.0.1', holdsRoutes: () => held })
+  try {
+    const at = (path: string) => fetch(`http://127.0.0.1:${server.port}${path}`, { redirect: 'manual' })
+    expect((await at('/_health')).status).toBe(503)
+    held = true
+    expect((await at('/_health')).status).toBe(204)
+  } finally {
+    await server.stop(true)
+  }
+})
