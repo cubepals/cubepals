@@ -45,7 +45,11 @@ async function drainState(app: string, machine: Machine, env: NodeJS.ProcessEnv)
       try {
         const answer = await fetch(`http://127.0.0.1:${PROXY_PORT}/_health/drain`, {
           signal: AbortSignal.timeout(5_000),
+          redirect: 'manual',
         })
+        // An edge from before it counted its players redirects a path it doesn't know, as it does
+        // a browser; the first roll onto this one.
+        if (answer.status === 404 || (answer.status >= 300 && answer.status < 400)) return null
         if (answer.ok) return (await answer.json()) as { players: number; routesCurrent: boolean }
         throw new Error(`answered ${answer.status}`)
       } catch (error) {
@@ -69,18 +73,17 @@ export function buildEdgeImage(
   label: string,
   env: NodeJS.ProcessEnv,
 ): string {
-  const built = spawnSync(
-    'fly',
-    ['deploy', '.', '--build-only', '--push', '--remote-only', '--dockerfile', dockerfile].concat([
-      '--image-label',
-      label,
-      '--config',
-      config,
-      '--app',
-      app,
-    ]),
-    { stdio: 'inherit', env },
-  )
+  const args = ['deploy', '.', '--build-only', '--push', '--remote-only', '--dockerfile', dockerfile].concat([
+    '--image-label',
+    label,
+    '--config',
+    config,
+    '--app',
+    app,
+  ])
+  let built = spawnSync('fly', args, { stdio: 'inherit', env })
+  // Depot's builders speak gRPC over TLS, which an intercepting proxy breaks; Fly's own come in over WireGuard.
+  if (built.status !== 0) built = spawnSync('fly', [...args, '--depot=false'], { stdio: 'inherit', env })
   if (built.status !== 0) throw new Error(`fly deploy --build-only stopped (exit ${built.status})`)
   return `registry.fly.io/${app}:${label}`
 }
@@ -109,7 +112,11 @@ export async function rollEdgeApp(
   }
   const steps: RegionSteps = {
     cordon: async (region) => fly('machine', 'cordon', machineIn(region).id, '--app', app),
-    players: async (region) => (await drainState(app, machineIn(region), env)).players,
+    players: async (region) => {
+      const state = await drainState(app, machineIn(region), env)
+      if (state === null) say(`${region}: this edge doesn’t count its players yet, so none is waited for`)
+      return state?.players ?? 0
+    },
     deploy: async (region) => {
       try {
         const args = ['deploy', '--image', image, '--config', config, '--app', app]
@@ -123,7 +130,7 @@ export async function rollEdgeApp(
         })
       }
     },
-    ready: async (region) => (await drainState(app, machineIn(region), env)).routesCurrent,
+    ready: async (region) => (await drainState(app, machineIn(region), env))?.routesCurrent === true,
   }
   return rollEdge(regions, steps, say, clock)
 }
