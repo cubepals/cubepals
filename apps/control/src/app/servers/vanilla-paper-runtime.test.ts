@@ -11,8 +11,8 @@ import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { defaultSettings, type ServerRevision } from '../domain/revision/revision.ts'
-import { PROXY_ENV, toRuntimeSpec } from './runtime-spec.ts'
+import { defaultSettings, type ServerRevision } from '../../domain/revision/revision.ts'
+import { PROXY_ENV, toRuntimeSpec } from '../../minecraft/runtime-spec.ts'
 
 const revision: ServerRevision = {
   id: 'r',
