@@ -64,6 +64,7 @@ import {
   write,
 } from './lib/load-report.ts'
 import { type Api, people } from './lib/people.ts'
+import { privateDatabaseUrl } from './lib/staging-database.ts'
 
 const WEB = 'https://staging.cubepals.com'
 const MAILPIT = 'http://127.0.0.1:18025'
@@ -79,9 +80,9 @@ const option = (name: string, fallback: string) => {
 }
 
 const state = JSON.parse(process.env.STAGING_STATE ?? '{}') as { authSecret?: string }
-const databaseUrl = process.env.STAGING_DATABASE_URL ?? ''
+const databaseUrl = state.authSecret ? privateDatabaseUrl({ ...state, authSecret: state.authSecret }) : ''
 if (!state.authSecret || databaseUrl === '') {
-  say('No staging to test: STAGING_STATE and STAGING_DATABASE_URL are needed.')
+  say('No staging to test: STAGING_STATE is needed, and STAGING_DATABASE_URL with STAGING_DATABASE=supabase.')
   process.exit(2)
 }
 // The staging check's accounts' domain, on staging's sign-up allowlist (staging.ts derives it).

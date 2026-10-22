@@ -25,8 +25,9 @@
  * Google sign-in; only STAGING_DEVELOPERS, the admin and the staging check's own domain can make
  * an account there (SIGNUP_ALLOWLIST). The API and realtime stay on fly.dev,
  * and players join `<server>.play.staging.cubepals.com`, whose wildcard records point at the edge's
- * own addresses. Postgres is Supabase's staging project, through
- * its session pooler (STAGING_DATABASE_URL), and mail goes to a Mailpit that only the org's private network reaches (`fly proxy 8025 -a bly-staging-mail`). Archives go to a
+ * own addresses. Postgres is a machine of its own on Fly, started first and stopped last
+ * (lib/staging-database.ts; STAGING_DATABASE=supabase brings back Supabase's staging project,
+ * through its session pooler, STAGING_DATABASE_URL), and mail goes to a Mailpit that only the org's private network reaches (`fly proxy 8025 -a bly-staging-mail`). Archives go to a
  * Tigris bucket. Payments are Polar's sandbox: POLAR_ACCESS_TOKEN and POLAR_PRODUCTS come from
  * .env, and `up` adds the webhook that `down` removes. What `up` generates (passwords, keys, the
  * bucket's credentials) stays in local/staging/state.json, or comes from STAGING_STATE where there
@@ -47,6 +48,7 @@ import { createPolar } from '@polar-sh/sdk/2026-10'
 import { GAME_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { pointRecord } from './lib/cloudflare-dns.ts'
 import { afterStop, asleep, awake, type Machine, serve } from './lib/control-wake.ts'
+import { DATABASE_APP, databaseKind, ensureDatabase, startDatabase } from './lib/staging-database.ts'
 import { buildWorker, deployWorker } from './lib/web-worker.ts'
 import { allowing, type Bucket, changeCors, sharePreviewKeys } from './preview-uploads.ts'
 import { previewOrigins, stagingCloudflare, stagingSite } from './staging-website.ts'
@@ -80,11 +82,6 @@ const STATE_FILE = 'local/staging/state.json'
 const ADMIN_EMAIL = 'admin@staging.blockly.test'
 /** Staging's own secrets on a maintainer's machine; a cloud environment has them in its settings. */
 const SECRETS_FILE = 'local/secrets/staging.env'
-/**
- * Supabase's root, which its pooler's certificate chains to, as the control image carries it.
- * node-postgres verifies the server against it (`sslmode=verify-full`).
- */
-const DATABASE_CA = '/app/packages/db/certs/supabase-root-2021.crt'
 
 /** What `fly certs show --json` says a certificate still needs, as far as it is read here. */
 interface PlayCertificate {
@@ -94,6 +91,8 @@ interface PlayCertificate {
 interface State {
   /** Supabase's session pooler, `sslmode=require`: from STAGING_DATABASE_URL, which replaces it. */
   databaseUrl?: string
+  /** The Fly database's: derived from the auth secret when missing, never printed. */
+  databasePassword?: string
   authSecret: string
   ticketSecret: string
   edgeToken: string
@@ -332,13 +331,8 @@ async function up(): Promise<void> {
     }
 
   say('database')
-  state.databaseUrl = process.env.STAGING_DATABASE_URL ?? state.databaseUrl
-  if (!state.databaseUrl)
-    throw new Error(`STAGING_DATABASE_URL (Supabase staging, session pooler) is not in ${SECRETS_FILE}`)
+  const database = await ensureDatabase(state, ORG, REGION, say)
   saveState(state)
-  const database = new URL(state.databaseUrl)
-  database.searchParams.set('sslmode', 'verify-full')
-  database.searchParams.set('sslrootcert', DATABASE_CA)
 
   say('mail')
   if (machinesOf(APP.mail).length === 0)
@@ -431,9 +425,9 @@ async function up(): Promise<void> {
   // Everything the control plane reads (docs/configuration.md), for both apps that run it.
   const config: Record<string, string> = {
     DEPLOYMENT_ID: 'staging',
-    DATABASE_URL: database.toString(),
+    DATABASE_URL: database.url,
     // Three processes (api, worker, realtime), each with two pools and a listener, share the
-    // pooler's limit with a deploy's migrations and the machines a rolling deploy overlaps.
+    // database's connections with a deploy's migrations and the machines a rolling deploy overlaps.
     DATABASE_POOL_MAX: '5',
     WEB_CANONICAL_ORIGIN: WEB,
     ...(await signIn(state)),
@@ -451,7 +445,7 @@ async function up(): Promise<void> {
     FLY_API_TOKEN: state.flyToken,
     FLY_MACHINE_LIMIT: '50',
     // The control app runs two machines (api, worker); every other app one.
-    FLY_PLATFORM_MACHINES: String(PLATFORM.length + 1),
+    FLY_PLATFORM_MACHINES: String(PLATFORM.length + 1 + database.machines),
     ARTIFACTS_RUNTIME_FACING_URL: origin(APP.control),
     ARTIFACTS_MIRROR: 'true',
     ARCHIVE_S3_ENDPOINT: state.bucket.endpoint,
@@ -581,6 +575,8 @@ function status(): void {
   say(`web:   ${WEB}`)
   if (apps.includes(APP.edge)) say(`play:  <server>.${PLAY_DOMAIN}`)
   say(`mail:  fly proxy ${MAIL_PORT} -a ${APP.mail}, then http://localhost:${MAIL_PORT}`)
+  if (apps.includes(DATABASE_APP))
+    say(`db:    ${DATABASE_APP}.flycast, private: fly proxy 5432 -a ${DATABASE_APP}`)
   say(`admin: sign up as ${ADMIN_EMAIL}; the confirmation arrives in that mail catcher`)
 }
 
@@ -656,7 +652,7 @@ async function empty(bucket: Bucket): Promise<void> {
 
 /** Stopped first, what could start a server again; then the servers; then what they all need. */
 const STOP_FIRST: readonly string[] = [APP.control, APP.realtime, APP.edge]
-const STOP_LAST: readonly string[] = [APP.mail]
+const STOP_LAST: readonly string[] = [APP.mail, DATABASE_APP]
 const stopOrder = (app: string): number =>
   STOP_FIRST.includes(app)
     ? STOP_FIRST.indexOf(app)
@@ -707,7 +703,9 @@ function startStopped(app: string): void {
 /** The platform started again, the mail catcher first. Servers start when someone plays, as ever. */
 async function start(): Promise<void> {
   const apps = new Set(appsInOrg())
-  const missing = PLATFORM.filter((app) => !apps.has(app))
+  const missing = [...PLATFORM, ...(databaseKind() === 'fly' ? [DATABASE_APP] : [])].filter(
+    (app) => !apps.has(app),
+  )
   if (missing.length > 0) {
     say(`Not made yet: ${missing.join(', ')}. Run up first.`)
     process.exitCode = 1
@@ -721,6 +719,8 @@ async function start(): Promise<void> {
     await up()
   } else {
     // Running for as long as staging is, as control.toml has it: the edge reaches it privately.
+    // The database first, and waited for: the control plane's migrations and queries need it.
+    await startDatabase(say)
     for (const id of serve(APP.control, (services) => awake(services))) say(`  ${APP.control} ${id} stays up`)
     for (const app of [APP.mail, APP.control, APP.realtime, APP.edge]) startStopped(app)
     await until('the web app and the API answer', 300, webAnswers)

@@ -23,8 +23,8 @@
  *   … --as <email>:<password>               an account made before, for a staging full of sign-ups
  *
  * The free plan runs no pack, and no mods, so `--pack`, `--mods`, and the plain run before its mods,
- * put its account on Plus through staging's database, as staging.ts reaches it (STAGING_DATABASE_URL,
- * else the state's); every run marks its account as Cubepals' own test account the same way.
+ * put its account on Plus through staging's database, as staging.ts reaches it (a `fly proxy` to
+ * the database on Fly, or STAGING_DATABASE_URL when STAGING_DATABASE=supabase); every run marks its account as Cubepals' own test account the same way.
  * `--rest` reaches it the same way: it moves the server's last play back past the Free plan's days
  * and runs the store sweep at once, as the staging check does, then checks with flyctl that a rested
  * server holds no machine or volume, and a woken one holds one of each. Its extra world is
@@ -43,7 +43,7 @@ import { MAIL_PORT } from '@blockly/contracts/local'
 import { SQL } from 'bun'
 import { runScheduledNow } from '../apps/control/src/infra/pg/jobs.ts'
 import { type Api, people } from './lib/people.ts'
-import { verifiedAgainstSupabase } from './lib/supabase-root.ts'
+import { reachDatabase } from './lib/staging-database.ts'
 
 const WEB = 'https://staging.cubepals.com'
 const KEEP = process.argv.includes('--keep')
@@ -76,10 +76,10 @@ const state = JSON.parse(
   existsSync('local/staging/state.json')
     ? readFileSync('local/staging/state.json', 'utf8')
     : (process.env.STAGING_STATE ?? '{}'),
-) as { databaseUrl: string; authSecret: string }
-/** Staging's database, Supabase's session pooler, as staging.ts reaches it. */
-const databaseUrl = process.env.STAGING_DATABASE_URL ?? state.databaseUrl
-const database = () => new SQL(databaseUrl)
+) as { databaseUrl?: string; databasePassword?: string; authSecret: string }
+/** Staging's database as staging.ts reaches it, through a proxy when it is on Fly. */
+const reached = await reachDatabase(state)
+const database = () => new SQL(reached.url)
 // Staging lets only its allowlist make accounts; the staging check's domain is on it, and private
 // to its state (staging.ts derives the same one).
 const ACCOUNT = process.argv.includes('--as') ? process.argv[process.argv.indexOf('--as') + 1] : undefined
@@ -397,7 +397,7 @@ if (PACK) {
   )
   // Two weeks without play, as far as the sweep can tell, and the sweep now rather than on its hour.
   await sql`update minecraft_servers set last_active_at = now() - interval '15 days' where id = ${server.id}`
-  await runScheduledNow(verifiedAgainstSupabase(databaseUrl), 'store-sweep')
+  await runScheduledNow(reached.nodeUrl, 'store-sweep')
   await timed(
     'rest',
     async () => undefined,

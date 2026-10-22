@@ -54,7 +54,7 @@ import { Progress, type StepResult, seconds, summaryTable } from './lib/check-pr
 import { type Edge, join, login } from './lib/minecraft.ts'
 import { ownGameJoins } from './lib/own-game-joins.ts'
 import { type Api, people } from './lib/people.ts'
-import { verifiedAgainstSupabase } from './lib/supabase-root.ts'
+import { reachDatabase } from './lib/staging-database.ts'
 
 const WEB = 'https://staging.cubepals.com'
 const STATE_FILE = 'local/staging/state.json'
@@ -81,6 +81,7 @@ const state = JSON.parse(
 ) as {
   /** Supabase's session pooler, as `up` kept it; a cloud environment has it as STAGING_DATABASE_URL. */
   databaseUrl?: string
+  databasePassword?: string
   authSecret: string
   bucket: { name: string; endpoint: string; region: string; accessKeyId: string; secretAccessKey: string }
 }
@@ -105,8 +106,8 @@ async function fly(args: string[]): Promise<string> {
   return out
 }
 
-const databaseUrl = state.databaseUrl ?? process.env.STAGING_DATABASE_URL ?? ''
-const database = new SQL(databaseUrl)
+const reached = await reachDatabase(state)
+const database = new SQL(reached.url)
 /** One statement against staging's database; what it answers is the first column of its first row. */
 async function sql(statement: string): Promise<string> {
   const [row] = (await database.unsafe(statement).values()) as unknown[][]
@@ -142,8 +143,7 @@ const serverApps = async () =>
   )
 
 /** Asks for a sweep now rather than on its schedule: a worker takes it within the minute. */
-const sweep = (job: 'purge-sweep' | 'store-sweep') =>
-  runScheduledNow(verifiedAgainstSupabase(databaseUrl), job)
+const sweep = (job: 'purge-sweep' | 'store-sweep') => runScheduledNow(reached.nodeUrl, job)
 
 // ─── The run ─────────────────────────────────────────────────────────────────────────────────
 
