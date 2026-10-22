@@ -29,7 +29,7 @@ export interface Limits {
 /** Which limit refused a connection. */
 export type Refusal = 'address-rate' | 'address-greeting' | 'server-rate' | 'server-open'
 
-class Bucket {
+export class Bucket {
   readonly rate: Rate
   #tokens: number
   #at: number

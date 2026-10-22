@@ -6,7 +6,7 @@
 
 import { afterEach, expect, test } from 'bun:test'
 import { type AddressInfo, connect, createServer, type Server } from 'node:net'
-import { readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
+import { proxyHeader, readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
 import { front, readHandshake, readProxyLine } from './front.ts'
 import { turnAway } from './hold.ts'
 import { Gate, type Limits } from './limits.ts'
@@ -114,6 +114,22 @@ test('what the gate lets in reaches mc-router as it came, after a PROXY header n
   const header = readProxyHeader(received)
   expect(header).toEqual({ source: { address: '203.0.113.7', port: 51234 }, next: 28 })
   expect(Array.from(received.subarray(28))).toEqual(Array.from(join))
+})
+
+test('a join Geyser makes for a Bedrock player is the player’s, and keeps the bytes Floodgate added', async () => {
+  const { port, behind } = await frontDoor(ROOMY, true)
+  // Geyser connects over loopback with a v2 header naming the Bedrock player, and writes their
+  // Floodgate data after the hostname.
+  const join = joinRequest('a.play.test\0floodgate-bytes')
+  const header = proxyHeader({ address: '198.51.100.9', port: 40000 }, { address: '127.0.0.1', port: 25565 })
+  await dial(port, Uint8Array.from([...header, ...join]))
+  await Bun.sleep(50)
+  const received = new Uint8Array(Buffer.from(behind.received[0] ?? '', 'latin1'))
+  const forwarded = readProxyHeader(received)
+  expect(forwarded).toMatchObject({ source: { address: '198.51.100.9', port: 40000 } })
+  expect(Array.from(received.subarray(typeof forwarded === 'object' ? forwarded.next : 0))).toEqual(
+    Array.from(join),
+  )
 })
 
 test('a join from a game the server can’t take is turned away at once, and mc-router never sees it', async () => {

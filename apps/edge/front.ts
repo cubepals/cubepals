@@ -4,7 +4,8 @@
 
 /**
  * The edge's front door: every player's connection arrives here first. It learns who is
- * connecting (from Fly's PROXY header when there is one) and which server they dialled (from the
+ * connecting (from Fly's PROXY header when there is one; from the v2 header of the edge's own Geyser,
+ * which connects over loopback for each Bedrock player, `bedrock.ts`) and which server they dialled (from the
  * handshake), asks the gate (`limits.ts`) whether that server and that address may have another
  * connection, and hands what it lets in to mc-router, with a PROXY protocol v2 header of its own
  * saying who is connecting. mc-router passes that header on to the server, which so sees each
@@ -22,7 +23,12 @@
  */
 
 import { connect, createServer, type Server, type Socket } from 'node:net'
-import { LOCAL_HEADER, proxyHeader, unmapped } from '../../packages/contracts/src/proxy-header.ts'
+import {
+  LOCAL_HEADER,
+  proxyHeader,
+  readProxyHeader,
+  unmapped,
+} from '../../packages/contracts/src/proxy-header.ts'
 import { turnAway } from './hold.ts'
 import type { Gate } from './limits.ts'
 import { hostnameOf, readVarInt } from './notice.ts'
@@ -166,6 +172,8 @@ export function pipe(client: Socket, destination: string, sent: Uint8Array, time
 class Arrival {
   readonly #client: Socket
   readonly #options: FrontOptions
+  /** Whether it connected from this machine: only Geyser does, and its header is believed. */
+  readonly #local: boolean
   #received: Uint8Array = new Uint8Array(0)
   /** Who is connecting; null until the PROXY line says, where one is expected. */
   #source: Source | null = null
@@ -176,15 +184,16 @@ class Arrival {
   constructor(client: Socket, options: FrontOptions) {
     this.#client = client
     this.#options = options
+    this.#local = /^(127\.|::1$|::ffff:127\.)/i.test(client.remoteAddress ?? '')
     client.on('error', () => client.destroy())
     client.setTimeout(GREETING_MS, () => client.destroy())
     client.once('close', () => this.#greeted?.())
-    if (
-      !options.proxied &&
-      !this.#greet({ address: client.remoteAddress ?? '', port: client.remotePort ?? 0 })
-    )
-      return
+    if (!options.proxied && !this.#local && !this.#greet(this.#socketSource())) return
     client.on('data', this.#receive)
+  }
+
+  #socketSource(): Source {
+    return { address: this.#client.remoteAddress ?? '', port: this.#client.remotePort ?? 0 }
   }
 
   /** Counts `source` against its address; false, having closed the connection, when it may not. */
@@ -209,8 +218,24 @@ class Arrival {
     this.#admit(handshake)
   }
 
-  /** Reads the PROXY line; whether it was all there and its address may connect. */
+  /**
+   * Reads who is connecting; whether it was all there and its address may connect. A connection
+   * from this machine may open with a v2 header, which is Geyser saying whose it is.
+   */
   #readSource(): boolean {
+    if (this.#local) {
+      const header = readProxyHeader(this.#received)
+      if (header === 'more') return false
+      if (header === 'bad') {
+        this.#client.destroy()
+        return false
+      }
+      if (header !== 'none') {
+        this.#received = this.#received.slice(header.next)
+        return this.#greet(header.source ?? this.#socketSource())
+      }
+      if (!this.#options.proxied) return this.#greet(this.#socketSource())
+    }
     const read = readProxyLine(this.#received)
     if (read === 'more') return false
     // A connection Fly's proxy made itself says nothing more worth hearing.

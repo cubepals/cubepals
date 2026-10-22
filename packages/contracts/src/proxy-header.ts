@@ -22,6 +22,9 @@ const VERSION_LOCAL = 0x20
 /** The address family in the high nibble, and the transport in the low: TCP over IPv4, over IPv6. */
 const TCP4 = 0x11
 const TCP6 = 0x21
+/** The same families over UDP (the edge's Bedrock relay puts one ahead of each datagram). */
+const UDP4 = 0x12
+const UDP6 = 0x22
 /** The signature, the version and command, the family, and the length of the addresses after them. */
 const FIXED = 16
 
@@ -36,15 +39,17 @@ export const LOCAL_HEADER: Uint8Array = Uint8Array.from([...SIGNATURE, VERSION_L
 
 /**
  * The header for a connection from `source` that arrived at `destination`. Both must be the same
- * family; an IPv4 address written as IPv6 (`::ffff:203.0.113.7`) counts as IPv4.
+ * family; an IPv4 address written as IPv6 (`::ffff:203.0.113.7`) counts as IPv4. `datagram` makes
+ * it the header of a UDP datagram, not of a TCP connection.
  */
-export function proxyHeader(source: Peer, destination: Peer): Uint8Array {
+export function proxyHeader(source: Peer, destination: Peer, datagram = false): Uint8Array {
   const from = unmapped(source.address)
   const to = unmapped(destination.address)
   const six = from.includes(':')
   const addresses = six ? [...ipv6Bytes(from), ...ipv6Bytes(to)] : [...ipv4Bytes(from), ...ipv4Bytes(to)]
   const rest = [...addresses, ...twoBytes(source.port), ...twoBytes(destination.port)]
-  return Uint8Array.from([...SIGNATURE, VERSION_PROXY, six ? TCP6 : TCP4, ...twoBytes(rest.length), ...rest])
+  const family = datagram ? (six ? UDP6 : UDP4) : six ? TCP6 : TCP4
+  return Uint8Array.from([...SIGNATURE, VERSION_PROXY, family, ...twoBytes(rest.length), ...rest])
 }
 
 /**
