@@ -11,6 +11,11 @@ name: Second eye
 # it, so nobody else can spend the subscription. What the reviewer looks for and how it answers
 # is .github/second-eye.md, which is its whole prompt.
 #
+# One pass covers the whole pull request: the turns it may use grow with the number of changed
+# files (TURNS_BASE plus TURNS_PER_FILE each, up to TURNS_MOST), and the answer has no cap on the
+# findings. A later pass is given the findings of the earlier one, read from the data block the
+# comment keeps, and settles each (fixed, gone or still open) before it looks for more.
+#
 # The jobs that can write never meet Claude. The review job holds read-only tokens: it checks out
 # the commit this workflow came from (the default branch, or for a label or a push the pull
 # request itself, which already wrote this file), saves the pull request's description and diff
@@ -116,7 +121,7 @@ jobs:
     if: needs.mark.outputs.review == 'true'
     runs-on: ubuntu-latest
     # The quiet window and the review.
-    timeout-minutes: 45
+    timeout-minutes: 60
     concurrency:
       group: second-eye-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
       cancel-in-progress: true
@@ -126,6 +131,7 @@ jobs:
     outputs:
       review: ${{ steps.claude.outputs.structured_output }}
       reviewed: ${{ steps.pull.outputs.reviewed }}
+      previous: ${{ steps.pull.outputs.previous }}
       model: ${{ steps.model.outputs.model }}
     env:
       PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
@@ -148,6 +154,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
+          TURNS_BASE: 30
+          TURNS_PER_FILE: 4
+          TURNS_MOST: 150
         run: |
           mkdir .second-eye
           gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json number,title,body,files,isCrossRepository,headRefOid,additions,deletions,changedFiles > .second-eye/pr.json
@@ -157,6 +166,23 @@ jobs:
           fi
           gh pr diff "$PR" -R "$GITHUB_REPOSITORY" > .second-eye/pr.diff
           echo "reviewed=$(jq -c '{sha: .headRefOid, files: .changedFiles, additions, deletions}' .second-eye/pr.json)" >> "$GITHUB_OUTPUT"
+          echo "turns=$(jq --argjson base "$TURNS_BASE" --argjson per "$TURNS_PER_FILE" --argjson most "$TURNS_MOST" '[$base + $per * .changedFiles, $most] | min' .second-eye/pr.json)" >> "$GITHUB_OUTPUT"
+          # The findings of the review before this one, from the data block its comment ends with,
+          # cut down to the fields of a finding. A bot's comment only, and never run or trusted.
+          encoded="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR/comments?per_page=100" \
+            | jq -r '[.[][] | select(.user.type == "Bot" and (.body | startswith("<!-- second-eye -->")))] | last | .body // ""' \
+            | grep -o 'second-eye-data:[A-Za-z0-9+/=]*' | tail -n 1 | cut -d: -f2 || true)"
+          if [ -n "$encoded" ] && printf '%s' "$encoded" | base64 -d \
+            | jq -c '{sha: (.sha | tostring), findings: [.findings[]? | {severity, file, line, problem}]}' > .second-eye/previous.json; then
+            echo "previous=$(cat .second-eye/previous.json)" >> "$GITHUB_OUTPUT"
+            before="$(jq -r .sha .second-eye/previous.json)"
+            head="$(jq -r .headRefOid .second-eye/pr.json)"
+            if printf '%s' "$before" | grep -Eq '^[0-9a-f]{40}$' && [ "$before" != "$head" ]; then
+              gh api -H 'Accept: application/vnd.github.diff' "repos/$GITHUB_REPOSITORY/compare/$before...$head" > .second-eye/since.diff || rm -f .second-eye/since.diff
+            fi
+          else
+            rm -f .second-eye/previous.json
+          fi
       - name: Load the rules
         id: rules
         run: |
@@ -173,11 +199,11 @@ jobs:
           github_token: ${{ github.token }}
           prompt: ${{ steps.rules.outputs.prompt }}
           claude_args: >-
-            --max-turns 40
+            --max-turns ${{ steps.pull.outputs.turns }}
             --permission-mode dontAsk
             --allowedTools "Read(./**)"
             --disallowedTools "Bash,Edit,MultiEdit,Write,NotebookEdit,WebFetch,WebSearch,Read(./.git/**),Read(//proc/**),Read(//sys/**),Read(//dev/**),Read(//etc/**),Read(//root/**),Read(//tmp/**),Read(//var/**),Read(//run/**),Read(//opt/**),Read(~/.*),Read(~/.*/**),Read(//home/runner/work/_temp/**),Read(//home/runner/work/_actions/**),Read(//home/runner/runners/**),Read(//home/runner/actions-runner/**)"
-            --json-schema '{"type":"object","additionalProperties":false,"required":["verdict","findings"],"properties":{"verdict":{"enum":["merge","fix first"]},"findings":{"type":"array","maxItems":8,"items":{"type":"object","additionalProperties":false,"required":["severity","file","line","problem","fix","why"],"properties":{"severity":{"enum":["high","medium","low"]},"file":{"type":"string","maxLength":200},"line":{"type":"integer","minimum":1},"problem":{"type":"string","maxLength":300},"fix":{"type":"string","maxLength":300},"why":{"type":"string","maxLength":600}}}}}}'
+            --json-schema '{"type":"object","additionalProperties":false,"required":["verdict","files_reviewed","earlier","findings"],"properties":{"verdict":{"enum":["merge","fix first"]},"files_reviewed":{"type":"integer","minimum":0},"earlier":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["number","status","note"],"properties":{"number":{"type":"integer","minimum":1},"status":{"enum":["fixed","gone"]},"note":{"type":"string","maxLength":200}}}},"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["severity","origin","file","line","problem","fix","why"],"properties":{"severity":{"enum":["high","medium","low"]},"origin":{"enum":["first","open","new","missed"]},"file":{"type":"string","maxLength":200},"line":{"type":"integer","minimum":1},"problem":{"type":"string","maxLength":300},"fix":{"type":"string","maxLength":300},"why":{"type":"string","maxLength":600}}}}}}'
       # The action hides Claude's output. This prints only how long it took, which tools were
       # refused and on what path, and on failure the result's error (a bad token reads "401 OAuth
       # access token is invalid"), each on one line so none is taken as a workflow command.
@@ -241,6 +267,7 @@ jobs:
           COMMENT_AUTHOR: ${{ steps.bot.outputs.app-slug && format('{0}[bot]', steps.bot.outputs.app-slug) || 'github-actions[bot]' }}
           REVIEW: ${{ needs.review.outputs.review }}
           REVIEWED: ${{ needs.review.outputs.reviewed }}
+          PREVIOUS: ${{ needs.review.outputs.previous }}
           MODEL: ${{ needs.review.outputs.model }}
           REPO: ${{ github.repository }}
           PULL: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
