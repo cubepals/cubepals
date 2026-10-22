@@ -8,9 +8,11 @@ import type { AccessEntry, AccessList, PlayerRef } from '../../domain/access/acc
 import { entryKey } from '../../domain/access/access.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
+import type { DeploymentCapabilities } from '../capabilities.ts'
 import { AppError } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
+import type { GeyserMc } from '../ports/geysermc.ts'
 import type { PlayerProfiles } from '../ports/minecraft.ts'
 import { findServer, loadRevision, lockServer } from '../servers/persistence.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
@@ -26,6 +28,7 @@ export class AccessService {
   readonly #db: Db
   readonly #policy: AccessPolicy
   readonly #profiles: PlayerProfiles
+  readonly #geyser: GeyserMc | null
   readonly #transitions: ServerTransitions
   readonly #events: EventBus
 
@@ -33,12 +36,14 @@ export class AccessService {
     db: Db
     policy: AccessPolicy
     profiles: PlayerProfiles
+    capabilities: DeploymentCapabilities
     transitions: ServerTransitions
     events: EventBus
   }) {
     this.#db = deps.db
     this.#policy = deps.policy
     this.#profiles = deps.profiles
+    this.#geyser = deps.capabilities.bedrock?.geyser ?? null
     this.#transitions = deps.transitions
     this.#events = deps.events
   }
@@ -109,8 +114,12 @@ export class AccessService {
   async #resolve(actor: Actor, serverId: string, name: string): Promise<PlayerRef> {
     const server = authorize(actor, await findServer(this.#db, serverId))
     const { onlineMode } = (await loadRevision(this.#db, server.desiredRevisionId)).settings
-    const player = await identityFor(name, onlineMode, this.#profiles)
-    if (player === null) throw new AppError('unknown_player', `There is no Minecraft player called ${name}.`)
+    const player = await identityFor(name, onlineMode, this.#profiles, this.#geyser)
+    if (player === null)
+      throw new AppError(
+        'unknown_player',
+        `There is no Minecraft player called ${name}. For a Bedrock player, check the gamertag; Cubepals knows it once they have joined a server.`,
+      )
     return player
   }
 

@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { isBedrockUuid } from '@blockly/contracts'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { type Db, schema } from '@blockly/db'
 import {
@@ -168,7 +169,9 @@ export class AccessReconciler {
     for (const entry of record.entries) {
       let next = entry
       if (!keyedFor(entry.player, onlineMode)) {
-        const player = await identityFor(entry.player.name, onlineMode, this.#profiles).catch(() => undefined)
+        const player = await identityFor(entry.player.name, onlineMode, this.#profiles, null).catch(
+          () => undefined,
+        )
         if (player === null) next = { ...entry, state: 'rejected', error: NO_ACCOUNT }
         else if (player !== undefined)
           next = {
@@ -210,7 +213,7 @@ export class AccessReconciler {
     if (!observed.onlineMode) return commands
     return Promise.all(
       commands.map(async (command) => {
-        if (!('player' in command)) return command
+        if (!('player' in command) || isBedrockUuid(command.player.uuid)) return command
         const current = await this.#profiles.byUuid(command.player.uuid).catch(() => null)
         return current ? { ...command, player: { ...command.player, name: current.name } } : command
       }),

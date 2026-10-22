@@ -5,6 +5,7 @@
 import type { Queryable } from '@blockly/db'
 import { schema } from '@blockly/db'
 import { and, count, eq, inArray } from 'drizzle-orm'
+import type { GeyserMc } from './ports/geysermc.ts'
 import type { Insight } from './ports/insight.ts'
 import type { MalwareLists } from './ports/malware.ts'
 import type { ArchiveStore, BillingProvider } from './ports/optional.ts'
@@ -23,6 +24,11 @@ export interface DeploymentCapabilities {
    * holds them to none; their classes are still read for what operators should see.
    */
   readonly malware?: MalwareLists | null
+  /**
+   * What lets Bedrock players in: the key Paper servers share with the edge, and GeyserMC, where
+   * Floodgate comes from and gamertags are found. Absent, no server is given Floodgate.
+   */
+  readonly bedrock?: { readonly floodgateKey: string; readonly geyser: GeyserMc } | null
 }
 
 export type DeploymentCapability = keyof DeploymentCapabilities
