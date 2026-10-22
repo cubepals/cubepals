@@ -90,6 +90,7 @@ pg-boss reports these itself, on OpenTelemetry's messaging conventions, in every
 | `messaging_process_duration` | histogram | `messaging_destination_name` (the queue), `error_type`, and pg-boss's own (`messaging_system`, `messaging_operation_name`, `messaging_operation_type`, `db_namespace`, `pgboss_schema`) | Seconds a worker took over each batch of jobs. A failed one has `error_type`, the class of what it threw (`Error`, `TypeError`, …); its count is the failures. Its buckets stop at 10 s: a server operation, which runs for minutes, is timed whole by `cubepals_operation_duration_seconds`. |
 | `messaging_client_operation_duration` | histogram | the same, with the operation (`send`, `fetch`, `complete`, `fail`, …) | Seconds each of pg-boss's own operations took. |
 | `messaging_client_consumed_messages_total`, `messaging_client_sent_messages_total` | counter | `messaging_destination_name`, and pg-boss's own | Jobs taken and sent. |
+| `pgboss_queue_jobs` | gauge | `messaging_destination_name`, `pgboss_job_state` (`deferred`, `ready`, `blocked`, `active`, `failed`), and pg-boss's own | Jobs in each queue by state, as pg-boss last cached them. `cubepals_queue_depth` is the worker's own read of the same queue. |
 
 Scheduled passes (`job_health`) are not pg-boss jobs: `bun scripts/ops.ts health` and `/api/health` report them.
 
