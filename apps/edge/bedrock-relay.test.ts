@@ -177,3 +177,18 @@ test('pings are told from other packets, and a pong takes the time of the ping i
   const answer = pongFor(pong('x'), ping(99))
   expect(Array.from(answer.subarray(1, 9))).toEqual(Array.from(ping(99).subarray(1, 9)))
 })
+
+test('Geyser’s port closing under it does not take the agent down', async () => {
+  const { player, geyser, port, relay } = await relayed()
+  await Bun.sleep(100)
+  player.socket.send(openRequest(), port, '127.0.0.1')
+  await Bun.sleep(100)
+  geyser.socket.close()
+  // Datagrams to a closed port come back refused; none of it may throw out of the relay.
+  for (let i = 0; i < 5; i++) {
+    player.socket.send(Uint8Array.of(0x84, i), port, '127.0.0.1')
+    await Bun.sleep(30)
+  }
+  await Bun.sleep(200)
+  expect(relay.players()).toBe(1)
+})

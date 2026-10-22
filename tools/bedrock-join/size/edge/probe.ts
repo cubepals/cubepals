@@ -30,12 +30,14 @@ const front: Udp = await Bun.udpSocket({
   hostname: '::',
   port: RELAY_PORT,
   socket: {
+    error() {},
     async data(_socket, packet, port, address) {
       const key = `[${address}]:${port}`
       let peer = peers.get(key)
       if (peer === undefined) {
         const socket = await Bun.udpSocket({
           socket: {
+            error() {},
             data(_back, reply) {
               front.send(reply, port, address)
             },

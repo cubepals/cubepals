@@ -88,10 +88,12 @@ async function forwardTo6(target: string): Promise<number> {
   const port = Number(target.slice(colon + 1))
   const front = createSocket('udp4')
   const upstreams = new Map<number, ReturnType<typeof createSocket>>()
+  front.on('error', () => undefined)
   front.on('message', (message, from) => {
     let up = upstreams.get(from.port)
     if (up === undefined) {
       up = createSocket('udp6')
+      up.on('error', () => undefined)
       up.on('message', (back) => front.send(back, from.port, from.address))
       upstreams.set(from.port, up)
     }

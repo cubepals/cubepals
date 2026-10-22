@@ -58,6 +58,13 @@ const OPEN_CONNECTION_REQUEST_1 = 0x05
 const PING_LENGTH = 1 + 8 + 16 + 8
 const PONG_TIME_AT = 1
 
+/**
+ * A datagram sent to a port nobody listens on comes back as a refusal on the next read, which Bun
+ * throws from the socket unless a handler takes it. Geyser's port is closed while it restarts, so
+ * a relay without one would take the whole agent down with it.
+ */
+function ignoreRefusal(): void {}
+
 const hasMagic = (packet: Uint8Array, at: number): boolean =>
   MAGIC.every((byte, i) => packet[at + i] === byte)
 
@@ -130,6 +137,7 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
     hostname: bind.hostname,
     port: bind.port,
     socket: {
+      error: ignoreRefusal,
       data(_socket, packet, port, address) {
         const key = `${address}:${port}`
         if (isPing(packet)) {
@@ -155,6 +163,7 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
         void Bun.udpSocket({
           hostname: '127.0.0.1',
           socket: {
+            error: ignoreRefusal,
             data(_upstream, back) {
               player.lastAt = Date.now()
               front.send(back, port, address)
@@ -176,6 +185,7 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
   const probe: Udp = await Bun.udpSocket({
     hostname: '127.0.0.1',
     socket: {
+      error: ignoreRefusal,
       data(_socket, packet) {
         if (!isPong(packet)) return
         pong = packet.slice()
