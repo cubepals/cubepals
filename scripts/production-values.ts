@@ -293,7 +293,7 @@ export const VALUES: Value[] = [
   {
     name: 'POLAR_PRODUCTS',
     goes: ['operator'],
-    where: 'Polar → Products: plus:<the Plus product id>',
+    where: 'Polar → Products: core:<the Core product id>,plus:<the Plus product id>',
     optional: 'billing',
   },
   {

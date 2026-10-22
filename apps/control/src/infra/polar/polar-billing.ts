@@ -23,7 +23,7 @@ import {
 import { discountBody, discountOf } from './polar-discounts.ts'
 import { GIFT_METADATA, giftOf } from './polar-gifts.ts'
 import type { Fields } from './polar-models.ts'
-import { call, refusal } from './polar-requests.ts'
+import { call, largestPaying, refusal } from './polar-requests.ts'
 
 /**
  * Polar through its official TypeScript SDK, pinned to API version 2026-10 for requests and for
@@ -46,7 +46,7 @@ export interface PolarBillingOptions {
   accessToken: string
   webhookSecret: string
   server: 'sandbox' | 'production'
-  /** Plan key → the Polar product that sells it. */
+  /** Plan key → the Polar product that sells it, the smallest plan first. */
   products: Readonly<Record<string, string>>
   /** Tests point this at a stand-in for Polar. */
   baseUrl?: string
@@ -732,7 +732,7 @@ export class PolarBilling implements BillingProvider {
   #standing(data: unknown): BillingState | null {
     const state = CustomerState.parse(data)
     if (!state.external_id) return null
-    const paid = state.active_subscriptions.find((subscription) => this.#plans.has(subscription.product_id))
+    const paid = largestPaying(state.active_subscriptions, [...this.#plans.keys()])
     return {
       userId: state.external_id,
       externalCustomerId: state.id,

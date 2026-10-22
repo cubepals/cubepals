@@ -19,9 +19,9 @@ import { playTotal } from '../accounts/play-total.ts'
 import type { UserActor } from '../actor.ts'
 
 const TEN =
-  '[Cubepals] The free trial ends in 10 minutes. The world is saved and kept, and Plus starts it again.'
+  '[Cubepals] The free trial ends in 10 minutes. The world is saved and kept, and Core starts it again.'
 const REFUSED =
-  'You’ve played the 20 hours of your free trial. Your worlds are kept, and Plus starts them again.'
+  'You’ve played the 20 hours of your free trial. Your worlds are kept, and Core starts them again.'
 
 let h: Harness
 
@@ -173,7 +173,7 @@ describe.skipIf(!hasDatabase)('Free’s 20 hours', () => {
     await ran(server.id, 'free', 6, 2)
     expect(await h.app.accounts.warnAboutPlay(actor.userId)).toBe(80)
     expect(h.mail.sent.at(-1)?.subject).toBe('About 4 hours of your free trial left')
-    expect(h.mail.sent.at(-1)?.text).toContain('Plus starts them again, with 120 hours a month.')
+    expect(h.mail.sent.at(-1)?.text).toContain('Core starts them again, with 40 hours a month.')
     expect(await h.app.accounts.warnAboutPlay(actor.userId)).toBeNull()
 
     await ran(server.id, 'free', 4, 1)

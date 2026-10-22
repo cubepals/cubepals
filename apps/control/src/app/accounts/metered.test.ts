@@ -103,7 +103,7 @@ describe.skipIf(!hasDatabase)('metered play', () => {
       () => null,
       (error: { message?: string }) => error.message ?? '',
     )
-    expect(asked).toBe('Extra hours come with Plus.')
+    expect(asked).toBe('Extra hours come with Core.')
   }, 40_000)
 
   test('the month says something at four fifths and when it runs out, once each', async () => {

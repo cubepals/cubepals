@@ -258,6 +258,29 @@ export async function subscriptionsLeftOut(
 }
 
 /**
+ * The account's other subscriptions at this provider that still pay and still renew, with the plan
+ * each is for: what a plan bought over them leaves to run out (`Billing.syncSubscription`).
+ */
+export async function otherRenewing(
+  q: Queryable,
+  userId: string,
+  provider: string,
+  keep: string | null,
+): Promise<Array<{ id: string; planKey: string }>> {
+  const rows = await q
+    .select({ id: subscriptions.externalSubscriptionId, planKey: subscriptions.planKey })
+    .from(subscriptions)
+    .where(
+      and(
+        otherOpen(userId, provider, keep),
+        inArray(subscriptions.status, PAYING),
+        eq(subscriptions.cancelAtPeriodEnd, false),
+      ),
+    )
+  return rows
+}
+
+/**
  * Every other subscription of the account at this provider stops paying: the ones in `pastDue`
  * are past due since then, while the provider retries them, and the rest have ended.
  */
@@ -487,6 +510,8 @@ export interface OrderNotice {
   totalCents: number
   extraCents: number
   orderedAt: Date
+  /** The plan the order paid for; null for one that paid for none. */
+  planKey: string | null
 }
 
 /** Accounts with a charge carrying extra play that failed, which they may not have heard about. */
@@ -518,6 +543,7 @@ export async function failingUntold(q: Queryable, userId: string, now: Date): Pr
       totalCents: orders.totalCents,
       extraCents: orders.extraCents,
       orderedAt: orders.orderedAt,
+      planKey: orders.planKey,
     })
     .from(orders)
     .where(
@@ -542,6 +568,7 @@ export async function owingUntold(q: Queryable, userId: string): Promise<OrderNo
       totalCents: orders.totalCents,
       extraCents: orders.extraCents,
       orderedAt: orders.orderedAt,
+      planKey: orders.planKey,
     })
     .from(orders)
     .where(and(owing(userId), isNull(orders.owingToldAt)))

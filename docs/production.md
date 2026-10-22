@@ -353,11 +353,16 @@ sizes, the key and whether each step passed, nothing else.
 Production runs without billing: everyone is on the plan their account says. To start charging,
 in Polar's production dashboard (polar.sh, not the sandbox):
 
-1. A product for Plus; its id goes in the file as `POLAR_PRODUCTS=plus:<id>`.
+1. A product for each paid plan, Core and Plus; their ids go in the file as `POLAR_PRODUCTS=core:<id>,plus:<id>`.
+   Core is "Cubepals Core": a recurring monthly product with the metadata `plan: core`, one fixed
+   price of $9.99 in US dollars with tax behaviour inclusive (VAT included, as the pricing page says),
+   and the "Extra play" metered price below, also tax inclusive. Plus is the same with `plan: plus`
+   and the prices below.
 2. A meter "Extra play": filter `name eq "play.extra"`, aggregation `sum` of `hours`, unit
    `custom` with the label "hour". On the Plus product, beside its $25 price, a metered price on
    that meter: `unit_amount` 25 (cents an hour) and `cap_amount` 5000 ($50 a period, twice the
-   most a player may allow in a month, as a last resort). Blockly sends `play.extra` events and
+   most a player may allow in a month, as a last resort). On the Core product, beside its $9.99
+   price, one on the same meter with `unit_amount` 25 and `cap_amount` 1500 ($15 a period). Blockly sends `play.extra` events and
    needs no id of either.
 3. A one-time product "Cubepals balance" with a custom (pay-what-you-want) price and the metadata
    `purpose: balance`. A payment Polar can no longer collect (its subscription ended) is paid

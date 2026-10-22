@@ -320,7 +320,7 @@ const webAnswers = () =>
 
 async function up(): Promise<void> {
   if (!process.env.POLAR_PRODUCTS)
-    throw new Error('POLAR_PRODUCTS (plus:<sandbox product id>) is not in .env')
+    throw new Error('POLAR_PRODUCTS (core:<sandbox product id>,plus:<sandbox product id>) is not in .env')
   const state = loadState()
   saveState(state)
 

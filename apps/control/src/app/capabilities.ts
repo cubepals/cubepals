@@ -55,6 +55,8 @@ export function requireCapability<K extends DeploymentCapability>(
 export const supportOf = (caps: DeploymentCapabilities) => ({
   archives: caps.archives !== null,
   billing: caps.billing !== null,
+  // The same key the edge and every server share, so one setting says it for all three.
+  bedrock: (caps.bedrock ?? null) !== null,
 })
 
 /**

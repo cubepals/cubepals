@@ -382,6 +382,8 @@ export interface PublicPlan {
   includedHours: number
   /** Whether the hours come every day, from the player's midnight, or every month. */
   per: 'day' | 'month'
+  /** What an hour past the included ones costs, in US cents, where the owner may allow them; null: none. */
+  extraHourCents: number | null
   /** Hours the plan includes in all, once, with `includedHours` the most a day; null: none. */
   totalHours: number | null
   /** Minutes after everyone leaves before a server sleeps, and stops using hours. */
@@ -389,6 +391,11 @@ export interface PublicPlan {
   maxServers: number
   /** The most players the plan's largest server holds. */
   maxPlayers: number
+  /**
+   * Whether friends on Bedrock join this plan's Paper servers beside Java players. False where this
+   * Cubepals has Bedrock off, so a page never promises it.
+   */
+  bedrock: boolean
   /** Mods, plugins and modpacks. */
   mods: boolean
   /** Datapacks, which a plan allows apart from mods. */

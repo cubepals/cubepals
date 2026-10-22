@@ -53,6 +53,12 @@ describe('server operations', () => {
   })
 })
 
+/** The products a deployment sells, one for each paid plan, the smallest plan first. */
+const PRODUCTS = {
+  core: '64a34283-3a76-4110-8db7-034c2ff23207',
+  plus: 'd8dd2de1-21b7-4a41-8bc3-ce909c0cfe23',
+}
+
 describe('configuration', () => {
   test('a local environment parses with defaults', () => {
     const config = loadConfig(env)
@@ -331,12 +337,12 @@ describe('configuration', () => {
       POLAR_ACCESS_TOKEN: 'polar_oat_0123456789abcdef',
       POLAR_WEBHOOK_SECRET: 'whsec_0123456789abcdef',
       POLAR_SERVER: 'sandbox',
-      POLAR_PRODUCTS: 'plus:d8dd2de1-21b7-4a41-8bc3-ce909c0cfe23',
+      POLAR_PRODUCTS: 'core:64a34283-3a76-4110-8db7-034c2ff23207,plus:d8dd2de1-21b7-4a41-8bc3-ce909c0cfe23',
     }
     expect(loadConfig(deployed).billing).toBeNull()
     expect(loadConfig(polar).billing).toMatchObject({
       server: 'sandbox',
-      products: { plus: 'd8dd2de1-21b7-4a41-8bc3-ce909c0cfe23' },
+      products: PRODUCTS,
     })
     expect(() => loadConfig({ ...polar, POLAR_SERVER: undefined })).toThrow(/billing.server/)
     expect(() => loadConfig({ ...polar, POLAR_WEBHOOK_SECRET: 'plain' })).toThrow(/whsec_/)

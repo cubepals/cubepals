@@ -78,6 +78,7 @@ export function createApiApp(deps: {
       faces: deps.services.faces,
       items: deps.services.items,
       icons: deps.services.icons,
+      bedrock: () => deps.services.platform.capabilities.bedrock,
     }),
   )
 

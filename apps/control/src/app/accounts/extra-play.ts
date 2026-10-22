@@ -9,7 +9,7 @@
  * warnings. Counting the hours is `billing/extra-usage.ts`'s; stopping servers is `enforceLimits`'.
  */
 import type { Db } from '@blockly/db'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsFor, planName } from '../../domain/account/entitlements.ts'
 import { UNIT_CENTS } from '../../domain/account/meter.ts'
 import { DEFAULT_TIME_ZONE, monthOf } from '../../domain/account/play-day.ts'
 import type { AccountStanding } from '../../domain/account/standing.ts'
@@ -57,6 +57,7 @@ export async function warnAboutExtra(
         ceiling: decision.ceiling,
         used: Math.min(decision.units, Math.round(used * 10) / 10),
         unitCents: UNIT_CENTS,
+        plan: planName(standing.plan),
         origin: deps.origin,
       }),
     })

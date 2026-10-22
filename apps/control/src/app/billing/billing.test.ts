@@ -430,6 +430,6 @@ describe.skipIf(!hasDatabase)('billing', () => {
     const after = await h.app.accountQueries.overview(owner)
     expect(after.plan).toMatchObject({ key: 'plus', billed: { planKey: 'plus', cancelAtPeriodEnd: true } })
     expect(after.entitlements.maxServers).toBe(3)
-    expect(after.plans.map((p) => p.key)).toEqual(['free', 'plus'])
+    expect(after.plans.map((p) => p.key)).toEqual(['free', 'core', 'plus'])
   })
 })

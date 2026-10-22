@@ -25,7 +25,7 @@ const POLAR = {
   POLAR_ACCESS_TOKEN: 'polar_oat_0123456789abcdef',
   POLAR_WEBHOOK_SECRET: 'whsec_0123456789abcdef',
   POLAR_SERVER: 'sandbox',
-  POLAR_PRODUCTS: 'plus:d8dd2de1-21b7-4a41-8bc3-ce909c0cfe23',
+  POLAR_PRODUCTS: 'core:64a34283-3a76-4110-8db7-034c2ff23207,plus:d8dd2de1-21b7-4a41-8bc3-ce909c0cfe23',
 }
 
 describe('local development', () => {

@@ -13,6 +13,7 @@ import {
   planName,
 } from '../../domain/account/entitlements.ts'
 import { extraUnits } from '../../domain/account/extra-play.ts'
+import { UNIT_CENTS } from '../../domain/account/meter.ts'
 import { DEFAULT_TIME_ZONE, isTimeZone, monthOf } from '../../domain/account/play-day.ts'
 import type { AccountStanding, Restrictions } from '../../domain/account/standing.ts'
 import { type Actor, requestedBy, runsThePlatform } from '../actor.ts'
@@ -78,6 +79,30 @@ const WAITLIST_PER_MINUTE = 30
  * arrives late still makes sense on its own.
  */
 const WARN_AT = [80, 100] as const
+
+/**
+ * What an email about running out says of extra hours and the plan with more than this one: its name, and how many extra
+ * hours a month cost what it costs over this plan, past which it is the cheaper. Nothing for the
+ * largest plan.
+ */
+function extraOffer(plan: Entitlements): {
+  unitCents: number
+  larger?: { name: string; extraHoursCheaper: number }
+} {
+  const next = PAID_PLANS.map((key) => entitlementsFor(key)).find(
+    (each) =>
+      each.monthlyPriceCents > plan.monthlyPriceCents &&
+      (each.includedUnits ?? 0) > (plan.includedUnits ?? 0),
+  )
+  if (next === undefined || plan.plan === 'free') return { unitCents: UNIT_CENTS }
+  return {
+    unitCents: UNIT_CENTS,
+    larger: {
+      name: planName(next.plan),
+      extraHoursCheaper: Math.floor((next.monthlyPriceCents - plan.monthlyPriceCents) / UNIT_CENTS),
+    },
+  }
+}
 
 /**
  * Account standing, as admins set it (§4). Suspension stops what the account
@@ -599,6 +624,7 @@ export class AccountService {
           used: Math.round(units * 10) / 10,
           extraAllowed: extraUnits(decision),
           mayBuyMore: decision.may,
+          ...extraOffer(plan),
           origin: this.#webOrigin,
         }),
       })

@@ -18,6 +18,8 @@ import { ACCOUNT, type Email, link, p, plain } from '../emails.ts'
 const DAY = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' })
 
 export function paymentFailed(input: {
+  /** The plan's name: "Core", "Plus". */
+  plan: string
   totalCents: number
   extraCents: number
   by: Date
@@ -25,7 +27,7 @@ export function paymentFailed(input: {
 }): Email {
   const account = `${input.origin}/account`
   const lines = [
-    `Your Plus payment of ${dollars(input.totalCents)}, with ${dollars(input.extraCents)} of extra hours in it, didn’t go through.`,
+    `Your ${input.plan} payment of ${dollars(input.totalCents)}, with ${dollars(input.extraCents)} of extra hours in it, didn’t go through.`,
     'Extra hours are off until it does. Update your card in Manage billing on your account, and the payment is tried again.',
     `If it still isn’t paid by ${DAY.format(input.by)}, your servers can’t start until it is.`,
   ]
@@ -41,10 +43,15 @@ export function paymentFailed(input: {
   }
 }
 
-export function paymentOwed(input: { owedCents: number; extraCents: number; origin: string }): Email {
+export function paymentOwed(input: {
+  plan: string
+  owedCents: number
+  extraCents: number
+  origin: string
+}): Email {
   const account = `${input.origin}/account`
   const lines = [
-    `You owe ${dollars(input.owedCents)} from a Plus payment that didn’t go through, ${dollars(input.extraCents)} of it for extra hours.`,
+    `You owe ${dollars(input.owedCents)} from a ${input.plan} payment that didn’t go through, ${dollars(input.extraCents)} of it for extra hours.`,
     'Until it’s paid, your servers can’t start and you can’t make new ones. Your worlds are safe, and you can still download them.',
     'Pay it on your account, and your servers can start again straight away.',
   ]

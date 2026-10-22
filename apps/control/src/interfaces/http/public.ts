@@ -27,6 +27,8 @@ export function createPublicApp(deps: {
   faces: PlayerFaces
   items: ItemIcons
   icons: ServerIcons
+  /** Whether this deployment takes Bedrock players: what the plans say about them. */
+  bedrock: () => boolean
 }): Hono {
   const app = new Hono()
 
@@ -50,7 +52,7 @@ export function createPublicApp(deps: {
   app.get('/api/public/plans', (c) => {
     c.header('Cache-Control', 'public, max-age=300')
     c.header('Access-Control-Allow-Origin', '*')
-    return c.json(publicPlans())
+    return c.json(publicPlans(deps.bedrock()))
   })
 
   /** The size behind each answer to "Who is playing?", from the table servers are made with. */

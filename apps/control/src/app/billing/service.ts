@@ -53,6 +53,7 @@ import {
   UNPAID_ORDER,
   untoldAbout,
 } from './persistence.ts'
+import { requireNotSmaller, smallerRenewing } from './plan-moves.ts'
 import {
   accountsWithYearsEnded,
   markReminded,
@@ -152,6 +153,7 @@ export class BillingService {
     const plan = entitlementsFor(planKey)
     if (term === 'month' && standing.plan === planKey)
       throw new AppError('invalid_choice', `You are on ${planKey} already.`)
+    requireNotSmaller(standing.plan, planKey)
     if (term === 'year') await this.#mayBuyYear(user.id, planKey)
     // Money still owed from a payment that failed is paid first, in the portal: a new
     // subscription would start a new bill beside the one nobody paid.
@@ -373,6 +375,7 @@ export class BillingService {
       const since = await this.#reach(() => billing.pastDueSince(id))
       if (since !== null) pastDue.set(id, since)
     }
+    await this.#stopSmallerPlans(state, provider)
     await this.#db.transaction(async (tx) => {
       // One change to an account's billing at a time, so each is audited against the one before.
       await lockStanding(tx, state.userId)
@@ -424,6 +427,23 @@ export class BillingService {
     })
     await this.#ending.unpaid(source, new Date(), state.userId)
     await this.#accounts.enforceLimits(state.userId)
+  }
+
+  /**
+   * A larger plan bought over a smaller one (Plus over Core) leaves the smaller subscription
+   * renewing at the provider: it is set to end with the month it paid for, which its owner keeps
+   * using, so nothing is paid twice (`plan-moves.ts`).
+   */
+  async #stopSmallerPlans(state: Pick<BillingState, 'userId' | 'subscription'>, provider: string) {
+    if (state.subscription === null) return
+    const billing = requireCapability(this.#caps, 'billing')
+    for (const id of await smallerRenewing(this.#db, state.userId, provider, state.subscription)) {
+      try {
+        await this.#reach(() => billing.stopRenewing(id))
+      } catch (error) {
+        console.error(`billing: stopping a smaller plan from renewing failed: ${inFull(error)}`)
+      }
+    }
   }
 
   /**
@@ -581,6 +601,7 @@ export class BillingService {
         await this.#mailer.send({
           to,
           ...paymentFailed({
+            plan: planName(order.planKey ?? 'plus'),
             totalCents: order.totalCents,
             extraCents: order.extraCents,
             by: new Date(order.orderedAt.getTime() + PAST_DUE_GRACE_MS),
@@ -599,6 +620,7 @@ export class BillingService {
       await this.#mailer.send({
         to,
         ...paymentOwed({
+          plan: planName(owing[0]?.planKey ?? 'plus'),
           owedCents: owing.reduce((sum, order) => sum + order.totalCents, 0),
           extraCents: owing.reduce((sum, order) => sum + order.extraCents, 0),
           origin: this.#webOrigin,

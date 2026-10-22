@@ -4,6 +4,7 @@
 
 import {
   type Entitlements,
+  entitlementsFor,
   PAID_PLANS,
   type PlanGap,
   planGap,
@@ -272,7 +273,7 @@ export function evaluate(facts: PolicyFacts, capability: Capability): Decision {
     case 'start_server':
     case 'restart_server': {
       const gap = planGap(entitlements, capability.runs, 'startable')
-      if (gap === 'size') return deny('not_entitled', 'Your plan does not include servers this size.')
+      if (gap === 'size') return deny('not_entitled', sizeRefusal(capability.runs))
       if (gap !== null) {
         const paid = planThatRuns(capability.runs)
         const what = WAITS_FOR[gap]
@@ -388,6 +389,15 @@ function freePlayStops(entitlements: Entitlements, facts: PolicyFacts): Decision
 }
 
 /**
+ * What a start is told for a size the plan doesn't run. After a move to a smaller plan the server
+ * waits as it is, and resizing it is the owner's call.
+ */
+function sizeRefusal(runs: Runs): string {
+  const larger = planThatRuns(runs)
+  return `Your plan does not include servers this size.${larger === null ? '' : ` ${planName(larger)} runs it as it is, or you can resize it.`}`
+}
+
+/**
  * What a start is told once the plan's play is used, the month's (with any extra allowed), the
  * plan's in all, or the day's; null while there is some left. A day's says when it is back, in the words used everywhere.
  */
@@ -422,7 +432,16 @@ function usedUp(entitlements: Entitlements, facts: PolicyFacts): string {
     return facts.extraMayRise
       ? 'You have used the extra play you allowed this month. Raise it in your account, or wait for the 1st.'
       : 'You have used the most extra play you can allow this month. It resets on the 1st.'
-  if (!entitlements.mayBuyMore) return 'You have used this month’s play time. It resets on the 1st.'
+  if (!entitlements.mayBuyMore) {
+    // A paid plan with no extra hours points to the plan that has more.
+    const larger =
+      entitlements.plan === 'free'
+        ? undefined
+        : PAID_PLANS.find(
+            (key) => (entitlementsFor(key).includedUnits ?? 0) > (entitlements.includedUnits ?? 0),
+          )
+    return `You have used this month’s play time. It resets on the 1st${larger === undefined ? '' : `, and ${planName(larger)} has more`}.`
+  }
   if (facts.extraOffBecause === null)
     return 'You have used this month’s play time. Allow extra play in your account, or wait for the 1st.'
   return `You have used this month’s play time, and it resets on the 1st. ${facts.extraOffBecause}`
