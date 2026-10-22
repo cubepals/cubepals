@@ -31,6 +31,7 @@ path = [
   "docs/emails/*.png",
   "docs/players/*.png",
   "docs/architecture/previews/*.png",
+  "docs/review/**",
 ]
 precedence = "closest"
 SPDX-FileCopyrightText = "2026 The Cubepals Authors"
