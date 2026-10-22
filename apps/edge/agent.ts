@@ -16,6 +16,7 @@ import { LOCAL_HEADER, readProxyHeader } from '../../packages/contracts/src/prox
 import { OWN_ICON_MAX_BYTES } from '../../packages/contracts/src/server-list.ts'
 import { GAME_PORT } from '../control/src/minecraft/ports.ts'
 import { asleepMessage } from './asleep.ts'
+import { type Bedrock, bedrockFromEnv, startBedrock } from './bedrock.ts'
 import { browserRedirect } from './browser-redirect.ts'
 import { takes, wrongGame } from './clients.ts'
 import { front, pipe } from './front.ts'
@@ -693,8 +694,11 @@ asleepAt(WAITING)
 // is then refused, and players are not touched.
 const WEB_ORIGIN = process.env.WEB_CANONICAL_ORIGIN?.replace(/\/$/, '')
 const PLAY_DOMAINS = (process.env.PLAY_DOMAINS ?? '').split(',').flatMap((d) => d.trim() || [])
+/** Bedrock players' Geyser, once started (below); Fly's health check on this port asks about it. */
+let bedrock: Bedrock | null = null
 if (WEB_ORIGIN && PLAY_DOMAINS.length > 0)
   browserRedirect({
+    healthy: () => process.env.FLOODGATE_KEY === undefined || bedrock?.healthy() === true,
     port: Number(env('BROWSER_PORT', '8080')),
     domains: PLAY_DOMAINS,
     web: WEB_ORIGIN,
@@ -738,7 +742,11 @@ const child = Bun.spawn(
   { stdout: 'inherit', stderr: 'inherit' },
 )
 
-for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => child.kill(signal))
+for (const signal of ['SIGTERM', 'SIGINT'] as const)
+  process.on(signal, () => {
+    bedrock?.stop()
+    child.kill(signal)
+  })
 
 /** Polls for routes for good. A list just applied is said to be held at once, by asking again. */
 async function pollRoutes(): Promise<never> {
@@ -768,6 +776,17 @@ front({
   },
   timeouts: TIMEOUTS,
 })
+
+// Bedrock players, where the edge holds the Floodgate key: Geyser dials the front door above, so
+// it starts once that listens. A Bedrock failure never takes Java players with it: the edge goes
+// on without, and its health says so.
+const bedrockSettings = bedrockFromEnv(process.env, MINECRAFT_PORT)
+if (bedrockSettings === null) console.error('FLOODGATE_KEY is unset; Bedrock players aren’t taken')
+else
+  bedrock = await startBedrock(bedrockSettings).catch((error) => {
+    console.error('Bedrock players aren’t taken: Geyser could not start', error)
+    return null
+  })
 
 const code = await child.exited
 console.error(`mc-router exited with ${code}`)

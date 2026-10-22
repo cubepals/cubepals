@@ -15,6 +15,9 @@
 /** One DNS label, which is all a slug can be in a play address. */
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 
+/** Where Fly's health check asks whether the edge is well. */
+const HEALTH_PATH = '/_health'
+
 /** What the edge knows to answer a browser with. */
 export interface Pages {
   /** PLAY_DOMAIN and each alias, lowercase: `<slug>.<domain>` is a server's play address. */
@@ -31,6 +34,8 @@ export interface Pages {
    * undefined for a server's own address, whose page is its own slug's.
    */
   aliasOf: (hostname: string) => string | undefined
+  /** Whether the edge is well, for Fly's check on this port (`/_health`): 503 where it isn't. */
+  healthy?: () => boolean
 }
 
 /**
@@ -54,7 +59,7 @@ export function pageFor(host: string | null, pages: Pages): string {
 
 /**
  * Listens on `port` for browsers, and sends each to its server's page with a temporary redirect,
- * so where it goes can change later. Every method and path is answered the same way.
+ * so where it goes can change later. Every method and path is answered the same way, but Fly's health check (`/_health`).
  */
 export function browserRedirect(
   options: Pages & { port: number; hostname?: string },
@@ -63,10 +68,13 @@ export function browserRedirect(
   return Bun.serve({
     port: options.port,
     ...(options.hostname === undefined ? {} : { hostname: options.hostname }),
-    fetch: (request) =>
-      new Response(null, {
+    fetch(request) {
+      if (pages.healthy !== undefined && new URL(request.url).pathname === HEALTH_PATH)
+        return new Response(null, { status: pages.healthy() ? 204 : 503 })
+      return new Response(null, {
         status: 302,
         headers: { location: pageFor(request.headers.get('host'), pages), 'cache-control': 'no-store' },
-      }),
+      })
+    },
   })
 }

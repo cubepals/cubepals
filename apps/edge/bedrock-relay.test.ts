@@ -1,0 +1,179 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/** The Bedrock relay, between a stand-in for a player and a stand-in for Geyser. */
+
+import { afterEach, expect, test } from 'bun:test'
+import { readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
+import { bedrockRelay, isPing, pongFor, type Relay, type RelayOptions } from './bedrock-relay.ts'
+
+const MAGIC = Uint8Array.from([
+  0x00, 0xff, 0xff, 0x00, 0xfe, 0xfe, 0xfe, 0xfe, 0xfd, 0xfd, 0xfd, 0xfd, 0x12, 0x34, 0x56, 0x78,
+])
+
+function ping(time: number): Uint8Array {
+  const bytes = new Uint8Array(33)
+  bytes[0] = 0x01
+  new DataView(bytes.buffer).setBigInt64(1, BigInt(time))
+  bytes.set(MAGIC, 9)
+  return bytes
+}
+
+function pong(text: string): Uint8Array {
+  const body = new TextEncoder().encode(text)
+  const bytes = new Uint8Array(35 + body.length)
+  bytes[0] = 0x1c
+  bytes.set(MAGIC, 17)
+  new DataView(bytes.buffer).setUint16(33, body.length)
+  bytes.set(body, 35)
+  return bytes
+}
+
+function openRequest(): Uint8Array {
+  const bytes = new Uint8Array(1 + 16 + 1 + 100)
+  bytes[0] = 0x05
+  bytes.set(MAGIC, 1)
+  bytes[17] = 11
+  return bytes
+}
+
+type Udp = Bun.udp.Socket<'buffer'>
+interface Heard {
+  bytes: Uint8Array
+  port: number
+}
+
+/** A socket that records what it is sent, and answers pings as Geyser does, once they say whose. */
+async function listener(onData?: (socket: Udp, bytes: Uint8Array, port: number) => void) {
+  const heard: Heard[] = []
+  const socket = await Bun.udpSocket({
+    hostname: '127.0.0.1',
+    socket: {
+      data(self, bytes, port) {
+        heard.push({ bytes: bytes.slice(), port })
+        onData?.(self, bytes, port)
+      },
+    },
+  })
+  return { socket, heard }
+}
+
+const closers: (() => void)[] = []
+afterEach(() => {
+  for (const close of closers.splice(0)) close()
+})
+
+/** A relay in front of a stand-in Geyser that answers any ping behind a header with `MCPE;Test`. */
+async function relayed(options: Partial<RelayOptions> = {}) {
+  const geyser = await listener((socket, bytes, port) => {
+    const header = readProxyHeader(bytes)
+    const rest = typeof header === 'object' ? bytes.subarray(header.next) : bytes
+    if (rest[0] === 0x01) socket.send(pong('MCPE;Test'), port, '127.0.0.1')
+    else if (rest[0] === 0x05) socket.send(Uint8Array.of(0x06), port, '127.0.0.1')
+  })
+  // The port a relay is asked for is taken before it is used, so one is found first.
+  const probe = await Bun.udpSocket({ hostname: '127.0.0.1' })
+  const publicPort = probe.port
+  probe.close()
+  const relay: Relay = await bedrockRelay({
+    bind: { hostname: '127.0.0.1', port: publicPort },
+    geyser: { hostname: '127.0.0.1', port: geyser.socket.port },
+    pongs: { perSecond: 0, burst: 2 },
+    opens: { perSecond: 0, burst: 3 },
+    most: 10,
+    idleMs: 60_000,
+    pongRefreshMs: 60_000,
+    ...options,
+  })
+  closers.push(
+    () => relay.close(),
+    () => geyser.socket.close(),
+  )
+  const player = await listener()
+  closers.push(() => player.socket.close())
+  return { relay, geyser, player, port: publicPort }
+}
+
+test('a ping is answered from the pong Geyser gave, with the time the ping carried', async () => {
+  const { player, port } = await relayed()
+  await Bun.sleep(100)
+  player.socket.send(ping(123456), port, '127.0.0.1')
+  await Bun.sleep(100)
+  expect(player.heard).toHaveLength(1)
+  const answer = player.heard[0]?.bytes ?? new Uint8Array()
+  expect(Array.from(answer.subarray(1, 9))).toEqual(Array.from(ping(123456).subarray(1, 9)))
+  expect(new TextDecoder().decode(answer.subarray(35))).toBe('MCPE;Test')
+})
+
+test('an address is sent only so many pongs, and the pings that go unanswered never reach Geyser', async () => {
+  const { player, geyser, port } = await relayed()
+  await Bun.sleep(100)
+  const asked = geyser.heard.length
+  for (let i = 0; i < 6; i++) player.socket.send(ping(i), port, '127.0.0.1')
+  await Bun.sleep(150)
+  expect(player.heard).toHaveLength(2)
+  expect(geyser.heard).toHaveLength(asked)
+})
+
+test('a player’s first datagram reaches Geyser behind a header naming them, and the replies come back', async () => {
+  const { player, geyser, port, relay } = await relayed()
+  await Bun.sleep(100)
+  player.socket.send(openRequest(), port, '127.0.0.1')
+  await Bun.sleep(100)
+  const first = geyser.heard.find((h) => h.bytes.length > 100)
+  const bytes = first?.bytes ?? new Uint8Array()
+  // PROXY v2, UDP over IPv4 (0x12), then the player's address and port.
+  expect(bytes[12]).toBe(0x21)
+  expect(bytes[13]).toBe(0x12)
+  expect(Array.from(bytes.subarray(16, 20))).toEqual([127, 0, 0, 1])
+  expect(((bytes[24] ?? 0) << 8) + (bytes[25] ?? 0)).toBe(player.socket.port)
+  expect(player.heard.map((h) => h.bytes[0])).toEqual([0x06])
+  expect(relay.players()).toBe(1)
+
+  // Later datagrams go as they came: Geyser keeps who the first said.
+  const next = Uint8Array.of(0x84, 1, 2, 3)
+  player.socket.send(next, port, '127.0.0.1')
+  await Bun.sleep(100)
+  expect(Array.from(geyser.heard.at(-1)?.bytes ?? [])).toEqual(Array.from(next))
+  // And from the same upstream socket, so Geyser sees one peer.
+  expect(geyser.heard.at(-1)?.port).toBe(first?.port)
+})
+
+test('a datagram that doesn’t open a connection makes no player, and an address opens only so many', async () => {
+  const { player, port, relay } = await relayed()
+  await Bun.sleep(100)
+  player.socket.send(Uint8Array.of(0x84, 1, 2, 3), port, '127.0.0.1')
+  await Bun.sleep(50)
+  expect(relay.players()).toBe(0)
+  // Three opens from one address are allowed; the same port is one player, so use several.
+  const others = await Promise.all([1, 2, 3, 4].map(() => listener()))
+  closers.push(...others.map((o) => () => o.socket.close()))
+  for (const other of others) other.socket.send(openRequest(), port, '127.0.0.1')
+  await Bun.sleep(150)
+  expect(relay.players()).toBe(3)
+})
+
+test('a quiet player is dropped', async () => {
+  const { player, port, relay } = await relayed({ idleMs: 50, sweepMs: 30 })
+  await Bun.sleep(100)
+  player.socket.send(openRequest(), port, '127.0.0.1')
+  await Bun.sleep(50)
+  expect(relay.players()).toBe(1)
+  await Bun.sleep(200)
+  expect(relay.players()).toBe(0)
+})
+
+test('it is ready only while Geyser answers', async () => {
+  const { relay } = await relayed()
+  await Bun.sleep(100)
+  expect(relay.ready()).toBe(true)
+})
+
+test('pings are told from other packets, and a pong takes the time of the ping it answers', () => {
+  expect(isPing(ping(1))).toBe(true)
+  expect(isPing(openRequest())).toBe(false)
+  expect(isPing(ping(1).subarray(0, 20))).toBe(false)
+  const answer = pongFor(pong('x'), ping(99))
+  expect(Array.from(answer.subarray(1, 9))).toEqual(Array.from(ping(99).subarray(1, 9)))
+})
