@@ -148,7 +148,7 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
         const known = players.get(key)
         if (known !== undefined) {
           known.lastAt = Date.now()
-          if (known.waiting !== null) known.waiting.push(packet.slice())
+          if (known.waiting !== null) known.waiting.push(Uint8Array.from(packet))
           else known.upstream.send(packet, geyser.port, geyser.hostname)
           return
         }
@@ -157,7 +157,7 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
         const player: Player = {
           upstream: null as unknown as Udp,
           lastAt: Date.now(),
-          waiting: [packet.slice()],
+          waiting: [Uint8Array.from(packet)],
         }
         players.set(key, player)
         void Bun.udpSocket({
@@ -188,7 +188,7 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
       error: ignoreRefusal,
       data(_socket, packet) {
         if (!isPong(packet)) return
-        pong = packet.slice()
+        pong = Uint8Array.from(packet)
         pongAt = Date.now()
       },
     },

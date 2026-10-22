@@ -51,7 +51,7 @@ async function listener(onData?: (socket: Udp, bytes: Uint8Array, port: number) 
     hostname: '127.0.0.1',
     socket: {
       data(self, bytes, port) {
-        heard.push({ bytes: bytes.slice(), port })
+        heard.push({ bytes: Uint8Array.from(bytes), port })
         onData?.(self, bytes, port)
       },
     },
