@@ -103,11 +103,11 @@ primary_region = "fra"
     grace_period = "15s"
 
   # Whether Geyser is up and answering (the agent's /_health): UDP has no check of its own. The
-  # grace period is a JVM's first start, which also fetches the game's files.
+  # grace period is as long as Fly allows, for a JVM's first start, which also fetches the game's files.
   [[services.http_checks]]
     interval = "15s"
     timeout = "2s"
-    grace_period = "120s"
+    grace_period = "60s"
     method = "get"
     path = "/_health"
 
