@@ -116,6 +116,9 @@ primary_region = "fra"
     method = "get"
     path = "/_health"
 
+# The agent's drain status (apps/edge/drain.ts, port 8091) has no service here on purpose: a deploy asks
+# for it over Fly's private network, and nothing on the internet can.
+
 # Sized by measuring 20 Bedrock players beside Java joins for ten minutes (apps/edge/bedrock.ts): a
 # shared CPU of two held back nearly all of its time once its burst was spent, and Java joins took
 # twice as long. Four shared CPUs and 2 GB kept up with no wait added to them.

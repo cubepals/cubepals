@@ -172,17 +172,11 @@ test('the edge’s health is Java’s alone: Bedrock down, or never started, nev
   }
 })
 
-test('says how many players are connected and whether the routes are the newest, apart from health', async () => {
-  const state = { players: 3, routesCurrent: false }
-  const server = browserRedirect({ ...PAGES, port: 0, hostname: '127.0.0.1', drain: () => ({ ...state }) })
-  try {
-    const at = (path: string) => fetch(`http://127.0.0.1:${server.port}${path}`, { redirect: 'manual' })
-    expect(await (await at('/_health/drain')).json()).toEqual({ players: 3, routesCurrent: false })
-    state.players = 0
-    state.routesCurrent = true
-    expect(await (await at('/_health/drain')).json()).toEqual({ players: 0, routesCurrent: true })
-    expect((await at('/_health')).status).toBe(204)
-  } finally {
-    await server.stop(true)
-  }
+test('the drain status is not served here: its path is redirected like any other', async () => {
+  const answer = await ask(
+    'GET /_health/drain HTTP/1.1\r\nHost: arcade.play.cubepals.test\r\nConnection: close\r\n\r\n',
+  )
+  expect(answer).toStartWith('HTTP/1.1 302')
+  expect(answer).toContain(`location: ${WEB}/server/arcade\r\n`)
+  expect(answer).not.toContain('players')
 })

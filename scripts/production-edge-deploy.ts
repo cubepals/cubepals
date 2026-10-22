@@ -5,7 +5,7 @@
 /**
  * The flyctl calls that restart an edge app one region at a time (production-edge.ts decides the
  * order and the waits): the image built once, then each region's machine cordoned, drained of
- * players through the edge's own count (`/_health/drain`, apps/edge/browser-redirect.ts), given
+ * players through the edge's own count (`/`, apps/edge/browser-redirect.ts), given
  * the image and waited on. Not for placing machines, which is production.ts's.
  */
 import { spawn, spawnSync } from 'node:child_process'
@@ -18,8 +18,8 @@ interface Machine {
   state: string
 }
 
-/** Where the agent's HTTP service listens on the machine (infra/fly/edge.toml). */
-const AGENT_HTTP_PORT = 8080
+/** Where the agent answers a deploy, on the private network only (apps/edge/drain.ts). */
+const DRAIN_PORT = 8091
 
 /** The local port `fly proxy` listens on, for the machine being asked. */
 const PROXY_PORT = 18080
@@ -36,20 +36,17 @@ export function machinesOf(app: string, env: NodeJS.ProcessEnv): Machine[] {
 /** Asks one machine's agent what a deploy waits on, through a proxy that lives for the call. */
 async function drainState(app: string, machine: Machine, env: NodeJS.ProcessEnv) {
   const target = `${machine.id}.vm.${app}.internal`
-  const proxy = spawn('fly', ['proxy', `${PROXY_PORT}:${AGENT_HTTP_PORT}`, target, '--app', app], {
+  const proxy = spawn('fly', ['proxy', `${PROXY_PORT}:${DRAIN_PORT}`, target, '--app', app], {
     env,
     stdio: 'ignore',
   })
   try {
     for (let attempt = 0; ; attempt++) {
       try {
-        const answer = await fetch(`http://127.0.0.1:${PROXY_PORT}/_health/drain`, {
+        const answer = await fetch(`http://127.0.0.1:${PROXY_PORT}/`, {
           signal: AbortSignal.timeout(5_000),
           redirect: 'manual',
         })
-        // An edge from before it counted its players redirects a path it doesn't know, as it does
-        // a browser; the first roll onto this one.
-        if (answer.status === 404 || (answer.status >= 300 && answer.status < 400)) return null
         if (answer.ok) return (await answer.json()) as { players: number; routesCurrent: boolean }
         throw new Error(`answered ${answer.status}`)
       } catch (error) {
@@ -99,7 +96,7 @@ export async function rollEdgeApp(
   regions: readonly string[],
   env: NodeJS.ProcessEnv,
   say: (line: string) => void,
-): Promise<number> {
+): Promise<{ cut: number; uncounted: string[] }> {
   const machineIn = (region: string): Machine => {
     const machine = machinesOf(app, env).find((m) => m.region === region)
     if (machine === undefined) throw new Error(`The edge has no machine in ${region}`)
@@ -113,9 +110,10 @@ export async function rollEdgeApp(
   const steps: RegionSteps = {
     cordon: async (region) => fly('machine', 'cordon', machineIn(region).id, '--app', app),
     players: async (region) => {
-      const state = await drainState(app, machineIn(region), env)
-      if (state === null) say(`${region}: this edge doesn’t count its players yet, so none is waited for`)
-      return state?.players ?? 0
+      // An edge from before it counted its players has nothing listening; that and a proxy that
+      // can't reach the edge both read as an edge that can't say.
+      const state = await drainState(app, machineIn(region), env).catch(() => null)
+      return state?.players ?? null
     },
     othersReady: async (region) => {
       const others = machinesOf(app, env).filter((m) => m.region !== region)

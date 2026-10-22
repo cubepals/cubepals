@@ -114,18 +114,20 @@ export interface Clock {
 
 /**
  * Waits until `players()` reads zero, for at most `limitMs`; the number still connected when it
- * stopped waiting, which restarting cuts. `say` gets a line when the count changes.
+ * stopped waiting, which restarting cuts, or null when the edge can't count (nothing to wait on).
+ * `say` gets a line when the count changes.
  */
 export async function waitForPlayers(
-  players: () => Promise<number>,
+  players: () => Promise<number | null>,
   say: (line: string) => void,
   clock: Clock,
   limitMs = EDGE_DRAIN_LIMIT_MS,
-): Promise<number> {
+): Promise<number | null> {
   const until = clock.now() + limitMs
   let last: number | undefined
   for (;;) {
     const count = await players()
+    if (count === null) return null
     if (count !== last) say(count === 0 ? 'no players connected' : `waiting on ${count} connected`)
     last = count
     if (count === 0) return 0
@@ -156,8 +158,8 @@ export interface RegionSteps {
   othersReady: (region: string) => Promise<boolean>
   /** Takes connections again; harmless where it already does. */
   uncordon: (region: string) => Promise<void>
-  /** How many players are connected through the region's machine. */
-  players: (region: string) => Promise<number>
+  /** How many players are connected through the region's machine; null when it can't say. */
+  players: (region: string) => Promise<number | null>
   /** Puts the new release on the region's machine and waits until it passes Fly's checks. */
   deploy: (region: string) => Promise<void>
   /** Whether the region's machine answers and holds the control plane's newest routes. */
@@ -171,44 +173,53 @@ export interface RegionSteps {
  * service has its players waited on, up to the limit, while new joins keep arriving; the gap while
  * it restarts is said. A region that doesn't come back ready, or that fails
  * anywhere on the way, takes connections again and stops the roll with the others as they were.
- * Returns how many players were cut.
+ * Returns how many players were counted and cut, and the regions that couldn't count theirs.
  */
 export async function rollEdge(
   regions: readonly string[],
   steps: RegionSteps,
   say: (line: string) => void,
   clock: Clock,
-): Promise<number> {
+): Promise<{ cut: number; uncounted: string[] }> {
   let cut = 0
+  const uncounted: string[] = []
   for (const region of regions) {
     const cordoned = regions.length > 1 && (await steps.othersReady(region))
     say(`${region}: ${cordoned ? 'taking no new joins, ' : ''}waiting for its players to leave`)
     if (cordoned) await steps.cordon(region)
     try {
-      const left = await waitForPlayers(
-        () => steps.players(region),
-        (line) => say(`${region}: ${line}`),
-        clock,
-      )
-      if (left > 0)
-        say(
-          `${region}: ${left} still connected after ${EDGE_DRAIN_LIMIT_MS / MINUTE_MS} min; restarting cuts them`,
-        )
-      cut += left
-      say(
-        cordoned
-          ? `${region}: deploying`
-          : `${region}: deploying; no other region can take its joins, so none is taken while it restarts`,
-      )
-      await steps.deploy(region)
-      if (!(await waitUntil(() => steps.ready(region), clock, EDGE_READY_LIMIT_MS)))
-        throw new Error(
-          `The edge in ${region} isn't well and up to date with the routes; the other regions are as they were.`,
-        )
-      say(`${region}: well and up to date with the routes`)
+      const left = await restartRegion(region, cordoned, steps, (line) => say(`${region}: ${line}`), clock)
+      if (left === null) uncounted.push(region)
+      else cut += left
     } finally {
       if (cordoned) await steps.uncordon(region).catch(() => undefined)
     }
   }
-  return cut
+  return { cut, uncounted }
+}
+
+/** One region's players waited on, the machine deployed and waited on; the players cut, or null. */
+async function restartRegion(
+  region: string,
+  cordoned: boolean,
+  steps: RegionSteps,
+  say: (line: string) => void,
+  clock: Clock,
+): Promise<number | null> {
+  const left = await waitForPlayers(() => steps.players(region), say, clock)
+  if (left === null) say("it can't say how many players are connected, so none was waited for")
+  else if (left > 0)
+    say(`${left} still connected after ${EDGE_DRAIN_LIMIT_MS / MINUTE_MS} min; restarting cuts them`)
+  say(
+    cordoned
+      ? 'deploying'
+      : 'deploying; no other region can take its joins, so none is taken while it restarts',
+  )
+  await steps.deploy(region)
+  if (!(await waitUntil(() => steps.ready(region), clock, EDGE_READY_LIMIT_MS)))
+    throw new Error(
+      `The edge in ${region} isn't well and up to date with the routes; the other regions are as they were.`,
+    )
+  say('well and up to date with the routes')
+  return left
 }

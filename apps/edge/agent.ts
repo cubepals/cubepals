@@ -19,6 +19,7 @@ import { asleepMessage } from './asleep.ts'
 import { type Bedrock, bedrockFromEnv, startBedrock } from './bedrock.ts'
 import { browserRedirect } from './browser-redirect.ts'
 import { takes, wrongGame } from './clients.ts'
+import { serveDrain } from './drain.ts'
 import { type FrontOptions, front, geyserDoor, pipe, playersOnline } from './front.ts'
 import { forServer, Unwrap } from './header.ts'
 import { Held, LOGIN_QUERIES, turnAway } from './hold.ts'
@@ -699,7 +700,6 @@ let bedrock: Bedrock | null = null
 if (WEB_ORIGIN && PLAY_DOMAINS.length > 0)
   browserRedirect({
     bedrock: () => bedrock?.status() ?? null,
-    drain: () => ({ players: playersOnline(), routesCurrent: poll.current() }),
     port: Number(env('BROWSER_PORT', '8080')),
     domains: PLAY_DOMAINS,
     web: WEB_ORIGIN,
@@ -707,6 +707,9 @@ if (WEB_ORIGIN && PLAY_DOMAINS.length > 0)
     aliasOf: (name) => aliases.get(name),
   })
 else console.error('WEB_CANONICAL_ORIGIN or PLAY_DOMAINS is unset; browsers aren’t redirected')
+
+// What a deploy asks before restarting this edge, on the private network only (drain.ts).
+serveDrain(() => ({ players: playersOnline(), routesCurrent: poll.current() }))
 
 // ─── Supervise mc-router ────────────────────────────────────────────────────────────────────
 

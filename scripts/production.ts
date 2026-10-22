@@ -168,7 +168,7 @@ async function deployApp(
       'image' in from
         ? from.image
         : buildEdgeImage('bly-prod-edge', config[1] as string, DOCKERFILES.edge, from.label, env)
-    const cut = await rollEdgeApp(
+    const { cut, uncounted } = await rollEdgeApp(
       'bly-prod-edge',
       config[1] as string,
       image,
@@ -176,7 +176,12 @@ async function deployApp(
       env,
       say,
     )
-    say(cut === 0 ? 'edge: no player was cut.' : `edge: ${cut} players were still connected and were cut.`)
+    if (uncounted.length > 0)
+      say(
+        `edge: ${uncounted.join(', ')} couldn’t say how many players were connected, so the players cut there are unknown.`,
+      )
+    if (cut > 0) say(`edge: ${cut} counted players were still connected and were cut.`)
+    else if (uncounted.length === 0) say('edge: no player was cut.')
   } else run('fly', ['deploy', ...source, ...config, '--yes', '--ha=false'], env)
   if (app === 'edge') placeEdge(env)
 }

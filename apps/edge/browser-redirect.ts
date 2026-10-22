@@ -18,8 +18,6 @@ const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 /** Where Fly's health check asks whether the edge is well, and where Bedrock's own status is. */
 const HEALTH_PATH = '/_health'
 const BEDROCK_PATH = '/_health/bedrock'
-/** Where a deploy asks how many players are connected and whether the routes are the newest. */
-const DRAIN_PATH = '/_health/drain'
 
 /** What the edge knows to answer a browser with. */
 export interface Pages {
@@ -37,11 +35,6 @@ export interface Pages {
    * undefined for a server's own address, whose page is its own slug's.
    */
   aliasOf: (hostname: string) => string | undefined
-  /**
-   * What a deploy waits on, at `/_health/drain`: the players connected through this edge, and
-   * whether it holds the control plane's newest routes. Not part of `/_health`.
-   */
-  drain?: () => { players: number; routesCurrent: boolean }
   /**
    * How Bedrock stands, null where the edge takes none: shown at `/_health/bedrock`, a status of its
    * own. It is never part of `/_health`, which Fly's check asks and which covers Java alone, since
@@ -69,16 +62,6 @@ export function pageFor(host: string | null, pages: Pages): string {
   return home
 }
 
-/** What `/_health/drain` and `/_health/bedrock` answer; null for any other path. */
-function statusAt(path: string, pages: Pages): Response | null {
-  if (path === DRAIN_PATH)
-    return pages.drain ? Response.json(pages.drain()) : new Response(null, { status: 404 })
-  if (path !== BEDROCK_PATH) return null
-  const status = pages.bedrock?.() ?? null
-  if (status === null) return new Response(null, { status: 404 })
-  return Response.json(status, { status: status.state === 'up' ? 200 : 503 })
-}
-
 /**
  * Listens on `port` for browsers, and sends each to its server's page with a temporary redirect,
  * so where it goes can change later. Every method and path is answered the same way, but Fly's health check (`/_health`).
@@ -94,8 +77,11 @@ export function browserRedirect(
       const path = new URL(request.url).pathname
       // Answering at all is the edge being well: if mc-router were gone, the agent would be too.
       if (path === HEALTH_PATH) return new Response(null, { status: 204 })
-      const status = statusAt(path, pages)
-      if (status !== null) return status
+      if (path === BEDROCK_PATH) {
+        const status = pages.bedrock?.() ?? null
+        if (status === null) return new Response(null, { status: 404 })
+        return Response.json(status, { status: status.state === 'up' ? 200 : 503 })
+      }
       return new Response(null, {
         status: 302,
         headers: { location: pageFor(request.headers.get('host'), pages), 'cache-control': 'no-store' },

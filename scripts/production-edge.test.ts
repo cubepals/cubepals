@@ -140,20 +140,33 @@ describe('the edge’s service', () => {
   })
 })
 
-describe('restarting the edge without cutting a player', () => {
-  /** A clock that only moves when slept on, and a log of what was done in what order. */
-  const world = () => {
-    let now = 0
-    const log: string[] = []
-    const clock: Clock = {
-      now: () => now,
-      sleep: async (ms) => {
-        now += ms
-      },
-    }
-    return { clock, log, said: (line: string) => log.push(line), time: () => now }
+/** A clock that only moves when slept on, and a log of what was done in what order. */
+const world = () => {
+  let now = 0
+  const log: string[] = []
+  const clock: Clock = {
+    now: () => now,
+    sleep: async (ms) => {
+      now += ms
+    },
   }
+  return { clock, log, said: (line: string) => log.push(line), time: () => now }
+}
 
+const steps = (log: string[], over: Partial<RegionSteps> = {}): RegionSteps => ({
+  cordon: async (r) => void log.push(`cordon ${r}`),
+  othersReady: async () => true,
+  uncordon: async (r) => void log.push(`uncordon ${r}`),
+  players: async () => 0,
+  deploy: async (r) => void log.push(`deploy ${r}`),
+  ready: async (r) => {
+    log.push(`ready ${r}`)
+    return true
+  },
+  ...over,
+})
+
+describe('restarting the edge without cutting a player', () => {
   test('waits for the players to leave, and restarts as soon as they have', async () => {
     const w = world()
     const counts = [3, 2, 0]
@@ -176,22 +189,9 @@ describe('restarting the edge without cutting a player', () => {
     expect(EDGE_DRAIN_LIMIT_MS).toBe(10 * MINUTE_MS)
   })
 
-  const steps = (log: string[], over: Partial<RegionSteps> = {}): RegionSteps => ({
-    cordon: async (r) => void log.push(`cordon ${r}`),
-    othersReady: async () => true,
-    uncordon: async (r) => void log.push(`uncordon ${r}`),
-    players: async () => 0,
-    deploy: async (r) => void log.push(`deploy ${r}`),
-    ready: async (r) => {
-      log.push(`ready ${r}`)
-      return true
-    },
-    ...over,
-  })
-
   test('one region at a time: the next is not touched until the last is ready', async () => {
     const w = world()
-    const cut = await rollEdge(['fra', 'iad'], steps(w.log), () => {}, w.clock)
+    const { cut } = await rollEdge(['fra', 'iad'], steps(w.log), () => {}, w.clock)
     expect(cut).toBe(0)
     expect(w.log).toEqual([
       ...['cordon fra', 'deploy fra', 'ready fra', 'uncordon fra'],
@@ -202,7 +202,7 @@ describe('restarting the edge without cutting a player', () => {
   test('a region that is not up to date with the routes yet is waited on', async () => {
     const w = world()
     let asks = 0
-    const cut = await rollEdge(
+    const { cut } = await rollEdge(
       ['fra', 'iad'],
       steps(w.log, { ready: async (r) => (r === 'fra' ? ++asks > 3 : true) }),
       () => {},
@@ -225,7 +225,7 @@ describe('restarting the edge without cutting a player', () => {
   test('counts the players cut across regions', async () => {
     const w = world()
     const said: string[] = []
-    const cut = await rollEdge(
+    const { cut } = await rollEdge(
       ['fra', 'iad'],
       steps(w.log, { players: async (r) => (r === 'fra' ? 2 : 0) }),
       (line) => said.push(line),
@@ -234,7 +234,9 @@ describe('restarting the edge without cutting a player', () => {
     expect(cut).toBe(2)
     expect(said).toContain('fra: 2 still connected after 10 min; restarting cuts them')
   })
+})
 
+describe('restarting the edge when a region can’t be cordoned or fails', () => {
   test('a single region is not cordoned, since no other takes its joins, but its players are waited on', async () => {
     const w = world()
     const counts = [2, 0]
@@ -267,5 +269,19 @@ describe('restarting the edge without cutting a player', () => {
     expect(said).toContain(
       'fra: deploying; no other region can take its joins, so none is taken while it restarts',
     )
+  })
+
+  test('an edge that cannot count its players is reported as uncounted, not as none cut', async () => {
+    const w = world()
+    const said: string[] = []
+    const result = await rollEdge(
+      ['fra', 'iad'],
+      steps(w.log, { players: async (r) => (r === 'fra' ? null : 0) }),
+      (line) => said.push(line),
+      w.clock,
+    )
+    expect(result).toEqual({ cut: 0, uncounted: ['fra'] })
+    expect(said).toContain("fra: it can't say how many players are connected, so none was waited for")
+    expect(w.time()).toBe(0)
   })
 })
