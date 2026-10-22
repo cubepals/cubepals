@@ -15,13 +15,13 @@ import type { ReactNode } from 'react'
 import { messageOf, useTRPC } from '../../../lib/api'
 import { checkoutHref } from '../../../lib/checkout'
 import { dayOf } from '../../../lib/present'
-import { Button, Note } from '../../../ui'
+import { Button, forSale, Note } from '../../../ui'
 import { planMark } from '../../(public)/steps'
 
 /** What goes under `plan`'s card, if anything: the person's own plan and one not for sale have none. */
 export function planAction(plan: PublicPlan, overview: AccountOverviewView, sells: boolean): ReactNode {
   const { billed } = overview.plan
-  if (!sells || !plan.available || plan.monthlyPriceCents === 0 || plan.key === overview.plan.key)
+  if (!sells || !forSale(plan) || plan.monthlyPriceCents === 0 || plan.key === overview.plan.key)
     return undefined
   if (plan.monthlyPriceCents > overview.entitlements.monthlyPriceCents)
     return (
@@ -34,8 +34,7 @@ export function planAction(plan: PublicPlan, overview: AccountOverviewView, sell
       </Button>
     )
   const paying = billed?.status === 'active' && billed.planKey === overview.plan.key
-  if (!paying || billed.cancelAtPeriodEnd || billed.periodEnd === null || billed.movesTo !== null)
-    return undefined
+  if (!paying || billed.cancelAtPeriodEnd || billed.periodEnd === null || billed.movesTo) return undefined
   return <MoveDown plan={plan} planNow={overview.plan.key} from={billed.periodEnd} />
 }
 

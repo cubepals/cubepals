@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from 'bun:test'
 import type { PublicPlan } from '@blockly/contracts'
-import { pitchOf, planPoints, priceOf } from '../ui/plans.tsx'
+import { extraHourOf, forSale, pitchOf, planPoints, priceOf } from '../ui/plans.tsx'
 import { daysSaid, hoursAgainSaid, hoursSaid } from './plans.ts'
 
 const free: PublicPlan = {
@@ -71,7 +71,7 @@ describe('plans as people read them', () => {
     expect(planPoints(free)).toEqual([
       '1 server, up to 5 players',
       '20 hours of play, at most 2 a day',
-      'Vanilla or Paper',
+      'Plain Minecraft',
       'Go back to any of your last 3 sessions, and download your world',
     ])
   })
@@ -87,12 +87,30 @@ describe('plans as people read them', () => {
     ])
   })
 
+  test('no card names a server type', () => {
+    for (const plan of [free, core, plus])
+      expect(planPoints(plan).join(' ')).not.toMatch(/vanilla|paper|fabric|forge/i)
+  })
+
+  test('a plans answer from before the new fields still reads: no clause says undefined, and no plan looks off sale', () => {
+    // What an API that predates `extraHourCents` and `available` sends.
+    const { extraHourCents: _e, available: _a, ...old } = plus
+    const oldPlus = old as unknown as PublicPlan
+    expect(planPoints(oldPlus).join(' ')).not.toContain('undefined')
+    expect(planPoints(oldPlus)[1]).toBe('120 hours of play each month')
+    expect(forSale(oldPlus)).toBe(true)
+    expect(extraHourOf(oldPlus)).toBeNull()
+    // Only the API saying so takes a plan off sale.
+    expect(forSale({ ...plus, available: false })).toBe(false)
+    expect(forSale({ ...plus, available: true })).toBe(true)
+  })
+
   test('Core is one server for a group of friends, with its hours in the details', () => {
     expect(priceOf(core.monthlyPriceCents)).toBe('$9.99 a month')
     expect(planPoints(core)).toEqual([
       '1 server, up to 5 players',
       '40 hours of play each month, then 25¢ an hour',
-      'Vanilla or Paper',
+      'Plain Minecraft',
       'Go back to any of your last 14 sessions, and a weekly download',
     ])
   })

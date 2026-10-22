@@ -15,6 +15,18 @@ import { Tip } from './tip'
  * a card says, and never its hours. Core says Java and Bedrock friends play together only where
  * Bedrock is on (`lib/bedrock.ts`), and promises nothing about Bedrock where it is off.
  */
+/**
+ * Whether a plan is on sale: only the API saying so (`available: false`) takes it off. A plans
+ * answer from before the field existed, while the site and the API deploy minutes apart, shows
+ * every plan as it always did.
+ */
+export const forSale = (plan: Pick<PublicPlan, 'available'>): boolean =>
+  (plan.available as boolean | undefined) !== false
+
+/** What an extra hour costs on a plan, in cents; null where the plan has none or the answer predates it. */
+export const extraHourOf = (plan: Pick<PublicPlan, 'extraHourCents'>): number | null =>
+  typeof plan.extraHourCents === 'number' ? plan.extraHourCents : null
+
 export function pitchOf(plan: Pick<PublicPlan, 'key' | 'maxPlayers'>, bedrock = false): string {
   switch (plan.key) {
     case 'free':
@@ -53,17 +65,17 @@ export function planPoints(plan: PublicPlan): string[] {
 export const planSaid = (plan: Pick<PublicPlan, 'name' | 'totalHours'>): string =>
   plan.totalHours === null ? plan.name : `the ${plan.name.toLowerCase()}`
 
-/** What a server may run past plain Minecraft, or that it is plain. */
+/** What a server may run past plain Minecraft, or that it is plain: no loader is ever named on a card. */
 function addOns(plan: PublicPlan): string {
   if (plan.mods)
     return plan.datapacks ? 'Modpacks, mods, plugins and datapacks' : 'Modpacks, mods and plugins'
-  return plan.datapacks ? 'Vanilla or Paper, with datapacks' : 'Vanilla or Paper'
+  return plan.datapacks ? 'Plain Minecraft, with datapacks' : 'Plain Minecraft'
 }
 
 const hoursPoint = (plan: PublicPlan) =>
   plan.totalHours !== null
     ? `${plan.totalHours} hours of play, at most ${plan.includedHours} a day`
-    : `${plan.includedHours} hours of play ${plan.per === 'day' ? 'every day' : 'each month'}${plan.extraHourCents === null ? '' : `, then ${plan.extraHourCents}¢ an hour`}`
+    : `${plan.includedHours} hours of play ${plan.per === 'day' ? 'every day' : 'each month'}${extraHourOf(plan) === null ? '' : `, then ${extraHourOf(plan)}¢ an hour`}`
 
 /** One of a plan's points as a card shows it: the hours on the dashed line that says what they are. */
 export function PlanPoint({ plan, point }: { plan: PublicPlan; point: string }) {

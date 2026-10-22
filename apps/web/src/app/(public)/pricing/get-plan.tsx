@@ -55,7 +55,7 @@ export function GetPlan({
         Get {name}
       </Button>
       {yearlyCents !== null && (
-        <Link href={href('year')} className="type-body-sm" {...planMark(plan, 'year')}>
+        <Link href={href('year')} className="type-body-sm bk-plan__year" {...planMark(plan, 'year')}>
           Or {dollars(yearlyCents)} for a year, paid once
         </Link>
       )}

@@ -8,7 +8,7 @@
 import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
 import { ctaMark, planMark, seenMark } from '../../app/(public)/steps'
-import { eachOf, PlanPoint, pitchOf, planPoints, priceOf } from '../../ui/plans'
+import { eachOf, forSale, PlanPoint, pitchOf, planPoints, priceOf } from '../../ui/plans'
 import { Section } from '../kit'
 import styles from './surface.module.css'
 
@@ -146,7 +146,7 @@ function PlanButton({
   getPlan: (key: string) => string
 }) {
   const isPaid = plan.monthlyPriceCents > 0
-  if (isPaid && !plan.available)
+  if (isPaid && !forSale(plan))
     return (
       <span className={`bl-btn ${styles.action}`} aria-disabled="true">
         Not available yet

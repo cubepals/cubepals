@@ -9,7 +9,7 @@ import { bedrockLive } from '../../../lib/bedrock'
 import { hoursSaid, publicPlans } from '../../../lib/plans'
 import { canonicalOrigin, pageMetadata } from '../../../lib/site'
 import { appSchema, JsonLd } from '../../../lib/structured-data'
-import { PlanCard, priceOf } from '../../../ui'
+import { forSale, PlanCard, priceOf } from '../../../ui'
 import { guideHref, publishedGuides } from '../guides'
 import { seenMark } from '../steps'
 import { GetPlan } from './get-plan'
@@ -74,7 +74,7 @@ export default async function PricingPage() {
                 name={plan.name}
                 paid={plan.monthlyPriceCents > 0}
                 yearlyCents={plan.yearlyPriceCents}
-                available={plan.available}
+                available={forSale(plan)}
               />
             }
           />

@@ -10,7 +10,7 @@ import type { PublicPlan } from '@blockly/contracts'
 import { dollars, EXTRA_HOUR_CENTS } from '../../../legal/figures'
 import { bedrockLive } from '../../../lib/bedrock'
 import { daysSaid, hoursAgainSaid } from '../../../lib/plans'
-import { eachOf } from '../../../ui'
+import { eachOf, extraHourOf } from '../../../ui'
 import { detailMark } from '../steps'
 
 /** The plans by what each is: the trial, the plan for friends on vanilla, and the one with mods. */
@@ -72,7 +72,7 @@ function runOutSaid(
   free: PublicPlan | undefined,
   paid: PublicPlan | undefined,
 ) {
-  const extras = plans.filter((plan) => plan.extraHourCents !== null)
+  const extras = plans.filter((plan) => extraHourOf(plan) !== null)
   const extra =
     extras.length > 0
       ? ` On ${named(extras)} you can allow extra hours instead, at ${dollars(EXTRA_HOUR_CENTS)} each, up to a limit you set, added to your next payment.`
