@@ -53,6 +53,26 @@ describe('a delete that waits to be sent', () => {
     expect(sent).toEqual([true])
   })
 
+  test('leaving twice, or after the timer fired, sends it once', async () => {
+    const deletes = new UndoableDeletes()
+    let sent = 0
+    deletes.start('a', async () => {
+      sent += 1
+    })
+    deletes.leave()
+    deletes.leave()
+    await Promise.resolve()
+    expect(sent).toBe(1)
+
+    deletes.start('b', () => new Promise(() => {}))
+    jest.advanceTimersByTime(UNDO_MS)
+    deletes.leave()
+    deletes.leave()
+    expect(deletes.isWaiting('b')).toBe(true)
+    jest.advanceTimersByTime(UNDO_MS)
+    expect(sent).toBe(1)
+  })
+
   test('a delete the API refused is kept with what it said, and the note is no longer hidden', async () => {
     const deletes = new UndoableDeletes()
     const failure = new Error('Cubepals couldn’t be reached.')

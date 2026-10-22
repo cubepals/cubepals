@@ -23,6 +23,8 @@ export const UNDO_MS = 8 * SECOND_MS
  */
 export class UndoableDeletes {
   private readonly waiting = new Map<string, { timer: ReturnType<typeof setTimeout>; send: Send }>()
+  /** Moved here from `waiting` as the call goes out, so a second send finds nothing to send. */
+  private readonly sending = new Set<string>()
   private readonly refused = new Map<string, unknown>()
   private readonly listeners = new Set<() => void>()
   private version = 0
@@ -47,7 +49,7 @@ export class UndoableDeletes {
   }
 
   isWaiting(id: string): boolean {
-    return this.waiting.has(id)
+    return this.waiting.has(id) || this.sending.has(id)
   }
 
   /** Why `id` could not be deleted, as thrown, until the next try. */
@@ -73,13 +75,14 @@ export class UndoableDeletes {
   private async send(id: string, leaving: boolean): Promise<void> {
     const entry = this.waiting.get(id)
     if (entry === undefined) return
-    clearTimeout(entry.timer)
+    this.cancel(id)
+    this.sending.add(id)
     try {
       await entry.send(leaving)
     } catch (error) {
       this.refused.set(id, error)
     } finally {
-      this.waiting.delete(id)
+      this.sending.delete(id)
       this.changed()
     }
   }

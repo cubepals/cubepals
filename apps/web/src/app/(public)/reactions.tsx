@@ -50,6 +50,10 @@ const NO_NAME = 'A player'
  */
 const noteDeletes = new UndoableDeletes()
 
+// Once for the page, not once for every card that shows notes: a note deleted a moment ago is sent
+// now rather than lost with the page.
+if (typeof window !== 'undefined') window.addEventListener('pagehide', () => noteDeletes.leave())
+
 /**
  * A server's stars and notes, on its card in the directory and on its own page: a guestbook,
  * never a community. Everyone sees the two counts. Someone signed in stars with one press and
@@ -58,12 +62,6 @@ const noteDeletes = new UndoableDeletes()
  * always say the same.
  */
 export function Reactions({ reactions }: { reactions: ReactionsView }) {
-  // A note deleted a moment ago is sent now rather than lost with the page.
-  useEffect(() => {
-    const leave = () => noteDeletes.leave()
-    window.addEventListener('pagehide', leave)
-    return () => window.removeEventListener('pagehide', leave)
-  }, [])
   return (
     <div className={styles.reactions}>
       <StarButton reactions={reactions} />
