@@ -91,6 +91,8 @@ export interface Run {
 export const MARKER = '<!-- second-eye -->'
 /** The data block that ends the comment: the findings that stand, for the next review. */
 const DATA = 'second-eye-data:'
+/** How much of each problem is kept when a review is far too long for one comment. */
+const SHORT = 100
 /** GitHub refuses a comment past 65536 characters; past this the folded reasons are left out. */
 const MOST_CHARACTERS = 60000
 
@@ -252,8 +254,16 @@ export function secondEyeComment(review: Review, run: Run): string {
     (finding, i) =>
       `${i + 1}. ${where(run, finding)}${finding.why ? ` ${cell(finding.why)}` : ''} **Fix:** ${cell(finding.fix)}`,
   )
-  // Too long for a comment: the tables stay, the folded reasons go.
-  const lines = (withWhy: boolean) => [
+  // Too long for a comment: first the folded reasons go, then each problem is cut short.
+  const reasons = (stage: 0 | 1 | 2): string[] => {
+    if (!findings.length) return []
+    if (stage === 0)
+      return ['<details>', '<summary>Why, and the fix</summary>', '', ...why, '', '</details>', '']
+    return ['_The reasons and fixes are left out: the review is too long for one comment._', '']
+  }
+  const problem = (text: string, stage: 0 | 1 | 2): string =>
+    stage === 2 ? plain(text).slice(0, SHORT) : text
+  const lines = (stage: 0 | 1 | 2) => [
     MARKER,
     ...(run.updating ? [`<sub>Updated for ${commitLink(run)}</sub>`, ''] : []),
     '### 🤖 Second eye · AI review by Claude',
@@ -273,21 +283,25 @@ export function secondEyeComment(review: Review, run: Run): string {
       ...head,
       ...found.map(
         (finding) =>
-          `| ${where(run, finding)} | ${cell(finding.problem)} |${run.previous ? ` ${SINCE[finding.origin ?? 'first']} |` : ''}`,
+          `| ${where(run, finding)} | ${cell(problem(finding.problem, stage))} |${run.previous ? ` ${SINCE[finding.origin ?? 'first']} |` : ''}`,
       ),
       '',
     ]),
-    ...(!findings.length
-      ? []
-      : withWhy
-        ? ['<details>', '<summary>Why, and the fix</summary>', '', ...why, '', '</details>', '']
-        : ['_The reasons and fixes are left out: the review is too long for one comment._', '']),
-    ...(run.previous ? settledDetails(review, run.previous) : []),
+    ...reasons(stage),
+    ...(run.previous && stage < 2 ? settledDetails(review, run.previous) : []),
     `<sub>An automated review by Claude, not a person. It advises and doesn't block the merge. Re-run: \`gh workflow run second-eye.yml -f pr=${run.pull}\`</sub>`,
-    dataBlock(run, findings),
+    dataBlock(
+      run,
+      stage === 2
+        ? findings.map((finding) => ({ ...finding, problem: problem(finding.problem, stage) }))
+        : findings,
+    ),
   ]
-  const body = lines(true).join('\n')
-  return body.length <= MOST_CHARACTERS ? body : lines(false).join('\n')
+  for (const stage of [0, 1] as const) {
+    const body = lines(stage).join('\n')
+    if (body.length <= MOST_CHARACTERS) return body
+  }
+  return lines(2).join('\n')
 }
 
 /** The commit a comment's review is for: the first commit it links to below any notice. */

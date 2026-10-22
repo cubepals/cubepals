@@ -151,6 +151,16 @@ describe('what the second eye shows beyond its findings', () => {
     expect(findingRows(body)).toHaveLength(60)
   })
 
+  test('an enormous review is cut to fit in one comment', () => {
+    const long = { ...finding('high', 1), problem: 'y'.repeat(300), why: 'x'.repeat(600) }
+    const body = secondEyeComment(
+      { verdict: 'fix first', findings: Array.from({ length: 120 }, () => long) },
+      run,
+    )
+    expect(body.length).toBeLessThan(65536)
+    expect(findingRows(body)).toHaveLength(120)
+  })
+
   test('ends with the findings that stand, for the next review to read', () => {
     const body = secondEyeComment({ verdict: 'fix first', findings: [finding('high', 1)] }, run)
     const encoded = /<!-- second-eye-data:([A-Za-z0-9+/=]+) -->$/.exec(body)?.[1] ?? ''

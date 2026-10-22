@@ -17,6 +17,9 @@ import {
 describe('isSensitive', () => {
   test.each([
     '.github/workflows/ci.yml',
+    '.github/second-eye.md',
+    'scripts/second-eye-gate.ts',
+    'scripts/second-eye-comment.ts',
     'infra/fly/app.tf',
     'apps/web/Dockerfile',
     'tools/bedrock-join/size/load/Dockerfile',
@@ -44,9 +47,8 @@ describe('isSensitive', () => {
     'apps/web/src/landing.tsx',
     'apps/control/src/app/servers/start.ts',
     'apps/control/src/app/accounts/profile.ts',
-    'scripts/second-eye-gate.ts',
+    'scripts/lib/pull-comment.ts',
     'docs/billing.md',
-    '.github/second-eye.md',
   ])('%s does not', (path) => expect(isSensitive(path)).toBe(false))
 })
 

@@ -26,9 +26,11 @@ export const CONTEXT = 'Second eye gate'
 /** The one account whose request, or whose own pull request, starts a review. */
 export const MAINTAINER = 'v0id-user'
 
-/** Paths whose change needs a second eye: workflows, infrastructure, images, dependencies, the schema, production and staging tooling, the edge, and the control plane's money and access code. */
+/** Paths whose change needs a second eye: workflows and the second eye's own prompt and scripts, infrastructure, images, dependencies, the schema, production and staging tooling, the edge, and the control plane's money and access code. */
 const SENSITIVE: RegExp[] = [
   /^\.github\/workflows\//,
+  /^\.github\/second-eye\.md$/,
+  /^scripts\/second-eye/,
   /^infra\//,
   /(^|\/)(Dockerfile(\..*)?|.*\.Dockerfile)$/,
   /(^|\/)(package\.json|bun\.lock)$/,
