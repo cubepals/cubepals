@@ -24,6 +24,7 @@ const IDLE_MS = 60_000
 
 const { address: bedrock } = await lookup('fly-global-services', { family: 4 })
 type Udp = Bun.udp.Socket<'buffer'>
+let next = 0
 const peers = new Map<string, { socket: Udp; at: number }>()
 
 const front: Udp = await Bun.udpSocket({
@@ -35,7 +36,12 @@ const front: Udp = await Bun.udpSocket({
       const key = `[${address}]:${port}`
       let peer = peers.get(key)
       if (peer === undefined) {
+        // Geyser limits connection attempts by address, and every test player would otherwise
+        // arrive from this machine's one. Each gets a loopback address of its own, as a real
+        // player has an address of their own.
+        const mine = next++
         const socket = await Bun.udpSocket({
+          hostname: `127.0.${1 + (Math.floor(mine / 254) % 254)}.${1 + (mine % 254)}`,
           socket: {
             error() {},
             data(_back, reply) {
