@@ -167,9 +167,10 @@ export interface RegionSteps {
 }
 
 /**
- * Restarts the edge one region at a time: the region is cordoned, its players waited on, then it
- * is deployed and waited on until ready, and only then the next. Cordoned only while another
- * region is ready to take its joins (with a single region there is none). A region that stays in
+ * Restarts the edge one region at a time: its players are waited on, then it is deployed and
+ * waited on until ready, and only then the next. With `options.cordon` a region is first cordoned
+ * while another is ready to take its joins (never with a single region); that is off until its
+ * effect on the other region's joins is measured. A region that stays in
  * service has its players waited on, up to the limit, while new joins keep arriving; the gap while
  * it restarts is said. A region that doesn't come back ready, or that fails
  * anywhere on the way, takes connections again and stops the roll with the others as they were.
@@ -180,22 +181,41 @@ export async function rollEdge(
   steps: RegionSteps,
   say: (line: string) => void,
   clock: Clock,
+  options: { cordon: boolean } = { cordon: false },
 ): Promise<{ cut: number; uncounted: string[] }> {
   let cut = 0
   const uncounted: string[] = []
   for (const region of regions) {
-    const cordoned = regions.length > 1 && (await steps.othersReady(region))
+    const cordoned = options.cordon && regions.length > 1 && (await steps.othersReady(region))
     say(`${region}: ${cordoned ? 'taking no new joins, ' : ''}waiting for its players to leave`)
     if (cordoned) await steps.cordon(region)
+    let restarted = false
     try {
       const left = await restartRegion(region, cordoned, steps, (line) => say(`${region}: ${line}`), clock)
+      restarted = true
       if (left === null) uncounted.push(region)
       else cut += left
     } finally {
-      if (cordoned) await steps.uncordon(region).catch(() => undefined)
+      // Taking joins again is never skipped; its failure ends the roll unless another error already does.
+      if (cordoned)
+        await uncordonAgain(region, steps, clock).catch((error) => {
+          if (restarted) throw error
+        })
     }
   }
   return { cut, uncounted }
+}
+
+/** Takes the region's connections again, tried a few times before giving up. */
+async function uncordonAgain(region: string, steps: RegionSteps, clock: Clock): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await steps.uncordon(region)
+    } catch (error) {
+      if (attempt >= 3) throw error
+      await clock.sleep(EDGE_ASK_EVERY_MS)
+    }
+  }
 }
 
 /** One region's players waited on, the machine deployed and waited on; the players cut, or null. */
@@ -210,11 +230,7 @@ async function restartRegion(
   if (left === null) say("it can't say how many players are connected, so none was waited for")
   else if (left > 0)
     say(`${left} still connected after ${EDGE_DRAIN_LIMIT_MS / MINUTE_MS} min; restarting cuts them`)
-  say(
-    cordoned
-      ? 'deploying'
-      : 'deploying; no other region can take its joins, so none is taken while it restarts',
-  )
+  say(cordoned ? 'deploying' : 'deploying; it takes joins until it restarts, and none while it does')
   await steps.deploy(region)
   if (!(await waitUntil(() => steps.ready(region), clock, EDGE_READY_LIMIT_MS)))
     throw new Error(

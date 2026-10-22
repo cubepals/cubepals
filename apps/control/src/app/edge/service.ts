@@ -301,15 +301,17 @@ export class EdgeService {
     const now = Date.now()
     // A restart is written at once, however lately the edge's word was: it is what the alert waits on.
     const restarted = startedAt !== null && this.#startedOf.get(edgeId) !== +startedAt
-    if (startedAt !== null) this.#startedOf.set(edgeId, +startedAt)
     if (unrouted || restarted) {
       this.#saidAt.set(edgeId, now)
       await seen(this.#db, this.#events, edgeId, syncedTo, startedAt)
+      // Remembered once written, so a write that failed is tried again by the next ask.
+      if (startedAt !== null) this.#startedOf.set(edgeId, +startedAt)
       return
     }
     if (now - (this.#saidAt.get(edgeId) ?? 0) < EDGE_SAID_EVERY_MS) return
     this.#saidAt.set(edgeId, now)
     await sawEdge(this.#db, edgeId, syncedTo, startedAt)
+    if (startedAt !== null) this.#startedOf.set(edgeId, +startedAt)
     if (now - this.#forgotAt < HOUR_MS) return
     this.#forgotAt = now
     await forgetQuietEdges(this.#db)

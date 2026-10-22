@@ -142,5 +142,5 @@ export async function rollEdgeApp(
       ),
     ready: async (region) => (await drainState(app, machineIn(region), env))?.routesCurrent === true,
   }
-  return rollEdge(regions, steps, say, clock)
+  return rollEdge(regions, steps, say, clock, { cordon: process.env.EDGE_CORDON === '1' })
 }
