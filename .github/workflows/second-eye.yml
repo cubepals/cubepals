@@ -117,7 +117,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      superseded: ${{ steps.newer.outputs.superseded }}
+      superseded: ${{ steps.newer.outputs.superseded || steps.after.outputs.superseded }}
       review: ${{ steps.claude.outputs.structured_output }}
       reviewed: ${{ steps.pull.outputs.reviewed }}
       model: ${{ steps.model.outputs.model }}
@@ -151,11 +151,11 @@ jobs:
           fi
           gh pr diff "$PR" -R "$GITHUB_REPOSITORY" > .second-eye/pr.diff
           echo "reviewed=$(jq -c '{sha: .headRefOid, files: .changedFiles, additions, deletions}' .second-eye/pr.json)" >> "$GITHUB_OUTPUT"
-      # The review is for the commit this run began on. When the pull request has moved past it and
-      # the push that moved it started a run of its own (one a person asked for: a run that every
-      # job skipped concludes skipped), that run reviews the new head, and this one ends green. A
-      # push nobody asked a review for starts none, so the review goes on and says it is of an
-      # older commit.
+      # The review is for the commit this run began on. When the pull request has moved to a later
+      # commit and the run that push started has a Review job that was not skipped (it waits, runs or
+      # finished), that run reviews the new head, and this one ends green. A push nobody asked a
+      # review for starts a run whose Review job is skipped, so the review goes on and says it is
+      # of an older commit.
       - name: Whether a newer push has its own review
         id: newer
         env:
@@ -164,10 +164,16 @@ jobs:
         run: |
           head=$(jq -r .headRefOid .second-eye/pr.json)
           if [ -n "$STARTED" ] && [ "$STARTED" != "$head" ]; then
-            runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/second-eye.yml/runs?head_sha=$head&per_page=100" --jq '[.workflow_runs[] | select(.conclusion != "skipped")] | length')
-            if [ "$runs" -gt 0 ]; then
-              echo "::notice::A newer push has its own review."
-              echo "superseded=true" >> "$GITHUB_OUTPUT"
+            status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$STARTED...$head" --jq .status || true)
+            if [ "$status" = ahead ]; then
+              for run in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/second-eye.yml/runs?head_sha=$head&event=pull_request&per_page=100" --jq '.workflow_runs[].id'); do
+                reviews=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100" --jq '[.jobs[] | select(.name == "Review" and .conclusion != "skipped")] | length')
+                if [ "$reviews" -gt 0 ]; then
+                  echo "::notice::A newer push has its own review."
+                  echo "superseded=true" >> "$GITHUB_OUTPUT"
+                  break
+                fi
+              done
             fi
           fi
       - name: Load the rules
@@ -193,6 +199,30 @@ jobs:
             --allowedTools "Read(./**)"
             --disallowedTools "Bash,Edit,MultiEdit,Write,NotebookEdit,WebFetch,WebSearch,Read(./.git/**),Read(//proc/**),Read(//sys/**),Read(//dev/**),Read(//etc/**),Read(//root/**),Read(//tmp/**),Read(//var/**),Read(//run/**),Read(//opt/**),Read(~/.*),Read(~/.*/**),Read(//home/runner/work/_temp/**),Read(//home/runner/work/_actions/**),Read(//home/runner/runners/**),Read(//home/runner/actions-runner/**)"
             --json-schema '{"type":"object","additionalProperties":false,"required":["verdict","findings"],"properties":{"verdict":{"enum":["merge","fix first"]},"findings":{"type":"array","maxItems":8,"items":{"type":"object","additionalProperties":false,"required":["severity","file","line","problem","fix","why"],"properties":{"severity":{"enum":["high","medium","low"]},"file":{"type":"string","maxLength":200},"line":{"type":"integer","minimum":1},"problem":{"type":"string","maxLength":300},"fix":{"type":"string","maxLength":300},"why":{"type":"string","maxLength":600}}}}}}'
+      # The same question once the review is made: a push that landed while Claude read, or while
+      # the quiet window of a push before it ran, has its own review, and this one must not land
+      # over it.
+      - name: Whether a newer push came during the review
+        id: after
+        if: steps.claude.outputs.structured_output != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          reviewed=$(jq -r .headRefOid .second-eye/pr.json)
+          head=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)
+          if [ "$reviewed" != "$head" ]; then
+            status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$reviewed...$head" --jq .status || true)
+            if [ "$status" = ahead ]; then
+              for run in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/second-eye.yml/runs?head_sha=$head&event=pull_request&per_page=100" --jq '.workflow_runs[].id'); do
+                reviews=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100" --jq '[.jobs[] | select(.name == "Review" and .conclusion != "skipped")] | length')
+                if [ "$reviews" -gt 0 ]; then
+                  echo "::notice::A newer push has its own review."
+                  echo "superseded=true" >> "$GITHUB_OUTPUT"
+                  break
+                fi
+              done
+            fi
+          fi
       # The action hides Claude's output. This prints only how long it took, which tools were
       # refused and on what path, and on failure the result's error (a bad token reads "401 OAuth
       # access token is invalid"), each on one line so none is taken as a workflow command.
@@ -220,7 +250,7 @@ jobs:
   comment:
     name: Comment
     needs: review
-    if: needs.review.outputs.review != ''
+    if: needs.review.outputs.review != '' && needs.review.outputs.superseded != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

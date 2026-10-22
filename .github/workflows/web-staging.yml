@@ -49,6 +49,11 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    # One deploy at a time, in the order the pushes came. A run waiting behind another starts when
+    # it is its turn, finds a newer push and ends green; none is cancelled while it deploys.
+    concurrency:
+      group: web-staging-main
+      cancel-in-progress: false
     steps:
       # A newer push to main replaces this build: it ends green here instead of cancelled, and
       # deploys nothing, so an older commit never lands after a newer one.
@@ -58,7 +63,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           current=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
-          if [ "$current" != "$GITHUB_SHA" ]; then
+          status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$GITHUB_SHA...$current" --jq .status || true)
+          if [ "$status" = ahead ]; then
             echo "::notice::A newer push to main deploys the website."
             echo "stale=true" >> "$GITHUB_OUTPUT"
           fi
@@ -96,6 +102,12 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    # One preview at a time for each pull request, in the order of its pushes: a run waiting behind
+    # another starts when it is its turn, finds a newer push and ends green, so the preview is never
+    # left on an older commit.
+    concurrency:
+      group: web-staging-preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     env:
       CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -109,8 +121,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          current=$(gh api "repos/$REPO/pulls/$PULL" --jq .head.sha)
-          if [ "$current" != "$SHA" ]; then
+          read -r current state < <(gh api "repos/$REPO/pulls/$PULL" --jq '"\(.head.sha) \(.state)"')
+          status=$(gh api "repos/$REPO/compare/$SHA...$current" --jq .status || true)
+          if [ "$state" != open ]; then
+            # The closed pull request's preview is forgotten by the origins job; adding it again would undo that.
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::The pull request is closed; it gets no preview."
+          elif [ "$status" = ahead ]; then
             # A newer push has its own run; this one ends green rather than cancelled.
             echo "run=false" >> "$GITHUB_OUTPUT"
             echo "::notice::The pull request has a newer push; its run builds the preview."
@@ -174,8 +191,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          current=$(gh api "repos/$REPO/pulls/$PULL" --jq .head.sha)
-          if [ "$current" = "$SHA" ]; then echo "current=true" >> "$GITHUB_OUTPUT"; fi
+          read -r current state < <(gh api "repos/$REPO/pulls/$PULL" --jq '"\(.head.sha) \(.state)"')
+          status=$(gh api "repos/$REPO/compare/$SHA...$current" --jq .status || true)
+          if [ "$state" = open ] && [ "$status" != ahead ]; then echo "current=true" >> "$GITHUB_OUTPUT"; fi
       - name: Say how it went
         if: ${{ steps.fresh.outputs.current == 'true' }}
         env:
@@ -188,7 +206,7 @@ jobs:
           bun .preview-tools/scripts/preview-comment.ts "$([ -n "$URL" ] && echo ready || echo failed)" ||
           echo "::warning::The preview comment couldn't say how the preview went."
       - name: Let the preview upload worlds
-        if: ${{ !cancelled() && steps.upload.outputs.url != '' }}
+        if: ${{ !cancelled() && steps.upload.outputs.url != '' && steps.fresh.outputs.current == 'true' }}
         env:
           URL: ${{ steps.upload.outputs.url }}
           COMMIT_URL: ${{ steps.upload.outputs.commit_url }}

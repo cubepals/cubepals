@@ -30,15 +30,19 @@ jobs:
       issues: read
       pull-requests: read
     steps:
+      # Superseded only when the pull request's head is a later commit than this run's; a lagging
+      # answer from the API, or a force push, runs the check.
       - name: Whether this is still the newest push
         id: newest
+        if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           NUMBER: ${{ github.event.pull_request.number }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           current=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$NUMBER" --jq .head.sha)
-          if [ "$current" != "$HEAD" ]; then
+          status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$HEAD...$current" --jq .status || true)
+          if [ "$status" = ahead ]; then
             echo "::notice::The pull request has a newer push; its run checks the labels."
             echo "stale=true" >> "$GITHUB_OUTPUT"
           fi
