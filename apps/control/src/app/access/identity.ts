@@ -38,18 +38,18 @@ export async function identityFor(
   const typed = name.trim()
   if (typedAsBedrock(typed)) return bedrockPlayer(typed.slice(1), geyser)
   const offline = { uuid: offlineUuid(typed), name: typed }
-  const profile = await javaAccount(typed, onlineMode, profiles)
+  const profile = await javaProfile(typed, onlineMode, profiles)
   if (profile !== null)
     return onlineMode ? { uuid: normalizeUuid(profile.uuid), name: profile.name } : offline
   return (await bedrockPlayer(typed, geyser)) ?? (onlineMode ? null : offline)
 }
 
 /**
- * The Java account called `typed`; null where none is, or the name is none Minecraft allows. A
+ * The Java profile called `typed`; null where none is, or the name is none Minecraft allows. A
  * server that doesn't verify accounts has no need of the answer, so where Mojang can't give it the
  * name stays a Java player's.
  */
-async function javaAccount(typed: string, onlineMode: boolean, profiles: PlayerProfiles) {
+async function javaProfile(typed: string, onlineMode: boolean, profiles: PlayerProfiles) {
   if (!JAVA_NAME.test(typed)) return null
   return onlineMode ? profiles.byName(typed) : profiles.byName(typed).catch(() => ({ uuid: '', name: typed }))
 }
