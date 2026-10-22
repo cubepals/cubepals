@@ -570,10 +570,6 @@
       "n": 18,
       "reason": "Over the threshold when the check began, and not yet looked at. Was browse/page.tsx's BrowsePage, moved unchanged so the page could export its metadata."
     },
-    "apps/web/src/app/(public)/reactions.tsx › function Notes": {
-      "n": 17,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    },
     "apps/web/src/ui/Button.tsx › function Button": {
       "n": 32,
       "reason": "Over the threshold when the check began, and not yet looked at."

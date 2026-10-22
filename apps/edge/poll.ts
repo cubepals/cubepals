@@ -55,7 +55,15 @@ export class RoutesPoll {
     this.#etag = response.headers.get('etag')
     this.#version = response.headers.get(ROUTES_VERSION_HEADER)
     this.#currentAt = Date.now()
+    this.#first.resolve()
     return true
+  }
+
+  readonly #first = Promise.withResolvers<void>()
+
+  /** Resolves once a list has been held whole, the first since this agent started. */
+  get firstHold(): Promise<void> {
+    return this.#first.promise
   }
 
   /** Whether a list has been held whole since this agent started. */

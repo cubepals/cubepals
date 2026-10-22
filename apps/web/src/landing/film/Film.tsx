@@ -14,6 +14,7 @@ import Link from 'next/link'
 import { type ReactNode, useId, useRef, useState } from 'react'
 import type { PublicStatus } from '../../app/(public)/status'
 import { ctaMark } from '../../app/(public)/steps'
+import { heroSmallPrint } from '../../lib/bedrock'
 import type { RoomKey } from '../engine/chunk'
 import type { Tone } from '../kit'
 import {
@@ -82,10 +83,12 @@ export function Night({
   create,
   plans,
   arcade,
+  bedrock,
 }: {
   create: string
   plans: PublicPlan[]
   arcade: PublicStatus | null
+  bedrock: boolean
 }) {
   const beat = useBeat(() => [[0, () => stage.set({ power: 'asleep', players: 0 })]])
   return (
@@ -97,7 +100,7 @@ export function Night({
       tone="night"
       sky
       y={76}
-      side={0.754}
+      side="hero"
       zoom="wide"
       // Framed as concept A1: the island's top a broad lit floor across the right half, seen from
       // 28 degrees up through a long lens, its left and right corners at 48% and 99% across, the
@@ -121,7 +124,7 @@ export function Night({
           <p>
             {trialSaid(plans)}
             <br />
-            Minecraft: Java Edition. Bedrock is coming soon.
+            {heroSmallPrint(bedrock)}
           </p>
         </div>
         <Arcade status={arcade} className={styles.arcade} />

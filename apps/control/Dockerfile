@@ -11,7 +11,7 @@
 # blocklyd, which the node endpoint hands to hosts as they join (FLEET_BLOCKLYD_BIN): one release
 # of cubepals/blocklyd, static (musl), pinned by digest. `bun scripts/blocklyd.ts bump <version>`
 # moves this line and the copies of the release's files beside the fleet adapter together.
-FROM ghcr.io/cubepals/blocklyd:0.3.3@sha256:cecec09a52ec48cda3a5053bc896de3e77f355801bb1c47135dbdd500dd283fd AS blocklyd
+FROM ghcr.io/cubepals/blocklyd:0.3.4@sha256:375ad52833390953eef29eeaff82925e6e85806b3615a8c8017a39fca73aeff2 AS blocklyd
 
 # The join reporter, the Paper plugin Cubepals places on servers (apps/reporter): built here from
 # its sources with the Gradle its wrapper names, and stored as an artifact as the control plane
@@ -22,7 +22,7 @@ COPY apps/reporter/settings.gradle.kts apps/reporter/build.gradle.kts ./
 COPY apps/reporter/src src
 RUN gradle jar --no-daemon --console=plain
 
-FROM mirror.gcr.io/library/node:22.23.2-trixie-slim@sha256:c5849ff9c9ebcd66615412f0b548ca5b8ecaef84003dc9ac2e077ebe46aaa3f6 AS deps
+FROM mirror.gcr.io/library/node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf AS deps
 COPY --from=mirror.gcr.io/oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 # Only the manifests first, so a source change doesn't reinstall anything.
@@ -39,7 +39,7 @@ RUN bun -e 'const p = await Bun.file("package.json").json(); p.workspaces = ["ap
 # The WebTransport module's install script (trusted in package.json) fetches its prebuilt native
 # binary for this platform.
 
-FROM mirror.gcr.io/library/node:22.23.2-trixie-slim@sha256:c5849ff9c9ebcd66615412f0b548ca5b8ecaef84003dc9ac2e077ebe46aaa3f6
+FROM mirror.gcr.io/library/node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf
 ENV NODE_ENV=production
 WORKDIR /app
 # Hoisted (bunfig.toml): every dependency lives in the root node_modules, and the workspace

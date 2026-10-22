@@ -6,8 +6,14 @@
  * The second reviewer's one comment on a pull request (second-eye.yml): the findings Claude
  * returned as JSON, written in one fixed shape that says it is an AI review: a heading, the
  * verdict, what was reviewed, what it looked at and which model, a row a finding with the
- * reasoning folded away, and a footer saying how to run it again. It is edited in place on each
- * run instead of written again, and the pull request carries one label for the verdict.
+ * reasoning folded away, and a footer saying how to run it again. Findings are grouped by
+ * severity, high first, with no cap on how many. It is edited in place on each run instead of
+ * written again, and the pull request carries one label for the verdict.
+ *
+ * It shows how many of the changed files the reviewer read, so a partial pass is visible. On a
+ * re-review it also says what became of the earlier findings (fixed, no longer applies, still
+ * open) and splits the rest into new (on code changed since) and missed before. The comment ends
+ * with a data block of the findings that stand, which the next run reads as the earlier review.
  *
  * While the review stands on a commit the pull request has moved past, a line at the top says so
  * (a new review is running, waits for the draft to be ready, or didn't finish) and the verdict's
@@ -17,7 +23,7 @@
  *   NOTICE=running|draft|failed bun scripts/second-eye-comment.ts
  *
  * It reads REVIEW (the action's structured output), REVIEWED (the commit and its counts, as the
- * review job read them), MODEL, REPO, PULL and GH_TOKEN from the environment the workflow gives
+ * review job read them), PREVIOUS (the earlier review's findings, when there was one), MODEL, REPO, PULL and GH_TOKEN from the environment the workflow gives
  * it, and what the reviewer looks at from .github/second-eye.md. With NOTICE it writes only the
  * line at the top and needs no review. It needs no installed package.
  * Not for what the reviewer looks for or how it judges: .github/second-eye.md says that.
@@ -37,9 +43,29 @@ export interface Finding {
   why?: string
 }
 
+/** Where a finding came from: a first review, or a re-review's carried-over, new or missed one. */
+export type Origin = 'first' | 'open' | 'new' | 'missed'
+
+/** What became of an earlier finding that is no longer open. */
+export interface Settled {
+  /** The earlier finding's number, from 1, in the order the earlier review listed them. */
+  number: number
+  status: 'fixed' | 'gone'
+  note?: string
+}
+
 export interface Review {
   verdict: 'merge' | 'fix first'
-  findings: Finding[]
+  /** How many of the changed files the reviewer read. */
+  files_reviewed?: number
+  earlier?: Settled[]
+  findings: (Finding & { origin?: Origin })[]
+}
+
+/** The findings the comment ends with and the next review starts from. */
+export interface Previous {
+  sha: string
+  findings: Pick<Finding, 'severity' | 'file' | 'line' | 'problem'>[]
 }
 
 /** What the comment says about the run, beside Claude's answer. */
@@ -57,12 +83,18 @@ export interface Run {
   areas: string[]
   /** True when the run edits a comment an earlier run wrote. */
   updating: boolean
+  /** The review before this one, when there was one. */
+  previous?: Previous
 }
 
 /** The comment's first line, which finds it again. */
 export const MARKER = '<!-- second-eye -->'
-/** At most this many findings are written, most severe first. */
-const MOST_FINDINGS = 8
+/** The data block that ends the comment: the findings that stand, for the next review. */
+const DATA = 'second-eye-data:'
+/** How much of each problem is kept when a review is far too long for one comment. */
+const SHORT = 100
+/** GitHub refuses a comment past 65536 characters; past this the folded reasons are left out. */
+const MOST_CHARACTERS = 60000
 
 /** The labels a pull request carries for the verdict: one, and never both. */
 export const LABELS = { merge: 'review/ai-merge', 'fix first': 'review/ai-fix-first' } as const
@@ -76,8 +108,15 @@ export const ASKED = 'needs-second-eye'
 export type Notice = 'running' | 'draft' | 'failed' | 'moved'
 
 const RANK: Record<Severity, number> = { high: 0, medium: 1, low: 2 }
-/** A severity's tag, kept on one line in its cell. */
-const TAG: Record<Severity, string> = { high: '🔴&nbsp;High', medium: '🟠&nbsp;Medium', low: '🟡&nbsp;Low' }
+/** A severity's heading over its table. */
+const HEADING: Record<Severity, string> = { high: '🔴 High', medium: '🟠 Medium', low: '🟡 Low' }
+/** What a re-review says of a finding in its row. */
+const SINCE: Record<Origin, string> = {
+  first: '',
+  open: 'Still open',
+  new: 'New, in code changed since',
+  missed: 'Missed before',
+}
 
 /** The verdict's badge: an emoji, which renders everywhere and fetches nothing. */
 const BADGE = { merge: '✅', 'fix first': '⚠️' } as const
@@ -115,11 +154,10 @@ function where(run: Run, finding: Finding): string {
 const count = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`
 
 /** The findings written, most severe first, and the verdict they leave. */
-function judged(review: Review): { verdict: Review['verdict']; findings: Finding[] } {
+function judged(review: Review): { verdict: Review['verdict']; findings: Review['findings'] } {
   const findings = (review.findings ?? [])
     .filter((finding) => finding.severity in RANK)
     .sort((a, b) => RANK[a.severity] - RANK[b.severity])
-    .slice(0, MOST_FINDINGS)
   return { verdict: findings.length && review.verdict !== 'merge' ? 'fix first' : 'merge', findings }
 }
 
@@ -132,19 +170,100 @@ export function lookedAt(rules: string): string[] {
   return [...section.matchAll(/^- ([^:\n]+):/gm)].map((match) => (match[1] as string).trim())
 }
 
+/** How many of the changed files were read, with a warning when that is not all of them. */
+function filesRead(review: Review, run: Run): string {
+  const total = count(run.files, 'file', 'files')
+  const read = review.files_reviewed
+  if (read === undefined) return `${total}, +${run.additions} −${run.deletions} lines`
+  const done = Math.min(Math.max(0, Math.trunc(Number(read) || 0)), run.files)
+  return `${total}, +${run.additions} −${run.deletions} lines · ${
+    done >= run.files ? `read all ${run.files}` : `⚠️ read ${done} of ${run.files}`
+  }`
+}
+
+/** What became of the earlier review's findings, and how the rest split, in a line or two. */
+function sinceLine(review: Review, previous: Previous): string[] {
+  const settled = [...new Map((review.earlier ?? []).map((e) => [e.number, e])).values()].filter(
+    (e) => previous.findings[e.number - 1],
+  )
+  const origin = (kind: Origin) => (review.findings ?? []).filter((f) => f.origin === kind).length
+  const part = (n: number, text: string) => (n ? [`${n} ${text}`] : [])
+  const earlier = [
+    ...part(settled.filter((e) => e.status === 'fixed').length, 'fixed'),
+    ...part(settled.filter((e) => e.status === 'gone').length, 'no longer apply'),
+    ...part(origin('open'), 'still open'),
+  ]
+  const added = [
+    ...part(origin('new'), 'new, in code changed since'),
+    ...part(origin('missed'), 'missed before'),
+  ]
+  const lost = previous.findings.length - settled.length - origin('open')
+  return [
+    `**Since the last review.** Earlier: ${count(previous.findings.length, 'finding', 'findings')}${
+      earlier.length || lost > 0
+        ? ` (${[...earlier, ...part(Math.max(lost, 0), 'not accounted for')].join(', ')})`
+        : ''
+    }. Now: ${added.length ? added.join(', ') : 'nothing new'}.`,
+    '',
+  ]
+}
+
+/** The earlier findings that are fixed or no longer apply, folded away. */
+function settledDetails(review: Review, previous: Previous): string[] {
+  const rows = (review.earlier ?? []).flatMap((e) => {
+    const was = previous.findings[e.number - 1]
+    if (!was) return []
+    const note = e.note ? ` ${cell(e.note)}` : ''
+    return [`- ${e.status === 'fixed' ? 'Fixed' : 'No longer applies'}: ${cell(was.problem)}${note}`]
+  })
+  return rows.length
+    ? [
+        '<details>',
+        `<summary>Earlier findings that are settled (${rows.length})</summary>`,
+        '',
+        ...rows,
+        '',
+        '</details>',
+        '',
+      ]
+    : []
+}
+
+/** The data block the next review starts from: the findings that stand, on this commit. */
+function dataBlock(run: Run, findings: Review['findings']): string {
+  const kept = findings.map(({ severity, file, line, problem }) => ({ severity, file, line, problem }))
+  return `<!-- ${DATA}${Buffer.from(JSON.stringify({ sha: run.sha, findings: kept })).toString('base64')} -->`
+}
+
 /** The comment's text, in GitHub's Markdown. */
 export function secondEyeComment(review: Review, run: Run): string {
   const { verdict, findings } = judged(review)
   const areas = run.areas.map((area) => area.replaceAll('`', '')).join(', ')
   const summary = [
-    [
-      'Reviewed',
-      `${commitLink(run)} · ${count(run.files, 'file', 'files')}, +${run.additions} −${run.deletions} lines`,
-    ],
+    ['Reviewed', `${commitLink(run)} · ${filesRead(review, run)}`],
     ['Looked at', areas ? areas.charAt(0).toUpperCase() + areas.slice(1) : 'Unknown'],
     ['Model', `${run.model ? `\`${plain(run.model)}\`` : 'Unknown'} · [Workflow run](${run.runUrl})`],
   ]
-  return [
+  const groups = (Object.keys(RANK) as Severity[])
+    .map((severity) => ({ severity, found: findings.filter((finding) => finding.severity === severity) }))
+    .filter((group) => group.found.length)
+  const head = run.previous
+    ? ['| Where | Problem | Since the last review |', '| --- | --- | --- |']
+    : ['| Where | Problem |', '| --- | --- |']
+  const why = findings.map(
+    (finding, i) =>
+      `${i + 1}. ${where(run, finding)}${finding.why ? ` ${cell(finding.why)}` : ''} **Fix:** ${cell(finding.fix)}`,
+  )
+  // Too long for a comment: first the folded reasons go, then each problem is cut short.
+  const reasons = (stage: 0 | 1 | 2): string[] => {
+    if (!findings.length) return []
+    if (stage === 0)
+      return ['<details>', '<summary>Why, and the fix</summary>', '', ...why, '', '</details>', '']
+    return ['_The reasons and fixes are left out: the review is too long for one comment._', '']
+  }
+  const problem = (text: string, stage: 0 | 1 | 2): string =>
+    stage === 2 ? plain(text).slice(0, SHORT) : text
+  const lines = (stage: 0 | 1 | 2) => [
     MARKER,
     ...(run.updating ? [`<sub>Updated for ${commitLink(run)}</sub>`, ''] : []),
     '### 🤖 Second eye · AI review by Claude',
@@ -157,28 +276,32 @@ export function secondEyeComment(review: Review, run: Run): string {
     '| :--- | :--- |',
     ...summary.map(([name, value]) => `| **${name}** | ${value} |`),
     '',
-    ...(findings.length
-      ? [
-          '| Severity | Where | Problem |',
-          '| --- | --- | --- |',
-          ...findings.map(
-            (finding) => `| ${TAG[finding.severity]} | ${where(run, finding)} | ${cell(finding.problem)} |`,
-          ),
-          '',
-          '<details>',
-          '<summary>Why, and the fix</summary>',
-          '',
-          ...findings.map(
-            (finding, i) =>
-              `${i + 1}. ${where(run, finding)}${finding.why ? ` ${cell(finding.why)}` : ''} **Fix:** ${cell(finding.fix)}`,
-          ),
-          '',
-          '</details>',
-          '',
-        ]
-      : []),
-    `<sub>An automated review by Claude, not a person. It advises and doesn't block the merge. Re-run: \`gh workflow run second-eye.yml -f pr=${run.pull}\`</sub>`,
-  ].join('\n')
+    ...(run.previous ? sinceLine(review, run.previous) : []),
+    ...groups.flatMap(({ severity, found }) => [
+      `#### ${HEADING[severity]} (${found.length})`,
+      '',
+      ...head,
+      ...found.map(
+        (finding) =>
+          `| ${where(run, finding)} | ${cell(problem(finding.problem, stage))} |${run.previous ? ` ${SINCE[finding.origin ?? 'first']} |` : ''}`,
+      ),
+      '',
+    ]),
+    ...reasons(stage),
+    ...(run.previous && stage < 2 ? settledDetails(review, run.previous) : []),
+    `<sub>An automated review by Claude, not a person. The verdict advises; on a sensitive change the Second eye gate also waits for a finished review. Re-run: \`gh workflow run second-eye.yml -f pr=${run.pull}\`</sub>`,
+    dataBlock(
+      run,
+      stage === 2
+        ? findings.map((finding) => ({ ...finding, problem: problem(finding.problem, stage) }))
+        : findings,
+    ),
+  ]
+  for (const stage of [0, 1] as const) {
+    const body = lines(stage).join('\n')
+    if (body.length <= MOST_CHARACTERS) return body
+  }
+  return lines(2).join('\n')
 }
 
 /** The commit a comment's review is for: the first commit it links to below any notice. */
@@ -253,6 +376,7 @@ async function markStale(repo: string, pull: string, notice: Notice): Promise<vo
 
 async function writeReview(repo: string, pull: string): Promise<void> {
   const review = JSON.parse(need('REVIEW')) as Review
+  const earlier = process.env.PREVIOUS ? (JSON.parse(process.env.PREVIOUS) as Previous) : undefined
   const reviewed = JSON.parse(need('REVIEWED')) as {
     sha: string
     files: number
@@ -269,6 +393,7 @@ async function writeReview(repo: string, pull: string): Promise<void> {
     model: process.env.MODEL ?? '',
     runUrl: `${process.env.GITHUB_SERVER_URL ?? 'https://github.com'}/${repo}/actions/runs/${need('GITHUB_RUN_ID')}`,
     areas: lookedAt(readFileSync(new URL('../.github/second-eye.md', import.meta.url), 'utf8')),
+    previous: earlier,
   }
   // A push the workflow didn't review again (a draft's, or anyone else's) moved the head on.
   const now = await pullNow(repo, pull)

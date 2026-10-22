@@ -36,10 +36,28 @@ const numberOr = (value: string | undefined, otherwise: number) =>
   value === undefined || value === '' || Number.isNaN(Number(value)) ? otherwise : Number(value)
 
 /** Where across the screen a section holds what it looks at: a side by name, or a place by number. */
-function sideOf(stands: string | undefined, band: boolean): number {
+function sideOf(element: HTMLElement, band: boolean): number {
+  const stands = element.dataset.side
   if (band || stands === 'center') return 0.5
+  if (stands === 'hero') return heroSide(element)
   if (stands === 'left') return 0.23
   return Number(stands) || 0.77
+}
+
+/**
+ * Where across the screen the first screen holds its chunk. The stylesheet works it out from the
+ * width and height (`--hero-x`, landing.css) so the print stood in for the canvas is in the same
+ * place; without it, where it has always been.
+ */
+function heroSide(element: HTMLElement): number {
+  const held = Number.parseFloat(getComputedStyle(element).getPropertyValue('--hero-x'))
+  return held > 0 && window.innerWidth > 0 ? held / window.innerWidth : 0.754
+}
+
+/** How much larger than a screen-tall chunk the first screen holds it: 1 until the width allows more. */
+function heroGrowth(element: HTMLElement): number {
+  const wide = Number.parseFloat(getComputedStyle(element).getPropertyValue('--hero-c'))
+  return wide > 0 ? Math.max(1, wide / (window.innerHeight * 0.8)) : 1
 }
 
 /** What a section looks at: its room's middle, or a place over the grass. */
@@ -66,7 +84,9 @@ function spanOf(
   const tried = trying.get('span')
   if (key && tried) return Number(tried)
   const zoom = (element.dataset.zoom as Zoom | undefined) ?? 'wide'
-  return numberOr(element.dataset.span, lens[zoom].span) * (band && element.dataset.span ? 0.85 : 1)
+  const span = numberOr(element.dataset.span, lens[zoom].span) * (band && element.dataset.span ? 0.85 : 1)
+  // The first screen shows fewer blocks as the chunk grows to fill a wider screen.
+  return element.dataset.side === 'hero' ? span / heroGrowth(element) : span
 }
 
 /** The view a section asks for, read off its attributes. */
@@ -86,7 +106,7 @@ function poseOf(element: HTMLElement, band: boolean, lens: Lens, trying: URLSear
     el: numberOr(element.dataset.el, lens[zoom].el),
     span: spanOf(element, key, band, lens, trying),
     fov: numberOr(element.dataset.fov, lens[zoom].fov),
-    side: sideOf(element.dataset.side, band),
+    side: sideOf(element, band),
     drop: band ? 0.5 : numberOr(element.dataset.drop, 0.5),
     crowd: numberOr(element.dataset.crowd, 0),
     // The page goes darker only on the way down: the dig's upper rooms are printed by the day on

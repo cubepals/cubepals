@@ -224,12 +224,12 @@ describe.skipIf(!hasDatabase)('a running server, as edges that come late or fall
           .select({ at: schema.edges.startedAt })
           .from(schema.edges)
           .where(eq(schema.edges.edgeId, 'loops'))
-      )[0]?.at
+      )[0]?.at?.getTime() ?? 0
     await h.app.edge.seen('loops', null, true, new Date(Date.now() - 30 * SECOND_MS))
     const first = await startedAt()
     // It restarts again within the grace: the start that counts stays the first.
     await h.app.edge.seen('loops', null, true, new Date())
-    expect(+(await startedAt())!).toBe(+first!)
+    expect(await startedAt()).toBe(first)
     // Once the grace has passed, the next restart is a new start.
     await h.db
       .update(schema.edges)
@@ -237,7 +237,7 @@ describe.skipIf(!hasDatabase)('a running server, as edges that come late or fall
       .where(eq(schema.edges.edgeId, 'loops'))
     const again = new Date()
     await h.app.edge.seen('loops', null, true, again)
-    expect(Math.abs(+(await startedAt())! - +again)).toBeLessThan(SECOND_MS)
+    expect(Math.abs((await startedAt()) - +again)).toBeLessThan(SECOND_MS)
   }, 30_000)
 
   test('a server never waits on the edges longer than the limit, and is told once it has', async () => {

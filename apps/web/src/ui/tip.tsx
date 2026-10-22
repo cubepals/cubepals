@@ -33,11 +33,14 @@ import { type ReactNode, useState } from 'react'
 export function Tip({
   tip,
   card = false,
+  bare = false,
   children,
 }: {
   tip: ReactNode
   /** Ink on Paper in either theme, edged like a popover, with nothing underlined beneath it. */
   card?: boolean
+  /** Around a button or link that is already focusable: no underline, no stop of its own. */
+  bare?: boolean
   children: ReactNode
 }) {
   const [open, setOpen] = useState(false)
@@ -71,12 +74,16 @@ export function Tip({
     common: { transitionTimingFunction: 'cubic-bezier(0.2, 0, 0, 1)' },
   })
 
-  const reference = card ? 'bk-tip bk-tip--card' : 'bk-tip'
+  const reference = card ? 'bk-tip bk-tip--card' : bare ? 'bk-tip bk-tip--bare' : 'bk-tip'
 
   return (
     <>
-      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus is how a keyboard reaches the tip */}
-      <span ref={refs.setReference} className={reference} tabIndex={0} {...getReferenceProps()}>
+      <span
+        ref={refs.setReference}
+        className={reference}
+        tabIndex={bare ? undefined : 0}
+        {...getReferenceProps()}
+      >
         {children}
       </span>
       {isMounted && (

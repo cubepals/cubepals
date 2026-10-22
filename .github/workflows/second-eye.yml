@@ -11,6 +11,11 @@ name: Second eye
 # it, so nobody else can spend the subscription. What the reviewer looks for and how it answers
 # is .github/second-eye.md, which is its whole prompt.
 #
+# One pass covers the whole pull request: the turns it may use grow with the number of changed
+# files (TURNS_BASE plus TURNS_PER_FILE each, up to TURNS_MOST), and the answer has no cap on the
+# findings. A later pass is given the findings of the earlier one, read from the data block the
+# comment keeps, and settles each (fixed, gone or still open) before it looks for more.
+#
 # The jobs that can write never meet Claude. The review job holds read-only tokens: it checks out
 # the commit this workflow came from (the default branch, or for a label or a push the pull
 # request itself, which already wrote this file), saves the pull request's description and diff
@@ -26,11 +31,22 @@ name: Second eye
 # pushes to stop: a newer push cancels it, waiting or reviewing, so one review covers a burst of
 # fixes. A draft's push only marks the review stale; the review runs when it is ready for review.
 #
-# A label or push on a fork's pull request starts nothing, and a run by hand refuses a fork's; a
-# comment reviews a fork's pull request the same way as any, from the default branch.
+# A review starts in two ways only, and never because someone opened a pull request. It starts by
+# itself on a same-repository pull request that v0id-user opened and that touches a sensitive path
+# (scripts/second-eye-gate.ts lists them). And it starts when v0id-user asks, on any pull request.
+# A push to a fork's pull request starts nothing, and a run by hand refuses a fork's; a label or a
+# comment reviews a fork's pull request from the default branch, as it would any.
+#
+# The gate job sets one status, "Second eye gate", on every pull request's head for a ruleset to
+# require: it passes at once when no sensitive path changed, and otherwise fails until a review
+# has finished, saying that it waits for v0id-user to request one.
 on:
   pull_request:
-    types: [labeled, synchronize, ready_for_review]
+    types: [opened, reopened, labeled, synchronize, ready_for_review]
+  # A fork's pull request, for its label and the gate only: its token can't write a status. Nothing
+  # of the pull request is checked out or run.
+  pull_request_target:
+    types: [opened, reopened, labeled, synchronize, ready_for_review]
   issue_comment:
     types: [created]
   workflow_dispatch:
@@ -43,13 +59,65 @@ on:
 permissions: {}
 
 jobs:
-  # Asked for, by whom, and on which branch. Every job after it needs it, so an event it skips
-  # (anyone else's comment, a push to a pull request nobody asked to review) runs nothing and
-  # cancels nothing.
-  mark:
-    name: Say a new review is coming
+  # Which sensitive paths the pull request touches, and whether that starts a review by itself.
+  # It reads the file list through the API and runs nothing of the pull request. A same-repository
+  # pull request is seen by the pull_request event and a fork's by pull_request_target, so each is
+  # seen once, with a token that can write the status.
+  sensitive:
+    name: Find the sensitive paths
     if: >-
       github.repository == 'cubepals/cubepals'
+      && (
+        (github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository)
+        || (github.event_name == 'pull_request_target'
+          && github.event.pull_request.head.repo.full_name != github.repository)
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      sensitive: ${{ steps.paths.outputs.sensitive }}
+      auto: ${{ steps.paths.outputs.auto }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: |
+            scripts
+            .github
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - name: Find the sensitive paths
+        id: paths
+        env:
+          MODE: paths
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          AUTHOR: ${{ github.event.pull_request.user.login || github.event.issue.user.login || github.actor }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          REPO: ${{ github.repository }}
+          PULL: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+        run: bun scripts/second-eye-gate.ts
+
+  # Asked for, by whom, and on which branch. Every job after it needs it, so an event it skips
+  # (anyone else's comment, a push to a pull request nobody asked to review, anyone else's pull
+  # request) runs nothing and cancels nothing, and the model is never reached.
+  mark:
+    name: Say a new review is coming
+    needs: sensitive
+    # A comment or a run by hand has no sensitive job, and a request must still start when that job
+    # failed: only the automatic start reads its output, which a failed job leaves empty.
+    if: >-
+      !cancelled()
+      && github.repository == 'cubepals/cubepals'
       && github.actor == 'v0id-user'
       && github.triggering_actor == 'v0id-user'
       && (
@@ -58,9 +126,14 @@ jobs:
           && (
             (github.event.action == 'labeled' && github.event.label.name == 'needs-second-eye')
             || (github.event.action != 'labeled'
-              && (contains(github.event.pull_request.labels.*.name, 'needs-second-eye')
+              && (needs.sensitive.outputs.auto == 'true'
+                || contains(github.event.pull_request.labels.*.name, 'needs-second-eye')
                 || contains(github.event.pull_request.labels.*.name, 'review/ai-merge')
                 || contains(github.event.pull_request.labels.*.name, 'review/ai-fix-first')))))
+        || (github.event_name == 'pull_request_target'
+          && github.event.pull_request.head.repo.full_name != github.repository
+          && github.event.action == 'labeled'
+          && github.event.label.name == 'needs-second-eye')
         || (github.event_name == 'issue_comment'
           && github.event.issue.pull_request
           && github.event.comment.user.login == 'v0id-user'
@@ -80,8 +153,8 @@ jobs:
     permissions:
       pull-requests: write
     outputs:
-      # A draft's push waits for ready_for_review; everything else is reviewed now.
-      review: ${{ !(github.event.action == 'synchronize' && github.event.pull_request.draft) }}
+      # A draft's push or opening waits for ready_for_review; everything else is reviewed now.
+      review: ${{ !(contains(fromJSON('["synchronize", "opened", "reopened"]'), github.event.action) && github.event.pull_request.draft) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -105,7 +178,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
           COMMENT_AUTHOR: ${{ steps.bot.outputs.app-slug && format('{0}[bot]', steps.bot.outputs.app-slug) || 'github-actions[bot]' }}
-          NOTICE: ${{ github.event.action == 'synchronize' && github.event.pull_request.draft && 'draft' || 'running' }}
+          NOTICE: ${{ contains(fromJSON('["synchronize", "opened", "reopened"]'), github.event.action) && github.event.pull_request.draft && 'draft' || 'running' }}
           REPO: ${{ github.repository }}
           PULL: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
         run: bun scripts/second-eye-comment.ts
@@ -116,7 +189,7 @@ jobs:
     if: needs.mark.outputs.review == 'true'
     runs-on: ubuntu-latest
     # The quiet window and the review.
-    timeout-minutes: 45
+    timeout-minutes: 60
     concurrency:
       group: second-eye-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
       cancel-in-progress: true
@@ -126,6 +199,7 @@ jobs:
     outputs:
       review: ${{ steps.claude.outputs.structured_output }}
       reviewed: ${{ steps.pull.outputs.reviewed }}
+      previous: ${{ steps.pull.outputs.previous }}
       model: ${{ steps.model.outputs.model }}
     env:
       PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
@@ -148,6 +222,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
+          TURNS_BASE: 30
+          TURNS_PER_FILE: 4
+          TURNS_MOST: 150
         run: |
           mkdir .second-eye
           gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json number,title,body,files,isCrossRepository,headRefOid,additions,deletions,changedFiles > .second-eye/pr.json
@@ -157,6 +234,23 @@ jobs:
           fi
           gh pr diff "$PR" -R "$GITHUB_REPOSITORY" > .second-eye/pr.diff
           echo "reviewed=$(jq -c '{sha: .headRefOid, files: .changedFiles, additions, deletions}' .second-eye/pr.json)" >> "$GITHUB_OUTPUT"
+          echo "turns=$(jq --argjson base "$TURNS_BASE" --argjson per "$TURNS_PER_FILE" --argjson most "$TURNS_MOST" '[$base + $per * .changedFiles, $most] | min' .second-eye/pr.json)" >> "$GITHUB_OUTPUT"
+          # The findings of the review before this one, from the data block its comment ends with,
+          # cut down to the fields of a finding. A bot's comment only, and never run or trusted.
+          encoded="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR/comments?per_page=100" \
+            | jq -r '[.[][] | select(.user.type == "Bot" and (.body | startswith("<!-- second-eye -->")))] | last | .body // ""' \
+            | grep -o 'second-eye-data:[A-Za-z0-9+/=]*' | tail -n 1 | cut -d: -f2 || true)"
+          if [ -n "$encoded" ] && printf '%s' "$encoded" | base64 -d \
+            | jq -c '{sha: (.sha | tostring), findings: [.findings[]? | {severity, file, line, problem}]}' > .second-eye/previous.json; then
+            echo "previous=$(cat .second-eye/previous.json)" >> "$GITHUB_OUTPUT"
+            before="$(jq -r .sha .second-eye/previous.json)"
+            head="$(jq -r .headRefOid .second-eye/pr.json)"
+            if printf '%s' "$before" | grep -Eq '^[0-9a-f]{40}$' && [ "$before" != "$head" ]; then
+              gh api -H 'Accept: application/vnd.github.diff' "repos/$GITHUB_REPOSITORY/compare/$before...$head" > .second-eye/since.diff || rm -f .second-eye/since.diff
+            fi
+          else
+            rm -f .second-eye/previous.json
+          fi
       - name: Load the rules
         id: rules
         run: |
@@ -173,11 +267,11 @@ jobs:
           github_token: ${{ github.token }}
           prompt: ${{ steps.rules.outputs.prompt }}
           claude_args: >-
-            --max-turns 40
+            --max-turns ${{ steps.pull.outputs.turns }}
             --permission-mode dontAsk
             --allowedTools "Read(./**)"
             --disallowedTools "Bash,Edit,MultiEdit,Write,NotebookEdit,WebFetch,WebSearch,Read(./.git/**),Read(//proc/**),Read(//sys/**),Read(//dev/**),Read(//etc/**),Read(//root/**),Read(//tmp/**),Read(//var/**),Read(//run/**),Read(//opt/**),Read(~/.*),Read(~/.*/**),Read(//home/runner/work/_temp/**),Read(//home/runner/work/_actions/**),Read(//home/runner/runners/**),Read(//home/runner/actions-runner/**)"
-            --json-schema '{"type":"object","additionalProperties":false,"required":["verdict","findings"],"properties":{"verdict":{"enum":["merge","fix first"]},"findings":{"type":"array","maxItems":8,"items":{"type":"object","additionalProperties":false,"required":["severity","file","line","problem","fix","why"],"properties":{"severity":{"enum":["high","medium","low"]},"file":{"type":"string","maxLength":200},"line":{"type":"integer","minimum":1},"problem":{"type":"string","maxLength":300},"fix":{"type":"string","maxLength":300},"why":{"type":"string","maxLength":600}}}}}}'
+            --json-schema '{"type":"object","additionalProperties":false,"required":["verdict","files_reviewed","earlier","findings"],"properties":{"verdict":{"enum":["merge","fix first"]},"files_reviewed":{"type":"integer","minimum":0},"earlier":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["number","status","note"],"properties":{"number":{"type":"integer","minimum":1},"status":{"enum":["fixed","gone"]},"note":{"type":"string","maxLength":200}}}},"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["severity","origin","file","line","problem","fix","why"],"properties":{"severity":{"enum":["high","medium","low"]},"origin":{"enum":["first","open","new","missed"]},"file":{"type":"string","maxLength":200},"line":{"type":"integer","minimum":1},"problem":{"type":"string","maxLength":300},"fix":{"type":"string","maxLength":300},"why":{"type":"string","maxLength":600}}}}}}'
       # The action hides Claude's output. This prints only how long it took, which tools were
       # refused and on what path, and on failure the result's error (a bad token reads "401 OAuth
       # access token is invalid"), each on one line so none is taken as a workflow command.
@@ -241,6 +335,7 @@ jobs:
           COMMENT_AUTHOR: ${{ steps.bot.outputs.app-slug && format('{0}[bot]', steps.bot.outputs.app-slug) || 'github-actions[bot]' }}
           REVIEW: ${{ needs.review.outputs.review }}
           REVIEWED: ${{ needs.review.outputs.reviewed }}
+          PREVIOUS: ${{ needs.review.outputs.previous }}
           MODEL: ${{ needs.review.outputs.model }}
           REPO: ${{ github.repository }}
           PULL: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
@@ -290,3 +385,47 @@ jobs:
           REPO: ${{ github.repository }}
           PULL: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
         run: bun scripts/second-eye-comment.ts
+
+  # The status a ruleset requires. It runs after the others, whatever they did, and says what
+  # became of the review: passed at once when no sensitive path changed, failed while a sensitive
+  # change waits for v0id-user to request one, passed once the review has finished.
+  gate:
+    name: Set the second eye gate
+    needs: [sensitive, mark, review, comment]
+    # Dependabot's token is read-only and can't set a status, so its pull requests have none until
+    # v0id-user asks for a review, which sets it from a comment or a run by hand.
+    if: >-
+      always()
+      && github.actor != 'dependabot[bot]'
+      && (needs.sensitive.result != 'skipped'
+        || (contains(fromJSON('["issue_comment", "workflow_dispatch"]'), github.event_name)
+          && needs.mark.result == 'success'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: |
+            scripts
+            .github
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - name: Set the second eye gate
+        env:
+          MODE: status
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          SENSITIVE: ${{ needs.sensitive.outputs.sensitive }}
+          MARK: ${{ needs.mark.result }}
+          REVIEW: ${{ needs.review.result }}
+          COMMENT: ${{ needs.comment.result }}
+          SHA: ${{ fromJSON(needs.review.outputs.reviewed || '{}').sha || github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+        run: bun scripts/second-eye-gate.ts

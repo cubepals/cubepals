@@ -188,6 +188,51 @@
   color: var(--ink-subtle);
 }
 
+/* A deleted note's place until it is gone for good: what happened, and the way back. */
+.deleted {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  min-height: 24px;
+  color: var(--ink-subtle);
+}
+.deleted p {
+  margin: 0;
+}
+.undo {
+  flex: none;
+  min-height: 24px;
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.undo:focus-visible {
+  outline-offset: -2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .swap {
+    animation: swap-in var(--quick) var(--ease);
+  }
+}
+@keyframes swap-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Under a note whose delete the API refused, across the whole row. */
+.refused {
+  grid-column: 2 / -1;
+  margin: 0;
+}
+
 /* One line and a send button in a pill: the pill is what reads as the field, so it takes the ring. */
 .composer {
   display: flex;
@@ -247,7 +292,6 @@
 }
 
 /* Waiting on the API: dimmed, and a press does nothing. */
-.remove[aria-disabled="true"],
 .send[aria-disabled="true"] {
   opacity: 0.45;
   cursor: default;

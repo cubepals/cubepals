@@ -212,7 +212,7 @@ export function Beat({
   sky?: boolean
   /** What the cue at the foot of the screen says, in place of "Next: …". */
   cue?: string
-  side?: 'left' | 'right' | 'center' | number
+  side?: 'left' | 'right' | 'center' | 'hero' | number
   line?: string
   place?: 'top'
   /** The proof: the section that demonstrates this beat, as it is on the long page. */

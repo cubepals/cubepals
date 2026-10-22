@@ -13,13 +13,23 @@ import {
   type ReactionsView,
 } from '@blockly/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUp, MessageCircle, Star, X } from 'lucide-react'
+import { ArrowUp, MessageCircle, Star, Trash2 } from 'lucide-react'
 import { usePathname } from 'next/navigation'
-import { type RefObject, type SubmitEvent, useCallback, useEffect, useId, useRef, useState } from 'react'
-import { messageOf, useTRPC } from '../../lib/api'
+import {
+  type RefObject,
+  type SubmitEvent,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
+import { messageOf, useTRPC, useTRPCClient } from '../../lib/api'
 import { timeAgo } from '../../lib/present'
 import { noted, shortCount, starred } from '../../lib/reactions'
 import * as rules from '../../lib/rules'
+import { UndoableDeletes } from '../../lib/undoable-delete'
 import { behindSignIn, useSignedIn } from '../../lib/viewer'
 import { Button, Popover, Skeleton, Tip } from '../../ui'
 import styles from './reactions.module.css'
@@ -33,6 +43,16 @@ const FAILURE_SHOWN_MS = 4000
 
 /** Who a note is from when it shows no name: left as anonymous, or from an account without one. */
 const NO_NAME = 'A player'
+
+/**
+ * Notes deleted and not yet gone. They live here rather than in the popover, so closing it doesn't
+ * cancel a delete, and an undo is still there when it opens again.
+ */
+const noteDeletes = new UndoableDeletes()
+
+// Once for the page, not once for every card that shows notes: a note deleted a moment ago is sent
+// now rather than lost with the page.
+if (typeof window !== 'undefined') window.addEventListener('pagehide', () => noteDeletes.leave())
 
 /**
  * A server's stars and notes, on its card in the directory and on its own page: a guestbook,
@@ -220,6 +240,7 @@ function Notes({
 }) {
   const trpc = useTRPC()
   const queries = useQueryClient()
+  const client = useTRPCClient()
   const patch = usePatch()
   const ids = useId()
   const notes = useQuery(trpc.listings.notes.queryOptions({ serverId }))
@@ -236,7 +257,7 @@ function Notes({
       },
     }),
   )
-  const remove = useMutation(trpc.listings.deleteNote.mutationOptions({ onSuccess: put }))
+  useSyncExternalStore(noteDeletes.subscribe, noteDeletes.snapshot, noteDeletes.snapshot)
 
   // The count beside the icon follows the notes as they were last fetched, so it never
   // disagrees with the list it opens.
@@ -255,9 +276,7 @@ function Notes({
 
   const now = Date.now()
   const left = NOTE_MAX_LENGTH - draft.length
-  // What is wrong with the note written; a delete that failed is said too, but isn't the field's.
   const invalid = problem ?? (add.isError ? messageOf(add.error) : null)
-  const said = invalid ?? (remove.isError ? messageOf(remove.error) : null)
   const field = `${ids}-note`
   const error = `${ids}-error`
   const signed = `${ids}-signed`
@@ -278,8 +297,14 @@ function Notes({
               key={note.id}
               note={note}
               now={now}
-              deleting={remove.isPending}
-              onDelete={() => remove.mutate({ noteId: note.id })}
+              deleted={noteDeletes.isWaiting(note.id)}
+              refusal={noteDeletes.refusal(note.id)}
+              onDelete={() =>
+                noteDeletes.start(note.id, (leaving) =>
+                  client.listings.deleteNote.mutate({ noteId: note.id }, { context: { leaving } }).then(put),
+                )
+              }
+              onUndo={() => noteDeletes.undo(note.id)}
             />
           ))}
         </ul>
@@ -306,7 +331,6 @@ function Notes({
             onDraft(event.target.value)
             setProblem(null)
             if (add.isError) add.reset()
-            if (remove.isError) remove.reset()
           }}
         />
         {left <= COUNT_FROM && <span className={`type-caption bk-num ${styles.left}`}>{left}</span>}
@@ -320,9 +344,9 @@ function Notes({
         </button>
       </form>
       <Signature id={signed} notes={notes.data} />
-      {said !== null && (
+      {invalid !== null && (
         <p id={error} className={`type-caption ${styles.error}`} role="alert">
-          {said}
+          {invalid}
         </p>
       )}
     </div>
@@ -342,18 +366,44 @@ function Signature({ id, notes }: { id: string; notes: NotesView | undefined }) 
   )
 }
 
-/** One note: who left it and when, what it says, and a way to delete it for whoever may. */
+/**
+ * One note: who left it and when, what it says, and a way to delete it for whoever may. Deleting
+ * hides it at once and leaves a line to undo it until the delete is sent; a delete the API refused
+ * brings the note back with what it said.
+ */
 function NoteRow({
   note,
   now,
-  deleting,
+  deleted,
+  refusal,
   onDelete,
+  onUndo,
 }: {
   note: NoteView
   now: number
-  deleting: boolean
+  deleted: boolean
+  refusal: { error: unknown } | undefined
   onDelete: () => void
+  onUndo: () => void
 }) {
+  const undo = useRef<HTMLButtonElement>(null)
+  // The press that deleted it was on this row, so a keyboard stays on it.
+  useEffect(() => {
+    if (deleted) undo.current?.focus()
+  }, [deleted])
+
+  if (deleted)
+    return (
+      <li className={`${styles.deleted} ${styles.swap}`}>
+        <p className="type-body-sm" role="status">
+          Note deleted.
+        </p>
+        <button ref={undo} type="button" className={styles.undo} onClick={onUndo}>
+          Undo
+        </button>
+      </li>
+    )
+
   return (
     <li className={styles.note}>
       <WriterAvatar avatar={note.avatar} className={styles.avatar} />
@@ -369,17 +419,16 @@ function NoteRow({
         {note.body}
       </p>
       {note.canDelete && (
-        <button
-          type="button"
-          className={styles.remove}
-          aria-label="Delete note"
-          aria-disabled={deleting || undefined}
-          onClick={() => {
-            if (!deleting) onDelete()
-          }}
-        >
-          <X size={14} strokeWidth={1.75} aria-hidden />
-        </button>
+        <Tip bare tip="Delete note">
+          <button type="button" className={styles.remove} aria-label="Delete note" onClick={onDelete}>
+            <Trash2 size={16} strokeWidth={1.75} aria-hidden />
+          </button>
+        </Tip>
+      )}
+      {refusal !== undefined && (
+        <p className={`type-caption ${styles.error} ${styles.refused}`} role="alert">
+          Couldn’t delete the note. {messageOf(refusal.error)}
+        </p>
       )}
     </li>
   )

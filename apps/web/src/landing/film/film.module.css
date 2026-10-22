@@ -175,13 +175,13 @@
   inset-block-start: 72px;
   inset-inline-start: calc(var(--gutter) + var(--rail));
   z-index: 4;
-  width: min(46vw, 40rem);
+  width: var(--hero-w);
 }
 /* What the page is, in the words people search for: small and quiet over the headline. */
 .first .kicker {
   margin: clamp(4px, 1.5vh, 24px) 0 0;
   font-weight: 600;
-  font-size: 0.9375rem;
+  font-size: max(0.9375rem, calc(var(--hero-h) * 0.15));
   line-height: 1.35;
 }
 /* Three lines, each its own: "Send your friends / the address. / They’re in." */
@@ -189,7 +189,7 @@
   margin-top: clamp(4px, 1vh, 12px);
   /* The room the descenders of "They’re" hang into, below the line box. */
   padding-bottom: 0.18em;
-  font-size: clamp(3rem, min(5.4vw, 10.5vh), 6.25rem);
+  font-size: max(3rem, var(--hero-h));
 }
 .first .headline span {
   display: block;
@@ -197,6 +197,7 @@
 .first .support {
   margin-top: clamp(12px, 2vh, 24px);
   max-width: 26em;
+  font-size: max(clamp(1.125rem, 1.5vw, 1.375rem), calc(var(--hero-h) * 0.22));
 }
 .first .go {
   display: flex;
@@ -205,16 +206,24 @@
   gap: 12px 20px;
   margin-top: clamp(20px, 3vh, 36px);
 }
+.first .go a {
+  min-height: max(60px, calc(var(--hero-h) * 0.6));
+  padding-inline: max(32px, calc(var(--hero-h) * 0.32));
+  font-size: max(1.25rem, calc(var(--hero-h) * 0.2));
+}
 .first .go p,
 .last .go p {
   margin: 0;
   font-size: 0.9375rem;
   line-height: 1.35;
 }
+.first .go p {
+  font-size: max(0.9375rem, calc(var(--hero-h) * 0.15));
+}
 /* Cubepals' own Arcade, as it is now: a line under the button, its address a press to copy. */
 .first .arcade {
   margin: clamp(14px, 2.2vh, 24px) 0 0;
-  font-size: 0.9375rem;
+  font-size: max(0.9375rem, calc(var(--hero-h) * 0.15));
   line-height: 1.35;
 }
 .first .arcade button {

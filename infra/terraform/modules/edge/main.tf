@@ -33,14 +33,16 @@ variable "edge_token_version" {
 }
 
 variable "floodgate_key" {
-  description = "FLOODGATE_KEY, the same value the control plane has: the key Geyser and every Paper server share."
+  description = "FLOODGATE_KEY, the same value the control plane has: the key Geyser and every Paper server share. Null where Bedrock is off."
   type        = string
   sensitive   = true
+  default     = null
 }
 
 variable "floodgate_key_version" {
-  description = "A non-secret marker that changes with the key."
+  description = "A non-secret marker that changes with the key. Null where Bedrock is off."
   type        = string
+  default     = null
 }
 
 variable "play_domains" {
@@ -84,12 +86,19 @@ resource "fly_secret" "edge_token" {
   value_wo_version = var.edge_token_version
 }
 
-# Geyser reads it at start (apps/edge/bedrock.ts).
+# Geyser reads it at start (apps/edge/bedrock.ts). Without it the edge takes no Bedrock players.
 resource "fly_secret" "floodgate_key" {
+  count            = var.floodgate_key_version == null ? 0 : 1
   app              = fly_app.edge.name
   name             = "FLOODGATE_KEY"
   value_wo         = var.floodgate_key
   value_wo_version = var.floodgate_key_version
+}
+
+# Where the key is set (staging), the secret was made before it could be absent: keep it.
+moved {
+  from = fly_secret.floodgate_key
+  to   = fly_secret.floodgate_key[0]
 }
 
 # Where a play address opened in a browser goes (apps/edge/browser-redirect.ts). Neither is secret,

@@ -16,12 +16,15 @@ name: Labels check
 on:
   pull_request:
     types: [opened, reopened, synchronize, edited, ready_for_review, labeled, unlabeled]
+  # Required checks must report in the merge queue too. The labels were checked on the pull
+  # request, so there every step is skipped and the check passes.
+  merge_group:
 
 permissions: {}
 
-# Only the newest event's answer matters.
+# Only the newest event's answer matters. A queue entry has no pull request, so its own ref keys it.
 concurrency:
-  group: labels-check-${{ github.event.pull_request.number }}
+  group: labels-check-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -35,14 +38,17 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request'
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           sparse-checkout: tools/labels
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: github.event_name == 'pull_request'
         with:
           bun-version: 1.4.3
-      - run: bun tools/labels/cli.ts check "$NUMBER"
+      - if: github.event_name == 'pull_request'
+        run: bun tools/labels/cli.ts check "$NUMBER"
         env:
           GH_TOKEN: ${{ github.token }}
           NUMBER: ${{ github.event.pull_request.number }}

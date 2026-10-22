@@ -48,7 +48,7 @@ describe('what a hotfix deploys', () => {
     expect(appsFor(['packages/db/src/schema/billing.ts'])).toEqual(['control', 'realtime'])
     expect(appsFor(['packages/contracts/src/durations.ts'])).toEqual(['control', 'realtime', 'edge'])
     expect(appsFor(['apps/control/src/minecraft/ports.ts'])).toEqual(['control', 'realtime', 'edge'])
-    expect(appsFor(['bun.lock'])).toEqual(['control', 'realtime'])
+    expect(appsFor(['bun.lock'])).toEqual(['control', 'realtime', 'edge'])
     expect(appsFor(['apps/edge/README.md', 'apps/control/README.md'])).toEqual([])
     expect(appsFor(['infra/fly/realtime.toml'])).toEqual(['realtime'])
     expect(appsFor(['apps/web/src/ui/plans.tsx', 'docs/production.md'])).toEqual([])

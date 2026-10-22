@@ -10,7 +10,7 @@ ARG GEYSER_VERSION=2.12.0
 ARG GEYSER_BUILD=1268
 ARG GEYSER_SHA256=87c8d732c4772b813f65b245acdabf9852af3632854116a312a132568141a348
 
-FROM ghcr.io/itzg/mc-router:1.47.1@sha256:177433dd91507339924d60205a19ae9a289afd0e69dbad54e1a55d497f7523f8 AS router
+FROM ghcr.io/itzg/mc-router:1.49.0@sha256:76697861c41e7d64880accf0d25e953a3c2d871e6f5f0922d7c830ffcb2b75ab AS router
 
 FROM scratch AS geyser
 ARG GEYSER_VERSION
@@ -37,13 +37,20 @@ FROM mirror.gcr.io/oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343a
 WORKDIR /build
 # The agent imports only types from the contracts, plus play-today.ts (with the units of time it
 # imports), edge-poll.ts, proxy-header.ts, server-list.ts and Minecraft's ports, which import
-# nothing else, so it compiles without installing anything.
-COPY apps/edge/agent.ts apps/edge/asleep.ts apps/edge/bedrock-relay.ts apps/edge/bedrock.ts apps/edge/browser-redirect.ts apps/edge/clients.ts apps/edge/drain.ts apps/edge/forwarding.ts apps/edge/front.ts apps/edge/geyser-config.ts apps/edge/geyser.ts apps/edge/header.ts apps/edge/hold.ts apps/edge/join-trace.ts apps/edge/limits.ts apps/edge/mappings.ts apps/edge/notice.ts apps/edge/ping-wake.ts apps/edge/poll.ts apps/edge/resting.ts apps/edge/router.ts apps/edge/visit-reporter.ts apps/edge/visits.ts apps/edge/
+# nothing else. Its one dependency is OpenTelemetry, for the metrics it serves (metrics.ts): only
+# the edge's workspace is installed, at the versions bun.lock pins, as in apps/control/Dockerfile.
+COPY package.json bun.lock bunfig.toml ./
+COPY apps/edge/package.json apps/edge/
+COPY packages/contracts/package.json packages/contracts/
+RUN bun -e 'const p = await Bun.file("package.json").json(); p.workspaces = ["apps/edge", "packages/contracts"]; delete p.devDependencies; await Bun.write("package.json", JSON.stringify(p))' \
+ && bun install --lockfile-only \
+ && bun install --production --frozen-lockfile
+COPY apps/edge/agent.ts apps/edge/asleep.ts apps/edge/bedrock-relay.ts apps/edge/bedrock.ts apps/edge/browser-redirect.ts apps/edge/clients.ts apps/edge/drain.ts apps/edge/forwarding.ts apps/edge/front.ts apps/edge/geyser-config.ts apps/edge/geyser.ts apps/edge/header.ts apps/edge/hold.ts apps/edge/join-trace.ts apps/edge/limits.ts apps/edge/mappings.ts apps/edge/metrics.ts apps/edge/notice.ts apps/edge/ping-wake.ts apps/edge/poll.ts apps/edge/resting.ts apps/edge/router.ts apps/edge/visit-reporter.ts apps/edge/visits.ts apps/edge/
 COPY packages/contracts/src/durations.ts packages/contracts/src/edge-poll.ts packages/contracts/src/play-today.ts packages/contracts/src/proxy-header.ts packages/contracts/src/server-list.ts packages/contracts/src/
 COPY apps/control/src/minecraft/ports.ts apps/control/src/minecraft/
 RUN bun build apps/edge/agent.ts --compile --outfile /build/edge-agent
 
-FROM mirror.gcr.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
+FROM mirror.gcr.io/library/debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
 COPY --from=router /mc-router /mc-router
 COPY --from=agent /build/edge-agent /edge-agent
 # Geyser's runtime and jar, which the agent starts (apps/edge/bedrock.ts).

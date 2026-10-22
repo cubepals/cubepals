@@ -19,13 +19,17 @@
  * --players   how many players join, one every --stagger ms (1500), each with a fake XUID of its
  *             own (--offset moves them): Floodgate makes a player's UUID from the XUID, so
  *             players sharing one would be refused as already logged in.
+ * --username the gamertag to log in as, for one player (bedrock<n> otherwise), and --xuid the
+ *             Xbox user id it carries (a made-up one otherwise). With sign-in off the edge takes
+ *             both as given, so a test can be a real gamertag that a server's lists know.
  * --hold      seconds to stay in the world once everyone is in (10).
  * --timeout   seconds to wait for a player to spawn (240, a cold wake included).
  *
  * Offline login: there is no Xbox account here, so the edge must run with Xbox sign-in off
  * (BEDROCK_VALIDATE_LOGIN=false). Production keeps it on, and refuses these players.
  *
- * Prints one JSON object on the last line: how many spawned and each player's time to spawn.
+ * Prints one JSON object on the last line: how many spawned, each player's time to spawn, and each
+ * player's kick message and the chat lines they were sent.
  * Exits 1 unless every player spawned. One machine's clients are the limit on how many players
  * it can join; run more than one machine for more.
  */
@@ -42,6 +46,8 @@ const { values } = parseArgs({
     connect: { type: 'string' },
     via6: { type: 'string' },
     players: { type: 'string', default: '1' },
+    username: { type: 'string' },
+    xuid: { type: 'string' },
     stagger: { type: 'string', default: '1500' },
     offset: { type: 'string', default: '0' },
     chat: { type: 'string', default: 'hello from a Bedrock player' },
@@ -108,13 +114,17 @@ let to = { host: connectHost || typedHost, port: Number(connectPort ?? typedPort
 if (values.via6) to = { host: '127.0.0.1', port: await forwardTo6(values.via6) }
 
 const spawnMs: (number | null)[] = []
+/** What each player was told: the reason they were turned away, and the chat lines that reached them. */
+const told: { kicked: string | null; chat: string[] }[] = []
 let spawned = 0
 
 function join1(index: number): Promise<void> {
   const n = index + Number(values.offset)
-  const username = `bedrock${n}`
+  const username = values.username ?? `bedrock${n}`
   const begun = Date.now()
   spawnMs[index] = null
+  const heard = { kicked: null as string | null, chat: [] as string[] }
+  told[index] = heard
   return new Promise((resolve) => {
     const options = {
       host: to.host,
@@ -132,7 +142,8 @@ function join1(index: number): Promise<void> {
     client.options.host = typedHost
     client.options.port = Number(typedPort)
     // Offline logins carry XUID 0, and Floodgate makes its UUID from the XUID.
-    if (client.profile) client.profile.xuid = 2535400000000000 + n
+    if (client.profile)
+      client.profile.xuid = values.xuid === undefined ? 2535400000000000 + n : Number(values.xuid)
     client.on('join', () => log(username, 'logged in'))
     client.on('spawn', () => {
       spawnMs[index] = Date.now() - begun
@@ -150,9 +161,13 @@ function join1(index: number): Promise<void> {
       })
       resolve()
     })
-    client.on('text', (p: { message?: string }) => log(username, 'chat:', p.message))
-    client.on('kick', (p: unknown) => {
+    client.on('text', (p: { message?: string }) => {
+      log(username, 'chat:', p.message)
+      heard.chat.push(p.message ?? '')
+    })
+    client.on('kick', (p: { message?: string }) => {
       log(username, 'kicked:', JSON.stringify(p))
+      heard.kicked = p.message ?? JSON.stringify(p)
       resolve()
     })
     client.on('error', (e: Error) => {
@@ -170,5 +185,5 @@ for (let i = 0; i < count; i++) {
 }
 await Promise.all(joining)
 await Bun.sleep(Number(values.hold) * 1000)
-process.stdout.write(`${JSON.stringify({ players: count, spawned, spawnMs })}\n`)
+process.stdout.write(`${JSON.stringify({ players: count, spawned, spawnMs, told })}\n`)
 process.exit(spawned === count ? 0 : 1)

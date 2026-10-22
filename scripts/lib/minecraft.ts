@@ -201,13 +201,13 @@ const hello = (name: string, protocol: number) => {
 }
 
 /** What the multiplayer screen's list shows of a server, as far as these scripts read it. */
-interface Status {
+export interface Status {
   version: { name: string; protocol: number }
   players?: { online: number; max: number }
 }
 
 /** The status ping the multiplayer screen sends for each server in its list. */
-async function status(edge: Edge, address: string): Promise<Status> {
+export async function status(edge: Edge, address: string): Promise<Status> {
   return (await exchange(edge, [handshake(address, 0, 1), packet(0x00, Buffer.alloc(0))], (_id, body) => {
     const [length, at] = readVarInt(body, 0)
     return JSON.parse(body.subarray(at, at + length).toString())

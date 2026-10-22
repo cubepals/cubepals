@@ -113,6 +113,7 @@ Terraform stack.
 | `INTERNAL_LISTEN` | `127.0.0.1:4001` | `fly-local-6pn:4001` (the organization's private network only) | toml (control) |
 | `REALTIME_LISTEN` | `127.0.0.1:7443` | `fly-global-services:443` (UDP reaches only sockets bound there, on the port browsers dial: Fly never rewrites a UDP port) | toml (realtime) |
 | `REALTIME_FALLBACK_LISTEN` | `127.0.0.1:7444` | `0.0.0.0:7444` (Fly terminates TLS in front) | toml (realtime) |
+| `METRICS_LISTEN` | unset (nothing is served) | `0.0.0.0:9091` (no service names it, so only Fly's private network reaches it; the edge reads it too) | toml (control, realtime, edge) |
 
 ### Web origins and auth
 
@@ -336,7 +337,7 @@ which the project's charts leave out.
 | `MINECRAFT_PORT` | `25565` | `25565` | toml |
 | `FLOODGATE_KEY` | unset: Bedrock players aren't taken | the same key as the control plane's, base64 of 16 bytes. With it the agent starts Geyser (`apps/edge/bedrock.ts`) and answers Bedrock on UDP `BEDROCK_PORT` | Terraform (edge) |
 | `BEDROCK_PORT`, `BEDROCK_BIND` | `19132`, `fly-global-services` | same: the one address Fly delivers UDP to | toml |
-| `BEDROCK_VALIDATE_LOGIN` | `true` | `true`. `false` skips Xbox sign-in and is for a test edge whose headless clients have no account (`tools/bedrock-join`) | — |
+| `BEDROCK_VALIDATE_LOGIN` | `true` | `true`. `false` skips Xbox sign-in and is for a test edge whose headless clients have no account (`tools/bedrock-join`); the Bedrock E2E workflow sets it on staging for its run and back after | — |
 | `BEDROCK_PONGS_PER_SECOND`, `BEDROCK_PONGS_BURST`, `BEDROCK_TOTAL_PONGS_PER_SECOND`, `BEDROCK_TOTAL_PONGS_BURST`, `BEDROCK_OPENS_PER_SECOND`, `BEDROCK_OPENS_BURST`, `BEDROCK_MOST_PLAYERS` | `2`, `10`, `200`, `400`, `1`, `10`, `2000` | same: pongs sent per address and in all, new connections opened per address, players held at once | — |
 | `GEYSER_JAR`, `GEYSER_DIR`, `GEYSER_WARM`, `GEYSER_HEAP` | the image's jar, `/tmp/geyser`, the game files fetched at image build, `768m` | same, with `GEYSER_HEAP` set in the toml to fit the machine. The jar's build is pinned in `apps/edge/Dockerfile` and raised with `bun scripts/geyser.ts bump` | — |
 | `EDGE_ID` | `local-edge` | the machine's hostname | — |

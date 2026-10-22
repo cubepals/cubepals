@@ -31,6 +31,8 @@ primary_region = "fra"
   # dial (the config refuses anything else).
   REALTIME_LISTEN = "fly-global-services:443"
   REALTIME_FALLBACK_LISTEN = "0.0.0.0:7444"
+  # Scraped by Fly's managed Prometheus below; no service names the port, so it is not published.
+  METRICS_LISTEN = "0.0.0.0:9091"
 
 # WebTransport: HTTP/3 over UDP, TLS terminated by the process.
 [[services]]
@@ -64,6 +66,10 @@ primary_region = "fra"
     interval = "15s"
     timeout = "2s"
     grace_period = "20s"
+
+[metrics]
+  port = 9091
+  path = "/metrics"
 
 [[vm]]
   size = "shared-cpu-1x"
