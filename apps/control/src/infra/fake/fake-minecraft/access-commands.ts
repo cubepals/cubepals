@@ -117,18 +117,21 @@ export async function pardon(server: AccessServer, name: string): Promise<string
   return `Unbanned ${entry.name}`
 }
 
-/** `kick`: a player who is on, named by their name or their UUID, as vanilla's entity argument takes either. */
+/**
+ * `kick`: a player who is on, by name. A UUID is refused, as vanilla's entity argument reads one as
+ * any entity and `kick` takes only players (measured on Paper 26.2).
+ */
 export function kick(server: AccessServer, args: string[]): string {
   const [target = '', ...words] = args
-  const reason = words.join(' ')
-  const uuid = [...server.online].find(
-    ([id, name]) => id === target.toLowerCase() || name.toLowerCase() === target.toLowerCase(),
-  )?.[0]
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(target))
+    return 'Only players may be affected by this command, but the provided selector includes entities'
+  const reason = words.join(' ') || 'Kicked by an operator'
+  const uuid = [...server.online].find(([, name]) => name.toLowerCase() === target.toLowerCase())?.[0]
   if (uuid === undefined) return 'No player was found'
   const name = server.online.get(uuid)
   server.online.delete(uuid)
-  server.kicks.set(uuid, reason || 'Kicked by an operator')
-  return `Kicked ${name}: ${reason || 'Kicked by an operator'}`
+  server.kicks.set(uuid, reason)
+  return `Kicked ${name}: ${reason}`
 }
 
 export async function banIp(lists: AccessLists, ip: string, reason: string, source: string): Promise<string> {

@@ -382,6 +382,10 @@ describe('access files', () => {
       'ban Steve griefing op Steve',
     )
     expect(accessCommand({ type: 'whitelist_mode', enabled: true })).toBe('whitelist on')
+    // By name: Paper 26.2 refuses `kick` a UUID, reading it as one that could be any entity.
+    expect(
+      accessCommand({ type: 'kick', player: { uuid: 'u', name: '.Pixel' }, reason: 'griefing' }, true),
+    ).toBe('minecraft:kick .Pixel You are banned from this server. Reason: griefing')
   })
 
   test('parses the files the server writes', () => {

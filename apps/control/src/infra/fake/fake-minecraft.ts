@@ -16,7 +16,7 @@
  *   exact name; a name in a command is looked up in its name cache (`usercache.json`, which logins
  *   and lookups fill), then asked of Mojang — even where accounts aren't checked — and, on such a
  *   server, finally derived from the name in lower case; a Bedrock player is in the cache only
- *   once they have joined, as Floodgate names them, and `kick` takes a UUID too;
+ *   once they have joined, as Floodgate names them, and `kick` refuses a UUID;
  * - RCON wants the secret the spec carries; a status ping answers once the world is loaded;
  * - each player on has a place and may have a last death, which `data get entity`, `tp` and
  *   `spreadplayers` (under `execute in`) read and move, answering in vanilla's words (1.20.1, 26.3);
