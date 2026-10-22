@@ -62,7 +62,7 @@ function plan(environment: string): boolean {
       ['required secrets only', example.secret_names],
       ['every secret', [...example.secret_names, ...(example.optional_secret_names ?? [])]],
     ] as const) {
-      console.log(`\n== ${environment}: ${scenario}`)
+      process.stdout.write(`\n== ${environment}: ${scenario}\n`)
       const env = {
         ...base,
         TF_VAR_secrets: named(names, 'stand-in'),
@@ -90,6 +90,7 @@ if (import.meta.main) {
   const results = (wanted.length > 0 ? wanted : ENVIRONMENTS).map(
     (environment) => [environment, plan(environment)] as const,
   )
-  for (const [environment, ok] of results) console.log(`${environment}: ${ok ? 'plans' : 'FAILS to plan'}`)
+  for (const [environment, ok] of results)
+    process.stdout.write(`${environment}: ${ok ? 'plans' : 'FAILS to plan'}\n`)
   process.exit(results.every(([, ok]) => ok) ? 0 : 1)
 }
