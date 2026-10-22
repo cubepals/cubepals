@@ -22,7 +22,7 @@
  * --username the gamertag to log in as, for one player (bedrock<n> otherwise), and --xuid the
  *             Xbox user id it carries (a made-up one otherwise). With sign-in off the edge takes
  *             both as given, so a test can be a real gamertag that a server's lists know.
- * --hold      seconds to stay in the world once everyone is in (10).
+ * --hold      seconds to stay in the world once everyone is in (10), then everyone leaves cleanly.
  * --timeout   seconds to wait for a player to spawn (240, a cold wake included).
  *
  * Offline login: there is no Xbox account here, so the edge must run with Xbox sign-in off
@@ -114,6 +114,7 @@ let to = { host: connectHost || typedHost, port: Number(connectPort ?? typedPort
 if (values.via6) to = { host: '127.0.0.1', port: await forwardTo6(values.via6) }
 
 const spawnMs: (number | null)[] = []
+const clients: { disconnect: () => void }[] = []
 /** What each player was told: the reason they were turned away, and the chat lines that reached them. */
 const told: { kicked: string | null; chat: string[] }[] = []
 let spawned = 0
@@ -136,6 +137,7 @@ function join1(index: number): Promise<void> {
       connectTimeout: Number(values.timeout) * 1000,
     }
     const client = createClient(options)
+    clients.push(client)
     // The Login is built after the socket opens, from the client's own copy of the options, so
     // naming the typed address now puts it in the ServerAddress without it being where the
     // packets already go.
@@ -185,5 +187,9 @@ for (let i = 0; i < count; i++) {
 }
 await Promise.all(joining)
 await Bun.sleep(Number(values.hold) * 1000)
+// Leaving as a player does, so the server drops the session now rather than when its connection
+// times out: a player who joins again at once is not told they are already logged in.
+for (const client of clients) client.disconnect()
+await Bun.sleep(1000)
 process.stdout.write(`${JSON.stringify({ players: count, spawned, spawnMs, told })}\n`)
 process.exit(spawned === count ? 0 : 1)

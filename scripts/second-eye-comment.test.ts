@@ -6,6 +6,7 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import {
+  decide,
   type Finding,
   LABELS,
   labelFor,
@@ -296,5 +297,40 @@ describe('a review the pull request has moved past', () => {
     expect(lines[3]).toBe(
       `<sub>Updated for [\`0123456\`](https://github.com/cubepals/cubepals/commit/${SHA})</sub>`,
     )
+  })
+})
+
+describe('decide', () => {
+  const base = {
+    event: 'workflow_dispatch',
+    action: '',
+    draft: false,
+    force: false,
+    reviewed: SHA,
+    head: SHA,
+  }
+
+  test('a run by hand on a head that has its review leaves the comment and label alone', () => {
+    expect(decide(base)).toEqual({ review: false, notice: 'none' })
+  })
+
+  test('forced, or on a head with no review yet, it reviews', () => {
+    expect(decide({ ...base, force: true })).toEqual({ review: true, notice: 'running' })
+    expect(decide({ ...base, head: HEAD })).toEqual({ review: true, notice: 'running' })
+    expect(decide({ ...base, reviewed: undefined })).toEqual({ review: true, notice: 'running' })
+  })
+
+  test('a comment or a label on a reviewed head still reviews', () => {
+    expect(decide({ ...base, event: 'issue_comment', action: 'created' }).review).toBe(true)
+    expect(decide({ ...base, event: 'pull_request', action: 'labeled' }).review).toBe(true)
+  })
+
+  test("a draft's push waits and marks the review stale", () => {
+    for (const action of ['synchronize', 'opened', 'reopened'])
+      expect(decide({ ...base, event: 'pull_request', action, draft: true })).toEqual({
+        review: false,
+        notice: 'draft',
+      })
+    expect(decide({ ...base, event: 'pull_request', action: 'synchronize' }).review).toBe(true)
   })
 })

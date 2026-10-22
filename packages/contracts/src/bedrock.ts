@@ -41,6 +41,14 @@ export const bedrockDisplayName = (name: string): string =>
 /** Whether a typed name asks for a Bedrock player: it starts the way Floodgate's names do. */
 export const typedAsBedrock = (typed: string): boolean => typed.trim().startsWith(FLOODGATE_PREFIX)
 
+/**
+ * Whether text can be a gamertag, typed with Floodgate's dot or without: letters, numbers and
+ * spaces, up to 15 of them. Only ASCII ones, since the server's player argument reads no others,
+ * and a name with any other fails its command on every sync. Whether an account has it is the
+ * lookup's to say.
+ */
+export const isGamertag = (typed: string): boolean => /^\.?[A-Za-z0-9][A-Za-z0-9 ]{0,14}$/.test(typed.trim())
+
 /** A player as a page names them: the gamertag for a Bedrock player, the name for any other. */
 export const shownName = (player: { uuid: string; name: string }): string =>
   isBedrockUuid(player.uuid) ? bedrockDisplayName(player.name) : player.name

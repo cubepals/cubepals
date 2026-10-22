@@ -40,12 +40,6 @@ on:
 permissions:
   contents: read
 
-# A newer push replaces an older one's build: on main, and on each pull request. The daily sweep
-# has its own group, so it never cancels a deploy.
-concurrency:
-  group: web-staging-${{ github.event.pull_request.number || (github.event_name == 'schedule' && 'sweep') || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   deploy:
     name: Deploy the website to staging
@@ -53,15 +47,39 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 20
+    permissions:
+      contents: read
+    # One deploy at a time, in the order the pushes came. A run waiting behind another starts when
+    # it is its turn, finds a newer push and ends green; none is cancelled while it deploys.
+    concurrency:
+      group: web-staging-main
+      cancel-in-progress: false
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # A newer push to main replaces this build: it ends green here instead of cancelled, and
+      # deploys nothing, so an older commit never lands after a newer one.
+      - name: Whether this is still the newest push
+        id: newest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$GITHUB_SHA...$current" --jq .status || true)
+          if [ "$status" = ahead ]; then
+            echo "::notice::A newer push to main deploys the website."
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.newest.outputs.stale != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - if: steps.newest.outputs.stale != 'true'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.3
-      - run: bun install --frozen-lockfile
-      - run: bun scripts/staging-website.ts deploy
+      - if: steps.newest.outputs.stale != 'true'
+        run: bun install --frozen-lockfile
+      - if: steps.newest.outputs.stale != 'true'
+        run: bun scripts/staging-website.ts deploy
         env:
           # Workers Scripts, Workers Routes and R2 on cubepals.com's account; the DNS token finds it,
           # and keeps the previews' wildcard record.
@@ -70,6 +88,7 @@ jobs:
       # A Worker that deployed can still throw on every request. Retried for three minutes while
       # Cloudflare moves traffic to the new version.
       - name: Ask staging for its pages
+        if: steps.newest.outputs.stale != 'true'
         run: bun scripts/site-check.ts https://staging.cubepals.com 180
 
   preview:
@@ -84,6 +103,12 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    # One preview at a time for each pull request, in the order of its pushes: a run waiting behind
+    # another starts when it is its turn, finds a newer push and ends green, so the preview is never
+    # left on an older commit.
+    concurrency:
+      group: web-staging-preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     env:
       CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -94,8 +119,20 @@ jobs:
     steps:
       - name: Whether this environment can upload
         id: ready
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -n "$CLOUDFLARE_WORKERS_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+          read -r current state < <(gh api "repos/$REPO/pulls/$PULL" --jq '"\(.head.sha) \(.state)"')
+          status=$(gh api "repos/$REPO/compare/$SHA...$current" --jq .status || true)
+          if [ "$state" != open ]; then
+            # The closed pull request's preview is forgotten by the origins job; adding it again would undo that.
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::The pull request is closed; it gets no preview."
+          elif [ "$status" = ahead ]; then
+            # A newer push has its own run; this one ends green rather than cancelled.
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::The pull request has a newer push; its run builds the preview."
+          elif [ -n "$CLOUDFLARE_WORKERS_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -147,9 +184,19 @@ jobs:
         id: upload
         if: steps.ready.outputs.run == 'true'
         run: bun scripts/staging-website.ts preview "$PULL"
-      # Ready only with an address. A cancelled run says nothing: the newer push's run says it.
-      - name: Say how it went
+      # Ready only with an address. A run the pull request has moved past says nothing: the newer
+      # push's run says it, and an older one never lands over it.
+      - name: Whether the preview is still the newest push
+        id: fresh
         if: ${{ !cancelled() && steps.ready.outputs.run == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          read -r current state < <(gh api "repos/$REPO/pulls/$PULL" --jq '"\(.head.sha) \(.state)"')
+          status=$(gh api "repos/$REPO/compare/$SHA...$current" --jq .status || true)
+          if [ "$state" = open ] && [ "$status" != ahead ]; then echo "current=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Say how it went
+        if: ${{ steps.fresh.outputs.current == 'true' }}
         env:
           GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
           COMMENT_AUTHOR: ${{ steps.bot.outputs.app-slug && format('{0}[bot]', steps.bot.outputs.app-slug) || 'github-actions[bot]' }}
@@ -160,7 +207,7 @@ jobs:
           bun .preview-tools/scripts/preview-comment.ts "$([ -n "$URL" ] && echo ready || echo failed)" ||
           echo "::warning::The preview comment couldn't say how the preview went."
       - name: Let the preview upload worlds
-        if: ${{ !cancelled() && steps.upload.outputs.url != '' }}
+        if: ${{ !cancelled() && steps.upload.outputs.url != '' && steps.fresh.outputs.current == 'true' }}
         env:
           URL: ${{ steps.upload.outputs.url }}
           COMMIT_URL: ${{ steps.upload.outputs.commit_url }}

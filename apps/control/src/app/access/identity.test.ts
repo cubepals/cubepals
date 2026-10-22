@@ -10,6 +10,7 @@
 import { describe, expect, test } from 'bun:test'
 import { FakeGeyserMc } from '../../infra/fake/fake-geysermc.ts'
 import { FakeProfiles } from '../../infra/fake/fake-profiles.ts'
+import { accessCommand } from '../../minecraft/access.ts'
 import { identityFor, keyedFor, namedBy, offlineUuid } from './identity.ts'
 
 describe('who a player is to a server', () => {
@@ -35,6 +36,33 @@ describe('who a player is to a server', () => {
     expect(await identityFor('NoAccountHere', true, profiles, null)).toBeNull()
     const verified = await identityFor('Steve', true, profiles, null)
     expect(verified?.uuid).not.toBe(offlineUuid('Steve'))
+  })
+
+  test('a server that does not verify accounts takes only a Java name as its own player', async () => {
+    const profiles = new FakeProfiles()
+    const geyser = new FakeGeyserMc()
+    // A gamertag nobody knows, with a space, would reach the server's commands as its first word.
+    expect(await identityFor('Pixel Pal', false, profiles, geyser)).toBeNull()
+    expect(await identityFor('Pixel Pal', false, profiles, null)).toBeNull()
+    expect(await identityFor('ab', false, profiles, geyser)).toBeNull()
+    expect(await identityFor('.Pixel Pal', false, profiles, geyser)).toBeNull()
+    geyser.introduce('Pixel Pal', '2535400000000000')
+    expect((await identityFor('Pixel Pal', false, profiles, geyser))?.name).toBe('.Pixel_Pal')
+  })
+
+  test('no name that reaches a command has a space in it', async () => {
+    const profiles = new FakeProfiles()
+    const geyser = new FakeGeyserMc()
+    geyser.introduce('Pixel Pal', '2535400000000000')
+    for (const typed of ['Pixel Pal', '.Pixel Pal', 'Steve Alex', ' .Pixel  Pal ', 'Unknown One'])
+      for (const onlineMode of [true, false]) {
+        const player = await identityFor(typed, onlineMode, profiles, geyser)
+        const command =
+          player === null
+            ? []
+            : [accessCommand({ type: 'op', player }), accessCommand({ type: 'whitelist_add', player })]
+        for (const line of command) expect(line.replace(/^(op|whitelist add) /, '')).not.toContain(' ')
+      }
   })
 
   test('an identity says which kind of server it was made for', async () => {
