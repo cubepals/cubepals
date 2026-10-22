@@ -30,6 +30,8 @@ export function productionSite(values: Record<string, string>, environment: Envi
     canonicalOrigin: settings.WEB_CANONICAL_ORIGIN ?? '',
     deploymentId: settings.DEPLOYMENT_ID ?? '',
     indexable: environment.web.indexable === true,
+    // The pages say Bedrock works exactly when the control plane is given the key that lets it in.
+    bedrock: Boolean(values.FLOODGATE_KEY),
     beta: environment.web.beta !== false,
     proxySecret: values.WEB_PROXY_SECRET ?? '',
     posthogToken: settings.POSTHOG_TOKEN || undefined,
