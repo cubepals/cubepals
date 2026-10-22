@@ -8,8 +8,10 @@ name: Labels check
 # merges (branch protection requires this check). labels.yml adds them within a minute or so of a
 # push; this waits up to three minutes for them, and runs again when someone adds or removes a
 # label. Labels added with labels.yml's token start no workflow, so that run re-runs this one when
-# it failed first. Bots' pull requests are held to it too: Dependabot's carry kind/deps from
-# dependabot.yml and get the rest like any other.
+# it failed first. A run for a commit the pull request has moved past ends at once, green: a newer
+# push has its own run, and a cancelled one shows as a grey cross on a pull request that is fine.
+# Bots' pull requests are held to it too: Dependabot's carry kind/deps from dependabot.yml and get
+# the rest like any other.
 #
 # It checks out the base branch's tools/labels, not the pull request's, installs nothing and only
 # reads labels, with a read-only token, so it is safe on pull requests from forks.
@@ -22,11 +24,6 @@ on:
 
 permissions: {}
 
-# Only the newest event's answer matters. A queue entry has no pull request, so its own ref keys it.
-concurrency:
-  group: labels-check-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   labels:
     name: Has a kind, an area and a size
@@ -37,17 +34,33 @@ jobs:
       issues: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Superseded only when the pull request's head is a later commit than this run's; a lagging
+      # answer from the API, or a force push, runs the check.
+      - name: Whether this is still the newest push
+        id: newest
         if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          current=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$NUMBER" --jq .head.sha)
+          status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$HEAD...$current" --jq .status || true)
+          if [ "$status" = ahead ]; then
+            echo "::notice::The pull request has a newer push; its run checks the labels."
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: github.event_name == 'pull_request' && steps.newest.outputs.stale != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           sparse-checkout: tools/labels
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        if: github.event_name == 'pull_request'
+      - if: github.event_name == 'pull_request' && steps.newest.outputs.stale != 'true'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.3
-      - if: github.event_name == 'pull_request'
+      - if: github.event_name == 'pull_request' && steps.newest.outputs.stale != 'true'
         run: bun tools/labels/cli.ts check "$NUMBER"
         env:
           GH_TOKEN: ${{ github.token }}

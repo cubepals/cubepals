@@ -3,10 +3,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The api role's HTTP surface through the real tRPC handler: which pages may send a change, and
- * what reaches PostHog when a request fails.
+ * The api role's HTTP surface through the real tRPC handler: which pages may send a change, what
+ * reaches PostHog when a request fails, and what is counted of each request.
  */
 import { describe, expect, test } from 'bun:test'
+import { installTelemetry } from '../../app/platform/telemetry.ts'
+import type { Telemetry } from '../../app/ports/telemetry.ts'
 import { RecordedInsight } from '../../testing/insight.ts'
 import type { Services } from '../trpc/trpc.ts'
 import { createApiApp } from './api.ts'
@@ -132,5 +134,46 @@ describe('errors and feedback', () => {
     expect(await said({ text: null, page: '/', version: 'v' })).toBe(
       'That doesn’t look right. Check it and try again.',
     )
+  })
+})
+
+// What the monitor hears of a batch: one request under its route template, and each procedure in
+// it by the path the router defines. A path the router doesn't define is never a label.
+describe('what is counted of a request', () => {
+  const requests: Array<Parameters<Telemetry['requestServed']>> = []
+  const procedures: Array<Parameters<Telemetry['procedureServed']>> = []
+  const app = createApiApp({
+    auth: signedInAs(() => null),
+    methods: { google: false, github: false, turnstileSiteKey: null },
+    addresses: { proxySecret: null, hostHeader: null },
+    origins: ['https://blockly.test'],
+    services: { insight: { report: () => {} } } as unknown as Services,
+  })
+
+  test('a batch is one request, and each procedure in it is timed by its path', async () => {
+    // Whole, since it stays installed for the files that run after this one.
+    const ignored = () => {}
+    installTelemetry({
+      operationEnded: ignored,
+      operationFailed: ignored,
+      joinCompleted: ignored,
+      wakeCompleted: ignored,
+      wakeAnswered: ignored,
+      realtimeConnected: ignored,
+      observeRealtime: ignored,
+      requestServed: (...args) => void requests.push(args),
+      procedureServed: (...args) => void procedures.push(args),
+    } satisfies Telemetry)
+    const response = await app.request('/api/trpc/billing.portal,servers.evil-7f3a9c?batch=1', {
+      method: 'POST',
+      headers: { origin: 'https://blockly.test', 'content-type': 'application/json' },
+      body: JSON.stringify({ 0: {}, 1: {} }),
+    })
+    // A batch whose calls answered differently is a 207 as a whole.
+    expect(response.status).toBe(207)
+    expect(requests.map(([listener, route, method]) => [listener, route, method])).toEqual([
+      ['api', '/api/trpc/*', 'POST'],
+    ])
+    expect(procedures.map(([procedure, status]) => [procedure, status])).toEqual([['billing.portal', 401]])
   })
 })

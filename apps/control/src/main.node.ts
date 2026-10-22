@@ -639,6 +639,7 @@ async function connect(config: DeploymentConfig) {
   const { url, directUrl, poolMax } = config.database
   const pool = createPool(url, poolMax)
   const boss = await startBoss(url, { maintains: config.roles.includes('worker'), poolMax })
+  const { telemetry } = serveMetrics(config.metrics.listen, config.roles, { pool, boss, url })
   return {
     pool,
     db: createDb(pool),
@@ -649,8 +650,7 @@ async function connect(config: DeploymentConfig) {
       locks: new PgAdvisoryLocks(pool),
       // Heard only where the edges ask for routes (`app/edge/service.ts`).
       routeChanges: new PgChangeSignal(directUrl, ROUTES_CHANNEL),
-      // One source for the figures the database holds: the worker role's.
-      telemetry: installTelemetry(serveMetrics(config.metrics.listen, config.roles, pool)),
+      telemetry: installTelemetry(telemetry),
     },
   }
 }

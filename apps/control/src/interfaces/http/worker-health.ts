@@ -5,6 +5,7 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { closeServer } from './listener.ts'
+import { measured } from './measured.ts'
 
 /**
  * A worker's own health, for Fly's check on the worker group (infra/fly/control.toml): 200 while
@@ -15,9 +16,9 @@ export function serveWorkerHealth(
   listen: { host: string; port: number },
   worker: { beating(): boolean },
 ): () => Promise<void> {
-  const app = new Hono().get('/health', (c) =>
-    worker.beating() ? c.json({ ok: true }) : c.json({ ok: false }, 503),
-  )
+  const app = new Hono()
+    .use('*', measured('worker'))
+    .get('/health', (c) => (worker.beating() ? c.json({ ok: true }) : c.json({ ok: false }, 503)))
   const server = serve({ fetch: app.fetch, hostname: listen.host, port: listen.port })
   return () => closeServer(server)
 }
