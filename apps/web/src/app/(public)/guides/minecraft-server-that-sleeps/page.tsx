@@ -158,7 +158,7 @@ export default async function Guide() {
           {
             question: 'Does it work on Bedrock?',
             answer: bedrockLive()
-              ? 'Yes. Friends on Bedrock, on phones, tablets or Windows, join the same server as Java friends, and joining wakes it the same way. Xbox, PlayStation and Switch can’t add a server, so they can’t join.'
+              ? 'Yes. Friends on Bedrock, on phones, tablets or Windows, join the same server as Java friends, and joining wakes it the same way. Xbox, PlayStation and Switch can’t add a server, so they can’t join. A server with mods can’t let them in yet.'
               : 'Not yet. Cubepals servers are for Java Edition, so a friend on a phone or a console can’t join. Bedrock support is coming soon, so friends on phones and tablets can join too. Sleeping Server Starter has an option for Bedrock if you host your own.',
           },
           {

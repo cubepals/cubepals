@@ -109,7 +109,7 @@ export default function Guide() {
           {
             question: 'Can my friends on Bedrock join?',
             answer: bedrockLive()
-              ? 'Yes. A friend on Bedrock, on a phone, tablet or Windows, adds the server with the same address and plays in the same world as Java friends. Xbox, PlayStation and Switch can’t add a server, so they can’t join.'
+              ? 'Yes. A friend on Bedrock, on a phone, tablet or Windows, adds the server with the same address and plays in the same world as Java friends. Xbox, PlayStation and Switch can’t add a server, so they can’t join. A server with mods can’t let them in yet.'
               : 'Not yet. Java Edition and Bedrock Edition don’t play together, so a friend on a phone or a console can’t join a Java server. Bedrock support is coming soon, so friends on phones and tablets can join too.',
           },
           {

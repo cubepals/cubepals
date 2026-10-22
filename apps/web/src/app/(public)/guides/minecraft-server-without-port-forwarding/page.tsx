@@ -92,7 +92,7 @@ export default function Guide() {
               <>
                 Check these, in order.{' '}
                 {bedrockLive()
-                  ? 'Are they on a console? Xbox, PlayStation and Switch can’t add a server, so they can’t join. Phones, tablets and Windows on Bedrock can, once the server lets Bedrock in.'
+                  ? 'Are they on a console? Xbox, PlayStation and Switch can’t add a server, so they can’t join. Phones, tablets and Windows on Bedrock can, once the server lets Bedrock in. A server with mods can’t let them in yet.'
                   : 'Are they on Java Edition? Bedrock players, on phones and consoles, can’t join a Java server.'}{' '}
                 Is their game on the same Minecraft version as the server? Did they paste the whole address,
                 with nothing missing? If the server is on your own computer, is the port forwarded, and is
