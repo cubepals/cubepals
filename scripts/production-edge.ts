@@ -152,6 +152,10 @@ export async function waitUntil(
 export interface RegionSteps {
   /** Takes no new connections; the players in stay. */
   cordon: (region: string) => Promise<void>
+  /** Whether a machine in another region is well and holds the newest routes, to take its joins. */
+  othersReady: (region: string) => Promise<boolean>
+  /** Takes connections again; harmless where it already does. */
+  uncordon: (region: string) => Promise<void>
   /** How many players are connected through the region's machine. */
   players: (region: string) => Promise<number>
   /** Puts the new release on the region's machine and waits until it passes Fly's checks. */
@@ -162,8 +166,12 @@ export interface RegionSteps {
 
 /**
  * Restarts the edge one region at a time: the region is cordoned, its players waited on, then it
- * is deployed and waited on until ready, and only then the next. A region that doesn't come back
- * ready stops the roll with the others as they were. Returns how many players were cut.
+ * is deployed and waited on until ready, and only then the next. Cordoned only while another
+ * region is ready to take its joins (with a single region there is none). A region that stays in
+ * service has its players waited on, up to the limit, while new joins keep arriving; the gap while
+ * it restarts is said. A region that doesn't come back ready, or that fails
+ * anywhere on the way, takes connections again and stops the roll with the others as they were.
+ * Returns how many players were cut.
  */
 export async function rollEdge(
   regions: readonly string[],
@@ -173,25 +181,34 @@ export async function rollEdge(
 ): Promise<number> {
   let cut = 0
   for (const region of regions) {
-    say(`${region}: taking no new joins, waiting for its players to leave`)
-    await steps.cordon(region)
-    const left = await waitForPlayers(
-      () => steps.players(region),
-      (line) => say(`${region}: ${line}`),
-      clock,
-    )
-    if (left > 0)
+    const cordoned = regions.length > 1 && (await steps.othersReady(region))
+    say(`${region}: ${cordoned ? 'taking no new joins, ' : ''}waiting for its players to leave`)
+    if (cordoned) await steps.cordon(region)
+    try {
+      const left = await waitForPlayers(
+        () => steps.players(region),
+        (line) => say(`${region}: ${line}`),
+        clock,
+      )
+      if (left > 0)
+        say(
+          `${region}: ${left} still connected after ${EDGE_DRAIN_LIMIT_MS / MINUTE_MS} min; restarting cuts them`,
+        )
+      cut += left
       say(
-        `${region}: ${left} still connected after ${EDGE_DRAIN_LIMIT_MS / MINUTE_MS} min; restarting cuts them`,
+        cordoned
+          ? `${region}: deploying`
+          : `${region}: deploying; no other region can take its joins, so none is taken while it restarts`,
       )
-    cut += left
-    say(`${region}: deploying`)
-    await steps.deploy(region)
-    if (!(await waitUntil(() => steps.ready(region), clock, EDGE_READY_LIMIT_MS)))
-      throw new Error(
-        `The edge in ${region} isn't well and up to date with the routes; the other regions are as they were.`,
-      )
-    say(`${region}: well and up to date with the routes`)
+      await steps.deploy(region)
+      if (!(await waitUntil(() => steps.ready(region), clock, EDGE_READY_LIMIT_MS)))
+        throw new Error(
+          `The edge in ${region} isn't well and up to date with the routes; the other regions are as they were.`,
+        )
+      say(`${region}: well and up to date with the routes`)
+    } finally {
+      if (cordoned) await steps.uncordon(region).catch(() => undefined)
+    }
   }
   return cut
 }

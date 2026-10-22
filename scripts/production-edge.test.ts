@@ -178,6 +178,8 @@ describe('restarting the edge without cutting a player', () => {
 
   const steps = (log: string[], over: Partial<RegionSteps> = {}): RegionSteps => ({
     cordon: async (r) => void log.push(`cordon ${r}`),
+    othersReady: async () => true,
+    uncordon: async (r) => void log.push(`uncordon ${r}`),
     players: async () => 0,
     deploy: async (r) => void log.push(`deploy ${r}`),
     ready: async (r) => {
@@ -191,7 +193,10 @@ describe('restarting the edge without cutting a player', () => {
     const w = world()
     const cut = await rollEdge(['fra', 'iad'], steps(w.log), () => {}, w.clock)
     expect(cut).toBe(0)
-    expect(w.log).toEqual(['cordon fra', 'deploy fra', 'ready fra', 'cordon iad', 'deploy iad', 'ready iad'])
+    expect(w.log).toEqual([
+      ...['cordon fra', 'deploy fra', 'ready fra', 'uncordon fra'],
+      ...['cordon iad', 'deploy iad', 'ready iad', 'uncordon iad'],
+    ])
   })
 
   test('a region that is not up to date with the routes yet is waited on', async () => {
@@ -213,7 +218,7 @@ describe('restarting the edge without cutting a player', () => {
     await expect(
       rollEdge(['fra', 'iad'], steps(w.log, { ready: async () => false }), () => {}, w.clock),
     ).rejects.toThrow('fra')
-    expect(w.log).toEqual(['cordon fra', 'deploy fra'])
+    expect(w.log).toEqual(['cordon fra', 'deploy fra', 'uncordon fra'])
     expect(w.time()).toBeGreaterThanOrEqual(EDGE_READY_LIMIT_MS)
   })
 
@@ -228,5 +233,39 @@ describe('restarting the edge without cutting a player', () => {
     )
     expect(cut).toBe(2)
     expect(said).toContain('fra: 2 still connected after 10 min; restarting cuts them')
+  })
+
+  test('a single region is not cordoned, since no other takes its joins, but its players are waited on', async () => {
+    const w = world()
+    const counts = [2, 0]
+    await rollEdge(['fra'], steps(w.log, { players: async () => counts.shift() ?? 0 }), () => {}, w.clock)
+    expect(w.log).toEqual(['deploy fra', 'ready fra'])
+    expect(w.time()).toBe(EDGE_ASK_EVERY_MS)
+  })
+
+  test('a failure after the cordon, in the wait or the deploy, takes the region out of it again', async () => {
+    const w = world()
+    const broken = steps(w.log, {
+      players: async () => {
+        throw new Error('proxy failed')
+      },
+    })
+    await expect(rollEdge(['fra', 'iad'], broken, () => {}, w.clock)).rejects.toThrow('proxy failed')
+    expect(w.log).toEqual(['cordon fra', 'uncordon fra'])
+  })
+
+  test('a region is not cordoned while no other region is ready to take its joins', async () => {
+    const w = world()
+    const said: string[] = []
+    await rollEdge(
+      ['fra', 'iad'],
+      steps(w.log, { othersReady: async () => false }),
+      (l) => said.push(l),
+      w.clock,
+    )
+    expect(w.log).not.toContain('cordon fra')
+    expect(said).toContain(
+      'fra: deploying; no other region can take its joins, so none is taken while it restarts',
+    )
   })
 })

@@ -111,7 +111,9 @@ bun scripts/production.ts apply
    new joins (Fly's anycast sends them to the other), `apply` waits up to ten minutes for its
    connected players to leave, then deploys it and waits until it is well and holds the newest
    routes before it goes on to the next. Players still connected at the limit are cut, and the
-   count is printed.
+   count is printed. A region is cordoned only while another is well and holds the newest routes. Otherwise,
+   as with one region, it stays in service while `apply` waits for its players, and is down only
+   while it restarts, which `apply` says.
 5. It pushes the commit as the `production` branch and deploys the website's build: live when it
    returns.
 

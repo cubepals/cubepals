@@ -117,19 +117,27 @@ export async function rollEdgeApp(
       if (state === null) say(`${region}: this edge doesn’t count its players yet, so none is waited for`)
       return state?.players ?? 0
     },
-    deploy: async (region) => {
-      try {
-        const args = ['deploy', '--image', image, '--config', config, '--app', app]
-        fly(...args, '--regions', region, '--update-only', '--yes', '--ha=false')
-      } finally {
-        // The new release brings its services back; this makes sure a failed one doesn't leave
-        // the region taking no joins.
-        spawnSync('fly', ['machine', 'uncordon', machineIn(region).id, '--app', app], {
-          stdio: 'inherit',
-          env,
-        })
-      }
+    othersReady: async (region) => {
+      const others = machinesOf(app, env).filter((m) => m.region !== region)
+      for (const other of others) if ((await drainState(app, other, env))?.routesCurrent === true) return true
+      return false
     },
+    uncordon: async (region) => fly('machine', 'uncordon', machineIn(region).id, '--app', app),
+    deploy: async (region) =>
+      fly(
+        'deploy',
+        '--image',
+        image,
+        '--config',
+        config,
+        '--app',
+        app,
+        '--regions',
+        region,
+        '--update-only',
+        '--yes',
+        '--ha=false',
+      ),
     ready: async (region) => (await drainState(app, machineIn(region), env))?.routesCurrent === true,
   }
   return rollEdge(regions, steps, say, clock)
