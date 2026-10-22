@@ -315,6 +315,8 @@ export const DeploymentConfig = z.object({
     trustedOrigins: z.array(z.string()),
   }),
   listen: z.object({ api: HostPort, internal: HostPort }),
+  /** Where Prometheus-format metrics are served, on a port no Fly service publishes; unset serves none. */
+  metrics: z.object({ listen: HostPort.optional() }),
   realtime: z.object({
     listen: HostPort,
     publicUrl: z.url(),

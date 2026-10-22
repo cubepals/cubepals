@@ -25,6 +25,7 @@ import { Held, LOGIN_QUERIES, turnAway } from './hold.ts'
 import { JoinTrace } from './join-trace.ts'
 import { Gate } from './limits.ts'
 import { mappings } from './mappings.ts'
+import { holdBegun, polled } from './metrics.ts'
 import { hostnameOf, type Join, Notice, type NoticeText, pingOf, statusRequest } from './notice.ts'
 import { PingWakes } from './ping-wake.ts'
 import { RoutesPoll } from './poll.ts'
@@ -192,7 +193,7 @@ const poll = new RoutesPoll(
 /** Asks for the routes, and applies them if they changed; whether they did. */
 async function syncRoutes(): Promise<boolean> {
   try {
-    return await poll.sync()
+    return await polled(() => poll.sync())
   } catch (error) {
     console.error('route sync failed; keeping the last known routes', error)
     return false
@@ -558,6 +559,7 @@ asleepAt(SLEEPING)
 async function hold(client: Socket, join: Join, header: Uint8Array | null): Promise<void> {
   const held = new Held(join)
   if (held.refused) return void client.destroy()
+  const ended = holdBegun()
   // One line per held join, as it ends (`join-trace.ts`), and its visit (`visits.ts`).
   const trace = new JoinTrace(hostnameOf(join))
   const visit = heldVisit(header)
@@ -585,7 +587,10 @@ async function hold(client: Socket, join: Join, header: Uint8Array | null): Prom
     ...(result !== null && 'wakeOperationId' in result ? { wakeOperationId: result.wakeOperationId } : {}),
     ...(ready ? { readyAt: new Date().toISOString() } : {}),
   })
-  if (client.destroyed) return visit.ended('gave_up_waiting')
+  if (client.destroyed) {
+    ended('gave_up')
+    return visit.ended('gave_up_waiting')
+  }
   if (result?.outcome === 'ready') trace.mark('up')
   if (result?.outcome === 'ready' && (await settle(client, held))) {
     client.removeAllListeners('data')
@@ -597,11 +602,13 @@ async function hold(client: Socket, join: Join, header: Uint8Array | null): Prom
     )
     trace.mark('forwarded')
     trace.ended('let in')
+    ended('let_in')
     visit.ended(null)
     return
   }
   const route = routes.find((r) => r.hostname === hostnameOf(join))
   trace.ended(`turned away: ${whyNot(result)}`)
+  ended(client.destroyed ? 'gave_up' : 'turned_away', whyNot(result))
   visit.ended(client.destroyed ? 'gave_up_waiting' : `refused:${whyNot(result)}`)
   client.end(turnAway(refusal(result, route)))
 }

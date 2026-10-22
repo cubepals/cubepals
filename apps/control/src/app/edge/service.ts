@@ -29,6 +29,7 @@ import {
   wakeStarts,
 } from '../operations/persistence.ts'
 import type { IdleDecision, Schedules } from '../operations/schedules.ts'
+import { wakeAnswered } from '../platform/telemetry.ts'
 import type { ChangeSignal } from '../ports/changes.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { PlayAddress, PlayAddressing } from '../ports/platform.ts'
@@ -339,6 +340,19 @@ export class EdgeService {
    * which only chooses whether its wake counts among the hour's (`#mayStart`).
    */
   async wake(hostname: string, retries = true, name?: string): Promise<WakeResult> {
+    const result = await this.#wakeFor(hostname, retries, name)
+    wakeAnswered(
+      result.outcome,
+      result.outcome === 'denied'
+        ? result.reason
+        : result.outcome === 'starting'
+          ? (result.behind ?? null)
+          : null,
+    )
+    return result
+  }
+
+  async #wakeFor(hostname: string, retries: boolean, name: string | undefined): Promise<WakeResult> {
     const deadline = Date.now() + this.#wakeWaitMs
     const left = () => Math.max(0, deadline - Date.now())
     const slug = this.#addressing.slugFor(hostname)

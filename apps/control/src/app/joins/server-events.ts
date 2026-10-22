@@ -15,6 +15,7 @@ import { MINUTE_MS } from '@blockly/contracts/durations'
 import type { ServerJoinEvent } from '@blockly/contracts/join-records'
 import { type Queryable, schema } from '@blockly/db'
 import { and, desc, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm'
+import { joinCompleted } from '../platform/telemetry.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import { findServer } from '../servers/persistence.ts'
 import { sourceOf } from './sources.ts'
@@ -83,6 +84,19 @@ async function recordMoment(
     (await begun(q, addressing, serverId, source, at))
   if (id === null) return []
   const column = joins[MOMENTS[event.kind]]
+  const [before] =
+    event.kind === 'in_world'
+      ? await q
+          .select({
+            inWorldAt: joins.inWorldAt,
+            connectedAt: joins.connectedAt,
+            path: joins.path,
+            edgeRegion: joins.edgeRegion,
+            detail: joins.detail,
+          })
+          .from(joins)
+          .where(eq(joins.id, id))
+      : []
   await q
     .update(joins)
     .set({
@@ -99,6 +113,9 @@ async function recordMoment(
       ...(event.kind === 'in_world' && event.tick ? { tick: event.tick } : {}),
     })
     .where(eq(joins.id, id))
+  // Timed once, from the edge's handshake; a join the edge said nothing of has no handshake.
+  if (before !== undefined && before.inWorldAt === null && before.detail.edge !== 'missing')
+    joinCompleted(before.path, before.edgeRegion, at.getTime() - before.connectedAt.getTime())
   return [id]
 }
 

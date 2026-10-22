@@ -6,6 +6,7 @@ import type { Db } from '@blockly/db'
 import type { OperationKind, Phase, ServerStatus } from '../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { DiagnosedFailure, inFull, inPlainWords, PermanentFailure } from '../errors.ts'
+import { operationEnded, operationFailed } from '../platform/telemetry.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { JobAttempt } from '../ports/jobs.ts'
 import { findServer, lockServer } from '../servers/persistence.ts'
@@ -164,6 +165,7 @@ export class OperationRunner {
           result.status,
           result.reason,
           'detail' in result ? result.detail : undefined,
+          reached,
         )
         await handler.abandon?.(op, result.reason, result.status)
       }
@@ -189,6 +191,7 @@ export class OperationRunner {
         said,
         await this.#abandon(handler, op, said, detail),
         error instanceof DiagnosedFailure ? error.remedy : undefined,
+        reached,
       )
     }
   }
@@ -232,6 +235,7 @@ export class OperationRunner {
     message: string,
     detail?: string,
     remedy?: string,
+    step: OperationStep | null = null,
   ): Promise<void> {
     const phase = handler?.phase ?? null
     const from = handler?.failsFrom ?? (phase === null ? [] : [phase])
@@ -250,8 +254,11 @@ export class OperationRunner {
           },
         })
       }
-      if (await finishOperation(tx, op.id, 'failed', message, detail ?? null))
+      if (await finishOperation(tx, op.id, 'failed', message, detail ?? null)) {
         await this.#events.publish(tx, progressEvent(op, current, null, 'failed'))
+        operationEnded(op.kind, 'failed', Date.now() - op.createdAt.getTime())
+        operationFailed(op.kind, step)
+      }
     })
   }
 
@@ -268,10 +275,14 @@ export class OperationRunner {
     status: 'succeeded' | 'cancelled' | 'failed',
     reason: string | null,
     detail?: string,
+    reached: OperationStep | null = null,
   ) {
     await this.#db.transaction(async (tx) => {
-      if (await finishOperation(tx, op.id, status, reason, detail ?? null))
+      if (await finishOperation(tx, op.id, status, reason, detail ?? null)) {
         await this.#events.publish(tx, progressEvent(op, server, null, status))
+        operationEnded(op.kind, status, Date.now() - op.createdAt.getTime())
+        if (status === 'failed') operationFailed(op.kind, reached)
+      }
     })
   }
 

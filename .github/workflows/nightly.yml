@@ -28,6 +28,9 @@ jobs:
     timeout-minutes: 75
     permissions:
       contents: write
+      # The release's archive gets a signed provenance attestation (docs/build-provenance.md).
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -98,10 +101,18 @@ jobs:
           STAGING_STATE: ${{ secrets.STAGING_STATE }}
           POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
       - name: Tag and release the nightly
+        id: release
         if: steps.new.outputs.run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RUN: ${{ github.run_number }}
         run: |
           tag=$(bun scripts/versions.ts nightly "$RUN")
-          gh release create "$tag" --target "$GITHUB_SHA" --prerelease --generate-notes --title "$tag"
+          git archive --format=tar.gz --prefix="cubepals-$tag/" -o "$RUNNER_TEMP/cubepals-$tag.tar.gz" "$GITHUB_SHA"
+          gh release create "$tag" "$RUNNER_TEMP/cubepals-$tag.tar.gz" --target "$GITHUB_SHA" --prerelease --generate-notes --title "$tag"
+          echo "archive=$RUNNER_TEMP/cubepals-$tag.tar.gz" >> "$GITHUB_OUTPUT"
+      - name: Attest the release's archive
+        if: steps.release.outputs.archive != ''
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: ${{ steps.release.outputs.archive }}

@@ -37,8 +37,15 @@ FROM mirror.gcr.io/oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343a
 WORKDIR /build
 # The agent imports only types from the contracts, plus play-today.ts (with the units of time it
 # imports), edge-poll.ts, proxy-header.ts, server-list.ts and Minecraft's ports, which import
-# nothing else, so it compiles without installing anything.
-COPY apps/edge/agent.ts apps/edge/asleep.ts apps/edge/bedrock-relay.ts apps/edge/bedrock.ts apps/edge/browser-redirect.ts apps/edge/clients.ts apps/edge/forwarding.ts apps/edge/front.ts apps/edge/geyser-config.ts apps/edge/geyser.ts apps/edge/header.ts apps/edge/hold.ts apps/edge/join-trace.ts apps/edge/limits.ts apps/edge/mappings.ts apps/edge/notice.ts apps/edge/ping-wake.ts apps/edge/poll.ts apps/edge/resting.ts apps/edge/router.ts apps/edge/visit-reporter.ts apps/edge/visits.ts apps/edge/
+# nothing else. Its one dependency is OpenTelemetry, for the metrics it serves (metrics.ts): only
+# the edge's workspace is installed, at the versions bun.lock pins, as in apps/control/Dockerfile.
+COPY package.json bun.lock bunfig.toml ./
+COPY apps/edge/package.json apps/edge/
+COPY packages/contracts/package.json packages/contracts/
+RUN bun -e 'const p = await Bun.file("package.json").json(); p.workspaces = ["apps/edge", "packages/contracts"]; delete p.devDependencies; await Bun.write("package.json", JSON.stringify(p))' \
+ && bun install --lockfile-only \
+ && bun install --production --frozen-lockfile
+COPY apps/edge/agent.ts apps/edge/asleep.ts apps/edge/bedrock-relay.ts apps/edge/bedrock.ts apps/edge/browser-redirect.ts apps/edge/clients.ts apps/edge/forwarding.ts apps/edge/front.ts apps/edge/geyser-config.ts apps/edge/geyser.ts apps/edge/header.ts apps/edge/hold.ts apps/edge/join-trace.ts apps/edge/limits.ts apps/edge/mappings.ts apps/edge/metrics.ts apps/edge/notice.ts apps/edge/ping-wake.ts apps/edge/poll.ts apps/edge/resting.ts apps/edge/router.ts apps/edge/visit-reporter.ts apps/edge/visits.ts apps/edge/
 COPY packages/contracts/src/durations.ts packages/contracts/src/edge-poll.ts packages/contracts/src/play-today.ts packages/contracts/src/proxy-header.ts packages/contracts/src/server-list.ts packages/contracts/src/
 COPY apps/control/src/minecraft/ports.ts apps/control/src/minecraft/
 RUN bun build apps/edge/agent.ts --compile --outfile /build/edge-agent

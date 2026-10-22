@@ -113,6 +113,7 @@ Terraform stack.
 | `INTERNAL_LISTEN` | `127.0.0.1:4001` | `fly-local-6pn:4001` (the organization's private network only) | toml (control) |
 | `REALTIME_LISTEN` | `127.0.0.1:7443` | `fly-global-services:443` (UDP reaches only sockets bound there, on the port browsers dial: Fly never rewrites a UDP port) | toml (realtime) |
 | `REALTIME_FALLBACK_LISTEN` | `127.0.0.1:7444` | `0.0.0.0:7444` (Fly terminates TLS in front) | toml (realtime) |
+| `METRICS_LISTEN` | unset (nothing is served) | `0.0.0.0:9091` (no service names it, so only Fly's private network reaches it; the edge reads it too) | toml (control, realtime, edge) |
 
 ### Web origins and auth
 

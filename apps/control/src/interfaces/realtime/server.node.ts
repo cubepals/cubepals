@@ -7,6 +7,7 @@ import { type ConnectRequest, createServer, refuse, type ServerPeer, TransportEr
 import { listenHttp3 } from 'transport-io/node-transport'
 import { listenWebSocket } from 'transport-io/websocket-node-transport'
 import type { ConsoleFeed } from '../../app/console/feed.ts'
+import { observeRealtime } from '../../app/platform/telemetry.ts'
 import type { DomainEvent, EventBus } from '../../app/ports/events.ts'
 import type { RealtimeTickets } from '../../app/ports/tickets.ts'
 import { originAllowed } from '../http/origins.ts'
@@ -51,6 +52,13 @@ const settle = (what: string) => (error: unknown) => {
   console.error(`realtime: ${what} failed`, error)
 }
 
+/** Counts the browsers connected, and with the consoles followed, tells the monitor of both. */
+function countBrowsers(tails: Map<string, AbortController>) {
+  let open = 0
+  observeRealtime(() => ({ browsers: open, tails: tails.size }))
+  return { opened: () => void open++, closed: () => void open-- }
+}
+
 /**
  * The realtime role: exactly one per deployment (Transport.io rooms live in one process). It
  * turns domain events into hints for each person's browser and streams console output to
@@ -59,6 +67,7 @@ const settle = (what: string) => (error: unknown) => {
 export async function startRealtime(options: RealtimeOptions): Promise<{ stop(): Promise<void> }> {
   const server = createServer<RealtimeMap, Peer>({ contract: realtimeContract })
   const tails = new Map<string, AbortController>()
+  const browsers = countBrowsers(tails)
 
   const authorize = async ({ query, headers }: ConnectRequest) => {
     if (!originAllowed(headers.origin, options.allowedOrigins)) return refuse('origin')
@@ -101,6 +110,7 @@ export async function startRealtime(options: RealtimeOptions): Promise<{ stop():
   }
 
   server.onSession((peer: ServerPeer<RealtimeMap, Peer>) => {
+    browsers.opened()
     peer.join(userRoom(peer.data.userId)).catch(settle('joining a person to their room'))
     const watch = async (serverId: string) => {
       if (!(await options.console.canWatch(peer.data.userId, serverId))) return
@@ -121,6 +131,7 @@ export async function startRealtime(options: RealtimeOptions): Promise<{ stop():
     peer.on('watch', ({ serverId }) => void watch(serverId).catch(settle('a watch')))
     peer.on('unwatch', ({ serverId }) => void unwatch(serverId).catch(settle('an unwatch')))
     void peer.closed.then(() => {
+      browsers.closed()
       for (const serverId of tails.keys()) stopTailIfUnwatched(serverId)
     })
   })

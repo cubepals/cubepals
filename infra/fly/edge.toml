@@ -27,6 +27,8 @@ primary_region = "fra"
   # with 20 Bedrock players Geyser's process held about 630 MB and the whole machine about 900 MB,
   # which leaves room for the heap to grow, the operating system and the game's files Geyser loads.
   GEYSER_HEAP = "768m"
+  # Scraped by Fly's managed Prometheus below; no service names the port, so it is not published.
+  METRICS_LISTEN = "0.0.0.0:9091"
 
 # Raw TCP: the Minecraft handshake names the server, so nothing in front may touch the stream
 # beyond the PROXY line ahead of it.
@@ -115,6 +117,10 @@ primary_region = "fra"
     grace_period = "15s"
     method = "get"
     path = "/_health"
+
+[metrics]
+  port = 9091
+  path = "/metrics"
 
 # Sized by measuring 20 Bedrock players beside Java joins for ten minutes (apps/edge/bedrock.ts): a
 # shared CPU of two held back nearly all of its time once its burst was spent, and Java joins took
