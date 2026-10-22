@@ -152,11 +152,13 @@ async function up(n: string, size: string, memory: string) {
     loadToml,
     `app = "${load}"\nprimary_region = "${REGION}"\n\n[[vm]]\n  size = "shared-cpu-2x"\n  memory = "2048mb"\n`,
   )
-  deploy(load, context, loadToml, join(context, 'tools/bedrock-join/size/load/Dockerfile'))
+  if (machines(load).length === 0)
+    deploy(load, context, loadToml, join(context, 'tools/bedrock-join/size/load/Dockerfile'))
   const server = machines(load).find((m) => m.name !== 'client-a' && m.name !== 'client-b')
   if (server === undefined) throw new Error('the load app has no machine')
   for (const name of ['client-a', 'client-b'])
-    fly(['machine', 'clone', server.id, '-a', load, '--name', name, '--override-cmd', 'client', '--detach'])
+    if (!machines(load).some((m) => m.name === name))
+      fly(['machine', 'clone', server.id, '-a', load, '--name', name, '--override-cmd', 'client', '--detach'])
   fly(['ips', 'allocate-v4', '--shared', '-a', edge, '-y'])
   const key = randomBytes(16).toString('base64')
   fly(
