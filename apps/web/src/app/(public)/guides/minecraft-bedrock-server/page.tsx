@@ -5,9 +5,11 @@
 /**
  * The guide to making a Minecraft Bedrock server. What it says about Bedrock Dedicated Server and
  * Realms comes from Mojang's own pages, linked where they're named. What it says of Cubepals was
- * done on staging: the steps on the create page, the address and the lines a Paper server's page
- * and settings show, and a Bedrock join waking a sleeping server. Where Bedrock is off
- * (`bedrockLive`), the Cubepals part says it is coming instead, and the page is unlisted.
+ * done on staging: the steps on the create page, the address and the join lines a server's page
+ * and settings show, and a Bedrock join waking a sleeping server. Any server without mods takes
+ * Bedrock players, since each runs on Paper, so the steps ask for no particular setup. Where
+ * Bedrock is off (`bedrockLive`), the Cubepals part says it is coming instead, and the page is
+ * unlisted.
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -75,8 +77,8 @@ export default function Guide() {
               question: 'Is it free?',
               answer: (
                 <>
-                  It starts with a free trial, with no card, and Smoother survival is part of it.{' '}
-                  <Link href="/pricing">Pricing</Link> has the plans.
+                  It starts with a free trial, with no card. <Link href="/pricing">Pricing</Link> has the
+                  plans.
                 </>
               ),
             },
@@ -102,19 +104,14 @@ function OneServer() {
     <>
       <Part id="one-server" title="One server for Java and Bedrock friends">
         <p>
-          On Cubepals, Bedrock friends join the same server as Java friends, in the same world, with the same
-          address.
+          On Cubepals, Bedrock friends join any server without mods: the same server as Java friends, in the
+          same world, with the same address. There’s nothing to choose for it.
         </p>
         <ol>
           <li>
             Sign up, then <strong>Create a server</strong>.
           </li>
-          <li>
-            Open <strong>More ways to play</strong> and pick <strong>Smoother survival</strong>. With Plus, a
-            game mode such as{' '}
-            <GuideLink to="lifesteal-manhunt-skyblock-with-friends">Lifesteal or Skyblock</GuideLink> works
-            too.
-          </li>
+          <li>Pick what to play.</li>
           <li>
             Type a name, then press <strong>Create server</strong>.
           </li>
@@ -141,9 +138,8 @@ function OneServer() {
 
       <Part id="not-yet" title="Where Bedrock friends can’t join yet">
         <p>
-          A plain Survival, Creative or Hardcore server is for Java friends only for now, and so is a server
-          with mods or a modpack. Its <strong>Settings</strong> say so under <strong>Bedrock friends</strong>,
-          and offer to make one they can join.
+          A server with mods or a modpack is for Java friends only for now. A server you made before Bedrock
+          came lets them in from its <strong>Settings</strong>, under <strong>Bedrock friends</strong>.
         </p>
       </Part>
     </>
