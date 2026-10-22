@@ -19,12 +19,14 @@ import {
   ADDRESS_MAX_LENGTH,
   ADDRESS_MIN_LENGTH,
   DESCRIPTION_MAX_LENGTH,
+  isGamertag,
   NAME_MAX_LENGTH,
   NOTE_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   PLAYER_NAME_MAX_LENGTH,
   PLAYER_NAME_MIN_LENGTH,
   SEED_MAX_LENGTH,
+  typedAsBedrock,
 } from '@blockly/contracts'
 import { offensive, PICK_ANOTHER_NAME } from '@blockly/contracts/names'
 import { sealProblem } from '@blockly/contracts/seal'
@@ -62,10 +64,12 @@ export const address: Rule = (value) => {
   return offensive(wanted) ? PICK_ANOTHER_NAME : null
 }
 
-/** A Minecraft name, as Mojang allows them. */
+/** A Minecraft name, as Mojang allows them, or a Bedrock player's gamertag with a dot ahead of it. */
 export const playerName: Rule = (value) => {
   const wanted = value.trim()
   if (blank(wanted)) return null
+  if (typedAsBedrock(wanted) || wanted.includes(' '))
+    return isGamertag(wanted) ? null : 'A gamertag is up to 15 letters, numbers or spaces, after a dot.'
   if (wanted.length < PLAYER_NAME_MIN_LENGTH || wanted.length > PLAYER_NAME_MAX_LENGTH)
     return `A Minecraft name is ${PLAYER_NAME_MIN_LENGTH} to ${PLAYER_NAME_MAX_LENGTH} characters.`
   return /^[A-Za-z0-9_]+$/.test(wanted) ? null : 'Minecraft names use letters, numbers and underscores.'

@@ -67,10 +67,20 @@ afterEach(() => {
   for (const close of closers.splice(0)) close()
 })
 
-/** A relay in front of a stand-in Geyser that answers any ping behind a header with `MCPE;Test`. */
-async function relayed(options: Partial<RelayOptions> = {}) {
+/**
+ * A relay in front of a stand-in Geyser that answers any ping behind a header with `MCPE;Test`. With
+ * `strict`, it behaves as Geyser measured: a source says whose it is with its first datagram, and
+ * what it sends after that, a header again included, is read as the game's own, so a ping that
+ * repeats the header is not answered.
+ */
+async function relayed(options: Partial<RelayOptions> = {}, strict = false) {
+  const sources = new Set<number>()
   const geyser = await listener((socket, bytes, port) => {
     const header = readProxyHeader(bytes)
+    if (strict) {
+      if ((typeof header === 'object') === sources.has(port)) return
+      sources.add(port)
+    }
     const rest = typeof header === 'object' ? bytes.subarray(header.next) : bytes
     if (rest[0] === 0x01) socket.send(pong('MCPE;Test'), port, '127.0.0.1')
     else if (rest[0] === 0x05) socket.send(Uint8Array.of(0x06), port, '127.0.0.1')
@@ -96,7 +106,7 @@ async function relayed(options: Partial<RelayOptions> = {}) {
   )
   const player = await listener()
   closers.push(() => player.socket.close())
-  return { relay, geyser, player, port: publicPort }
+  return { relay, geyser, player, port: publicPort, sources }
 }
 
 test('a ping is answered from the pong Geyser gave, with the time the ping carried', async () => {
@@ -172,6 +182,23 @@ test('it is ready only while Geyser answers', async () => {
   const { relay } = await relayed()
   await Bun.sleep(100)
   expect(relay.ready()).toBe(true)
+})
+
+test('it stays ready while Geyser, which takes a header once per source, keeps answering', async () => {
+  const { relay } = await relayed({ pongRefreshMs: 50 }, true)
+  // Past the time a first pong stays fresh, several times over.
+  await Bun.sleep(600)
+  expect(relay.ready()).toBe(true)
+})
+
+test('it is ready again after Geyser starts over and has forgotten every source', async () => {
+  const { relay, geyser, sources } = await relayed({ pongRefreshMs: 50 }, true)
+  await Bun.sleep(200)
+  expect(relay.ready()).toBe(true)
+  sources.clear()
+  await Bun.sleep(600)
+  expect(relay.ready()).toBe(true)
+  expect(geyser.heard.length).toBeGreaterThan(2)
 })
 
 test('pings are told from other packets, and a pong takes the time of the ping it answers', () => {

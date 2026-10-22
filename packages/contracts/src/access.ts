@@ -9,6 +9,7 @@
  */
 
 import { z } from 'zod'
+import { isGamertag, typedAsBedrock } from './bedrock.ts'
 import { PLAYER_NAME_MAX_LENGTH, PLAYER_NAME_MIN_LENGTH } from './limits.ts'
 import { ServerId } from './server.ts'
 
@@ -24,11 +25,25 @@ export const PlayerName = z
     `Minecraft names are ${PLAYER_NAME_MIN_LENGTH} to ${PLAYER_NAME_MAX_LENGTH} letters, numbers or underscores`,
   )
 
-export const AddPlayerInput = z.object({ serverId: ServerId, name: PlayerName })
+const JAVA_NAME = new RegExp(`^[A-Za-z0-9_]{${PLAYER_NAME_MIN_LENGTH},${PLAYER_NAME_MAX_LENGTH}}$`)
+
+/**
+ * Who a list entry is named by: a Java name, or a Bedrock player's gamertag, which a dot ahead of it
+ * marks (`.Gamertag`, as Floodgate names them) unless a space in it already tells. The service finds the account either way.
+ */
+export const PlayerEntry = z
+  .string()
+  .trim()
+  .refine(
+    (typed) => JAVA_NAME.test(typed) || (isGamertag(typed) && (typedAsBedrock(typed) || typed.includes(' '))),
+    `Minecraft names are ${PLAYER_NAME_MIN_LENGTH} to ${PLAYER_NAME_MAX_LENGTH} letters, numbers or underscores. For a Bedrock player, type a dot and their gamertag.`,
+  )
+
+export const AddPlayerInput = z.object({ serverId: ServerId, name: PlayerEntry })
 export const PlayerInput = z.object({ serverId: ServerId, playerUuid: z.uuid() })
 export const BanInput = z.object({
   serverId: ServerId,
-  name: PlayerName,
+  name: PlayerEntry,
   reason: z.string().trim().max(120).optional(),
 })
 export const WhitelistModeInput = z.object({ serverId: ServerId, enabled: z.boolean() })

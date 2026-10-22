@@ -185,23 +185,37 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
   })
 
   // Geyser's pong, asked for through a socket of the relay's own, since it answers only datagrams
-  // that say whose they are.
-  const probe: Udp = await Bun.udpSocket({
-    hostname: '127.0.0.1',
-    socket: {
-      error: ignoreRefusal,
-      data(_socket, packet) {
-        if (!isPong(packet)) return
-        pong = Uint8Array.from(packet)
-        pongAt = Date.now()
-      },
-    },
-  })
+  // that say whose they are. Geyser reads that header once per source and takes what follows as the
+  // game's own, so each ask comes from a new socket, with the header ahead of its only datagram: a
+  // socket asking again would be unanswered after the first pong, and one asking a Geyser that has
+  // started over would never be answered.
+  const probes = new Set<Udp>()
+  let closed = false
   const ask = () => {
     const ping = new Uint8Array(PING_LENGTH)
     ping[0] = UNCONNECTED_PING
     ping.set(MAGIC, 9)
-    toGeyser(probe, { address: '127.0.0.1', port: probe.port }, ping)
+    void Bun.udpSocket({
+      hostname: '127.0.0.1',
+      socket: {
+        error: ignoreRefusal,
+        data(self, packet) {
+          if (!isPong(packet)) return
+          pong = Uint8Array.from(packet)
+          pongAt = Date.now()
+          probes.delete(self)
+          self.close()
+        },
+      },
+    }).then((probe) => {
+      if (closed) return probe.close()
+      probes.add(probe)
+      toGeyser(probe, { address: '127.0.0.1', port: probe.port }, ping)
+      // An ask nobody answers is let go before the next.
+      setTimeout(() => {
+        if (probes.delete(probe)) probe.close()
+      }, options.pongRefreshMs)
+    })
   }
   ask()
   const asking = setInterval(ask, options.pongRefreshMs)
@@ -227,7 +241,9 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
       clearInterval(asking)
       clearInterval(sweeping)
       front.close()
-      probe.close()
+      closed = true
+      for (const probe of probes) probe.close()
+      probes.clear()
       for (const player of players.values()) player.upstream?.close()
       players.clear()
     },
