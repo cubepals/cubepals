@@ -1,0 +1,14 @@
+{
+  "name": "bedrock-join-tools",
+  "private": true,
+  "type": "module",
+  "description": "A headless Bedrock join (bedrock-join.ts), for testing the edge's Geyser. Outside the workspaces: it needs a native RakNet build, which nothing else in the repository does.",
+  "dependencies": {
+    "bedrock-protocol": "3.59.0",
+    "raknet-native": "1.2.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.3",
+    "typescript": "5.9.3"
+  }
+}
