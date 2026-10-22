@@ -10,8 +10,8 @@
 # fixes come with the monthly ones.
 # Each pull request is labelled `kind/deps` here, never a label per ecosystem; tools/labels adds
 # its area and size. Each is assigned to v0id-user. Minor and patch
-# updates merge themselves once `check` passes (workflows/dependabot.yml); majors and actions wait
-# for a person.
+# updates merge themselves once `check` passes (workflows/dependabot.yml); majors, actions and
+# anything that moves Next wait for a person.
 version: 2
 updates:
   - package-ecosystem: bun
