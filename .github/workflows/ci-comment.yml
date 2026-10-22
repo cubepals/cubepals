@@ -9,21 +9,18 @@ name: CI comment
 # access on pull requests from forks too, so the job never checks out or runs their code: it runs
 # the base branch's scripts and reads the run's JUnit reports as data. A push to main gets no
 # comment. A failure here only warns: `check` in ci.yml judges the run, not this.
+#
+# No concurrency group: the job a later event replaces ends as cancelled, a grey cross on a pull
+# request that is fine. The `in_progress` job stands down once the run is done and leaves the
+# results to the `completed` job, so "running" never lands after them.
 on:
   workflow_run:
     workflows: [CI]
-    types: [requested, in_progress, completed]
+    types: [in_progress, completed]
 
 permissions:
   actions: read
   pull-requests: write
-
-# One job at a time for each CI run, so "running" never lands after its results. GitHub keeps one
-# job pending in a group and cancels the one it replaces, so the `completed` event's job can be
-# cancelled for a later event's; that job starts after the run is done and writes the results
-# itself. A group per run, not per branch, so one run's events never cancel another run's.
-concurrency:
-  group: ci-comment-${{ github.event.workflow_run.id }}
 
 jobs:
   comment:
@@ -73,6 +70,11 @@ jobs:
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.event.workflow_run.id }}
           JUNIT: ${{ steps.results.outputs.dir }}
-        run: >-
-          bun scripts/ci-comment.ts ||
-          echo "::warning::The CI comment couldn't be written."
+          ACTION: ${{ github.event.action }}
+        run: |
+          status=$(gh api "repos/$REPO/actions/runs/$RUN_ID" --jq .status || true)
+          if [ "$ACTION" = in_progress ] && [ "$status" = completed ]; then
+            echo "The run is done; the job for its completion writes the results."
+            exit 0
+          fi
+          bun scripts/ci-comment.ts || echo "::warning::The CI comment couldn't be written."
