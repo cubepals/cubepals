@@ -17,6 +17,15 @@ export interface Telemetry {
   wakeCompleted(edgeRegion: string | null, ms: number): void
   /** The edge's ask to wake a server was answered: `reason` is a refusal's, or what a start waits behind. */
   wakeAnswered(outcome: string, reason: string | null): void
+  /**
+   * An HTTP listener (`api`, `internal`, `worker`) answered a request: `route` is the template it
+   * matched (`*` when none did), never the path it was asked for.
+   */
+  requestServed(listener: string, route: string, method: string, status: number, ms: number): void
+  /** A tRPC procedure ran: its path as the router defines it, and the HTTP status it answered with. */
+  procedureServed(procedure: string, status: number, ms: number): void
+  /** A browser asked the realtime role to connect: `outcome` is `accepted`, or why it was refused. */
+  realtimeConnected(transport: 'webtransport' | 'websocket', outcome: string, ms: number): void
   /** The realtime role's open connections, read as the monitor scrapes. */
   observeRealtime(read: () => { browsers: number; tails: number }): void
 }

@@ -19,6 +19,9 @@ const counted: Counted = {
   joinCompleted: [],
   wakeCompleted: [],
   wakeAnswered: [],
+  requestServed: [],
+  procedureServed: [],
+  realtimeConnected: [],
   observeRealtime: [],
 }
 const recorder: Telemetry = {
@@ -27,6 +30,9 @@ const recorder: Telemetry = {
   joinCompleted: (...args) => void counted.joinCompleted.push(args),
   wakeCompleted: (...args) => void counted.wakeCompleted.push(args),
   wakeAnswered: (...args) => void counted.wakeAnswered.push(args),
+  requestServed: (...args) => void counted.requestServed.push(args),
+  procedureServed: (...args) => void counted.procedureServed.push(args),
+  realtimeConnected: (...args) => void counted.realtimeConnected.push(args),
   observeRealtime: (...args) => void counted.observeRealtime.push(args),
 }
 

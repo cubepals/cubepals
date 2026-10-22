@@ -7,7 +7,7 @@ import { type ConnectRequest, createServer, refuse, type ServerPeer, TransportEr
 import { listenHttp3 } from 'transport-io/node-transport'
 import { listenWebSocket } from 'transport-io/websocket-node-transport'
 import type { ConsoleFeed } from '../../app/console/feed.ts'
-import { observeRealtime } from '../../app/platform/telemetry.ts'
+import { observeRealtime, realtimeConnected } from '../../app/platform/telemetry.ts'
 import type { DomainEvent, EventBus } from '../../app/ports/events.ts'
 import type { RealtimeTickets } from '../../app/ports/tickets.ts'
 import { originAllowed } from '../http/origins.ts'
@@ -69,17 +69,30 @@ export async function startRealtime(options: RealtimeOptions): Promise<{ stop():
   const tails = new Map<string, AbortController>()
   const browsers = countBrowsers(tails)
 
-  const authorize = async ({ query, headers }: ConnectRequest) => {
-    if (!originAllowed(headers.origin, options.allowedOrigins)) return refuse('origin')
-    const userId = await options.tickets.verify(query.get('ticket') ?? '')
-    return userId === null ? refuse('ticket') : { userId }
-  }
+  // Each answer is timed and counted by the transport it came over, and why it was refused if it was.
+  const authorize =
+    (transport: 'webtransport' | 'websocket') =>
+    async ({ query, headers }: ConnectRequest) => {
+      const began = performance.now()
+      const answered = <T>(outcome: string, answer: T): T => {
+        realtimeConnected(transport, outcome, performance.now() - began)
+        return answer
+      }
+      if (!originAllowed(headers.origin, options.allowedOrigins)) return answered('origin', refuse('origin'))
+      const userId = await options.tickets.verify(query.get('ticket') ?? '')
+      return userId === null ? answered('ticket', refuse('ticket')) : answered('accepted', { userId })
+    }
 
-  const listener = await listenHttp3<Peer>({ ...options.listen, ...options.tls, path: '/', authorize })
+  const listener = await listenHttp3<Peer>({
+    ...options.listen,
+    ...options.tls,
+    path: '/',
+    authorize: authorize('webtransport'),
+  })
   const fallback = await listenWebSocket<Peer>({
     ...options.fallbackListen,
     path: '/transport-io',
-    authorize,
+    authorize: authorize('websocket'),
   })
 
   const startTail = async (serverId: string) => {

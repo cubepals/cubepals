@@ -12,6 +12,7 @@ import { appRouter } from '../trpc/router.ts'
 import type { Services } from '../trpc/trpc.ts'
 import { brandPackRoutes } from './brand-pack.ts'
 import { type AddressTrust, withClientAddress } from './client-address.ts'
+import { measured } from './measured.ts'
 import { ownPagesOnly } from './origins.ts'
 import { createPublicApp } from './public.ts'
 
@@ -29,6 +30,7 @@ export function createApiApp(deps: {
   origins: readonly string[]
 }): Hono<{ Variables: { requestId: string } }> {
   const app = new Hono<{ Variables: { requestId: string } }>()
+  app.use('*', measured('api'))
 
   // Each request's id, as the web tier named it or a new one, said back so a report can be matched.
   app.use('*', async (c, next) => {
