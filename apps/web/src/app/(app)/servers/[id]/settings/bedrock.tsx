@@ -23,7 +23,8 @@ import { ConfirmChange, changeable, useChanged, whatHappens } from './shared'
 const BEDROCK_PORT = 19132
 
 export function BedrockSetting({ view }: { view: ServerView }) {
-  if (view.bedrock === null)
+  const bedrock = view.bedrock
+  if (bedrock === null)
     return (
       <FormSection
         title="Bedrock friends"
@@ -34,10 +35,12 @@ export function BedrockSetting({ view }: { view: ServerView }) {
         </Button>
       </FormSection>
     )
-  return <BedrockForm key={String(view.bedrock)} view={view} on={view.bedrock} />
+  return (
+    <BedrockForm key={String(bedrock.on)} view={view} on={bedrock.on} blocked={bedrock.needsOtherVersions} />
+  )
 }
 
-function BedrockForm({ view, on }: { view: ServerView; on: boolean }) {
+function BedrockForm({ view, on, blocked }: { view: ServerView; on: boolean; blocked: boolean }) {
   const trpc = useTRPC()
   const outcome = useOutcome(view)
   const changed = useChanged(view.id)
@@ -52,9 +55,8 @@ function BedrockForm({ view, on }: { view: ServerView; on: boolean }) {
     }),
   )
   const allowed = changeable(view)
-  const line = on
-    ? 'Bedrock friends can join: phones, tablets and Windows.'
-    : 'Bedrock friends can’t join: phones, tablets and Windows.'
+  const occupied = view.status === 'running' && (view.players?.online ?? 0) > 0
+  const line = lineOf(on, blocked)
   const said =
     allowed.busy !== undefined
       ? `${allowed.busy}…`
@@ -78,7 +80,7 @@ function BedrockForm({ view, on }: { view: ServerView; on: boolean }) {
           />
         }
       />
-      {on && (
+      {on && !blocked && (
         <>
           <p className="bk-field__help">
             On a phone or tablet: Play, Servers, Add Server. Type {view.joinAddress} as the address and{' '}
@@ -106,9 +108,19 @@ function BedrockForm({ view, on }: { view: ServerView; on: boolean }) {
             : 'Players on phones, tablets and Windows can join with the same address.'}
         </p>
         <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-          {whatHappens(view)}
+          {occupied
+            ? 'Someone is playing, so the change waits and the server takes it the next time it starts.'
+            : whatHappens(view)}
         </p>
       </ConfirmChange>
     </FormSection>
   )
+}
+
+/** What the section says Bedrock players can do, from the choice and what the other versions allow. */
+function lineOf(on: boolean, blocked: boolean): string {
+  if (!on) return 'Bedrock friends can’t join: phones, tablets and Windows.'
+  if (blocked)
+    return 'Bedrock friends can’t join while this server lets in only its own Minecraft version. Turn on Newer and older versions above.'
+  return 'Bedrock friends can join: phones, tablets and Windows.'
 }

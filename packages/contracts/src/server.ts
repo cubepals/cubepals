@@ -523,6 +523,15 @@ export const ChangeOtherVersionsInput = z.object({ ...change, otherVersions: z.e
 export const ChangeBedrockInput = z.object({ ...change, bedrock: z.boolean() })
 
 /**
+ * Whether a Paper server lets Bedrock players in: its choice (`on`), and whether the owner's "other
+ * versions: off" stops them, which it does on every release but the one Geyser speaks.
+ */
+export interface BedrockView {
+  on: boolean
+  needsOtherVersions: boolean
+}
+
+/**
  * Which players' games join a server, as its settings say it: from `oldest`, the oldest release
  * whose players join, to the one it runs, and any newer one where `newer`. `otherVersions` is the
  * choice behind it, on a server that has one (Paper); null on any other.
@@ -691,7 +700,7 @@ export interface ServerView {
    * Whether it lets Bedrock players in (phones, tablets and Windows): on or off on a Paper server
    * that plays no pack, null on any other, where they can't join.
    */
-  bedrock: boolean | null
+  bedrock: BedrockView | null
   partySize: PartySize
   /** Stopped with changes that apply when it next starts. */
   pendingRestart: boolean

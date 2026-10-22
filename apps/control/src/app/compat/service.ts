@@ -10,6 +10,10 @@
  * plan, limit or price that counts plugins counts them, and the owner's plugin list never shows
  * them. The settings page says which versions join, and the switch is the way back.
  *
+ * Floodgate, and the Via plugins its release needs, are placed the same way where Bedrock players
+ * are let in (`ServerSettings.bedrock`), but not where the owner lets no other version in and the
+ * release is not the one Geyser speaks (`minecraft/bedrock.ts`).
+ *
  * Grim, which Stop cheaters runs, is pinned and placed the same way (`grimFor`), wherever the
  * server's Stop cheaters is on (`app/stop-cheaters/`), on plain Minecraft run on Paper too.
  *
@@ -19,6 +23,7 @@
  * the ones it now places (`servers/specs.ts`). Which clients a server takes is
  * `minecraft/clients.ts`'s, from the ones a boot placed or the next will (`joinsNow`).
  */
+import type { BedrockView } from '@blockly/contracts'
 import { type AppliedConfigJson, type Db, type Queryable, schema } from '@blockly/db'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
@@ -28,7 +33,7 @@ import {
   runsOnPaper,
   type ServerRevision,
 } from '../../domain/revision/revision.ts'
-import { bedrockPlugins, FLOODGATE } from '../../minecraft/bedrock.ts'
+import { bedrockAvailable, bedrockPlugins, FLOODGATE } from '../../minecraft/bedrock.ts'
 import { joinsOf } from '../../minecraft/clients.ts'
 import { COMPAT, runsPlugin, VIABACKWARDS, VIAREWIND, VIAVERSION } from '../../minecraft/mods.ts'
 import { GRIM, runsOwnGrim } from '../../minecraft/stop-cheaters.ts'
@@ -150,6 +155,11 @@ export class CompatPlugins {
   }
 }
 
+/** Whether a Paper server's choice and its other versions' leave Bedrock players able to join. */
+const bedrockWanted = (revision: Pick<ServerRevision, 'gameVersion' | 'settings'>): boolean =>
+  bedrockOf(revision.settings) &&
+  bedrockAvailable(revision.gameVersion, otherVersionsOf(revision.settings) === 'off')
+
 /**
  * The Via plugins a revision starts with, placed in the plugins folder by Cubepals' own step: on a
  * Paper server, those its choice asks for, as pinned for its release, but any the owner runs
@@ -164,7 +174,7 @@ export async function compatFor(
   if (revision.loader !== 'paper' || revision.modpack !== null) return []
   // The Via plugins its choice asks for, and Floodgate with the ones Bedrock players need.
   const choice = COMPAT[otherVersionsOf(revision.settings)]
-  const bedrock = bedrockOf(revision.settings) ? bedrockPlugins(revision.gameVersion) : []
+  const bedrock = bedrockWanted(revision) ? bedrockPlugins(revision.gameVersion) : []
   const wanted = [...new Set([...choice, ...bedrock])].filter((id) => !runsPlugin(revision.mods, id))
   if (wanted.length === 0) return []
   const rows = await q
@@ -234,10 +244,12 @@ export async function joinsNow(
     mods: ReadonlyArray<Pick<PinnedMod, 'source' | 'name'>>
   },
   run: { running: boolean; applied: Pick<AppliedConfigJson, 'revisionId' | 'compat'> | null },
-): Promise<{ joins: ReturnType<typeof joinsOf>; bedrock: boolean | null }> {
+): Promise<{ joins: ReturnType<typeof joinsOf>; bedrock: BedrockView | null }> {
   const booted = run.running && run.applied?.revisionId === revision.id
   const placed = booted ? (run.applied?.compat ?? []) : projectsOf(await compatFor(q, revision))
-  // Whether it lets Bedrock players in, as its choice says; none where they can't join.
+  // Whether it lets Bedrock players in, as its choice says, and whether its other versions stop them.
   const chooses = revision.loader === 'paper' && revision.modpack === null
-  return { joins: joinsOf(revision, placed), bedrock: chooses ? bedrockOf(revision.settings) : null }
+  const on = bedrockOf(revision.settings)
+  const bedrock = chooses ? { on, needsOtherVersions: on && !bedrockWanted(revision) } : null
+  return { joins: joinsOf(revision, placed), bedrock }
 }
