@@ -190,6 +190,17 @@ describe('restarting the edge without cutting a player', () => {
     expect(w.log).toEqual(['waiting on 3 connected', 'waiting on 2 connected', 'no players connected'])
   })
 
+  test('a hiccup after counting is waited through; a first silence, or a run of them, is not', async () => {
+    const w = world()
+    const reads: (number | null)[] = [3, null, 2, 0]
+    expect(await waitForPlayers(async () => reads.shift() ?? null, w.said, w.clock)).toBe(0)
+    const first = world()
+    expect(await waitForPlayers(async () => null, first.said, first.clock)).toBeNull()
+    const gone = world()
+    const dying: (number | null)[] = [3, null, null, null, 0]
+    expect(await waitForPlayers(async () => dying.shift() ?? null, gone.said, gone.clock)).toBeNull()
+  })
+
   test('goes ahead at the limit, and says how many it cuts', async () => {
     const w = world()
     const left = await waitForPlayers(async () => 4, w.said, w.clock)
@@ -380,7 +391,8 @@ describe('every machine of the edge', () => {
 
   test('players add up across a region’s machines; none is counted where none can say', () => {
     expect(sumPlayers([2, 3])).toBe(5)
-    expect(sumPlayers([2, null])).toBe(2)
+    expect(sumPlayers([2, null])).toBeNull()
+    expect(sumPlayers([0, null])).toBeNull()
     expect(sumPlayers([null, null])).toBeNull()
   })
 

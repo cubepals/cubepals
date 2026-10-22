@@ -106,6 +106,9 @@ export const EDGE_READY_LIMIT_MS = 5 * MINUTE_MS
 /** How often an edge is asked how many players it carries, and whether it is ready. */
 export const EDGE_ASK_EVERY_MS = 5 * SECOND_MS
 
+/** How many reads in a row may say nothing, once the edge has counted, before it is given up on. */
+const SILENT_READS = 3
+
 /** What a roll waits with: the clock, so a test needn't wait for real. */
 export interface Clock {
   now: () => number
@@ -124,16 +127,29 @@ export async function waitForPlayers(
   limitMs = EDGE_DRAIN_LIMIT_MS,
 ): Promise<number | null> {
   const until = clock.now() + limitMs
-  let last: number | undefined
+  const seen: { last?: number; silent: number } = { silent: 0 }
   for (;;) {
-    const count = await players()
-    if (count === null) return null
-    if (count !== last) say(count === 0 ? 'no players connected' : `waiting on ${count} connected`)
-    last = count
-    if (count === 0) return 0
-    if (clock.now() >= until) return count
+    const read = readOf(await players(), seen, say)
+    if (read === null || read === 0) return read
+    if (read !== 'again' && clock.now() >= until) return read
     await clock.sleep(EDGE_ASK_EVERY_MS)
   }
+}
+
+/**
+ * What one read of the count means: the count, null when the edge can't count (a first read that
+ * says nothing, or `SILENT_READS` in a row after it had), or 'again' for a hiccup.
+ */
+function readOf(
+  count: number | null,
+  seen: { last?: number; silent: number },
+  say: (line: string) => void,
+): number | null | 'again' {
+  seen.silent = count === null ? seen.silent + 1 : 0
+  if (count === null) return seen.last === undefined || seen.silent >= SILENT_READS ? null : 'again'
+  if (count !== seen.last) say(count === 0 ? 'no players connected' : `waiting on ${count} connected`)
+  seen.last = count
+  return count
 }
 
 /** Waits until `ready()` holds, for at most `limitMs`; whether it did. */
@@ -276,10 +292,10 @@ export const deployMachines = (
   ...['--only-machines', ids.join(','), '--update-only', '--yes', '--ha=false'],
 ]
 
-/** The players across a region's machines; null where none of them could say. */
+/** The players across a region's machines; null when any of them could not say. */
 export function sumPlayers(counts: readonly (number | null)[]): number | null {
   const known = counts.filter((c): c is number => c !== null)
-  return known.length === 0 ? null : known.reduce((a, b) => a + b, 0)
+  return known.length < counts.length ? null : known.reduce((a, b) => a + b, 0)
 }
 
 /**

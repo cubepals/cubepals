@@ -36,15 +36,15 @@ export interface Pages {
    */
   aliasOf: (hostname: string) => string | undefined
   /**
-   * How Bedrock stands, null where the edge takes none: shown at `/_health/bedrock`, a status of its
-   * own. It is never part of `/_health`, which Fly's check asks and which covers Java alone, since
-   * a check that failed for Geyser's sake would take the Java players' edge down with it.
-   */
-  /**
    * Whether the edge holds routes yet, once since it started: until it does, `/_health` fails, so
    * Fly sends it no joins that it would close for want of a route. Always well where left out.
    */
   holdsRoutes?: () => boolean
+  /**
+   * How Bedrock stands, null where the edge takes none: shown at `/_health/bedrock`, a status of its
+   * own. It is never part of `/_health`, which Fly's check asks and which covers Java alone, since
+   * a check that failed for Geyser's sake would take the Java players' edge down with it.
+   */
   bedrock?: () => { state: string; bound: boolean; restarts: number } | null
 }
 
