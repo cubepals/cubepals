@@ -132,6 +132,31 @@ describe.skipIf(!hasDatabase)('Bedrock players on a Paper server', () => {
     expect(jars.some((line) => line.includes(VIAVERSION))).toBe(true)
   }, 90_000)
 
+  test('a Free account’s Paper server has Bedrock: its plugins are Cubepals’, not counted by the plan', async () => {
+    const owner = await h.user('Fable')
+    expect((await h.app.accountQueries.overview(owner)).plan.key).toBe('free')
+    // Free runs plain Paper only; one that carries plugins needs Plus.
+    const { templates } = await h.app.queries.createOptions(owner)
+    expect(templates.find((template) => template.key === 'smooth')?.fits.allowed).toBe(true)
+    const server = await h.create(owner, { from: { kind: 'template', key: 'smooth' } })
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+    const revision = await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)
+    expect(revision.mods).toEqual([])
+    const { jars } = await jarsOf(server.id)
+    expect(jars.some((line) => line.includes(FLOODGATE))).toBe(true)
+    expect((await h.app.queries.get(owner, server.id)).bedrock).toBe(true)
+    // Changing the choice on Free is allowed, and the server stays a plain Paper server.
+    await h.app.revisions.changeBedrock(owner, server.id, false, randomUUID())
+    await h.until(server.id, 'running')
+    await h.app.revisions.changeBedrock(owner, server.id, true, randomUUID())
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+    expect(existsSync(keyFile(server.id))).toBe(true)
+    const after = await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)
+    expect(after.mods).toEqual([])
+  }, 120_000)
+
   test('only a Paper server has the choice', async () => {
     const owner = await h.user('Elm')
     const server = await h.create(owner)
