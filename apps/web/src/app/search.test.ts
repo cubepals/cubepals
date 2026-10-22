@@ -57,10 +57,11 @@ describe('sitemap.xml', () => {
 
   test('lists approved guides only, Bedrock’s only where it is on, and /guides once one is approved', () => {
     production()
-    const found = urls()
-    for (const guide of GUIDES)
-      expect(found.includes(`https://cubepals.com${guideHref(guide)}`)).toBe(listed(guide))
-    expect(found.includes('https://cubepals.com/guides')).toBe(GUIDES.some((guide) => guide.approved))
+    const expected = [
+      ...(GUIDES.some((guide) => guide.approved) ? ['https://cubepals.com/guides'] : []),
+      ...GUIDES.filter(listed).map((guide) => `https://cubepals.com${guideHref(guide)}`),
+    ]
+    expect(urls().filter((url) => new URL(url).pathname.startsWith('/guides'))).toEqual(expected)
   })
 })
 
