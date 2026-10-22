@@ -43,7 +43,7 @@ describe('the step that writes the key', () => {
 
   /** Runs the step in a stand-in for the volume, with the key (or none) in the environment. */
   const run = (volume: string, key: Buffer | null) => {
-    const script = `unlinked() { :; }; ${BEDROCK_STEP.replaceAll(DATA_DIR, volume)}`
+    const script = `unlinked() { :; }; ${BEDROCK_STEP.replaceAll(DATA_DIR, volume)} if printenv ${FLOODGATE_KEY_ENV} >/dev/null; then echo STILL_SET; fi`
     const result = Bun.spawnSync(['/bin/sh', '-c', script], {
       env: {
         PATH: process.env.PATH ?? '',
@@ -58,6 +58,8 @@ describe('the step that writes the key', () => {
     const { code, out } = run(volume, KEY)
     expect(code).toBe(0)
     expect(out).not.toContain(KEY.toString('base64'))
+    // The server the image starts next inherits no key: it is on the volume, not in its environment.
+    expect(out).not.toContain('STILL_SET')
     const file = join(volume, FLOODGATE_KEY_FILE)
     expect(readFileSync(file)).toEqual(KEY)
     expect(statSync(file).mode & 0o777).toBe(0o600)
@@ -66,7 +68,7 @@ describe('the step that writes the key', () => {
   test('takes the key away when Bedrock is turned off, and leaves a key it did not write', () => {
     const volume = mkdtempSync(join(tmpdir(), 'bedrock-step-'))
     run(volume, KEY)
-    expect(run(volume, null).code).toBe(0)
+    expect(run(volume, null).out).not.toContain('STILL_SET')
     expect(() => statSync(join(volume, FLOODGATE_KEY_FILE))).toThrow()
     const own = join(volume, FLOODGATE_KEY_FILE)
     mkdirSync(join(volume, 'plugins/floodgate'), { recursive: true })

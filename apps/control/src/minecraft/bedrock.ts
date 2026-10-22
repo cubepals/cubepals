@@ -11,6 +11,10 @@
  * is the newer. Which server gets what is `app/compat/`'s; the player's name and UUID are
  * `@blockly/contracts`' (`bedrock.ts`).
  *
+ * The key file is readable by every plugin the server runs, the owner's own included, so the key is
+ * not what keeps a Bedrock login honest: the edge refuses Floodgate data that did not come from
+ * Cubepals' own Geyser. The start still keeps the key out of the process's environment.
+ *
  * Not for Geyser's own configuration, or how the edge routes Bedrock joins (apps/edge).
  */
 import type { PinnedMod } from '../domain/mods/artifact.ts'
@@ -23,6 +27,14 @@ export const FLOODGATE = 'floodgate'
 
 /** The one Java release Geyser speaks. A server on any other needs Via to take Geyser's players. */
 export const GEYSER_JAVA_VERSION = '26.3'
+
+/**
+ * Whether Bedrock players can join a server on `gameVersion` whose owner lets other versions in or
+ * not. Geyser's game is `GEYSER_JAVA_VERSION`; on any other release the server needs ViaVersion to
+ * take it, and an owner who let no other version in has not asked for that.
+ */
+export const bedrockAvailable = (gameVersion: string, otherVersionsOff: boolean): boolean =>
+  !otherVersionsOff || compareVersions(gameVersion, GEYSER_JAVA_VERSION) === 0
 
 /**
  * The plugins a Paper server on `gameVersion` runs to let Bedrock players in, by project id:
@@ -44,7 +56,7 @@ const MARK = '.blockly-bedrock'
 /**
  * The step, on a server that can run Floodgate: with the key, it is written (as bytes, 16 of them),
  * and handed to the volume's owner, since Floodgate writes its settings beside it. Without it, a key
- * an earlier start wrote goes. Runs as root, so it replaces any link on the way (`volume-links.ts`),
+ * an earlier start wrote goes. Either way the variable is unset before the image starts the server. Runs as root, so it replaces any link on the way (`volume-links.ts`),
  * and never prints the key.
  */
 export const BEDROCK_STEP = [
@@ -53,6 +65,8 @@ export const BEDROCK_STEP = [
   `&& printf %s "$${FLOODGATE_KEY_ENV}" | base64 -d > "$k" && chmod 600 "$k" && echo ours > "$m"`,
   `&& chown -h "$(ls -nd ${DATA_DIR} | awk '{ print $3 ":" $4 }')" "$(dirname "$(dirname "$k")")" "$(dirname "$k")" "$k" || exit 1;`,
   `elif [ -f "$m" ]; then rm -f "$k" "$m"; fi;`,
+  // The key is on the volume now; the server and its plugins start without it in their environment.
+  `unset ${FLOODGATE_KEY_ENV};`,
 ].join(' ')
 
 /**
