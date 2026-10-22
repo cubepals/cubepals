@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
 
 /**
- * The guide to making a Minecraft Bedrock server. What it says about Bedrock Dedicated Server and
- * Realms comes from Mojang's own pages, linked where they're named. What it says of Cubepals was
+ * The guide to making a Minecraft Bedrock server. What it says about Bedrock Dedicated Server comes
+ * from Mojang's own page, linked where it's named. What it says of Cubepals was
  * done on staging: the steps on the create page, the address and the join lines a server's page
  * and settings show, and a Bedrock join waking a sleeping server. Any server without mods takes
  * Bedrock players, since each runs on Paper, so the steps ask for no particular setup. Where
@@ -27,8 +27,10 @@ export default function Guide() {
     <GuideArticle slug={SLUG}>
       <p className="type-body">
         A Bedrock server is a world your friends on phones, tablets and Windows join from the Servers tab,
-        whether or not you’re playing. There are two usual ways to get one
-        {live ? ', and a third that lets your Java friends into the same world.' : '.'}
+        whether or not you’re playing.{' '}
+        {live
+          ? 'You can run one on your own computer, or make one your Java friends join too.'
+          : 'Here is how to run one on your own computer.'}
       </p>
 
       <Part id="own-computer" title="On your own computer">
@@ -43,14 +45,6 @@ export default function Guide() {
           people get stuck (
           <GuideLink to="minecraft-server-without-port-forwarding">why port forwarding goes wrong</GuideLink>
           ).
-        </p>
-      </Part>
-
-      <Part id="realms" title="Realms">
-        <p>
-          Mojang’s own <OutLink href="https://www.minecraft.net/en-us/realms">Realms</OutLink> is a monthly
-          subscription that keeps a world online for you and the friends you invite. Realms for Bedrock is
-          played on Bedrock, consoles included; Java has a Realms of its own.
         </p>
       </Part>
 
@@ -79,6 +73,15 @@ export default function Guide() {
                 <>
                   It starts with a free trial, with no card. <Link href="/pricing">Pricing</Link> has the
                   plans.
+                </>
+              ),
+            },
+            {
+              question: 'My server is older. Can Bedrock friends join it?',
+              answer: (
+                <>
+                  Yes, if it has no mods. In its <strong>Settings</strong>, under{' '}
+                  <strong>Bedrock friends</strong>, let them in.
                 </>
               ),
             },
@@ -137,10 +140,7 @@ function OneServer() {
       </Part>
 
       <Part id="not-yet" title="Where Bedrock friends can’t join yet">
-        <p>
-          A server with mods or a modpack is for Java friends only for now. A server you made before Bedrock
-          came lets them in from its <strong>Settings</strong>, under <strong>Bedrock friends</strong>.
-        </p>
+        <p>A server with mods or a modpack is for Java friends only for now.</p>
       </Part>
     </>
   )
