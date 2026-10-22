@@ -72,6 +72,9 @@ jobs:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
           AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.AUTH_GOOGLE_CLIENT_SECRET }}
           STAGING_DEVELOPERS: ${{ secrets.STAGING_DEVELOPERS }}
+          # Staging's database is on Fly; STAGING_DATABASE=supabase (a variable of this environment)
+          # brings back the Supabase project that STAGING_DATABASE_URL names.
+          STAGING_DATABASE: ${{ vars.STAGING_DATABASE }}
           STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
       # The tag below needs this to pass: no nightly is made while staging's website is broken.
       - name: Ask staging for its pages
@@ -83,6 +86,8 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
           STAGING_STATE: ${{ secrets.STAGING_STATE }}
+          STAGING_DATABASE: ${{ vars.STAGING_DATABASE }}
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
       # Whatever happened above, nothing is left running or holding an address. A second try
       # covers a blip reaching Fly, which once left staging running (2026-10-08).
       - name: Stop staging

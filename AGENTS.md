@@ -82,7 +82,8 @@ A change isn't done when its PR is green. It is done when the runs it starts on 
 
 Staging runs on Fly in the `blockly-staging` org, and it stays. When nobody is testing, its machines are stopped, not destroyed.
 
-- **Start it before testing:** `bun scripts/staging.ts start`. **Stop it after:** `bun scripts/staging.ts stop`, and check that it reports every machine as stopped. `status` shows what exists and where to reach it.
+- **Start it before testing:** `bun scripts/staging.ts start`. **Stop it after:** `bun scripts/staging.ts stop`, and check that it reports every machine as stopped, the database's included. `status` shows what exists and where to reach it.
+- **Its database** is Postgres on a Fly Machine of its own, the app `bly-staging-db`, in the control plane's region. `start` starts it first and waits until it accepts connections; `stop` stops it last. It is private to the org: the scripts reach it through `fly proxy`. It isn't backed up, since staging is seeded again. `STAGING_DATABASE=supabase` switches back to the Supabase project.
 - **Deploy a branch to it:** `bun scripts/staging.ts up`. It makes only what is missing and deploys this checkout. **Check it end to end:** `bun scripts/staging-check.ts`.
 - **Never run `bun scripts/staging.ts down`** unless a maintainer asks for exactly that. It destroys staging, its database and worlds included.
 - **In a cloud environment,** its variables (`FLY_API_TOKEN`, `POLAR_*`, `STAGING_STATE`) stand in for a maintainer's machine. Never print these values, and never put them in a commit, a PR or a message. If `fly` or `bun` is missing or not 1.4.3, the environment's setup script didn't run. Say so rather than working around it.

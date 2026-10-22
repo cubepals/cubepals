@@ -22,8 +22,9 @@ and every secret as `secrets`, when Terraform is applied.
 
 ## Staging, on the providers' own addresses
 
-Staging stays. When nobody is testing, its machines are stopped, not destroyed: its database,
-worlds, bucket and secrets are kept, and cost only their storage. `scripts/staging.ts` runs it,
+Staging stays. When nobody is testing, its machines are stopped, not destroyed: its database
+machine included, with its volume, and the worlds, bucket and secrets are kept, and cost only
+their storage. `scripts/staging.ts` runs it,
 and `scripts/staging-check.ts` checks it:
 
 - `bun scripts/staging.ts up` makes whatever is missing in the `blockly-staging` Fly org and
@@ -35,9 +36,10 @@ and `scripts/staging-check.ts` checks it:
   players join `<server>.play.staging.cubepals.com`, whose wildcard
   records `up` points at the edge. The passwords and keys it made stay in
   `local/staging/state.json`, or come from `STAGING_STATE` where there is no such file.
-- `bun scripts/staging.ts start` starts the platform again before testing, its database first;
-  servers start when someone plays. `bun scripts/staging.ts stop` stops every machine in the
-  org afterwards, the servers' included, and says whether any still runs. Neither touches the
+- `bun scripts/staging.ts start` starts the platform again before testing, its database first,
+  and waits until the database accepts connections (a few seconds); servers start when someone
+  plays. `bun scripts/staging.ts stop` stops every machine in the org afterwards, the servers'
+  included and the database last, and says whether any still runs. Neither touches the
   web Worker, which costs nothing idle.
 - `bun scripts/staging.ts status` shows what exists and where to reach it.
   `bun scripts/staging.ts env` writes what a cloud environment needs to run all of this to
@@ -62,9 +64,21 @@ and `scripts/staging-check.ts` checks it:
   snapshots until their retention ends; there is no call to delete them sooner.
 
 This staging differs from the design the tables' Staging column describes, which Terraform makes:
-Postgres is Supabase's staging project (Free, eu-central-1), not Managed Postgres, reached
-through its session pooler, which carries `LISTEN` too, so there is no `DATABASE_DIRECT_URL`;
-`STAGING_DATABASE_URL` names it, and `down` leaves it be; archives go to Tigris, not R2;
+Postgres is not Managed Postgres but Postgres 17 on a Fly Machine of its own, in the app
+`bly-staging-db` with a 1 GB volume, in the control plane's region (`fra`). The control plane and
+realtime reach it at `bly-staging-db.flycast:5432` on the org's private network, directly: there is
+no pooler, so there is no `DATABASE_DIRECT_URL` and `DATABASE_POOL_MAX` stays 5. Nothing outside the org
+reaches it; the staging scripts open a `fly proxy` to it (`fly proxy 5432 -a bly-staging-db` by hand).
+The password is derived from staging's auth secret, so it is the same in every state that holds
+that secret; it is set as a Fly secret on the database app and in `DATABASE_URL` on the control and
+realtime apps, kept in `STAGING_STATE`, and never printed. Flycast starts the machine for a
+connection, so a pull request's preview that wakes the stopped API also finds its database; `stop`
+and the nightly stop it again. The migrations need nothing but Postgres itself: no extension and no
+role beyond the one that owns the database. There are no backups, because staging is seeded
+again; `down` destroys the database with the rest. `STAGING_DATABASE=supabase` (a variable of the
+workflows' `staging` environment, or in `local/secrets/staging.env`) switches back to the Supabase
+staging project, through its session pooler, which `STAGING_DATABASE_URL` names; `down` leaves that
+project be. Archives go to Tigris, not R2;
 the web Worker is `staging.ts`'s, not Terraform's; the API and realtime are on `fly.dev`, not staging's own domain; mail goes to the Mailpit; and
 Google is its only OAuth sign-in.
 
