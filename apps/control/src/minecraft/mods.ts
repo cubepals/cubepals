@@ -115,7 +115,10 @@ const VIA_NAMES: Readonly<Record<string, string>> = {
 }
 
 /** Whether `mods` hold the Via plugin that is Modrinth's `projectId`, from wherever it came. */
-export const runsPlugin = (mods: readonly PinnedMod[], projectId: string): boolean =>
+export const runsPlugin = (
+  mods: ReadonlyArray<Pick<PinnedMod, 'source' | 'name'>>,
+  projectId: string,
+): boolean =>
   mods.some(
     (mod) =>
       ('projectId' in mod.source && mod.source.projectId === projectId) ||

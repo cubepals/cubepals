@@ -68,5 +68,6 @@ export interface PinnedModpack {
 }
 
 /** Whether two revisions play the same pack at the same version. */
-export const samePack = (a: PinnedModpack | null, b: PinnedModpack | null): boolean =>
+type PackIdentity = Pick<PinnedModpack, 'catalog' | 'versionId'>
+export const samePack = (a: PackIdentity | null, b: PackIdentity | null): boolean =>
   a === null || b === null ? a === b : a.catalog === b.catalog && a.versionId === b.versionId

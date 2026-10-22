@@ -61,7 +61,7 @@ export const protocolOf = (release: string): number | null =>
 export function clientRange(
   gameVersion: string,
   loader: Loader,
-  mods: readonly PinnedMod[],
+  mods: ReadonlyArray<Pick<PinnedMod, 'source' | 'name'>>,
   adds: readonly string[] = [],
 ): ClientRange | null {
   const protocol = protocolOf(gameVersion)
@@ -89,7 +89,8 @@ export function clientRange(
  * know.
  */
 export function joinsOf(
-  revision: Pick<ServerRevision, 'gameVersion' | 'loader' | 'mods' | 'modpack'> & {
+  revision: Pick<ServerRevision, 'gameVersion' | 'loader' | 'modpack'> & {
+    mods: ReadonlyArray<Pick<PinnedMod, 'source' | 'name'>>
     settings: Pick<ServerSettings, 'otherVersions'>
   },
   adds?: readonly string[],
