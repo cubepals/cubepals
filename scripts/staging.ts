@@ -99,7 +99,7 @@ interface State {
   runtimeKey: string
   /** Made after the first staging came up: generated when missing. */
   webProxySecret?: string
-  /** The key Floodgate takes Bedrock players in with, 16 bytes as base64: made when missing. */
+  /** The key Floodgate takes Bedrock players in with, 16 bytes as base64: made once, and kept here. */
   floodgateKey?: string
   /** The org token a cloud environment runs flyctl with: made by `env`. */
   operatorToken?: string
@@ -185,12 +185,10 @@ const stagingTokens = () =>
 // ─── State ───────────────────────────────────────────────────────────────────────────────────
 
 function loadState(): State {
-  const kept = existsSync(STATE_FILE) ? readFileSync(STATE_FILE, 'utf8') : process.env.STAGING_STATE
-  // A cloud environment has no local file: its settings carry what `up` made (`env`). A state from
-  // before the Bedrock key gets one, which `up` saves with the rest.
-  if (kept) return { floodgateKey: randomBytes(16).toString('base64'), ...(JSON.parse(kept) as State) }
+  if (existsSync(STATE_FILE)) return JSON.parse(readFileSync(STATE_FILE, 'utf8')) as State
+  // A cloud environment has no local file: its settings carry what `up` made (`env`).
+  if (process.env.STAGING_STATE) return JSON.parse(process.env.STAGING_STATE) as State
   return {
-    floodgateKey: randomBytes(16).toString('base64'),
     authSecret: secret(),
     ticketSecret: secret(),
     edgeToken: secret(),
@@ -421,8 +419,9 @@ async function up(): Promise<void> {
   }
   await pointWebhook(state)
 
-  if (state.webProxySecret === undefined) {
-    state.webProxySecret = secret()
+  if (state.webProxySecret === undefined || state.floodgateKey === undefined) {
+    state.webProxySecret ??= secret()
+    state.floodgateKey ??= randomBytes(16).toString('base64')
     saveState(state)
   }
 
