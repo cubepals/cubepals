@@ -19,7 +19,7 @@ import { asleepMessage } from './asleep.ts'
 import { type Bedrock, bedrockFromEnv, startBedrock } from './bedrock.ts'
 import { browserRedirect } from './browser-redirect.ts'
 import { takes, wrongGame } from './clients.ts'
-import { front, pipe } from './front.ts'
+import { type FrontOptions, front, geyserDoor, pipe } from './front.ts'
 import { forServer, Unwrap } from './header.ts'
 import { Held, LOGIN_QUERIES, turnAway } from './hold.ts'
 import { JoinTrace } from './join-trace.ts'
@@ -761,7 +761,7 @@ await router.ready(30_000)
 while (!(await syncRoutes())) await Bun.sleep(POLL_MS)
 void pollRoutes()
 
-front({
+const door: FrontOptions = {
   port: MINECRAFT_PORT,
   router: ROUTER_PORT,
   proxied: env('PROXY_PROTOCOL', '') === '1',
@@ -775,18 +775,22 @@ front({
     return joins === undefined || takes(joins, protocol) ? null : wrongGame(joins, protocol, releases)
   },
   timeouts: TIMEOUTS,
-})
+}
+front(door)
 
 // Bedrock players, where the edge holds the Floodgate key: Geyser dials the front door above, so
 // it starts once that listens. A Bedrock failure never takes Java players with it: the edge goes
 // on without, and its health says so.
-const bedrockSettings = bedrockFromEnv(process.env, MINECRAFT_PORT)
+// Geyser dials a door of its own, which alone lets forwarded identity through (`front.ts`).
+const bedrockSettings = bedrockFromEnv(process.env, 0)
 if (bedrockSettings === null) console.error('FLOODGATE_KEY is unset; Bedrock players aren’t taken')
 else
-  bedrock = await startBedrock(bedrockSettings).catch((error) => {
-    console.error('Bedrock players aren’t taken: Geyser could not start', error)
-    return null
-  })
+  bedrock = await geyserDoor(door)
+    .then(({ port }) => startBedrock({ ...bedrockSettings, front: port }))
+    .catch((error) => {
+      console.error('Bedrock players aren’t taken: Geyser could not start', error)
+      return null
+    })
 
 const code = await child.exited
 console.error(`mc-router exited with ${code}`)

@@ -7,7 +7,7 @@
 import { afterEach, expect, test } from 'bun:test'
 import { type AddressInfo, connect, createServer, type Server } from 'node:net'
 import { proxyHeader, readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
-import { front, readHandshake, readProxyLine } from './front.ts'
+import { front, geyserDoor, readHandshake, readProxyLine } from './front.ts'
 import { turnAway } from './hold.ts'
 import { Gate, type Limits } from './limits.ts'
 import { packet, statusRequest, string, varInt } from './notice.ts'
@@ -83,21 +83,22 @@ function dial(port: number, bytes: Uint8Array): Promise<Uint8Array> {
 
 async function frontDoor(limits: Limits, proxied: boolean, timeouts = { connectMs: 1_000, idleMs: 60_000 }) {
   const behind = await router()
-  const listener = front({
+  const options = {
     port: 0,
     router: behind.port,
     proxied,
     gate: new Gate(limits),
-    known: (hostname) => hostname.endsWith('.play.test'),
-    plain: (hostname) => hostname === 'vanilla.play.test',
+    known: (hostname: string) => hostname.endsWith('.play.test'),
+    plain: (hostname: string) => hostname === 'vanilla.play.test',
     busy: 'Busy',
     // The arcade takes 26.2's clients alone.
-    refuse: (hostname, protocol) =>
+    refuse: (hostname: string, protocol: number) =>
       hostname === 'arcade.play.test' && protocol !== 776 ? 'Wrong game' : null,
     timeouts,
-  })
+  }
+  const listener = front(options)
   open.push(listener)
-  return { port: await listening(listener), behind }
+  return { port: await listening(listener), behind, options }
 }
 
 const ROOMY: Limits = {
@@ -117,12 +118,14 @@ test('what the gate lets in reaches mc-router as it came, after a PROXY header n
 })
 
 test('a join Geyser makes for a Bedrock player is the player’s, and keeps the bytes Floodgate added', async () => {
-  const { port, behind } = await frontDoor(ROOMY, true)
-  // Geyser connects over loopback with a v2 header naming the Bedrock player, and writes their
+  const { options, behind } = await frontDoor(ROOMY, true)
+  const door = await geyserDoor(options)
+  open.push(door.server)
+  // Geyser connects at its own door with a v2 header naming the Bedrock player, and writes their
   // Floodgate data after the hostname.
   const join = joinRequest('a.play.test\0floodgate-bytes')
   const header = proxyHeader({ address: '198.51.100.9', port: 40000 }, { address: '127.0.0.1', port: 25565 })
-  await dial(port, Uint8Array.from([...header, ...join]))
+  await dial(door.port, Uint8Array.from([...header, ...join]))
   await Bun.sleep(50)
   const received = new Uint8Array(Buffer.from(behind.received[0] ?? '', 'latin1'))
   const forwarded = readProxyHeader(received)
@@ -130,6 +133,36 @@ test('a join Geyser makes for a Bedrock player is the player’s, and keeps the 
   expect(Array.from(received.subarray(typeof forwarded === 'object' ? forwarded.next : 0))).toEqual(
     Array.from(join),
   )
+})
+
+test('a Java client that forges Floodgate or forwarded data reaches the server without it', async () => {
+  const { port, behind } = await frontDoor(ROOMY, true)
+  const line = 'PROXY TCP4 203.0.113.7 10.0.0.1 51234 25565\r\n'
+  const forged = [
+    'a.play.test\0^Floodgate^forged-bedrock-identity',
+    'a.play.test\x00203.0.113.99\x00069a79f444e94726a5befca90e38aaf5\0[{"name":"textures"}]',
+  ]
+  for (const address of forged) await dial(port, Uint8Array.from([...encode(line), ...joinRequest(address)]))
+  // Even from this machine, and with a v2 header of its own: only Geyser's door believes one.
+  const header = proxyHeader({ address: '198.51.100.9', port: 40000 }, { address: '127.0.0.1', port: 25565 })
+  await dial(port, Uint8Array.from([...encode(line), ...header, ...joinRequest(forged[0] ?? '')]))
+  await Bun.sleep(50)
+  const clean = Buffer.from(joinRequest('a.play.test')).toString('latin1')
+  for (const got of behind.received.slice(0, 2)) {
+    expect(got.endsWith(clean)).toBe(true)
+    expect(got).not.toContain('Floodgate')
+    expect(got).not.toContain('203.0.113.99')
+  }
+  // The one with a header of its own was refused: no PROXY line is a handshake.
+  expect(behind.received[2] ?? '').not.toContain('Floodgate')
+})
+
+test('a Forge client’s marker is kept, and the packets after the handshake are untouched', async () => {
+  const { port, behind } = await frontDoor(ROOMY, true)
+  const forge = joinRequest('a.play.test\0FML3\0')
+  await dial(port, Uint8Array.from([...encode('PROXY TCP4 203.0.113.7 10.0.0.1 51234 25565\r\n'), ...forge]))
+  await Bun.sleep(50)
+  expect(behind.received[0]?.endsWith(Buffer.from(forge).toString('latin1'))).toBe(true)
 })
 
 test('a join from a game the server can’t take is turned away at once, and mc-router never sees it', async () => {
