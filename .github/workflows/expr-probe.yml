@@ -4,22 +4,32 @@ on:
     branches: [claude/expr-probe]
 permissions: {}
 jobs:
-  probe:
+  top:
+    if: github.event_name == 'never'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo top
+  mid:
+    needs: top
+    if: '!cancelled()'
     runs-on: ubuntu-latest
     outputs:
-      a: ${{ !(contains(fromJSON('["synchronize", "opened", "reopened"]'), fromJSON('{}').action) && fromJSON('{}').draft) }}
-      b: ${{ contains(fromJSON('["synchronize", "opened", "reopened"]'), fromJSON('{}').action) }}
-      c: ${{ !(false && fromJSON('{}').draft) }}
-      d: ${{ !(contains(fromJSON('["synchronize", "opened", "reopened"]'), github.event.action) && github.event.pull_request.draft) }}
+      go: ${{ steps.s.outputs.go }}
     steps:
-      - run: |
-          echo "a=${{ !(contains(fromJSON('["synchronize", "opened", "reopened"]'), fromJSON('{}').action) && fromJSON('{}').draft) }}"
-          echo "b=${{ contains(fromJSON('["synchronize", "opened", "reopened"]'), fromJSON('{}').action) }}"
-          echo "d=${{ !(contains(fromJSON('["synchronize", "opened", "reopened"]'), github.event.action) && github.event.pull_request.draft) }}"
-  read:
-    needs: probe
+      - id: s
+        run: echo "go=true" >> "$GITHUB_OUTPUT"
+  plain:
+    needs: mid
+    if: needs.mid.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
-      - run: |
-          echo "outputs a=[${{ needs.probe.outputs.a }}] b=[${{ needs.probe.outputs.b }}] c=[${{ needs.probe.outputs.c }}] d=[${{ needs.probe.outputs.d }}]"
-          echo "cmp=${{ needs.probe.outputs.d == 'true' }}"
+      - run: echo plain ran
+  explicit:
+    needs: mid
+    if: >-
+      !cancelled()
+      && needs.mid.result == 'success'
+      && needs.mid.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo explicit ran
