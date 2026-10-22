@@ -40,7 +40,8 @@ export const PlayerEntry = z
   )
 
 export const AddPlayerInput = z.object({ serverId: ServerId, name: PlayerEntry })
-export const PlayerInput = z.object({ serverId: ServerId, playerUuid: z.uuid() })
+/** Any UUID's shape, not only an RFC version's: Floodgate's for a Bedrock player is version 0. */
+export const PlayerInput = z.object({ serverId: ServerId, playerUuid: z.guid() })
 export const BanInput = z.object({
   serverId: ServerId,
   name: PlayerEntry,
