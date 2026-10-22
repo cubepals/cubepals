@@ -23,6 +23,10 @@ primary_region = "fra"
   # Fly's proxy opens each connection with a PROXY line naming the player's address, which the
   # agent's per-address limits count by (apps/edge/front.ts).
   PROXY_PROTOCOL = "1"
+  # Geyser's heap, beside the agent and mc-router (about 100 MB together) on this machine's 2 GB:
+  # with 20 Bedrock players Geyser's process held about 630 MB and the whole machine about 900 MB,
+  # which leaves room for the heap to grow, the operating system and the game's files Geyser loads.
+  GEYSER_HEAP = "768m"
 
 # Raw TCP: the Minecraft handshake names the server, so nothing in front may touch the stream
 # beyond the PROXY line ahead of it.
@@ -112,6 +116,9 @@ primary_region = "fra"
     method = "get"
     path = "/_health"
 
+# Sized by measuring 20 Bedrock players beside Java joins for ten minutes (apps/edge/bedrock.ts): a
+# shared CPU of two held back nearly all of its time once its burst was spent, and Java joins took
+# twice as long. Four shared CPUs and 2 GB kept up with no wait added to them.
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "512mb"
+  size = "shared-cpu-4x"
+  memory = "2048mb"

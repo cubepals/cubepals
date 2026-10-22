@@ -60,7 +60,7 @@ export function bedrockFromEnv(env: NodeJS.ProcessEnv, front: number): BedrockOp
     jar: env.GEYSER_JAR ?? '/geyser/Geyser-Standalone.jar',
     dir: env.GEYSER_DIR ?? '/tmp/geyser',
     warm: env.GEYSER_WARM ?? '/geyser/warm',
-    heap: env.GEYSER_HEAP ?? '512m',
+    heap: env.GEYSER_HEAP ?? '768m',
     bind: env.BEDROCK_BIND ?? 'fly-global-services',
     port: number('BEDROCK_PORT', 19132),
     front,
