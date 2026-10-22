@@ -73,7 +73,9 @@ jobs:
       - name: Label
         env:
           GH_TOKEN: ${{ github.token }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # The model reads only v0id-user's own pull requests and issues, and runs asked for by
+          # hand; everyone else's get the labels the rules give, without it (tools/labels/model.ts).
+          ANTHROPIC_API_KEY: ${{ (github.event_name == 'workflow_dispatch' || (github.event.pull_request.user.login || github.event.issue.user.login) == 'v0id-user') && secrets.ANTHROPIC_API_KEY || '' }}
           EVENT: ${{ github.event_name }}
           NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           COMMAND: ${{ inputs.command }}
