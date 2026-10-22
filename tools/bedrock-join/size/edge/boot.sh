@@ -9,7 +9,7 @@ set -- $pin
 version=$1 build=$2 sha=$3
 bun repo/tools/bedrock-join/size/edge/fetch.ts "https://download.geysermc.org/v2/projects/geyser/versions/$version/builds/$build/downloads/standalone" geyser.jar
 echo "$sha  geyser.jar" | sha256sum -c -
-bun repo/tools/bedrock-join/size/edge/fetch.ts "https://github.com/itzg/mc-router/releases/download/$MC_ROUTER_VERSION/mc-router_${MC_ROUTER_VERSION}_linux_amd64.tar.gz" mc-router.tgz
+bun repo/tools/bedrock-join/size/edge/fetch.ts "https://github.com/itzg/mc-router/releases/download/v$MC_ROUTER_VERSION/mc-router_${MC_ROUTER_VERSION}_linux_amd64.tar.gz" mc-router.tgz
 tar xzf mc-router.tgz -C /edge mc-router
 export GEYSER_JAR=/edge/geyser.jar ROUTER_BIN=/edge/mc-router
 bun repo/tools/bedrock-join/size/edge/probe.ts &
