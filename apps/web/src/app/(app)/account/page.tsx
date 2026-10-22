@@ -162,6 +162,7 @@ function Play({ overview }: { overview: AccountOverviewView }) {
         <Note tone="info">
           Running low. When they’re used, your servers sleep until the 1st
           {u.extra.may ? ', and nothing more is charged unless you allow it below' : ''}.
+          {cheaperSaid(overview)}
         </Note>
       ) : null}
       {doubled && (
@@ -228,7 +229,7 @@ function Play({ overview }: { overview: AccountOverviewView }) {
 
 /**
  * The plan's hours in all (Free's 20): what is left of them, and once they are played, that the
- * worlds are kept and Plus starts them again. They come once, so there is nothing to wait for.
+ * worlds are kept and Core starts them again. They come once, so there is nothing to wait for.
  */
 function PlayTotal({ overview }: { overview: AccountOverviewView }) {
   const total = overview.usage.total
@@ -280,20 +281,39 @@ const extraOf = (u: AccountOverviewView['usage']) => ({
   hours: Math.round(u.extra.countedUnits * 10) / 10,
 })
 
+/** The plan with more hours than this one, for an upgrade: none for an account on the largest. */
+const largerPlan = (overview: AccountOverviewView) =>
+  overview.plans.find(
+    (p) =>
+      (p.entitlements.includedUnits ?? 0) > (overview.entitlements.includedUnits ?? 0) &&
+      p.entitlements.monthlyPriceCents > overview.entitlements.monthlyPriceCents,
+  )
+
+/**
+ * Where extra hours can be allowed and a larger plan exists, what each costs and when that plan
+ * costs less: "Extra hours are $0.25 each; past 60 a month, Plus costs less." Empty otherwise.
+ */
+function cheaperSaid(overview: AccountOverviewView): string {
+  const more = largerPlan(overview)
+  if (!more || !overview.usage.extra.may) return ''
+  const { unitCents } = overview.usage
+  const past = Math.floor(
+    (more.entitlements.monthlyPriceCents - overview.entitlements.monthlyPriceCents) / unitCents,
+  )
+  return ` Extra hours are ${money(unitCents)} each; past ${past} a month, ${title(more.key)} costs less.`
+}
+
 /** The month's included play is used: on extra hours now, or asleep until the 1st, and why. */
 function UsedUp({ overview, included }: { overview: AccountOverviewView; included: number }) {
   const x = overview.usage.extra
   const { allowedNow, billed, hours } = extraOf(overview.usage)
   // An upgrade only: with an admin's own hours on the account, a cheaper plan can have more.
-  const more = overview.plans.find(
-    (p) =>
-      (p.entitlements.includedUnits ?? 0) > (overview.entitlements.includedUnits ?? 0) &&
-      p.entitlements.monthlyPriceCents > overview.entitlements.monthlyPriceCents,
-  )
+  const more = largerPlan(overview)
+  const plan = title(overview.plan.key)
   if (allowedNow > 0)
     return (
       <Note tone="info">
-        {`You're on extra hours: ${hours} so far this month, ${billed}, billed with your Plus payments. Servers sleep once you reach the ${allowedNow} you allowed.`}
+        {`You're on extra hours: ${hours} so far this month, ${billed}, billed with your ${plan} payments. Servers sleep once you reach the ${allowedNow} you allowed.`}
       </Note>
     )
   return (
@@ -301,8 +321,9 @@ function UsedUp({ overview, included }: { overview: AccountOverviewView; include
       <Note tone="info">
         {`You've played this month's ${included} hours. Your servers sleep until the 1st${x.may ? ', unless you allow some extra play below' : ''}.`}
         {x.countedUnits > 0
-          ? ` Your ${hours} extra hours this month, ${billed}, are billed with your Plus payments.`
+          ? ` Your ${hours} extra hours this month, ${billed}, are billed with your ${plan} payments.`
           : ''}
+        {cheaperSaid(overview)}
       </Note>
       {more && (
         <PlusOffer
@@ -657,7 +678,11 @@ function Plans({ overview }: { overview: AccountOverviewView }) {
             current={plan.key === overview.plan.key}
             mark={seenMark(`plan_${plan.key}`)}
             action={
-              sells && plan.monthlyPriceCents > 0 && plan.key !== overview.plan.key ? (
+              // A smaller plan isn't bought over a larger one: ending the larger comes first.
+              sells &&
+              plan.monthlyPriceCents > 0 &&
+              plan.key !== overview.plan.key &&
+              plan.monthlyPriceCents > overview.entitlements.monthlyPriceCents ? (
                 <Button
                   variant="primary"
                   href={checkoutHref({ plan: plan.key, reason: 'account' })}

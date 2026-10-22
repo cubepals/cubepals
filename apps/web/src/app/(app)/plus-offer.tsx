@@ -65,7 +65,7 @@ export function PlusOffer({
               {offered.includedUnits} hours of play
             </PlayHours>
           )}{' '}
-          · up to {offered.maxServers} servers
+          · {offered.maxServers === 1 ? '1 server' : `up to ${offered.maxServers} servers`}
         </>
       }
       footer={

@@ -8,15 +8,9 @@
 import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
 import { ctaMark, planMark, seenMark } from '../../app/(public)/steps'
-import { eachOf, PlanPoint, planPoints, priceOf } from '../../ui/plans'
+import { eachOf, PlanPoint, pitchOf, planPoints, priceOf } from '../../ui/plans'
 import { Section } from '../kit'
 import styles from './surface.module.css'
-
-/** What each plan is for, as the person choosing would put it (the same words as ui/plans.tsx). */
-const PITCH: Record<string, string> = {
-  free: 'Plain Minecraft for a small group',
-  plus: 'Modpacks, bigger groups, more play',
-}
 
 const dollars = (cents: number): string => `$${cents % 100 === 0 ? cents / 100 : (cents / 100).toFixed(2)}`
 
@@ -100,7 +94,7 @@ export function PlansSaid({
                 <span className="bl-num">{dollars(plan.monthlyPriceCents)}</span>
                 {isPaid && <small> a month</small>}
               </p>
-              <p className={styles.pitch}>{PITCH[plan.key] ?? ''}</p>
+              <p className={styles.pitch}>{pitchOf(plan)}</p>
               <Shared plan={plan} />
               <ul className={styles.points}>
                 {planPoints(plan).map((point) => (

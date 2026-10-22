@@ -10,10 +10,24 @@ import { OutLink } from './out-link'
 import { Badge } from './surfaces'
 import { Tip } from './tip'
 
-/** What each plan is for, as the person choosing would put it. */
-const PITCH: Record<string, string> = {
-  free: 'Plain Minecraft for a small group',
-  plus: 'Modpacks, bigger groups, more play',
+/**
+ * Who a plan is for and what they play on it, as the person choosing would put it: the first thing
+ * a card says, and never its hours. Core says Bedrock friends join only where this Cubepals takes
+ * them (`PublicPlan.bedrock`), and otherwise that it is coming.
+ */
+export function pitchOf(plan: Pick<PublicPlan, 'key' | 'maxPlayers' | 'bedrock'>): string {
+  switch (plan.key) {
+    case 'free':
+      return 'Try plain Minecraft with friends, no card'
+    case 'core':
+      return plan.bedrock
+        ? `Vanilla for you and ${plan.maxPlayers - 1} friends, Java and Bedrock together`
+        : `Vanilla for you and ${plan.maxPlayers - 1} friends on Java, and Bedrock is coming`
+    case 'plus':
+      return 'Mods, plugins and modpacks, for bigger groups'
+    default:
+      return ''
+  }
 }
 
 /**
@@ -51,7 +65,7 @@ function addOns(plan: PublicPlan): string {
 const hoursPoint = (plan: PublicPlan) =>
   plan.totalHours !== null
     ? `${plan.totalHours} hours of play, at most ${plan.includedHours} a day`
-    : `${plan.includedHours} hours of play ${plan.per === 'day' ? 'every day' : 'each month'}`
+    : `${plan.includedHours} hours of play ${plan.per === 'day' ? 'every day' : 'each month'}${plan.extraHourCents === null ? '' : `, then ${plan.extraHourCents}¢ an hour`}`
 
 /** One of a plan's points as a card shows it: the hours on the dashed line that says what they are. */
 export function PlanPoint({ plan, point }: { plan: PublicPlan; point: string }) {
@@ -114,7 +128,7 @@ export function PlayHours({
               <p>
                 They come once, not every month: {total} in all, at most {hours} a day from midnight where you
                 are. Once they’re played, the trial ends and nothing is charged. Your world is kept and you
-                can still download it, and Plus starts it again.
+                can still download it, and Core starts it again.
               </p>
             )}
           </>
@@ -209,6 +223,7 @@ export function PlanCard({
         <h3 className="type-eyebrow">{plan.name}</h3>
         {current && <Badge tone="grass">Yours</Badge>}
       </div>
+      <p className="type-heading-sm bk-plan__pitch">{pitchOf(plan)}</p>
       <p className="bk-plan__price">
         <span className="type-display-md bk-num">{dollars(plan.monthlyPriceCents)}</span>
         {plan.monthlyPriceCents > 0 && <span className="type-body-sm"> a month</span>}
@@ -218,7 +233,6 @@ export function PlanCard({
           {shared.each} each, shared by {shared.friends} friends.
         </p>
       )}
-      <p className="type-body bk-plan__pitch">{PITCH[plan.key] ?? ''}</p>
       <ul className="bk-plan__points">
         {planPoints(plan).map((point) => (
           <li key={point} className="type-body-sm">

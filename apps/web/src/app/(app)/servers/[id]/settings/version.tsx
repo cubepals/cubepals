@@ -11,6 +11,7 @@ import { messageOf, useTRPC } from '../../../../../lib/api'
 import { type Outcome, said, useOutcome } from '../../../../../lib/outcome'
 import { loaderLabel, presentConflict, presentPlan, runsOnPaper } from '../../../../../lib/present'
 import { Button, FormSection, Note, Select, Skeleton } from '../../../../../ui'
+import { PlusOffer } from '../../../plus-offer'
 import { ConfirmChange, changeable, planLines, RevokedChoice, useChanged, whatHappens } from './shared'
 
 const LOADER_HELP: Record<Loader, string> = {
@@ -238,6 +239,7 @@ function SizeForm({
     }),
   )
   const chosen = options.partySizes.find((size) => size.value === partySize)
+  const locked = options.partySizes.find((size) => !size.allowed)
   const allowed = changeable(view)
   const dirty = partySize !== view.partySize
   // Linked to as #size (the overview's out-of-memory note); it renders after its data, so the
@@ -284,10 +286,20 @@ function SizeForm({
             </label>
           ))}
         </fieldset>
-        {options.partySizes.some((size) => !size.allowed) && (
-          <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-            Bigger sizes need a bigger plan.
-          </p>
+        {/* The group this plan stops at: the plan that holds more, one click away. */}
+        {locked?.plan ? (
+          <PlusOffer
+            why={locked.reason ?? 'Bigger groups come with a bigger plan.'}
+            plan={locked.plan}
+            reason="players"
+            next={`/servers/${view.id}/settings`}
+          />
+        ) : (
+          locked && (
+            <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
+              Bigger sizes need a bigger plan.
+            </p>
+          )
         )}
       </FormSection>
       <ConfirmChange
