@@ -27,6 +27,9 @@ kill_timeout = 90
   API_LISTEN = "0.0.0.0:8080"
   # The edge reaches the internal listener over the organization's private network only.
   INTERNAL_LISTEN = "fly-local-6pn:4001"
+  # Prometheus-format metrics, scraped by Fly's managed Prometheus below. No service names this
+  # port, so only Fly's private network reaches it (docs/metrics.md).
+  METRICS_LISTEN = "0.0.0.0:9091"
 
 [processes]
   api = "env ROLES=api node src/main.node.ts"
@@ -66,6 +69,11 @@ kill_timeout = 90
   interval = "30s"
   timeout = "5s"
   grace_period = "2m"
+
+[[metrics]]
+  port = 9091
+  path = "/metrics"
+  processes = ["api", "worker"]
 
 [[vm]]
   processes = ["api"]

@@ -24,6 +24,7 @@ import { PlatformHealth } from './app/platform/health.ts'
 import { JobRecord } from './app/platform/job-record.ts'
 import { ServerRepairs } from './app/platform/repairs.ts'
 import { SuspendSwitch } from './app/platform/suspend-switch.ts'
+import { installTelemetry } from './app/platform/telemetry.ts'
 import { CLIENT_ADDRESS_HEADER } from './app/ports/auth.ts'
 import type { EventBus } from './app/ports/events.ts'
 import type { PlayerProfiles, ReadinessProbe, ServerConsole } from './app/ports/minecraft.ts'
@@ -36,6 +37,7 @@ import { scheduledJobs } from './app/scheduled-jobs.ts'
 import { ServerIcons } from './app/server-icons/service.ts'
 import { presenceFor } from './app/servers/usage.ts'
 import { installTuning } from './app/tuning.ts'
+import { hostPort } from './config/host-port.ts'
 import { loadConfig, tuningOf } from './config/load.ts'
 import { ConfiguredPlayAddressing, ConfiguredRegionCatalog } from './config/play-addressing.ts'
 import type { DeploymentConfig, RuntimeConfig } from './config/schema.ts'
@@ -79,6 +81,7 @@ import { SmtpMailer } from './infra/mail/smtp.ts'
 import { PublishedMalwareLists } from './infra/malware/mcantimalware.ts'
 import { RconConsole } from './infra/mc-protocol/rcon.ts'
 import { SlpProbe } from './infra/mc-protocol/slp.ts'
+import { serveMetrics } from './infra/metrics/exporter.ts'
 import { modrinthClient } from './infra/modrinth/client.ts'
 import { ModrinthCatalog } from './infra/modrinth/modrinth-catalog.ts'
 import { MojangClientAssets } from './infra/mojang/client-assets.ts'
@@ -304,11 +307,6 @@ async function providerFor(
       }
     }
   }
-}
-
-const hostPort = (value: string) => {
-  const at = value.lastIndexOf(':')
-  return { host: value.slice(0, at).replace(/^\[|\]$/g, ''), port: Number(value.slice(at + 1)) }
 }
 
 /**
@@ -651,6 +649,8 @@ async function connect(config: DeploymentConfig) {
       locks: new PgAdvisoryLocks(pool),
       // Heard only where the edges ask for routes (`app/edge/service.ts`).
       routeChanges: new PgChangeSignal(directUrl, ROUTES_CHANNEL),
+      // One source for the figures the database holds: the worker role's.
+      telemetry: installTelemetry(serveMetrics(config.metrics.listen, config.roles, pool)),
     },
   }
 }

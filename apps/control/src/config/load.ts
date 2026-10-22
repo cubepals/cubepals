@@ -320,6 +320,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
       api: env.API_LISTEN ?? `127.0.0.1:${API_PORT}`,
       internal: env.INTERNAL_LISTEN ?? `127.0.0.1:${INTERNAL_PORT}`,
     },
+    metrics: { listen: env.METRICS_LISTEN },
     realtime: {
       listen: env.REALTIME_LISTEN ?? '127.0.0.1:7443',
       publicUrl: env.REALTIME_PUBLIC_URL,

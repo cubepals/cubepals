@@ -4,6 +4,9 @@
   "type": "module",
   "license": "AGPL-3.0-only",
   "dependencies": {
-    "@blockly/contracts": "workspace:*"
+    "@blockly/contracts": "workspace:*",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/exporter-prometheus": "0.223.0",
+    "@opentelemetry/sdk-metrics": "2.12.0"
   }
 }

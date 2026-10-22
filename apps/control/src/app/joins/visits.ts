@@ -17,6 +17,7 @@ import { and, desc, eq, gt, lt, or, sql } from 'drizzle-orm'
 import { keptFor } from '../../domain/server/kept-addresses.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { addressHash } from '../edge/known-addresses.ts'
+import { wakeCompleted } from '../platform/telemetry.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import type { SecretKeyring } from '../secrets.ts'
 import { findLiveBySlug } from '../servers/persistence.ts'
@@ -119,6 +120,10 @@ export async function recordVisits(
   for (const report of reports) {
     const row = await rowOf(q, deps, report)
     await adopt(q, row)
+    const [before] = await q
+      .select({ readyAt: joins.readyAt, wakeAskedAt: joins.wakeAskedAt })
+      .from(joins)
+      .where(eq(joins.id, row.id))
     const set: Record<string, unknown> = Object.fromEntries(
       FILLED.map((key) => [key, sql`coalesce(${joins[key]}, excluded.${sql.identifier(joins[key].name)})`]),
     )
@@ -126,6 +131,10 @@ export async function recordVisits(
     set.leftAt = sql`least(${joins.leftAt}, excluded.left_at)`
     set.detail = sql`${joins.detail} || excluded.detail`
     await q.insert(joins).values(row).onConflictDoUpdate({ target: joins.id, set })
+    // Timed once, by the report that first says the server was ready.
+    const asked = before?.wakeAskedAt ?? row.wakeAskedAt
+    if (before?.readyAt == null && row.readyAt != null && asked != null)
+      wakeCompleted(row.edgeRegion ?? null, row.readyAt.getTime() - asked.getTime())
   }
 }
 
