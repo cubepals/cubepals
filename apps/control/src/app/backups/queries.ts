@@ -45,7 +45,7 @@ export class BackupQueries {
       server.desiredRevisionId,
       ...listed.map((b) => b.revisionId),
     ])
-    const desired = revisions.get(server.desiredRevisionId) as RevisionSummary
+    const desired = summaryOf(revisions, server.desiredRevisionId)
     const standing = await loadStanding(this.#db, server.ownerId)
     const availability = (capability: Capability) =>
       this.#db.transaction(async (tx) =>
@@ -60,7 +60,7 @@ export class BackupQueries {
         restore: await availability({ kind: 'restore_archive' }),
       },
       backups: listed.map((backup): BackupView => {
-        const revision = revisions.get(backup.revisionId) as RevisionSummary
+        const revision = summaryOf(revisions, backup.revisionId)
         return {
           id: backup.id,
           trigger: backup.trigger,
@@ -82,6 +82,12 @@ export class BackupQueries {
       }),
     }
   }
+}
+
+export const summaryOf = (found: Map<string, RevisionSummary>, id: string): RevisionSummary => {
+  const summary = found.get(id)
+  if (summary === undefined) throw new Error(`Revision ${id} is missing`)
+  return summary
 }
 
 const toAvailability = (decision: Decision): Availability =>
