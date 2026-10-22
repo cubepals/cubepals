@@ -36,33 +36,47 @@ export interface ServerSettings {
   /**
    * Which other Minecraft versions' players a Paper server lets in beside its own, through the
    * Via plugins Cubepals adds as it starts (`app/compat/`): none (`off`), newer and older ones
-   * (`on`), or also 1.8 and 1.7 (`oldest`). Absent is `on`. Its own change, like `onlineMode`.
+   * (`on`), or also 1.8 and 1.7 (`oldest`). Absent is `on` on Paper and `off` on plain Minecraft
+   * (`otherVersionsOf`). Its own change, like `onlineMode`.
    */
   otherVersions?: OtherVersions
   /**
    * Whether a Paper server lets Bedrock players in (phones, tablets and Windows), through the
-   * plugins Cubepals adds as it starts (`app/compat/`). Absent is on. Its own change, like
-   * `otherVersions`.
+   * plugins Cubepals adds as it starts (`app/compat/`). Absent is on on Paper and off on plain
+   * Minecraft (`bedrockOf`). Its own change, like `otherVersions`.
    */
   bedrock?: boolean
 }
 
 export type OtherVersions = 'off' | 'on' | 'oldest'
 
+/**
+ * What a server's choices of other versions and Bedrock are read from. A plain server that never
+ * made them has them off: it was made before plain Minecraft let anyone else in, and nothing turns
+ * them on for it but its owner. A new one is made with both on (`servers/new-server.ts`).
+ */
+type Choosing<K extends keyof ServerSettings> = Pick<RevisionDraft, 'loader'> & {
+  settings: Pick<ServerSettings, K>
+}
+
 /** A server's choice of other versions, with the default for one that never made it. */
-export const otherVersionsOf = (settings: Pick<ServerSettings, 'otherVersions'>): OtherVersions =>
-  settings.otherVersions ?? 'on'
+export const otherVersionsOf = (revision: Choosing<'otherVersions'>): OtherVersions =>
+  revision.settings.otherVersions ?? (revision.loader === 'vanilla' ? 'off' : 'on')
 
 /** A server's choice of letting Bedrock players in, with the default for one that never made it. */
-export const bedrockOf = (settings: Pick<ServerSettings, 'bedrock'>): boolean => settings.bedrock ?? true
+export const bedrockOf = (revision: Choosing<'bedrock'>): boolean =>
+  revision.settings.bedrock ?? revision.loader !== 'vanilla'
 
 /** One setting as the server has it, a choice it never made at its default. */
-const settingOf = (settings: ServerSettings, key: keyof ServerSettings): string | number | boolean =>
+const settingOf = (
+  revision: Pick<RevisionDraft, 'loader' | 'settings'>,
+  key: keyof ServerSettings,
+): string | number | boolean =>
   key === 'otherVersions'
-    ? otherVersionsOf(settings)
+    ? otherVersionsOf(revision)
     : key === 'bedrock'
-      ? bedrockOf(settings)
-      : settings[key]
+      ? bedrockOf(revision)
+      : revision.settings[key]
 
 /** The settings the game form edits: everything but how players are checked and who can join. */
 export type GameSettings = Omit<ServerSettings, 'onlineMode' | 'otherVersions' | 'bedrock'>
@@ -223,8 +237,8 @@ export function describeChanges(from: ChangeFacts, to: ChangeFacts): RevisionCha
     keyof ServerSettings
   >
   for (const key of keys)
-    if (settingOf(from.settings, key) !== settingOf(to.settings, key))
-      changes.push({ field: key, from: settingOf(from.settings, key), to: settingOf(to.settings, key) })
+    if (settingOf(from, key) !== settingOf(to, key))
+      changes.push({ field: key, from: settingOf(from, key), to: settingOf(to, key) })
   const identity = ({ source }: Pick<PinnedMod, 'source'>) =>
     'uploadId' in source ? `upload:${source.uploadId}` : `${source.catalog}:${source.projectId}`
   const before = new Map(from.mods.map((m) => [identity(m), m]))
@@ -298,11 +312,23 @@ export function runsOnPaper(
       mods?: ReadonlyArray<Pick<PinnedMod, 'loaders'>>
     },
 ): boolean {
+  return isPlain(revision) && (revision.loaderVersion ?? null) !== null
+}
+
+/**
+ * Plain Minecraft: no pack, and no mods but datapacks. It runs on Paper or on Mojang's own server
+ * (`runsOnPaper`), and moves between the two with its world.
+ */
+export function isPlain(
+  revision: Pick<RevisionDraft, 'loader'> & {
+    modpack?: unknown
+    mods?: ReadonlyArray<Pick<PinnedMod, 'loaders'>>
+  },
+): boolean {
   return (
     revision.loader === 'vanilla' &&
     (revision.modpack ?? null) === null &&
-    (revision.mods ?? []).every((mod) => isDatapack(mod)) &&
-    (revision.loaderVersion ?? null) !== null
+    (revision.mods ?? []).every((mod) => isDatapack(mod))
   )
 }
 

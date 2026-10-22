@@ -164,7 +164,9 @@ describe('Paper reading a PROXY header', () => {
       toRuntimeSpec({ ...input, revision: { ...revision, loader: 'fabric' } }).env[PROXY_ENV],
     ).toBeUndefined()
 
-    const script = toRuntimeSpec({ ...input, revision: onPaper }).entrypoint?.[2] ?? ''
+    // A Paper server's: plain Minecraft's first start writes other settings there too (`vanilla-paper.ts`).
+    const paper = { ...revision, loader: 'paper' as const }
+    const script = toRuntimeSpec({ ...input, revision: paper }).entrypoint?.[2] ?? ''
     const data = mkdtempSync(join(tmpdir(), 'paper-proxy-'))
     const global = `${data}/config/paper-global.yml`
     const step = script.replaceAll('/data', data).replace('exec /image/scripts/start "$@"', 'true')

@@ -109,7 +109,11 @@ describe.skipIf(!hasDatabase)('Bedrock players on a Paper server', () => {
     expect(JSON.stringify(spec.env)).not.toContain(TEST_FLOODGATE_KEY)
     // On the disk as it started: the 16 bytes the key stands for.
     expect(readFileSync(keyFile(id))).toEqual(Buffer.from(TEST_FLOODGATE_KEY, 'base64'))
-    expect((await h.app.queries.get(owner, id)).bedrock).toEqual({ on: true, needsOtherVersions: false })
+    expect((await h.app.queries.get(owner, id)).bedrock).toEqual({
+      on: true,
+      needsOtherVersions: false,
+      moves: false,
+    })
   }, 60_000)
 
   test('turning it off takes Floodgate and the key away at the next start, and on puts them back', async () => {
@@ -122,7 +126,11 @@ describe.skipIf(!hasDatabase)('Bedrock players on a Paper server', () => {
     expect(spec.env.ENFORCE_SECURE_PROFILE).toBe('TRUE')
     expect(spec.secrets[FLOODGATE_KEY_ENV]).toBeUndefined()
     expect(existsSync(keyFile(id))).toBe(false)
-    expect((await h.app.queries.get(owner, id)).bedrock).toEqual({ on: false, needsOtherVersions: false })
+    expect((await h.app.queries.get(owner, id)).bedrock).toEqual({
+      on: false,
+      needsOtherVersions: false,
+      moves: false,
+    })
 
     await h.app.revisions.changeBedrock(owner, id, true, randomUUID())
     await h.until(id, 'running')
@@ -139,7 +147,11 @@ describe.skipIf(!hasDatabase)('Bedrock players on a Paper server', () => {
     expect(jars).toEqual([])
     expect(spec.secrets[FLOODGATE_KEY_ENV]).toBeUndefined()
     expect(existsSync(keyFile(id))).toBe(false)
-    expect((await h.app.queries.get(owner, id)).bedrock).toEqual({ on: true, needsOtherVersions: true })
+    expect((await h.app.queries.get(owner, id)).bedrock).toEqual({
+      on: true,
+      needsOtherVersions: true,
+      moves: false,
+    })
     // Its choice is kept: letting other versions in again brings Bedrock back at the next start.
     await h.app.revisions.changeOtherVersions(owner, id, 'on', randomUUID())
     await h.until(id, 'running')
@@ -203,6 +215,7 @@ describe.skipIf(!hasDatabase)('Bedrock and who is on the server', () => {
     expect((await h.app.queries.get(owner, server.id)).bedrock).toEqual({
       on: true,
       needsOtherVersions: false,
+      moves: false,
     })
     // Changing the choice on Free is allowed, and the server stays a plain Paper server.
     await h.app.revisions.changeBedrock(owner, server.id, false, randomUUID())
@@ -247,15 +260,16 @@ describe.skipIf(!hasDatabase)('Bedrock players as players', () => {
     expect(await h.app.sharing.joinThroughInvite(inviteCode, '.Pixel Pal')).toMatchObject({ added: false })
   }, 180_000)
 
-  test('only a Paper server has the choice', async () => {
-    const owner = await h.user('Elm')
-    const server = await h.create(owner)
+  test('a server with mods has no choice', async () => {
+    // Fabric comes with Plus.
+    const owner = await h.user('Elm', 'plus')
+    const server = await h.create(owner, { loader: 'fabric', gameVersion: '26.2' })
     await h.until(server.id, 'running')
     await h.settled(server.id)
     expect(existsSync(keyFile(server.id))).toBe(false)
     expect((await h.app.queries.get(owner, server.id)).bedrock).toBeNull()
     await expect(h.app.revisions.changeBedrock(owner, server.id, false, randomUUID())).rejects.toThrow(
-      'Only a Paper server',
+      'only a server without mods',
     )
   }, 30_000)
 })

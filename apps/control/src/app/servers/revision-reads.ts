@@ -163,11 +163,14 @@ export async function revisionHistory(
   }
 }
 
-/** What a server's page shows of what it plays: the mods by name only, which is all joining asks of them. */
+/**
+ * What a server's page shows of what it plays: the mods by name only, which is all joining asks of
+ * them, with the loaders each is for, which say whether plain Minecraft runs on Paper (`runsOnPaper`).
+ */
 export type RevisionCard = Pick<
   ServerRevision,
   'id' | 'gameVersion' | 'loader' | 'loaderVersion' | 'settings' | 'modpack'
-> & { mods: Array<Pick<PinnedMod, 'source' | 'name'>> }
+> & { mods: Array<Pick<PinnedMod, 'source' | 'name' | 'loaders'>> }
 
 export async function loadRevisionCard(q: Queryable, id: string): Promise<RevisionCard> {
   const [row] = await q
@@ -179,7 +182,7 @@ export async function loadRevisionCard(q: Queryable, id: string): Promise<Revisi
       settings: revisions.settings,
       modpack: revisions.modpack,
       mods: json<RevisionCard['mods']>(
-        sql`(select coalesce(jsonb_agg(jsonb_build_object('source', m->'source', 'name', m->'name') order by n), '[]'::jsonb)
+        sql`(select coalesce(jsonb_agg(jsonb_build_object('source', m->'source', 'name', m->'name', 'loaders', m->'loaders') order by n), '[]'::jsonb)
           from jsonb_array_elements(${revisions.mods}) with ordinality as e(m, n))`,
       ),
     })

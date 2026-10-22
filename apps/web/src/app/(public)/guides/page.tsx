@@ -10,16 +10,23 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { bedrockLive } from '../../../lib/bedrock'
 import { pageMetadata } from '../../../lib/site'
 import { draftGuides, type Guide, guideHref, guidesIndexLive, publishedGuides } from '../guides'
 import styles from './article.module.css'
 
-export const metadata: Metadata = pageMetadata({
-  title: 'Guides to playing Minecraft with friends',
-  description:
-    'How to set up a Minecraft server for your friends, what it costs, and how they join. For Minecraft: Java Edition.',
-  path: '/guides',
-})
+/** What the guides are for: Java Edition, and Bedrock too where Bedrock is on. */
+const forWhom = () =>
+  bedrockLive()
+    ? 'For Minecraft: Java Edition, and Bedrock where a guide says so.'
+    : 'For Minecraft: Java Edition.'
+
+export const generateMetadata = (): Metadata =>
+  pageMetadata({
+    title: 'Guides to playing Minecraft with friends',
+    description: `How to set up a Minecraft server for your friends, what it costs, and how they join. ${forWhom()}`,
+    path: '/guides',
+  })
 
 export default function GuidesIndex() {
   if (!guidesIndexLive()) notFound()
@@ -31,8 +38,7 @@ export default function GuidesIndex() {
           Guides to playing Minecraft with friends
         </h1>
         <p className="type-body" style={{ color: 'var(--ink-muted)', maxWidth: 'var(--width-prose)' }}>
-          How to set up a server for your friends, what it costs, and how they join. Every guide is for
-          Minecraft: Java Edition.
+          How to set up a server for your friends, what it costs, and how they join. {forWhom()}
         </p>
       </header>
       <GuideList guides={publishedGuides()} />

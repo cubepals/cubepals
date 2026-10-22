@@ -340,12 +340,15 @@ export class SetupService {
         notes: pack.notes,
       }
     }
+    // Plain Minecraft lands on the newest release Cubepals runs it on Paper on, where Bedrock
+    // friends join it (`runsOnPaper`); a newer one, on Mojang's own server, only when asked for.
+    const onPaper = (id: string) => setup.loader === 'vanilla' && supports(id, 'paper')
     const versions =
       setup.gameVersion === ''
         ? offeredVersions()
             .map((offered) => offered.id)
             .filter((id) => supports(id, setup.loader))
-            .sort((a, b) => compareVersions(b, a))
+            .sort((a, b) => Number(onPaper(b)) - Number(onPaper(a)) || compareVersions(b, a))
         : [setup.gameVersion]
 
     let conflicts: ModConflict[] = []

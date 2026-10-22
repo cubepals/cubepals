@@ -7,7 +7,8 @@
  * This list decides where a guide appears. While a guide is unapproved it can be read locally and
  * in previews, says noindex, and is left out of the sitemap, the /guides index and the footers; in
  * production it is a 404. A reviewed guide is published by setting `approved: true` and its
- * `published` date to the day it goes up.
+ * `published` date to the day it goes up. A guide for Bedrock friends is listed only where Bedrock is
+ * on, and is otherwise left out as a draft is, though its page stays up.
  *
  * Each guide's words are in its own directory under guides/, one `page.tsx` each, and the pictures
  * in it are under `public/guides/<slug>/`, taken on a local stack.
@@ -18,6 +19,7 @@
  * - `links.tsx`: the guides the footers link to, as links
  */
 import { notFound } from 'next/navigation'
+import { bedrockLive } from '../../lib/bedrock'
 import { indexable } from '../../lib/site'
 
 export interface Guide {
@@ -30,6 +32,11 @@ export interface Guide {
   published: string
   modified: string
   approved: boolean
+  /**
+   * For Bedrock friends too, so listed only where Bedrock is on (`bedrockLive`). Elsewhere its page
+   * can still be read, says Bedrock is coming, and asks search engines to leave it out.
+   */
+  bedrock?: true
 }
 
 export const GUIDES: readonly Guide[] = [
@@ -114,6 +121,16 @@ export const GUIDES: readonly Guide[] = [
     modified: '2026-10-11',
     approved: true,
   },
+  {
+    slug: 'minecraft-bedrock-server',
+    title: 'How to make a Minecraft Bedrock server',
+    description:
+      'One Minecraft server for friends on Bedrock and Java, in the same world. It sleeps when nobody plays and wakes when a friend joins.',
+    published: '2026-10-22',
+    modified: '2026-10-22',
+    approved: true,
+    bedrock: true,
+  },
 ]
 
 /** The guides the footers link to: the first how-to guides, never a comparison. */
@@ -126,8 +143,11 @@ const IN_FOOTERS = [
 
 export const guideHref = (guide: Pick<Guide, 'slug'>): string => `/guides/${guide.slug}`
 
-/** The guides the public sees: approved ones, wherever the site runs. */
-export const publishedGuides = (): Guide[] => GUIDES.filter((guide) => guide.approved)
+/** Whether a guide is listed here: approved, and for Bedrock only where Bedrock is on. */
+export const listed = (guide: Guide): boolean => guide.approved && (guide.bedrock !== true || bedrockLive())
+
+/** The guides the public sees: approved ones, wherever the site runs, Bedrock's only where it is on. */
+export const publishedGuides = (): Guide[] => GUIDES.filter(listed)
 
 /** Guides waiting for review, readable everywhere but production. */
 export const draftGuides = (): Guide[] => (indexable() ? [] : GUIDES.filter((guide) => !guide.approved))

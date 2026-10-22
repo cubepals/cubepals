@@ -254,6 +254,8 @@ export interface SetupPreview {
   loaderLabel: string
   /** Which players' games join it, by the plugins it carries. */
   joins: JoinRange
+  /** Whether Bedrock friends join it: on Paper, plain Minecraft's too, where the deployment has Bedrock. */
+  bedrock: boolean
   /** The mods that come with it, their dependencies included. */
   mods: string[]
   /**
@@ -523,12 +525,13 @@ export const ChangeOtherVersionsInput = z.object({ ...change, otherVersions: z.e
 export const ChangeBedrockInput = z.object({ ...change, bedrock: z.boolean() })
 
 /**
- * Whether a Paper server lets Bedrock players in: its choice (`on`), and whether the owner's "other
- * versions: off" stops them, which it does on every release but the one Geyser speaks.
+ * Whether a Paper server lets Bedrock players in: its choice (`on`), and whether "other versions:
+ * off" stops them, as on every release but Geyser's. `moves`: letting them in moves it onto Paper.
  */
 export interface BedrockView {
   on: boolean
   needsOtherVersions: boolean
+  moves: boolean
 }
 
 /**
@@ -696,10 +699,7 @@ export interface ServerView {
   createdAt: string
   version: number
   settings: ServerSettingsView
-  /**
-   * Whether it lets Bedrock players in (phones, tablets and Windows): on or off on a Paper server
-   * that plays no pack, null on any other, where they can't join; false where the deployment lets none in.
-   */
+  /** Bedrock players: on or off on Paper or plain Minecraft, no pack; null on others; false if none. */
   bedrock: BedrockView | null | false
   partySize: PartySize
   /** Stopped with changes that apply when it next starts. */

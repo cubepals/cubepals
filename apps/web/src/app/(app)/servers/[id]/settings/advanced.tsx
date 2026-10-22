@@ -103,10 +103,7 @@ function ServerSoftware({ view, outcome }: { view: ServerView; outcome: Outcome 
             or explore at once; you can switch back here any time.
           </p>
         ) : (
-          <p>
-            Paper plays the same game and keeps up with more players. A few redstone and farm tricks that rely
-            on Minecraft’s bugs work differently on it.
-          </p>
+          <p>Paper plays the same game and keeps up with more players.</p>
         )}
         <p>Your world comes along, its Nether and End too.</p>
         <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>

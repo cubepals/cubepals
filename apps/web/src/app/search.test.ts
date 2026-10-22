@@ -8,7 +8,7 @@
  */
 import { afterEach, describe, expect, test } from 'bun:test'
 import { PRIVATE, UNLISTED } from '../lib/site.ts'
-import { GUIDES, guideHref } from './(public)/guides.ts'
+import { GUIDES, guideHref, listed } from './(public)/guides.ts'
 import robots from './robots.ts'
 import sitemap from './sitemap.ts'
 
@@ -55,12 +55,13 @@ describe('sitemap.xml', () => {
       expect(listed.some((url) => url.includes(path))).toBe(false)
   })
 
-  test('lists approved guides only, and /guides only once one is approved', () => {
+  test('lists approved guides only, Bedrock’s only where it is on, and /guides once one is approved', () => {
     production()
-    const listed = urls()
-    for (const guide of GUIDES)
-      expect(listed.includes(`https://cubepals.com${guideHref(guide)}`)).toBe(guide.approved)
-    expect(listed.includes('https://cubepals.com/guides')).toBe(GUIDES.some((guide) => guide.approved))
+    const expected = [
+      ...(GUIDES.some((guide) => guide.approved) ? ['https://cubepals.com/guides'] : []),
+      ...GUIDES.filter(listed).map((guide) => `https://cubepals.com${guideHref(guide)}`),
+    ]
+    expect(urls().filter((url) => new URL(url).pathname.startsWith('/guides'))).toEqual(expected)
   })
 })
 

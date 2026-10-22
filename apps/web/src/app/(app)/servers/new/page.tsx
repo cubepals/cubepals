@@ -683,7 +683,8 @@ function explain(
 
 /**
  * A template's choice in a sentence: the Minecraft it picked when that isn't the newest, and why,
- * and that newer Minecraft joins too where the server carries what lets it.
+ * and that newer Minecraft joins too where the server carries what lets it. Plain Minecraft is
+ * picked where Bedrock friends join it, which is the reason where it is one.
  */
 function templateLine(
   preview: SetupPreview,
@@ -696,7 +697,9 @@ function templateLine(
       ? `${preview.from} doesn’t run on Minecraft ${version}, so Cubepals picked ${preview.gameVersion}, the newest it runs on.`
       : from.gameVersion !== undefined || preview.gameVersion === offered[0]?.value
         ? null
-        : `Cubepals picked Minecraft ${preview.gameVersion}, the newest that everything in ${preview.from} runs on.`
+        : preview.loader === 'vanilla' && preview.bedrock
+          ? `Cubepals picked Minecraft ${preview.gameVersion}, the newest Bedrock friends can join.`
+          : `Cubepals picked Minecraft ${preview.gameVersion}, the newest that everything in ${preview.from} runs on.`
   // On an older release, a friend on another Minecraft would wonder whether they can join.
   const newer = preview.joins.newer
     ? `Players on Minecraft ${versionsThatJoin(preview.gameVersion, preview.joins)} can join.`

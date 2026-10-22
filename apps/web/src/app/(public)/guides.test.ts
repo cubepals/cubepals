@@ -7,7 +7,8 @@
  * is a 404 in production, noindex elsewhere, and left out of the index and the footers.
  */
 import { afterEach, describe, expect, test } from 'bun:test'
-import { UNLISTED } from '../../lib/site.ts'
+import { canonicalOrigin, UNLISTED } from '../../lib/site.ts'
+import sitemap from '../sitemap.ts'
 import { guideMetadata } from './guides/article.tsx'
 import {
   draftGuides,
@@ -20,9 +21,12 @@ import {
 } from './guides.ts'
 
 const was = process.env.WEB_INDEXABLE
+const bedrockWas = process.env.WEB_BEDROCK
 afterEach(() => {
   if (was === undefined) delete process.env.WEB_INDEXABLE
   else process.env.WEB_INDEXABLE = was
+  if (bedrockWas === undefined) delete process.env.WEB_BEDROCK
+  else process.env.WEB_BEDROCK = bedrockWas
 })
 const production = () => {
   process.env.WEB_INDEXABLE = '1'
@@ -45,7 +49,7 @@ function withApproval(guide: Guide, approved: boolean, check: () => void) {
 const first = GUIDES[0] as Guide
 
 describe('guides', () => {
-  test('are the plan’s eight how-to guides and the game modes, and no comparison', () => {
+  test('are the plan’s eight how-to guides, the game modes and Bedrock, and no comparison', () => {
     expect(GUIDES.map((guide) => guide.slug)).toEqual([
       'minecraft-server-for-friends',
       'play-minecraft-java-with-friends',
@@ -56,6 +60,7 @@ describe('guides', () => {
       'play-a-modpack-with-friends',
       'minecraft-server-uk-europe',
       'lifesteal-manhunt-skyblock-with-friends',
+      'minecraft-bedrock-server',
     ])
     for (const guide of GUIDES) {
       expect(guide.description.length).toBeLessThanOrEqual(155)
@@ -129,5 +134,26 @@ describe('an approved guide', () => {
     production()
     const ram = GUIDES.find((guide) => guide.slug === 'minecraft-server-ram') as Guide
     withApproval(ram, true, () => expect(footerGuides()).not.toContain(ram))
+  })
+})
+
+describe('the Bedrock guide', () => {
+  const bedrock = GUIDES.find((guide) => guide.bedrock) as Guide
+
+  test('is listed, indexable and in the sitemap where Bedrock is on', () => {
+    production()
+    process.env.WEB_BEDROCK = '1'
+    expect(publishedGuides()).toContain(bedrock)
+    expect(guideMetadata(bedrock.slug).robots).toBeUndefined()
+    expect(sitemap().map((page) => page.url)).toContain(`${canonicalOrigin()}/guides/${bedrock.slug}`)
+  })
+
+  test('where Bedrock is off, stays readable but unlisted, noindex and out of the sitemap', () => {
+    production()
+    delete process.env.WEB_BEDROCK
+    expect(liveGuide(bedrock.slug)).toBe(bedrock)
+    expect(publishedGuides()).not.toContain(bedrock)
+    expect(guideMetadata(bedrock.slug).robots).toEqual(UNLISTED)
+    expect(sitemap().map((page) => page.url)).not.toContain(`${canonicalOrigin()}/guides/${bedrock.slug}`)
   })
 })

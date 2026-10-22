@@ -6,9 +6,10 @@
 
 /**
  * Whether Bedrock players (phones, tablets and Windows) can join a server, and how they do. On a
- * Paper server it is on, and this is the switch that takes it away with what Cubepals added for it;
- * on any other server type it says they can't yet, and where they can. Beside Other versions, and
- * with the same restart.
+ * server without mods it is on, and this is the switch that takes it away with what Cubepals added
+ * for it. A plain server on Mojang's own server gets one step instead, which lets them in by moving
+ * it onto Paper; a modded one is told they can't join yet, and where they can. Beside Other
+ * versions, and with the same restart.
  */
 
 import type { ServerView } from '@blockly/contracts'
@@ -26,13 +27,18 @@ export function BedrockSetting({ view }: { view: ServerView }) {
     return (
       <FormSection
         title="Bedrock friends"
-        description="Phones, tablets and Windows can’t join this kind of server yet. They can join a Paper server."
+        description={
+          view.loader === 'vanilla'
+            ? `Phones, tablets and Windows can’t join Minecraft ${view.gameVersion} yet.`
+            : 'Phones, tablets and Windows can’t join a server with mods yet. They can join any server without mods.'
+        }
       >
         <Button variant="secondary" href="/servers/new">
-          Make a Paper server
+          Make a server
         </Button>
       </FormSection>
     )
+  if (bedrock.moves) return <LetThemIn view={view} />
   return (
     <BedrockForm key={String(bedrock.on)} view={view} on={bedrock.on} blocked={bedrock.needsOtherVersions} />
   )
@@ -104,6 +110,66 @@ function BedrockForm({ view, on, blocked }: { view: ServerView; on: boolean; blo
             ? 'Players on Bedrock won’t be able to join. Java players are not affected.'
             : 'Players on phones, tablets and Windows can join with the same address.'}
         </p>
+        <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
+          {occupied
+            ? 'Someone is playing, so the change waits and the server takes it the next time it starts.'
+            : whatHappens(view)}
+        </p>
+      </ConfirmChange>
+    </FormSection>
+  )
+}
+
+/**
+ * The one step that lets Bedrock friends into plain Minecraft on Mojang's own server: it moves onto
+ * Paper, which Floodgate runs on, with a backup first. Asked, never done on its own, and the way
+ * back is said: this switch, and Mojang's own server under Advanced.
+ */
+function LetThemIn({ view }: { view: ServerView }) {
+  const trpc = useTRPC()
+  const outcome = useOutcome(view)
+  const changed = useChanged(view.id)
+  const [asking, setAsking] = useState(false)
+  const save = useMutation(
+    trpc.servers.changeBedrock.mutationOptions({
+      onSuccess: (next) => {
+        setAsking(false)
+        changed(next)
+        outcome.settled(next)
+      },
+    }),
+  )
+  const allowed = changeable(view)
+  const occupied = view.status === 'running' && (view.players?.online ?? 0) > 0
+  const line = 'Friends on phones, tablets and Windows can’t join this server yet.'
+  const said =
+    allowed.busy !== undefined
+      ? `${allowed.busy}…`
+      : outcome.said === 'failed'
+        ? `Didn’t change. ${line}`
+        : line
+  return (
+    <FormSection title="Bedrock friends" description={said}>
+      <Button variant="secondary" disabled={!allowed.ok} onClick={() => setAsking(true)}>
+        Let Bedrock friends in
+      </Button>
+      <ConfirmChange
+        open={asking}
+        onClose={() => setAsking(false)}
+        title="Let Bedrock friends in?"
+        confirmLabel="Let them in"
+        working="Saving your change"
+        error={save.error}
+        onConfirm={(requestId) =>
+          save.mutateAsync({ serverId: view.id, requestId, version: view.version, bedrock: true })
+        }
+      >
+        <p>
+          Friends on phones, tablets and Windows join with the same address. To let them in, Cubepals runs
+          this server on Paper: the same game, with less lag. Your world comes along, its Nether and End too,
+          and a backup is made first.
+        </p>
+        <p>You can stop them joining here, and go back to Mojang’s own server under Advanced.</p>
         <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
           {occupied
             ? 'Someone is playing, so the change waits and the server takes it the next time it starts.'

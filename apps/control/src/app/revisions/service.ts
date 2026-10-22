@@ -12,6 +12,7 @@ import {
   bedrockOf,
   describeChanges,
   type GameSettings,
+  isPlain,
   type Loader,
   type OtherVersions,
   otherVersionsOf,
@@ -44,7 +45,7 @@ import { insertRevision, loadRevision, loadRuntime, lockServer, setDesired } fro
 import type { ServerTransitions } from '../servers/transitions.ts'
 import { presenceFor } from '../servers/usage.ts'
 import { requireWithinPlan, runsOf } from './caps.ts'
-import { pinUnpinned } from './pins.ts'
+import { paperPin, pinUnpinned } from './pins.ts'
 
 export interface ChangeOptions {
   /** The owner was told which jars were taken down where they were published, and runs them anyway. */
@@ -54,6 +55,36 @@ export interface ChangeOptions {
    * since refuses the change rather than let it undo what the person hasn't seen.
    */
   version?: number | undefined
+}
+
+/**
+ * The revision `changeBedrock` makes, and whether it moves plain Minecraft onto Paper; null where
+ * nothing changes. Plain Minecraft that never chose its other versions lets them in with Bedrock.
+ */
+async function bedrockDraft(
+  builds: LoaderBuilds,
+  desired: ServerRevision,
+  bedrock: boolean,
+): Promise<{ draft: RevisionDraft; moves: boolean } | null> {
+  const plain = isPlain(desired)
+  if (!plain && (desired.loader !== 'paper' || desired.modpack !== null))
+    throw new AppError('invalid_choice', 'Bedrock players join only a server without mods.')
+  const moves = bedrock && plain && !runsOnPaper(desired)
+  if (bedrockOf(desired) === bedrock && !moves) return null
+  const loaderVersion = moves ? await paperPin(builds, desired.gameVersion, 'refuse') : desired.loaderVersion
+  if (loaderVersion === null && moves)
+    throw new AppError('invalid_choice', `Bedrock players can’t join Minecraft ${desired.gameVersion} yet.`)
+  const opens = plain && bedrock && desired.settings.otherVersions === undefined
+  return {
+    moves,
+    draft: {
+      ...draftOf(desired),
+      loaderVersion,
+      settings: { ...desired.settings, bedrock, ...(opens ? { otherVersions: 'on' } : {}) },
+      reason: moves ? 'version_changed' : 'settings_changed',
+      basedOnRevisionId: desired.id,
+    },
+  }
 }
 
 /** Mods resolved for a change, and the revision the resolution started from. */
@@ -171,8 +202,8 @@ export class RevisionService {
 
   /**
    * Which other Minecraft versions' players the server lets in (`ServerSettings.otherVersions`):
-   * the Via plugins Cubepals adds as it starts, or none. Only Paper runs them, so another server
-   * type has no such choice. They are Cubepals' own, never the owner's plugins, so no plan counts
+   * the Via plugins Cubepals adds as it starts, or none. Only Paper runs them, plain Minecraft's
+   * where it runs on Paper, so another server type has no such choice. They are Cubepals' own, never the owner's plugins, so no plan counts
    * them; they come and go with the server's next start.
    */
   changeOtherVersions(
@@ -183,9 +214,9 @@ export class RevisionService {
     options: ChangeOptions = {},
   ) {
     return this.#change(actor, serverId, requestId, 'apply', options, async (_tx, _server, desired) => {
-      if (desired.loader !== 'paper' || desired.modpack !== null)
+      if (desired.modpack !== null || (desired.loader !== 'paper' && !runsOnPaper(desired)))
         throw new AppError('invalid_choice', 'Only a Paper server lets players on other versions in.')
-      if (otherVersionsOf(desired.settings) === otherVersions) return null
+      if (otherVersionsOf(desired) === otherVersions) return null
       const draft: RevisionDraft = {
         ...draftOf(desired),
         settings: { ...desired.settings, otherVersions },
@@ -202,6 +233,12 @@ export class RevisionService {
    * Cubepals' own, never the owner's plugins, so no plan counts them. The change restarts a running
    * server only while nobody is on it; with players on, it is saved and the server takes it at its
    * next start.
+   *
+   * Plain Minecraft lets them in too. On Mojang's own server, letting them in moves it onto Paper in
+   * the same change, which a start applies as any change of server type: a snapshot first, and back
+   * to it if Paper doesn't come up. Its other versions come on with it where it never chose them,
+   * since Bedrock players reach most releases only through them. Turning Bedrock off leaves it on
+   * Paper; Mojang's own server is its own switch (`changeVersion`).
    */
   changeBedrock(
     actor: Actor,
@@ -217,16 +254,10 @@ export class RevisionService {
       'apply',
       options,
       async (_tx, _server, desired) => {
-        if (desired.loader !== 'paper' || desired.modpack !== null)
-          throw new AppError('invalid_choice', 'Only a Paper server lets Bedrock players in.')
-        if (bedrockOf(desired.settings) === bedrock) return null
-        const draft: RevisionDraft = {
-          ...draftOf(desired),
-          settings: { ...desired.settings, bedrock },
-          reason: 'settings_changed',
-          basedOnRevisionId: desired.id,
-        }
-        return { draft, audit: { action: 'server.bedrock_changed', data: { bedrock } } }
+        const next = await bedrockDraft(this.#builds, desired, bedrock)
+        if (next === null) return null
+        const data = { bedrock, ...(next.moves ? { onPaper: true } : {}) }
+        return { draft: next.draft, audit: { action: 'server.bedrock_changed', data } }
       },
       true,
     )

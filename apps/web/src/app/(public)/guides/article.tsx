@@ -12,21 +12,22 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
+import { bedrockLive } from '../../../lib/bedrock'
 import { publicPlans } from '../../../lib/plans'
 import { currentSession } from '../../../lib/session'
 import { canonicalOrigin, pageMetadata, UNLISTED } from '../../../lib/site'
 import { guideSchema, JsonLd } from '../../../lib/structured-data'
 import { Button } from '../../../ui'
-import { GUIDES, guideHref, guidesIndexLive, liveGuide } from '../guides'
+import { GUIDES, guideHref, guidesIndexLive, listed, liveGuide } from '../guides'
 import { GuideEnd } from '../presses'
 import { ctaMark } from '../steps'
 import styles from './article.module.css'
 
-/** A guide's title, description and address; noindex until it is approved. */
+/** A guide's title, description and address; noindex until it is listed. */
 export function guideMetadata(slug: string): Metadata {
   const guide = liveGuide(slug)
   const own = pageMetadata({ title: guide.title, description: guide.description, path: guideHref(guide) })
-  return guide.approved ? own : { ...own, robots: UNLISTED }
+  return listed(guide) ? own : { ...own, robots: UNLISTED }
 }
 
 /** The plans a guide's numbers come from, the same table the pricing page reads. */
@@ -63,6 +64,7 @@ export async function GuideArticle({ slug, children }: { slug: string; children:
         <h1 className="type-display-md">{guide.title}</h1>
         <p className={`type-body-sm ${styles.meta}`}>
           Updated {said(guide.modified)} · For Minecraft: Java Edition
+          {guide.bedrock && bedrockLive() ? ' and Bedrock Edition' : ''}
         </p>
       </header>
       {!guide.approved && (

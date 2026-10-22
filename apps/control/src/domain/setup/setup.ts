@@ -87,6 +87,7 @@ type SetupSettings = Partial<
     | 'simulationDistance'
     | 'motd'
     | 'otherVersions'
+    | 'bedrock'
   >
 >
 
@@ -130,6 +131,7 @@ export function setupOf(
       ...(revision.settings.otherVersions === undefined
         ? {}
         : { otherVersions: revision.settings.otherVersions }),
+      ...(revision.settings.bedrock === undefined ? {} : { bedrock: revision.settings.bedrock }),
     },
     world: { levelType: world.levelType, hardcore: world.hardcore },
     party,

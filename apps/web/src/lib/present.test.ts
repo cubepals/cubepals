@@ -425,9 +425,9 @@ describe('joining a server that lets Bedrock players in', () => {
   })
 
   test('only where Bedrock players can join: its choice is on and its other versions leave room', () => {
-    expect(letsBedrockIn({ bedrock: { on: true, needsOtherVersions: false } })).toBe(true)
-    expect(letsBedrockIn({ bedrock: { on: true, needsOtherVersions: true } })).toBe(false)
-    expect(letsBedrockIn({ bedrock: { on: false, needsOtherVersions: false } })).toBe(false)
+    expect(letsBedrockIn({ bedrock: { on: true, needsOtherVersions: false, moves: false } })).toBe(true)
+    expect(letsBedrockIn({ bedrock: { on: true, needsOtherVersions: true, moves: false } })).toBe(false)
+    expect(letsBedrockIn({ bedrock: { on: false, needsOtherVersions: false, moves: false } })).toBe(false)
     expect(letsBedrockIn({ bedrock: null })).toBe(false)
   })
 })
