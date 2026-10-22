@@ -9,6 +9,7 @@ import {
   type PlanGap,
   planGap,
   planName,
+  planOnSale,
   planThatRuns,
   type Runs,
 } from '../account/entitlements.ts'
@@ -86,6 +87,8 @@ export interface NewServerRoom {
 interface DeploymentSupport {
   archives: boolean
   billing: boolean
+  /** Paid plans billing has no product for: not for sale, so never pointed to. */
+  unsoldPlans?: readonly string[]
 }
 
 export interface PlatformControls {
@@ -411,8 +414,8 @@ function playUsedUp(entitlements: Entitlements, facts: PolicyFacts): string | nu
     return usedUp(entitlements, facts)
   if (facts.totalLeft !== null && facts.totalLeft <= 0) {
     const total = entitlements.totalUnits ?? 0
-    const paid = PAID_PLANS[0]
-    return `You’ve played the ${total} hours of your free trial. Your worlds are kept${paid === undefined ? '' : `, and ${planName(paid)} starts them again`}.${SHARED[facts.freeSharedBecause ?? 'none']}`
+    const paid = planOnSale(facts.deployment.unsoldPlans ?? [])
+    return `You’ve played the ${total} hours of your free trial. Your worlds are kept${paid === null ? '' : `, and ${planName(paid)} starts them again`}.${SHARED[facts.freeSharedBecause ?? 'none']}`
   }
   if (facts.today === null || facts.today.left > 0) return null
   const hours = entitlements.dailyUnits ?? 0

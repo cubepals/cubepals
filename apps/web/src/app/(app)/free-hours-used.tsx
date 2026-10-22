@@ -6,7 +6,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useTRPC } from '../../lib/api'
-import { Note } from '../../ui'
+import { forSale, Note } from '../../ui'
 import { PlusOffer } from './plus-offer'
 
 /**
@@ -17,8 +17,13 @@ import { PlusOffer } from './plus-offer'
 export function FreeHoursUsed({ hours, next }: { hours: number; next?: string }) {
   const trpc = useTRPC()
   const overview = useQuery(trpc.account.overview.queryOptions())
+  const listed = useQuery(trpc.billing.plans.queryOptions())
+  // The plan that plays by the month and is for sale here: nothing is offered that nothing sells.
   const monthly = overview.data?.plans.find(
-    (p) => p.entitlements.totalUnits === null && p.entitlements.includedUnits !== null,
+    (p) =>
+      p.entitlements.totalUnits === null &&
+      p.entitlements.includedUnits !== null &&
+      listed.data?.some((plan) => plan.key === p.key && forSale(plan)),
   )
   return (
     <>

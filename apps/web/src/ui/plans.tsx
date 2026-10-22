@@ -138,7 +138,7 @@ export function PlayHours({
               <p>
                 They come once, not every month: {total} in all, at most {hours} a day from midnight where you
                 are. Once they’re played, the trial ends and nothing is charged. Your world is kept and you
-                can still download it, and Core starts it again.
+                can still download it, and a paid plan starts it again.
               </p>
             )}
           </>

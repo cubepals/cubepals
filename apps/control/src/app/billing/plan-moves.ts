@@ -15,12 +15,26 @@ import { AppError } from '../errors.ts'
 import type { BillingProvider } from '../ports/optional.ts'
 import { latestSubscription, otherRenewing, PAYING, recordMove } from './persistence.ts'
 
-/** Refuses a smaller plan over a larger one: it is a move at the month's end, never a second payment. */
-export function requireNotSmaller(current: string, wanted: string): void {
+/**
+ * Refuses a smaller plan over a larger one. Where a monthly subscription pays for the larger, it is
+ * a move at the month's end from the account; where none does (a year, a gift, an admin's), there
+ * is nothing to move, and the smaller plan opens when the larger ends.
+ */
+export async function requireNotSmaller(
+  db: Db,
+  userId: string,
+  current: string,
+  wanted: string,
+): Promise<void> {
   if (current === 'free' || PAID_PLANS.indexOf(current) <= PAID_PLANS.indexOf(wanted)) return
+  const sub = await latestSubscription(db, userId)
+  const movable =
+    sub !== null && PAYING.includes(sub.status) && !sub.cancelAtPeriodEnd && sub.planKey === current
   throw new AppError(
     'invalid_choice',
-    `You have ${planName(current)} now. Move to ${planName(wanted)} from your account: it starts when the month you paid for ends, and ${planName(current)} stays until then.`,
+    movable
+      ? `You have ${planName(current)} now. Move to ${planName(wanted)} from your account: it starts when the month you paid for ends, and ${planName(current)} stays until then.`
+      : `You have ${planName(current)} until it ends, and ${planName(wanted)} opens when it does.`,
   )
 }
 

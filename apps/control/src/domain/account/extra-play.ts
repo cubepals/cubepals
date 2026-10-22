@@ -27,6 +27,15 @@ export interface BillingFacts {
   owedCents: number
 }
 
+/** The account's ceilings held to what the plan lets an owner allow: Core's own, where it has one. */
+export const ceilingsFor = (
+  plan: Entitlements,
+  ceilings: AbuseLimits['extraCeiling'],
+): AbuseLimits['extraCeiling'] => {
+  const most = plan.mostExtraUnits ?? Number.POSITIVE_INFINITY
+  return { untilRenewed: Math.min(ceilings.untilRenewed, most), renewed: Math.min(ceilings.renewed, most) }
+}
+
 export type ExtraPlay =
   /** `units`: what the owner allowed, held to `ceiling`. */
   | { may: true; ceiling: number; units: number }
@@ -70,7 +79,8 @@ export function extraPlay(
     return no(
       `Your ${name} is set to end, so extra hours are off. Keep ${name} in Manage billing to allow them.`,
     )
-  const ceiling = billing.paidRenewals > 0 ? ceilings.renewed : ceilings.untilRenewed
+  const held = ceilingsFor(plan, ceilings)
+  const ceiling = billing.paidRenewals > 0 ? held.renewed : held.untilRenewed
   return { may: true, ceiling, units: Math.min(Math.max(0, allowed), ceiling) }
 }
 

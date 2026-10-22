@@ -9,7 +9,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { Entitlements } from './entitlements.ts'
 import { entitlementsFor } from './entitlements.ts'
-import { type BillingFacts, extraPlay as decide, extraUnits } from './extra-play.ts'
+import { type BillingFacts, ceilingsFor, extraPlay as decide, extraUnits } from './extra-play.ts'
 
 /** Ceilings for these tests, not a deployment's. */
 const CEILINGS = { untilRenewed: 20, renewed: 60 }
@@ -48,6 +48,32 @@ describe('extra play', () => {
       may: false,
       why: 'Extra hours are billed on a Core subscription, and this account doesn’t have one.',
     })
+  })
+
+  test('Core’s own ceiling is 60 extra hours, whatever the account’s: no more is allowed than Polar bills', () => {
+    const core = entitlementsFor('core')
+    // Ceilings of 20 until a renewal and 200 after, as a deployment may set them.
+    const wide = { untilRenewed: 20, renewed: 200 }
+    expect(decide(core, 500, paying(), wide)).toEqual({ may: true, ceiling: 20, units: 20 })
+    expect(decide(core, 500, paying({ paidRenewals: 1 }), wide)).toEqual({
+      may: true,
+      ceiling: 60,
+      units: 60,
+    })
+    // A ceiling already under Core's own is the ceiling.
+    expect(decide(core, 500, paying({ paidRenewals: 1 }), { untilRenewed: 10, renewed: 40 })).toEqual({
+      may: true,
+      ceiling: 40,
+      units: 40,
+    })
+    // Plus keeps the account's ceiling.
+    expect(decide(plus, 500, paying({ paidRenewals: 1 }), wide)).toEqual({
+      may: true,
+      ceiling: 200,
+      units: 200,
+    })
+    expect(ceilingsFor(core, wide)).toEqual({ untilRenewed: 20, renewed: 60 })
+    expect(ceilingsFor(plus, wide)).toEqual(wide)
   })
 
   test('a paying Plus account may allow some, up to one ceiling until a renewal is paid, then another', () => {

@@ -230,7 +230,7 @@ function Play({ overview }: { overview: AccountOverviewView }) {
 
 /**
  * The plan's hours in all (Free's 20): what is left of them, and once they are played, that the
- * worlds are kept and Core starts them again. They come once, so there is nothing to wait for.
+ * worlds are kept and the plan that plays by the month starts them again. They come once, so there is nothing to wait for.
  */
 function PlayTotal({ overview }: { overview: AccountOverviewView }) {
   const total = overview.usage.total
@@ -392,6 +392,12 @@ function ExtraPlay({ overview }: { overview: AccountOverviewView }) {
         }
       />
       {allow.isError && <Note tone="danger">{messageOf(allow.error)}</Note>}
+      {overview.entitlements.mostExtraUnits !== null && largerPlan(overview) && (
+        <p className="type-body-sm">
+          {title(overview.plan.key)} stops at {overview.entitlements.mostExtraUnits} extra hours;{' '}
+          {title(largerPlan(overview)?.key ?? '')} covers more.
+        </p>
+      )}
     </>
   )
 }

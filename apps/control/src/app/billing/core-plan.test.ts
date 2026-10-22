@@ -174,6 +174,29 @@ describe.skipIf(!hasDatabase)('buying Core and Plus over it', () => {
 })
 
 describe.skipIf(!hasDatabase)('moving down from Plus to Core', () => {
+  test('Plus that no monthly subscription pays for has nothing to move: Core opens when it ends', async () => {
+    const until = 'You have Plus until it ends, and Core opens when it does.'
+    // Plus an admin gave, a year paid at once and a gift all run out on their own.
+    const given = await w.h.user('Kay', 'plus')
+    expect(await refusal(w.h.app.billing.startCheckout(given, 'core'))).toMatchObject({
+      code: 'invalid_choice',
+      message: until,
+    })
+    // Plus set to end with the month paid for is no move either: it ends, and Core opens.
+    const ending = await w.h.user('Lee')
+    await pays(ending, [{ sub: randomUUID(), product: PLUS_PRODUCT, at: '2026-10-01T00:00:00Z' }])
+    const state = w.polar.states.get(ending.userId)
+    const [held] = state?.active_subscriptions ?? []
+    if (state === undefined || held === undefined) throw new Error('Polar holds the subscription')
+    held.cancel_at_period_end = true
+    await w.post(stateChanged(state))
+    expect(await refusal(w.h.app.billing.startCheckout(ending, 'core'))).toMatchObject({ message: until })
+    // And the move itself says the same of both.
+    expect(await refusal(w.h.app.billing.moveToSmaller(given, 'core'))).toMatchObject({
+      code: 'invalid_choice',
+    })
+  })
+
   /** An owner on Plus with one server, moved to Core: Plus ended in Manage billing, Core bought after it. */
   async function movedDown(name: string, request: Parameters<typeof create>[1]) {
     const owner = await w.h.user(name)
@@ -258,6 +281,21 @@ describe.skipIf(!hasDatabase)('Core’s extra play', () => {
     expect(await refusal(w.h.app.accounts.allowExtraPlay(owner, usage.extra.ceiling + 1))).toMatchObject({
       code: 'invalid_choice',
     })
+    // Core stops at 60 extra hours, which is all Polar bills at its price, however much the account's
+    // own ceiling allows: after a renewal is paid, 60 may be allowed and no more.
+    await w.ordered(owner, sub, {
+      product_id: CORE_PRODUCT,
+      billing_reason: 'subscription_cycle',
+      created_at: new Date().toISOString(),
+      items: [orderItem(999, CORE_FIXED_PRICE)],
+    })
+    expect(await w.h.app.accounts.allowExtraPlay(owner, 60)).toBe(60)
+    expect(await refusal(w.h.app.accounts.allowExtraPlay(owner, 61))).toMatchObject({
+      code: 'invalid_choice',
+    })
+    const renewed = await w.h.app.accountQueries.overview(owner)
+    expect(renewed.usage.extra).toMatchObject({ ceiling: 60, nextCeiling: null })
+    expect(renewed.usage.extra.choices.every((units) => units <= 60)).toBe(true)
     // A renewal's extra line on Core's metered price is extra play on the order, on the Core plan.
     const id = await w.renewalWithExtra(owner, sub, new Date(), { status: 'paid', core: true })
     expect(await w.kept(id)).toMatchObject({ planKey: 'core', extraCents: 250, totalCents: 1249 })

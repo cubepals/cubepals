@@ -198,6 +198,8 @@ export interface EntitlementsView {
   totalUnits: number | null
   /** Whether the owner may allow play past the included block, and be charged for it. */
   mayBuyMore: boolean
+  /** The most extra hours a month the plan lets an owner allow, whatever the account's ceiling; null: the ceiling alone. */
+  mostExtraUnits: number | null
   /** Whether the owner sets their own AFK kick; otherwise the plan's own applies. */
   mayChooseAfkKick: boolean
   /** Whether the owner may turn off online mode (`ONLINE_MODE_KEPT` says why Free can't). */

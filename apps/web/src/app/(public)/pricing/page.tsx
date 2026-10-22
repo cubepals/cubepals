@@ -44,7 +44,7 @@ export default async function PricingPage() {
   const plans = await publicPlans()
   const { core, plus } = byKind(plans)
   // The plan the trial leads to.
-  const paid = core ?? plus
+  const paid = [core, plus].find((plan) => plan !== undefined && forSale(plan))
   const costGuide = publishedGuides().find((guide) => guide.slug === 'minecraft-server-cost')
   return (
     <>

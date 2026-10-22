@@ -592,3 +592,24 @@ describe('Core', () => {
     expect(refused(start, { unitsThisMonth: 60, extraUnitsAllowed: 20 })).toMatchObject({ ok: false })
   })
 })
+
+describe('the trial’s end names a plan only where one is for sale', () => {
+  const played = (unsoldPlans: string[]) =>
+    evaluate(
+      facts({
+        entitlements: entitlementsFor('free'),
+        totalLeft: 0,
+        deployment: { archives: false, billing: true, unsoldPlans },
+      }),
+      { kind: 'start_server', runs: plain('3g') },
+    )
+  const said = (unsoldPlans: string[]) => (played(unsoldPlans) as { message: string }).message
+
+  test('Core where it is for sale, Plus where only Plus is, and no plan where neither is', () => {
+    expect(said([])).toContain('Core starts them again')
+    expect(said(['core'])).toContain('Plus starts them again')
+    const none = said(['core', 'plus'])
+    expect(none).toContain('Your worlds are kept.')
+    expect(none).not.toMatch(/Core|Plus/)
+  })
+})

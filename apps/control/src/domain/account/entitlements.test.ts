@@ -10,6 +10,7 @@ import {
   longestSnapshotNeedDays,
   PAID_PLANS,
   planGap,
+  planOnSale,
   planThatRuns,
   runsOn,
 } from './entitlements.ts'
@@ -215,6 +216,15 @@ describe('core', () => {
       expect(planThatRuns(lifted)).toBe('plus')
     // Plain 3 GB vanilla is the first paid plan's own.
     expect(planThatRuns(vanilla)).toBe('core')
+  })
+})
+
+describe('the plan a trial leads to', () => {
+  test('is the cheapest paid plan for sale, and none where nothing is', () => {
+    expect(planOnSale([])).toBe('core')
+    expect(planOnSale(['core'])).toBe('plus')
+    expect(planOnSale(['plus'])).toBe('core')
+    expect(planOnSale(['core', 'plus'])).toBeNull()
   })
 })
 

@@ -364,7 +364,7 @@ in Polar's production dashboard (polar.sh, not the sandbox):
    `custom` with the label "hour". On the Plus product, beside its $25 price, a metered price on
    that meter: `unit_amount` 25 (cents an hour) and `cap_amount` 5000 ($50 a period, twice the
    most a player may allow in a month, as a last resort). On the Core product, beside its $9.99
-   price, one on the same meter with `unit_amount` 25 and `cap_amount` 1500 ($15 a period). Blockly sends `play.extra` events and
+   price, one on the same meter with `unit_amount` 25 and `cap_amount` 1500 ($15 a period, 60 hours). Core's plan table holds an owner to 60 extra hours (`mostExtraUnits`), so no more is allowed than Polar bills; change the cap and that number together. Blockly sends `play.extra` events and
    needs no id of either.
 3. A one-time product "Cubepals balance" with a custom (pay-what-you-want) price and the metadata
    `purpose: balance`. A payment Polar can no longer collect (its subscription ended) is paid

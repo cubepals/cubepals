@@ -14,6 +14,7 @@ import {
   PLAN_KEYS,
   planName,
 } from '../../domain/account/entitlements.ts'
+import { ceilingsFor } from '../../domain/account/extra-play.ts'
 import { UNIT_CENTS } from '../../domain/account/meter.ts'
 import { DEFAULT_TIME_ZONE, monthStart } from '../../domain/account/play-day.ts'
 import type { AccountStanding } from '../../domain/account/standing.ts'
@@ -271,8 +272,8 @@ export class AccountQueries {
           why: decision.may ? null : decision.why,
           ceiling,
           nextCeiling:
-            decision.may && ceiling < tuning().abuse.extraCeiling.renewed
-              ? tuning().abuse.extraCeiling.renewed
+            decision.may && ceiling < ceilingsFor(entitlements, tuning().abuse.extraCeiling).renewed
+              ? ceilingsFor(entitlements, tuning().abuse.extraCeiling).renewed
               : null,
           choices: decision.may ? EXTRA_CHOICES.filter((units) => units <= ceiling) : [],
           ...(await extraThisMonth(this.#db, standing, now)),

@@ -7,6 +7,7 @@ import { backAtMidnight } from '@blockly/contracts/play-today'
 import type { Tx } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { extraUnits } from '../../domain/account/extra-play.ts'
+import { installUnsoldPlans } from '../../domain/account/on-sale.ts'
 import {
   type Capability,
   type Decision,
@@ -130,6 +131,8 @@ export class AccessPolicy {
   /** `room` knows the most servers the provider can hold, when it has a limit (§19.12). */
   constructor(caps: DeploymentCapabilities, room: CreateRoom) {
     this.#caps = caps
+    // The few texts that name the plan to buy outside the policy read it from here.
+    installUnsoldPlans(supportOf(caps).unsoldPlans)
     this.room = room
   }
 

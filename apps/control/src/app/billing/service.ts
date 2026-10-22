@@ -156,7 +156,7 @@ export class BillingService {
     const plan = entitlementsFor(planKey)
     if (term === 'month' && standing.plan === planKey)
       throw new AppError('invalid_choice', `You are on ${planKey} already.`)
-    requireNotSmaller(standing.plan, planKey)
+    await requireNotSmaller(this.#db, user.id, standing.plan, planKey)
     if (term === 'year') await this.#mayBuyYear(user.id, planKey)
     // Money still owed from a payment that failed is paid first, in the portal: a new
     // subscription would start a new bill beside the one nobody paid.

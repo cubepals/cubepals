@@ -10,7 +10,7 @@ import type { PublicPlan } from '@blockly/contracts'
 import { dollars, EXTRA_HOUR_CENTS } from '../../../legal/figures'
 import { bedrockLive } from '../../../lib/bedrock'
 import { daysSaid, hoursAgainSaid } from '../../../lib/plans'
-import { eachOf, extraHourOf } from '../../../ui'
+import { eachOf, extraHourOf, forSale } from '../../../ui'
 import { detailMark } from '../steps'
 
 /** The plans by what each is: the trial, the plan for friends on vanilla, and the one with mods. */
@@ -103,7 +103,8 @@ const bedrockSaid = (on: boolean) =>
 
 export function Questions({ plans }: { plans: readonly PublicPlan[] }) {
   const { free, core, plus } = byKind(plans)
-  const paid = core ?? plus
+  // What the trial leads to: the first plan that is for sale.
+  const paid = [core, plus].find((plan) => plan !== undefined && forSale(plan))
   const shared = paid ? eachOf(paid) : null
   const rests = restsSaid(free, paid, plus)
   return (
