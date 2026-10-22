@@ -51,7 +51,13 @@ import { dirname, resolve } from 'node:path'
 import { authWorks } from './lib/auth-through-website.ts'
 import { pingIndexNow } from './lib/indexnow.ts'
 import { buildWorker } from './lib/web-worker.ts'
-import { edgePlacement, edgeRegions, edgeSourceGaps, type FlyAddress } from './production-edge.ts'
+import {
+  edgePlacement,
+  edgeRegions,
+  edgeSourceGaps,
+  type FlyAddress,
+  regionsToRoll,
+} from './production-edge.ts'
 import { buildEdgeImage, machinesOf, rollEdgeApp } from './production-edge-deploy.ts'
 import { bringUpToDate } from './production-tfvars.ts'
 import {
@@ -174,7 +180,7 @@ async function deployApp(
       'bly-prod-edge',
       config[1] as string,
       image,
-      edgeRegions(environment().edge_regions),
+      regionsToRoll(machinesOf('bly-prod-edge', env), edgeRegions(environment().edge_regions)),
       env,
       say,
     )

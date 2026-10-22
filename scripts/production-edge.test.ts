@@ -10,14 +10,18 @@ import { parse } from 'smol-toml'
 import { MINUTE_MS } from '../packages/contracts/src/durations.ts'
 import {
   type Clock,
+  deployMachines,
   EDGE_ASK_EVERY_MS,
   EDGE_DRAIN_LIMIT_MS,
   EDGE_READY_LIMIT_MS,
   edgePlacement,
   edgeRegions,
   edgeSourceGaps,
+  machinesIn,
   type RegionSteps,
+  regionsToRoll,
   rollEdge,
+  sumPlayers,
   waitForPlayers,
 } from './production-edge.ts'
 
@@ -287,9 +291,9 @@ describe('restarting the edge when a region can’t be cordoned or fails', () =>
     expect(w.time()).toBe(0)
   })
 
-  test('cordons nothing unless asked to', async () => {
+  test('cordons nothing when told not to', async () => {
     const w = world()
-    await rollEdge(['fra', 'iad'], steps(w.log), () => {}, w.clock)
+    await rollEdge(['fra', 'iad'], steps(w.log), () => {}, w.clock, { cordon: false })
     expect(w.log).toEqual(['deploy fra', 'ready fra', 'deploy iad', 'ready iad'])
   })
 
@@ -313,5 +317,58 @@ describe('restarting the edge when a region can’t be cordoned or fails', () =>
     })
     await expect(roll(['fra', 'iad'], never, () => {}, stuck.clock)).rejects.toThrow('fly down')
     expect(stuck.log).not.toContain('cordon iad')
+  })
+
+  test('says a region is still cordoned when its undo fails after another error', async () => {
+    const w = world()
+    const said: string[] = []
+    const both = steps(w.log, {
+      players: async () => {
+        throw new Error('proxy failed')
+      },
+      uncordon: async () => {
+        throw new Error('fly down')
+      },
+    })
+    await expect(roll(['fra', 'iad'], both, (l) => said.push(l), w.clock)).rejects.toThrow('proxy failed')
+    expect(said).toContain('fra: is still cordoned and takes no joins: fly down')
+  })
+
+  test('cordons by default, and a single region is waited on while it serves', async () => {
+    const w = world()
+    await rollEdge(['fra', 'iad'], steps(w.log), () => {}, w.clock)
+    expect(w.log[0]).toBe('cordon fra')
+    const single = world()
+    await rollEdge(['fra'], steps(single.log), () => {}, single.clock)
+    expect(single.log).toEqual(['deploy fra', 'ready fra'])
+  })
+})
+
+describe('every machine of the edge', () => {
+  const machines = [
+    { id: 'm1', region: 'fra' },
+    { id: 'm2', region: 'fra' },
+    { id: 'm3', region: 'iad' },
+    { id: 'm4', region: 'ams' },
+  ]
+
+  test('a region’s machines are all named, and deployed by id so no other is touched', () => {
+    expect(machinesIn(machines, 'fra')).toEqual(['m1', 'm2'])
+    expect(deployMachines('bly-prod-edge', 'infra/fly/edge.toml', 'img:1', ['m1', 'm2'])).toEqual([
+      ...['deploy', '--image', 'img:1', '--config', 'infra/fly/edge.toml', '--app', 'bly-prod-edge'],
+      ...['--only-machines', 'm1,m2', '--update-only', '--yes', '--ha=false'],
+    ])
+  })
+
+  test('a machine in a region left out of the list is rolled too, after the listed ones', () => {
+    expect(regionsToRoll(machines, ['iad', 'fra'])).toEqual(['iad', 'fra', 'ams'])
+    expect(regionsToRoll(machines, ['fra'])).toEqual(['fra', 'ams', 'iad'])
+    expect(regionsToRoll(machines, ['sjc'])).toEqual(['ams', 'fra', 'iad'])
+  })
+
+  test('players add up across a region’s machines; none is counted where none can say', () => {
+    expect(sumPlayers([2, 3])).toBe(5)
+    expect(sumPlayers([2, null])).toBe(2)
+    expect(sumPlayers([null, null])).toBeNull()
   })
 })

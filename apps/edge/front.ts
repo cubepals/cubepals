@@ -62,6 +62,12 @@ export interface FrontOptions {
    */
   refuse: (hostname: string, protocol: number) => string | null
   timeouts: Timeouts
+  /**
+   * Resolves once routes are held. A join that has said where it is going waits for it before it is
+   * let through, so a freshly started edge that already listens never closes a join for want of a
+   * route. Left out, every join is let through at once.
+   */
+  ready?: Promise<void>
   /** Where each join and ping is recorded (`visits.ts`); nothing is, without it. */
   visits?: Visits
 }
@@ -226,7 +232,9 @@ class Arrival {
     this.#client.pause()
     this.#client.setTimeout(0)
     this.#greeted?.()
-    this.#admit(handshake)
+    void (this.#options.ready ?? Promise.resolve()).then(() => {
+      if (!this.#client.destroyed) this.#admit(handshake)
+    })
   }
 
   /**

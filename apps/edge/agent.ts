@@ -709,7 +709,7 @@ if (WEB_ORIGIN && PLAY_DOMAINS.length > 0)
   })
 else console.error('WEB_CANONICAL_ORIGIN or PLAY_DOMAINS is unset; browsers aren’t redirected')
 
-// What a deploy asks before restarting this edge, on the private network only (drain.ts).
+// Asked by a deploy, on the private network only (drain.ts).
 serveDrain(() => ({ players: playersOnline(), routesCurrent: poll.current() }))
 
 // ─── Supervise mc-router ────────────────────────────────────────────────────────────────────
@@ -761,11 +761,8 @@ async function pollRoutes(): Promise<never> {
   }
 }
 
-// Players are let in only once mc-router holds every route: until then, one would be closed.
-await router.ready(30_000)
-while (!(await syncRoutes())) await Bun.sleep(POLL_MS)
-void pollRoutes()
-
+// The door listens at once, and lets a join through only once routes are held (`ready`).
+const held = Promise.withResolvers<void>()
 const door: FrontOptions = {
   port: MINECRAFT_PORT,
   router: ROUTER_PORT,
@@ -780,8 +777,13 @@ const door: FrontOptions = {
     return joins === undefined || takes(joins, protocol) ? null : wrongGame(joins, protocol, releases)
   },
   timeouts: TIMEOUTS,
+  ready: held.promise,
 }
 front(door)
+await router.ready(30_000)
+while (!(await syncRoutes())) await Bun.sleep(POLL_MS)
+held.resolve()
+void pollRoutes()
 
 // Bedrock players, where the edge holds the Floodgate key: Geyser dials the front door above, so
 // it starts once that listens. A Bedrock failure never takes Java players with it: the edge goes

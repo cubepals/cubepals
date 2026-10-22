@@ -107,13 +107,13 @@ bun scripts/production.ts apply
 4. It deploys `bly-prod-control` (its release runs the migrations), then `bly-prod-realtime` (one
    machine, always), then `bly-prod-edge`, all from this checkout. An app whose image sources,
    Dockerfile and Fly config are the same as in the commit its running release was built from is
-   left running, and `apply` says so. The edge changes one region at a time: `apply` waits up to ten minutes for a
-   region's connected players to leave, deploys it, and waits until it is well and holds the
-   newest routes before it goes on to the next. Players still connected at the limit are cut, and
-   the count is printed. The region keeps taking joins while it waits and is out only while it
-   restarts, which Fly's anycast covers where another region runs. With `EDGE_CORDON=1` a region
-   is also cordoned first while another is ready; that is off until its effect on the other
-   region's joins is measured.
+   left running, and `apply` says so. The edge changes one region at a time, every machine it has (a region left out of
+   `edge_regions` too): a region is cordoned while another is well and holds the newest routes, so
+   it takes no new joins and its players can finish; `apply` waits up to ten minutes for them to
+   leave, deploys exactly that region's machines, and waits until they are well and hold the newest
+   routes before it goes on to the next. A single region isn't cordoned, since no other could take
+   its joins: it is waited on while it serves. Players still connected at the limit are cut, and
+   the count is printed. `EDGE_CORDON=0` turns the cordon off.
 5. It pushes the commit as the `production` branch and deploys the website's build: live when it
    returns.
 

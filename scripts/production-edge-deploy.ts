@@ -9,14 +9,15 @@
  * the image and waited on. Not for placing machines, which is production.ts's.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { type Clock, type RegionSteps, rollEdge } from './production-edge.ts'
-
-/** A Fly machine, as `fly machines list --json` lists it. */
-interface Machine {
-  id: string
-  region: string
-  state: string
-}
+import {
+  type Clock,
+  deployMachines,
+  type Machine,
+  machinesIn,
+  type RegionSteps,
+  rollEdge,
+  sumPlayers,
+} from './production-edge.ts'
 
 /** Where the agent answers a deploy, on the private network only (apps/edge/drain.ts). */
 const DRAIN_PORT = 8091
@@ -34,8 +35,8 @@ export function machinesOf(app: string, env: NodeJS.ProcessEnv): Machine[] {
 }
 
 /** Asks one machine's agent what a deploy waits on, through a proxy that lives for the call. */
-async function drainState(app: string, machine: Machine, env: NodeJS.ProcessEnv) {
-  const target = `${machine.id}.vm.${app}.internal`
+async function drainState(app: string, id: string, env: NodeJS.ProcessEnv) {
+  const target = `${id}.vm.${app}.internal`
   const proxy = spawn('fly', ['proxy', `${PROXY_PORT}:${DRAIN_PORT}`, target, '--app', app], {
     env,
     stdio: 'ignore',
@@ -100,47 +101,41 @@ export async function rollEdgeApp(
   env: NodeJS.ProcessEnv,
   say: (line: string) => void,
 ): Promise<{ cut: number; uncounted: string[] }> {
-  const machineIn = (region: string): Machine => {
-    const machine = machinesOf(app, env).find((m) => m.region === region)
-    if (machine === undefined) throw new Error(`The edge has no machine in ${region}`)
-    return machine
+  const idsIn = (region: string): string[] => {
+    const ids = machinesIn(machinesOf(app, env), region)
+    if (ids.length === 0) throw new Error(`The edge has no machine in ${region}`)
+    return ids
   }
   const fly = (...args: string[]) => {
     const result = spawnSync('fly', args, { stdio: 'inherit', env })
     if (result.status !== 0)
       throw new Error(`fly ${args[0]} ${args[1] ?? ''} stopped (exit ${result.status})`)
   }
+  const stateOf = (id: string) => drainState(app, id, env).catch(() => null)
   const steps: RegionSteps = {
-    cordon: async (region) => fly('machine', 'cordon', machineIn(region).id, '--app', app),
+    cordon: async (region) => fly('machine', 'cordon', ...idsIn(region), '--app', app),
+    othersReady: async (region) => {
+      const others = machinesOf(app, env).filter((m) => m.region !== region)
+      for (const other of new Set(others.map((m) => m.region))) {
+        const states = []
+        for (const id of machinesIn(others, other)) states.push(await stateOf(id))
+        if (states.every((s) => s?.routesCurrent === true)) return true
+      }
+      return false
+    },
+    uncordon: async (region) => fly('machine', 'uncordon', ...idsIn(region), '--app', app),
     players: async (region) => {
       // An edge from before it counted its players has nothing listening; that and a proxy that
       // can't reach the edge both read as an edge that can't say.
-      const state = await drainState(app, machineIn(region), env).catch(() => null)
-      return state?.players ?? null
+      const counts = []
+      for (const id of idsIn(region)) counts.push((await stateOf(id))?.players ?? null)
+      return sumPlayers(counts)
     },
-    othersReady: async (region) => {
-      const others = machinesOf(app, env).filter((m) => m.region !== region)
-      for (const other of others)
-        if ((await drainState(app, other, env).catch(() => null))?.routesCurrent === true) return true
-      return false
+    deploy: async (region) => fly(...deployMachines(app, config, image, idsIn(region))),
+    ready: async (region) => {
+      for (const id of idsIn(region)) if ((await stateOf(id))?.routesCurrent !== true) return false
+      return true
     },
-    uncordon: async (region) => fly('machine', 'uncordon', machineIn(region).id, '--app', app),
-    deploy: async (region) =>
-      fly(
-        'deploy',
-        '--image',
-        image,
-        '--config',
-        config,
-        '--app',
-        app,
-        '--regions',
-        region,
-        '--update-only',
-        '--yes',
-        '--ha=false',
-      ),
-    ready: async (region) => (await drainState(app, machineIn(region), env))?.routesCurrent === true,
   }
-  return rollEdge(regions, steps, say, clock, { cordon: process.env.EDGE_CORDON === '1' })
+  return rollEdge(regions, steps, say, clock, { cordon: process.env.EDGE_CORDON !== '0' })
 }

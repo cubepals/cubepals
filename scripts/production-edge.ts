@@ -168,12 +168,11 @@ export interface RegionSteps {
 
 /**
  * Restarts the edge one region at a time: its players are waited on, then it is deployed and
- * waited on until ready, and only then the next. With `options.cordon` a region is first cordoned
- * while another is ready to take its joins (never with a single region); that is off until its
- * effect on the other region's joins is measured. A region that stays in
- * service has its players waited on, up to the limit, while new joins keep arriving; the gap while
- * it restarts is said. A region that doesn't come back ready, or that fails
- * anywhere on the way, takes connections again and stops the roll with the others as they were.
+ * waited on until ready, and only then the next. With `options.cordon` (the default) a region is
+ * first cordoned while another is ready to take its joins, so its players finish and no new join
+ * arrives; with a single region there is none to take them, and it is waited on while it serves.
+ * A region that doesn't come back ready, or fails anywhere on the way, takes connections again and
+ * stops the roll with the others as they were.
  * Returns how many players were counted and cut, and the regions that couldn't count theirs.
  */
 export async function rollEdge(
@@ -181,7 +180,7 @@ export async function rollEdge(
   steps: RegionSteps,
   say: (line: string) => void,
   clock: Clock,
-  options: { cordon: boolean } = { cordon: false },
+  options: { cordon: boolean } = { cordon: true },
 ): Promise<{ cut: number; uncounted: string[] }> {
   let cut = 0
   const uncounted: string[] = []
@@ -196,10 +195,14 @@ export async function rollEdge(
       if (left === null) uncounted.push(region)
       else cut += left
     } finally {
-      // Taking joins again is never skipped; its failure ends the roll unless another error already does.
+      // Taking joins again is never skipped. Its failure ends the roll; where another error already
+      // does, that one is thrown and this one is said, since the region stays cordoned.
       if (cordoned)
         await uncordonAgain(region, steps, clock).catch((error) => {
           if (restarted) throw error
+          say(
+            `${region}: is still cordoned and takes no joins: ${error instanceof Error ? error.message : error}`,
+          )
         })
     }
   }
@@ -238,4 +241,42 @@ async function restartRegion(
     )
   say('well and up to date with the routes')
   return left
+}
+
+/** A Fly machine, as `fly machines list --json` lists it. */
+export interface Machine {
+  id: string
+  region: string
+}
+
+/** The ids of the app's machines in `region`: an edge may run more than one there. */
+export const machinesIn = (machines: readonly Machine[], region: string): string[] =>
+  machines.filter((m) => m.region === region).map((m) => m.id)
+
+/**
+ * The regions to roll: every one the app has a machine in, the configured ones first in their
+ * order, then the rest by name, so a machine left in a region since removed from the list is
+ * updated too.
+ */
+export function regionsToRoll(machines: readonly Machine[], configured: readonly string[]): string[] {
+  const present = new Set(machines.map((m) => m.region))
+  const rest = [...present].filter((r) => !configured.includes(r)).sort()
+  return [...configured.filter((r) => present.has(r)), ...rest]
+}
+
+/** The flyctl call that puts `image` on exactly these machines and restarts nothing else. */
+export const deployMachines = (
+  app: string,
+  config: string,
+  image: string,
+  ids: readonly string[],
+): string[] => [
+  ...['deploy', '--image', image, '--config', config, '--app', app],
+  ...['--only-machines', ids.join(','), '--update-only', '--yes', '--ha=false'],
+]
+
+/** The players across a region's machines; null where none of them could say. */
+export function sumPlayers(counts: readonly (number | null)[]): number | null {
+  const known = counts.filter((c): c is number => c !== null)
+  return known.length === 0 ? null : known.reduce((a, b) => a + b, 0)
 }
