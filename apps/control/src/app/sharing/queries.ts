@@ -27,13 +27,8 @@ import type { ModCatalog } from '../ports/catalog.ts'
 import type { Limits } from '../ports/limits.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import { pictureOf } from '../server-icons/view.ts'
-import {
-  findByInvite,
-  findLiveBySlug,
-  findServer,
-  loadRevision,
-  loadRuntime,
-} from '../servers/persistence.ts'
+import { findByInvite, findLiveBySlug, findServer, loadRuntime } from '../servers/persistence.ts'
+import { loadRevisionFields, WITHOUT_FILES } from '../servers/revision-reads.ts'
 import { presenceFor } from '../servers/usage.ts'
 import { creditsOf } from '../setups/templates.ts'
 import { listWorlds } from '../worlds/persistence.ts'
@@ -167,7 +162,10 @@ export class SharingQueries {
     const { applied } = await loadRuntime(this.#db, server.id, this.#providers)
     const verdict = await trustOf(
       this.#db,
-      await loadRevision(this.#db, applied?.revisionId ?? server.desiredRevisionId),
+      await loadRevisionFields(this.#db, applied?.revisionId ?? server.desiredRevisionId, [
+        'mods',
+        'modpack',
+      ]),
     )
     const copies = copying(verdict, listing?.copyable ?? true)
     return {
@@ -218,9 +216,10 @@ export class SharingQueries {
     // What it runs is what it last booted, where there is one: a page shouldn't promise a mod
     // that is only queued for the next start.
     const { applied } = await loadRuntime(this.#db, server.id, this.#providers)
-    const revision = await loadRevision(
+    const revision = await loadRevisionFields(
       this.#db,
       applied === null ? server.desiredRevisionId : applied.revisionId,
+      WITHOUT_FILES,
     )
     const access = await readAccess(this.#db, server.id)
     const online = (await presenceFor(this.#db, [server.id])).get(server.id) ?? []
@@ -271,7 +270,10 @@ export class SharingQueries {
    * their game too: a server-side mod is the server's business, not theirs.
    */
   async #needs(
-    revision: ServerRevision,
+    revision: Pick<
+      ServerRevision,
+      'id' | 'gameVersion' | 'loader' | 'loaderVersion' | 'mods' | 'modpack' | 'settings'
+    >,
     running: boolean,
     applied: Parameters<typeof joinsNow>[2]['applied'],
   ): Promise<JoinNeeds> {

@@ -11,7 +11,8 @@ import type { LevelType } from '../../minecraft/worlds.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
 import { AppError, NotFound } from '../errors.ts'
 import type { EventBus } from '../ports/events.ts'
-import { loadRevision, loadRuntime, lockServer, setDesired } from '../servers/persistence.ts'
+import { loadRuntime, lockServer, setDesired } from '../servers/persistence.ts'
+import { loadRevisionFields } from '../servers/revision-reads.ts'
 import { notNow, type ServerTransitions } from '../servers/transitions.ts'
 import { freshStartOf } from './fresh-start.ts'
 import { awaitingPrune, insertWorld, keptWorlds, listWorlds, markWorldDeleted } from './persistence.ts'
@@ -57,7 +58,7 @@ export class WorldService {
       throw new AppError('invalid_name', `Name the world in 1 to ${NAME_MAX_LENGTH} characters.`)
     return this.#switch(actor, serverId, requestId, 'server.world_created', async (tx, server) => {
       const existing = await listWorlds(tx, server.id)
-      const desired = await loadRevision(tx, server.desiredRevisionId)
+      const desired = await loadRevisionFields(tx, server.desiredRevisionId, ['gameVersion', 'mods'])
       keepsIslands(islandsOf(desired.mods))
       return insertWorld(tx, {
         serverId: server.id,
@@ -88,7 +89,7 @@ export class WorldService {
             ? 'Start the server first, so Cubepals can reset everyone’s hearts.'
             : notNow(server.lifecycle.status),
         )
-      const desired = await loadRevision(tx, server.desiredRevisionId)
+      const desired = await loadRevisionFields(tx, server.desiredRevisionId, ['gameVersion'])
       const world = await insertWorld(tx, {
         serverId: server.id,
         levelName: nextLevelName((await listWorlds(tx, server.id)).map((w) => w.levelName)),

@@ -40,6 +40,7 @@ import type { ModService } from '../mods/service.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
 import { findServer, loadRevision, lockServer } from '../servers/persistence.ts'
+import { loadRevisionFields } from '../servers/revision-reads.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
 import { CHAT_FILTER } from './chat-filter.ts'
 import { endOf } from './delivery.ts'
@@ -72,7 +73,11 @@ export class ModerationService {
 
   async view(actor: Actor, serverId: string, now = new Date()): Promise<ModerationView> {
     const server = authorize(actor, await findServer(this.#db, serverId))
-    const desired = await loadRevision(this.#db, server.desiredRevisionId)
+    const desired = await loadRevisionFields(this.#db, server.desiredRevisionId, [
+      'loader',
+      'mods',
+      'modpack',
+    ])
     const [head] = await this.#db
       .select({ ladder: schema.serverAccess.moderationLadder })
       .from(schema.serverAccess)
@@ -144,7 +149,7 @@ export class ModerationService {
     p: { playerUuid: string; name: string; kind: ModerationKind; minutes: number | null; reason: string },
   ): Promise<void> {
     await this.#change(actor, serverId, 'moderation.punished', async (tx, server) => {
-      if (!runsModeration((await loadRevision(tx, server.desiredRevisionId)).mods))
+      if (!runsModeration((await loadRevisionFields(tx, server.desiredRevisionId, ['mods'])).mods))
         throw new AppError('invalid_choice', 'Turn on the moderation tools first, on the Players page.')
       await tx.insert(actions).values({
         serverId,
@@ -220,7 +225,7 @@ export class ModerationService {
 }
 
 /** A server the tools can run on: Paper, or plain Minecraft, which becomes Paper with them. */
-const canModerate = (revision: ServerRevision) =>
+const canModerate = (revision: Pick<ServerRevision, 'loader' | 'modpack'>) =>
   revision.modpack === null && (revision.loader === 'paper' || revision.loader === 'vanilla')
 
 function actionView(row: typeof actions.$inferSelect, now: Date): ModerationActionView {

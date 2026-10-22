@@ -50,6 +50,7 @@ import {
   lockServer,
   setDesired,
 } from '../servers/persistence.ts'
+import { loadRevisionFields } from '../servers/revision-reads.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
 import { claimPendingUpload, insertPendingUpload, loadPendingUpload } from '../uploads/persistence.ts'
 import { insertWorld, keptWorlds, listWorlds, markPruned, markWorldDeleted } from '../worlds/persistence.ts'
@@ -287,7 +288,7 @@ export class BackupService {
         'not_entitled',
         comesWith('Worlds made with mods', planThatRuns({ tier: '3g', loader: 'fabric', modded: true })),
       )
-    const desired = await loadRevision(this.#db, server.desiredRevisionId)
+    const desired = await loadRevisionFields(this.#db, server.desiredRevisionId, ['gameVersion'])
     if (compareVersions(world.gameVersion, desired.gameVersion) > 0)
       throw new AppError(
         'version_downgrade',

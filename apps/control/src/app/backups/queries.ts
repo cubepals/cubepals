@@ -7,13 +7,13 @@ import { DAY_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import type { Capability, Decision } from '../../domain/policy/policy.ts'
-import type { ServerRevision } from '../../domain/revision/revision.ts'
 import { compareVersions } from '../../minecraft/versions.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { type Actor, authorize } from '../actor.ts'
 import { pendingOfKind } from '../operations/persistence.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
-import { findServer, loadRevision } from '../servers/persistence.ts'
+import { findServer } from '../servers/persistence.ts'
+import { type RevisionSummary, summariesOf } from '../servers/revision-reads.ts'
 import { listWorlds } from '../worlds/persistence.ts'
 import { type BackupRecord, listBackups } from './persistence.ts'
 
@@ -41,10 +41,11 @@ export class BackupQueries {
       (backup.status === 'failed' && now.getTime() - backup.createdAt.getTime() < FAILED_SHOWN_MS)
     const listed = (await listBackups(this.#db, server.id)).filter(shown)
     const worlds = new Map((await listWorlds(this.#db, server.id)).map((w) => [w.id, w]))
-    const desired = await loadRevision(this.#db, server.desiredRevisionId)
-    const revisions = new Map<string, ServerRevision>()
-    for (const id of new Set(listed.map((b) => b.revisionId)))
-      revisions.set(id, await loadRevision(this.#db, id))
+    const revisions = await summariesOf(this.#db, [
+      server.desiredRevisionId,
+      ...listed.map((b) => b.revisionId),
+    ])
+    const desired = revisions.get(server.desiredRevisionId) as RevisionSummary
     const standing = await loadStanding(this.#db, server.ownerId)
     const availability = (capability: Capability) =>
       this.#db.transaction(async (tx) =>
@@ -59,7 +60,7 @@ export class BackupQueries {
         restore: await availability({ kind: 'restore_archive' }),
       },
       backups: listed.map((backup): BackupView => {
-        const revision = revisions.get(backup.revisionId) as ServerRevision
+        const revision = revisions.get(backup.revisionId) as RevisionSummary
         return {
           id: backup.id,
           trigger: backup.trigger,
@@ -74,7 +75,7 @@ export class BackupQueries {
             revisionNumber: revision.number,
             gameVersion: revision.gameVersion,
             loader: revision.loader,
-            mods: revision.mods.length,
+            mods: revision.modNames.length,
           },
           needsConfiguration: compareVersions(revision.gameVersion, desired.gameVersion) > 0,
         }

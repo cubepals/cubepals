@@ -18,7 +18,8 @@ import type { EventBus } from '../ports/events.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { Mailer } from '../ports/platform.ts'
 import type { OwnerNotices } from '../servers/owner-notices.ts'
-import { findServer, loadRevision, loadRuntime, lockServer } from '../servers/persistence.ts'
+import { findServer, loadRuntime, lockServer } from '../servers/persistence.ts'
+import { loadRevisionFields } from '../servers/revision-reads.ts'
 import { onAtPublish } from '../stop-cheaters/persistence.ts'
 import { catalogViewOf, trustOf } from './judge.ts'
 import {
@@ -125,7 +126,10 @@ export class ListingService {
       const server = authorize(actor, await lockServer(tx, serverId))
       if (wanted) {
         const { applied } = await loadRuntime(tx, server.id, this.#providers)
-        const revision = await loadRevision(tx, applied?.revisionId ?? server.desiredRevisionId)
+        const revision = await loadRevisionFields(tx, applied?.revisionId ?? server.desiredRevisionId, [
+          'mods',
+          'modpack',
+        ])
         if (!copying(await trustOf(tx, revision), true).allowed)
           throw new AppError(
             'invalid_choice',
@@ -286,7 +290,8 @@ export class ListingService {
       const server = await findServer(this.#db, serverId)
       if (server === null) continue
       const { applied } = await loadRuntime(this.#db, serverId, this.#providers)
-      const revision = applied === null ? null : await loadRevision(this.#db, applied.revisionId)
+      const revision =
+        applied === null ? null : await loadRevisionFields(this.#db, applied.revisionId, ['mods', 'modpack'])
       const standing = await loadStanding(this.#db, server.ownerId, now)
       const verdict =
         revision === null
@@ -302,7 +307,7 @@ export class ListingService {
       const changed = await saveEligibility(this.#db, serverId, {
         eligible: result.eligible,
         reasons: result.reasons,
-        revisionId: revision?.id ?? null,
+        revisionId: applied?.revisionId ?? null,
         at: now,
       })
       if (changed) await this.#db.transaction((tx) => this.#changed(tx, serverId, server.ownerId))

@@ -7,7 +7,7 @@ import type { Queryable } from '@blockly/db'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { islandsOf } from '../../minecraft/islands.ts'
 import { runsLifeSteal, START_HEARTS } from '../../minecraft/lifesteal.ts'
-import { loadRevision } from '../servers/persistence.ts'
+import { loadRevisionFields } from '../servers/revision-reads.ts'
 import { listWorlds, type WorldRecord } from './persistence.ts'
 
 const WORDS = { season: 'Season', round: 'Round', world: 'World', islands: 'World' } as const
@@ -23,7 +23,7 @@ export async function freshStartOf(
   q: Queryable,
   server: MinecraftServer,
 ): Promise<FreshStartView & { from: WorldRecord | undefined }> {
-  const revision = await loadRevision(q, server.desiredRevisionId)
+  const revision = await loadRevisionFields(q, server.desiredRevisionId, ['mods'])
   const worlds = await listWorlds(q, server.id)
   const from = worlds.find((w) => w.id === server.activeWorldId)
   const islands = islandsOf(revision.mods)
