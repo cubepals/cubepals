@@ -15,6 +15,8 @@ import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
 export interface Supervision {
   command: string[]
   cwd: string
+  /** The only environment the child gets: nothing of the agent's own (its secrets) unless named here. */
+  env: Record<string, string>
   /** Put in front of each line the child writes, so the agent's logs say whose it is. */
   prefix: string
   /** The wait before the first start again; it doubles each time up to `longest`. */
@@ -56,7 +58,7 @@ export class Supervised {
     while (!this.#stopped) {
       const began = Date.now()
       this.#state = 'running'
-      this.#child = Bun.spawn(command, { cwd, stdout: 'pipe', stderr: 'pipe' })
+      this.#child = Bun.spawn(command, { cwd, env: this.#options.env, stdout: 'pipe', stderr: 'pipe' })
       const [code] = await Promise.all([
         this.#child.exited,
         lines(this.#child.stdout as ReadableStream<Uint8Array>, prefix),

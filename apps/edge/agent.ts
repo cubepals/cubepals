@@ -694,11 +694,11 @@ asleepAt(WAITING)
 // is then refused, and players are not touched.
 const WEB_ORIGIN = process.env.WEB_CANONICAL_ORIGIN?.replace(/\/$/, '')
 const PLAY_DOMAINS = (process.env.PLAY_DOMAINS ?? '').split(',').flatMap((d) => d.trim() || [])
-/** Bedrock players' Geyser, once started (below); Fly's health check on this port asks about it. */
+/** Bedrock players' Geyser, once started (below); its status is its own, apart from the edge's health. */
 let bedrock: Bedrock | null = null
 if (WEB_ORIGIN && PLAY_DOMAINS.length > 0)
   browserRedirect({
-    healthy: () => process.env.FLOODGATE_KEY === undefined || bedrock?.healthy() === true,
+    bedrock: () => bedrock?.status() ?? null,
     port: Number(env('BROWSER_PORT', '8080')),
     domains: PLAY_DOMAINS,
     web: WEB_ORIGIN,

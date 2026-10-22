@@ -81,6 +81,19 @@ function dial(port: number, bytes: Uint8Array): Promise<Uint8Array> {
   })
 }
 
+/** Whether the door closes a connection that sends `bytes` on its own, within a second. */
+function closedByDoor(port: number, bytes: Uint8Array): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = connect({ host: '127.0.0.1', port }, () => socket.write(bytes))
+    socket.on('error', () => undefined)
+    socket.on('close', () => resolve(true))
+    setTimeout(() => {
+      socket.destroy()
+      resolve(false)
+    }, 1000)
+  })
+}
+
 async function frontDoor(limits: Limits, proxied: boolean, timeouts = { connectMs: 1_000, idleMs: 60_000 }) {
   const behind = await router()
   const options = {
@@ -143,18 +156,22 @@ test('a Java client that forges Floodgate or forwarded data reaches the server w
     'a.play.test\x00203.0.113.99\x00069a79f444e94726a5befca90e38aaf5\0[{"name":"textures"}]',
   ]
   for (const address of forged) await dial(port, Uint8Array.from([...encode(line), ...joinRequest(address)]))
-  // Even from this machine, and with a v2 header of its own: only Geyser's door believes one.
+  // Even from this machine, and with a v2 header of its own: only Geyser's door believes one, so
+  // the public door closes the connection itself, before mc-router is dialled.
   const header = proxyHeader({ address: '198.51.100.9', port: 40000 }, { address: '127.0.0.1', port: 25565 })
-  await dial(port, Uint8Array.from([...encode(line), ...header, ...joinRequest(forged[0] ?? '')]))
-  await Bun.sleep(50)
+  const refused = await closedByDoor(
+    port,
+    Uint8Array.from([...encode(line), ...header, ...joinRequest(forged[0] ?? '')]),
+  )
+  await Bun.sleep(100)
   const clean = Buffer.from(joinRequest('a.play.test')).toString('latin1')
   for (const got of behind.received.slice(0, 2)) {
     expect(got.endsWith(clean)).toBe(true)
     expect(got).not.toContain('Floodgate')
     expect(got).not.toContain('203.0.113.99')
   }
-  // The one with a header of its own was refused: no PROXY line is a handshake.
-  expect(behind.received[2] ?? '').not.toContain('Floodgate')
+  expect(refused).toBe(true)
+  expect(behind.received).toHaveLength(2)
 })
 
 test('a Forge client’s marker is kept, and the packets after the handshake are untouched', async () => {

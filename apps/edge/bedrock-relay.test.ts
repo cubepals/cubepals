@@ -45,10 +45,13 @@ interface Heard {
 }
 
 /** A socket that records what it is sent, and answers pings as Geyser does, once they say whose. */
-async function listener(onData?: (socket: Udp, bytes: Uint8Array, port: number) => void) {
+async function listener(
+  onData?: (socket: Udp, bytes: Uint8Array, port: number) => void,
+  hostname = '127.0.0.1',
+) {
   const heard: Heard[] = []
   const socket = await Bun.udpSocket({
-    hostname: '127.0.0.1',
+    hostname,
     socket: {
       data(self, bytes, port) {
         heard.push({ bytes: Uint8Array.from(bytes), port })
@@ -80,6 +83,7 @@ async function relayed(options: Partial<RelayOptions> = {}) {
     bind: { hostname: '127.0.0.1', port: publicPort },
     geyser: { hostname: '127.0.0.1', port: geyser.socket.port },
     pongs: { perSecond: 0, burst: 2 },
+    totalPongs: { perSecond: 0, burst: 3 },
     opens: { perSecond: 0, burst: 3 },
     most: 10,
     idleMs: 60_000,
@@ -191,4 +195,15 @@ test('Geyser’s port closing under it does not take the agent down', async () =
   }
   await Bun.sleep(200)
   expect(relay.players()).toBe(1)
+})
+
+test('pongs are sent in all only so fast, however many addresses ask', async () => {
+  const { port } = await relayed()
+  await Bun.sleep(100)
+  // Each address is within its own limit; together they are past the total of three.
+  const askers = await Promise.all([2, 3, 4, 5, 6].map((n) => listener(undefined, `127.0.0.${n}`)))
+  closers.push(...askers.map((a) => () => a.socket.close()))
+  for (const asker of askers) asker.socket.send(ping(1), port, '127.0.0.1')
+  await Bun.sleep(150)
+  expect(askers.reduce((sum, a) => sum + a.heard.length, 0)).toBe(3)
 })

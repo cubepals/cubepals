@@ -20,6 +20,19 @@ ADD --checksum=sha256:${GEYSER_SHA256} --chmod=0644 https://download.geysermc.or
 
 FROM mirror.gcr.io/library/eclipse-temurin:25-jre@sha256:dbb43d81099eec91e0800226ed2296d03146ee7857165b95112372ad0d67e87f AS java
 
+# Geyser's first start fetches the game's own files from Mojang (about 60 MB), which on the edge
+# would run inside its first minute and leave Bedrock players waiting on a download after every
+# deploy. Here it is started once, until it has them, and what it kept is copied to the image.
+FROM java AS warm
+COPY --from=geyser /Geyser-Standalone.jar /geyser/Geyser-Standalone.jar
+WORKDIR /geyser/warm
+RUN set -e; \
+    java -Xmx256m -jar /geyser/Geyser-Standalone.jar --nogui > /tmp/warm.log 2>&1 & \
+    pid=$!; \
+    for i in $(seq 1 240); do grep -q "successfully downloaded" /tmp/warm.log && break; sleep 1; done; \
+    kill $pid; cat /tmp/warm.log; \
+    test -f cache/client_jar.hash && test -d locales
+
 FROM mirror.gcr.io/oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 AS agent
 WORKDIR /build
 # The agent imports only types from the contracts, plus play-today.ts (with the units of time it
@@ -36,6 +49,8 @@ COPY --from=agent /build/edge-agent /edge-agent
 # Geyser's runtime and jar, which the agent starts (apps/edge/bedrock.ts).
 COPY --from=java /opt/java/openjdk /opt/java/openjdk
 COPY --from=geyser /Geyser-Standalone.jar /geyser/Geyser-Standalone.jar
+COPY --from=warm /geyser/warm/cache /geyser/warm/cache
+COPY --from=warm /geyser/warm/locales /geyser/warm/locales
 ENV PATH=/opt/java/openjdk/bin:$PATH
 USER 65532
 EXPOSE 25565 8080 19132/udp

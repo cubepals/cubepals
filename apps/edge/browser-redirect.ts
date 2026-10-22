@@ -15,8 +15,9 @@
 /** One DNS label, which is all a slug can be in a play address. */
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 
-/** Where Fly's health check asks whether the edge is well. */
+/** Where Fly's health check asks whether the edge is well, and where Bedrock's own status is. */
 const HEALTH_PATH = '/_health'
+const BEDROCK_PATH = '/_health/bedrock'
 
 /** What the edge knows to answer a browser with. */
 export interface Pages {
@@ -34,8 +35,12 @@ export interface Pages {
    * undefined for a server's own address, whose page is its own slug's.
    */
   aliasOf: (hostname: string) => string | undefined
-  /** Whether the edge is well, for Fly's check on this port (`/_health`): 503 where it isn't. */
-  healthy?: () => boolean
+  /**
+   * How Bedrock stands, null where the edge takes none: shown at `/_health/bedrock`, a status of its
+   * own. It is never part of `/_health`, which Fly's check asks and which covers Java alone, since
+   * a check that failed for Geyser's sake would take the Java players' edge down with it.
+   */
+  bedrock?: () => { state: string; bound: boolean; restarts: number } | null
 }
 
 /**
@@ -69,8 +74,14 @@ export function browserRedirect(
     port: options.port,
     ...(options.hostname === undefined ? {} : { hostname: options.hostname }),
     fetch(request) {
-      if (pages.healthy !== undefined && new URL(request.url).pathname === HEALTH_PATH)
-        return new Response(null, { status: pages.healthy() ? 204 : 503 })
+      const path = new URL(request.url).pathname
+      // Answering at all is the edge being well: if mc-router were gone, the agent would be too.
+      if (path === HEALTH_PATH) return new Response(null, { status: 204 })
+      if (path === BEDROCK_PATH) {
+        const status = pages.bedrock?.() ?? null
+        if (status === null) return new Response(null, { status: 404 })
+        return Response.json(status, { status: status.state === 'up' ? 200 : 503 })
+      }
       return new Response(null, {
         status: 302,
         headers: { location: pageFor(request.headers.get('host'), pages), 'cache-control': 'no-store' },

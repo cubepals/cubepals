@@ -33,6 +33,8 @@ export interface RelayOptions {
   geyser: { hostname: string; port: number }
   /** How many pongs one address is sent. */
   pongs: Rate
+  /** How many pongs are sent in all, whoever asks: a flood from many addresses is answered no faster. */
+  totalPongs: Rate
   /** How many new connections one address may open. */
   opens: Rate
   /** How many players are held at most. */
@@ -111,6 +113,7 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
   const players = new Map<string, Player>()
   const pongAllowed = new Map<string, Bucket>()
   const openAllowed = new Map<string, Bucket>()
+  const totalPongs = new Bucket(options.totalPongs, Date.now())
   let pong: Uint8Array | null = null
   let pongAt = 0
 
@@ -141,7 +144,8 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
       data(_socket, packet, port, address) {
         const key = `${address}:${port}`
         if (isPing(packet)) {
-          if (pong !== null && allowed(pongAllowed, options.pongs, address))
+          // The total is taken last, so an address already refused doesn't spend it.
+          if (pong !== null && allowed(pongAllowed, options.pongs, address) && totalPongs.take(Date.now()))
             front.send(pongFor(pong, packet), port, address)
           return
         }
