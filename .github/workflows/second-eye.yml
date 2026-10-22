@@ -28,8 +28,9 @@ name: Second eye
 # needs-second-eye, or a verdict label), each push v0id-user makes reviews the new head again. The
 # mark job says first, at the top of the comment, that the review is for an older commit, and takes
 # the verdict's label off until the new one lands. The review then waits QUIET_MINUTES for the
-# pushes to stop: a newer push cancels it, waiting or reviewing, so one review covers a burst of
-# fixes. A draft's push only marks the review stale; the review runs when it is ready for review.
+# pushes to stop: a run that finds a newer push has its own run ends green without reviewing, so
+# one review covers a burst of fixes and none shows as cancelled. A draft's push only marks the
+# review stale; the review runs when it is ready for review.
 #
 # A review starts in two ways only, and never because someone opened a pull request. It starts by
 # itself on a same-repository pull request that v0id-user opened and that touches a sensitive path
@@ -144,12 +145,6 @@ jobs:
       )
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # One group a pull request for every job here: a newer run's job cancels an older run's, waiting
-    # or running, so an older review never lands after a newer push. Jobs of one run follow each
-    # other, so they never cancel themselves.
-    concurrency:
-      group: second-eye-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
-      cancel-in-progress: true
     permissions:
       pull-requests: write
     outputs:
@@ -190,13 +185,12 @@ jobs:
     runs-on: ubuntu-latest
     # The quiet window and the review.
     timeout-minutes: 60
-    concurrency:
-      group: second-eye-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
-      cancel-in-progress: true
     permissions:
+      actions: read
       contents: read
       pull-requests: read
     outputs:
+      superseded: ${{ steps.newer.outputs.superseded || steps.after.outputs.superseded }}
       review: ${{ steps.claude.outputs.structured_output }}
       reviewed: ${{ steps.pull.outputs.reviewed }}
       previous: ${{ steps.pull.outputs.previous }}
@@ -205,8 +199,8 @@ jobs:
       PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
     steps:
       # A push waits for the pushes after it: a fix loop pushes again once CI has run and the fix is
-      # made, and a newer push cancels this job while it sleeps. A label, a comment or a run by hand
-      # is someone asking now, so it starts at once.
+      # made, and the job that wakes to a newer push stands down (the next step). A label, a comment
+      # or a run by hand is someone asking now, so it starts at once.
       - name: Wait for the pushes to stop
         if: github.event.action == 'synchronize'
         env:
@@ -251,8 +245,34 @@ jobs:
           else
             rm -f .second-eye/previous.json
           fi
+      # The review is for the commit this run began on. When the pull request has moved to a later
+      # commit and the run that push started has a Review job that was not skipped (it waits, runs or
+      # finished), that run reviews the new head, and this one ends green. A push nobody asked a
+      # review for starts a run whose Review job is skipped, so the review goes on and says it is
+      # of an older commit.
+      - name: Whether a newer push has its own review
+        id: newer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STARTED: ${{ github.event.pull_request.head.sha }}
+        run: |
+          head=$(jq -r .headRefOid .second-eye/pr.json)
+          if [ -n "$STARTED" ] && [ "$STARTED" != "$head" ]; then
+            status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$STARTED...$head" --jq .status || true)
+            if [ "$status" = ahead ]; then
+              for run in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/second-eye.yml/runs?head_sha=$head&event=pull_request&per_page=100" --jq '.workflow_runs[].id'); do
+                reviews=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100" --jq '[.jobs[] | select(.name == "Review" and .conclusion != "skipped")] | length')
+                if [ "$reviews" -gt 0 ]; then
+                  echo "::notice::A newer push has its own review."
+                  echo "superseded=true" >> "$GITHUB_OUTPUT"
+                  break
+                fi
+              done
+            fi
+          fi
       - name: Load the rules
         id: rules
+        if: steps.newer.outputs.superseded != 'true'
         run: |
           delimiter="rules-$(openssl rand -hex 16)"
           { echo "prompt<<$delimiter"; cat .github/second-eye.md; echo "$delimiter"; } >> "$GITHUB_OUTPUT"
@@ -260,6 +280,7 @@ jobs:
       # no path where a secret lives (the process's environment, the home directory's settings,
       # the runner's files, the git config the action writes its token into).
       - id: claude
+        if: steps.newer.outputs.superseded != 'true'
         uses: anthropics/claude-code-action@db77d4d3c98f3f6380e7cd45ffba2342a3dbde3c # v1.0.254
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -272,6 +293,30 @@ jobs:
             --allowedTools "Read(./**)"
             --disallowedTools "Bash,Edit,MultiEdit,Write,NotebookEdit,WebFetch,WebSearch,Read(./.git/**),Read(//proc/**),Read(//sys/**),Read(//dev/**),Read(//etc/**),Read(//root/**),Read(//tmp/**),Read(//var/**),Read(//run/**),Read(//opt/**),Read(~/.*),Read(~/.*/**),Read(//home/runner/work/_temp/**),Read(//home/runner/work/_actions/**),Read(//home/runner/runners/**),Read(//home/runner/actions-runner/**)"
             --json-schema '{"type":"object","additionalProperties":false,"required":["verdict","files_reviewed","earlier","findings"],"properties":{"verdict":{"enum":["merge","fix first"]},"files_reviewed":{"type":"integer","minimum":0},"earlier":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["number","status","note"],"properties":{"number":{"type":"integer","minimum":1},"status":{"enum":["fixed","gone"]},"note":{"type":"string","maxLength":200}}}},"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["severity","origin","file","line","problem","fix","why"],"properties":{"severity":{"enum":["high","medium","low"]},"origin":{"enum":["first","open","new","missed"]},"file":{"type":"string","maxLength":200},"line":{"type":"integer","minimum":1},"problem":{"type":"string","maxLength":300},"fix":{"type":"string","maxLength":300},"why":{"type":"string","maxLength":600}}}}}}'
+      # The same question once the review is made: a push that landed while Claude read, or while
+      # the quiet window of a push before it ran, has its own review, and this one must not land
+      # over it.
+      - name: Whether a newer push came during the review
+        id: after
+        if: steps.claude.outputs.structured_output != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          reviewed=$(jq -r .headRefOid .second-eye/pr.json)
+          head=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)
+          if [ "$reviewed" != "$head" ]; then
+            status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$reviewed...$head" --jq .status || true)
+            if [ "$status" = ahead ]; then
+              for run in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/second-eye.yml/runs?head_sha=$head&event=pull_request&per_page=100" --jq '.workflow_runs[].id'); do
+                reviews=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100" --jq '[.jobs[] | select(.name == "Review" and .conclusion != "skipped")] | length')
+                if [ "$reviews" -gt 0 ]; then
+                  echo "::notice::A newer push has its own review."
+                  echo "superseded=true" >> "$GITHUB_OUTPUT"
+                  break
+                fi
+              done
+            fi
+          fi
       # The action hides Claude's output. This prints only how long it took, which tools were
       # refused and on what path, and on failure the result's error (a bad token reads "401 OAuth
       # access token is invalid"), each on one line so none is taken as a workflow command.
@@ -299,12 +344,9 @@ jobs:
   comment:
     name: Comment
     needs: review
-    if: needs.review.outputs.review != ''
+    if: needs.review.outputs.review != '' && needs.review.outputs.superseded != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    concurrency:
-      group: second-eye-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
-      cancel-in-progress: true
     permissions:
       # For github-actions[bot] when the Cubepals app isn't configured: the comment and the label.
       pull-requests: write
@@ -342,20 +384,18 @@ jobs:
         run: bun scripts/second-eye-comment.ts
 
   # A review that failed, or answered nothing, says so on the comment in place of "running". One
-  # a newer push cancelled says nothing: the newer run writes the comment.
+  # a newer push replaced says nothing: the newer run writes the comment.
   failed:
     name: Say the review didn't finish
     needs: [mark, review]
     if: >-
       always()
       && needs.mark.outputs.review == 'true'
+      && needs.review.outputs.superseded != 'true'
       && (needs.review.result == 'failure'
         || (needs.review.result == 'success' && needs.review.outputs.review == ''))
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    concurrency:
-      group: second-eye-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
-      cancel-in-progress: true
     permissions:
       pull-requests: write
     steps:
