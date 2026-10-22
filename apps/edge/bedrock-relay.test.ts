@@ -201,6 +201,27 @@ test('it is ready again after Geyser starts over and has forgotten every source'
   expect(geyser.heard.length).toBeGreaterThan(2)
 })
 
+test('a probe that cannot be made is said once, is no rejection, and reads as Geyser down', async () => {
+  const { relay } = await relayed({ pongRefreshMs: 50 })
+  await Bun.sleep(100)
+  expect(relay.ready()).toBe(true)
+  const real = Bun.udpSocket
+  const said: unknown[][] = []
+  const log = console.error
+  console.error = (...parts: unknown[]) => said.push(parts)
+  Bun.udpSocket = (() => Promise.reject(new Error('no sockets left'))) as typeof Bun.udpSocket
+  try {
+    // Several asks go by, and the last pong ages out.
+    await Bun.sleep(500)
+    expect(relay.ready()).toBe(false)
+    expect(said).toHaveLength(1)
+    expect(String(said[0]?.[0])).toContain('could not ask Geyser')
+  } finally {
+    Bun.udpSocket = real
+    console.error = log
+  }
+})
+
 test('pings are told from other packets, and a pong takes the time of the ping it answers', () => {
   expect(isPing(ping(1))).toBe(true)
   expect(isPing(openRequest())).toBe(false)

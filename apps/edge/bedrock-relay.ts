@@ -121,6 +121,7 @@ function pongProbes(
 ): { ask: () => void; close: () => void } {
   const open = new Set<Udp>()
   let closed = false
+  let said = false
   return {
     ask() {
       const ping = new Uint8Array(PING_LENGTH)
@@ -137,15 +138,23 @@ function pongProbes(
             self.close()
           },
         },
-      }).then((probe) => {
-        if (closed) return probe.close()
-        open.add(probe)
-        send(probe, { address: '127.0.0.1', port: probe.port }, ping)
-        // An ask nobody answers is let go before the next.
-        setTimeout(() => {
-          if (open.delete(probe)) probe.close()
-        }, giveUpMs)
       })
+        .then((probe) => {
+          if (closed) return probe.close()
+          open.add(probe)
+          send(probe, { address: '127.0.0.1', port: probe.port }, ping)
+          // An ask nobody answers is let go before the next.
+          setTimeout(() => {
+            if (open.delete(probe)) probe.close()
+          }, giveUpMs)
+        })
+        .catch((error: unknown) => {
+          // No socket to ask with is a Geyser that isn't answering: the pong ages out and the relay
+          // reads as not ready. It is said once, not at every ask, and never takes the agent down.
+          if (said) return
+          said = true
+          console.error('[geyser] the relay could not ask Geyser for its pong; Bedrock reads as down', error)
+        })
     },
     close() {
       closed = true
