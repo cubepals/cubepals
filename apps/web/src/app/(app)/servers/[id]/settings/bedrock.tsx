@@ -16,11 +16,8 @@ import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTRPC } from '../../../../../lib/api'
 import { useOutcome } from '../../../../../lib/outcome'
-import { Button, FormRow, FormSection, Toggle } from '../../../../../ui'
+import { Button, CopyField, FormRow, FormSection, Toggle } from '../../../../../ui'
 import { ConfirmChange, changeable, useChanged, whatHappens } from './shared'
-
-/** The port Bedrock players type beside the address, which is Bedrock's own default. */
-const BEDROCK_PORT = 19132
 
 export function BedrockSetting({ view }: { view: ServerView }) {
   const bedrock = view.bedrock
@@ -69,8 +66,7 @@ function BedrockForm({ view, on, blocked }: { view: ServerView; on: boolean; blo
   return (
     <FormSection title="Bedrock friends" description={said}>
       <FormRow
-        label="Let Bedrock players join"
-        description="Cubepals adds what they need when the server starts, and takes it away if you switch this off."
+        label="Let them join"
         control={
           <Toggle
             checked={on}
@@ -83,9 +79,9 @@ function BedrockForm({ view, on, blocked }: { view: ServerView; on: boolean; blo
       {on && !blocked && (
         <>
           <p className="bk-field__help">
-            On a phone or tablet: Play, Servers, Add Server. Type {view.joinAddress} as the address and{' '}
-            {BEDROCK_PORT} as the port.
+            On a phone or tablet: Play, Servers, Add Server, and type this address.
           </p>
+          <CopyField value={view.joinAddress} />
           <p className="bk-field__help">
             Xbox, PlayStation and Switch can’t add a server, so they can’t join.
           </p>
@@ -119,8 +115,8 @@ function BedrockForm({ view, on, blocked }: { view: ServerView; on: boolean; blo
 
 /** What the section says Bedrock players can do, from the choice and what the other versions allow. */
 function lineOf(on: boolean, blocked: boolean): string {
-  if (!on) return 'Bedrock friends can’t join: phones, tablets and Windows.'
+  if (!on) return 'Friends on phones, tablets and Windows can’t join this server.'
   if (blocked)
     return 'Bedrock friends can’t join while this server lets in only its own Minecraft version. Turn on Newer and older versions above.'
-  return 'Bedrock friends can join: phones, tablets and Windows.'
+  return 'Friends on phones, tablets and Windows join the same server.'
 }
