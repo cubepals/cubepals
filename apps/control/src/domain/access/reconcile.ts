@@ -125,7 +125,12 @@ export function planDelivery(observed: ObservedAccess, record: AccessRecord): Ac
   const commands: AccessCommand[] = [
     ...add('operator').map((e) => ({ type: 'op' as const, player: e.player })),
     ...remove('ban').map((o) => ({ type: 'pardon' as const, player: o.player })),
-    ...add('ban').map((e) => ({ type: 'ban' as const, player: e.player, reason: e.details.reason ?? null })),
+    // A ban turns out a player who is on with no reason given; the kick before it gives them one.
+    ...add('ban').flatMap((e): AccessCommand[] => {
+      const reason = e.details.reason ?? null
+      const ban = { type: 'ban' as const, player: e.player, reason }
+      return reason === null ? [ban] : [{ type: 'kick', player: e.player, reason }, ban]
+    }),
     ...remove('operator').map((o) => ({ type: 'deop' as const, player: o.player })),
     ...observed.ipBans.map((b) => ({ type: 'pardon_ip' as const, ip: b.ip })),
     ...(observed.helpers === null
@@ -166,8 +171,8 @@ export function whitelistToWrite(observed: ObservedAccess, record: AccessRecord)
 /**
  * The operators and bans to write where the files hold anyone else, for a server that has to
  * read them as it starts: the console names players the server's own way, which on a server that
- * doesn't check accounts, or one that just changed, is not the way Blockly holds them. Null when
- * the files already match.
+ * doesn't check accounts, or one that just changed, is not the way Blockly holds them, and it can't
+ * name a Bedrock player it hasn't met. Null when the files already match.
  */
 export function operatorsAndBansToWrite(
   observed: ObservedAccess,
@@ -206,6 +211,8 @@ const NAMED_BY_CONSOLE: ReadonlySet<AccessList> = new Set(['operator', 'ban'])
 
 /** What an operator or ban that can't land yet says, after "Not applied yet —". */
 export const WAITS_FOR_JOIN = 'it takes effect when they next join.'
+/** What a pardon that can't land yet says: a banned player can't join to be named. */
+export const WAITS_FOR_START = 'it takes effect when the server next starts.'
 
 export interface Settlement {
   record: AccessRecord
@@ -218,13 +225,16 @@ export interface Settlement {
 
 /**
  * Judges each pending entry against the files as they are after delivery. The files decide,
- * not the command output, whose wording changes between Minecraft versions.
+ * not the command output, whose wording changes between Minecraft versions. `metFirst` says which
+ * players the console can name only once the server has met them, on any server: a Bedrock player,
+ * whom the server's name lookup finds only in its cache of players who have joined.
  */
 export function settle(
   record: AccessRecord,
   before: ObservedAccess,
   after: ObservedAccess,
   failures: ReadonlyMap<string, string>,
+  metFirst: (player: PlayerRef) => boolean,
 ): Settlement {
   const present = new Map(observedEntries(after).map((o) => [entryKey(o.list, o.player.uuid), o]))
   const existedBefore = new Set(observedEntries(before).map((o) => entryKey(o.list, o.player.uuid)))
@@ -236,11 +246,7 @@ export function settle(
     const key = entryKey(entry.list, entry.player.uuid)
     const failure = failures.get(key) ?? null
     const found = present.get(key)
-    // On a server that doesn't check accounts, the console names a player it hasn't met the way
-    // an account would be named, so an operator or ban for them lands under someone else. Once
-    // they have joined, the server knows the name as theirs; until then the change waits. A helper
-    // is named by their UUID, which is exact on every server.
-    const waits = !after.onlineMode && NAMED_BY_CONSOLE.has(entry.list)
+    const waits = waitsToBeNamed(entry, after, metFirst)
 
     if (entry.state === 'pending_add') {
       if (found) {
@@ -276,7 +282,7 @@ export function settle(
       if (found)
         entries.push({
           ...entry,
-          error: failure ?? (waits ? WAITS_FOR_JOIN : 'The server did not accept this change.'),
+          error: failure ?? (waits ? pardonWaits(entry) : 'The server did not accept this change.'),
         })
       // Gone from the files: the removal landed and the entry leaves the record.
     } else {
@@ -297,6 +303,22 @@ export function settle(
     undo,
   }
 }
+
+/**
+ * Whether the console can't name this entry's player yet. On a server that doesn't check accounts,
+ * it names a player it hasn't met the way an account would be named, so an operator or ban for them
+ * lands under someone else; a `metFirst` player it can't name at all. Once they have joined, the
+ * server knows the name as theirs; until then the change waits. A helper is named by their UUID,
+ * which is exact on every server.
+ */
+const waitsToBeNamed = (
+  entry: AccessEntry,
+  after: ObservedAccess,
+  metFirst: (player: PlayerRef) => boolean,
+) => NAMED_BY_CONSOLE.has(entry.list) && (!after.onlineMode || metFirst(entry.player))
+
+/** What a removal that waits says: a banned player can't join to be named, so a pardon waits for a start. */
+const pardonWaits = (entry: AccessEntry) => (entry.list === 'ban' ? WAITS_FOR_START : WAITS_FOR_JOIN)
 
 function reverse(entry: ObservedEntry): AccessCommand {
   switch (entry.list) {
@@ -334,6 +356,8 @@ export function commandKey(command: AccessCommand): string | null {
     case 'whitelist_mode':
     case 'pardon_ip':
     case 'whitelist_reload':
+    // A kick changes no list: the ban after it decides.
+    case 'kick':
       return null
   }
 }

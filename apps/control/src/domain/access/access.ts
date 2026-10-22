@@ -81,6 +81,8 @@ export type AccessCommand =
   | { type: 'op'; player: PlayerRef }
   | { type: 'deop'; player: PlayerRef }
   | { type: 'ban'; player: PlayerRef; reason: string | null }
+  /** A player on is turned out with the reason they are banned for, which the ban's own kick leaves out. */
+  | { type: 'kick'; player: PlayerRef; reason: string }
   | { type: 'pardon'; player: PlayerRef }
   | { type: 'pardon_ip'; ip: string }
   | { type: 'helper_add'; player: PlayerRef }

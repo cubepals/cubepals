@@ -4,8 +4,8 @@
 
 /**
  * Answers the console commands that change who may play on a fake server (whitelist, op and deop,
- * ban and pardon, by name or address) in vanilla's own words, and makes the change they report. It
- * does not hold the lists or name players: the lists and the name cache do (`lists.ts`,
+ * ban and pardon, by name or address, and kick) in vanilla's own words, and makes the change they
+ * report. It does not hold the lists or name players: the lists and the name cache do (`lists.ts`,
  * `names.ts`); the game commands and the dispatch of every command are the server's
  * (`fake-minecraft.ts`).
  */
@@ -24,6 +24,8 @@ export interface AccessServer {
   names: NameCache
   /** Who is playing, by UUID: a ban, or a whitelist that no longer holds them, kicks them. */
   online: Map<string, string>
+  /** Why each player was last turned out, by UUID. */
+  kicks: Map<string, string>
 }
 
 export async function whitelist(server: AccessServer, args: string[]): Promise<string> {
@@ -98,7 +100,8 @@ export async function ban(
     reason: reason || 'Banned by an operator.',
   }
   await server.lists.save('banned-players.json', [...bans, entry])
-  server.online.delete(uuid)
+  // Vanilla's own kick names no reason (`multiplayer.disconnect.banned`).
+  if (server.online.delete(uuid)) server.kicks.set(uuid, 'You are banned from this server.')
   return `Banned ${profile.name}: ${entry.reason}`
 }
 
@@ -112,6 +115,20 @@ export async function pardon(server: AccessServer, name: string): Promise<string
     bans.filter((e) => e !== entry),
   )
   return `Unbanned ${entry.name}`
+}
+
+/** `kick`: a player who is on, named by their name or their UUID, as vanilla's entity argument takes either. */
+export function kick(server: AccessServer, args: string[]): string {
+  const [target = '', ...words] = args
+  const reason = words.join(' ')
+  const uuid = [...server.online].find(
+    ([id, name]) => id === target.toLowerCase() || name.toLowerCase() === target.toLowerCase(),
+  )?.[0]
+  if (uuid === undefined) return 'No player was found'
+  const name = server.online.get(uuid)
+  server.online.delete(uuid)
+  server.kicks.set(uuid, reason || 'Kicked by an operator')
+  return `Kicked ${name}: ${reason || 'Kicked by an operator'}`
 }
 
 export async function banIp(lists: AccessLists, ip: string, reason: string, source: string): Promise<string> {

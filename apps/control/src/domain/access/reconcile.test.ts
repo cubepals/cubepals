@@ -11,12 +11,16 @@ import {
   planDelivery,
   settle,
   WAITS_FOR_JOIN,
+  WAITS_FOR_START,
   whitelistToWrite,
 } from './reconcile.ts'
 
 const steve: PlayerRef = { uuid: '11111111-1111-1111-1111-111111111111', name: 'Steve' }
 const alex: PlayerRef = { uuid: '22222222-2222-2222-2222-222222222222', name: 'Alex' }
 const griefer: PlayerRef = { uuid: '33333333-3333-3333-3333-333333333333', name: 'Griefer' }
+
+/** No player the console can name only once the server has met them, as on a server without Bedrock. */
+const javaOnly = () => false
 
 const files = (patch: Partial<ObservedAccess> = {}): ObservedAccess => ({
   onlineMode: true,
@@ -119,6 +123,35 @@ describe('planDelivery', () => {
       { type: 'deop', player: alex },
     ])
   })
+  test('a ban with a reason first turns the player out with it', () => {
+    const banned = { ...entry('ban', griefer, 'pending_add'), details: { reason: 'griefing' } }
+    expect(planDelivery(files(), record({ entries: [banned] }))).toEqual([
+      { type: 'kick', player: griefer, reason: 'griefing' },
+      { type: 'ban', player: griefer, reason: 'griefing' },
+    ])
+  })
+})
+
+describe('a Bedrock player the server has not met', () => {
+  const pixel: PlayerRef = { uuid: '00000000-0000-0000-0009-01eed05d1000', name: '.Pixel' }
+  const held = { ...pixel, reason: null, source: null, expiresAt: null }
+  const bedrock = (p: PlayerRef) => p === pixel
+
+  test('one the console could not name waits, rather than being rejected', () => {
+    const add = record({ entries: [entry('ban', pixel, 'pending_add')] })
+    expect(settle(add, files(), files(), new Map(), bedrock).record.entries).toEqual([
+      { ...entry('ban', pixel, 'pending_add'), error: WAITS_FOR_JOIN },
+    ])
+    const remove = record({ entries: [entry('ban', pixel, 'pending_remove')] })
+    expect(
+      settle(remove, files({ bans: [held] }), files({ bans: [held] }), new Map(), bedrock).record.entries,
+    ).toEqual([{ ...entry('ban', pixel, 'pending_remove'), error: WAITS_FOR_START }])
+    // An operator is named the same way, and waits for them to join just the same.
+    const op = record({ entries: [entry('operator', pixel, 'pending_add')] })
+    expect(settle(op, files(), files(), new Map(), bedrock).record.entries).toEqual([
+      { ...entry('operator', pixel, 'pending_add'), error: WAITS_FOR_JOIN },
+    ])
+  })
 })
 
 describe('settle', () => {
@@ -129,7 +162,7 @@ describe('settle', () => {
     })
     const before = files({ operators: [{ ...alex, level: 4, bypassesPlayerLimit: false }] })
     const after = files({ whitelistEnabled: true, whitelist: [steve] })
-    const { record: settled, undo } = settle(delivering, before, after, new Map())
+    const { record: settled, undo } = settle(delivering, before, after, new Map(), javaOnly)
     expect(undo).toEqual([])
     expect(settled).toEqual({
       whitelistEnabled: true,
@@ -144,7 +177,7 @@ describe('settle', () => {
     const failures = new Map([
       [commandKey({ type: 'whitelist_add', player: steve }) ?? '', 'connection reset'],
     ])
-    const { record: settled } = settle(delivering, files(), files(), failures)
+    const { record: settled } = settle(delivering, files(), files(), failures, javaOnly)
     expect(settled.entries[0]).toMatchObject({ state: 'pending_add', error: 'connection reset' })
   })
 
@@ -152,7 +185,7 @@ describe('settle', () => {
     const newOwner: PlayerRef = { uuid: '44444444-4444-4444-4444-444444444444', name: 'steve' }
     const delivering = record({ entries: [entry('operator', steve, 'pending_add')] })
     const after = files({ operators: [{ ...newOwner, level: 4, bypassesPlayerLimit: false }] })
-    const { record: settled, undo } = settle(delivering, files(), after, new Map())
+    const { record: settled, undo } = settle(delivering, files(), after, new Map(), javaOnly)
     expect(undo).toEqual([{ type: 'deop', player: newOwner }])
     expect(settled.entries[0]).toMatchObject({ state: 'rejected' })
   })
@@ -166,20 +199,20 @@ describe('settle, on a server that does not check accounts', () => {
   test('an operator the server put under someone else is taken off, and waits for Steve to join', () => {
     const delivering = record({ entries: [entry('operator', steve, 'pending_add')] })
     const after = files({ ...unchecked, operators: [{ ...named, level: 4, bypassesPlayerLimit: false }] })
-    const { record: settled, undo } = settle(delivering, files(unchecked), after, new Map())
+    const { record: settled, undo } = settle(delivering, files(unchecked), after, new Map(), javaOnly)
     expect(undo).toEqual([{ type: 'deop', player: named }])
     expect(settled.entries).toEqual([{ ...entry('operator', steve, 'pending_add'), error: WAITS_FOR_JOIN }])
   })
 
   test('a ban that did not land waits too, where a server that checks accounts refuses it', () => {
     const delivering = record({ entries: [entry('ban', griefer, 'pending_add')] })
-    expect(settle(delivering, files(unchecked), files(unchecked), new Map()).record.entries[0]).toMatchObject(
-      {
-        state: 'pending_add',
-        error: WAITS_FOR_JOIN,
-      },
-    )
-    expect(settle(delivering, files(), files(), new Map()).record.entries[0]).toMatchObject({
+    expect(
+      settle(delivering, files(unchecked), files(unchecked), new Map(), javaOnly).record.entries[0],
+    ).toMatchObject({
+      state: 'pending_add',
+      error: WAITS_FOR_JOIN,
+    })
+    expect(settle(delivering, files(), files(), new Map(), javaOnly).record.entries[0]).toMatchObject({
       state: 'rejected',
     })
   })
@@ -187,7 +220,9 @@ describe('settle, on a server that does not check accounts', () => {
   test('the whitelist never waits: Blockly writes it as the server keys it', () => {
     const delivering = record({ entries: [entry('whitelist', steve, 'pending_add')] })
     const after = files({ ...unchecked, whitelist: [steve] })
-    expect(settle(delivering, files(unchecked), after, new Map()).record.entries[0]?.state).toBe('active')
+    expect(settle(delivering, files(unchecked), after, new Map(), javaOnly).record.entries[0]?.state).toBe(
+      'active',
+    )
   })
 })
 
@@ -199,7 +234,7 @@ describe('helpers', () => {
     expect(planDelivery(files(tools), naming)).toEqual([{ type: 'helper_add', player: alex }])
     const after = files({ helpers: [{ ...alex, name: '' }] })
     // LuckPerms keeps no name for someone who hasn't joined: the record's stays.
-    expect(settle(naming, files(tools), after, new Map()).record.entries[0]).toMatchObject({
+    expect(settle(naming, files(tools), after, new Map(), javaOnly).record.entries[0]).toMatchObject({
       state: 'active',
       player: alex,
     })
@@ -217,15 +252,15 @@ describe('helpers', () => {
     const held = record({ entries: [entry('helper', alex, 'active'), entry('helper', steve, 'pending_add')] })
     expect(importObserved(held, files()).entries).toEqual(held.entries)
     expect(planDelivery(files(), held)).toEqual([])
-    expect(settle(held, files(), files(), new Map()).record.entries).toEqual(held.entries)
+    expect(settle(held, files(), files(), new Map(), javaOnly).record.entries).toEqual(held.entries)
   })
 
   test('helpers never wait to join, and are never written into the operator and ban files', () => {
     const naming = record({ entries: [entry('helper', alex, 'pending_add')] })
     const unchecked = { onlineMode: false, helpers: [] as PlayerRef[] }
-    expect(settle(naming, files(unchecked), files(unchecked), new Map()).record.entries[0]?.state).toBe(
-      'rejected',
-    )
+    expect(
+      settle(naming, files(unchecked), files(unchecked), new Map(), javaOnly).record.entries[0]?.state,
+    ).toBe('rejected')
     expect(
       operatorsAndBansToWrite(files(), record({ entries: [entry('helper', alex, 'active')] })),
     ).toBeNull()

@@ -112,8 +112,10 @@ export class AccessReconciler {
     if (options.mayRestart) {
       const lists = operatorsAndBansToWrite(observed, working)
       // The console names players the server's own way. Where that is not how Blockly holds them,
-      // the files are written instead, and read as the server starts again.
-      if (lists !== null && (!observed.onlineMode || changedKind)) {
+      // or it can't name them yet, as a Bedrock player it hasn't met, the files are written
+      // instead, and read as the server starts again.
+      const fileOnly = !observed.onlineMode || changedKind || bedrockBansWaiting(observed, working)
+      if (lists !== null && fileOnly) {
         const whitelist = targetWhitelist(working)
         await this.#write(handle, accessFiles({ whitelist, ...lists }, new Date()), changedKind)
         await this.#save(server, before, working)
@@ -147,7 +149,7 @@ export class AccessReconciler {
     await this.#moderation.deliver(server, handle).catch(() => false)
     await luckPermsSaved(commands)
     const after = await this.#readFiles(handle)
-    const { record, undo } = settle(working, observed, after, failures)
+    const { record, undo } = settle(working, observed, after, failures, (p) => isBedrockUuid(p.uuid))
     if (undo.length > 0) await this.#deliver(handle, server.id, undo, after.pluginBans)
     // IP bans can't work behind the shared edge (§15.1): the ones lifted are audited, and the
     // access page tells the owner why.
@@ -295,6 +297,22 @@ function everyKeyed(observed: ObservedAccess, onlineMode: boolean): boolean {
   return [...observed.whitelist, ...observed.operators, ...observed.bans].every((p) =>
     keyedFor(p, onlineMode),
   )
+}
+
+/**
+ * Whether a ban or pardon of a Bedrock player waits for the ban file. The console names a player
+ * through the server's name cache, then Mojang, which has no Bedrock player: the cache holds one
+ * only once they have joined (Paper 26.2, `GameProfileArgument`, `PlayerList.placeNewPlayer`).
+ * Nothing makes a running server read the file again short of reloading every plugin, so it is
+ * written for the server to read as it starts.
+ */
+function bedrockBansWaiting(observed: ObservedAccess, record: AccessRecord): boolean {
+  const banned = new Set(observed.bans.map((p) => entryKey('ban', p.uuid)))
+  return record.entries.some((e) => {
+    if (e.list !== 'ban' || !isBedrockUuid(e.player.uuid)) return false
+    const held = banned.has(entryKey('ban', e.player.uuid))
+    return (e.state === 'pending_add' && !held) || (e.state === 'pending_remove' && held)
+  })
 }
 
 /** Everyone the whitelist should hold once delivery is done. */

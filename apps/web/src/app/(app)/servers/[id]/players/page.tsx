@@ -446,7 +446,11 @@ function metaOf(entry: AccessEntryView, running: boolean): string | undefined {
           ? 'Adding…'
           : 'Added when the server starts'
     case 'pending_remove':
-      return running ? 'Removing…' : 'Removed when the server starts'
+      return entry.error
+        ? `Not applied yet — ${entry.error}`
+        : running
+          ? 'Removing…'
+          : 'Removed when the server starts'
     case 'rejected':
       return entry.error ?? 'The server did not accept this'
     case 'active':
