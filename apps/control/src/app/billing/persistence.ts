@@ -235,9 +235,14 @@ export async function saveSubscription(
             ? sql`coalesce(${subscriptions.canceledAt}, ${canceledAt})`
             : canceledAt,
         pastDueAt: null,
-        // A move to a smaller plan is done once the provider says the subscription is on it.
-        movesToPlan: sql`case when ${subscriptions.movesToPlan} = ${subscription.planKey} then null else ${subscriptions.movesToPlan} end`,
-        movesAt: sql`case when ${subscriptions.movesToPlan} = ${subscription.planKey} then null else ${subscriptions.movesAt} end`,
+        // A move to a smaller plan is done once the provider says the subscription is on it, and
+        // off once it says the subscription ends: nothing moves from a plan that is ending.
+        ...(subscription.cancelAtPeriodEnd
+          ? { movesToPlan: null, movesAt: null }
+          : {
+              movesToPlan: sql`case when ${subscriptions.movesToPlan} = ${subscription.planKey} then null else ${subscriptions.movesToPlan} end`,
+              movesAt: sql`case when ${subscriptions.movesToPlan} = ${subscription.planKey} then null else ${subscriptions.movesAt} end`,
+            }),
         updatedAt: new Date(),
       },
     })

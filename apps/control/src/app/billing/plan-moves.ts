@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Moving between paid plans. Plus bought over Core leaves Core's subscription renewing at the
- * provider, to run out with the month paid for. Plus down to Core is a move the provider applies
- * when the month paid for ends: Plus stays until then, and nothing is paid twice. Core is never
- * bought over Plus. Not for what a smaller plan runs (`entitlements.ts`).
+ * Moving between paid plans. Core up to Plus changes the product of the one subscription that
+ * pays for it, now, so there is never a second subscription to renew beside it. Plus down to Core
+ * is a move the provider applies when the month paid for ends: Plus stays until then, and nothing
+ * is paid twice. Core is never bought over Plus. Not for what a smaller plan runs (`entitlements.ts`).
  */
 import { type Db, type Queryable, schema } from '@blockly/db'
 import { PAID_PLANS, planName } from '../../domain/account/entitlements.ts'
@@ -69,6 +69,34 @@ export async function moveToSmaller(
     data: { from: sub.planKey, to: wanted, at: appliesAt.toISOString() },
   })
   return { plan: wanted, at: appliesAt }
+}
+
+/**
+ * A larger plan bought by an account whose monthly subscription pays for a smaller one: the
+ * subscription becomes the larger plan's, the provider charging the difference for the rest of the
+ * month, and a refusal from the provider is the caller's to fail. False where no monthly
+ * subscription pays for a smaller plan, and the larger is bought at a checkout.
+ */
+export async function upgradeInPlace(
+  db: Db,
+  billing: BillingProvider,
+  userId: string,
+  wanted: string,
+  actor: Actor,
+  reach: <T>(call: () => Promise<T>) => Promise<T>,
+): Promise<boolean> {
+  const sub = await latestSubscription(db, userId)
+  if (sub === null || sub.provider !== billing.provider || !PAYING.includes(sub.status)) return false
+  if (PAID_PLANS.indexOf(sub.planKey) >= PAID_PLANS.indexOf(wanted)) return false
+  await reach(() => billing.upgradeSubscription(sub.externalSubscriptionId, wanted))
+  await db.insert(schema.auditLog).values({
+    actor: requestedBy(actor),
+    action: 'billing.plan_upgraded_in_place',
+    subjectType: 'account',
+    subjectId: userId,
+    data: { from: sub.planKey, to: wanted },
+  })
+  return true
 }
 
 /** The account's subscriptions still renewing for a plan smaller than the one now paying (`paying`). */

@@ -508,13 +508,14 @@ function payingSummary(
 ): string | null {
   if (billed.pastDueUntil)
     return `Your last payment didn’t go through. Update your card in Manage billing by ${dayOf(billed.pastDueUntil)} to keep ${title(key)}.`
+  // A plan set to end ends, whatever move to a smaller one was asked for before.
+  if (billed.cancelAtPeriodEnd && billed.periodEnd)
+    return `Ends on ${dayOf(billed.periodEnd)}; then you're on the free trial.`
   if (billed.movesTo)
     return `${title(billed.movesTo.plan)} from ${dayOf(billed.movesTo.at)}. You keep ${title(key)} until then.`
-  if (billed.periodEnd && !billed.cancelAtPeriodEnd && giftNext !== null)
-    return `Renews on ${dayOf(billed.periodEnd)}. ${giftWaits(giftNext)}`
   if (!billed.periodEnd) return null
-  return billed.cancelAtPeriodEnd
-    ? `Ends on ${dayOf(billed.periodEnd)}; then you're on the free trial.`
+  return giftNext !== null
+    ? `Renews on ${dayOf(billed.periodEnd)}. ${giftWaits(giftNext)}`
     : `Renews on ${dayOf(billed.periodEnd)}.`
 }
 

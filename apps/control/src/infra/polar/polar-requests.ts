@@ -69,3 +69,25 @@ export async function moveSubscription(
   if (!at) throw new Error('Polar took the move but says no day it applies')
   return { appliesAt: new Date(at) }
 }
+
+/**
+ * A subscription made another plan's product at once (`proration_behavior: invoice`): Polar
+ * invoices the difference for the rest of the period and keeps the one subscription, with the new
+ * product's prices alone. Polar refuses a product change to one set to end with its period, so
+ * that is undone first.
+ */
+export async function upgradeSubscription(
+  polar: ReturnType<typeof createPolar>,
+  product: string | undefined,
+  id: string,
+): Promise<void> {
+  if (product === undefined) throw new Error('No Polar product sells that plan')
+  const held = await call('reading a subscription', () => polar.subscriptions.get(id))
+  if (held.cancel_at_period_end)
+    await call('making a subscription renew again', () =>
+      polar.subscriptions.update(id, { cancel_at_period_end: false }),
+    )
+  await call('changing a subscription to another plan', () =>
+    polar.subscriptions.update(id, { product_id: product, proration_behavior: 'invoice' }),
+  )
+}

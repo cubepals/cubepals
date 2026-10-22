@@ -90,9 +90,9 @@ function cancelSaid(plus: PublicPlan | undefined): string {
   return `Any time, from your account. You keep your plan until the end of the month you paid for. Your worlds stay${waits}.${year}`
 }
 
-/** Changing plan: Plus over Core is one checkout, and the move down ends Plus first. */
+/** Changing plan: up to Plus changes the one subscription now, and down to Core waits for the month's end. */
 function changeSaid(core: PublicPlan, plus: PublicPlan): string {
-  return `${plus.name} over ${core.name} any time, from your account: the ${core.name} month you paid for runs out without renewing. To go from ${plus.name} to ${core.name}, end ${plus.name} first, and your worlds stay as they are: a modded one waits for ${plus.name} rather than losing anything.`
+  return `Yes, from your account. ${core.name} to ${plus.name} starts at once: you pay the difference for the rest of the month, and your subscription stays one. ${plus.name} to ${core.name} is offered on your account page too: ${core.name} starts when the month you paid for ends, you keep ${plus.name} until then, and there is nothing to end first. Your worlds stay as they are: a modded one waits for ${plus.name} rather than losing anything.`
 }
 
 /** Whether friends on Bedrock can join, as this Cubepals has it. */

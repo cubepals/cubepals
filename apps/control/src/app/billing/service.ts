@@ -53,7 +53,7 @@ import {
   UNPAID_ORDER,
   untoldAbout,
 } from './persistence.ts'
-import { moveToSmaller, requireNotSmaller, smallerRenewing } from './plan-moves.ts'
+import { moveToSmaller, requireNotSmaller, smallerRenewing, upgradeInPlace } from './plan-moves.ts'
 import {
   accountsWithYearsEnded,
   markReminded,
@@ -170,6 +170,11 @@ export class BillingService {
     const returnUrl = new URL(this.#returnUrl)
     if (options.next !== undefined && /^\/(?![/\\])/.test(options.next))
       returnUrl.searchParams.set('next', options.next)
+    // The subscription that pays for a smaller plan becomes this one: nothing renews beside it.
+    if (term === 'month' && (await upgradeInPlace(this.#db, billing, user.id, planKey, actor, this.#reach))) {
+      await this.refresh(actor)
+      return { url: returnUrl.toString() }
+    }
     const url = await this.#reach(() =>
       billing.checkoutUrl({
         userId: user.id,
@@ -441,19 +446,15 @@ export class BillingService {
   }
 
   /**
-   * A larger plan bought over a smaller one (Plus over Core) leaves the smaller subscription
-   * renewing at the provider: it is set to end with the month it paid for, which its owner keeps
-   * using, so nothing is paid twice (`plan-moves.ts`).
+   * A smaller plan's subscription still renewing beside a larger one (Plus bought by a year, or at
+   * a checkout begun before Core became Plus in place) is set to end with the month it paid for. A
+   * refusal from the provider fails the sync, which the provider's webhook delivers again.
    */
   async #stopSmallerPlans(state: Pick<BillingState, 'userId' | 'subscription'>, provider: string) {
     if (state.subscription === null) return
     const billing = requireCapability(this.#caps, 'billing')
     for (const id of await smallerRenewing(this.#db, state.userId, provider, state.subscription)) {
-      try {
-        await this.#reach(() => billing.stopRenewing(id))
-      } catch (error) {
-        console.error(`billing: stopping a smaller plan from renewing failed: ${inFull(error)}`)
-      }
+      await this.#reach(() => billing.stopRenewing(id))
     }
   }
 

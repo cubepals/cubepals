@@ -62,7 +62,7 @@ async function pays(owner: UserActor, plans: Array<{ sub: string; product: strin
   for (const next of rest)
     state.active_subscriptions.push({ ...held, id: next.sub, product_id: next.product, created_at: next.at })
   w.polar.states.set(owner.userId, state)
-  await w.post(stateChanged(state))
+  return w.post(stateChanged(state))
 }
 
 const create = (owner: UserActor, request: Parameters<typeof w.h.create>[1] = {}) =>
@@ -121,41 +121,88 @@ describe.skipIf(!hasDatabase)('buying Core and Plus over it', () => {
     expect(modded).toMatchObject({ code: 'not_entitled' })
     expect(modded?.message).toContain('Plus')
   }, 60_000)
+})
 
-  test('Plus over Core is one checkout, and the Core month paid for runs out without renewing', async () => {
+describe.skipIf(!hasDatabase)('Core becoming Plus in place', () => {
+  test('Plus over Core changes the one subscription: no checkout, no second renewal', async () => {
     const owner = await w.h.user('Bea')
     const core = randomUUID()
     await pays(owner, [{ sub: core, product: CORE_PRODUCT, at: '2026-10-01T00:00:00Z' }])
     expect((await loadStanding(w.h.db, owner.userId)).plan).toBe('core')
+    const asked = w.polar.requests.length
 
-    w.polar.reply = () => ({ status: 201, body: checkout('co_plus', 'https://polar.test/checkout/plus') })
-    await w.h.app.billing.startCheckout(owner, 'plus', { reason: 'players', next: '/servers/new' })
-    expect(JSON.parse(w.polar.requests.at(-1)?.body ?? '').products).toEqual([PLUS_PRODUCT])
-    w.reset()
-
-    // Polar now lists both; the larger one speaks for the account.
-    const plus = randomUUID()
-    await pays(owner, [
-      { sub: core, product: CORE_PRODUCT, at: '2026-10-01T00:00:00Z' },
-      { sub: plus, product: PLUS_PRODUCT, at: '2026-10-10T00:00:00Z' },
+    const { url } = await w.h.app.billing.startCheckout(owner, 'plus', {
+      reason: 'players',
+      next: '/servers/new',
+    })
+    expect(new URL(url).searchParams.get('next')).toBe('/servers/new')
+    const sent = w.polar.requests.slice(asked)
+    expect(sent.some((request) => request.path.startsWith('/v1/checkouts'))).toBe(false)
+    // Polar is asked once, on the subscription Core is paid by: its product, the difference invoiced.
+    expect(w.updates).toEqual([
+      { id: core, body: { product_id: PLUS_PRODUCT, proration_behavior: 'invoice' } },
     ])
+
     expect((await loadStanding(w.h.db, owner.userId)).plan).toBe('plus')
-    expect(w.updates).toContainEqual({ id: core, body: { cancel_at_period_end: true } })
-    expect(w.updates.some((update) => update.id === plus)).toBe(false)
     const rows = await w.h.db
       .select({
         id: schema.billingSubscriptions.externalSubscriptionId,
+        plan: schema.billingSubscriptions.planKey,
         status: schema.billingSubscriptions.status,
+        ending: schema.billingSubscriptions.cancelAtPeriodEnd,
       })
       .from(schema.billingSubscriptions)
-      .where(and(eq(schema.billingSubscriptions.userId, owner.userId)))
-    expect(rows.find((row) => row.id === core)?.status).toBe('ended')
-    expect(rows.find((row) => row.id === plus)?.status).toBe('active')
+      .where(eq(schema.billingSubscriptions.userId, owner.userId))
+    expect(rows).toEqual([{ id: core, plan: 'plus', status: 'active', ending: false }])
+    expect((await w.audited(owner, 'billing.plan_upgraded_in_place'))[0]).toMatchObject({
+      from: 'core',
+      to: 'plus',
+    })
     expect((await w.h.app.accountQueries.overview(owner)).entitlements).toMatchObject({
       plan: 'plus',
       maxServers: 3,
       includedUnits: 120,
     })
+  })
+
+  test('Core set to end renews again first, as Polar changes the product of no ending subscription', async () => {
+    const owner = await w.h.user('Dee')
+    const core = randomUUID()
+    await pays(owner, [{ sub: core, product: CORE_PRODUCT, at: '2026-10-01T00:00:00Z' }])
+    const state = w.polar.states.get(owner.userId)
+    const [held] = state?.active_subscriptions ?? []
+    if (state === undefined || held === undefined) throw new Error('Polar holds the subscription')
+    held.cancel_at_period_end = true
+    w.subscriptions.set(core, subscription(core, { cancel_at_period_end: true, ended_at: null }))
+    await w.post(stateChanged(state))
+
+    await w.h.app.billing.startCheckout(owner, 'plus')
+    expect(w.updates.filter((update) => update.id === core)).toEqual([
+      { id: core, body: { cancel_at_period_end: false } },
+      { id: core, body: { product_id: PLUS_PRODUCT, proration_behavior: 'invoice' } },
+    ])
+    expect((await loadStanding(w.h.db, owner.userId)).plan).toBe('plus')
+  })
+
+  test('a Core still renewing beside Plus is stopped, and a stop Polar refuses fails the delivery', async () => {
+    const owner = await w.h.user('Eli')
+    const core = randomUUID()
+    const plus = randomUUID()
+    const both = [
+      { sub: core, product: CORE_PRODUCT, at: '2026-10-01T00:00:00Z' },
+      { sub: plus, product: PLUS_PRODUCT, at: '2026-10-10T00:00:00Z' },
+    ]
+    await pays(owner, both.slice(0, 1))
+    const answer = w.polar.reply
+    w.polar.reply = (request) => (request.method === 'PATCH' ? { status: 500, body: {} } : answer(request))
+    expect((await pays(owner, both)).status).toBeGreaterThanOrEqual(500)
+
+    // Polar answers the next delivery: Core's renewal stops, and the account is Plus's alone.
+    w.polar.reply = answer
+    await pays(owner, both)
+    expect(w.updates).toContainEqual({ id: core, body: { cancel_at_period_end: true } })
+    expect(w.updates.some((update) => update.id === plus)).toBe(false)
+    expect((await loadStanding(w.h.db, owner.userId)).plan).toBe('plus')
   })
 
   test('Core is not bought over Plus: the move to it is from the account, and nothing is paid twice', async () => {
@@ -403,4 +450,32 @@ describe.skipIf(!hasDatabase)('moving from Plus to Core at the month’s end', (
     // As on any move down: the modded server stops whole and says which plan runs it.
     expect((await w.h.until(modded.id, 'stopped')).lifecycle.stopReason).toBe('entitlement')
   }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('a plan set to end beats a move to a smaller one', () => {
+  test('Polar saying Plus ends clears the move, and the account says it ends', async () => {
+    const owner = await w.h.user('Fay')
+    const sub = randomUUID()
+    const end = new Date(Date.now() + 10 * DAY_MS)
+    await pays(owner, [{ sub, product: PLUS_PRODUCT, at: '2026-10-01T00:00:00Z' }])
+    w.subscriptions.set(
+      sub,
+      subscription(sub, { status: 'active', current_period_end: end.toISOString(), ended_at: null }),
+    )
+    await w.h.app.billing.moveToSmaller(owner, 'core')
+    expect((await w.h.app.accountQueries.overview(owner)).plan.billed).toMatchObject({
+      movesTo: { plan: 'core', at: end },
+      cancelAtPeriodEnd: false,
+    })
+
+    const state = w.polar.states.get(owner.userId)
+    const [held] = state?.active_subscriptions ?? []
+    if (state === undefined || held === undefined) throw new Error('Polar holds the subscription')
+    held.cancel_at_period_end = true
+    await w.post(stateChanged(state))
+    expect((await w.h.app.accountQueries.overview(owner)).plan.billed).toMatchObject({
+      movesTo: null,
+      cancelAtPeriodEnd: true,
+    })
+  })
 })

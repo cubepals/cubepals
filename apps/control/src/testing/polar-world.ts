@@ -157,6 +157,15 @@ export class PolarWorld {
     const asked = JSON.parse(body) as SubscriptionChange
     this.updates.push({ id: sub, body: asked })
     const held = this.subscriptions.get(sub) ?? subscription(sub, { status: 'active', ended_at: null })
+    // Polar changes the product of no subscription that is set to end with its period.
+    if (asked.product_id != null && held.cancel_at_period_end)
+      return {
+        status: 403,
+        body: {
+          error: 'NotPermitted',
+          detail: 'This subscription is already canceled or will be at the end of the period.',
+        },
+      }
     // A product change for the next period is held as the pending update, as Polar answers it.
     const later = asked.product_id != null && asked.proration_behavior === 'next_period'
     const updated = {
@@ -172,7 +181,18 @@ export class PolarWorld {
         : asked),
     } as models.Subscription
     this.subscriptions.set(sub, updated)
+    this.#listed(sub, asked, later)
     return { status: 200, body: updated }
+  }
+
+  /** What the customer's state lists of a subscription changes with it: its product now, or whether it renews. */
+  #listed(sub: string, asked: SubscriptionChange, later: boolean) {
+    for (const state of this.polar.states.values())
+      for (const listed of state.active_subscriptions)
+        if (listed.id === sub) {
+          if (asked.product_id != null && !later) listed.product_id = asked.product_id
+          if (asked.cancel_at_period_end != null) listed.cancel_at_period_end = asked.cancel_at_period_end
+        }
   }
 
   /** A subscription revoked: it ends now, as Polar answers it; one revoked already is refused. */

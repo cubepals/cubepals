@@ -133,6 +133,14 @@ export class LocalBilling implements BillingProvider {
     return { appliesAt: row?.end ?? new Date() }
   }
 
+  /** Its record of who pays is `billing_subscriptions` itself: the plan is the larger one from now, renewing. */
+  async upgradeSubscription(externalSubscriptionId: string, planKey: string): Promise<void> {
+    await this.#db
+      .update(schema.billingSubscriptions)
+      .set({ planKey, cancelAtPeriodEnd: false, canceledAt: null, updatedAt: new Date() })
+      .where(eq(schema.billingSubscriptions.externalSubscriptionId, externalSubscriptionId))
+  }
+
   /** Its record of who pays is `billing_subscriptions` itself, so the cancel is written there. */
   async stopRenewing(externalSubscriptionId: string): Promise<void> {
     await this.#db
