@@ -23,9 +23,9 @@ function leftSaid(left: number): string {
  * What the email says the month's play has come to, in the words the account page uses. `carried`
  * is what was left of last month's hours and came into this one.
  */
-/** What extra hours cost, and when the larger plan costs less: "Extra hours are $0.25 each. Past 60 a month, Plus costs less." */
+/** What extra hours cost, and when the larger plan costs less: "Extra hours are $0.25 each. Past 60 extra hours a month, Plus costs less." */
 const largerSaid = (larger: { name: string; extraHoursCheaper: number }, unitCents: number): string =>
-  `Extra hours are ${dollars(unitCents)} each. Past ${larger.extraHoursCheaper} a month, ${larger.name} costs less, and has more hours.`
+  `Extra hours are ${dollars(unitCents)} each. Past ${larger.extraHoursCheaper} extra hours a month, ${larger.name} costs less, and has more hours.`
 
 function playLines(input: {
   mark: number

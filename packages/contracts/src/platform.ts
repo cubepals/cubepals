@@ -10,8 +10,6 @@ export interface PlatformCapabilities {
   archives: boolean
   /** Paid plans. Without it, plans are set by an admin. */
   billing: boolean
-  /** Bedrock players can join Paper servers: the key the edge and servers share is set. */
-  bedrock: boolean
   /** Paid plans billing has no product for: not for sale yet. Empty where there is no billing. */
   unsoldPlans: string[]
 }

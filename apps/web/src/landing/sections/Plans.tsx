@@ -38,11 +38,14 @@ export function Plans({
   plans,
   create,
   getPlan,
+  bedrock,
 }: {
   plans: PublicPlan[]
   create: string
   /** Where a paid plan's button leads, by plan key. */
   getPlan: (key: string) => string
+  /** Whether Bedrock is on (`lib/bedrock.ts`). */
+  bedrock: boolean
 }) {
   if (plans.length < 2) return null
   return (
@@ -55,7 +58,7 @@ export function Plans({
       act="friends"
       className={styles.plans}
     >
-      <PlansSaid plans={plans} create={create} getPlan={getPlan} />
+      <PlansSaid plans={plans} create={create} getPlan={getPlan} bedrock={bedrock} />
     </Section>
   )
 }
@@ -68,10 +71,12 @@ export function PlansSaid({
   plans,
   create,
   getPlan,
+  bedrock,
 }: {
   plans: PublicPlan[]
   create: string
   getPlan: (key: string) => string
+  bedrock: boolean
 }) {
   const paid = plans.find((plan) => plan.monthlyPriceCents > 0)
   return (
@@ -94,7 +99,7 @@ export function PlansSaid({
                 <span className="bl-num">{dollars(plan.monthlyPriceCents)}</span>
                 {isPaid && <small> a month</small>}
               </p>
-              <p className={styles.pitch}>{pitchOf(plan)}</p>
+              <p className={styles.pitch}>{pitchOf(plan, bedrock)}</p>
               <Shared plan={plan} />
               <ul className={styles.points}>
                 {planPoints(plan).map((point) => (

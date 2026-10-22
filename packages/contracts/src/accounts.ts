@@ -393,11 +393,6 @@ export interface PublicPlan {
   maxServers: number
   /** The most players the plan's largest server holds. */
   maxPlayers: number
-  /**
-   * Whether friends on Bedrock join this plan's Paper servers beside Java players. False where this
-   * Cubepals has Bedrock off, so a page never promises it.
-   */
-  bedrock: boolean
   /** Mods, plugins and modpacks. */
   mods: boolean
   /** Datapacks, which a plan allows apart from mods. */

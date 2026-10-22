@@ -5,6 +5,7 @@
 import type { PublicPlan } from '@blockly/contracts'
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { bedrockLive } from '../../../lib/bedrock'
 import { hoursSaid, publicPlans } from '../../../lib/plans'
 import { canonicalOrigin, pageMetadata } from '../../../lib/site'
 import { appSchema, JsonLd } from '../../../lib/structured-data'
@@ -29,6 +30,10 @@ export async function generateMetadata(): Promise<Metadata> {
     path: '/pricing',
   })
 }
+
+/** What bigger groups run on, said under the plan that has them. */
+const LARGE_SERVERS =
+  'Big modpacks and groups of 20 or more run on a large server, which counts two hours for each hour it runs. Groups of more than 50 run on the largest, which counts four.'
 
 /**
  * What Blockly costs, for anyone: three plans, in the words people choose on, and the few
@@ -61,6 +66,8 @@ export default async function PricingPage() {
             key={plan.key}
             plan={plan}
             mark={seenMark(`plan_${plan.key}`)}
+            bedrock={bedrockLive()}
+            note={plan === plus ? LARGE_SERVERS : undefined}
             action={
               <GetPlan
                 plan={plan.key}
@@ -72,10 +79,6 @@ export default async function PricingPage() {
           />
         ))}
       </div>
-      <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-        {plus?.name ?? 'Plus'}: big modpacks and groups of 20 or more run on a large server, which counts two
-        hours for each hour it runs. Groups of more than 50 run on the largest, which counts four.
-      </p>
       <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
         Prices are in US dollars and include VAT where it applies. Paid plans renew monthly until you cancel;
         {yearSaid(plus, ` a year of ${plus?.name} is paid once and doesn’t renew on its own.`)} Cancelling

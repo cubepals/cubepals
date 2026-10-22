@@ -23,7 +23,6 @@ const plan = (over: Partial<PublicPlan>): PublicPlan => ({
   sleepsAfterMinutes: 10,
   maxServers: 1,
   maxPlayers: 5,
-  bedrock: false,
   mods: false,
   datapacks: false,
   downloads: 'daily',

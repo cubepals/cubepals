@@ -27,8 +27,8 @@ export function createPublicApp(deps: {
   faces: PlayerFaces
   items: ItemIcons
   icons: ServerIcons
-  /** What this deployment takes (Bedrock players) and sells (each paid plan): what the plans say of it. */
-  platform: () => Pick<PlatformCapabilities, 'bedrock' | 'unsoldPlans'>
+  /** What this deployment sells (each paid plan): what the plans say of it. */
+  platform: () => Pick<PlatformCapabilities, 'unsoldPlans'>
 }): Hono {
   const app = new Hono()
 

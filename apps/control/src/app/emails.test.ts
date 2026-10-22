@@ -357,7 +357,7 @@ describe('emails on Core', () => {
       origin: ORIGIN,
     })
     expect(core.text).toContain(
-      'Extra hours are $0.25 each. Past 60 a month, Plus costs less, and has more hours.',
+      'Extra hours are $0.25 each. Past 60 extra hours a month, Plus costs less, and has more hours.',
     )
     const usedUp = playWarning({
       mark: 100,
@@ -371,6 +371,6 @@ describe('emails on Core', () => {
       origin: ORIGIN,
     })
     expect(usedUp.text).toContain('allow some extra play on your account')
-    expect(usedUp.text).toContain('Past 60 a month, Plus costs less')
+    expect(usedUp.text).toContain('Past 60 extra hours a month, Plus costs less')
   })
 })

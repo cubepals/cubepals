@@ -12,17 +12,15 @@ import { Tip } from './tip'
 
 /**
  * Who a plan is for and what they play on it, as the person choosing would put it: the first thing
- * a card says, and never its hours. Core says Bedrock friends join only where this Cubepals takes
- * them (`PublicPlan.bedrock`), and otherwise that it is coming.
+ * a card says, and never its hours. Core says Java and Bedrock friends play together only where
+ * Bedrock is on (`lib/bedrock.ts`), and promises nothing about Bedrock where it is off.
  */
-export function pitchOf(plan: Pick<PublicPlan, 'key' | 'maxPlayers' | 'bedrock'>): string {
+export function pitchOf(plan: Pick<PublicPlan, 'key' | 'maxPlayers'>, bedrock = false): string {
   switch (plan.key) {
     case 'free':
       return 'Try plain Minecraft with friends, no card'
     case 'core':
-      return plan.bedrock
-        ? `Vanilla for you and ${plan.maxPlayers - 1} friends, Java and Bedrock together`
-        : `Vanilla for you and ${plan.maxPlayers - 1} friends on Java, and Bedrock is coming`
+      return `Plain Minecraft for you and ${plan.maxPlayers - 1} friends${bedrock ? ', Java and Bedrock together' : ''}`
     case 'plus':
       return 'Mods, plugins and modpacks, for bigger groups'
     default:
@@ -203,8 +201,17 @@ export function PlanCard({
   current = false,
   action,
   mark,
+  bedrock = false,
+  solid = plan.monthlyPriceCents > 0,
+  note,
 }: {
   plan: PublicPlan
+  /** Whether Bedrock is on, for the card's first line (`lib/bedrock.ts`). */
+  bedrock?: boolean
+  /** The card is the dark one: the player's own plan on their account, a paid plan elsewhere. */
+  solid?: boolean
+  /** Small print that belongs to this plan, under its details. */
+  note?: ReactNode
   /** The plan the person is on, marked as theirs. */
   current?: boolean
   action?: ReactNode
@@ -213,17 +220,12 @@ export function PlanCard({
 }) {
   const shared = eachOf(plan)
   return (
-    <section
-      className="bk-plan"
-      aria-label={plan.name}
-      data-paid={plan.monthlyPriceCents > 0 || undefined}
-      {...mark}
-    >
+    <section className="bk-plan" aria-label={plan.name} data-paid={solid || undefined} {...mark}>
       <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)', justifyContent: 'space-between' }}>
         <h3 className="type-eyebrow">{plan.name}</h3>
         {current && <Badge tone="grass">Yours</Badge>}
       </div>
-      <p className="type-heading-sm bk-plan__pitch">{pitchOf(plan)}</p>
+      <p className="type-heading-sm bk-plan__pitch">{pitchOf(plan, bedrock)}</p>
       <p className="bk-plan__price">
         <span className="type-display-md bk-num">{dollars(plan.monthlyPriceCents)}</span>
         {plan.monthlyPriceCents > 0 && <span className="type-body-sm"> a month</span>}
@@ -241,6 +243,7 @@ export function PlanCard({
           </li>
         ))}
       </ul>
+      {note && <p className="type-body-sm bk-plan__each">{note}</p>}
       {action && <div className="bk-plan__action">{action}</div>}
     </section>
   )

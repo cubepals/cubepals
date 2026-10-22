@@ -8,6 +8,7 @@
  */
 import type { PublicPlan } from '@blockly/contracts'
 import { dollars, EXTRA_HOUR_CENTS } from '../../../legal/figures'
+import { bedrockLive } from '../../../lib/bedrock'
 import { daysSaid, hoursAgainSaid } from '../../../lib/plans'
 import { eachOf } from '../../../ui'
 import { detailMark } from '../steps'
@@ -97,7 +98,7 @@ function changeSaid(core: PublicPlan, plus: PublicPlan): string {
 /** Whether friends on Bedrock can join, as this Cubepals has it. */
 const bedrockSaid = (on: boolean) =>
   on
-    ? 'Phones, tablets and Windows join a Paper server beside Java players. Consoles can’t yet.'
+    ? 'Yes. Friends on Bedrock, on phones, tablets or Windows, join the same server as Java friends, with the same address. Xbox, PlayStation and Switch can’t add a server, so they can’t join. A server with mods can’t let them in yet.'
     : 'Not yet. Cubepals runs Minecraft: Java Edition. Bedrock support is coming soon, so friends on phones and tablets can join too.'
 
 export function Questions({ plans }: { plans: readonly PublicPlan[] }) {
@@ -144,7 +145,7 @@ export function Questions({ plans }: { plans: readonly PublicPlan[] }) {
         </Question>
       )}
       <Question which="bedrock" title="Bedrock or consoles?">
-        {bedrockSaid(plans.some((plan) => plan.bedrock))}
+        {bedrockSaid(bedrockLive())}
       </Question>
       <Question which="modpacks" title="Which modpacks?">
         Modrinth packs, from a search or a link. A pack from CurseForge or a launcher runs from its file:

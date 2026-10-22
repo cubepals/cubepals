@@ -18,7 +18,7 @@ describe('public sizes', () => {
     faces: {} as PlayerFaces,
     items: {} as ItemIcons,
     icons: {} as ServerIcons,
-    platform: () => ({ bedrock: false, unsoldPlans: [] }),
+    platform: () => ({ unsoldPlans: [] }),
   })
 
   test('each answer to who is playing, with the players it holds and its memory', async () => {
@@ -41,7 +41,7 @@ describe('public plans', () => {
     faces: {} as PlayerFaces,
     items: {} as ItemIcons,
     icons: {} as ServerIcons,
-    platform: () => ({ bedrock: false, unsoldPlans: [] }),
+    platform: () => ({ unsoldPlans: [] }),
   })
 
   test('Free, Core and Plus, with what each costs and includes', async () => {
@@ -64,7 +64,6 @@ describe('public plans', () => {
         sleepsAfterMinutes: 10,
         maxServers: 1,
         maxPlayers: 5,
-        bedrock: false,
         mods: false,
         datapacks: false,
         downloads: 'daily',
@@ -85,7 +84,6 @@ describe('public plans', () => {
         sleepsAfterMinutes: 15,
         maxServers: 1,
         maxPlayers: 5,
-        bedrock: false,
         mods: false,
         datapacks: false,
         downloads: 'history',
@@ -106,7 +104,6 @@ describe('public plans', () => {
         sleepsAfterMinutes: 15,
         maxServers: 3,
         maxPlayers: 100,
-        bedrock: false,
         mods: true,
         datapacks: true,
         downloads: 'history',
@@ -132,7 +129,7 @@ describe('player faces', () => {
     faces,
     items: {} as ItemIcons,
     icons: {} as ServerIcons,
-    platform: () => ({ bedrock: false, unsoldPlans: [] }),
+    platform: () => ({ unsoldPlans: [] }),
   })
 
   test('an 8×8 picture, cached for the hour Blockly keeps it', async () => {

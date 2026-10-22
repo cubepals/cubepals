@@ -300,7 +300,7 @@ function cheaperSaid(overview: AccountOverviewView): string {
   const past = Math.floor(
     (more.entitlements.monthlyPriceCents - overview.entitlements.monthlyPriceCents) / unitCents,
   )
-  return ` Extra hours are ${money(unitCents)} each; past ${past} a month, ${title(more.key)} costs less.`
+  return ` Extra hours are ${money(unitCents)} each; past ${past} extra hours a month, ${title(more.key)} costs less.`
 }
 
 /** The month's included play is used: on extra hours now, or asleep until the 1st, and why. */
@@ -676,6 +676,8 @@ function Plans({ overview }: { overview: AccountOverviewView }) {
             key={plan.key}
             plan={plan}
             current={plan.key === overview.plan.key}
+            // Only the player's own plan is dark, so the eye lands on theirs.
+            solid={plan.key === overview.plan.key}
             mark={seenMark(`plan_${plan.key}`)}
             action={
               // A smaller plan isn't bought over a larger one: ending the larger comes first.
