@@ -22,7 +22,7 @@ COPY apps/reporter/settings.gradle.kts apps/reporter/build.gradle.kts ./
 COPY apps/reporter/src src
 RUN gradle jar --no-daemon --console=plain
 
-FROM mirror.gcr.io/library/node:22.23.2-trixie-slim@sha256:c5849ff9c9ebcd66615412f0b548ca5b8ecaef84003dc9ac2e077ebe46aaa3f6 AS deps
+FROM mirror.gcr.io/library/node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf AS deps
 COPY --from=mirror.gcr.io/oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 # Only the manifests first, so a source change doesn't reinstall anything.
@@ -39,7 +39,7 @@ RUN bun -e 'const p = await Bun.file("package.json").json(); p.workspaces = ["ap
 # The WebTransport module's install script (trusted in package.json) fetches its prebuilt native
 # binary for this platform.
 
-FROM mirror.gcr.io/library/node:22.23.2-trixie-slim@sha256:c5849ff9c9ebcd66615412f0b548ca5b8ecaef84003dc9ac2e077ebe46aaa3f6
+FROM mirror.gcr.io/library/node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf
 ENV NODE_ENV=production
 WORKDIR /app
 # Hoisted (bunfig.toml): every dependency lives in the root node_modules, and the workspace

@@ -54,5 +54,13 @@
   },
   "trustedDependencies": [
     "@fails-components/webtransport-transport-http3-quiche"
-  ]
+  ],
+  "overrides": {
+    "@node-minify/core": {
+      "glob": "10.5.0"
+    },
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.25.12"
+    }
+  }
 }

@@ -8,7 +8,7 @@
 # Base images come from Google's mirror of Docker Hub, pinned by digest, as in
 # apps/control/Dockerfile.
 
-FROM mirror.gcr.io/library/node:22.23.2-trixie-slim@sha256:c5849ff9c9ebcd66615412f0b548ca5b8ecaef84003dc9ac2e077ebe46aaa3f6 AS build
+FROM mirror.gcr.io/library/node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf AS build
 COPY --from=mirror.gcr.io/oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml tsconfig.base.json ./
@@ -27,7 +27,7 @@ RUN test -n "$API_UPSTREAM" || (echo "Pass --build-arg API_UPSTREAM=<the control
 ENV NEXT_OUTPUT=standalone NEXT_TELEMETRY_DISABLED=1
 RUN cd apps/web && ../../node_modules/.bin/next build
 
-FROM mirror.gcr.io/library/node:22.23.2-trixie-slim@sha256:c5849ff9c9ebcd66615412f0b548ca5b8ecaef84003dc9ac2e077ebe46aaa3f6
+FROM mirror.gcr.io/library/node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
 WORKDIR /app
 # The standalone server mirrors the repository layout from its tracing root.
