@@ -70,9 +70,12 @@ jobs:
           if [ -f bedrock-check.log ]; then
             { echo '```'; sed -n '/^  step /,$p' bedrock-check.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           fi
+      # A second try covers a blip reaching Fly, as the stop below has.
       - name: Turn the edge's Xbox sign-in check on
         if: always() && steps.validation.conclusion != 'skipped'
-        run: fly secrets set BEDROCK_VALIDATE_LOGIN=true -a bly-staging-edge
+        run: |
+          fly secrets set BEDROCK_VALIDATE_LOGIN=true -a bly-staging-edge ||
+            (sleep 60 && fly secrets set BEDROCK_VALIDATE_LOGIN=true -a bly-staging-edge)
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
       # Whatever happened above, nothing is left running. A second try covers a blip reaching Fly.

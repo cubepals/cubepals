@@ -764,7 +764,8 @@ export interface CreateOptions {
   templates: TemplateView[]
   /** Packs Blockly offers by name, each at the release a new server plays; usable first. */
   packs: CuratedPackView[]
-  gameVersions: { value: string; label: string; recommended: boolean }[]
+  /** Newest first, each with the server types Cubepals offers on it. */
+  gameVersions: { value: string; label: string; recommended: boolean; loaders: Loader[] }[]
   loaders: { value: Loader; label: string }[]
   regions: { key: string; label: string }[]
   /** `plan`: the plan that includes a size this one doesn't. */

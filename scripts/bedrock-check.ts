@@ -202,6 +202,12 @@ try {
   const made =
     signedUp &&
     (await step('a Paper server is made with Bedrock on, Floodgate loaded with its key file', async () => {
+      // The newest release the create flow offers Paper on, from the same catalog it reads.
+      const { gameVersions } = await api('servers.createOptions', {}, 'GET')
+      const release = (gameVersions as { value: string; loaders: string[] }[]).find((v) =>
+        v.loaders.includes('paper'),
+      )
+      check(release !== undefined, 'the create flow offers Paper on no release')
       const created = await api('servers.create', {
         idempotencyKey: checkKey(),
         name: 'Bedrock Check',
@@ -209,6 +215,7 @@ try {
         regionKey: 'eu',
         playStyle: 'survival',
         loader: 'paper',
+        gameVersion: release.value,
       })
       server = { id: created.id, slug: created.slug }
       const at = Date.now()
@@ -231,7 +238,7 @@ try {
         failed.length === 0,
         `Floodgate complained of its key: ${failed[0]?.replace(/^.*?floodgate/i, 'floodgate').slice(0, 160)}`,
       )
-      return `${address()} (${server.id}) up in ${seconds(Date.now() - at)}; ${loaded.length} Floodgate log lines, none about its key`
+      return `Paper on Minecraft ${release.value}, ${address()} (${server.id}) up in ${seconds(Date.now() - at)}; ${loaded.length} Floodgate log lines, none about its key`
     }))
 
   const slept =

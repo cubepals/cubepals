@@ -50,6 +50,15 @@ export const LOADER_LABELS: Record<Loader, string> = {
 export const notOffered = (loader: Loader, gameVersion: string): string =>
   `Cubepals doesn’t offer ${LOADER_LABELS[loader]} on Minecraft ${gameVersion} yet.`
 
+/** The releases the create flow lists, newest first, each with the server types offered on it. */
+export const createVersions = () =>
+  OFFERED.map((v) => ({
+    value: v.id,
+    label: v.id,
+    recommended: v.id === DEFAULT_GAME_VERSION,
+    loaders: [...v.loaders],
+  }))
+
 export function offeredVersions(): readonly OfferedVersion[] {
   return OFFERED
 }
