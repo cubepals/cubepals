@@ -289,7 +289,7 @@ export function secondEyeComment(review: Review, run: Run): string {
     ]),
     ...reasons(stage),
     ...(run.previous && stage < 2 ? settledDetails(review, run.previous) : []),
-    `<sub>An automated review by Claude, not a person. It advises and doesn't block the merge. Re-run: \`gh workflow run second-eye.yml -f pr=${run.pull}\`</sub>`,
+    `<sub>An automated review by Claude, not a person. The verdict advises; on a sensitive change the Second eye gate also waits for a finished review. Re-run: \`gh workflow run second-eye.yml -f pr=${run.pull}\`</sub>`,
     dataBlock(
       run,
       stage === 2

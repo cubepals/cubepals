@@ -114,10 +114,9 @@ jobs:
     name: Say a new review is coming
     needs: sensitive
     # A comment or a run by hand has no sensitive job, and a request must still start when that job
-    # failed: only the automatic start depends on it.
+    # failed: only the automatic start reads its output, which a failed job leaves empty.
     if: >-
-      always()
-      && (needs.sensitive.result == 'success' || needs.sensitive.result == 'skipped')
+      !cancelled()
       && github.repository == 'cubepals/cubepals'
       && github.actor == 'v0id-user'
       && github.triggering_actor == 'v0id-user'
@@ -393,8 +392,11 @@ jobs:
   gate:
     name: Set the second eye gate
     needs: [sensitive, mark, review, comment]
+    # Dependabot's token is read-only and can't set a status, so its pull requests have none until
+    # v0id-user asks for a review, which sets it from a comment or a run by hand.
     if: >-
       always()
+      && github.actor != 'dependabot[bot]'
       && (needs.sensitive.result != 'skipped'
         || (contains(fromJSON('["issue_comment", "workflow_dispatch"]'), github.event_name)
           && needs.mark.result == 'success'))
