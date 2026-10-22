@@ -97,7 +97,7 @@ export function Night({
       tone="night"
       sky
       y={76}
-      side={0.754}
+      side="hero"
       zoom="wide"
       // Framed as concept A1: the island's top a broad lit floor across the right half, seen from
       // 28 degrees up through a long lens, its left and right corners at 48% and 99% across, the
