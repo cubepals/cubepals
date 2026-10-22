@@ -168,11 +168,12 @@ export interface RegionSteps {
 
 /**
  * Restarts the edge one region at a time: its players are waited on, then it is deployed and
- * waited on until ready, and only then the next. With `options.cordon` (the default) a region is
- * first cordoned while another is ready to take its joins, so its players finish and no new join
- * arrives; with a single region there is none to take them, and it is waited on while it serves.
- * A region that doesn't come back ready, or fails anywhere on the way, takes connections again and
- * stops the roll with the others as they were.
+ * waited on until ready, and only then the next. With `options.cordon` a region is first cordoned
+ * while another is ready to take its joins, so no new join arrives while its players finish; that
+ * is off by default, since on staging a cordoned region made the other region's probe fail nearly
+ * every join. Without it a region serves while it is waited on. A region that doesn't come back
+ * ready, or fails anywhere on the way, takes connections again and stops the roll with the others
+ * as they were.
  * Returns how many players were counted and cut, and the regions that couldn't count theirs.
  */
 export async function rollEdge(
@@ -180,7 +181,7 @@ export async function rollEdge(
   steps: RegionSteps,
   say: (line: string) => void,
   clock: Clock,
-  options: { cordon: boolean } = { cordon: true },
+  options: { cordon: boolean } = { cordon: false },
 ): Promise<{ cut: number; uncounted: string[] }> {
   let cut = 0
   const uncounted: string[] = []

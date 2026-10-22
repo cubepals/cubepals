@@ -291,9 +291,9 @@ describe('restarting the edge when a region can’t be cordoned or fails', () =>
     expect(w.time()).toBe(0)
   })
 
-  test('cordons nothing when told not to', async () => {
+  test('cordons nothing unless asked to', async () => {
     const w = world()
-    await rollEdge(['fra', 'iad'], steps(w.log), () => {}, w.clock, { cordon: false })
+    await rollEdge(['fra', 'iad'], steps(w.log), () => {}, w.clock)
     expect(w.log).toEqual(['deploy fra', 'ready fra', 'deploy iad', 'ready iad'])
   })
 
@@ -334,9 +334,9 @@ describe('restarting the edge when a region can’t be cordoned or fails', () =>
     expect(said).toContain('fra: is still cordoned and takes no joins: fly down')
   })
 
-  test('cordons by default, and a single region is waited on while it serves', async () => {
+  test('cordons when asked to, and a single region is waited on while it serves', async () => {
     const w = world()
-    await rollEdge(['fra', 'iad'], steps(w.log), () => {}, w.clock)
+    await roll(['fra', 'iad'], steps(w.log), () => {}, w.clock)
     expect(w.log[0]).toBe('cordon fra')
     const single = world()
     await rollEdge(['fra'], steps(single.log), () => {}, single.clock)

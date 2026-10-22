@@ -137,5 +137,5 @@ export async function rollEdgeApp(
       return true
     },
   }
-  return rollEdge(regions, steps, say, clock, { cordon: process.env.EDGE_CORDON !== '0' })
+  return rollEdge(regions, steps, say, clock, { cordon: process.env.EDGE_CORDON === '1' })
 }
