@@ -22,9 +22,9 @@ on:
 
 permissions: {}
 
-# Only the newest event's answer matters.
+# Only the newest event's answer matters. A queue entry has no pull request, so its own ref keys it.
 concurrency:
-  group: labels-check-${{ github.event.pull_request.number }}
+  group: labels-check-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
