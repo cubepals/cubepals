@@ -51,6 +51,7 @@ import { TEMPLATES } from '../apps/control/src/app/setups/templates.ts'
 import { runScheduledNow } from '../apps/control/src/infra/pg/jobs.ts'
 import { GAME_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { Progress, type StepResult, seconds, summaryTable } from './lib/check-progress.ts'
+import { fly } from './lib/fly-async.ts'
 import { type Edge, join, login } from './lib/minecraft.ts'
 import { ownGameJoins } from './lib/own-game-joins.ts'
 import { type Api, people } from './lib/people.ts'
@@ -92,18 +93,6 @@ const state = JSON.parse(
 function proxy(local: number, remote: number, app: string): void {
   const child = spawn('fly', ['proxy', `${local}:${remote}`, '-a', app], { stdio: 'ignore' })
   process.on('exit', () => child.kill())
-}
-
-/** flyctl, without holding up the other journeys while it answers. */
-async function fly(args: string[]): Promise<string> {
-  const child = Bun.spawn(['fly', ...args], { stdout: 'pipe', stderr: 'pipe' })
-  const [out, err, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ])
-  if (code !== 0) throw new Error(`fly ${args.slice(0, 3).join(' ')}: ${err.trim()}`)
-  return out
 }
 
 const reached = await reachDatabase(state)
