@@ -33,6 +33,8 @@
   letter-spacing: -0.055em;
 }
 .plans .price small {
+  /* "a month" stays with the price or goes to the next line whole, never split from "a". */
+  white-space: nowrap;
   font-size: 1rem;
   font-weight: 500;
   letter-spacing: -0.01em;
