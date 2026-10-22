@@ -292,7 +292,7 @@ const largerPlan = (overview: AccountOverviewView) =>
 
 /**
  * Where extra hours can be allowed and a larger plan exists, what each costs and when that plan
- * costs less: "Extra hours are $0.25 each; past 60 a month, Plus costs less." Empty otherwise.
+ * costs less: "Extra hours are $0.25 each; past 60 extra hours a month, Plus costs less." Empty otherwise.
  */
 function cheaperSaid(overview: AccountOverviewView): string {
   const more = largerPlan(overview)
@@ -368,7 +368,7 @@ function ExtraPlay({ overview }: { overview: AccountOverviewView }) {
     <>
       <FormRow
         label="Extra play you allow"
-        description={`${allowed.said === 'done' ? 'Saved. ' : ''}Past what your plan includes, ${money(u.unitCents)} an hour, added to your next Plus payment. Cubepals stops your servers at this number, so nothing costs more than you said.${later}`}
+        description={`${allowed.said === 'done' ? 'Saved. ' : ''}Past what your plan includes, ${money(u.unitCents)} an hour, added to your next ${title(overview.plan.key)} payment. Cubepals stops your servers at this number, so nothing costs more than you said.${later}`}
         control={
           <div className="bk-row" style={{ gap: 'var(--space-8)', alignItems: 'center' }}>
             <select

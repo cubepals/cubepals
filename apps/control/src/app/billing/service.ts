@@ -148,10 +148,10 @@ export class BillingService {
     const term = options.term ?? 'month'
     if (!PAID_PLANS.includes(planKey))
       throw new AppError('invalid_choice', `There is no ${planKey} plan to buy.`)
+    await this.#db.transaction((tx) => this.#policy.require(tx, user.id, { kind: 'billing' }))
     // A plan with no product here yet isn't for sale: said, never a failure.
     if (!requireCapability(this.#caps, 'billing').sells(planKey))
       throw new AppError('invalid_choice', `${planName(planKey)} isn’t available yet.`)
-    await this.#db.transaction((tx) => this.#policy.require(tx, user.id, { kind: 'billing' }))
     const standing = await loadStanding(this.#db, user.id)
     const plan = entitlementsFor(planKey)
     if (term === 'month' && standing.plan === planKey)
