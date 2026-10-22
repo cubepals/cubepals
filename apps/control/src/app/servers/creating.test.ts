@@ -143,7 +143,8 @@ describe.skipIf(!hasDatabase)('creating a server', () => {
     expect(await created(templated.id)).toEqual([
       {
         slug: templated.slug,
-        gameVersion: '26.3',
+        // The newest release Cubepals runs plain Minecraft on Paper on, where Bedrock friends join.
+        gameVersion: '26.2',
         loader: 'vanilla',
         from: 'template',
         template: 'hardcore',

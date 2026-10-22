@@ -174,10 +174,9 @@ describe.skipIf(!hasDatabase)('the Via plugins every Paper server starts with', 
     expect(templateOf('duels')?.setup.settings.otherVersions).toBe('oldest')
   })
 
-  test('only a server on Paper has the choice', async () => {
+  test('only Paper has the choice', async () => {
     const owner = await h.user('Ivy')
-    // Plain Minecraft on Mojang's own server: Cubepals offers no Paper on 26.3.
-    const server = await h.create(owner, { gameVersion: '26.3' })
+    const server = await h.create(owner)
     await h.until(server.id, 'running')
     await h.settled(server.id)
     expect((await h.app.queries.get(owner, server.id)).joins?.otherVersions).toBeNull()

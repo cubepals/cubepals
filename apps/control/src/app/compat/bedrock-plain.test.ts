@@ -133,15 +133,6 @@ describe.skipIf(!hasDatabase)('a new plain server', () => {
     }, 60_000)
   }
 
-  test('one made from nothing lands where Paper runs it too', async () => {
-    const owner = await h.user('Nothing')
-    const { id } = await h.create(owner, { name: 'Nothing' })
-    await running(id)
-    const revision = await desired(id)
-    expect(runsOnPaper(revision)).toBe(true)
-    expect(revision.settings).toMatchObject({ bedrock: true, otherVersions: 'on' })
-  }, 60_000)
-
   test('a plain server asked for on a release without Paper runs Mojang’s own, and says Bedrock can’t join', async () => {
     const owner = await h.user('Newest')
     const { id } = await h.create(owner, {

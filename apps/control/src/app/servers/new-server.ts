@@ -26,11 +26,9 @@ import { type MemoryTier, PARTY, type PartySize } from '../../domain/server/size
 import { nextLevelName, type World } from '../../domain/world/world.ts'
 import { joinRange } from '../../minecraft/clients.ts'
 import {
-  compareVersions,
   DEFAULT_GAME_VERSION,
   DEFAULT_LOADER,
   notOffered,
-  offeredVersions,
   packRuns,
   supports,
 } from '../../minecraft/versions.ts'
@@ -91,8 +89,8 @@ export async function draftNewServer(
   // What to play decides the release, the server type, the mods and the size; nobody making a
   // server is asked about any of them.
   const chosen = request.from === undefined ? null : await sources.resolve(request.from, actor)
+  const gameVersion = chosen?.gameVersion ?? request.gameVersion ?? DEFAULT_GAME_VERSION
   const loader = chosen?.loader ?? request.loader ?? DEFAULT_LOADER
-  const gameVersion = chosen?.gameVersion ?? request.gameVersion ?? releaseFor(loader)
   // A pack brings its own release and loader, which may be one Blockly doesn't offer a new world.
   const runs = chosen?.modpack ? packRuns(gameVersion, loader) : supports(gameVersion, loader)
   if (!runs) throw new AppError('invalid_choice', notOffered(loader, gameVersion))
@@ -113,11 +111,10 @@ export async function draftNewServer(
   })
   requireWithinPlan(plan, { loader, settings, mods: chosen?.mods ?? [], modpack: chosen?.modpack ?? null })
 
-  const loaderVersion = await firstPin(sources.builds, request, chosen, loader, gameVersion)
   const revision: RevisionDraft = {
     gameVersion,
     loader,
-    loaderVersion,
+    loaderVersion: await firstPin(sources.builds, request, chosen, loader, gameVersion),
     settings,
     mods: chosen?.mods ?? [],
     modpack: chosen?.modpack ?? null,
@@ -182,18 +179,6 @@ async function firstPin(
     return paperPin(builds, gameVersion, 'plain')
   return loaderPin(builds, loader, gameVersion)
 }
-
-/**
- * The release a server made from nothing lands on. Plain Minecraft's is the newest Cubepals runs it
- * on Paper on, where Bedrock friends join it, as a template's is (`SetupService.resolve`).
- */
-const releaseFor = (loader: Loader): string =>
-  (loader === 'vanilla'
-    ? offeredVersions()
-        .map((offered) => offered.id)
-        .filter((id) => supports(id, 'paper'))
-        .sort((a, b) => compareVersions(b, a))[0]
-    : undefined) ?? DEFAULT_GAME_VERSION
 
 /**
  * Which players' games join a new server, and whether Bedrock friends do where the deployment lets
