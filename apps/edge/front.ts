@@ -36,6 +36,7 @@ import {
 import { withoutForwarding } from './forwarding.ts'
 import { turnAway } from './hold.ts'
 import type { Gate } from './limits.ts'
+import { connectionClosed, connectionEnded, type Edition, firstByteAfter } from './metrics.ts'
 import { hostnameOf, readVarInt } from './notice.ts'
 import { sourceKey, type Visits } from './visits.ts'
 
@@ -185,16 +186,45 @@ class Arrival {
   /** Releases the address's place among connections still greeting. */
   #greeted: (() => void) | null = null
   readonly #receive = (chunk: Buffer) => this.#take(chunk)
+  /** When the connection was accepted, for the time to its first byte back. */
+  readonly #began = performance.now()
+  /** Whether it has been counted, as `metrics.ts` counts each connection once; or handed on, not yet. */
+  #counted = false
+  #handed = false
 
   constructor(client: Socket, options: FrontOptions, geyser = false) {
     this.#client = client
     this.#options = options
     this.#geyser = geyser
     client.on('error', () => client.destroy())
-    client.setTimeout(GREETING_MS, () => client.destroy())
-    client.once('close', () => this.#greeted?.())
+    client.setTimeout(GREETING_MS, () => {
+      this.#count('failed', 'greeting_timeout')
+      client.destroy()
+    })
+    client.once('close', () => {
+      this.#greeted?.()
+      const why = this.#handed ? 'left' : this.#received.length === 0 ? 'silent' : 'closed'
+      this.#count('failed', why)
+    })
     if (!options.proxied && !geyser && !this.#greet(this.#socketSource())) return
     client.on('data', this.#receive)
+  }
+
+  get #edition(): Edition {
+    return this.#geyser ? 'bedrock' : 'java'
+  }
+
+  /** Counts how the connection's greeting ended, the first time it is known. */
+  #count(outcome: 'accepted' | 'refused' | 'failed', reason?: string): void {
+    if (this.#counted) return
+    this.#counted = true
+    connectionEnded(this.#edition, outcome, reason)
+  }
+
+  /** Closes a connection that broke the protocol before saying where it was going. */
+  #broken(): void {
+    this.#count('failed', 'bad_greeting')
+    this.#client.destroy()
   }
 
   #socketSource(): Source {
@@ -205,17 +235,20 @@ class Arrival {
   #greet(source: Source): boolean {
     this.#source = source
     this.#greeted = this.#options.gate.greet(source.address)
-    if (!this.#greeted) this.#client.destroy()
+    if (!this.#greeted) {
+      this.#count('refused', 'address')
+      this.#client.destroy()
+    }
     return this.#greeted !== null
   }
 
   #take(chunk: Buffer): void {
     this.#received = concat(this.#received, chunk)
-    if (this.#received.length > MOST_GREETING) return void this.#client.destroy()
+    if (this.#received.length > MOST_GREETING) return void this.#broken()
     if (this.#source === null && !this.#readSource()) return
     const handshake = readHandshake(this.#received)
     if (handshake === 'more') return
-    if (handshake === 'bad') return void this.#client.destroy()
+    if (handshake === 'bad') return void this.#broken()
     this.#client.off('data', this.#receive)
     this.#client.pause()
     this.#client.setTimeout(0)
@@ -232,7 +265,7 @@ class Arrival {
       const header = readProxyHeader(this.#received)
       if (header === 'more') return false
       if (header === 'bad') {
-        this.#client.destroy()
+        this.#broken()
         return false
       }
       if (header !== 'none') {
@@ -243,8 +276,13 @@ class Arrival {
     }
     const read = readProxyLine(this.#received)
     if (read === 'more') return false
-    // A connection Fly's proxy made itself says nothing more worth hearing.
-    if (read === 'bad' || read.source === null) {
+    if (read === 'bad') {
+      this.#broken()
+      return false
+    }
+    // A connection Fly's proxy made itself says nothing more worth hearing, and isn't a player's.
+    if (read.source === null) {
+      this.#counted = true
       this.#client.destroy()
       return false
     }
@@ -260,6 +298,7 @@ class Arrival {
     const refused = handshake.joining ? refuse(handshake.hostname, handshake.protocol) : null
     if (refused !== null) {
       visit?.refused('wrong_game')
+      this.#count('refused', 'wrong_game')
       return void this.#client.end(turnAway(refused))
     }
     const admitted = gate.admit(known(handshake.hostname) ? handshake.hostname : '')
@@ -268,6 +307,7 @@ class Arrival {
       if (handshake.joining) this.#client.end(turnAway(busy))
       else this.#client.destroy()
       visit?.refused('busy')
+      this.#count('refused', 'busy')
       return
     }
     this.#client.once('close', admitted)
@@ -277,11 +317,29 @@ class Arrival {
         sent = concat(headerFor(this.#source, port), sent)
       } catch {
         // An address that can't be written in a header: no player's connection has one.
-        return void this.#client.destroy()
+        return void this.#broken()
       }
     }
     const toRouter = pipe(this.#client, `127.0.0.1:${router}`, sent, timeouts)
+    this.#handed = true
+    this.#measure(toRouter, handshake.joining ? 'join' : 'ping')
     visit?.admitted(toRouter)
+  }
+
+  /**
+   * Times the first byte back through `toRouter`, which is when the connection counts as accepted;
+   * one that closes before is a failure, the backend's unless the player left first. Once the
+   * player's side closes, what passed each way is counted.
+   */
+  #measure(toRouter: Socket, intent: 'join' | 'ping'): void {
+    toRouter.once('data', () => {
+      if (this.#counted) return
+      firstByteAfter(this.#edition, intent, performance.now() - this.#began)
+      this.#count('accepted')
+    })
+    toRouter.once('close', () => this.#count('failed', 'backend'))
+    const client = this.#client
+    client.once('close', () => connectionClosed(this.#edition, client.bytesRead, client.bytesWritten))
   }
 
   /**
