@@ -4,6 +4,13 @@
 
 'use client'
 
+/**
+ * A plan's button on the pricing page, and under it the same plan for a year paid at once where
+ * it is sold that way. Signed in, each goes to the checkout page (the agreement, then paying) and
+ * back to their servers; signed out, it makes the account first, and the account page carries on
+ * to the checkout page.
+ */
+
 import Link from 'next/link'
 import { dollars } from '../../../legal/figures'
 import { checkoutHref } from '../../../lib/checkout'
@@ -11,12 +18,6 @@ import { behindSignUp, useSignedIn } from '../../../lib/viewer'
 import { Button } from '../../../ui'
 import { ctaMark, planMark } from '../steps'
 
-/**
- * A plan's button on the pricing page, and under it the same plan for a year paid at once where
- * it is sold that way. Signed in, each goes to the checkout page (the agreement, then paying) and
- * back to their servers; signed out, it makes the account first, and the account page carries on
- * to the checkout page.
- */
 export function GetPlan({
   plan,
   name,

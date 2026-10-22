@@ -49,14 +49,13 @@ const FROM_A_MODPACK = {
 // route Polar calls, the plan they put an account on, and what a smaller plan stops.
 describe.skipIf(!hasDatabase)('billing', () => {
   let h: Harness
-  let billing: PolarBilling
   let webhook: ReturnType<typeof createBillingWebhook>
   const polar = new PolarStandIn()
   const secret = webhookSecret()
 
   beforeAll(async () => {
     await polar.start()
-    billing = new PolarBilling({
+    const billing = new PolarBilling({
       accessToken: 'polar_oat_test',
       webhookSecret: secret,
       server: 'sandbox',
@@ -105,23 +104,6 @@ describe.skipIf(!hasDatabase)('billing', () => {
       partySize: '5',
       regionKey: 'local',
     })
-
-  test('a plan with no product here is not for sale: said at checkout, and in what the site shows', async () => {
-    const owner = await h.user()
-    const asked = polar.requests.length
-    // This deployment sells Plus alone, so Core is not for sale yet.
-    expect(await refusal(h.app.billing.startCheckout(owner, 'core'))).toBe('invalid_choice')
-    await expect(h.app.billing.startCheckout(owner, 'core')).rejects.toThrow('Core isn’t available yet.')
-    expect(polar.requests.length).toBe(asked)
-    expect(supportOf({ archives: null, billing }).unsoldPlans).toEqual(['core'])
-    expect(
-      publicPlans(supportOf({ archives: null, billing })).map((plan) => [plan.key, plan.available]),
-    ).toEqual([
-      ['free', true],
-      ['core', false],
-      ['plus', true],
-    ])
-  })
 
   test('a checkout is for a paid plan and comes back to the account page; the portal is for customers', async () => {
     const owner = await h.user()

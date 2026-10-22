@@ -108,19 +108,7 @@ export function PlansSaid({
                   </li>
                 ))}
               </ul>
-              {isPaid && !plan.available ? (
-                <span className={`bl-btn ${styles.action}`} aria-disabled="true">
-                  Not available yet
-                </span>
-              ) : (
-                <Link
-                  href={isPaid ? getPlan(plan.key) : create}
-                  className={`bl-btn ${isPaid ? 'bl-btn--lit' : ''} ${styles.action}`}
-                  {...(isPaid ? planMark(plan.key, 'month') : ctaMark('plans_create'))}
-                >
-                  {isPaid ? `Get ${plan.name}` : 'Create a server'}
-                </Link>
-              )}
+              <PlanButton plan={plan} create={create} getPlan={getPlan} />
             </section>
           )
         })}
@@ -144,5 +132,33 @@ function Shared({ plan }: { plan: PublicPlan }) {
     <p className={styles.shared}>
       {shared.each} each, shared by {shared.friends} friends.
     </p>
+  )
+}
+
+/** The card's button: to the plan's checkout, to a first server, or that a plan isn't for sale yet. */
+function PlanButton({
+  plan,
+  create,
+  getPlan,
+}: {
+  plan: PublicPlan
+  create: string
+  getPlan: (key: string) => string
+}) {
+  const isPaid = plan.monthlyPriceCents > 0
+  if (isPaid && !plan.available)
+    return (
+      <span className={`bl-btn ${styles.action}`} aria-disabled="true">
+        Not available yet
+      </span>
+    )
+  return (
+    <Link
+      href={isPaid ? getPlan(plan.key) : create}
+      className={`bl-btn ${isPaid ? 'bl-btn--lit' : ''} ${styles.action}`}
+      {...(isPaid ? planMark(plan.key, 'month') : ctaMark('plans_create'))}
+    >
+      {isPaid ? `Get ${plan.name}` : 'Create a server'}
+    </Link>
   )
 }

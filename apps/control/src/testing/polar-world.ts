@@ -64,6 +64,15 @@ const list = (items: unknown[]): Answer => ({ status: 200, body: page(items) })
 type SubscriptionChange = models.SubscriptionUpdateBase & { cancel_at_period_end?: boolean }
 
 export class PolarWorld {
+  /** The products it sells: both paid plans, or the ones a test names. */
+  readonly #products: Record<string, string>
+  /** The Polar adapter the control plane runs on, once started. */
+  billing: PolarBilling | null = null
+
+  constructor(products: Record<string, string> = { core: CORE_PRODUCT, plus: PLUS_PRODUCT }) {
+    this.#products = products
+  }
+
   readonly polar = new PolarStandIn()
   readonly #secret = webhookSecret()
   #h: Harness | null = null
@@ -91,9 +100,10 @@ export class PolarWorld {
       accessToken: 'polar_oat_test',
       webhookSecret: this.#secret,
       server: 'sandbox',
-      products: { core: CORE_PRODUCT, plus: PLUS_PRODUCT },
+      products: this.#products,
       baseUrl: this.polar.url,
     })
+    this.billing = billing
     this.#h = await startHarness({ capabilities: { archives: null, billing } })
     this.#webhook = createBillingWebhook({ billing: this.#h.app.billing })
   }

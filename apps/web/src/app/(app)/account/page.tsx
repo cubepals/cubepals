@@ -494,22 +494,32 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
   )
 }
 
+/** What the plan section says of a plan a subscription pays for: past due, moving to a smaller plan, or its renewal. */
+function payingSummary(
+  billed: NonNullable<AccountOverviewView['plan']['billed']>,
+  key: string,
+  giftNext: AccountOverviewView['plan']['giftNext'],
+): string | null {
+  if (billed.pastDueUntil)
+    return `Your last payment didn’t go through. Update your card in Manage billing by ${dayOf(billed.pastDueUntil)} to keep ${title(key)}.`
+  if (billed.movesTo)
+    return `${title(billed.movesTo.plan)} from ${dayOf(billed.movesTo.at)}. You keep ${title(key)} until then.`
+  if (billed.periodEnd && !billed.cancelAtPeriodEnd && giftNext !== null)
+    return `Renews on ${dayOf(billed.periodEnd)}. ${giftWaits(giftNext)}`
+  if (!billed.periodEnd) return null
+  return billed.cancelAtPeriodEnd
+    ? `Ends on ${dayOf(billed.periodEnd)}; then you're on the free trial.`
+    : `Renews on ${dayOf(billed.periodEnd)}.`
+}
+
 /** What the account's plan section says under its name: what pays for the plan, and until when. */
 function planSummary(overview: AccountOverviewView): string {
   const { key, billed, year, gifted, giftNext } = overview.plan
   if (year !== null) return yearSummary(year, gifted !== null)
   if (billed?.endedFor && key === 'free') return endedSummary(billed.endedFor, title(billed.planKey))
   const paying = billed !== null && billed.status !== 'ended' && billed.planKey === key
-  if (paying && billed.pastDueUntil)
-    return `Your last payment didn’t go through. Update your card in Manage billing by ${dayOf(billed.pastDueUntil)} to keep ${title(key)}.`
-  if (paying && billed.movesTo)
-    return `${title(billed.movesTo.plan)} from ${dayOf(billed.movesTo.at)}. You keep ${title(key)} until then.`
-  if (paying && billed.periodEnd && !billed.cancelAtPeriodEnd && giftNext !== null)
-    return `Renews on ${dayOf(billed.periodEnd)}. ${giftWaits(giftNext)}`
-  if (paying && billed.periodEnd)
-    return billed.cancelAtPeriodEnd
-      ? `Ends on ${dayOf(billed.periodEnd)}; then you're on the free trial.`
-      : `Renews on ${dayOf(billed.periodEnd)}.`
+  const said = paying ? payingSummary(billed, key, giftNext) : null
+  if (said !== null) return said
   if (gifted !== null)
     return `A gift, until ${dayOf(gifted.until)}. It doesn’t renew; then you’re on the free trial.`
   return key !== 'free'
