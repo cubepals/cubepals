@@ -38,3 +38,6 @@ infra/terraform/environments/*/config.auto.tfvars.json
 
 # Python bytecode, written when brand/card.py imports brand/wordmark.py.
 __pycache__/
+
+# A plan's stand-in backend, which scripts/terraform-plan.ts writes and removes.
+infra/terraform/environments/*/plan_override.tf
