@@ -14,6 +14,7 @@ enforce-secure-profile=false
 max-players=200
 white-list=false
 difficulty=peaceful
+pause-when-empty-seconds=-1
 spawn-monsters=false
 spawn-animals=false
 enforce-whitelist=false
