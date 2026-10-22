@@ -19,7 +19,8 @@ import { shownStatus, shownStatuses } from '../edge/routed.ts'
 import { NotFound } from '../errors.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import { pictureOf } from '../server-icons/view.ts'
-import { findServer, loadRevision } from '../servers/persistence.ts'
+import { findServer } from '../servers/persistence.ts'
+import { summariesOf } from '../servers/revision-reads.ts'
 import {
   allowlist,
   type DirectoryRow,
@@ -167,7 +168,10 @@ export class ListingQueries {
   /** A server as a card: its own identity, the booted revision for what it runs, presence for who is on. */
   /** `awake` is whether it is shown running (`edge/routed.ts`). */
   async #card(row: DirectoryRow, viewerId: string | null, awake: boolean): Promise<ListingCardView> {
-    const revision = row.revisionId === null ? null : await loadRevision(this.#db, row.revisionId)
+    const revision =
+      row.revisionId === null
+        ? null
+        : ((await summariesOf(this.#db, [row.revisionId])).get(row.revisionId) ?? null)
     return {
       serverId: row.server.id,
       slug: row.server.slug,
@@ -182,7 +186,7 @@ export class ListingQueries {
       whitelistOnly: row.whitelistEnabled,
       gameVersion: revision?.gameVersion ?? null,
       loader: revision?.loader ?? null,
-      mods: revision?.mods.map((m) => m.name) ?? [],
+      mods: revision?.modNames ?? [],
       reactions: {
         serverId: row.server.id,
         stars: row.stars,

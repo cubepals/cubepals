@@ -42,7 +42,7 @@ import {
   trend,
 } from './health-persistence.ts'
 import { KEY_SWEEPS, overdue } from './job-record.ts'
-import { loadJobHealth } from './persistence.ts'
+import { loadJobProgress } from './persistence.ts'
 
 /** A split by region or setup says something once its group has this many timed. */
 const SPLIT_AT_LEAST = 3
@@ -103,7 +103,7 @@ export class PlatformHealth {
    * recorded counts as stale. It names only the sweeps, never what went wrong in them.
    */
   async liveness(now = new Date()): Promise<{ ok: boolean; stale: string[] }> {
-    const recorded = await loadJobHealth(this.#db)
+    const recorded = await loadJobProgress(this.#db, KEY_SWEEPS)
     const stale = KEY_SWEEPS.filter((job) => {
       const row = recorded.find((r) => r.job === job)
       return row === undefined || overdue(row, now)

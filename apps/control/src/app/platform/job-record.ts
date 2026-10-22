@@ -14,7 +14,8 @@ import type { JobOutcomes, ScheduledJob, WorkerHeartbeat } from '../ports/jobs.t
 import {
   claimJobs,
   type JobHealthRecord,
-  loadJobHealth,
+  type JobProgress,
+  loadJobProgress,
   recordJobFailed,
   recordJobsSucceeded,
   recordSchedule,
@@ -32,10 +33,11 @@ export const KEY_SWEEPS = [
 ] as const satisfies ReadonlyArray<ScheduledJob | WorkerHeartbeat>
 
 /** Since when a job has gone without a success: its last, or when it was first seen. */
-export const quietSince = (row: JobHealthRecord): Date => row.lastSucceededAt ?? row.firstSeenAt
+export const quietSince = (row: Pick<JobHealthRecord, 'firstSeenAt' | 'lastSucceededAt'>): Date =>
+  row.lastSucceededAt ?? row.firstSeenAt
 
 /** A scheduled job with no success in three of its intervals. */
-export const overdue = (row: JobHealthRecord, now: Date): boolean =>
+export const overdue = (row: JobProgress, now: Date): boolean =>
   row.everySeconds !== null &&
   now.getTime() - quietSince(row).getTime() > QUIET_INTERVALS * row.everySeconds * SECOND_MS
 
@@ -69,7 +71,7 @@ export class JobRecord implements JobOutcomes {
   }
 
   async lastSucceeded(): Promise<ReadonlyMap<string, Date>> {
-    const rows = await loadJobHealth(this.#db)
+    const rows = await loadJobProgress(this.#db)
     return new Map(rows.flatMap((r) => (r.lastSucceededAt === null ? [] : [[r.job, r.lastSucceededAt]])))
   }
 

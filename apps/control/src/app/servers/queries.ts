@@ -23,13 +23,7 @@ import type {
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
 import { type Entitlements, entitlementsFor } from '../../domain/account/entitlements.ts'
-import {
-  changeKind,
-  describeChanges,
-  type Loader,
-  SETTING_BOUNDS,
-  type ServerRevision,
-} from '../../domain/revision/revision.ts'
+import { changeKind, describeChanges, type Loader, SETTING_BOUNDS } from '../../domain/revision/revision.ts'
 import { bedtime } from '../../domain/server/idle.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import {
@@ -84,15 +78,14 @@ import {
   countLive,
   findServer,
   listOwned,
-  listRevisions,
   listTrashed,
-  loadRevision,
   loadRuntime,
   OUT_OF_MEMORY,
   purgedWithArchives,
   readyBackupCounts,
 } from './persistence.ts'
 import { partySizesFor, planFit, usableFirst } from './plan-fit.ts'
+import { loadChangeFacts, loadRevisionCard, loadRevisionFields, revisionHistory } from './revision-reads.ts'
 import type { MinecraftServerService } from './service.ts'
 import { lastsOnceRestored } from './temporary.ts'
 import { knownPlayers, lastActivity, openIntervalStart, openRun, presenceFor } from './usage.ts'
@@ -146,8 +139,8 @@ export class ServerQueries {
   async revisions(actor: Actor, serverId: string): Promise<RevisionView[]> {
     const server = authorize(actor, await findServer(this.#db, serverId))
     const { applied } = await loadRuntime(this.#db, server.id, this.#providers)
-    const desired = await loadRevision(this.#db, server.desiredRevisionId)
-    const revisions = await listRevisions(this.#db, server.id, 51)
+    const history = await revisionHistory(this.#db, server.id, server.desiredRevisionId, 51)
+    const { desired, entries: revisions } = history
     return revisions.slice(0, 50).map((revision, i) => {
       const before = revisions[i + 1]
       return {
@@ -169,7 +162,7 @@ export class ServerQueries {
   /** What the settings page may offer: bounds, versions this world can move to, sizes the plan allows. */
   async settingsOptions(actor: Actor, serverId: string): Promise<SettingsOptions> {
     const server = authorize(actor, await findServer(this.#db, serverId))
-    const revision = await loadRevision(this.#db, server.desiredRevisionId)
+    const revision = await loadRevisionFields(this.#db, server.desiredRevisionId, ['gameVersion', 'settings'])
     const standing = await loadStanding(this.#db, server.ownerId)
     const entitlements = entitlementsFor(standing.plan, standing.limitOverrides)
     // The plan's caps are the page's bounds too, so the form asks for a value it can save.
@@ -570,11 +563,11 @@ export class ServerQueries {
   async #operationView(
     op: OperationRecord,
     server: MinecraftServer,
-    desired: ServerRevision,
     applied: { revisionId: string; worldId: string } | null,
   ): Promise<OperationView> {
     if (op.kind !== 'apply' || applied === null) return operationView(op, null)
-    const ran = await loadRevision(this.#db, applied.revisionId)
+    const ran = await loadChangeFacts(this.#db, applied.revisionId)
+    const desired = await loadChangeFacts(this.#db, server.desiredRevisionId)
     return operationView(
       op,
       changeKind(describeChanges(ran, desired), applied.worldId === server.activeWorldId),
@@ -608,7 +601,7 @@ export class ServerQueries {
   }
 
   async #view(server: MinecraftServer, online: Online, shown: Shown): Promise<ServerView> {
-    const revision = await loadRevision(this.#db, server.desiredRevisionId)
+    const revision = await loadRevisionCard(this.#db, server.desiredRevisionId)
     const operation = await activeOperation(this.#db, server.id)
     const binding = await loadRuntime(this.#db, server.id, this.#providers)
     const lastChange = await latestOfKind(this.#db, server.id, 'apply')
@@ -665,7 +658,7 @@ export class ServerQueries {
       playStyle: revision.settings.defaultGameMode,
       region: { key: server.regionKey, label: this.#regions.label(server.regionKey) ?? server.regionKey },
       memoryTier: server.memoryTier,
-      activeOperation: operation ? await this.#operationView(operation, server, revision, applied) : null,
+      activeOperation: operation ? await this.#operationView(operation, server, applied) : null,
       lastWakeSeconds: await this.#wakeEstimate(server, operation),
       players: running
         ? { online: online?.length ?? 0, people: (online ?? []).map((p) => ({ name: p.name, uuid: p.uuid })) }

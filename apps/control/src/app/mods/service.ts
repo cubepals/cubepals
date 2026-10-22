@@ -59,6 +59,7 @@ import type { LoaderBuilds } from '../ports/loaders.ts'
 import { loaderPin, paperPin } from '../revisions/pins.ts'
 import { type ChangeOptions, playsNoPack, type RevisionService } from '../revisions/service.ts'
 import { findServer, loadRevision } from '../servers/persistence.ts'
+import { loadRevisionFields } from '../servers/revision-reads.ts'
 import {
   deletePendingUpload,
   finishPendingUpload,
@@ -265,7 +266,7 @@ export class ModService {
       throw new AppError('invalid_upload', 'The file changed on its way here. Upload it again.')
     const check = await this.#checks.screen(digests)
     if (check !== null) throw new AppError('invalid_upload', refusalOf(pending.fileName, check) ?? '')
-    const { gameVersion } = await loadRevision(this.#db, server.desiredRevisionId)
+    const { gameVersion } = await loadRevisionFields(this.#db, server.desiredRevisionId, ['gameVersion'])
     const file = { url: link.url, bytes, sha512, fileName: pending.fileName, gameVersion }
     const jar = datapack
       ? null

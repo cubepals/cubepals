@@ -23,15 +23,15 @@ import { DAY_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import type { ServerJoinEvent } from '@blockly/contracts/join-records'
 import { type Db, schema, type Tx } from '@blockly/db'
 import { and, eq, gte, sql } from 'drizzle-orm'
-import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { runsModeration } from '../../minecraft/moderation.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
-import { grimFor } from '../compat/service.ts'
+import { GRIM_FIELDS, type GrimFacts, grimFor } from '../compat/service.ts'
 import { AppError } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
-import { findServer, loadRevision, lockServer } from '../servers/persistence.ts'
+import { findServer, lockServer } from '../servers/persistence.ts'
+import { loadRevisionFields } from '../servers/revision-reads.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
 import { tuning } from '../tuning.ts'
 import {
@@ -69,11 +69,11 @@ export class StopCheatersService {
   /** The switch as the Players page shows it. */
   async viewOf(actor: Actor, serverId: string): Promise<StopCheatersView> {
     const server = authorize(actor, await findServer(this.#db, serverId))
-    return this.view(server, await loadRevision(this.#db, server.desiredRevisionId))
+    return this.view(server, await loadRevisionFields(this.#db, server.desiredRevisionId, GRIM_FIELDS))
   }
 
   /** The switch as the Players page shows it, for a server already authorized. */
-  async view(server: MinecraftServer, desired: ServerRevision, now = new Date()): Promise<StopCheatersView> {
+  async view(server: MinecraftServer, desired: GrimFacts, now = new Date()): Promise<StopCheatersView> {
     const row = await loadStopCheaters(this.#db, server.id)
     const { on, why } = effective(row)
     const grim = await grimFor(this.#db, desired)
@@ -171,7 +171,7 @@ export class StopCheatersService {
     if (rule === undefined || reason !== rule.reason) return
     const server = await lockServer(tx, serverId)
     if (server === null || server.deletedAt !== null) return
-    if (!runsModeration((await loadRevision(tx, server.desiredRevisionId)).mods)) return
+    if (!runsModeration((await loadRevisionFields(tx, server.desiredRevisionId, ['mods'])).mods)) return
     const since = new Date(at.getTime() - rule.withinMinutes * MINUTE_MS)
     const removed = await countRemovals(tx, serverId, since, { playerUuid: player.uuid, reason })
     if (removed < rule.removals) return
@@ -220,12 +220,12 @@ export class StopCheatersService {
     requestId: string,
     action: string,
     /** Whether a running server restarts for it. */
-    apply: (tx: Tx, desired: ServerRevision) => Promise<boolean>,
+    apply: (tx: Tx, desired: GrimFacts) => Promise<boolean>,
   ): Promise<void> {
     await this.#db.transaction(async (tx) => {
       const server = authorize(actor, await lockServer(tx, serverId))
       if (actor.kind === 'user') await this.#policy.require(tx, server.ownerId, { kind: 'manage_access' })
-      const restarts = await apply(tx, await loadRevision(tx, server.desiredRevisionId))
+      const restarts = await apply(tx, await loadRevisionFields(tx, server.desiredRevisionId, GRIM_FIELDS))
       await tx.insert(schema.auditLog).values({
         actor: requestedBy(actor),
         action,

@@ -14,7 +14,8 @@ import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { GeyserMc } from '../ports/geysermc.ts'
 import type { PlayerProfiles } from '../ports/minecraft.ts'
-import { findServer, loadRevision, lockServer } from '../servers/persistence.ts'
+import { findServer, lockServer } from '../servers/persistence.ts'
+import { loadRevisionFields } from '../servers/revision-reads.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
 import { identityFor } from './identity.ts'
 import { deleteEntry, lockAccess, readAccess, setWhitelistPending, upsertEntry } from './persistence.ts'
@@ -113,7 +114,8 @@ export class AccessService {
    */
   async #resolve(actor: Actor, serverId: string, name: string): Promise<PlayerRef> {
     const server = authorize(actor, await findServer(this.#db, serverId))
-    const { onlineMode } = (await loadRevision(this.#db, server.desiredRevisionId)).settings
+    const { onlineMode } = (await loadRevisionFields(this.#db, server.desiredRevisionId, ['settings']))
+      .settings
     const player = await identityFor(name, onlineMode, this.#profiles, this.#geyser)
     if (player === null)
       throw new AppError(

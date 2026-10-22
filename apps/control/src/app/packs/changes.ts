@@ -9,7 +9,8 @@ import { type Actor, authorize } from '../actor.ts'
 import type { PackCuration } from '../curation/service.ts'
 import { AppError } from '../errors.ts'
 import type { ChangeOptions, RevisionService } from '../revisions/service.ts'
-import { findServer, loadRevision } from '../servers/persistence.ts'
+import { findServer } from '../servers/persistence.ts'
+import { loadRevisionFields } from '../servers/revision-reads.ts'
 import type { SetupService } from '../setups/service.ts'
 import type { PackService } from './service.ts'
 
@@ -51,7 +52,7 @@ export class PackChanges {
     options: ChangeOptions = {},
   ): Promise<MinecraftServer> {
     const server = authorize(actor, await findServer(this.#db, serverId))
-    const desired = await loadRevision(this.#db, server.desiredRevisionId)
+    const desired = await loadRevisionFields(this.#db, server.desiredRevisionId, ['modpack'])
     if (desired.modpack === null)
       throw new AppError(
         'invalid_choice',
