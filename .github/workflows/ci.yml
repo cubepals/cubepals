@@ -8,6 +8,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The merge queue's check of a pull request on top of what is queued ahead of it; the jobs and
+  # their names are the same, so `check` is the one answer there too.
+  merge_group:
 
 permissions:
   contents: read
@@ -21,14 +24,16 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      code: ${{ steps.filter.outputs.code }}
-      reporter: ${{ steps.reporter.outputs.reporter }}
+      # The queue tests everything: what a merge changes is what the commits ahead of it changed too.
+      code: ${{ github.event_name == 'merge_group' && 'true' || steps.filter.outputs.code }}
+      reporter: ${{ github.event_name == 'merge_group' && 'true' || steps.reporter.outputs.reporter }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
+        if: github.event_name != 'merge_group'
         with:
           predicate-quantifier: every
           filters: |
@@ -44,6 +49,7 @@ jobs:
       # Its own step: under `every` above, a file would have to match all of these at once.
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: reporter
+        if: github.event_name != 'merge_group'
         with:
           filters: |
             reporter:
@@ -99,6 +105,11 @@ jobs:
             terraform -chdir=infra/terraform/environments/$env init -backend=false -input=false
             terraform -chdir=infra/terraform/environments/$env validate
           done
+      # A plan of each environment against its example config, with stand-in credentials and no
+      # state: a variable or secret the stack reads and an environment doesn't give fails here, not
+      # at the next apply. Two changes that pass alone and break together fail in the merge queue.
+      - name: Terraform plans for each environment
+        run: bun scripts/terraform-plan.ts
 
   # The website as the Cloudflare Worker production runs: OpenNext's build, wrangler's bundle of the
   # Worker's entry, uploading nothing, then the built Worker started locally and asked for the
