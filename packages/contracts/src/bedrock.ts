@@ -12,6 +12,7 @@
  * `00000000-0000-0000-0009-01eed05d1000`. Not for how a gamertag becomes an XUID: that is a lookup
  * the control plane makes.
  */
+import type { BedrockView } from './server.ts'
 
 /** The prefix Floodgate gives every Bedrock player's name, in its default configuration. */
 const FLOODGATE_PREFIX = '.'
@@ -43,3 +44,7 @@ export const typedAsBedrock = (typed: string): boolean => typed.trim().startsWit
 /** A player as a page names them: the gamertag for a Bedrock player, the name for any other. */
 export const shownName = (player: { uuid: string; name: string }): string =>
   isBedrockUuid(player.uuid) ? bedrockDisplayName(player.name) : player.name
+
+/** Whether Bedrock players can join a server now: its choice is on and its other versions leave room for it. */
+export const letsBedrockIn = (server: { bedrock: BedrockView | null }): boolean =>
+  server.bedrock?.on === true && !server.bedrock.needsOtherVersions

@@ -9,6 +9,7 @@ import {
   type AccessList,
   type AccessView,
   isBedrockUuid,
+  letsBedrockIn,
   type ServerView,
 } from '@blockly/contracts'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -236,7 +237,7 @@ function InviteCard({ server, whitelistOnly }: { server: ServerView; whitelistOn
         <span className="bk-field__label">Or just the address</span>
         <CopyField value={server.joinAddress} />
         <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-          {joinLine(server.gameVersion, packToInstall(server), server.joins)}
+          {joinLine(server.gameVersion, packToInstall(server), server.joins, letsBedrockIn(server))}
         </p>
       </div>
     </FormSection>
