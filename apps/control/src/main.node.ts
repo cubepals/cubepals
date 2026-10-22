@@ -36,6 +36,7 @@ import { scheduledJobs } from './app/scheduled-jobs.ts'
 import { ServerIcons } from './app/server-icons/service.ts'
 import { presenceFor } from './app/servers/usage.ts'
 import { installTuning } from './app/tuning.ts'
+import { hostPort } from './config/host-port.ts'
 import { loadConfig, tuningOf } from './config/load.ts'
 import { ConfiguredPlayAddressing, ConfiguredRegionCatalog } from './config/play-addressing.ts'
 import type { DeploymentConfig, RuntimeConfig } from './config/schema.ts'
@@ -304,11 +305,6 @@ async function providerFor(
       }
     }
   }
-}
-
-const hostPort = (value: string) => {
-  const at = value.lastIndexOf(':')
-  return { host: value.slice(0, at).replace(/^\[|\]$/g, ''), port: Number(value.slice(at + 1)) }
 }
 
 /**
