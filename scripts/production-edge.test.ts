@@ -17,6 +17,7 @@ import {
   edgePlacement,
   edgeRegions,
   edgeSourceGaps,
+  isReady,
   machinesIn,
   type RegionSteps,
   regionsToRoll,
@@ -334,6 +335,17 @@ describe('restarting the edge when a region can’t be cordoned or fails', () =>
     expect(said).toContain('fra: is still cordoned and takes no joins: fly down')
   })
 
+  test('a cordon that fails partway is undone', async () => {
+    const w = world()
+    const half = steps(w.log, {
+      cordon: async () => {
+        throw new Error('cordoned one of two')
+      },
+    })
+    await expect(roll(['fra', 'iad'], half, () => {}, w.clock)).rejects.toThrow('cordoned one of two')
+    expect(w.log).toEqual(['uncordon fra'])
+  })
+
   test('cordons when asked to, and a single region is waited on while it serves', async () => {
     const w = world()
     await roll(['fra', 'iad'], steps(w.log), () => {}, w.clock)
@@ -370,5 +382,11 @@ describe('every machine of the edge', () => {
     expect(sumPlayers([2, 3])).toBe(5)
     expect(sumPlayers([2, null])).toBe(2)
     expect(sumPlayers([null, null])).toBeNull()
+  })
+
+  test('an agent that says nothing is ready once Fly passed its checks, as in a rollback', () => {
+    expect(isReady(null)).toBe(true)
+    expect(isReady({ routesCurrent: false })).toBe(false)
+    expect(isReady({ routesCurrent: true })).toBe(true)
   })
 })

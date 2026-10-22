@@ -12,6 +12,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import {
   type Clock,
   deployMachines,
+  isReady,
   type Machine,
   machinesIn,
   type RegionSteps,
@@ -133,7 +134,7 @@ export async function rollEdgeApp(
     },
     deploy: async (region) => fly(...deployMachines(app, config, image, idsIn(region))),
     ready: async (region) => {
-      for (const id of idsIn(region)) if ((await stateOf(id))?.routesCurrent !== true) return false
+      for (const id of idsIn(region)) if (!isReady(await stateOf(id))) return false
       return true
     },
   }

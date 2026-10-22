@@ -188,9 +188,9 @@ export async function rollEdge(
   for (const region of regions) {
     const cordoned = options.cordon && regions.length > 1 && (await steps.othersReady(region))
     say(`${region}: ${cordoned ? 'taking no new joins, ' : ''}waiting for its players to leave`)
-    if (cordoned) await steps.cordon(region)
     let restarted = false
     try {
+      if (cordoned) await steps.cordon(region)
       const left = await restartRegion(region, cordoned, steps, (line) => say(`${region}: ${line}`), clock)
       restarted = true
       if (left === null) uncounted.push(region)
@@ -281,3 +281,11 @@ export function sumPlayers(counts: readonly (number | null)[]): number | null {
   const known = counts.filter((c): c is number => c !== null)
   return known.length === 0 ? null : known.reduce((a, b) => a + b, 0)
 }
+
+/**
+ * Whether a restarted machine is ready by what its agent says: it holds the newest routes. An
+ * agent that says nothing (an image from before the drain port, as in a rollback) is taken as ready
+ * once Fly's own checks passed, which the deploy has already waited for.
+ */
+export const isReady = (state: { routesCurrent: boolean } | null): boolean =>
+  state === null || state.routesCurrent
