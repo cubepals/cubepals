@@ -170,7 +170,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
   const links = new ArtifactLinks(settings.artifactsRuntimeFacingUrl, settings.runtimeSecrets)
   const official = officialFilesOf(settings.officialServerFiles?.files ?? {})
   const brandPack = buildBrandPack(formats, settings.webOrigin)
-  const specs = new RuntimeSpecs(settings.runtimeSecrets, links, brandPack, official)
+  const specs = new RuntimeSpecs(settings.runtimeSecrets, links, brandPack, official, ports.capabilities)
   // Setups resolve mods through the catalog, which needs revisions, which need servers: the
   // server service reaches for setups only when a server is being made, so it takes a getter.
   let setups: SetupService
@@ -241,9 +241,9 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     curseforge: ports.curseforge,
   })
   setups = new SetupService({
+    ...ports,
     db,
     mods,
-    catalog: ports.catalog,
     providers: runtime.providers,
     contents,
     packs,
@@ -274,7 +274,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     curation,
     providers: runtime.providers,
   })
-  const access = new AccessService({ db, policy, profiles, transitions, events })
+  const access = new AccessService({ ...ports, db, policy, transitions, events })
   const sharing = new SharingService({ db, access })
   const accounts = new AccountService({
     db,

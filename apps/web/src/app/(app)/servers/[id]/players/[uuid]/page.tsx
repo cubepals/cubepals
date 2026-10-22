@@ -12,7 +12,14 @@
  * A change for someone who is away waits for them to join, and the page says so, with a way to
  * take it back. While the server sleeps, it shows what was kept as it went to sleep.
  */
-import type { GameMode, PlaceView, PlayerView, WaitingView } from '@blockly/contracts'
+import {
+  type GameMode,
+  isBedrockUuid,
+  type PlaceView,
+  type PlayerView,
+  shownName,
+  type WaitingView,
+} from '@blockly/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
@@ -20,7 +27,17 @@ import { useParams } from 'next/navigation'
 import { messageOf, useTRPC } from '../../../../../../lib/api'
 import { said, useOutcome } from '../../../../../../lib/outcome'
 import { timeAgo } from '../../../../../../lib/present'
-import { Button, EmptyState, FormSection, ICON, Note, PlayerFace, Skeleton, Tabs } from '../../../../../../ui'
+import {
+  Badge,
+  Button,
+  EmptyState,
+  FormSection,
+  ICON,
+  Note,
+  PlayerFace,
+  Skeleton,
+  Tabs,
+} from '../../../../../../ui'
 import { useServer } from '../../use-server'
 import { Inventory } from './inventory'
 import { PlayerModeration } from './moderation'
@@ -59,7 +76,13 @@ export default function PlayerPage() {
         <PlayerFace name={p.name} uuid={p.uuid} size={64} />
         <div className="bk-stack" style={{ gap: 'var(--space-4)' }}>
           <h1 className="type-display-md" style={{ color: 'var(--ink)' }}>
-            {p.name}
+            {shownName(p)}
+            {isBedrockUuid(p.uuid) && (
+              <>
+                {' '}
+                <Badge tone="outline">Bedrock</Badge>
+              </>
+            )}
           </h1>
           <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
             {statsLine(p)}
@@ -118,8 +141,8 @@ function Source({ player, running }: { player: PlayerView; running: boolean }) {
   return (
     <Note tone="info">
       {running
-        ? `Cubepals couldn’t read where ${player.name} is just now.`
-        : `Where ${player.name} is shows once the server wakes.`}
+        ? `Cubepals couldn’t read where ${shownName(player)} is just now.`
+        : `Where ${shownName(player)} is shows once the server wakes.`}
     </Note>
   )
 }
@@ -143,9 +166,9 @@ function Places({ serverId, player }: { serverId: string; player: PlayerView }) 
   return (
     <>
       <FormSection
-        title={`Where ${player.name} died`}
+        title={`Where ${shownName(player)} died`}
         description={
-          player.lastDeath ? `In ${placeLine(player.lastDeath)}.` : `${player.name} hasn’t died here.`
+          player.lastDeath ? `In ${placeLine(player.lastDeath)}.` : `${shownName(player)} hasn’t died here.`
         }
       >
         {player.lastDeath && (
@@ -159,7 +182,7 @@ function Places({ serverId, player }: { serverId: string; player: PlayerView }) 
         )}
       </FormSection>
       <FormSection
-        title={`Where ${player.name} is`}
+        title={`Where ${shownName(player)} is`}
         description={
           player.position
             ? `${player.online ? 'In' : 'Last in'} ${placeLine(player.position)}.`
@@ -209,8 +232,8 @@ function Trip({
       {waiting ? (
         <Waiting serverId={serverId} player={player} kind="place">
           {to === 'death'
-            ? `When ${player.name} next joins, they go back there.`
-            : `When ${player.name} next joins, they go to the spawn.`}
+            ? `When ${shownName(player)} next joins, they go back there.`
+            : `When ${shownName(player)} next joins, they go to the spawn.`}
         </Waiting>
       ) : (
         <div>
@@ -243,7 +266,7 @@ function GameModeSection({ serverId, player }: { serverId: string; player: Playe
   const waiting = player.waiting.find((w) => w.kind === 'game_mode')
   const label = (mode: string) => MODES.find((m) => m.value === mode)?.label ?? mode
   return (
-    <FormSection title="Game mode" description={`For ${player.name} alone.`}>
+    <FormSection title="Game mode" description={`For ${shownName(player)} alone.`}>
       <Tabs
         label="Game mode"
         items={MODES}
@@ -252,7 +275,7 @@ function GameModeSection({ serverId, player }: { serverId: string; player: Playe
       />
       {waiting && (
         <Waiting serverId={serverId} player={player} kind="game_mode">
-          {`${label(waiting.what)} when ${player.name} next joins.`}
+          {`${label(waiting.what)} when ${shownName(player)} next joins.`}
         </Waiting>
       )}
       {set.isError && <Note tone="danger">{messageOf(set.error)}</Note>}

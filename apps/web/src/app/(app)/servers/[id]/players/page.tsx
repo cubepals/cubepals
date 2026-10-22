@@ -4,7 +4,14 @@
 
 'use client'
 
-import type { AccessEntryView, AccessList, AccessView, ServerView } from '@blockly/contracts'
+import {
+  type AccessEntryView,
+  type AccessList,
+  type AccessView,
+  isBedrockUuid,
+  letsBedrockIn,
+  type ServerView,
+} from '@blockly/contracts'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
@@ -52,9 +59,10 @@ export default function PlayersPage() {
 
   const running = server.data.status === 'running'
   // Where the server doesn't check accounts, the name typed here is exactly who can join.
+  const bedrockHelp = server.data.bedrock?.on === true ? 'For a Bedrock player, their gamertag.' : undefined
   const nameHelp = server.data.settings.onlineMode
-    ? undefined
-    : 'Exactly as it is in the game: capitals count.'
+    ? bedrockHelp
+    : ['Exactly as it is in the game: capitals count.', bedrockHelp].filter(Boolean).join(' ')
   const whitelistOn = access.data.pendingWhitelistEnabled ?? access.data.whitelistEnabled
   const online = server.data.players?.people ?? []
   const invite = <InviteCard server={server.data} whitelistOnly={whitelistOn} />
@@ -229,7 +237,7 @@ function InviteCard({ server, whitelistOnly }: { server: ServerView; whitelistOn
         <span className="bk-field__label">Or just the address</span>
         <CopyField value={server.joinAddress} />
         <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-          {joinLine(server.gameVersion, packToInstall(server), server.joins)}
+          {joinLine(server.gameVersion, packToInstall(server), server.joins, letsBedrockIn(server))}
         </p>
       </div>
     </FormSection>
@@ -323,7 +331,12 @@ function AccessSection({
   // Who has played here, less whoever this list already has: by who they are, or by the name.
   const offered = known
     .filter((player) => !shown.some((e) => e.player.uuid === player.uuid || e.player.name === player.name))
-    .map((player) => (player.online ? { value: player.name, note: 'Playing now' } : { value: player.name }))
+    .map((player) => {
+      const note = [isBedrockUuid(player.uuid) && 'Bedrock', player.online && 'Playing now']
+        .filter(Boolean)
+        .join(' · ')
+      return note === '' ? { value: player.name } : { value: player.name, note }
+    })
 
   const submit = (event: SubmitEvent) => {
     event.preventDefault()

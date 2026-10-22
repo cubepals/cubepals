@@ -17,6 +17,7 @@ import {
   BrowseInput,
   ChangeAddressInput,
   ChangeAuthenticationInput,
+  ChangeBedrockInput,
   ChangeOtherVersionsInput,
   ChangePackInput,
   ChangeSettingsInput,
@@ -203,6 +204,13 @@ const servers = router({
       input.requestId,
       { version: input.version },
     )
+    return ctx.services.queries.get(ctx.actor, input.serverId)
+  }),
+  /** Whether a Paper server lets Bedrock players in, through Floodgate. */
+  changeBedrock: authedProcedure.input(ChangeBedrockInput).mutation(async ({ ctx, input }) => {
+    await ctx.services.revisions.changeBedrock(ctx.actor, input.serverId, input.bedrock, input.requestId, {
+      version: input.version,
+    })
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
   /** What a new game version or server type does to the mods, before choosing it. */

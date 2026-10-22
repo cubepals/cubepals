@@ -23,6 +23,7 @@ import {
   supports,
 } from '../../minecraft/versions.ts'
 import type { Actor } from '../actor.ts'
+import type { DeploymentCapabilities } from '../capabilities.ts'
 import { CompatPlugins } from '../compat/service.ts'
 import type { PackCuration } from '../curation/service.ts'
 import { AppError, NotFound } from '../errors.ts'
@@ -107,6 +108,7 @@ export class SetupService {
     db: Db
     mods: ModService
     catalog: ModCatalog
+    capabilities: DeploymentCapabilities
     /** The runtimes this deployment runs: a binding to another is foreign. */
     providers: readonly string[]
     contents: PackContents
@@ -122,7 +124,11 @@ export class SetupService {
     this.#packs = deps.packs
     this.#curation = deps.curation
     this.#starters = new StarterWorlds(deps.packs.archiveStore)
-    this.compat = new CompatPlugins({ db: deps.db, mods: deps.mods })
+    this.compat = new CompatPlugins({
+      db: deps.db,
+      mods: deps.mods,
+      geyser: deps.capabilities.bedrock?.geyser ?? null,
+    })
   }
 
   /** A template, as offered: one whose world can't start here yet isn't, as if it weren't there. */

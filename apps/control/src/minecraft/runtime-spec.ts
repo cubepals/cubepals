@@ -14,6 +14,7 @@ import {
 import { type MemoryTier, memoryMb } from '../domain/server/size.ts'
 import type { World } from '../domain/world/world.ts'
 import { ARCADE_DATAPACK } from './arcade.ts'
+import { BEDROCK_STEP, bedrockSpec } from './bedrock.ts'
 import { CARRIED_STEP, carriedEnv, placesFiles } from './carried.ts'
 import { DATAPACKS_STEP, datapacksEnv, datapacksOf } from './datapacks.ts'
 import { WAITING_DATAPACK } from './duels-waiting.ts'
@@ -59,6 +60,12 @@ export interface RuntimeSpecInput {
    * reads them.
    */
   compat?: readonly PinnedMod[]
+  /**
+   * The key Floodgate shares with the edge, as base64 (`FLOODGATE_KEY`). Written to the server by
+   * its start's step where the compat plugins include Floodgate; none, and Bedrock players are not
+   * let in.
+   */
+  floodgateKey?: string | null
 }
 
 interface PlanLimits {
@@ -183,9 +190,9 @@ export function imageFor(
 
 /**
  * The image's variable for each setting, which writes it into `server.properties` at every start;
- * which other versions join is Cubepals' own, and no property.
+ * which other versions join and whether Bedrock players do are Cubepals' own, and no property.
  */
-export const SETTING_ENV: Record<Exclude<keyof ServerSettings, 'otherVersions'>, string> = {
+export const SETTING_ENV: Record<Exclude<keyof ServerSettings, 'otherVersions' | 'bedrock'>, string> = {
   difficulty: 'DIFFICULTY',
   defaultGameMode: 'MODE',
   pvp: 'PVP',
@@ -519,6 +526,7 @@ function entrypointFor(steps: {
   pack: boolean
   carried: boolean
   stopCheaters: boolean
+  bedrock: boolean
   jars: 'MODS' | 'PLUGINS' | null
 }): readonly string[] {
   const script = [
@@ -530,6 +538,7 @@ function entrypointFor(steps: {
     ...(steps.pack ? PACK_STEP : []),
     ...(steps.carried ? [CARRIED_STEP] : []),
     ...(steps.stopCheaters ? [STOP_CHEATERS_STEP] : []),
+    ...(steps.bedrock ? [BEDROCK_STEP] : []),
     ...(steps.jars === null ? [] : [jarListStep(steps.jars)]),
     WAKE_STEP,
     EXEC_IMAGE,
@@ -555,6 +564,8 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
   const placing = { ...revision, mods: [...revision.mods, ...(input.compat ?? [])] }
   // Paper, or plain Minecraft run on Paper, with no pack: the servers that read a PROXY header.
   const viaPlaced = input.compat !== undefined && usesProxyProtocol(revision)
+  const placedHere = viaPlaced ? input.compat : undefined
+  const bedrock = bedrockSpec(placedHere, input.floodgateKey)
   const totalMb = memoryMb(memoryTier)
   const onPaper = runsOnPaper(revision)
   const loaderVersionVar = onPaper ? LOADER_VERSION_VARS.paper : LOADER_VERSION_VARS[revision.loader]
@@ -568,6 +579,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
     pack: pack !== null,
     carried: viaPlaced || placesFiles(placing),
     stopCheaters: viaPlaced,
+    bedrock: viaPlaced,
     jars: pack === null ? (jarsOf(revision.loader)?.env ?? null) : null,
   })
   const reconstructible = reconstructibleOf(revision)
@@ -589,7 +601,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       ...settingsEnv(revision.settings),
       ...modsEnv(input),
       ...datapacksEnv(revision, input.artifactUrl),
-      ...carriedEnv(revision, world.levelName, input.artifactUrl, viaPlaced ? input.compat : undefined),
+      ...carriedEnv(revision, world.levelName, input.artifactUrl, placedHere),
       ...limitsEnv(input.limits),
       ...brandPackEnv(input),
       // OVERRIDE_ICON, or the image keeps the first icon a world ever had.
@@ -597,9 +609,8 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       ...(usesProxyProtocol(revision) ? { [PROXY_ENV]: 'TRUE' } : {}),
       // Constants of how Blockly runs Minecraft, not settings anyone changes.
       ENFORCE_WHITELIST: 'TRUE',
-      // Mojang's chat reporting stays on: a player's chat is signed, and a plugin may block a
-      // message but never pass off another as theirs.
-      ENFORCE_SECURE_PROFILE: 'TRUE',
+      // Mojang's chat reporting stays on unless Bedrock players are let in (`bedrockSpec`).
+      ...bedrock.env,
       ENABLE_RCON: 'TRUE',
       RCON_PORT: String(RCON_PORT),
       // The control plane is the only writer of power state (§0, decision 3).
@@ -609,7 +620,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       USE_AIKAR_FLAGS: 'TRUE',
       STOP_DURATION: String(STOP_DURATION_SECONDS),
     },
-    secrets: { RCON_PASSWORD: input.rconPassword },
+    secrets: { RCON_PASSWORD: input.rconPassword, ...bedrock.secrets },
     resources: { memoryMb: totalMb },
     storage: {
       mountPath: DATA_DIR,

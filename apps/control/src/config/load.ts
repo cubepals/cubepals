@@ -244,6 +244,9 @@ function economicsJson(env: NodeJS.ProcessEnv): unknown {
   return privateJson(env, 'ECONOMICS_TUNING', DEFAULT_ECONOMICS_TUNING)
 }
 
+/** FLOODGATE_KEY as given; none when it is unset or empty. */
+const floodgateKeyOf = (env: NodeJS.ProcessEnv): string | null => env.FLOODGATE_KEY || null
+
 /** JOIN_REPORTER as given, and SIGNALS as parsed JSON, or the text that didn't parse. */
 function joinsFrom(env: NodeJS.ProcessEnv) {
   const signals = env.SIGNALS
@@ -355,6 +358,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
     defaultRuntime,
     // Operators' API on the internal listener (scripts/runtimes.ts, scripts/fleet.ts).
     operatorToken: env.OPERATOR_TOKEN || env.FLEET_OPERATOR_TOKEN || null,
+    floodgateKey: floodgateKeyOf(env),
     artifacts: {
       runtimeFacingUrl: env.ARTIFACTS_RUNTIME_FACING_URL,
       mirrorCatalogArtifacts: env.ARTIFACTS_MIRROR === 'true',

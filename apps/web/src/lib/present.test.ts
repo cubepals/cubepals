@@ -5,7 +5,13 @@
 import { describe, expect, test } from 'bun:test'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { type ChangeKind, type OperationView, PLAY_ICONS, type ServerView } from '@blockly/contracts'
+import {
+  type ChangeKind,
+  letsBedrockIn,
+  type OperationView,
+  PLAY_ICONS,
+  type ServerView,
+} from '@blockly/contracts'
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import {
   downloadOf,
@@ -406,5 +412,22 @@ describe('the ways to play', () => {
     // A missing one is a broken image on the create page; scripts/play-icons.py draws them all.
     const publicDir = join(import.meta.dir, '../../public')
     for (const icon of PLAY_ICONS) expect(existsSync(join(publicDir, playIconSrc(icon)))).toBe(true)
+  })
+})
+
+describe('joining a server that lets Bedrock players in', () => {
+  test('keeps the Java line, adds the phone line and says consoles can’t join', () => {
+    expect(joinLine('26.2', null, null, true)).toBe(
+      'In Minecraft: Java Edition 26.2, open Multiplayer → Add Server and paste it. On a phone or tablet: Play, Servers, Add Server, and type the same address. Consoles can’t join.',
+    )
+    // One that doesn't says what it always did.
+    expect(joinLine('26.2', null, null, false)).toBe(joinLine('26.2'))
+  })
+
+  test('only where Bedrock players can join: its choice is on and its other versions leave room', () => {
+    expect(letsBedrockIn({ bedrock: { on: true, needsOtherVersions: false } })).toBe(true)
+    expect(letsBedrockIn({ bedrock: { on: true, needsOtherVersions: true } })).toBe(false)
+    expect(letsBedrockIn({ bedrock: { on: false, needsOtherVersions: false } })).toBe(false)
+    expect(letsBedrockIn({ bedrock: null })).toBe(false)
   })
 })

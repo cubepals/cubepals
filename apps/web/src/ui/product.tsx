@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { isBedrockUuid, shownName } from '@blockly/contracts'
 import Image from 'next/image'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
@@ -109,8 +110,9 @@ export function PlayerRow({
     <>
       <PlayerFace name={name} uuid={uuid} />
       <div className="bk-player__body">
-        <div className="bk-row" style={{ gap: 'var(--space-8)' }}>
-          <span className="bk-player__name">{name}</span>
+        <div className="bk-row" style={{ gap: 'var(--space-8)', flexWrap: 'wrap' }}>
+          <span className="bk-player__name">{uuid === undefined ? name : shownName({ uuid, name })}</span>
+          {uuid !== undefined && isBedrockUuid(uuid) && <Badge tone="outline">Bedrock</Badge>}
           {badge}
         </div>
         {meta && (

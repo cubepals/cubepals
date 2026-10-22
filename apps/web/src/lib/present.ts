@@ -519,14 +519,15 @@ export function notLoadedLine(server: Pick<ServerView, 'notLoaded'>): string {
   return `${new Intl.ListFormat('en', { type: 'conjunction' }).format(server.notLoaded)} didn’t load`
 }
 
-/** `joins`: the versions the server takes, so the line doesn't send anyone to a version they needn't. */
+/** `joins`: the versions the server takes, so the line doesn't send anyone to a version they needn't. `bedrock`: it lets phones and tablets in. */
 export function joinLine(
   gameVersion: string,
   pack: { name: string } | null = null,
   joins: JoinRange | null = null,
+  bedrock = false,
 ): string {
   const game = `Minecraft: Java Edition ${versionsThatJoin(gameVersion, joins)}${pack === null ? '' : ` with ${pack.name} installed`}`
-  return `In ${game}, open Multiplayer → Add Server and paste it. Consoles and phones can’t join.`
+  return `In ${game}, open Multiplayer → Add Server and paste it. ${bedrock ? 'On a phone or tablet: Play, Servers, Add Server, and type the same address. Consoles can’t join.' : 'Consoles and phones can’t join.'}`
 }
 
 /** A moment today as a clock reads it: "18:40". */

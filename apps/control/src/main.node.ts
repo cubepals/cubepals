@@ -68,6 +68,7 @@ import { FlyLogSource } from './infra/fly/fly-logs.ts'
 import { FlyRuntime } from './infra/fly/fly-runtime.ts'
 import { LibraryFileFormats } from './infra/formats/file-formats.ts'
 import { LibraryPackArchives } from './infra/formats/pack-archives.ts'
+import { bedrockCapability } from './infra/geysermc/geysermc.ts'
 import { hangarClient } from './infra/hangar/client.ts'
 import { HangarCatalog } from './infra/hangar/hangar-catalog.ts'
 import { MemoryLimits } from './infra/limits/memory-limits.ts'
@@ -585,6 +586,7 @@ function capabilitiesFor(config: DeploymentConfig, db: Db): DeploymentCapabiliti
   return {
     insight: insightFor(config),
     malware: new PublishedMalwareLists(),
+    bedrock: bedrockCapability(config.floodgateKey),
     archives: config.archive === null ? null : new S3ArchiveStore(config.archive),
     billing:
       billing?.provider === 'polar'
@@ -663,9 +665,7 @@ async function main(): Promise<void> {
   const fly = config.runtimes.find((runtime) => runtime.provider === 'fly')
   const suspend = new SuspendSwitch({ db, fallback: fly?.suspend ?? null })
   const provider = await runtimesFor(config, pool, db, profiles, suspend)
-
   const capabilities = capabilitiesFor(config, db)
-
   const stranded = await archivesMissing(db, capabilities)
   if (stranded !== null) console.warn(stranded)
 

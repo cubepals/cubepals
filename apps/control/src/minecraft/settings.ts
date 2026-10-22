@@ -34,6 +34,7 @@ export function settingTakes(setting: keyof ServerSettings, gameVersion: string)
     case 'spawnProtection':
     case 'onlineMode':
     case 'otherVersions':
+    case 'bedrock':
       return 'restart'
   }
 }

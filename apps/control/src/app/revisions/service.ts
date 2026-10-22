@@ -9,6 +9,7 @@ import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import { type PinnedModpack, samePack } from '../../domain/mods/modpack.ts'
 import type { CarriedFile } from '../../domain/revision/carried.ts'
 import {
+  bedrockOf,
   describeChanges,
   type GameSettings,
   type Loader,
@@ -41,6 +42,7 @@ import type { EventBus } from '../ports/events.ts'
 import type { LoaderBuilds } from '../ports/loaders.ts'
 import { insertRevision, loadRevision, loadRuntime, lockServer, setDesired } from '../servers/persistence.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
+import { presenceFor } from '../servers/usage.ts'
 import { requireWithinPlan, runsOf } from './caps.ts'
 import { pinUnpinned } from './pins.ts'
 
@@ -119,6 +121,7 @@ export class RevisionService {
         ...(desired.settings.otherVersions === undefined
           ? {}
           : { otherVersions: desired.settings.otherVersions }),
+        ...(desired.settings.bedrock === undefined ? {} : { bedrock: desired.settings.bedrock }),
       }
       const problems = settingsProblems(settings, playerCapacity(server.memoryTier))
       if (problems.length > 0) throw new AppError('invalid_settings', problems.join(' '))
@@ -191,6 +194,42 @@ export class RevisionService {
       }
       return { draft, audit: { action: 'server.other_versions_changed', data: { otherVersions } } }
     })
+  }
+
+  /**
+   * Whether the server lets Bedrock players in (`ServerSettings.bedrock`): Floodgate, and the Via
+   * plugins its version needs, which Cubepals adds as it starts. Only Paper runs them. They are
+   * Cubepals' own, never the owner's plugins, so no plan counts them. The change restarts a running
+   * server only while nobody is on it; with players on, it is saved and the server takes it at its
+   * next start.
+   */
+  changeBedrock(
+    actor: Actor,
+    serverId: string,
+    bedrock: boolean,
+    requestId: string,
+    options: ChangeOptions = {},
+  ) {
+    return this.#change(
+      actor,
+      serverId,
+      requestId,
+      'apply',
+      options,
+      async (_tx, _server, desired) => {
+        if (desired.loader !== 'paper' || desired.modpack !== null)
+          throw new AppError('invalid_choice', 'Only a Paper server lets Bedrock players in.')
+        if (bedrockOf(desired.settings) === bedrock) return null
+        const draft: RevisionDraft = {
+          ...draftOf(desired),
+          settings: { ...desired.settings, bedrock },
+          reason: 'settings_changed',
+          basedOnRevisionId: desired.id,
+        }
+        return { draft, audit: { action: 'server.bedrock_changed', data: { bedrock } } }
+      },
+      true,
+    )
   }
 
   /**
@@ -379,6 +418,7 @@ export class RevisionService {
     command: 'apply' | 'rollback',
     options: ChangeOptions,
     plan: (tx: Tx, server: MinecraftServer, desired: ServerRevision) => Promise<Plan | null>,
+    waitsForPlayers = false,
   ): Promise<MinecraftServer> {
     return this.#db.transaction(async (tx) => {
       const server = authorize(actor, await lockServer(tx, serverId))
@@ -426,16 +466,13 @@ export class RevisionService {
         ...(revision ? { revisionId: revision.id } : {}),
         ...(memoryTier ? { memoryTier } : {}),
       })
-      const result = await this.#transitions.command(
-        tx,
-        moved,
-        { type: command },
-        {
-          requestedBy: requestedBy(actor),
-          idempotencyKey: `${command}:${requestId}`,
-          input: revision ? { revisionId: revision.id } : {},
-        },
-      )
+      const result = await this.#applyChange(tx, moved, {
+        command,
+        requestedBy: requestedBy(actor),
+        key: `${command}:${requestId}`,
+        input: revision ? { revisionId: revision.id } : {},
+        waitsForPlayers,
+      })
       // Where the status didn't move, nothing else told the owner's pages that the server changed.
       if (result.server === moved)
         await this.#events.publish(tx, {
@@ -457,6 +494,34 @@ export class RevisionService {
       })
       return result.server
     })
+  }
+
+  /**
+   * The command that applies a saved change. One that waits for players is not given while anyone is
+   * on a running server: the change stays the server's desired revision, and its next start runs it.
+   */
+  async #applyChange(
+    tx: Tx,
+    moved: MinecraftServer,
+    how: {
+      command: 'apply' | 'rollback'
+      requestedBy: string
+      key: string
+      input: { revisionId?: string }
+      waitsForPlayers: boolean
+    },
+  ) {
+    const occupied =
+      how.waitsForPlayers &&
+      moved.lifecycle.status === 'running' &&
+      ((await presenceFor(tx, [moved.id])).get(moved.id)?.length ?? 0) > 0
+    if (occupied) return { server: moved }
+    return this.#transitions.command(
+      tx,
+      moved,
+      { type: how.command },
+      { requestedBy: how.requestedBy, idempotencyKey: how.key, input: how.input },
+    )
   }
 
   /** The newest game version this server's world has run on, or is about to. */

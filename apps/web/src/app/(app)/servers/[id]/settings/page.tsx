@@ -23,6 +23,7 @@ import {
 } from '../../../../../ui'
 import { useServer } from '../use-server'
 import { Advanced } from './advanced'
+import { BedrockSetting } from './bedrock'
 import { GameSettings } from './game'
 import { History } from './history'
 import { Identity } from './identity'
@@ -62,6 +63,7 @@ export default function SettingsPage() {
           <GameSettings view={view} options={options.data} />
           <VersionSettings view={view} options={options.data} />
           <OtherVersionsSetting view={view} />
+          <BedrockSetting view={view} />
           <SizeSettings view={view} options={options.data} />
         </>
       )}

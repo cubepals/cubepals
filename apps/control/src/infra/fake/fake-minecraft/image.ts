@@ -221,6 +221,26 @@ export async function placeStopCheaters(volume: string, env: Env): Promise<void>
   await writeFile(mark, 'ours\n')
 }
 
+/**
+ * Blockly's start step for the key Floodgate shares with the edge (`minecraft/bedrock.ts`): the key
+ * from the environment written as its bytes, or an earlier start's taken away when Bedrock is off.
+ * The step itself runs in a real shell in `minecraft/bedrock.test.ts`.
+ */
+export async function placeBedrock(volume: string, env: Env): Promise<void> {
+  const file = join(volume, 'plugins/floodgate/key.pem')
+  const mark = join(volume, '.blockly-bedrock')
+  const key = env.BLOCKLY_FLOODGATE_KEY
+  if (key === undefined) {
+    if ((await readFile(mark, 'utf8').catch(() => null)) === null) return
+    await rm(file, { force: true })
+    await rm(mark, { force: true })
+    return
+  }
+  await mkdir(dirname(file), { recursive: true })
+  await writeFile(file, Buffer.from(key, 'base64'))
+  await writeFile(mark, 'ours\n')
+}
+
 /** Where the image puts jars: plugins for plugin servers, mods for the rest. */
 export const jarDir = (env: Env) =>
   ['PAPER', 'BUKKIT', 'SPIGOT', 'PURPUR'].includes(env.TYPE ?? '') ? 'plugins' : 'mods'

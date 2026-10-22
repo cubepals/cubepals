@@ -10,6 +10,10 @@
  * plan, limit or price that counts plugins counts them, and the owner's plugin list never shows
  * them. The settings page says which versions join, and the switch is the way back.
  *
+ * Floodgate, and the Via plugins its release needs, are placed the same way where Bedrock players
+ * are let in (`ServerSettings.bedrock`), but not where the owner lets no other version in and the
+ * release is not the one Geyser speaks (`minecraft/bedrock.ts`).
+ *
  * Grim, which Stop cheaters runs, is pinned and placed the same way (`grimFor`), wherever the
  * server's Stop cheaters is on (`app/stop-cheaters/`), on plain Minecraft run on Paper too.
  *
@@ -19,15 +23,23 @@
  * the ones it now places (`servers/specs.ts`). Which clients a server takes is
  * `minecraft/clients.ts`'s, from the ones a boot placed or the next will (`joinsNow`).
  */
+import type { BedrockView } from '@blockly/contracts'
 import { type AppliedConfigJson, type Db, type Queryable, schema } from '@blockly/db'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
-import { otherVersionsOf, runsOnPaper, type ServerRevision } from '../../domain/revision/revision.ts'
+import {
+  bedrockOf,
+  otherVersionsOf,
+  runsOnPaper,
+  type ServerRevision,
+} from '../../domain/revision/revision.ts'
+import { bedrockAvailable, bedrockPlugins, FLOODGATE } from '../../minecraft/bedrock.ts'
 import { joinsOf } from '../../minecraft/clients.ts'
 import { COMPAT, runsPlugin, VIABACKWARDS, VIAREWIND, VIAVERSION } from '../../minecraft/mods.ts'
 import { GRIM, runsOwnGrim } from '../../minecraft/stop-cheaters.ts'
 import { offeredVersions, supports } from '../../minecraft/versions.ts'
 import type { ModService } from '../mods/service.ts'
+import type { GeyserMc } from '../ports/geysermc.ts'
 
 const { compatPlugins, minecraftServers: servers, serverRevisions: revisions } = schema
 
@@ -44,20 +56,25 @@ const TRIES: readonly (readonly string[])[] = [
 export class CompatPlugins {
   readonly #db: Db
   readonly #mods: Pick<ModService, 'resolveNew'>
+  readonly #geyser: GeyserMc | null
 
-  constructor(deps: { db: Db; mods: Pick<ModService, 'resolveNew'> }) {
+  constructor(deps: { db: Db; mods: Pick<ModService, 'resolveNew'>; geyser: GeyserMc | null }) {
     this.#db = deps.db
     this.#mods = deps.mods
+    this.#geyser = deps.geyser
   }
 
   /**
    * `compat-pins`: the Via plugins pinned again for each release Cubepals offers Paper on and each
-   * one a Paper server runs, and Grim for each where Grim publishes a build. A release the catalog
-   * can't answer for keeps what it had. How many releases were pinned.
+   * one a Paper server runs, Grim for each where Grim publishes a build, and Floodgate, whose one
+   * jar runs on them all. A release the catalog can't answer for keeps what it had. How many
+   * releases were pinned.
    */
   async refresh(): Promise<number> {
     let pinned = 0
+    const floodgate = await this.#floodgate()
     for (const gameVersion of await this.#releases()) {
+      if (floodgate !== null) await this.#pin(gameVersion, [floodgate], [FLOODGATE])
       const grim = await this.#mods
         .resolveNew({ gameVersion, loader: 'paper' }, [{ projectId: GRIM }])
         .catch(() => null)
@@ -75,9 +92,31 @@ export class CompatPlugins {
         via = true
         break
       }
-      if (via || grim?.kind === 'ok') pinned++
+      if (via || grim?.kind === 'ok' || floodgate !== null) pinned++
     }
     return pinned
+  }
+
+  /** Floodgate's newest Paper jar as a pinned plugin; null where GeyserMC can't be asked or lists none. */
+  async #floodgate(): Promise<PinnedMod | null> {
+    const jar = await this.#geyser?.latestFloodgate().catch(() => null)
+    if (jar === null || jar === undefined) return null
+    return {
+      source: { catalog: 'geysermc', projectId: FLOODGATE, versionId: `${jar.version}-${jar.build}` },
+      name: 'Floodgate',
+      versionLabel: `${jar.version} build ${jar.build}`,
+      artifact: {
+        ref: { kind: 'remote', url: jar.url },
+        sha512: jar.sha512,
+        sizeBytes: jar.sizeBytes,
+        fileName: jar.fileName,
+      },
+      environment: 'server',
+      loaders: ['paper'],
+      gameVersions: [],
+      origin: 'dependency',
+      requiredBy: [],
+    }
   }
 
   /**
@@ -116,6 +155,11 @@ export class CompatPlugins {
   }
 }
 
+/** Whether a Paper server's choice and its other versions' leave Bedrock players able to join. */
+const bedrockWanted = (revision: Pick<ServerRevision, 'gameVersion' | 'settings'>): boolean =>
+  bedrockOf(revision.settings) &&
+  bedrockAvailable(revision.gameVersion, otherVersionsOf(revision.settings) === 'off')
+
 /**
  * The Via plugins a revision starts with, placed in the plugins folder by Cubepals' own step: on a
  * Paper server, those its choice asks for, as pinned for its release, but any the owner runs
@@ -128,18 +172,27 @@ export async function compatFor(
   },
 ): Promise<PinnedMod[]> {
   if (revision.loader !== 'paper' || revision.modpack !== null) return []
-  const wanted = COMPAT[otherVersionsOf(revision.settings)].filter((id) => !runsPlugin(revision.mods, id))
+  // The Via plugins its choice asks for, and Floodgate with the ones Bedrock players need.
+  const choice = COMPAT[otherVersionsOf(revision.settings)]
+  const bedrock = bedrockWanted(revision) ? bedrockPlugins(revision.gameVersion) : []
+  const wanted = [...new Set([...choice, ...bedrock])].filter((id) => !runsPlugin(revision.mods, id))
   if (wanted.length === 0) return []
   const rows = await q
     .select({ projectId: compatPlugins.projectId, pinned: compatPlugins.pinned })
     .from(compatPlugins)
     .where(and(eq(compatPlugins.gameVersion, revision.gameVersion), inArray(compatPlugins.projectId, wanted)))
-  // An addon goes only beside ViaVersion, which it can't load without.
-  const pins = wanted.flatMap((id) =>
-    rows.filter((row) => row.projectId === id).map((row) => row.pinned as PinnedMod),
+  // What Bedrock players need comes only with Floodgate: a release with none pinned has no Bedrock.
+  const bedrockPinned = rows.some((row) => row.projectId === FLOODGATE)
+  const pins = wanted
+    .filter((id) => choice.includes(id) || (bedrockPinned && bedrock.includes(id)))
+    .flatMap((id) => rows.filter((row) => row.projectId === id).map((row) => row.pinned as PinnedMod))
+  // An addon goes only beside ViaVersion, which it can't load without; Floodgate needs no other plugin.
+  const viaAddons = new Set([VIABACKWARDS, VIAREWIND])
+  const hasVia = runsPlugin([...revision.mods, ...pins], VIAVERSION)
+  const placed = pins.filter(
+    (mod) => hasVia || !('projectId' in mod.source && viaAddons.has(mod.source.projectId)),
   )
-  if (!runsPlugin([...revision.mods, ...pins], VIAVERSION)) return []
-  return pins.map((mod) => ({ ...mod, dir: PLUGINS_DIR }))
+  return placed.map((mod) => ({ ...mod, dir: PLUGINS_DIR }))
 }
 
 /** What `grimFor` reads of a revision. */
@@ -191,8 +244,12 @@ export async function joinsNow(
     mods: ReadonlyArray<Pick<PinnedMod, 'source' | 'name'>>
   },
   run: { running: boolean; applied: Pick<AppliedConfigJson, 'revisionId' | 'compat'> | null },
-): Promise<{ joins: ReturnType<typeof joinsOf> }> {
+): Promise<{ joins: ReturnType<typeof joinsOf>; bedrock: BedrockView | null }> {
   const booted = run.running && run.applied?.revisionId === revision.id
   const placed = booted ? (run.applied?.compat ?? []) : projectsOf(await compatFor(q, revision))
-  return { joins: joinsOf(revision, placed) }
+  // Whether it lets Bedrock players in, as its choice says, and whether its other versions stop them.
+  const chooses = revision.loader === 'paper' && revision.modpack === null
+  const on = bedrockOf(revision.settings)
+  const bedrock = chooses ? { on, needsOtherVersions: on && !bedrockWanted(revision) } : null
+  return { joins: joinsOf(revision, placed), bedrock }
 }

@@ -39,6 +39,12 @@ export interface ServerSettings {
    * (`on`), or also 1.8 and 1.7 (`oldest`). Absent is `on`. Its own change, like `onlineMode`.
    */
   otherVersions?: OtherVersions
+  /**
+   * Whether a Paper server lets Bedrock players in (phones, tablets and Windows), through the
+   * plugins Cubepals adds as it starts (`app/compat/`). Absent is on. Its own change, like
+   * `otherVersions`.
+   */
+  bedrock?: boolean
 }
 
 export type OtherVersions = 'off' | 'on' | 'oldest'
@@ -47,12 +53,19 @@ export type OtherVersions = 'off' | 'on' | 'oldest'
 export const otherVersionsOf = (settings: Pick<ServerSettings, 'otherVersions'>): OtherVersions =>
   settings.otherVersions ?? 'on'
 
+/** A server's choice of letting Bedrock players in, with the default for one that never made it. */
+export const bedrockOf = (settings: Pick<ServerSettings, 'bedrock'>): boolean => settings.bedrock ?? true
+
 /** One setting as the server has it, a choice it never made at its default. */
 const settingOf = (settings: ServerSettings, key: keyof ServerSettings): string | number | boolean =>
-  key === 'otherVersions' ? otherVersionsOf(settings) : settings[key]
+  key === 'otherVersions'
+    ? otherVersionsOf(settings)
+    : key === 'bedrock'
+      ? bedrockOf(settings)
+      : settings[key]
 
-/** The settings the game form edits: everything but how players are checked and which versions join. */
-export type GameSettings = Omit<ServerSettings, 'onlineMode' | 'otherVersions'>
+/** The settings the game form edits: everything but how players are checked and who can join. */
+export type GameSettings = Omit<ServerSettings, 'onlineMode' | 'otherVersions' | 'bedrock'>
 
 type RevisionReason =
   | 'created'

@@ -237,11 +237,11 @@ export const VALUES: Value[] = [
   { name: 'WEB_PROXY_SECRET', goes: ['secret'], where: '', generate: random },
   { name: 'REALTIME_TICKET_SECRET', goes: ['secret'], where: '', generate: random },
   { name: 'EDGE_TOKEN', goes: ['secret'], where: '', generate: random },
-  /** The AES key Floodgate shares between the edge's Geyser and every Paper server: 16 bytes. */
-  { name: 'FLOODGATE_KEY', goes: ['secret'], where: '', generate: () => randomBytes(16).toString('base64') },
   /** The operators' API's bearer (scripts/ops.ts, scripts/production-check.ts). */
   { name: 'OPERATOR_TOKEN', goes: ['secret'], where: '', generate: random },
   { name: 'RUNTIME_SECRETS_KEY', goes: ['secret'], where: '', generate: () => `1:${random()}` },
+  /** Shared with the edge: 16 bytes as base64, the key Floodgate takes Bedrock players in with. */
+  { name: 'FLOODGATE_KEY', goes: ['secret'], where: '', generate: () => randomBytes(16).toString('base64') },
   {
     name: 'ADMIN_EMAILS',
     goes: ['operator'],
