@@ -2,6 +2,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Who a player is to a server: the UUID and name a typed name stands for, a Bedrock player's by
+ * their gamertag included, and whether a typed name names a player already known.
+ */
+
 import { createHash } from 'node:crypto'
 import { floodgateName, floodgateUuid, isBedrockUuid, typedAsBedrock } from '@blockly/contracts'
 import type { PlayerRef } from '../../domain/access/access.ts'
@@ -14,12 +19,15 @@ import type { PlayerProfiles } from '../ports/minecraft.ts'
 export const offlineUuid = (name: string): string =>
   uuidFromMd5(createHash('md5').update(offlineIdentitySeed(name), 'utf8').digest())
 
+/** What Minecraft lets a Java account be called; anything else can only be a gamertag. */
+const JAVA_NAME = /^[A-Za-z0-9_]{3,16}$/
+
 /**
  * The player a name means to a server: its Minecraft account where the server verifies accounts,
  * and otherwise the name itself, exactly as typed. Null where the server verifies accounts and
  * no account has the name. A name that starts with a dot, as Floodgate names Bedrock players, is
  * a Bedrock player whatever the server checks; so is a name no Minecraft account has, when an Xbox
- * account does. Without `geyser`, no Bedrock player is found.
+ * account does, on either kind of server. Without `geyser`, no Bedrock player is found.
  */
 export async function identityFor(
   name: string,
@@ -29,10 +37,21 @@ export async function identityFor(
 ): Promise<PlayerRef | null> {
   const typed = name.trim()
   if (typedAsBedrock(typed)) return bedrockPlayer(typed.slice(1), geyser)
-  if (!onlineMode) return { uuid: offlineUuid(typed), name: typed }
-  const profile = await profiles.byName(typed)
-  if (profile !== null) return { uuid: normalizeUuid(profile.uuid), name: profile.name }
-  return bedrockPlayer(typed, geyser)
+  const offline = { uuid: offlineUuid(typed), name: typed }
+  const profile = await javaAccount(typed, onlineMode, profiles)
+  if (profile !== null)
+    return onlineMode ? { uuid: normalizeUuid(profile.uuid), name: profile.name } : offline
+  return (await bedrockPlayer(typed, geyser)) ?? (onlineMode ? null : offline)
+}
+
+/**
+ * The Java account called `typed`; null where none is, or the name is none Minecraft allows. A
+ * server that doesn't verify accounts has no need of the answer, so where Mojang can't give it the
+ * name stays a Java player's.
+ */
+async function javaAccount(typed: string, onlineMode: boolean, profiles: PlayerProfiles) {
+  if (!JAVA_NAME.test(typed)) return null
+  return onlineMode ? profiles.byName(typed) : profiles.byName(typed).catch(() => ({ uuid: '', name: typed }))
 }
 
 /** The Bedrock player with this gamertag, as Floodgate logs them in; null where no Xbox account is known by it. */
@@ -51,3 +70,17 @@ async function bedrockPlayer(
  */
 export const keyedFor = (player: PlayerRef, onlineMode: boolean): boolean =>
   isBedrockUuid(player.uuid) || (normalizeUuid(player.uuid) === offlineUuid(player.name)) !== onlineMode
+
+/**
+ * Whether `typed` names this player, as an invitation or a list reads it: a Bedrock player by their
+ * gamertag, with or without the dot, spaces or not; a Java player by their name, whatever its
+ * capitals where the server verifies accounts. A plain name that a Java account could have is
+ * never taken for a Bedrock player's.
+ */
+export function namedBy(player: PlayerRef, typed: string, onlineMode: boolean): boolean {
+  if (!isBedrockUuid(player.uuid))
+    return onlineMode ? player.name.toLowerCase() === typed.toLowerCase() : player.name === typed
+  if (!typedAsBedrock(typed) && JAVA_NAME.test(typed)) return false
+  const gamertag = typedAsBedrock(typed) ? typed.slice(1) : typed
+  return floodgateName(gamertag).toLowerCase() === player.name.toLowerCase()
+}

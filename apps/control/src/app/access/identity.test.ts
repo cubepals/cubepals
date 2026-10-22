@@ -10,7 +10,7 @@
 import { describe, expect, test } from 'bun:test'
 import { FakeGeyserMc } from '../../infra/fake/fake-geysermc.ts'
 import { FakeProfiles } from '../../infra/fake/fake-profiles.ts'
-import { identityFor, keyedFor, offlineUuid } from './identity.ts'
+import { identityFor, keyedFor, namedBy, offlineUuid } from './identity.ts'
 
 describe('who a player is to a server', () => {
   test('a server that does not verify accounts derives the player from the exact name', () => {
@@ -82,5 +82,33 @@ describe('a Bedrock player to a server', () => {
     const player = { uuid: FLOODGATE_UUID, name: '.Pixel' }
     expect(keyedFor(player, true)).toBe(true)
     expect(keyedFor(player, false)).toBe(true)
+  })
+
+  test('an undotted gamertag on a server that does not check accounts is the Bedrock player', async () => {
+    const geyser = new FakeGeyserMc()
+    geyser.introduce('Pixel Pal', XUID)
+    geyser.introduce('PixelPal', XUID)
+    const profiles = new FakeProfiles()
+    // A gamertag with a space can't be a Java name; one without it is taken for a Java player's
+    // only while an account has it.
+    expect((await identityFor('Pixel Pal', false, profiles, geyser))?.uuid).toBe(FLOODGATE_UUID)
+    profiles.unknown('PixelPal')
+    expect((await identityFor('PixelPal', false, profiles, geyser))?.uuid).toBe(FLOODGATE_UUID)
+    // Someone who is only a Java name still gets what they always did.
+    expect(await identityFor('Steve', false, new FakeProfiles(), geyser)).toEqual({
+      uuid: offlineUuid('Steve'),
+      name: 'Steve',
+    })
+  })
+
+  test('a typed name is the player already known by it, a dotted gamertag included', () => {
+    const player = { uuid: FLOODGATE_UUID, name: '.Pixel_Pal' }
+    for (const typed of ['.Pixel Pal', '.pixel_pal', 'Pixel Pal'])
+      expect(namedBy(player, typed, true)).toBe(true)
+    // A name a Java account could have is not taken for the Bedrock player's.
+    expect(namedBy({ uuid: FLOODGATE_UUID, name: '.Pixel' }, 'Pixel', true)).toBe(false)
+    expect(namedBy({ uuid: FLOODGATE_UUID, name: '.Pixel' }, '.Pixel', true)).toBe(true)
+    expect(namedBy({ uuid: offlineUuid('Steve'), name: 'Steve' }, 'steve', false)).toBe(false)
+    expect(namedBy({ uuid: offlineUuid('Steve'), name: 'Steve' }, 'steve', true)).toBe(true)
   })
 })

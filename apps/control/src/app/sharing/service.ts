@@ -2,10 +2,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { JoinThroughInviteResult } from '@blockly/contracts'
+import { type JoinThroughInviteResult, shownName } from '@blockly/contracts'
 import { HOUR_MS } from '@blockly/contracts/durations'
 import { type Db, schema } from '@blockly/db'
 import { and, eq, gte, max, sql } from 'drizzle-orm'
+import { namedBy } from '../access/identity.ts'
 import { readAccess } from '../access/persistence.ts'
 import type { AccessService } from '../access/service.ts'
 import { loadStanding } from '../accounts/persistence.ts'
@@ -56,9 +57,9 @@ export class SharingService {
       (entry) =>
         entry.list === 'whitelist' &&
         (entry.state === 'active' || entry.state === 'pending_add') &&
-        (onlineMode ? entry.player.name.toLowerCase() === typed.toLowerCase() : entry.player.name === typed),
+        namedBy(entry.player, typed, onlineMode),
     )
-    if (listed !== undefined) return { playerName: listed.player.name, added: false, asleep }
+    if (listed !== undefined) return { playerName: shownName(listed.player), added: false, asleep }
 
     // Joins through this link only (`AbuseLimits.inviteJoinsPerHour`): the ones since its owner last
     // replaced it, within the hour. Resetting a link ends the old one along with its count, so the
@@ -96,15 +97,15 @@ export class SharingService {
     // door, and the whitelist holds the account rather than a spelling.
     await this.#access.add(INVITEE, server.id, 'whitelist', typed)
     const saved = (await readAccess(this.#db, server.id)).record.entries.find(
-      (entry) => entry.list === 'whitelist' && entry.player.name.toLowerCase() === typed.toLowerCase(),
+      (entry) => entry.list === 'whitelist' && namedBy(entry.player, typed, true),
     )
     await this.#db.insert(schema.auditLog).values({
       actor: 'system:invite',
       action: 'access.invite_join',
       subjectType: 'server',
       subjectId: server.id,
-      data: { playerName: saved?.player.name ?? typed },
+      data: { playerName: saved ? shownName(saved.player) : typed },
     })
-    return { playerName: saved?.player.name ?? typed, added: true, asleep }
+    return { playerName: saved ? shownName(saved.player) : typed, added: true, asleep }
   }
 }
