@@ -102,12 +102,13 @@ primary_region = "fra"
     timeout = "2s"
     grace_period = "15s"
 
-  # Whether Geyser is up and answering (the agent's /_health): UDP has no check of its own. The
-  # grace period is as long as Fly allows, for a JVM's first start, which also fetches the game's files.
+  # The edge's own health (the agent's /_health), which covers Java players alone: Geyser failing
+  # must never take the machine out of rotation for them. Geyser restarts by itself, and how it
+  # stands is its own status at /_health/bedrock, which no check asks.
   [[services.http_checks]]
     interval = "15s"
     timeout = "2s"
-    grace_period = "60s"
+    grace_period = "15s"
     method = "get"
     path = "/_health"
 
