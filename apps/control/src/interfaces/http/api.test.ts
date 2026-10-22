@@ -151,10 +151,19 @@ describe('what is counted of a request', () => {
   })
 
   test('a batch is one request, and each procedure in it is timed by its path', async () => {
+    // Whole, since it stays installed for the files that run after this one.
+    const ignored = () => {}
     installTelemetry({
+      operationEnded: ignored,
+      operationFailed: ignored,
+      joinCompleted: ignored,
+      wakeCompleted: ignored,
+      wakeAnswered: ignored,
+      realtimeConnected: ignored,
+      observeRealtime: ignored,
       requestServed: (...args) => void requests.push(args),
       procedureServed: (...args) => void procedures.push(args),
-    } as Telemetry)
+    } satisfies Telemetry)
     const response = await app.request('/api/trpc/billing.portal,servers.evil-7f3a9c?batch=1', {
       method: 'POST',
       headers: { origin: 'https://blockly.test', 'content-type': 'application/json' },
