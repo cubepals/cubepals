@@ -234,6 +234,22 @@ export async function loadJobHealth(q: Queryable): Promise<JobHealthRecord[]> {
   return q.select().from(jobs)
 }
 
+/** What `overdue` reads of a job: when it was first seen and last got through, and how often it runs. */
+export type JobProgress = Pick<JobHealthRecord, 'job' | 'everySeconds' | 'firstSeenAt' | 'lastSucceededAt'>
+
+/** The progress of `names`, or of every job, without the errors and claims the rows also hold. */
+export async function loadJobProgress(q: Queryable, names?: readonly string[]): Promise<JobProgress[]> {
+  return q
+    .select({
+      job: jobs.job,
+      everySeconds: jobs.everySeconds,
+      firstSeenAt: jobs.firstSeenAt,
+      lastSucceededAt: jobs.lastSucceededAt,
+    })
+    .from(jobs)
+    .where(names === undefined ? undefined : inArray(jobs.job, [...names]))
+}
+
 /**
  * The scheduled jobs as they are now, each with its interval; one first seen now counts from now.
  * Scheduled jobs no longer among them are forgotten; what runs on no schedule is kept.
