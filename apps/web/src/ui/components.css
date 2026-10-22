@@ -2614,6 +2614,11 @@ details[open] > .bk-disclosure::before {
   outline: 2px solid var(--grass-press);
   outline-offset: 2px;
 }
+.bk-tip--bare {
+  display: inline-grid;
+  text-decoration: none;
+  cursor: inherit;
+}
 .bk-tip__float {
   z-index: 50;
 }

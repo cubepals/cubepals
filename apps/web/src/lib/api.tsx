@@ -66,7 +66,16 @@ export function ApiProvider({ data, children }: { data?: DehydratedState; childr
         splitLink({
           condition: (op) => OUTSIDE.has(op.path),
           true: httpLink({ url: '/api/trpc' }),
-          false: httpBatchLink({ url: '/api/trpc' }),
+          // A call made as the page is being left (`context: { leaving: true }`) is sent with
+          // `keepalive`, which the browser finishes after the page has gone.
+          false: splitLink({
+            condition: (op) => op.context.leaving === true,
+            true: httpLink({
+              url: '/api/trpc',
+              fetch: (url, init) => fetch(url, { ...init, keepalive: true }),
+            }),
+            false: httpBatchLink({ url: '/api/trpc' }),
+          }),
         }),
       ],
     }),
