@@ -67,10 +67,12 @@ jobs:
     name: Find the sensitive paths
     if: >-
       github.repository == 'cubepals/cubepals'
-      && !(github.event_name == 'pull_request'
-        && github.event.pull_request.head.repo.full_name != github.repository)
-      && !(github.event_name == 'pull_request_target'
-        && github.event.pull_request.head.repo.full_name == github.repository)
+      && (
+        (github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository)
+        || (github.event_name == 'pull_request_target'
+          && github.event.pull_request.head.repo.full_name != github.repository)
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -111,8 +113,12 @@ jobs:
   mark:
     name: Say a new review is coming
     needs: sensitive
+    # A comment or a run by hand has no sensitive job, and a request must still start when that job
+    # failed: only the automatic start depends on it.
     if: >-
-      github.repository == 'cubepals/cubepals'
+      always()
+      && (needs.sensitive.result == 'success' || needs.sensitive.result == 'skipped')
+      && github.repository == 'cubepals/cubepals'
       && github.actor == 'v0id-user'
       && github.triggering_actor == 'v0id-user'
       && (
@@ -126,6 +132,7 @@ jobs:
                 || contains(github.event.pull_request.labels.*.name, 'review/ai-merge')
                 || contains(github.event.pull_request.labels.*.name, 'review/ai-fix-first')))))
         || (github.event_name == 'pull_request_target'
+          && github.event.pull_request.head.repo.full_name != github.repository
           && github.event.action == 'labeled'
           && github.event.label.name == 'needs-second-eye')
         || (github.event_name == 'issue_comment'
@@ -386,7 +393,11 @@ jobs:
   gate:
     name: Set the second eye gate
     needs: [sensitive, mark, review, comment]
-    if: always() && needs.sensitive.result != 'skipped'
+    if: >-
+      always()
+      && (needs.sensitive.result != 'skipped'
+        || (contains(fromJSON('["issue_comment", "workflow_dispatch"]'), github.event_name)
+          && needs.mark.result == 'success'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -413,6 +424,6 @@ jobs:
           MARK: ${{ needs.mark.result }}
           REVIEW: ${{ needs.review.result }}
           COMMENT: ${{ needs.comment.result }}
-          SHA: ${{ github.event.pull_request.head.sha || fromJSON(needs.review.outputs.reviewed || '{}').sha }}
+          SHA: ${{ fromJSON(needs.review.outputs.reviewed || '{}').sha || github.event.pull_request.head.sha }}
           REPO: ${{ github.repository }}
         run: bun scripts/second-eye-gate.ts

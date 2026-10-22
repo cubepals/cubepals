@@ -188,6 +188,18 @@ describe('what the second eye shows beyond its findings', () => {
       'Missed before |',
     ])
     expect(body).toContain('Earlier findings that are settled (2)')
+    const lost = secondEyeComment(
+      {
+        verdict: 'merge',
+        earlier: [
+          { number: 1, status: 'fixed' },
+          { number: 1, status: 'fixed' },
+        ],
+        findings: [],
+      },
+      { ...run, previous },
+    )
+    expect(lost).toContain('(1 fixed, 2 not accounted for)')
     expect(body).toContain('- Fixed: Hours are charged twice when the stop retries. now keyed')
     expect(body).toContain('- No longer applies: Hours are charged twice when the stop retries. code removed')
   })

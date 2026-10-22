@@ -181,7 +181,9 @@ function filesRead(review: Review, run: Run): string {
 
 /** What became of the earlier review's findings, and how the rest split, in a line or two. */
 function sinceLine(review: Review, previous: Previous): string[] {
-  const settled = (review.earlier ?? []).filter((e) => previous.findings[e.number - 1])
+  const settled = [...new Map((review.earlier ?? []).map((e) => [e.number, e])).values()].filter(
+    (e) => previous.findings[e.number - 1],
+  )
   const origin = (kind: Origin) => (review.findings ?? []).filter((f) => f.origin === kind).length
   const part = (n: number, text: string) => (n ? [`${n} ${text}`] : [])
   const earlier = [
@@ -193,9 +195,12 @@ function sinceLine(review: Review, previous: Previous): string[] {
     ...part(origin('new'), 'new, in code changed since'),
     ...part(origin('missed'), 'missed before'),
   ]
+  const lost = previous.findings.length - settled.length - origin('open')
   return [
     `**Since the last review.** Earlier: ${count(previous.findings.length, 'finding', 'findings')}${
-      earlier.length ? ` (${earlier.join(', ')})` : ''
+      earlier.length || lost > 0
+        ? ` (${[...earlier, ...part(Math.max(lost, 0), 'not accounted for')].join(', ')})`
+        : ''
     }. Now: ${added.length ? added.join(', ') : 'nothing new'}.`,
     '',
   ]

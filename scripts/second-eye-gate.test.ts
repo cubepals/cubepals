@@ -139,6 +139,8 @@ describe('second-eye.yml', () => {
     expect(mark).toContain("github.actor == 'v0id-user'")
     expect(mark).toContain("github.triggering_actor == 'v0id-user'")
     expect(mark).toContain("needs.sensitive.outputs.auto == 'true'")
+    // A failed path check drops the automatic start only, never a request.
+    expect(mark).toContain("needs.sensitive.result == 'skipped'")
     expect(job('review')).toContain('needs: mark')
     expect(job('comment')).toContain('needs: review')
     // Nothing else holds the token that runs the model.
