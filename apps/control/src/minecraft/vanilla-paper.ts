@@ -69,8 +69,10 @@ const SETTINGS: ReadonlyArray<{ path: string; lines: readonly string[] }> = [
     ],
   },
   {
-    // Activation range 0 ticks every mob as Minecraft does, wherever it is: the one setting here
-    // with a real cost, and the one farms most depend on.
+    // An activation range of 0 or less marks every entity of that kind always active (Paper's
+    // `ActivationRange.initializeEntityActivationState`), so each one ticks fully wherever it is,
+    // as on Mojang's own server. The one setting here with a real cost, and the one farms most
+    // depend on.
     path: 'spigot.yml',
     lines: [
       'world-settings:',
