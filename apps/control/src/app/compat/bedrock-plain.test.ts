@@ -205,3 +205,51 @@ describe.skipIf(!hasDatabase)('a plain server made before', () => {
     expect((await jarsOf(id)).some((line) => line.includes(FLOODGATE))).toBe(true)
   }, 120_000)
 })
+
+describe.skipIf(!hasDatabase)('a copy of a plain server', () => {
+  test('keeps the choices its source made, Bedrock turned off included', async () => {
+    const owner = await h.user('Copier', 'plus')
+    const { id, slug } = await h.create(owner, { name: 'Off', from: { kind: 'template', key: 'survival' } })
+    await running(id)
+    await h.app.revisions.changeBedrock(owner, id, false, randomUUID())
+    await running(id)
+    const offCopy = await h.create(owner, { name: 'Off copy', from: { kind: 'server', slug } })
+    await running(offCopy.id)
+    const off = await desired(offCopy.id)
+    expect(runsOnPaper(off)).toBe(true)
+    expect(off.settings).toMatchObject({ bedrock: false, otherVersions: 'on' })
+    expect((await jarsOf(offCopy.id)).some((line) => line.includes(FLOODGATE))).toBe(false)
+  }, 120_000)
+
+  test('of one made before either choice, has both off', async () => {
+    const owner = await h.user('Copier Before', 'plus')
+    const before = await madeBefore(owner, 'Before', false)
+    const beforeCopy = await h.create(owner, {
+      name: 'Before copy',
+      from: { kind: 'server', slug: (await h.server(before)).slug },
+    })
+    await running(beforeCopy.id)
+    const copied = await desired(beforeCopy.id)
+    expect(runsOnPaper(copied)).toBe(true)
+    expect(copied.settings.bedrock).toBeUndefined()
+    expect(copied.settings.otherVersions).toBeUndefined()
+    expect(await jarsOf(beforeCopy.id)).toEqual([])
+    expect((await h.app.queries.get(owner, beforeCopy.id)).bedrock).toEqual({
+      on: false,
+      needsOtherVersions: false,
+      moves: false,
+    })
+  }, 120_000)
+
+  test('of a new one, keeps Bedrock on, and the preview says so', async () => {
+    const owner = await h.user('Copier On', 'plus')
+    const { id, slug } = await h.create(owner, { name: 'On', from: { kind: 'template', key: 'creative' } })
+    await running(id)
+    const preview = await h.app.queries.setupPreview(owner, { kind: 'server', slug })
+    expect(preview.bedrock).toBe(true)
+    const copy = await h.create(owner, { name: 'On copy', from: { kind: 'server', slug } })
+    await running(copy.id)
+    expect((await desired(copy.id)).settings).toMatchObject({ bedrock: true, otherVersions: 'on' })
+    expect((await jarsOf(copy.id)).some((line) => line.includes(FLOODGATE))).toBe(true)
+  }, 120_000)
+})

@@ -15,6 +15,7 @@ import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { isDatapack } from '../../domain/mods/artifact.ts'
 import type { CarriedFile } from '../../domain/revision/carried.ts'
 import {
+  bedrockOf,
   defaultSettings,
   isPlain,
   type Loader,
@@ -123,7 +124,7 @@ export async function draftNewServer(
     reason: 'created',
     basedOnRevisionId: null,
   }
-  revision.settings = withChoices(revision)
+  revision.settings = withChoices(revision, request.from)
 
   const createdFrom =
     request.from === undefined
@@ -190,17 +191,12 @@ export function newJoins(
   offered: boolean,
 ): { joins: { oldest: string; newer: boolean }; bedrock: boolean } {
   const onPaper = startsOnPaper(from, chosen)
-  const joins = joinRange({
-    ...chosen,
-    // The build is read as the server is made; that there will be one is all the range asks.
-    loaderVersion: onPaper ? (chosen.setup.loaderVersion ?? 'paper') : null,
-    settings: {
-      otherVersions:
-        chosen.setup.settings.otherVersions ?? (onPaper ? PLAIN_ON_PAPER.otherVersions : undefined),
-    },
-  })
-  const bedrock = offered && chosen.modpack === null && (chosen.loader === 'paper' || onPaper)
-  return { joins, bedrock }
+  // The build is read as the server is made; that there will be one is all the range asks.
+  const loaderVersion = onPaper ? (chosen.setup.loaderVersion ?? 'paper') : null
+  const settings = withChoices({ ...chosen, loaderVersion, settings: chosen.setup.settings }, from)
+  const joins = joinRange({ ...chosen, loaderVersion, settings })
+  const paper = chosen.modpack === null && (chosen.loader === 'paper' || onPaper)
+  return { joins, bedrock: offered && paper && bedrockOf({ loader: chosen.loader, settings }) }
 }
 
 /**
@@ -230,9 +226,17 @@ const PLAIN_ON_PAPER = {
   bedrock: true,
 } as const satisfies Partial<ServerSettings>
 
-/** A new revision's settings, with the choices a plain server on Paper is made with. */
-const withChoices = (revision: RevisionDraft): ServerSettings =>
-  runsOnPaper(revision) ? { ...PLAIN_ON_PAPER, ...revision.settings } : revision.settings
+/**
+ * A new revision's settings, with the choices a plain server on Paper is made with. A copy has
+ * none added: it keeps the choices its source made, and one that made none has them off.
+ */
+const withChoices = <S extends Partial<ServerSettings>>(
+  revision: Parameters<typeof runsOnPaper>[0] & { settings: S },
+  from: SetupSource | undefined,
+): S =>
+  runsOnPaper(revision) && from?.kind !== 'server'
+    ? { ...PLAIN_ON_PAPER, ...revision.settings }
+    : revision.settings
 
 /** The files a new server's setup carries; one made without a setup carries none. */
 const carriedBy = (chosen: ResolvedSetup | null): CarriedFile[] => [...(chosen?.setup.files ?? [])]
