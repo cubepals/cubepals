@@ -42,7 +42,6 @@ import { packEnvironment, packTier, suggestedForServers } from '../../minecraft/
 import { settingTakes } from '../../minecraft/settings.ts'
 import {
   compareVersions,
-  createVersions,
   DEFAULT_GAME_VERSION,
   DEFAULT_LOADER,
   LOADER_LABELS,
@@ -330,7 +329,11 @@ export class ServerQueries {
     return {
       templates: usableFirst(templates),
       packs: usableFirst(packs),
-      gameVersions: createVersions(),
+      gameVersions: offeredVersions().map((v) => ({
+        value: v.id,
+        label: v.id,
+        recommended: v.id === DEFAULT_GAME_VERSION,
+      })),
       loaders: (['vanilla', 'paper', 'fabric'] as const).map((value) => ({
         value,
         label: LOADER_LABELS[value],
