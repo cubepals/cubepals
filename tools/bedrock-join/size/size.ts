@@ -243,6 +243,21 @@ function summarize(samples: Sample[], ticksPerSecond = 100) {
   }
 }
 
+/** Starts `command` on a machine and leaves it running: an exec that lasts a minute is cut off. */
+function detach(app: string, id: string, command: string, log: string): void {
+  exec(app, id, `sh -c 'rm -f ${log}; nohup ${command} > ${log} 2>&1 &'`, 60)
+}
+
+/** Waits for a detached command to print its last line, a JSON object; returns it. */
+async function finished(app: string, id: string, log: string, seconds: number): Promise<string> {
+  for (let waited = 0; waited < seconds; waited += 5) {
+    await Bun.sleep(5000)
+    const last = exec(app, id, `tail -n 1 ${log}`, 60).trim().split('\n').pop() ?? ''
+    if (last.startsWith('{')) return last
+  }
+  return 'no answer'
+}
+
 async function run(n: string, players: number, seconds: number) {
   const { edge, load } = names(n)
   const edgeMachine = machines(edge)[0]
@@ -250,37 +265,37 @@ async function run(n: string, players: number, seconds: number) {
   if (edgeMachine === undefined || clients.length < 2) throw new Error('run `up` first')
   const [a, b] = clients as [Machine, Machine]
   const relay = `${edgeMachine.id}.vm.${edge}.internal:19140`
-  const started = Date.now()
   const tool = '/app/tools/bedrock-join'
   const joinCommand = (offset: number, count: number) =>
-    `bun ${tool}/join.ts --address a.play.bsize --via6 ${relay} --players ${count} --offset ${offset} --stagger 1500 --hold ${seconds} --timeout 180 2>/dev/null`
-  const jobs: Promise<string>[] = []
-  const each = players / 2
+    `bun ${tool}/join.ts --address a.play.bsize --via6 ${relay} --players ${count} --offset ${offset} --stagger 1500 --hold ${seconds} --timeout 180`
   if (players > 0) {
-    jobs.push(Promise.resolve().then(() => exec(load, a.id, joinCommand(0, each), seconds + 400)))
-    jobs.push(Promise.resolve().then(() => exec(load, b.id, joinCommand(100, each), seconds + 400)))
+    detach(load, a.id, joinCommand(0, players / 2), '/tmp/bedrock.log')
+    detach(load, b.id, joinCommand(100, players / 2), '/tmp/bedrock.log')
   }
   // The Java loops start once the Bedrock players are in.
-  const settle = players > 0 ? Math.ceil((players * 1.5) / 2) + 20 : 0
+  const settle = players > 0 ? Math.ceil((players * 1.5) / 2) + 25 : 0
   await Bun.sleep(settle * 1000)
+  const measuredFrom = Date.now()
   const javaFor = Math.max(30, seconds)
-  const java = exec(
-    load,
-    a.id,
-    `bun ${tool}/size/load/java-load.ts ${edge}.fly.dev 5 ${javaFor}`,
-    javaFor + 120,
-  )
-  const results = await Promise.all(jobs)
+  detach(load, a.id, `bun ${tool}/size/load/java-load.ts ${edge}.fly.dev 5 ${javaFor}`, '/tmp/java.log')
+  const java = await finished(load, a.id, '/tmp/java.log', javaFor + 120)
+  const bedrock =
+    players > 0
+      ? [
+          await finished(load, a.id, '/tmp/bedrock.log', seconds + 300),
+          await finished(load, b.id, '/tmp/bedrock.log', 60),
+        ]
+      : []
   const stats = JSON.parse(
     exec(
       load,
       a.id,
-      `bun -e "process.stdout.write(await (await fetch('http://${edgeMachine.id}.vm.${edge}.internal:8099/stats?since=${started + settle * 1000}')).text())"`,
+      `bun -e "process.stdout.write(await (await fetch('http://${edgeMachine.id}.vm.${edge}.internal:8099/stats?since=${measuredFrom}')).text())"`,
       60,
     ),
   ) as Sample[]
   process.stdout.write(
-    `${JSON.stringify({ bedrockPlayers: players, java: JSON.parse(java.trim().split('\n').pop() ?? '{}'), bedrock: results.map((r) => r.trim().split('\n').pop()), edge: summarize(stats.filter((s) => s.at <= Date.now())) }, null, 2)}\n`,
+    `${JSON.stringify({ bedrockPlayers: players, java: JSON.parse(java.startsWith('{') ? java : '{}'), bedrock: bedrock.map((r) => (r.startsWith('{') ? JSON.parse(r) : r)), edge: summarize(stats) }, null, 2)}\n`,
   )
 }
 
