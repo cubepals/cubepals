@@ -105,6 +105,9 @@ const facts: string[] = []
 const failures: string[] = []
 const started = Date.now()
 
+/** The running step's signal: aborted when it gives up, so what it left waiting stops with it. */
+let current = new AbortController().signal
+
 /** One step, timed; a failure is recorded and the run goes on with what doesn't depend on it. */
 async function step(
   name: string,
@@ -112,11 +115,16 @@ async function step(
   limitSeconds = 900,
 ): Promise<boolean> {
   const at = Date.now()
+  const gaveUp = new AbortController()
+  current = gaveUp.signal
   try {
     const note = await Promise.race([
       run(),
       new Promise<never>((_, stop) =>
-        setTimeout(() => stop(new Error(`gave up after ${limitSeconds}s`)), limitSeconds * SECOND_MS).unref(),
+        setTimeout(() => {
+          gaveUp.abort()
+          stop(new Error(`gave up after ${limitSeconds}s`))
+        }, limitSeconds * SECOND_MS).unref(),
       ),
     ])
     results.push({ name, ok: true, ms: Date.now() - at })
@@ -134,6 +142,7 @@ async function step(
 async function until<T>(what: string, limitSeconds: number, read: () => Promise<T | undefined>): Promise<T> {
   const deadline = Date.now() + limitSeconds * SECOND_MS
   for (;;) {
+    if (current.aborted) throw new Error(`stopped waiting for ${what}: its step gave up`)
     const got = await read().catch(() => undefined)
     if (got !== undefined) return got
     if (Date.now() >= deadline) throw new Error(`never ${what} within ${limitSeconds}s`)
@@ -267,7 +276,11 @@ try {
       'a Bedrock player joins: the server wakes, they spawn, a chat line arrives',
       async () => {
         const chat = `hello from Bedrock ${randomUUID().slice(0, 8)}`
-        const run = await bedrockJoin(address(), ['--chat', chat, '--hold', '15', '--timeout', '240'])
+        const run = await bedrockJoin(
+          address(),
+          ['--chat', chat, '--hold', '15', '--timeout', '240'],
+          current,
+        )
         const [spawn] = run.spawnMs
         check(
           run.spawned === 1 && typeof spawn === 'number',
@@ -288,7 +301,7 @@ try {
     await step(
       'a Java ping sees the same server while the Bedrock player is in',
       async () => {
-        const holding = bedrockJoin(address(), ['--hold', '25', '--timeout', '120'])
+        const holding = bedrockJoin(address(), ['--hold', '25', '--timeout', '120'], current)
         const seen = await until('showed the Bedrock player', 90, async () => {
           const ping = await status(EDGE, address())
           return (ping.players?.online ?? 0) >= 1 ? ping : undefined
@@ -301,10 +314,20 @@ try {
     )
   }
 
-  const [listed, unlisted, banned] = [...(await knownGamertags(GAMERTAGS, 3)).entries()]
-  if (slept && listed && unlisted && banned) {
+  let tags: [string, string][] = []
+  if (slept)
+    await step(
+      'GeyserMC knows three gamertags for the access steps',
+      async () => {
+        tags = [...(await knownGamertags(GAMERTAGS, 3, current)).entries()]
+        return tags.map(([name]) => name).join(', ')
+      },
+      60,
+    )
+  const [listed, unlisted, banned] = tags
+  if (listed && unlisted && banned) {
     const joinsAs = ([name, xuid]: [string, string]) =>
-      bedrockJoin(address(), ['--username', name, '--xuid', xuid, '--hold', '2', '--timeout', '60'])
+      bedrockJoin(address(), ['--username', name, '--xuid', xuid, '--hold', '2', '--timeout', '60'], current)
 
     const ready = await step(
       '"Only people I add can join" is on, one gamertag added and one banned',
@@ -374,12 +397,14 @@ try {
           // [e] keeps the shell that runs this from matching its own command line.
           `sh -c "for p in /proc/[0-9]*; do grep -qa Geyser-Standalon[e] $p/cmdline 2>/dev/null && echo \${p#/proc/}; done"`,
         ])
-        const pid = Number(found.trim().split('\n')[0])
-        check(
-          Number.isInteger(pid) && pid > 1,
-          `Geyser's process was not found: "${found.trim().slice(0, 80)}"`,
-        )
-        await fly(['ssh', 'console', '-a', EDGE_APP, '-C', `sh -c "kill -9 ${pid}"`])
+        // Every process whose command line names Geyser's jar, so none is left to hold the port.
+        const pids = found
+          .trim()
+          .split('\n')
+          .map(Number)
+          .filter((pid) => Number.isInteger(pid) && pid > 1)
+        check(pids.length > 0, `Geyser's process was not found: "${found.trim().slice(0, 80)}"`)
+        await fly(['ssh', 'console', '-a', EDGE_APP, '-C', `sh -c "kill -9 ${pids.join(' ')}"`])
         const at = Date.now()
         const down = await until('seen down', 30, async () => {
           const now = await bedrockStatus()
@@ -396,12 +421,12 @@ try {
         const motd = await until('answered a Bedrock ping again', 60, () =>
           bedrockPing(`bedrock-check.${PLAY_DOMAIN}`),
         )
-        const again = await bedrockJoin(address(), ['--hold', '3', '--timeout', '120'])
+        const again = await bedrockJoin(address(), ['--hold', '3', '--timeout', '120'], current)
         check(again.spawned === 1, 'a Bedrock player could not join after Geyser came back')
         facts.push(
           `Geyser killed: back ${seconds(back)} later (restarts ${before.restarts} to ${after.restarts})`,
         )
-        return `pid ${pid} killed; Bedrock ${down.state}, edge health ${health}, a Java join took ${seconds(javaTook)}; Geyser up again after ${seconds(back)}, pong "${motd.split(';').slice(0, 2).join(';')}", a Bedrock join spawned`
+        return `pid ${pids.join(', ')} killed; Bedrock ${down.state}, edge health ${health}, a Java join took ${seconds(javaTook)}; Geyser up again after ${seconds(back)}, pong "${motd.split(';').slice(0, 2).join(';')}", a Bedrock join spawned`
       },
       600,
     )

@@ -10,7 +10,7 @@
  * Not for the check's steps or its accounts (`scripts/bedrock-check.ts`).
  */
 import { createSocket } from 'node:dgram'
-import { resolve4 } from 'node:dns/promises'
+import { lookup } from 'node:dns/promises'
 import { SECOND_MS } from '@blockly/contracts/durations'
 
 /** RakNet's offline-message marker, which every unconnected packet carries. */
@@ -20,8 +20,7 @@ const UNCONNECTED_PONG = 0x1c
 
 /** What a Bedrock client's server list shows of a server: the answer to RakNet's unconnected ping. */
 export async function bedrockPing(host: string, port = 19132, timeoutMs = 5 * SECOND_MS): Promise<string> {
-  const [address] = await resolve4(host)
-  if (address === undefined) throw new Error(`${host} has no IPv4`)
+  const { address } = await lookup(host, { family: 4 })
   const ping = Buffer.concat([Buffer.from([UNCONNECTED_PING]), Buffer.alloc(8), MAGIC, Buffer.alloc(8)])
   const socket = createSocket('udp4')
   try {
@@ -58,12 +57,17 @@ export interface BedrockJoin {
  * Runs `tools/bedrock-join` against a play address, once with the options given. Its exit status
  * says whether every player spawned; a check that expects a refusal reads the answer instead.
  */
-export async function bedrockJoin(address: string, options: string[] = []): Promise<BedrockJoin> {
+export async function bedrockJoin(
+  address: string,
+  options: string[] = [],
+  signal?: AbortSignal,
+): Promise<BedrockJoin> {
   const began = Date.now()
   const child = Bun.spawn(['bun', 'join.ts', '--address', address, ...options], {
     cwd: 'tools/bedrock-join',
     stdout: 'pipe',
     stderr: 'inherit',
+    ...(signal === undefined ? {} : { signal }),
   })
   const [out] = await Promise.all([new Response(child.stdout).text(), child.exited])
   const last = out.trim().split('\n').at(-1) ?? ''
@@ -79,11 +83,17 @@ const XBOX_LOOKUP = 'https://api.geysermc.org/v2/xbox/xuid'
  * does. Cubepals adds a Bedrock player to a list only through this lookup, so a test of the lists
  * needs gamertags that answer it.
  */
-export async function knownGamertags(candidates: string[], count: number): Promise<Map<string, string>> {
+export async function knownGamertags(
+  candidates: string[],
+  count: number,
+  signal?: AbortSignal,
+): Promise<Map<string, string>> {
   const found = new Map<string, string>()
   for (const gamertag of candidates) {
     if (found.size === count) break
-    const response = await fetch(`${XBOX_LOOKUP}/${encodeURIComponent(gamertag)}`)
+    const response = await fetch(`${XBOX_LOOKUP}/${encodeURIComponent(gamertag)}`, {
+      signal: AbortSignal.any([AbortSignal.timeout(10 * SECOND_MS), ...(signal ? [signal] : [])]),
+    })
     const xuid = response.ok ? /"xuid"\s*:\s*"?(\d+)/.exec(await response.text())?.[1] : undefined
     if (xuid !== undefined) found.set(gamertag, xuid)
   }
