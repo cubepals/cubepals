@@ -347,6 +347,12 @@ describe('console', () => {
         { name: 'Alex', uuid: '6ab43178-89fd-4905-97f6-0f67d9d76fd9' },
       ],
     })
+    // A Bedrock player keeps the dot Floodgate names them with, as the access lists hold them.
+    expect(
+      parseOnlinePlayers(
+        'There are 1 of a max of 20 players online: .Pixel_Pal (00000000-0000-0000-0009-01eed05d1000)',
+      )?.players,
+    ).toEqual([{ name: '.Pixel_Pal', uuid: '00000000-0000-0000-0009-01eed05d1000' }])
   })
 
   test('normalizes uuids and refuses IP bans', () => {

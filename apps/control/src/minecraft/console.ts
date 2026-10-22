@@ -33,7 +33,8 @@ export interface OnlinePlayers {
 }
 
 const LIST_PATTERN = /There are (\d+) of a max of (\d+) players online:?(.*)$/s
-const PLAYER_PATTERN = /([A-Za-z0-9_]{1,16}) \(([0-9a-fA-F-]{32,36})\)/g
+/** A name with its UUID; a Bedrock player's starts with Floodgate's dot. */
+const PLAYER_PATTERN = /([.A-Za-z0-9_]{1,16}) \(([0-9a-fA-F-]{32,36})\)/g
 
 /** Parses `list uuids`: "There are 1 of a max of 20 players online: Steve (0000…)". */
 export function parseOnlinePlayers(output: string): OnlinePlayers | null {
