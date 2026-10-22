@@ -25,4 +25,8 @@ export const operationFailed: Telemetry['operationFailed'] = (...args) => instal
 export const joinCompleted: Telemetry['joinCompleted'] = (...args) => installed?.joinCompleted(...args)
 export const wakeCompleted: Telemetry['wakeCompleted'] = (...args) => installed?.wakeCompleted(...args)
 export const wakeAnswered: Telemetry['wakeAnswered'] = (...args) => installed?.wakeAnswered(...args)
+export const requestServed: Telemetry['requestServed'] = (...args) => installed?.requestServed(...args)
+export const procedureServed: Telemetry['procedureServed'] = (...args) => installed?.procedureServed(...args)
+export const realtimeConnected: Telemetry['realtimeConnected'] = (...args) =>
+  installed?.realtimeConnected(...args)
 export const observeRealtime: Telemetry['observeRealtime'] = (...args) => installed?.observeRealtime(...args)

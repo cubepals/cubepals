@@ -21,6 +21,7 @@ import { VisitBatch } from '@blockly/contracts/join-records'
 import { Hono } from 'hono'
 import type { EdgeService } from '../../app/edge/service.ts'
 import type { JoinService } from '../../app/joins/service.ts'
+import { measured } from '../http/measured.ts'
 
 /**
  * The edge protocol, served on the internal listener only. The edge asks for routes and reports
@@ -28,6 +29,8 @@ import type { JoinService } from '../../app/joins/service.ts'
  */
 export function createInternalApp(deps: { edge: EdgeService; joins: JoinService; token: string }): Hono {
   const app = new Hono()
+  // The operators' APIs, mounted on this listener later (main.node.ts), are measured here too.
+  app.use('*', measured('internal'))
   const expected = Buffer.from(`Bearer ${deps.token}`)
 
   app.use(`${EDGE_PROTOCOL_BASE}/*`, async (c, next) => {

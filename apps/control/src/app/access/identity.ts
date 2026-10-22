@@ -27,7 +27,8 @@ const JAVA_NAME = /^[A-Za-z0-9_]{3,16}$/
  * and otherwise the name itself, exactly as typed. Null where the server verifies accounts and
  * no account has the name. A name that starts with a dot, as Floodgate names Bedrock players, is
  * a Bedrock player whatever the server checks; so is a name no Minecraft account has, when an Xbox
- * account does, on either kind of server. Without `geyser`, no Bedrock player is found.
+ * account does, on either kind of server. Without `geyser`, no Bedrock player is found, and a name
+ * that is not a Java name is no player.
  */
 export async function identityFor(
   name: string,
@@ -41,7 +42,10 @@ export async function identityFor(
   const profile = await javaProfile(typed, onlineMode, profiles)
   if (profile !== null)
     return onlineMode ? { uuid: normalizeUuid(profile.uuid), name: profile.name } : offline
-  return (await bedrockPlayer(typed, geyser)) ?? (onlineMode ? null : offline)
+  const bedrock = await bedrockPlayer(typed, geyser)
+  // Only a Java name can be a player a server makes up from the name: any other, a gamertag with a
+  // space say, would reach the server's commands as the Java player its first word names.
+  return bedrock ?? (onlineMode || !JAVA_NAME.test(typed) ? null : offline)
 }
 
 /**

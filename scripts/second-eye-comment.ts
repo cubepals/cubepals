@@ -21,14 +21,17 @@
  *
  *   bun scripts/second-eye-comment.ts
  *   NOTICE=running|draft|failed bun scripts/second-eye-comment.ts
+ *   DECIDE=1 bun scripts/second-eye-comment.ts
  *
  * It reads REVIEW (the action's structured output), REVIEWED (the commit and its counts, as the
  * review job read them), PREVIOUS (the earlier review's findings, when there was one), MODEL, REPO, PULL and GH_TOKEN from the environment the workflow gives
  * it, and what the reviewer looks at from .github/second-eye.md. With NOTICE it writes only the
- * line at the top and needs no review. It needs no installed package.
+ * line at the top and needs no review. With DECIDE it touches nothing: it writes to GITHUB_OUTPUT
+ * whether this run reviews and what it says first (EVENT, ACTION, DRAFT and FORCE say what started
+ * it), so a run that reviews nothing leaves the comment and the verdict's label as they are. It needs no installed package.
  * Not for what the reviewer looks for or how it judges: .github/second-eye.md says that.
  */
-import { readFileSync } from 'node:fs'
+import { appendFileSync, readFileSync } from 'node:fs'
 import { github, keepComment, ourComment } from './lib/pull-comment.ts'
 
 export type Severity = 'high' | 'medium' | 'low'
@@ -329,6 +332,33 @@ export function withNotice(body: string, line?: string): string {
   return [MARKER, ...(line ? [line, ''] : []), ...lines].join('\n')
 }
 
+/** What a run does before it reviews: whether it reviews, and what the comment says meanwhile. */
+export interface Start {
+  review: boolean
+  /** 'none' leaves the comment and the labels untouched. */
+  notice: 'running' | 'draft' | 'none'
+}
+
+/**
+ * A run by hand on a commit that already has its review does nothing, unless it is forced: the
+ * verdict and its label stand. A draft's push marks the review stale and waits. Anything else
+ * reviews.
+ */
+export function decide(run: {
+  event: string
+  action: string
+  draft: boolean
+  force: boolean
+  reviewed?: string
+  head: string
+}): Start {
+  if (run.event === 'workflow_dispatch' && !run.force && run.reviewed === run.head)
+    return { review: false, notice: 'none' }
+  if (['synchronize', 'opened', 'reopened'].includes(run.action) && run.draft)
+    return { review: false, notice: 'draft' }
+  return { review: true, notice: 'running' }
+}
+
 /** The pull request's head commit and labels as they are now. */
 async function pullNow(repo: string, pull: string): Promise<{ head: string; labels: string[] }> {
   const response = await github(`repos/${repo}/pulls/${pull}`)
@@ -404,7 +434,24 @@ async function writeReview(repo: string, pull: string): Promise<void> {
   await label(repo, pull, now.labels, moved ? undefined : labelFor(review))
 }
 
+async function writeStart(repo: string, pull: string): Promise<void> {
+  const [now, comment] = await Promise.all([pullNow(repo, pull), ourComment(repo, pull, MARKER)])
+  const start = decide({
+    event: need('EVENT'),
+    action: process.env.ACTION ?? '',
+    draft: process.env.DRAFT === 'true',
+    force: process.env.FORCE === 'true',
+    reviewed: comment ? reviewedIn(comment.body) : undefined,
+    head: now.head,
+  })
+  appendFileSync(need('GITHUB_OUTPUT'), `review=${start.review}\nnotice=${start.notice}\n`)
+}
+
 if (import.meta.main) {
+  if (process.env.DECIDE) {
+    await writeStart(need('REPO'), need('PULL'))
+    process.exit(0)
+  }
   const notice = process.env.NOTICE as Notice | undefined
   if (notice && !['running', 'draft', 'failed'].includes(notice)) throw new Error(`NOTICE is ${notice}`)
   if (notice) await markStale(need('REPO'), need('PULL'), notice)

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test'
+import { randomUUID } from 'node:crypto'
 import {
   AddNoteInput,
   AddPlayerInput,
@@ -86,6 +87,22 @@ describe('what Blockly says about what was typed', () => {
     expect(rules.playerName('a_b-c')).toContain('letters, numbers and underscores')
     expect(rules.playerName('ab')).toContain('3 to 16')
     expect(rules.playerName('a'.repeat(17))).toContain('3 to 16')
+  })
+
+  test('a Bedrock gamertag is taken with its dot, and agrees with what the API takes', () => {
+    expect(rules.playerName('.Ninja')).toBeNull()
+    expect(rules.playerName('.Pixel Pal')).toBeNull()
+    expect(rules.playerName('Major Nelson')).toBeNull()
+    expect(rules.playerName('.')).not.toBeNull()
+    expect(rules.playerName(`.${'a'.repeat(16)}`)).not.toBeNull()
+    expect(rules.playerName('.no-dashes')).not.toBeNull()
+    // Only the letters the server's player argument reads.
+    expect(rules.playerName('.Zoë')).not.toBeNull()
+    expect(rules.playerName('Zoë Pal')).not.toBeNull()
+    for (const typed of ['.Ninja', 'Major Nelson', '.', '.no-dashes', '.Zoë', 'Zoë Pal'])
+      expect(AddPlayerInput.safeParse({ serverId: randomUUID(), name: typed }).success).toBe(
+        rules.playerName(typed) === null,
+      )
   })
 
   test('every bound matches the one the API enforces', () => {

@@ -2,8 +2,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/** How a Bedrock player is named, and how the access lists take one by gamertag. */
+
 import { describe, expect, test } from 'bun:test'
 import {
+  AddPlayerInput,
+  BanInput,
   bedrockDisplayName,
   floodgateName,
   floodgateUuid,
@@ -40,5 +44,36 @@ describe('a Bedrock player as Floodgate names them', () => {
   test('a typed name asks for Bedrock when it starts with the dot', () => {
     expect(typedAsBedrock(' .Pixel')).toBe(true)
     expect(typedAsBedrock('Steve')).toBe(false)
+  })
+})
+
+describe('the lists take a Bedrock player by gamertag', () => {
+  const serverId = '5c107a17-e1cc-4e2a-9d09-97217184d539'
+
+  test('a gamertag with its dot is added and banned, as a Java name is', () => {
+    for (const name of ['.Ninja', '.Pixel Pal', 'Pixel Pal', 'Steve', 'a_b'])
+      expect(AddPlayerInput.safeParse({ serverId, name }).success).toBe(true)
+    expect(BanInput.safeParse({ serverId, name: '.Dream', reason: 'griefing' }).success).toBe(true)
+    expect(AddPlayerInput.parse({ serverId, name: '  .Ninja ' }).name).toBe('.Ninja')
+  })
+
+  test('what is neither a Java name nor a gamertag is refused, and the refusal says how to type one', () => {
+    for (const name of [
+      '',
+      '.',
+      'ab',
+      '.Zoë',
+      '.日本語',
+      'Zoë Pal',
+      '.Pixel\u00a0Pal',
+      'a-b',
+      '.no-dashes',
+      `.${'a'.repeat(16)}`,
+      'has/slash',
+    ]) {
+      const refused = AddPlayerInput.safeParse({ serverId, name })
+      expect(refused.success).toBe(false)
+      expect(refused.error?.issues[0]?.message).toContain('type a dot and their gamertag')
+    }
   })
 })

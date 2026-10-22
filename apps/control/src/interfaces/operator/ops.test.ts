@@ -478,7 +478,7 @@ describe('the operators’ API: players, Browse and the platform', () => {
     ])
     expect((await call('DELETE', `/servers/${SERVER}/access/ban/Nobody`)).status).toBe(404)
     expect((await call('POST', `/servers/${SERVER}/access/owners`, { name: 'Steve' })).status).toBe(400)
-    expect((await call('POST', `/servers/${SERVER}/access/ban`, { name: 'not a name' })).status).toBe(400)
+    expect((await call('POST', `/servers/${SERVER}/access/ban`, { name: 'not/a-name!' })).status).toBe(400)
 
     expect((await call('GET', `/servers/${SERVER}/moderation`)).status).toBe(200)
     expect(

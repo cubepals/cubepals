@@ -25,7 +25,7 @@ import { Held, LOGIN_QUERIES, turnAway } from './hold.ts'
 import { JoinTrace } from './join-trace.ts'
 import { Gate } from './limits.ts'
 import { mappings } from './mappings.ts'
-import { holdBegun, polled } from './metrics.ts'
+import { holdBegun, observeGeyser, polled } from './metrics.ts'
 import { hostnameOf, type Join, Notice, type NoticeText, pingOf, statusRequest } from './notice.ts'
 import { PingWakes } from './ping-wake.ts'
 import { RoutesPoll } from './poll.ts'
@@ -785,10 +785,9 @@ const door: FrontOptions = {
 }
 front(door)
 
-// Bedrock players, where the edge holds the Floodgate key: Geyser dials the front door above, so
-// it starts once that listens. A Bedrock failure never takes Java players with it: the edge goes
-// on without, and its health says so.
-// Geyser dials a door of its own, which alone lets forwarded identity through (`front.ts`).
+// Bedrock players, where the edge holds the Floodgate key, once the front door listens: Geyser dials
+// a door of its own, which alone lets forwarded identity through (`front.ts`). A Bedrock failure never
+// takes Java players with it: the edge goes on without, and its health and its metrics say so.
 const bedrockSettings = bedrockFromEnv(process.env, 0)
 if (bedrockSettings === null) console.error('FLOODGATE_KEY is unset; Bedrock players aren’t taken')
 else
@@ -798,6 +797,7 @@ else
       console.error('Bedrock players aren’t taken: Geyser could not start', error)
       return null
     })
+observeGeyser(() => (bedrockSettings === null ? null : bedrock?.status().state === 'up'))
 
 const code = await child.exited
 console.error(`mc-router exited with ${code}`)

@@ -286,6 +286,8 @@ try {
           run.spawned === 1 && typeof spawn === 'number',
           `the player did not spawn: ${run.told[0]?.kicked ?? 'no answer'}`,
         )
+        // A player turned out after they spawned is a launch blocker, not a flaw of the check.
+        check(run.told[0]?.kicked == null, `the player was kicked after spawning: "${run.told[0]?.kicked}"`)
         const heard = run.told[0]?.chat ?? []
         check(
           heard.some((line) => line.includes(chat)),
@@ -301,13 +303,17 @@ try {
     await step(
       'a Java ping sees the same server while the Bedrock player is in',
       async () => {
-        const holding = bedrockJoin(address(), ['--hold', '25', '--timeout', '120'], current)
+        // Another player than the one before, so a session the server still holds can't refuse them.
+        const holding = bedrockJoin(address(), ['--offset', '1', '--hold', '25', '--timeout', '120'], current)
         const seen = await until('showed the Bedrock player', 90, async () => {
           const ping = await status(EDGE, address())
           return (ping.players?.online ?? 0) >= 1 ? ping : undefined
         })
         const run = await holding
-        check(run.spawned === 1, 'the Bedrock player did not stay in')
+        check(
+          run.spawned === 1 && run.told[0]?.kicked == null,
+          `the Bedrock player did not stay in: ${run.told[0]?.kicked ?? 'they never spawned'}`,
+        )
         return `Java sees ${seen.version.name}, ${seen.players?.online} online of ${seen.players?.max}`
       },
       200,
@@ -395,7 +401,7 @@ try {
           EDGE_APP,
           '-C',
           // [e] keeps the shell that runs this from matching its own command line.
-          `sh -c "for p in /proc/[0-9]*; do grep -qa Geyser-Standalon[e] $p/cmdline 2>/dev/null && echo \${p#/proc/}; done"`,
+          `sh -c "for p in /proc/[0-9]*; do grep -qa Geyser-Standalon[e] $p/cmdline 2>/dev/null && echo \${p#/proc/}; done; true"`,
         ])
         // Every process whose command line names Geyser's jar, so none is left to hold the port.
         const pids = found

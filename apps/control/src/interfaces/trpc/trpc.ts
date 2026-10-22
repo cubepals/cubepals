@@ -4,6 +4,7 @@
 
 import type { AppErrorCode, PlatformCapabilities } from '@blockly/contracts'
 import { initTRPC, TRPCError } from '@trpc/server'
+import { getHTTPStatusCodeFromError } from '@trpc/server/http'
 import { ZodError, z } from 'zod'
 import type { PlayerFaces } from '../../app/access/faces.ts'
 import type { AccessService } from '../../app/access/service.ts'
@@ -36,6 +37,7 @@ import type { PlatformHealth } from '../../app/platform/health.ts'
 import type { ServerRepairs } from '../../app/platform/repairs.ts'
 import type { StuckWork } from '../../app/platform/stuck.ts'
 import type { SuspendSwitch } from '../../app/platform/suspend-switch.ts'
+import { procedureServed } from '../../app/platform/telemetry.ts'
 import type { PlayerService } from '../../app/players/service.ts'
 import type { SessionSwitch } from '../../app/ports/auth.ts'
 import type { RealtimeTickets } from '../../app/ports/tickets.ts'
@@ -201,6 +203,17 @@ const translateErrors = t.middleware(async ({ next }) => {
   return result
 })
 
+/**
+ * Times each procedure by its path, which the router defines, so no caller adds a label. A batch
+ * is one HTTP request (`http/measured.ts`) but each procedure in it is timed here on its own.
+ */
+const timed = t.middleware(async ({ path, next }) => {
+  const began = performance.now()
+  const result = await next()
+  procedureServed(path, result.ok ? 200 : getHTTPStatusCodeFromError(result.error), performance.now() - began)
+  return result
+})
+
 /** The request's session, which only HTTP requests carry. */
 export function sessionOf(ctx: Pick<Context, 'session'>): SessionSwitch {
   if (ctx.session === undefined)
@@ -209,7 +222,7 @@ export function sessionOf(ctx: Pick<Context, 'session'>): SessionSwitch {
 }
 
 export const router = t.router
-export const publicProcedure = t.procedure.use(translateErrors)
+export const publicProcedure = t.procedure.use(timed).use(translateErrors)
 export const authedProcedure = publicProcedure.use(({ ctx, next }) => {
   if (ctx.actor === null) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in first.' })
   return next({ ctx: { ...ctx, actor: ctx.actor } })
