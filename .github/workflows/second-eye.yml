@@ -56,6 +56,10 @@ on:
         description: Pull request number to review
         type: number
         required: true
+      force:
+        description: Review again although the head already has its review
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -148,8 +152,9 @@ jobs:
     permissions:
       pull-requests: write
     outputs:
-      # A draft's push or opening waits for ready_for_review; everything else is reviewed now.
-      review: ${{ !(contains(fromJSON('["synchronize", "opened", "reopened"]'), github.event.action) && github.event.pull_request.draft) }}
+      # Whether this run reviews: not a draft's push or opening, which waits for ready_for_review,
+      # and not a run by hand on a head that already has its review, unless forced.
+      review: ${{ steps.decide.outputs.review }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -169,11 +174,27 @@ jobs:
         with:
           client-id: ${{ vars.CUBEPALS_APP_CLIENT_ID }}
           private-key: ${{ secrets.CUBEPALS_APP_PRIVATE_KEY }}
+      - name: Decide whether to review
+        id: decide
+        env:
+          DECIDE: 1
+          GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
+          COMMENT_AUTHOR: ${{ steps.bot.outputs.app-slug && format('{0}[bot]', steps.bot.outputs.app-slug) || 'github-actions[bot]' }}
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          FORCE: ${{ inputs.force }}
+          REPO: ${{ github.repository }}
+          PULL: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+        run: bun scripts/second-eye-comment.ts
+      # Only a run that reviews, or a draft's push that makes the review stale, writes anything: a
+      # skipped review never touches the comment or the labels.
       - name: Say a new review is coming
+        if: steps.decide.outputs.notice != 'none'
         env:
           GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
           COMMENT_AUTHOR: ${{ steps.bot.outputs.app-slug && format('{0}[bot]', steps.bot.outputs.app-slug) || 'github-actions[bot]' }}
-          NOTICE: ${{ contains(fromJSON('["synchronize", "opened", "reopened"]'), github.event.action) && github.event.pull_request.draft && 'draft' || 'running' }}
+          NOTICE: ${{ steps.decide.outputs.notice }}
           REPO: ${{ github.repository }}
           PULL: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
         run: bun scripts/second-eye-comment.ts
@@ -181,7 +202,12 @@ jobs:
   review:
     name: Review
     needs: mark
-    if: needs.mark.outputs.review == 'true'
+    # A job's implicit success() also fails on a skipped job further up the chain, and a comment or
+    # a run by hand has no sensitive job: the status is asked for here, so the review still runs.
+    if: >-
+      !cancelled()
+      && needs.mark.result == 'success'
+      && needs.mark.outputs.review == 'true'
     runs-on: ubuntu-latest
     # The quiet window and the review.
     timeout-minutes: 60
@@ -344,7 +370,12 @@ jobs:
   comment:
     name: Comment
     needs: review
-    if: needs.review.outputs.review != '' && needs.review.outputs.superseded != 'true'
+    # As for the review: asked for here because the sensitive job above it can be skipped.
+    if: >-
+      !cancelled()
+      && needs.review.result == 'success'
+      && needs.review.outputs.review != ''
+      && needs.review.outputs.superseded != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

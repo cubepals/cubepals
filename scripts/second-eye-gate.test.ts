@@ -151,4 +151,22 @@ describe('second-eye.yml', () => {
     expect(job('sensitive')).not.toContain('CLAUDE_CODE_OAUTH_TOKEN')
     expect(job('gate')).not.toContain('CLAUDE_CODE_OAUTH_TOKEN')
   })
+
+  test('a skipped review writes nothing: the notice step waits for the decision', () => {
+    const mark = job('mark')
+    expect(mark).toContain('id: decide')
+    expect(mark).toContain("if: steps.decide.outputs.notice != 'none'")
+    expect(mark).toContain('review: ${{ steps.decide.outputs.review }}')
+    expect(workflow).toContain('force:')
+  })
+
+  test('the review and its comment run when the sensitive job above them is skipped', () => {
+    // A comment or a run by hand skips the sensitive job, and an implicit success() would skip
+    // every job below it.
+    for (const name of ['review', 'comment']) {
+      const section = job(name)
+      expect(section).toContain('!cancelled()')
+      expect(section).toContain(`needs.${name === 'review' ? 'mark' : 'review'}.result == 'success'`)
+    }
+  })
 })
