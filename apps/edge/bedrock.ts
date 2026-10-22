@@ -95,7 +95,15 @@ export async function startBedrock(options: BedrockOptions): Promise<Bedrock> {
   if (!options.validateLogin) console.error('[geyser] XBOX SIGN-IN IS OFF: for a test edge only')
 
   const geyser = new Supervised({
-    command: ['java', `-Xmx${options.heap}`, '-XX:+UseSerialGC', '-jar', options.jar, '--nogui'],
+    command: [
+      'java',
+      `-Xmx${options.heap}`,
+      '-XX:+UseSerialGC',
+      '-XX:+ExitOnOutOfMemoryError',
+      '-jar',
+      options.jar,
+      '--nogui',
+    ],
     cwd: options.dir,
     prefix: '[geyser]',
   })

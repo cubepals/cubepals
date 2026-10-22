@@ -333,6 +333,11 @@ which the project's charts leave out.
 | `BROWSER_PORT` | `8080` (Fly's HTTP service on 80 and 443) | same | — |
 | `IDLE_HINT_AFTER` | `10m` (compose knob) | `10m` | toml |
 | `MINECRAFT_PORT` | `25565` | `25565` | toml |
+| `FLOODGATE_KEY` | unset: Bedrock players aren't taken | the same key as the control plane's, base64 of 16 bytes. With it the agent starts Geyser (`apps/edge/bedrock.ts`) and answers Bedrock on UDP `BEDROCK_PORT` | Terraform (edge) |
+| `BEDROCK_PORT`, `BEDROCK_BIND` | `19132`, `fly-global-services` | same: the one address Fly delivers UDP to | toml |
+| `BEDROCK_VALIDATE_LOGIN` | `true` | `true`. `false` skips Xbox sign-in and is for a test edge whose headless clients have no account (`tools/bedrock-join`) | — |
+| `BEDROCK_PONGS_PER_SECOND`, `BEDROCK_PONGS_BURST`, `BEDROCK_OPENS_PER_SECOND`, `BEDROCK_OPENS_BURST`, `BEDROCK_MOST_PLAYERS` | `2`, `10`, `1`, `10`, `2000` | same: pongs sent, and new connections opened, per address; players held at once | — |
+| `GEYSER_JAR`, `GEYSER_DIR`, `GEYSER_HEAP` | the image's jar, `/tmp/geyser`, `512m` | same. The jar's build is pinned in `apps/edge/Dockerfile` and raised with `bun scripts/geyser.ts bump` | — |
 | `EDGE_ID` | `local-edge` | the machine's hostname | — |
 | `ROUTES_POLL_MS` | `1000` | same | — |
 | `AGENT_PORT` | `8090` (mc-router's webhooks) | same | — |
