@@ -421,6 +421,14 @@ export const DeploymentConfig = z.object({
   defaultRuntime: z.string().min(1),
   /** The operators' API's bearer token (scripts/runtimes.ts, scripts/fleet.ts); none turns it off. */
   operatorToken: Secret.nullable(),
+  /**
+   * The key Paper servers and the edge share to take Bedrock players in (FLOODGATE_KEY): 16 bytes as
+   * base64. None, and no server is given Floodgate, since a key of its own would not match the edge's.
+   */
+  floodgateKey: z
+    .string()
+    .regex(/^[A-Za-z0-9+/]{22}==$/, 'FLOODGATE_KEY is 16 bytes as base64')
+    .nullable(),
   artifacts: z.object({
     /** The control plane as game runtimes reach it (§15.2). */
     runtimeFacingUrl: z.url(),

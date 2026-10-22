@@ -9,6 +9,7 @@ import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import { type PinnedModpack, samePack } from '../../domain/mods/modpack.ts'
 import type { CarriedFile } from '../../domain/revision/carried.ts'
 import {
+  bedrockOf,
   describeChanges,
   type GameSettings,
   type Loader,
@@ -119,6 +120,7 @@ export class RevisionService {
         ...(desired.settings.otherVersions === undefined
           ? {}
           : { otherVersions: desired.settings.otherVersions }),
+        ...(desired.settings.bedrock === undefined ? {} : { bedrock: desired.settings.bedrock }),
       }
       const problems = settingsProblems(settings, playerCapacity(server.memoryTier))
       if (problems.length > 0) throw new AppError('invalid_settings', problems.join(' '))
@@ -190,6 +192,33 @@ export class RevisionService {
         basedOnRevisionId: desired.id,
       }
       return { draft, audit: { action: 'server.other_versions_changed', data: { otherVersions } } }
+    })
+  }
+
+  /**
+   * Whether the server lets Bedrock players in (`ServerSettings.bedrock`): Floodgate, and the Via
+   * plugins its version needs, which Cubepals adds as it starts. Only Paper runs them. They are
+   * Cubepals' own, never the owner's plugins, so no plan counts them; turning it off takes them
+   * away at the server's next start.
+   */
+  changeBedrock(
+    actor: Actor,
+    serverId: string,
+    bedrock: boolean,
+    requestId: string,
+    options: ChangeOptions = {},
+  ) {
+    return this.#change(actor, serverId, requestId, 'apply', options, async (_tx, _server, desired) => {
+      if (desired.loader !== 'paper' || desired.modpack !== null)
+        throw new AppError('invalid_choice', 'Only a Paper server lets Bedrock players in.')
+      if (bedrockOf(desired.settings) === bedrock) return null
+      const draft: RevisionDraft = {
+        ...draftOf(desired),
+        settings: { ...desired.settings, bedrock },
+        reason: 'settings_changed',
+        basedOnRevisionId: desired.id,
+      }
+      return { draft, audit: { action: 'server.bedrock_changed', data: { bedrock } } }
     })
   }
 

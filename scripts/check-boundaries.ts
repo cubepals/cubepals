@@ -52,6 +52,8 @@ const PROVIDER_HOSTS: Record<string, RegExp> = {
   hangar: /^(hangar|hangarcdn)\.papermc\.io$/,
   curseforge: /(^|\.)(curseforge\.com|forgecdn\.net)$/,
   mojang: /(^|\.)(minecraftservices\.com|mojang\.com|minecraft\.net)$/,
+  // Floodgate's download service and the Xbox lookup behind a Bedrock player's gamertag.
+  geysermc: /(^|\.)geysermc\.org$/,
   loaders: /(^|\.)(fabricmc\.net|quiltmc\.org|papermc\.io|minecraftforge\.net|neoforged\.net)$/,
   // MCAntiMalware's database, published in its own repository.
   malware: /^raw\.githubusercontent\.com$/,

@@ -94,6 +94,7 @@ describe('the values file', () => {
       [
         'AUTH_SECRET',
         'EDGE_TOKEN',
+        'FLOODGATE_KEY',
         'OPERATOR_TOKEN',
         'REALTIME_TICKET_SECRET',
         'RUNTIME_SECRETS_KEY',
@@ -101,6 +102,7 @@ describe('the values file', () => {
       ].sort(),
     )
     expect(made.RUNTIME_SECRETS_KEY).toMatch(/^1:.{40,}$/)
+    expect(Buffer.from(made.FLOODGATE_KEY ?? '', 'base64')).toHaveLength(16)
     expect(parseValues(valuesFile({})).AUTH_SECRET).not.toBe(made.AUTH_SECRET)
 
     const kept = { ADMIN_EMAILS: 'owner@example.test', ADMIN_ALERT_EMAILS: 'ops@example.test' }

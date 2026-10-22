@@ -112,6 +112,7 @@ const VIA_NAMES: Readonly<Record<string, string>> = {
   [VIAVERSION]: 'viaversion',
   [VIABACKWARDS]: 'viabackwards',
   [VIAREWIND]: 'viarewind',
+  floodgate: 'floodgate',
 }
 
 /** Whether `mods` hold the Via plugin that is Modrinth's `projectId`, from wherever it came. */

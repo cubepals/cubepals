@@ -240,6 +240,8 @@ export const VALUES: Value[] = [
   /** The operators' API's bearer (scripts/ops.ts, scripts/production-check.ts). */
   { name: 'OPERATOR_TOKEN', goes: ['secret'], where: '', generate: random },
   { name: 'RUNTIME_SECRETS_KEY', goes: ['secret'], where: '', generate: () => `1:${random()}` },
+  /** Shared with the edge: 16 bytes as base64, the key Floodgate takes Bedrock players in with. */
+  { name: 'FLOODGATE_KEY', goes: ['secret'], where: '', generate: () => randomBytes(16).toString('base64') },
   {
     name: 'ADMIN_EMAILS',
     goes: ['operator'],

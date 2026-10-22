@@ -12,7 +12,9 @@ import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import type { MemoryTier } from '../../domain/server/size.ts'
 import type { World } from '../../domain/world/world.ts'
+import { FLOODGATE } from '../../minecraft/bedrock.ts'
 import { COMPAT_PREFIX } from '../../minecraft/carried.ts'
+import { runsPlugin } from '../../minecraft/mods.ts'
 import { leaveOutNow } from '../../minecraft/pack-build.ts'
 import {
   IDENTITY_ENV,
@@ -29,6 +31,7 @@ import { loadStanding } from '../accounts/persistence.ts'
 import type { BuiltPack } from '../artifacts/brand-pack.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
 import { reporterPin } from '../artifacts/reporter.ts'
+import type { DeploymentCapabilities } from '../capabilities.ts'
 import { compatFor, projectsOf } from '../compat/service.ts'
 import { PermanentFailure } from '../errors.ts'
 import { loadListing } from '../listings/persistence.ts'
@@ -122,13 +125,16 @@ export class RuntimeSpecs {
   readonly brandPack: BuiltPack
 
   readonly #official: OfficialFiles
+  readonly #floodgateKey: string | null
 
   constructor(
     secrets: SecretKeyring,
     links: ArtifactLinks,
     brandPack: BuiltPack,
     official: OfficialFiles = noOfficialFiles,
+    capabilities: DeploymentCapabilities = { archives: null, billing: null },
   ) {
+    this.#floodgateKey = capabilities.bedrock?.floodgateKey ?? null
     this.#secrets = secrets
     this.#links = links
     this.#official = official
@@ -189,7 +195,10 @@ export class RuntimeSpecs {
       ...spec,
       labels: { ...spec.labels, [SECRETS_VERSION_LABEL]: String(current.version) },
     })
-    const placed = await compatFor(q, revision)
+    // Floodgate only where there is a key to give it: one it made for itself would not match the edge's.
+    const placed = (await compatFor(q, revision)).filter(
+      (mod) => this.#floodgateKey !== null || !runsPlugin([mod], FLOODGATE),
+    )
     // Stop cheaters where it is on: Grim, unless the owner runs their own, and its punishments
     // file, an official server's own where its files name one (`stop-cheaters/start.ts`).
     const officialFiles = official ? this.#official.forStart(server) : []
@@ -209,6 +218,7 @@ export class RuntimeSpecs {
       ...input,
       revision: starting,
       compat: [...placed, ...reporter, ...(stop.placed?.jar ? [stop.placed.jar] : [])],
+      floodgateKey: this.#floodgateKey,
     })
     // With the punishments file its step writes (`minecraft/stop-cheaters.ts`) where it runs.
     const env = {
