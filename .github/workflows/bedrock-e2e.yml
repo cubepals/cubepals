@@ -12,8 +12,6 @@ name: Bedrock E2E
 # concurrency group: neither changes staging under the other.
 on:
   workflow_dispatch:
-  push:
-    branches: [claude/bedrock-e2e-workflow-judp47]
 
 permissions:
   contents: read
