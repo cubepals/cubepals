@@ -32,6 +32,17 @@ variable "edge_token_version" {
   type        = string
 }
 
+variable "floodgate_key" {
+  description = "FLOODGATE_KEY, the same value the control plane has: the key Geyser and every Paper server share."
+  type        = string
+  sensitive   = true
+}
+
+variable "floodgate_key_version" {
+  description = "A non-secret marker that changes with the key."
+  type        = string
+}
+
 variable "play_domains" {
   description = "PLAY_DOMAIN, then each of PLAY_DOMAIN_ALIASES: <slug>.<domain> reaches the edge."
   type        = list(string)
@@ -71,6 +82,14 @@ resource "fly_secret" "edge_token" {
   name             = "EDGE_TOKEN"
   value_wo         = var.edge_token
   value_wo_version = var.edge_token_version
+}
+
+# Geyser reads it at start (apps/edge/bedrock.ts).
+resource "fly_secret" "floodgate_key" {
+  app              = fly_app.edge.name
+  name             = "FLOODGATE_KEY"
+  value_wo         = var.floodgate_key
+  value_wo_version = var.floodgate_key_version
 }
 
 # Where a play address opened in a browser goes (apps/edge/browser-redirect.ts). Neither is secret,

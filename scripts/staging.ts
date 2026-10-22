@@ -99,6 +99,8 @@ interface State {
   runtimeKey: string
   /** Made after the first staging came up: generated when missing. */
   webProxySecret?: string
+  /** The key Geyser on the edge and every Paper server share: 16 bytes, base64. Made when missing. */
+  floodgateKey?: string
   /** The org token a cloud environment runs flyctl with: made by `env`. */
   operatorToken?: string
   flyToken?: string
@@ -183,10 +185,15 @@ const stagingTokens = () =>
 // ─── State ───────────────────────────────────────────────────────────────────────────────────
 
 function loadState(): State {
-  if (existsSync(STATE_FILE)) return JSON.parse(readFileSync(STATE_FILE, 'utf8')) as State
-  // A cloud environment has no local file: its settings carry what `up` made (`env`).
-  if (process.env.STAGING_STATE) return JSON.parse(process.env.STAGING_STATE) as State
+  const kept = existsSync(STATE_FILE)
+    ? (JSON.parse(readFileSync(STATE_FILE, 'utf8')) as State)
+    : // A cloud environment has no local file: its settings carry what `up` made (`env`).
+      process.env.STAGING_STATE
+      ? (JSON.parse(process.env.STAGING_STATE) as State)
+      : null
+  if (kept !== null) return { ...kept, floodgateKey: kept.floodgateKey ?? randomBytes(16).toString('base64') }
   return {
+    floodgateKey: randomBytes(16).toString('base64'),
     authSecret: secret(),
     ticketSecret: secret(),
     edgeToken: secret(),
@@ -465,13 +472,13 @@ async function up(): Promise<void> {
     POLAR_SERVER: 'sandbox',
     POLAR_PRODUCTS: process.env.POLAR_PRODUCTS,
   }
-  const lines = Object.entries(config)
+  const lines = Object.entries({ ...config, FLOODGATE_KEY: state.floodgateKey })
     .map(([name, value]) => `${name}=${value}`)
     .join('\n')
   for (const app of [APP.control, APP.realtime])
     fly(['secrets', 'import', '-a', app, '--stage'], { input: lines })
   fly(['secrets', 'import', '-a', APP.edge, '--stage'], {
-    input: `CONTROL_URL=http://api.process.${APP.control}.internal:${INTERNAL_PORT}\nEDGE_TOKEN=${state.edgeToken}\n${EDGE_PAGES}`,
+    input: `CONTROL_URL=http://api.process.${APP.control}.internal:${INTERNAL_PORT}\nEDGE_TOKEN=${state.edgeToken}\nFLOODGATE_KEY=${state.floodgateKey}\n${EDGE_PAGES}`,
   })
 
   // The web app is built here while Fly builds the rest on its own builders: neither waits.

@@ -94,6 +94,7 @@ describe('the values file', () => {
       [
         'AUTH_SECRET',
         'EDGE_TOKEN',
+        'FLOODGATE_KEY',
         'OPERATOR_TOKEN',
         'REALTIME_TICKET_SECRET',
         'RUNTIME_SECRETS_KEY',

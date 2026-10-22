@@ -48,7 +48,7 @@ bun scripts/production.ts init
 
 writes `local/production/production.env` (never committed, readable only by you). It already holds
 the random secrets (`AUTH_SECRET`, `WEB_PROXY_SECRET`, `REALTIME_TICKET_SECRET`, `EDGE_TOKEN`,
-`OPERATOR_TOKEN`, `RUNTIME_SECRETS_KEY`). Run again, it makes any random one the file doesn't hold
+`FLOODGATE_KEY`, `OPERATOR_TOKEN`, `RUNTIME_SECRETS_KEY`). Run again, it makes any random one the file doesn't hold
 yet and keeps the rest. Above each empty value it says where to get it. The same list:
 
 | Value | Where to get it | Where it goes |

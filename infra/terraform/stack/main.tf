@@ -182,14 +182,16 @@ module "control" {
 }
 
 module "edge" {
-  source             = "../modules/edge"
-  org                = module.org.org
-  edge_app           = module.org.apps.edge
-  control_url        = local.internal_url
-  edge_token         = var.secrets["EDGE_TOKEN"]
-  edge_token_version = var.secret_versions["EDGE_TOKEN"]
-  play_domains       = local.play_domains
-  web_origin         = var.settings["WEB_CANONICAL_ORIGIN"]
+  source                = "../modules/edge"
+  org                   = module.org.org
+  edge_app              = module.org.apps.edge
+  control_url           = local.internal_url
+  edge_token            = var.secrets["EDGE_TOKEN"]
+  edge_token_version    = var.secret_versions["EDGE_TOKEN"]
+  floodgate_key         = var.secrets["FLOODGATE_KEY"]
+  floodgate_key_version = var.secret_versions["FLOODGATE_KEY"]
+  play_domains          = local.play_domains
+  web_origin            = var.settings["WEB_CANONICAL_ORIGIN"]
 }
 
 module "dns" {
