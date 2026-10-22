@@ -188,8 +188,8 @@ module "edge" {
   control_url           = local.internal_url
   edge_token            = var.secrets["EDGE_TOKEN"]
   edge_token_version    = var.secret_versions["EDGE_TOKEN"]
-  floodgate_key         = var.secrets["FLOODGATE_KEY"]
-  floodgate_key_version = var.secret_versions["FLOODGATE_KEY"]
+  floodgate_key         = lookup(var.secrets, "FLOODGATE_KEY", null)
+  floodgate_key_version = lookup(var.secret_versions, "FLOODGATE_KEY", null)
   play_domains          = local.play_domains
   web_origin            = var.settings["WEB_CANONICAL_ORIGIN"]
 }
