@@ -45,6 +45,12 @@ export const billingSubscriptions = pgTable(
      * null while it renews. Extra play is counted up to here and no further.
      */
     canceledAt: ts('canceled_at'),
+    /**
+     * A smaller plan it moves to at `movesAt`, the end of the period paid for (Plus to Core): the
+     * plan in force stays until then. Null while it stays on its plan.
+     */
+    movesToPlan: text('moves_to_plan'),
+    movesAt: ts('moves_at'),
     /** When the provider made it; which of an account's subscriptions is its newest. */
     createdAt: createdAt(),
     updatedAt: updatedAt(),

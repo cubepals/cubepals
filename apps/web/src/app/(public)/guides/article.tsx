@@ -36,7 +36,8 @@ export async function guidePlans(): Promise<{ free?: PublicPlan; paid?: PublicPl
   const plans = await publicPlans(300)
   return {
     free: plans.find((plan) => plan.monthlyPriceCents === 0),
-    paid: plans.find((plan) => plan.monthlyPriceCents > 0),
+    // The plan the guides talk about is the one with mods, plugins and bigger groups.
+    paid: plans.find((plan) => plan.mods),
   }
 }
 

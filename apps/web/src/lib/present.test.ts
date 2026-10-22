@@ -131,7 +131,7 @@ describe('presentStatus', () => {
       })
     expect(presentStatus({ ...out('idle'), playTotal: { hours: 20, hoursLeft: 0 } })).toEqual({
       pill: 'stopped',
-      detail: 'The free trial is over. Its world is kept, and Plus starts it again',
+      detail: 'The free trial is over. Its world is kept',
     })
     // A crash keeps its own words, and a running server is never resting.
     expect(presentStatus(out('crash')).pill).toBe('crashed')

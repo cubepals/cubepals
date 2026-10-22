@@ -4,10 +4,10 @@
 
 /**
  * How a request to Polar fails, for PolarBilling: Polar out of reach as BillingUnavailable, and a
- * refusal in Polar's own words. The requests themselves are PolarBilling's.
+ * refusal in Polar's own words; and the few requests and choices too small for a file of their own.
  */
 import { PolarClientError, PolarError, PolarRateLimitError } from '@polar-sh/sdk'
-import type { models } from '@polar-sh/sdk/2026-10'
+import type { createPolar, models } from '@polar-sh/sdk/2026-10'
 import { BillingUnavailable } from '../../app/ports/optional.ts'
 
 /**
@@ -37,4 +37,57 @@ export async function call<T>(what: string, request: () => Promise<T>): Promise<
     if (unavailable) throw new BillingUnavailable(`${what}: ${(error as Error).message}`)
     throw error
   }
+}
+
+/**
+ * Of an account's subscriptions that pay at once (Core, then Plus bought over it), the one for the
+ * largest plan: `products` lists each plan's product, the smallest first. Others are left out.
+ */
+export function largestPaying<T extends { product_id: string }>(
+  subscriptions: readonly T[],
+  products: readonly string[],
+): T | undefined {
+  const rank = (subscription: T) => products.indexOf(subscription.product_id)
+  return subscriptions.filter((each) => rank(each) >= 0).sort((a, b) => rank(b) - rank(a))[0]
+}
+
+/**
+ * A subscription changed to another plan's product when the period paid for ends
+ * (`proration_behavior: next_period`): it keeps its own until then, and Polar holds the change as
+ * the subscription's pending update, whose `applies_at` says when. No plan's product, no change.
+ */
+export async function moveSubscription(
+  polar: ReturnType<typeof createPolar>,
+  product: string | undefined,
+  id: string,
+): Promise<{ appliesAt: Date }> {
+  if (product === undefined) throw new Error('No Polar product sells that plan')
+  const held = await call('moving a subscription to another plan', () =>
+    polar.subscriptions.update(id, { product_id: product, proration_behavior: 'next_period' }),
+  )
+  const at = held.pending_update?.applies_at ?? held.current_period_end
+  if (!at) throw new Error('Polar took the move but says no day it applies')
+  return { appliesAt: new Date(at) }
+}
+
+/**
+ * A subscription made another plan's product at once (`proration_behavior: invoice`): Polar
+ * invoices the difference for the rest of the period and keeps the one subscription, with the new
+ * product's prices alone. Polar refuses a product change to one set to end with its period, so
+ * that is undone first.
+ */
+export async function upgradeSubscription(
+  polar: ReturnType<typeof createPolar>,
+  product: string | undefined,
+  id: string,
+): Promise<void> {
+  if (product === undefined) throw new Error('No Polar product sells that plan')
+  const held = await call('reading a subscription', () => polar.subscriptions.get(id))
+  if (held.cancel_at_period_end)
+    await call('making a subscription renew again', () =>
+      polar.subscriptions.update(id, { cancel_at_period_end: false }),
+    )
+  await call('changing a subscription to another plan', () =>
+    polar.subscriptions.update(id, { product_id: product, proration_behavior: 'invoice' }),
+  )
 }

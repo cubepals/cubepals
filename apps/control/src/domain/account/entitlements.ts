@@ -56,6 +56,12 @@ export interface Entitlements {
   /** Whether an owner may allow play past the included block, and be charged for it. */
   mayBuyMore: boolean
   /**
+   * The most extra hours a month an owner may allow on this plan, whatever the account's ceiling
+   * (`AbuseLimits.extraCeiling`): the provider stops billing a plan's extra play at its own cap, so
+   * no more may be allowed than it bills. Null: the ceiling alone.
+   */
+  mostExtraUnits: number | null
+  /**
    * Whether the owner sets their own AFK kick, never included. Someone standing still spends the
    * owner's hours, so on a plan with room to spend it is their call; Free keeps Blockly's.
    */
@@ -175,6 +181,7 @@ const PLANS: Record<string, Entitlements> = {
     dailyUnits: 2,
     totalUnits: 20,
     mayBuyMore: false,
+    mostExtraUnits: null,
     mayChooseAfkKick: false,
     mayTurnOffOnlineMode: false,
     idleShutdownAfterMinutes: 10,
@@ -202,6 +209,49 @@ const PLANS: Record<string, Entitlements> = {
     deleteAfterIdleDays: 365,
     createsPerHour: 3,
   },
+  // Core is plain Minecraft for a group of friends, sized for five at once: 40 hours a month, with
+  // extra hours to allow past them as on Plus, and none carried over. Mods, plugins and modpacks
+  // come with Plus, and stay visible there.
+  core: {
+    plan: 'core',
+    monthlyPriceCents: 999,
+    yearlyPriceCents: null,
+    maxServers: 1,
+    maxRunning: 1,
+    allowedMemoryTiers: ['3g'],
+    legacyMemoryTiers: [],
+    includedUnits: 40,
+    carryUnits: null,
+    dailyUnits: null,
+    totalUnits: null,
+    mayBuyMore: true,
+    // 60 extra hours is the most the provider bills on Core's price; Plus covers more.
+    mostExtraUnits: 60,
+    mayChooseAfkKick: true,
+    mayTurnOffOnlineMode: false,
+    idleShutdownAfterMinutes: 15,
+    playerIdleKickMinutes: 15,
+    maxSessionMinutes: null,
+    allowedLoaders: ['vanilla', 'paper'],
+    mayUseMods: false,
+    mayUseDatapacks: false,
+    settingCaps: { maxPlayers: 5, viewDistance: 8, simulationDistance: 6 },
+    worldRadius: 10_000,
+    // Backups as on Plus: a plan that keeps a world safe keeps it the same way.
+    backupPolicy: {
+      snapshotsKept: 14,
+      archiveEnabled: true,
+      archiveRetentionDays: 30,
+      downloadsPerDay: null,
+    },
+    mayListPublicly: true,
+    mayUploadCustomMods: false,
+    trashRetentionDays: 30,
+    storage: { startGb: 5, mostGb: 20, paidForGb: 10 },
+    storeAfterIdleDays: 30,
+    deleteAfterIdleDays: null,
+    createsPerHour: 5,
+  },
   plus: {
     plan: 'plus',
     monthlyPriceCents: 2500,
@@ -222,6 +272,7 @@ const PLANS: Record<string, Entitlements> = {
     // Extra hours, 25¢ each (meter.ts), up to a limit the owner sets under the account's ceiling
     // (`AbuseLimits.extraCeiling`), billed on the next Plus payment. Who may allow them is `extra-play.ts`'s to say.
     mayBuyMore: true,
+    mostExtraUnits: null,
     mayChooseAfkKick: true,
     mayTurnOffOnlineMode: true,
     // Joining wakes a server, so an empty one waiting an hour only spends the owner's hours.
@@ -318,6 +369,19 @@ export function planGap(plan: Entitlements, runs: Runs, sizes: 'offered' | 'star
 /** The paid plan that runs something, for where Blockly says what would: null when none does. */
 export function planThatRuns(runs: Runs): string | null {
   return PAID_PLANS.find((plan) => planGap(entitlementsFor(plan), runs, 'offered') === null) ?? null
+}
+
+/**
+ * The cheapest paid plan for sale where `unsold` have no product: what the trial's end and the
+ * hours running out point to, so no one is told a plan starts their servers that nothing sells.
+ * Null where no paid plan is for sale.
+ */
+export function planOnSale(unsold: readonly string[]): string | null {
+  const open = PAID_PLANS.filter((plan) => !unsold.includes(plan))
+  return (
+    open.sort((a, b) => entitlementsFor(a).monthlyPriceCents - entitlementsFor(b).monthlyPriceCents)[0] ??
+    null
+  )
 }
 
 /**

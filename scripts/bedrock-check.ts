@@ -338,6 +338,13 @@ try {
     const ready = await step(
       '"Only people I add can join" is on, one gamertag added and one banned',
       async () => {
+        // Lists reach a running server at once and a sleeping one at its next boot, so the server
+        // is woken first: these steps check what a player is let in by, not when lists arrive.
+        if ((await view()).status !== 'running') {
+          await api('servers.start', { serverId: server.id, requestId: randomUUID() })
+          await waitFor((v) => v.status === 'running', 'woke for the access steps', 600)
+          await waitFor((v) => v.activeOperation === null, 'settled', 600)
+        }
         await api('access.setWhitelist', { serverId: server.id, enabled: true })
         await api('access.addToWhitelist', { serverId: server.id, name: `.${listed[0]}` })
         await api('access.ban', { serverId: server.id, name: `.${banned[0]}`, reason: 'Bedrock check' })
@@ -427,8 +434,17 @@ try {
         const motd = await until('answered a Bedrock ping again', 60, () =>
           bedrockPing(`bedrock-check.${PLAY_DOMAIN}`),
         )
-        const again = await bedrockJoin(address(), ['--hold', '3', '--timeout', '120'], current)
-        check(again.spawned === 1, 'a Bedrock player could not join after Geyser came back')
+        // Geyser answers pings before it has its first session ready, so a join gets three tries,
+        // half a minute apart, and the try that worked is reported.
+        let again = await bedrockJoin(address(), ['--hold', '3', '--timeout', '120'], current)
+        let tries = 1
+        while (again.spawned !== 1 && tries < 3) {
+          await Bun.sleep(30 * SECOND_MS)
+          again = await bedrockJoin(address(), ['--hold', '3', '--timeout', '120'], current)
+          tries += 1
+        }
+        check(again.spawned === 1, `a Bedrock player could not join after Geyser came back, ${tries} tries`)
+        facts.push(`Geyser killed: a Bedrock join spawned on try ${tries}`)
         facts.push(
           `Geyser killed: back ${seconds(back)} later (restarts ${before.restarts} to ${after.restarts})`,
         )

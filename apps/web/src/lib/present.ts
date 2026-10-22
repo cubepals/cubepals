@@ -38,8 +38,7 @@ export function presentStatus(
       label: 'Resting',
       detail: 'Resting until midnight. Nobody can wake it before then',
     }
-  if (out === 'trial')
-    return { pill: 'stopped', detail: 'The free trial is over. Its world is kept, and Plus starts it again' }
+  if (out === 'trial') return { pill: 'stopped', detail: 'The free trial is over. Its world is kept' }
   switch (server.status) {
     case 'provisioning':
       return { pill: 'settingUp', detail: 'Building your world' }

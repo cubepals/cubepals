@@ -10,6 +10,8 @@ export interface PlatformCapabilities {
   archives: boolean
   /** Paid plans. Without it, plans are set by an admin. */
   billing: boolean
+  /** Paid plans billing has no product for: not for sale yet. Empty where there is no billing. */
+  unsoldPlans: string[]
 }
 
 // ─── What admins run the platform with ──────────────────────────────────────────────────────

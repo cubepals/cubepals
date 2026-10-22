@@ -53,6 +53,7 @@ import {
   UNPAID_ORDER,
   untoldAbout,
 } from './persistence.ts'
+import { moveToSmaller, requireNotSmaller, smallerRenewing, upgradeInPlace } from './plan-moves.ts'
 import {
   accountsWithYearsEnded,
   markReminded,
@@ -148,10 +149,14 @@ export class BillingService {
     if (!PAID_PLANS.includes(planKey))
       throw new AppError('invalid_choice', `There is no ${planKey} plan to buy.`)
     await this.#db.transaction((tx) => this.#policy.require(tx, user.id, { kind: 'billing' }))
+    // A plan with no product here yet isn't for sale: said, never a failure.
+    if (!requireCapability(this.#caps, 'billing').sells(planKey))
+      throw new AppError('invalid_choice', `${planName(planKey)} isn’t available yet.`)
     const standing = await loadStanding(this.#db, user.id)
     const plan = entitlementsFor(planKey)
     if (term === 'month' && standing.plan === planKey)
       throw new AppError('invalid_choice', `You are on ${planKey} already.`)
+    await requireNotSmaller(this.#db, user.id, standing.plan, planKey)
     if (term === 'year') await this.#mayBuyYear(user.id, planKey)
     // Money still owed from a payment that failed is paid first, in the portal: a new
     // subscription would start a new bill beside the one nobody paid.
@@ -165,6 +170,11 @@ export class BillingService {
     const returnUrl = new URL(this.#returnUrl)
     if (options.next !== undefined && /^\/(?![/\\])/.test(options.next))
       returnUrl.searchParams.set('next', options.next)
+    // The subscription that pays for a smaller plan becomes this one: nothing renews beside it.
+    if (term === 'month' && (await upgradeInPlace(this.#db, billing, user.id, planKey, actor, this.#reach))) {
+      await this.refresh(actor)
+      return { url: returnUrl.toString() }
+    }
     const url = await this.#reach(() =>
       billing.checkoutUrl({
         userId: user.id,
@@ -245,6 +255,14 @@ export class BillingService {
       data: { cents: owed.cents, totalCents: owed.totalCents, orders: owed.orders },
     })
     return { url }
+  }
+
+  /** Plus down to Core and the like: at the month's end, Plus until then (`plan-moves.ts`). */
+  async moveToSmaller(actor: Actor, planKey: string): Promise<{ plan: string; at: Date }> {
+    const user = await this.#person(actor)
+    await this.#db.transaction((tx) => this.#policy.require(tx, user.id, { kind: 'billing' }))
+    const billing = requireCapability(this.#caps, 'billing')
+    return moveToSmaller(this.#db, billing, user.id, planKey, actor, (call) => this.#reach(call))
   }
 
   /** The provider's page for changing or cancelling a subscription. */
@@ -373,6 +391,7 @@ export class BillingService {
       const since = await this.#reach(() => billing.pastDueSince(id))
       if (since !== null) pastDue.set(id, since)
     }
+    await this.#stopSmallerPlans(state, provider)
     await this.#db.transaction(async (tx) => {
       // One change to an account's billing at a time, so each is audited against the one before.
       await lockStanding(tx, state.userId)
@@ -424,6 +443,19 @@ export class BillingService {
     })
     await this.#ending.unpaid(source, new Date(), state.userId)
     await this.#accounts.enforceLimits(state.userId)
+  }
+
+  /**
+   * A smaller plan's subscription still renewing beside a larger one (Plus bought by a year, or at
+   * a checkout begun before Core became Plus in place) is set to end with the month it paid for. A
+   * refusal from the provider fails the sync, which the provider's webhook delivers again.
+   */
+  async #stopSmallerPlans(state: Pick<BillingState, 'userId' | 'subscription'>, provider: string) {
+    if (state.subscription === null) return
+    const billing = requireCapability(this.#caps, 'billing')
+    for (const id of await smallerRenewing(this.#db, state.userId, provider, state.subscription)) {
+      await this.#reach(() => billing.stopRenewing(id))
+    }
   }
 
   /**
@@ -581,6 +613,7 @@ export class BillingService {
         await this.#mailer.send({
           to,
           ...paymentFailed({
+            plan: planName(order.planKey ?? 'plus'),
             totalCents: order.totalCents,
             extraCents: order.extraCents,
             by: new Date(order.orderedAt.getTime() + PAST_DUE_GRACE_MS),
@@ -599,6 +632,7 @@ export class BillingService {
       await this.#mailer.send({
         to,
         ...paymentOwed({
+          plan: planName(owing[0]?.planKey ?? 'plus'),
           owedCents: owing.reduce((sum, order) => sum + order.totalCents, 0),
           extraCents: owing.reduce((sum, order) => sum + order.extraCents, 0),
           origin: this.#webOrigin,

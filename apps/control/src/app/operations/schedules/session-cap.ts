@@ -12,8 +12,9 @@
  */
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
-import { type Entitlements, entitlementsFor } from '../../../domain/account/entitlements.ts'
+import { type Entitlements, entitlementsFor, planName } from '../../../domain/account/entitlements.ts'
 import { METER_UNITS } from '../../../domain/account/meter.ts'
+import { planOnSaleHere } from '../../../domain/account/on-sale.ts'
 import type { AccountStanding } from '../../../domain/account/standing.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { announce } from '../../../minecraft/console.ts'
@@ -54,7 +55,10 @@ const WARNING: Record<SessionEnd['reason'], (minutes: number) => string> = {
   daily: (minutes) =>
     `Today’s play ends in ${minutes} minutes. The world is saved, and play is back at midnight.`,
   free_hours: (minutes) =>
-    `The free trial ends in ${minutes} minutes. The world is saved and kept, and Plus starts it again.`,
+    (() => {
+      const paid = planOnSaleHere()
+      return `The free trial ends in ${minutes} minutes. The world is saved and kept${paid === null ? '' : `, and ${planName(paid)} starts it again`}.`
+    })(),
 }
 
 /** What a stop for each end is keyed by, with the session's start: one stop each. */

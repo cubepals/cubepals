@@ -198,6 +198,8 @@ export interface EntitlementsView {
   totalUnits: number | null
   /** Whether the owner may allow play past the included block, and be charged for it. */
   mayBuyMore: boolean
+  /** The most extra hours a month the plan lets an owner allow, whatever the account's ceiling; null: the ceiling alone. */
+  mostExtraUnits: number | null
   /** Whether the owner sets their own AFK kick; otherwise the plan's own applies. */
   mayChooseAfkKick: boolean
   /** Whether the owner may turn off online mode (`ONLINE_MODE_KEPT` says why Free can't). */
@@ -257,6 +259,8 @@ export interface AccountOverviewView {
       pastDueUntil: string | null
       /** Cubepals ended it itself: its first month was withdrawn, or its renewal stayed unpaid. */
       endedFor: 'withdrawal' | 'unpaid' | null
+      /** A smaller plan it moves to at the end of the period paid for; null: it stays. */
+      movesTo: { plan: string; at: string } | null
     } | null
     /**
      * The plan paid for a year at once: when the first year still to run starts (later than now
@@ -375,6 +379,8 @@ export const CheckoutInput = z.object({
 export interface PublicPlan {
   key: string
   name: string
+  /** False for a paid plan nothing sells here yet: its card says so, and its checkout. */
+  available: boolean
   monthlyPriceCents: number
   /** A year paid at once, which never renews on its own; null: not sold by the year. */
   yearlyPriceCents: number | null
@@ -382,6 +388,8 @@ export interface PublicPlan {
   includedHours: number
   /** Whether the hours come every day, from the player's midnight, or every month. */
   per: 'day' | 'month'
+  /** What an hour past the included ones costs, in US cents, where the owner may allow them; null: none. */
+  extraHourCents: number | null
   /** Hours the plan includes in all, once, with `includedHours` the most a day; null: none. */
   totalHours: number | null
   /** Minutes after everyone leaves before a server sleeps, and stops using hours. */

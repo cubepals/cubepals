@@ -68,7 +68,7 @@ function standIns(names: readonly string[]): Record<string, string> {
 
 /** What only the operator has: their account's ids, admin emails, and the CA terms accepted. */
 const OPERATOR: Record<string, Record<string, string>> = {
-  staging: { POLAR_PRODUCTS: 'plus:product-id', ADMIN_EMAILS: 'ops@example.test' },
+  staging: { POLAR_PRODUCTS: 'core:core-id,plus:product-id', ADMIN_EMAILS: 'ops@example.test' },
   // Production starts without billing: POLAR_PRODUCTS comes with Polar's secrets, when it charges.
   production: {
     ADMIN_EMAILS: 'ops@example.test',
@@ -175,13 +175,21 @@ describe('where the environments differ', () => {
 
     const polar = ['POLAR_ACCESS_TOKEN', 'POLAR_WEBHOOK_SECRET']
     expect(production.optional_secret_names).toEqual(expect.arrayContaining(polar))
-    const billing = loadConfig({ ...base, ...standIns(polar), POLAR_PRODUCTS: 'plus:product-id' }).billing
+    const billing = loadConfig({
+      ...base,
+      ...standIns(polar),
+      POLAR_PRODUCTS: 'core:core-id,plus:product-id',
+    }).billing
     expect(billing).toMatchObject({ provider: 'polar', server: 'production' })
     // Nothing of local development's stand-ins: half of Polar's values is refused, not stood in for,
     // and sign-up keeps its cap (config.local is what lifts it).
     expect(loadConfig(base).local).toBeNull()
     expect(() =>
-      loadConfig({ ...base, ...standIns(['POLAR_ACCESS_TOKEN']), POLAR_PRODUCTS: 'plus:product-id' }),
+      loadConfig({
+        ...base,
+        ...standIns(['POLAR_ACCESS_TOKEN']),
+        POLAR_PRODUCTS: 'core:core-id,plus:product-id',
+      }),
     ).toThrow(/billing.webhookSecret/)
   })
 

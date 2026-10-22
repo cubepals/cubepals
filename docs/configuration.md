@@ -231,7 +231,7 @@ regions nodes enroll into (`RUNTIME_REGION_MAP` may, where the fleet is the defa
 | `POLAR_ACCESS_TOKEN` | optional | secret | optional (off at launch) | secret | An organization access token with `checkouts:write`, `customer_sessions:write`, `customers:read`, `subscriptions:write`, `products:read`, `orders:read`, `payments:read`, `refunds:write`, `events:write` and `discounts:write`. Absent: plans come from the account's plan column alone |
 | `POLAR_WEBHOOK_SECRET` | optional | secret | optional (off at launch) | secret | `whsec_…`, from the webhook endpoint in Polar's dashboard (`<WEB_CANONICAL_ORIGIN>/api/billing/webhook`, API version 2026-10, events `customer.state_changed`, `order.created`, `order.updated`, `order.paid`, `order.refunded`, `subscription.active`, `subscription.past_due`, `subscription.canceled`, `subscription.uncanceled` and `subscription.revoked`) |
 | `POLAR_SERVER` | `sandbox` | `sandbox` | `production` | tf | Named explicitly |
-| `POLAR_PRODUCTS` | optional | op | optional (off at launch) | op | `plus:<product id>`, every paid plan. Production takes it with the two secrets above or none of them ([production.md](production.md#billing-later)) |
+| `POLAR_PRODUCTS` | optional | op | optional (off at launch) | op | `core:<product id>,plus:<product id>`, one for each paid plan on sale; a plan without one is not for sale yet, and the control plane says so at start. Production takes it with the two secrets above or none of them ([production.md](production.md#billing-later)) |
 
 ### Room for new servers
 

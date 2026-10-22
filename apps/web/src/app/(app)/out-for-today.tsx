@@ -8,7 +8,7 @@ import { backAtMidnight } from '@blockly/contracts'
 import { useQuery } from '@tanstack/react-query'
 import { useTRPC } from '../../lib/api'
 import { useNow } from '../../lib/hooks'
-import { Note } from '../../ui'
+import { forSale, Note } from '../../ui'
 import { PlusOffer } from './plus-offer'
 
 /**
@@ -20,8 +20,12 @@ export function OutForToday({ hours, backAt, next }: { hours: number; backAt: st
   const trpc = useTRPC()
   const now = useNow(30_000)
   const overview = useQuery(trpc.account.overview.queryOptions())
+  const listed = useQuery(trpc.billing.plans.queryOptions())
   const monthly = overview.data?.plans.find(
-    (p) => p.entitlements.dailyUnits === null && p.entitlements.includedUnits !== null,
+    (p) =>
+      p.entitlements.dailyUnits === null &&
+      p.entitlements.includedUnits !== null &&
+      listed.data?.some((plan) => plan.key === p.key && forSale(plan)),
   )
   return (
     <>

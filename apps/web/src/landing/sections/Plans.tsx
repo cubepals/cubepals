@@ -8,15 +8,9 @@
 import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
 import { ctaMark, planMark, seenMark } from '../../app/(public)/steps'
-import { eachOf, PlanPoint, planPoints, priceOf } from '../../ui/plans'
+import { eachOf, forSale, PlanPoint, pitchOf, planPoints, priceOf } from '../../ui/plans'
 import { Section } from '../kit'
 import styles from './surface.module.css'
-
-/** What each plan is for, as the person choosing would put it (the same words as ui/plans.tsx). */
-const PITCH: Record<string, string> = {
-  free: 'Plain Minecraft for a small group',
-  plus: 'Modpacks, bigger groups, more play',
-}
 
 const dollars = (cents: number): string => `$${cents % 100 === 0 ? cents / 100 : (cents / 100).toFixed(2)}`
 
@@ -44,11 +38,14 @@ export function Plans({
   plans,
   create,
   getPlan,
+  bedrock,
 }: {
   plans: PublicPlan[]
   create: string
   /** Where a paid plan's button leads, by plan key. */
   getPlan: (key: string) => string
+  /** Whether Bedrock is on (`lib/bedrock.ts`). */
+  bedrock: boolean
 }) {
   if (plans.length < 2) return null
   return (
@@ -61,7 +58,7 @@ export function Plans({
       act="friends"
       className={styles.plans}
     >
-      <PlansSaid plans={plans} create={create} getPlan={getPlan} />
+      <PlansSaid plans={plans} create={create} getPlan={getPlan} bedrock={bedrock} />
     </Section>
   )
 }
@@ -74,10 +71,12 @@ export function PlansSaid({
   plans,
   create,
   getPlan,
+  bedrock,
 }: {
   plans: PublicPlan[]
   create: string
   getPlan: (key: string) => string
+  bedrock: boolean
 }) {
   const paid = plans.find((plan) => plan.monthlyPriceCents > 0)
   return (
@@ -100,7 +99,7 @@ export function PlansSaid({
                 <span className="bl-num">{dollars(plan.monthlyPriceCents)}</span>
                 {isPaid && <small> a month</small>}
               </p>
-              <p className={styles.pitch}>{PITCH[plan.key] ?? ''}</p>
+              <p className={styles.pitch}>{pitchOf(plan, bedrock)}</p>
               <Shared plan={plan} />
               <ul className={styles.points}>
                 {planPoints(plan).map((point) => (
@@ -109,13 +108,7 @@ export function PlansSaid({
                   </li>
                 ))}
               </ul>
-              <Link
-                href={isPaid ? getPlan(plan.key) : create}
-                className={`bl-btn ${isPaid ? 'bl-btn--lit' : ''} ${styles.action}`}
-                {...(isPaid ? planMark(plan.key, 'month') : ctaMark('plans_create'))}
-              >
-                {isPaid ? `Get ${plan.name}` : 'Create a server'}
-              </Link>
+              <PlanButton plan={plan} create={create} getPlan={getPlan} />
             </section>
           )
         })}
@@ -139,5 +132,33 @@ function Shared({ plan }: { plan: PublicPlan }) {
     <p className={styles.shared}>
       {shared.each} each, shared by {shared.friends} friends.
     </p>
+  )
+}
+
+/** The card's button: to the plan's checkout, to a first server, or that a plan isn't for sale yet. */
+function PlanButton({
+  plan,
+  create,
+  getPlan,
+}: {
+  plan: PublicPlan
+  create: string
+  getPlan: (key: string) => string
+}) {
+  const isPaid = plan.monthlyPriceCents > 0
+  if (isPaid && !forSale(plan))
+    return (
+      <span className={`bl-btn ${styles.action}`} aria-disabled="true">
+        Not available yet
+      </span>
+    )
+  return (
+    <Link
+      href={isPaid ? getPlan(plan.key) : create}
+      className={`bl-btn ${isPaid ? 'bl-btn--lit' : ''} ${styles.action}`}
+      {...(isPaid ? planMark(plan.key, 'month') : ctaMark('plans_create'))}
+    >
+      {isPaid ? `Get ${plan.name}` : 'Create a server'}
+    </Link>
   )
 }

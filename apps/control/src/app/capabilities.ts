@@ -5,6 +5,7 @@
 import type { Queryable } from '@blockly/db'
 import { schema } from '@blockly/db'
 import { and, count, eq, inArray } from 'drizzle-orm'
+import { PAID_PLANS } from '../domain/account/entitlements.ts'
 import type { GeyserMc } from './ports/geysermc.ts'
 import type { Insight } from './ports/insight.ts'
 import type { MalwareLists } from './ports/malware.ts'
@@ -55,6 +56,8 @@ export function requireCapability<K extends DeploymentCapability>(
 export const supportOf = (caps: DeploymentCapabilities) => ({
   archives: caps.archives !== null,
   billing: caps.billing !== null,
+  // Paid plans billing has no product for: not for sale yet, said on their card and checkout.
+  unsoldPlans: caps.billing === null ? [] : PAID_PLANS.filter((plan) => !caps.billing?.sells(plan)),
 })
 
 /**

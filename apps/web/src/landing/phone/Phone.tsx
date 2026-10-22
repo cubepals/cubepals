@@ -71,7 +71,7 @@ export function Phone({ create, signedIn, plans, getPlan, bedrock }: Landed) {
           data-tone="paper"
           {...seenMark('price')}
         >
-          <PlansSaid plans={plans} create={create} getPlan={getPlan} />
+          <PlansSaid plans={plans} create={create} getPlan={getPlan} bedrock={bedrock} />
         </section>
       )}
       <section className={styles.last} data-tone="paper" data-closing {...seenMark('your-own')}>

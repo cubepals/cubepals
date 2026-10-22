@@ -104,7 +104,7 @@ export function FilmPage({ create, signedIn, plans, getPlan, arcade, bedrock }: 
           <Strata from="var(--bedrock)" to="var(--night)" drawn />
           <Worlds played />
           <Strata from="var(--night)" to="var(--paper)" drawn />
-          <Plans plans={plans} create={create} getPlan={getPlan} />
+          <Plans plans={plans} create={create} getPlan={getPlan} bedrock={bedrock} />
           <Last create={create} plans={plans} />
         </div>
       </main>

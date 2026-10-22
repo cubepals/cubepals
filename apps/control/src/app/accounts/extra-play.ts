@@ -9,7 +9,8 @@
  * warnings. Counting the hours is `billing/extra-usage.ts`'s; stopping servers is `enforceLimits`'.
  */
 import type { Db } from '@blockly/db'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsFor, planName } from '../../domain/account/entitlements.ts'
+import { ceilingsFor } from '../../domain/account/extra-play.ts'
 import { UNIT_CENTS } from '../../domain/account/meter.ts'
 import { DEFAULT_TIME_ZONE, monthOf } from '../../domain/account/play-day.ts'
 import type { AccountStanding } from '../../domain/account/standing.ts'
@@ -17,6 +18,7 @@ import { meteredMonth } from '../billing/chip-in-meter.ts'
 import { extraPlayNow } from '../billing/persistence.ts'
 import { extraWarning } from '../emails/play.ts'
 import type { Mailer } from '../ports/platform.ts'
+import { tuning } from '../tuning.ts'
 import { emailOf, loadStanding, lockStanding, saveStanding } from './persistence.ts'
 
 /** Per cent of the limit the owner allowed; 0 is the moment extra play starts being used. */
@@ -57,6 +59,7 @@ export async function warnAboutExtra(
         ceiling: decision.ceiling,
         used: Math.min(decision.units, Math.round(used * 10) / 10),
         unitCents: UNIT_CENTS,
+        plan: planName(standing.plan),
         origin: deps.origin,
       }),
     })
@@ -66,3 +69,7 @@ export async function warnAboutExtra(
   })
   return reached
 }
+
+/** The most extra hours the account's plan lets an owner allow once a renewal is paid. */
+export const renewedCeiling = (standing: AccountStanding): number =>
+  ceilingsFor(entitlementsFor(standing.plan, standing.limitOverrides), tuning().abuse.extraCeiling).renewed

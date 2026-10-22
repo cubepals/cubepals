@@ -11,7 +11,6 @@
  * line for the log. A deployment gets none of it: it refuses what this would have covered.
  */
 import { MAIL_PORT } from '@blockly/contracts/local'
-import { PAID_PLANS } from '../domain/account/entitlements.ts'
 import { type DeploymentConfig, isLocal, LOCAL_ONLY, PolarConfig } from './schema.ts'
 
 /** Whether WEB_CANONICAL_ORIGIN is on this machine or its local network. */
@@ -46,9 +45,9 @@ export function localBilling(
     }
   const parsed = PolarConfig.safeParse(polar)
   const problems = parsed.success
-    ? PAID_PLANS.filter((plan) => !(plan in parsed.data.products)).map(
-        (plan) => `POLAR_PRODUCTS: nothing sells ${plan}`,
-      )
+    ? Object.keys(parsed.data.products).length === 0
+      ? ['POLAR_PRODUCTS: nothing sells a plan']
+      : []
     : parsed.error.issues.map((issue) => `${polarName(issue.path)}: ${issue.message}`)
   if (problems.length === 0) return { billing: polar, note: `Payments: Polar's ${polar.server} server.` }
   return {

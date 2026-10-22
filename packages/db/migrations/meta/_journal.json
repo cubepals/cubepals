@@ -677,8 +677,15 @@
     {
       "idx": 96,
       "version": "7",
-      "when": 1792659750681,
-      "tag": "0096_edge_started",
+      "when": 1792682343495,
+      "tag": "0096_core_plan_move",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1792697420991,
+      "tag": "0097_edge_started",
       "breakpoints": true
     }
   ]

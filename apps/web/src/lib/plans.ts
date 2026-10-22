@@ -74,12 +74,18 @@ export const hoursSaid = (plan: Pick<PublicPlan, 'includedHours' | 'per' | 'tota
 
 /**
  * When the plans' hours start again, as a sentence about running out says it: "the hours start
- * again: the free trial’s at midnight where you are, until its 20 are played; Plus’s on the 1st".
+ * again: the free trial’s at midnight where you are, until its 20 are played; Core’s and Plus’s on
+ * the 1st".
  */
 export function hoursAgainSaid(plans: readonly PublicPlan[]): string {
-  const each = plans.map((plan) => {
-    const when = plan.per === 'day' ? 'at midnight where you are' : 'on the 1st'
-    return `${planSaid(plan)}’s ${when}${plan.totalHours === null ? '' : `, until its ${plan.totalHours} are played`}`
-  })
+  // Plans whose hours start again together are said together: "Core’s and Plus’s on the 1st".
+  const groups: Array<{ names: string[]; when: string }> = []
+  for (const plan of plans) {
+    const when = `${plan.per === 'day' ? 'at midnight where you are' : 'on the 1st'}${plan.totalHours === null ? '' : `, until its ${plan.totalHours} are played`}`
+    const group = groups.find((each) => each.when === when)
+    if (group) group.names.push(`${planSaid(plan)}’s`)
+    else groups.push({ names: [`${planSaid(plan)}’s`], when })
+  }
+  const each = groups.map(({ names, when }) => `${names.join(' and ')} ${when}`)
   return each.length > 0 ? `the hours start again: ${each.join('; ')}` : 'the hours start again'
 }

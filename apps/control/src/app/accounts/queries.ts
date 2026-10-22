@@ -14,6 +14,7 @@ import {
   PLAN_KEYS,
   planName,
 } from '../../domain/account/entitlements.ts'
+import { ceilingsFor } from '../../domain/account/extra-play.ts'
 import { UNIT_CENTS } from '../../domain/account/meter.ts'
 import { DEFAULT_TIME_ZONE, monthStart } from '../../domain/account/play-day.ts'
 import type { AccountStanding } from '../../domain/account/standing.ts'
@@ -90,6 +91,8 @@ export interface AccountOverview {
       planKey: string
       pastDueUntil: Date | null
       endedFor: EndedFor | null
+      /** A smaller plan it moves to at the end of the period paid for; null: it stays. */
+      movesTo: { plan: string; at: Date } | null
     } | null
     /**
      * The plan paid for a year at once: when the first year still to run starts, when the last
@@ -240,6 +243,7 @@ export class AccountQueries {
                     ? new Date(subscription.pastDueAt.getTime() + PAST_DUE_GRACE_MS)
                     : null,
                 endedFor: await endedFor(this.#db, subscription),
+                movesTo: movesOf(subscription),
               },
         year: await yearView(this.#db, userId, now),
         gifted,
@@ -268,8 +272,8 @@ export class AccountQueries {
           why: decision.may ? null : decision.why,
           ceiling,
           nextCeiling:
-            decision.may && ceiling < tuning().abuse.extraCeiling.renewed
-              ? tuning().abuse.extraCeiling.renewed
+            decision.may && ceiling < ceilingsFor(entitlements, tuning().abuse.extraCeiling).renewed
+              ? ceilingsFor(entitlements, tuning().abuse.extraCeiling).renewed
               : null,
           choices: decision.may ? EXTRA_CHOICES.filter((units) => units <= ceiling) : [],
           ...(await extraThisMonth(this.#db, standing, now)),
@@ -369,11 +373,15 @@ export class AccountQueries {
   }
 }
 
+/** The smaller plan a subscription moves to at the end of its period, and when; null if it stays. */
+const movesOf = (s: { movesToPlan: string | null; movesAt: Date | null }) =>
+  s.movesToPlan !== null && s.movesAt !== null ? { plan: s.movesToPlan, at: s.movesAt } : null
+
 /**
  * Every plan as the pricing page shows it, from the plan table itself: the page reads
  * this rather than keeping numbers of its own that could drift from what is enforced.
  */
-export function publicPlans(): PublicPlan[] {
+export function publicPlans(sold: { unsoldPlans: readonly string[] }): PublicPlan[] {
   return PLAN_KEYS.map((key) => {
     const plan = entitlementsFor(key)
     const largest = Math.max(...plan.allowedMemoryTiers.map(playerCapacity))
@@ -384,10 +392,12 @@ export function publicPlans(): PublicPlan[] {
       yearlyPriceCents: plan.yearlyPriceCents,
       includedHours: plan.dailyUnits ?? plan.includedUnits ?? 0,
       per: plan.dailyUnits === null ? 'month' : 'day',
+      extraHourCents: plan.mayBuyMore ? UNIT_CENTS : null,
       totalHours: plan.totalUnits,
       sleepsAfterMinutes: plan.idleShutdownAfterMinutes,
       maxServers: plan.maxServers,
       maxPlayers: plan.settingCaps === null ? largest : Math.min(largest, plan.settingCaps.maxPlayers),
+      available: !sold.unsoldPlans.includes(key),
       mods: plan.mayUseMods,
       datapacks: plan.mayUseDatapacks,
       downloads: plan.backupPolicy.archiveEnabled ? 'history' : 'daily',

@@ -250,7 +250,7 @@ test.skipIf(!hasDatabase)(
     expect(after.usage.extra).toMatchObject({ ceiling: 50, nextCeiling: null, choices: [0, 20, 50] })
     // A refund in full of every payment takes it back to nothing paid.
     const free = await h.user('Kim')
-    expect(await refusal(h.app.accounts.allowExtraPlay(free, 20))).toBe('Extra hours come with Plus.')
+    expect(await refusal(h.app.accounts.allowExtraPlay(free, 20))).toBe('Extra hours come with Core.')
     // None is always allowed, whatever the account.
     expect(await h.app.accounts.allowExtraPlay(free, 0)).toBe(0)
   },

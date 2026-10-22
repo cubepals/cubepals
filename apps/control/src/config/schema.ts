@@ -627,9 +627,8 @@ export function inconsistencies(config: DeploymentConfig): string[] {
     for (const plan of sold)
       if (!PAID_PLANS.includes(plan))
         problems.push(`POLAR_PRODUCTS sells "${plan}", which isn't a paid plan (${PAID_PLANS.join(', ')}).`)
-    for (const plan of PAID_PLANS)
-      if (!sold.includes(plan))
-        problems.push(`No Polar product sells the ${plan} plan. Add it to POLAR_PRODUCTS.`)
+    // A paid plan with no product is only not for sale yet; none sold at all is a mistake.
+    if (sold.length === 0) problems.push('POLAR_PRODUCTS names no product. Add one for a paid plan.')
   }
   if (config.artifacts.mirrorCatalogArtifacts && config.archive === null)
     problems.push('Mirroring catalog artifacts needs an archive store. Configure one or turn mirroring off.')

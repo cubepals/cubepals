@@ -208,6 +208,11 @@ export interface BillingProvider {
     priceCents?: number
     returnUrl: string
   }): Promise<string>
+  /**
+   * Whether a product sells the plan here. A paid plan with none is not for sale yet: its card and
+   * checkout say so, and nothing fails.
+   */
+  sells(planKey: string): boolean
   /** The plan's yearly product is sold here: a checkout for it can be made. */
   sellsYear(planKey: string): Promise<boolean>
   /**
@@ -215,6 +220,18 @@ export interface BillingProvider {
    * the portal would: a year was bought to follow it.
    */
   stopRenewing(externalSubscriptionId: string): Promise<void>
+  /**
+   * The subscription changes to another plan's product when the period paid for ends, and keeps
+   * its own until then (Plus to Core). Answers when it applies.
+   */
+  moveToPlan(externalSubscriptionId: string, planKey: string): Promise<{ appliesAt: Date }>
+  /**
+   * The subscription becomes another plan's product now, the one subscription kept (Core to Plus):
+   * the larger plan's price replaces the smaller, the difference for the rest of the period is
+   * charged at once, and no second subscription renews beside it. One set to end with its period
+   * is made to renew first: the provider changes the product of none else.
+   */
+  upgradeSubscription(externalSubscriptionId: string, planKey: string): Promise<void>
   /**
    * The subscription ends now, and nothing more is charged for it: its first month was withdrawn,
    * or its renewal is still unpaid when the plan's grace runs out. One ended already stays ended.

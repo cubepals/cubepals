@@ -153,6 +153,7 @@ function NewTestAccount() {
             value={plan}
             options={[
               { value: 'free', label: 'Free' },
+              { value: 'core', label: 'Core' },
               { value: 'plus', label: 'Plus' },
             ]}
             onChange={(event) => setPlan(event.target.value)}

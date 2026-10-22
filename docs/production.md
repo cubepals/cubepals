@@ -182,7 +182,9 @@ before it, and the apps it didn't change stay as they are; it says which. A seco
 goes back one deploy further. The `production` branch moves back to the commit that is live
 again. The website goes to the Worker version that was live before, at once and without a build
 (`wrangler rollback`; any of the last 100 versions). A rollback doesn't undo a migration or a
-secret: fix forward, then deploy again.
+secret: fix forward, then deploy again. A release that sells Core has `core:<id>` in
+`POLAR_PRODUCTS`, which older code refuses as not a paid plan: remove `core:<id>` from
+`POLAR_PRODUCTS` before rolling back past the Core release, and put it back after going forward.
 
 Until the first `apply` or `hotfix` built with this tagging has run, the images the Fly apps run
 don't say which deploy made them, so a bare `rollback` or `rollback fly` leaves every Fly app as
@@ -362,11 +364,16 @@ sizes, the key and whether each step passed, nothing else.
 Production runs without billing: everyone is on the plan their account says. To start charging,
 in Polar's production dashboard (polar.sh, not the sandbox):
 
-1. A product for Plus; its id goes in the file as `POLAR_PRODUCTS=plus:<id>`.
+1. A product for each paid plan, Core and Plus; their ids go in the file as `POLAR_PRODUCTS=core:<id>,plus:<id>`.
+   Core is "Cubepals Core": a recurring monthly product with the metadata `plan: core`, one fixed
+   price of $9.99 in US dollars with tax behaviour inclusive (VAT included, as the pricing page says),
+   and the "Extra play" metered price below, also tax inclusive. Plus is the same with `plan: plus`
+   and the prices below.
 2. A meter "Extra play": filter `name eq "play.extra"`, aggregation `sum` of `hours`, unit
    `custom` with the label "hour". On the Plus product, beside its $25 price, a metered price on
    that meter: `unit_amount` 25 (cents an hour) and `cap_amount` 5000 ($50 a period, twice the
-   most a player may allow in a month, as a last resort). Blockly sends `play.extra` events and
+   most a player may allow in a month, as a last resort). On the Core product, beside its $9.99
+   price, one on the same meter with `unit_amount` 25 and `cap_amount` 1500 ($15 a period, 60 hours). Core's plan table holds an owner to 60 extra hours (`mostExtraUnits`), so no more is allowed than Polar bills; change the cap and that number together. Blockly sends `play.extra` events and
    needs no id of either.
 3. A one-time product "Cubepals balance" with a custom (pay-what-you-want) price and the metadata
    `purpose: balance`. A payment Polar can no longer collect (its subscription ended) is paid

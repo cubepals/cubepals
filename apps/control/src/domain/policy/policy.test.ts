@@ -532,7 +532,7 @@ describe('free play', () => {
     })
     expect(evaluate(facts({ totalLeft: 0, freeSharedBecause: 'players' }), start)).toMatchObject({
       message:
-        'You’ve played the 20 hours of your free trial. Your worlds are kept, and Plus starts them again. Your free trial is shared with another Cubepals account the same player plays on.',
+        'You’ve played the 20 hours of your free trial. Your worlds are kept, and Core starts them again. Your free trial is shared with another Cubepals account the same player plays on.',
     })
   })
 })
@@ -547,7 +547,69 @@ describe('Free’s 20 hours in all', () => {
       ok: false,
       code: 'limit_reached',
       message:
-        'You’ve played the 20 hours of your free trial. Your worlds are kept, and Plus starts them again.',
+        'You’ve played the 20 hours of your free trial. Your worlds are kept, and Core starts them again.',
     })
+  })
+})
+
+describe('Core', () => {
+  const core = entitlementsFor('core')
+  const refused = (capability: Parameters<typeof evaluate>[1], patch: Partial<PolicyFacts> = {}) =>
+    evaluate(facts({ entitlements: core, today: null, totalLeft: null, ...patch }), capability)
+
+  test('runs plain Minecraft on its one size, and nothing more', () => {
+    expect(refused({ kind: 'create_server', memoryTier: '3g' })).toEqual({ ok: true })
+    expect(refused({ kind: 'start_server', runs: plain('3g') })).toEqual({ ok: true })
+    expect(refused({ kind: 'create_server', memoryTier: '4g' })).toMatchObject({
+      ok: false,
+      code: 'not_entitled',
+    })
+  })
+
+  test('a server it doesn’t run waits as it is, and says which plan runs it', () => {
+    expect(refused({ kind: 'start_server', runs: { ...plain('3g'), modded: true } })).toEqual({
+      ok: false,
+      code: 'not_entitled',
+      message: 'Mods, plugins and modpacks come with Plus. Its world is safe, and it starts again with Plus.',
+    })
+    expect(refused({ kind: 'start_server', runs: plain('8g') })).toEqual({
+      ok: false,
+      code: 'not_entitled',
+      message: 'Your plan does not include servers this size. Plus runs it as it is, or you can resize it.',
+    })
+  })
+
+  test('its 40 hours run out, and extra play is there to allow, as on Plus', () => {
+    const start = { kind: 'start_server', runs: plain('3g') } as const
+    expect(refused(start, { unitsThisMonth: 39.5 })).toEqual({ ok: true })
+    expect(refused(start, { unitsThisMonth: 40 })).toEqual({
+      ok: false,
+      code: 'limit_reached',
+      message: 'You have used this month’s play time. Allow extra play in your account, or wait for the 1st.',
+    })
+    // With some allowed, it plays on until those are used too.
+    expect(refused(start, { unitsThisMonth: 40, extraUnitsAllowed: 20 })).toEqual({ ok: true })
+    expect(refused(start, { unitsThisMonth: 60, extraUnitsAllowed: 20 })).toMatchObject({ ok: false })
+  })
+})
+
+describe('the trial’s end names a plan only where one is for sale', () => {
+  const played = (unsoldPlans: string[]) =>
+    evaluate(
+      facts({
+        entitlements: entitlementsFor('free'),
+        totalLeft: 0,
+        deployment: { archives: false, billing: true, unsoldPlans },
+      }),
+      { kind: 'start_server', runs: plain('3g') },
+    )
+  const said = (unsoldPlans: string[]) => (played(unsoldPlans) as { message: string }).message
+
+  test('Core where it is for sale, Plus where only Plus is, and no plan where neither is', () => {
+    expect(said([])).toContain('Core starts them again')
+    expect(said(['core'])).toContain('Plus starts them again')
+    const none = said(['core', 'plus'])
+    expect(none).toContain('Your worlds are kept.')
+    expect(none).not.toMatch(/Core|Plus/)
   })
 })

@@ -10,10 +10,34 @@ import { OutLink } from './out-link'
 import { Badge } from './surfaces'
 import { Tip } from './tip'
 
-/** What each plan is for, as the person choosing would put it. */
-const PITCH: Record<string, string> = {
-  free: 'Plain Minecraft for a small group',
-  plus: 'Modpacks, bigger groups, more play',
+/**
+ * Who a plan is for and what they play on it, as the person choosing would put it: the first thing
+ * a card says, and never its hours. Core says Java and Bedrock friends play together only where
+ * Bedrock is on (`lib/bedrock.ts`), and promises nothing about Bedrock where it is off.
+ */
+/**
+ * Whether a plan is on sale: only the API saying so (`available: false`) takes it off. A plans
+ * answer from before the field existed, while the site and the API deploy minutes apart, shows
+ * every plan as it always did.
+ */
+export const forSale = (plan: Pick<PublicPlan, 'available'>): boolean =>
+  (plan.available as boolean | undefined) !== false
+
+/** What an extra hour costs on a plan, in cents; null where the plan has none or the answer predates it. */
+export const extraHourOf = (plan: Pick<PublicPlan, 'extraHourCents'>): number | null =>
+  typeof plan.extraHourCents === 'number' ? plan.extraHourCents : null
+
+export function pitchOf(plan: Pick<PublicPlan, 'key' | 'maxPlayers'>, bedrock = false): string {
+  switch (plan.key) {
+    case 'free':
+      return 'Try plain Minecraft with friends, no card'
+    case 'core':
+      return `Plain Minecraft for you and ${plan.maxPlayers - 1} friends${bedrock ? ', Java and Bedrock together' : ''}`
+    case 'plus':
+      return 'Mods, plugins and modpacks, for bigger groups'
+    default:
+      return ''
+  }
 }
 
 /**
@@ -41,17 +65,17 @@ export function planPoints(plan: PublicPlan): string[] {
 export const planSaid = (plan: Pick<PublicPlan, 'name' | 'totalHours'>): string =>
   plan.totalHours === null ? plan.name : `the ${plan.name.toLowerCase()}`
 
-/** What a server may run past plain Minecraft, or that it is plain. */
+/** What a server may run past plain Minecraft, or that it is plain: no loader is ever named on a card. */
 function addOns(plan: PublicPlan): string {
   if (plan.mods)
     return plan.datapacks ? 'Modpacks, mods, plugins and datapacks' : 'Modpacks, mods and plugins'
-  return plan.datapacks ? 'Vanilla or Paper, with datapacks' : 'Vanilla or Paper'
+  return plan.datapacks ? 'Plain Minecraft, with datapacks' : 'Plain Minecraft'
 }
 
 const hoursPoint = (plan: PublicPlan) =>
   plan.totalHours !== null
     ? `${plan.totalHours} hours of play, at most ${plan.includedHours} a day`
-    : `${plan.includedHours} hours of play ${plan.per === 'day' ? 'every day' : 'each month'}`
+    : `${plan.includedHours} hours of play ${plan.per === 'day' ? 'every day' : 'each month'}${extraHourOf(plan) === null ? '' : `, then ${extraHourOf(plan)}¢ an hour`}`
 
 /** One of a plan's points as a card shows it: the hours on the dashed line that says what they are. */
 export function PlanPoint({ plan, point }: { plan: PublicPlan; point: string }) {
@@ -114,7 +138,7 @@ export function PlayHours({
               <p>
                 They come once, not every month: {total} in all, at most {hours} a day from midnight where you
                 are. Once they’re played, the trial ends and nothing is charged. Your world is kept and you
-                can still download it, and Plus starts it again.
+                can still download it, and a paid plan starts it again.
               </p>
             )}
           </>
@@ -189,8 +213,17 @@ export function PlanCard({
   current = false,
   action,
   mark,
+  bedrock = false,
+  solid = plan.monthlyPriceCents > 0,
+  note,
 }: {
   plan: PublicPlan
+  /** Whether Bedrock is on, for the card's first line (`lib/bedrock.ts`). */
+  bedrock?: boolean
+  /** The card is the dark one: the player's own plan on their account, a paid plan elsewhere. */
+  solid?: boolean
+  /** Small print that belongs to this plan, under its details. */
+  note?: ReactNode
   /** The plan the person is on, marked as theirs. */
   current?: boolean
   action?: ReactNode
@@ -199,16 +232,12 @@ export function PlanCard({
 }) {
   const shared = eachOf(plan)
   return (
-    <section
-      className="bk-plan"
-      aria-label={plan.name}
-      data-paid={plan.monthlyPriceCents > 0 || undefined}
-      {...mark}
-    >
+    <section className="bk-plan" aria-label={plan.name} data-paid={solid || undefined} {...mark}>
       <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)', justifyContent: 'space-between' }}>
         <h3 className="type-eyebrow">{plan.name}</h3>
         {current && <Badge tone="grass">Yours</Badge>}
       </div>
+      <p className="type-heading-sm bk-plan__pitch">{pitchOf(plan, bedrock)}</p>
       <p className="bk-plan__price">
         <span className="type-display-md bk-num">{dollars(plan.monthlyPriceCents)}</span>
         {plan.monthlyPriceCents > 0 && <span className="type-body-sm"> a month</span>}
@@ -218,7 +247,6 @@ export function PlanCard({
           {shared.each} each, shared by {shared.friends} friends.
         </p>
       )}
-      <p className="type-body bk-plan__pitch">{PITCH[plan.key] ?? ''}</p>
       <ul className="bk-plan__points">
         {planPoints(plan).map((point) => (
           <li key={point} className="type-body-sm">
@@ -227,6 +255,7 @@ export function PlanCard({
           </li>
         ))}
       </ul>
+      {note && <p className="type-body-sm bk-plan__each">{note}</p>}
       {action && <div className="bk-plan__action">{action}</div>}
     </section>
   )

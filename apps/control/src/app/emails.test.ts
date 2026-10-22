@@ -17,6 +17,8 @@ import { keepingWorld, listingRemoved, serverRebuilt } from './emails/servers.ts
 import { type Email, esc, INK, meter } from './emails.ts'
 
 const ORIGIN = 'https://staging.blockly.test'
+/** What emails about Plus say of its extra hours (a quarter each, billed on Plus), and where their links start. */
+const ON_PLUS = { plan: 'Plus', unitCents: 25, origin: ORIGIN }
 const bay = { id: 'srv_7Kq2', name: 'Sunrise <Bay>' }
 
 /** Every email, with what it should say, its shape, and the figure it carries, if any. */
@@ -66,7 +68,7 @@ const EMAILS: Array<{
       used: 48.3,
       extraAllowed: 0,
       mayBuyMore: true,
-      origin: ORIGIN,
+      ...ON_PLUS,
     }),
     subject: 'About 12 hours of play left this month',
     shape: 'layout',
@@ -80,8 +82,7 @@ const EMAILS: Array<{
       allowed: 20,
       ceiling: 50,
       used: mark === 0 ? 0.4 : (20 * mark) / 100,
-      unitCents: 25,
-      origin: ORIGIN,
+      ...ON_PLUS,
     }),
     subject: [
       'You’re on extra hours now',
@@ -94,6 +95,7 @@ const EMAILS: Array<{
   {
     name: 'payment failed',
     email: paymentFailed({
+      plan: 'Plus',
       totalCents: 1750,
       extraCents: 250,
       by: new Date('2026-11-08T00:00:00Z'),
@@ -105,7 +107,7 @@ const EMAILS: Array<{
   },
   {
     name: 'payment owed',
-    email: paymentOwed({ owedCents: 1750, extraCents: 250, origin: ORIGIN }),
+    email: paymentOwed({ plan: 'Plus', owedCents: 1750, extraCents: 250, origin: ORIGIN }),
     subject: 'Your Cubepals servers can’t start until a payment is made',
     shape: 'plain',
     link: `${ORIGIN}/account`,
@@ -248,7 +250,7 @@ describe('emails', () => {
         used: mark === 100 ? 140 : 120,
         extraAllowed: 0,
         mayBuyMore: true,
-        origin: ORIGIN,
+        ...ON_PLUS,
       })
     expect(warned(80).subject).toBe('About 20 hours of play left this month')
     expect(warned(80).text).toContain(
@@ -266,12 +268,11 @@ describe('emails', () => {
       allowed: 20,
       ceiling: 20,
       used: 0.4,
-      unitCents: 25,
-      origin: ORIGIN,
+      ...ON_PLUS,
     })
     // At the ceiling, the limit can't be raised, so it isn't offered.
     const atCeiling = (mark: number) =>
-      extraWarning({ mark, included: 60, allowed: 20, ceiling: 20, used: 20, unitCents: 25, origin: ORIGIN })
+      extraWarning({ mark, included: 60, allowed: 20, ceiling: 20, used: 20, ...ON_PLUS })
     expect(atCeiling(100).text).toContain('Your servers sleep until the 1st.\n')
     for (const mark of [80, 100]) expect(atCeiling(mark).text).not.toContain('raise')
     expect(started.text).toContain(
@@ -280,16 +281,17 @@ describe('emails', () => {
     expect(started.text).toContain('They’re added to your next Plus payment.')
     expect(
       paymentFailed({
+        plan: 'Plus',
         totalCents: 1750,
         extraCents: 250,
         by: new Date('2026-11-08T00:00:00Z'),
         origin: ORIGIN,
       }).text,
     ).toContain('If it still isn’t paid by 8 November, your servers can’t start until it is.')
-    expect(paymentOwed({ owedCents: 1750, extraCents: 250, origin: ORIGIN }).text).toContain(
+    expect(paymentOwed({ plan: 'Plus', owedCents: 1750, extraCents: 250, origin: ORIGIN }).text).toContain(
       'Your worlds are safe, and you can still download them.',
     )
-    for (const email of [started, paymentOwed({ owedCents: 1, extraCents: 1, origin: ORIGIN })])
+    for (const email of [started, paymentOwed({ plan: 'Plus', owedCents: 1, extraCents: 1, origin: ORIGIN })])
       expect(email.text).not.toMatch(/seamless|effortless|powerful|turn on|handled|GB|RAM/i)
   })
 
@@ -339,4 +341,36 @@ describe('account emails', () => {
       expect(html).not.toMatch(/unsubscribe|preferences|follow us|offer|discount/i)
     },
   )
+})
+
+describe('emails on Core', () => {
+  test('on Core, running low says what extra hours cost and when Plus costs less', () => {
+    const core = playWarning({
+      mark: 80,
+      included: 40,
+      carried: 0,
+      used: 33,
+      extraAllowed: 0,
+      mayBuyMore: true,
+      unitCents: 25,
+      larger: { name: 'Plus', extraHoursCheaper: 60 },
+      origin: ORIGIN,
+    })
+    expect(core.text).toContain(
+      'Extra hours are $0.25 each. Past 60 extra hours a month, Plus costs less, and has more hours.',
+    )
+    const usedUp = playWarning({
+      mark: 100,
+      included: 40,
+      carried: 0,
+      used: 40,
+      extraAllowed: 0,
+      mayBuyMore: true,
+      unitCents: 25,
+      larger: { name: 'Plus', extraHoursCheaper: 60 },
+      origin: ORIGIN,
+    })
+    expect(usedUp.text).toContain('allow some extra play on your account')
+    expect(usedUp.text).toContain('Past 60 extra hours a month, Plus costs less')
+  })
 })

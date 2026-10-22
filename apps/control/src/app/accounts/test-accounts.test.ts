@@ -28,8 +28,11 @@ const billing: BillingProvider = {
     asked.push(request.userId)
     return 'https://billing.test/checkout'
   },
+  sells: () => true,
   sellsYear: async () => false,
   stopRenewing: async () => {},
+  moveToPlan: async () => ({ appliesAt: new Date() }),
+  upgradeSubscription: async () => {},
   endSubscription: async () => {},
   refundedAsWithdrawal: async () => false,
   portalUrl: async () => 'https://billing.test/portal',

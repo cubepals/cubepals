@@ -636,7 +636,8 @@ export interface SettingsOptions {
     /** `allowed`: a server type the plan runs; the others say what they need. */
     loaders: { value: Loader; label: string; allowed: boolean; reason?: string }[]
   }[]
-  partySizes: { value: PartySize; label: string; maxPlayers: number; allowed: boolean; reason?: string }[]
+  /** Each size as the create flow lists it, with the plan that holds a group this one doesn't. */
+  partySizes: CreateOptions['partySizes']
   /** Where the server can move to. */
   regions: { key: string; label: string }[]
   /**

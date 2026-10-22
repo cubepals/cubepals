@@ -13,6 +13,8 @@ import {
   planName,
 } from '../../domain/account/entitlements.ts'
 import { extraUnits } from '../../domain/account/extra-play.ts'
+import { UNIT_CENTS } from '../../domain/account/meter.ts'
+import { planOnSaleHere } from '../../domain/account/on-sale.ts'
 import { DEFAULT_TIME_ZONE, isTimeZone, monthOf } from '../../domain/account/play-day.ts'
 import type { AccountStanding, Restrictions } from '../../domain/account/standing.ts'
 import { type Actor, requestedBy, runsThePlatform } from '../actor.ts'
@@ -31,7 +33,7 @@ import { desiredRuns } from '../servers/revision-reads.ts'
 import type { MinecraftServerService } from '../servers/service.ts'
 import { openIntervalStart } from '../servers/usage.ts'
 import { tuning } from '../tuning.ts'
-import { warnAboutExtra } from './extra-play.ts'
+import { renewedCeiling, warnAboutExtra } from './extra-play.ts'
 import { FreePlayGuard } from './free-play-guard.ts'
 import {
   countTakenFreePlaces,
@@ -78,6 +80,30 @@ const WAITLIST_PER_MINUTE = 30
  * arrives late still makes sense on its own.
  */
 const WARN_AT = [80, 100] as const
+
+/**
+ * What an email about running out says of extra hours and the plan with more than this one: its name, and how many extra
+ * hours a month cost what it costs over this plan, past which it is the cheaper. Nothing for the
+ * largest plan.
+ */
+function extraOffer(plan: Entitlements): {
+  unitCents: number
+  larger?: { name: string; extraHoursCheaper: number }
+} {
+  const next = PAID_PLANS.map((key) => entitlementsFor(key)).find(
+    (each) =>
+      each.monthlyPriceCents > plan.monthlyPriceCents &&
+      (each.includedUnits ?? 0) > (plan.includedUnits ?? 0),
+  )
+  if (next === undefined || plan.plan === 'free') return { unitCents: UNIT_CENTS }
+  return {
+    unitCents: UNIT_CENTS,
+    larger: {
+      name: planName(next.plan),
+      extraHoursCheaper: Math.floor((next.monthlyPriceCents - plan.monthlyPriceCents) / UNIT_CENTS),
+    },
+  }
+}
 
 /**
  * Account standing, as admins set it (§4). Suspension stops what the account
@@ -246,8 +272,8 @@ export class AccountService {
       if (units > decision.ceiling)
         throw new AppError(
           'invalid_choice',
-          decision.ceiling < tuning().abuse.extraCeiling.renewed
-            ? `You can allow up to ${decision.ceiling} extra hours a month until your first renewal is paid, then up to ${tuning().abuse.extraCeiling.renewed}.`
+          decision.ceiling < renewedCeiling(standing)
+            ? `You can allow up to ${decision.ceiling} extra hours a month until your first renewal is paid, then up to ${renewedCeiling(standing)}.`
             : `You can allow up to ${decision.ceiling} extra hours a month.`,
         )
     }
@@ -599,6 +625,7 @@ export class AccountService {
           used: Math.round(units * 10) / 10,
           extraAllowed: extraUnits(decision),
           mayBuyMore: decision.may,
+          ...extraOffer(plan),
           origin: this.#webOrigin,
         }),
       })
@@ -622,8 +649,8 @@ export class AccountService {
     if (reached === undefined) return null
     const [said, saidMark] = (standing.playWarned ?? '').split(':')
     if (said === 'total' && Number(saidMark) >= reached) return null
-    const paid = PAID_PLANS[0]
-    const monthly = paid === undefined ? null : entitlementsFor(paid).includedUnits
+    const paid = planOnSaleHere()
+    const monthly = paid === null ? null : entitlementsFor(paid).includedUnits
     const to = await emailOf(this.#db, standing.userId)
     if (to !== null)
       await this.#mailer.send({
@@ -632,7 +659,7 @@ export class AccountService {
           mark: reached,
           included: total.included,
           used: Math.round(total.units * 10) / 10,
-          paid: paid === undefined || monthly === null ? null : { name: planName(paid), hours: monthly },
+          paid: paid === null || monthly === null ? null : { name: planName(paid), hours: monthly },
           origin: this.#webOrigin,
         }),
       })

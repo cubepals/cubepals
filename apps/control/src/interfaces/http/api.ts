@@ -80,6 +80,7 @@ export function createApiApp(deps: {
       faces: deps.services.faces,
       items: deps.services.items,
       icons: deps.services.icons,
+      platform: () => deps.services.platform.capabilities,
     }),
   )
 

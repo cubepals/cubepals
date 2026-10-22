@@ -31,6 +31,7 @@ import { ctaMark, planMark, seenMark } from '../../(public)/steps'
 import { FreeHoursUsed } from '../free-hours-used'
 import { OutForToday } from '../out-for-today'
 import { PlusOffer } from '../plus-offer'
+import { planAction } from './plan-action'
 
 /** The signed-in person's plan: what it allows, what they use of it, and upgrading or managing it. */
 export default function AccountPage() {
@@ -162,6 +163,7 @@ function Play({ overview }: { overview: AccountOverviewView }) {
         <Note tone="info">
           Running low. When they’re used, your servers sleep until the 1st
           {u.extra.may ? ', and nothing more is charged unless you allow it below' : ''}.
+          {cheaperSaid(overview)}
         </Note>
       ) : null}
       {doubled && (
@@ -228,7 +230,7 @@ function Play({ overview }: { overview: AccountOverviewView }) {
 
 /**
  * The plan's hours in all (Free's 20): what is left of them, and once they are played, that the
- * worlds are kept and Plus starts them again. They come once, so there is nothing to wait for.
+ * worlds are kept and the plan that plays by the month starts them again. They come once, so there is nothing to wait for.
  */
 function PlayTotal({ overview }: { overview: AccountOverviewView }) {
   const total = overview.usage.total
@@ -280,20 +282,39 @@ const extraOf = (u: AccountOverviewView['usage']) => ({
   hours: Math.round(u.extra.countedUnits * 10) / 10,
 })
 
+/** The plan with more hours than this one, for an upgrade: none for an account on the largest. */
+const largerPlan = (overview: AccountOverviewView) =>
+  overview.plans.find(
+    (p) =>
+      (p.entitlements.includedUnits ?? 0) > (overview.entitlements.includedUnits ?? 0) &&
+      p.entitlements.monthlyPriceCents > overview.entitlements.monthlyPriceCents,
+  )
+
+/**
+ * Where extra hours can be allowed and a larger plan exists, what each costs and when that plan
+ * costs less: "Extra hours are $0.25 each; past 60 extra hours a month, Plus costs less." Empty otherwise.
+ */
+function cheaperSaid(overview: AccountOverviewView): string {
+  const more = largerPlan(overview)
+  if (!more || !overview.usage.extra.may) return ''
+  const { unitCents } = overview.usage
+  const past = Math.floor(
+    (more.entitlements.monthlyPriceCents - overview.entitlements.monthlyPriceCents) / unitCents,
+  )
+  return ` Extra hours are ${money(unitCents)} each; past ${past} extra hours a month, ${title(more.key)} costs less.`
+}
+
 /** The month's included play is used: on extra hours now, or asleep until the 1st, and why. */
 function UsedUp({ overview, included }: { overview: AccountOverviewView; included: number }) {
   const x = overview.usage.extra
   const { allowedNow, billed, hours } = extraOf(overview.usage)
   // An upgrade only: with an admin's own hours on the account, a cheaper plan can have more.
-  const more = overview.plans.find(
-    (p) =>
-      (p.entitlements.includedUnits ?? 0) > (overview.entitlements.includedUnits ?? 0) &&
-      p.entitlements.monthlyPriceCents > overview.entitlements.monthlyPriceCents,
-  )
+  const more = largerPlan(overview)
+  const plan = title(overview.plan.key)
   if (allowedNow > 0)
     return (
       <Note tone="info">
-        {`You're on extra hours: ${hours} so far this month, ${billed}, billed with your Plus payments. Servers sleep once you reach the ${allowedNow} you allowed.`}
+        {`You're on extra hours: ${hours} so far this month, ${billed}, billed with your ${plan} payments. Servers sleep once you reach the ${allowedNow} you allowed.`}
       </Note>
     )
   return (
@@ -301,8 +322,9 @@ function UsedUp({ overview, included }: { overview: AccountOverviewView; include
       <Note tone="info">
         {`You've played this month's ${included} hours. Your servers sleep until the 1st${x.may ? ', unless you allow some extra play below' : ''}.`}
         {x.countedUnits > 0
-          ? ` Your ${hours} extra hours this month, ${billed}, are billed with your Plus payments.`
+          ? ` Your ${hours} extra hours this month, ${billed}, are billed with your ${plan} payments.`
           : ''}
+        {cheaperSaid(overview)}
       </Note>
       {more && (
         <PlusOffer
@@ -346,7 +368,7 @@ function ExtraPlay({ overview }: { overview: AccountOverviewView }) {
     <>
       <FormRow
         label="Extra play you allow"
-        description={`${allowed.said === 'done' ? 'Saved. ' : ''}Past what your plan includes, ${money(u.unitCents)} an hour, added to your next Plus payment. Cubepals stops your servers at this number, so nothing costs more than you said.${later}`}
+        description={`${allowed.said === 'done' ? 'Saved. ' : ''}Past what your plan includes, ${money(u.unitCents)} an hour, added to your next ${title(overview.plan.key)} payment. Cubepals stops your servers at this number, so nothing costs more than you said.${later}`}
         control={
           <div className="bk-row" style={{ gap: 'var(--space-8)', alignItems: 'center' }}>
             <select
@@ -370,6 +392,12 @@ function ExtraPlay({ overview }: { overview: AccountOverviewView }) {
         }
       />
       {allow.isError && <Note tone="danger">{messageOf(allow.error)}</Note>}
+      {overview.entitlements.mostExtraUnits !== null && largerPlan(overview) && (
+        <p className="type-body-sm">
+          {title(overview.plan.key)} stops at {overview.entitlements.mostExtraUnits} extra hours;{' '}
+          {title(largerPlan(overview)?.key ?? '')} covers more.
+        </p>
+      )}
     </>
   )
 }
@@ -472,20 +500,33 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
   )
 }
 
+/** What the plan section says of a plan a subscription pays for: past due, moving to a smaller plan, or its renewal. */
+function payingSummary(
+  billed: NonNullable<AccountOverviewView['plan']['billed']>,
+  key: string,
+  giftNext: AccountOverviewView['plan']['giftNext'],
+): string | null {
+  if (billed.pastDueUntil)
+    return `Your last payment didn’t go through. Update your card in Manage billing by ${dayOf(billed.pastDueUntil)} to keep ${title(key)}.`
+  // A plan set to end ends, whatever move to a smaller one was asked for before.
+  if (billed.cancelAtPeriodEnd && billed.periodEnd)
+    return `Ends on ${dayOf(billed.periodEnd)}; then you're on the free trial.`
+  if (billed.movesTo)
+    return `${title(billed.movesTo.plan)} from ${dayOf(billed.movesTo.at)}. You keep ${title(key)} until then.`
+  if (!billed.periodEnd) return null
+  return giftNext !== null
+    ? `Renews on ${dayOf(billed.periodEnd)}. ${giftWaits(giftNext)}`
+    : `Renews on ${dayOf(billed.periodEnd)}.`
+}
+
 /** What the account's plan section says under its name: what pays for the plan, and until when. */
 function planSummary(overview: AccountOverviewView): string {
   const { key, billed, year, gifted, giftNext } = overview.plan
   if (year !== null) return yearSummary(year, gifted !== null)
   if (billed?.endedFor && key === 'free') return endedSummary(billed.endedFor, title(billed.planKey))
   const paying = billed !== null && billed.status !== 'ended' && billed.planKey === key
-  if (paying && billed.pastDueUntil)
-    return `Your last payment didn’t go through. Update your card in Manage billing by ${dayOf(billed.pastDueUntil)} to keep ${title(key)}.`
-  if (paying && billed.periodEnd && !billed.cancelAtPeriodEnd && giftNext !== null)
-    return `Renews on ${dayOf(billed.periodEnd)}. ${giftWaits(giftNext)}`
-  if (paying && billed.periodEnd)
-    return billed.cancelAtPeriodEnd
-      ? `Ends on ${dayOf(billed.periodEnd)}; then you're on the free trial.`
-      : `Renews on ${dayOf(billed.periodEnd)}.`
+  const said = paying ? payingSummary(billed, key, giftNext) : null
+  if (said !== null) return said
   if (gifted !== null)
     return `A gift, until ${dayOf(gifted.until)}. It doesn’t renew; then you’re on the free trial.`
   return key !== 'free'
@@ -655,18 +696,10 @@ function Plans({ overview }: { overview: AccountOverviewView }) {
             key={plan.key}
             plan={plan}
             current={plan.key === overview.plan.key}
+            // Only the player's own plan is dark, so the eye lands on theirs.
+            solid={plan.key === overview.plan.key}
             mark={seenMark(`plan_${plan.key}`)}
-            action={
-              sells && plan.monthlyPriceCents > 0 && plan.key !== overview.plan.key ? (
-                <Button
-                  variant="primary"
-                  href={checkoutHref({ plan: plan.key, reason: 'account' })}
-                  {...planMark(plan.key, 'month')}
-                >
-                  Get {plan.name}
-                </Button>
-              ) : undefined
-            }
+            action={planAction(plan, overview, sells)}
           />
         ))}
       </div>

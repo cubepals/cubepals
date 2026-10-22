@@ -18,6 +18,7 @@ describe('public sizes', () => {
     faces: {} as PlayerFaces,
     items: {} as ItemIcons,
     icons: {} as ServerIcons,
+    platform: () => ({ unsoldPlans: [] }),
   })
 
   test('each answer to who is playing, with the players it holds and its memory', async () => {
@@ -40,9 +41,10 @@ describe('public plans', () => {
     faces: {} as PlayerFaces,
     items: {} as ItemIcons,
     icons: {} as ServerIcons,
+    platform: () => ({ unsoldPlans: [] }),
   })
 
-  test('Free and Plus, with what each costs and includes', async () => {
+  test('Free, Core and Plus, with what each costs and includes', async () => {
     const response = await app.request('/api/public/plans')
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('public, max-age=300')
@@ -51,11 +53,13 @@ describe('public plans', () => {
       {
         key: 'free',
         name: 'Free trial',
+        available: true,
         monthlyPriceCents: 0,
         yearlyPriceCents: null,
         // 20 hours in all, at most 2 a day from the player's midnight, and no monthly total.
         includedHours: 2,
         per: 'day',
+        extraHourCents: null,
         totalHours: 20,
         sleepsAfterMinutes: 10,
         maxServers: 1,
@@ -68,12 +72,34 @@ describe('public plans', () => {
         deletedAfterDays: 365,
       },
       {
+        key: 'core',
+        name: 'Core',
+        available: true,
+        monthlyPriceCents: 999,
+        yearlyPriceCents: null,
+        includedHours: 40,
+        per: 'month',
+        extraHourCents: 25,
+        totalHours: null,
+        sleepsAfterMinutes: 15,
+        maxServers: 1,
+        maxPlayers: 5,
+        mods: false,
+        datapacks: false,
+        downloads: 'history',
+        sessionsKept: 14,
+        restsAfterDays: 30,
+        deletedAfterDays: null,
+      },
+      {
         key: 'plus',
         name: 'Plus',
+        available: true,
         monthlyPriceCents: 2500,
         yearlyPriceCents: 25000,
         includedHours: 120,
         per: 'month',
+        extraHourCents: 25,
         totalHours: null,
         sleepsAfterMinutes: 15,
         maxServers: 3,
@@ -103,6 +129,7 @@ describe('player faces', () => {
     faces,
     items: {} as ItemIcons,
     icons: {} as ServerIcons,
+    platform: () => ({ unsoldPlans: [] }),
   })
 
   test('an 8×8 picture, cached for the hour Blockly keeps it', async () => {

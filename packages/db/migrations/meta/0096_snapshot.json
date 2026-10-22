@@ -1,5 +1,5 @@
 {
-  "id": "2d29407d-20d7-479c-a00e-172c08630a6f",
+  "id": "d45e3186-10b4-4251-b27a-da77e8e03311",
   "prevId": "611c9547-74cd-41d2-8265-7e3781056da9",
   "version": "7",
   "dialect": "postgresql",
@@ -2732,6 +2732,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "moves_to_plan": {
+          "name": "moves_to_plan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "moves_at": {
+          "name": "moves_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -4031,12 +4043,6 @@
         },
         "synced_to": {
           "name": "synced_to",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "started_at": {
-          "name": "started_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

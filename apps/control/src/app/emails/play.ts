@@ -23,6 +23,10 @@ function leftSaid(left: number): string {
  * What the email says the month's play has come to, in the words the account page uses. `carried`
  * is what was left of last month's hours and came into this one.
  */
+/** What extra hours cost, and when the larger plan costs less: "Extra hours are $0.25 each. Past 60 extra hours a month, Plus costs less." */
+const largerSaid = (larger: { name: string; extraHoursCheaper: number }, unitCents: number): string =>
+  `Extra hours are ${dollars(unitCents)} each. Past ${larger.extraHoursCheaper} extra hours a month, ${larger.name} costs less, and has more hours.`
+
 function playLines(input: {
   mark: number
   included: number
@@ -30,6 +34,9 @@ function playLines(input: {
   used: number
   extraAllowed: number
   mayBuyMore: boolean
+  unitCents: number
+  /** The plan with more, where there is one: its name, and the extra hours a month after which it costs less. */
+  larger?: { name: string; extraHoursCheaper: number }
 }): string[] {
   if (input.mark >= 100) {
     const lines = [
@@ -42,6 +49,7 @@ function playLines(input: {
     ]
     if (input.mayBuyMore && input.extraAllowed === 0)
       lines.push('If you want them back before then, allow some extra play on your account.')
+    if (input.larger) lines.push(largerSaid(input.larger, input.unitCents))
     return lines
   }
   const left = leftSaid(input.included + input.carried - input.used)
@@ -50,6 +58,7 @@ function playLines(input: {
       ? `You have ${left} left of your ${input.included + input.carried} hours of play this month: ${input.included} from your plan and ${input.carried} left from last month. A large server uses them twice as fast.`
       : `You have ${left} left of the ${input.included} hours of play your plan includes this month. A large server uses them twice as fast.`,
     `When they run out, your servers sleep until the 1st${input.mayBuyMore ? ', unless you allow some extra play' : ''}. Nothing is charged unless you allow it.`,
+    ...(input.larger && input.mayBuyMore ? [largerSaid(input.larger, input.unitCents)] : []),
   ]
 }
 
@@ -60,6 +69,8 @@ export function playWarning(input: {
   used: number
   extraAllowed: number
   mayBuyMore: boolean
+  unitCents: number
+  larger?: { name: string; extraHoursCheaper: number }
   origin: string
 }): Email {
   const account = `${input.origin}/account`
@@ -105,6 +116,8 @@ export function extraWarning(input: {
   ceiling: number
   used: number
   unitCents: number
+  /** The plan's name, whose payment the extra hours are added to: "Core", "Plus". */
+  plan: string
   origin: string
 }): Email {
   const account = `${input.origin}/account`
@@ -117,9 +130,9 @@ export function extraWarning(input: {
       ? {
           subject: 'Your Cubepals servers are asleep until the 1st',
           heading: 'The extra hours you allowed are used up',
-          preheader: `${soFar} of extra hours, on your next Plus payment.`,
+          preheader: `${soFar} of extra hours, on your next ${input.plan} payment.`,
           lines: [
-            `You’ve played the ${input.allowed} extra hours you allowed this month: ${soFar}, added to your next Plus payment.`,
+            `You’ve played the ${input.allowed} extra hours you allowed this month: ${soFar}, added to your next ${input.plan} payment.`,
             mayRaise
               ? 'Your servers sleep until the 1st, or until you raise your limit on your account.'
               : 'Your servers sleep until the 1st.',
@@ -129,9 +142,9 @@ export function extraWarning(input: {
         ? {
             subject: `You’ve used ${input.mark}% of the extra hours you allowed`,
             heading: `${input.mark}% of your extra hours are used`,
-            preheader: `${soFar} so far, on your next Plus payment.`,
+            preheader: `${soFar} so far, on your next ${input.plan} payment.`,
             lines: [
-              `You’ve played ${input.used} of the ${input.allowed} extra hours you allowed this month: ${soFar} so far, added to your next Plus payment.`,
+              `You’ve played ${input.used} of the ${input.allowed} extra hours you allowed this month: ${soFar} so far, added to your next ${input.plan} payment.`,
               mayRaise
                 ? 'When they’re used up your servers sleep until the 1st, unless you raise your limit.'
                 : 'When they’re used up your servers sleep until the 1st.',
@@ -140,10 +153,10 @@ export function extraWarning(input: {
         : {
             subject: 'You’re on extra hours now',
             heading: 'You’re past your included hours',
-            preheader: `${each} an hour, up to the limit you set, on your next Plus payment.`,
+            preheader: `${each} an hour, up to the limit you set, on your next ${input.plan} payment.`,
             lines: [
               `You’ve played all ${input.included} of this month’s hours, so your servers are on extra hours now: ${each} an hour, up to the ${input.allowed} you allowed (${upTo}).`,
-              'They’re added to your next Plus payment. You can change your limit on your account whenever you like.',
+              `They’re added to your next ${input.plan} payment. You can change your limit on your account whenever you like.`,
             ],
           }
   return {

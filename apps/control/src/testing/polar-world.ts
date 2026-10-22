@@ -22,6 +22,9 @@ import { createBillingWebhook } from '../interfaces/billing/webhook.ts'
 import { type Harness, startHarness } from './harness.ts'
 import {
   type Answer,
+  CORE_FIXED_PRICE,
+  CORE_METERED_PRICE,
+  CORE_PRODUCT,
   checkout,
   customerState,
   eventsIngested,
@@ -52,9 +55,24 @@ export const YEAR = '0f6f9a52-3b8c-4d0e-9a51-1f0ab2a1c004'
 /** The one-time product friends chip in to a server with, found by its metadata. */
 export const CHIP_IN = '0f6f9a52-3b8c-4d0e-9a51-1f0ab2a1c005'
 
+/** The rest of a pending update Polar holds. */
+const PENDING = { id: 'pending-update', created_at: '2026-10-01T00:00:00Z', modified_at: null, seats: null }
+
 const list = (items: unknown[]): Answer => ({ status: 200, body: page(items) })
 
+/** What is asked of a subscription: a cancel at the period's end, or another product from the next. */
+type SubscriptionChange = models.SubscriptionUpdateBase & { cancel_at_period_end?: boolean }
+
 export class PolarWorld {
+  /** The products it sells: both paid plans, or the ones a test names. */
+  readonly #products: Record<string, string>
+  /** The Polar adapter the control plane runs on, once started. */
+  billing: PolarBilling | null = null
+
+  constructor(products: Record<string, string> = { core: CORE_PRODUCT, plus: PLUS_PRODUCT }) {
+    this.#products = products
+  }
+
   readonly polar = new PolarStandIn()
   readonly #secret = webhookSecret()
   #h: Harness | null = null
@@ -68,6 +86,8 @@ export class PolarWorld {
   readonly declined = new Set<string>()
   /** Refunds asked for, as their request bodies. */
   readonly refunds: models.RefundCreate[] = []
+  /** Changes asked of a subscription (a cancel at the period's end), as their request bodies, by id. */
+  readonly updates: Array<{ id: string; body: SubscriptionChange }> = []
 
   get h(): Harness {
     if (this.#h === null) throw new Error('PolarWorld is not started')
@@ -80,9 +100,10 @@ export class PolarWorld {
       accessToken: 'polar_oat_test',
       webhookSecret: this.#secret,
       server: 'sandbox',
-      products: { plus: PLUS_PRODUCT },
+      products: this.#products,
       baseUrl: this.polar.url,
     })
+    this.billing = billing
     this.#h = await startHarness({ capabilities: { archives: null, billing } })
     this.#webhook = createBillingWebhook({ billing: this.#h.app.billing })
   }
@@ -102,8 +123,8 @@ export class PolarWorld {
     const id = (prefix: string) =>
       url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) : null
     if (url.pathname === '/v1/products/') return this.#found(url)
-    if (url.pathname.startsWith(`/v1/products/${PLUS_PRODUCT}`))
-      return { status: 200, body: product(PLUS_PRODUCT) }
+    const plan = [PLUS_PRODUCT, CORE_PRODUCT].find((each) => url.pathname.startsWith(`/v1/products/${each}`))
+    if (plan !== undefined) return { status: 200, body: product(plan) }
     if (method === 'POST') return this.#write(url.pathname, body)
     if (url.pathname === '/v1/checkouts/') return this.#open(url)
     if (url.pathname === '/v1/refunds/') {
@@ -119,10 +140,59 @@ export class PolarWorld {
       return list(this.declined.has(asked) ? [payment(asked, 'failed')] : [])
     }
     const sub = id('/v1/subscriptions/')
-    if (sub !== null && method === 'DELETE') return this.#revoke(sub)
-    if (sub !== null) return { status: 200, body: this.subscriptions.get(sub) ?? subscription(sub) }
+    if (sub !== null) return this.#subscription(method, sub, body)
     const held = this.orders.get(id('/v1/orders/') ?? '')
     return held === undefined ? notFound : { status: 200, body: held }
+  }
+
+  /** A subscription read, revoked or changed. */
+  #subscription(method: string, sub: string, body: string): Answer {
+    if (method === 'DELETE') return this.#revoke(sub)
+    if (method === 'PATCH') return this.#update(sub, body)
+    return { status: 200, body: this.subscriptions.get(sub) ?? subscription(sub) }
+  }
+
+  /** A change to a subscription kept as it was asked, and answered with the subscription as it is now. */
+  #update(sub: string, body: string): Answer {
+    const asked = JSON.parse(body) as SubscriptionChange
+    this.updates.push({ id: sub, body: asked })
+    const held = this.subscriptions.get(sub) ?? subscription(sub, { status: 'active', ended_at: null })
+    // Polar changes the product of no subscription that is set to end with its period.
+    if (asked.product_id != null && held.cancel_at_period_end)
+      return {
+        status: 403,
+        body: {
+          error: 'NotPermitted',
+          detail: 'This subscription is already canceled or will be at the end of the period.',
+        },
+      }
+    // A product change for the next period is held as the pending update, as Polar answers it.
+    const later = asked.product_id != null && asked.proration_behavior === 'next_period'
+    const updated = {
+      ...held,
+      ...(later
+        ? {
+            pending_update: {
+              ...PENDING,
+              applies_at: held.current_period_end ?? '',
+              product_id: asked.product_id,
+            },
+          }
+        : asked),
+    } as models.Subscription
+    this.subscriptions.set(sub, updated)
+    this.#listed(sub, asked, later)
+    return { status: 200, body: updated }
+  }
+
+  /** What the customer's state lists of a subscription changes with it: its product now, or whether it renews. */
+  #listed(sub: string, asked: SubscriptionChange, later: boolean) {
+    for (const state of this.polar.states.values())
+      for (const listed of state.active_subscriptions)
+        if (listed.id === sub) {
+          if (asked.product_id != null && !later) listed.product_id = asked.product_id
+          if (asked.cancel_at_period_end != null) listed.cancel_at_period_end = asked.cancel_at_period_end
+        }
   }
 
   /** A subscription revoked: it ends now, as Polar answers it; one revoked already is refused. */
@@ -245,17 +315,18 @@ export class PolarWorld {
   }
 
   /**
-   * A renewal with $2.50 of extra hours on its $17.50, `tax` on top, as Polar delivers it: made
+   * A renewal with $2.50 of extra hours on its $17.50 ($12.49 on Core), `tax` on top, as Polar delivers it: made
    * and waiting, or voided.
    */
   renewalWithExtra(
     owner: UserActor,
     sub: string,
     madeAt: Date,
-    options: { status?: models.OrderStatus; id?: string; tax?: number } = {},
+    options: { status?: models.OrderStatus; id?: string; tax?: number; core?: boolean } = {},
   ) {
     const status = options.status ?? 'pending'
     const tax = options.tax ?? 0
+    const net = options.core ? 1249 : 1750
     return this.ordered(
       owner,
       sub,
@@ -265,11 +336,14 @@ export class PolarWorld {
         paid: false,
         billing_reason: 'subscription_cycle',
         created_at: madeAt.toISOString(),
-        subtotal_amount: 1750,
-        net_amount: 1750,
+        subtotal_amount: net,
+        net_amount: net,
         tax_amount: tax,
-        total_amount: 1750 + tax,
-        items: [orderItem(1500, FIXED_PRICE), orderItem(250, METERED_PRICE)],
+        total_amount: net + tax,
+        ...(options.core ? { product_id: CORE_PRODUCT } : {}),
+        items: options.core
+          ? [orderItem(999, CORE_FIXED_PRICE), orderItem(250, CORE_METERED_PRICE)]
+          : [orderItem(1500, FIXED_PRICE), orderItem(250, METERED_PRICE)],
       },
       status === 'pending' ? 'order.created' : 'order.updated',
     )

@@ -10,6 +10,7 @@ import {
   longestSnapshotNeedDays,
   PAID_PLANS,
   planGap,
+  planOnSale,
   planThatRuns,
   runsOn,
 } from './entitlements.ts'
@@ -59,7 +60,7 @@ describe('entitlements', () => {
     })
     expect(plus.allowedLoaders).toEqual(['vanilla', 'paper', 'fabric', 'quilt', 'neoforge', 'forge'])
     expect(plus.allowedMemoryTiers).toEqual(['3g', '4g', '8g', '16g'])
-    expect(PAID_PLANS).toEqual(['plus'])
+    expect(PAID_PLANS).toEqual(['core', 'plus'])
   })
 
   test('the included block is 120 hours on the small sizes, 60 on the large one and 30 on the largest', () => {
@@ -152,6 +153,78 @@ describe('entitlements', () => {
 
   test('provider snapshots are kept as long as the longest plan needs', () => {
     expect(longestSnapshotNeedDays()).toBe(44)
+  })
+})
+
+describe('core', () => {
+  test('core is vanilla and Paper for five at once, on one 3 GB server, with 40 hours a month and extra to allow', () => {
+    const core = entitlementsFor('core')
+    expect(core).toMatchObject({
+      monthlyPriceCents: 999,
+      yearlyPriceCents: null,
+      maxServers: 1,
+      maxRunning: 1,
+      allowedMemoryTiers: ['3g'],
+      legacyMemoryTiers: [],
+      includedUnits: 40,
+      carryUnits: null,
+      dailyUnits: null,
+      totalUnits: null,
+      // Extra hours past the 40, as on Plus.
+      mayBuyMore: true,
+      allowedLoaders: ['vanilla', 'paper'],
+      mayUseMods: false,
+      mayUseDatapacks: false,
+      mayUploadCustomMods: false,
+      settingCaps: { maxPlayers: 5, viewDistance: 8, simulationDistance: 6 },
+    })
+    // 40 hours on the one size it runs.
+    expect((core.includedUnits ?? 0) / METER_UNITS['3g']).toBe(40)
+    // Backups are Plus's, whole.
+    expect(core.backupPolicy).toEqual(entitlementsFor('plus').backupPolicy)
+    expect(core.trashRetentionDays).toBe(entitlementsFor('plus').trashRetentionDays)
+  })
+
+  test('the trial is Core’s first hours: the same server, the same group, the same server types', () => {
+    const free = entitlementsFor('free')
+    const core = entitlementsFor('core')
+    expect([free.allowedMemoryTiers, free.allowedLoaders, free.settingCaps, free.maxServers]).toEqual([
+      core.allowedMemoryTiers,
+      core.allowedLoaders,
+      core.settingCaps,
+      core.maxServers,
+    ])
+    expect(free.totalUnits).toBe(20)
+  })
+
+  test('each Core limit is a gap with the plan that lifts it named: Plus', () => {
+    const core = entitlementsFor('core')
+    const vanilla = { tier: '3g' as const, loader: 'vanilla' as const, modded: false }
+    expect(planGap(core, vanilla, 'offered')).toBeNull()
+    expect(planGap(core, { ...vanilla, loader: 'paper' }, 'offered')).toBeNull()
+    expect(planGap(core, { ...vanilla, loader: 'paper', modded: true }, 'offered')).toBe('mods')
+    expect(planGap(core, { ...vanilla, datapacks: true }, 'offered')).toBe('datapacks')
+    expect(planGap(core, { ...vanilla, loader: 'fabric' }, 'offered')).toBe('server_type')
+    // A size Core never sold doesn't start on it, even where it is already a server.
+    expect(planGap(core, { ...vanilla, tier: '4g' }, 'offered')).toBe('size')
+    expect(planGap(core, { ...vanilla, tier: '8g' }, 'startable')).toBe('size')
+    for (const lifted of [
+      { ...vanilla, modded: true },
+      { ...vanilla, loader: 'fabric' as const },
+      { ...vanilla, tier: '4g' as const },
+    ])
+      expect(planThatRuns(lifted)).toBe('plus')
+    // Plain 3 GB vanilla is the first paid plan's own.
+    expect(planThatRuns(vanilla)).toBe('core')
+  })
+})
+
+describe('the plan a trial leads to', () => {
+  test('is the cheapest paid plan for sale, and none where nothing is', () => {
+    expect(planOnSale([])).toBe('core')
+    expect(planOnSale(['core'])).toBe('plus')
+    expect(planOnSale(['plus'])).toBe('core')
+    expect(planOnSale(['core', 'plus'])).toBeNull()
   })
 })
 

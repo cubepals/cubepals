@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { API_PORT, INTERNAL_PORT } from '@blockly/contracts/local'
+import { PAID_PLANS } from '../domain/account/entitlements.ts'
 import {
   DEFAULT_ABUSE_LIMITS,
   DEFAULT_CAPACITY_TUNING,
@@ -36,6 +37,12 @@ const pairs = (value: string | undefined) =>
       ? { key: item, label: item }
       : { key: item.slice(0, at).trim(), label: item.slice(at + 1).trim() }
   })
+
+/** Plan products smallest plan first, as a subscription to two of them is judged (`PolarBilling`). */
+const smallestFirst = (products: Record<string, string>) =>
+  Object.fromEntries(
+    Object.entries(products).sort(([a], [b]) => PAID_PLANS.indexOf(a) - PAID_PLANS.indexOf(b)),
+  )
 
 const record = (value: string | undefined) =>
   Object.fromEntries(pairs(value).map(({ key, label }) => [key, label]))
@@ -214,9 +221,14 @@ function billingFrom(env: NodeJS.ProcessEnv): { billing: unknown; local: { notes
           accessToken: env.POLAR_ACCESS_TOKEN,
           webhookSecret: env.POLAR_WEBHOOK_SECRET,
           server: env.POLAR_SERVER,
-          products: record(env.POLAR_PRODUCTS),
+          products: smallestFirst(record(env.POLAR_PRODUCTS)),
         }
       : null
+  const unsold = polar === null ? [] : PAID_PLANS.filter((plan) => !(plan in polar.products))
+  for (const plan of unsold)
+    console.warn(
+      `billing: no Polar product sells the ${plan} plan, so it is not for sale. Add it to POLAR_PRODUCTS.`,
+    )
   if (!isLocalDeployment(env)) return { billing: env.POLAR_ACCESS_TOKEN ? polar : null, local: null }
   const { billing, note } = localBilling(polar, env.LOCAL_BILLING)
   return { billing, local: { notes: [note, ...localNotes(env)] } }

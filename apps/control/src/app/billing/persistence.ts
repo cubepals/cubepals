@@ -73,6 +73,9 @@ export interface SubscriptionRecord {
   cancelAtPeriodEnd: boolean
   pastDueAt: Date | null
   canceledAt: Date | null
+  /** A smaller plan it moves to at `movesAt`, the end of the period paid for; null: it stays. */
+  movesToPlan: string | null
+  movesAt: Date | null
   createdAt: Date
   updatedAt: Date
 }
@@ -204,7 +207,12 @@ export async function latestSubscription(q: Queryable, userId: string): Promise<
  */
 export async function saveSubscription(
   tx: Tx,
-  subscription: Omit<SubscriptionRecord, 'updatedAt' | 'pastDueAt' | 'createdAt'> & { createdAt?: Date },
+  subscription: Omit<
+    SubscriptionRecord,
+    'updatedAt' | 'pastDueAt' | 'createdAt' | 'movesToPlan' | 'movesAt'
+  > & {
+    createdAt?: Date
+  },
 ): Promise<void> {
   const made = subscription.createdAt === undefined ? {} : { createdAt: subscription.createdAt }
   // Set to end: when the provider says, or else the first Blockly heard of it. Renewing: never.
@@ -227,9 +235,36 @@ export async function saveSubscription(
             ? sql`coalesce(${subscriptions.canceledAt}, ${canceledAt})`
             : canceledAt,
         pastDueAt: null,
+        // A move to a smaller plan is done once the provider says the subscription is on it, and
+        // off once it says the subscription ends: nothing moves from a plan that is ending.
+        ...(subscription.cancelAtPeriodEnd
+          ? { movesToPlan: null, movesAt: null }
+          : {
+              movesToPlan: sql`case when ${subscriptions.movesToPlan} = ${subscription.planKey} then null else ${subscriptions.movesToPlan} end`,
+              movesAt: sql`case when ${subscriptions.movesToPlan} = ${subscription.planKey} then null else ${subscriptions.movesAt} end`,
+            }),
         updatedAt: new Date(),
       },
     })
+}
+
+/** A move to a smaller plan at `at`, the end of the period paid for, as the provider took it. */
+export async function recordMove(
+  q: Queryable,
+  provider: string,
+  externalSubscriptionId: string,
+  plan: string,
+  at: Date,
+): Promise<void> {
+  await q
+    .update(subscriptions)
+    .set({ movesToPlan: plan, movesAt: at, updatedAt: new Date() })
+    .where(
+      and(
+        eq(subscriptions.provider, provider),
+        eq(subscriptions.externalSubscriptionId, externalSubscriptionId),
+      ),
+    )
 }
 
 const otherOpen = (userId: string, provider: string, keep: string | null) =>
@@ -255,6 +290,29 @@ export async function subscriptionsLeftOut(
     .from(subscriptions)
     .where(otherOpen(userId, provider, keep))
   return rows.map((row) => row.id)
+}
+
+/**
+ * The account's other subscriptions at this provider that still pay and still renew, with the plan
+ * each is for: what a plan bought over them leaves to run out (`Billing.syncSubscription`).
+ */
+export async function otherRenewing(
+  q: Queryable,
+  userId: string,
+  provider: string,
+  keep: string | null,
+): Promise<Array<{ id: string; planKey: string }>> {
+  const rows = await q
+    .select({ id: subscriptions.externalSubscriptionId, planKey: subscriptions.planKey })
+    .from(subscriptions)
+    .where(
+      and(
+        otherOpen(userId, provider, keep),
+        inArray(subscriptions.status, PAYING),
+        eq(subscriptions.cancelAtPeriodEnd, false),
+      ),
+    )
+  return rows
 }
 
 /**
@@ -487,6 +545,8 @@ export interface OrderNotice {
   totalCents: number
   extraCents: number
   orderedAt: Date
+  /** The plan the order paid for; null for one that paid for none. */
+  planKey: string | null
 }
 
 /** Accounts with a charge carrying extra play that failed, which they may not have heard about. */
@@ -518,6 +578,7 @@ export async function failingUntold(q: Queryable, userId: string, now: Date): Pr
       totalCents: orders.totalCents,
       extraCents: orders.extraCents,
       orderedAt: orders.orderedAt,
+      planKey: orders.planKey,
     })
     .from(orders)
     .where(
@@ -542,6 +603,7 @@ export async function owingUntold(q: Queryable, userId: string): Promise<OrderNo
       totalCents: orders.totalCents,
       extraCents: orders.extraCents,
       orderedAt: orders.orderedAt,
+      planKey: orders.planKey,
     })
     .from(orders)
     .where(and(owing(userId), isNull(orders.owingToldAt)))

@@ -18,6 +18,11 @@ import type { models, webhooks } from '../infra/polar/polar-models.ts'
 
 /** The Polar product that sells `plus` in tests. */
 export const PLUS_PRODUCT = 'd8dd2de1-21b7-4a41-8bc3-ce909c0cfe23'
+/** The product that sells Core: $9.99 a month, tax inclusive, and the metered Extra play price. */
+export const CORE_PRODUCT = '5b1c0c6e-3f0a-4c58-9b0e-6f1f4c2f7a10'
+/** Core's own price, and its metered one, which bills extra play as Plus' does. */
+export const CORE_FIXED_PRICE = '5b1c0c6e-3f0a-4c58-9b0e-6f1f4c2f7a11'
+export const CORE_METERED_PRICE = '5b1c0c6e-3f0a-4c58-9b0e-6f1f4c2f7a12'
 /** Plus' own price, and its metered one, which bills extra play. */
 export const FIXED_PRICE = '0f6f9a52-3b8c-4d0e-9a51-1f0ab2a1c001'
 export const METERED_PRICE = '0f6f9a52-3b8c-4d0e-9a51-1f0ab2a1c002'
@@ -135,15 +140,20 @@ export const customerState = (
   ...patch,
 })
 
-/** A price of a product: Plus' own $15 unless it is `metered`, the one extra play is billed by. */
+/**
+ * A price of a product: its own, or the `metered` one extra play is billed by. Plus' own is $15
+ * here; Core's are as the sandbox product holds them: $9.99, then 25 cents an hour up to $15 a
+ * period, both tax inclusive.
+ */
 const price = (id: string, product: string, metered: boolean): models.ProductPrice => {
+  const core = product === CORE_PRODUCT
   const common = {
     id,
     created_at: '2026-09-01T00:00:00Z',
     modified_at: null,
     source: 'catalog' as const,
     price_currency: 'usd',
-    tax_behavior: null,
+    tax_behavior: core ? ('inclusive' as const) : null,
     is_archived: false,
     product_id: product,
   }
@@ -151,7 +161,7 @@ const price = (id: string, product: string, metered: boolean): models.ProductPri
     ? {
         ...common,
         amount_type: 'metered_unit',
-        cap_amount: null,
+        cap_amount: core ? 1500 : null,
         meter_id: 'c3a1d2b4-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
         meter: {
           id: 'c3a1d2b4-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
@@ -160,9 +170,9 @@ const price = (id: string, product: string, metered: boolean): models.ProductPri
           custom_label: null,
           custom_multiplier: null,
         },
-        unit_amount: '250',
+        unit_amount: core ? '25' : '250',
       }
-    : { ...common, amount_type: 'fixed', price_amount: 1500 }
+    : { ...common, amount_type: 'fixed', price_amount: core ? 999 : 1500 }
 }
 
 /** A product; Plus, monthly, with its own price and its metered one, unless it is another. */
@@ -172,19 +182,24 @@ export const product = (id: string, patch: Partial<models.Product> = {}): models
   modified_at: null,
   trial_interval: null,
   trial_interval_count: null,
-  name: id === PLUS_PRODUCT ? 'Plus' : 'Balance',
+  name: id === PLUS_PRODUCT ? 'Plus' : id === CORE_PRODUCT ? 'Core' : 'Balance',
   description: null,
   visibility: 'public',
-  recurring_interval: id === PLUS_PRODUCT ? 'month' : null,
-  recurring_interval_count: id === PLUS_PRODUCT ? 1 : null,
+  recurring_interval: id === PLUS_PRODUCT || id === CORE_PRODUCT ? 'month' : null,
+  recurring_interval_count: id === PLUS_PRODUCT || id === CORE_PRODUCT ? 1 : null,
   meter_interval: null,
   meter_interval_count: null,
-  is_recurring: id === PLUS_PRODUCT,
+  is_recurring: id === PLUS_PRODUCT || id === CORE_PRODUCT,
   is_archived: false,
   organization_id: ORGANIZATION,
   metadata: {},
   is_deletable: false,
-  prices: id === PLUS_PRODUCT ? [price(FIXED_PRICE, id, false), price(METERED_PRICE, id, true)] : [],
+  prices:
+    id === PLUS_PRODUCT
+      ? [price(FIXED_PRICE, id, false), price(METERED_PRICE, id, true)]
+      : id === CORE_PRODUCT
+        ? [price(CORE_FIXED_PRICE, id, false), price(CORE_METERED_PRICE, id, true)]
+        : [],
   benefits: [],
   medias: [],
   attached_custom_fields: [],

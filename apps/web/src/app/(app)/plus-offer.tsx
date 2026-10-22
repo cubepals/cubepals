@@ -11,7 +11,7 @@ import { useEffect } from 'react'
 import { useTRPC } from '../../lib/api'
 import { checkoutHref } from '../../lib/checkout'
 import { upgradeDeclined, upgradePressed, upgradeShown } from '../../lib/paying'
-import { Button, Card, Note, PlayHours } from '../../ui'
+import { Button, Card, forSale, Note, PlayHours } from '../../ui'
 import { placeOf } from '../(public)/steps'
 
 /**
@@ -43,10 +43,12 @@ export function PlusOffer({
   const router = useRouter()
   const path = usePathname()
   const overview = useQuery(trpc.account.overview.queryOptions())
+  const listed = useQuery(trpc.billing.plans.queryOptions())
   const sells = overview.data?.features.find((f) => f.feature === 'billing')?.available === true
   const offered = overview.data?.plans.find((p) => p.key === plan)?.entitlements
   // The line alone where there is nothing to buy: no plans sold here, or that plan already theirs.
-  const lineOnly = !sells || offered === undefined || overview.data?.plan.key === plan
+  const unsold = listed.data?.some((p) => p.key === plan && !forSale(p)) === true
+  const lineOnly = !sells || unsold || offered === undefined || overview.data?.plan.key === plan
   const counted = { plan, reason, where: placeOf(path) }
   useShown(counted, overview.data === undefined ? null : !lineOnly)
   if (lineOnly) return <Note tone="info">{why}</Note>
@@ -65,7 +67,7 @@ export function PlusOffer({
               {offered.includedUnits} hours of play
             </PlayHours>
           )}{' '}
-          · up to {offered.maxServers} servers
+          · {offered.maxServers === 1 ? '1 server' : `up to ${offered.maxServers} servers`}
         </>
       }
       footer={

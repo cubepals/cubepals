@@ -53,6 +53,12 @@ describe('server operations', () => {
   })
 })
 
+/** The products a deployment sells, one for each paid plan, the smallest plan first. */
+const PRODUCTS = {
+  core: '64a34283-3a76-4110-8db7-034c2ff23207',
+  plus: 'd8dd2de1-21b7-4a41-8bc3-ce909c0cfe23',
+}
+
 describe('configuration', () => {
   test('a local environment parses with defaults', () => {
     const config = loadConfig(env)
@@ -331,16 +337,16 @@ describe('configuration', () => {
       POLAR_ACCESS_TOKEN: 'polar_oat_0123456789abcdef',
       POLAR_WEBHOOK_SECRET: 'whsec_0123456789abcdef',
       POLAR_SERVER: 'sandbox',
-      POLAR_PRODUCTS: 'plus:d8dd2de1-21b7-4a41-8bc3-ce909c0cfe23',
+      POLAR_PRODUCTS: 'core:64a34283-3a76-4110-8db7-034c2ff23207,plus:d8dd2de1-21b7-4a41-8bc3-ce909c0cfe23',
     }
     expect(loadConfig(deployed).billing).toBeNull()
     expect(loadConfig(polar).billing).toMatchObject({
       server: 'sandbox',
-      products: { plus: 'd8dd2de1-21b7-4a41-8bc3-ce909c0cfe23' },
+      products: PRODUCTS,
     })
     expect(() => loadConfig({ ...polar, POLAR_SERVER: undefined })).toThrow(/billing.server/)
     expect(() => loadConfig({ ...polar, POLAR_WEBHOOK_SECRET: 'plain' })).toThrow(/whsec_/)
-    expect(() => loadConfig({ ...polar, POLAR_PRODUCTS: '' })).toThrow(/No Polar product sells the plus plan/)
+    expect(() => loadConfig({ ...polar, POLAR_PRODUCTS: '' })).toThrow(/POLAR_PRODUCTS names no product/)
     expect(() => loadConfig({ ...polar, POLAR_PRODUCTS: `${polar.POLAR_PRODUCTS},free:abc` })).toThrow(
       /"free", which isn't a paid plan/,
     )
@@ -581,5 +587,24 @@ describe('STOP_CHEATERS', () => {
         tuning: null,
         problem: 'invalid',
       })
+  })
+})
+
+describe('Polar products', () => {
+  test('a paid plan with no product is not for sale yet: plus alone, core alone and both all start', () => {
+    const polar = {
+      ...deployed,
+      POLAR_ACCESS_TOKEN: 'polar_oat_0123456789abcdef',
+      POLAR_WEBHOOK_SECRET: 'whsec_0123456789abcdef',
+      POLAR_SERVER: 'sandbox',
+    }
+    const products = (value: string) => loadConfig({ ...polar, POLAR_PRODUCTS: value }).billing
+    expect(products('plus:p1')).toMatchObject({ products: { plus: 'p1' } })
+    expect(products('core:c1')).toMatchObject({ products: { core: 'c1' } })
+    // Listed in any order, smallest plan first.
+    expect(Object.keys((products('plus:p1,core:c1') as { products: object }).products)).toEqual([
+      'core',
+      'plus',
+    ])
   })
 })

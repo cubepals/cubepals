@@ -68,7 +68,7 @@ const without = (...names: string[]) =>
 const billing = {
   POLAR_ACCESS_TOKEN: 'polar_oat_stand-in-token',
   POLAR_WEBHOOK_SECRET: 'whsec_stand-in-webhook-secret',
-  POLAR_PRODUCTS: 'plus:product-id',
+  POLAR_PRODUCTS: 'core:core-id,plus:product-id',
 }
 
 describe('the values', () => {
@@ -227,7 +227,9 @@ describe('what Terraform gets', () => {
     expect(Object.keys(JSON.parse(env.TF_VAR_secrets ?? '{}'))).toEqual(
       expect.arrayContaining(['POLAR_ACCESS_TOKEN', 'POLAR_WEBHOOK_SECRET']),
     )
-    expect(JSON.parse(env.TF_VAR_operator_settings ?? '{}').POLAR_PRODUCTS).toBe('plus:product-id')
+    expect(JSON.parse(env.TF_VAR_operator_settings ?? '{}').POLAR_PRODUCTS).toBe(
+      'core:core-id,plus:product-id',
+    )
   })
 
   test('the dumps bucket is named once, and its token never reaches Terraform or the apps', () => {
