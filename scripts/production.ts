@@ -163,6 +163,8 @@ async function deployApp(
       : ['.', '--dockerfile', DOCKERFILES[app], '--remote-only', '--image-label', from.label]
   const config = ['--config', `infra/fly/${app}.toml`, '--app', `bly-prod-${app}`]
   if (app === 'edge' && machinesOf('bly-prod-edge', env).length > 0) {
+    // A region added since the last deploy gets its machine first, so the roll finds one in each.
+    placeEdge(env)
     // Each region on its own, after its players have left: a deploy never costs a join or a game.
     const image =
       'image' in from
@@ -196,6 +198,12 @@ function unchangedReason(app: FlyApp, env: NodeJS.ProcessEnv): string | null {
   const commit = deployOf(imagesOf(app, env)[0] ?? '')?.commit
   if (commit === undefined || spawnSync('git', ['cat-file', '-e', `${commit}^{commit}`]).status !== 0)
     return null
+  // Where the edge runs is private configuration, not a path in git: a region added since has no machine yet.
+  if (app === 'edge') {
+    const present = machinesOf('bly-prod-edge', env).map((m) => m.region)
+    if (edgePlacement('bly-prod-edge', edgeRegions(environment().edge_regions), present).length > 0)
+      return null
+  }
   const paths = git('diff', '--name-only', commit, 'HEAD').split('\n').filter(Boolean)
   if (changedFor(app, paths)) return null
   return `${app}: left running. Nothing it is built from or configured with changed since ${commit.slice(0, 8)}, which its running release was built from.`
