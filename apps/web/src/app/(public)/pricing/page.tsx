@@ -6,6 +6,7 @@ import type { PublicPlan } from '@blockly/contracts'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { dollars, EXTRA_HOUR_CENTS } from '../../../legal/figures'
+import { bedrockLive } from '../../../lib/bedrock'
 import { daysSaid, hoursAgainSaid, hoursSaid, publicPlans } from '../../../lib/plans'
 import { canonicalOrigin, pageMetadata } from '../../../lib/site'
 import { appSchema, JsonLd } from '../../../lib/structured-data'
@@ -135,8 +136,9 @@ export default async function PricingPage() {
           </Question>
         )}
         <Question which="bedrock" title="Bedrock or consoles?">
-          Not yet. Cubepals runs Minecraft: Java Edition. Bedrock support is coming soon, so friends on phones
-          and tablets can join too.
+          {bedrockLive()
+            ? 'Yes. Friends on Bedrock, on phones, tablets or Windows, join the same server as Java friends, with the same address. Xbox, PlayStation and Switch can’t add a server, so they can’t join. A server with mods can’t let them in yet.'
+            : 'Not yet. Cubepals runs Minecraft: Java Edition. Bedrock support is coming soon, so friends on phones and tablets can join too.'}
         </Question>
         <Question which="modpacks" title="Which modpacks?">
           Modrinth packs, from a search or a link. A pack from CurseForge or a launcher runs from its file:

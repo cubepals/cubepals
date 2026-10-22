@@ -21,12 +21,18 @@ describe("production's website", () => {
       canonicalOrigin: 'https://cubepals.com',
       deploymentId: 'prod',
       indexable: true,
+      bedrock: false,
       beta: true,
       proxySecret: 'stand-in-proxy-secret',
       posthogToken: example.settings.POSTHOG_TOKEN,
       sourceMaps: undefined,
       cloudflare: { token: 'stand-in-workers-token', accountId: '0123456789abcdef0123456789abcdef' },
     })
+  })
+
+  test('says Bedrock works only when the key that lets it in is there', () => {
+    expect(productionSite(values, example).bedrock).toBe(false)
+    expect(productionSite({ ...values, FLOODGATE_KEY: 'stand-in-key' }, example).bedrock).toBe(true)
   })
 
   test('stops saying it is in beta once the environment turns it off', () => {

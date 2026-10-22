@@ -14,6 +14,7 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { Presses } from '../app/(public)/presses'
 import type { PublicStatus } from '../app/(public)/status'
+import { bedrockLive } from '../lib/bedrock'
 import { publicPlans } from '../lib/plans'
 import { currentSession } from '../lib/session'
 import { canonicalOrigin } from '../lib/site'
@@ -48,6 +49,8 @@ export interface Landed {
   getPlan: (key: string) => string
   /** Cubepals' own Arcade as anyone can see it, or null unless it is known to be awake or asleep. */
   arcade: PublicStatus | null
+  /** Whether the pages say Bedrock friends can join (lib/bedrock.ts). */
+  bedrock: boolean
 }
 
 /** The Arcade's address on the public status endpoint. */
@@ -85,7 +88,7 @@ export async function landingOf(
     const account = `/account?get=${key}&reason=pricing`
     return signedIn ? account : withSource(`/sign-up?next=${encodeURIComponent(account)}`, source)
   }
-  return { signedIn, create, plans, getPlan, arcade }
+  return { signedIn, create, plans, getPlan, arcade, bedrock: bedrockLive() }
 }
 
 /** The frame the page's forms are set in. `film` marks the one the film is in. */

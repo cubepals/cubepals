@@ -48,7 +48,7 @@ import {
   WarmProofs,
 } from './proofs'
 
-export function FilmPage({ create, signedIn, plans, getPlan, arcade }: Landed) {
+export function FilmPage({ create, signedIn, plans, getPlan, arcade, bedrock }: Landed) {
   return (
     <>
       <Scroll />
@@ -75,7 +75,7 @@ export function FilmPage({ create, signedIn, plans, getPlan, arcade }: Landed) {
               aria-hidden
             />
           </div>
-          <Night create={create} plans={plans} arcade={arcade} />
+          <Night create={create} plans={plans} arcade={arcade} bedrock={bedrock} />
           <Knock />
           <Strata from="var(--night)" to="var(--slate)" />
           <Wake proof={<AddressProof plans={plans} bare />} />

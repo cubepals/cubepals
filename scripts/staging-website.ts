@@ -81,6 +81,8 @@ export function stagingSite(cloudflare: Cloudflare, proxySecret?: string): Worke
     canonicalOrigin: WEB,
     deploymentId: 'staging',
     indexable: false,
+    // Staging's control plane always has Bedrock (staging.ts gives it a FLOODGATE_KEY).
+    bedrock: true,
     proxySecret,
     cloudflare,
   }
