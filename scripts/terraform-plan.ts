@@ -38,7 +38,8 @@ function terraform(directory: string, args: string[], env: NodeJS.ProcessEnv): b
 }
 
 /** The names each as `value`: the secrets, and their versions. */
-const named = (names: string[], value: string) => JSON.stringify(Object.fromEntries(names.map((n) => [n, value])))
+const named = (names: string[], value: string) =>
+  JSON.stringify(Object.fromEntries(names.map((n) => [n, value])))
 
 function plan(environment: string): boolean {
   const directory = join(ROOT, 'infra/terraform/environments', environment)
@@ -67,7 +68,9 @@ function plan(environment: string): boolean {
         TF_VAR_secrets: named(names, 'stand-in'),
         TF_VAR_secret_versions: named(names, 'v1'),
         // Billing is all of Polar's values or none of them.
-        TF_VAR_operator_settings: names.includes('POLAR_ACCESS_TOKEN') ? '{"POLAR_PRODUCTS":"stand-in"}' : '{}',
+        TF_VAR_operator_settings: names.includes('POLAR_ACCESS_TOKEN')
+          ? '{"POLAR_PRODUCTS":"stand-in"}'
+          : '{}',
       }
       const planned = terraform(
         directory,
@@ -84,7 +87,9 @@ function plan(environment: string): boolean {
 
 if (import.meta.main) {
   const wanted = process.argv.slice(2)
-  const results = (wanted.length > 0 ? wanted : ENVIRONMENTS).map((environment) => [environment, plan(environment)] as const)
+  const results = (wanted.length > 0 ? wanted : ENVIRONMENTS).map(
+    (environment) => [environment, plan(environment)] as const,
+  )
   for (const [environment, ok] of results) console.log(`${environment}: ${ok ? 'plans' : 'FAILS to plan'}`)
   process.exit(results.every(([, ok]) => ok) ? 0 : 1)
 }
