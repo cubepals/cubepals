@@ -20,8 +20,13 @@
  * pixel thick, corners step by pixels, nothing is rounded.
  */
 
-/* Registered so that reading it gives pixels, which the camera needs (views.ts). */
+/* Registered so that reading them gives pixels, which the camera needs (views.ts). */
 @property --hero-x {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --hero-c {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
@@ -49,16 +54,30 @@
      where it always was; past that it comes in toward the words, a share of the room left over. */
   --hero-h: min(5.4vw, 10.5vh);
   --hero-w: max(min(46vw, 40rem), calc(var(--hero-h) * 6.4));
-  /* Where the words end, as far as they are written, and how tall the chunk is on the print. */
+  /* Where the words end, as far as they are written. */
   --hero-r: calc(var(--gutter) + var(--rail) + var(--hero-w) * 0.9);
-  --hero-c: calc(100svh * 0.8);
-  --hero-in: min(
-    25.4vw,
-    max(
-      0px,
-      min(calc(75.4vw - (var(--hero-r) * 0.6 + 40vw + var(--hero-c) * 0.1)), calc((100vw - 1536px) * 0.6))
-    )
+  /* How wide the chunk is. It is as tall as the screen's own 0.8 up to 1920px wide; past that it
+     grows with the width until the room left over is the same on either side of it (a margin of
+     6% of the width), so the camera holds fewer blocks and the print is scaled the same. */
+  --hero-c0: calc(100svh * 0.8);
+  --hero-c: calc(
+    var(--hero-c0) +
+    max(0px, min(100vw - var(--hero-r) - 12vw - var(--hero-c0), 100vw - 1920px))
   );
+  /* What is left between the words and the screen's right edge, and the share of it that goes
+     between the words and the chunk: 0.4, and half of it once the chunk has grown to fit. */
+  --hero-left: calc(100vw - var(--hero-r) - var(--hero-c));
+  --hero-gap: calc(var(--hero-left) * 0.4 + clamp(0px, (100vw - 1920px) * 0.2, var(--hero-left) * 0.1));
+  /* The chunk's middle as the camera holds it sits a little right of what is drawn of it (the
+     house leans left), so past 1920px it is held that much further right to even the margins. */
+  --hero-mid: calc(
+    var(--hero-r) +
+    var(--hero-gap) +
+    var(--hero-c) *
+    0.5 +
+    clamp(0px, (100vw - 1920px) * 0.1, var(--hero-c) * 0.035)
+  );
+  --hero-in: min(25.4vw, max(0px, min(calc(75.4vw - var(--hero-mid)), calc((100vw - 1536px) * 0.6))));
   /* Where across the screen the chunk's middle is held: the camera reads it (views.ts), and so
      does the print that stands in until the canvas has drawn. */
   --hero-x: calc(75.4vw - var(--hero-in));
@@ -357,22 +376,23 @@
 /* The hero's chunk as printed beforehand by the same print, 1440 by 900 at one and at two device
    pixels to a CSS pixel (public/imagery/landing-hero*.png, one pixel a dot), over the canvas until
    the canvas has drawn its first lit frame (`data-lit`, engine/gl.ts), and then dissolving into it.
-   The camera keeps the chunk as tall as a fixed share of the screen and its middle at the hero's
-   `side` across (`--hero-x`, which the camera reads too), so a still as tall as the screen and
-   placed by the same length lands where the live print does at any size. Only on a wide screen, where the canvas is the
-   whole screen; it scrolls away with the hero. */
+   The camera keeps the chunk as wide as `--hero-c` and its middle at `--hero-x` across, both of
+   which it reads from here, so a still scaled and placed by the same lengths lands where the live
+   print does at any size. Only on a wide screen, where the canvas is the whole screen; it scrolls
+   away with the hero. */
 .bl-first {
   display: none;
 }
 @media (min-width: 1024px) {
   .bl-first {
     position: absolute;
-    top: 0;
+    /* Scaled with the chunk, about the place the camera holds (drop 0.202, Film.tsx). */
+    top: calc(0.202 * (100svh - var(--hero-c) / 0.8));
     left: var(--hero-x);
     display: block;
     width: auto;
     max-width: none;
-    height: 100svh;
+    height: calc(var(--hero-c) / 0.8);
     translate: -75.4% 0;
     image-rendering: pixelated;
     pointer-events: none;

@@ -54,6 +54,12 @@ function heroSide(element: HTMLElement): number {
   return held > 0 && window.innerWidth > 0 ? held / window.innerWidth : 0.754
 }
 
+/** How much larger than a screen-tall chunk the first screen holds it: 1 until the width allows more. */
+function heroGrowth(element: HTMLElement): number {
+  const wide = Number.parseFloat(getComputedStyle(element).getPropertyValue('--hero-c'))
+  return wide > 0 ? Math.max(1, wide / (window.innerHeight * 0.8)) : 1
+}
+
 /** What a section looks at: its room's middle, or a place over the grass. */
 function focusOf(
   element: HTMLElement,
@@ -78,7 +84,9 @@ function spanOf(
   const tried = trying.get('span')
   if (key && tried) return Number(tried)
   const zoom = (element.dataset.zoom as Zoom | undefined) ?? 'wide'
-  return numberOr(element.dataset.span, lens[zoom].span) * (band && element.dataset.span ? 0.85 : 1)
+  const span = numberOr(element.dataset.span, lens[zoom].span) * (band && element.dataset.span ? 0.85 : 1)
+  // The first screen shows fewer blocks as the chunk grows to fill a wider screen.
+  return element.dataset.side === 'hero' ? span / heroGrowth(element) : span
 }
 
 /** The view a section asks for, read off its attributes. */
