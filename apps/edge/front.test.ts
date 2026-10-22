@@ -7,7 +7,7 @@
 import { afterEach, expect, test } from 'bun:test'
 import { type AddressInfo, connect, createServer, type Server } from 'node:net'
 import { proxyHeader, readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
-import { front, geyserDoor, readHandshake, readProxyLine } from './front.ts'
+import { front, geyserDoor, playersOnline, readHandshake, readProxyLine } from './front.ts'
 import { turnAway } from './hold.ts'
 import { Gate, type Limits } from './limits.ts'
 import { packet, statusRequest, string, varInt } from './notice.ts'
@@ -335,4 +335,20 @@ test('a server that never takes the connection is given up on once its connect t
   } finally {
     server.stop()
   }
+})
+
+test('counts the joins it proxies while they are open, and not pings', async () => {
+  const { port } = await frontDoor(ROOMY, true)
+  const before = playersOnline()
+  const line = encode('PROXY TCP4 203.0.113.7 10.0.0.1 51234 25565\r\n')
+  const joined = connect(port, '127.0.0.1')
+  joined.write(Uint8Array.from([...line, ...joinRequest('a.play.test')]))
+  const pinged = connect(port, '127.0.0.1')
+  pinged.write(Uint8Array.from([...line, ...statusRequest('a.play.test', 25565)]))
+  await Bun.sleep(100)
+  expect(playersOnline()).toBe(before + 1)
+  joined.destroy()
+  pinged.destroy()
+  await Bun.sleep(100)
+  expect(playersOnline()).toBe(before)
 })

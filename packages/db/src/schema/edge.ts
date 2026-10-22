@@ -26,6 +26,8 @@ export const edges = pgTable('edges', {
    * read began. Null until it has said so once.
    */
   syncedTo: ts('synced_to'),
+  /** When its agent last started, as it says; null for an edge that doesn't say. */
+  startedAt: ts('started_at'),
   /** When it last asked; an edge not seen for a while no longer counts. */
   seenAt: ts('seen_at').notNull(),
 })

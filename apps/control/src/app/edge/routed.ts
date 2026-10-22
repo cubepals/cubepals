@@ -21,7 +21,7 @@
  * With no edge counted, as where a deployment runs none, nothing waits. Not for what an edge does
  * with its routes, which is apps/edge's, or for building them (`service.ts`).
  */
-import { DAY_MS, SECOND_MS } from '@blockly/contracts/durations'
+import { DAY_MS, MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import { type Db, type Queryable, schema } from '@blockly/db'
 import { and, eq, inArray, isNull, lt, type SQL, sql } from 'drizzle-orm'
 import type { ServerStatus } from '../../domain/server/lifecycle.ts'
@@ -47,6 +47,12 @@ const EDGE_SEEN_MS = 2 * EDGE_SAID_EVERY_MS + 5 * SECOND_MS
  * waits on the edges to read as running.
  */
 export const EDGE_BEHIND_MS = 15 * SECOND_MS
+
+/**
+ * How long after its agent (re)starts an edge is left out of the `edge_behind` alert: a deploy
+ * restarts the machine, and it takes a while to hold the newest routes again.
+ */
+export const EDGE_RESTART_GRACE_MS = MINUTE_MS
 
 /** How long a row is kept for an edge gone quiet, as one replaced by a deploy. */
 const EDGE_KEPT_MS = DAY_MS
@@ -135,21 +141,33 @@ export async function markListed(q: Queryable, serverIds: readonly string[]): Pr
  * has said yet (null). Then each server every counted edge now holds, or that has waited as long
  * as any does, reads as running: its version moves, and its page is told.
  */
-export async function seen(db: Db, events: EventBus, edgeId: string, syncedTo: Date | null): Promise<void> {
-  await sawEdge(db, edgeId, syncedTo)
+export async function seen(
+  db: Db,
+  events: EventBus,
+  edgeId: string,
+  syncedTo: Date | null,
+  startedAt: Date | null = null,
+): Promise<void> {
+  await sawEdge(db, edgeId, syncedTo, startedAt)
   await forgetQuietEdges(db)
   await tellRouted(db, events)
 }
 
 /** Edge `edgeId` asked for its routes, holding every route of version `syncedTo`, or of none yet. */
-export async function sawEdge(db: Db, edgeId: string, syncedTo: Date | null): Promise<void> {
+export async function sawEdge(
+  db: Db,
+  edgeId: string,
+  syncedTo: Date | null,
+  startedAt: Date | null = null,
+): Promise<void> {
   await db
     .insert(edges)
-    .values({ edgeId, syncedTo, seenAt: sql`clock_timestamp()` })
+    .values({ edgeId, syncedTo, startedAt, seenAt: sql`clock_timestamp()` })
     .onConflictDoUpdate({
       target: edges.edgeId,
       set: {
         seenAt: sql`clock_timestamp()`,
+        ...(startedAt === null ? {} : { startedAt }),
         // A version only moves forward: an answer that arrives late says nothing new.
         ...(syncedTo === null ? {} : { syncedTo: sql`greatest(${edges.syncedTo}, ${syncedTo})` }),
       },
@@ -180,8 +198,16 @@ async function tellRouted(db: Db, events: EventBus): Promise<void> {
   })
 }
 
-/** Edges still asking for routes whose version has fallen too far behind to count. */
+/**
+ * Edges still asking for routes whose version has fallen too far behind to count, bar one whose
+ * agent started within `EDGE_RESTART_GRACE_MS`: it is catching up, not stuck.
+ */
 export async function edgesBehind(q: Queryable): Promise<string[]> {
-  const rows = await q.select({ edgeId: edges.edgeId }).from(edges).where(sql`${live} and not ${keepsUp}`)
+  const rows = await q
+    .select({ edgeId: edges.edgeId })
+    .from(edges)
+    .where(
+      sql`${live} and not ${keepsUp} and (${edges.startedAt} is null or ${edges.startedAt} <= ${ago(EDGE_RESTART_GRACE_MS)})`,
+    )
   return rows.map((r) => r.edgeId)
 }

@@ -77,6 +77,12 @@ export interface Timeouts {
   idleMs: number
 }
 
+/** Joins let through that are still open, across both doors: what a deploy waits on (`playersOnline`). */
+let joinsOpen = 0
+
+/** How many players' connections this edge proxies right now, a server list's pings left out. */
+export const playersOnline = (): number => joinsOpen
+
 /** How long a connection has to say where it is going, as mc-router allows. */
 const GREETING_MS = 5_000
 /** Far more than a PROXY header and a handshake ever take. */
@@ -271,6 +277,10 @@ class Arrival {
       return
     }
     this.#client.once('close', admitted)
+    if (handshake.joining) {
+      joinsOpen++
+      this.#client.once('close', () => joinsOpen--)
+    }
     let sent = this.#geyser ? this.#received : withoutForwarding(this.#received)
     if (!plain(handshake.hostname)) {
       try {

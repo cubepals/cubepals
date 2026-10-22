@@ -10,7 +10,14 @@
  * Not for applying a list, which the caller does (`router.ts`).
  */
 import type { EdgeRoutes } from '@blockly/contracts/edge'
-import { ROUTES_HELD_HEADER, ROUTES_VERSION_HEADER } from '../../packages/contracts/src/edge-poll.ts'
+import {
+  EDGE_STARTED_HEADER,
+  ROUTES_HELD_HEADER,
+  ROUTES_VERSION_HEADER,
+} from '../../packages/contracts/src/edge-poll.ts'
+
+/** When this agent started: the control plane gives a restarted edge time to catch up. */
+const STARTED_AT = Date.now()
 
 export class RoutesPoll {
   /** Asks for the routes with these headers. */
@@ -21,6 +28,8 @@ export class RoutesPoll {
   #etag: string | null = null
   /** The version of the newest list every route of which was held. */
   #version: string | null = null
+  /** When the control plane last answered that the held list is its newest, or sent one now held. */
+  #currentAt: number | null = null
 
   constructor(
     ask: (headers: Record<string, string>) => Promise<Response>,
@@ -33,15 +42,25 @@ export class RoutesPoll {
   /** Asks once, and applies the list if it changed; whether it did and is held now. */
   async sync(): Promise<boolean> {
     const response = await this.#ask({
+      [EDGE_STARTED_HEADER]: String(STARTED_AT),
       ...(this.#etag === null ? {} : { 'if-none-match': this.#etag }),
       ...(this.#version === null ? {} : { [ROUTES_HELD_HEADER]: this.#version }),
     })
-    if (response.status === 304) return false
+    if (response.status === 304) {
+      if (this.#version !== null) this.#currentAt = Date.now()
+      return false
+    }
     if (!response.ok) throw new Error(`routes answered ${response.status}`)
     if (!(await this.#take((await response.json()) as EdgeRoutes))) return false
     this.#etag = response.headers.get('etag')
     this.#version = response.headers.get(ROUTES_VERSION_HEADER)
+    this.#currentAt = Date.now()
     return true
+  }
+
+  /** Whether the list held was the control plane's newest when it was last asked, within `withinMs`. */
+  current(withinMs = 5_000): boolean {
+    return this.#currentAt !== null && Date.now() - this.#currentAt <= withinMs
   }
 
   /**

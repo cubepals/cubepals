@@ -19,7 +19,7 @@ import { asleepMessage } from './asleep.ts'
 import { type Bedrock, bedrockFromEnv, startBedrock } from './bedrock.ts'
 import { browserRedirect } from './browser-redirect.ts'
 import { takes, wrongGame } from './clients.ts'
-import { type FrontOptions, front, geyserDoor, pipe } from './front.ts'
+import { type FrontOptions, front, geyserDoor, pipe, playersOnline } from './front.ts'
 import { forServer, Unwrap } from './header.ts'
 import { Held, LOGIN_QUERIES, turnAway } from './hold.ts'
 import { JoinTrace } from './join-trace.ts'
@@ -699,6 +699,7 @@ let bedrock: Bedrock | null = null
 if (WEB_ORIGIN && PLAY_DOMAINS.length > 0)
   browserRedirect({
     bedrock: () => bedrock?.status() ?? null,
+    drain: () => ({ players: playersOnline(), routesCurrent: poll.current() }),
     port: Number(env('BROWSER_PORT', '8080')),
     domains: PLAY_DOMAINS,
     web: WEB_ORIGIN,

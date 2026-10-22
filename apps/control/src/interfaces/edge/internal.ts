@@ -13,6 +13,7 @@ import {
 } from '@blockly/contracts/edge'
 import {
   EDGE_ID_HEADER,
+  EDGE_STARTED_HEADER,
   NEWER_REASONS,
   ROUTES_HELD_HEADER,
   ROUTES_VERSION_HEADER,
@@ -46,7 +47,9 @@ export function createInternalApp(deps: { edge: EdgeService; joins: JoinService;
     const edgeId = c.req.header(EDGE_ID_HEADER)
     const said = Number(c.req.header(ROUTES_HELD_HEADER))
     const held = unchanged ? from : Number.isFinite(said) && said > 0 ? new Date(Math.min(said, +from)) : null
-    if (edgeId) await deps.edge.seen(edgeId, held, unrouted)
+    const started = Number(c.req.header(EDGE_STARTED_HEADER))
+    const startedAt = Number.isFinite(started) && started > 0 ? new Date(started) : null
+    if (edgeId) await deps.edge.seen(edgeId, held, unrouted, startedAt)
     c.header(ROUTES_VERSION_HEADER, String(+from))
     if (unchanged) return c.body(null, 304)
     c.header('ETag', etag)

@@ -16,6 +16,8 @@
 export const EDGE_ID_HEADER = 'x-edge-id'
 export const ROUTES_VERSION_HEADER = 'x-routes-version'
 export const ROUTES_HELD_HEADER = 'x-routes-held'
+/** When the edge's agent started, in milliseconds: a restarted edge is given time to catch up. */
+export const EDGE_STARTED_HEADER = 'x-edge-started'
 
 /**
  * The reasons a wake is denied for that an edge names in its wake request's `understands` once it

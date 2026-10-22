@@ -55,6 +55,13 @@ const APP_INPUTS = Object.fromEntries(
   ]),
 ) as Record<FlyApp, string[]>
 
+/**
+ * Whether a deploy has anything to put on `app`, given the paths that differ between the commit
+ * its running release was built from and this one: its image's sources, Dockerfile or Fly config.
+ */
+export const changedFor = (app: FlyApp, paths: readonly string[]): boolean =>
+  paths.some((path) => within(path, APP_INPUTS[app]))
+
 /** Whether a path is one of the inputs, or inside one that is a directory. */
 const within = (path: string, inputs: readonly string[]): boolean =>
   inputs.some((input) => path === input || path.startsWith(`${input}/`))

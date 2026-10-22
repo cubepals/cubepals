@@ -10,10 +10,17 @@
  * crossing to fra and back. Every edge pulls the same routes, and the control plane waits on each
  * of them before a server reads as running (apps/control/src/app/edge/routed.ts).
  *
+ * A deploy never costs a player a join or a game: the edge is restarted one region at a time, each
+ * after its players have left (up to `EDGE_DRAIN_LIMIT_MS`) and before the next only once it is
+ * well and holds the newest routes again. Fly's anycast sends a region's new joins to the other
+ * while it restarts. The flyctl calls are production-edge-deploy.ts's; this file decides.
+ *
  * Terraform counts the machines against the org's limit (`edge_regions` in the stack); this file
  * only says what flyctl does after a deploy, and whether fleet nodes on the internet let every edge
  * in. The commands are production.ts's to run.
  */
+
+import { MINUTE_MS, SECOND_MS } from '../packages/contracts/src/durations.ts'
 
 /** Where the edge runs when the environment doesn't say: infra/fly/edge.toml's primary region. */
 const DEFAULT_EDGE_REGIONS = ['fra'] as const
@@ -88,4 +95,103 @@ export function edgeSourceGaps(
         gaps.push(`${Address}, the edge’s egress address in ${region}, isn’t in fleet_hetzner.edge_sources`)
   }
   return gaps
+}
+
+/** The longest a restart waits for an edge's players to leave; past it, the ones still in are cut. */
+export const EDGE_DRAIN_LIMIT_MS = 10 * MINUTE_MS
+
+/** The longest a restarted edge has to be well and hold the newest routes before the roll stops. */
+export const EDGE_READY_LIMIT_MS = 5 * MINUTE_MS
+
+/** How often an edge is asked how many players it carries, and whether it is ready. */
+export const EDGE_ASK_EVERY_MS = 5 * SECOND_MS
+
+/** What a roll waits with: the clock, so a test needn't wait for real. */
+export interface Clock {
+  now: () => number
+  sleep: (ms: number) => Promise<void>
+}
+
+/**
+ * Waits until `players()` reads zero, for at most `limitMs`; the number still connected when it
+ * stopped waiting, which restarting cuts. `say` gets a line when the count changes.
+ */
+export async function waitForPlayers(
+  players: () => Promise<number>,
+  say: (line: string) => void,
+  clock: Clock,
+  limitMs = EDGE_DRAIN_LIMIT_MS,
+): Promise<number> {
+  const until = clock.now() + limitMs
+  let last: number | undefined
+  for (;;) {
+    const count = await players()
+    if (count !== last) say(count === 0 ? 'no players connected' : `waiting on ${count} connected`)
+    last = count
+    if (count === 0) return 0
+    if (clock.now() >= until) return count
+    await clock.sleep(EDGE_ASK_EVERY_MS)
+  }
+}
+
+/** Waits until `ready()` holds, for at most `limitMs`; whether it did. */
+export async function waitUntil(
+  ready: () => Promise<boolean>,
+  clock: Clock,
+  limitMs: number,
+): Promise<boolean> {
+  const until = clock.now() + limitMs
+  for (;;) {
+    if (await ready().catch(() => false)) return true
+    if (clock.now() >= until) return false
+    await clock.sleep(EDGE_ASK_EVERY_MS)
+  }
+}
+
+/** What restarting one region's machine takes, in the order it is done. */
+export interface RegionSteps {
+  /** Takes no new connections; the players in stay. */
+  cordon: (region: string) => Promise<void>
+  /** How many players are connected through the region's machine. */
+  players: (region: string) => Promise<number>
+  /** Puts the new release on the region's machine and waits until it passes Fly's checks. */
+  deploy: (region: string) => Promise<void>
+  /** Whether the region's machine answers and holds the control plane's newest routes. */
+  ready: (region: string) => Promise<boolean>
+}
+
+/**
+ * Restarts the edge one region at a time: the region is cordoned, its players waited on, then it
+ * is deployed and waited on until ready, and only then the next. A region that doesn't come back
+ * ready stops the roll with the others as they were. Returns how many players were cut.
+ */
+export async function rollEdge(
+  regions: readonly string[],
+  steps: RegionSteps,
+  say: (line: string) => void,
+  clock: Clock,
+): Promise<number> {
+  let cut = 0
+  for (const region of regions) {
+    say(`${region}: taking no new joins, waiting for its players to leave`)
+    await steps.cordon(region)
+    const left = await waitForPlayers(
+      () => steps.players(region),
+      (line) => say(`${region}: ${line}`),
+      clock,
+    )
+    if (left > 0)
+      say(
+        `${region}: ${left} still connected after ${EDGE_DRAIN_LIMIT_MS / MINUTE_MS} min; restarting cuts them`,
+      )
+    cut += left
+    say(`${region}: deploying`)
+    await steps.deploy(region)
+    if (!(await waitUntil(() => steps.ready(region), clock, EDGE_READY_LIMIT_MS)))
+      throw new Error(
+        `The edge in ${region} isn't well and up to date with the routes; the other regions are as they were.`,
+      )
+    say(`${region}: well and up to date with the routes`)
+  }
+  return cut
 }

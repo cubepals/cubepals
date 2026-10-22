@@ -171,3 +171,18 @@ test('the edge’s health is Java’s alone: Bedrock down, or never started, nev
     await server.stop(true)
   }
 })
+
+test('says how many players are connected and whether the routes are the newest, apart from health', async () => {
+  const state = { players: 3, routesCurrent: false }
+  const server = browserRedirect({ ...PAGES, port: 0, hostname: '127.0.0.1', drain: () => ({ ...state }) })
+  try {
+    const at = (path: string) => fetch(`http://127.0.0.1:${server.port}${path}`, { redirect: 'manual' })
+    expect(await (await at('/_health/drain')).json()).toEqual({ players: 3, routesCurrent: false })
+    state.players = 0
+    state.routesCurrent = true
+    expect(await (await at('/_health/drain')).json()).toEqual({ players: 0, routesCurrent: true })
+    expect((await at('/_health')).status).toBe(204)
+  } finally {
+    await server.stop(true)
+  }
+})

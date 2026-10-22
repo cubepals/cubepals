@@ -7,7 +7,19 @@ import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'smol-toml'
-import { edgePlacement, edgeRegions, edgeSourceGaps } from './production-edge.ts'
+import { MINUTE_MS } from '../packages/contracts/src/durations.ts'
+import {
+  type Clock,
+  EDGE_ASK_EVERY_MS,
+  EDGE_DRAIN_LIMIT_MS,
+  EDGE_READY_LIMIT_MS,
+  edgePlacement,
+  edgeRegions,
+  edgeSourceGaps,
+  type RegionSteps,
+  rollEdge,
+  waitForPlayers,
+} from './production-edge.ts'
 
 const APP = 'bly-prod-edge'
 
@@ -125,5 +137,96 @@ describe('the edge’s service', () => {
       { port: 80, handlers: ['http'] },
       { port: 443, handlers: ['tls', 'http'] },
     ])
+  })
+})
+
+describe('restarting the edge without cutting a player', () => {
+  /** A clock that only moves when slept on, and a log of what was done in what order. */
+  const world = () => {
+    let now = 0
+    const log: string[] = []
+    const clock: Clock = {
+      now: () => now,
+      sleep: async (ms) => {
+        now += ms
+      },
+    }
+    return { clock, log, said: (line: string) => log.push(line), time: () => now }
+  }
+
+  test('waits for the players to leave, and restarts as soon as they have', async () => {
+    const w = world()
+    const counts = [3, 2, 0]
+    const left = await waitForPlayers(async () => counts.shift() ?? 0, w.said, w.clock)
+    expect(left).toBe(0)
+    expect(w.time()).toBe(2 * EDGE_ASK_EVERY_MS)
+    expect(w.log).toEqual(['waiting on 3 connected', 'waiting on 2 connected', 'no players connected'])
+  })
+
+  test('goes ahead at the limit, and says how many it cuts', async () => {
+    const w = world()
+    const left = await waitForPlayers(async () => 4, w.said, w.clock)
+    expect(left).toBe(4)
+    expect(w.time()).toBeGreaterThanOrEqual(EDGE_DRAIN_LIMIT_MS)
+    expect(w.time()).toBeLessThan(EDGE_DRAIN_LIMIT_MS + EDGE_ASK_EVERY_MS)
+    expect(w.log).toEqual(['waiting on 4 connected'])
+  })
+
+  test('the limit is ten minutes', () => {
+    expect(EDGE_DRAIN_LIMIT_MS).toBe(10 * MINUTE_MS)
+  })
+
+  const steps = (log: string[], over: Partial<RegionSteps> = {}): RegionSteps => ({
+    cordon: async (r) => void log.push(`cordon ${r}`),
+    players: async () => 0,
+    deploy: async (r) => void log.push(`deploy ${r}`),
+    ready: async (r) => {
+      log.push(`ready ${r}`)
+      return true
+    },
+    ...over,
+  })
+
+  test('one region at a time: the next is not touched until the last is ready', async () => {
+    const w = world()
+    const cut = await rollEdge(['fra', 'iad'], steps(w.log), () => {}, w.clock)
+    expect(cut).toBe(0)
+    expect(w.log).toEqual(['cordon fra', 'deploy fra', 'ready fra', 'cordon iad', 'deploy iad', 'ready iad'])
+  })
+
+  test('a region that is not up to date with the routes yet is waited on', async () => {
+    const w = world()
+    let asks = 0
+    const cut = await rollEdge(
+      ['fra', 'iad'],
+      steps(w.log, { ready: async (r) => (r === 'fra' ? ++asks > 3 : true) }),
+      () => {},
+      w.clock,
+    )
+    expect(cut).toBe(0)
+    expect(asks).toBe(4)
+    expect(w.log.indexOf('cordon iad')).toBeGreaterThan(w.log.indexOf('deploy fra'))
+  })
+
+  test('a region that never comes back ready stops the roll before the next', async () => {
+    const w = world()
+    await expect(
+      rollEdge(['fra', 'iad'], steps(w.log, { ready: async () => false }), () => {}, w.clock),
+    ).rejects.toThrow('fra')
+    expect(w.log).toEqual(['cordon fra', 'deploy fra'])
+    expect(w.time()).toBeGreaterThanOrEqual(EDGE_READY_LIMIT_MS)
+  })
+
+  test('counts the players cut across regions', async () => {
+    const w = world()
+    const said: string[] = []
+    const cut = await rollEdge(
+      ['fra', 'iad'],
+      steps(w.log, { players: async (r) => (r === 'fra' ? 2 : 0) }),
+      (line) => said.push(line),
+      w.clock,
+    )
+    expect(cut).toBe(2)
+    expect(said).toContain('fra: 2 still connected after 10 min; restarting cuts them')
   })
 })

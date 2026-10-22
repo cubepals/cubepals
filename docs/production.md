@@ -105,7 +105,13 @@ bun scripts/production.ts apply
 3. Terraform shows the plan and asks before it changes anything. Answer `yes`.
    Then it gives the Database dump workflow its secrets ([below](#database-dumps)).
 4. It deploys `bly-prod-control` (its release runs the migrations), then `bly-prod-realtime` (one
-   machine, always), then `bly-prod-edge`, all from this checkout.
+   machine, always), then `bly-prod-edge`, all from this checkout. An app whose image sources,
+   Dockerfile and Fly config are the same as in the commit its running release was built from is
+   left running, and `apply` says so. The edge changes one region at a time: the region takes no
+   new joins (Fly's anycast sends them to the other), `apply` waits up to ten minutes for its
+   connected players to leave, then deploys it and waits until it is well and holds the newest
+   routes before it goes on to the next. Players still connected at the limit are cut, and the
+   count is printed.
 5. It pushes the commit as the `production` branch and deploys the website's build: live when it
    returns.
 

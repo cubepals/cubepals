@@ -4,7 +4,7 @@
 
 /** Which paths reach production by which road: the website alone, or a hotfix's Fly apps. */
 import { describe, expect, test } from 'bun:test'
-import { appsFor, flyInputs, reachesWebsite, terraformIn } from './production-web.ts'
+import { appsFor, changedFor, flyInputs, reachesWebsite, terraformIn } from './production-web.ts'
 
 describe('what may go to production as the website alone', () => {
   test('the website, docs, scripts and Terraform are not what the Fly apps are built from', () => {
@@ -64,5 +64,14 @@ describe('what a hotfix deploys', () => {
     expect(terraformIn(['infra/terraform/modules/dns/main.tf', 'apps/web/x.ts'])).toEqual([
       'infra/terraform/modules/dns/main.tf',
     ])
+  })
+})
+
+describe('whether an app has anything to deploy', () => {
+  test('the edge only when its sources, Dockerfile or Fly config changed', () => {
+    expect(changedFor('edge', ['apps/web/src/page.tsx', 'docs/production.md'])).toBe(false)
+    expect(changedFor('edge', ['apps/edge/front.ts'])).toBe(true)
+    expect(changedFor('edge', ['infra/fly/edge.toml'])).toBe(true)
+    expect(changedFor('control', ['infra/fly/edge.toml'])).toBe(false)
   })
 })

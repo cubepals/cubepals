@@ -132,6 +132,8 @@ export class EdgeService {
   readonly #changes: ChangeSignal | null
   /** When each edge's word was last written, by this process. */
   readonly #saidAt = new Map<string, number>()
+  /** When each edge's agent last said it started, to write a restart at once. */
+  readonly #startedOf = new Map<string, number>()
   /** When this process last let go of edges gone quiet. */
   #forgotAt = 0
   /** Starts joins asked for that are under way, by server: joins that arrive together share one. */
@@ -288,18 +290,26 @@ export class EdgeService {
    * Edge `edgeId` asked for its routes, holding the list read from `syncedTo` on, or a list it
    * would not be handed now (null). While no server waits on the edges (`unrouted` false), its
    * word is written only every `EDGE_SAID_EVERY_MS`, which keeps it counted: nothing reads its
-   * version but a server that waits.
+   * version but a server that waits. `startedAt` is when its agent started, if it says.
    */
-  async seen(edgeId: string, syncedTo: Date | null, unrouted = true): Promise<void> {
+  async seen(
+    edgeId: string,
+    syncedTo: Date | null,
+    unrouted = true,
+    startedAt: Date | null = null,
+  ): Promise<void> {
     const now = Date.now()
-    if (unrouted) {
+    // A restart is written at once, however lately the edge's word was: it is what the alert waits on.
+    const restarted = startedAt !== null && this.#startedOf.get(edgeId) !== +startedAt
+    if (startedAt !== null) this.#startedOf.set(edgeId, +startedAt)
+    if (unrouted || restarted) {
       this.#saidAt.set(edgeId, now)
-      await seen(this.#db, this.#events, edgeId, syncedTo)
+      await seen(this.#db, this.#events, edgeId, syncedTo, startedAt)
       return
     }
     if (now - (this.#saidAt.get(edgeId) ?? 0) < EDGE_SAID_EVERY_MS) return
     this.#saidAt.set(edgeId, now)
-    await sawEdge(this.#db, edgeId, syncedTo)
+    await sawEdge(this.#db, edgeId, syncedTo, startedAt)
     if (now - this.#forgotAt < HOUR_MS) return
     this.#forgotAt = now
     await forgetQuietEdges(this.#db)
