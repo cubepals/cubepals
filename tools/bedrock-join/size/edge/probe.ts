@@ -58,9 +58,9 @@ setInterval(() => {
 }, EVERY_MS)
 
 const NAMES: [string, string][] = [
-  ['agent', 'edge-agent'],
+  ['agent', 'apps/edge/agent.ts'],
   ['mc-router', 'mc-router'],
-  ['geyser', 'Geyser-Standalone'],
+  ['geyser', 'geyser.jar'],
   ['relay', 'probe.ts'],
 ]
 

@@ -88,51 +88,9 @@ interface Machine {
   id: string
   name: string
   state: string
+  config: { image: string }
 }
 const machines = (app: string): Machine[] => JSON.parse(fly(['machines', 'list', '-a', app, '--json']))
-
-/** The edge's Dockerfile with the test relay and sampler added. */
-function edgeDockerfile(): string {
-  const base = readFileSync(join(ROOT, 'apps/edge/Dockerfile'), 'utf8')
-  const last = base.lastIndexOf('FROM mirror.gcr.io/library/debian')
-  const final = base.slice(last).replace(/^(FROM .*)$/m, '$1 AS edge')
-  return `${base.slice(0, last)}${final}
-FROM edge
-USER root
-COPY --from=agent /usr/local/bin/bun /usr/local/bin/bun
-COPY tools/bedrock-join/size/edge/ /size/
-USER 65532
-ENTRYPOINT ["/size/start.sh"]
-`
-}
-
-/** The edge's fly.toml for the test: this checkout's, under another name, sized as asked. */
-function edgeConfig(app: string, dockerfile: string, size: string, memory: string, heap: string): string {
-  const original = readFileSync(join(ROOT, 'infra/fly/edge.toml'), 'utf8')
-  const test = [
-    'BEDROCK_VALIDATE_LOGIN = "false"',
-    `GEYSER_HEAP = "${heap}"`,
-    'BEDROCK_OPENS_PER_SECOND = "1000"',
-    'BEDROCK_OPENS_BURST = "1000"',
-    'BEDROCK_PONGS_PER_SECOND = "1000"',
-    'BEDROCK_PONGS_BURST = "1000"',
-    'ADDRESS_CONNECTIONS_PER_SECOND = "1000"',
-    'ADDRESS_CONNECTIONS_BURST = "1000"',
-    'ADDRESS_GREETING = "1000"',
-  ]
-    .map((line) => `  ${line}`)
-    .join('\n')
-  return `${original
-    .replace(/^app = .*$/m, `app = "${app}"`)
-    .replace(/^primary_region = .*$/m, `primary_region = "${REGION}"`)
-    .replace(/dockerfile = .*$/m, `dockerfile = "${dockerfile}"`)
-    .replace('[env]\n', `[env]\n${test}\n`)
-    .replace(/\[\[vm\]\][\s\S]*$/, '')}
-[[vm]]
-  size = "${size}"
-  memory = "${memory}mb"
-`
-}
 
 function tempDir(n: string): string {
   const dir = join(tmpdir(), `bedrock-size-${n}`)
@@ -160,22 +118,58 @@ async function up(n: string, size: string, memory: string) {
     if (!machines(load).some((m) => m.name === name))
       fly(['machine', 'clone', server.id, '-a', load, '--name', name, '--override-cmd', 'client', '--detach'])
   fly(['ips', 'allocate-v4', '--shared', '-a', edge, '-y'])
-  const key = randomBytes(16).toString('base64')
-  fly(
-    ['secrets', 'import', '-a', edge, '--stage'],
-    `FLOODGATE_KEY=${key}\nEDGE_TOKEN=${randomBytes(12).toString('hex')}\nCONTROL_URL=http://${server.id}.vm.${load}.internal:4001\n`,
-  )
-  const dockerfile = join(dir, 'Dockerfile.edge')
-  writeFileSync(dockerfile, edgeDockerfile())
-  const toml = join(dir, 'edge.toml')
-  writeFileSync(toml, edgeConfig(edge, dockerfile, size, memory, Number(memory) >= 2048 ? '768m' : '512m'))
-  deploy(edge, context, toml, dockerfile)
+  const commit = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: ROOT }).stdout.toString().trim()
+  const environment = {
+    COMMIT: commit,
+    MC_ROUTER_VERSION:
+      /mc-router:(\d+\.\d+\.\d+)/.exec(readFileSync(join(ROOT, 'apps/edge/Dockerfile'), 'utf8'))?.[1] ?? '',
+    CONTROL_URL: `http://${server.id}.vm.${load}.internal:4001`,
+    EDGE_TOKEN: randomBytes(12).toString('hex'),
+    FLOODGATE_KEY: randomBytes(16).toString('base64'),
+    PROXY_PROTOCOL: '1',
+    BEDROCK_VALIDATE_LOGIN: 'false',
+    GEYSER_HEAP: Number(memory) >= 2048 ? '768m' : '512m',
+    BEDROCK_OPENS_PER_SECOND: '1000',
+    BEDROCK_OPENS_BURST: '1000',
+    BEDROCK_PONGS_PER_SECOND: '1000',
+    BEDROCK_PONGS_BURST: '1000',
+    ADDRESS_CONNECTIONS_PER_SECOND: '1000',
+    ADDRESS_CONNECTIONS_BURST: '1000',
+    ADDRESS_GREETING: '1000',
+  }
+  // The pushed commit is fetched on the machine and run from source: a test edge has no image.
+  const start = `mkdir -p /edge/repo && cd /edge && curl -fsSL https://codeload.github.com/cubepals/cubepals/tar.gz/$COMMIT | tar xz -C repo --strip-components=1 && exec sh repo/tools/bedrock-join/size/edge/boot.sh`
+  fly([
+    'machine',
+    'run',
+    server.config.image,
+    '-a',
+    edge,
+    '--name',
+    'edge',
+    '--region',
+    REGION,
+    '--vm-size',
+    size,
+    '--vm-memory',
+    memory,
+    '--port',
+    '25565:25565/tcp:proxy_proto',
+    ...Object.entries(environment).flatMap(([name, value]) => ['--env', `${name}=${value}`]),
+    '--entrypoint',
+    '/bin/sh',
+    '--',
+    '-c',
+    start,
+  ])
   process.stdout.write(`up: ${edge} (${size} ${memory} MB), load app ${load}\n`)
 }
 
 function resize(n: string, size: string, memory: string) {
   const { edge } = names(n)
-  fly(['scale', 'vm', size, '--vm-memory', memory, '-a', edge, '--yes'])
+  const machine = machines(edge)[0]
+  if (machine === undefined) throw new Error('run `up` first')
+  fly(['machine', 'update', machine.id, '-a', edge, '--vm-size', size, '--vm-memory', memory, '--yes'])
   process.stdout.write(`resized ${edge} to ${size} ${memory} MB\n`)
 }
 
