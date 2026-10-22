@@ -171,7 +171,7 @@ async function deployApp(
   if (app === 'edge' && machinesOf('bly-prod-edge', env).length > 0) {
     // A region added since the last deploy gets its machine first, so the roll finds one in each.
     placeEdge(env)
-    // Each region on its own, after its players have left: a deploy never costs a join or a game.
+    // Each region on its own, after its players have left or the limit passes (production-edge.ts).
     const image =
       'image' in from
         ? from.image

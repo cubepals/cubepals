@@ -19,7 +19,7 @@ import { asleepMessage } from './asleep.ts'
 import { type Bedrock, bedrockFromEnv, startBedrock } from './bedrock.ts'
 import { browserRedirect } from './browser-redirect.ts'
 import { takes, wrongGame } from './clients.ts'
-import { serveDrain } from './drain.ts'
+import { drainOf, serveDrain } from './drain.ts'
 import { type FrontOptions, front, geyserDoor, pipe, playersOnline } from './front.ts'
 import { forServer, Unwrap } from './header.ts'
 import { Held, LOGIN_QUERIES, turnAway } from './hold.ts'
@@ -697,6 +697,7 @@ const WEB_ORIGIN = process.env.WEB_CANONICAL_ORIGIN?.replace(/\/$/, '')
 const PLAY_DOMAINS = (process.env.PLAY_DOMAINS ?? '').split(',').flatMap((d) => d.trim() || [])
 /** Bedrock players' Geyser, once started (below); its status is its own, apart from the edge's health. */
 let bedrock: Bedrock | null = null
+const bedrockSettings = bedrockFromEnv(process.env, 0)
 if (WEB_ORIGIN && PLAY_DOMAINS.length > 0)
   browserRedirect({
     bedrock: () => bedrock?.status() ?? null,
@@ -710,7 +711,7 @@ if (WEB_ORIGIN && PLAY_DOMAINS.length > 0)
 else console.error('WEB_CANONICAL_ORIGIN or PLAY_DOMAINS is unset; browsers aren’t redirected')
 
 // Asked by a deploy, on the private network only (drain.ts).
-serveDrain(() => ({ players: playersOnline(), routesCurrent: poll.current() }))
+serveDrain(() => drainOf(playersOnline(), poll.current(), bedrockSettings !== null, bedrock?.status().bound))
 
 // ─── Supervise mc-router ────────────────────────────────────────────────────────────────────
 
@@ -789,7 +790,6 @@ void pollRoutes()
 // it starts once that listens. A Bedrock failure never takes Java players with it: the edge goes
 // on without, and its health says so.
 // Geyser dials a door of its own, which alone lets forwarded identity through (`front.ts`).
-const bedrockSettings = bedrockFromEnv(process.env, 0)
 if (bedrockSettings === null) console.error('FLOODGATE_KEY is unset; Bedrock players aren’t taken')
 else
   bedrock = await geyserDoor(door)

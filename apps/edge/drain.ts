@@ -15,6 +15,8 @@
 export interface Drain {
   players: number
   routesCurrent: boolean
+  /** Whether Bedrock players are taken here ('none' where they aren't) and Geyser has bound its port. */
+  bedrock: 'none' | 'bound' | 'unbound'
 }
 
 /** Listens on `port` of `hostname` and answers every request with `drain()` as JSON. */
@@ -45,3 +47,10 @@ export function serveDrain(drain: () => Drain): void {
     console.error('the drain status isn’t served; a deploy won’t wait for this edge’s players', error)
   }
 }
+
+/** What the edge says: Bedrock is 'unbound' while it is taken here (`taken`) and Geyser hasn't bound its port. */
+export const drainOf = (players: number, routesCurrent: boolean, taken: boolean, bound?: boolean): Drain => ({
+  players,
+  routesCurrent,
+  bedrock: !taken ? 'none' : bound ? 'bound' : 'unbound',
+})

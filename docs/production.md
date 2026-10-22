@@ -111,7 +111,8 @@ bun scripts/production.ts apply
    `edge_regions` too): `apply` waits up to ten minutes for a region's connected players to leave
    while it keeps serving, deploys exactly that region's machines, and waits until they are well
    and hold the newest routes before it goes on to the next. Players still connected at the limit
-   are cut, and the count is printed. `EDGE_CORDON=1` also cordons the region first while another
+   are cut and counted; a region that couldn't count its players is named, and no "none was cut"
+   is printed for it. A region is ready once Geyser has bound its port where Bedrock is taken. `EDGE_CORDON=1` also cordons the region first while another
    is ready, so no new join arrives while it drains; it is off because on staging a cordoned
    region made the other region fail joins.
 5. It pushes the commit as the `production` branch and deploys the website's build: live when it

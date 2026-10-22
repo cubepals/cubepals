@@ -4,13 +4,17 @@
 
 /**
  * The flyctl calls that restart an edge app one region at a time (production-edge.ts decides the
- * order and the waits): the image built once, then each region's machine cordoned, drained of
- * players through the edge's own count (`/`, apps/edge/browser-redirect.ts), given
- * the image and waited on. Not for placing machines, which is production.ts's.
+ * order and the waits): the image built once, then each region's machines asked how many players
+ * they carry and whether they are ready, through the edge's drain port (apps/edge/drain.ts, over
+ * `fly proxy`), optionally cordoned, and given the image by id. Not for placing machines, which is
+ * production.ts's.
  */
 import { spawn, spawnSync } from 'node:child_process'
+import type { AddressInfo } from 'node:net'
+import { createServer } from 'node:net'
 import {
   type Clock,
+  type DrainState,
   deployMachines,
   isReady,
   type Machine,
@@ -23,9 +27,6 @@ import {
 /** Where the agent answers a deploy, on the private network only (apps/edge/drain.ts). */
 const DRAIN_PORT = 8091
 
-/** The local port `fly proxy` listens on, for the machine being asked. */
-const PROXY_PORT = 18080
-
 const clock: Clock = { now: Date.now, sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)) }
 
 /** The app's machines, one in each region it runs in; none for an app never deployed. */
@@ -35,21 +36,31 @@ export function machinesOf(app: string, env: NodeJS.ProcessEnv): Machine[] {
   return JSON.parse(listed.stdout || '[]') as Machine[]
 }
 
+/** A free local port, for the proxy of one question. */
+async function freePort(): Promise<number> {
+  const server = createServer()
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const { port } = server.address() as AddressInfo
+  await new Promise((resolve) => server.close(resolve))
+  return port
+}
+
 /** Asks one machine's agent what a deploy waits on, through a proxy that lives for the call. */
-async function drainState(app: string, id: string, env: NodeJS.ProcessEnv) {
+async function drainState(app: string, id: string, env: NodeJS.ProcessEnv): Promise<DrainState> {
+  const port = await freePort()
   const target = `${id}.vm.${app}.internal`
-  const proxy = spawn('fly', ['proxy', `${PROXY_PORT}:${DRAIN_PORT}`, target, '--app', app], {
+  const proxy = spawn('fly', ['proxy', `${port}:${DRAIN_PORT}`, target, '--app', app], {
     env,
     stdio: 'ignore',
   })
   try {
     for (let attempt = 0; ; attempt++) {
       try {
-        const answer = await fetch(`http://127.0.0.1:${PROXY_PORT}/`, {
+        const answer = await fetch(`http://127.0.0.1:${port}/`, {
           signal: AbortSignal.timeout(5_000),
           redirect: 'manual',
         })
-        if (answer.ok) return (await answer.json()) as { players: number; routesCurrent: boolean }
+        if (answer.ok) return (await answer.json()) as DrainState
         throw new Error(`answered ${answer.status}`)
       } catch (error) {
         if (attempt >= 15) throw error
@@ -57,10 +68,12 @@ async function drainState(app: string, id: string, env: NodeJS.ProcessEnv) {
       }
     }
   } finally {
-    // Gone before the next question reuses the port.
-    const exited = new Promise((resolve) => proxy.once('exit', resolve))
-    proxy.kill()
-    await exited
+    // A proxy that already exited (its port taken, say) never emits 'exit' again.
+    if (proxy.exitCode === null && proxy.signalCode === null) {
+      const exited = new Promise((resolve) => proxy.once('exit', resolve))
+      proxy.kill()
+      await exited
+    }
   }
 }
 
@@ -92,7 +105,7 @@ export function buildEdgeImage(
 
 /**
  * Puts `image` on the app's machines one region at a time, in the order of `regions`; how many
- * players were cut. A machine each region, as the edge runs (production-edge.ts).
+ * players were cut. Every machine in each of `regions` is asked and deployed (production-edge.ts).
  */
 export async function rollEdgeApp(
   app: string,

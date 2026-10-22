@@ -10,10 +10,12 @@
  * crossing to fra and back. Every edge pulls the same routes, and the control plane waits on each
  * of them before a server reads as running (apps/control/src/app/edge/routed.ts).
  *
- * A deploy never costs a player a join or a game: the edge is restarted one region at a time, each
- * after its players have left (up to `EDGE_DRAIN_LIMIT_MS`) and before the next only once it is
- * well and holds the newest routes again. Fly's anycast sends a region's new joins to the other
- * while it restarts. The flyctl calls are production-edge-deploy.ts's; this file decides.
+ * A deploy restarts the edge one region at a time, every machine it has: each region's players
+ * are waited on (up to `EDGE_DRAIN_LIMIT_MS`; those still connected then are cut, and counted),
+ * its machines are deployed, and the next region waits until they are well, hold the newest routes
+ * and, where Bedrock is taken, have Geyser bound. While a region restarts, Fly's anycast sends its
+ * joins to the others; a few are lost as its machine stops (23 of 336 from one probe on staging).
+ * The flyctl calls are production-edge-deploy.ts's; this file decides.
  *
  * Terraform counts the machines against the org's limit (`edge_regions` in the stack); this file
  * only says what flyctl does after a deploy, and whether fleet nodes on the internet let every edge
@@ -106,50 +108,41 @@ export const EDGE_READY_LIMIT_MS = 5 * MINUTE_MS
 /** How often an edge is asked how many players it carries, and whether it is ready. */
 export const EDGE_ASK_EVERY_MS = 5 * SECOND_MS
 
-/** How many reads in a row may say nothing, once the edge has counted, before it is given up on. */
-const SILENT_READS = 3
-
-/** What a roll waits with: the clock, so a test needn't wait for real. */
-export interface Clock {
-  now: () => number
-  sleep: (ms: number) => Promise<void>
+/** How a wait for players ended. */
+export interface Wait {
+  /** Players still connected at the last count read; null where the edge never counted. */
+  left: number | null
+  /** Queries for the count that failed along the way. */
+  failed: number
+  /** Whether the last query failed, so `left` may be out of date or absent. */
+  unsure: boolean
 }
 
 /**
- * Waits until `players()` reads zero, for at most `limitMs`; the number still connected when it
- * stopped waiting, which restarting cuts, or null when the edge can't count (nothing to wait on).
- * `say` gets a line when the count changes.
+ * Waits until `players()` reads zero, for at most `limitMs`. A query that fails is asked again at
+ * the next turn: once an edge has counted, only the limit ends the wait, with the last count it
+ * gave. An edge whose first query fails can't count at all (one from before the drain port), and
+ * nothing is waited for. `say` gets a line when the count changes.
  */
 export async function waitForPlayers(
   players: () => Promise<number | null>,
   say: (line: string) => void,
   clock: Clock,
   limitMs = EDGE_DRAIN_LIMIT_MS,
-): Promise<number | null> {
+): Promise<Wait> {
   const until = clock.now() + limitMs
-  const seen: { last?: number; silent: number } = { silent: 0 }
+  let last: number | null = null
+  let failed = 0
   for (;;) {
-    const read = readOf(await players(), seen, say)
-    if (read === null || read === 0) return read
-    if (read !== 'again' && clock.now() >= until) return read
+    const count = await players()
+    if (count !== null && count !== last)
+      say(count === 0 ? 'no players connected' : `waiting on ${count} connected`)
+    if (count === null) failed++
+    last = count ?? last
+    const over = count === 0 || (count === null && last === null) || clock.now() >= until
+    if (over) return { left: last, failed, unsure: count === null }
     await clock.sleep(EDGE_ASK_EVERY_MS)
   }
-}
-
-/**
- * What one read of the count means: the count, null when the edge can't count (a first read that
- * says nothing, or `SILENT_READS` in a row after it had), or 'again' for a hiccup.
- */
-function readOf(
-  count: number | null,
-  seen: { last?: number; silent: number },
-  say: (line: string) => void,
-): number | null | 'again' {
-  seen.silent = count === null ? seen.silent + 1 : 0
-  if (count === null) return seen.last === undefined || seen.silent >= SILENT_READS ? null : 'again'
-  if (count !== seen.last) say(count === 0 ? 'no players connected' : `waiting on ${count} connected`)
-  seen.last = count
-  return count
 }
 
 /** Waits until `ready()` holds, for at most `limitMs`; whether it did. */
@@ -207,19 +200,18 @@ export async function rollEdge(
     let restarted = false
     try {
       if (cordoned) await steps.cordon(region)
-      const left = await restartRegion(region, cordoned, steps, (line) => say(`${region}: ${line}`), clock)
+      const wait = await restartRegion(region, cordoned, steps, (line) => say(`${region}: ${line}`), clock)
       restarted = true
-      if (left === null) uncounted.push(region)
-      else cut += left
+      if (wait.unsure) uncounted.push(region)
+      cut += wait.left ?? 0
     } finally {
       // Taking joins again is never skipped. Its failure ends the roll; where another error already
       // does, that one is thrown and this one is said, since the region stays cordoned.
       if (cordoned)
         await uncordonAgain(region, steps, clock).catch((error) => {
-          if (restarted) throw error
-          say(
-            `${region}: is still cordoned and takes no joins: ${error instanceof Error ? error.message : error}`,
-          )
+          const stuck = `${region}: is still cordoned and takes no joins: ${error instanceof Error ? error.message : error}`
+          if (restarted) throw new Error(stuck)
+          say(stuck)
         })
     }
   }
@@ -238,18 +230,20 @@ async function uncordonAgain(region: string, steps: RegionSteps, clock: Clock): 
   }
 }
 
-/** One region's players waited on, the machine deployed and waited on; the players cut, or null. */
+/** One region's players waited on, the machine deployed and waited on; how the wait ended. */
 async function restartRegion(
   region: string,
   cordoned: boolean,
   steps: RegionSteps,
   say: (line: string) => void,
   clock: Clock,
-): Promise<number | null> {
-  const left = await waitForPlayers(() => steps.players(region), say, clock)
-  if (left === null) say("it can't say how many players are connected, so none was waited for")
-  else if (left > 0)
-    say(`${left} still connected after ${EDGE_DRAIN_LIMIT_MS / MINUTE_MS} min; restarting cuts them`)
+): Promise<Wait> {
+  const wait = await waitForPlayers(() => steps.players(region), say, clock)
+  if (wait.left === null) say("it can't say how many players are connected, so none was waited for")
+  else if (wait.left > 0)
+    say(`${wait.left} still connected after ${EDGE_DRAIN_LIMIT_MS / MINUTE_MS} min; restarting cuts them`)
+  if (wait.failed > 0)
+    say(`${wait.failed} queries for the count failed${wait.unsure ? ', the last one too' : ''}`)
   say(cordoned ? 'deploying' : 'deploying; it takes joins until it restarts, and none while it does')
   await steps.deploy(region)
   if (!(await waitUntil(() => steps.ready(region), clock, EDGE_READY_LIMIT_MS)))
@@ -257,7 +251,7 @@ async function restartRegion(
       `The edge in ${region} isn't well and up to date with the routes; the other regions are as they were.`,
     )
   say('well and up to date with the routes')
-  return left
+  return wait
 }
 
 /** A Fly machine, as `fly machines list --json` lists it. */
@@ -298,10 +292,18 @@ export function sumPlayers(counts: readonly (number | null)[]): number | null {
   return known.length < counts.length ? null : known.reduce((a, b) => a + b, 0)
 }
 
+/** What an edge's agent says to a deploy (apps/edge/drain.ts). */
+export interface DrainState {
+  players: number
+  routesCurrent: boolean
+  bedrock: 'none' | 'bound' | 'unbound'
+}
+
 /**
- * Whether a restarted machine is ready by what its agent says: it holds the newest routes. An
- * agent that says nothing (an image from before the drain port, as in a rollback) is taken as ready
- * once Fly's own checks passed, which the deploy has already waited for.
+ * Whether a restarted machine is ready by what its agent says: it holds the newest routes, and
+ * Geyser has bound its port where Bedrock players are taken, since Fly delivers their UDP to a
+ * machine from boot. An agent that says nothing (an image from before the drain port, as in a
+ * rollback) is taken as ready once Fly's own checks passed, which the deploy has already waited for.
  */
-export const isReady = (state: { routesCurrent: boolean } | null): boolean =>
-  state === null || state.routesCurrent
+export const isReady = (state: DrainState | null): boolean =>
+  state === null || (state.routesCurrent && state.bedrock !== 'unbound')

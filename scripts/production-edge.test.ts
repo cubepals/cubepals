@@ -184,27 +184,37 @@ describe('restarting the edge without cutting a player', () => {
   test('waits for the players to leave, and restarts as soon as they have', async () => {
     const w = world()
     const counts = [3, 2, 0]
-    const left = await waitForPlayers(async () => counts.shift() ?? 0, w.said, w.clock)
-    expect(left).toBe(0)
+    const wait = await waitForPlayers(async () => counts.shift() ?? 0, w.said, w.clock)
+    expect(wait).toEqual({ left: 0, failed: 0, unsure: false })
     expect(w.time()).toBe(2 * EDGE_ASK_EVERY_MS)
     expect(w.log).toEqual(['waiting on 3 connected', 'waiting on 2 connected', 'no players connected'])
   })
 
-  test('a hiccup after counting is waited through; a first silence, or a run of them, is not', async () => {
+  test('a query that fails is asked again, and a first silence is an edge that can’t count', async () => {
     const w = world()
     const reads: (number | null)[] = [3, null, 2, 0]
-    expect(await waitForPlayers(async () => reads.shift() ?? null, w.said, w.clock)).toBe(0)
+    const wait = await waitForPlayers(async () => reads.shift() ?? null, w.said, w.clock)
+    expect(wait).toEqual({ left: 0, failed: 1, unsure: false })
     const first = world()
-    expect(await waitForPlayers(async () => null, first.said, first.clock)).toBeNull()
-    const gone = world()
-    const dying: (number | null)[] = [3, null, null, null, 0]
-    expect(await waitForPlayers(async () => dying.shift() ?? null, gone.said, gone.clock)).toBeNull()
+    const never = await waitForPlayers(async () => null, first.said, first.clock)
+    expect(never).toEqual({ left: null, failed: 1, unsure: true })
+    expect(first.time()).toBe(0)
+  })
+
+  test('once a count was read, only the limit ends the wait, on the last count', async () => {
+    const w = world()
+    let reads = 0
+    const wait = await waitForPlayers(async () => (reads++ === 0 ? 3 : null), w.said, w.clock)
+    expect(wait.left).toBe(3)
+    expect(wait.unsure).toBe(true)
+    expect(wait.failed).toBe(reads - 1)
+    expect(w.time()).toBeGreaterThanOrEqual(EDGE_DRAIN_LIMIT_MS)
   })
 
   test('goes ahead at the limit, and says how many it cuts', async () => {
     const w = world()
-    const left = await waitForPlayers(async () => 4, w.said, w.clock)
-    expect(left).toBe(4)
+    const wait = await waitForPlayers(async () => 4, w.said, w.clock)
+    expect(wait.left).toBe(4)
     expect(w.time()).toBeGreaterThanOrEqual(EDGE_DRAIN_LIMIT_MS)
     expect(w.time()).toBeLessThan(EDGE_DRAIN_LIMIT_MS + EDGE_ASK_EVERY_MS)
     expect(w.log).toEqual(['waiting on 4 connected'])
@@ -287,6 +297,29 @@ describe('restarting the edge when a region can’t be cordoned or fails', () =>
     await roll(['fra', 'iad'], steps(w.log, { othersReady: async () => false }), (l) => said.push(l), w.clock)
     expect(w.log).not.toContain('cordon fra')
     expect(said).toContain('fra: deploying; it takes joins until it restarts, and none while it does')
+  })
+
+  test('a region where a machine can’t say is uncounted, however many the others read', async () => {
+    const w = world()
+    const result = await rollEdge(
+      ['fra', 'iad'],
+      steps(w.log, { players: async (r) => (r === 'fra' ? sumPlayers([0, null]) : 0) }),
+      () => {},
+      w.clock,
+    )
+    expect(result.uncounted).toEqual(['fra'])
+  })
+
+  test('a failed uncordon after a good restart says the region is still cordoned', async () => {
+    const w = world()
+    const stuck = steps(w.log, {
+      uncordon: async () => {
+        throw new Error('fly down')
+      },
+    })
+    await expect(roll(['fra', 'iad'], stuck, () => {}, w.clock)).rejects.toThrow(
+      'fra: is still cordoned and takes no joins: fly down',
+    )
   })
 
   test('an edge that cannot count its players is reported as uncounted, not as none cut', async () => {
@@ -398,7 +431,12 @@ describe('every machine of the edge', () => {
 
   test('an agent that says nothing is ready once Fly passed its checks, as in a rollback', () => {
     expect(isReady(null)).toBe(true)
-    expect(isReady({ routesCurrent: false })).toBe(false)
-    expect(isReady({ routesCurrent: true })).toBe(true)
+    expect(isReady({ players: 0, routesCurrent: false, bedrock: 'none' })).toBe(false)
+    expect(isReady({ players: 0, routesCurrent: true, bedrock: 'none' })).toBe(true)
+    expect(isReady({ players: 0, routesCurrent: true, bedrock: 'bound' })).toBe(true)
+  })
+
+  test('a machine whose Geyser is not bound yet is not ready, so the next region waits', () => {
+    expect(isReady({ players: 0, routesCurrent: true, bedrock: 'unbound' })).toBe(false)
   })
 })
