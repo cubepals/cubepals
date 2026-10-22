@@ -110,7 +110,7 @@ export function PlayerRow({
     <>
       <PlayerFace name={name} uuid={uuid} />
       <div className="bk-player__body">
-        <div className="bk-row" style={{ gap: 'var(--space-8)' }}>
+        <div className="bk-row" style={{ gap: 'var(--space-8)', flexWrap: 'wrap' }}>
           <span className="bk-player__name">{uuid === undefined ? name : shownName({ uuid, name })}</span>
           {uuid !== undefined && isBedrockUuid(uuid) && <Badge tone="outline">Bedrock</Badge>}
           {badge}
