@@ -22,6 +22,7 @@ import { DATA_DIR, JAR_LISTS, jarsOf } from './jars.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
 import { STARTER_STEP, starterEnv, starterOf } from './starter.ts'
 import { STOP_CHEATERS_STEP } from './stop-cheaters.ts'
+import { VANILLA_PAPER_STEP } from './vanilla-paper.ts'
 import { javaFor } from './versions.ts'
 import { UNLINKED } from './volume-links.ts'
 import { WAKE_STEP } from './wake-step.ts'
@@ -513,7 +514,8 @@ const EXEC_IMAGE = `exec ${IMAGE_ENTRYPOINT} "$@"`
 /**
  * The image's own entrypoint, after Blockly's steps, which run as root on the volume: before them,
  * what they call to replace a link where they write (`volume-links.ts`). The first puts the volume's files as the
- * server type reads them (`PAPER_STEP` on Paper, `DIMENSIONS_STEP` on any other), and the
+ * server type reads them (`PAPER_STEP` on Paper, after `VANILLA_PAPER_STEP` on plain Minecraft run
+ * on Paper, `DIMENSIONS_STEP` on any other), and the
  * second the world's datapacks (`DATAPACKS_STEP`); the world a template starts on
  * (`STARTER_STEP`), the icon, the pack, the files Cubepals places itself and the list of jars the
  * image installs follow where a server has them, and last what spares the image work it would
@@ -521,6 +523,7 @@ const EXEC_IMAGE = `exec ${IMAGE_ENTRYPOINT} "$@"`
  */
 function entrypointFor(steps: {
   paper: boolean
+  vanilla: boolean
   starter: boolean
   icon: boolean
   pack: boolean
@@ -531,6 +534,7 @@ function entrypointFor(steps: {
 }): readonly string[] {
   const script = [
     UNLINKED,
+    ...(steps.vanilla ? [VANILLA_PAPER_STEP] : []),
     steps.paper ? PAPER_STEP : DIMENSIONS_STEP,
     DATAPACKS_STEP,
     ...(steps.starter ? [STARTER_STEP] : []),
@@ -574,6 +578,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
   const type = pack !== null ? 'MODRINTH' : onPaper ? TYPES.paper : TYPES[revision.loader]
   const entrypoint = entrypointFor({
     paper: type === TYPES.paper,
+    vanilla: onPaper,
     starter: starterOf(world.levelType) !== null,
     icon: input.iconUrl !== null,
     pack: pack !== null,
