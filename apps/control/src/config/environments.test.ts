@@ -55,6 +55,8 @@ function standIns(names: readonly string[]): Record<string, string> {
     DATABASE_DIRECT_URL: 'postgres://blockly:secret@direct.db.internal:5432/blockly',
     SMTP_URL: 'smtps://user:secret@smtp.example.test:465',
     POLAR_WEBHOOK_SECRET: 'whsec_stand-in-for-the-webhook-secret',
+    // 16 bytes as base64, which is all the control plane checks of it.
+    FLOODGATE_KEY: Buffer.alloc(16, 1).toString('base64'),
     FREE_LINK_TUNING: JSON.stringify(DEFAULT_FREE_LINK_TUNING),
     ABUSE_LIMITS: JSON.stringify(DEFAULT_ABUSE_LIMITS),
     CAPACITY_TUNING: JSON.stringify(DEFAULT_CAPACITY_TUNING),
