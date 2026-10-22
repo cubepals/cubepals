@@ -183,6 +183,7 @@ async function deployApp(
       regionsToRoll(machinesOf('bly-prod-edge', env), edgeRegions(environment().edge_regions)),
       env,
       say,
+      'image' in from ? hasDrainPort(from.image) : true,
     )
     if (uncounted.length > 0)
       say(
@@ -221,6 +222,14 @@ function unchangedReason(app: FlyApp, env: NodeJS.ProcessEnv): string | null {
     if (changedFor(app, paths)) return null
   }
   return `${app}: left running. Nothing it is built from or configured with changed since ${known[0]?.slice(0, 8)}, which its running ${app === 'edge' ? 'machines were' : 'release was'} built from.`
+}
+
+/** Whether an image's commit has the edge's drain port (apps/edge/drain.ts); false when it can't be told. */
+function hasDrainPort(image: string): boolean {
+  const commit = deployOf(image)?.commit
+  return (
+    commit !== undefined && spawnSync('git', ['cat-file', '-e', `${commit}:apps/edge/drain.ts`]).status === 0
+  )
 }
 
 /** The edge's machines, one in each region `edge_regions` lists (production-edge.ts). */

@@ -105,7 +105,7 @@ export function buildEdgeImage(
 
 /**
  * Puts `image` on the app's machines one region at a time, in the order of `regions`; how many
- * players were cut. Every machine in each of `regions` is asked and deployed (production-edge.ts).
+ * players were cut. `drains` is whether the image answers on the drain port. Every machine in each of `regions` is asked and deployed (production-edge.ts).
  */
 export async function rollEdgeApp(
   app: string,
@@ -114,6 +114,7 @@ export async function rollEdgeApp(
   regions: readonly string[],
   env: NodeJS.ProcessEnv,
   say: (line: string) => void,
+  drains = true,
 ): Promise<{ cut: number; uncounted: string[] }> {
   const idsIn = (region: string): string[] => {
     const ids = machinesIn(machinesOf(app, env), region)
@@ -147,7 +148,7 @@ export async function rollEdgeApp(
     },
     deploy: async (region) => fly(...deployMachines(app, config, image, idsIn(region))),
     ready: async (region) => {
-      for (const id of idsIn(region)) if (!isReady(await stateOf(id))) return false
+      for (const id of idsIn(region)) if (!isReady(await stateOf(id), drains)) return false
       return true
     },
   }

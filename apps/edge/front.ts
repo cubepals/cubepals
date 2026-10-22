@@ -69,6 +69,8 @@ export interface FrontOptions {
    * route. Left out, every join is let through at once.
    */
   ready?: Promise<void>
+  /** How long a join waits for `ready` before it is closed; `READY_WAIT_MS` where left out. */
+  readyWaitMs?: number
   /** Where each join and ping is recorded (`visits.ts`); nothing is, without it. */
   visits?: Visits
 }
@@ -89,6 +91,9 @@ let joinsOpen = 0
 
 /** How many players' connections this edge proxies right now, a server list's pings left out. */
 export const playersOnline = (): number => joinsOpen
+
+/** How long a join that has said where it is going waits for routes to be held before it is closed. */
+const READY_WAIT_MS = 30_000
 
 /** How long a connection has to say where it is going, as mc-router allows. */
 const GREETING_MS = 5_000
@@ -263,10 +268,14 @@ class Arrival {
     if (handshake === 'bad') return void this.#broken()
     this.#client.off('data', this.#receive)
     this.#client.pause()
-    this.#client.setTimeout(0)
+    const { ready, readyWaitMs = READY_WAIT_MS } = this.#options
+    // Waiting for routes is bounded: with the control plane out of reach at boot, joins would pile up.
+    this.#client.setTimeout(ready === undefined ? 0 : readyWaitMs, () => this.#client.destroy())
     this.#greeted?.()
-    void (this.#options.ready ?? Promise.resolve()).then(() => {
-      if (!this.#client.destroyed) this.#admit(handshake)
+    void (ready ?? Promise.resolve()).then(() => {
+      if (this.#client.destroyed) return
+      this.#client.setTimeout(0)
+      this.#admit(handshake)
     })
   }
 

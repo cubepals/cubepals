@@ -303,8 +303,9 @@ export interface DrainState {
 /**
  * Whether a restarted machine is ready by what its agent says: it holds the newest routes, and
  * Geyser has bound its port where Bedrock players are taken, since Fly delivers their UDP to a
- * machine from boot. An agent that says nothing (an image from before the drain port, as in a
- * rollback) is taken as ready once Fly's own checks passed, which the deploy has already waited for.
+ * machine from boot. An agent that says nothing is not ready, unless the image predates the drain
+ * port (`drains` false, as in a rollback to one): then Fly's own checks, which the deploy has
+ * already waited for, are all there is.
  */
-export const isReady = (state: DrainState | null): boolean =>
-  state === null || (state.routesCurrent && state.bedrock !== 'unbound')
+export const isReady = (state: DrainState | null, drains = true): boolean =>
+  state === null ? !drains : state.routesCurrent && state.bedrock !== 'unbound'

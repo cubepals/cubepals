@@ -429,8 +429,9 @@ describe('every machine of the edge', () => {
     expect(sumPlayers([null, null])).toBeNull()
   })
 
-  test('an agent that says nothing is ready once Fly passed its checks, as in a rollback', () => {
-    expect(isReady(null)).toBe(true)
+  test('an agent that says nothing is ready only for an image from before the drain port', () => {
+    expect(isReady(null, false)).toBe(true)
+    expect(isReady(null)).toBe(false)
     expect(isReady({ players: 0, routesCurrent: false, bedrock: 'none' })).toBe(false)
     expect(isReady({ players: 0, routesCurrent: true, bedrock: 'none' })).toBe(true)
     expect(isReady({ players: 0, routesCurrent: true, bedrock: 'bound' })).toBe(true)
