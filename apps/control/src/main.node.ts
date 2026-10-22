@@ -639,7 +639,6 @@ async function connect(config: DeploymentConfig) {
   const { url, directUrl, poolMax } = config.database
   const pool = createPool(url, poolMax)
   const boss = await startBoss(url, { maintains: config.roles.includes('worker'), poolMax })
-  // One source for the figures the database holds: the worker role's.
   const { telemetry } = serveMetrics(config.metrics.listen, config.roles, { pool, boss, url })
   return {
     pool,

@@ -15,6 +15,7 @@ import { Hono } from 'hono'
 import type { Pool } from 'pg'
 import type { PgBoss } from 'pg-boss'
 import { installTelemetry } from '../../app/platform/telemetry.ts'
+import type { Telemetry } from '../../app/ports/telemetry.ts'
 import { measured } from '../../interfaces/http/measured.ts'
 import { freshDatabase, hasDatabase } from '../../testing/fleet.ts'
 import { startBoss } from '../pg/jobs.ts'
@@ -64,72 +65,78 @@ async function server(
   })
 }
 
-describe.skipIf(!hasDatabase)('the metrics endpoint', () => {
-  beforeAll(async () => {
-    const fresh = await freshDatabase()
-    db = fresh.db
-    pool = createPool(fresh.url)
-    drop = fresh.drop
-    const sender = await startBoss(fresh.url, { maintains: false })
-    await sender.createQueue('probe')
-    await sender.send('probe', {})
-    await sender.stop({ graceful: false })
-    await db.insert(schema.users).values({ id: 'owner', name: 'Owner', email: 'owner@example.test' })
-    await server('a', 'fra', 'running')
-    await server('b', 'fra', 'stopped')
-    await server('c', 'iad', 'stored')
-    await server('d', 'iad', 'stopped', true)
-    boss = await startBoss(fresh.url, { maintains: false })
-    const served = serveMetrics(`127.0.0.1:${PORT}`, ['worker'], { pool, boss, url: fresh.url })
-    stop = served.stop
-    const telemetry = installTelemetry(served.telemetry)
-    for (const path of [
-      `/api/public/servers/${SERVER_ID}`,
-      `/api/public/names/${PLAYER}/face.png`,
-      `/api/public/servers/${EMAIL}?from=${ADDRESS}`,
-      `/api/boom/${SERVER_ID}`,
-      `/${ADDRESS}/${PLAYER}`,
-      '/api/health/live',
-    ])
-      await listener.request(path, { headers: { 'x-forwarded-for': ADDRESS } })
-    await listener.request(`/api/public/servers/${PLAYER}`, { method: 'PROPFIND' })
-    telemetry.procedureServed('servers.list', 200, 30)
-    telemetry.procedureServed('servers.list', 404, 5)
-    telemetry.realtimeConnected('websocket', 'ticket', 2)
-    await pool.query(`select 1 from minecraft_servers where id = '${SERVER_ID}'`)
-    await pool.query('select 1 / 0').catch(() => {})
-    await boss.createQueue('ok')
-    await boss.createQueue('fails')
-    await boss.work('ok', async () => {})
-    await boss.work('fails', async () => {
-      throw new Error(`no such server ${SERVER_ID}`)
-    })
-    await boss.send('ok', { serverId: SERVER_ID })
-    await boss.send('fails', { serverId: SERVER_ID }, { retryLimit: 0 })
-    // The workers ask every two seconds; Postgres's own figures are read as the exporter starts.
-    for (
-      let tries = 0;
-      tries < 40 && !/messaging_process_duration_count\{[^}]*"fails"/.test(scrape);
-      tries++
-    ) {
-      await Bun.sleep(250)
-      scrape = await (await fetch(`http://127.0.0.1:${PORT}/metrics`)).text()
-    }
-    telemetry.operationEnded('start', 'succeeded', 42_000)
-    telemetry.operationFailed('start', 'booting')
-    telemetry.wakeAnswered('denied', 'quota')
-    telemetry.wakeCompleted('fra', 20_000)
-    telemetry.joinCompleted('held', 'fra', 25_000)
-    scrape = await (await fetch(`http://127.0.0.1:${PORT}/metrics`)).text()
-  }, 30_000)
-
-  afterAll(async () => {
-    await boss?.stop({ graceful: false })
-    await stop?.()
-    await pool?.end()
-    await drop?.()
+/**
+ * Requests with ids, names and addresses in their paths, a procedure, a refused browser, a query
+ * that fails, and a job that does, then waits until pg-boss has worked both jobs.
+ */
+async function drive(telemetry: Telemetry, boss: PgBoss) {
+  for (const path of [
+    `/api/public/servers/${SERVER_ID}`,
+    `/api/public/names/${PLAYER}/face.png`,
+    `/api/public/servers/${EMAIL}?from=${ADDRESS}`,
+    `/api/boom/${SERVER_ID}`,
+    `/${ADDRESS}/${PLAYER}`,
+    '/api/health/live',
+  ])
+    await listener.request(path, { headers: { 'x-forwarded-for': ADDRESS } })
+  await listener.request(`/api/public/servers/${PLAYER}`, { method: 'PROPFIND' })
+  telemetry.procedureServed('servers.list', 200, 30)
+  telemetry.procedureServed('servers.list', 404, 5)
+  telemetry.realtimeConnected('websocket', 'ticket', 2)
+  await pool.query(`select 1 from minecraft_servers where id = '${SERVER_ID}'`)
+  await pool.query('select 1 / 0').catch(() => {})
+  await boss.createQueue('ok')
+  await boss.createQueue('fails')
+  await boss.work('ok', async () => {})
+  await boss.work('fails', async () => {
+    throw new Error(`no such server ${SERVER_ID}`)
   })
+  await boss.send('ok', { serverId: SERVER_ID })
+  await boss.send('fails', { serverId: SERVER_ID }, { retryLimit: 0 })
+  // The workers ask every two seconds; Postgres's own figures are read as the exporter starts.
+  for (let tries = 0; tries < 40 && !/messaging_process_duration_count\{[^}]*"fails"/.test(scrape); tries++) {
+    await Bun.sleep(250)
+    scrape = await (await fetch(`http://127.0.0.1:${PORT}/metrics`)).text()
+  }
+}
 
+beforeAll(async () => {
+  if (!hasDatabase) return
+  const fresh = await freshDatabase()
+  db = fresh.db
+  pool = createPool(fresh.url)
+  drop = fresh.drop
+  const sender = await startBoss(fresh.url, { maintains: false })
+  await sender.createQueue('probe')
+  await sender.send('probe', {})
+  await sender.stop({ graceful: false })
+  await db.insert(schema.users).values({ id: 'owner', name: 'Owner', email: 'owner@example.test' })
+  await server('a', 'fra', 'running')
+  await server('b', 'fra', 'stopped')
+  await server('c', 'iad', 'stored')
+  await server('d', 'iad', 'stopped', true)
+  boss = await startBoss(fresh.url, { maintains: false })
+  const served = serveMetrics(`127.0.0.1:${PORT}`, ['worker'], { pool, boss, url: fresh.url })
+  stop = served.stop
+  const telemetry = installTelemetry(served.telemetry)
+  await drive(telemetry, boss)
+  telemetry.operationEnded('start', 'succeeded', 42_000)
+  telemetry.operationFailed('start', 'booting')
+  telemetry.wakeAnswered('denied', 'quota')
+  telemetry.wakeCompleted('fra', 20_000)
+  telemetry.joinCompleted('held', 'fra', 25_000)
+  scrape = await (await fetch(`http://127.0.0.1:${PORT}/metrics`)).text()
+}, 30_000)
+
+afterAll(async () => {
+  if (!hasDatabase) return
+  await boss?.stop({ graceful: false })
+  await stop?.()
+  await pool?.end()
+  await drop?.()
+})
+
+describe.skipIf(!hasDatabase)('the metrics endpoint', () => {
   test('says how long operations, wakes and joins took, as histograms', () => {
     expect(scrape).toContain(
       'cubepals_operation_duration_seconds_bucket{kind="start",outcome="succeeded",le="60"} 1',
@@ -150,7 +157,9 @@ describe.skipIf(!hasDatabase)('the metrics endpoint', () => {
     expect(scrape).toContain('cubepals_servers{state="trashed",server_region="iad"} 1')
     expect(scrape).toContain('cubepals_queue_depth{queue="probe"} 1')
   })
+})
 
+describe.skipIf(!hasDatabase)('the metrics endpoint, of requests, the database and the process', () => {
   test('counts requests by route template, method and status class, and times all but health', () => {
     const labels = (route: string, method: string, status: string) =>
       `{listener="api",http_route="${route}",http_request_method="${method}",status_class="${status}"}`

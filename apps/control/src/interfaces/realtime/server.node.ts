@@ -60,6 +60,23 @@ function countBrowsers(tails: Map<string, AbortController>) {
 }
 
 /**
+ * Lets in a browser from Cubepals' own pages with a ticket that verifies. Each answer is timed and
+ * counted by the transport it came over, and why it was refused if it was.
+ */
+const authorizer =
+  (options: Pick<RealtimeOptions, 'allowedOrigins' | 'tickets'>, transport: 'webtransport' | 'websocket') =>
+  async ({ query, headers }: ConnectRequest) => {
+    const began = performance.now()
+    const answered = <T>(outcome: string, answer: T): T => {
+      realtimeConnected(transport, outcome, performance.now() - began)
+      return answer
+    }
+    if (!originAllowed(headers.origin, options.allowedOrigins)) return answered('origin', refuse('origin'))
+    const userId = await options.tickets.verify(query.get('ticket') ?? '')
+    return userId === null ? answered('ticket', refuse('ticket')) : answered('accepted', { userId })
+  }
+
+/**
  * The realtime role: exactly one per deployment (Transport.io rooms live in one process). It
  * turns domain events into hints for each person's browser and streams console output to
  * whoever is watching a server.
@@ -69,30 +86,16 @@ export async function startRealtime(options: RealtimeOptions): Promise<{ stop():
   const tails = new Map<string, AbortController>()
   const browsers = countBrowsers(tails)
 
-  // Each answer is timed and counted by the transport it came over, and why it was refused if it was.
-  const authorize =
-    (transport: 'webtransport' | 'websocket') =>
-    async ({ query, headers }: ConnectRequest) => {
-      const began = performance.now()
-      const answered = <T>(outcome: string, answer: T): T => {
-        realtimeConnected(transport, outcome, performance.now() - began)
-        return answer
-      }
-      if (!originAllowed(headers.origin, options.allowedOrigins)) return answered('origin', refuse('origin'))
-      const userId = await options.tickets.verify(query.get('ticket') ?? '')
-      return userId === null ? answered('ticket', refuse('ticket')) : answered('accepted', { userId })
-    }
-
   const listener = await listenHttp3<Peer>({
     ...options.listen,
     ...options.tls,
     path: '/',
-    authorize: authorize('webtransport'),
+    authorize: authorizer(options, 'webtransport'),
   })
   const fallback = await listenWebSocket<Peer>({
     ...options.fallbackListen,
     path: '/transport-io',
-    authorize: authorize('websocket'),
+    authorize: authorizer(options, 'websocket'),
   })
 
   const startTail = async (serverId: string) => {
