@@ -14,13 +14,23 @@ import type { Db } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { isDatapack } from '../../domain/mods/artifact.ts'
 import type { CarriedFile } from '../../domain/revision/carried.ts'
-import { defaultSettings, type Loader, type RevisionDraft } from '../../domain/revision/revision.ts'
+import {
+  defaultSettings,
+  isPlain,
+  type Loader,
+  type RevisionDraft,
+  runsOnPaper,
+  type ServerSettings,
+} from '../../domain/revision/revision.ts'
 import { type MemoryTier, PARTY, type PartySize } from '../../domain/server/size.ts'
 import { nextLevelName, type World } from '../../domain/world/world.ts'
+import { joinRange } from '../../minecraft/clients.ts'
 import {
+  compareVersions,
   DEFAULT_GAME_VERSION,
   DEFAULT_LOADER,
   notOffered,
+  offeredVersions,
   packRuns,
   supports,
 } from '../../minecraft/versions.ts'
@@ -81,8 +91,8 @@ export async function draftNewServer(
   // What to play decides the release, the server type, the mods and the size; nobody making a
   // server is asked about any of them.
   const chosen = request.from === undefined ? null : await sources.resolve(request.from, actor)
-  const gameVersion = chosen?.gameVersion ?? request.gameVersion ?? DEFAULT_GAME_VERSION
   const loader = chosen?.loader ?? request.loader ?? DEFAULT_LOADER
+  const gameVersion = chosen?.gameVersion ?? request.gameVersion ?? releaseFor(loader)
   // A pack brings its own release and loader, which may be one Blockly doesn't offer a new world.
   const runs = chosen?.modpack ? packRuns(gameVersion, loader) : supports(gameVersion, loader)
   if (!runs) throw new AppError('invalid_choice', notOffered(loader, gameVersion))
@@ -103,10 +113,11 @@ export async function draftNewServer(
   })
   requireWithinPlan(plan, { loader, settings, mods: chosen?.mods ?? [], modpack: chosen?.modpack ?? null })
 
+  const loaderVersion = await firstPin(sources.builds, request, chosen, loader, gameVersion)
   const revision: RevisionDraft = {
     gameVersion,
     loader,
-    loaderVersion: await firstPin(sources.builds, request, chosen, loader, gameVersion),
+    loaderVersion,
     settings,
     mods: chosen?.mods ?? [],
     modpack: chosen?.modpack ?? null,
@@ -115,6 +126,7 @@ export async function draftNewServer(
     reason: 'created',
     basedOnRevisionId: null,
   }
+  revision.settings = withChoices(revision)
 
   const createdFrom =
     request.from === undefined
@@ -170,6 +182,72 @@ async function firstPin(
     return paperPin(builds, gameVersion, 'plain')
   return loaderPin(builds, loader, gameVersion)
 }
+
+/**
+ * The release a server made from nothing lands on. Plain Minecraft's is the newest Cubepals runs it
+ * on Paper on, where Bedrock friends join it, as a template's is (`SetupService.resolve`).
+ */
+const releaseFor = (loader: Loader): string =>
+  (loader === 'vanilla'
+    ? offeredVersions()
+        .map((offered) => offered.id)
+        .filter((id) => supports(id, 'paper'))
+        .sort((a, b) => compareVersions(b, a))[0]
+    : undefined) ?? DEFAULT_GAME_VERSION
+
+/**
+ * Which players' games join a new server, and whether Bedrock friends do where the deployment lets
+ * them in (`offered`), as the create page says it before the server is made.
+ */
+export function newJoins(
+  from: SetupSource,
+  chosen: ResolvedSetup,
+  offered: boolean,
+): { joins: { oldest: string; newer: boolean }; bedrock: boolean } {
+  const onPaper = startsOnPaper(from, chosen)
+  const joins = joinRange({
+    ...chosen,
+    // The build is read as the server is made; that there will be one is all the range asks.
+    loaderVersion: onPaper ? (chosen.setup.loaderVersion ?? 'paper') : null,
+    settings: {
+      otherVersions:
+        chosen.setup.settings.otherVersions ?? (onPaper ? PLAIN_ON_PAPER.otherVersions : undefined),
+    },
+  })
+  const bedrock = offered && chosen.modpack === null && (chosen.loader === 'paper' || onPaper)
+  return { joins, bedrock }
+}
+
+/**
+ * Whether a new server runs plain Minecraft on Paper, as `firstPin` decides it, before any build list
+ * is read: one made from nothing or a template where Cubepals offers Paper for its release, and a
+ * copy where the server it copies ran on Paper.
+ */
+function startsOnPaper(
+  from: SetupSource | undefined,
+  chosen: Pick<ResolvedSetup, 'loader' | 'gameVersion' | 'mods' | 'modpack'> & {
+    setup: Pick<ResolvedSetup['setup'], 'loaderVersion'>
+  },
+): boolean {
+  if (!isPlain(chosen)) return false
+  if (chosen.setup.loaderVersion !== null) return true
+  return (from === undefined || from.kind === 'template') && supports(chosen.gameVersion, 'paper')
+}
+
+/**
+ * What a new plain server on Paper lets in, as any Paper server does: Bedrock friends, and players
+ * on other versions, which most releases need for Bedrock players to reach them. A plain server
+ * that never chose either has them off (`otherVersionsOf`), so a new one says so; one copied keeps
+ * the choices its source made.
+ */
+const PLAIN_ON_PAPER = {
+  otherVersions: 'on',
+  bedrock: true,
+} as const satisfies Partial<ServerSettings>
+
+/** A new revision's settings, with the choices a plain server on Paper is made with. */
+const withChoices = (revision: RevisionDraft): ServerSettings =>
+  runsOnPaper(revision) ? { ...PLAIN_ON_PAPER, ...revision.settings } : revision.settings
 
 /** The files a new server's setup carries; one made without a setup carries none. */
 const carriedBy = (chosen: ResolvedSetup | null): CarriedFile[] => [...(chosen?.setup.files ?? [])]

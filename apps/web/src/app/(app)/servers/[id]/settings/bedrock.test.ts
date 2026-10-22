@@ -18,7 +18,9 @@ const view = (offered: boolean, bedrock: Exclude<ServerView['bedrock'], false>) 
 describe('a deployment without Bedrock', () => {
   test('the settings page has no Bedrock section, on a Paper server or any other', () => {
     expect(BedrockSetting({ view: view(false, null) })).toBeNull()
-    expect(BedrockSetting({ view: view(false, { on: true, needsOtherVersions: false }) })).toBeNull()
+    expect(
+      BedrockSetting({ view: view(false, { on: true, needsOtherVersions: false, moves: false }) }),
+    ).toBeNull()
   })
 
   test('the invite box keeps today’s line', () => {

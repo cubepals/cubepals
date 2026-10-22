@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The Via plugins Cubepals adds to every Paper server as it starts, so players on other Minecraft
- * versions join it: ViaVersion and ViaBackwards unless its owner turned them off, and ViaRewind
+ * The Via plugins Cubepals adds to every Paper server as it starts, plain Minecraft run on Paper
+ * included, so players on other Minecraft versions join it: ViaVersion and ViaBackwards unless its owner turned them off, and ViaRewind
  * too where they let in 1.8 and 1.7 (`ServerSettings.otherVersions`). They are Cubepals'
  * compatibility layer, never the owner's plugins: they are not in the server's revision, so no
  * plan, limit or price that counts plugins counts them, and the owner's plugin list never shows
@@ -29,6 +29,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import {
   bedrockOf,
+  isPlain,
   otherVersionsOf,
   runsOnPaper,
   type ServerRevision,
@@ -64,6 +65,11 @@ export class CompatPlugins {
    */
   joins(q: Queryable, revision: Parameters<typeof joinsNow>[1], run: Parameters<typeof joinsNow>[2]) {
     return joinsNow(q, revision, { ...run, offered: this.#geyser !== null })
+  }
+
+  /** Whether the deployment lets Bedrock players in at all: without the Bedrock key, none. */
+  get offered(): boolean {
+    return this.#geyser !== null
   }
 
   constructor(deps: { db: Db; mods: Pick<ModService, 'resolveNew'>; geyser: GeyserMc | null }) {
@@ -163,25 +169,37 @@ export class CompatPlugins {
   }
 }
 
+/** What a revision is read for, to know whether it runs on Paper (`runsPaper`). */
+type OnPaper = Pick<ServerRevision, 'loader' | 'loaderVersion' | 'modpack'> & {
+  mods: ReadonlyArray<Pick<PinnedMod, 'loaders'>>
+}
+
+/**
+ * A server that runs Paper's plugins, and so Cubepals' own: Paper, or plain Minecraft run on Paper,
+ * playing no pack.
+ */
+const runsPaper = (revision: OnPaper): boolean =>
+  revision.modpack === null && (revision.loader === 'paper' || runsOnPaper(revision))
+
 /** Whether a Paper server's choice and its other versions' leave Bedrock players able to join. */
-const bedrockWanted = (revision: Pick<ServerRevision, 'gameVersion' | 'settings'>): boolean =>
-  bedrockOf(revision.settings) &&
-  bedrockAvailable(revision.gameVersion, otherVersionsOf(revision.settings) === 'off')
+const bedrockWanted = (revision: Pick<ServerRevision, 'gameVersion' | 'loader' | 'settings'>): boolean =>
+  bedrockOf(revision) && bedrockAvailable(revision.gameVersion, otherVersionsOf(revision) === 'off')
 
 /**
  * The Via plugins a revision starts with, placed in the plugins folder by Cubepals' own step: on a
- * Paper server, those its choice asks for, as pinned for its release, but any the owner runs
- * already as their own plugin. None on any other server type, or one playing a pack.
+ * Paper server or plain Minecraft run on Paper, those its choice asks for, as pinned for its
+ * release, but any the owner runs already as their own plugin. None on any other server type, or
+ * one playing a pack.
  */
 export async function compatFor(
   q: Queryable,
-  revision: Pick<ServerRevision, 'gameVersion' | 'loader' | 'modpack' | 'settings'> & {
-    mods: ReadonlyArray<Pick<PinnedMod, 'source' | 'name'>>
+  revision: Pick<ServerRevision, 'gameVersion' | 'loader' | 'loaderVersion' | 'modpack' | 'settings'> & {
+    mods: ReadonlyArray<Pick<PinnedMod, 'source' | 'name' | 'loaders'>>
   },
 ): Promise<PinnedMod[]> {
-  if (revision.loader !== 'paper' || revision.modpack !== null) return []
+  if (!runsPaper(revision)) return []
   // The Via plugins its choice asks for, and Floodgate with the ones Bedrock players need.
-  const choice = COMPAT[otherVersionsOf(revision.settings)]
+  const choice = COMPAT[otherVersionsOf(revision)]
   const bedrock = bedrockWanted(revision) ? bedrockPlugins(revision.gameVersion) : []
   const wanted = [...new Set([...choice, ...bedrock])].filter((id) => !runsPlugin(revision.mods, id))
   if (wanted.length === 0) return []
@@ -234,8 +252,7 @@ export async function grimFor(
 }
 
 /** A server Grim can run on: Paper, or plain Minecraft run on Paper, with no pack. */
-const runsGrim = (revision: Pick<ServerRevision, 'loader' | 'loaderVersion' | 'mods' | 'modpack'>): boolean =>
-  revision.modpack === null && (revision.loader === 'paper' || runsOnPaper(revision))
+const runsGrim = runsPaper
 
 /** Which Via plugins `placed` holds, by Modrinth project id, as a boot's record and the edge name them. */
 export const projectsOf = (placed: readonly PinnedMod[]): string[] =>
@@ -245,11 +262,18 @@ export const projectsOf = (placed: readonly PinnedMod[]): string[] =>
  * Which players' games a server on `revision` takes, as its page says it and the edge lets them in:
  * running on a boot of it (`applied`), with the Via plugins that boot placed, none for a boot from
  * before one said; otherwise with those its next boot places.
+ *
+ * Whether Bedrock players join it: on a server that runs Paper, as its choice says; plain Minecraft
+ * on Mojang's own server can't take them, and letting them in moves it onto Paper (`moves`), where
+ * Paper has a build for its release.
  */
 export async function joinsNow(
   q: Queryable,
-  revision: Pick<ServerRevision, 'id' | 'gameVersion' | 'loader' | 'modpack' | 'settings'> & {
-    mods: ReadonlyArray<Pick<PinnedMod, 'source' | 'name'>>
+  revision: Pick<
+    ServerRevision,
+    'id' | 'gameVersion' | 'loader' | 'loaderVersion' | 'modpack' | 'settings'
+  > & {
+    mods: ReadonlyArray<Pick<PinnedMod, 'source' | 'name' | 'loaders'>>
   },
   run: {
     running: boolean
@@ -261,8 +285,9 @@ export async function joinsNow(
   const booted = run.running && run.applied?.revisionId === revision.id
   const placed = booted ? (run.applied?.compat ?? []) : projectsOf(await compatFor(q, revision))
   // Whether it lets Bedrock players in, as its choice says, and whether its other versions stop them.
-  const chooses = revision.loader === 'paper' && revision.modpack === null
-  const on = bedrockOf(revision.settings)
-  const bedrock = chooses ? { on, needsOtherVersions: on && !bedrockWanted(revision) } : null
+  const paper = runsPaper(revision)
+  const moves = !paper && isPlain(revision) && supports(revision.gameVersion, 'paper')
+  const on = paper && bedrockOf(revision)
+  const bedrock = paper || moves ? { on, needsOtherVersions: on && !bedrockWanted(revision), moves } : null
   return { joins: joinsOf(revision, placed), bedrock: run.offered === true ? bedrock : false }
 }

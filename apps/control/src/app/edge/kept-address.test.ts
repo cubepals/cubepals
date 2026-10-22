@@ -33,7 +33,7 @@ describe.skipIf(!hasDatabase)('a kept address', () => {
 
   test('routes, wakes and counts as the server it points at, under every play domain', async () => {
     const owner = await h.user()
-    const made = await h.create(owner, { name: 'Arcade' })
+    const made = await h.create(owner, { name: 'Arcade', gameVersion: '26.3' })
     await h.db
       .update(schema.minecraftServers)
       .set({ slug: 'arcade' as Slug })

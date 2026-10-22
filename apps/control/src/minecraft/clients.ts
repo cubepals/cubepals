@@ -17,6 +17,7 @@ import {
   type Loader,
   type OtherVersions,
   otherVersionsOf,
+  runsOnPaper,
   type ServerRevision,
   type ServerSettings,
 } from '../domain/revision/revision.ts'
@@ -54,8 +55,9 @@ export const protocolOf = (release: string): number | null =>
 
 /**
  * The clients a server on `gameVersion` with `mods` takes, with the Via plugins Cubepals adds,
- * `adds` by Modrinth project id, counted as its own. Only Paper runs them; on any other server type
- * a client must speak the server's own number. Null for a release the table doesn't know, which
+ * `adds` by Modrinth project id, counted as its own. Only Paper runs them, plain Minecraft's too
+ * where it runs on Paper; on any other server type a client must speak the server's own number.
+ * Plain Minecraft on Mojang's own server is never given any (`app/compat/`). Null for a release the table doesn't know, which
  * takes whatever it takes.
  */
 export function clientRange(
@@ -75,7 +77,7 @@ export function clientRange(
   }
   const runs = (projectId: string) => runsPlugin(mods, projectId) || adds.includes(projectId)
   // ViaBackwards and ViaRewind are ViaVersion's addons, and load only beside it.
-  if (loader !== 'paper' || !runs(VIAVERSION)) return own
+  if ((loader !== 'paper' && loader !== 'vanilla') || !runs(VIAVERSION)) return own
   const floor = runs(VIABACKWARDS) ? (runs(VIAREWIND) ? VIAREWIND_OLDEST : VIABACKWARDS_OLDEST) : gameVersion
   const oldest = Math.min(protocol, protocolOf(floor) ?? protocol)
   return { ...own, oldest, oldestRelease: oldest === protocol ? gameVersion : floor, newest: null }
@@ -84,19 +86,20 @@ export function clientRange(
 /**
  * Which players' games a revision's server takes, as its pages say it: from `oldest` to the release
  * it runs, and every newer one where `newer`, with the choice behind it on a server that has one
- * (Paper, playing no pack). With `adds`, the Via plugins Cubepals places for it, as a boot placed
+ * (Paper, or plain Minecraft run on Paper, playing no pack). With `adds`, the Via plugins Cubepals places for it, as a boot placed
  * them or the next will; without, those its choice asks for. Null for a release the table doesn't
  * know.
  */
 export function joinsOf(
-  revision: Pick<ServerRevision, 'gameVersion' | 'loader' | 'modpack'> & {
-    mods: ReadonlyArray<Pick<PinnedMod, 'source' | 'name'>>
-    settings: Pick<ServerSettings, 'otherVersions'>
-  },
+  revision: Pick<ServerRevision, 'gameVersion' | 'loader' | 'modpack'> &
+    Partial<Pick<ServerRevision, 'loaderVersion'>> & {
+      mods: ReadonlyArray<Pick<PinnedMod, 'source' | 'name' | 'loaders'>>
+      settings: Pick<ServerSettings, 'otherVersions'>
+    },
   adds?: readonly string[],
 ): { oldest: string; newer: boolean; otherVersions: OtherVersions | null } | null {
-  const chooses = revision.loader === 'paper' && revision.modpack === null
-  const otherVersions = chooses ? otherVersionsOf(revision.settings) : null
+  const chooses = revision.modpack === null && (revision.loader === 'paper' || runsOnPaper(revision))
+  const otherVersions = chooses ? otherVersionsOf(revision) : null
   const placed = otherVersions === null ? [] : (adds ?? COMPAT[otherVersions])
   const range = clientRange(revision.gameVersion, revision.loader, revision.mods, placed)
   return range === null ? null : { oldest: range.oldestRelease, newer: range.newest === null, otherVersions }

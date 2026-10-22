@@ -36,7 +36,6 @@ import {
   sizeLabel,
 } from '../../domain/server/size.ts'
 import { formatJoinAddress } from '../../minecraft/address.ts'
-import { joinRange } from '../../minecraft/clients.ts'
 import { loaderOfPack } from '../../minecraft/mods.ts'
 import { packEnvironment, packTier, suggestedForServers } from '../../minecraft/packs.ts'
 import { settingTakes } from '../../minecraft/settings.ts'
@@ -73,6 +72,7 @@ import { pictureOf } from '../server-icons/view.ts'
 import { loadPackChecks } from '../setups/persistence.ts'
 import { type SetupService, type SetupSource, sizeOf } from '../setups/service.ts'
 import { TEMPLATES } from '../setups/templates.ts'
+import { newJoins } from './new-server.ts'
 import {
   countLive,
   findServer,
@@ -524,10 +524,7 @@ export class ServerQueries {
       gameVersion: resolved.gameVersion,
       loader: resolved.loader,
       loaderLabel: LOADER_LABELS[resolved.loader],
-      joins: joinRange({
-        ...resolved,
-        settings: { otherVersions: resolved.setup.settings.otherVersions },
-      }),
+      ...newJoins(from, resolved, this.#setups.compat.offered),
       mods: resolved.mods.map((mod) => mod.name),
       modpack:
         resolved.modpack === null

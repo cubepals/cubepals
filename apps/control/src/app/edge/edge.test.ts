@@ -350,7 +350,7 @@ describe.skipIf(!hasDatabase)('edge, where addresses move', () => {
 
   test('a sleeping server routes nowhere, and each wake answers where it runs now', async () => {
     const owner = await h.user()
-    const created = await h.create(owner)
+    const created = await h.create(owner, { gameVersion: '26.3' })
     await h.until(created.id, 'running')
     await h.settled(created.id)
     const first = await routeOf(created.slug)
@@ -450,7 +450,8 @@ describe.skipIf(!hasDatabase)('edge, a sleeping server in the server list', () =
 
   test('only a server whose run reads a PROXY header is sent one, from its route and its wake', async () => {
     const paper = await h.create(await h.user(), { loader: 'paper', gameVersion: '1.21.11' })
-    const plain = await h.create(await h.user())
+    // Plain Minecraft on Mojang's own server: Cubepals offers no Paper on 26.3.
+    const plain = await h.create(await h.user(), { gameVersion: '26.3' })
     for (const { id } of [paper, plain]) {
       await h.until(id, 'running')
       await h.settled(id)

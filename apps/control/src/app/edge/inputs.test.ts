@@ -29,7 +29,8 @@ describe.skipIf(!hasDatabase)('the route inputs', () => {
 
   test('read in one snapshot with the fingerprint they go by, which moves only with what they read', async () => {
     const owner = await h.user()
-    const created = await h.create(owner)
+    // On Mojang's own server, which reads no PROXY header until the move below says it does.
+    const created = await h.create(owner, { gameVersion: '26.3' })
     await h.until(created.id, 'running')
     await h.settled(created.id)
     const servers = schema.minecraftServers

@@ -154,6 +154,7 @@ async function playsOf(q: Queryable, ids: readonly string[]): Promise<RouteInput
       id: revisions.id,
       gameVersion: revisions.gameVersion,
       loader: revisions.loader,
+      loaderVersion: revisions.loaderVersion,
       otherVersions: sql<OtherVersions | null>`${revisions.settings}->>'otherVersions'`,
       pack: sql<boolean>`${revisions.modpack} is not null`,
       pinned: sql<
@@ -166,11 +167,18 @@ async function playsOf(q: Queryable, ids: readonly string[]): Promise<RouteInput
     .from(revisions)
     .where(inArray(revisions.id, [...ids]))
   return new Map(
-    rows.map(({ id, otherVersions, pack, ...plays }) => [
+    rows.map(({ id, otherVersions, pack, loaderVersion, ...plays }) => [
       id,
       {
         ...plays,
-        otherVersions: pack ? 'off' : otherVersionsOf({ otherVersions: otherVersions ?? undefined }),
+        // Plain Minecraft on Mojang's own server runs no plugin, whatever it chose.
+        otherVersions:
+          pack || (plays.loader === 'vanilla' && loaderVersion === null)
+            ? 'off'
+            : otherVersionsOf({
+                loader: plays.loader,
+                settings: { otherVersions: otherVersions ?? undefined },
+              }),
       },
     ]),
   )

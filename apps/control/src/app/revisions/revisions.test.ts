@@ -71,7 +71,7 @@ describe.skipIf(!hasDatabase)('revisions', () => {
     expect(await desired()).toMatchObject({ gameVersion: '26.3', loaderVersion: '0.19.6' })
     expect(h.runtime.machine(id)?.spec.env.FABRIC_LOADER_VERSION).toBe('0.19.6')
     // Vanilla has no build of its own.
-    const plain = await running('Plain')
+    const plain = await running('Plain', { gameVersion: '26.3' })
     expect((await loadRevision(h.db, (await h.server(plain.id)).desiredRevisionId)).loaderVersion).toBeNull()
     expect(
       Object.keys(h.runtime.machine(plain.id)?.spec.env ?? {}).filter((k) => k.endsWith('_VERSION')),
@@ -403,7 +403,7 @@ describe.skipIf(!hasDatabase)('revisions', () => {
   }, 40_000)
 
   test('versions only move forward, and only to what Blockly offers', async () => {
-    const { owner, id } = await running()
+    const { owner, id } = await running('Test server', { gameVersion: '26.3' })
     await expect(
       h.app.mods.changeVersion(owner, id, { gameVersion: '26.2', loader: 'vanilla' }, [], randomUUID()),
     ).rejects.toThrow(/older version/)

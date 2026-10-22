@@ -195,12 +195,12 @@ describe.skipIf(!hasDatabase)('revision reads', () => {
     expect(query).not.toContain('"files"')
   })
 
-  test('a card names each mod and carries nothing more of it', async () => {
+  test('a card names each mod and its loaders, and carries nothing more of it', async () => {
     const query = await sqlOf(async () => {
       const card = await loadRevisionCard(db, ids[0] ?? '')
       expect(card.mods).toEqual([
-        { source: mod(1).source, name: 'Mod 1' },
-        { source: mod(2).source, name: 'Mod 2' },
+        { source: mod(1).source, name: 'Mod 1', loaders: mod(1).loaders },
+        { source: mod(2).source, name: 'Mod 2', loaders: mod(2).loaders },
       ])
       expect(Object.keys(card).sort()).toEqual(
         ['gameVersion', 'id', 'loader', 'loaderVersion', 'modpack', 'mods', 'settings'].sort(),
