@@ -373,7 +373,7 @@ export class AccountQueries {
  * Every plan as the pricing page shows it, from the plan table itself: the page reads
  * this rather than keeping numbers of its own that could drift from what is enforced.
  */
-export function publicPlans(bedrock: boolean): PublicPlan[] {
+export function publicPlans(sold: { bedrock: boolean; unsoldPlans: readonly string[] }): PublicPlan[] {
   return PLAN_KEYS.map((key) => {
     const plan = entitlementsFor(key)
     const largest = Math.max(...plan.allowedMemoryTiers.map(playerCapacity))
@@ -389,7 +389,8 @@ export function publicPlans(bedrock: boolean): PublicPlan[] {
       sleepsAfterMinutes: plan.idleShutdownAfterMinutes,
       maxServers: plan.maxServers,
       maxPlayers: plan.settingCaps === null ? largest : Math.min(largest, plan.settingCaps.maxPlayers),
-      bedrock: bedrock && plan.allowedLoaders.includes('paper'),
+      bedrock: sold.bedrock && plan.allowedLoaders.includes('paper'),
+      available: !sold.unsoldPlans.includes(key),
       mods: plan.mayUseMods,
       datapacks: plan.mayUseDatapacks,
       downloads: plan.backupPolicy.archiveEnabled ? 'history' : 'daily',

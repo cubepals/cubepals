@@ -114,6 +114,11 @@ export class LocalBilling implements BillingProvider {
     })
   }
 
+  /** Every plan is sold here. */
+  sells(): boolean {
+    return true
+  }
+
   /** Every plan is sold by the year here, as by the month. */
   async sellsYear(): Promise<boolean> {
     return true

@@ -345,6 +345,10 @@ export class PolarBilling implements BillingProvider {
     return checkout.url
   }
 
+  sells(planKey: string): boolean {
+    return Object.hasOwn(this.#products, planKey)
+  }
+
   async sellsYear(planKey: string): Promise<boolean> {
     return (await this.#yearProduct(planKey)) !== undefined
   }

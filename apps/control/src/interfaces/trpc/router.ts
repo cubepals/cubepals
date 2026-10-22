@@ -640,7 +640,7 @@ const account = router({
 
 const billing = router({
   /** Every plan as the pricing page shows it, for anyone: the table everything enforces. */
-  plans: publicProcedure.query(({ ctx }) => publicPlans(ctx.services.platform.capabilities.bedrock)),
+  plans: publicProcedure.query(({ ctx }) => publicPlans(ctx.services.platform.capabilities)),
   checkout: authedProcedure.input(CheckoutInput).mutation(({ ctx, input }) =>
     ctx.services.billing.startCheckout(ctx.actor, input.plan, {
       term: input.term,

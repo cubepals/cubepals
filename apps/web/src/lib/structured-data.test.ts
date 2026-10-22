@@ -13,6 +13,7 @@ import { appSchema, guideSchema, jsonLd, siteSchema } from './structured-data.ts
 const plan = (over: Partial<PublicPlan>): PublicPlan => ({
   key: 'free',
   name: 'Free trial',
+  available: true,
   monthlyPriceCents: 0,
   yearlyPriceCents: null,
   includedHours: 2,

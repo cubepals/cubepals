@@ -331,6 +331,23 @@ describe('configuration', () => {
     expect(() => loadConfig({ ...store, ARCHIVE_S3_BUCKET: '' })).toThrow(/archive.bucket/)
   })
 
+  test('a paid plan with no product is not for sale yet: plus alone, core alone and both all start', () => {
+    const polar = {
+      ...deployed,
+      POLAR_ACCESS_TOKEN: 'polar_oat_0123456789abcdef',
+      POLAR_WEBHOOK_SECRET: 'whsec_0123456789abcdef',
+      POLAR_SERVER: 'sandbox',
+    }
+    const products = (value: string) => loadConfig({ ...polar, POLAR_PRODUCTS: value }).billing
+    expect(products('plus:p1')).toMatchObject({ products: { plus: 'p1' } })
+    expect(products('core:c1')).toMatchObject({ products: { core: 'c1' } })
+    // Listed in any order, smallest plan first.
+    expect(Object.keys((products('plus:p1,core:c1') as { products: object }).products)).toEqual([
+      'core',
+      'plus',
+    ])
+  })
+
   test('Polar billing names its server and sells every paid plan, and only paid plans', () => {
     const polar = {
       ...deployed,
@@ -346,7 +363,7 @@ describe('configuration', () => {
     })
     expect(() => loadConfig({ ...polar, POLAR_SERVER: undefined })).toThrow(/billing.server/)
     expect(() => loadConfig({ ...polar, POLAR_WEBHOOK_SECRET: 'plain' })).toThrow(/whsec_/)
-    expect(() => loadConfig({ ...polar, POLAR_PRODUCTS: '' })).toThrow(/No Polar product sells the plus plan/)
+    expect(() => loadConfig({ ...polar, POLAR_PRODUCTS: '' })).toThrow(/POLAR_PRODUCTS names no product/)
     expect(() => loadConfig({ ...polar, POLAR_PRODUCTS: `${polar.POLAR_PRODUCTS},free:abc` })).toThrow(
       /"free", which isn't a paid plan/,
     )

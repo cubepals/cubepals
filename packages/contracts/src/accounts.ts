@@ -375,6 +375,8 @@ export const CheckoutInput = z.object({
 export interface PublicPlan {
   key: string
   name: string
+  /** False for a paid plan nothing sells here yet: its card says so, and its checkout. */
+  available: boolean
   monthlyPriceCents: number
   /** A year paid at once, which never renews on its own; null: not sold by the year. */
   yearlyPriceCents: number | null

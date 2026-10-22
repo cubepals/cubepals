@@ -5,6 +5,7 @@
 import type { Queryable } from '@blockly/db'
 import { schema } from '@blockly/db'
 import { and, count, eq, inArray } from 'drizzle-orm'
+import { PAID_PLANS } from '../domain/account/entitlements.ts'
 import type { GeyserMc } from './ports/geysermc.ts'
 import type { Insight } from './ports/insight.ts'
 import type { MalwareLists } from './ports/malware.ts'
@@ -57,6 +58,8 @@ export const supportOf = (caps: DeploymentCapabilities) => ({
   billing: caps.billing !== null,
   // The same key the edge and every server share, so one setting says it for all three.
   bedrock: (caps.bedrock ?? null) !== null,
+  // Paid plans billing has no product for: not for sale yet, said on their card and checkout.
+  unsoldPlans: caps.billing === null ? [] : PAID_PLANS.filter((plan) => !caps.billing?.sells(plan)),
 })
 
 /**

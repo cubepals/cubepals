@@ -10,6 +10,7 @@ import { daysSaid, hoursAgainSaid, hoursSaid } from './plans.ts'
 const free: PublicPlan = {
   key: 'free',
   name: 'Free trial',
+  available: true,
   monthlyPriceCents: 0,
   yearlyPriceCents: null,
   includedHours: 2,

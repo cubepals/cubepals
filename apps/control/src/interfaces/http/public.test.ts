@@ -18,7 +18,7 @@ describe('public sizes', () => {
     faces: {} as PlayerFaces,
     items: {} as ItemIcons,
     icons: {} as ServerIcons,
-    bedrock: () => false,
+    platform: () => ({ bedrock: false, unsoldPlans: [] }),
   })
 
   test('each answer to who is playing, with the players it holds and its memory', async () => {
@@ -41,7 +41,7 @@ describe('public plans', () => {
     faces: {} as PlayerFaces,
     items: {} as ItemIcons,
     icons: {} as ServerIcons,
-    bedrock: () => false,
+    platform: () => ({ bedrock: false, unsoldPlans: [] }),
   })
 
   test('Free, Core and Plus, with what each costs and includes', async () => {
@@ -53,6 +53,7 @@ describe('public plans', () => {
       {
         key: 'free',
         name: 'Free trial',
+        available: true,
         monthlyPriceCents: 0,
         yearlyPriceCents: null,
         // 20 hours in all, at most 2 a day from the player's midnight, and no monthly total.
@@ -74,6 +75,7 @@ describe('public plans', () => {
       {
         key: 'core',
         name: 'Core',
+        available: true,
         monthlyPriceCents: 999,
         yearlyPriceCents: null,
         includedHours: 40,
@@ -94,6 +96,7 @@ describe('public plans', () => {
       {
         key: 'plus',
         name: 'Plus',
+        available: true,
         monthlyPriceCents: 2500,
         yearlyPriceCents: 25000,
         includedHours: 120,
@@ -129,7 +132,7 @@ describe('player faces', () => {
     faces,
     items: {} as ItemIcons,
     icons: {} as ServerIcons,
-    bedrock: () => false,
+    platform: () => ({ bedrock: false, unsoldPlans: [] }),
   })
 
   test('an 8×8 picture, cached for the hour Blockly keeps it', async () => {

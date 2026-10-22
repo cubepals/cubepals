@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { PublicServerView } from '@blockly/contracts'
+import type { PlatformCapabilities, PublicServerView } from '@blockly/contracts'
 import { DAY_S, HOUR_S } from '@blockly/contracts/durations'
 import { type Context, Hono } from 'hono'
 import { PNG } from 'pngjs'
@@ -27,8 +27,8 @@ export function createPublicApp(deps: {
   faces: PlayerFaces
   items: ItemIcons
   icons: ServerIcons
-  /** Whether this deployment takes Bedrock players: what the plans say about them. */
-  bedrock: () => boolean
+  /** What this deployment takes (Bedrock players) and sells (each paid plan): what the plans say of it. */
+  platform: () => Pick<PlatformCapabilities, 'bedrock' | 'unsoldPlans'>
 }): Hono {
   const app = new Hono()
 
@@ -52,7 +52,7 @@ export function createPublicApp(deps: {
   app.get('/api/public/plans', (c) => {
     c.header('Cache-Control', 'public, max-age=300')
     c.header('Access-Control-Allow-Origin', '*')
-    return c.json(publicPlans(deps.bedrock()))
+    return c.json(publicPlans(deps.platform()))
   })
 
   /** The size behind each answer to "Who is playing?", from the table servers are made with. */

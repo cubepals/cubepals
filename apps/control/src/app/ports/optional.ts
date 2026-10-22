@@ -208,6 +208,11 @@ export interface BillingProvider {
     priceCents?: number
     returnUrl: string
   }): Promise<string>
+  /**
+   * Whether a product sells the plan here. A paid plan with none is not for sale yet: its card and
+   * checkout say so, and nothing fails.
+   */
+  sells(planKey: string): boolean
   /** The plan's yearly product is sold here: a checkout for it can be made. */
   sellsYear(planKey: string): Promise<boolean>
   /**
