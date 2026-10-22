@@ -119,7 +119,7 @@ async function up(n: string, size: string, memory: string) {
     `mkdir -p /edge/repo && cd /edge && bun -e 'await Bun.write("repo.tgz", await fetch("https://codeload.github.com/cubepals/cubepals/tar.gz/" + process.env.COMMIT))' && tar xzf repo.tgz -C repo --strip-components=1 && exec sh repo/tools/bedrock-join/size/${script}`
   const image = machines(load).find((m) => m.name === 'client-a')?.config.image
   if (image === undefined) throw new Error('the load app has no client machine')
-  for (const old of machines(load).filter((m) => m.name !== 'client-a' && m.name !== 'client-b'))
+  for (const old of machines(load).filter((m) => !['client-a', 'client-b', 'server'].includes(m.name)))
     fly(['machine', 'destroy', old.id, '-a', load, '--force'])
   if (!machines(load).some((m) => m.name === 'server'))
     fly([

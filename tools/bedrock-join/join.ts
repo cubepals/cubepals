@@ -139,6 +139,7 @@ function join1(index: number): Promise<void> {
       client.queue('text', {
         type: 'chat',
         needs_translation: false,
+        category: 'authored',
         source_name: username,
         xuid: '',
         platform_chat_id: '',
