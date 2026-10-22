@@ -12,6 +12,9 @@ name: PR title
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
+  # Required checks must report in the merge queue too. There the title is the queued commit's
+  # subject, which the queue writes from it; the mentions were checked on the pull request.
+  merge_group:
 
 permissions:
   contents: read
@@ -19,7 +22,7 @@ permissions:
 jobs:
   title:
     name: Title fits in 50 characters
-    if: github.event.pull_request.user.type != 'Bot'
+    if: github.event_name == 'merge_group' || github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -30,9 +33,16 @@ jobs:
           bun-version: 1.4.3
       # The title is untrusted text: it reaches the script through the environment, never the shell.
       - run: bun run scripts/check-subject.ts --title
+        if: github.event_name == 'pull_request'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
+      - name: The queued commit's subject fits
+        if: github.event_name == 'merge_group'
+        env:
+          MESSAGE: ${{ github.event.merge_group.head_commit.message }}
+        run: PR_TITLE="${MESSAGE%%$'\n'*}" bun run scripts/check-subject.ts --title
       - name: Mentions nobody
+        if: github.event_name == 'pull_request'
         run: bun run scripts/check-mentions.ts --pr
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
