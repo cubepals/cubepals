@@ -182,6 +182,8 @@ async function up(n: string, size: string, memory: string) {
     memory,
     '--port',
     '25565:25565/tcp:proxy_proto',
+    '--port',
+    '19132:19132/udp',
     ...Object.entries(environment).flatMap(([name, value]) => ['--env', `${name}=${value}`]),
     '--entrypoint',
     '/bin/sh',
