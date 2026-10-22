@@ -96,7 +96,10 @@ describe('what Blockly says about what was typed', () => {
     expect(rules.playerName('.')).not.toBeNull()
     expect(rules.playerName(`.${'a'.repeat(16)}`)).not.toBeNull()
     expect(rules.playerName('.no-dashes')).not.toBeNull()
-    for (const typed of ['.Ninja', 'Major Nelson', '.', '.no-dashes'])
+    // Only the letters the server's player argument reads.
+    expect(rules.playerName('.Zoë')).not.toBeNull()
+    expect(rules.playerName('Zoë Pal')).not.toBeNull()
+    for (const typed of ['.Ninja', 'Major Nelson', '.', '.no-dashes', '.Zoë', 'Zoë Pal'])
       expect(AddPlayerInput.safeParse({ serverId: randomUUID(), name: typed }).success).toBe(
         rules.playerName(typed) === null,
       )

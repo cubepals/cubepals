@@ -58,7 +58,19 @@ describe('the lists take a Bedrock player by gamertag', () => {
   })
 
   test('what is neither a Java name nor a gamertag is refused, and the refusal says how to type one', () => {
-    for (const name of ['', '.', 'ab', 'a-b', '.no-dashes', `.${'a'.repeat(16)}`, 'has/slash']) {
+    for (const name of [
+      '',
+      '.',
+      'ab',
+      '.Zoë',
+      '.日本語',
+      'Zoë Pal',
+      '.Pixel\u00a0Pal',
+      'a-b',
+      '.no-dashes',
+      `.${'a'.repeat(16)}`,
+      'has/slash',
+    ]) {
       const refused = AddPlayerInput.safeParse({ serverId, name })
       expect(refused.success).toBe(false)
       expect(refused.error?.issues[0]?.message).toContain('type a dot and their gamertag')

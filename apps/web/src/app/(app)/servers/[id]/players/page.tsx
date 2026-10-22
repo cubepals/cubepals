@@ -59,7 +59,9 @@ export default function PlayersPage() {
 
   const running = server.data.status === 'running'
   // Where the server doesn't check accounts, the name typed here is exactly who can join.
-  const bedrockHelp = letsBedrockIn(server.data) ? 'For a Bedrock player, their gamertag.' : undefined
+  const bedrockHelp = letsBedrockIn(server.data)
+    ? 'For a Bedrock player, a dot and their gamertag.'
+    : undefined
   const nameHelp = server.data.settings.onlineMode
     ? bedrockHelp
     : ['Exactly as it is in the game: capitals count.', bedrockHelp].filter(Boolean).join(' ')
