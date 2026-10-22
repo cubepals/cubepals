@@ -139,12 +139,8 @@ export class ServerQueries {
   async revisions(actor: Actor, serverId: string): Promise<RevisionView[]> {
     const server = authorize(actor, await findServer(this.#db, serverId))
     const { applied } = await loadRuntime(this.#db, server.id, this.#providers)
-    const { desired, entries: revisions } = await revisionHistory(
-      this.#db,
-      server.id,
-      server.desiredRevisionId,
-      51,
-    )
+    const history = await revisionHistory(this.#db, server.id, server.desiredRevisionId, 51)
+    const { desired, entries: revisions } = history
     return revisions.slice(0, 50).map((revision, i) => {
       const before = revisions[i + 1]
       return {

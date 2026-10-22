@@ -108,6 +108,32 @@ async function seed(db: Db): Promise<{ serverId: string; ids: string[] }> {
   return { serverId, ids }
 }
 
+/** The changes between every two of the server's revisions, said from their facts and from the whole rows. */
+async function compareBothWays(db: Db, serverId: string, ids: string[]): Promise<void> {
+  const whole = await listRevisions(db, serverId, 10)
+  const { desired, entries } = await revisionHistory(db, serverId, ids[2] ?? '', 10)
+  expect(entries.map((r) => r.number)).toEqual([3, 2, 1])
+  for (let i = 0; i < whole.length; i++)
+    for (let j = 0; j < whole.length; j++) {
+      const x = entries[i]
+      const y = entries[j]
+      if (x === undefined || y === undefined) throw new Error('the history is short')
+      expect(describeChanges(x, y)).toEqual(
+        describeChanges(whole[i] as ServerRevision, whole[j] as ServerRevision),
+      )
+    }
+  expect(describeChanges(desired, entries[2] as never)).toEqual(
+    describeChanges(whole[0] as ServerRevision, whole[2] as ServerRevision),
+  )
+  // The changed file and the changed mod are among what it says, not nothing.
+  expect(describeChanges(entries[2] as never, entries[0] as never)).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ field: 'files', changed: ['Plug settings'] }),
+      expect.objectContaining({ field: 'mods', added: ['Mod 3'], removed: ['Mod 2'] }),
+    ]),
+  )
+}
+
 describe.skipIf(!hasDatabase)('revision reads', () => {
   let drop: () => Promise<void>
   let pool: ReturnType<typeof createPool>
@@ -205,31 +231,8 @@ describe.skipIf(!hasDatabase)('revision reads', () => {
     expect(JSON.stringify(facts).length).toBeLessThan(2_000)
   })
 
-  test('comparing revisions by their facts says what comparing whole rows says', async () => {
-    const whole = await listRevisions(db, serverId, 10)
-    const desiredId = ids[2] ?? ''
-    const { desired, entries } = await revisionHistory(db, serverId, desiredId, 10)
-    expect(entries.map((r) => r.number)).toEqual([3, 2, 1])
-    for (let i = 0; i < whole.length; i++)
-      for (let j = 0; j < whole.length; j++) {
-        const x = entries[i]
-        const y = entries[j]
-        if (x === undefined || y === undefined) throw new Error('the history is short')
-        expect(describeChanges(x, y)).toEqual(
-          describeChanges(whole[i] as ServerRevision, whole[j] as ServerRevision),
-        )
-      }
-    expect(describeChanges(desired, entries[2] as never)).toEqual(
-      describeChanges(whole[0] as ServerRevision, whole[2] as ServerRevision),
-    )
-    // The changed file and the changed mod are among what it says, not nothing.
-    expect(describeChanges(entries[2] as never, entries[0] as never)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ field: 'files', changed: ['Plug settings'] }),
-        expect.objectContaining({ field: 'mods', added: ['Mod 3'], removed: ['Mod 2'] }),
-      ]),
-    )
-  })
+  test('comparing revisions by their facts says what comparing whole rows says', () =>
+    compareBothWays(db, serverId, ids))
 
   test('the mods are read once for each list that differs, not once for each revision', async () => {
     sent = []
