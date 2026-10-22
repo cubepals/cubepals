@@ -258,6 +258,7 @@ async function restartRegion(
 export interface Machine {
   id: string
   region: string
+  config?: { image?: string }
 }
 
 /** The ids of the app's machines in `region`: an edge may run more than one there. */

@@ -201,18 +201,26 @@ async function deployApp(
  * between that commit and this one, a deploy would only restart machines onto the same thing.
  */
 function unchangedReason(app: FlyApp, env: NodeJS.ProcessEnv): string | null {
-  const commit = deployOf(imagesOf(app, env)[0] ?? '')?.commit
-  if (commit === undefined || spawnSync('git', ['cat-file', '-e', `${commit}^{commit}`]).status !== 0)
-    return null
+  // The edge is judged by every machine's image: a roll that stopped partway leaves some on the old one.
+  const images =
+    app === 'edge'
+      ? machinesOf('bly-prod-edge', env).map((m) => m.config?.image ?? '')
+      : [imagesOf(app, env)[0] ?? '']
+  const commits = images.map((image) => deployOf(image)?.commit)
+  const known = commits.filter((c): c is string => c !== undefined)
+  if (known.length === 0 || known.length < commits.length) return null
+  if (known.some((c) => spawnSync('git', ['cat-file', '-e', `${c}^{commit}`]).status !== 0)) return null
   // Where the edge runs is private configuration, not a path in git: a region added since has no machine yet.
   if (app === 'edge') {
     const present = machinesOf('bly-prod-edge', env).map((m) => m.region)
     if (edgePlacement('bly-prod-edge', edgeRegions(environment().edge_regions), present).length > 0)
       return null
   }
-  const paths = git('diff', '--name-only', commit, 'HEAD').split('\n').filter(Boolean)
-  if (changedFor(app, paths)) return null
-  return `${app}: left running. Nothing it is built from or configured with changed since ${commit.slice(0, 8)}, which its running release was built from.`
+  for (const commit of new Set(known)) {
+    const paths = git('diff', '--name-only', commit, 'HEAD').split('\n').filter(Boolean)
+    if (changedFor(app, paths)) return null
+  }
+  return `${app}: left running. Nothing it is built from or configured with changed since ${known[0]?.slice(0, 8)}, which its running ${app === 'edge' ? 'machines were' : 'release was'} built from.`
 }
 
 /** The edge's machines, one in each region `edge_regions` lists (production-edge.ts). */

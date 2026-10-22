@@ -167,7 +167,13 @@ export async function sawEdge(
       target: edges.edgeId,
       set: {
         seenAt: sql`clock_timestamp()`,
-        ...(startedAt === null ? {} : { startedAt }),
+        // A restart inside the grace of the last doesn't extend it, so an agent that crashes every few
+        // seconds is reported once a grace has passed.
+        ...(startedAt === null
+          ? {}
+          : {
+              startedAt: sql`case when ${edges.startedAt} > ${ago(EDGE_RESTART_GRACE_MS)} then ${edges.startedAt} else ${startedAt} end`,
+            }),
         // A version only moves forward: an answer that arrives late says nothing new.
         ...(syncedTo === null ? {} : { syncedTo: sql`greatest(${edges.syncedTo}, ${syncedTo})` }),
       },

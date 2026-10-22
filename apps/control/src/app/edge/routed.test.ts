@@ -217,6 +217,29 @@ describe.skipIf(!hasDatabase)('a running server, as edges that come late or fall
     expect(await alerted()).toContain('edge_behind')
   }, 30_000)
 
+  test('restarts inside the grace of the last do not extend it, so a crash loop is reported', async () => {
+    const startedAt = async () =>
+      (
+        await h.db
+          .select({ at: schema.edges.startedAt })
+          .from(schema.edges)
+          .where(eq(schema.edges.edgeId, 'loops'))
+      )[0]?.at
+    await h.app.edge.seen('loops', null, true, new Date(Date.now() - 30 * SECOND_MS))
+    const first = await startedAt()
+    // It restarts again within the grace: the start that counts stays the first.
+    await h.app.edge.seen('loops', null, true, new Date())
+    expect(+(await startedAt())!).toBe(+first!)
+    // Once the grace has passed, the next restart is a new start.
+    await h.db
+      .update(schema.edges)
+      .set({ startedAt: new Date(Date.now() - EDGE_RESTART_GRACE_MS - SECOND_MS) })
+      .where(eq(schema.edges.edgeId, 'loops'))
+    const again = new Date()
+    await h.app.edge.seen('loops', null, true, again)
+    expect(Math.abs(+(await startedAt())! - +again)).toBeLessThan(SECOND_MS)
+  }, 30_000)
+
   test('a server never waits on the edges longer than the limit, and is told once it has', async () => {
     const owner = await h.user()
     const never = stuck('never')
