@@ -11,6 +11,7 @@
 import Link from 'next/link'
 import { SiteHeader } from '../../app/(public)/header'
 import { ctaMark, seenMark } from '../../app/(public)/steps'
+import { heroSmallPrint } from '../../lib/bedrock'
 import { Follow } from '../Follow'
 import type { Landed } from '../Landing'
 import { lastSaid, PlansSaid, trialSaid } from '../sections/Plans'
@@ -22,7 +23,7 @@ import { Still } from './Still'
 /** The night's picture as printed beforehand, shown until the worker's own print is in. */
 const night = { src: '/imagery/landing-still-night.png', width: 430, height: 323 }
 
-export function Phone({ create, signedIn, plans, getPlan }: Landed) {
+export function Phone({ create, signedIn, plans, getPlan, bedrock }: Landed) {
   return (
     <main className={styles.page} data-phone>
       <section className={styles.night} data-tone="night" data-sky {...seenMark('top')}>
@@ -39,7 +40,7 @@ export function Phone({ create, signedIn, plans, getPlan }: Landed) {
           <p>
             <strong>{trialSaid(plans)}</strong>
             <br />
-            Minecraft: Java Edition. Bedrock is coming soon.
+            {heroSmallPrint(bedrock)}
           </p>
         </div>
         <Still still="night" first={night} className={styles.still} />

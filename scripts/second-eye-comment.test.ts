@@ -44,7 +44,7 @@ const finding = (severity: Finding['severity'], line: number): Finding => ({
   why: 'The retry calls charge() again.',
 })
 
-const findingRows = (body: string) => body.split('\n').filter((line) => /^\| (🔴|🟠|🟡)&nbsp;/.test(line))
+const findingRows = (body: string) => body.split('\n').filter((line) => line.startsWith('| [`'))
 
 describe('secondEyeComment', () => {
   test('nothing found reads as an AI review that says merge', () => {
@@ -63,12 +63,12 @@ describe('secondEyeComment', () => {
       '| **Model** | `claude-test-model` · [Workflow run](https://github.com/cubepals/cubepals/actions/runs/7) |',
     )
     expect(body).not.toContain('<details>')
-    expect(lines.at(-1)).toBe(
-      "<sub>An automated review by Claude, not a person. It advises and doesn't block the merge. Re-run: `gh workflow run second-eye.yml -f pr=42`</sub>",
+    expect(lines.at(-2)).toBe(
+      '<sub>An automated review by Claude, not a person. The verdict advises; on a sensitive change the Second eye gate also waits for a finished review. Re-run: `gh workflow run second-eye.yml -f pr=42`</sub>',
     )
   })
 
-  test('findings: a row each, most severe first, linked to the line, reasons folded', () => {
+  test('findings: grouped by severity, a row each, linked to the line, reasons folded', () => {
     const body = secondEyeComment(
       { verdict: 'fix first', findings: [finding('low', 3), finding('high', 1), finding('medium', 2)] },
       run,
@@ -77,9 +77,14 @@ describe('secondEyeComment', () => {
     const link = (line: number) =>
       `[\`apps/control/src/billing.ts:${line}\`](https://github.com/cubepals/cubepals/blob/${SHA}/apps/control/src/billing.ts#L${line})`
     expect(findingRows(body)).toEqual([
-      `| 🔴&nbsp;High | ${link(1)} | Hours are charged twice when the stop retries. |`,
-      `| 🟠&nbsp;Medium | ${link(2)} | Hours are charged twice when the stop retries. |`,
-      `| 🟡&nbsp;Low | ${link(3)} | Hours are charged twice when the stop retries. |`,
+      `| ${link(1)} | Hours are charged twice when the stop retries. |`,
+      `| ${link(2)} | Hours are charged twice when the stop retries. |`,
+      `| ${link(3)} | Hours are charged twice when the stop retries. |`,
+    ])
+    expect(body.split('\n').filter((line) => line.startsWith('#### '))).toEqual([
+      '#### 🔴 High (1)',
+      '#### 🟠 Medium (1)',
+      '#### 🟡 Low (1)',
     ])
     const details = body.slice(body.indexOf('<details>'), body.indexOf('</details>'))
     expect(details).toContain(
@@ -87,13 +92,13 @@ describe('secondEyeComment', () => {
     )
   })
 
-  test('at most eight findings', () => {
+  test('every finding is written, with no cap', () => {
     const body = secondEyeComment(
       { verdict: 'fix first', findings: Array.from({ length: 12 }, (_, i) => finding('medium', i + 1)) },
       run,
     )
-    expect(findingRows(body)).toHaveLength(8)
-    expect(body).toContain('8 findings.')
+    expect(findingRows(body)).toHaveLength(12)
+    expect(body).toContain('12 findings.')
   })
 
   test("Claude's text stays in its cell, opens no tag, and mentions nobody", () => {
@@ -124,6 +129,89 @@ describe('secondEyeComment', () => {
       `<sub>Updated for [\`0123456\`](https://github.com/cubepals/cubepals/commit/${SHA})</sub>`,
     )
     expect(lines[3]).toBe('### 🤖 Second eye · AI review by Claude')
+  })
+})
+
+describe('what the second eye shows beyond its findings', () => {
+  test('says how many of the changed files were read, and warns when not all', () => {
+    const all = secondEyeComment({ verdict: 'merge', files_reviewed: 3, findings: [] }, run)
+    expect(all).toContain('3 files, +120 −14 lines · read all 3 |')
+    const part = secondEyeComment({ verdict: 'merge', files_reviewed: 1, findings: [] }, run)
+    expect(part).toContain('· ⚠️ read 1 of 3 |')
+  })
+
+  test('a very long review drops the folded reasons and keeps the rows', () => {
+    const long = { ...finding('high', 1), why: 'x'.repeat(500) }
+    const body = secondEyeComment(
+      { verdict: 'fix first', findings: Array.from({ length: 60 }, () => long) },
+      run,
+    )
+    expect(body.length).toBeLessThan(65536)
+    expect(body).not.toContain('<details>')
+    expect(findingRows(body)).toHaveLength(60)
+  })
+
+  test('an enormous review is cut to fit in one comment', () => {
+    const long = { ...finding('high', 1), problem: 'y'.repeat(300), why: 'x'.repeat(600) }
+    const body = secondEyeComment(
+      { verdict: 'fix first', findings: Array.from({ length: 120 }, () => long) },
+      run,
+    )
+    expect(body.length).toBeLessThan(65536)
+    expect(findingRows(body)).toHaveLength(120)
+  })
+
+  test('ends with the findings that stand, for the next review to read', () => {
+    const body = secondEyeComment({ verdict: 'fix first', findings: [finding('high', 1)] }, run)
+    const encoded = /<!-- second-eye-data:([A-Za-z0-9+/=]+) -->$/.exec(body)?.[1] ?? ''
+    const data = JSON.parse(Buffer.from(encoded, 'base64').toString())
+    expect(data.sha).toBe(SHA)
+    expect(data.findings).toEqual([
+      { severity: 'high', file: 'apps/control/src/billing.ts', line: 1, problem: finding('high', 1).problem },
+    ])
+  })
+
+  test('a re-review says what became of the earlier findings and splits the rest', () => {
+    const previous = { sha: HEAD, findings: [finding('high', 1), finding('medium', 2), finding('low', 3)] }
+    const body = secondEyeComment(
+      {
+        verdict: 'fix first',
+        files_reviewed: 3,
+        earlier: [
+          { number: 1, status: 'fixed', note: 'now keyed' },
+          { number: 3, status: 'gone', note: 'code removed' },
+        ],
+        findings: [
+          { ...finding('medium', 2), origin: 'open' },
+          { ...finding('high', 9), origin: 'new' },
+          { ...finding('low', 8), origin: 'missed' },
+        ],
+      },
+      { ...run, previous },
+    )
+    expect(body).toContain(
+      '**Since the last review.** Earlier: 3 findings (1 fixed, 1 no longer apply, 1 still open). Now: 1 new, in code changed since, 1 missed before.',
+    )
+    expect(findingRows(body).map((row) => row.split(' | ').at(-1))).toEqual([
+      'New, in code changed since |',
+      'Still open |',
+      'Missed before |',
+    ])
+    expect(body).toContain('Earlier findings that are settled (2)')
+    const lost = secondEyeComment(
+      {
+        verdict: 'merge',
+        earlier: [
+          { number: 1, status: 'fixed' },
+          { number: 1, status: 'fixed' },
+        ],
+        findings: [],
+      },
+      { ...run, previous },
+    )
+    expect(lost).toContain('(1 fixed, 2 not accounted for)')
+    expect(body).toContain('- Fixed: Hours are charged twice when the stop retries. now keyed')
+    expect(body).toContain('- No longer applies: Hours are charged twice when the stop retries. code removed')
   })
 })
 
