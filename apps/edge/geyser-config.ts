@@ -48,6 +48,8 @@ export function geyserConfig(s: GeyserSettings): string {
     `  primary-motd: ${NAME}`,
     `  secondary-motd: ${NAME}`,
     '  passthrough-motd: false',
+    // Geyser pings the Java server for its own message; ours is fixed, so it isn't asked every few seconds.
+    '  ping-passthrough-interval: 3600',
     'gameplay:',
     `  server-name: ${NAME}`,
     'advanced:',

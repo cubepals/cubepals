@@ -11,12 +11,14 @@ online-mode=false
 server-port=25570
 enforce-secure-profile=false
 max-players=200
+white-list=false
+enforce-whitelist=false
 view-distance=6
 simulation-distance=4
 level-type=minecraft\:flat
 spawn-protection=0
 PROPS
-  bun /app/tools/bedrock-join/size/load/control-stub.ts &
+  bun "$(dirname "$0")/control-stub.ts" &
   exec java -Xmx1200m -XX:+UseSerialGC -jar server.jar nogui
   ;;
 *) exec sleep infinity ;;

@@ -112,14 +112,42 @@ async function up(n: string, size: string, memory: string) {
   )
   if (machines(load).length === 0)
     deploy(load, context, loadToml, join(context, 'tools/bedrock-join/size/load/Dockerfile'))
-  const server = machines(load).find((m) => m.name !== 'client-a' && m.name !== 'client-b')
-  if (server === undefined) throw new Error('the load app has no machine')
-  for (const name of ['client-a', 'client-b'])
-    if (!machines(load).some((m) => m.name === name))
-      fly(['machine', 'clone', server.id, '-a', load, '--name', name, '--override-cmd', 'client', '--detach'])
+  const commit = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: ROOT }).stdout.toString().trim()
+  // The pushed commit is fetched on a machine and run from source: a test edge has no image of
+  // its own, and the load machines' image is older than the commit.
+  const start = (script: string) =>
+    `mkdir -p /edge/repo && cd /edge && bun -e 'await Bun.write("repo.tgz", await fetch("https://codeload.github.com/cubepals/cubepals/tar.gz/" + process.env.COMMIT))' && tar xzf repo.tgz -C repo --strip-components=1 && exec sh repo/tools/bedrock-join/size/${script}`
+  const image = machines(load).find((m) => m.name === 'client-a')?.config.image
+  if (image === undefined) throw new Error('the load app has no client machine')
+  for (const old of machines(load).filter((m) => m.name !== 'client-a' && m.name !== 'client-b'))
+    fly(['machine', 'destroy', old.id, '-a', load, '--force'])
+  if (!machines(load).some((m) => m.name === 'server'))
+    fly([
+      'machine',
+      'run',
+      image,
+      '-a',
+      load,
+      '--name',
+      'server',
+      '--region',
+      REGION,
+      '--vm-size',
+      'shared-cpu-2x',
+      '--vm-memory',
+      '2048',
+      '--env',
+      `COMMIT=${commit}`,
+      '--entrypoint',
+      '/bin/sh',
+      '--',
+      '-c',
+      start('load/start.sh server'),
+    ])
+  const server = machines(load).find((m) => m.name === 'server')
+  if (server === undefined) throw new Error('the server machine did not start')
   for (const old of machines(edge)) fly(['machine', 'destroy', old.id, '-a', edge, '--force'])
   fly(['ips', 'allocate-v4', '--shared', '-a', edge, '-y'])
-  const commit = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: ROOT }).stdout.toString().trim()
   const environment = {
     COMMIT: commit,
     MC_ROUTER_VERSION:
@@ -138,8 +166,6 @@ async function up(n: string, size: string, memory: string) {
     ADDRESS_CONNECTIONS_BURST: '1000',
     ADDRESS_GREETING: '1000',
   }
-  // The pushed commit is fetched on the machine and run from source: a test edge has no image.
-  const start = `mkdir -p /edge/repo && cd /edge && bun -e 'await Bun.write("repo.tgz", await fetch("https://codeload.github.com/cubepals/cubepals/tar.gz/" + process.env.COMMIT))' && tar xzf repo.tgz -C repo --strip-components=1 && exec sh repo/tools/bedrock-join/size/edge/boot.sh`
   fly([
     'machine',
     'run',
@@ -161,7 +187,7 @@ async function up(n: string, size: string, memory: string) {
     '/bin/sh',
     '--',
     '-c',
-    start,
+    start('edge/boot.sh'),
   ])
   process.stdout.write(`up: ${edge} (${size} ${memory} MB), load app ${load}\n`)
 }
