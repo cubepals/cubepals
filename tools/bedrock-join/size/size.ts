@@ -117,6 +117,7 @@ async function up(n: string, size: string, memory: string) {
   for (const name of ['client-a', 'client-b'])
     if (!machines(load).some((m) => m.name === name))
       fly(['machine', 'clone', server.id, '-a', load, '--name', name, '--override-cmd', 'client', '--detach'])
+  for (const old of machines(edge)) fly(['machine', 'destroy', old.id, '-a', edge, '--force'])
   fly(['ips', 'allocate-v4', '--shared', '-a', edge, '-y'])
   const commit = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: ROOT }).stdout.toString().trim()
   const environment = {
@@ -138,7 +139,7 @@ async function up(n: string, size: string, memory: string) {
     ADDRESS_GREETING: '1000',
   }
   // The pushed commit is fetched on the machine and run from source: a test edge has no image.
-  const start = `mkdir -p /edge/repo && cd /edge && curl -fsSL https://codeload.github.com/cubepals/cubepals/tar.gz/$COMMIT | tar xz -C repo --strip-components=1 && exec sh repo/tools/bedrock-join/size/edge/boot.sh`
+  const start = `mkdir -p /edge/repo && cd /edge && bun -e 'await Bun.write("repo.tgz", await fetch("https://codeload.github.com/cubepals/cubepals/tar.gz/" + process.env.COMMIT))' && tar xzf repo.tgz -C repo --strip-components=1 && exec sh repo/tools/bedrock-join/size/edge/boot.sh`
   fly([
     'machine',
     'run',
