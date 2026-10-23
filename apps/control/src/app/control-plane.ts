@@ -351,7 +351,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     accountQueries: new AccountQueries({ db, policy }),
     billing,
     listings,
-    listingQueries: new ListingQueries({ db, addressing: ports.addressing, capabilities: ports.capabilities }),
+    listingQueries: new ListingQueries({ ...ports, db }),
     sharing,
     sharingQueries: new SharingQueries({
       ...ports,

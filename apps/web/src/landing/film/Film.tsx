@@ -115,7 +115,8 @@ export function Night({
           <span>Send your friends</span> <span>the address.</span> <span>They’re in.</span>
         </h1>
         <p className={`bl-lede ${styles.support}`}>
-          Make a server in three decisions. Your friends join from the normal game, whenever they like.
+          Make a server in three decisions. {bedrock ? 'Friends on PC, phones and tablets' : 'Your friends'}{' '}
+          join from the normal game, whenever they like.
         </p>
         <div className={styles.go}>
           <Link href={create} className="bl-btn bl-btn--lg" {...ctaMark('hero_create')}>
@@ -123,8 +124,12 @@ export function Night({
           </Link>
           <p>
             {trialSaid(plans)}
-            <br />
-            {heroSmallPrint(bedrock)}
+            {heroSmallPrint(bedrock) && (
+              <>
+                <br />
+                {heroSmallPrint(bedrock)}
+              </>
+            )}
           </p>
         </div>
         <Arcade status={arcade} className={styles.arcade} />

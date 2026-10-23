@@ -16,7 +16,10 @@ import { guideHref, publishedGuides } from '../guides'
 import { PricingCard } from './get-plan'
 import { byKind, Questions, yearSaid } from './questions'
 
-/** The title and description say the plans' own numbers, or nothing about them when the table can't be read. */
+/**
+ * The title and description say the plans' own numbers, or nothing about them when the table can't
+ * be read, and Core's Java and Bedrock friends where Bedrock is on.
+ */
 export async function generateMetadata(): Promise<Metadata> {
   const { free, core, plus } = byKind(await publicPlans())
   const paid = [core, plus].filter((plan): plan is PublicPlan => plan !== undefined)
@@ -27,7 +30,7 @@ export async function generateMetadata(): Promise<Metadata> {
         : 'Pricing',
     description:
       free && core
-        ? `${core.name} starts free, with ${free.totalHours ? `${free.totalHours} hours and ` : ''}no card, for you and ${core.maxPlayers - 1} friends.${plus ? ` ${plus.name} adds mods, plugins and bigger groups.` : ''}`
+        ? `${core.name} starts free, with ${free.totalHours ? `${free.totalHours} hours and ` : ''}no card, for you and ${core.maxPlayers - 1} friends${bedrockLive() ? ' on Java and Bedrock' : ''}.${plus ? ` ${plus.name} adds mods, plugins and bigger groups.` : ''}`
         : 'Core starts free, for you and your friends. Plus adds mods, plugins and bigger groups.',
     path: '/pricing',
   })

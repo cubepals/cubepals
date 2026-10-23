@@ -21,6 +21,7 @@ import {
   CopyField,
   FormSection,
   GetPack,
+  JavaAndBedrock,
   Note,
   OfficialSeal,
   OutLink,
@@ -75,6 +76,7 @@ export function ServerPage({ view, invitedBy }: { view: PublicServerView; invite
               : view.wakesSlowly
                 ? 'Asleep — it wakes up when you join. This one takes a couple of minutes.'
                 : 'Asleep — it wakes up when you join'}
+            {view.bedrock === true && <JavaAndBedrock />}
             {view.whitelistOnly && <Badge tone="outline">Invite only</Badge>}
           </span>
         </div>
@@ -91,7 +93,7 @@ export function ServerPage({ view, invitedBy }: { view: PublicServerView; invite
 
       <FormSection
         title="Join"
-        description={joinLine(view.gameVersion, view.needs.modpack, view.needs.joins)}
+        description={joinLine(view.gameVersion, view.needs.modpack, view.needs.joins, view.bedrock === true)}
       >
         <CopyField value={view.joinAddress} mark={ctaMark('copy_join_address')} />
         {view.players.length > 0 && (

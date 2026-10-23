@@ -31,7 +31,7 @@ import { useDebounced } from '../../../../lib/hooks'
 import { iconSrc } from '../../../../lib/present'
 import * as rules from '../../../../lib/rules'
 import { useChecked } from '../../../../lib/use-checked'
-import { Button, Note, OutLink, Skeleton, TextField, Toggle } from '../../../../ui'
+import { Button, JavaAndBedrock, Note, OutLink, Skeleton, TextField, Toggle } from '../../../../ui'
 import { PackDrop, type ReadPack } from '../../pack-drop'
 import { PlusOffer } from '../../plus-offer'
 import styles from './create.module.css'
@@ -292,7 +292,7 @@ function CreateServer() {
             picked?.name ??
             (from.kind === 'import' ? ownPack?.pack.name : undefined) ??
             (copying !== null ? `Like ${copying.name}` : preview.data?.from),
-          release,
+          ...withEditions(release, preview.data),
           region.said,
           chosenSize !== null && players !== undefined && `Up to ${players} players`,
           forADay && 'For a day',
@@ -617,6 +617,10 @@ function CreateServer() {
 }
 
 /** The way back from the packs or the upload to the list of ways to play. */
+/** The bar's release, and "Java and Bedrock" after it where Bedrock friends join what is being made. */
+const withEditions = (release: ReactNode, preview: SetupPreview | undefined): ReactNode[] =>
+  preview?.bedrock ? [release, <JavaAndBedrock key="editions" />] : [release]
+
 function BackToWays({ onBack }: { onBack: () => void }) {
   return (
     <div>

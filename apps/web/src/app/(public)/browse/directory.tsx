@@ -17,7 +17,7 @@ import { messageOf, useTRPC } from '../../../lib/api'
 import { useDebounced } from '../../../lib/hooks'
 import { iconSrc, loaderLabel, timeAgo } from '../../../lib/present'
 import { useSignedIn } from '../../../lib/viewer'
-import { Badge, EmptyState, Note, OfficialSeal, Skeleton, TextField } from '../../../ui'
+import { Badge, EmptyState, JavaAndBedrock, Note, OfficialSeal, Skeleton, TextField } from '../../../ui'
 import { useBrowseSteps } from '../presses'
 import { Reactions } from '../reactions'
 import { ctaMark } from '../steps'
@@ -166,6 +166,7 @@ export function Card({ listing }: { listing: ListingCardView }) {
       )}
       {/* At the foot of every card, so the counts line up along a row of them. */}
       <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)', marginBlockStart: 'auto' }}>
+        {listing.bedrock === true && <JavaAndBedrock />}
         {listing.whitelistOnly && <Badge tone="outline">Invite only</Badge>}
         {listing.tags.slice(0, 3).map((t) => (
           <Badge key={t}>{t}</Badge>

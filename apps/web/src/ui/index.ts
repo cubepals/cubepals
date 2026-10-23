@@ -5,6 +5,7 @@
 export { ActionButton } from './action-button'
 export { Button } from './Button'
 export { Console, type ConsoleLine } from './Console'
+export { JavaAndBedrock } from './editions'
 export { PlayerFace } from './face'
 export { Checkbox, FormRow, FormSection, Select, TextField, Toggle } from './fields'
 export { CopyField, FileButton, Modal, NavTabs, ProgressBar, Tabs } from './interactive'
