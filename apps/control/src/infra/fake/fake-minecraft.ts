@@ -15,7 +15,8 @@
  *   is the player's account where accounts are checked, and otherwise a UUID derived from the
  *   exact name; a name in a command is looked up in its name cache (`usercache.json`, which logins
  *   and lookups fill), then asked of Mojang — even where accounts aren't checked — and, on such a
- *   server, finally derived from the name in lower case;
+ *   server, finally derived from the name in lower case; a Bedrock player is in the cache only
+ *   once they have joined, as Floodgate names them, and `kick` refuses a UUID;
  * - RCON wants the secret the spec carries; a status ping answers once the world is loaded;
  * - each player on has a place and may have a last death, which `data get entity`, `tp` and
  *   `spreadplayers` (under `execute in`) read and move, answering in vanilla's words (1.20.1, 26.3);
@@ -54,6 +55,7 @@ import {
   type AccessServer,
   ban,
   banIp,
+  kick,
   op,
   pardon,
   pardonIp,
@@ -83,6 +85,8 @@ interface Server {
   running: boolean
   ready: boolean
   online: Map<string, string>
+  /** Why each player was last turned out, by UUID: a kick's reason, or the words a ban kicks with. */
+  kicks: Map<string, string>
   /** The access lists as the running server holds them. */
   lists: AccessLists
   /** Which name is which player: `usercache.json`. */
@@ -265,6 +269,31 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
     } else {
       player = { uuid: offlineUuid(name), name }
     }
+    return this.#admit(server, player)
+  }
+
+  /**
+   * A Bedrock player joins through the edge: Floodgate hands the server the UUID and name it made
+   * for them, which no account lookup is asked about. The server then judges them as any other.
+   */
+  async bedrockLogin(
+    key: string,
+    player: { uuid: string; name: string },
+  ): Promise<'joined' | 'banned' | 'not whitelisted'> {
+    const server = this.#require(key)
+    if (!server.running) throw new Error('The server is not running')
+    return this.#admit(server, player)
+  }
+
+  /** Why the server last turned this player out, if it ever did. */
+  kickedWith(key: string, uuid: string): string | undefined {
+    return this.#require(key).kicks.get(uuid)
+  }
+
+  async #admit(
+    server: Server,
+    player: { uuid: string; name: string },
+  ): Promise<'joined' | 'banned' | 'not whitelisted'> {
     if (server.lists.held('banned-players.json').some((e) => e.uuid === player.uuid)) return 'banned'
     const listed = server.lists.held('whitelist.json').some((e) => e.uuid === player.uuid)
     if ((await whitelistOn(server.dir)) && !listed) return 'not whitelisted'
@@ -388,6 +417,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
         running: false,
         ready: false,
         online: new Map(),
+        kicks: new Map(),
         lists: new AccessLists(),
         names: new NameCache(this.#profiles),
         said: [],
@@ -466,6 +496,8 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
         return ban(this.#access(server), args[0] ?? '', args.slice(1).join(' '), source)
       case 'pardon':
         return pardon(this.#access(server), args[0] ?? '')
+      case 'kick':
+        return kick(this.#access(server), args)
       case 'ban-ip':
         return banIp(server.lists, args[0] ?? '', args.slice(1).join(' '), source)
       case 'pardon-ip':
@@ -637,6 +669,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
       lists: server.lists,
       names: server.names,
       online: server.online,
+      kicks: server.kicks,
     }
   }
 }

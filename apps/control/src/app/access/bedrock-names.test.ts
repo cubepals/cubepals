@@ -12,6 +12,7 @@ import {
   floodgateName,
   floodgateUuid,
   isBedrockUuid,
+  PlayerInput,
   shownName,
   typedAsBedrock,
 } from '@blockly/contracts'
@@ -55,6 +56,11 @@ describe('the lists take a Bedrock player by gamertag', () => {
       expect(AddPlayerInput.safeParse({ serverId, name }).success).toBe(true)
     expect(BanInput.safeParse({ serverId, name: '.Dream', reason: 'griefing' }).success).toBe(true)
     expect(AddPlayerInput.parse({ serverId, name: '  .Ninja ' }).name).toBe('.Ninja')
+    // Unbanned or taken off a list by Floodgate's UUID, which is no RFC version.
+    expect(PlayerInput.safeParse({ serverId, playerUuid: floodgateUuid('2535400000000000') }).success).toBe(
+      true,
+    )
+    expect(PlayerInput.safeParse({ serverId, playerUuid: 'not-a-uuid' }).success).toBe(false)
   })
 
   test('what is neither a Java name nor a gamertag is refused, and the refusal says how to type one', () => {

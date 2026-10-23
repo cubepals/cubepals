@@ -27,8 +27,8 @@ import {
  */
 
 /**
- * `pluginBans`: a plugin answers to `ban` (`ObservedAccess.pluginBans`), so the game's own ban
- * list is reached by its full name, which only a server with plugins knows.
+ * `pluginBans`: a plugin answers to `ban` and `kick` (`ObservedAccess.pluginBans`), so the game's
+ * own commands are reached by their full name, which only a server with plugins knows.
  */
 export function accessCommand(command: AccessCommand, pluginBans = false): string {
   const vanilla = pluginBans ? 'minecraft:' : ''
@@ -49,6 +49,11 @@ export function accessCommand(command: AccessCommand, pluginBans = false): strin
         : `${vanilla}ban ${command.player.name}`
     case 'pardon':
       return `${vanilla}pardon ${command.player.name}`
+    case 'kick':
+      // By name: `kick` takes only someone who is on, whose name is theirs, and refuses a UUID as
+      // one that could be any entity (Paper 26.2). The words are those the game refuses a banned
+      // player's join with.
+      return `${vanilla}kick ${command.player.name} You are banned from this server. Reason: ${plain(command.reason)}`
     case 'pardon_ip':
       return `pardon-ip ${command.ip}`
     case 'whitelist_reload':

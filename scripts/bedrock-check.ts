@@ -16,8 +16,10 @@
  *   server     Bedrock on, Floodgate loaded with its key file (never printed)
  *   join       the server asleep, a Bedrock join waking it: spawn, time to spawn, a chat line, and
  *              a Java ping that sees the same server
- *   access     "Only people I add can join": an unlisted gamertag refused, an added one let in, a
- *              banned one refused
+ *   whitelist  "Only people I add can join": an unlisted gamertag refused, an added one let in;
+ *              then off again, so what follows tests what it names
+ *   ban        a gamertag the server hasn't met: the ban waits, turns them out with its reason as
+ *              they join, and refuses them after; a pardon lets them back in
  *   forged     a Java handshake carrying Floodgate data reaches the server without it
  *   geyser     Geyser's process killed by its PID: Java joins and the edge's health carry on, and
  *              Geyser comes back
@@ -332,39 +334,48 @@ try {
     )
   const [listed, unlisted, banned] = tags
   if (listed && unlisted && banned) {
-    const joinsAs = ([name, xuid]: [string, string]) =>
-      bedrockJoin(address(), ['--username', name, '--xuid', xuid, '--hold', '2', '--timeout', '60'], current)
+    const joinsAs = ([name, xuid]: [string, string], hold = 2) =>
+      bedrockJoin(
+        address(),
+        ['--username', name, '--xuid', xuid, '--hold', String(hold), '--timeout', String(hold + 60)],
+        current,
+      )
+    type Entry = { list: string; player: { name: string; uuid: string }; state: string; error: string | null }
+    const entryOf = async (list: string, name: string) =>
+      ((await api('access.get', { serverId: server.id }, 'GET')).entries as Entry[]).find(
+        (e) => e.list === list && e.player.name === `.${name}`,
+      )
+    // Lists reach a running server at once and a sleeping one at its next boot, so the server is
+    // woken first: these steps check what a player is let in by, not when lists arrive.
+    const awake = async () => {
+      if ((await view()).status === 'running') return
+      await api('servers.start', { serverId: server.id, requestId: randomUUID() })
+      await waitFor((v) => v.status === 'running', 'woke for the access steps', 600)
+      await waitFor((v) => v.activeOperation === null, 'settled', 600)
+    }
+    const whitelistIs = (enabled: boolean) =>
+      until(`the whitelist ${enabled ? 'on' : 'off'} on the server`, 180, async () => {
+        const access = await api('access.get', { serverId: server.id }, 'GET')
+        return access.whitelistEnabled === enabled && access.pendingWhitelistEnabled === null
+          ? true
+          : undefined
+      })
 
-    const ready = await step(
-      '"Only people I add can join" is on, one gamertag added and one banned',
+    const listedIn = await step(
+      'whitelist: "Only people I add can join" is on, with one gamertag added',
       async () => {
-        // Lists reach a running server at once and a sleeping one at its next boot, so the server
-        // is woken first: these steps check what a player is let in by, not when lists arrive.
-        if ((await view()).status !== 'running') {
-          await api('servers.start', { serverId: server.id, requestId: randomUUID() })
-          await waitFor((v) => v.status === 'running', 'woke for the access steps', 600)
-          await waitFor((v) => v.activeOperation === null, 'settled', 600)
-        }
+        await awake()
         await api('access.setWhitelist', { serverId: server.id, enabled: true })
         await api('access.addToWhitelist', { serverId: server.id, name: `.${listed[0]}` })
-        await api('access.ban', { serverId: server.id, name: `.${banned[0]}`, reason: 'Bedrock check' })
-        await until('delivered to the server', 180, async () => {
-          const access = await api('access.get', { serverId: server.id }, 'GET')
-          const active = (list: string, name: string) =>
-            access.entries.some(
-              (e: { list: string; player: { name: string }; state: string }) =>
-                e.list === list && e.player.name === `.${name}` && e.state === 'active',
-            )
-          return access.whitelistEnabled && active('whitelist', listed[0]) && active('ban', banned[0])
-            ? true
-            : undefined
-        })
-        return 'the lists are on the server'
+        await whitelistIs(true)
+        await until('the gamertag on the whitelist', 180, async () =>
+          (await entryOf('whitelist', listed[0]))?.state === 'active' ? true : undefined,
+        )
+        return 'the whitelist is on the server'
       },
       300,
     )
-
-    if (ready) {
+    if (listedIn) {
       await step('an unlisted gamertag is refused', async () => {
         const run = await joinsAs(unlisted)
         check(run.spawned === 0, 'an unlisted gamertag got in')
@@ -376,13 +387,62 @@ try {
         check(run.spawned === 1, `an added gamertag was refused: ${run.told[0]?.kicked ?? 'no answer'}`)
         return `spawned ${seconds(run.spawnMs[0] ?? 0)} after the join began`
       })
-      await step('a banned gamertag is refused', async () => {
-        const run = await joinsAs(banned)
-        check(run.spawned === 0, 'a banned gamertag got in')
-        check(run.told[0]?.kicked != null, 'the join ended without a reason')
-        return `refused: "${run.told[0]?.kicked}"`
-      })
     }
+    // Off again, so the ban below and the Geyser step after it test what they name, not the whitelist.
+    const open = await step('"Only people I add can join" is off again', async () => {
+      await awake()
+      await api('access.setWhitelist', { serverId: server.id, enabled: false })
+      await whitelistIs(false)
+      return 'anyone may join'
+    })
+
+    const bannedOut =
+      open &&
+      (await step(
+        'ban: a gamertag the server has not met waits for them, turned out as they join, then refused',
+        async () => {
+          await awake()
+          const reason = 'Bedrock check'
+          await api('access.ban', { serverId: server.id, name: `.${banned[0]}`, reason })
+          // The server can't name a Bedrock player it hasn't met: the ban waits, and says why.
+          const waiting = await until('the ban waiting for them', 180, async () => {
+            const entry = await entryOf('ban', banned[0])
+            return entry?.state === 'pending_add' && entry.error !== null ? entry : undefined
+          })
+          check(
+            (await entryOf('ban', banned[0]))?.state !== 'active',
+            'the ban showed as in force before they joined',
+          )
+          // Held long enough for a reading of who is on to see them, and the ban to follow.
+          const run = await joinsAs(banned, 150)
+          check(
+            run.spawned === 1,
+            `they were refused before the server met them: ${run.told[0]?.kicked ?? 'no answer'}`,
+          )
+          const kicked = run.told[0]?.kicked ?? ''
+          check(kicked.includes(reason), `they were not turned out with the reason: "${kicked}"`)
+          await until('the ban in force', 120, async () =>
+            (await entryOf('ban', banned[0]))?.state === 'active' ? true : undefined,
+          )
+          const again = await joinsAs(banned)
+          check(again.spawned === 0, 'a banned gamertag got back in')
+          return `waited ("${waiting.error}"), turned out with "${kicked}", then refused: "${again.told[0]?.kicked}"`
+        },
+        400,
+      ))
+
+    if (bannedOut)
+      await step('pardon: the banned gamertag is pardoned and gets in', async () => {
+        const entry = await entryOf('ban', banned[0])
+        check(entry !== undefined, 'the ban is gone from the list')
+        await api('access.pardon', { serverId: server.id, playerUuid: entry?.player.uuid })
+        await until('the ban lifted', 180, async () =>
+          (await entryOf('ban', banned[0])) === undefined ? true : undefined,
+        )
+        const run = await joinsAs(banned)
+        check(run.spawned === 1, `a pardoned gamertag was refused: ${run.told[0]?.kicked ?? 'no answer'}`)
+        return `spawned ${seconds(run.spawnMs[0] ?? 0)} after the join began`
+      })
   }
 
   if (made) {
