@@ -6,9 +6,9 @@
  * Gifts: time on a paid plan that one account buys and another redeems with a code. The provider
  * sells each gift as a one-time product (`giftProducts`); its paid order makes the gift here and
  * emails its buyer the code, of which only a hash is kept. A gift made before its checkout, as one
- * a guest buys (GIFTS_BY_EMAIL), is named in its order (`giftId`) and found by that. Redeeming gives the account the plan
- * for the gift's months, from then or from when the time it already has ends (a year paid at once
- * included), and `billedPlan` reads it from there. A refund voids a code nobody has used, and ends
+ * a guest buys (GIFTS_BY_EMAIL), is named in its order (`giftId`) and found by that. Redeeming
+ * gives the account the plan for the gift's months, from then or from when the time it already has
+ * ends (a year paid at once included), and `billedPlan` reads it from there. A refund voids a code nobody has used, and ends
  * the time of one somebody has. A gift redeemed to start when a subscription set to end runs out
  * moves on if the subscription is kept and renews, so it never runs under paid days. Buying is
  * capped per buyer per day, and wrong codes per account per hour.
@@ -201,19 +201,26 @@ export class Gifts {
           )
         return
       }
-      if (row.voidedAt !== null) return
-      const bought = [
-        { action: 'billing.gift_bought', data: { gift: row.id, plan: row.planKey, months: row.months } },
-      ]
-      if (row.delivery === 'email') {
-        if (first)
-          await writeEntries(tx, row.buyerId ?? row.id, 'system:billing', 'webhook', bought, subjectOf(row))
-        return
-      }
-      if (row.emailedAt !== null || row.buyerId === null || !row.planKey || !row.months) return
-      await this.#sendCode(tx, row.id, row.buyerId, row.planKey, row.months)
-      await writeEntries(tx, row.buyerId, 'system:billing', 'webhook', bought)
+      if (row.voidedAt === null) await this.#paidFor(tx, row, first)
     })
+  }
+
+  /**
+   * A gift paid for, not refunded: one delivered as a code has it emailed to its buyer, unless it
+   * was; one delivered by email has its purchase audited the first time (`first`), and waits.
+   */
+  async #paidFor(tx: Tx, row: typeof gifts.$inferSelect, first: boolean) {
+    const bought = [
+      { action: 'billing.gift_bought', data: { gift: row.id, plan: row.planKey, months: row.months } },
+    ]
+    if (row.delivery === 'email') {
+      if (first)
+        await writeEntries(tx, row.buyerId ?? row.id, 'system:billing', 'webhook', bought, subjectOf(row))
+      return
+    }
+    if (row.emailedAt !== null || row.buyerId === null || !row.planKey || !row.months) return
+    await this.#sendCode(tx, row.id, row.buyerId, row.planKey, row.months)
+    await writeEntries(tx, row.buyerId, 'system:billing', 'webhook', bought)
   }
 
   /** A new code for the gift, kept as its hash, and emailed to the buyer in the same breath. */

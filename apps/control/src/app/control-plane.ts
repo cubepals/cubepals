@@ -134,8 +134,6 @@ export interface ControlPlaneSettings {
    * download Cubepals' resource pack from it (`artifacts/brand-pack.ts`).
    */
   webOrigin: string
-  /** GIFTS_BY_EMAIL: gifts emailed to the person they are for, bought with or without an account. */
-  giftsByEmail?: boolean
   /** Whether sign-up stops at the free-account cap; true unless this is local development. */
   signupCap?: boolean
   /** The packs Blockly offers by name; the review in `curation/packs.ts` unless a test brings its own. */
@@ -287,14 +285,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     webOrigin: settings.webOrigin,
     configured: { admins: settings.adminEmails ?? [], signupCap: settings.signupCap ?? true },
   })
-  const billing = new BillingService({
-    ...ports,
-    db,
-    policy,
-    accounts,
-    webOrigin: settings.webOrigin,
-    giftsByEmail: settings.giftsByEmail ?? false,
-  })
+  const billing = new BillingService({ ...ports, db, policy, accounts, webOrigin: settings.webOrigin })
   const backups = new BackupService({ db, transitions, events, runtime, policy, artifacts, official, ports })
   const worlds = new WorldService({ db, transitions, events, providers: runtime.providers })
   const reconciler = new AccessReconciler({ db, runtime, console: ports.console, profiles, specs, events })

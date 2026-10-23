@@ -703,7 +703,6 @@ async function main(): Promise<void> {
       stopCheatersProblem: config.stopCheaters.problem,
       adminInbox: config.mail.adminInbox,
       webOrigin: config.web.canonicalOrigin,
-      giftsByEmail: config.giftsByEmail,
       signupCap: config.local === null,
       room: config.room,
     },

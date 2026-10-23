@@ -7,12 +7,13 @@
  * billing service hands out, the page's button, the signed delivery through the webhook route
  * Polar's take, and the plan the account is on after each.
  */
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { TERMS_VERSION } from '@blockly/contracts'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { loadStanding } from '../../app/accounts/persistence.ts'
 import { latestSubscription } from '../../app/billing/persistence.ts'
+import { installTuning, tuning } from '../../app/tuning.ts'
 import { createBillingWebhook } from '../../interfaces/billing/webhook.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { localCheckoutPages } from './checkout-pages.ts'
@@ -152,5 +153,96 @@ describe.skipIf(!hasDatabase)('the local checkout', () => {
     })
     expect(refused.status).toBe(401)
     expect((await loadStanding(h.db, actor.userId)).plan).toBe('free')
+  })
+})
+
+describe.skipIf(!hasDatabase)('the local gift page, with GIFTS_BY_EMAIL', () => {
+  const MONTH = { id: 'local-gift-plus', planKey: 'plus', months: 1, priceCents: 1500 }
+  let h: Harness
+  let billing: LocalBilling
+  let pages: ReturnType<typeof localCheckoutPages>
+
+  const before = tuning()
+  beforeEach(() => installTuning({ ...before, giftsByEmail: true }))
+  afterEach(() => installTuning(before))
+
+  beforeAll(async () => {
+    h = await startHarness({
+      capabilities: (db) => {
+        billing = new LocalBilling({
+          db,
+          secret: 'local-only-auth-secret',
+          webOrigin: 'http://localhost:3000',
+          gifts: [MONTH],
+        })
+        return { archives: null, billing }
+      },
+    })
+    pages = localCheckoutPages({ billing, webhook: createBillingWebhook({ billing: h.app.billing }) })
+  }, 30_000)
+
+  afterAll(() => h.close())
+
+  /** A guest's gift, made before its checkout, bought on the page with `email`; answers the gift and its order. */
+  async function bought(email: string) {
+    const [made] = await h.db
+      .insert(schema.planGifts)
+      .values({
+        provider: 'local',
+        buyerEmail: email,
+        recipientKey: `recipient-${crypto.randomUUID()}`,
+        delivery: 'email',
+        state: 'checkout',
+        planKey: 'plus',
+        months: 1,
+      })
+      .returning()
+    if (!made) throw new Error('no gift was made')
+    const link = new URL(
+      await billing.giftCheckoutUrl({
+        userId: null,
+        email,
+        gift: MONTH,
+        giftId: made.id,
+        returnUrl: 'http://localhost:3000/gift',
+      }),
+    )
+    expect((await pages.request(link.pathname + link.search)).status).toBe(200)
+    const paid = await pages.request(link.pathname, {
+      method: 'POST',
+      body: new URLSearchParams({ ticket: link.searchParams.get('ticket') ?? '' }),
+    })
+    expect(paid.status).toBe(303)
+    const [gift] = await h.db.select().from(schema.planGifts).where(eq(schema.planGifts.id, made.id))
+    const [order] = await h.db
+      .select()
+      .from(schema.billingOrders)
+      .where(eq(schema.billingOrders.giftId, made.id))
+    return { gift, order }
+  }
+
+  test('a guest pays for the gift made before its checkout, kept with no account', async () => {
+    const { gift, order } = await bought('guest@example.test')
+    expect(order).toMatchObject({ provider: 'local', userId: null })
+    expect(gift).toMatchObject({ state: 'paid', externalOrderId: order?.externalOrderId, buyerId: null })
+  })
+
+  test('filed under the account with the guest’s email, as Polar files it, it is still the guest’s', async () => {
+    const account = await h.user()
+    const sent = billing.delivery({
+      type: 'order.paid',
+      userId: null,
+      planKey: null,
+      cents: 1500,
+      gift: MONTH,
+      giftId: crypto.randomUUID(),
+      payerEmail: `${account.userId}@example.test`,
+    })
+    const read = await billing.receive(sent.body, sent.headers)
+    expect(read?.kind === 'order' ? read.order.userId : null).toBe(account.userId)
+    const { gift, order } = await bought(`${account.userId}@example.test`)
+    expect(order?.userId).toBeNull()
+    expect(gift).toMatchObject({ state: 'paid', buyerId: null })
+    expect(h.mail.to(`${account.userId}@example.test`)).toHaveLength(0)
   })
 })

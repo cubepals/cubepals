@@ -266,7 +266,7 @@ export class LocalBilling implements BillingProvider {
         kind: 'order',
         order: {
           externalOrderId: `local-${randomUUID()}`,
-          userId: event.userId ?? (await this.#accountAt(event.payerEmail)),
+          userId: await this.#payer(event),
           planKey: event.planKey,
           billingReason: event.planKey === null || event.year ? 'purchase' : 'subscription_create',
           currency: 'usd',
@@ -286,8 +286,8 @@ export class LocalBilling implements BillingProvider {
           chipIn: event.planKey === null ? (event.chipIn ?? null) : null,
           paysForYear: event.year === true && event.planKey !== null,
           gift: event.gift ?? null,
-          giftId: event.giftId ?? null,
-          payerEmail: event.payerEmail ?? null,
+          giftId: event.giftId,
+          payerEmail: event.payerEmail,
           orderedAt: new Date(),
         },
       }
@@ -309,13 +309,16 @@ export class LocalBilling implements BillingProvider {
     return { kind: 'standing', state }
   }
 
-  /** The account with this email, as Polar finds its customer by the email a guest pays with. */
-  async #accountAt(email: string | undefined): Promise<string | null> {
-    if (email === undefined) return null
+  /**
+   * Whose order it is: the account that paid, or for a guest the account with their email, as
+   * Polar finds its customer by the email a guest pays with; null with none.
+   */
+  async #payer(event: { userId: string | null; payerEmail?: string }): Promise<string | null> {
+    if (event.userId !== null || event.payerEmail === undefined) return event.userId
     const [user] = await this.#db
       .select({ id: schema.users.id })
       .from(schema.users)
-      .where(eq(schema.users.email, email))
+      .where(eq(schema.users.email, event.payerEmail))
     return user?.id ?? null
   }
 

@@ -250,7 +250,8 @@ export class RuntimeEconomics {
       .groupBy(schema.backups.serverId)
     const orders = await this.#db
       .select({
-        userId: schema.billingOrders.userId,
+        // A gift a guest bought has no account, and so no servers: '' is nobody's.
+        userId: sql<string>`coalesce(${schema.billingOrders.userId}, '')`,
         revenue: sql<string>`sum(greatest(${schema.billingOrders.netCents} - ${schema.billingOrders.refundedCents}, 0))`,
         fees: sql<string>`sum(round(${schema.billingOrders.totalCents} * ${figures().paymentFee.percent / 100}::numeric) + ${figures().paymentFee.fixedCents}::numeric)`,
       })
@@ -398,8 +399,7 @@ export class RuntimeEconomics {
     }
     let unattributed = 0
     for (const order of orders) {
-      // A gift a guest bought has no account, and so no servers.
-      const owned = (order.userId === null ? [] : (byOwner.get(order.userId) ?? [])).filter(
+      const owned = (byOwner.get(order.userId) ?? []).filter(
         (s) => liveById.get(s.serverId)?.status !== 'deleted',
       )
       const revenue = Number(order.revenue)

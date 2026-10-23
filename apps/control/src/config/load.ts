@@ -413,6 +413,7 @@ export const tuningOf = (config: DeploymentConfig) => ({
   economics: config.economicsTuning,
   joins: config.joins,
   stopCheaters: config.stopCheaters.tuning,
+  giftsByEmail: config.giftsByEmail,
 })
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): DeploymentConfig {

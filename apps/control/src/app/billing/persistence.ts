@@ -353,19 +353,18 @@ export async function settleOtherSubscriptions(
  * order (made, then paid, then refunded) updates it. A refund only ever grows, so a paid delivery the
  * provider sends again after the refund never takes it back. An order for someone this deployment
  * never made isn't its revenue. An order for a gift made before its checkout (`giftId`) is its
- * buyer's (`byGift`): a guest's is kept with no account, and only where `guests` (GIFTS_BY_EMAIL)
- * says so. Answers the order as kept, or null when nothing is.
+ * buyer's (`byGift`): a guest's is kept with no account, with GIFTS_BY_EMAIL on. Answers the order
+ * as kept, or null when nothing is.
  */
 export async function recordOrder(
   q: Queryable,
   provider: string,
   delivered: BillingOrder,
-  guests = false,
 ): Promise<BillingOrder | null> {
   const order = await byGift(q, delivered)
   if (order === null) return null
   if (order.userId === null) {
-    if (!guests || !order.giftId) return null
+    if (!order.giftId || tuning().giftsByEmail !== true) return null
   } else {
     const [known] = await q
       .select({ id: schema.users.id })
@@ -418,10 +417,7 @@ export async function recordOrder(
  */
 async function byGift(q: Queryable, order: BillingOrder): Promise<BillingOrder | null> {
   if (!order.giftId) return order
-  const [gift] = await q
-    .select({ buyerId: schema.planGifts.buyerId })
-    .from(schema.planGifts)
-    .where(eq(schema.planGifts.id, order.giftId))
+  const [gift] = await q.select({ buyerId: gifts.buyerId }).from(gifts).where(eq(gifts.id, order.giftId))
   return gift === undefined ? null : { ...order, userId: gift.buyerId }
 }
 
