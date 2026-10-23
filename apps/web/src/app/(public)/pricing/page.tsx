@@ -38,7 +38,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 /**
  * What Blockly costs, for anyone: the paid plans, the first of them starting with the free trial,
- * in the words people choose on, and the few
+ * in the words people choose on, a quiet way to give Plus, and the few
  * questions they ask before paying. Every number comes from the plan table the control plane
  * enforces, so nothing here can promise what a server won't do.
  */
@@ -67,6 +67,11 @@ export default async function PricingPage() {
           />
         ))}
       </PlanCards>
+      {plus && (
+        <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
+          Know someone who’d like {plus.name}? <Link href="/gift">Give it as a gift</Link>.
+        </p>
+      )}
       <p className="type-body" style={{ color: 'var(--ink-muted)' }}>
         Hours only count while your server is running, and it sleeps when nobody’s on. Joining wakes it,
         usually in a couple of seconds; the first start, or one after a change, can take up to a minute.

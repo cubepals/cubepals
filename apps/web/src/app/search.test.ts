@@ -45,11 +45,13 @@ describe('robots.txt', () => {
 describe('sitemap.xml', () => {
   const urls = () => sitemap().map((entry) => entry.url)
 
-  test('lists home, pricing and the policies on the canonical origin, and none of the private pages', () => {
+  test('lists home, pricing, gifts and the policies on the canonical origin, and none of the private pages', () => {
     production()
     const listed = urls()
     expect(listed).toContain('https://cubepals.com/')
     expect(listed).toContain('https://cubepals.com/pricing')
+    expect(listed).toContain('https://cubepals.com/gift')
+    expect(listed).toContain('https://cubepals.com/redeem')
     expect(listed).toContain('https://cubepals.com/legal/terms')
     for (const path of ['/browse', '/sign-in', '/join/', '/server/', '/servers', '/design'])
       expect(listed.some((url) => url.includes(path))).toBe(false)
