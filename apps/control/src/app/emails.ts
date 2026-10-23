@@ -28,7 +28,9 @@
  * - `admins.ts`: what the platform tells every admin: a raised alert, the daily spend limit.
  * - `billing.ts`: a payment carrying extra play that failed, one still owed after that, and a
  *   year of Plus about to end.
- * - `gifts.ts`: a gift's code, to whoever bought it.
+ * - `gifts.ts`: a gift's emails: to whoever bought it (paid, its code, an address that bounced,
+ *   refunded) and to whoever it is for (waiting, started, one reminder).
+ * - `gift-previews.ts`: each gift email filled in with an example, for the tests and for looking at.
  * - `notices.ts`: what Cubepals itself changed on someone's server, from the address nobody reads
  *   (MAIL_NOTICE_FROM): a new address, out of Browse.
  * - `play.ts`: the warnings as a month's included play runs out, and as extra play is used.
@@ -210,7 +212,13 @@ ${input.preheader === undefined ? '' : `<div style="display:none;max-height:0;ov
  * icons or a List-Unsubscribe header, so the account's emails carry none of them, and no hidden
  * preheader. They come from their own address (MAIL_ACCOUNT_FROM), DKIM-signed for its domain.
  */
-export function plain(input: { subject: string; body: string; why: string }): string {
+export function plain(input: {
+  subject: string
+  body: string
+  why: string
+  /** From the address nobody reads (MAIL_NOTICE_FROM): the footer says so instead of offering a reply. */
+  unread?: true
+}): string {
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -222,7 +230,7 @@ export function plain(input: { subject: string; body: string; why: string }): st
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px"><tr><td>
     <p style="margin:0 0 24px;font:800 18px/1 ${SANS};letter-spacing:-.02em;color:${INK}">cubepals</p>
     ${input.body}
-    <p style="margin:28px 0 0;font:400 13px/1.55 ${SANS};color:${SUBTLE}">${input.why} Reply to this email to reach a person.</p>
+    <p style="margin:28px 0 0;font:400 13px/1.55 ${SANS};color:${SUBTLE}">${input.why} ${input.unread ? 'This mailbox isn’t read.' : 'Reply to this email to reach a person.'}</p>
   </td></tr></table>
 </td></tr></table>
 </body></html>`
