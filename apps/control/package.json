@@ -41,7 +41,7 @@
     "nodemailer": "10.1.2",
     "openapi-fetch": "0.17.0",
     "pg": "8.23.1",
-    "pg-boss": "12.38.0",
+    "pg-boss": "12.37.1",
     "pngjs": "7.0.0",
     "posthog-node": "5.56.1",
     "prismarine-nbt": "2.8.0",
