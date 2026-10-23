@@ -270,10 +270,19 @@ class Arrival {
     this.#client.pause()
     const { ready, readyWaitMs = READY_WAIT_MS } = this.#options
     // Waiting for routes is bounded: with the control plane out of reach at boot, joins would pile up.
-    this.#client.setTimeout(ready === undefined ? 0 : readyWaitMs, () => this.#client.destroy())
+    let expired = false
+    // The greeting's own timeout no longer applies; this wait has its own.
+    this.#client.removeAllListeners('timeout')
+    this.#client.setTimeout(ready === undefined ? 0 : readyWaitMs, () => {
+      expired = true
+      this.#count('refused', 'busy')
+      // A join hears the edge's usual notice; a ping just goes unanswered.
+      if (handshake.joining) this.#client.end(turnAway(this.#options.busy))
+      else this.#client.destroy()
+    })
     this.#greeted?.()
     void (ready ?? Promise.resolve()).then(() => {
-      if (this.#client.destroyed) return
+      if (expired || this.#client.destroyed) return
       this.#client.setTimeout(0)
       this.#admit(handshake)
     })

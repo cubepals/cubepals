@@ -145,16 +145,21 @@ export async function waitForPlayers(
   }
 }
 
-/** Waits until `ready()` holds, for at most `limitMs`; whether it did. */
+/**
+ * Waits until `check()` answers true, for at most `limitMs`; true, or the reason it gave last.
+ * A check that throws counts as not ready, with the error as its reason.
+ */
 export async function waitUntil(
-  ready: () => Promise<boolean>,
+  check: () => Promise<true | string>,
   clock: Clock,
   limitMs: number,
-): Promise<boolean> {
+): Promise<true | string> {
   const until = clock.now() + limitMs
   for (;;) {
-    if (await ready().catch(() => false)) return true
-    if (clock.now() >= until) return false
+    const answer = await check().catch(
+      (error) => `the check failed: ${error instanceof Error ? error.message : error}`,
+    )
+    if (answer === true || clock.now() >= until) return answer
     await clock.sleep(EDGE_ASK_EVERY_MS)
   }
 }
@@ -171,8 +176,8 @@ export interface RegionSteps {
   players: (region: string) => Promise<number | null>
   /** Puts the new release on the region's machine and waits until it passes Fly's checks. */
   deploy: (region: string) => Promise<void>
-  /** Whether the region's machine answers and holds the control plane's newest routes. */
-  ready: (region: string) => Promise<boolean>
+  /** True once the region's machines answer and hold the control plane's newest routes; else why not. */
+  ready: (region: string) => Promise<true | string>
 }
 
 /**
@@ -246,9 +251,10 @@ async function restartRegion(
     say(`${wait.failed} queries for the count failed${wait.unsure ? ', the last one too' : ''}`)
   say(cordoned ? 'deploying' : 'deploying; it takes joins until it restarts, and none while it does')
   await steps.deploy(region)
-  if (!(await waitUntil(() => steps.ready(region), clock, EDGE_READY_LIMIT_MS)))
+  const ready = await waitUntil(() => steps.ready(region), clock, EDGE_READY_LIMIT_MS)
+  if (ready !== true)
     throw new Error(
-      `The edge in ${region} isn't well and up to date with the routes; the other regions are as they were.`,
+      `The edge in ${region} wasn't ready ${EDGE_READY_LIMIT_MS / MINUTE_MS} min after its deploy: ${ready}. The other regions are as they were.`,
     )
   say('well and up to date with the routes')
   return wait
@@ -301,11 +307,18 @@ export interface DrainState {
 }
 
 /**
- * Whether a restarted machine is ready by what its agent says: it holds the newest routes, and
+ * Why a restarted machine is not ready by what its agent says, or null when it is: it holds the newest routes, and
  * Geyser has bound its port where Bedrock players are taken, since Fly delivers their UDP to a
  * machine from boot. An agent that says nothing is not ready, unless the image predates the drain
  * port (`drains` false, as in a rollback to one): then Fly's own checks, which the deploy has
  * already waited for, are all there is.
  */
+export function whyNotReady(state: DrainState | null, drains = true): string | null {
+  if (state === null) return drains ? 'its agent does not answer on the drain port' : null
+  if (!state.routesCurrent) return 'it does not hold the newest routes yet'
+  return state.bedrock === 'unbound' ? 'Geyser has not bound its port yet' : null
+}
+
+/** Whether a restarted machine is ready (`whyNotReady`). */
 export const isReady = (state: DrainState | null, drains = true): boolean =>
-  state === null ? !drains : state.routesCurrent && state.bedrock !== 'unbound'
+  whyNotReady(state, drains) === null

@@ -16,12 +16,12 @@ import {
   type Clock,
   type DrainState,
   deployMachines,
-  isReady,
   type Machine,
   machinesIn,
   type RegionSteps,
   rollEdge,
   sumPlayers,
+  whyNotReady,
 } from './production-edge.ts'
 
 /** Where the agent answers a deploy, on the private network only (apps/edge/drain.ts). */
@@ -148,7 +148,11 @@ export async function rollEdgeApp(
     },
     deploy: async (region) => fly(...deployMachines(app, config, image, idsIn(region))),
     ready: async (region) => {
-      for (const id of idsIn(region)) if (!isReady(await stateOf(id), drains)) return false
+      for (const id of idsIn(region)) {
+        // Asked again until the limit: an answer that fails now may not next time.
+        const why = whyNotReady(await drainState(app, id, env).catch(() => null), drains)
+        if (why !== null) return `machine ${id}: ${why}`
+      }
       return true
     },
   }

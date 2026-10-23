@@ -24,6 +24,7 @@ import {
   rollEdge,
   sumPlayers,
   waitForPlayers,
+  whyNotReady,
 } from './production-edge.ts'
 
 const APP = 'bly-prod-edge'
@@ -239,7 +240,7 @@ describe('restarting the edge without cutting a player', () => {
     let asks = 0
     const { cut } = await roll(
       ['fra', 'iad'],
-      steps(w.log, { ready: async (r) => (r === 'fra' ? ++asks > 3 : true) }),
+      steps(w.log, { ready: async (r) => (r === 'fra' && ++asks <= 3 ? 'routes are not current' : true) }),
       () => {},
       w.clock,
     )
@@ -251,8 +252,15 @@ describe('restarting the edge without cutting a player', () => {
   test('a region that never comes back ready stops the roll before the next', async () => {
     const w = world()
     await expect(
-      roll(['fra', 'iad'], steps(w.log, { ready: async () => false }), () => {}, w.clock),
-    ).rejects.toThrow('fra')
+      roll(
+        ['fra', 'iad'],
+        steps(w.log, { ready: async () => 'its agent does not answer on the drain port' }),
+        () => {},
+        w.clock,
+      ),
+    ).rejects.toThrow(
+      "The edge in fra wasn't ready 5 min after its deploy: its agent does not answer on the drain port",
+    )
     expect(w.log).toEqual(['cordon fra', 'deploy fra', 'uncordon fra'])
     expect(w.time()).toBeGreaterThanOrEqual(EDGE_READY_LIMIT_MS)
   })
@@ -439,5 +447,12 @@ describe('every machine of the edge', () => {
 
   test('a machine whose Geyser is not bound yet is not ready, so the next region waits', () => {
     expect(isReady({ players: 0, routesCurrent: true, bedrock: 'unbound' })).toBe(false)
+    expect(whyNotReady({ players: 0, routesCurrent: true, bedrock: 'unbound' })).toBe(
+      'Geyser has not bound its port yet',
+    )
+    expect(whyNotReady({ players: 0, routesCurrent: false, bedrock: 'none' })).toBe(
+      'it does not hold the newest routes yet',
+    )
+    expect(whyNotReady(null)).toBe('its agent does not answer on the drain port')
   })
 })

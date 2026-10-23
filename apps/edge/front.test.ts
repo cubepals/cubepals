@@ -371,15 +371,33 @@ test('a join made before routes are held waits for them, and then goes through',
   expect(behind.received.length).toBe(1)
 })
 
-test('a join waiting for routes that never come is closed after the wait', async () => {
+test('a join waiting for routes that never come hears the busy notice and is closed after the wait', async () => {
   const { options, behind } = await frontDoor(ROOMY, true)
   const listener = front({ ...options, port: 0, ready: new Promise<void>(() => {}), readyWaitMs: 100 })
   open.push(listener)
   const port = await listening(listener)
   const line = encode('PROXY TCP4 203.0.113.7 10.0.0.1 51234 25565\r\n')
   const client = connect(port, '127.0.0.1')
+  const heard: Buffer[] = []
+  client.on('data', (chunk) => heard.push(chunk))
   const closed = new Promise<void>((resolve) => client.once('close', () => resolve()))
   client.write(Uint8Array.from([...line, ...joinRequest('a.play.test')]))
   await Promise.race([closed, Bun.sleep(2_000).then(() => Promise.reject(new Error('still open')))])
+  expect(Buffer.concat(heard).toString('latin1')).toContain('Busy')
   expect(behind.received).toEqual([])
+})
+
+test('a ping waiting for routes that never come is closed unanswered after the wait', async () => {
+  const { options } = await frontDoor(ROOMY, true)
+  const listener = front({ ...options, port: 0, ready: new Promise<void>(() => {}), readyWaitMs: 100 })
+  open.push(listener)
+  const port = await listening(listener)
+  const line = encode('PROXY TCP4 203.0.113.7 10.0.0.1 51234 25565\r\n')
+  const client = connect(port, '127.0.0.1')
+  let heard = 0
+  client.on('data', (chunk) => (heard += chunk.length))
+  const closed = new Promise<void>((resolve) => client.once('close', () => resolve()))
+  client.write(Uint8Array.from([...line, ...statusRequest('a.play.test', 25565)]))
+  await Promise.race([closed, Bun.sleep(2_000).then(() => Promise.reject(new Error('still open')))])
+  expect(heard).toBe(0)
 })
