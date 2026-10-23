@@ -54,10 +54,24 @@ function heroSide(element: HTMLElement): number {
   return held > 0 && window.innerWidth > 0 ? held / window.innerWidth : 0.754
 }
 
-/** How much larger than a screen-tall chunk the first screen holds it: 1 until the width allows more. */
+/**
+ * How much larger than a screen-tall chunk the first screen holds it: more where the width allows,
+ * less where the words would otherwise reach it (landing.css).
+ */
 function heroGrowth(element: HTMLElement): number {
   const wide = Number.parseFloat(getComputedStyle(element).getPropertyValue('--hero-c'))
-  return wide > 0 ? Math.max(1, wide / (window.innerHeight * 0.8)) : 1
+  return wide > 0 ? wide / (window.innerHeight * 0.8) : 1
+}
+
+/**
+ * How far down the screen a section holds what it looks at. The first screen's chunk, drawn
+ * smaller than a screen-tall one, is held lower by as much, so it still stands on the screen's
+ * foot with its column running off it, the way the print does (`.bl-first`, landing.css).
+ */
+function dropOf(element: HTMLElement): number {
+  const drop = numberOr(element.dataset.drop, 0.5)
+  if (element.dataset.side !== 'hero') return drop
+  return Math.max(drop, 1 - (1 - drop) * heroGrowth(element))
 }
 
 /** What a section looks at: its room's middle, or a place over the grass. */
@@ -107,7 +121,7 @@ function poseOf(element: HTMLElement, band: boolean, lens: Lens, trying: URLSear
     span: spanOf(element, key, band, lens, trying),
     fov: numberOr(element.dataset.fov, lens[zoom].fov),
     side: sideOf(element, band),
-    drop: band ? 0.5 : numberOr(element.dataset.drop, 0.5),
+    drop: band ? 0.5 : dropOf(element),
     crowd: numberOr(element.dataset.crowd, 0),
     // The page goes darker only on the way down: the dig's upper rooms are printed by the day on
     // stone, and only what is on the dark grounds below (slate, bedrock) in the room's look, lit
