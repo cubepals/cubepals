@@ -9,14 +9,14 @@
  * that way, in the card's details. Signed in, each goes to the checkout page (the agreement, then paying) and
  * back to their servers; signed out, it makes the account first, and the account page carries on
  * to the checkout page. On the plan the free trial starts, the first button starts the trial,
- * with what it is and the plan itself, quieter, beside it: the button sits as low as the other cards'.
+ * with what it is and the plan itself under it (ui/plan-card.tsx).
  */
 
 import Link from 'next/link'
 import { dollars } from '../../../legal/figures'
 import { checkoutHref } from '../../../lib/checkout'
 import { behindSignUp, useSignedIn } from '../../../lib/viewer'
-import { Button } from '../../../ui'
+import { PlanButtons } from '../../../ui/plan-card'
 import { ctaMark, planMark } from '../steps'
 
 /** Where a paid plan's checkout is: signed out, the account is made first, and carries on there. */
@@ -39,34 +39,22 @@ export function GetPlan({
   startsFree?: string | undefined
 }) {
   const signedIn = useSignedIn()
-  if (!startsFree)
-    return available ? (
-      <Button variant="primary" href={checkoutOf(signedIn, plan, 'month')} {...planMark(plan, 'month')}>
-        Get {name}
-      </Button>
-    ) : (
-      <Button variant="outline" disabled>
-        Not available yet
-      </Button>
-    )
   return (
-    <div className="bk-row bk-wrap" style={{ gap: 'var(--space-12)', alignItems: 'center' }}>
-      <Button variant="outline" href={behindSignUp(signedIn, '/servers/new')} {...ctaMark('pricing_create')}>
-        Start free
-      </Button>
-      <div className="bk-stack" style={{ gap: 0 }}>
-        <span className="type-body-sm bk-plan__each">{startsFree}</span>
-        {available && (
-          <Link
-            href={checkoutOf(signedIn, plan, 'month')}
-            className="type-body-sm bk-plan__year"
-            {...planMark(plan, 'month')}
-          >
-            Get {name}
-          </Link>
-        )}
-      </div>
-    </div>
+    <PlanButtons
+      name={name}
+      available={available}
+      get={checkoutOf(signedIn, plan, 'month')}
+      getMark={planMark(plan, 'month')}
+      start={
+        startsFree
+          ? {
+              href: behindSignUp(signedIn, '/servers/new'),
+              mark: ctaMark('pricing_create'),
+              free: startsFree,
+            }
+          : undefined
+      }
+    />
   )
 }
 

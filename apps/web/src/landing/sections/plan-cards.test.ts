@@ -71,6 +71,8 @@ const cards = (html: string) =>
     .split('<section')
     .slice(1)
     .map((card) => card.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '))
+/** The first card's opening tag and markup, as written. */
+const coreTag = (html: string) => html.split('<section')[1] ?? ''
 /** A card's face: what it says before its details open. */
 const face = (card: string) => card.replace(/See everything in .*?(Start free|Get Plus)/, '$1')
 
@@ -89,10 +91,18 @@ describe('the landing’s plan cards', () => {
     expect(plusCard).not.toContain('Start free')
   })
 
-  test('Core is the light card and Plus the dark one', () => {
+  test('Core is the paper card and Plus the ink one, both in the stepped frame', () => {
     const [coreTag = '', plusTag = ''] = html.match(/<section[^>]*>/g) ?? []
-    expect(coreTag).not.toContain('bl-frame--solid')
-    expect(plusTag).toContain('bl-frame--solid')
+    expect(coreTag).toContain('bl-frame')
+    expect(coreTag).not.toContain('data-paid')
+    expect(plusTag).toContain('bl-frame')
+    expect(plusTag).toContain('data-paid')
+  })
+
+  test('Start free is the ink block and Get Plus the lit one, at each card’s foot', () => {
+    expect(html).toMatch(/<a [^>]*class="bl-btn [^"]*"[^>]*>Start free<\/a>/)
+    expect(html).toMatch(/<a [^>]*class="bl-btn bl-btn--lit [^"]*"[^>]*>Get Plus<\/a>/)
+    expect(coreTag(html)).not.toContain('bl-btn--lit')
   })
 
   test('the heading says Core starts free and Plus adds mods', () => {
@@ -107,13 +117,10 @@ describe('the landing’s plan cards', () => {
       'Backups, and your world to download',
     ])
       expect(face(coreCard)).toContain(line)
-    for (const line of [
-      'Up to 100 players',
-      'Up to 3 servers',
-      'Mods, plugins, modpacks and datapacks',
-      'Go back to any of your last 14 sessions',
-    ])
-      expect(face(plusCard)).toContain(line)
+    expect(face(plusCard)).toContain(
+      'Up to 100 players Mods, plugins, modpacks and datapacks Up to 3 servers Get Plus',
+    )
+    expect(face(plusCard)).not.toContain('sessions')
     expect(face(coreCard)).not.toMatch(/\d+ hours of play/)
     expect(face(plusCard)).not.toMatch(/hours/)
   })
@@ -131,11 +138,15 @@ describe('the landing’s plan cards', () => {
     expect(plusCard).toContain('See everything in Plus')
     expect(plusCard).toContain('120 hours of play each month')
     expect(plusCard).toContain('counts two hours for each hour it runs')
+    expect(plusCard).toContain('Go back to any of your last 14 sessions')
     expect(plusCard).toContain('Or $250 for a year, paid once')
     expect(plusCard).toContain('$5 each, shared by five friends')
     expect(html.match(/<details/g)).toHaveLength(2)
-    // Plain Minecraft is said once, on the card's face.
-    expect(coreCard.match(/Plain Minecraft/g)).toHaveLength(1)
+    // Plain Minecraft is said on Core's face, and what it runs in its details.
+    expect(face(coreCard)).toContain('Plain Minecraft with your friends')
+    expect(coreCard).toContain('Plain Minecraft: vanilla or Paper')
+    expect(coreCard.match(/Plain Minecraft/g)).toHaveLength(2)
+    expect(plusCard).not.toMatch(/vanilla|Paper/)
     // The hours keep their dashed-line explainer.
     expect(html).toContain('bk-tip')
   })

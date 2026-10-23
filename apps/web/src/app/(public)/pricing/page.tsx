@@ -9,17 +9,8 @@ import { bedrockLive } from '../../../lib/bedrock'
 import { publicPlans } from '../../../lib/plans'
 import { canonicalOrigin, pageMetadata } from '../../../lib/site'
 import { appSchema, JsonLd } from '../../../lib/structured-data'
-import {
-  cardsOf,
-  forSale,
-  freeSaid,
-  offerPitch,
-  offerPoints,
-  PlanCard,
-  PlanDetails,
-  plansSaid,
-  priceOf,
-} from '../../../ui'
+import { cardsOf, forSale, freeSaid, plansSaid, priceOf } from '../../../ui'
+import { OfferCard, PlanCards } from '../../../ui/plan-card'
 import { guideHref, publishedGuides } from '../guides'
 import { seenMark } from '../steps'
 import { GetPlan, GetYear } from './get-plan'
@@ -62,44 +53,33 @@ export default async function PricingPage() {
           {plansSaid(plans)}.
         </h1>
       </header>
-      <div className="bk-plans">
+      <PlanCards>
         {cards.map((plan) => {
           const startsTrial = plan === starter ? trial : undefined
           return (
-            <PlanCard
+            <OfferCard
               key={plan.key}
               plan={plan}
+              plans={plans}
+              trial={startsTrial}
+              bedrock={bedrock}
               mark={seenMark(`plan_${plan.key}`)}
-              // The plan the trial starts is the light card, as the trial's own was.
-              solid={!startsTrial}
-              offer={{
-                pitch: offerPitch(plan, plans),
-                points: offerPoints(plan, bedrock),
-                details: (
-                  <PlanDetails
-                    plan={plan}
-                    trial={startsTrial}
-                    className="type-body-sm"
-                    year={
-                      plan.yearlyPriceCents && forSale(plan) ? (
-                        <GetYear plan={plan.key} yearlyCents={plan.yearlyPriceCents} />
-                      ) : undefined
-                    }
-                  />
-                ),
-              }}
-              action={
-                <GetPlan
-                  plan={plan.key}
-                  name={plan.name}
-                  available={forSale(plan)}
-                  startsFree={startsTrial && freeSaid(startsTrial)}
-                />
+              year={
+                plan.yearlyPriceCents && forSale(plan) ? (
+                  <GetYear plan={plan.key} yearlyCents={plan.yearlyPriceCents} />
+                ) : undefined
               }
-            />
+            >
+              <GetPlan
+                plan={plan.key}
+                name={plan.name}
+                available={forSale(plan)}
+                startsFree={startsTrial && freeSaid(startsTrial)}
+              />
+            </OfferCard>
           )
         })}
-      </div>
+      </PlanCards>
       <p className="type-body" style={{ color: 'var(--ink-muted)' }}>
         Hours only count while your server is running, and it sleeps when nobody’s on. Joining wakes it,
         usually in a couple of seconds; the first start, or one after a change, can take up to a minute.

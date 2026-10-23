@@ -70,7 +70,7 @@ describe('the landing’s plans against an older plans API', () => {
     expect(alone).toContain('Not available yet')
   })
 
-  test('no clause says undefined, and no card names a server type', () => {
+  test('no clause says undefined, and Plus names no server type', () => {
     // What people read: the markup's class names are the test runner's, with no stylesheet behind them.
     const said = html.replace(/<[^>]+>/g, ' ')
     expect(said).not.toContain('undefined')

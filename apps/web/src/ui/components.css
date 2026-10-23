@@ -2820,9 +2820,6 @@ details[open] > .bk-disclosure::before {
   margin-block-start: 2px;
   color: var(--grass);
 }
-.bk-plan[data-paid] .bk-plan__year {
-  color: var(--ink-inverse);
-}
 .bk-plan__action {
   margin-block-start: auto;
   padding-block-start: var(--space-8);
@@ -2855,9 +2852,6 @@ details[open] > .bk-disclosure::before {
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
-}
-.bk-plan[data-paid] .bk-plan-more summary {
-  color: var(--ink-inverse);
 }
 
 /* Where a pack's file is dropped: the whole area takes the drop, the button inside picks one. */

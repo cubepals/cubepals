@@ -41,14 +41,16 @@ export function offerPitch(plan: PublicPlan, plans: readonly PublicPlan[]): stri
   return 'Plain Minecraft with your friends'
 }
 
-/** What you get on a plan, in a few short lines, with no hours: those are in its details. */
+/**
+ * What you get on a plan, in a few short lines, with no hours: those are in its details, with the
+ * sessions it keeps.
+ */
 export function offerPoints(plan: PublicPlan, bedrock: boolean): string[] {
   if (plan.mods)
     return [
       `Up to ${plan.maxPlayers} players`,
-      plan.maxServers === 1 ? '1 server' : `Up to ${plan.maxServers} servers`,
       plan.datapacks ? 'Mods, plugins, modpacks and datapacks' : 'Mods, plugins and modpacks',
-      `Go back to any of your last ${plan.sessionsKept} sessions`,
+      plan.maxServers === 1 ? '1 server' : `Up to ${plan.maxServers} servers`,
     ]
   return [
     plan.maxPlayers > 1 ? `You and ${plan.maxPlayers - 1} friends` : 'Just you',
@@ -97,7 +99,7 @@ export function PlanDetails({
         )}
         <li>Hours count only while your server is awake, not for each player</li>
         <li>{keptPoint(plan)}</li>
-        {plan.mods && <li>{LARGE_SERVERS}</li>}
+        <li>{plan.mods ? LARGE_SERVERS : 'Plain Minecraft: vanilla or Paper'}</li>
         {plan.yearlyPriceCents ? (
           <li>{year ?? `Or ${dollars(plan.yearlyPriceCents)} for a year, paid once`}</li>
         ) : null}

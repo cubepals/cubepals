@@ -6,75 +6,9 @@
 
 /* The two plain parts of the surface that aren't the hero: the plans, and the closing. */
 
+/* The cards are ui/plan-card.tsx's, the same as /pricing's. */
 .plans .cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14.5rem), 1fr));
-  gap: calc(var(--px) * 8);
   margin-top: clamp(28px, 5vh, 48px);
-}
-.plans .card {
-  display: grid;
-  align-content: start;
-  gap: calc(var(--px) * 4);
-  padding: clamp(20px, 2.6vw, 32px);
-}
-.plans .name {
-  margin: 0;
-  font-size: 1.125rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-.plans .price {
-  margin: 0;
-  font-variation-settings: "SHRP" 100;
-  font-weight: 800;
-  font-size: clamp(3rem, 5vw, 4.5rem);
-  line-height: 0.95;
-  letter-spacing: -0.055em;
-}
-.plans .price small {
-  /* "a month" stays with the price or goes to the next line whole, never split from "a". */
-  white-space: nowrap;
-  font-size: 1rem;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-.plans .pitch {
-  margin: 0 0 calc(var(--px) * 4);
-}
-.plans .points {
-  display: grid;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: 1rem;
-}
-.plans .points li {
-  padding: calc(var(--px) * 4) 0;
-  border-top: var(--px) solid color-mix(in srgb, currentColor 22%, transparent);
-}
-.plans .action {
-  justify-self: start;
-  margin-top: calc(var(--px) * 8);
-}
-/* On the solid card the button's own block is paper, so it still reads as a block on ink. */
-.plans .paid .action {
-  --btn-shadow: color-mix(in srgb, var(--paper) 45%, var(--ink));
-}
-/* What the paid plan comes to for a group: under its pitch, a step quieter. */
-.plans .shared {
-  margin: calc(var(--px) * -2) 0 calc(var(--px) * 4);
-  font-weight: 600;
-}
-/* The trial, beside the button that starts it. */
-.plans .free {
-  margin: 0;
-  font-weight: 600;
-}
-/* "See everything in Core": the rest of the plan, opened in place, at the points' size. */
-.plans .details {
-  margin-top: calc(var(--px) * 2);
-  font-size: 1rem;
 }
 .plans .hours {
   margin-top: calc(var(--px) * 2);

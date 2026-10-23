@@ -1,0 +1,147 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/*
+ * The public plan cards (plan-card.tsx), at the landing's sizes. Each card spans seven rows of the
+ * grid around it and takes them as its own (subgrid): name, price, pitch, lines, details, button,
+ * and what is under the button. Side by side, a row is as tall as the taller card's, so the
+ * buttons stay level when one card's details open. The colours are the landing's tokens
+ * (landing/blocks.css), which stay ink and paper in either theme; plan-card.test.ts holds them to
+ * WCAG AA on their card.
+ */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 24px 16px;
+}
+
+/* The paper card: ink on white, ticks in the torch. */
+.card {
+  --tick: var(--torch);
+  display: grid;
+  grid-row: span 7;
+  grid-template-rows: subgrid;
+  row-gap: calc(var(--px) * 4);
+  align-items: start;
+  padding: clamp(20px, 2.6vw, 32px);
+  color: var(--fg);
+  font-family: var(--display);
+  font-variation-settings: "SHRP" 30;
+  font-size: 18px;
+  line-height: 1.5;
+}
+.card :focus-visible {
+  outline: calc(var(--px) * 1.5) solid var(--fg);
+  outline-offset: calc(var(--px) * 2);
+}
+
+/* The ink card: paper on ink, and the torch a lighter step of itself so it reads on ink. */
+.paid {
+  --frame-fill: var(--ink);
+  --frame-line: var(--ink);
+  --fg: var(--paper);
+  --field: var(--ink);
+  --on-fg: var(--ink);
+  --torch: var(--night);
+}
+.paid ::selection {
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.name {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.price {
+  margin: 0;
+  font-variation-settings: "SHRP" 100;
+  font-weight: 800;
+  font-size: clamp(3rem, 5vw, 4.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.055em;
+}
+.price small {
+  /* "a month" stays with the price or goes to the next line whole. */
+  white-space: nowrap;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.pitch {
+  margin: 0 0 calc(var(--px) * 4);
+}
+
+/* The lines: a rule above each, and one under the last. */
+.points {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 1rem;
+}
+.points li {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 4) 0;
+  border-top: var(--px) solid color-mix(in srgb, currentColor 22%, transparent);
+}
+.points li:last-child {
+  border-bottom: var(--px) solid color-mix(in srgb, currentColor 22%, transparent);
+}
+.points svg {
+  flex: none;
+  margin-top: 0.15em;
+  color: var(--tick);
+}
+
+/* "See everything in Core": the rest of the plan, opened in place, at the lines' size. */
+.details {
+  margin-top: calc(var(--px) * 2);
+  font-size: 1rem;
+}
+.details summary {
+  padding-block: calc(var(--px) * 2);
+}
+.details a {
+  color: inherit;
+}
+
+.action {
+  justify-self: start;
+  margin-top: calc(var(--px) * 8);
+}
+/* On ink, the lit button's own block is paper, so it still reads as a block. */
+.paid .action {
+  --btn-shadow: color-mix(in srgb, var(--paper) 45%, var(--ink));
+}
+
+/* Under Start free: what the trial is, and the plan itself. */
+.under {
+  display: grid;
+  justify-items: start;
+}
+.free {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.get {
+  /* A target taller than a line, with room round the words. */
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+  color: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  text-underline-offset: 0.25em;
+  text-decoration-thickness: var(--px);
+}

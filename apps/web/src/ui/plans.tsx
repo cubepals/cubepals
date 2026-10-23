@@ -213,7 +213,7 @@ export function eachOf(
 /** A price as it is said: "$0", "$15 a month". */
 export const priceOf = (cents: number): string => (cents === 0 ? '$0' : `${dollars(cents)} a month`)
 
-/** One plan as the pricing page, the landing page and the account page all show it. */
+/** One plan as the account page shows it. The public pages have their own card (`plan-card.tsx`). */
 export function PlanCard({
   plan,
   current = false,
@@ -222,12 +222,11 @@ export function PlanCard({
   bedrock = false,
   solid = plan.monthlyPriceCents > 0,
   note,
-  offer,
 }: {
   plan: PublicPlan
   /** Whether Bedrock is on, for the card's first line (`lib/bedrock.ts`). */
   bedrock?: boolean
-  /** The card is the dark one: the player's own plan on their account, a paid plan elsewhere. */
+  /** The card is the dark one: the player's own plan. */
   solid?: boolean
   /** Small print that belongs to this plan, under its details. */
   note?: ReactNode
@@ -236,17 +235,15 @@ export function PlanCard({
   action?: ReactNode
   /** The page's mark for the card coming into view, so it is counted (app/(public)/steps.ts). */
   mark?: Readonly<Record<`data-${string}`, string>>
-  /** On the public pages: what you get in a few lines, and the rest in details (`plan-details.tsx`). */
-  offer?: { pitch: string; points: string[]; details: ReactNode }
 }) {
-  const shared = offer ? null : eachOf(plan)
+  const shared = eachOf(plan)
   return (
     <section className="bk-plan" aria-label={plan.name} data-paid={solid || undefined} {...mark}>
       <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)', justifyContent: 'space-between' }}>
         <h3 className="type-eyebrow">{plan.name}</h3>
         {current && <Badge tone="grass">Yours</Badge>}
       </div>
-      <p className="type-heading-sm bk-plan__pitch">{offer?.pitch ?? pitchOf(plan, bedrock)}</p>
+      <p className="type-heading-sm bk-plan__pitch">{pitchOf(plan, bedrock)}</p>
       <p className="bk-plan__price">
         <span className="type-display-md bk-num">{dollars(plan.monthlyPriceCents)}</span>
         {plan.monthlyPriceCents > 0 && <span className="type-body-sm"> a month</span>}
@@ -257,14 +254,13 @@ export function PlanCard({
         </p>
       )}
       <ul className="bk-plan__points">
-        {(offer?.points ?? planPoints(plan)).map((point) => (
+        {planPoints(plan).map((point) => (
           <li key={point} className="type-body-sm">
             <Check size={16} strokeWidth={2.25} aria-hidden />
             <PlanPoint plan={plan} point={point} />
           </li>
         ))}
       </ul>
-      {offer?.details}
       {note && <p className="type-body-sm bk-plan__each">{note}</p>}
       {action && <div className="bk-plan__action">{action}</div>}
     </section>

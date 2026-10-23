@@ -8,12 +8,11 @@
 import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
 import { ctaMark, planMark, seenMark } from '../../app/(public)/steps'
-import { cardsOf, freeSaid, offerPitch, offerPoints, PlanDetails, plansSaid } from '../../ui/plan-details'
+import { OfferCard, PlanButtons, PlanCards } from '../../ui/plan-card'
+import { cardsOf, freeSaid, plansSaid } from '../../ui/plan-details'
 import { eachOf, forSale, priceOf } from '../../ui/plans'
 import { Section } from '../kit'
 import styles from './surface.module.css'
-
-const dollars = (cents: number): string => `$${cents % 100 === 0 ? cents / 100 : (cents / 100).toFixed(2)}`
 
 /** The free trial in a few words, from its own hours: "20 hours free, no card." */
 export function trialSaid(plans: readonly PublicPlan[]): string {
@@ -66,7 +65,7 @@ export function Plans({
 
 /**
  * What the plans section says, wherever it is set: the heading, a card to each paid plan (the first
- * starting with the free trial, on the light card), and the line under them. The film sets it in
+ * starting with the free trial, on the paper card; ui/plan-card.tsx), and the line under them. The film sets it in
  * its section; the phone's page sets it in its own.
  */
 export function PlansSaid({
@@ -84,71 +83,36 @@ export function PlansSaid({
   return (
     <>
       <h2 className="bl-h2">{plansSaid(plans)}</h2>
-      <div className={styles.cards}>
+      <PlanCards className={styles.cards}>
         {cards.map((plan) => {
           const startsTrial = plan === starter ? trial : undefined
           return (
-            <section
+            <OfferCard
               key={plan.key}
-              className={`bl-frame ${startsTrial ? '' : `bl-frame--solid ${styles.paid}`} ${styles.card}`}
-              aria-label={plan.name}
-              {...seenMark(`plan_${plan.key}`)}
+              plan={plan}
+              plans={plans}
+              trial={startsTrial}
+              bedrock={bedrock}
+              mark={seenMark(`plan_${plan.key}`)}
             >
-              <h3 className={styles.name}>{plan.name}</h3>
-              <p className={styles.price}>
-                <span className="bl-num">{dollars(plan.monthlyPriceCents)}</span>
-                <small> a month</small>
-              </p>
-              <p className={styles.pitch}>{offerPitch(plan, plans)}</p>
-              <ul className={styles.points}>
-                {offerPoints(plan, bedrock).map((point) => (
-                  <li key={point}>{point}</li>
-                ))}
-              </ul>
-              <PlanDetails plan={plan} trial={startsTrial} className={styles.details} />
-              {startsTrial ? (
-                <>
-                  <Link href={create} className={`bl-btn ${styles.action}`} {...ctaMark('plans_create')}>
-                    Start free
-                  </Link>
-                  <p className={styles.free}>{freeSaid(startsTrial)}</p>
-                  {forSale(plan) && (
-                    <Link href={getPlan(plan.key)} className={styles.more} {...planMark(plan.key, 'month')}>
-                      Get {plan.name}
-                    </Link>
-                  )}
-                </>
-              ) : (
-                <PlanButton plan={plan} getPlan={getPlan} />
-              )}
-            </section>
+              <PlanButtons
+                name={plan.name}
+                available={forSale(plan)}
+                get={getPlan(plan.key)}
+                getMark={planMark(plan.key, 'month')}
+                start={
+                  startsTrial && { href: create, mark: ctaMark('plans_create'), free: freeSaid(startsTrial) }
+                }
+              />
+            </OfferCard>
           )
         })}
-      </div>
+      </PlanCards>
       <p className={`bl-body ${styles.hours}`}>
         <Link href="/pricing" className={styles.more}>
           Full pricing
         </Link>
       </p>
     </>
-  )
-}
-
-/** A paid card's button: to the plan's checkout, or that the plan isn't for sale yet. */
-function PlanButton({ plan, getPlan }: { plan: PublicPlan; getPlan: (key: string) => string }) {
-  if (!forSale(plan))
-    return (
-      <span className={`bl-btn ${styles.action}`} aria-disabled="true">
-        Not available yet
-      </span>
-    )
-  return (
-    <Link
-      href={getPlan(plan.key)}
-      className={`bl-btn bl-btn--lit ${styles.action}`}
-      {...planMark(plan.key, 'month')}
-    >
-      Get {plan.name}
-    </Link>
   )
 }
