@@ -21,13 +21,16 @@
   gap: var(--space-16);
 }
 
-/* The paper card: ink on white, ink pictures. */
+/* The paper card: ink on white, ink pictures. Side by side, the cards share their three rows
+   (panel, edge, body), so the panels and their buttons stay level. */
 .card {
   --plan-card-inset: clamp(var(--space-12), 2vw, var(--space-20));
   --plan-card-target: 44px;
   --plan-card-icon: var(--ink);
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  row-gap: 0;
   padding: 0;
   color: var(--fg);
   font-family: var(--display);
@@ -59,7 +62,8 @@
   --fg: var(--paper);
   --field: var(--ink);
   --on-fg: var(--ink);
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-12);
   margin: var(--plan-card-inset) var(--plan-card-inset) 0;
   padding: var(--space-12) var(--space-12) var(--space-16);
@@ -86,10 +90,11 @@
 .offer strong {
   color: var(--fg);
 }
-/* As wide as the panel. Start free is paper on ink, with a step of ink below it. */
+/* As wide as the panel, at its foot. Start free is paper on ink, with a step of ink below it. */
 .action.action {
   display: flex;
   width: 100%;
+  margin-top: auto;
   --btn-shadow: var(--muted);
 }
 /* Get Plus: the lit indigo, with the deep indigo below it. */
@@ -98,17 +103,20 @@
   --btn-shadow: var(--torch);
 }
 
-.edge {
+/* Two rows of the checker of two-pixel squares (`.bl-dither`, level 3). */
+.card .edge {
+  --dot: calc(var(--px) * 2);
+  height: calc(var(--px) * 4);
   margin-inline: var(--plan-card-inset);
+  color: var(--ink);
 }
 .paid .edge {
-  --dither-ink: var(--plan-card-edge);
+  color: var(--plan-card-edge);
 }
 
 /* What you get, and how to buy it, to the foot of the card. */
 .body {
   display: flex;
-  flex: 1;
   flex-direction: column;
   gap: var(--space-12);
   padding: clamp(var(--space-20), 2.6vw, var(--space-32));

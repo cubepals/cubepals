@@ -29,13 +29,7 @@ export function ServerRow({
   return (
     <div className={styles.row}>
       <div className={styles.picture}>{picture}</div>
-      <div className={styles.text}>
-        <p className={`bl-game ${styles.name}`}>{name}</p>
-        <p className={`bl-game ${styles.message}`}>
-          <span className={styles.lead}>{lead}</span>
-          {rest && <span className={styles.rest}>{rest}</span>}
-        </p>
-      </div>
+      <p className={`bl-game ${styles.name}`}>{name}</p>
       <div className={styles.signal}>
         <span className={styles.bars} aria-hidden>
           <span />
@@ -47,6 +41,10 @@ export function ServerRow({
           {players.on}/{players.max}
         </span>
       </div>
+      <p className={`bl-game ${styles.message}`}>
+        <span className={styles.lead}>{lead}</span>
+        {rest && <span className={styles.rest}>{rest}</span>}
+      </p>
     </div>
   )
 }

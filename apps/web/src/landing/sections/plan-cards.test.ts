@@ -107,8 +107,8 @@ describe('the landing’s plan cards', () => {
   })
 
   test('each card opens with the plan as a server in the list', () => {
-    expect(face(coreCard)).toContain('Core Plain Minecraft Java and Bedrock, one address 0/5')
-    expect(face(plusCard)).toContain('Plus Mods and modpacks Everything in Core, and more 0/100')
+    expect(face(coreCard)).toContain('Core 0/5 Plain Minecraft Java and Bedrock, one address')
+    expect(face(plusCard)).toContain('Plus 0/100 Mods and modpacks Everything in Core, and more')
     expect(coreHtml).toContain('src="/server-icons/grass.svg"')
   })
 
@@ -150,7 +150,7 @@ describe('the landing’s plan cards', () => {
   test('Bedrock is promised only where it is on', () => {
     const off = landing(false)
     expect(off).not.toContain('Bedrock')
-    expect(cards(off)[0]).toContain('Core Plain Minecraft 0/5')
+    expect(cards(off)[0]).toContain('Core 0/5 Plain Minecraft 20 hours free')
     expect(off.match(/<li class="type-body"><svg/g)).toHaveLength(6)
   })
 

@@ -732,38 +732,6 @@
   color: var(--ink);
 }
 
-/* ─── Dither: the print's greys, for bars, fills and the edges between strata ───────────────── */
-
-.bl-dither {
-  --dot: calc(var(--px) * 1);
-  background-color: currentColor;
-  -webkit-mask-size: calc(var(--dot) * 4) calc(var(--dot) * 4);
-  mask-size: calc(var(--dot) * 4) calc(var(--dot) * 4);
-  -webkit-mask-repeat: repeat;
-  mask-repeat: repeat;
-  image-rendering: pixelated;
-}
-.bl-dither[data-level="1"] {
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h1v1H0zM2 2h1v1H2z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h1v1H0zM2 2h1v1H2z'/%3E%3C/svg%3E");
-}
-.bl-dither[data-level="2"] {
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h1v1H0zM2 0h1v1H2zM0 2h1v1H0zM2 2h1v1H2z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h1v1H0zM2 0h1v1H2zM0 2h1v1H0zM2 2h1v1H2z'/%3E%3C/svg%3E");
-}
-.bl-dither[data-level="3"] {
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h1v1H0zM1 1h1v1H1z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h1v1H0zM1 1h1v1H1z'/%3E%3C/svg%3E");
-  -webkit-mask-size: calc(var(--dot) * 2) calc(var(--dot) * 2);
-  mask-size: calc(var(--dot) * 2) calc(var(--dot) * 2);
-}
-.bl-dither[data-level="4"] {
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h4v4H0z'/%3E%3Cpath fill='%23fff' d='M1 1h1v1H1zM3 3h1v1H3z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h4v4H0z'/%3E%3Cpath fill='%23fff' d='M1 1h1v1H1zM3 3h1v1H3z'/%3E%3C/svg%3E");
-  -webkit-mask-mode: luminance;
-  mask-mode: luminance;
-}
-
 /* The edge between two strata: the lower one's colour arriving in rows of denser and denser dots. */
 .bl-strata {
   display: grid;

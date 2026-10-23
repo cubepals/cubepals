@@ -96,7 +96,7 @@ export function OfferCard({
         )}
         <PanelButton name={plan.name} start={trial ? start : undefined} month={month} />
       </div>
-      <div className={`bl-dither ${styles.edge}`} />
+      <div className={`bl-dither ${styles.edge}`} data-level="3" />
       <div className={styles.body}>
         <p className={`type-body-lg ${styles.pitch}`}>
           {trial ? (

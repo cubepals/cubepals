@@ -221,19 +221,36 @@
   --btn-shadow: var(--ink);
 }
 
-/* A dithered edge: where one ground gives way to the next, two rows of a checker of
-   two-pixel squares, as the chunk is printed. It is drawn in --dither-ink, ink unless set. */
+/* Dither: the print's greys, for bars, fills and the edges between strata. It is drawn in the
+   text's colour, through a mask of one of four densities (`data-level`). */
 .bl-dither {
-  --dither-cell: calc(var(--px) * 2);
-  height: calc(var(--dither-cell) * 2);
-  background:
-    conic-gradient(
-      var(--dither-ink, var(--ink)) 90deg,
-      transparent 90deg 180deg,
-      var(--dither-ink, var(--ink)) 180deg 270deg,
-      transparent 270deg
-    )
-    0 0 / calc(var(--dither-cell) * 2) calc(var(--dither-cell) * 2);
+  --dot: calc(var(--px) * 1);
+  background-color: currentColor;
+  -webkit-mask-size: calc(var(--dot) * 4) calc(var(--dot) * 4);
+  mask-size: calc(var(--dot) * 4) calc(var(--dot) * 4);
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  image-rendering: pixelated;
+}
+.bl-dither[data-level="1"] {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h1v1H0zM2 2h1v1H2z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h1v1H0zM2 2h1v1H2z'/%3E%3C/svg%3E");
+}
+.bl-dither[data-level="2"] {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h1v1H0zM2 0h1v1H2zM0 2h1v1H0zM2 2h1v1H2z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h1v1H0zM2 0h1v1H2zM0 2h1v1H0zM2 2h1v1H2z'/%3E%3C/svg%3E");
+}
+.bl-dither[data-level="3"] {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h1v1H0zM1 1h1v1H1z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h1v1H0zM1 1h1v1H1z'/%3E%3C/svg%3E");
+  -webkit-mask-size: calc(var(--dot) * 2) calc(var(--dot) * 2);
+  mask-size: calc(var(--dot) * 2) calc(var(--dot) * 2);
+}
+.bl-dither[data-level="4"] {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h4v4H0z'/%3E%3Cpath fill='%23fff' d='M1 1h1v1H1zM3 3h1v1H3z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h4v4H0z'/%3E%3Cpath fill='%23fff' d='M1 1h1v1H1zM3 3h1v1H3z'/%3E%3C/svg%3E");
+  -webkit-mask-mode: luminance;
+  mask-mode: luminance;
 }
 
 /* Someone who asked for less motion gets a button that goes down at once. */
