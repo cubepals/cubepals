@@ -183,6 +183,16 @@ export default async function Guide() {
               </>
             ),
           },
+          {
+            question: 'How does this compare with Aternos?',
+            answer: (
+              <>
+                For a group of friends,{' '}
+                <GuideLink to="aternos-alternative">Cubepals and Aternos compared</GuideLink> looks at how the
+                two start a server and what each one gives free.
+              </>
+            ),
+          },
         ]}
       />
     </GuideArticle>

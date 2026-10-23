@@ -178,6 +178,16 @@ export default async function Guide() {
                 ? `Up to ${free.maxPlayers} at once on the trial, and up to ${paid.maxPlayers} on ${paid.name}.`
                 : 'It depends on the plan: see Pricing.',
           },
+          {
+            question: 'How does Cubepals compare with Aternos?',
+            answer: (
+              <>
+                For a group of friends on Java,{' '}
+                <GuideLink to="aternos-alternative">Cubepals and Aternos compared</GuideLink> takes the two
+                side by side.
+              </>
+            ),
+          },
         ]}
       />
     </GuideArticle>

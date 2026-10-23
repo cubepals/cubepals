@@ -49,7 +49,7 @@ function withApproval(guide: Guide, approved: boolean, check: () => void) {
 const first = GUIDES[0] as Guide
 
 describe('guides', () => {
-  test('are the plan’s eight how-to guides, the game modes and Bedrock, and no comparison', () => {
+  test('are the plan’s eight how-to guides, the game modes, Bedrock and the one comparison', () => {
     expect(GUIDES.map((guide) => guide.slug)).toEqual([
       'minecraft-server-for-friends',
       'play-minecraft-java-with-friends',
@@ -61,6 +61,7 @@ describe('guides', () => {
       'minecraft-server-uk-europe',
       'lifesteal-manhunt-skyblock-with-friends',
       'minecraft-bedrock-server',
+      'aternos-alternative',
     ])
     for (const guide of GUIDES) {
       expect(guide.description.length).toBeLessThanOrEqual(155)
@@ -130,10 +131,12 @@ describe('an approved guide', () => {
     })
   })
 
-  test('only the first how-to guides are in the footers', () => {
+  test('only the first how-to guides are in the footers, and never a comparison', () => {
     production()
     const ram = GUIDES.find((guide) => guide.slug === 'minecraft-server-ram') as Guide
     withApproval(ram, true, () => expect(footerGuides()).not.toContain(ram))
+    const aternos = GUIDES.find((guide) => guide.slug === 'aternos-alternative') as Guide
+    withApproval(aternos, true, () => expect(footerGuides()).not.toContain(aternos))
   })
 })
 
