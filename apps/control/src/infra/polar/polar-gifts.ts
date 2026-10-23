@@ -6,7 +6,9 @@
  * Gift products in Polar's terms (SDK 2026-10 `models`, read 2026-10-12): a one-time product with
  * metadata `purpose: gift`, `plan` and `months`, at one fixed price, read back as a gift; anything
  * else is not one. The products are made in Polar, like the plans', so a new gift (a year of Plus)
- * is a product there and nothing here. Requests themselves are PolarBilling's.
+ * is a product there and nothing here. A gift made before its checkout is named in the checkout's
+ * metadata, which Polar copies to the order, and read back from there with who paid. Requests
+ * themselves are PolarBilling's.
  */
 import type { models } from '@polar-sh/sdk/2026-10'
 import { z } from 'zod'
@@ -15,6 +17,47 @@ import type { Fields } from './polar-models.ts'
 
 /** The metadata that marks a product as a gift, and the products list is filtered on. */
 export const GIFT_METADATA = { purpose: 'gift' } as const
+
+/**
+ * What a gift checkout names. Its customer: the account paying, or for a guest none of ours, and
+ * Polar finds the customer with that email or makes one (seen in the sandbox, 2026-10-23). Its
+ * metadata: the gift made before the checkout, by id, which Polar copies to the order; none for a
+ * gift its paid order makes (`delivery: code`). A guest's gift is always made first.
+ */
+export function giftCheckoutOf(input: { userId: string | null; giftId: string | null }): {
+  customer: { external_customer_id?: string }
+  metadata: { purpose: 'gift'; gift: string } | undefined
+} {
+  if (input.userId === null && input.giftId === null)
+    throw new Error('A guest’s gift is made before its checkout, which names it')
+  return {
+    customer: input.userId === null ? {} : { external_customer_id: input.userId },
+    metadata: input.giftId === null ? undefined : { ...GIFT_METADATA, gift: input.giftId },
+  }
+}
+
+// The fields of a gift's order read here: the metadata its checkout carried, and who paid.
+const PolarGiftOrder = z.object({
+  metadata: z.record(z.string(), z.unknown()).nullish(),
+  customer: z.object({ email: z.string().nullish() } satisfies Fields<models.OrderCustomer>),
+} satisfies Fields<models.Order>)
+
+/**
+ * The gift an order for `gift` paid for, when it was made before its checkout (`giftId`), and the
+ * email it was paid with. Only a gift product's order is read, and only an id shaped like one of
+ * ours: metadata on anything else is not ours. A guest's order carries the external id of
+ * whichever account Polar matched the email to, if any, which says nothing about who bought it;
+ * `Gifts.payer` reads that from the gift itself.
+ */
+export function giftOrderOf(
+  data: unknown,
+  gift: GiftProduct | null,
+): { gift: GiftProduct | null; giftId: string | null; payerEmail: string | null } {
+  if (gift === null) return { gift, giftId: null, payerEmail: null }
+  const order = PolarGiftOrder.parse(data)
+  const id = z.uuid().safeParse(order.metadata?.gift)
+  return { gift, giftId: id.success ? id.data : null, payerEmail: order.customer.email ?? null }
+}
 
 const PolarGift = z.object({
   id: z.string(),

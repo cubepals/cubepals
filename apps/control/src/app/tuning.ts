@@ -4,8 +4,8 @@
 
 /**
  * The deployment's free-link tuning, abuse limits, capacity tuning and economics figures (`domain/account/tuning.ts`),
- * which servers get the join reporter, and Stop cheaters' punishments and ban rule, installed once at startup from configuration and read
- * wherever they are needed. Until installed, as in tests, the defaults apply.
+ * which servers get the join reporter, Stop cheaters' punishments and ban rule, and whether gifts go by email, installed once at startup
+ * from configuration and read wherever they are needed. Until installed, as in tests, the defaults apply.
  */
 import {
   type AbuseLimits,
@@ -40,6 +40,11 @@ interface Tuning {
    * null, servers get the public default: alerts and logs, and no removal or ban.
    */
   stopCheaters?: StopCheatersTuning | null
+  /**
+   * GIFTS_BY_EMAIL: gifts emailed to the person they are for, bought with or without an account
+   * (`billing/gifts.ts`). Absent, as in tests, it is off.
+   */
+  giftsByEmail?: boolean
 }
 
 /** Grim's punishments file as text, and when removals for sending what no game can become a ban. */

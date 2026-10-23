@@ -91,7 +91,11 @@ export interface BillingState {
 /** A paid order, as the billing provider reports it: what it was for, and every amount in cents. */
 export interface BillingOrder {
   externalOrderId: string
-  /** Our user id, from the customer's external id; null for a customer this deployment didn't make. */
+  /**
+   * Our user id, from the customer's external id; null for a customer this deployment didn't make.
+   * For a gift a guest bought it is whichever account the provider matched their email to, if any,
+   * which `Gifts.payer` sets aside.
+   */
   userId: string | null
   /** The plan its product sells; null for a product no plan names. */
   planKey: string | null
@@ -122,6 +126,10 @@ export interface BillingOrder {
   paysForYear: boolean
   /** What it bought as a gift, when it is for one of the provider's gift products. */
   gift?: GiftProduct | null
+  /** The gift it paid for, when the gift was made before its checkout, which named it. */
+  giftId?: string | null
+  /** The email it was paid with, as the provider has it: read for a gift, for its buyer. */
+  payerEmail?: string | null
   orderedAt: Date
   /** When the provider last changed it (paid, refunded…), where it says. */
   changedAt?: Date | null
@@ -278,13 +286,16 @@ export interface BillingProvider {
   /** The gifts on sale, cheapest first; none when the provider sells none. */
   giftProducts(): Promise<GiftProduct[]>
   /**
-   * A checkout for one gift, paid by `userId`, with no discount code. A checkout still open for
-   * the same buyer and gift is offered again rather than a second one.
+   * A checkout for one gift, with no discount code, paid by `userId` or, where that is null, by a
+   * guest at `email`. `giftId` is the gift made before its checkout, which its order names; null
+   * for one its paid order makes, which a guest's never is. A checkout still open for the same
+   * buyer and gift is offered again rather than a second one.
    */
   giftCheckoutUrl(input: {
-    userId: string
+    userId: string | null
     email: string
     gift: GiftProduct
+    giftId: string | null
     returnUrl: string
   }): Promise<string>
   /** Gives back `cents` of a paid order, before tax (the provider refunds its tax with it). */

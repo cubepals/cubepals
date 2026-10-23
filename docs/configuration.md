@@ -232,6 +232,7 @@ regions nodes enroll into (`RUNTIME_REGION_MAP` may, where the fleet is the defa
 | `POLAR_WEBHOOK_SECRET` | optional | secret | optional (off at launch) | secret | `whsec_…`, from the webhook endpoint in Polar's dashboard (`<WEB_CANONICAL_ORIGIN>/api/billing/webhook`, API version 2026-10, events `customer.state_changed`, `order.created`, `order.updated`, `order.paid`, `order.refunded`, `subscription.active`, `subscription.past_due`, `subscription.canceled`, `subscription.uncanceled` and `subscription.revoked`) |
 | `POLAR_SERVER` | `sandbox` | `sandbox` | `production` | tf | Named explicitly |
 | `POLAR_PRODUCTS` | optional | op | optional (off at launch) | op | `core:<product id>,plus:<product id>`, one for each paid plan on sale; a plan without one is not for sale yet, and the control plane says so at start. Production takes it with the two secrets above or none of them ([production.md](production.md#billing-later)) |
+| `GIFTS_BY_EMAIL` | `false` | `false` | `false` | tf | Gifts emailed to the person they are for, bought with or without an account. Off, a gift is a code emailed to the account that bought it, and Polar's order for a gift a guest started is not kept |
 
 ### Room for new servers
 
