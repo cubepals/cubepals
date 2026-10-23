@@ -61,10 +61,6 @@ export default async function PricingPage() {
         <h1 className="type-display-md" style={{ color: 'var(--ink)' }}>
           {plansSaid(plans)}.
         </h1>
-        <p className="type-body" style={{ color: 'var(--ink-muted)' }}>
-          Hours only count while your server is running, and it sleeps when nobody’s on. Joining wakes it,
-          usually in a couple of seconds; the first start, or one after a change, can take up to a minute.
-        </p>
       </header>
       <div className="bk-plans">
         {cards.map((plan) => {
@@ -102,6 +98,10 @@ export default async function PricingPage() {
           )
         })}
       </div>
+      <p className="type-body" style={{ color: 'var(--ink-muted)' }}>
+        Hours only count while your server is running, and it sleeps when nobody’s on. Joining wakes it,
+        usually in a couple of seconds; the first start, or one after a change, can take up to a minute.
+      </p>
       <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
         Prices are in US dollars and include VAT where it applies. Paid plans renew monthly until you cancel;
         {yearSaid(plus, ` a year of ${plus?.name} is paid once and doesn’t renew on its own.`)} Cancelling

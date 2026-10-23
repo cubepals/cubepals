@@ -70,7 +70,7 @@ export const planSaid = (plan: Pick<PublicPlan, 'name' | 'totalHours'>): string 
   plan.totalHours === null ? plan.name : `the ${plan.name.toLowerCase()}`
 
 /** What a server may run past plain Minecraft, or that it is plain: no loader is ever named on a card. */
-export function addOns(plan: PublicPlan): string {
+function addOns(plan: PublicPlan): string {
   if (plan.mods)
     return plan.datapacks ? 'Modpacks, mods, plugins and datapacks' : 'Modpacks, mods and plugins'
   return plan.datapacks ? 'Plain Minecraft, with datapacks' : 'Plain Minecraft'

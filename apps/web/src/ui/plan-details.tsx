@@ -10,7 +10,7 @@
 import type { PublicPlan } from '@blockly/contracts'
 import { ChevronDown } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { addOns, dollars, eachOf, forSale, hoursPoint, keptPoint, PlanPoint, priceOf } from './plans'
+import { dollars, eachOf, forSale, hoursPoint, keptPoint, PlanPoint, priceOf } from './plans'
 
 /** The trial, the paid plans that get a card each, and the one the trial starts. */
 export function cardsOf(plans: readonly PublicPlan[]) {
@@ -97,7 +97,6 @@ export function PlanDetails({
         )}
         <li>Hours count only while your server is awake, not for each player</li>
         <li>{keptPoint(plan)}</li>
-        <li>{addOns(plan)}</li>
         {plan.mods && <li>{LARGE_SERVERS}</li>}
         {plan.yearlyPriceCents ? (
           <li>{year ?? `Or ${dollars(plan.yearlyPriceCents)} for a year, paid once`}</li>

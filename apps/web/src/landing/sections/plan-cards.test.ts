@@ -128,8 +128,18 @@ describe('the landing’s plan cards', () => {
     expect(plusCard).toContain('Or $250 for a year, paid once')
     expect(plusCard).toContain('$5 each, shared by five friends')
     expect(html.match(/<details/g)).toHaveLength(2)
+    // Plain Minecraft is said once, on the card's face.
+    expect(coreCard.match(/Plain Minecraft/g)).toHaveLength(1)
     // The hours keep their dashed-line explainer.
     expect(html).toContain('bk-tip')
+  })
+
+  test('under the cards, only the way to the full pricing', () => {
+    const under = html
+      .slice(html.lastIndexOf('</section>'))
+      .replace(/<[^>]+>/g, ' ')
+      .trim()
+    expect(under).toBe('Full pricing')
   })
 
   test('no card says what no plan is', () => {

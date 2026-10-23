@@ -9,7 +9,7 @@
  * that way, in the card's details. Signed in, each goes to the checkout page (the agreement, then paying) and
  * back to their servers; signed out, it makes the account first, and the account page carries on
  * to the checkout page. On the plan the free trial starts, the first button starts the trial,
- * with a line saying what it is, and the plan itself is the quieter link under it.
+ * with what it is and the plan itself, quieter, beside it: the button sits as low as the other cards'.
  */
 
 import Link from 'next/link'
@@ -50,20 +50,22 @@ export function GetPlan({
       </Button>
     )
   return (
-    <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
+    <div className="bk-row bk-wrap" style={{ gap: 'var(--space-12)', alignItems: 'center' }}>
       <Button variant="primary" href={behindSignUp(signedIn, '/servers/new')} {...ctaMark('pricing_create')}>
         Start free
       </Button>
-      <p className="type-body-sm bk-plan__each">{startsFree}</p>
-      {available && (
-        <Link
-          href={checkoutOf(signedIn, plan, 'month')}
-          className="type-body-sm bk-plan__year"
-          {...planMark(plan, 'month')}
-        >
-          Get {name}
-        </Link>
-      )}
+      <div className="bk-stack" style={{ gap: 0 }}>
+        <span className="type-body-sm bk-plan__each">{startsFree}</span>
+        {available && (
+          <Link
+            href={checkoutOf(signedIn, plan, 'month')}
+            className="type-body-sm bk-plan__year"
+            {...planMark(plan, 'month')}
+          >
+            Get {name}
+          </Link>
+        )}
+      </div>
     </div>
   )
 }

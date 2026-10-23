@@ -130,7 +130,6 @@ export function PlansSaid({
         })}
       </div>
       <p className={`bl-body ${styles.hours}`}>
-        Hours only count while the server is running.{' '}
         <Link href="/pricing" className={styles.more}>
           Full pricing
         </Link>
