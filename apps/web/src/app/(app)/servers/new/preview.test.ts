@@ -126,7 +126,8 @@ function heldBy(fails: (from: SetupSourceInput) => Error | null = onlyOn121) {
     },
   }
   const queries = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const ahead = (from: SetupSourceInput) => queries.prefetchQuery(previewQuery(trpc as never, from, '5'))
+  const ahead = (from: SetupSourceInput) =>
+    queries.query(previewQuery(trpc as never, from, '5')).catch(() => undefined)
   return { asked, queries, trpc: trpc as never, ahead }
 }
 

@@ -9,7 +9,7 @@
  */
 import type { CreateOptions, PartySize, SetupPreview, SetupSourceInput } from '@blockly/contracts'
 import { MINUTE_MS } from '@blockly/contracts/durations'
-import { type QueryClient, useQueryClient } from '@tanstack/react-query'
+import { noop, type QueryClient, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { codeOf, useTRPC } from '../../../../lib/api'
 
@@ -107,6 +107,6 @@ export function useChoicesAhead({
   useEffect(() => {
     if (live === undefined || !offers) return
     for (const from of choicesAhead(live, version))
-      void queries.prefetchQuery(previewQuery(trpc, from, partySize))
+      queries.query(previewQuery(trpc, from, partySize)).catch(noop)
   }, [queries, trpc, live, partySize, version, offers])
 }
