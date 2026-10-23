@@ -11,6 +11,8 @@ export interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElemen
   ref?: Ref<HTMLInputElement>
   label: string
   help?: ReactNode
+  /** `help` changes as the field is typed in, and a screen reader says it when it does. */
+  live?: boolean
   /** Replaces `help` and sets the invalid style. Write the fix, not the rule. */
   error?: string | null
   optional?: boolean
@@ -24,6 +26,7 @@ export interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElemen
 export function TextField({
   label,
   help,
+  live,
   error,
   optional,
   mono,
@@ -61,7 +64,7 @@ export function TextField({
           {error}
         </p>
       ) : help ? (
-        <p id={note} className="bk-field__help">
+        <p id={note} className="bk-field__help" aria-live={live ? 'polite' : undefined}>
           {help}
         </p>
       ) : null}
