@@ -19,7 +19,7 @@ import { RedeemGift } from './redeem-gift'
 const shown = ({ value, caret }: CodeText): string => `${value.slice(0, caret)}|${value.slice(caret)}`
 
 /** The field from text with a `|` for its caret. */
-const field = (text: string): CodeText => ({ value: text.replace('|', ''), caret: text.indexOf('|') })
+const field = (text: string): CodeText => ({ value: text.replaceAll('|', ''), caret: text.indexOf('|') })
 
 /** The field after typing `keys` at its caret. */
 function type(text: string, keys: string): string {
