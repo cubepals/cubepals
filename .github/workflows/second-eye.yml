@@ -224,13 +224,14 @@ jobs:
     env:
       PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
     steps:
-      # A push waits for the pushes after it: a fix loop pushes again once CI has run and the fix is
-      # made, and the job that wakes to a newer push stands down (the next step). A label, a comment
-      # or a run by hand is someone asking now, so it starts at once.
+      # A push waits briefly for the pushes right after it (a burst of commits), and the job that
+      # wakes to a newer push stands down (the next step). Five minutes catches a burst without
+      # holding a ready pull request back. A label, a comment or a run by hand is someone asking
+      # now, so it starts at once.
       - name: Wait for the pushes to stop
         if: github.event.action == 'synchronize'
         env:
-          QUIET_MINUTES: 20
+          QUIET_MINUTES: 5
         run: sleep "${QUIET_MINUTES}m"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
