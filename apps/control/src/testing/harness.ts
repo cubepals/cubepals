@@ -147,6 +147,11 @@ export interface HarnessOptions {
    * `curation.ingest`: no worker runs them, so nothing checks one behind a test's back.
    */
   curatedPacks?: readonly CuratedPack[]
+  /**
+   * How long a template's resolution is kept for previews. None by default: tests publish to the
+   * catalog as they go, and a preview answers from what it lists then.
+   */
+  templatesKeptMs?: number
   /** Blockly's own packs, checked the same way: only when a test asks. */
   ownPacks?: readonly OwnPack[]
   /**
@@ -327,6 +332,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       webOrigin: 'http://localhost:3000',
       curatedPacks: options.curatedPacks ?? [],
       ownPacks: options.ownPacks ?? [],
+      templatesKeptMs: options.templatesKeptMs ?? 0,
       ...settingsFrom(options),
     },
   )
