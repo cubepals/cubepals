@@ -24,6 +24,8 @@ export interface Supervision {
   longestWaitMs?: number
   /** How long it must have run for the next wait to be the first again. */
   steadyMs?: number
+  /** Told each time the child exits, before the wait to start it again. */
+  exited?: () => void
 }
 
 export type GeyserState = 'starting' | 'running' | 'waiting'
@@ -66,6 +68,7 @@ export class Supervised {
       ])
       if (this.#stopped) return
       this.#state = 'waiting'
+      this.#options.exited?.()
       wait = Date.now() - began >= steady ? first : Math.min(wait * 2, longest)
       console.error(`${prefix} exited with ${code}; starting again in ${Math.round(wait / SECOND_MS)} s`)
       await Bun.sleep(wait)

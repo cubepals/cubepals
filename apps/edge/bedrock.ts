@@ -78,6 +78,11 @@ export function bedrockFromEnv(env: NodeJS.ProcessEnv, front: number): BedrockOp
 
 /** The port Geyser listens on, on loopback, behind the relay. */
 const GEYSER_PORT = 19131
+/**
+ * How long Geyser keeps a source's PROXY header while nothing comes from it: SESSION_TIMEOUT_MS of
+ * its RakNet library (org.cloudburstmc.netty's RakConstants), which nothing outside Java exports.
+ */
+const GEYSER_KEEPS_QUIET_SOURCE_MS = 10 * SECOND_MS
 /** The most the key may be: Floodgate's is AES-128, 16 bytes. */
 const KEY_BYTES = 16
 /** What Geyser's process is given of the agent's environment: enough to find Java, and nothing secret. */
@@ -154,6 +159,7 @@ export function startBedrock(options: BedrockOptions): Bedrock {
   prepareGeyserDir(options)
   if (!options.validateLogin) console.error('[geyser] XBOX SIGN-IN IS OFF: for a test edge only')
 
+  let relay: Relay | null = null
   const geyser = new Supervised({
     command: [
       'java',
@@ -167,10 +173,11 @@ export function startBedrock(options: BedrockOptions): Bedrock {
     cwd: options.dir,
     env: geyserEnv(process.env),
     prefix: '[geyser]',
+    // The Geyser that starts next knows no player and has given no pong.
+    exited: () => relay?.forget(),
   })
   void geyser.run()
 
-  let relay: Relay | null = null
   let stopped = false
   void untilItHolds(
     async () => {
@@ -182,7 +189,7 @@ export function startBedrock(options: BedrockOptions): Bedrock {
         totalPongs: options.totalPongs,
         opens: options.opens,
         most: options.most,
-        idleMs: 30 * SECOND_MS,
+        idleMs: GEYSER_KEEPS_QUIET_SOURCE_MS - 2 * SECOND_MS,
         pongRefreshMs: 5 * SECOND_MS,
       })
       console.error(`[geyser] Bedrock players join at ${hostname}:${options.port}`)
