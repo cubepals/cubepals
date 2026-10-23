@@ -205,6 +205,32 @@ describe.skipIf(!hasDatabase)('with GIFTS_BY_EMAIL', () => {
   })
 })
 
+describe.skipIf(!hasDatabase)('a gift made before its checkout, not paid for', () => {
+  const w = new PolarWorld()
+
+  beforeAll(() => w.start(), 30_000)
+  afterAll(() => w.close())
+
+  test('has no code to send again, and one delivered by email never has', async () => {
+    const buyer = await w.h.user('Ida')
+    const unpaid = await started(w, {
+      buyerId: buyer.userId,
+      buyerEmail: null,
+      delivery: 'code',
+      recipientKey: null,
+    })
+    await expect(w.h.app.billing.gifts.resend(buyer, unpaid.id)).rejects.toThrow(/not found/i)
+    const emailed = await started(w, {
+      buyerId: buyer.userId,
+      state: 'paid',
+      externalOrderId: `order-${randomUUID()}`,
+    })
+    await expect(w.h.app.billing.gifts.resend(buyer, emailed.id)).rejects.toThrow(/no code to send/)
+    expect((await gift(w, unpaid.id))?.codeHash).toBeNull()
+    expect((await gift(w, emailed.id))?.codeHash).toBeNull()
+  })
+})
+
 describe.skipIf(!hasDatabase)('without GIFTS_BY_EMAIL', () => {
   const w = new PolarWorld()
 

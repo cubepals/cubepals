@@ -444,8 +444,15 @@ export class Gifts {
         .from(gifts)
         .where(and(eq(gifts.id, giftId), eq(gifts.buyerId, user.id)))
         .for('update')
-      if (!row) throw new NotFound('Gift')
-      if (row.redeemedBy !== null || row.voidedAt !== null || !row.planKey || !row.months)
+      // One not paid for yet is not the buyer's to see, and one delivered by email has no code.
+      if (!row || row.state === 'checkout') throw new NotFound('Gift')
+      if (
+        row.delivery !== 'code' ||
+        row.redeemedBy !== null ||
+        row.voidedAt !== null ||
+        !row.planKey ||
+        !row.months
+      )
         throw new AppError(
           'invalid_choice',
           'That gift has been redeemed or refunded, so it has no code to send.',
