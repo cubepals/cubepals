@@ -225,6 +225,17 @@
   }
 }
 
+/* The page is scrolled by its own hand — Lenis on the wheel, touch and the keys — and the rail
+   beside it shows where it stands, so the window keeps no scrollbar of its own here and the page
+   fills it edge to edge. The webkit rule is for Safari and older Chromium. Only the page's own:
+   no scroller inside is touched, and every other page keeps the scrollbars globals.css gives. */
+html:has(.bl) {
+  scrollbar-width: none;
+}
+html:has(.bl)::-webkit-scrollbar {
+  display: none;
+}
+
 /* On a wide screen the words sit above the chunk's canvas and the ground they are written on sits
    below it. On a narrow one the chunk is a band and everything scrolls under it. */
 .bl-col {
