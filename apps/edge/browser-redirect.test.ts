@@ -59,6 +59,11 @@ test('an address no server has goes home', () => {
   expect(pageFor('nothing-here.play.cubepals.test', PAGES)).toBe(`${WEB}/`)
 })
 
+test('Cubepals’ example address goes home, under every play domain', () => {
+  expect(pageFor('your-server.play.cubepals.test', PAGES)).toBe(`${WEB}/`)
+  expect(pageFor('Your-Server.MC.Cubepals.Test.', PAGES)).toBe(`${WEB}/`)
+})
+
 test('a host under no play domain, or no host at all, goes home', () => {
   expect(pageFor('arcade.example.test', PAGES)).toBe(`${WEB}/`)
   expect(pageFor('evilplay.cubepals.test', PAGES)).toBe(`${WEB}/`)

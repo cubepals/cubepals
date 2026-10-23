@@ -67,9 +67,17 @@ describe('held names', () => {
   })
 
   test('an address Cubepals keeps for its own server is kept, and one that only contains it is anyone’s', () => {
-    expect(holdOn('sunset-valley')).toBe('kept')
-    expect(checkSlug('sunset-valley').ok).toBe(true)
-    expect(holdOn('sunset-valley-2')).toBeNull()
+    for (const slug of ['sunset-valley', 'copper-cove', 'maple-hollow']) {
+      expect(holdOn(slug)).toBe('kept')
+      expect(checkSlug(slug).ok).toBe(true)
+      expect(holdOn(`${slug}-2`)).toBeNull()
+    }
+  })
+
+  test('Cubepals’ example address is held, and one that only contains it is anyone’s', () => {
+    expect(holdOn('your-server')).toBe('example')
+    expect(checkSlug('your-server').ok).toBe(true)
+    expect(holdOn('your-server-2')).toBeNull()
   })
 
   test('a name or description that says Cubepals, Official, Verified or Staff, however it is written', () => {

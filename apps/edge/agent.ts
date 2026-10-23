@@ -19,6 +19,7 @@ import { asleepMessage } from './asleep.ts'
 import { type Bedrock, bedrockFromEnv, startBedrock } from './bedrock.ts'
 import { browserRedirect } from './browser-redirect.ts'
 import { takes, wrongGame } from './clients.ts'
+import { exampleAt } from './example-address.ts'
 import { type FrontOptions, front, geyserDoor, pipe } from './front.ts'
 import { forServer, Unwrap } from './header.ts'
 import { Held, LOGIN_QUERIES, turnAway } from './hold.ts'
@@ -165,7 +166,7 @@ const asked = new Map<string, number>()
 /** Has mc-router hold the routes, changing only what differs; whether it holds them all. */
 async function applyRoutes(): Promise<boolean> {
   try {
-    await router.apply(mappings(routes, unreachable, { restarting: NOTICE, asleep: SLEEPING }))
+    await router.apply(mappings(routes, unreachable, { restarting: NOTICE, asleep: SLEEPING }, PLAY_DOMAINS))
     return true
   } catch (error) {
     // Not held, so not said to be: the next poll fetches the list again, and applies it again.
@@ -437,11 +438,10 @@ Bun.listen<{ notice: Notice; unwrap: Unwrap }>({
 // ─── A sleeping server's notice ──────────────────────────────────────────────────────────────
 
 // mc-router asks the wake webhook for a join, and dials a server's route for a ping, or for a join
-// that arrives while another is waking the server: mc-router asks once per wake, not once per join.
-// Dialled directly, a sleeping server's route leads nowhere sure on Fly: its proxy takes the
-// connection while the machine is down, then resets it, closes it or holds it for as long as it
-// likes. So the route leads here. A ping is told the server sleeps; a join goes to the waiting
-// room below, which shares the wake already under way and lets it in once the server is up.
+// that arrives while another is waking the server: it asks once per wake, not once per join. Dialled
+// directly, a sleeping server's route leads nowhere sure on Fly: its proxy takes the connection while
+// the machine is down, then resets, closes or holds it. So the route leads here: a ping is told the
+// server sleeps, a join goes to the waiting room below. Cubepals' example address hears what it is.
 
 /** Sleeping servers a ping asked to wake early, so each is asked once a while (`ping-wake.ts`). */
 const pingWakes = new PingWakes(
@@ -507,7 +507,7 @@ function sourceOf(header: Uint8Array | null): string | null {
  */
 function asleepAt(address: string): void {
   createServer((client) => {
-    const notice = new Notice(asleep)
+    const notice = new Notice((dialled) => exampleAt(dialled, hostnames) ?? asleep(dialled))
     const unwrap = new Unwrap()
     client.setTimeout(10_000, () => client.destroy())
     client.on('error', () => client.destroy())

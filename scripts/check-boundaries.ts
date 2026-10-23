@@ -24,7 +24,7 @@ type Layer = (typeof LAYERS)[number]
  * None imports anything itself.
  */
 const PURE_PACKAGES =
-  /^@blockly\/contracts\/(durations|limits|minecraft-font|motd-layout|plain-text|published-maps|seal|server-list)$/
+  /^@blockly\/contracts\/(durations|example-address|limits|minecraft-font|motd-layout|plain-text|published-maps|seal|server-list)$/
 const APP_PACKAGES = /^(@blockly\/(db|contracts)(\/.*)?|drizzle-orm(\/.*)?|zod|node:.*)$/
 
 /** A string literal holding a hostname, with or without a scheme (§17). */
@@ -303,6 +303,7 @@ if (PROVIDER_ID !== null)
 // Values written once and read from anywhere: domain/ reads the limits, the server list's codes
 // and the check marks typed text refuses, the edge's image copies Minecraft's ports alone. Each stays a file that imports nothing.
 for (const path of [
+  'packages/contracts/src/example-address.ts',
   'packages/contracts/src/limits.ts',
   'packages/contracts/src/published-maps.ts',
   'packages/contracts/src/seal.ts',

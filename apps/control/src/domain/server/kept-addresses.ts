@@ -14,6 +14,9 @@
 const KEPT: ReadonlyMap<string, string> = new Map([
   // Shown in Cubepals' own published images as an address to join.
   ['sunset-valley', 'arcade'],
+  // Shown in Cubepals' pages and ads.
+  ['copper-cove', 'arcade'],
+  ['maple-hollow', 'arcade'],
 ])
 
 /** The slug of the server a kept address points at; null for any other address. */
