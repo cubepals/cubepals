@@ -6,13 +6,23 @@ import type { PublicPlan } from '@blockly/contracts'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { bedrockLive } from '../../../lib/bedrock'
-import { hoursSaid, publicPlans } from '../../../lib/plans'
+import { publicPlans } from '../../../lib/plans'
 import { canonicalOrigin, pageMetadata } from '../../../lib/site'
 import { appSchema, JsonLd } from '../../../lib/structured-data'
-import { forSale, PlanCard, priceOf } from '../../../ui'
+import {
+  cardsOf,
+  forSale,
+  freeSaid,
+  offerPitch,
+  offerPoints,
+  PlanCard,
+  PlanDetails,
+  plansSaid,
+  priceOf,
+} from '../../../ui'
 import { guideHref, publishedGuides } from '../guides'
 import { seenMark } from '../steps'
-import { GetPlan } from './get-plan'
+import { GetPlan, GetYear } from './get-plan'
 import { byKind, Questions, yearSaid } from './questions'
 
 /** The title and description say the plans' own numbers, or nothing about them when the table can't be read. */
@@ -24,36 +34,32 @@ export async function generateMetadata(): Promise<Metadata> {
       paid.length > 0
         ? `Pricing: a free trial, then ${paid.map((plan) => `${plan.name} for ${priceOf(plan.monthlyPriceCents)}`).join(' or ')}`
         : 'Pricing',
-    description: free
-      ? `A free trial of ${hoursSaid(free)}, for up to ${free.maxPlayers} players.${core ? ` ${core.name} for you and ${core.maxPlayers - 1} friends.` : ''}${plus ? ` ${plus.name} for mods, plugins and bigger groups.` : ''}`
-      : 'Start with a free trial. Core for friends on vanilla, Plus for mods and bigger groups.',
+    description:
+      free && core
+        ? `${core.name} starts free, with ${free.totalHours ? `${free.totalHours} hours and ` : ''}no card, for you and ${core.maxPlayers - 1} friends.${plus ? ` ${plus.name} adds mods, plugins and bigger groups.` : ''}`
+        : 'Core starts free, for you and your friends. Plus adds mods, plugins and bigger groups.',
     path: '/pricing',
   })
 }
 
-/** What bigger groups run on, said under the plan that has them. */
-const LARGE_SERVERS =
-  'Big modpacks and groups of 20 or more run on a large server, which counts two hours for each hour it runs. Groups of more than 50 run on the largest, which counts four.'
-
 /**
- * What Blockly costs, for anyone: three plans, in the words people choose on, and the few
+ * What Blockly costs, for anyone: the paid plans, the first of them starting with the free trial,
+ * in the words people choose on, and the few
  * questions they ask before paying. Every number comes from the plan table the control plane
  * enforces, so nothing here can promise what a server won't do.
  */
 export default async function PricingPage() {
   const plans = await publicPlans()
-  const { core, plus } = byKind(plans)
-  // The plan the trial leads to.
-  const paid = [core, plus].find((plan) => plan !== undefined && forSale(plan))
+  const { plus } = byKind(plans)
+  const { trial, cards, starter } = cardsOf(plans)
+  const bedrock = bedrockLive()
   const costGuide = publishedGuides().find((guide) => guide.slug === 'minecraft-server-cost')
   return (
     <>
       <JsonLd schema={appSchema(plans, canonicalOrigin())} />
       <header className="bk-stack" style={{ gap: 'var(--space-8)' }}>
         <h1 className="type-display-md" style={{ color: 'var(--ink)' }}>
-          {paid
-            ? `Start with a free trial. ${paid.name} when it ends${plus && plus !== paid ? `, ${plus.name} for mods` : ''}.`
-            : 'Start with a free trial.'}
+          {plansSaid(plans)}.
         </h1>
         <p className="type-body" style={{ color: 'var(--ink-muted)' }}>
           Hours only count while your server is running, and it sleeps when nobody’s on. Joining wakes it,
@@ -61,24 +67,40 @@ export default async function PricingPage() {
         </p>
       </header>
       <div className="bk-plans">
-        {plans.map((plan) => (
-          <PlanCard
-            key={plan.key}
-            plan={plan}
-            mark={seenMark(`plan_${plan.key}`)}
-            bedrock={bedrockLive()}
-            note={plan === plus ? LARGE_SERVERS : undefined}
-            action={
-              <GetPlan
-                plan={plan.key}
-                name={plan.name}
-                paid={plan.monthlyPriceCents > 0}
-                yearlyCents={plan.yearlyPriceCents}
-                available={forSale(plan)}
-              />
-            }
-          />
-        ))}
+        {cards.map((plan) => {
+          const startsTrial = plan === starter ? trial : undefined
+          return (
+            <PlanCard
+              key={plan.key}
+              plan={plan}
+              mark={seenMark(`plan_${plan.key}`)}
+              offer={{
+                pitch: offerPitch(plan, plans),
+                points: offerPoints(plan, bedrock),
+                details: (
+                  <PlanDetails
+                    plan={plan}
+                    trial={startsTrial}
+                    className="type-body-sm"
+                    year={
+                      plan.yearlyPriceCents && forSale(plan) ? (
+                        <GetYear plan={plan.key} yearlyCents={plan.yearlyPriceCents} />
+                      ) : undefined
+                    }
+                  />
+                ),
+              }}
+              action={
+                <GetPlan
+                  plan={plan.key}
+                  name={plan.name}
+                  available={forSale(plan)}
+                  startsFree={startsTrial && freeSaid(startsTrial)}
+                />
+              }
+            />
+          )
+        })}
       </div>
       <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
         Prices are in US dollars and include VAT where it applies. Paid plans renew monthly until you cancel;

@@ -52,11 +52,15 @@ export function planPoints(plan: PublicPlan): string[] {
       : `Up to ${plan.maxServers} servers and ${plan.maxPlayers} players`,
     hoursPoint(plan),
     addOns(plan),
-    plan.downloads === 'history'
-      ? `Go back to any of your last ${plan.sessionsKept} sessions, and a weekly download`
-      : `Go back to any of your last ${plan.sessionsKept} sessions, and download your world`,
+    keptPoint(plan),
   ]
 }
+
+/** The sessions a plan keeps to go back to, and how its world is downloaded. */
+export const keptPoint = (plan: Pick<PublicPlan, 'downloads' | 'sessionsKept'>): string =>
+  plan.downloads === 'history'
+    ? `Go back to any of your last ${plan.sessionsKept} sessions, and a weekly download`
+    : `Go back to any of your last ${plan.sessionsKept} sessions, and download your world`
 
 /**
  * A plan's name inside a sentence: "Plus", or "the free trial" for the one whose hours come once,
@@ -66,13 +70,14 @@ export const planSaid = (plan: Pick<PublicPlan, 'name' | 'totalHours'>): string 
   plan.totalHours === null ? plan.name : `the ${plan.name.toLowerCase()}`
 
 /** What a server may run past plain Minecraft, or that it is plain: no loader is ever named on a card. */
-function addOns(plan: PublicPlan): string {
+export function addOns(plan: PublicPlan): string {
   if (plan.mods)
     return plan.datapacks ? 'Modpacks, mods, plugins and datapacks' : 'Modpacks, mods and plugins'
   return plan.datapacks ? 'Plain Minecraft, with datapacks' : 'Plain Minecraft'
 }
 
-const hoursPoint = (plan: PublicPlan) =>
+/** A plan's hours of play, as the line its dashed explainer sits on. */
+export const hoursPoint = (plan: PublicPlan) =>
   plan.totalHours !== null
     ? `${plan.totalHours} hours of play, at most ${plan.includedHours} a day`
     : `${plan.includedHours} hours of play ${plan.per === 'day' ? 'every day' : 'each month'}${extraHourOf(plan) === null ? '' : `, then ${extraHourOf(plan)}¢ an hour`}`
@@ -185,7 +190,8 @@ export function PlayHours({
 }
 
 /** An amount as it is written: "$0", "$15", "$4.50". */
-const dollars = (cents: number): string => `$${cents % 100 === 0 ? cents / 100 : (cents / 100).toFixed(2)}`
+export const dollars = (cents: number): string =>
+  `$${cents % 100 === 0 ? cents / 100 : (cents / 100).toFixed(2)}`
 
 /**
  * The group a paid plan's price is shown split across: friends who play together on one server.
@@ -216,6 +222,7 @@ export function PlanCard({
   bedrock = false,
   solid = plan.monthlyPriceCents > 0,
   note,
+  offer,
 }: {
   plan: PublicPlan
   /** Whether Bedrock is on, for the card's first line (`lib/bedrock.ts`). */
@@ -229,15 +236,17 @@ export function PlanCard({
   action?: ReactNode
   /** The page's mark for the card coming into view, so it is counted (app/(public)/steps.ts). */
   mark?: Readonly<Record<`data-${string}`, string>>
+  /** On the public pages: what you get in a few lines, and the rest in details (`plan-details.tsx`). */
+  offer?: { pitch: string; points: string[]; details: ReactNode }
 }) {
-  const shared = eachOf(plan)
+  const shared = offer ? null : eachOf(plan)
   return (
     <section className="bk-plan" aria-label={plan.name} data-paid={solid || undefined} {...mark}>
       <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)', justifyContent: 'space-between' }}>
         <h3 className="type-eyebrow">{plan.name}</h3>
         {current && <Badge tone="grass">Yours</Badge>}
       </div>
-      <p className="type-heading-sm bk-plan__pitch">{pitchOf(plan, bedrock)}</p>
+      <p className="type-heading-sm bk-plan__pitch">{offer?.pitch ?? pitchOf(plan, bedrock)}</p>
       <p className="bk-plan__price">
         <span className="type-display-md bk-num">{dollars(plan.monthlyPriceCents)}</span>
         {plan.monthlyPriceCents > 0 && <span className="type-body-sm"> a month</span>}
@@ -248,13 +257,14 @@ export function PlanCard({
         </p>
       )}
       <ul className="bk-plan__points">
-        {planPoints(plan).map((point) => (
+        {(offer?.points ?? planPoints(plan)).map((point) => (
           <li key={point} className="type-body-sm">
             <Check size={16} strokeWidth={2.25} aria-hidden />
             <PlanPoint plan={plan} point={point} />
           </li>
         ))}
       </ul>
+      {offer?.details}
       {note && <p className="type-body-sm bk-plan__each">{note}</p>}
       {action && <div className="bk-plan__action">{action}</div>}
     </section>

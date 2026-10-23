@@ -3,12 +3,13 @@
 // SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
 
 /**
- * The plans, from the plan table the control plane enforces, set as two cards.
+ * The paid plans, from the plan table the control plane enforces, set as a card each.
  */
 import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
 import { ctaMark, planMark, seenMark } from '../../app/(public)/steps'
-import { eachOf, forSale, PlanPoint, pitchOf, planPoints, priceOf } from '../../ui/plans'
+import { cardsOf, freeSaid, offerPitch, offerPoints, PlanDetails, plansSaid } from '../../ui/plan-details'
+import { eachOf, forSale, priceOf } from '../../ui/plans'
 import { Section } from '../kit'
 import styles from './surface.module.css'
 
@@ -47,7 +48,7 @@ export function Plans({
   /** Whether Bedrock is on (`lib/bedrock.ts`). */
   bedrock: boolean
 }) {
-  if (plans.length < 2) return null
+  if (cardsOf(plans).cards.length === 0) return null
   return (
     <Section
       id="price"
@@ -64,8 +65,9 @@ export function Plans({
 }
 
 /**
- * What the plans section says, wherever it is set: the heading, a card to a plan, and the line
- * under them. The film sets it in its section; the phone's page sets it in its own.
+ * What the plans section says, wherever it is set: the heading, a card to each paid plan (the first
+ * starting with the free trial), and the line under them. The film sets it in its section; the
+ * phone's page sets it in its own.
  */
 export function PlansSaid({
   plans,
@@ -78,42 +80,55 @@ export function PlansSaid({
   getPlan: (key: string) => string
   bedrock: boolean
 }) {
-  const paid = plans.find((plan) => plan.monthlyPriceCents > 0)
+  const { trial, cards, starter } = cardsOf(plans)
   return (
     <>
-      <h2 className="bl-h2">
-        {paid ? `A free trial, or ${priceOf(paid.monthlyPriceCents)} for more` : 'A free trial'}
-      </h2>
+      <h2 className="bl-h2">{plansSaid(plans)}</h2>
       <div className={styles.cards}>
-        {plans.map((plan) => {
-          const isPaid = plan.monthlyPriceCents > 0
+        {cards.map((plan) => {
+          const startsTrial = plan === starter ? trial : undefined
           return (
             <section
               key={plan.key}
-              className={`bl-frame ${isPaid ? `bl-frame--solid ${styles.paid}` : ''} ${styles.card}`}
+              className={`bl-frame bl-frame--solid ${styles.paid} ${styles.card}`}
               aria-label={plan.name}
               {...seenMark(`plan_${plan.key}`)}
             >
               <h3 className={styles.name}>{plan.name}</h3>
               <p className={styles.price}>
                 <span className="bl-num">{dollars(plan.monthlyPriceCents)}</span>
-                {isPaid && <small> a month</small>}
+                <small> a month</small>
               </p>
-              <p className={styles.pitch}>{pitchOf(plan, bedrock)}</p>
-              <Shared plan={plan} />
+              <p className={styles.pitch}>{offerPitch(plan, plans)}</p>
               <ul className={styles.points}>
-                {planPoints(plan).map((point) => (
-                  <li key={point}>
-                    <PlanPoint plan={plan} point={point} />
-                  </li>
+                {offerPoints(plan, bedrock).map((point) => (
+                  <li key={point}>{point}</li>
                 ))}
               </ul>
-              <PlanButton plan={plan} create={create} getPlan={getPlan} />
+              <PlanDetails plan={plan} trial={startsTrial} className={styles.details} />
+              {startsTrial ? (
+                <>
+                  <Link
+                    href={create}
+                    className={`bl-btn bl-btn--lit ${styles.action}`}
+                    {...ctaMark('plans_create')}
+                  >
+                    Start free
+                  </Link>
+                  <p className={styles.free}>{freeSaid(startsTrial)}</p>
+                  {forSale(plan) && (
+                    <Link href={getPlan(plan.key)} className={styles.more} {...planMark(plan.key, 'month')}>
+                      Get {plan.name}
+                    </Link>
+                  )}
+                </>
+              ) : (
+                <PlanButton plan={plan} getPlan={getPlan} />
+              )}
             </section>
           )
         })}
       </div>
-      <p className={`bl-body ${styles.trial}`}>{trialSaid(plans)}</p>
       <p className={`bl-body ${styles.hours}`}>
         Hours only count while the server is running.{' '}
         <Link href="/pricing" className={styles.more}>
@@ -124,29 +139,9 @@ export function PlansSaid({
   )
 }
 
-/** What a paid plan comes to for each of a group sharing it: "$5 each, shared by five friends." */
-function Shared({ plan }: { plan: PublicPlan }) {
-  const shared = eachOf(plan)
-  if (!shared) return null
-  return (
-    <p className={styles.shared}>
-      {shared.each} each, shared by {shared.friends} friends.
-    </p>
-  )
-}
-
-/** The card's button: to the plan's checkout, to a first server, or that a plan isn't for sale yet. */
-function PlanButton({
-  plan,
-  create,
-  getPlan,
-}: {
-  plan: PublicPlan
-  create: string
-  getPlan: (key: string) => string
-}) {
-  const isPaid = plan.monthlyPriceCents > 0
-  if (isPaid && !forSale(plan))
+/** A paid card's button: to the plan's checkout, or that the plan isn't for sale yet. */
+function PlanButton({ plan, getPlan }: { plan: PublicPlan; getPlan: (key: string) => string }) {
+  if (!forSale(plan))
     return (
       <span className={`bl-btn ${styles.action}`} aria-disabled="true">
         Not available yet
@@ -154,11 +149,11 @@ function PlanButton({
     )
   return (
     <Link
-      href={isPaid ? getPlan(plan.key) : create}
-      className={`bl-btn ${isPaid ? 'bl-btn--lit' : ''} ${styles.action}`}
-      {...(isPaid ? planMark(plan.key, 'month') : ctaMark('plans_create'))}
+      href={getPlan(plan.key)}
+      className={`bl-btn bl-btn--lit ${styles.action}`}
+      {...planMark(plan.key, 'month')}
     >
-      {isPaid ? `Get ${plan.name}` : 'Create a server'}
+      Get {plan.name}
     </Link>
   )
 }

@@ -66,14 +66,21 @@
   margin: calc(var(--px) * -2) 0 calc(var(--px) * 4);
   font-weight: 600;
 }
-.plans .trial {
-  margin: calc(var(--px) * 10) 0 0;
+/* The trial, beside the button that starts it. */
+.plans .free {
+  margin: 0;
   font-weight: 600;
+}
+/* "See everything in Core": the rest of the plan, opened in place, at the points' size. */
+.plans .details {
+  margin-top: calc(var(--px) * 2);
+  font-size: 1rem;
 }
 .plans .hours {
   margin-top: calc(var(--px) * 2);
 }
 .plans .more {
+  justify-self: start;
   color: inherit;
   font-weight: 600;
   text-underline-offset: 0.25em;

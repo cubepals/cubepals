@@ -2827,6 +2827,38 @@ details[open] > .bk-disclosure::before {
   margin-block-start: auto;
   padding-block-start: var(--space-8);
 }
+/* A plan's details on the public pages: a quiet line that opens the rest in place, in the card's own ink. */
+.bk-plan-more summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  cursor: pointer;
+  list-style: none;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+  text-decoration-thickness: 1px;
+}
+.bk-plan-more summary::-webkit-details-marker {
+  display: none;
+}
+.bk-plan-more summary svg {
+  flex: none;
+  transition: transform 150ms cubic-bezier(0.2, 0, 0, 1);
+}
+.bk-plan-more[open] summary svg {
+  transform: rotate(180deg);
+}
+.bk-plan-more__list {
+  margin: var(--space-12) 0 0;
+  padding: 0 0 0 var(--space-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.bk-plan[data-paid] .bk-plan-more summary {
+  color: var(--ink-inverse);
+}
 
 /* Where a pack's file is dropped: the whole area takes the drop, the button inside picks one. */
 .bk-drop {
