@@ -266,16 +266,14 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     ...(settings.ownPacks === undefined ? {} : { own: settings.ownPacks }),
   })
   const queries = new ServerQueries({
+    ...ports,
     db,
-    addressing: ports.addressing,
-    regions: ports.regions,
     service: servers,
     setups,
-    catalog: ports.catalog,
     packs,
     curation,
     providers: runtime.providers,
-    ...(settings.templatesKeptMs === undefined ? {} : { templatesKeptMs: settings.templatesKeptMs }),
+    templatesKeptMs: settings.templatesKeptMs,
   })
   const access = new AccessService({ ...ports, db, policy, transitions, events })
   const sharing = new SharingService({ db, access })

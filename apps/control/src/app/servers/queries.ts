@@ -111,7 +111,6 @@ export class ServerQueries {
   readonly #templateSizes = new Map<string, { tier: MemoryTier; from: string }>()
   #templatesSizedAt = 0
   #sizingTemplates: Promise<void> | null = null
-  /** Each template's resolution, kept for previews (`resolved-templates.ts`). */
   readonly #templates: ResolvedTemplates
 
   constructor(deps: {
@@ -125,17 +124,14 @@ export class ServerQueries {
     curation: PackCuration
     /** The runtimes this deployment runs: a binding to another is foreign. */
     providers: readonly string[]
-    templatesKeptMs?: number
+    templatesKeptMs?: number | undefined
   }) {
     this.#db = deps.db
     this.#addressing = deps.addressing
     this.#regions = deps.regions
     this.#service = deps.service
     this.#setups = deps.setups
-    // A template is the same setup for everyone, so nobody's account is asked about.
-    this.#templates = new ResolvedTemplates((source) => deps.setups.resolve(source, null), {
-      ...(deps.templatesKeptMs === undefined ? {} : { keptMs: deps.templatesKeptMs }),
-    })
+    this.#templates = new ResolvedTemplates(deps.setups, deps.templatesKeptMs)
     this.#catalog = deps.catalog
     this.#packs = deps.packs
     this.#curation = deps.curation
@@ -379,7 +375,10 @@ export class ServerQueries {
     if (stale && this.#sizingTemplates === null) {
       this.#sizingTemplates = Promise.all(
         TEMPLATES.map(async (template) => {
-          const resolved = await this.#templates.get({ kind: 'template', key: template.key }).catch(() => null)
+          // A template is the same setup for everyone, so nobody's account is asked about.
+          const resolved = await this.#templates
+            .resolve({ kind: 'template', key: template.key }, null)
+            .catch(() => null)
           if (resolved === null) return false
           this.#templateSizes.set(template.key, { tier: resolved.tier, from: resolved.from })
           return true
@@ -509,8 +508,7 @@ export class ServerQueries {
     /** The party the person picked, so the preview is the server they would get. */
     partySize: PartySize = '5',
   ): Promise<SetupPreview> {
-    const resolved =
-      from.kind === 'template' ? await this.#templates.get(from) : await this.#setups.resolve(from, actor)
+    const resolved = await this.#templates.resolve(from, actor)
     const standing = await loadStanding(this.#db, actor.userId)
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
     const size = sizeOf(partySize, resolved.tier)

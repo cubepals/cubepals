@@ -59,10 +59,17 @@ describe.skipIf(!hasDatabase)('a template’s preview, kept', () => {
       asked.push(projectId)
       return versions(projectId, target)
     }
-    const plus = await h.app.queries.setupPreview(await h.user('Ari', 'plus'), { kind: 'template', key: 'rpg' })
+    const plus = await h.app.queries.setupPreview(await h.user('Ari', 'plus'), {
+      kind: 'template',
+      key: 'rpg',
+    })
     const before = asked.length
     expect(before).toBeGreaterThan(0)
-    const free = await h.app.queries.setupPreview(await h.user('Noor'), { kind: 'template', key: 'rpg' }, '10')
+    const free = await h.app.queries.setupPreview(
+      await h.user('Noor'),
+      { kind: 'template', key: 'rpg' },
+      '10',
+    )
     expect(asked).toHaveLength(before)
     expect(free).toMatchObject({ gameVersion: plus.gameVersion, mods: plus.mods })
     expect(plus.size.allowed).toBe(true)

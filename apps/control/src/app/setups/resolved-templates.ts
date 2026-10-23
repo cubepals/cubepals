@@ -15,42 +15,46 @@
  * - **Dropped:** `TEMPLATE_KEPT_MS` after it was asked, and at once when it failed another way. A
  *   release Blockly doesn't offer is never kept, so made-up versions can't fill it.
  *
+ * A pack or a copy, anything but a template, is resolved afresh on every ask, for whoever asks.
  * Not for making a server: creating resolves afresh, so it pins the builds the catalog lists then.
  */
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import { offeredVersions } from '../../minecraft/versions.ts'
+import type { Actor } from '../actor.ts'
 import { AppError } from '../errors.ts'
-import type { ResolvedSetup, SetupSource } from './service.ts'
-
-type TemplateSource = SetupSource & { kind: 'template' }
+import type { ResolvedSetup, SetupService, SetupSource } from './service.ts'
 
 /** How long a template's resolution is kept: a mod's newest build moves rarely, and slowly. */
 export const TEMPLATE_KEPT_MS = 10 * MINUTE_MS
 
 export class ResolvedTemplates {
-  readonly #resolve: (source: TemplateSource) => Promise<ResolvedSetup>
+  readonly #setups: Pick<SetupService, 'resolve'>
   readonly #now: () => number
   readonly #keptMs: number
   readonly #kept = new Map<string, { at: number; answer: Promise<ResolvedSetup> }>()
 
   constructor(
-    resolve: (source: TemplateSource) => Promise<ResolvedSetup>,
-    options: { now?: () => number; keptMs?: number } = {},
+    setups: Pick<SetupService, 'resolve'>,
+    keptMs = TEMPLATE_KEPT_MS,
+    now: () => number = Date.now,
   ) {
-    this.#resolve = resolve
-    this.#now = options.now ?? Date.now
-    this.#keptMs = options.keptMs ?? TEMPLATE_KEPT_MS
+    this.#setups = setups
+    this.#keptMs = keptMs
+    this.#now = now
   }
 
-  get(source: TemplateSource): Promise<ResolvedSetup> {
+  /** `SetupService.resolve`, answered from what is kept for a template. */
+  resolve(source: SetupSource, viewer: Actor | null): Promise<ResolvedSetup> {
+    if (source.kind !== 'template') return this.#setups.resolve(source, viewer)
     const { gameVersion } = source
     if (gameVersion !== undefined && !offeredVersions().some((offered) => offered.id === gameVersion))
-      return this.#resolve(source)
+      return this.#setups.resolve(source, null)
     const key = `${source.key}@${gameVersion ?? ''}`
     const now = this.#now()
     const kept = this.#kept.get(key)
     if (kept !== undefined && now - kept.at < this.#keptMs) return kept.answer
-    const entry = { at: now, answer: this.#resolve(source) }
+    // A template is the same setup for everyone, so nobody's account is asked about.
+    const entry = { at: now, answer: this.#setups.resolve(source, null) }
     this.#kept.set(key, entry)
     entry.answer.catch((error: unknown) => {
       if (refusal(error)) return

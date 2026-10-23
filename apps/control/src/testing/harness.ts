@@ -207,9 +207,16 @@ class OfflineFileFormats extends LibraryFileFormats {
 }
 
 /** The settings a test's options decide: how long boots and wakes take, the room creates leave, official files and Stop cheaters' configuration. */
-const settingsFrom = ({ provider, room, officialServerFiles, stopCheatersProblem }: HarnessOptions) => ({
+const settingsFrom = ({
+  provider,
+  room,
   officialServerFiles,
   stopCheatersProblem,
+  templatesKeptMs,
+}: HarnessOptions) => ({
+  officialServerFiles,
+  stopCheatersProblem,
+  templatesKeptMs: templatesKeptMs ?? 0,
   bootTimeouts: provider?.bootTimeouts ?? { runningMs: 5_000, readyMs: 3_000, resumeMs: 1_000 },
   wakeWaitMs: provider?.wakeWaitMs ?? 5_000,
   ...(room === undefined ? {} : { room }),
@@ -332,7 +339,6 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       webOrigin: 'http://localhost:3000',
       curatedPacks: options.curatedPacks ?? [],
       ownPacks: options.ownPacks ?? [],
-      templatesKeptMs: options.templatesKeptMs ?? 0,
       ...settingsFrom(options),
     },
   )
