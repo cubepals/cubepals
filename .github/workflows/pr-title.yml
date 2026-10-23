@@ -8,7 +8,8 @@ name: PR title
 # 50 characters or fewer (scripts/check-subject.ts, which the commit-msg hook runs too). A retitle
 # runs it again. The title and body name nobody by accident either (scripts/check-mentions.ts), since
 # the body becomes the commit's and commits turn any at-sign name into a mention. Dependabot's and
-# other bots' pull requests are theirs to write.
+# other bots' pull requests are theirs to write. Two jobs run these checks, so each failure shows
+# under its own name.
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
@@ -39,9 +40,21 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
-      - name: Mentions nobody
+  mentions:
+    name: Names nobody
+    if: github.event_name == 'merge_group' || github.event.pull_request.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: github.event_name == 'pull_request'
-        run: bun run scripts/check-mentions.ts --pr
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: github.event_name == 'pull_request'
+        with:
+          bun-version: 1.4.3
+      - run: bun run scripts/check-mentions.ts --pr
+        if: github.event_name == 'pull_request'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}

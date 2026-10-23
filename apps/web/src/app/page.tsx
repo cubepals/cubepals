@@ -3,11 +3,13 @@
 // SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
 
 import { FilmPage } from '../landing/film/FilmPage'
-import { Frame, LANDING_METADATA, landingOf } from '../landing/Landing'
+import { Frame, landingOf } from '../landing/Landing'
 import { Layouts } from '../landing/Layouts'
+import { landingMetadata } from '../landing/metadata'
 import { Phone } from '../landing/phone/Phone'
+import { bedrockLive } from '../lib/bedrock'
 
-export const metadata = LANDING_METADATA
+export const generateMetadata = () => landingMetadata(bedrockLive())
 
 /**
  * The landing page: a film the scroll plays, on one Minecraft chunk. One beat to a screen, the

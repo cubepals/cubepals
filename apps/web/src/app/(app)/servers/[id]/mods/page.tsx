@@ -38,6 +38,7 @@ import {
   whatHappens,
 } from '../settings/shared'
 import { useServer } from '../use-server'
+import { BedrockGoes } from './bedrock-goes'
 import { OwnDatapacks } from './own-datapacks'
 import { UploadRow, useOwnUploads } from './own-uploads'
 
@@ -653,21 +654,24 @@ function PlanChange({
         />
       )}
       {planned && lines.length > 0 && (
-        <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-          {moveTo !== null && (
-            <>This world moves to Minecraft {moveTo}, which is where these run. It doesn’t move back. </>
-          )}
-          {planned.loader !== list.loader && planned.added.length > 0 && (
-            <>
-              This server moves from Vanilla to {loaderLabel(planned.loader)} to run{' '}
-              {planned.added.length === 1 ? 'it' : 'them'}. Your world comes along.{' '}
-            </>
-          )}
-          {datapacksSaid(planned.added)}
-          {planned.added.some((m) => m.environment === 'both') &&
-            'Players need the ones marked for players too in their own game. '}
-          {whatHappens(view)}
-        </p>
+        <>
+          <BedrockGoes view={view} plan={planned} />
+          <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
+            {moveTo !== null && (
+              <>This world moves to Minecraft {moveTo}, which is where these run. It doesn’t move back. </>
+            )}
+            {planned.loader !== list.loader && planned.added.length > 0 && (
+              <>
+                This server moves from Vanilla to {loaderLabel(planned.loader)} to run{' '}
+                {planned.added.length === 1 ? 'it' : 'them'}. Your world comes along.{' '}
+              </>
+            )}
+            {datapacksSaid(planned.added)}
+            {planned.added.some((m) => m.environment === 'both') &&
+              'Players need the ones marked for players too in their own game. '}
+            {whatHappens(view)}
+          </p>
+        </>
       )}
     </ConfirmChange>
   )

@@ -88,6 +88,8 @@ export interface PublicServerView {
   gameVersion: string
   loader: Loader
   needs: JoinNeeds
+  /** Bedrock players join it now, on phones and tablets too. Absent from older answers. */
+  bedrock?: boolean
   /** Mods Blockly can name to a stranger: vanilla, or ones it vouches for. */
   mods: string[]
   /** Only people the owner adds can join. */
