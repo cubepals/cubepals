@@ -280,9 +280,11 @@ class Arrival {
       if (handshake.joining) this.#client.end(turnAway(this.#options.busy))
       else this.#client.destroy()
     })
-    this.#greeted?.()
+    // The place among the address's greeting connections is kept until routes are held (or the
+    // wait expires and the socket closes), so one address can't hold unlimited waiting joins.
     void (ready ?? Promise.resolve()).then(() => {
       if (expired || this.#client.destroyed) return
+      this.#greeted?.()
       this.#client.setTimeout(0)
       this.#admit(handshake)
     })

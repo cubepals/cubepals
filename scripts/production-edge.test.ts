@@ -275,7 +275,7 @@ describe('restarting the edge without cutting a player', () => {
       w.clock,
     )
     expect(cut).toBe(2)
-    expect(said).toContain('fra: 2 still connected after 10 min; restarting cuts them')
+    expect(said).toContain('fra: restarting with 2 players still connected after 10 min; they are cut')
   })
 })
 

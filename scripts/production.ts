@@ -189,7 +189,7 @@ async function deployApp(
       say(
         `edge: ${uncounted.join(', ')} couldn’t say how many players were connected, so the players cut there are unknown.`,
       )
-    if (cut > 0) say(`edge: ${cut} counted players were still connected and were cut.`)
+    if (cut > 0) say(`edge: restarted with ${cut} counted players still connected; they were cut.`)
     else if (uncounted.length === 0) say('edge: no player was cut.')
   } else run('fly', ['deploy', ...source, ...config, '--yes', '--ha=false'], env)
   if (app === 'edge') placeEdge(env)

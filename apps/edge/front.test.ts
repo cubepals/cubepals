@@ -401,3 +401,23 @@ test('a ping waiting for routes that never come is closed unanswered after the w
   await Promise.race([closed, Bun.sleep(2_000).then(() => Promise.reject(new Error('still open')))])
   expect(heard).toBe(0)
 })
+
+test('a join waiting for routes keeps its place among the address’s greeting connections', async () => {
+  const limits: Limits = { ...ROOMY, address: { ...ROOMY.address, greeting: 1 } }
+  const { options, behind } = await frontDoor(limits, true)
+  const listener = front({ ...options, port: 0, ready: new Promise<void>(() => {}), readyWaitMs: 3_000 })
+  open.push(listener)
+  const port = await listening(listener)
+  const line = encode('PROXY TCP4 203.0.113.7 10.0.0.1 51234 25565\r\n')
+  const first = connect(port, '127.0.0.1')
+  first.write(Uint8Array.from([...line, ...joinRequest('a.play.test')]))
+  await Bun.sleep(150)
+  // The same address again: the first still holds the one place, so this one is closed at once.
+  const second = connect(port, '127.0.0.1')
+  const closed = new Promise<void>((resolve) => second.once('close', () => resolve()))
+  second.write(Uint8Array.from([...line, ...joinRequest('a.play.test')]))
+  await Promise.race([closed, Bun.sleep(1_000).then(() => Promise.reject(new Error('not limited')))])
+  expect(first.destroyed).toBe(false)
+  expect(behind.received).toEqual([])
+  first.destroy()
+})

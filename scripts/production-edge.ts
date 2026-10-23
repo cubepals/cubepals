@@ -246,7 +246,9 @@ async function restartRegion(
   const wait = await waitForPlayers(() => steps.players(region), say, clock)
   if (wait.left === null) say("it can't say how many players are connected, so none was waited for")
   else if (wait.left > 0)
-    say(`${wait.left} still connected after ${EDGE_DRAIN_LIMIT_MS / MINUTE_MS} min; restarting cuts them`)
+    say(
+      `restarting with ${wait.left} players still connected after ${EDGE_DRAIN_LIMIT_MS / MINUTE_MS} min; they are cut`,
+    )
   if (wait.failed > 0)
     say(`${wait.failed} queries for the count failed${wait.unsure ? ', the last one too' : ''}`)
   say(cordoned ? 'deploying' : 'deploying; it takes joins until it restarts, and none while it does')
