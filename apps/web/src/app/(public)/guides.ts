@@ -24,8 +24,10 @@ import { indexable } from '../../lib/site'
 
 export interface Guide {
   slug: string
-  /** The page's H1 and tab title, before "· Cubepals". */
+  /** The page's tab title, before "· Cubepals", and its H1 when `heading` is unset. */
   title: string
+  /** A different H1, where the tab title isn't the heading a reader compares pages by. */
+  heading?: string
   /** Under 155 characters, so search results don't cut it. */
   description: string
   /** The day it went up and the day it last changed, as YYYY-MM-DD: shown on the page and in its markup. */
@@ -128,6 +130,17 @@ export const GUIDES: readonly Guide[] = [
       'One Minecraft server for friends on Bedrock and Java, in the same world. It sleeps when nobody plays and wakes when a friend joins.',
     published: '2026-10-22',
     modified: '2026-10-22',
+    approved: true,
+    bedrock: true,
+  },
+  {
+    slug: 'aternos-alternative',
+    title: 'An Aternos alternative for friends on Java',
+    heading: 'Cubepals and Aternos compared',
+    description:
+      'How Cubepals and Aternos differ for a group of friends on Minecraft: how a server starts, what’s free, and where Aternos is the better choice.',
+    published: '2026-10-23',
+    modified: '2026-10-23',
     approved: true,
     bedrock: true,
   },

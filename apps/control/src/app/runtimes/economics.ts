@@ -250,7 +250,8 @@ export class RuntimeEconomics {
       .groupBy(schema.backups.serverId)
     const orders = await this.#db
       .select({
-        userId: schema.billingOrders.userId,
+        // A gift a guest bought has no account, and so no servers: '' is nobody's.
+        userId: sql<string>`coalesce(${schema.billingOrders.userId}, '')`,
         revenue: sql<string>`sum(greatest(${schema.billingOrders.netCents} - ${schema.billingOrders.refundedCents}, 0))`,
         fees: sql<string>`sum(round(${schema.billingOrders.totalCents} * ${figures().paymentFee.percent / 100}::numeric) + ${figures().paymentFee.fixedCents}::numeric)`,
       })

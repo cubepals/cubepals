@@ -42,7 +42,7 @@ export function localCheckoutPages(deps: {
 
   app.post(`${LOCAL_BILLING_PATH}/checkout`, async (c) => {
     const ticket = deps.billing.ticket(String((await c.req.parseBody()).ticket ?? ''), 'checkout')
-    if (ticket === null || ticket.planKey === null) return c.html(expired(), 400)
+    if (ticket?.userId == null || ticket.planKey === null) return c.html(expired(), 400)
     // A year is one order, with no subscription to renew it.
     if (!ticket.year)
       await deliver({ type: 'subscription.started', userId: ticket.userId, planKey: ticket.planKey })
@@ -86,7 +86,7 @@ export function localCheckoutPages(deps: {
 
   app.get(`${LOCAL_BILLING_PATH}/portal`, async (c) => {
     const ticket = deps.billing.ticket(c.req.query('ticket') ?? '', 'portal')
-    if (ticket === null) return c.html(expired(), 400)
+    if (ticket?.userId == null) return c.html(expired(), 400)
     const paid = (await deps.billing.stateOf(ticket.userId))?.subscription ?? null
     if (paid === null)
       return c.html(
@@ -104,7 +104,7 @@ export function localCheckoutPages(deps: {
 
   app.post(`${LOCAL_BILLING_PATH}/portal`, async (c) => {
     const ticket = deps.billing.ticket(String((await c.req.parseBody()).ticket ?? ''), 'portal')
-    if (ticket === null) return c.html(expired(), 400)
+    if (ticket?.userId == null) return c.html(expired(), 400)
     await deliver({ type: 'subscription.cancelled', userId: ticket.userId })
     return c.redirect(ticket.returnUrl, 303)
   })
@@ -123,7 +123,9 @@ function forOthers(app: Hono, billing: LocalBilling, deliver: Deliver): void {
     return c.html(
       page(
         'Test gift',
-        `<p>This Cubepals runs on your own computer, so nothing is charged here. Buy it and a code for ${plan} is emailed to this account, the way a payment would send it.</p>`,
+        ticket.giftId === undefined
+          ? `<p>This Cubepals runs on your own computer, so nothing is charged here. Buy it and a code for ${plan} is emailed to this account, the way a payment would send it.</p>`
+          : `<p>This Cubepals runs on your own computer, so nothing is charged here. Buy it and the gift of ${plan} is paid for, the way a payment would pay for it.</p>`,
         form(c.req.query('ticket') ?? '', `Buy ${title(ticket.gift.planKey)} as a gift`, ticket),
       ),
     )
@@ -138,6 +140,8 @@ function forOthers(app: Hono, billing: LocalBilling, deliver: Deliver): void {
       planKey: null,
       cents: ticket.priceCents,
       gift: ticket.gift,
+      ...(ticket.giftId === undefined ? {} : { giftId: ticket.giftId }),
+      ...(ticket.email === undefined ? {} : { payerEmail: ticket.email }),
     })
     return c.redirect(ticket.returnUrl, 303)
   })

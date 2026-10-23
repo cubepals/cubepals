@@ -9,7 +9,9 @@
  * and cancelled the way a payment grants and cancels it, with the paid order a checkout makes.
  * Nothing is charged, and extra play is kept here (`reported`) rather than sent anywhere. Discount
  * codes are kept in memory until a restart, to try the admin pages with; its checkout takes none.
- * It sells the gifts it is given (a month of each paid plan), through a page of its own.
+ * It sells the gifts it is given (a month of each paid plan), through a page of its own, to an
+ * account or a guest, and files a guest's order as Polar does: under the account with their email,
+ * if there is one.
  *
  * Its record of who pays is `billing_subscriptions` itself: a provider keeps its own, and this one
  * has nowhere else to keep it.
@@ -45,14 +47,17 @@ const PERIOD_MS = 365 * DAY_MS
 /** What a link to a page carries: whose it is, what it is for, and where it goes back to. */
 export interface Ticket {
   page: 'checkout' | 'portal' | 'settle' | 'gift' | 'chip_in'
-  userId: string
+  /** Whose it is; null only for a gift a guest buys. */
+  userId: string | null
   /** The plan a checkout is for, and what Blockly says it costs; null and 0 for the portal. */
   planKey: string | null
   priceCents: number
   /** A checkout for a year of the plan, paid once, rather than a subscription. */
   year?: boolean
-  /** The gift a gift page sells. */
+  /** The gift a gift page sells, the gift made before its checkout, and the email it is paid with. */
   gift?: GiftProduct
+  giftId?: string
+  email?: string
   /** The orders a payment settles, for the settle page. */
   settles?: string[]
   /** The server a chip-in is for. */
@@ -67,12 +72,14 @@ export type Delivery =
   | { type: 'subscription.cancelled'; userId: string }
   | {
       type: 'order.paid'
-      userId: string
+      userId: string | null
       planKey: string | null
       cents: number
       settles?: string[]
       year?: boolean
       gift?: GiftProduct
+      giftId?: string
+      payerEmail?: string
       chipIn?: string
     }
 
@@ -194,13 +201,23 @@ export class LocalBilling implements BillingProvider {
   }
 
   /** The gift page: a payment for a gift, with nothing charged, as the others. */
-  async giftCheckoutUrl(input: { userId: string; gift: GiftProduct; returnUrl: string }): Promise<string> {
+  async giftCheckoutUrl(input: {
+    userId: string | null
+    email: string
+    gift: GiftProduct
+    giftId: string | null
+    returnUrl: string
+  }): Promise<string> {
+    if (input.userId === null && input.giftId === null)
+      throw new Error('A guest’s gift is made before its checkout, which names it')
     return this.#link({
       page: 'gift',
       userId: input.userId,
       planKey: null,
       priceCents: input.gift.priceCents,
       gift: input.gift,
+      ...(input.giftId === null ? {} : { giftId: input.giftId }),
+      email: input.email,
       returnUrl: input.returnUrl,
     })
   }
@@ -249,7 +266,7 @@ export class LocalBilling implements BillingProvider {
         kind: 'order',
         order: {
           externalOrderId: `local-${randomUUID()}`,
-          userId: event.userId,
+          userId: await this.#payer(event),
           planKey: event.planKey,
           billingReason: event.planKey === null || event.year ? 'purchase' : 'subscription_create',
           currency: 'usd',
@@ -269,6 +286,8 @@ export class LocalBilling implements BillingProvider {
           chipIn: event.planKey === null ? (event.chipIn ?? null) : null,
           paysForYear: event.year === true && event.planKey !== null,
           gift: event.gift ?? null,
+          giftId: event.giftId,
+          payerEmail: event.payerEmail,
           orderedAt: new Date(),
         },
       }
@@ -288,6 +307,19 @@ export class LocalBilling implements BillingProvider {
           : null,
     }
     return { kind: 'standing', state }
+  }
+
+  /**
+   * Whose order it is: the account that paid, or for a guest the account with their email, as
+   * Polar finds its customer by the email a guest pays with; null with none.
+   */
+  async #payer(event: { userId: string | null; payerEmail?: string }): Promise<string | null> {
+    if (event.userId !== null || event.payerEmail === undefined) return event.userId
+    const [user] = await this.#db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.email, event.payerEmail))
+    return user?.id ?? null
   }
 
   async stateOf(userId: string): Promise<BillingState | null> {

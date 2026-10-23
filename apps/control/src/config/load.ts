@@ -393,6 +393,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
       : null,
     insight: insightFrom(env),
     ...billingFrom(env),
+    giftsByEmail: env.GIFTS_BY_EMAIL === 'true',
     freeLinkTuning: privateJson(env, 'FREE_LINK_TUNING', DEFAULT_FREE_LINK_TUNING),
     abuseLimits: privateJson(env, 'ABUSE_LIMITS', DEFAULT_ABUSE_LIMITS),
     capacityTuning: privateJson(env, 'CAPACITY_TUNING', DEFAULT_CAPACITY_TUNING),
@@ -412,6 +413,7 @@ export const tuningOf = (config: DeploymentConfig) => ({
   economics: config.economicsTuning,
   joins: config.joins,
   stopCheaters: config.stopCheaters.tuning,
+  giftsByEmail: config.giftsByEmail,
 })
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): DeploymentConfig {

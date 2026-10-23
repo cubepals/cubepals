@@ -6,8 +6,10 @@
  * What people pay for: subscriptions to a plan and the orders that charged them, as the billing
  * provider reported them, and the extra play Blockly reports to the provider to be billed.
  */
+import { sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -19,6 +21,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { users } from './auth.ts'
 import { createdAt, ts, updatedAt } from './columns.ts'
+import { planGifts } from './gifts.ts'
 
 export const billingSubscriptions = pgTable(
   'billing_subscriptions',
@@ -71,9 +74,10 @@ export const billingOrders = pgTable(
   {
     provider: text('provider').notNull(),
     externalOrderId: text('external_order_id').notNull(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => users.id),
+    /** The account that paid; null only for a gift a guest bought (`giftId`). */
+    userId: text('user_id').references(() => users.id),
+    /** The gift it paid for, when the gift was made before its checkout (`plan_gifts.state`). */
+    giftId: uuid('gift_id').references(() => planGifts.id),
     /** The plan the order was for; null for a product no plan names. */
     planKey: text('plan_key'),
     /** `purchase`, `subscription_create`, `subscription_cycle`, … as the provider says it. */
@@ -119,6 +123,7 @@ export const billingOrders = pgTable(
     primaryKey({ columns: [t.provider, t.externalOrderId] }),
     index('billing_orders_user').on(t.userId),
     index('billing_orders_ordered').on(t.orderedAt),
+    check('billing_orders_payer', sql`${t.userId} is not null or ${t.giftId} is not null`),
   ],
 )
 

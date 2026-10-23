@@ -21,7 +21,7 @@ import {
   WebhookRejected,
 } from '../../app/ports/optional.ts'
 import { discountBody, discountOf } from './polar-discounts.ts'
-import { GIFT_METADATA, giftOf } from './polar-gifts.ts'
+import { GIFT_METADATA, giftCheckoutOf, giftOf, giftOrderOf } from './polar-gifts.ts'
 import type { Fields } from './polar-models.ts'
 import { call, largestPaying, moveSubscription, refusal, upgradeSubscription } from './polar-requests.ts'
 
@@ -421,33 +421,34 @@ export class PolarBilling implements BillingProvider {
   }
 
   /**
-   * A checkout for one gift, charged to the buyer as a customer like any other, with no code: a
-   * coupon for the plans is not for gifts of them. One still open for the same buyer and gift is
-   * the one to pay, as with a balance.
+   * A checkout for one gift, with no code: a coupon for the plans is not for gifts of them. What it
+   * names is `giftCheckoutOf`'s. One still open for the same buyer and gift is the one to pay.
    */
   async giftCheckoutUrl(input: {
-    userId: string
+    userId: string | null
     email: string
     gift: GiftProduct
+    giftId: string | null
     returnUrl: string
   }): Promise<string> {
+    const { customer, metadata } = giftCheckoutOf(input)
     const open = OpenCheckouts.parse(
       await call('finding an open gift checkout', () =>
-        this.#polar.checkouts.list({
-          product_id: input.gift.id,
-          external_customer_id: input.userId,
-          status: 'open',
-          limit: 20,
-        }),
+        this.#polar.checkouts.list({ product_id: input.gift.id, ...customer, status: 'open', limit: 20 }),
       ),
-    ).items.find((checkout) => new Date(checkout.expires_at).getTime() > Date.now() + CHECKOUT_LEFT_MS)
+    ).items.find(
+      (checkout) =>
+        checkout.metadata?.gift === metadata?.gift &&
+        new Date(checkout.expires_at).getTime() > Date.now() + CHECKOUT_LEFT_MS,
+    )
     if (open !== undefined) return open.url
     const checkout = await withEmail(input.email, (email) =>
       call('starting a gift checkout', () =>
         this.#polar.checkouts.create({
           products: [input.gift.id],
           allow_discount_codes: false,
-          external_customer_id: input.userId,
+          ...customer,
+          metadata,
           ...email,
           success_url: input.returnUrl,
           return_url: input.returnUrl,
@@ -553,7 +554,7 @@ export class PolarBilling implements BillingProvider {
       balance,
       chipIn,
       paysForYear: year !== undefined,
-      gift,
+      ...giftOrderOf(data, gift),
       orderedAt: new Date(order.created_at),
       changedAt: order.modified_at ? new Date(order.modified_at) : null,
     }

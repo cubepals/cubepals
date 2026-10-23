@@ -11,6 +11,8 @@ import { describe, expect, test } from 'bun:test'
 import { passwordChanged, resetPassword, verifyEmail, welcome } from './emails/account.ts'
 import { adminAlert, spendLimit } from './emails/admins.ts'
 import { paymentFailed, paymentOwed } from './emails/billing.ts'
+import { giftPreviews } from './emails/gift-previews.ts'
+import { giftReminder, giftWords } from './emails/gifts.ts'
 import { addressChanged, unlisted } from './emails/notices.ts'
 import { extraWarning, playWarning } from './emails/play.ts'
 import { keepingWorld, listingRemoved, serverRebuilt } from './emails/servers.ts'
@@ -185,6 +187,7 @@ const EMAILS: Array<{
     shape: 'layout',
     link: `${ORIGIN}/admin/platform`,
   },
+  ...giftPreviews(ORIGIN),
 ]
 
 describe('emails', () => {
@@ -372,5 +375,61 @@ describe('emails on Core', () => {
     })
     expect(usedUp.text).toContain('allow some extra play on your account')
     expect(usedUp.text).toContain('Past 60 extra hours a month, Plus costs less')
+  })
+})
+
+describe('gift emails', () => {
+  const gifts = giftPreviews(ORIGIN)
+  const named = (name: string) => {
+    const found = gifts.find((g) => g.name === name)
+    if (!found) throw new Error(`no preview ${name}`)
+    return found.email
+  }
+
+  test('what a buyer writes reaches the recipient escaped, with no web or email address left in it', () => {
+    const { html, text } = named('gift waiting')
+    const note = '“Happy birthday! Build us a castle on, or mail me at. See you on Saturday.”'
+    expect(text).toContain(note)
+    expect(html).toContain(esc(note))
+    expect(html).toContain('Sam &lt;b&gt; sent you a month of Plus on Cubepals')
+    for (const part of [html, text]) expect(part).not.toContain('example.com')
+    expect(html).not.toContain('<b>')
+  })
+
+  test('a From name or note keeps its words and loses links, addresses and hidden marks', () => {
+    expect(giftWords('see https://x.io/a now')).toBe('see now')
+    expect(giftWords('go to evil.com/free, or EVIL.COM')).toBe('go to, or')
+    expect(giftWords('sam@example.com')).toBe('')
+    expect(giftWords('Sam\u202E moc.live\nSmith')).toBe('Sam Smith')
+    expect(giftWords('Mr. Smith, e.g. 3.14 hours')).toBe('Mr. Smith, e.g. 3.14 hours')
+  })
+
+  test('with nothing left of the From name, the gift is from someone', () => {
+    const reminder = giftReminder({
+      planKey: 'plus',
+      months: 1,
+      from: 'www.example.com',
+      account: true,
+      claim: ORIGIN,
+    })
+    expect(reminder.subject).toBe('Your gift from Someone is still waiting')
+  })
+
+  test('from the address nobody reads, they say so and offer no reply', () => {
+    for (const name of ['gift started', 'gift reminder', 'gift refunded', 'gift cancelled']) {
+      const { html, text } = named(name)
+      expect(text.endsWith('This mailbox isn’t read.')).toBe(true)
+      expect(html).toContain('This mailbox isn’t read.')
+      expect(html).not.toContain('Reply to this email')
+    }
+    for (const name of ['gift paid', 'gift to hand', 'gift waiting', 'gift bounced'])
+      expect(named(name).html).toContain('Reply to this email to reach a person.')
+  })
+
+  test('they say each thing in the words of the voice', () => {
+    for (const { email } of gifts)
+      expect(`${email.subject}\n${email.text}`).not.toMatch(
+        /seamless|effortless|powerful|turn on|handled|looked after|set up for you|without you|any device|GB|RAM/i,
+      )
   })
 })

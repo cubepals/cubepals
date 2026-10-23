@@ -5,9 +5,10 @@
 /**
  * Gifts: time on a paid plan that one account buys and another redeems with a code. The provider
  * sells each gift as a one-time product (`giftProducts`); its paid order makes the gift here and
- * emails its buyer the code, of which only a hash is kept. Redeeming gives the account the plan
- * for the gift's months, from then or from when the time it already has ends (a year paid at once
- * included), and `billedPlan` reads it from there. A refund voids a code nobody has used, and ends
+ * emails its buyer the code, of which only a hash is kept. A gift made before its checkout, as one
+ * a guest buys (GIFTS_BY_EMAIL), is named in its order (`giftId`) and found by that. Redeeming
+ * gives the account the plan for the gift's months, from then or from when the time it already has
+ * ends (a year paid at once included), and `billedPlan` reads it from there. A refund voids a code nobody has used, and ends
  * the time of one somebody has. A gift redeemed to start when a subscription set to end runs out
  * moves on if the subscription is kept and renews, so it never runs under paid days. Buying is
  * capped per buyer per day, and wrong codes per account per hour.
@@ -17,7 +18,7 @@
 import type { GiftOptionView, GiftView, RedeemedGiftView } from '@blockly/contracts'
 import { DAY_MS, HOUR_MS } from '@blockly/contracts/durations'
 import { type Db, type Queryable, schema, type Tx } from '@blockly/db'
-import { and, asc, count, desc, eq, gt, isNotNull, isNull, lte, max } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, isNotNull, isNull, lte, max, ne, sql } from 'drizzle-orm'
 import { emailOf, isTestAccount, loadStanding, lockStanding } from '../accounts/persistence.ts'
 import type { AccountService } from '../accounts/service.ts'
 import { type Actor, requestedBy } from '../actor.ts'
@@ -38,6 +39,12 @@ import { addMonths, lastYearEnd } from './years.ts'
 const gifts = schema.planGifts
 
 const REFUSED = 'That code doesn’t work. Check it against the email it came in.'
+
+/**
+ * What an order paid for: a gift made before its checkout, which the order names (`giftId`), with
+ * the email it was paid with; or a gift its paid order makes, for the account that paid.
+ */
+type Paid = { giftId: string; payerEmail: string | null } | { buyerId: string; gift: GiftProduct }
 
 export class Gifts {
   readonly #db: Db
@@ -96,7 +103,7 @@ export class Gifts {
     if (gift === undefined) throw new AppError('invalid_choice', 'That gift isn’t on sale any more.')
     const returnUrl = new URL('/gift?bought=1', this.#webOrigin).toString()
     const url = await reach(() =>
-      billing.giftCheckoutUrl({ userId: user.id, email: user.email, gift, returnUrl }),
+      billing.giftCheckoutUrl({ userId: user.id, email: user.email, gift, giftId: null, returnUrl }),
     )
     await this.#db.insert(schema.auditLog).values({
       actor: requestedBy(actor),
@@ -112,10 +119,16 @@ export class Gifts {
    * The provider's word on an order (`BillingService.receiveWebhook`): a gift paid for is made
    * and its code emailed, once; a gift refunded is voided. The refund is the order's as
    * `recordOrder` kept it, which only grows, so a paid delivery that comes after the refund's
-   * makes no gift. Anything else is not a gift's.
+   * makes no gift. Anything else is not a gift's. A gift made before its checkout is found by the
+   * id its order names, a guest's too, which has no account (`recordOrder`).
    */
   async received(provider: string, order: BillingOrder): Promise<void> {
-    if (order.userId === null) return
+    const paid: Paid | null = order.giftId
+      ? { giftId: order.giftId, payerEmail: order.payerEmail ?? null }
+      : order.gift && order.userId !== null
+        ? { buyerId: order.userId, gift: order.gift }
+        : null
+    if (paid === null && order.userId === null) return
     const [kept] = await this.#db
       .select({ refundedCents: schema.billingOrders.refundedCents })
       .from(schema.billingOrders)
@@ -126,39 +139,88 @@ export class Gifts {
         ),
       )
     if (order.refundedCents > 0 || (kept?.refundedCents ?? 0) > 0 || order.status === 'refunded') {
-      await this.#void(
-        provider,
-        order.externalOrderId,
-        order.gift ? { buyerId: order.userId, gift: order.gift } : null,
-      )
+      await this.#void(provider, order.externalOrderId, paid)
       return
     }
-    if (order.gift && PAID_ORDER.includes(order.status))
-      await this.#issue(provider, order.externalOrderId, order.userId, order.gift)
+    if (paid !== null && PAID_ORDER.includes(order.status))
+      await this.#issue(provider, order.externalOrderId, paid)
   }
 
   /**
-   * The gift an order paid for, made once, and its code emailed to the buyer. A code is made only
-   * as it is emailed: a delivery that failed before the email went makes a new one, which nobody
-   * had seen the old one of.
+   * The gift an order paid for, found by the order from here on (`plan_gifts_order`). One made
+   * before its checkout is given the order the first time an order names it, paid (`paid`) or
+   * refunded, with the email it was paid with where its buyer gave none; a second order naming it
+   * finds nothing. Any other is made for the order, once. Answers whether this was that first time.
    */
-  async #issue(provider: string, externalOrderId: string, buyerId: string, gift: GiftProduct) {
+  async #attach(tx: Tx, provider: string, externalOrderId: string, paid: Paid, state: 'paid' | null) {
+    if ('giftId' in paid) {
+      const attached = await tx
+        .update(gifts)
+        .set({
+          provider,
+          externalOrderId,
+          buyerEmail: sql`coalesce(${gifts.buyerEmail}, ${paid.payerEmail})`,
+          ...(state === null ? {} : { state }),
+        })
+        .where(and(eq(gifts.id, paid.giftId), isNull(gifts.externalOrderId)))
+        .returning({ id: gifts.id })
+      return attached.length > 0
+    }
+    const made = await tx
+      .insert(gifts)
+      .values({
+        provider,
+        externalOrderId,
+        buyerId: paid.buyerId,
+        planKey: paid.gift.planKey,
+        months: paid.gift.months,
+      })
+      .onConflictDoNothing()
+      .returning({ id: gifts.id })
+    return made.length > 0
+  }
+
+  /**
+   * The gift an order paid for, made or found once, and, for one delivered as a code, its code
+   * emailed to the buyer. A code is made only as it is emailed: a delivery that failed before the
+   * email went makes a new one, which nobody had seen the old one of. One delivered by email waits
+   * for its own delivery.
+   */
+  async #issue(provider: string, externalOrderId: string, paid: Paid) {
     await this.#db.transaction(async (tx) => {
-      await tx
-        .insert(gifts)
-        .values({ provider, externalOrderId, buyerId, planKey: gift.planKey, months: gift.months })
-        .onConflictDoNothing()
+      const first = await this.#attach(tx, provider, externalOrderId, paid, 'paid')
       const [row] = await tx
         .select()
         .from(gifts)
         .where(and(eq(gifts.provider, provider), eq(gifts.externalOrderId, externalOrderId)))
         .for('update')
-      if (!row || row.emailedAt !== null || row.voidedAt !== null) return
-      await this.#sendCode(tx, row.id, buyerId, gift.planKey, gift.months)
-      await writeEntries(tx, buyerId, 'system:billing', 'webhook', [
-        { action: 'billing.gift_bought', data: { gift: row.id, plan: gift.planKey, months: gift.months } },
-      ])
+      if (!row) {
+        if ('giftId' in paid)
+          console.error(
+            `billing: order ${externalOrderId} names gift ${paid.giftId}, which another order paid for`,
+          )
+        return
+      }
+      if (row.voidedAt === null) await this.#paidFor(tx, row, first)
     })
+  }
+
+  /**
+   * A gift paid for, not refunded: one delivered as a code has it emailed to its buyer, unless it
+   * was; one delivered by email has its purchase audited the first time (`first`), and waits.
+   */
+  async #paidFor(tx: Tx, row: typeof gifts.$inferSelect, first: boolean) {
+    const bought = [
+      { action: 'billing.gift_bought', data: { gift: row.id, plan: row.planKey, months: row.months } },
+    ]
+    if (row.delivery === 'email') {
+      if (first)
+        await writeEntries(tx, row.buyerId ?? row.id, 'system:billing', 'webhook', bought, subjectOf(row))
+      return
+    }
+    if (row.emailedAt !== null || row.buyerId === null || !row.planKey || !row.months) return
+    await this.#sendCode(tx, row.id, row.buyerId, row.planKey, row.months)
+    await writeEntries(tx, row.buyerId, 'system:billing', 'webhook', bought)
   }
 
   /** A new code for the gift, kept as its hash, and emailed to the buyer in the same breath. */
@@ -176,26 +238,13 @@ export class Gifts {
   /**
    * A refund: the code stops working, and time already redeemed with it ends now. The account that
    * had it moves to the plan it has without it, and what that plan doesn't allow stops. A gift
-   * order refunded before its gift was made (`bought`) is kept as a gift refunded, with no code, so
-   * its paid delivery coming after never makes one.
+   * order refunded before its paid delivery is handled (`paid`) is kept as a gift refunded, with no
+   * code, so its paid delivery coming after never makes one; a gift made before its checkout is
+   * found by its id for that. Who it was for is kept no longer.
    */
-  async #void(
-    provider: string,
-    externalOrderId: string,
-    bought: { buyerId: string; gift: GiftProduct } | null,
-  ): Promise<void> {
+  async #void(provider: string, externalOrderId: string, paid: Paid | null): Promise<void> {
     const redeemedBy = await this.#db.transaction(async (tx) => {
-      if (bought !== null)
-        await tx
-          .insert(gifts)
-          .values({
-            provider,
-            externalOrderId,
-            buyerId: bought.buyerId,
-            planKey: bought.gift.planKey,
-            months: bought.gift.months,
-          })
-          .onConflictDoNothing()
+      if (paid !== null) await this.#attach(tx, provider, externalOrderId, paid, null)
       const [row] = await tx
         .select()
         .from(gifts)
@@ -205,10 +254,18 @@ export class Gifts {
       if (row.redeemedBy !== null) await lockStanding(tx, row.redeemedBy)
       const now = new Date()
       const before = row.redeemedBy === null ? null : (await loadStanding(tx, row.redeemedBy, now)).plan
-      await tx.update(gifts).set({ voidedAt: now }).where(eq(gifts.id, row.id))
-      await writeEntries(tx, row.buyerId, 'system:billing', 'webhook', [
-        { action: 'billing.gift_refunded', data: { gift: row.id, redeemed: row.redeemedBy !== null } },
-      ])
+      await tx
+        .update(gifts)
+        .set({ voidedAt: now, state: 'refunded', recipientEmail: null })
+        .where(eq(gifts.id, row.id))
+      await writeEntries(
+        tx,
+        row.buyerId ?? row.id,
+        'system:billing',
+        'webhook',
+        [{ action: 'billing.gift_refunded', data: { gift: row.id, redeemed: row.redeemedBy !== null } }],
+        subjectOf(row),
+      )
       if (row.redeemedBy !== null && before !== null)
         await writeEntries(
           tx,
@@ -274,7 +331,14 @@ export class Gifts {
       const before = (await loadStanding(tx, user.id, now)).plan
       await tx
         .update(gifts)
-        .set({ redeemedBy: user.id, redeemedAt: now, startsAt, endsAt })
+        .set({
+          redeemedBy: user.id,
+          redeemedAt: now,
+          startsAt,
+          endsAt,
+          state: 'claimed',
+          recipientEmail: null,
+        })
         .where(eq(gifts.id, row.id))
       await writeEntries(tx, user.id, requestedBy(actor), 'user', [
         {
@@ -349,13 +413,13 @@ export class Gifts {
       throw new AppError('rate_limited', 'That’s a lot of codes that didn’t work. Try again in an hour.')
   }
 
-  /** The gifts the account bought, newest first. */
+  /** The gifts the account bought, newest first; not one whose checkout was never paid. */
   async mine(actor: Actor): Promise<GiftView[]> {
     const user = await this.#person(actor)
     const rows = await this.#db
       .select()
       .from(gifts)
-      .where(eq(gifts.buyerId, user.id))
+      .where(and(eq(gifts.buyerId, user.id), ne(gifts.state, 'checkout')))
       .orderBy(desc(gifts.createdAt))
     return rows.map((row) => ({
       id: row.id,
@@ -380,8 +444,15 @@ export class Gifts {
         .from(gifts)
         .where(and(eq(gifts.id, giftId), eq(gifts.buyerId, user.id)))
         .for('update')
-      if (!row) throw new NotFound('Gift')
-      if (row.redeemedBy !== null || row.voidedAt !== null || !row.planKey || !row.months)
+      // One not paid for yet is not the buyer's to see, and one delivered by email has no code.
+      if (!row || row.state === 'checkout') throw new NotFound('Gift')
+      if (
+        row.delivery !== 'code' ||
+        row.redeemedBy !== null ||
+        row.voidedAt !== null ||
+        !row.planKey ||
+        !row.months
+      )
         throw new AppError(
           'invalid_choice',
           'That gift has been redeemed or refunded, so it has no code to send.',
@@ -509,6 +580,9 @@ export async function giftNext(
   const continues = row.endsAt < addMonths(row.startsAt, row.months)
   return { planKey: row.planKey, months: row.months, startsAt: row.startsAt, endsAt: row.endsAt, continues }
 }
+
+/** What a gift's audit entries are about: its buyer's account, or the gift itself for a guest's. */
+const subjectOf = (row: { buyerId: string | null }) => (row.buyerId === null ? 'gift' : 'account')
 
 /** The provider being down is a refusal people can read, not an internal error. */
 async function reach<T>(call: () => Promise<T>): Promise<T> {

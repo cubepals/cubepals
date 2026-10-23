@@ -1,5 +1,5 @@
 {
-  "id": "9e183bcb-de97-4380-87f1-0323e2a6caf4",
+  "id": "4cd6acf4-9ab2-48d0-871e-48bcb2c27ff4",
   "prevId": "d45e3186-10b4-4251-b27a-da77e8e03311",
   "version": "7",
   "dialect": "postgresql",
@@ -2472,7 +2472,13 @@
           "name": "user_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "gift_id": {
+          "name": "gift_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "plan_key": {
           "name": "plan_key",
@@ -2644,6 +2650,19 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "billing_orders_gift_id_plan_gifts_id_fk": {
+          "name": "billing_orders_gift_id_plan_gifts_id_fk",
+          "tableFrom": "billing_orders",
+          "tableTo": "plan_gifts",
+          "columnsFrom": [
+            "gift_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2657,7 +2676,12 @@
       },
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "billing_orders_payer": {
+          "name": "billing_orders_payer",
+          "value": "\"billing_orders\".\"user_id\" is not null or \"billing_orders\".\"gift_id\" is not null"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.billing_subscriptions": {
@@ -4043,12 +4067,6 @@
         },
         "synced_to": {
           "name": "synced_to",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "started_at": {
-          "name": "started_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -5484,13 +5502,87 @@
           "name": "external_order_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "buyer_id": {
           "name": "buyer_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "buyer_email": {
+          "name": "buyer_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recipient_email": {
+          "name": "recipient_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recipient_key": {
+          "name": "recipient_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "from_name": {
+          "name": "from_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delivery": {
+          "name": "delivery",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'code'"
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'paid'"
+        },
+        "attached_to": {
+          "name": "attached_to",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "claim_hash": {
+          "name": "claim_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "manage_hash": {
+          "name": "manage_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reminded_at": {
+          "name": "reminded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "declined_at": {
+          "name": "declined_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "kind": {
           "name": "kind",
@@ -5610,6 +5702,36 @@
           "method": "btree",
           "with": {}
         },
+        "plan_gifts_claim": {
+          "name": "plan_gifts_claim",
+          "columns": [
+            {
+              "expression": "claim_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "plan_gifts_manage": {
+          "name": "plan_gifts_manage",
+          "columns": [
+            {
+              "expression": "manage_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "plan_gifts_buyer": {
           "name": "plan_gifts_buyer",
           "columns": [
@@ -5621,6 +5743,63 @@
             },
             {
               "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "plan_gifts_buyer_email": {
+          "name": "plan_gifts_buyer_email",
+          "columns": [
+            {
+              "expression": "buyer_email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "plan_gifts_recipient": {
+          "name": "plan_gifts_recipient",
+          "columns": [
+            {
+              "expression": "recipient_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "plan_gifts_attached_to": {
+          "name": "plan_gifts_attached_to",
+          "columns": [
+            {
+              "expression": "attached_to",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -5661,6 +5840,19 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "plan_gifts_attached_to_users_id_fk": {
+          "name": "plan_gifts_attached_to_users_id_fk",
+          "tableFrom": "plan_gifts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "attached_to"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "plan_gifts_redeemed_by_users_id_fk": {
           "name": "plan_gifts_redeemed_by_users_id_fk",
           "tableFrom": "plan_gifts",
@@ -5678,7 +5870,28 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "plan_gifts_buyer_known": {
+          "name": "plan_gifts_buyer_known",
+          "value": "\"plan_gifts\".\"buyer_id\" is not null or \"plan_gifts\".\"buyer_email\" is not null"
+        },
+        "plan_gifts_paid_has_order": {
+          "name": "plan_gifts_paid_has_order",
+          "value": "\"plan_gifts\".\"state\" = 'checkout' or \"plan_gifts\".\"external_order_id\" is not null"
+        },
+        "plan_gifts_delivery": {
+          "name": "plan_gifts_delivery",
+          "value": "\"plan_gifts\".\"delivery\" in ('code', 'email')"
+        },
+        "plan_gifts_emailed_has_recipient": {
+          "name": "plan_gifts_emailed_has_recipient",
+          "value": "\"plan_gifts\".\"delivery\" = 'code' or \"plan_gifts\".\"recipient_key\" is not null"
+        },
+        "plan_gifts_state": {
+          "name": "plan_gifts_state",
+          "value": "\"plan_gifts\".\"state\" in ('checkout', 'paid', 'claimed', 'refunded')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.insight_asks": {

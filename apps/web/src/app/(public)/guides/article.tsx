@@ -62,7 +62,7 @@ export async function GuideArticle({ slug, children }: { slug: string; children:
             <Link href="/guides">Guides</Link>
           </p>
         )}
-        <h1 className="type-display-md">{guide.title}</h1>
+        <h1 className="type-display-md">{guide.heading ?? guide.title}</h1>
         <p className={`type-body-sm ${styles.meta}`}>
           Updated {said(guide.modified)} · For Minecraft: Java Edition
           {guide.bedrock && bedrockLive() ? ' and Bedrock Edition' : ''}
