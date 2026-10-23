@@ -1,0 +1,216 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/*
+ * The landing page's frames and buttons, loaded on every page (app/globals.css), so a page outside
+ * the landing can set them too: the plan cards on /pricing do. Their tokens are the landing's ink,
+ * paper and torch (landing.css), set on `.bl` and on anything marked `.bl-print`, which stays ink
+ * on paper in either theme. The rest of the landing's look stays in landing.css.
+ */
+
+.bl,
+.bl-print {
+  --paper: #f8f7f5;
+  --ink: #0d0d0d;
+  --night: #8c86f2;
+  --torch: #3a2e8f;
+
+  --px: 2px;
+
+  --field: var(--paper);
+  --fg: var(--ink);
+  --line: var(--ink);
+  --muted: #5b5954;
+  --panel: #ffffff;
+  --on-fg: var(--paper);
+
+  --display: var(--font-geologica), var(--font-figtree), system-ui, sans-serif;
+}
+
+/* ─── Blocks: frames and buttons, with stepped corners ──────────────────────────────────────── */
+
+/* A box drawn the way the chunk is: a one-pixel line that steps round each corner. */
+.bl-frame {
+  position: relative;
+  isolation: isolate;
+  padding: calc(var(--px) * 8);
+  --step: calc(var(--px) * 2);
+  --w: var(--px);
+}
+.bl-frame::before,
+.bl-frame::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+.bl-frame::before {
+  inset: 0;
+  background: var(--frame-line, var(--line));
+  clip-path: polygon(
+    0 var(--step),
+    var(--step) var(--step),
+    var(--step) 0,
+    calc(100% - var(--step)) 0,
+    calc(100% - var(--step)) var(--step),
+    100% var(--step),
+    100% calc(100% - var(--step)),
+    calc(100% - var(--step)) calc(100% - var(--step)),
+    calc(100% - var(--step)) 100%,
+    var(--step) 100%,
+    var(--step) calc(100% - var(--step)),
+    0 calc(100% - var(--step))
+  );
+}
+.bl-frame::after {
+  inset: var(--w);
+  background: var(--frame-fill, var(--panel));
+  --s: calc(var(--step) - var(--w));
+  clip-path: polygon(
+    0 var(--step),
+    var(--step) var(--step),
+    var(--step) 0,
+    calc(100% - var(--step)) 0,
+    calc(100% - var(--step)) var(--step),
+    100% var(--step),
+    100% calc(100% - var(--step)),
+    calc(100% - var(--step)) calc(100% - var(--step)),
+    calc(100% - var(--step)) 100%,
+    var(--step) 100%,
+    var(--step) calc(100% - var(--step)),
+    0 calc(100% - var(--step))
+  );
+}
+.bl-frame--bare {
+  --frame-fill: var(--field);
+}
+.bl-frame--solid {
+  --torch: #6a5cd3;
+  --frame-fill: var(--fg);
+  --frame-line: var(--fg);
+  color: var(--on-fg);
+}
+.bl-frame--lit {
+  --frame-fill: var(--torch);
+  --frame-line: var(--ink);
+  color: var(--ink);
+}
+
+/* A button is a block you push: it sits a pixel proud of its shadow and goes down when pressed. */
+.bl-btn {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6em;
+  min-height: 48px;
+  padding: 0 calc(var(--px) * 12);
+  border: 0;
+  background: none;
+  color: var(--on-fg);
+  font: inherit;
+  font-family: var(--display);
+  font-variation-settings: "SHRP" 100;
+  font-weight: 700;
+  font-size: 1.0625rem;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  --step: calc(var(--px) * 2);
+  translate: 0 calc(var(--px) * -2);
+  transition: translate 120ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+.bl-btn::before,
+.bl-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  clip-path: polygon(
+    0 var(--step),
+    var(--step) var(--step),
+    var(--step) 0,
+    calc(100% - var(--step)) 0,
+    calc(100% - var(--step)) var(--step),
+    100% var(--step),
+    100% calc(100% - var(--step)),
+    calc(100% - var(--step)) calc(100% - var(--step)),
+    calc(100% - var(--step)) 100%,
+    var(--step) 100%,
+    var(--step) calc(100% - var(--step)),
+    0 calc(100% - var(--step))
+  );
+}
+.bl-btn::before {
+  background: var(--btn-shadow, color-mix(in srgb, var(--fg) 38%, var(--field)));
+  translate: 0 calc(var(--px) * 2);
+  z-index: -2;
+  transition: translate 120ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+.bl-btn::after {
+  background: var(--btn-fill, var(--fg));
+}
+.bl-btn:hover {
+  translate: 0 calc(var(--px) * -3);
+}
+.bl-btn:hover::before {
+  translate: 0 calc(var(--px) * 3);
+}
+.bl-btn:active,
+.bl-btn[aria-pressed="true"] {
+  translate: 0 0;
+}
+.bl-btn:active::before,
+.bl-btn[aria-pressed="true"]::before {
+  translate: 0 0;
+}
+.bl-btn:disabled,
+.bl-btn[aria-disabled="true"] {
+  cursor: default;
+  translate: 0 0;
+  opacity: 0.6;
+}
+.bl-btn:disabled::before,
+.bl-btn[aria-disabled="true"]::before {
+  translate: 0 0;
+}
+.bl-btn--lg {
+  min-height: 60px;
+  padding: 0 calc(var(--px) * 16);
+  font-size: 1.25rem;
+}
+.bl-btn--sm {
+  min-height: 36px;
+  padding: 0 calc(var(--px) * 7);
+  font-size: 0.9375rem;
+}
+/* The quiet button: an outline, for the second thing you could do. */
+.bl-btn--quiet {
+  color: var(--fg);
+  --btn-fill: var(--field);
+  box-shadow: none;
+}
+.bl-btn--quiet::after {
+  background:
+    linear-gradient(var(--field), var(--field)) center / calc(100% - var(--px) * 2) calc(100% - var(--px) * 2)
+    no-repeat,
+    var(--fg);
+}
+.bl-btn--lit {
+  color: var(--ink);
+  --btn-fill: var(--torch);
+  --btn-shadow: var(--ink);
+}
+
+/* Someone who asked for less motion gets a button that goes down at once. */
+@media (prefers-reduced-motion: reduce) {
+  .bl-btn,
+  .bl-btn::before {
+    transition: none;
+  }
+}
