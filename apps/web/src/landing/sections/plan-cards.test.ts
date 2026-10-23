@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
 
 /**
- * The landing's plan cards: one to each paid plan, Core starting with the free trial. Each opens
- * with the plan as a server in the multiplayer list, its offer and its button; then a few lines of
- * what you get, the hours and the rest in details that open in place, and one more way to buy it.
+ * The landing's plan cards: one to each paid plan, Core starting with the free trial. Each is one
+ * surface: the plan's name and the line under it, what it costs and one quiet line under that, its
+ * one button, three lines of what you get, and the hours and the rest in details that open in place.
  */
 import { describe, expect, test } from 'bun:test'
 import type { PublicPlan } from '@blockly/contracts'
@@ -92,9 +92,8 @@ describe('the landing’s plan cards', () => {
     expect(html).toContain('aria-label="Core"')
     expect(html).toContain('aria-label="Plus"')
     expect(html).not.toContain('aria-label="Free trial"')
-    expect(coreCard).toContain('20 hours free , no card Start free')
-    expect(coreCard).toContain('Then $9.99 a month, when you want to keep playing.')
-    expect(plusCard).toContain('$25 a month Get Plus')
+    expect(coreCard).toContain('20 hours free No card, then $9.99 a month Start free')
+    expect(plusCard).toContain('$25 a month Or $250 for a year, paid once Get Plus')
     expect(plusCard).not.toContain('Start free')
   })
 
@@ -106,13 +105,15 @@ describe('the landing’s plan cards', () => {
     expect(plusTag).toContain('data-paid')
   })
 
-  test('each card opens with the plan as a server in the list', () => {
-    expect(face(coreCard)).toContain('Core 0/5 Plain Minecraft Java and Bedrock, one address')
-    expect(face(plusCard)).toContain('Plus 0/100 Mods and modpacks Everything in Core, and more')
+  test('each card opens with its picture, its name and one line under it', () => {
+    expect(coreCard).toContain('> Core Plain Minecraft 20 hours free')
+    expect(plusCard).toContain('> Plus Everything in Core, and more $25 a month')
     expect(coreHtml).toContain('src="/server-icons/grass.svg"')
+    // No card in a card: the multiplayer list's row is gone.
+    expect(html).not.toMatch(/0\/5|0\/100/)
   })
 
-  test('Start free is the block on Core, Get Plus the lit one, each as wide as its panel', () => {
+  test('one button to a card: Start free on Core, Get Plus, the lit one, on Plus', () => {
     expect(coreHtml).toMatch(
       /<a [^>]*class="bl-btn bl-btn--lg [^"]*"[^>]*href="\/servers\/new"[^>]*>Start free<\/a>/,
     )
@@ -120,37 +121,42 @@ describe('the landing’s plan cards', () => {
       /<a [^>]*class="bl-btn bl-btn--lg bl-btn--lit [^"]*"[^>]*href="\/checkout\/plus\/month"[^>]*>Get Plus<\/a>/,
     )
     expect(coreHtml).not.toContain('bl-btn--lit')
+    expect(coreHtml.match(/class="bl-btn /g)).toHaveLength(1)
+    expect(plusHtml.match(/class="bl-btn /g)).toHaveLength(1)
+    expect(coreHtml).not.toContain('/checkout/core')
   })
 
-  test('the foot: Core now on Core, a year on Plus', () => {
-    expect(coreCard.trim()).toEndWith('Ready to keep it? Get Core now')
-    expect(coreHtml).toMatch(/href="\/checkout\/core\/month"[^>]*>Get Core now</)
-    expect(plusCard.trim()).toMatch(/Want a year\? \$250, paid once/)
-    expect(plusHtml).toMatch(/href="\/checkout\/plus\/year"[^>]*>\$250, paid once</)
+  test('the one quiet line: Core’s price after the trial, and Plus’s year', () => {
+    expect(coreCard).not.toMatch(/Get Core|Ready to keep it/)
+    expect(plusHtml).toMatch(/href="\/checkout\/plus\/year"[^>]*>Or \$250 for a year, paid once</)
   })
 
   test('the heading says Core starts free and Plus adds mods', () => {
     expect(html).toContain('Core starts free, and Plus adds mods')
   })
 
-  test('each card’s face says what you get, a picture to each line, with no hours', () => {
-    expect(face(coreCard)).toContain(
-      'You and 4 friends Java and Bedrock friends on one server Sleeps when nobody’s on, wakes when someone joins Backups, and your world to download',
-    )
-    expect(face(plusCard)).toContain(
-      'Everything in Core, and mods Up to 100 players Mods, plugins, modpacks and datapacks Up to 3 servers',
-    )
-    expect(face(plusCard)).not.toContain('sessions')
-    expect(coreHtml.match(/<li class="type-body"><svg/g)).toHaveLength(4)
+  test('each card’s face says what you get in three lines, a picture to each, with no hours', () => {
+    expect(face(coreCard)).toContain('You and 4 friends Java and Bedrock together Sleeps when nobody’s on')
+    expect(face(plusCard)).toContain('Up to 100 players Mods and modpacks Up to 3 servers')
+    expect(coreHtml.match(/<li class="type-body"><svg/g)).toHaveLength(3)
     expect(plusHtml.match(/<li class="type-body"><svg/g)).toHaveLength(3)
-    expect(face(coreCard)).not.toMatch(/\d+ hours of play/)
+    expect(face(coreCard)).not.toMatch(/hours of play/)
     expect(face(plusCard)).not.toMatch(/hours/)
+  })
+
+  test('no fact is said twice on a card’s face', () => {
+    expect(face(coreCard).match(/friends/g)).toHaveLength(1)
+    expect(face(coreCard).match(/Bedrock/g)).toHaveLength(1)
+    expect(face(coreCard).match(/\$9\.99/g)).toHaveLength(1)
+    expect(face(plusCard).match(/Core/g)).toHaveLength(1)
+    expect(face(plusCard).match(/mods/gi)).toHaveLength(1)
+    expect(face(plusCard).match(/\$250/g)).toHaveLength(1)
   })
 
   test('Bedrock is promised only where it is on', () => {
     const off = landing(false)
     expect(off).not.toContain('Bedrock')
-    expect(cards(off)[0]).toContain('Core 0/5 Plain Minecraft 20 hours free')
+    expect(face(cards(off)[0] ?? '')).toContain('You and 4 friends Backups, and your world to download')
     expect(off.match(/<li class="type-body"><svg/g)).toHaveLength(6)
   })
 
@@ -166,7 +172,8 @@ describe('the landing’s plan cards', () => {
     expect(plusCard).toContain('Go back to any of your last 14 sessions')
     expect(plusCard).toContain('counts two hours for each hour it runs')
     expect(plusCard).toContain('$5 each, shared by five friends')
-    // The year is said once, at the card's foot.
+    expect(plusCard).toContain('Plugins and datapacks work too')
+    // The year is said once, under the price.
     expect(plusCard.match(/\$250/g)).toHaveLength(1)
     expect(plusCard).not.toMatch(/vanilla|Paper/)
     expect(html.match(/<details/g)).toHaveLength(2)

@@ -61,11 +61,9 @@ describe('the landing’s plans against an older plans API', () => {
   const html = landing(PLANS)
 
   test('a paid plan keeps its button, and only an explicit not-for-sale takes it away', () => {
-    expect(html).toContain('Get Plus')
+    // The trial starts Plus here, so Start free is its one button.
     expect(html).toContain('Start free')
-    const off = landing([...PLANS.slice(0, 1), { ...(PLANS[1] as PublicPlan), available: false }])
-    expect(off).not.toContain('Get Plus')
-    expect(off).toContain('Start free')
+    expect(landing(PLANS.slice(1))).toContain('Get Plus')
     const alone = landing([{ ...(PLANS[1] as PublicPlan), available: false }])
     expect(alone).toContain('Not available yet')
   })

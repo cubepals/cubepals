@@ -6,6 +6,28 @@
 
 /* The two plain parts of the surface that aren't the hero: the plans, and the closing. */
 
+/* The header (app/(public)/header.module.css) is fixed over the picture with no ground of its own,
+   72px tall. While the plans scroll under it, a strip of their own ground stands in its band, so
+   the lockup and the links never sit on a card. It waits just above the plate, where the picture
+   is already bare behind the header, and holds to the top of the screen only while the plate goes
+   by. On a narrow screen the header doesn't stand over the plans. */
+.plans .clear {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .plans .clear {
+    display: block;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    height: 72px;
+    /* From the plate's top, up a header's height, and as wide as the plate and its shadow. */
+    margin: calc(var(--plate) * -1 - 72px) calc(var(--plate) * -1 - var(--px) * 4) var(--plate)
+      calc(var(--plate) * -1);
+    background: var(--field);
+  }
+}
+
 /* The cards are ui/plan-card.tsx's, the same as /pricing's. */
 .plans .cards {
   margin-top: clamp(28px, 5vh, 48px);

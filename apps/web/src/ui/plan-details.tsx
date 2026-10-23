@@ -29,55 +29,37 @@ export function plansSaid(plans: readonly PublicPlan[]): string {
   return plus ? `${first}, and ${plus.name} adds mods` : first
 }
 
-/** The line over the button that starts the trial, in its two parts: "20 hours free", ", no card". */
-export const freeSaid = (trial: Pick<PublicPlan, 'totalHours'>): [string, string] => [
-  trial.totalHours ? `${trial.totalHours} hours free` : 'Free to start',
-  ', no card',
-]
+/** What the trial gives, said as the price of the plan it starts: "20 hours free". */
+export const freeSaid = (trial: Pick<PublicPlan, 'totalHours'>): string =>
+  trial.totalHours ? `${trial.totalHours} hours free` : 'Free to start'
 
-/**
- * A paid plan's message as the multiplayer list would show it, in two lines: what it plays, and
- * who joins or what it adds. Java and Bedrock together is said only where Bedrock is on.
- */
-export function serverMessage(
-  plan: PublicPlan,
-  plans: readonly PublicPlan[],
-  bedrock: boolean,
-): [string, string?] {
-  const before = cardsOf(plans).cards.find((other) => other !== plan && !other.mods)
-  if (plan.mods) return ['Mods and modpacks', before ? `Everything in ${before.name}, and more` : undefined]
-  return ['Plain Minecraft', bedrock ? 'Java and Bedrock, one address' : undefined]
-}
-
-/** A paid card's first line: who it is for, or what it adds to the plan before it. */
+/** A card's line under its name: what it plays, or that it has all of the plan before it. */
 export function offerPitch(plan: PublicPlan, plans: readonly PublicPlan[]): string {
   const before = cardsOf(plans).cards.find((other) => other !== plan && !other.mods)
-  if (plan.mods) return before ? `Everything in ${before.name}, and mods` : 'Mods, plugins and modpacks'
-  return 'Plain Minecraft with your friends'
+  if (plan.mods) return before ? `Everything in ${before.name}, and more` : 'Mods and modpacks'
+  return 'Plain Minecraft'
 }
 
 /** What a line on a card is about, which picks its picture. */
 export type PointKind = 'friends' | 'bridge' | 'moon' | 'chest' | 'crowd' | 'anvil' | 'servers'
 
 /**
- * What you get on a plan, in a few short lines, with no hours: those are in its details, with the
- * sessions it keeps.
+ * What you get on a plan, in three short lines, with no hours: those are in its details, with the
+ * servers, the sessions it keeps and the rest.
  */
 export function offerPoints(plan: PublicPlan, bedrock: boolean): { said: string; kind: PointKind }[] {
   if (plan.mods)
     return [
       { said: `Up to ${plan.maxPlayers} players`, kind: 'crowd' },
-      {
-        said: plan.datapacks ? 'Mods, plugins, modpacks and datapacks' : 'Mods, plugins and modpacks',
-        kind: 'anvil',
-      },
+      { said: 'Mods and modpacks', kind: 'anvil' },
       { said: plan.maxServers === 1 ? '1 server' : `Up to ${plan.maxServers} servers`, kind: 'servers' },
     ]
   return [
     { said: plan.maxPlayers > 1 ? `You and ${plan.maxPlayers - 1} friends` : 'Just you', kind: 'friends' },
-    ...(bedrock ? [{ said: 'Java and Bedrock friends on one server', kind: 'bridge' as const }] : []),
-    { said: 'Sleeps when nobody’s on, wakes when someone joins', kind: 'moon' },
-    { said: 'Backups, and your world to download', kind: 'chest' },
+    bedrock
+      ? { said: 'Java and Bedrock together', kind: 'bridge' }
+      : { said: 'Backups, and your world to download', kind: 'chest' },
+    { said: 'Sleeps when nobody’s on', kind: 'moon' },
   ]
 }
 
@@ -124,6 +106,7 @@ export function PlanDetails({
         <li>Hours count only while your server is awake, not for each player</li>
         <li>{keptPoint(plan)}</li>
         <li>{plan.mods ? LARGE_SERVERS : 'Plain Minecraft: vanilla or Paper'}</li>
+        {plan.mods && <li>{plan.datapacks ? 'Plugins and datapacks work too' : 'Plugins work too'}</li>}
         {plan.yearlyPriceCents && year !== false ? (
           <li>{year ?? `Or ${dollars(plan.yearlyPriceCents)} for a year, paid once`}</li>
         ) : null}

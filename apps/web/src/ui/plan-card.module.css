@@ -9,29 +9,31 @@
  * (landing/blocks.css), which stay ink and paper in either theme, and the product's muted ink on
  * dark, the same in both; plan-card.test.ts holds every pair to WCAG AA. The spacing and type are
  * the product's tokens. Three of the card's own:
- *   --plan-card-inset   how far the ink panel and the dithered edge sit inside the frame
- *   --plan-card-edge    the ink card's panel outline and dither: a step of paper into ink, so a
- *                       panel of ink still reads on an ink card
+ *   --plan-card-inset   how far the card's words sit inside its frame
+ *   --plan-card-quiet   the card's quieter words: the line under its name and under its price
  *   --plan-card-target  the least height of a link or summary on the card, so each is easy to hit
  */
 
+/* Two side by side down to a narrow column (the landing's, at 1280px), one above the other below. */
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
   gap: var(--space-16);
 }
 
-/* The paper card: ink on white, ink pictures. Side by side, the cards share their three rows
-   (panel, edge, body), so the panels and their buttons stay level. */
+/* The paper card: ink on white, ink pictures. Side by side, the cards share their five rows (name,
+   price, button, lines, details), so each row stays level with its neighbour's and neither card
+   has a hole. */
 .card {
-  --plan-card-inset: clamp(var(--space-12), 2vw, var(--space-20));
+  --plan-card-inset: var(--space-16);
+  --plan-card-quiet: var(--muted);
   --plan-card-target: 44px;
   --plan-card-icon: var(--ink);
   display: grid;
-  grid-row: span 3;
+  grid-row: span 5;
   grid-template-rows: subgrid;
-  row-gap: 0;
-  padding: 0;
+  row-gap: var(--space-16);
+  padding: var(--plan-card-inset);
   color: var(--fg);
   font-family: var(--display);
   font-variation-settings: "SHRP" 30;
@@ -49,29 +51,26 @@
   --fg: var(--paper);
   --field: var(--ink);
   --on-fg: var(--ink);
+  --plan-card-quiet: var(--ink-inverse-muted);
   --plan-card-icon: var(--night);
-  --plan-card-edge: color-mix(in srgb, var(--paper) 20%, var(--ink));
 }
 .paid ::selection {
   background: var(--panel);
   color: var(--ink);
 }
 
-/* The ink panel: the server in the list, the offer and the button, paper on ink on either card. */
-.panel {
-  --fg: var(--paper);
-  --field: var(--ink);
-  --on-fg: var(--ink);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-12);
-  margin: var(--plan-card-inset) var(--plan-card-inset) 0;
-  padding: var(--space-12) var(--space-12) var(--space-16);
-  background: var(--ink);
-  color: var(--fg);
+/* The plan's picture and its name in the game's face, and the line under them. */
+.head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-4) var(--space-12);
 }
-.paid .panel {
-  box-shadow: inset 0 0 0 var(--px) var(--plan-card-edge);
+.picture {
+  display: block;
+  width: calc(var(--px) * 16);
+  height: calc(var(--px) * 16);
+  image-rendering: pixelated;
 }
 .anvil {
   display: grid;
@@ -83,50 +82,61 @@
   width: 75%;
   height: 75%;
 }
-.offer {
+.head .name {
   margin: 0;
-  color: var(--ink-inverse-muted);
+  /* Three times the game face's eight-pixel grid. */
+  font-size: calc(var(--px) * 12);
+  line-height: 1;
 }
-.offer strong {
+.head .pitch {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--plan-card-quiet);
+}
+
+/* What it costs, large, and the one quiet line under it. */
+.offer {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+}
+.price {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+.price strong {
+  font-size: 32px;
+  font-weight: 800;
+  font-variation-settings: "SHRP" 100;
+  letter-spacing: -0.04em;
+}
+.then {
+  margin: 0;
+  color: var(--plan-card-quiet);
+}
+.then a {
   color: var(--fg);
+  font-weight: 600;
+  text-underline-offset: 0.25em;
+  text-decoration-thickness: var(--px);
 }
-/* As wide as the panel, at its foot. Start free is paper on ink, with a step of ink below it. */
+
+/* As wide as the card. Start free is the ink block on the paper card. */
 .action.action {
   display: flex;
   width: 100%;
-  margin-top: auto;
-  --btn-shadow: var(--muted);
 }
 /* Get Plus: the lit indigo, with the deep indigo below it. */
-.panel .lit {
+.paid .lit {
   --btn-fill: var(--night);
   --btn-shadow: var(--torch);
 }
 
-/* Two rows of the checker of two-pixel squares (`.bl-dither`, level 3). */
-.card .edge {
-  --dot: calc(var(--px) * 2);
-  height: calc(var(--px) * 4);
-  margin-inline: var(--plan-card-inset);
-  color: var(--ink);
-}
-.paid .edge {
-  color: var(--plan-card-edge);
-}
-
-/* What you get, and how to buy it, to the foot of the card. */
-.body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-12);
-  padding: clamp(var(--space-20), 2.6vw, var(--space-32));
-}
-.pitch {
-  margin: 0;
-}
 .points {
   display: grid;
-  gap: var(--space-12);
+  align-content: start;
+  gap: var(--space-8);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -134,37 +144,17 @@
 .points li {
   display: flex;
   align-items: center;
-  gap: var(--space-12);
+  gap: var(--space-8);
 }
 .points svg {
   flex: none;
   color: var(--plan-card-icon);
 }
 
-/* "See everything in Core": the rest of the plan, opened in place. */
+/* "See everything in Core": the rest of the plan, opened in place, at the card's foot. */
 .details summary {
   min-height: var(--plan-card-target);
 }
 .details a {
   color: inherit;
-}
-
-.foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 var(--space-8);
-  margin: auto 0 0;
-}
-.ask {
-  opacity: 0.72;
-}
-.foot a {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--plan-card-target);
-  color: inherit;
-  font-weight: 600;
-  text-underline-offset: 0.25em;
-  text-decoration-thickness: var(--px);
 }

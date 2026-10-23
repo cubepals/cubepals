@@ -33,6 +33,8 @@ export function lastSaid(plans: readonly PublicPlan[]): string {
  * server won't do. The last thing a player needs; after it the page turns, and digs. With no plans
  * to show (the control plane can't be reached) the section is left out. Everyone is already in on
  * the grass below it, as on the closing it hands over to, so nobody arrives during the flight.
+ * The header, which has no ground of its own over the picture, never draws over the cards: the
+ * section keeps a strip of its own ground under it while it scrolls by (surface.module.css).
  */
 export function Plans({
   plans,
@@ -58,6 +60,7 @@ export function Plans({
       act="friends"
       className={styles.plans}
     >
+      <div className={styles.clear} aria-hidden />
       <PlansSaid plans={plans} create={create} getPlan={getPlan} bedrock={bedrock} />
     </Section>
   )
