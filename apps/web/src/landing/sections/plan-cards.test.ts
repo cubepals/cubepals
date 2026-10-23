@@ -89,6 +89,12 @@ describe('the landing’s plan cards', () => {
     expect(plusCard).not.toContain('Start free')
   })
 
+  test('Core is the light card and Plus the dark one', () => {
+    const [coreTag = '', plusTag = ''] = html.match(/<section[^>]*>/g) ?? []
+    expect(coreTag).not.toContain('bl-frame--solid')
+    expect(plusTag).toContain('bl-frame--solid')
+  })
+
   test('the heading says Core starts free and Plus adds mods', () => {
     expect(html).toContain('Core starts free, and Plus adds mods')
   })

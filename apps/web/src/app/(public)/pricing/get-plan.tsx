@@ -51,7 +51,7 @@ export function GetPlan({
     )
   return (
     <div className="bk-row bk-wrap" style={{ gap: 'var(--space-12)', alignItems: 'center' }}>
-      <Button variant="primary" href={behindSignUp(signedIn, '/servers/new')} {...ctaMark('pricing_create')}>
+      <Button variant="outline" href={behindSignUp(signedIn, '/servers/new')} {...ctaMark('pricing_create')}>
         Start free
       </Button>
       <div className="bk-stack" style={{ gap: 0 }}>

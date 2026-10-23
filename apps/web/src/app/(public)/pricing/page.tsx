@@ -70,6 +70,8 @@ export default async function PricingPage() {
               key={plan.key}
               plan={plan}
               mark={seenMark(`plan_${plan.key}`)}
+              // The plan the trial starts is the light card, as the trial's own was.
+              solid={!startsTrial}
               offer={{
                 pitch: offerPitch(plan, plans),
                 points: offerPoints(plan, bedrock),

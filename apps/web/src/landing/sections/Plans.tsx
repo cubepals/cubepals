@@ -66,8 +66,8 @@ export function Plans({
 
 /**
  * What the plans section says, wherever it is set: the heading, a card to each paid plan (the first
- * starting with the free trial), and the line under them. The film sets it in its section; the
- * phone's page sets it in its own.
+ * starting with the free trial, on the light card), and the line under them. The film sets it in
+ * its section; the phone's page sets it in its own.
  */
 export function PlansSaid({
   plans,
@@ -90,7 +90,7 @@ export function PlansSaid({
           return (
             <section
               key={plan.key}
-              className={`bl-frame bl-frame--solid ${styles.paid} ${styles.card}`}
+              className={`bl-frame ${startsTrial ? '' : `bl-frame--solid ${styles.paid}`} ${styles.card}`}
               aria-label={plan.name}
               {...seenMark(`plan_${plan.key}`)}
             >
@@ -108,11 +108,7 @@ export function PlansSaid({
               <PlanDetails plan={plan} trial={startsTrial} className={styles.details} />
               {startsTrial ? (
                 <>
-                  <Link
-                    href={create}
-                    className={`bl-btn bl-btn--lit ${styles.action}`}
-                    {...ctaMark('plans_create')}
-                  >
+                  <Link href={create} className={`bl-btn ${styles.action}`} {...ctaMark('plans_create')}>
                     Start free
                   </Link>
                   <p className={styles.free}>{freeSaid(startsTrial)}</p>
