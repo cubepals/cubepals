@@ -140,6 +140,8 @@ export interface ControlPlaneSettings {
   curatedPacks?: readonly CuratedPack[]
   /** Blockly's own packs; the review in `curation/own.ts` unless a test brings its own. */
   ownPacks?: readonly OwnPack[]
+  /** How long a template's resolution is kept for previews (`setups/resolved-templates.ts`). */
+  templatesKeptMs?: number
   /** The files placed on servers flagged official at every start (OFFICIAL_SERVER_FILES), and why there are none when there should be. */
   officialServerFiles?: {
     files: Readonly<Record<string, Readonly<Record<string, string>>>>
@@ -264,15 +266,14 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     ...(settings.ownPacks === undefined ? {} : { own: settings.ownPacks }),
   })
   const queries = new ServerQueries({
+    ...ports,
     db,
-    addressing: ports.addressing,
-    regions: ports.regions,
     service: servers,
     setups,
-    catalog: ports.catalog,
     packs,
     curation,
     providers: runtime.providers,
+    templatesKeptMs: settings.templatesKeptMs,
   })
   const access = new AccessService({ ...ports, db, policy, transitions, events })
   const sharing = new SharingService({ db, access })
@@ -351,7 +352,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     accountQueries: new AccountQueries({ db, policy }),
     billing,
     listings,
-    listingQueries: new ListingQueries({ db, addressing: ports.addressing }),
+    listingQueries: new ListingQueries({ ...ports, db }),
     sharing,
     sharingQueries: new SharingQueries({
       ...ports,

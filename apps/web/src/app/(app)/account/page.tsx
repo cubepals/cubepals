@@ -6,6 +6,7 @@
 
 import { type AccountOverviewView, UPGRADE_REASONS, type UpgradeReason } from '@blockly/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { messageOf, useTRPC } from '../../../lib/api'
@@ -494,6 +495,11 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
         <Note tone="info">{billing.message}</Note>
       )}
       <Owed extra={overview.usage.extra} />
+      {billing?.available && (
+        <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
+          Got a gift code? <Link href="/redeem">Redeem it</Link>.
+        </p>
+      )}
       {refresh.isPending && <p className="type-body-sm">Checking your payment…</p>}
       {failure && <Note tone="danger">{messageOf(failure)}</Note>}
     </FormSection>

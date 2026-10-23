@@ -32,15 +32,21 @@ export function Phone({ create, signedIn, plans, getPlan, bedrock }: Landed) {
         <h1 className={`bl-display ${styles.headline}`}>
           <span>Send your friends</span> <span>the address.</span> <span>They’re in.</span>
         </h1>
-        <p className={`bl-lede ${styles.support}`}>Make a server in three decisions.</p>
+        <p className={`bl-lede ${styles.support}`}>
+          Make a server in three decisions.{bedrock && ' Friends on PC, phones and tablets join it.'}
+        </p>
         <div className={styles.go}>
           <Link href={create} className="bl-btn bl-btn--lg" {...ctaMark('hero_create')}>
             Create a server
           </Link>
           <p>
             <strong>{trialSaid(plans)}</strong>
-            <br />
-            {heroSmallPrint(bedrock)}
+            {heroSmallPrint(bedrock) && (
+              <>
+                <br />
+                {heroSmallPrint(bedrock)}
+              </>
+            )}
           </p>
         </div>
         <Still still="night" first={night} className={styles.still} />

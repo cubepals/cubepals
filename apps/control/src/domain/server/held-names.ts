@@ -7,11 +7,13 @@
  * hold each falls under; `app/servers/names.ts` says who may still give one. A server that already
  * has one keeps it: these are read when an address is chosen, never when one is routed. Offensive
  * words are not here; an open-source matcher judges those (`@blockly/contracts/names`). Addresses
- * Cubepals keeps for its own servers are `kept-addresses.ts`'s, and fall under a hold here.
+ * Cubepals keeps for its own servers are `kept-addresses.ts`'s, and fall under a hold here, as does
+ * its example address (`@blockly/contracts/example-address`), which the edge answers itself.
  *
  * Also the words the name or description of a server not marked official can't say
  * (`saysOfficial`), read when either is chosen.
  */
+import { EXAMPLE_ADDRESS } from '@blockly/contracts/example-address'
 import { keptFor } from './kept-addresses.ts'
 
 /**
@@ -120,12 +122,14 @@ export const HELD_FOR_CUBEPALS: ReadonlySet<string> = new Set([
 
 /**
  * Which hold an address falls under, if any: `brand` for operators alone, `cubepals` for staff,
- * `kept` for nobody, since it already points at one of Cubepals' own servers.
+ * `kept` for nobody, since it already points at one of Cubepals' own servers, and `example` for
+ * nobody, since the edge answers it itself.
  */
-export type Hold = 'brand' | 'cubepals' | 'kept'
+export type Hold = 'brand' | 'cubepals' | 'kept' | 'example'
 
 export function holdOn(slug: string): Hold | null {
   if (keptFor(slug) !== null) return 'kept'
+  if (slug === EXAMPLE_ADDRESS) return 'example'
   if (passesForBrand(slug)) return 'brand'
   if (HELD_FOR_CUBEPALS.has(slug)) return 'cubepals'
   return null

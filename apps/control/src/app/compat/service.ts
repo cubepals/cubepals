@@ -291,3 +291,12 @@ export async function joinsNow(
   const bedrock = paper || moves ? { on, needsOtherVersions: on && !bedrockWanted(revision), moves } : null
   return { joins: joinsOf(revision, placed), bedrock: run.offered === true ? bedrock : false }
 }
+
+/**
+ * Whether Bedrock players join a server on `revision` now, as a page anyone can open says it: on
+ * a deployment that lets them in, a Paper server whose choice and other versions let them in.
+ */
+export const takesBedrock = (
+  revision: OnPaper & Pick<ServerRevision, 'gameVersion' | 'settings'>,
+  offered: boolean,
+): boolean => offered && runsPaper(revision) && bedrockWanted(revision)

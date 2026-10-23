@@ -139,6 +139,7 @@ const IN_FOOTERS = [
   'minecraft-server-cost',
   'minecraft-server-that-sleeps',
   'minecraft-server-uk-europe',
+  'minecraft-bedrock-server',
 ]
 
 export const guideHref = (guide: Pick<Guide, 'slug'>): string => `/guides/${guide.slug}`

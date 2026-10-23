@@ -31,15 +31,16 @@ import { useDebounced } from '../../../../lib/hooks'
 import { iconSrc } from '../../../../lib/present'
 import * as rules from '../../../../lib/rules'
 import { useChecked } from '../../../../lib/use-checked'
-import { Button, Note, OutLink, Skeleton, TextField, Toggle } from '../../../../ui'
+import { Button, JavaAndBedrock, Note, OutLink, Skeleton, TextField, Toggle } from '../../../../ui'
 import { PackDrop, type ReadPack } from '../../pack-drop'
 import { PlusOffer } from '../../plus-offer'
+import { useChoosing } from './choosing'
 import styles from './create.module.css'
 import { keptChoice, keptPath } from './kept'
 import { usePlanLimit } from './limit'
 import { Modpacks, typingNext } from './modpacks'
 import { Part } from './part'
-import { previewOf } from './preview'
+import { previewQuery, useChoicesAhead } from './preview'
 import { useRegion } from './region'
 import { ReleasePick } from './release'
 import { useCreate } from './sending'
@@ -100,10 +101,6 @@ function CreateServer() {
   // How long they want it is the one thing only they know; a game played in an evening starts out
   // as lasting a day until they say otherwise. Null: they haven't said.
   const [temporary, setTemporary] = useState<boolean | null>(null)
-  // Why the last thing they picked can't be made, said where they picked it.
-  const [refused, setRefused] = useState<{ key: string; message: string } | null>(null)
-  // What is being checked before it counts as picked: a template's key or a pack's id.
-  const [checking, setChecking] = useState<string | null>(null)
   const debouncedName = useDebounced(name.trim(), 300)
   const checkedName = useChecked(rules.serverName, name)
 
@@ -137,14 +134,16 @@ function CreateServer() {
   // Until they say who is playing, a choice is judged at the smallest size: whether the plan
   // runs it at all.
   const judgedAt = chosenSize ?? choosable[0]?.value ?? '5'
+  // A failed create's message is about the last press; changing anything moves on from it.
+  const moveOn = () => {
+    if (create.isError) create.reset()
+  }
+  const { choose, checking, refused, setRefused } = useChoosing({ from, setFrom, judgedAt, moveOn })
 
   // What Blockly would make of the choice, asked once and used twice: to refuse a choice that
   // can't run before anyone goes any further, and to say what the server will be in the bar.
   const preview = useQuery({
-    ...trpc.servers.setupPreview.queryOptions({
-      from: from ?? { kind: 'template', key: 'survival' },
-      partySize: judgedAt,
-    }),
+    ...previewQuery(trpc, from ?? { kind: 'template', key: 'survival' }, judgedAt),
     enabled: from !== null,
     placeholderData: (previous) => previous,
   })
@@ -187,46 +186,11 @@ function CreateServer() {
     if (cameBack && picking === 'ways') modpackWay.current?.focus()
   }, [cameBack, picking])
 
-  // A failed create's message is about the last press; changing anything moves on from it.
-  const moveOn = () => {
-    if (create.isError) create.reset()
-  }
-
-  /**
-   * Choosing something Blockly can't run is answered where the choice was made, not at a button
-   * that does nothing. It is the question the bar asks too, so there is one rule about what fits
-   * a plan, in one place, asked earlier.
-   */
-  const choose = async (asked: SetupSourceInput, key: string): Promise<boolean> => {
-    if (checking !== null) return false
-    setChecking(key)
-    setRefused(null)
-    moveOn()
-    try {
-      const { source, would } = await previewOf(queries, trpc, asked, judgedAt)
-      if (!would.size.allowed) {
-        // What another plan runs stays chosen, with that plan offered under it; what no plan
-        // runs is refused where it was picked.
-        if (would.size.plan != null) {
-          setFrom(source)
-          return true
-        }
-        setRefused({ key, message: would.size.reason ?? 'That needs more power than your plan.' })
-        return false
-      }
-      setFrom(source)
-      return true
-    } catch (error) {
-      setRefused({ key, message: messageOf(error) })
-      return false
-    } finally {
-      setChecking(null)
-    }
-  }
   // A version someone picked stays theirs as they look through the templates.
   const [version, setVersion] = useState<string | undefined>(() =>
     from?.kind === 'template' ? from.gameVersion : undefined,
   )
+  useChoicesAhead({ live: options.data, partySize: judgedAt, version, offers: like === null })
   const pickTemplate = (key: string) =>
     void choose({ kind: 'template', key, ...(version === undefined ? {} : { gameVersion: version }) }, key)
   const pickVersion = async (value: string) => {
@@ -292,7 +256,7 @@ function CreateServer() {
             picked?.name ??
             (from.kind === 'import' ? ownPack?.pack.name : undefined) ??
             (copying !== null ? `Like ${copying.name}` : preview.data?.from),
-          release,
+          ...withEditions(release, preview.data),
           region.said,
           chosenSize !== null && players !== undefined && `Up to ${players} players`,
           forADay && 'For a day',
@@ -617,6 +581,10 @@ function CreateServer() {
 }
 
 /** The way back from the packs or the upload to the list of ways to play. */
+/** The bar's release, and "Java and Bedrock" after it where Bedrock friends join what is being made. */
+const withEditions = (release: ReactNode, preview: SetupPreview | undefined): ReactNode[] =>
+  preview?.bedrock ? [release, <JavaAndBedrock key="editions" />] : [release]
+
 function BackToWays({ onBack }: { onBack: () => void }) {
   return (
     <div>

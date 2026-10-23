@@ -14,8 +14,12 @@
  * - A ping is answered here, from the last pong Geyser gave, so a flood of them never reaches Geyser
  *   or costs it a socket. A pong is far larger than the ping that asks for it, so an address is
  *   answered only so many a second.
- * - A peer exists only once it opens a RakNet connection (the first packet a player sends); the
- *   address's new peers are rate limited, the peers held are capped, and a quiet one is dropped.
+ * - A peer exists only once it opens a RakNet connection (the first packet a player sends), and
+ *   only while Geyser answers; the address's new peers are rate limited and the peers held capped.
+ * - Geyser forgets a source's header when the source goes quiet, and forgets every source when it
+ *   starts over, and a datagram from a source it has forgotten is dropped. So the relay forgets a
+ *   quiet player first, and every player when Geyser starts over (`forget`): a player who sends
+ *   again is a new peer, whose first datagram carries the header again.
  *
  * Not for deciding who may join: Geyser signs players in, and the Java path (`front.ts`) limits them.
  */
@@ -39,7 +43,10 @@ export interface RelayOptions {
   opens: Rate
   /** How many players are held at most. */
   most: number
-  /** How long a player may be quiet before they are dropped. */
+  /**
+   * How long a player may send nothing before they are forgotten: less than Geyser keeps a quiet
+   * source's header, so the relay never holds a player whose header Geyser has let go.
+   */
   idleMs: number
   /** How long a pong from Geyser stands before it asks for another. */
   pongRefreshMs: number
@@ -94,6 +101,7 @@ export function pongFor(pong: Uint8Array, ping: Uint8Array): Uint8Array {
 
 interface Player {
   upstream: Udp
+  /** When the player last sent: Geyser's replies don't count, as they don't keep its header. */
   lastAt: number
   /** Datagrams that came while the upstream socket was being made. */
   waiting: Uint8Array[] | null
@@ -105,6 +113,11 @@ export interface Relay {
   players: () => number
   /** Whether Geyser has answered a ping lately, which is whether it is taking players. */
   ready: () => boolean
+  /**
+   * Lets every player and the last pong go, for a Geyser that has started over: it knows none of
+   * them. The relay is ready again once the new Geyser answers.
+   */
+  forget: () => void
 }
 
 /**
@@ -173,6 +186,11 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
   const totalPongs = new Bucket(options.totalPongs, Date.now())
   let pong: Uint8Array | null = null
   let pongAt = 0
+  const ready = () => pong !== null && Date.now() - pongAt < 3 * options.pongRefreshMs
+  const drop = (key: string, player: Player) => {
+    player.upstream?.close()
+    players.delete(key)
+  }
 
   const allowed = (buckets: Map<string, Bucket>, rate: Rate, address: string): boolean => {
     const key = addressKey(address)
@@ -193,6 +211,21 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
     upstream.send(framed, geyser.port, geyser.hostname)
   }
 
+  /** Sends a known player's datagram on; false for a stranger, which may open a connection. */
+  const passedOn = (key: string, packet: Uint8Array): boolean => {
+    const known = players.get(key)
+    if (known === undefined) return false
+    // Quiet for that long, they are a stranger to Geyser too: what they send now starts over.
+    if (Date.now() - known.lastAt >= options.idleMs) {
+      drop(key, known)
+      return false
+    }
+    known.lastAt = Date.now()
+    if (known.waiting !== null) known.waiting.push(Uint8Array.from(packet))
+    else known.upstream.send(packet, geyser.port, geyser.hostname)
+    return true
+  }
+
   const front: Udp = await Bun.udpSocket({
     hostname: bind.hostname,
     port: bind.port,
@@ -206,15 +239,10 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
             front.send(pongFor(pong, packet), port, address)
           return
         }
-        const known = players.get(key)
-        if (known !== undefined) {
-          known.lastAt = Date.now()
-          if (known.waiting !== null) known.waiting.push(Uint8Array.from(packet))
-          else known.upstream.send(packet, geyser.port, geyser.hostname)
-          return
-        }
-        if (!opens(packet) || players.size >= options.most || !allowed(openAllowed, options.opens, address))
-          return
+        if (passedOn(key, packet)) return
+        // While Geyser isn't answering, a header sent now would be lost and the player with it.
+        if (!opens(packet) || !ready() || players.size >= options.most) return
+        if (!allowed(openAllowed, options.opens, address)) return
         const player: Player = {
           upstream: null as unknown as Udp,
           lastAt: Date.now(),
@@ -226,11 +254,12 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
           socket: {
             error: ignoreRefusal,
             data(_upstream, back) {
-              player.lastAt = Date.now()
               front.send(back, port, address)
             },
           },
         }).then((upstream) => {
+          // Forgotten while its socket was being made: nothing is sent for it.
+          if (players.get(key) !== player) return upstream.close()
           player.upstream = upstream
           const [first, ...rest] = player.waiting ?? []
           if (first !== undefined) toGeyser(upstream, { address, port }, first)
@@ -256,11 +285,7 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
   const sweeping = setInterval(
     () => {
       const now = Date.now()
-      for (const [key, player] of players) {
-        if (now - player.lastAt < options.idleMs) continue
-        player.upstream?.close()
-        players.delete(key)
-      }
+      for (const [key, player] of players) if (now - player.lastAt >= options.idleMs) drop(key, player)
       for (const buckets of [pongAllowed, openAllowed])
         for (const [key, bucket] of buckets) if (bucket.full(now)) buckets.delete(key)
     },
@@ -269,7 +294,11 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
 
   return {
     players: () => players.size,
-    ready: () => pong !== null && Date.now() - pongAt < 3 * options.pongRefreshMs,
+    ready,
+    forget() {
+      pong = null
+      for (const [key, player] of players) drop(key, player)
+    },
     close() {
       clearInterval(asking)
       clearInterval(sweeping)

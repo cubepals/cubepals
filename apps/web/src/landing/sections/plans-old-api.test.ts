@@ -62,13 +62,15 @@ describe('the landing’s plans against an older plans API', () => {
 
   test('a paid plan keeps its button, and only an explicit not-for-sale takes it away', () => {
     expect(html).toContain('Get Plus')
-    expect(html).not.toContain('Not available yet')
+    expect(html).toContain('Start free')
     const off = landing([...PLANS.slice(0, 1), { ...(PLANS[1] as PublicPlan), available: false }])
-    expect(off).toContain('Not available yet')
     expect(off).not.toContain('Get Plus')
+    expect(off).toContain('Start free')
+    const alone = landing([{ ...(PLANS[1] as PublicPlan), available: false }])
+    expect(alone).toContain('Not available yet')
   })
 
-  test('no clause says undefined, and no card names a server type', () => {
+  test('no clause says undefined, and Plus names no server type', () => {
     // What people read: the markup's class names are the test runner's, with no stylesheet behind them.
     const said = html.replace(/<[^>]+>/g, ' ')
     expect(said).not.toContain('undefined')

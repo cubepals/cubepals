@@ -29,11 +29,6 @@ updates:
     ignore:
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
-      # Next 16.4.0 builds, but the Worker it makes throws on every request
-      # (`Unexpected loadManifest(/.next/server/preview-props.json)`). Held at 16.3 until the
-      # adapter runs it.
-      - dependency-name: 'next'
-        versions: ['>=16.4.0']
     groups:
       bun-security:
         applies-to: security-updates

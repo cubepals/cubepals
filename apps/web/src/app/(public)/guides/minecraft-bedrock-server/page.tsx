@@ -9,15 +9,16 @@
  * and settings show, and a Bedrock join waking a sleeping server. Any server without mods takes
  * Bedrock players, since each runs on Paper, so the steps ask for no particular setup. Where
  * Bedrock is off (`bedrockLive`), the Cubepals part says it is coming instead, and the page is
- * unlisted.
+ * unlisted. The pictures are from a local stack with Bedrock on.
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { bedrockLive } from '../../../../lib/bedrock'
 import { OutLink } from '../../../../ui/out-link'
-import { GuideArticle, GuideLink, guideMetadata, Part, Questions } from '../article'
+import { GuideArticle, GuideLink, guideMetadata, Part, Questions, Shot } from '../article'
 
 const SLUG = 'minecraft-bedrock-server'
+const PICTURES = `/guides/${SLUG}`
 
 export const generateMetadata = (): Metadata => guideMetadata(SLUG)
 
@@ -120,6 +121,19 @@ function OneServer() {
           </li>
           <li>Send everyone the address on the server’s page.</li>
         </ol>
+        <Shot
+          src={`${PICTURES}/what-to-play.png`}
+          width={680}
+          height={340}
+          alt="The “What to play” question on the create page, with Survival picked, next to Creative, Hardcore and More ways to play. Under them: Cubepals picked Minecraft 26.2, the newest Bedrock friends can join. Players on Minecraft 1.9 or newer can join."
+          caption="Cubepals picks the Minecraft Bedrock friends can join."
+        />
+        <Shot
+          src={`${PICTURES}/name-it.png`}
+          width={680}
+          height={278}
+          alt="The “Name it” question with the server name Copper Cove typed in. Under it: Friends join at copper-cove.play.cubepals.com. The bar below says Survival, Minecraft 26.2, Europe, and Up to 5 players, and has the Create server button."
+        />
       </Part>
 
       <Part id="how-they-join" title="How your friends join">
@@ -128,6 +142,12 @@ function OneServer() {
           <strong>Servers</strong>, then <strong>Add Server</strong>, and type the address. Java friends open{' '}
           <strong>Multiplayer</strong>, then <strong>Add Server</strong>, and paste the same one.
         </p>
+        <Shot
+          src={`${PICTURES}/address.png`}
+          width={576}
+          height={234}
+          alt="A server’s page showing Copper Cove Online, its address copper-cove.play.cubepals.com with a Copy address button, and the lines: In Minecraft: Java Edition 1.9 or newer, open Multiplayer, then Add Server, and paste it. On a phone or tablet: Play, Servers, Add Server, and type the same address. Consoles can’t join."
+        />
         <p>Xbox, PlayStation and Switch can’t add a server, so they can’t join.</p>
       </Part>
 

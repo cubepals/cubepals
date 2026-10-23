@@ -2,10 +2,12 @@
 //
 // SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
 
-import { Frame, LANDING_METADATA, landingOf } from '../../landing/Landing'
+import { Frame, landingOf } from '../../landing/Landing'
+import { landingMetadata } from '../../landing/metadata'
 import { Phone } from '../../landing/phone/Phone'
+import { bedrockLive } from '../../lib/bedrock'
 
-export const metadata = LANDING_METADATA
+export const generateMetadata = () => landingMetadata(bedrockLive())
 
 /**
  * The landing page as a phone is sent it: its own short page and nothing of the film, so none of

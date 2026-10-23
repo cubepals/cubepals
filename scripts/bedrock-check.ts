@@ -494,8 +494,8 @@ try {
         const motd = await until('answered a Bedrock ping again', 60, () =>
           bedrockPing(`bedrock-check.${PLAY_DOMAIN}`),
         )
-        // Geyser answers pings before it has its first session ready, so a join gets three tries,
-        // half a minute apart, and the try that worked is reported.
+        // Bedrock reads up once the new Geyser has answered the relay. A join still gets three
+        // tries, half a minute apart, and the try that worked is reported.
         let again = await bedrockJoin(address(), ['--hold', '3', '--timeout', '120'], current)
         let tries = 1
         while (again.spawned !== 1 && tries < 3) {

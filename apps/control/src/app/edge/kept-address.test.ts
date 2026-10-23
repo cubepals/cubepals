@@ -14,6 +14,9 @@ import { eq } from 'drizzle-orm'
 import type { Slug } from '../../domain/server/slug.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 
+/** The addresses Cubepals keeps for Arcade. */
+const KEPT = ['sunset-valley', 'copper-cove', 'maple-hollow']
+
 describe.skipIf(!hasDatabase)('a kept address', () => {
   let h: Harness
 
@@ -27,8 +30,10 @@ describe.skipIf(!hasDatabase)('a kept address', () => {
 
   test('routes nowhere while no server has the slug it points at', async () => {
     const { routes } = await h.app.edge.routes()
-    expect(routes.filter((r) => r.hostname.startsWith('sunset-valley.'))).toEqual([])
-    expect(await h.app.edge.wake('sunset-valley.play.test')).toEqual({ outcome: 'denied', reason: 'unknown' })
+    for (const kept of KEPT) {
+      expect(routes.filter((r) => r.hostname.startsWith(`${kept}.`))).toEqual([])
+      expect(await h.app.edge.wake(`${kept}.play.test`)).toEqual({ outcome: 'denied', reason: 'unknown' })
+    }
   })
 
   test('routes, wakes and counts as the server it points at, under every play domain', async () => {
@@ -50,12 +55,13 @@ describe.skipIf(!hasDatabase)('a kept address', () => {
     if (arcade === undefined) throw new Error('Arcade has no route')
     expect(arcade.state).toBe('asleep')
     expect(arcade.aliasOf).toBeUndefined()
-    for (const domain of ['play.test', 'play.old.test'])
-      expect(asleep.find((r) => r.hostname === `sunset-valley.${domain}`)).toEqual({
-        ...arcade,
-        hostname: `sunset-valley.${domain}`,
-        aliasOf: 'arcade',
-      })
+    for (const kept of KEPT)
+      for (const domain of ['play.test', 'play.old.test'])
+        expect(asleep.find((r) => r.hostname === `${kept}.${domain}`)).toEqual({
+          ...arcade,
+          hostname: `${kept}.${domain}`,
+          aliasOf: 'arcade',
+        })
 
     // A join at it wakes Arcade, and is sent where a join at Arcade's own address is.
     const woken = await h.app.edge.wake('sunset-valley.play.test')
@@ -67,7 +73,8 @@ describe.skipIf(!hasDatabase)('a kept address', () => {
     })
     const running = (await h.app.edge.routes()).routes
     const destination = running.find((r) => r.hostname === 'arcade.play.test')?.destination
-    expect(running.find((r) => r.hostname === 'sunset-valley.play.test')?.destination).toBe(destination)
+    for (const kept of KEPT)
+      expect(running.find((r) => r.hostname === `${kept}.play.test`)?.destination).toBe(destination)
 
     // A player seen at it is on Arcade, and no other server is.
     const player = { name: 'Alex', uuid: '5f2c5d3a9b6e4f10a1b2c3d4e5f60718' }

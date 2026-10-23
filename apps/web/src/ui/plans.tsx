@@ -52,11 +52,15 @@ export function planPoints(plan: PublicPlan): string[] {
       : `Up to ${plan.maxServers} servers and ${plan.maxPlayers} players`,
     hoursPoint(plan),
     addOns(plan),
-    plan.downloads === 'history'
-      ? `Go back to any of your last ${plan.sessionsKept} sessions, and a weekly download`
-      : `Go back to any of your last ${plan.sessionsKept} sessions, and download your world`,
+    keptPoint(plan),
   ]
 }
+
+/** The sessions a plan keeps to go back to, and how its world is downloaded. */
+export const keptPoint = (plan: Pick<PublicPlan, 'downloads' | 'sessionsKept'>): string =>
+  plan.downloads === 'history'
+    ? `Go back to any of your last ${plan.sessionsKept} sessions, and a weekly download`
+    : `Go back to any of your last ${plan.sessionsKept} sessions, and download your world`
 
 /**
  * A plan's name inside a sentence: "Plus", or "the free trial" for the one whose hours come once,
@@ -72,7 +76,8 @@ function addOns(plan: PublicPlan): string {
   return plan.datapacks ? 'Plain Minecraft, with datapacks' : 'Plain Minecraft'
 }
 
-const hoursPoint = (plan: PublicPlan) =>
+/** A plan's hours of play, as the line its dashed explainer sits on. */
+export const hoursPoint = (plan: PublicPlan) =>
   plan.totalHours !== null
     ? `${plan.totalHours} hours of play, at most ${plan.includedHours} a day`
     : `${plan.includedHours} hours of play ${plan.per === 'day' ? 'every day' : 'each month'}${extraHourOf(plan) === null ? '' : `, then ${extraHourOf(plan)}¢ an hour`}`
@@ -185,7 +190,8 @@ export function PlayHours({
 }
 
 /** An amount as it is written: "$0", "$15", "$4.50". */
-const dollars = (cents: number): string => `$${cents % 100 === 0 ? cents / 100 : (cents / 100).toFixed(2)}`
+export const dollars = (cents: number): string =>
+  `$${cents % 100 === 0 ? cents / 100 : (cents / 100).toFixed(2)}`
 
 /**
  * The group a paid plan's price is shown split across: friends who play together on one server.
@@ -207,7 +213,7 @@ export function eachOf(
 /** A price as it is said: "$0", "$15 a month". */
 export const priceOf = (cents: number): string => (cents === 0 ? '$0' : `${dollars(cents)} a month`)
 
-/** One plan as the pricing page, the landing page and the account page all show it. */
+/** One plan as the account page shows it. The public pages have their own card (`plan-card.tsx`). */
 export function PlanCard({
   plan,
   current = false,
@@ -220,7 +226,7 @@ export function PlanCard({
   plan: PublicPlan
   /** Whether Bedrock is on, for the card's first line (`lib/bedrock.ts`). */
   bedrock?: boolean
-  /** The card is the dark one: the player's own plan on their account, a paid plan elsewhere. */
+  /** The card is the dark one: the player's own plan. */
   solid?: boolean
   /** Small print that belongs to this plan, under its details. */
   note?: ReactNode

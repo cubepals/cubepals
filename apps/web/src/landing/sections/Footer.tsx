@@ -25,6 +25,7 @@ export function Footer() {
           <div className={styles.footerGroup}>
             <p className={styles.groupName}>Cubepals</p>
             <Link href="/pricing">Pricing</Link>
+            <Link href="/gift">Gift Plus</Link>
             <Link href="/browse">Browse servers</Link>
             <Link href="/contact">Contact us</Link>
             <OutLink href={SOURCE_URL}>Source code</OutLink>

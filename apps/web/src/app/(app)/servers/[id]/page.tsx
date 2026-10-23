@@ -36,6 +36,7 @@ import {
   EmptyState,
   GetPack,
   ICON,
+  JavaAndBedrock,
   Note,
   PackBadge,
   PlayerFace,
@@ -135,6 +136,7 @@ function Overview({ server }: { server: ServerView }) {
               <Badge>{loaderWithBuild(server.loader, server.loaderVersion)}</Badge>
             )}
             <Badge>{server.playStyle === 'creative' ? 'Creative' : 'Survival'}</Badge>
+            {letsBedrockIn(server) && <JavaAndBedrock />}
           </div>
           {/* Where it runs is Blockly's business: the settings page has it for anyone who wants
               to move it. What an owner needs here is how many can play. */}

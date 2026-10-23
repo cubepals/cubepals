@@ -4,7 +4,7 @@
 
 /**
  * Names held back from players, end to end: brand names, names held for Cubepals' own servers,
- * addresses Cubepals keeps and offensive ones, as a player, an admin and an operator meet them, and what servers that already
+ * addresses Cubepals keeps, its example address and offensive ones, as a player, an admin and an operator meet them, and what servers that already
  * have one keep.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
@@ -152,25 +152,35 @@ describe.skipIf(!hasDatabase)('addresses Cubepals keeps', () => {
     await h.close()
   })
 
-  test('an address Cubepals keeps for its own server is taken for everyone, operators too', async () => {
-    const owner = await h.user('Steve', 'plus')
-    const admin: Actor = { kind: 'admin', userId: (await h.user('Admin')).userId }
-    expect(await h.app.servers.suggestAddress(owner, 'Sunset Valley')).toMatchObject({
-      slug: expect.stringMatching(/^sunset-valley-\d{4}$/),
-      available: true,
-    })
-    for (const actor of [owner, admin, operator])
-      expect(await h.app.servers.suggestAddress(actor, '', 'sunset-valley')).toMatchObject({
-        available: false,
+  /** Addresses Cubepals keeps for its own server, and its example address, by the name that suggests each. */
+  const HELD = [
+    ['Sunset Valley', 'sunset-valley'],
+    ['Copper Cove', 'copper-cove'],
+    ['Maple Hollow', 'maple-hollow'],
+    ['Your Server', 'your-server'],
+  ] as const
+
+  for (const [name, slug] of HELD)
+    test(`${slug}, kept for Cubepals' own server or its example, is taken for everyone, operators too`, async () => {
+      const owner = await h.user('Steve', 'plus')
+      const admin: Actor = { kind: 'admin', userId: (await h.user('Admin')).userId }
+      const numbered = new RegExp(`^${slug}-\\d{4}$`)
+      expect(await h.app.servers.suggestAddress(owner, name)).toMatchObject({
+        slug: expect.stringMatching(numbered),
+        available: true,
       })
-    expect(await refusal(h.create(owner, { name: 'Sunset Valley', slug: 'sunset-valley' }))).toBe(
-      'slug_taken: That address is taken — try adding a word.',
-    )
-    const made = await h.create(owner, { name: 'Sunset Valley' })
-    expect(made.slug).toMatch(/^sunset-valley-\d{4}$/)
-    for (const actor of [owner, admin, operator])
-      expect(await refusal(h.app.servers.changeAddress(actor, made.id, 'sunset-valley'))).toBe(
+      for (const actor of [owner, admin, operator])
+        expect(await h.app.servers.suggestAddress(actor, '', slug)).toMatchObject({
+          available: false,
+        })
+      expect(await refusal(h.create(owner, { name, slug }))).toBe(
         'slug_taken: That address is taken — try adding a word.',
       )
-  })
+      const made = await h.create(owner, { name })
+      expect(made.slug).toMatch(numbered)
+      for (const actor of [owner, admin, operator])
+        expect(await refusal(h.app.servers.changeAddress(actor, made.id, slug))).toBe(
+          'slug_taken: That address is taken — try adding a word.',
+        )
+    })
 })

@@ -15,12 +15,14 @@ import { inArray } from 'drizzle-orm'
 import { formatJoinAddress } from '../../minecraft/address.ts'
 import { loadControls } from '../accounts/persistence.ts'
 import { type Actor, authorize, runsThePlatform } from '../actor.ts'
+import type { DeploymentCapabilities } from '../capabilities.ts'
+import { takesBedrock } from '../compat/service.ts'
 import { shownStatus, shownStatuses } from '../edge/routed.ts'
 import { NotFound } from '../errors.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import { pictureOf } from '../server-icons/view.ts'
 import { findServer } from '../servers/persistence.ts'
-import { summariesOf } from '../servers/revision-reads.ts'
+import { loadRevisionFields, summariesOf } from '../servers/revision-reads.ts'
 import {
   allowlist,
   type DirectoryRow,
@@ -36,10 +38,13 @@ const PAGE = 24
 export class ListingQueries {
   readonly #db: Db
   readonly #addressing: PlayAddressing
+  /** Whether this deployment lets Bedrock players in at all. */
+  readonly #bedrock: boolean
 
-  constructor(deps: { db: Db; addressing: PlayAddressing }) {
+  constructor(deps: { db: Db; addressing: PlayAddressing; capabilities: DeploymentCapabilities }) {
     this.#db = deps.db
     this.#addressing = deps.addressing
+    this.#bedrock = (deps.capabilities.bedrock ?? null) !== null
   }
 
   /**
@@ -172,6 +177,20 @@ export class ListingQueries {
       row.revisionId === null
         ? null
         : ((await summariesOf(this.#db, [row.revisionId])).get(row.revisionId) ?? null)
+    const bedrock =
+      this.#bedrock &&
+      row.revisionId !== null &&
+      takesBedrock(
+        await loadRevisionFields(this.#db, row.revisionId, [
+          'gameVersion',
+          'loader',
+          'loaderVersion',
+          'mods',
+          'modpack',
+          'settings',
+        ]),
+        true,
+      )
     return {
       serverId: row.server.id,
       slug: row.server.slug,
@@ -187,6 +206,7 @@ export class ListingQueries {
       gameVersion: revision?.gameVersion ?? null,
       loader: revision?.loader ?? null,
       mods: revision?.modNames ?? [],
+      bedrock,
       reactions: {
         serverId: row.server.id,
         stars: row.stars,

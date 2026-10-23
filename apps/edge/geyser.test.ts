@@ -9,6 +9,7 @@ import { Supervised } from './geyser.ts'
 
 test('a child that exits is started again, its lines in the agent’s logs behind its name', async () => {
   const logged: string[] = []
+  let exits = 0
   const spy = spyOn(console, 'error').mockImplementation((...parts: unknown[]) => {
     logged.push(parts.join(' '))
   })
@@ -19,6 +20,7 @@ test('a child that exits is started again, its lines in the agent’s logs behin
     prefix: '[geyser]',
     firstWaitMs: 20,
     longestWaitMs: 40,
+    exited: () => exits++,
   })
   const running = child.run()
   while (child.restarts < 2) await Bun.sleep(20)
@@ -27,6 +29,8 @@ test('a child that exits is started again, its lines in the agent’s logs behin
   spy.mockRestore()
   expect(logged.filter((line) => line === '[geyser] hello').length).toBeGreaterThanOrEqual(2)
   expect(logged.some((line) => line.startsWith('[geyser] exited with 3'))).toBe(true)
+  // Told of each exit, so the relay can forget what that Geyser knew.
+  expect(exits).toBeGreaterThanOrEqual(2)
 })
 
 test('it is running while the child is, and stopping ends it for good', async () => {

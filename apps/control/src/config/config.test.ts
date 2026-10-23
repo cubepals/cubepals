@@ -388,6 +388,8 @@ describe('play addressing', () => {
   test('a kept address answers with the slug of the server it points at, under every play domain', () => {
     expect(addressing.slugFor('sunset-valley.play.example.gg')).toBe('arcade')
     expect(addressing.slugFor('Sunset-Valley.play.old.gg.')).toBe('arcade')
+    expect(addressing.slugFor('copper-cove.play.example.gg')).toBe('arcade')
+    expect(addressing.slugFor('Maple-Hollow.play.old.gg.')).toBe('arcade')
   })
 
   test('each hostname names the play domain it came through, primary or alias (§11)', () => {

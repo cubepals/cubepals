@@ -23,7 +23,8 @@
  *             Xbox user id it carries (a made-up one otherwise). With sign-in off the edge takes
  *             both as given, so a test can be a real gamertag that a server's lists know.
  * --hold      seconds to stay in the world once everyone is in (10), then everyone leaves cleanly.
- * --timeout   seconds to wait for a player to spawn (240, a cold wake included).
+ * --timeout   seconds to wait for a player to spawn (240, a cold wake included). A connection not
+ *             made within one attempt is tried again from a new socket until then.
  *
  * Offline login: there is no Xbox account here, so the edge must run with Xbox sign-in off
  * (BEDROCK_VALIDATE_LOGIN=false). Production keeps it on, and refuses these players.
@@ -82,6 +83,10 @@ function ensureRaknetBinding(): void {
 }
 ensureRaknetBinding()
 const { createClient } = await import('bedrock-protocol')
+// The package's types leave out Connecting, the status RakNet's connection moves a client to.
+const { ClientStatus } = require('bedrock-protocol/src/connection.js') as {
+  ClientStatus: { Disconnected: number }
+}
 
 /**
  * A UDP forwarder on this machine's loopback to an IPv6 address: bedrock-protocol's RakNet speaks
@@ -119,64 +124,87 @@ const clients: { disconnect: () => void }[] = []
 const told: { kicked: string | null; chat: string[] }[] = []
 let spawned = 0
 
+/**
+ * How long one RakNet connection attempt lasts: raknet-native sends twelve open requests half a
+ * second apart, then gives up without a word, and its client waits out the whole --timeout.
+ */
+const ATTEMPT_MS = 10_000
+
 function join1(index: number): Promise<void> {
   const n = index + Number(values.offset)
   const username = values.username ?? `bedrock${n}`
   const begun = Date.now()
+  const deadline = begun + Number(values.timeout) * 1000
   spawnMs[index] = null
   const heard = { kicked: null as string | null, chat: [] as string[] }
   told[index] = heard
   return new Promise((resolve) => {
-    const options = {
-      host: to.host,
-      port: to.port,
-      username,
-      offline: true,
-      raknetBackend: 'raknet-native' as const,
-      skipPing: true,
-      connectTimeout: Number(values.timeout) * 1000,
+    let ended = false
+    const end = () => {
+      ended = true
+      resolve()
     }
-    const client = createClient(options)
-    clients.push(client)
-    // The Login is built after the socket opens, from the client's own copy of the options, so
-    // naming the typed address now puts it in the ServerAddress without it being where the
-    // packets already go.
-    client.options.host = typedHost
-    client.options.port = Number(typedPort)
-    // Offline logins carry XUID 0, and Floodgate makes its UUID from the XUID.
-    if (client.profile)
-      client.profile.xuid = values.xuid === undefined ? 2535400000000000 + n : Number(values.xuid)
-    client.on('join', () => log(username, 'logged in'))
-    client.on('spawn', () => {
-      spawnMs[index] = Date.now() - begun
-      spawned++
-      log(username, `spawned after ${spawnMs[index]} ms (${spawned}/${count})`)
-      client.queue('text', {
-        type: 'chat',
-        needs_translation: false,
-        category: 'authored',
-        source_name: username,
-        xuid: '',
-        platform_chat_id: '',
-        filtered_message: '',
-        message: values.chat,
+    const attempt = () => {
+      const client = createClient({
+        host: to.host,
+        port: to.port,
+        username,
+        offline: true,
+        raknetBackend: 'raknet-native' as const,
+        skipPing: true,
+        connectTimeout: deadline - Date.now(),
       })
-      resolve()
-    })
-    client.on('text', (p: { message?: string }) => {
-      log(username, 'chat:', p.message)
-      heard.chat.push(p.message ?? '')
-    })
-    client.on('kick', (p: { message?: string }) => {
-      log(username, 'kicked:', JSON.stringify(p))
-      heard.kicked = p.message ?? JSON.stringify(p)
-      resolve()
-    })
-    client.on('error', (e: Error) => {
-      log(username, 'error:', e.message)
-      resolve()
-    })
-    setTimeout(resolve, Number(values.timeout) * 1000)
+      clients[index] = client
+      // The Login is built after the socket opens, from the client's own copy of the options, so
+      // naming the typed address now puts it in the ServerAddress without it being where the
+      // packets already go.
+      client.options.host = typedHost
+      client.options.port = Number(typedPort)
+      // Offline logins carry XUID 0, and Floodgate makes its UUID from the XUID.
+      if (client.profile)
+        client.profile.xuid = values.xuid === undefined ? 2535400000000000 + n : Number(values.xuid)
+      client.on('join', () => log(username, 'logged in'))
+      client.on('spawn', () => {
+        spawnMs[index] = Date.now() - begun
+        spawned++
+        log(username, `spawned after ${spawnMs[index]} ms (${spawned}/${count})`)
+        client.queue('text', {
+          type: 'chat',
+          needs_translation: false,
+          category: 'authored',
+          source_name: username,
+          xuid: '',
+          platform_chat_id: '',
+          filtered_message: '',
+          message: values.chat,
+        })
+        end()
+      })
+      client.on('text', (p: { message?: string }) => {
+        log(username, 'chat:', p.message)
+        heard.chat.push(p.message ?? '')
+      })
+      client.on('kick', (p: { message?: string }) => {
+        log(username, 'kicked:', JSON.stringify(p))
+        heard.kicked = p.message ?? JSON.stringify(p)
+        end()
+      })
+      client.on('error', (e: Error) => {
+        log(username, 'error:', e.message)
+        end()
+      })
+      // A path through the network can lose every datagram of one socket while another socket's
+      // get through, so an attempt that never connected is let go and a new socket tries again, as
+      // a player taps Join again.
+      setTimeout(() => {
+        if (ended || client.status !== ClientStatus.Disconnected || Date.now() + ATTEMPT_MS > deadline) return
+        log(username, `not connected after ${ATTEMPT_MS / 1000}s; trying again from a new socket`)
+        client.close()
+        attempt()
+      }, ATTEMPT_MS)
+    }
+    attempt()
+    setTimeout(end, deadline - Date.now())
   })
 }
 

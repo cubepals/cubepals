@@ -147,6 +147,11 @@ export interface HarnessOptions {
    * `curation.ingest`: no worker runs them, so nothing checks one behind a test's back.
    */
   curatedPacks?: readonly CuratedPack[]
+  /**
+   * How long a template's resolution is kept for previews. None by default: tests publish to the
+   * catalog as they go, and a preview answers from what it lists then.
+   */
+  templatesKeptMs?: number
   /** Blockly's own packs, checked the same way: only when a test asks. */
   ownPacks?: readonly OwnPack[]
   /**
@@ -202,9 +207,16 @@ class OfflineFileFormats extends LibraryFileFormats {
 }
 
 /** The settings a test's options decide: how long boots and wakes take, the room creates leave, official files and Stop cheaters' configuration. */
-const settingsFrom = ({ provider, room, officialServerFiles, stopCheatersProblem }: HarnessOptions) => ({
+const settingsFrom = ({
+  provider,
+  room,
   officialServerFiles,
   stopCheatersProblem,
+  templatesKeptMs,
+}: HarnessOptions) => ({
+  officialServerFiles,
+  stopCheatersProblem,
+  templatesKeptMs: templatesKeptMs ?? 0,
   bootTimeouts: provider?.bootTimeouts ?? { runningMs: 5_000, readyMs: 3_000, resumeMs: 1_000 },
   wakeWaitMs: provider?.wakeWaitMs ?? 5_000,
   ...(room === undefined ? {} : { room }),

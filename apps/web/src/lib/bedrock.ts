@@ -12,6 +12,6 @@
 /** Whether the public pages say Bedrock works: the deployment sets WEB_BEDROCK to `1`. */
 export const bedrockLive = (): boolean => process.env.WEB_BEDROCK === '1'
 
-/** The small print under the hero's button, after the trial's line. */
-export const heroSmallPrint = (live: boolean): string =>
-  live ? 'Java and Bedrock friends join the same server.' : 'Minecraft: Java Edition. Bedrock is coming soon.'
+/** The small print under the hero's button, after the trial's line: where Bedrock is off, that it is coming. */
+export const heroSmallPrint = (live: boolean): string | null =>
+  live ? null : 'Minecraft: Java Edition. Bedrock is coming soon.'

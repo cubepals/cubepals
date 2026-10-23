@@ -71,16 +71,23 @@ afterEach(() => {
  * A relay in front of a stand-in Geyser that answers any ping behind a header with `MCPE;Test`. With
  * `strict`, it behaves as Geyser measured: a source says whose it is with its first datagram, and
  * what it sends after that, a header again included, is read as the game's own, so a ping that
- * repeats the header is not answered.
+ * repeats the header is not answered. It forgets a source that sends nothing for `memoryMs`, and
+ * answers nothing while `down`.
  */
-async function relayed(options: Partial<RelayOptions> = {}, strict = false) {
-  const sources = new Set<number>()
+async function relayed(options: Partial<RelayOptions> = {}, strict = false, memoryMs = Infinity) {
+  const sources = new Map<number, number>()
+  const state = { down: false }
+  /** Whether strict Geyser reads a datagram: a header from a source it doesn't know, none from one it does. */
+  const reads = (port: number, headed: boolean): boolean => {
+    const heardAt = sources.get(port)
+    const known = heardAt !== undefined && Date.now() - heardAt < memoryMs
+    if (!known) sources.delete(port)
+    if (known || headed) sources.set(port, Date.now())
+    return headed !== known
+  }
   const geyser = await listener((socket, bytes, port) => {
     const header = readProxyHeader(bytes)
-    if (strict) {
-      if ((typeof header === 'object') === sources.has(port)) return
-      sources.add(port)
-    }
+    if (state.down || (strict && !reads(port, typeof header === 'object'))) return
     const rest = typeof header === 'object' ? bytes.subarray(header.next) : bytes
     if (rest[0] === 0x01) socket.send(pong('MCPE;Test'), port, '127.0.0.1')
     else if (rest[0] === 0x05) socket.send(Uint8Array.of(0x06), port, '127.0.0.1')
@@ -106,7 +113,7 @@ async function relayed(options: Partial<RelayOptions> = {}, strict = false) {
   )
   const player = await listener()
   closers.push(() => player.socket.close())
-  return { relay, geyser, player, port: publicPort, sources }
+  return { relay, geyser, player, port: publicPort, sources, state }
 }
 
 test('a ping is answered from the pong Geyser gave, with the time the ping carried', async () => {
@@ -169,13 +176,62 @@ test('a datagram that doesn’t open a connection makes no player, and an addres
 })
 
 test('a quiet player is dropped', async () => {
-  const { player, port, relay } = await relayed({ idleMs: 50, sweepMs: 30 })
+  const { player, port, relay } = await relayed({ idleMs: 150, sweepMs: 30 })
+  await Bun.sleep(100)
+  player.socket.send(openRequest(), port, '127.0.0.1')
+  await Bun.sleep(30)
+  expect(relay.players()).toBe(1)
+  await Bun.sleep(300)
+  expect(relay.players()).toBe(0)
+})
+
+/** How many times `player` has been answered an open request: Geyser's reply is 0x06. */
+const opened = (player: { heard: Heard[] }) => player.heard.filter((h) => h.bytes[0] === 0x06).length
+
+test('a player quiet for as long as Geyser keeps their header gets in when they open again', async () => {
+  // Geyser forgets the source at 200 ms; the sweep comes far too late to save them.
+  const { player, port } = await relayed({ idleMs: 150 }, true, 200)
   await Bun.sleep(100)
   player.socket.send(openRequest(), port, '127.0.0.1')
   await Bun.sleep(50)
-  expect(relay.players()).toBe(1)
-  await Bun.sleep(200)
+  expect(opened(player)).toBe(1)
+  // Geyser's replies come and go meanwhile; only what the player sends keeps their header.
+  await Bun.sleep(250)
+  for (let i = 0; i < 3; i++) {
+    player.socket.send(openRequest(), port, '127.0.0.1')
+    await Bun.sleep(30)
+  }
+  expect(opened(player)).toBeGreaterThanOrEqual(2)
+})
+
+test('after Geyser starts over, no player is made until it answers, and a returning one gets in', async () => {
+  const { player, port, relay, sources, state } = await relayed({ pongRefreshMs: 50 }, true)
+  await Bun.sleep(100)
+  player.socket.send(openRequest(), port, '127.0.0.1')
+  await Bun.sleep(50)
+  expect(opened(player)).toBe(1)
+
+  // Geyser exits, and is seen to after it last answered: the one that starts next knows nobody
+  // and isn't listening yet.
+  state.down = true
+  sources.clear()
+  await Bun.sleep(30)
+  relay.forget()
+  expect(relay.ready()).toBe(false)
   expect(relay.players()).toBe(0)
+  player.socket.send(ping(1), port, '127.0.0.1')
+  player.socket.send(openRequest(), port, '127.0.0.1')
+  await Bun.sleep(100)
+  // No pong from the Geyser that is gone, and no player whose header would be lost.
+  expect(player.heard.filter((h) => h.bytes[0] === 0x1c)).toHaveLength(0)
+  expect(relay.players()).toBe(0)
+
+  state.down = false
+  await Bun.sleep(200)
+  expect(relay.ready()).toBe(true)
+  player.socket.send(openRequest(), port, '127.0.0.1')
+  await Bun.sleep(50)
+  expect(opened(player)).toBe(2)
 })
 
 test('it is ready only while Geyser answers', async () => {

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The foot of the pages: who runs the service, every policy, Mojang's words and a small joke. The
+ * The foot of the pages: giving Plus, who runs the service, every policy, Mojang's words and a small joke. The
  * landing page builds its own from the same parts.
  */
 import Link from 'next/link'
@@ -56,7 +56,7 @@ export function NotBacked({ className }: { className?: string }) {
 
 /**
  * The foot of every page outside the landing page (which has its own, from the same parts): who
- * runs the service, every policy, and Mojang's words. A layout may put its own links first, as the
+ * runs the service, giving Plus, every policy, and Mojang's words. A layout may put its own links first, as the
  * public pages do with the guides.
  */
 export function SiteFooter({ children }: { children?: ReactNode }) {
@@ -67,7 +67,8 @@ export function SiteFooter({ children }: { children?: ReactNode }) {
           {children}
         </nav>
       )}
-      <nav className={styles.links} aria-label="Legal">
+      <nav className={styles.links} aria-label="More">
+        <Link href="/gift">Gift Plus</Link>
         <Link href="/contact">Contact</Link>
         <PolicyLinks />
       </nav>

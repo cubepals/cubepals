@@ -37,14 +37,14 @@ describe.skipIf(!hasDatabase)('owner notices', () => {
   test('an operator’s new address tells the owner once, after it is stored', async () => {
     const owner = await h.user('Maple')
     const made = await h.create(owner, { name: 'Maple Hollow', slug: 'maple-old' })
-    await h.app.notices.changeAddress(operator, made.id, 'maple-hollow')
+    await h.app.notices.changeAddress(operator, made.id, 'maple-grove')
     const to = await emailOf(owner.userId)
     const [notice, ...more] = noticesTo(to)
     expect(more).toEqual([])
     expect(notice?.subject).toBe('Your server has a new address')
     expect(notice?.text).toBe(
       [
-        'Your server “Maple Hollow” moved from maple-old.play.test to maple-hollow.play.test. Short addresses like “maple-old” are kept for Cubepals, so nobody mistakes a server for ours.',
+        'Your server “Maple Hollow” moved from maple-old.play.test to maple-grove.play.test. Short addresses like “maple-old” are kept for Cubepals, so nobody mistakes a server for ours.',
         '',
         'Your world and settings didn’t change. You can pick another address in your server’s settings.',
         `http://localhost:3000/servers/${made.id}`,
@@ -60,7 +60,7 @@ describe.skipIf(!hasDatabase)('owner notices', () => {
     expect(h.mail.to(to)).toHaveLength(1)
 
     // The same address again changes nothing, so says nothing.
-    await h.app.notices.changeAddress(operator, made.id, 'maple-hollow')
+    await h.app.notices.changeAddress(operator, made.id, 'maple-grove')
     expect(noticesTo(to)).toHaveLength(1)
   })
 

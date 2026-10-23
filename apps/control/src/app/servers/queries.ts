@@ -70,6 +70,7 @@ import type { PlayAddressing, RegionCatalog } from '../ports/platform.ts'
 import { hasDatapacks, isModded } from '../revisions/caps.ts'
 import { pictureOf } from '../server-icons/view.ts'
 import { loadPackChecks } from '../setups/persistence.ts'
+import { ResolvedTemplates } from '../setups/resolved-templates.ts'
 import { type SetupService, type SetupSource, sizeOf } from '../setups/service.ts'
 import { TEMPLATES } from '../setups/templates.ts'
 import { newJoins } from './new-server.ts'
@@ -110,6 +111,7 @@ export class ServerQueries {
   readonly #templateSizes = new Map<string, { tier: MemoryTier; from: string }>()
   #templatesSizedAt = 0
   #sizingTemplates: Promise<void> | null = null
+  readonly #templates: ResolvedTemplates
 
   constructor(deps: {
     db: Db
@@ -122,12 +124,14 @@ export class ServerQueries {
     curation: PackCuration
     /** The runtimes this deployment runs: a binding to another is foreign. */
     providers: readonly string[]
+    templatesKeptMs?: number | undefined
   }) {
     this.#db = deps.db
     this.#addressing = deps.addressing
     this.#regions = deps.regions
     this.#service = deps.service
     this.#setups = deps.setups
+    this.#templates = new ResolvedTemplates(deps.setups, deps.templatesKeptMs)
     this.#catalog = deps.catalog
     this.#packs = deps.packs
     this.#curation = deps.curation
@@ -372,7 +376,7 @@ export class ServerQueries {
       this.#sizingTemplates = Promise.all(
         TEMPLATES.map(async (template) => {
           // A template is the same setup for everyone, so nobody's account is asked about.
-          const resolved = await this.#setups
+          const resolved = await this.#templates
             .resolve({ kind: 'template', key: template.key }, null)
             .catch(() => null)
           if (resolved === null) return false
@@ -504,7 +508,7 @@ export class ServerQueries {
     /** The party the person picked, so the preview is the server they would get. */
     partySize: PartySize = '5',
   ): Promise<SetupPreview> {
-    const resolved = await this.#setups.resolve(from, actor)
+    const resolved = await this.#templates.resolve(from, actor)
     const standing = await loadStanding(this.#db, actor.userId)
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
     const size = sizeOf(partySize, resolved.tier)

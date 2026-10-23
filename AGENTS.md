@@ -28,6 +28,10 @@ Players know this product as **Cubepals**, at `cubepals.com`. **Blockly** is its
 
 Fraud and abuse tuning, costs and margins, competitors, pricing history, strategy and vendor trials never go in this repository, its commits, PRs or issues: code reads such numbers from private configuration, with a harmless default ([CLAUDE.md](CLAUDE.md)).
 
+## The website's runtime
+
+`next` and `@opennextjs/cloudflare` move together, only for a security fix or a feature the site needs, and merge only after the pull request's staging preview serves the site's pages ([CLAUDE.md](CLAUDE.md)).
+
 ## No accidental mentions
 
 Never put `@` before a name in a commit message or a PR body, not even inside backticks. Commits do not render markdown, and a squash merge copies the PR body into the commit, so `@s` becomes a mention of the GitHub user "s". Write "the s selector" or "the player" instead. In issues and comments, selectors, package scopes and emails go inside backticks closed on the same line.
