@@ -203,7 +203,7 @@ db('a refund voids a code nobody used, and ends time somebody redeemed', async (
   await h.app.billing.gifts.received(
     'local',
     order(unused.buyer.userId, {
-      externalOrderId: unused.row.externalOrderId,
+      externalOrderId: unused.row.externalOrderId ?? '',
       refundedCents: 1500,
       status: 'refunded',
     }),
@@ -217,7 +217,7 @@ db('a refund voids a code nobody used, and ends time somebody redeemed', async (
   await h.app.billing.gifts.received(
     'local',
     order(used.buyer.userId, {
-      externalOrderId: used.row.externalOrderId,
+      externalOrderId: used.row.externalOrderId ?? '',
       refundedCents: 1500,
       status: 'refunded',
     }),

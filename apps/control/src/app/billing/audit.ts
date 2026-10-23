@@ -114,20 +114,24 @@ function whilePaying(
   return entries
 }
 
-/** Entries about one account, written by `actor` from `source`. */
+/**
+ * Entries about one account, written by `actor` from `source`; or about one gift (`subjectType:
+ * gift`, its id for `userId`), for a gift a guest bought, which has no account to be about.
+ */
 export async function writeEntries(
   q: Queryable,
   userId: string,
   actor: string,
   source: BillingSource,
   entries: readonly AuditEntry[],
+  subjectType: 'account' | 'gift' = 'account',
 ): Promise<void> {
   if (entries.length === 0) return
   await q.insert(schema.auditLog).values(
     entries.map((entry) => ({
       actor,
       action: entry.action,
-      subjectType: 'account',
+      subjectType,
       subjectId: userId,
       data: { ...entry.data, source },
     })),

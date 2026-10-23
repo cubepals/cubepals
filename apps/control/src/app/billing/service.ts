@@ -97,6 +97,8 @@ export class BillingService {
   /** Subscriptions Blockly ends at the provider itself: a withdrawal, a renewal left unpaid. */
   readonly #ending: SubscriptionEnding
   readonly #webOrigin: string
+  /** GIFTS_BY_EMAIL: a gift a guest bought is kept, with no account (`recordOrder`). */
+  readonly #giftsByEmail: boolean
   /** Where the web app's account page is, for the provider to send people back to. */
   readonly #returnUrl: string
 
@@ -108,8 +110,10 @@ export class BillingService {
     jobs: JobQueue
     mailer: Mailer
     webOrigin: string
+    giftsByEmail?: boolean
   }) {
     this.#db = deps.db
+    this.#giftsByEmail = deps.giftsByEmail ?? false
     this.#policy = deps.policy
     this.#caps = deps.capabilities
     this.#accounts = deps.accounts
@@ -302,9 +306,9 @@ export class BillingService {
     const event = await billing.receive(body, headers)
     if (event === null) return 'ignored'
     if (event.kind === 'order') {
-      const kept = await recordOrder(this.#db, billing.provider, event.order)
-      if (kept) await this.#orderKept(billing.provider, event.order)
-      return kept ? 'recorded' : 'ignored'
+      const kept = await recordOrder(this.#db, billing.provider, event.order, this.#giftsByEmail)
+      if (kept !== null) await this.#orderKept(billing.provider, kept)
+      return kept !== null ? 'recorded' : 'ignored'
     }
     await this.syncSubscription(event.state, 'system:billing', 'webhook')
     return 'synced'
@@ -315,6 +319,8 @@ export class BillingService {
    * a renewal, a year or a gift paid for, a month withdrawn, and the account's limits read again.
    */
   async #orderKept(provider: string, order: BillingOrder): Promise<void> {
+    // A gift a guest bought is the gift's alone: no account to settle, renew, refund or limit.
+    if (order.userId === null) return this.gifts.received(provider, order)
     await this.#overpaid.balancePaid(order)
     await this.#overpaid.paidTwice(order)
     await this.chipIns.record(provider, order)
@@ -594,7 +600,7 @@ export class BillingService {
       }
       return null
     }
-    if (await recordOrder(this.#db, billing.provider, fresh.order))
+    if ((await recordOrder(this.#db, billing.provider, fresh.order, this.#giftsByEmail)) !== null)
       await this.#db.transaction((tx) => settleWith(tx, billing.provider, fresh.order))
     return fresh
   }

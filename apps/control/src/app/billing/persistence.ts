@@ -352,15 +352,27 @@ export async function settleOtherSubscriptions(
  * An order as the provider reports it, kept by its id: a redelivered or later event about the same
  * order (made, then paid, then refunded) updates it. A refund only ever grows, so a paid delivery the
  * provider sends again after the refund never takes it back. An order for someone this deployment
- * never made isn't its revenue; false then, and nothing is kept.
+ * never made isn't its revenue. An order for a gift made before its checkout (`giftId`) is its
+ * buyer's (`byGift`): a guest's is kept with no account, and only where `guests` (GIFTS_BY_EMAIL)
+ * says so. Answers the order as kept, or null when nothing is.
  */
-export async function recordOrder(q: Queryable, provider: string, order: BillingOrder): Promise<boolean> {
-  if (order.userId === null) return false
-  const [known] = await q
-    .select({ id: schema.users.id })
-    .from(schema.users)
-    .where(eq(schema.users.id, order.userId))
-  if (known === undefined) return false
+export async function recordOrder(
+  q: Queryable,
+  provider: string,
+  delivered: BillingOrder,
+  guests = false,
+): Promise<BillingOrder | null> {
+  const order = await byGift(q, delivered)
+  if (order === null) return null
+  if (order.userId === null) {
+    if (!guests || !order.giftId) return null
+  } else {
+    const [known] = await q
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.id, order.userId))
+    if (known === undefined) return null
+  }
   const row = {
     userId: order.userId,
     planKey: order.planKey,
@@ -375,6 +387,7 @@ export async function recordOrder(q: Queryable, provider: string, order: Billing
     status: order.status,
     extraCents: order.extraCents,
     externalSubscriptionId: order.externalSubscriptionId,
+    giftId: order.giftId ?? null,
     orderedAt: order.orderedAt,
   }
   await q
@@ -394,7 +407,22 @@ export async function recordOrder(q: Queryable, provider: string, order: Billing
         updatedAt: new Date(),
       },
     })
-  return true
+  return order
+}
+
+/**
+ * The order as the gift it names says it (`giftId`): paid by the gift's buyer, an account or a
+ * guest, whatever account the provider filed it under. Polar files a guest's order under the
+ * customer with their email, which is an account's when one has it, and says nothing of who
+ * bought the gift. An order naming a gift this deployment never made is not its order: null.
+ */
+async function byGift(q: Queryable, order: BillingOrder): Promise<BillingOrder | null> {
+  if (!order.giftId) return order
+  const [gift] = await q
+    .select({ buyerId: schema.planGifts.buyerId })
+    .from(schema.planGifts)
+    .where(eq(schema.planGifts.id, order.giftId))
+  return gift === undefined ? null : { ...order, userId: gift.buyerId }
 }
 
 const orders = schema.billingOrders
@@ -459,7 +487,10 @@ export async function mayBeOwed(
         or(ended, lt(orders.orderedAt, new Date(now.getTime() - PAST_DUE_GRACE_MS))),
       ),
     )
-  return rows.map(({ old, ended, ...row }) => ({ ...row, ended: ended && !old }))
+  // Only a guest's gift has no account, and a gift carries no extra play.
+  return rows.flatMap(({ old, ended, userId, ...row }) =>
+    userId === null ? [] : [{ ...row, userId, ended: ended && !old }],
+  )
 }
 
 /** The provider said again that this order is unpaid and won't be: it is owed from `now`. */
@@ -562,7 +593,7 @@ export async function untoldAbout(q: Queryable): Promise<string[]> {
         or(isNull(orders.failureToldAt), isNull(orders.owingToldAt)),
       ),
     )
-  return rows.map((row) => row.userId)
+  return rows.flatMap((row) => (row.userId === null ? [] : [row.userId]))
 }
 
 /**

@@ -398,7 +398,8 @@ export class RuntimeEconomics {
     }
     let unattributed = 0
     for (const order of orders) {
-      const owned = (byOwner.get(order.userId) ?? []).filter(
+      // A gift a guest bought has no account, and so no servers.
+      const owned = (order.userId === null ? [] : (byOwner.get(order.userId) ?? [])).filter(
         (s) => liveById.get(s.serverId)?.status !== 'deleted',
       )
       const revenue = Number(order.revenue)

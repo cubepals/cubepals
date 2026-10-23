@@ -110,6 +110,8 @@ export interface HarnessOptions {
   /** Or made from the harness's database, for an adapter that keeps its record there. */
   capabilities?: DeploymentCapabilities | ((db: Db) => DeploymentCapabilities)
   mirrorCatalogArtifacts?: boolean
+  /** GIFTS_BY_EMAIL; off unless a test turns it on. */
+  giftsByEmail?: boolean
   /** The files placed on servers flagged official, and why there are none when there should be. */
   officialServerFiles?: ControlPlaneSettings['officialServerFiles']
   /** Why STOP_CHEATERS gives the public default, as production's configuration would say. */
@@ -337,6 +339,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       mirrorCatalogArtifacts: options.mirrorCatalogArtifacts ?? false,
       adminEmails: options.adminEmails ?? [],
       webOrigin: 'http://localhost:3000',
+      giftsByEmail: options.giftsByEmail ?? false,
       curatedPacks: options.curatedPacks ?? [],
       ownPacks: options.ownPacks ?? [],
       ...settingsFrom(options),

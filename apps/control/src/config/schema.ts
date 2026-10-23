@@ -470,6 +470,8 @@ export const DeploymentConfig = z.object({
    * each for the log. Null on every deployment.
    */
   local: z.object({ notes: z.array(z.string()) }).nullable(),
+  /** GIFTS_BY_EMAIL: gifts emailed to the person they are for, bought with or without an account. */
+  giftsByEmail: z.boolean(),
   /**
    * Private tuning, installed at startup (`app/tuning.ts`). Required in production; elsewhere,
    * unset is the harmless default.
