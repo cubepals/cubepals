@@ -142,6 +142,7 @@ export const GUIDES: readonly Guide[] = [
     published: '2026-10-23',
     modified: '2026-10-23',
     approved: true,
+    bedrock: true,
   },
 ]
 
