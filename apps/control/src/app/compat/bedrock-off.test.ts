@@ -75,5 +75,9 @@ describe.skipIf(!hasDatabase)('a deployment with no Bedrock key', () => {
     // The settings page and the invite box read these two: nothing to say.
     const view = await h.app.queries.get(owner, server.id)
     expect(view.bedrock).toBe(false)
+    // Nor do its public page and its directory card.
+    await h.app.listings.setPublic(owner, server.id, true)
+    expect((await h.app.sharingQueries.page(server.slug, null))?.bedrock).toBe(false)
+    expect((await h.app.listingQueries.detail(server.id)).bedrock).toBe(false)
   }, 60_000)
 })

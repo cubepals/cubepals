@@ -16,7 +16,7 @@ import { loadControls, loadStanding } from '../accounts/persistence.ts'
 import type { Actor } from '../actor.ts'
 import { offersChipIn } from '../billing/chip-ins.ts'
 import type { DeploymentCapabilities } from '../capabilities.ts'
-import { joinsNow } from '../compat/service.ts'
+import { joinsNow, takesBedrock } from '../compat/service.ts'
 import { shownStatus } from '../edge/routed.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { tally } from '../guestbook/persistence.ts'
@@ -58,6 +58,8 @@ export class SharingQueries {
   readonly #limits: Limits
   /** Whether this deployment takes payments, which chipping in needs. */
   readonly #billing: boolean
+  /** Whether this deployment lets Bedrock players in at all. */
+  readonly #bedrock: boolean
 
   constructor(deps: {
     db: Db
@@ -70,6 +72,7 @@ export class SharingQueries {
     capabilities: DeploymentCapabilities
   }) {
     this.#billing = deps.capabilities.billing !== null
+    this.#bedrock = (deps.capabilities.bedrock ?? null) !== null
     this.#db = deps.db
     this.#limits = deps.limits
     this.#addressing = deps.addressing
@@ -245,6 +248,7 @@ export class SharingQueries {
       gameVersion: revision.gameVersion,
       loader: revision.loader,
       needs: await this.#needs(revision, awake, applied),
+      bedrock: takesBedrock(revision, this.#bedrock),
       mods: revision.mods.filter((mod) => mod.origin === 'user').map((mod) => mod.name),
       whitelistOnly: access.record.whitelistEnabledPending ?? access.record.whitelistEnabled,
       invited: how.invited,

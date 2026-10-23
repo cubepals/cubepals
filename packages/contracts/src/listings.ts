@@ -38,6 +38,8 @@ export interface ListingCardView {
   loader: Loader | null
   /** Vanilla, or mods Blockly vouches for. */
   mods: string[]
+  /** Bedrock players join it now, on phones and tablets too. Absent from older answers. */
+  bedrock?: boolean
   /** Its stars and notes, with whether the person reading starred it. */
   reactions: ReactionsView
   /** Cubepals runs it itself: an admin's mark, which can't be bought or claimed. */
