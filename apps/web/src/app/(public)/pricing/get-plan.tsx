@@ -5,19 +5,17 @@
 'use client'
 
 /**
- * A plan's button on the pricing page, and the same plan for a year paid at once where it is sold
- * that way, in the card's details. Signed in, each goes to the checkout page (the agreement, then paying) and
- * back to their servers; signed out, it makes the account first, and the account page carries on
- * to the checkout page. On the plan the free trial starts, the first button starts the trial,
- * with what it is and the plan itself under it (ui/plan-card.tsx).
+ * A plan's card on the pricing page (ui/plan-card.tsx), with its links: the month, and the year
+ * paid at once where it is sold that way. Signed in, each goes to the checkout page (the
+ * agreement, then paying) and back to their servers; signed out, it makes the account first, and
+ * the account page carries on to the checkout page. Start free makes the account first too.
  */
 
-import Link from 'next/link'
-import { dollars } from '../../../legal/figures'
+import type { PublicPlan } from '@blockly/contracts'
 import { checkoutHref } from '../../../lib/checkout'
 import { behindSignUp, useSignedIn } from '../../../lib/viewer'
-import { PlanButtons } from '../../../ui/plan-card'
-import { ctaMark, planMark } from '../steps'
+import { OfferCard } from '../../../ui/plan-card'
+import { ctaMark, planMark, seenMark } from '../steps'
 
 /** Where a paid plan's checkout is: signed out, the account is made first, and carries on there. */
 const checkoutOf = (signedIn: boolean, plan: string, term: 'month' | 'year') =>
@@ -25,45 +23,29 @@ const checkoutOf = (signedIn: boolean, plan: string, term: 'month' | 'year') =>
     ? checkoutHref({ plan, term, reason: 'pricing', next: '/servers' })
     : behindSignUp(false, `/account?get=${plan}${term === 'year' ? '&term=year' : ''}&reason=pricing`)
 
-export function GetPlan({
+/** A paid plan's card on the pricing page, with its links for whoever is reading. */
+export function PricingCard({
   plan,
-  name,
-  available = true,
-  startsFree,
+  plans,
+  trial,
+  bedrock,
 }: {
-  plan: string
-  name: string
-  /** False for a paid plan nothing sells here yet. */
-  available?: boolean
-  /** On the plan the free trial starts: what the trial is, "20 hours free, no card". */
-  startsFree?: string | undefined
+  plan: PublicPlan
+  plans: readonly PublicPlan[]
+  /** The free trial, on the plan it starts. */
+  trial?: PublicPlan | undefined
+  bedrock: boolean
 }) {
   const signedIn = useSignedIn()
   return (
-    <PlanButtons
-      name={name}
-      available={available}
-      get={checkoutOf(signedIn, plan, 'month')}
-      getMark={planMark(plan, 'month')}
-      start={
-        startsFree
-          ? {
-              href: behindSignUp(signedIn, '/servers/new'),
-              mark: ctaMark('pricing_create'),
-              free: startsFree,
-            }
-          : undefined
-      }
+    <OfferCard
+      plan={plan}
+      plans={plans}
+      trial={trial}
+      bedrock={bedrock}
+      mark={seenMark(`plan_${plan.key}`)}
+      start={{ href: behindSignUp(signedIn, '/servers/new'), mark: ctaMark('pricing_create') }}
+      checkout={(term) => ({ href: checkoutOf(signedIn, plan.key, term), mark: planMark(plan.key, term) })}
     />
-  )
-}
-
-/** A plan for a year paid at once, as a line in its card's details. */
-export function GetYear({ plan, yearlyCents }: { plan: string; yearlyCents: number }) {
-  const signedIn = useSignedIn()
-  return (
-    <Link href={checkoutOf(signedIn, plan, 'year')} {...planMark(plan, 'year')}>
-      Or {dollars(yearlyCents)} for a year, paid once
-    </Link>
   )
 }

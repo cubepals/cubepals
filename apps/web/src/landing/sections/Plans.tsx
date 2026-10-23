@@ -8,9 +8,9 @@
 import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
 import { ctaMark, planMark, seenMark } from '../../app/(public)/steps'
-import { OfferCard, PlanButtons, PlanCards } from '../../ui/plan-card'
-import { cardsOf, freeSaid, plansSaid } from '../../ui/plan-details'
-import { eachOf, forSale, priceOf } from '../../ui/plans'
+import { OfferCard, PlanCards } from '../../ui/plan-card'
+import { cardsOf, plansSaid } from '../../ui/plan-details'
+import { eachOf, priceOf } from '../../ui/plans'
 import { Section } from '../kit'
 import styles from './surface.module.css'
 
@@ -43,7 +43,7 @@ export function Plans({
   plans: PublicPlan[]
   create: string
   /** Where a paid plan's button leads, by plan key. */
-  getPlan: (key: string) => string
+  getPlan: (key: string, term?: 'month' | 'year') => string
   /** Whether Bedrock is on (`lib/bedrock.ts`). */
   bedrock: boolean
 }) {
@@ -76,7 +76,7 @@ export function PlansSaid({
 }: {
   plans: PublicPlan[]
   create: string
-  getPlan: (key: string) => string
+  getPlan: (key: string, term?: 'month' | 'year') => string
   bedrock: boolean
 }) {
   const { trial, cards, starter } = cardsOf(plans)
@@ -84,29 +84,18 @@ export function PlansSaid({
     <>
       <h2 className="bl-h2">{plansSaid(plans)}</h2>
       <PlanCards className={styles.cards}>
-        {cards.map((plan) => {
-          const startsTrial = plan === starter ? trial : undefined
-          return (
-            <OfferCard
-              key={plan.key}
-              plan={plan}
-              plans={plans}
-              trial={startsTrial}
-              bedrock={bedrock}
-              mark={seenMark(`plan_${plan.key}`)}
-            >
-              <PlanButtons
-                name={plan.name}
-                available={forSale(plan)}
-                get={getPlan(plan.key)}
-                getMark={planMark(plan.key, 'month')}
-                start={
-                  startsTrial && { href: create, mark: ctaMark('plans_create'), free: freeSaid(startsTrial) }
-                }
-              />
-            </OfferCard>
-          )
-        })}
+        {cards.map((plan) => (
+          <OfferCard
+            key={plan.key}
+            plan={plan}
+            plans={plans}
+            trial={plan === starter ? trial : undefined}
+            bedrock={bedrock}
+            mark={seenMark(`plan_${plan.key}`)}
+            start={{ href: create, mark: ctaMark('plans_create') }}
+            checkout={(term) => ({ href: getPlan(plan.key, term), mark: planMark(plan.key, term) })}
+          />
+        ))}
       </PlanCards>
       <p className={`bl-body ${styles.hours}`}>
         <Link href="/pricing" className={styles.more}>

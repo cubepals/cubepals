@@ -5,15 +5,15 @@
 import type { PublicPlan } from '@blockly/contracts'
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { digits, pixel } from '../../../landing/fonts'
 import { bedrockLive } from '../../../lib/bedrock'
 import { publicPlans } from '../../../lib/plans'
 import { canonicalOrigin, pageMetadata } from '../../../lib/site'
 import { appSchema, JsonLd } from '../../../lib/structured-data'
-import { cardsOf, forSale, freeSaid, plansSaid, priceOf } from '../../../ui'
-import { OfferCard, PlanCards } from '../../../ui/plan-card'
+import { cardsOf, plansSaid, priceOf } from '../../../ui'
+import { PlanCards } from '../../../ui/plan-card'
 import { guideHref, publishedGuides } from '../guides'
-import { seenMark } from '../steps'
-import { GetPlan, GetYear } from './get-plan'
+import { PricingCard } from './get-plan'
 import { byKind, Questions, yearSaid } from './questions'
 
 /** The title and description say the plans' own numbers, or nothing about them when the table can't be read. */
@@ -53,32 +53,16 @@ export default async function PricingPage() {
           {plansSaid(plans)}.
         </h1>
       </header>
-      <PlanCards>
-        {cards.map((plan) => {
-          const startsTrial = plan === starter ? trial : undefined
-          return (
-            <OfferCard
-              key={plan.key}
-              plan={plan}
-              plans={plans}
-              trial={startsTrial}
-              bedrock={bedrock}
-              mark={seenMark(`plan_${plan.key}`)}
-              year={
-                plan.yearlyPriceCents && forSale(plan) ? (
-                  <GetYear plan={plan.key} yearlyCents={plan.yearlyPriceCents} />
-                ) : undefined
-              }
-            >
-              <GetPlan
-                plan={plan.key}
-                name={plan.name}
-                available={forSale(plan)}
-                startsFree={startsTrial && freeSaid(startsTrial)}
-              />
-            </OfferCard>
-          )
-        })}
+      <PlanCards className={`${pixel.variable} ${digits.variable}`}>
+        {cards.map((plan) => (
+          <PricingCard
+            key={plan.key}
+            plan={plan}
+            plans={plans}
+            trial={plan === starter ? trial : undefined}
+            bedrock={bedrock}
+          />
+        ))}
       </PlanCards>
       <p className="type-body" style={{ color: 'var(--ink-muted)' }}>
         Hours only count while your server is running, and it sleeps when nobody’s on. Joining wakes it,

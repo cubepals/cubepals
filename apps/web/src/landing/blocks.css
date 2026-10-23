@@ -5,10 +5,12 @@
  */
 
 /*
- * The landing page's frames and buttons, loaded on every page (app/globals.css), so a page outside
- * the landing can set them too: the plan cards on /pricing do. Their tokens are the landing's ink,
- * paper and torch (landing.css), set on `.bl` and on anything marked `.bl-print`, which stays ink
- * on paper in either theme. The rest of the landing's look stays in landing.css.
+ * The landing page's frames, buttons, dithered edges and game face, loaded on every page
+ * (app/globals.css), so a page outside the landing can set them too: the plan cards on /pricing
+ * do. Their tokens are the landing's ink, paper and torch, set on `.bl` and on anything marked
+ * `.bl-print`, which stays ink on paper in either theme. The game face's fonts come from
+ * landing/fonts.ts, on `.bl` and on the plan cards. The rest of the landing's look stays in
+ * landing.css.
  */
 
 .bl,
@@ -28,6 +30,18 @@
   --on-fg: var(--paper);
 
   --display: var(--font-geologica), var(--font-figtree), system-ui, sans-serif;
+  /* The digits' face comes first and holds nothing but digits, so only they are taken from it. */
+  --game: var(--font-digits), var(--font-pixel), var(--font-plex-mono), ui-monospace, monospace;
+}
+
+/* The game's voice: what Minecraft itself would show. */
+.bl-game {
+  font-family: var(--game);
+  font-variation-settings: normal;
+  font-weight: 400;
+  font-size: 1rem;
+  line-height: 1.25;
+  letter-spacing: 0;
 }
 
 /* ─── Blocks: frames and buttons, with stepped corners ──────────────────────────────────────── */
@@ -205,6 +219,21 @@
   color: var(--ink);
   --btn-fill: var(--torch);
   --btn-shadow: var(--ink);
+}
+
+/* A dithered edge: where one ground gives way to the next, two rows of a checker of
+   two-pixel squares, as the chunk is printed. It is drawn in --dither-ink, ink unless set. */
+.bl-dither {
+  --dither-cell: calc(var(--px) * 2);
+  height: calc(var(--dither-cell) * 2);
+  background:
+    conic-gradient(
+      var(--dither-ink, var(--ink)) 90deg,
+      transparent 90deg 180deg,
+      var(--dither-ink, var(--ink)) 180deg 270deg,
+      transparent 270deg
+    )
+    0 0 / calc(var(--dither-cell) * 2) calc(var(--dither-cell) * 2);
 }
 
 /* Someone who asked for less motion gets a button that goes down at once. */

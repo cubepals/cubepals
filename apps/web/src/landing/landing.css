@@ -77,8 +77,6 @@
      does the print that stands in until the canvas has drawn. */
   --hero-x: calc(75.4vw - var(--hero-in));
 
-  /* The digits' face comes first and holds nothing but digits, so only they are taken from it. */
-  --game: var(--font-digits), var(--font-pixel), var(--font-plex-mono), ui-monospace, monospace;
   --machine: var(--font-plex-mono), ui-monospace, Menlo, monospace;
 
   position: relative;
@@ -669,15 +667,6 @@
   will-change: transform;
 }
 
-/* The game's voice: what Minecraft itself would show. */
-.bl-game {
-  font-family: var(--game);
-  font-variation-settings: normal;
-  font-weight: 400;
-  font-size: 1rem;
-  line-height: 1.25;
-  letter-spacing: 0;
-}
 /* The machine's voice: names, flags, log lines. Below ground only. */
 .bl-mono {
   font-family: var(--machine);

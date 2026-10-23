@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
 
 /**
- * The landing's plan cards: one to each paid plan, Core starting with the free trial, a few lines
- * of what you get on each, and the hours and the rest in details that open in place.
+ * The landing's plan cards: one to each paid plan, Core starting with the free trial. Each opens
+ * with the plan as a server in the multiplayer list, its offer and its button; then a few lines of
+ * what you get, the hours and the rest in details that open in place, and one more way to buy it.
  */
 import { describe, expect, test } from 'bun:test'
 import type { PublicPlan } from '@blockly/contracts'
@@ -63,7 +64,12 @@ const PLANS = [free, core, plus]
 
 const landing = (bedrock: boolean) =>
   renderToStaticMarkup(
-    createElement(PlansSaid, { plans: PLANS, create: '/servers/new', getPlan: () => '/checkout', bedrock }),
+    createElement(PlansSaid, {
+      plans: PLANS,
+      create: '/servers/new',
+      getPlan: (key: string, term = 'month') => `/checkout/${key}/${term}`,
+      bedrock,
+    }),
   )
 /** The cards one by one, as what people read: the markup's tags stripped, split at each card. */
 const cards = (html: string) =>
@@ -71,23 +77,24 @@ const cards = (html: string) =>
     .split('<section')
     .slice(1)
     .map((card) => card.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '))
-/** The first card's opening tag and markup, as written. */
-const coreTag = (html: string) => html.split('<section')[1] ?? ''
+/** The cards one by one, as written. */
+const markup = (html: string) => html.split('<section').slice(1)
 /** A card's face: what it says before its details open. */
-const face = (card: string) => card.replace(/See everything in .*?(Start free|Get Plus)/, '$1')
+const face = (card: string) => card.split('See everything in')[0] ?? ''
 
 describe('the landing’s plan cards', () => {
   const html = landing(true)
   const [coreCard = '', plusCard = ''] = cards(html)
+  const [coreHtml = '', plusHtml = ''] = markup(html)
 
   test('two cards, Core and Plus: the trial is how Core starts', () => {
     expect(cards(html)).toHaveLength(2)
     expect(html).toContain('aria-label="Core"')
     expect(html).toContain('aria-label="Plus"')
     expect(html).not.toContain('aria-label="Free trial"')
-    expect(coreCard).toContain('$9.99 a month')
-    expect(coreCard).toMatch(/Start free 20 hours free, no card Get Core/)
-    expect(plusCard).toContain('Get Plus')
+    expect(coreCard).toContain('20 hours free , no card Start free')
+    expect(coreCard).toContain('Then $9.99 a month, when you want to keep playing.')
+    expect(plusCard).toContain('$25 a month Get Plus')
     expect(plusCard).not.toContain('Start free')
   })
 
@@ -99,34 +106,52 @@ describe('the landing’s plan cards', () => {
     expect(plusTag).toContain('data-paid')
   })
 
-  test('Start free is the ink block and Get Plus the lit one, at each card’s foot', () => {
-    expect(html).toMatch(/<a [^>]*class="bl-btn [^"]*"[^>]*>Start free<\/a>/)
-    expect(html).toMatch(/<a [^>]*class="bl-btn bl-btn--lit [^"]*"[^>]*>Get Plus<\/a>/)
-    expect(coreTag(html)).not.toContain('bl-btn--lit')
+  test('each card opens with the plan as a server in the list', () => {
+    expect(face(coreCard)).toContain('Core Plain Minecraft Java and Bedrock, one address 0/5')
+    expect(face(plusCard)).toContain('Plus Mods and modpacks Everything in Core, and more 0/100')
+    expect(coreHtml).toContain('src="/server-icons/grass.svg"')
+  })
+
+  test('Start free is the block on Core, Get Plus the lit one, each as wide as its panel', () => {
+    expect(coreHtml).toMatch(
+      /<a [^>]*class="bl-btn bl-btn--lg [^"]*"[^>]*href="\/servers\/new"[^>]*>Start free<\/a>/,
+    )
+    expect(plusHtml).toMatch(
+      /<a [^>]*class="bl-btn bl-btn--lg bl-btn--lit [^"]*"[^>]*href="\/checkout\/plus\/month"[^>]*>Get Plus<\/a>/,
+    )
+    expect(coreHtml).not.toContain('bl-btn--lit')
+  })
+
+  test('the foot: Core now on Core, a year on Plus', () => {
+    expect(coreCard.trim()).toEndWith('Ready to keep it? Get Core now')
+    expect(coreHtml).toMatch(/href="\/checkout\/core\/month"[^>]*>Get Core now</)
+    expect(plusCard.trim()).toMatch(/Want a year\? \$250, paid once/)
+    expect(plusHtml).toMatch(/href="\/checkout\/plus\/year"[^>]*>\$250, paid once</)
   })
 
   test('the heading says Core starts free and Plus adds mods', () => {
     expect(html).toContain('Core starts free, and Plus adds mods')
   })
 
-  test('each card’s face says what you get, with no hours', () => {
-    for (const line of [
-      'You and 4 friends',
-      'Java and Bedrock friends on one server',
-      'Sleeps when nobody’s on, wakes when someone joins',
-      'Backups, and your world to download',
-    ])
-      expect(face(coreCard)).toContain(line)
+  test('each card’s face says what you get, a picture to each line, with no hours', () => {
+    expect(face(coreCard)).toContain(
+      'You and 4 friends Java and Bedrock friends on one server Sleeps when nobody’s on, wakes when someone joins Backups, and your world to download',
+    )
     expect(face(plusCard)).toContain(
-      'Up to 100 players Mods, plugins, modpacks and datapacks Up to 3 servers Get Plus',
+      'Everything in Core, and mods Up to 100 players Mods, plugins, modpacks and datapacks Up to 3 servers',
     )
     expect(face(plusCard)).not.toContain('sessions')
+    expect(coreHtml.match(/<li class="type-body"><svg/g)).toHaveLength(4)
+    expect(plusHtml.match(/<li class="type-body"><svg/g)).toHaveLength(3)
     expect(face(coreCard)).not.toMatch(/\d+ hours of play/)
     expect(face(plusCard)).not.toMatch(/hours/)
   })
 
-  test('Core promises Bedrock friends only where Bedrock is on', () => {
-    expect(landing(false)).not.toContain('Bedrock')
+  test('Bedrock is promised only where it is on', () => {
+    const off = landing(false)
+    expect(off).not.toContain('Bedrock')
+    expect(cards(off)[0]).toContain('Core Plain Minecraft 0/5')
+    expect(off.match(/<li class="type-body"><svg/g)).toHaveLength(6)
   })
 
   test('the details hold the hours, the trial, the rules and the prices', () => {
@@ -134,19 +159,17 @@ describe('the landing’s plan cards', () => {
     expect(coreCard).toContain('40 hours of play each month, then 25¢ an hour')
     expect(coreCard).toContain('Starts with a free trial: 20 hours of play, at most 2 a day , no card')
     expect(coreCard).toContain('Hours count only while your server is awake, not for each player')
+    expect(coreCard).toContain('Plain Minecraft: vanilla or Paper')
     expect(coreCard).toContain('$2 each, shared by five friends')
     expect(plusCard).toContain('See everything in Plus')
     expect(plusCard).toContain('120 hours of play each month')
-    expect(plusCard).toContain('counts two hours for each hour it runs')
     expect(plusCard).toContain('Go back to any of your last 14 sessions')
-    expect(plusCard).toContain('Or $250 for a year, paid once')
+    expect(plusCard).toContain('counts two hours for each hour it runs')
     expect(plusCard).toContain('$5 each, shared by five friends')
-    expect(html.match(/<details/g)).toHaveLength(2)
-    // Plain Minecraft is said on Core's face, and what it runs in its details.
-    expect(face(coreCard)).toContain('Plain Minecraft with your friends')
-    expect(coreCard).toContain('Plain Minecraft: vanilla or Paper')
-    expect(coreCard.match(/Plain Minecraft/g)).toHaveLength(2)
+    // The year is said once, at the card's foot.
+    expect(plusCard.match(/\$250/g)).toHaveLength(1)
     expect(plusCard).not.toMatch(/vanilla|Paper/)
+    expect(html.match(/<details/g)).toHaveLength(2)
     // The hours keep their dashed-line explainer.
     expect(html).toContain('bk-tip')
   })

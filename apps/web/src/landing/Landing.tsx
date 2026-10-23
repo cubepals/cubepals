@@ -45,8 +45,8 @@ export interface Landed {
   /** Where "Create a server" leads. */
   create: string
   plans: PublicPlan[]
-  /** Where a paid plan's button leads, by plan key. */
-  getPlan: (key: string) => string
+  /** Where a paid plan's button leads, by plan key, for a month or a year. */
+  getPlan: (key: string, term?: 'month' | 'year') => string
   /** Cubepals' own Arcade as anyone can see it, or null unless it is known to be awake or asleep. */
   arcade: PublicStatus | null
   /** Whether the pages say Bedrock friends can join (lib/bedrock.ts). */
@@ -84,8 +84,8 @@ export async function landingOf(
   const create = signedIn ? '/servers/new' : withSource('/sign-up', source)
   // Kept five minutes: one reading serves everyone who lands in that time.
   const [plans, arcade] = await Promise.all([publicPlans(300), arcadeNow()])
-  const getPlan = (key: string) => {
-    const account = `/account?get=${key}&reason=pricing`
+  const getPlan = (key: string, term: 'month' | 'year' = 'month') => {
+    const account = `/account?get=${key}${term === 'year' ? '&term=year' : ''}&reason=pricing`
     return signedIn ? account : withSource(`/sign-up?next=${encodeURIComponent(account)}`, source)
   }
   return { signedIn, create, plans, getPlan, arcade, bedrock: bedrockLive() }

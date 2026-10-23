@@ -8,7 +8,6 @@
  * is how the first paid plan starts. Not for the account page, whose cards list a plan's points.
  */
 import type { PublicPlan } from '@blockly/contracts'
-import { ChevronDown } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { dollars, eachOf, forSale, hoursPoint, keptPoint, PlanPoint, priceOf } from './plans'
 
@@ -30,9 +29,25 @@ export function plansSaid(plans: readonly PublicPlan[]): string {
   return plus ? `${first}, and ${plus.name} adds mods` : first
 }
 
-/** The line beside the button that starts the trial: "20 hours free, no card". */
-export const freeSaid = (trial: Pick<PublicPlan, 'totalHours'>): string =>
-  trial.totalHours ? `${trial.totalHours} hours free, no card` : 'Free to start, no card'
+/** The line over the button that starts the trial, in its two parts: "20 hours free", ", no card". */
+export const freeSaid = (trial: Pick<PublicPlan, 'totalHours'>): [string, string] => [
+  trial.totalHours ? `${trial.totalHours} hours free` : 'Free to start',
+  ', no card',
+]
+
+/**
+ * A paid plan's message as the multiplayer list would show it, in two lines: what it plays, and
+ * who joins or what it adds. Java and Bedrock together is said only where Bedrock is on.
+ */
+export function serverMessage(
+  plan: PublicPlan,
+  plans: readonly PublicPlan[],
+  bedrock: boolean,
+): [string, string?] {
+  const before = cardsOf(plans).cards.find((other) => other !== plan && !other.mods)
+  if (plan.mods) return ['Mods and modpacks', before ? `Everything in ${before.name}, and more` : undefined]
+  return ['Plain Minecraft', bedrock ? 'Java and Bedrock, one address' : undefined]
+}
 
 /** A paid card's first line: who it is for, or what it adds to the plan before it. */
 export function offerPitch(plan: PublicPlan, plans: readonly PublicPlan[]): string {
@@ -41,22 +56,28 @@ export function offerPitch(plan: PublicPlan, plans: readonly PublicPlan[]): stri
   return 'Plain Minecraft with your friends'
 }
 
+/** What a line on a card is about, which picks its picture. */
+export type PointKind = 'friends' | 'bridge' | 'moon' | 'chest' | 'crowd' | 'anvil' | 'servers'
+
 /**
  * What you get on a plan, in a few short lines, with no hours: those are in its details, with the
  * sessions it keeps.
  */
-export function offerPoints(plan: PublicPlan, bedrock: boolean): string[] {
+export function offerPoints(plan: PublicPlan, bedrock: boolean): { said: string; kind: PointKind }[] {
   if (plan.mods)
     return [
-      `Up to ${plan.maxPlayers} players`,
-      plan.datapacks ? 'Mods, plugins, modpacks and datapacks' : 'Mods, plugins and modpacks',
-      plan.maxServers === 1 ? '1 server' : `Up to ${plan.maxServers} servers`,
+      { said: `Up to ${plan.maxPlayers} players`, kind: 'crowd' },
+      {
+        said: plan.datapacks ? 'Mods, plugins, modpacks and datapacks' : 'Mods, plugins and modpacks',
+        kind: 'anvil',
+      },
+      { said: plan.maxServers === 1 ? '1 server' : `Up to ${plan.maxServers} servers`, kind: 'servers' },
     ]
   return [
-    plan.maxPlayers > 1 ? `You and ${plan.maxPlayers - 1} friends` : 'Just you',
-    ...(bedrock ? ['Java and Bedrock friends on one server'] : []),
-    'Sleeps when nobody’s on, wakes when someone joins',
-    'Backups, and your world to download',
+    { said: plan.maxPlayers > 1 ? `You and ${plan.maxPlayers - 1} friends` : 'Just you', kind: 'friends' },
+    ...(bedrock ? [{ said: 'Java and Bedrock friends on one server', kind: 'bridge' as const }] : []),
+    { said: 'Sleeps when nobody’s on, wakes when someone joins', kind: 'moon' },
+    { said: 'Backups, and your world to download', kind: 'chest' },
   ]
 }
 
@@ -72,13 +93,16 @@ export function PlanDetails({
   plan,
   trial,
   year,
+  marker,
   className = '',
 }: {
   plan: PublicPlan
   /** The free trial, on the plan it starts. */
   trial?: PublicPlan | undefined
-  /** The year's line as a link to buy it, where the page has one; otherwise it is said. */
-  year?: ReactNode
+  /** The year's line as a link to buy it, where the page has one; otherwise it is said. False: the card says it elsewhere. */
+  year?: ReactNode | false
+  /** What turns as the details open, after the summary's words. */
+  marker: ReactNode
   className?: string
 }) {
   const shared = eachOf(plan)
@@ -86,7 +110,7 @@ export function PlanDetails({
     <details className={`bk-plan-more ${className}`}>
       <summary>
         See everything in {plan.name}
-        <ChevronDown size={16} strokeWidth={2.25} aria-hidden />
+        {marker}
       </summary>
       <ul className="bk-plan-more__list">
         <li>
@@ -100,7 +124,7 @@ export function PlanDetails({
         <li>Hours count only while your server is awake, not for each player</li>
         <li>{keptPoint(plan)}</li>
         <li>{plan.mods ? LARGE_SERVERS : 'Plain Minecraft: vanilla or Paper'}</li>
-        {plan.yearlyPriceCents ? (
+        {plan.yearlyPriceCents && year !== false ? (
           <li>{year ?? `Or ${dollars(plan.yearlyPriceCents)} for a year, paid once`}</li>
         ) : null}
         {shared && (
