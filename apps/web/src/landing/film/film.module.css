@@ -175,7 +175,8 @@
   inset-block-start: 72px;
   inset-inline-start: calc(var(--gutter) + var(--rail));
   z-index: 4;
-  width: var(--hero-w);
+  /* As wide as the chunk leaves them (landing.css). */
+  width: var(--hero-words);
 }
 /* What the page is, in the words people search for: small and quiet over the headline. */
 .first .kicker {

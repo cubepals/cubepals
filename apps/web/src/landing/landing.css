@@ -46,36 +46,49 @@
   /* The first screen's size, one curve for all of it. The headline is as large as the width and the
      height let it be, and it stops growing at 100px only on screens that can't use more: the words
      under it (film.module.css) and where the chunk stands follow it. Below 1536px wide the chunk is
-     where it always was; past that it comes in toward the words, a share of the room left over. */
+     where it always was, unless the words would reach it; past that it comes in toward the words, a
+     share of the room left over. */
   --hero-h: min(5.4vw, 10.5vh);
   --hero-w: max(min(46vw, 40rem), calc(var(--hero-h) * 6.4));
   /* Where the words end, as far as they are written. */
   --hero-r: calc(var(--gutter) + var(--rail) + var(--hero-w) * 0.9);
-  /* How wide the chunk is. It is as tall as the screen's own 0.8 up to 1920px wide; past that it
-     grows with the width until the room left over is the same on either side of it (a margin of
-     6% of the width), so the camera holds fewer blocks and the print is scaled the same. */
+  /* How wide the chunk is with room to spare. It is as tall as the screen's own 0.8 up to 1920px
+     wide; past that it grows with the width until the room left over is the same on either side of
+     it (a margin of 6% of the width), so the camera holds fewer blocks and the print is scaled the
+     same. */
   --hero-c0: calc(100svh * 0.8);
-  --hero-c: calc(
+  --hero-free-c: calc(
     var(--hero-c0) +
     max(0px, min(100vw - var(--hero-r) - 12vw - var(--hero-c0), 100vw - 1920px))
   );
   /* What is left between the words and the screen's right edge, and the share of it that goes
      between the words and the chunk: 0.4, and half of it once the chunk has grown to fit. */
-  --hero-left: calc(100vw - var(--hero-r) - var(--hero-c));
+  --hero-left: calc(100vw - var(--hero-r) - var(--hero-free-c));
   --hero-gap: calc(var(--hero-left) * 0.4 + clamp(0px, (100vw - 1920px) * 0.2, var(--hero-left) * 0.1));
   /* The chunk's middle as the camera holds it sits a little right of what is drawn of it (the
      house leans left), so past 1920px it is held that much further right to even the margins. */
   --hero-mid: calc(
     var(--hero-r) +
     var(--hero-gap) +
-    var(--hero-c) *
+    var(--hero-free-c) *
     0.5 +
-    clamp(0px, (100vw - 1920px) * 0.1, var(--hero-c) * 0.035)
+    clamp(0px, (100vw - 1920px) * 0.1, var(--hero-free-c) * 0.035)
   );
   --hero-in: min(25.4vw, max(0px, min(calc(75.4vw - var(--hero-mid)), calc((100vw - 1536px) * 0.6))));
-  /* Where across the screen the chunk's middle is held: the camera reads it (views.ts), and so
-     does the print that stands in until the canvas has drawn. */
-  --hero-x: calc(75.4vw - var(--hero-in));
+  /* Where across the screen the chunk's middle is with room to spare. */
+  --hero-free-x: calc(75.4vw - var(--hero-in));
+  /* The words never run onto the chunk. What is drawn of it starts 0.543 of its width left of its
+     middle, and a gutter clear of that the words stop: they wrap shorter, down to the headline in
+     four lines as a large screen sets it ("the address." is 5.6em, and its halo). On a screen too
+     narrow or too tall for even that, the chunk is drawn smaller to fill what is left up to the
+     right edge, its middle moves right with it, and it stands on the screen's foot (`.bl-first`). */
+  --hero-room: calc(var(--hero-free-x) - var(--hero-free-c) * 0.543 - var(--gutter) * 2 - var(--rail));
+  --hero-words: clamp(calc(max(3rem, var(--hero-h)) * 5.8), var(--hero-room), var(--hero-w));
+  --hero-ends: calc(var(--gutter) * 2 + var(--rail) + var(--hero-words));
+  /* How wide the chunk is, and where across the screen its middle is held: the camera reads both
+     (views.ts), and so does the print that stands in until the canvas has drawn. */
+  --hero-c: min(var(--hero-free-c), 100vw - var(--hero-ends));
+  --hero-x: max(var(--hero-free-x), var(--hero-ends) + var(--hero-c) * 0.543);
 
   --machine: var(--font-plex-mono), ui-monospace, Menlo, monospace;
 
@@ -382,8 +395,9 @@ html:has(.bl)::-webkit-scrollbar {
 @media (min-width: 1024px) {
   .bl-first {
     position: absolute;
-    /* Scaled with the chunk, about the place the camera holds (drop 0.202, Film.tsx). */
-    top: calc(0.202 * (100svh - var(--hero-c) / 0.8));
+    /* Scaled with the chunk, about the place the camera holds (drop 0.202, Film.tsx); drawn
+       smaller than the screen it stands on its foot, so the column still runs off it (views.ts). */
+    top: max(0.202 * (100svh - var(--hero-c) / 0.8), 100svh - var(--hero-c) / 0.8);
     left: var(--hero-x);
     display: block;
     width: auto;

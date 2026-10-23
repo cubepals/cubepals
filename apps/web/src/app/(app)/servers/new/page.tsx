@@ -18,7 +18,6 @@ import { AlertTriangle, ArrowLeft } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 import {
   type CSSProperties,
-  Fragment,
   type ReactNode,
   type SubmitEvent,
   Suspense,
@@ -551,10 +550,9 @@ function CreateServer() {
             <span className={styles.barMeta}>
               {summary.map((part, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: the parts keep their order
-                <Fragment key={i}>
-                  {i > 0 && ' · '}
+                <span key={i} className={styles.barPart}>
                   {part}
-                </Fragment>
+                </span>
               ))}
             </span>
           )}

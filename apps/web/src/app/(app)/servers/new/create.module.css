@@ -331,11 +331,16 @@
 
 /* ─── The bar ────────────────────────────────────────────────────────────────────────────── */
 
+/* Nothing in the bar is cut short: it is the last look at what is being made. What it says wraps
+   onto more lines, and where the bar is too narrow for the button beside the words, the button
+   takes a line of its own under them. */
 .bar {
   position: sticky;
   inset-block-end: var(--space-16);
   z-index: 2;
+  container-type: inline-size;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-12);
   padding: var(--space-12);
@@ -366,11 +371,17 @@
   flex: 1;
   min-inline-size: 0;
 }
+.bar > button {
+  flex: none;
+}
+@container (inline-size < 30rem) {
+  .bar > button {
+    flex: 1 1 100%;
+  }
+}
 .barName {
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .barName[data-empty] {
   color: var(--ink-inverse-muted);
@@ -378,13 +389,30 @@
 .bar[data-failed] .barName {
   color: var(--ink);
 }
+/* Each part of the line stays whole where it fits and moves down a line where it doesn't, with
+   its dot after it, so a line never starts with one. The release, the chip and the region sit on
+   the line's middle, as the words beside them do. */
 .barMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 0.35em;
+  row-gap: 2px;
   font-size: 14px;
   line-height: 20px;
   color: var(--ink-inverse-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.barPart {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.barPart:not(:last-child)::after {
+  content: "·" / "";
+  margin-inline-start: 0.35em;
+}
+.barPart > :is(select, button, [data-editions]) {
+  max-inline-size: 100%;
+  vertical-align: middle;
 }
 /* The release, where someone may pick another: the bar's own words, underlined to say so, and
    the site's chevron in the bar's light ink rather than the browser's arrow. */
@@ -397,6 +425,8 @@
   border-block-end: 1px dashed currentColor;
   border-radius: 0;
   padding: 0 20px 0 0;
+  /* As wide as the release shown, not the longest one offered, which would run off a phone. */
+  field-sizing: content;
   cursor: pointer;
 }
 .barVersion:focus-visible {
@@ -418,7 +448,7 @@
   border-block-end: 1px dashed currentColor;
   border-radius: 0;
   padding: 0;
-  vertical-align: bottom;
+  text-align: start;
   cursor: pointer;
 }
 .barRegion:focus-visible {
@@ -531,16 +561,6 @@
   .part {
     padding: var(--space-16);
     border-radius: var(--radius-lg);
-  }
-  .bar {
-    flex-wrap: wrap;
-  }
-  .bar > button {
-    flex: 1 1 100%;
-  }
-  /* The button has a line of its own here, so what is being made gets the room to say it all. */
-  .barMeta {
-    white-space: normal;
   }
 }
 
