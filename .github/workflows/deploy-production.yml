@@ -1,0 +1,111 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+name: Deploy production
+
+# Production deployed from GitHub's machine, so no deploy depends on one person's disk
+# (docs/production.md § Deploy from GitHub). `apply` takes a nightly that passed on staging through
+# `bun scripts/production.ts apply`; the rollbacks put back what the last deploy changed. The
+# values are production.env and config.auto.tfvars.json, taken from the encrypted bundle in the
+# private records repository with the age key this environment holds; nothing else of it is opened.
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: What to do
+        type: choice
+        options:
+          - apply
+          - rollback
+          - rollback website
+          - rollback fly
+        default: apply
+      version:
+        description: The nightly to deploy (v…-nightly.…); empty takes the newest. Only for apply.
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+# One deploy at a time; a second waits rather than deploying under the first.
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: "Production: ${{ inputs.command }}"
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 90
+    steps:
+      # DEPLOY_GITHUB_TOKEN pushes the `production` branch (workflows included), makes the release,
+      # sets the Database dump workflow's secrets and reads the private records.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.DEPLOY_GITHUB_TOKEN }}
+      - name: The commit to deploy
+        if: inputs.command == 'apply'
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          tag="$VERSION"
+          [ -n "$tag" ] || tag=$(git tag --list '*-nightly.*' --sort=-v:refname | head -n 1)
+          case "$tag" in
+            *-nightly.*) ;;
+            *) echo "\"$tag\" isn't a nightly. Production takes only a commit a nightly passed on staging."; exit 1 ;;
+          esac
+          git checkout --quiet --detach "refs/tags/$tag"
+          echo "Deploying $tag, $(git rev-parse --short HEAD)."
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
+        with:
+          version: 0.4.111
+      # The release ships only `flyctl`; the scripts call it `fly`, as its installer names it.
+      - run: ln -s flyctl "$(dirname "$(command -v flyctl)")/fly" && fly version
+      - name: Terraform and age
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/terraform.zip" https://releases.hashicorp.com/terraform/1.17.0/terraform_1.17.0_linux_amd64.zip
+          echo "c168cab7c637a8769fdb90089ddd19de701bc6ff8aca64dc2e2185fe46f59f67  $RUNNER_TEMP/terraform.zip" | sha256sum -c -
+          sudo unzip -oq "$RUNNER_TEMP/terraform.zip" terraform -d /usr/local/bin
+          sudo apt-get update -qq && sudo apt-get install -y -qq age
+          terraform version && age --version
+      - run: bun install --frozen-lockfile
+      - name: Production's values, from the private records
+        env:
+          AGE_SECRET_KEY: ${{ secrets.AGE_SECRET_KEY }}
+          RECORDS_TOKEN: ${{ secrets.DEPLOY_GITHUB_TOKEN }}
+        run: |
+          umask 077
+          records="$RUNNER_TEMP/records"
+          git clone --quiet --depth 1 --filter=blob:none --sparse \
+            "https://x-access-token:$RECORDS_TOKEN@github.com/cubepals/cubepals-internal" "$records"
+          git -C "$records" sparse-checkout set ops/secrets
+          printf '%s\n' "$AGE_SECRET_KEY" > "$RUNNER_TEMP/age.key"
+          AGE_KEY_FILE="$RUNNER_TEMP/age.key" sh "$records/ops/secrets/secrets-pack.sh" unpack \
+            "$records/ops/secrets/cubepals-secrets.tar.age" . \
+            local/production/production.env \
+            infra/terraform/environments/production/config.auto.tfvars.json
+          rm -rf "$RUNNER_TEMP/age.key" "$records"
+      # Terraform shows its plan and asks; starting this workflow is the yes.
+      - name: Deploy
+        env:
+          GH_TOKEN: ${{ secrets.DEPLOY_GITHUB_TOKEN }}
+          COMMAND: ${{ inputs.command }}
+        run: |
+          if [ "$COMMAND" = apply ]; then
+            echo yes | bun scripts/production.ts apply
+          else
+            # shellcheck disable=SC2086 # "rollback website" is the command and its argument.
+            bun scripts/production.ts $COMMAND
+          fi
+      - name: Ask production for its pages
+        run: bun scripts/site-check.ts https://cubepals.com 180
+      - name: Leave no value behind
+        if: always()
+        run: rm -f local/production/production.env local/production/backend.hcl infra/terraform/environments/production/config.auto.tfvars.json

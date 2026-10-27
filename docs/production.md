@@ -198,6 +198,35 @@ it is and says so. Name the apps instead:
 bun scripts/production.ts rollback fly control realtime edge
 ```
 
+## Deploy from GitHub
+
+Once production exists, it deploys from the **Deploy production** workflow
+(`.github/workflows/deploy-production.yml`) on GitHub's machine, so no deploy depends on one
+person's disk: Actions → Deploy production → Run workflow. `apply` deploys a nightly, the newest
+or the one named in `version`, exactly as `bun scripts/production.ts apply` does from a checkout;
+`rollback`, `rollback website` and `rollback fly` are the rollbacks of [Going back](#going-back).
+It ends by asking production for its pages. One runs at a time.
+
+```sh
+gh workflow run deploy-production.yml -f command=apply             # the newest nightly
+gh workflow run deploy-production.yml -f command=apply -f version=v0.1.110-nightly.20261028.120
+gh workflow run deploy-production.yml -f command=rollback
+gh run watch
+```
+
+It takes `local/production/production.env` and `config.auto.tfvars.json` out of the encrypted
+bundle in the private records repository (`ops/secrets`), and nothing else of it. A value changes
+there: unpack the bundle, edit, pack it again and commit. A value changed only on one machine is
+lost the next time production deploys. The repository's `production` environment holds the
+workflow's two secrets:
+
+| Secret | What it is |
+|---|---|
+| `AGE_SECRET_KEY` | The age key the bundle is encrypted to: the line that starts `AGE-SECRET-KEY-` |
+| `DEPLOY_GITHUB_TOKEN` | A fine-grained token. On this repository: Contents, Workflows, Environments and Secrets, read and write; Actions, read. On the private records: Contents, read |
+
+An agent runs it as well when a maintainer asks for a deploy ([AGENTS.md](../AGENTS.md#production)).
+
 ## 4. Check it
 
 1. `dig +short rt.cubepals.com` gives one IPv4 address and `dig +short AAAA rt.cubepals.com`

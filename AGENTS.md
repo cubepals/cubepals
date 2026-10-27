@@ -82,6 +82,15 @@ A change isn't done when its PR is green. It is done when the runs it starts on 
 - **After a merge, look at the Actions page,** not only the PR's checks: `gh run list -R cubepals/<repo> -L 30`. Scheduled runs (the nightly, the weekly fleet run) fail without a PR to show it.
 - **A failure outside the code is still a failure.** A registry's rate limit or an outage gets a fix (a mirror, a retry), not a rerun until it passes.
 
+## Production
+
+Production deploys from the **Deploy production** workflow, on GitHub's machine ([docs/production.md](docs/production.md#deploy-from-github)). An agent deploys it itself when a maintainer asks for a deploy: it runs the workflow and sees it through, rather than handing the button back.
+
+- **Only a nightly.** `apply` takes a commit a nightly passed on staging: the newest, unless one is named. `gh workflow run deploy-production.yml -f command=apply`, then `gh run watch`.
+- **See it through.** Watch the run to the end, ask production for `/`, `/pricing`, `/sign-in` and `/api/health`, and say what went out.
+- **Back first, cause after.** If production fails after a deploy, run the workflow's `rollback` at once, then find the cause.
+- **Values live in the private records,** in the encrypted bundle the workflow opens. A value changed anywhere else is lost; change it there. Never print one.
+
 ## Staging
 
 Staging runs on Fly in the `blockly-staging` org, and it stays. When nobody is testing, its machines are stopped, not destroyed.
