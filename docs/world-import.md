@@ -71,9 +71,9 @@ the game keeps its saves, with the player's own system first and a button to cop
 
 ## How it is sent
 
-- **A folder** is sent as an uncompressed tar the browser composes as a `Blob` of headers and the
-  files' own `File` slices. Nothing is read into memory, the size is known before the upload
-  starts, and region files are compressed already, so gzip would add work for little.
+- **A folder** is sent as a zip that `client-zip` streams from the files as they are read, stored
+  without compression: region files are compressed already. Its size is known before the upload
+  starts (`predictLength`), and nothing is held in memory whole.
 - **A file** is sent as it is.
 - **Before anything is sent**, the browser looks at the listing (a folder's entries, a zip's
   central directory) and answers at once for a Bedrock save, no `level.dat`, several worlds, or a
@@ -81,6 +81,27 @@ the game keeps its saves, with the player's own system first and a button to cop
   for speed, not trust.
 - **Large files** go up in parts through the archive store's multipart upload
   (`s3-archive-store.ts`); a part that fails is sent again, not the whole file.
+
+## Libraries
+
+The formats and services here are taken from libraries and the services' own APIs, behind the
+existing ports ([dependency-audit.md](dependency-audit.md)). Blockly's own code is the Minecraft
+layout and the decisions.
+
+| Work                                          | Library or service                                               |
+| --------------------------------------------- | ---------------------------------------------------------------- |
+| Reading uploaded zips, strictly               | `@zip.js/zip.js`, through `PackArchives` (`pack-archives.ts`)    |
+| A zip's listing in the browser, before upload | `@zip.js/zip.js`, reading the central directory of the `File`    |
+| A folder as a zip, in the browser             | `client-zip`, new, audited as dependency-audit.md says           |
+| Reading and writing tarballs                  | `tar` (node-tar), as `readTarball` and `filterTarball` use it    |
+| `level.dat` and player files                  | `prismarine-nbt`, read and written                               |
+| `server.properties`                           | `dot-properties`, through `FileFormats.decode`                   |
+| A Minecraft name's account                    | Mojang's profile API, through `PlayerProfiles`                   |
+| An offline-mode player's UUID                 | `offlineUuid` (`app/access/identity.ts`)                         |
+| Which mod a jar is                            | Modrinth's `version_files` lookup by hash (`filesByHash`)       |
+| Upload in parts                               | S3 multipart upload, through the archive store                   |
+
+Region files are copied as they are and never decoded, so no chunk format is read.
 
 ## How Blockly reads it
 
