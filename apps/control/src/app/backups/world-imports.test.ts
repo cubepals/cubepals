@@ -8,13 +8,15 @@
  * Paper server's folder whose Nether and End sit beside its world. Region files stand in as text:
  * nothing reads them, and what is checked is that they arrive where the server reads them.
  */
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { schema } from '@blockly/db'
+import { eq } from 'drizzle-orm'
 import { LibraryFileFormats } from '../../infra/formats/file-formats.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
@@ -140,6 +142,23 @@ describe.skipIf(!hasDatabase)('a single-player save', () => {
   }, 120_000)
 })
 
+describe.skipIf(!hasDatabase)('a single-player save whose host has a file of their own already', () => {
+  test('keeps that file as it was, and says so', async () => {
+    const { owner, id } = await server('Kai')
+    const kai = normalizeUuid((await h.profiles.byName('Kai'))?.uuid ?? '')
+    const files = {
+      ...(await save('Kai World/', true)),
+      [`Kai World/playerdata/${kai}.dat`]: await readFile(PLAYER),
+    }
+    const asked = await bringWorld(h, owner, id, zipBytes(files), { fileName: 'Kai World.zip' })
+    await h.app.backups.imports.answer(owner, id, asked.importId, { player: 'Kai' })
+    const ready = await untilRead(h, owner, id, asked.importId)
+    expect(ready).toMatchObject({ status: 'ready' })
+    if (ready.status !== 'ready') return
+    expect(ready.notes).toContain('Kai already had a player file in the world, which stays as it was.')
+  }, 120_000)
+})
+
 describe.skipIf(!hasDatabase)('a saves folder', () => {
   test('a saves folder of several: its owner chooses which', async () => {
     const { owner, id } = await server('Sam')
@@ -188,5 +207,50 @@ describe.skipIf(!hasDatabase)('a server’s folder', () => {
       'world-2_nether',
       'world-2_the_end',
     ])
+  }, 120_000)
+
+  test('the same folder as a hand-made .tar.gz is written again too: only a Cubepals download is kept as it came', async () => {
+    const { owner, id } = await server('Rowan')
+    const folder = await mkdtemp(join(scratch, 'server-'))
+    for (const [path, bytes] of Object.entries(await serverFolder('paper-1.21.11'))) {
+      await run('mkdir', ['-p', join(folder, path, '..')])
+      await writeFile(join(folder, path), bytes)
+    }
+    await run('tar', ['-czf', join(scratch, 'server.tar.gz'), '-C', folder, '.'])
+    const view = await bringWorld(
+      h,
+      owner,
+      id,
+      new Uint8Array(await readFile(join(scratch, 'server.tar.gz'))),
+      {
+        fileName: 'server.tar.gz',
+      },
+    )
+    const dir = await unpacked((await broughtBackup(h, view)).archiveKey)
+    const { stdout } = await run('ls', ['-A', dir])
+    expect(stdout).not.toContain('plugins')
+    expect(stdout).not.toContain('bukkit.yml')
+  }, 120_000)
+})
+
+describe.skipIf(!hasDatabase)('an upload that goes while it is read', () => {
+  test('is refused, saying to upload it again, rather than left being read', async () => {
+    const { owner, id } = await server('Quinn')
+    const target = store.archiveTarget.bind(store)
+    // As the daily sweep takes an upload past its day: between reading it and keeping the world.
+    const swept = spyOn(store, 'archiveTarget').mockImplementation(async (key) => {
+      await h.db.delete(schema.pendingUploads).where(eq(schema.pendingUploads.serverId, id))
+      return target(key)
+    })
+    try {
+      expect(
+        await bringWorld(h, owner, id, zipBytes(await save('My World/')), { fileName: 'w.zip' }),
+      ).toMatchObject({
+        status: 'refused',
+        message: 'The upload was cleared before Cubepals finished reading it. Upload it again.',
+      })
+    } finally {
+      swept.mockRestore()
+    }
   }, 120_000)
 })

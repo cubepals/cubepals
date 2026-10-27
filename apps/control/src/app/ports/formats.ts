@@ -139,6 +139,8 @@ export interface WorldArchiveKept {
 }
 
 export interface WorldArchive {
+  /** What the file is, from its own bytes rather than its name. */
+  readonly format: 'zip' | 'gzip' | 'tar'
   /** Every file, by its checked name, with its size. */
   readonly files: ReadonlyArray<{ name: string; sizeBytes: number }>
   /** The files `keep` picked, by name. */

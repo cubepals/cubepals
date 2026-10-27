@@ -104,6 +104,7 @@ const SAID = {
   noWorld: 'There’s no world in this file. Upload the world’s own folder, the one with level.dat in it.',
   gaveUp: 'Cubepals couldn’t finish reading this world. Try uploading it again.',
   gone: 'This server is gone.',
+  cleared: 'The upload was cleared before Cubepals finished reading it. Upload it again.',
 }
 
 /** Why an import ends without a world: the sentence its owner reads, and what an admin reads. */
@@ -433,20 +434,34 @@ export class WorldImports {
       (isLevelName(read.world.folderName) && !taken.includes(read.world.folderName)
         ? read.world.folderName
         : nextLevelName(taken))
+    // Only a download Cubepals made, as the gzipped tarball it made, is kept as it came: what else
+    // it holds beside the world is what Cubepals put in it (`world-download.ts`).
     const asItCame =
-      /\.(tar\.gz|tgz)$/i.test(pending.fileName) &&
+      fromCubepals &&
+      read.archive.format === 'gzip' &&
       read.holds.properties === PROPERTIES_FILE &&
       read.world.folder === `${levelName}/` &&
       read.world.beside.every((folder) => folder.startsWith(`${levelName}_`)) &&
       player === null
-    const notes = [...read.notes, ...this.#notes(read, levelName, player, input.serverVersion, asItCame)]
+    const names = read.archive.files.map((file) => file.name)
+    const place = placeOnServer(read.world, levelName)
+    const playerPath =
+      player === null
+        ? null
+        : playerFilePath(names, read.world, levelName, read.facts.gameVersion, player.uuid)
+    // Where the world already has a file of the account named, that file stays as the world had it.
+    const hostWritten = playerPath !== null && !names.some((name) => place(name) === playerPath)
+    const notes = [
+      ...read.notes,
+      ...this.#notes(read, levelName, player, hostWritten, input.serverVersion, asItCame),
+    ]
     const backupId = randomUUID()
     let key = pending.key
     let sizeBytes = pending.sizeBytes
     if (!asItCame) {
       key = store.newKey('archive', { serverId: server.id, id: backupId })
       sizeBytes = await putStream(
-        this.#archives.tarball(this.#placed(read, levelName, player)),
+        this.#archives.tarball(this.#placed(read, levelName, hostWritten ? playerPath : null)),
         await store.archiveTarget(key, LINK_SECONDS, 'browser'),
         mostOf(read.archive),
       )
@@ -465,6 +480,8 @@ export class WorldImports {
     })
     if (!kept && !asItCame) await store.delete(key)
     if (kept && !asItCame) await store.delete(pending.key).catch(() => undefined)
+    // The upload was cleared while it was read (it waited past the day uploads are kept).
+    if (!kept) throw new Refused(SAID.cleared, 'the pending upload was taken while the import ran')
   }
 
   /** What its owner reads Cubepals did, besides what reading found. */
@@ -472,6 +489,7 @@ export class WorldImports {
     read: Read,
     levelName: string,
     player: { name: string } | null,
+    hostWritten: boolean,
     serverVersion: string,
     asItCame: boolean,
   ): string[] {
@@ -483,7 +501,11 @@ export class WorldImports {
     if (!asItCame && folder !== '' && (folder.includes('/') || folder !== name))
       notes.push(`Found “${name}” in ${folder}.`)
     if (player !== null)
-      notes.push(`Gave ${player.name} what they carried and where they stood in the single-player world.`)
+      notes.push(
+        hostWritten
+          ? `Gave ${player.name} what they carried and where they stood in the single-player world.`
+          : `${player.name} already had a player file in the world, which stays as it was.`,
+      )
     const leftOut = leftOutOf(
       read.archive.files.map((file) => file.name),
       read.world,
@@ -504,30 +526,20 @@ export class WorldImports {
   }
 
   /** The upload's world as the server keeps it, with the settings that name it and its host's file. */
-  async *#placed(
-    read: Read,
-    levelName: string,
-    player: { uuid: string } | null,
-  ): AsyncIterable<TarballEntry> {
+  async *#placed(read: Read, levelName: string, hostFile: string | null): AsyncIterable<TarballEntry> {
     const properties = new TextEncoder().encode(`level-name=${levelName}\n`)
     yield { name: PROPERTIES_FILE, sizeBytes: properties.byteLength, data: properties }
     const place = placeOnServer(read.world, levelName)
-    const names = read.archive.files.map((file) => file.name)
-    const playerPath =
-      player === null
-        ? null
-        : playerFilePath(names, read.world, levelName, read.facts.gameVersion, player.uuid)
-    let playerKept = false
     for await (const file of read.archive.entries()) {
       const to = place(file.name)
       if (to === null) {
         await file.data.cancel()
         continue
       }
-      if (to === playerPath) playerKept = true
       yield { name: to, sizeBytes: file.sizeBytes, data: file.data }
     }
-    if (playerPath === null || playerKept) return
+    if (hostFile === null) return
+    const playerPath = hostFile
     const own = await this.#formats.nbtPart(read.levelDat, ['Data', 'Player'])
     if (own !== null) yield { name: playerPath, sizeBytes: own.byteLength, data: own }
   }

@@ -11,7 +11,7 @@
  * the page that opened this offers. Not where a world is restored, or a backup taken.
  */
 import type { ServerView, WorldImportView } from '@blockly/contracts'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { messageOf, useTRPC } from '../../../../lib/api'
 import { bytes } from '../../../../lib/present'
@@ -176,7 +176,17 @@ function Questions({
   state: Extract<WorldImportView, { status: 'asking' }>
 }) {
   const trpc = useTRPC()
-  const answer = useMutation(trpc.backups.answerUpload.mutationOptions())
+  const queries = useQueryClient()
+  // The answer comes back as the import read again, which the dialog watches until it ends.
+  const answer = useMutation(
+    trpc.backups.answerUpload.mutationOptions({
+      onSuccess: (next) =>
+        queries.setQueryData(
+          trpc.backups.upload.queryKey({ serverId: view.id, importId: next.importId }),
+          next,
+        ),
+    }),
+  )
   const [folder, setFolder] = useState(state.worlds?.[0]?.folder ?? '')
   const [player, setPlayer] = useState('')
   const say = (given: { folder?: string; player?: string | null }) =>

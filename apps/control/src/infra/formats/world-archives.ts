@@ -81,6 +81,7 @@ async function zipWorld(zip: PackArchive, limits: WorldArchiveKept): Promise<Wor
     throw error
   }
   return {
+    format: 'zip',
     files: zip.files,
     kept,
     async *entries() {
@@ -110,6 +111,8 @@ async function eachTarEntry(
   gzipped: boolean,
   check: (name: string, entry: ReadEntry) => void,
   visit: (name: string, entry: ReadEntry) => Promise<void> | void,
+  /** Handed the way to stop reading early, which settles the read with what it is given. */
+  stopWith?: (stop: (error: unknown) => void) => void,
 ): Promise<void> {
   const parser = new Parser({ strict: true })
   const file = createReadStream(path, { highWaterMark: READ_CHUNK_BYTES })
@@ -126,6 +129,7 @@ async function eachTarEntry(
     file.destroy()
     stop()
   }
+  stopWith?.(fail)
   parser.on('entry', (entry: ReadEntry) => {
     let name: string | null
     try {
@@ -233,6 +237,7 @@ async function tarWorld(
       if (kinds.has(keyOf(name.slice(0, slash))))
         throw new HostileArchive('duplicate', `${name} is under ${name.slice(0, slash)}, which is a file`)
   return {
+    format: gzipped ? 'gzip' : 'tar',
     files,
     kept,
     entries: () => tarEntries(path, gzipped),
@@ -272,15 +277,27 @@ async function* tarEntries(
   let wake: (() => void) | null = null
   let ended = false
   let failure: unknown = null
+  let stopReading: (error: unknown) => void = () => {}
+  // Resolved when whoever reads the entries stops early: the entry they left goes unread.
+  let letGo: () => void = () => {}
+  const goneBy = new Promise<void>((resolve) => {
+    letGo = resolve
+  })
+  const open = new Set<ReadEntry>()
   const reading = eachTarEntry(
     path,
     gzipped,
     () => {},
     (name, entry) => {
-      const read = new Promise<void>((resolve) => entry.on('end', () => resolve()))
+      open.add(entry)
+      const read = Promise.race([new Promise<void>((resolve) => entry.on('end', () => resolve())), goneBy])
+      void read.then(() => open.delete(entry))
       queue.push({ name, sizeBytes: entry.size, data: streamOf(entry), read })
       wake?.()
       return read
+    },
+    (stop) => {
+      stopReading = stop
     },
   ).then(
     () => {
@@ -309,6 +326,11 @@ async function* tarEntries(
       wake = null
     }
   } finally {
+    if (!ended) {
+      letGo()
+      for (const entry of open) entry.resume()
+      stopReading(new Error('The tarball was left before its end'))
+    }
     await reading
   }
 }
@@ -318,14 +340,28 @@ function tarballOf(entries: AsyncIterable<TarballEntry>): ReadableStream<Uint8Ar
   const pack = new Pack({ gzip: { level: GZIP_LEVEL } })
   const output = pack.pipe(new PassThrough())
   const folders = new Set<string>()
+  // Whoever reads the tarball can stop early (an upload that failed): writing stops with it.
+  let left = false
+  const leftBy = new Promise<void>((resolve) =>
+    output.on('close', () => {
+      left = true
+      resolve()
+    }),
+  )
   const write = async () => {
     for await (const file of entries) {
+      if (left) throw new Error('The tarball was left before its end')
       for (const folder of foldersOf(file.name)) {
         if (folders.has(folder)) continue
         folders.add(folder)
         added(pack, `${folder}/`, 'Directory', 0).end()
       }
-      await fill(added(pack, file.name, 'File', file.sizeBytes), file)
+      await fill(added(pack, file.name, 'File', file.sizeBytes), file, leftBy, () => left).catch(
+        async (error: unknown) => {
+          if (!(file.data instanceof Uint8Array)) await file.data.cancel().catch(() => undefined)
+          throw error
+        },
+      )
     }
     pack.end()
   }
@@ -350,7 +386,12 @@ function added(pack: Pack, path: string, type: 'File' | 'Directory', size: numbe
 }
 
 /** A file's bytes written into its entry as they come, which must be the size it said. */
-async function fill(entry: ReadEntry, file: TarballEntry): Promise<void> {
+async function fill(
+  entry: ReadEntry,
+  file: TarballEntry,
+  leftBy: Promise<void>,
+  left: () => boolean,
+): Promise<void> {
   let written = 0
   const chunks = file.data instanceof Uint8Array ? [file.data] : (file.data as AsyncIterable<Uint8Array>)
   for await (const chunk of chunks) {
@@ -358,7 +399,8 @@ async function fill(entry: ReadEntry, file: TarballEntry): Promise<void> {
     if (written > file.sizeBytes)
       throw new Error(`${file.name} is longer than the ${file.sizeBytes} bytes it said`)
     if (!entry.write(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength)))
-      await once(entry, 'drain')
+      await Promise.race([once(entry, 'drain'), leftBy])
+    if (left()) throw new Error('The tarball was left before its end')
   }
   if (written !== file.sizeBytes)
     throw new Error(`${file.name} is ${written} bytes, not the ${file.sizeBytes} it said`)

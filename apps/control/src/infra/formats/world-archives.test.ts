@@ -225,3 +225,23 @@ describe('the tarball a world becomes', () => {
     expect(new Response(archives.tarball(entries())).arrayBuffer()).rejects.toThrow('not the 10 it said')
   })
 })
+
+describe('a tarball left before its end', () => {
+  test('lets go of the world it was reading, and of its own writing, at once', async () => {
+    const dir = await folder({
+      'world/level.dat': 'level',
+      'world/region/r.0.0.mca': 'r'.repeat(4 * 1024 * 1024),
+    })
+    const path = join(scratch, 'left.tar.gz')
+    await run('tar', ['-czf', path, '-C', dir, '.'])
+    const world = await archives.openWorld(path, LIMITS)
+    async function* entries(): AsyncIterable<TarballEntry> {
+      for await (const file of world.entries())
+        yield { name: file.name, sizeBytes: file.sizeBytes, data: file.data }
+    }
+    const reader = archives.tarball(entries()).getReader()
+    await reader.read()
+    const settled = reader.cancel().then(() => 'settled')
+    expect(await Promise.race([settled, Bun.sleep(5000).then(() => 'still waiting')])).toBe('settled')
+  })
+})
