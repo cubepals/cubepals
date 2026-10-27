@@ -283,20 +283,18 @@ export class WorldReading {
    * § How Blockly reads it, 6): each name in the server's `usercache.json` whose UUID is the one the
    * server made up from it, and who has files in the world, looked up as an account. Their files'
    * new names, who was matched, and who has no account by that name, whose files stay as they are.
+   * `others` are the server's other worlds kept with it, whose players are its players too.
    * None for a server that plays in offline mode itself, where the names stay the server's.
    */
-  async accounts(read: Read, onlineMode: boolean): Promise<Accounts> {
+  async accounts(read: Read, onlineMode: boolean, others: readonly Read[] = []): Promise<Accounts> {
     const accounts: Accounts = { renames: new Map(), matched: [], unmatched: [], kept: [] }
     const properties = read.holds.properties
     if (properties === null || !onlineMode) return accounts
     const raw = read.archive.kept.get(`${properties.slice(0, properties.lastIndexOf('/') + 1)}${NAME_CACHE}`)
     if (raw === undefined) return accounts
-    const present = new Set(
-      playersWithFiles(
-        read.archive.files.map((file) => file.name),
-        read.world,
-      ),
-    )
+    // Their files in every world kept, the server's other worlds' too.
+    const names = read.archive.files.map((file) => file.name)
+    const present = new Set([read, ...others].flatMap((one) => playersWithFiles(names, one.world)))
     const offline = usercacheOf(raw).filter(
       (one) => one.uuid === offlineUuid(one.name) && present.has(one.uuid),
     )

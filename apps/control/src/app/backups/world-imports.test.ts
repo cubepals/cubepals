@@ -31,6 +31,7 @@ import {
   serverFolder,
   untilRead,
 } from '../../testing/world-imports.ts'
+import { offlineUuid } from '../access/identity.ts'
 import type { UserActor } from '../actor.ts'
 import { listWorlds } from '../worlds/persistence.ts'
 
@@ -216,15 +217,24 @@ describe.skipIf(!hasDatabase)('a server’s folder', () => {
   }, 120_000)
 })
 
+/** A server's folder with a second world beside the first, and its Nether, as a server with several keeps them. */
+function withSecondWorld(files: Record<string, Uint8Array>): Record<string, Uint8Array> {
+  const copies = Object.entries(files).flatMap(([path, bytes]) =>
+    path.startsWith('world/') || path.startsWith('world_nether/')
+      ? [[path.replace(/^world/, 'creative'), bytes] as const]
+      : [],
+  )
+  return { ...files, ...Object.fromEntries(copies) }
+}
+
 describe.skipIf(!hasDatabase)('a server’s folder with other worlds', () => {
   test('keeps each as a backup of its own, in a folder of its own, and says so', async () => {
     const { owner, id } = await server('Sasha')
-    const files = await serverFolder('paper-1.21.11')
-    // A second world beside the first, with its Nether, as a server with several keeps them.
-    for (const [path, bytes] of Object.entries({ ...files }))
-      if (path.startsWith('world/')) files[`creative/${path.slice('world/'.length)}`] = bytes
-      else if (path.startsWith('world_nether/'))
-        files[`creative_nether/${path.slice('world_nether/'.length)}`] = bytes
+    const files = withSecondWorld(await serverFolder('paper-1.21.11'))
+    // Alex, of the offline-mode server, played only in the other world: moved to their account there.
+    const alex = offlineUuid('Alex')
+    files[`creative/playerdata/${alex}.dat`] = new Uint8Array(await readFile(PLAYER))
+    files['usercache.json'] = new TextEncoder().encode(JSON.stringify([{ name: 'Alex', uuid: alex }]))
     const view = await bringWorld(h, owner, id, zipBytes(files), { fileName: 'server.zip' })
     if (view.status !== 'ready') throw new Error(`The import is ${view.status}`)
     expect(view.notes).toContain(
@@ -250,6 +260,10 @@ describe.skipIf(!hasDatabase)('a server’s folder with other worlds', () => {
       `${creative.levelName}_nether`,
       'server.properties',
     ])
+    const online = normalizeUuid((await h.profiles.byName('Alex'))?.uuid ?? '')
+    expect(await run('ls', [join(dir, creative.levelName, 'playerdata')]).then((r) => r.stdout.trim())).toBe(
+      `${online}.dat`,
+    )
   }, 120_000)
 })
 

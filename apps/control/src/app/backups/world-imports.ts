@@ -239,13 +239,13 @@ export class WorldImports {
         desired.gameVersion,
       )
       const player = await this.#reading.hostPlayer(read, record.answer ?? {}, desired.settings.onlineMode)
-      const accounts = await this.#reading.accounts(read, desired.settings.onlineMode)
-      const people = await this.#reading.people(read, desired.settings.onlineMode)
       const others = await this.#reading.others(
         read,
         { ownerId: server.ownerId, serverId: server.id },
         desired.gameVersion,
       )
+      const accounts = await this.#reading.accounts(read, desired.settings.onlineMode, others.reads)
+      const people = await this.#reading.people(read, desired.settings.onlineMode)
       await this.#keep({
         record,
         pending,
