@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto'
 import { DAY_MS, HOUR_S, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
 import { type Db, schema, type Tx } from '@blockly/db'
-import { entitlementsFor, PLAN_KEYS, WORLD_SHARE_OF_DISK } from '../../domain/account/entitlements.ts'
+import { entitlementsFor, PLAN_KEYS, worldRoomBytes } from '../../domain/account/entitlements.ts'
 import type { RevisionDraft } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { levelNameOf, PROPERTIES_FILE, wantedInWorldArchive } from '../../minecraft/uploads.ts'
@@ -67,8 +67,7 @@ const SCHEDULED_ARCHIVE_EVERY_MS = 7 * DAY_MS
 /** A world download can be as large as one upload to the store takes. */
 const MAX_WORLD_BYTES = 4 * 1024 ** 3
 /** The largest world download a disk of `diskGb` has room for. */
-const worldUploadLimit = (diskGb: number): number =>
-  Math.min(MAX_WORLD_BYTES, Math.floor(diskGb * WORLD_SHARE_OF_DISK * 1024 ** 3))
+const worldUploadLimit = (diskGb: number): number => Math.min(MAX_WORLD_BYTES, worldRoomBytes(diskGb))
 /** Uploading a large world takes a while; the link only has to be valid when it starts. */
 const WORLD_UPLOAD_LINK_SECONDS = HOUR_S
 /** Long enough to read an uploaded world's properties and level.dat. */

@@ -25,11 +25,16 @@ import {
   type WorldImportAnswerJson,
   type WorldImportQuestionJson,
 } from '@blockly/db'
-import { comesWith, entitlementsFor, planThatRuns } from '../../domain/account/entitlements.ts'
+import {
+  comesWith,
+  entitlementsFor,
+  planThatRuns,
+  worldRoomBytes,
+} from '../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { nextLevelName } from '../../domain/world/world.ts'
 import { PROPERTIES_FILE } from '../../minecraft/uploads.ts'
-import { compareVersions } from '../../minecraft/versions.ts'
+import { compareVersions, isRelease } from '../../minecraft/versions.ts'
 import { DOWNLOAD_NOTE, jarsInNote } from '../../minecraft/world-download.ts'
 import { moddedBrands, type WorldFacts, worldFacts } from '../../minecraft/world-facts.ts'
 import {
@@ -62,7 +67,7 @@ import {
 } from '../ports/formats.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { PlayerProfiles } from '../ports/minecraft.ts'
-import { findServer, lockServer } from '../servers/persistence.ts'
+import { findServer, grownStorage, lockServer } from '../servers/persistence.ts'
 import { loadRevisionFields } from '../servers/revision-reads.ts'
 import { claimPendingUpload, loadPendingUpload, type PendingUpload } from '../uploads/persistence.ts'
 import { insertWorld, listWorlds, markPruned, markWorldDeleted } from '../worlds/persistence.ts'
@@ -367,7 +372,8 @@ export class WorldImports {
 
   /** What would open wrongly, or not at all, on this server: refused before anything is written. */
   async #refuseWhatWontOpen(server: MinecraftServer, read: Read, serverVersion: string): Promise<void> {
-    if (compareVersions(read.facts.gameVersion, serverVersion) > 0)
+    // A snapshot's name says nothing of the releases around it, so it is never called newer.
+    if (isRelease(read.facts.gameVersion) && compareVersions(read.facts.gameVersion, serverVersion) > 0)
       throw new Refused(
         `This world was last played on Minecraft ${read.facts.gameVersion}, newer than this server's ${serverVersion}. Move the server to ${read.facts.gameVersion} first, then try again.`,
       )
@@ -380,9 +386,21 @@ export class WorldImports {
       ...(note === undefined ? [] : jarsInNote(new TextDecoder().decode(note))),
     ]
     const standing = await loadStanding(this.#db, server.ownerId)
+    const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+    // Held to the room an upload is (`beginWorldUpload`), as the world lies on disk, not as it was sent.
+    const room = worldRoomBytes(Math.max(plan.storage.mostGb, await grownStorage(this.#db, server.id)))
+    const place = placeOnServer(read.world, 'world')
+    const unpacked = read.archive.files.reduce(
+      (sum, file) => (place(file.name) === null ? sum : sum + file.sizeBytes),
+      0,
+    )
+    if (unpacked > room)
+      throw new Refused(
+        `This world is ${gigabytes(unpacked)} GB unpacked, and this server has room for a world of up to ${gigabytes(room)} GB.`,
+      )
     // A world made with mods is never opened on plain Minecraft on a plan without them: it would
     // lose every modded block and item without a word.
-    if (jars.length > 0 && !entitlementsFor(standing.plan, standing.limitOverrides).mayUseMods)
+    if (jars.length > 0 && !plan.mayUseMods)
       throw new Refused(
         comesWith('Worlds made with mods', planThatRuns({ tier: '3g', loader: 'fabric', modded: true })),
       )
@@ -477,6 +495,11 @@ export class WorldImports {
       key,
       sizeBytes,
       notes,
+      serverVersion: input.serverVersion,
+    }).catch(async (error: unknown) => {
+      // A retry writes it again under a new key, so the one written here goes with the failure.
+      if (!asItCame) await store.delete(key).catch(() => undefined)
+      throw error
     })
     if (!kept && !asItCame) await store.delete(key)
     if (kept && !asItCame) await store.delete(pending.key).catch(() => undefined)
@@ -516,7 +539,11 @@ export class WorldImports {
       notes.push(
         `It was opened with ${modded.join(' and ')}. Blocks and items from its mods are only there on a server running the same mods.`,
       )
-    if (compareVersions(read.facts.gameVersion, serverVersion) < 0)
+    if (!isRelease(read.facts.gameVersion))
+      notes.push(
+        `It was last played on the Minecraft snapshot ${read.facts.gameVersion}. A release older than that snapshot can’t open it.`,
+      )
+    else if (compareVersions(read.facts.gameVersion, serverVersion) < 0)
       notes.push(
         `It was last played on Minecraft ${read.facts.gameVersion}. Restoring it opens it on ${serverVersion}, which updates it; this backup stays as it came.`,
       )
@@ -559,6 +586,7 @@ export class WorldImports {
     key: string
     sizeBytes: number
     notes: string[]
+    serverVersion: string
   }): Promise<boolean> {
     const { record, read, server } = input
     const now = new Date()
@@ -580,7 +608,9 @@ export class WorldImports {
             seed: read.facts.seed,
             levelType: read.facts.levelType,
             hardcore: read.facts.hardcore,
-            generatedOnVersion: read.facts.gameVersion,
+            generatedOnVersion: isRelease(read.facts.gameVersion)
+              ? read.facts.gameVersion
+              : input.serverVersion,
           })
         ).id
         // Not on the server until the backup is restored.
@@ -622,6 +652,9 @@ export class WorldImports {
       await store.delete(pending.key)
   }
 }
+
+/** Bytes as the sentences about room say them: gigabytes, to a tenth. */
+const gigabytes = (bytes: number): number => Number((bytes / 1024 ** 3).toFixed(1))
 
 /** The most a world's tarball can come to: every file in full, with its header and padding. */
 function mostOf(archive: WorldArchive): number {

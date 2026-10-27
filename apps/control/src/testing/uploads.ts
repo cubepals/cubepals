@@ -129,6 +129,15 @@ export async function withHost(level: Uint8Array, player: Uint8Array): Promise<U
   return gzipSync(nbt.writeUncompressed(world))
 }
 
+/** A world's level.dat as the game named `version` last saved it (`Data.Version.Name`). */
+export async function savedOn(level: Uint8Array, version: string): Promise<Uint8Array> {
+  const world = (await nbt.parse(Buffer.from(level))).parsed
+  const saved = world.value.Data?.type === 'compound' ? world.value.Data.value.Version : undefined
+  if (saved?.type !== 'compound') throw new Error('Not a level.dat')
+  saved.value.Name = { type: 'string', value: version }
+  return gzipSync(nbt.writeUncompressed(world))
+}
+
 /** A zip of the given files, as a test uploads one: an app test never reaches for the zip library. */
 export const zipBytes = (files: Record<string, Uint8Array>): Uint8Array => zipSync(files)
 

@@ -112,6 +112,9 @@ export function oldestReleaseOn(java: number): string | null {
   return on.sort(compareVersions)[0] ?? null
 }
 
+/** Whether a version is a release's (`1.21.11`, `26.3`), not a snapshot's (`24w14a`, `1.21-pre1`). */
+export const isRelease = (version: string): boolean => /^\d+(\.\d+){1,2}$/.test(version)
+
 /**
  * Orders release ids: 1.21.8 < 1.21.10 < 26.1.2 < 26.2. Worlds only move forward, so a change
  * to an older release is refused.

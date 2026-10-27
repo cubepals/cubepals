@@ -16,12 +16,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { schema } from '@blockly/db'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { LibraryFileFormats } from '../../infra/formats/file-formats.ts'
+import { LibraryUploadArchives } from '../../infra/formats/world-archives.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
-import { withHost, zipBytes } from '../../testing/uploads.ts'
+import { savedOn, withHost, zipBytes } from '../../testing/uploads.ts'
 import { bringWorld, broughtBackup, untilRead } from '../../testing/world-imports.ts'
 import type { UserActor } from '../actor.ts'
 import { listWorlds } from '../worlds/persistence.ts'
@@ -252,5 +253,104 @@ describe.skipIf(!hasDatabase)('an upload that goes while it is read', () => {
     } finally {
       swept.mockRestore()
     }
+  }, 120_000)
+})
+
+describe.skipIf(!hasDatabase)('a world larger than the server holds', () => {
+  test('is refused by its size unpacked, not by the size it was sent at', async () => {
+    const { owner, id } = await server('Rowan')
+    const open = LibraryUploadArchives.prototype.openWorld
+    // Region files that unpack past any disk the plan has: the real archive, its sizes made large.
+    const opened = spyOn(LibraryUploadArchives.prototype, 'openWorld').mockImplementation(async function (
+      this: LibraryUploadArchives,
+      ...args
+    ) {
+      const archive = await open.apply(this, args)
+      const files = archive.files.map((file) =>
+        file.name.endsWith('.mca') ? { ...file, sizeBytes: 8 * 1024 ** 3 } : file,
+      )
+      return new Proxy(archive, {
+        get: (target, key) => {
+          if (key === 'files') return files
+          const value = Reflect.get(target, key, target)
+          return typeof value === 'function' ? value.bind(target) : value
+        },
+      })
+    })
+    try {
+      const view = await bringWorld(h, owner, id, zipBytes(await save('My World/')), { fileName: 'w.zip' })
+      expect(view).toMatchObject({ status: 'refused' })
+      expect(view.status === 'refused' && view.message).toMatch(
+        /^This world is [\d.]+ GB unpacked, and this server has room for a world of up to [\d.]+ GB\.$/,
+      )
+    } finally {
+      opened.mockRestore()
+    }
+  }, 120_000)
+})
+
+describe.skipIf(!hasDatabase)('a world kept when recording it fails', () => {
+  test('leaves no copy behind, and the retry keeps one', async () => {
+    const { owner, id } = await server('Sage')
+    const target = store.archiveTarget.bind(store)
+    const written: string[] = []
+    // A world made under the same folder while this one is written: Postgres refuses the second.
+    const raced = spyOn(store, 'archiveTarget').mockImplementation(async (key) => {
+      written.push(key)
+      if (written.length === 1)
+        await h.db.insert(schema.worlds).values({
+          serverId: id,
+          levelName: 'world-2',
+          name: 'Made meanwhile',
+          generatedOnVersion: '26.3',
+        })
+      return target(key)
+    })
+    try {
+      const bytes = zipBytes(await save('My World/'))
+      const start = await h.app.backups.beginWorldUpload(owner, id, {
+        fileName: 'w.zip',
+        sizeBytes: bytes.length,
+      })
+      await fetch(start.url, { method: 'PUT', body: bytes, headers: start.headers })
+      const { importId } = await h.app.backups.finishWorldUpload(owner, id, start.ticket)
+      // The first try failed, and its job waits to be tried again.
+      const until = Date.now() + 60_000
+      const stateOf = async () =>
+        (
+          await h.db.execute<{ state: string }>(
+            sql`select state from pgboss.job where name = 'world-import' and data->>'importId' = ${importId}`,
+          )
+        ).rows[0]?.state
+      while ((await stateOf()) !== 'retry' && Date.now() < until) await Bun.sleep(200)
+      expect(await stateOf()).toBe('retry')
+      expect(written).toHaveLength(1)
+      expect(store.objects.has(written[0] as string)).toBe(false)
+      // The retry, as the queue runs it once it comes due.
+      await h.app.backups.imports.runImport(importId)
+      const backup = await broughtBackup(h, await untilRead(h, owner, id, importId))
+      expect(written).toHaveLength(2)
+      expect(backup.archiveKey).toBe(written[1] as string)
+    } finally {
+      raced.mockRestore()
+    }
+  }, 120_000)
+})
+
+describe.skipIf(!hasDatabase)('a world last played on a snapshot', () => {
+  test('is taken, its snapshot said, since a snapshot’s name says nothing of the releases around it', async () => {
+    const { owner, id } = await server('Tamsin')
+    const files = await save('Snapshot World/')
+    files['Snapshot World/level.dat'] = await savedOn(
+      files['Snapshot World/level.dat'] as Uint8Array,
+      '26.4-snapshot-1',
+    )
+    const view = await bringWorld(h, owner, id, zipBytes(files), { fileName: 'w.zip' })
+    expect(view).toMatchObject({ status: 'ready' })
+    expect(view.status === 'ready' && view.notes).toContain(
+      'It was last played on the Minecraft snapshot 26.4-snapshot-1. A release older than that snapshot can’t open it.',
+    )
+    const world = (await listWorlds(h.db, id)).find((one) => one.name === 'Snapshot World')
+    expect(world?.generatedOnVersion).not.toBe('26.4-snapshot-1')
   }, 120_000)
 })

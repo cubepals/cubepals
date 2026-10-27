@@ -12,7 +12,7 @@ import { diskName, jarsOf } from './jars.ts'
 import { bootMilestone, classifyLine, saysReady } from './logs.ts'
 import { catalogLoadersFor, projectTypesFor, serverEnvironment } from './mods.ts'
 import { IDENTITY_ENV, imageFor, PLAN_ENV, toRuntimeSpec, withoutOwnSteps } from './runtime-spec.ts'
-import { compareVersions, javaFor } from './versions.ts'
+import { compareVersions, isRelease, javaFor } from './versions.ts'
 import { WAKE_STEP } from './wake-step.ts'
 
 describe('version order', () => {
@@ -28,6 +28,12 @@ describe('version order', () => {
     ])
     expect(compareVersions('26.3', '26.3')).toBe(0)
     expect(compareVersions('26.3', '26.3.1')).toBe(-1)
+  })
+
+  test('a snapshot or a pre-release is not a release, under either scheme', () => {
+    for (const release of ['1.21.11', '26.3', '26.1.2']) expect(isRelease(release)).toBe(true)
+    for (const other of ['24w14a', '1.21-pre1', '1.21.5-rc1', '26.4-snapshot-1'])
+      expect(isRelease(other)).toBe(false)
   })
 })
 

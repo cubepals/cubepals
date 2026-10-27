@@ -409,7 +409,10 @@ export function addedLabel(gap: 'mods' | 'datapacks', modpack: boolean): string 
  * How much of a disk a world brought back from a download may take: it unpacks a little bigger
  * (region files are compressed already), beside the server's own files.
  */
-export const WORLD_SHARE_OF_DISK = 0.6
+const WORLD_SHARE_OF_DISK = 0.6
+
+/** The largest world, as it lies on disk, a disk of `diskGb` has room for. */
+export const worldRoomBytes = (diskGb: number): number => Math.floor(diskGb * WORLD_SHARE_OF_DISK * 1024 ** 3)
 
 /**
  * The disk a server needs to bring back a world download of `worldBytes`, where the one it has is
