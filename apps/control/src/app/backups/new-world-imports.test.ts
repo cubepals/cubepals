@@ -434,6 +434,13 @@ describe.skipIf(!hasDatabase)('a pack with its world, from one upload', () => {
     if (pack.status !== 'ready') throw new Error(`The pack is ${pack.status}`)
     expect(pack.pack).toMatchObject({ gameVersion: '1.21.11', loaderLabel: 'Fabric' })
     if (pack.worldImportId === null) throw new Error('The pack came without its world')
+    // The world's import holds the upload alone, in the same write that made it: the store's sweep,
+    // which clears a finished upload's file, finds no pack upload at its key.
+    const left = await h.db.query.pendingUploads.findMany({
+      where: (t, { and, eq }) => and(eq(t.ownerId, owner.userId), eq(t.kind, 'pack')),
+    })
+    expect(left).toEqual([])
+    await h.app.artifacts.collectGarbage()
 
     // Its world, read from the same upload, which goes once the world is kept.
     const world = await untilNewRead(h, owner, pack.worldImportId)

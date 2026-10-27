@@ -255,6 +255,9 @@ export class PackService {
               sizeBytes: pending.sizeBytes,
             })
           : null
+        // The world's import holds the file now: the pack's upload goes in the same write, so the
+        // store's sweep, which clears a finished upload's file, never finds it under the pack.
+        if (world !== null) await deletePendingUpload(tx, pending.id)
         await packImportReady(tx, importId, {
           packSha512: built.sha512,
           result: built.summary,
@@ -275,8 +278,9 @@ export class PackService {
       throw error
     } finally {
       await rm(work, { recursive: true, force: true })
-      if (pending !== null)
-        await (worldImportId === null ? store.delete(pending.key) : Promise.resolve())
+      if (pending !== null && worldImportId === null)
+        await store
+          .delete(pending.key)
           .then(() => deletePendingUpload(this.#db, pending.id))
           .catch(() => undefined)
     }
