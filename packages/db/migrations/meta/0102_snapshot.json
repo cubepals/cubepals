@@ -1,6 +1,6 @@
 {
-  "id": "acef41b3-462b-440d-a40a-60877a4e839f",
-  "prevId": "75ef4db0-100b-41ed-8d0f-5fe838beec62",
+  "id": "872ac2e3-14d1-4e77-878d-d9c6327422d0",
+  "prevId": "f2a9ef55-765d-4deb-828a-8518b041c8d1",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1333,6 +1333,13 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "brings_world": {
+          "name": "brings_world",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
         },
         "created_at": {
           "name": "created_at",
