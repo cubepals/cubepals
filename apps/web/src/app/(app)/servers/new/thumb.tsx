@@ -7,7 +7,7 @@
  * says whether it is picked or being checked. It knows how a choice looks, not how it is chosen:
  * that lives in `way.tsx`, `modpacks.tsx` and the page.
  */
-import type { CuratedPackView, ModpackHit, PlayIcon } from '@blockly/contracts'
+import type { CuratedPackView, ModpackHit, PlayIcon, ServerIcon, SetupSourceInput } from '@blockly/contracts'
 import { Check, Loader2 } from 'lucide-react'
 import Image from 'next/image'
 import { iconSrc, playIconSrc } from '../../../../lib/present'
@@ -36,6 +36,20 @@ export const curatedPicture = (pack: CuratedPackView): Picture =>
     : pack.icon === null
       ? wayPicture('modpack')
       : { src: pack.icon, photo: true }
+
+/** A world its owner brought wears the grass block, as "Your own world" does. */
+export const OWN_WORLD: Picture = { src: iconSrc('grass') }
+
+/** What the bar pictures for a way picked by its kind: a pack found or dropped, a world, a copy. */
+export function sourcePicture(
+  kind: SetupSourceInput['kind'] | undefined,
+  copying: { icon: ServerIcon | null } | null,
+): Picture {
+  if (kind === 'modpack') return wayPicture('modpack')
+  if (kind === 'import') return wayPicture('ownpack')
+  if (kind === 'world') return OWN_WORLD
+  return { src: iconSrc(copying?.icon ?? null) }
+}
 
 /**
  * Under a pack Blockly offers, quietly: the Minecraft it is, whether friends need anything, and

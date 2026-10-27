@@ -45,20 +45,22 @@ const STARTER_VARIABLE = 'BLOCKLY_STARTER'
 /**
  * The step. Only on a world's first start, before Minecraft makes it: a world that has its
  * `level.dat` is never touched again. The archive is fetched for as long as it keeps arriving (a
- * world its owner brought may be gigabytes), checked against its sha512, and unpacked into the
- * world's folder, owned as the volume is; anything else stops the start, so a server never
- * generates a plain world where its template's should be. A link where the world or the archive
- * goes is replaced first (`volume-links.ts`): the step runs as root.
+ * world its owner brought may be gigabytes), checked against its sha512, unpacked beside the
+ * world's folder and owned as the volume is, then moved into its place whole: an unpack cut short
+ * leaves no `level.dat` a later start would take for the world. Anything else stops the start, so a
+ * server never generates a plain world where its template's should be. A link where the world or
+ * the archive goes is replaced first (`volume-links.ts`): the step runs as root.
  */
 export const STARTER_STEP = [
-  `if [ -n "$${STARTER_VARIABLE}" ] && [ ! -f "${DATA_DIR}/$LEVEL/level.dat" ]; then`,
-  `sha=\${${STARTER_VARIABLE}%% *}; url=\${${STARTER_VARIABLE}#* }; f="${DATA_DIR}/.blockly-starter.tar.gz";`,
-  'unlinked "$LEVEL"; unlinked .blockly-starter.tar.gz;',
+  `if [ -n "$${STARTER_VARIABLE}" ] && [ -n "$LEVEL" ] && [ ! -f "${DATA_DIR}/$LEVEL/level.dat" ]; then`,
+  `sha=\${${STARTER_VARIABLE}%% *}; url=\${${STARTER_VARIABLE}#* };`,
+  `f="${DATA_DIR}/.blockly-starter.tar.gz"; u="${DATA_DIR}/.blockly-starter";`,
+  'unlinked "$LEVEL"; unlinked .blockly-starter.tar.gz; unlinked .blockly-starter; rm -rf "$u";',
   `{ curl -fsSL --retry 3 --connect-timeout 20 --speed-limit 1024 --speed-time 60 -o "$f" "$url" &&`,
-  `[ "$(sha512sum "$f" | cut -d ' ' -f 1)" = "$sha" ] &&`,
-  `mkdir -p "${DATA_DIR}/$LEVEL" && tar -xzf "$f" -C "${DATA_DIR}/$LEVEL" &&`,
-  `chown -R "$(ls -nd ${DATA_DIR} | awk '{ print $3 ":" $4 }')" "${DATA_DIR}/$LEVEL" && rm -f "$f"; }`,
-  `|| { rm -f "$f"; echo "Cubepals could not fetch the world $LEVEL starts on" >&2; exit 1; }; fi;`,
+  `[ "$(sha512sum "$f" | cut -d ' ' -f 1)" = "$sha" ] && mkdir -p "$u" && tar -xzf "$f" -C "$u" &&`,
+  `chown -R "$(ls -nd ${DATA_DIR} | awk '{ print $3 ":" $4 }')" "$u" &&`,
+  `rm -rf "${DATA_DIR}/$LEVEL" && mv -T "$u" "${DATA_DIR}/$LEVEL" && rm -f "$f"; }`,
+  `|| { rm -rf "$f" "$u"; echo "Cubepals could not fetch the world $LEVEL starts on" >&2; exit 1; }; fi;`,
 ].join(' ')
 
 /** The variable the step reads, for a world that starts on an archive. */

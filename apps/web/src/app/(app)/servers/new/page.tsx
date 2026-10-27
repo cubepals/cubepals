@@ -27,7 +27,6 @@ import {
 } from 'react'
 import { codeOf, messageOf, useTRPC } from '../../../../lib/api'
 import { useDebounced } from '../../../../lib/hooks'
-import { iconSrc } from '../../../../lib/present'
 import * as rules from '../../../../lib/rules'
 import { useChecked } from '../../../../lib/use-checked'
 import { Button, JavaAndBedrock, Note, OutLink, Skeleton, TextField, Toggle } from '../../../../ui'
@@ -44,7 +43,7 @@ import { useRegion } from './region'
 import { ReleasePick } from './release'
 import { useCreate } from './sending'
 import { createMark, useSteps } from './steps'
-import { curatedPicture, type Picture, packPicture, Thumb, wayPicture } from './thumb'
+import { curatedPicture, type Picture, packPicture, sourcePicture, Thumb, wayPicture } from './thumb'
 import { Ways } from './ways'
 
 /**
@@ -224,11 +223,7 @@ function CreateServer() {
         ? curatedPicture(curatedPick)
         : picked !== null
           ? packPicture(picked)
-          : from?.kind === 'modpack'
-            ? wayPicture('modpack')
-            : from?.kind === 'import'
-              ? wayPicture('ownpack')
-              : { src: iconSrc(copying?.icon ?? null) }
+          : sourcePicture(from?.kind, copying)
   // What is being made, as the bar says it: "Survival · Minecraft 26.3 · Up to 10 players". A
   // template's release is the newest it runs on unless someone picks another here, to match the
   // game their friends have; a pack's or a copy's is its own.

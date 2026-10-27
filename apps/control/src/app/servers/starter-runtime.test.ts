@@ -30,6 +30,9 @@ function archive(): Buffer {
 
 const ARCHIVE = archive()
 const sha512 = createHash('sha512').update(ARCHIVE).digest('hex')
+/** The archive cut short, as a disk that fills or a machine stopped mid-unpack leaves it. */
+const CUT = ARCHIVE.subarray(0, ARCHIVE.length - 24)
+const cutSha512 = createHash('sha512').update(CUT).digest('hex')
 let fetched = 0
 let links: Bun.Server<undefined>
 
@@ -40,7 +43,8 @@ beforeAll(() => {
     fetch(request) {
       fetched += 1
       const name = new URL(request.url).pathname.slice(1)
-      return name === 'world.tar.gz' ? new Response(ARCHIVE) : new Response('other bytes')
+      if (name === 'world.tar.gz') return new Response(ARCHIVE)
+      return name === 'cut.tar.gz' ? new Response(CUT) : new Response('other bytes')
     },
   })
 })
@@ -79,6 +83,18 @@ describe('a world that starts on an archive', () => {
     expect(await start(data)).toBe(0)
     expect(fetched).toBe(before)
     expect(readFileSync(join(data, 'world/level.dat'), 'utf8')).toBe('played')
+  })
+
+  test('an unpack cut short leaves no world, and the next start unpacks it whole', async () => {
+    const data = mkdtempSync(join(tmpdir(), 'starter-'))
+    expect(await start(data, 'cut.tar.gz', cutSha512)).not.toBe(0)
+    expect(existsSync(join(data, 'world/level.dat'))).toBe(false)
+    expect(readdirSync(data)).toEqual([])
+    expect(await start(data)).toBe(0)
+    expect(readFileSync(join(data, 'world/dimensions/minecraft/overworld/region/r.0.0.mca'), 'utf8')).toBe(
+      'region',
+    )
+    expect(readdirSync(data)).toEqual(['world'])
   })
 
   test('other bytes stop the start, and leave nothing behind', async () => {

@@ -23,16 +23,12 @@ import {
 import { ChevronDown } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { type Ref, useEffect, useId, useState } from 'react'
-import { iconSrc } from '../../../../lib/present'
 import { seenMark } from '../../../(public)/steps'
 import styles from './create.module.css'
 import { paidFor } from './modpacks'
 import { createMark } from './steps'
-import { curatedMeta, curatedPicture, type Picture, wayPicture } from './thumb'
+import { curatedMeta, curatedPicture, OWN_WORLD, wayPicture } from './thumb'
 import { Way } from './way'
-
-/** A world someone brings wears a grass block, as a world's picture does. */
-const OWN_WORLD: Picture = { src: iconSrc('grass') }
 
 /**
  * The ways shown before anything else: the three modes Minecraft's own new-world screen offers,
@@ -217,8 +213,10 @@ function lockedMark(fit: PlanFit | null) {
  */
 function useMore(from: SetupSourceInput | null): [boolean, () => void] {
   const [more, setMore] = useState(
+    // "Your own world" sits beside the first three, outside it.
     from !== null &&
       from.kind !== 'server' &&
+      from.kind !== 'world' &&
       !(from.kind === 'template' && (FIRST as readonly string[]).includes(from.key)),
   )
   useEffect(() => {
