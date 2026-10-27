@@ -4,13 +4,7 @@
 
 import { z } from 'zod'
 import type { JoinRange } from './joins.ts'
-import {
-  ADDRESS_MAX_LENGTH,
-  ADDRESS_MIN_LENGTH,
-  DESCRIPTION_MAX_LENGTH,
-  NAME_MAX_LENGTH,
-  SEED_MAX_LENGTH,
-} from './limits.ts'
+import { ADDRESS_MAX_LENGTH, ADDRESS_MIN_LENGTH, DESCRIPTION_MAX_LENGTH, NAME_MAX_LENGTH } from './limits.ts'
 import { oneLine, plainLines } from './plain-text.ts'
 import { OWN_ICON_MAX_BYTES } from './server-list.ts'
 
@@ -141,53 +135,6 @@ export const InviteCode = z
   .toLowerCase()
   .regex(/^[a-km-z2-9]{12}$/)
 
-/** Where a new server's setup comes from: something Blockly offers, or a server being copied. */
-export const SetupSourceInput = z.discriminatedUnion('kind', [
-  /** Without a version, the newest release everything in the template runs on. */
-  z.object({
-    kind: z.literal('template'),
-    key: z.string().trim().min(1).max(40),
-    gameVersion: z.string().trim().min(1).max(20).optional(),
-  }),
-  z.object({
-    kind: z.literal('modpack'),
-    projectId: z.string().trim().min(1).max(64),
-    /** The exact version to play; without one, the newest Blockly can run. */
-    versionId: z.string().trim().min(1).max(64).optional(),
-  }),
-  /** A pack Blockly offers by name; without a version, the release it offers now. */
-  z.object({
-    kind: z.literal('curated'),
-    key: z.string().trim().min(1).max(40),
-    version: z.string().trim().min(1).max(64).optional(),
-  }),
-  z.object({
-    kind: z.literal('server'),
-    slug: z.string().trim().toLowerCase().min(ADDRESS_MIN_LENGTH).max(ADDRESS_MAX_LENGTH).optional(),
-    /** An invite link's code, which lets a friend copy a server that isn't public. */
-    invite: InviteCode.optional(),
-  }),
-  /** A pack its owner uploaded, once Blockly has read it and built it into one it can run. */
-  z.object({ kind: z.literal('import'), importId: z.uuid() }),
-])
-export type SetupSourceInput = z.infer<typeof SetupSourceInput>
-
-/**
- * A setup to look at before anything is made. The party size comes with it, because the size a
- * server lands on is the bigger of what the party needs and what the setup needs — asking
- * without it would preview a different server from the one that gets created.
- */
-export const SetupRef = z.object({ from: SetupSourceInput, partySize: PartySize.optional() })
-
-/** A template, for the releases it runs on. */
-export const TemplateRef = z.object({ key: z.string().trim().min(1).max(40) })
-
-/**
- * Each release Cubepals offers, and whether a template runs on it: the same answer creating a
- * server from it on that release would give, before anyone picks one. `reason` says why not.
- */
-export type TemplateReleases = Array<{ gameVersion: string; runs: boolean; reason?: string }>
-
 /** What Blockly offers under "what do you want to play?". */
 export interface TemplateView {
   key: string
@@ -240,45 +187,6 @@ export interface CuratedPackView {
  */
 export type PlanFit = { allowed: true } | { allowed: false; reason: string; plan: string | null }
 
-/** A setup resolved against the catalog: what a server made from it would actually run. */
-export interface SetupPreview {
-  /** What is being copied or started from, by name. */
-  from: string
-  /**
-   * The server being copied, by its own name and picture, as its page shows them; null for a
-   * template or a pack. `from` names the pack instead where the server plays one.
-   */
-  copying: { name: string; icon: ServerIcon | null } | null
-  gameVersion: string
-  loader: Loader
-  loaderLabel: string
-  /** Which players' games join it, by the plugins it carries. */
-  joins: JoinRange
-  /** Whether Bedrock friends join it: on Paper, plain Minecraft's too, where the deployment has Bedrock. */
-  bedrock: boolean
-  /** The mods that come with it, their dependencies included. */
-  mods: string[]
-  /**
-   * The modpack it plays, where it plays one; then it has no mod list of its own. `both` when
-   * everyone playing installs it too, `server` when it runs on the server alone and plain
-   * Minecraft joins.
-   */
-  modpack: {
-    name: string
-    version: string
-    /** Its page on its catalog; null for an uploaded pack that has none. */
-    page: string | null
-    environment: 'server' | 'both'
-    /** What Blockly did with it that the owner should know, in one sentence each. */
-    notes: string[]
-  } | null
-  /**
-   * The size it needs before anyone is counted, and whether the plan runs it (its size, its
-   * server type and its mods); if not, why, and which plan would.
-   */
-  size: { label: string; allowed: boolean; reason?: string; plan?: string | null }
-}
-
 /**
  * A modpack a server plays, by the name, version and picture people know it by, and the exact
  * version the way a player gets it: straight from its catalog, never a copy of Blockly's.
@@ -296,90 +204,6 @@ export interface PackView {
   /** `both` when everyone playing installs it too; `server` when it runs on the server alone. */
   environment: 'server' | 'both'
 }
-
-export const CreateServerInput = z.object({
-  /** Generated by the client when the create flow opens, so a retried submit is the same request. */
-  idempotencyKey: z.uuid(),
-  name: z.string().overwrite(oneLine).trim().min(1).max(NAME_MAX_LENGTH),
-  slug: z.string().trim().toLowerCase().min(ADDRESS_MIN_LENGTH).max(ADDRESS_MAX_LENGTH).optional(),
-  /** What to play. Without one, plain survival. */
-  from: SetupSourceInput.optional(),
-  playStyle: PlayStyle.optional(),
-  partySize: PartySize,
-  gameVersion: z.string().trim().min(1).max(20).optional(),
-  loader: Loader.optional(),
-  regionKey: z.string().trim().min(1).max(40).optional(),
-  seed: z.string().overwrite(oneLine).trim().max(SEED_MAX_LENGTH).optional(),
-  hardcore: z.boolean().optional(),
-  /** Made for a while: Blockly deletes it a day later unless its owner keeps it. */
-  temporary: z.boolean().optional(),
-  /**
-   * A server of the same owner whose first build failed, which this one takes the place of: it
-   * goes to the trash, as a delete sends it, and this one takes its address. Nobody has played on
-   * it, since it never started.
-   */
-  replaces: ServerId.optional(),
-})
-export type CreateServerInput = z.infer<typeof CreateServerInput>
-
-/** A modpack someone might play, as the create flow lists them. */
-export interface ModpackHit {
-  projectId: string
-  name: string
-  summary: string
-  iconUrl: string | null
-  downloads: number
-  /**
-   * The newest Minecraft Blockly offers that this pack runs on; null when it runs on none of
-   * them, which is the one thing about a pack worth saying before anybody picks it.
-   */
-  gameVersion: string | null
-  /**
-   * False for a pack made for a player's own game, which is no server at all: listed when searched
-   * for by name, so it doesn't seem missing, and never picked.
-   */
-  runsOnServers: boolean
-  /**
-   * What choosing it is told when Blockly can't run it as a server, found by checking it before
-   * anybody picked it (a pack that leaves mods for each player to fetch by hand, say); null when
-   * it runs or hasn't been checked yet. Such a pack stays out of the default list, and a search
-   * shows it dimmed with this.
-   */
-  refusal: string | null
-  /**
-   * Whether the plan of whoever is searching runs this pack, and if not, why: the same words
-   * choosing it would be refused with. A pack a plan can't run is shown dimmed, never hidden.
-   */
-  fits: PlanFit
-}
-
-/** A link someone pasted where they search for a pack. */
-export const PackLinkInput = z.object({ url: z.string().trim().min(8).max(500) })
-
-/**
- * What a pasted link is: a pack Blockly can make a server of, at the version the link names if it
- * names one, or the one sentence that says what to do instead, with a page to do it on.
- */
-export type PackLinkView =
-  | { kind: 'pack'; hit: ModpackHit; versionId: string | null; versionLabel: string | null }
-  | { kind: 'refused'; message: string; page: string | null }
-
-export const PackVersionsInput = z.object({ projectId: z.string().trim().min(1).max(64) })
-
-/** A version of a pack a server can run, as a picker lists them, newest first. */
-export interface PackVersionView {
-  versionId: string
-  label: string
-  gameVersion: string
-  loaderLabel: string
-  publishedAt: string
-}
-
-export const SearchModpacksInput = z.object({
-  text: z.string().trim().max(100),
-  offset: z.number().int().min(0).max(500).default(0),
-  limit: z.number().int().min(1).max(20).default(10),
-})
 
 export const SuggestAddressInput = z.object({
   name: z.string().overwrite(oneLine).trim().max(NAME_MAX_LENGTH),
