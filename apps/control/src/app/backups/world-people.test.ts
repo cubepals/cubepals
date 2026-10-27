@@ -102,6 +102,14 @@ describe('what a choice lets in', () => {
   })
 })
 
+describe('a whitelist with nobody on it', () => {
+  test('isn’t turned on: it would keep everyone out, the owner too', () => {
+    const people = { whitelistOn: true, whitelist: [], operators: [], bans: [], unknown: [] }
+    const none = accessFrom(people, { letIn: [], operators: [], keepBans: true, whitelistOn: true })
+    expect(none).toEqual({ whitelistOn: false, entries: [] })
+  })
+})
+
 describe('a player whose account can’t be looked up', () => {
   test('fails the read, to be tried again, rather than being left out as nobody', async () => {
     const files = new Map([

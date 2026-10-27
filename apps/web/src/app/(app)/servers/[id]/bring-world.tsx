@@ -239,8 +239,7 @@ function LetIn({
         queries.invalidateQueries({ queryKey: trpc.access.get.queryKey({ serverId: view.id }) }),
     }),
   )
-  const nothing =
-    choice.letIn.length === 0 && !choice.whitelistOn && (!choice.keepBans || people.bans.length === 0)
+  const nothing = choice.letIn.length === 0 && (!choice.keepBans || people.bans.length === 0)
   return (
     <div className="bk-stack" style={{ gap: 'var(--space-12)' }}>
       <WorldPeopleChoice people={people} choice={choice} disabled={letIn.isSuccess} onChange={setChoice} />

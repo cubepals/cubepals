@@ -113,8 +113,9 @@ export function WorldPeopleChoice({
       )}
       <Toggle
         label="Only players let in can join"
-        checked={choice.whitelistOn}
-        disabled={disabled}
+        // Off while nobody is let in: a whitelist of nobody would keep everyone out, you too.
+        checked={choice.whitelistOn && letIn.size > 0}
+        disabled={disabled || letIn.size === 0}
         onChange={(on) => onChange({ ...choice, whitelistOn: on })}
       />
       {banned.length > 0 && (

@@ -101,7 +101,9 @@ export class AccessService {
         const state = existing?.state === 'pending_remove' ? 'active' : 'pending_add'
         await upsertEntry(tx, serverId, { ...entry, state }, requestedBy(actor))
       }
-      if (chosen.whitelistOn) await setWhitelistPending(tx, serverId, true)
+      // Never on with nobody let in: it would keep everyone out, its owner too.
+      const someone = chosen.entries.some((entry) => entry.list === 'whitelist')
+      if (chosen.whitelistOn && someone) await setWhitelistPending(tx, serverId, true)
     })
   }
 

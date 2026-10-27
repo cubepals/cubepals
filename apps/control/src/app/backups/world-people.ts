@@ -183,7 +183,8 @@ export function accessFrom(people: WorldPeopleJson, choice: PeopleChoice): Seede
   // A player let in who was also banned is let in: the owner said so.
   const letIn = new Set(chosen.map((player) => player.uuid))
   return {
-    whitelistOn: choice.whitelistOn,
+    // Only with someone on it: a whitelist of nobody would keep everyone out, its owner too.
+    whitelistOn: choice.whitelistOn && chosen.length > 0,
     entries: [
       ...chosen.map((player) => entry('whitelist', player)),
       // An operator at the level their server gave them, not more.
