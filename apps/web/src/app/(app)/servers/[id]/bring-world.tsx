@@ -232,7 +232,11 @@ function LetIn({
 }) {
   const trpc = useTRPC()
   const queries = useQueryClient()
-  const [choice, setChoice] = useState<PeopleChoice>(() => defaultPeopleChoice(people))
+  // A server that has players of its own keeps its whitelist as it is until its owner says.
+  const [choice, setChoice] = useState<PeopleChoice>(() => ({
+    ...defaultPeopleChoice(people),
+    whitelistOn: false,
+  }))
   const letIn = useMutation(
     trpc.backups.letInFromUpload.mutationOptions({
       onSuccess: () =>

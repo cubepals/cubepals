@@ -322,7 +322,6 @@ export class WorldImports {
       ...peopleNotes(input.people),
       ...othersNotes(input.others.reads, input.others.left),
     ]
-    const others = await this.#keptOthers(server, input.others.reads, worlds, [...taken, levelName], accounts)
     const backupId = randomUUID()
     let key = pending.key
     let sizeBytes = pending.sizeBytes
@@ -334,6 +333,17 @@ export class WorldImports {
         mostOf(read.archive),
       )
     }
+    // Written after the world itself, which a failure among them takes with it.
+    const others = await this.#keptOthers(
+      server,
+      input.others.reads,
+      worlds,
+      [...taken, levelName],
+      accounts,
+    ).catch(async (error: unknown) => {
+      if (!asItCame) await store.delete(key).catch(() => undefined)
+      throw error
+    })
     const kept = await this.#record({
       record,
       pending,

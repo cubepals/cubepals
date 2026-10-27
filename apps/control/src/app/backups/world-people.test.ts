@@ -16,6 +16,8 @@ import { utf8, zipBytes } from '../../testing/uploads.ts'
 import { bringNewWorld, bringWorld, serverFolder } from '../../testing/world-imports.ts'
 import { offlineUuid } from '../access/identity.ts'
 import { readAccess } from '../access/persistence.ts'
+import type { PlayerProfiles } from '../ports/minecraft.ts'
+import { peopleOf } from './world-people.ts'
 
 let h: Harness
 const store = new MemoryStore()
@@ -76,6 +78,28 @@ async function privateServer(): Promise<Uint8Array> {
   files['server.properties'] = utf8(properties.replace('white-list=false', 'white-list=true'))
   return zipBytes(files)
 }
+
+describe('a player whose account can’t be looked up', () => {
+  test('fails the read, to be tried again, rather than being left out as nobody', async () => {
+    const files = new Map([
+      [
+        'whitelist.json',
+        new TextEncoder().encode(JSON.stringify([{ uuid: offlineUuid('Alex'), name: 'Alex' }])),
+      ],
+    ])
+    const read = {
+      archive: { kept: files },
+      holds: { properties: 'server.properties' },
+      world: { folder: 'world/' },
+    }
+    const down = {
+      byName: async () => {
+        throw new Error('Mojang answered 429')
+      },
+    } as unknown as PlayerProfiles
+    await expect(peopleOf(read, true, down)).rejects.toThrow('Mojang answered 429')
+  })
+})
 
 describe.skipIf(!hasDatabase)('the players of the server a world came from', () => {
   test('are shown by their accounts, and a name with none is said', async () => {

@@ -508,10 +508,16 @@ describe.skipIf(!hasDatabase)('an offline-mode server’s players', () => {
     files[`world/stats/${alex}.json`] = utf8('{"stats":{}}')
     files[`world/advancements/${alex}.json`] = utf8('{}')
     files[`world/playerdata/${ghost}.dat`] = player
+    // Steve played online too: his account has a file of its own, which stays, and so does his offline one.
+    const steve = offlineUuid('Steve')
+    const steveOnline = normalizeUuid((await h.profiles.byName('Steve'))?.uuid ?? '')
+    files[`world/playerdata/${steve}.dat`] = player
+    files[`world/playerdata/${steveOnline}.dat`] = player
     files['usercache.json'] = utf8(
       JSON.stringify([
         { name: 'Alex', uuid: alex, expiresOn: '2026-11-27 12:00:00 +0000' },
         { name: 'Ghost', uuid: ghost, expiresOn: '2026-11-27 12:00:00 +0000' },
+        { name: 'Steve', uuid: steve, expiresOn: '2026-11-27 12:00:00 +0000' },
       ]),
     )
     const ready = await bringNewWorld(h, owner, zipBytes(files), 'offline.zip')
@@ -520,6 +526,7 @@ describe.skipIf(!hasDatabase)('an offline-mode server’s players', () => {
       expect.arrayContaining([
         'Moved a player of the offline-mode server to their Minecraft accounts, with what they carried and their stats: Alex.',
         'No Minecraft account is called Ghost, so their files stay as the offline-mode server kept them.',
+        'Steve already had files under their Minecraft account in the world, so both stay as they were.',
       ]),
     )
 
@@ -529,7 +536,9 @@ describe.skipIf(!hasDatabase)('an offline-mode server’s players', () => {
     expect(await readFile(join(dir, `playerdata/${online}.dat`))).toEqual(Buffer.from(player))
     expect(await readdir(join(dir, 'stats'))).toEqual([`${online}.json`])
     expect(await readdir(join(dir, 'advancements'))).toEqual([`${online}.json`])
-    expect((await readdir(join(dir, 'playerdata'))).sort()).toEqual([`${ghost}.dat`, `${online}.dat`].sort())
+    expect((await readdir(join(dir, 'playerdata'))).sort()).toEqual(
+      [`${ghost}.dat`, `${online}.dat`, `${steve}.dat`, `${steveOnline}.dat`].sort(),
+    )
   }, 120_000)
 })
 

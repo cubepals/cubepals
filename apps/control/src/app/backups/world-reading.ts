@@ -286,7 +286,7 @@ export class WorldReading {
    * None for a server that plays in offline mode itself, where the names stay the server's.
    */
   async accounts(read: Read, onlineMode: boolean): Promise<Accounts> {
-    const accounts: Accounts = { renames: new Map(), matched: [], unmatched: [] }
+    const accounts: Accounts = { renames: new Map(), matched: [], unmatched: [], kept: [] }
     const properties = read.holds.properties
     if (properties === null || !onlineMode) return accounts
     const raw = read.archive.kept.get(`${properties.slice(0, properties.lastIndexOf('/') + 1)}${NAME_CACHE}`)
@@ -300,13 +300,24 @@ export class WorldReading {
     const offline = usercacheOf(raw).filter(
       (one) => one.uuid === offlineUuid(one.name) && present.has(one.uuid),
     )
+    // Each file name a player has, or is given: two can't land on one.
+    const taken = new Set(present)
     for (const one of offline.slice(0, MOST_ACCOUNTS)) {
-      const profile = await this.#profiles.byName(one.name).catch(() => null)
-      if (profile === null) accounts.unmatched.push(one.name)
-      else {
-        accounts.renames.set(one.uuid, normalizeUuid(profile.uuid))
-        accounts.matched.push(profile.name)
+      // A lookup that fails throws, and the read is tried again: only Mojang's own "nobody" is no account.
+      const profile = await this.#profiles.byName(one.name)
+      if (profile === null) {
+        accounts.unmatched.push(one.name)
+        continue
       }
+      const uuid = normalizeUuid(profile.uuid).toLowerCase()
+      // The account has files of its own in the world, or another name came to it first: those stay.
+      if (taken.has(uuid)) {
+        accounts.kept.push(one.name)
+        continue
+      }
+      taken.add(uuid)
+      accounts.renames.set(one.uuid, uuid)
+      accounts.matched.push(profile.name)
     }
     return accounts
   }
@@ -369,6 +380,8 @@ export interface Accounts {
   matched: string[]
   /** Names no Minecraft account has, whose files stay as they are. */
   unmatched: string[]
+  /** Names whose account already has files in the world, which stay, as theirs do. */
+  kept: string[]
 }
 
 /** The names and UUIDs a server's `usercache.json` lists, dashed and lowercase; none where it can't be read. */
@@ -398,6 +411,11 @@ export function accountNotes(accounts: Accounts): string[] {
     ...(accounts.unmatched.length > 0
       ? [
           `No Minecraft account is called ${accounts.unmatched.join(', ')}, so their files stay as the offline-mode server kept them.`,
+        ]
+      : []),
+    ...(accounts.kept.length > 0
+      ? [
+          `${accounts.kept.join(', ')} already had files under their Minecraft account in the world, so both stay as they were.`,
         ]
       : []),
   ]

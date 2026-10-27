@@ -106,7 +106,8 @@ async function asTheyAre(
   if (isBedrockUuid(listed.uuid)) return { uuid: listed.uuid, name: listed.name }
   if (!onlineMode) return { uuid: offlineUuid(listed.name), name: listed.name }
   if (listed.uuid !== offlineUuid(listed.name)) return { uuid: listed.uuid, name: listed.name }
-  const profile = await profiles.byName(listed.name).catch(() => null)
+  // A lookup that fails throws, and the read is tried again: only Mojang's own "nobody" is unknown.
+  const profile = await profiles.byName(listed.name)
   return profile === null ? null : { uuid: normalizeUuid(profile.uuid).toLowerCase(), name: profile.name }
 }
 
