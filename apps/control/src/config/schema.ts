@@ -197,6 +197,7 @@ const AbuseLimits = z
       knownAddressDays: Count.default(DEFAULT_ABUSE_LIMITS.knownAddressDays),
       joinReportsPerSecond: Count.default(DEFAULT_ABUSE_LIMITS.joinReportsPerSecond),
       joinReportBytes: Count.default(DEFAULT_ABUSE_LIMITS.joinReportBytes),
+      worldUploadsPerDay: Count.default(DEFAULT_ABUSE_LIMITS.worldUploadsPerDay),
     },
     { error: 'ABUSE_LIMITS is the deployment’s abuse limits, as JSON (docs/configuration.md)' },
   )

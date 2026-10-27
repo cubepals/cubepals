@@ -74,6 +74,11 @@ export interface AbuseLimits {
    */
   joinReportsPerSecond: number
   joinReportBytes: number
+  /**
+   * Worlds one account may bring in a day before there is a server for them
+   * (`app/backups/new-world-imports.ts`): each is up to 4 GB, and read on a worker.
+   */
+  worldUploadsPerDay: number
 }
 
 /** The figures the runtime economics report prices a margin with (`app/runtimes/economics.ts`). */
@@ -116,6 +121,7 @@ export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {
   inviteJoinsPerHour: 10,
   joinReportsPerSecond: 10,
   joinReportBytes: 65_536,
+  worldUploadsPerDay: 10,
 }
 
 /** Round figures for development and tests. */

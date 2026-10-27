@@ -468,6 +468,11 @@ describe('private tuning', () => {
     expect(loadConfig({ ...env, ABUSE_LIMITS: JSON.stringify(wider) }).abuseLimits).toEqual(wider)
   })
 
+  test('a deployment’s limits from before the world upload cap existed take its default', () => {
+    const { worldUploadsPerDay: _, ...older } = abuse
+    expect(loadConfig({ ...env, ABUSE_LIMITS: JSON.stringify(older) }).abuseLimits).toEqual(abuse)
+  })
+
   test('production refuses to start without it, and any deployment with it wrong', () => {
     const prod = { ...deployed, DEPLOYMENT_ID: 'prod' }
     const { FREE_LINK_TUNING: _f, ...noLinks } = tuned

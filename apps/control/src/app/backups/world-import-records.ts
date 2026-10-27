@@ -14,7 +14,7 @@ import {
   type WorldImportAnswerJson,
   type WorldImportQuestionJson,
 } from '@blockly/db'
-import { and, eq, isNull, ne, sql } from 'drizzle-orm'
+import { and, count, eq, gt, isNull, ne, sql } from 'drizzle-orm'
 
 const imports = schema.worldImports
 
@@ -119,6 +119,15 @@ export async function worldImportRefused(
       question: null,
     })
     .where(and(eq(imports.id, id), eq(imports.status, 'reading')))
+}
+
+/** How many worlds its owner brought for a server not yet made since `since`. */
+export async function worldsBroughtSince(q: Queryable, ownerId: string, since: Date): Promise<number> {
+  const [row] = await q
+    .select({ n: count() })
+    .from(imports)
+    .where(and(eq(imports.ownerId, ownerId), isNull(imports.serverId), gt(imports.createdAt, since)))
+  return row?.n ?? 0
 }
 
 /**

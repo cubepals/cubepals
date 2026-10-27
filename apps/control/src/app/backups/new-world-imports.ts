@@ -16,7 +16,7 @@ import { join } from 'node:path'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { NewWorldImportView } from '@blockly/contracts'
-import { HOUR_S } from '@blockly/contracts/durations'
+import { DAY_MS, HOUR_S } from '@blockly/contracts/durations'
 import type { Db, NewWorldFactsJson, WorldImportAnswerJson } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import type { ModArtifact } from '../../domain/mods/artifact.ts'
@@ -30,6 +30,7 @@ import { AppError, NotFound } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { FileFormats, PackArchives, TarballEntry, WorldArchives } from '../ports/formats.ts'
 import type { JobQueue } from '../ports/jobs.ts'
+import { tuning } from '../tuning.ts'
 import {
   claimPendingUpload,
   insertPendingUpload,
@@ -43,6 +44,7 @@ import {
   type WorldImportRecord,
   worldImportAnswered,
   worldsBroughtBefore,
+  worldsBroughtSince,
 } from './world-import-records.ts'
 import {
   answerFor,
@@ -113,6 +115,9 @@ export class NewWorldImports {
           `A server on your plan has room for a world of up to ${Number((limit / 1024 ** 3).toFixed(1))} GB.`,
         )
       await this.#policy.require(tx, actor.userId, { kind: 'restore_archive' })
+      const since = new Date(Date.now() - DAY_MS)
+      if ((await worldsBroughtSince(tx, actor.userId, since)) >= tuning().abuse.worldUploadsPerDay)
+        throw new AppError('rate_limited', 'That’s a lot of worlds for one day. Try again tomorrow.')
       const store = requireCapability(this.#caps, 'archives')
       const id = randomUUID()
       const key = store.newKey('world_upload', { serverId: '', id })

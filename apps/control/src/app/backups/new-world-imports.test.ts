@@ -28,6 +28,7 @@ import { MemoryStore } from '../../testing/memory-store.ts'
 import { savedOn, zipBytes } from '../../testing/uploads.ts'
 import { bringNewWorld, PLAYER, save, serverFolder, untilNewRead } from '../../testing/world-imports.ts'
 import { grownStorage, loadRevision } from '../servers/persistence.ts'
+import { installTuning, tuning } from '../tuning.ts'
 import { listWorlds } from '../worlds/persistence.ts'
 
 const run = promisify(execFile)
@@ -218,6 +219,22 @@ describe.skipIf(!hasDatabase)('what can’t make a server', () => {
         from: 'world',
       },
     )
+  }, 120_000)
+
+  test('past the worlds an account may bring in a day, the next is refused before it is sent', async () => {
+    const was = tuning()
+    installTuning({ ...was, abuse: { ...was.abuse, worldUploadsPerDay: 1 } })
+    try {
+      const owner = await h.user('Fern', 'plus')
+      expect((await bringNewWorld(h, owner, zipBytes(await save('Today/')), 'today.zip')).status).toBe(
+        'ready',
+      )
+      await expect(
+        h.app.backups.newWorlds.begin(owner, { fileName: 'more.zip', sizeBytes: 1024 }),
+      ).rejects.toThrow('That’s a lot of worlds for one day. Try again tomorrow.')
+    } finally {
+      installTuning(was)
+    }
   }, 120_000)
 
   test('a world brought before the latest one, or someone else’s', async () => {
