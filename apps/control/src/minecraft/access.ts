@@ -245,7 +245,11 @@ export function accessFiles(lists: Partial<AccessLists>, now: Date): Partial<Rec
   return files
 }
 
-type AccessFile = 'whitelist.json' | 'ops.json' | 'banned-players.json'
+/** The files a server keeps who may join it in: its whitelist, its operators and its players' bans. */
+export const ACCESS_FILES = ['whitelist.json', 'ops.json', 'banned-players.json'] as const
+type AccessFile = (typeof ACCESS_FILES)[number]
+/** The server's cache of which name is which player. */
+export const NAME_CACHE = 'usercache.json'
 
 /**
  * One exec that writes these files, and with `forgetNames` also the server's cache of which name
@@ -263,7 +267,7 @@ export function writeAccessFiles(files: Partial<Record<AccessFile, string>>, for
   const owner = `owner=$(ls -nd . | awk '{print $3":"$4}')`
   const steps = [owner]
   const contents: string[] = []
-  for (const name of ['whitelist.json', 'ops.json', 'banned-players.json'] as const) {
+  for (const name of ACCESS_FILES) {
     const content = files[name]
     if (content === undefined) continue
     contents.push(content)
@@ -273,7 +277,7 @@ export function writeAccessFiles(files: Partial<Record<AccessFile, string>>, for
       `chown -h "$owner" ${name}`,
     )
   }
-  if (forgetNames) steps.push('rm -f usercache.json')
+  if (forgetNames) steps.push(`rm -f ${NAME_CACHE}`)
   // The writes, run as the owner where the exec is root's and the image has `gosu`.
   const handOver = `${owner} && if [ "$(id -u)" = 0 ] && command -v gosu >/dev/null 2>&1; then exec gosu "$owner" sh -c "$1" "$@"; fi; exec sh -c "$1" "$@"`
   return ['sh', '-c', `cd ${DATA_DIR} && ${handOver}`, 'blockly-access', steps.join(' && '), ...contents]

@@ -11,12 +11,10 @@
 import { isBedrockUuid, MOST_WORLD_PEOPLE, type PeopleChoice } from '@blockly/contracts'
 import type { WorldPeopleJson, WorldPersonJson } from '@blockly/db'
 import type { AccessEntry, SeededAccess } from '../../domain/access/access.ts'
+import { ACCESS_FILES } from '../../minecraft/access.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { offlineUuid } from '../access/identity.ts'
 import type { PlayerProfiles } from '../ports/minecraft.ts'
-
-/** The files a server keeps who may join it in, beside its `server.properties`. */
-const ACCESS_FILES = ['whitelist.json', 'ops.json', 'banned-players.json'] as const
 
 /** What of a read upload its server's files are found by (`Read` in `world-reading.ts`). */
 interface Read {

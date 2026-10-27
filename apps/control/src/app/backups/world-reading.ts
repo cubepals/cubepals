@@ -14,6 +14,7 @@ import {
   planThatRuns,
   worldRoomBytes,
 } from '../../domain/account/entitlements.ts'
+import { NAME_CACHE } from '../../minecraft/access.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { compareVersions, isRelease } from '../../minecraft/versions.ts'
 import { DOWNLOAD_NOTE, jarsInNote } from '../../minecraft/world-download.ts'
@@ -288,7 +289,7 @@ export class WorldReading {
     const accounts: Accounts = { renames: new Map(), matched: [], unmatched: [] }
     const properties = read.holds.properties
     if (properties === null || !onlineMode) return accounts
-    const raw = read.archive.kept.get(`${properties.slice(0, properties.lastIndexOf('/') + 1)}usercache.json`)
+    const raw = read.archive.kept.get(`${properties.slice(0, properties.lastIndexOf('/') + 1)}${NAME_CACHE}`)
     if (raw === undefined) return accounts
     const present = new Set(
       playersWithFiles(
