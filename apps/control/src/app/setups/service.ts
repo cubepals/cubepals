@@ -330,8 +330,10 @@ export class SetupService {
   async #packOnWorld(importId: string, pack: PackSourceInput, viewer: Actor | null): Promise<ResolvedSetup> {
     if (viewer?.kind !== 'user') throw new NotFound('Upload')
     const brought = await broughtWorld(this.#db, viewer.userId, importId)
-    const forWorld = await packForWorld(pack, brought, (projectId) => this.#packs.versions(projectId))
-    return fittedToWorld(await this.#resolved(forWorld, viewer), brought)
+    const forWorld = await packForWorld(pack, brought, (projectId) =>
+      this.#catalog.modpackVersions(projectId),
+    )
+    return fittedToWorld(await this.#resolved(forWorld, viewer), brought, pack)
   }
 
   async #resolved(source: SetupSource, viewer: Actor | null): Promise<ResolvedSetup> {

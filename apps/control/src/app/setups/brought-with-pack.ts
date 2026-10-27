@@ -7,7 +7,8 @@
  * (docs/world-import.md § Mods and plugins): which version of a catalog pack plays it, and what
  * the pack resolves to, fitted to the world. Resolving the pack is `service.ts`'s, as for any pack.
  */
-import type { PackSourceInput, PackVersionView } from '@blockly/contracts'
+import type { PackSourceInput } from '@blockly/contracts'
+import type { CatalogVersion } from '../../domain/mods/catalog.ts'
 import type { ServerSetup } from '../../domain/setup/setup.ts'
 import { compareVersions } from '../../minecraft/versions.ts'
 import type { BroughtWorld } from '../backups/new-world-imports.ts'
@@ -19,34 +20,44 @@ export const PLAYED_WITH_MODS =
 
 /**
  * The pack to resolve for a world: one from the catalog named without a version plays its newest
- * version for the world's own release, where it has one, so the world isn't moved to a newer
- * Minecraft unasked.
+ * version that lists the world's own release, where it has one, so the world isn't moved to a
+ * newer Minecraft unasked.
  */
 export async function packForWorld(
   pack: PackSourceInput,
   brought: BroughtWorld,
-  versions: (projectId: string) => Promise<PackVersionView[]>,
+  versions: (
+    projectId: string,
+  ) => Promise<ReadonlyArray<Pick<CatalogVersion, 'versionId' | 'gameVersions' | 'publishedAt'>>>,
 ): Promise<PackSourceInput> {
   if (pack.kind !== 'modpack' || pack.versionId !== undefined) return pack
-  const own = (await versions(pack.projectId)).find(
-    (version) => version.gameVersion === brought.facts.playsOn,
-  )
+  const own = [...(await versions(pack.projectId))]
+    .filter((version) => version.gameVersions.includes(brought.facts.playsOn))
+    .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())[0]
   return own === undefined ? pack : { ...pack, versionId: own.versionId }
 }
 
 /**
  * What a pack resolved to, fitted to the world its server starts on: the pack decides what it
  * runs, the world its game mode, difficulty and type, and the disk it needs. A world last saved on
- * a newer Minecraft than the pack's would lose what that release added, so it is refused.
+ * a newer Minecraft than the pack's would lose what that release added, so it is refused; one
+ * the pack would update is only where its owner chose the pack's version (`pack`), the file or
+ * the release Cubepals offers, never a version Cubepals picked for them.
  */
 export function fittedToWorld<
   R extends { gameVersion: string; from: string; notes: string[]; setup: ServerSetup },
->(resolved: R, brought: BroughtWorld): R & { brought: BroughtWorld } {
+>(resolved: R, brought: BroughtWorld, pack: PackSourceInput): R & { brought: BroughtWorld } {
   const { facts } = brought
   if (compareVersions(facts.playsOn, resolved.gameVersion) > 0)
     throw new AppError(
       'invalid_choice',
       `This world was last played on Minecraft ${facts.gameVersion}, and ${resolved.from} runs ${resolved.gameVersion}, which can’t open it. Choose the version of the pack the world was played with.`,
+    )
+  // Moving a world to a newer Minecraft can't be undone: only where its owner chose the version.
+  if (facts.playsOn !== resolved.gameVersion && pack.kind === 'modpack' && pack.versionId === undefined)
+    throw new AppError(
+      'invalid_choice',
+      `No version of ${resolved.from} runs Minecraft ${facts.playsOn}, which this world was played on. Choose the version it was played with, or one on a newer Minecraft to update the world to.`,
     )
   const updated = facts.gameVersion !== resolved.gameVersion
   return {

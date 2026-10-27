@@ -253,57 +253,6 @@ describe.skipIf(!hasDatabase)('what can’t make a server', () => {
     })
   }, 120_000)
 
-  test('a world played with mods asks for its pack, and its server is made from that pack', async () => {
-    const owner = await h.user('Sage', 'plus')
-    const files = await serverFolder('vanilla-1.21.11')
-    files['mods/sodium.jar'] = new TextEncoder().encode('a mod')
-    const ready = await bringNewWorld(h, owner, zipBytes(files), 'modded.zip')
-    expect(ready).toMatchObject({ status: 'ready', world: { gameVersion: '1.21.11', moddedWith: [] } })
-    if (ready.status !== 'ready') return
-    // Alone it would be opened on plain Minecraft, which would lose what its mods added.
-    await expect(
-      h.app.queries.setupPreview(owner, { kind: 'world', importId: ready.importId }),
-    ).rejects.toThrow(
-      'This world was played with mods, which plain Minecraft would lose. Choose the pack it was played with, and its server is made from that.',
-    )
-
-    // Named without a version, the pack plays its newest one for the world's own release.
-    publishPack('played-pack', [
-      { id: 'pp-2', gameVersions: ['26.3'] },
-      { id: 'pp-1', gameVersions: ['1.21.11'] },
-    ])
-    const from = {
-      kind: 'world',
-      importId: ready.importId,
-      pack: { kind: 'modpack', projectId: 'played-pack' },
-    } as const
-    expect(await h.app.queries.setupPreview(owner, from)).toMatchObject({
-      gameVersion: '1.21.11',
-      loader: 'fabric',
-      modpack: { version: 'pp-1' },
-    })
-    const server = await h.create(owner, { from })
-    const revision = await loadRevision(h.db, server.desiredRevisionId)
-    expect(revision.modpack).toMatchObject({ projectId: 'played-pack', versionId: 'pp-1' })
-    // The world's own game mode and difficulty, and the world itself to start on.
-    expect(revision.settings).toMatchObject({ defaultGameMode: 'survival', difficulty: 'easy' })
-    const kept = await h.db.query.worldImports.findFirst({ where: (t, { eq }) => eq(t.id, ready.importId) })
-    const [world] = await listWorlds(h.db, server.id)
-    expect(world?.startsOn).toEqual(kept?.startsOn ?? null)
-
-    // A pack version older than the world would lose what its release added.
-    publishPack('older-pack', [{ id: 'op-1', gameVersions: ['1.21.1'] }])
-    await expect(
-      h.app.queries.setupPreview(owner, {
-        kind: 'world',
-        importId: ready.importId,
-        pack: { kind: 'modpack', projectId: 'older-pack' },
-      }),
-    ).rejects.toThrow(
-      'This world was last played on Minecraft 1.21.11, and older-pack runs 1.21.1, which can’t open it. Choose the version of the pack the world was played with.',
-    )
-  }, 120_000)
-
   test('a world refused after a ready one leaves that one to make a server from', async () => {
     const owner = await h.user('Nell', 'plus')
     const kept = await bringNewWorld(h, owner, zipBytes(await save('Keep/')), 'keep.zip')
@@ -354,5 +303,93 @@ describe.skipIf(!hasDatabase)('what can’t make a server', () => {
       'Upload',
     )
     await expect(h.app.backups.newWorlds.view(stranger, second.importId)).rejects.toThrow('Upload')
+  }, 120_000)
+})
+
+describe.skipIf(!hasDatabase)('a world played with mods', () => {
+  test('a world played with mods asks for its pack, and its server is made from that pack', async () => {
+    const owner = await h.user('Sage', 'plus')
+    const files = await serverFolder('vanilla-1.21.11')
+    files['mods/sodium.jar'] = new TextEncoder().encode('a mod')
+    const ready = await bringNewWorld(h, owner, zipBytes(files), 'modded.zip')
+    expect(ready).toMatchObject({ status: 'ready', world: { gameVersion: '1.21.11', moddedWith: [] } })
+    if (ready.status !== 'ready') return
+    // Alone it would be opened on plain Minecraft, which would lose what its mods added.
+    await expect(
+      h.app.queries.setupPreview(owner, { kind: 'world', importId: ready.importId }),
+    ).rejects.toThrow(
+      'This world was played with mods, which plain Minecraft would lose. Choose the pack it was played with, and its server is made from that.',
+    )
+
+    // Named without a version, the pack plays its newest one for the world's own release.
+    publishPack('played-pack', [
+      { id: 'pp-2', gameVersions: ['26.3'] },
+      { id: 'pp-1', gameVersions: ['1.21.11'] },
+    ])
+    const from = {
+      kind: 'world',
+      importId: ready.importId,
+      pack: { kind: 'modpack', projectId: 'played-pack' },
+    } as const
+    expect(await h.app.queries.setupPreview(owner, from)).toMatchObject({
+      gameVersion: '1.21.11',
+      loader: 'fabric',
+      modpack: { version: 'pp-1' },
+    })
+    const server = await h.create(owner, { from })
+    const revision = await loadRevision(h.db, server.desiredRevisionId)
+    expect(revision.modpack).toMatchObject({ projectId: 'played-pack', versionId: 'pp-1' })
+    // The world's own game mode and difficulty, and the world itself to start on.
+    expect(revision.settings).toMatchObject({ defaultGameMode: 'survival', difficulty: 'easy' })
+    const kept = await h.db.query.worldImports.findFirst({ where: (t, { eq }) => eq(t.id, ready.importId) })
+    const [world] = await listWorlds(h.db, server.id)
+    expect(world?.startsOn).toEqual(kept?.startsOn ?? null)
+
+    // A version that lists the world's release among others is one for it.
+    publishPack('wide-pack', [
+      { id: 'wp-2', gameVersions: ['26.3'] },
+      { id: 'wp-1', gameVersions: ['1.21.11', '26.3'] },
+    ])
+    expect(
+      await h.app.queries.setupPreview(owner, {
+        kind: 'world',
+        importId: ready.importId,
+        pack: { kind: 'modpack', projectId: 'wide-pack' },
+      }),
+    ).toMatchObject({ gameVersion: '1.21.11', modpack: { version: 'wp-1' } })
+    // With none for its release, the world isn't moved to a newer Minecraft unasked; its owner picks.
+    publishPack('newer-pack', [{ id: 'np-1', gameVersions: ['26.3'] }])
+    const newer = { kind: 'modpack', projectId: 'newer-pack' } as const
+    await expect(
+      h.app.queries.setupPreview(owner, { kind: 'world', importId: ready.importId, pack: newer }),
+    ).rejects.toThrow(
+      'No version of newer-pack runs Minecraft 1.21.11, which this world was played on. Choose the version it was played with, or one on a newer Minecraft to update the world to.',
+    )
+    expect(
+      await h.app.queries.setupPreview(owner, {
+        kind: 'world',
+        importId: ready.importId,
+        pack: { ...newer, versionId: 'np-1' },
+      }),
+    ).toMatchObject({
+      gameVersion: '26.3',
+      modpack: {
+        notes: [
+          'It was last played on Minecraft 1.21.11. newer-pack runs 26.3, which updates it when it first starts.',
+        ],
+      },
+    })
+
+    // A pack version older than the world would lose what its release added.
+    publishPack('older-pack', [{ id: 'op-1', gameVersions: ['1.21.1'] }])
+    await expect(
+      h.app.queries.setupPreview(owner, {
+        kind: 'world',
+        importId: ready.importId,
+        pack: { kind: 'modpack', projectId: 'older-pack' },
+      }),
+    ).rejects.toThrow(
+      'This world was last played on Minecraft 1.21.11, and older-pack runs 1.21.1, which can’t open it. Choose the version of the pack the world was played with.',
+    )
   }, 120_000)
 })
