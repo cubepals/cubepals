@@ -4,6 +4,8 @@
 
 import { describe, expect, test } from 'bun:test'
 import {
+  broughtWorldRoomBytes,
+  diskForBroughtWorld,
   diskForWorld,
   entitlementsFor,
   grownDisk,
@@ -275,5 +277,21 @@ describe('what the plans cost and include once', () => {
 
   test('plus is $25 a month, or $250 a year: two months free', () => {
     expect(entitlementsFor('plus')).toMatchObject({ monthlyPriceCents: 2500, yearlyPriceCents: 25000 })
+  })
+})
+
+describe('the disk a new server starts with for a world brought', () => {
+  test('a new server made from a world brought has room for it, and its archive while it unpacks', () => {
+    const GB = 2 ** 30
+    const plus = entitlementsFor('plus')
+    // A small world starts on the plan's first disk.
+    expect(diskForBroughtWorld(plus, 1 * GB, 0.8 * GB)).toBe(5)
+    // 3 GB of world needs 5 GB, and 2.5 GB of archive lies beside it while it unpacks.
+    expect(diskForBroughtWorld(plus, 3 * GB, 2.5 * GB)).toBe(8)
+    // The largest world a new server starts on: 7.5 GB needs 12.5 GB, and as much archive beside
+    // it fills Plus's largest disk, 20 GB.
+    expect(broughtWorldRoomBytes(plus.storage.mostGb) / GB).toBeCloseTo(7.5, 6)
+    expect(diskForBroughtWorld(plus, 7.5 * GB, 7.5 * GB)).toBe(20)
+    expect(diskForBroughtWorld(plus, 9 * GB, 9 * GB)).toBe(20)
   })
 })

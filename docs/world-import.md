@@ -40,8 +40,11 @@ Before the plan:
   offers, in its game mode and difficulty, with its own name and seed. The world is kept as an
   archive under its bytes, and the server's first start unpacks it where its world goes
   (`World.startsOn`, `minecraft/starter.ts`), before the steps that lay a world out for its server
-  type. The store keeps the archive while a server has the world, and a month for one not made yet;
-  bringing another world for a new server lets the one before go.
+  type. The server starts on a disk with room for the world and, while it unpacks, the archive
+  beside it (`diskForBroughtWorld`), up to the plan's largest; a world brought before its server is
+  held to what that leaves. The store keeps the archive while a server has the world, and a month
+  for one not made yet; another world brought for a new server lets the one before go once it is
+  ready.
 - **Next:** mods (step 4), then the rest and the guide.
 
 ## What it does

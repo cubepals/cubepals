@@ -11,8 +11,8 @@
  * (`service.ts`), which runs this first.
  */
 import { NAME_MAX_LENGTH } from '@blockly/contracts'
-import type { Db } from '@blockly/db'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import type { Db, Tx } from '@blockly/db'
+import { diskForBroughtWorld, type Entitlements, entitlementsFor } from '../../domain/account/entitlements.ts'
 import { isDatapack } from '../../domain/mods/artifact.ts'
 import type { CarriedFile } from '../../domain/revision/carried.ts'
 import {
@@ -45,7 +45,7 @@ import { fittedDefaults, requireWithinPlan } from '../revisions/caps.ts'
 import { loaderPin, paperPin } from '../revisions/pins.ts'
 import type { ResolvedSetup, SetupSource } from '../setups/service.ts'
 import { sizeOf } from '../setups/service.ts'
-import type { NewServer } from './persistence.ts'
+import { createRuntimeBinding, growStorage, type NewServer } from './persistence.ts'
 
 export interface CreateServerRequest {
   idempotencyKey: string
@@ -76,6 +76,8 @@ export interface NewServerDraft {
   /** The owner's plan, and the disk it starts a server on, for placing it. */
   plan: string
   storageGb: number
+  /** That disk where it is past the plan's first, as a world its owner brought needs; else null. */
+  grownGb: number | null
   /** What the audit row adds about where it came from: a template, or a curated pack's release. */
   origin: Record<string, unknown>
 }
@@ -144,18 +146,43 @@ export async function draftNewServer(
     memoryTier,
     createdFrom,
     revision,
-    world:
-      chosen?.brought === undefined
-        ? newWorld(request, chosen, gameVersion)
-        : broughtWorld(chosen.brought, gameVersion),
+    ...firstWorld(request, chosen, gameVersion, plan),
     plan: standing.plan,
-    storageGb: plan.storage.startGb,
     origin: {
       ...(request.from?.kind === 'template' ? { template: request.from.key } : {}),
       ...(chosen?.modpack?.curated === undefined
         ? {}
         : { curated: chosen.modpack.curated.key, release: chosen.modpack.curated.version }),
     },
+  }
+}
+
+/** A new server's binding to the runtime it was placed on, and the disk its first world needs. */
+export async function bindNewRuntime(
+  tx: Tx,
+  serverId: string,
+  provider: string,
+  grownGb: number | null,
+): Promise<void> {
+  await createRuntimeBinding(tx, serverId, provider)
+  if (grownGb !== null) await growStorage(tx, serverId, grownGb)
+}
+
+/** A new server's first world, and the disk it starts with: one with room for a world brought. */
+function firstWorld(
+  request: CreateServerRequest,
+  chosen: ResolvedSetup | null,
+  gameVersion: string,
+  plan: Entitlements,
+): Pick<NewServerDraft, 'world' | 'storageGb' | 'grownGb'> {
+  const brought = chosen?.brought
+  if (brought === undefined)
+    return { world: newWorld(request, chosen, gameVersion), storageGb: plan.storage.startGb, grownGb: null }
+  const disk = diskForBroughtWorld(plan, brought.facts.sizeBytes, brought.startsOn.sizeBytes)
+  return {
+    world: broughtWorld(brought, gameVersion),
+    storageGb: disk,
+    grownGb: disk > plan.storage.startGb ? disk : null,
   }
 }
 

@@ -300,6 +300,8 @@ export interface NewWorldFactsJson {
   hardcore: boolean
   gameMode: 'survival' | 'creative' | 'adventure' | 'spectator'
   difficulty: 'peaceful' | 'easy' | 'normal' | 'hard'
+  /** The world as it lies on disk once unpacked, which its server's first disk has room for. */
+  sizeBytes: number
 }
 
 /** An uploaded world's own facts, as its server.properties and level.dat say. */

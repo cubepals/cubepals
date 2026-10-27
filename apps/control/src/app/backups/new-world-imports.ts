@@ -133,8 +133,8 @@ export class NewWorldImports {
 
   /**
    * The upload arrived: it is read on a worker, and `view` says how it went. Asked twice, once. Its
-   * owner holds one world for a server not yet made: the one before it goes, as nothing made from
-   * it needs it.
+   * owner holds one world for a server not yet made: the one before it goes once this one is ready
+   * (`#keep`), so a world that is refused or never picked leaves the one before as it was.
    */
   async finish(actor: UserActor, ticket: string): Promise<{ importId: string }> {
     const known = await loadWorldImport(this.#db, ticket)
@@ -154,9 +154,7 @@ export class NewWorldImports {
         sizeBytes: pending.sizeBytes,
         name: null,
       })
-      if (!made) return
-      await worldsBroughtBefore(tx, actor.userId, pending.id)
-      await this.#jobs.enqueueWorldImport(tx, pending.id)
+      if (made) await this.#jobs.enqueueWorldImport(tx, pending.id)
     })
     return { importId: pending.id }
   }
@@ -240,6 +238,10 @@ export class NewWorldImports {
       hardcore: read.facts.hardcore,
       gameMode: read.facts.gameMode,
       difficulty: read.facts.difficulty,
+      sizeBytes: read.archive.files.reduce(
+        (sum, file) => (place(file.name) === null ? sum : sum + file.sizeBytes),
+        0,
+      ),
     }
     const notes = [
       ...read.notes,
@@ -256,6 +258,7 @@ export class NewWorldImports {
     const kept = await this.#db.transaction(async (tx) => {
       if (!(await claimPendingUpload(tx, pending.id))) return false
       await newWorldImportReady(tx, record.id, { facts, startsOn, notes, at: new Date() })
+      await worldsBroughtBefore(tx, record.ownerId, record.id)
       return true
     })
     // The upload was cleared while it was read (it waited past the day uploads are kept). What was

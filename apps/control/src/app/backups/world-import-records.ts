@@ -14,7 +14,7 @@ import {
   type WorldImportAnswerJson,
   type WorldImportQuestionJson,
 } from '@blockly/db'
-import { and, eq, isNull, ne } from 'drizzle-orm'
+import { and, eq, isNull, ne, sql } from 'drizzle-orm'
 
 const imports = schema.worldImports
 
@@ -122,12 +122,20 @@ export async function worldImportRefused(
 }
 
 /**
- * Its owner brought another world for a server not yet made: the ones before it can't make one
- * any more, and what they stored is the store's sweep's to let go once nothing uses it.
+ * Its owner's world for a server not yet made is ready: the ones they brought before it can't make
+ * one any more, and what they stored is the store's sweep's to let go once nothing uses it. One
+ * brought after it and ready first stays.
  */
 export async function worldsBroughtBefore(q: Queryable, ownerId: string, latestId: string): Promise<void> {
   await q
     .update(imports)
     .set({ startsOn: null })
-    .where(and(eq(imports.ownerId, ownerId), isNull(imports.serverId), ne(imports.id, latestId)))
+    .where(
+      and(
+        eq(imports.ownerId, ownerId),
+        isNull(imports.serverId),
+        ne(imports.id, latestId),
+        sql`${imports.createdAt} < (select ${imports.createdAt} from ${imports} where ${imports.id} = ${latestId})`,
+      ),
+    )
 }

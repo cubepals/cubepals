@@ -415,6 +415,22 @@ const WORLD_SHARE_OF_DISK = 0.6
 export const worldRoomBytes = (diskGb: number): number => Math.floor(diskGb * WORLD_SHARE_OF_DISK * 1024 ** 3)
 
 /**
+ * The largest world, as it lies on disk, a new server on a disk of `diskGb` can start on: while its
+ * first start unpacks it, its archive lies beside it, and a gzipped world is no larger than the world.
+ */
+export const broughtWorldRoomBytes = (diskGb: number): number =>
+  Math.floor((diskGb * 1024 ** 3) / (1 / WORLD_SHARE_OF_DISK + 1))
+
+/**
+ * The disk a new server made from a world its owner brought starts with: room for the world, and
+ * for its archive beside it while the first start unpacks it, from the plan's first disk to its most.
+ */
+export function diskForBroughtWorld(plan: Entitlements, worldBytes: number, archiveBytes: number): number {
+  const needed = Math.ceil((worldBytes / WORLD_SHARE_OF_DISK + archiveBytes) / 2 ** 30)
+  return Math.min(plan.storage.mostGb, Math.max(plan.storage.startGb, needed))
+}
+
+/**
  * The disk a server needs to bring back a world download of `worldBytes`, where the one it has is
  * too small and its plan can grow that far; null when its disk will do, or no disk it may have would.
  */

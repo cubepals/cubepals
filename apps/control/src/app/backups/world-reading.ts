@@ -8,6 +8,7 @@ import type { WorldImportView } from '@blockly/contracts'
 import { HOUR_S } from '@blockly/contracts/durations'
 import type { Db, WorldImportAnswerJson, WorldImportQuestionJson } from '@blockly/db'
 import {
+  broughtWorldRoomBytes,
   comesWith,
   entitlementsFor,
   planThatRuns,
@@ -241,8 +242,11 @@ export class WorldReading {
     const standing = await loadStanding(this.#db, to.ownerId)
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
     // Held to the room an upload is (`beginWorldUpload`), as the world lies on disk, not as it was sent.
-    const grown = to.serverId === null ? 0 : await grownStorage(this.#db, to.serverId)
-    const room = worldRoomBytes(Math.max(plan.storage.mostGb, grown))
+    // A new server's first start unpacks it beside its archive (`diskForBroughtWorld`).
+    const room =
+      to.serverId === null
+        ? broughtWorldRoomBytes(plan.storage.mostGb)
+        : worldRoomBytes(Math.max(plan.storage.mostGb, await grownStorage(this.#db, to.serverId)))
     const place = placeOnServer(read.world, 'world')
     const unpacked = read.archive.files.reduce(
       (sum, file) => (place(file.name) === null ? sum : sum + file.sizeBytes),

@@ -31,9 +31,8 @@ import { keepSentIcon, type OwnIcon } from '../server-icons/persistence.ts'
 import type { SetupService } from '../setups/service.ts'
 import { newInviteCode } from './invites.ts'
 import { checkNewServer, mayGive, redescribed, refuseAddress, renamed } from './names.ts'
-import { type CreateServerRequest, draftNewServer } from './new-server.ts'
+import { bindNewRuntime, type CreateServerRequest, draftNewServer } from './new-server.ts'
 import {
-  createRuntimeBinding,
   findByCreateKey,
   findServer,
   insertRevision,
@@ -137,7 +136,7 @@ export class MinecraftServerService {
       owner,
       request,
     )
-    const { regionKey, memoryTier, createdFrom, revision, world, plan, storageGb, origin } = draft
+    const { regionKey, memoryTier, createdFrom, revision, world, plan, storageGb, grownGb, origin } = draft
 
     const server = await this.#db.transaction(async (tx) => {
       // An owner's creates take turns under their own capacity lock. A second press, or a retry
@@ -206,7 +205,7 @@ export class MinecraftServerService {
       // Under the platform's lock to commit: the count, and placing by each runtime's count.
       await admit(created.server.id)
       const placed = await this.#placement.place(tx, placing, rules, requestedBy(madeBy), answers)
-      await createRuntimeBinding(tx, created.server.id, placed.provider)
+      await bindNewRuntime(tx, created.server.id, placed.provider, grownGb)
       return created.server
     })
     return server

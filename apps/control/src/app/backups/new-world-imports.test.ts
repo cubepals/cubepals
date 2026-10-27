@@ -15,6 +15,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { DAY_MS } from '@blockly/contracts/durations'
+import { schema } from '@blockly/db'
+import { eq } from 'drizzle-orm'
+import { diskForBroughtWorld, entitlementsFor } from '../../domain/account/entitlements.ts'
 import { LibraryFileFormats } from '../../infra/formats/file-formats.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { DATAPACKS_STEP } from '../../minecraft/datapacks.ts'
@@ -24,7 +27,7 @@ import { type Harness, hasDatabase, startHarness } from '../../testing/harness.t
 import { MemoryStore } from '../../testing/memory-store.ts'
 import { savedOn, zipBytes } from '../../testing/uploads.ts'
 import { bringNewWorld, PLAYER, save, serverFolder, untilNewRead } from '../../testing/world-imports.ts'
-import { loadRevision } from '../servers/persistence.ts'
+import { grownStorage, loadRevision } from '../servers/persistence.ts'
 import { listWorlds } from '../worlds/persistence.ts'
 
 const run = promisify(execFile)
@@ -149,6 +152,34 @@ describe.skipIf(!hasDatabase)('a server made from a world its owner brought', ()
   }, 120_000)
 })
 
+describe.skipIf(!hasDatabase)('the disk a server made from a world brought starts with', () => {
+  test('has room for the world, and for its archive while its first start unpacks it', async () => {
+    const owner = await h.user('Wren', 'plus')
+    const small = await bringNewWorld(h, owner, zipBytes(await save('Small/')), 'small.zip')
+    if (small.status !== 'ready') throw new Error(`The import is ${small.status}`)
+    const first = await h.create(owner, { from: { kind: 'world', importId: small.importId } })
+    // A small world starts on the plan's first disk, as any new server does.
+    expect(await grownStorage(h.db, first.id)).toBe(0)
+
+    const large = await bringNewWorld(h, owner, zipBytes(await save('Large/')), 'large.zip')
+    if (large.status !== 'ready') throw new Error(`The import is ${large.status}`)
+    // As though the world were 6 GB unpacked: its server starts on the disk that holds it and its
+    // archive at once, past the plan's first.
+    const kept = await h.db.query.worldImports.findFirst({ where: (t, { eq }) => eq(t.id, large.importId) })
+    if (kept?.facts == null || kept.startsOn == null) throw new Error('The import keeps no world')
+    await h.db
+      .update(schema.worldImports)
+      .set({ facts: { ...kept.facts, sizeBytes: 6 * 2 ** 30 } })
+      .where(eq(schema.worldImports.id, large.importId))
+    const second = await h.create(owner, { from: { kind: 'world', importId: large.importId } })
+    const plus = entitlementsFor('plus')
+    expect(await grownStorage(h.db, second.id)).toBe(
+      diskForBroughtWorld(plus, 6 * 2 ** 30, kept.startsOn.sizeBytes),
+    )
+    expect(await grownStorage(h.db, second.id)).toBeGreaterThan(plus.storage.startGb)
+  }, 120_000)
+})
+
 describe.skipIf(!hasDatabase)('a Paper server’s folder, before its server is made', () => {
   test('brings its Nether and End inside the world, where every server type finds them', async () => {
     const owner = await h.user('Juno', 'plus')
@@ -172,6 +203,21 @@ describe.skipIf(!hasDatabase)('what can’t make a server', () => {
       status: 'refused',
       message: 'This world was last played on Minecraft 99.1, newer than any release Cubepals offers yet.',
     })
+  }, 120_000)
+
+  test('a world refused after a ready one leaves that one to make a server from', async () => {
+    const owner = await h.user('Nell', 'plus')
+    const kept = await bringNewWorld(h, owner, zipBytes(await save('Keep/')), 'keep.zip')
+    const files = await save('Later/')
+    files['Later/level.dat'] = await savedOn(files['Later/level.dat'] as Uint8Array, '99.1')
+    expect((await bringNewWorld(h, owner, zipBytes(files), 'later.zip')).status).toBe('refused')
+    expect(kept.status).toBe('ready')
+    // The create page can still make a server from the first.
+    expect(await h.app.queries.setupPreview(owner, { kind: 'world', importId: kept.importId })).toMatchObject(
+      {
+        from: 'world',
+      },
+    )
   }, 120_000)
 
   test('a world brought before the latest one, or someone else’s', async () => {

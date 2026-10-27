@@ -44,16 +44,18 @@ const STARTER_VARIABLE = 'BLOCKLY_STARTER'
 
 /**
  * The step. Only on a world's first start, before Minecraft makes it: a world that has its
- * `level.dat` is never touched again. The archive is fetched, checked against its sha512, and
- * unpacked into the world's folder, owned as the volume is; anything else stops the start, so a
- * server never generates a plain world where its template's should be. A link where the world or
- * the archive goes is replaced first (`volume-links.ts`): the step runs as root.
+ * `level.dat` is never touched again. The archive is fetched for as long as it keeps arriving (a
+ * world its owner brought may be gigabytes), checked against its sha512, and unpacked into the
+ * world's folder, owned as the volume is; anything else stops the start, so a server never
+ * generates a plain world where its template's should be. A link where the world or the archive
+ * goes is replaced first (`volume-links.ts`): the step runs as root.
  */
 export const STARTER_STEP = [
   `if [ -n "$${STARTER_VARIABLE}" ] && [ ! -f "${DATA_DIR}/$LEVEL/level.dat" ]; then`,
   `sha=\${${STARTER_VARIABLE}%% *}; url=\${${STARTER_VARIABLE}#* }; f="${DATA_DIR}/.blockly-starter.tar.gz";`,
   'unlinked "$LEVEL"; unlinked .blockly-starter.tar.gz;',
-  `{ curl -fsSL --retry 3 --max-time 600 -o "$f" "$url" && [ "$(sha512sum "$f" | cut -d ' ' -f 1)" = "$sha" ] &&`,
+  `{ curl -fsSL --retry 3 --connect-timeout 20 --speed-limit 1024 --speed-time 60 -o "$f" "$url" &&`,
+  `[ "$(sha512sum "$f" | cut -d ' ' -f 1)" = "$sha" ] &&`,
   `mkdir -p "${DATA_DIR}/$LEVEL" && tar -xzf "$f" -C "${DATA_DIR}/$LEVEL" &&`,
   `chown -R "$(ls -nd ${DATA_DIR} | awk '{ print $3 ":" $4 }')" "${DATA_DIR}/$LEVEL" && rm -f "$f"; }`,
   `|| { rm -f "$f"; echo "Cubepals could not fetch the world $LEVEL starts on" >&2; exit 1; }; fi;`,
