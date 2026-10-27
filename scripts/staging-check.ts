@@ -9,13 +9,15 @@
  *   bun scripts/staging-check.ts --keep     leaves the accounts and their servers to look at
  *
  * What a group does with a server over weeks, with the weeks skipped by moving one timestamp, split
- * into three journeys that run at once, each on its own Free account and server, since none needs
+ * into four journeys that run at once, each on its own Free account and server, since none needs
  * what another does:
  *
  *   sleep   made, joined through the edge, left until it goes to sleep, woken by a join
  *   rest    made, written into, rested in the archive store with its machine and volume let go,
  *           woken from the archive by a join, and checked to be the same world
  *   crash   made, its machine killed under it, and back as the same world
+ *   import  made, written into, its world downloaded and uploaded again as a player's own save,
+ *           restored from it, and checked to be the same world
  *
  * and one more for each of Cubepals' own templates, each template whose setup carries a datapack
  * Cubepals writes (the Arcade and Duels), found from the templates themselves: made from it and
@@ -50,6 +52,7 @@ import { SQL } from 'bun'
 import { TEMPLATES } from '../apps/control/src/app/setups/templates.ts'
 import { runScheduledNow } from '../apps/control/src/infra/pg/jobs.ts'
 import { GAME_PORT } from '../apps/control/src/minecraft/ports.ts'
+import { bringsWorldIn } from './lib/brought-world.ts'
 import { Progress, type StepResult, seconds, summaryTable } from './lib/check-progress.ts'
 import { fly } from './lib/fly-async.ts'
 import { type Edge, join, login } from './lib/minecraft.ts'
@@ -607,6 +610,12 @@ async function rests(j: Journey): Promise<void> {
   await j.trash()
 }
 
+/** Made, its world downloaded and brought back as a player's own save (`lib/brought-world.ts`). */
+async function bringsIn(j: Journey): Promise<void> {
+  if (await j.begin()) await bringsWorldIn(j)
+  await j.trash()
+}
+
 /** Made, its machine killed under it, back as the same world. */
 async function crashes(j: Journey): Promise<void> {
   if (!(await j.begin())) return
@@ -739,18 +748,20 @@ await before.step(
 const sleep = new Journey('sleep')
 const rest = new Journey('rest')
 const crash = new Journey('crash')
+const brought = new Journey('import')
 const owns = OWN_TEMPLATES.map((own) => ({ own, j: new Journey(own.key) }))
 say(
-  `\n${3 + owns.length} servers at once: sleep (asleep and woken), rest (archived and back), crash (killed and back), and ${owns.map(({ own }) => own.key).join(', ')} (Cubepals' own templates, booted cold)`,
+  `\n${4 + owns.length} servers at once: sleep (asleep and woken), rest (archived and back), crash (killed and back), import (its world brought back as a save), and ${owns.map(({ own }) => own.key).join(', ')} (Cubepals' own templates, booted cold)`,
 )
 await Promise.all([
   sleeps(sleep),
   rests(rest),
   crashes(crash),
+  bringsIn(brought),
   ...owns.map(({ own, j }) => ownTemplate(j, own)),
 ])
 
-const made = [sleep, rest, crash, ...owns.map(({ j }) => j)].filter((j) => j.server.id !== '')
+const made = [sleep, rest, crash, brought, ...owns.map(({ j }) => j)].filter((j) => j.server.id !== '')
 if (KEEP)
   for (const j of made)
     say(`\nkept (${j.name}): ${j.owner.email} / ${j.owner.password}, server ${j.server.id}`)
