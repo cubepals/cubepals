@@ -146,7 +146,9 @@ async function eachTarEntry(
     pending = pending.then(async () => {
       if (failure !== null) return void entry.resume()
       try {
-        await visit(checked, entry)
+        // A failure while this entry is read (a bomb found in it, the file gone) ends the wait for
+        // it: the bytes it waits for never come once the file stops.
+        await Promise.race([visit(checked, entry), stopped])
       } catch (error) {
         entry.resume()
         fail(error)

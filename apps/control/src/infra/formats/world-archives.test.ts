@@ -187,6 +187,24 @@ describe('a tarball built to do harm is refused before anything is used', () => 
     await run('tar', ['-czf', path, '-C', dir, 'a.mca', 'b.mca'])
     expect(await refused(new Uint8Array(await Bun.file(path).arrayBuffer()))).toBe('bomb')
   })
+
+  test('one that inflates past its size while a file it keeps is read is refused, not waited on', async () => {
+    const path = join(scratch, 'bomb-kept.tar.gz')
+    const dir = await folder({})
+    // The meter trips inside the level.dat it is reading, as the world's own file is kept.
+    await writeFile(join(dir, 'a.mca'), Buffer.alloc(40 * 1024 * 1024))
+    await writeFile(join(dir, 'level.dat'), Buffer.alloc(30 * 1024 * 1024))
+    await run('tar', ['-czf', path, '-C', dir, 'a.mca', 'level.dat'])
+    const opened = archives.openWorld(path, { ...LIMITS, maxKeptBytes: 32 * 1024 * 1024 })
+    const refusal = await Promise.race([
+      opened.then(
+        () => null,
+        (error: unknown) => (error instanceof HostileArchive ? error.reason : String(error)),
+      ),
+      Bun.sleep(20_000).then(() => 'still waiting'),
+    ])
+    expect(refusal).toBe('bomb')
+  }, 30_000)
 })
 
 describe('the tarball a world becomes', () => {
