@@ -44,7 +44,8 @@ Before the plan:
   beside it (`diskForBroughtWorld`), up to the plan's largest; a world brought before its server is
   held to what that leaves. The store keeps the archive while a server has the world, and a month
   for one not made yet; another world brought for a new server lets the one before go once it is
-  ready.
+  ready. A world played with mods is refused there until step 4, which makes a server from a pack
+  and a world together: its server is made from its pack, and the world brought on its World page.
 - **Next:** mods (step 4), then the rest and the guide.
 
 ## What it does

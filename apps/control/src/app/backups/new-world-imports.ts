@@ -21,6 +21,7 @@ import type { Db, NewWorldFactsJson, WorldImportAnswerJson } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import type { ModArtifact } from '../../domain/mods/artifact.ts'
 import { releaseFor } from '../../minecraft/versions.ts'
+import { moddedBrands } from '../../minecraft/world-facts.ts'
 import { placeInLevel, playerFilePath } from '../../minecraft/world-layout.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import type { UserActor } from '../actor.ts'
@@ -49,6 +50,7 @@ import {
 import {
   answerFor,
   MAX_WORLD_BYTES,
+  modJars,
   notesOn,
   type Read,
   type ReadingDeps,
@@ -68,6 +70,10 @@ const ARCHIVE_NAME = 'world.tar.gz'
 const LEVEL = 'world'
 
 /** A world brought for a new server, as making the server uses it. */
+/** What a world played with mods is told on the create page, where a server is made from it alone. */
+const PLAYED_WITH_MODS =
+  'This world was played with mods, and a server made from it alone runs plain Minecraft, which would lose its modded blocks and items. Make the server from the pack it was played with, under “A pack you have”, then bring the world on that server’s World page.'
+
 export interface BroughtWorld {
   facts: NewWorldFactsJson
   /** The archive the server's first start unpacks where its world goes. */
@@ -199,6 +205,9 @@ export class NewWorldImports {
           `This world was last played on Minecraft ${read.facts.gameVersion}, newer than any release Cubepals offers yet.`,
         )
       await this.#reading.refuseWhatWontOpen({ ownerId: record.ownerId, serverId: null }, read, playsOn)
+      // A server made from a world alone runs plain Minecraft, which would lose a modded world's
+      // blocks and items: it is made from its pack, and the world brought to it after.
+      if (moddedBrands(read.facts).length > 0 || modJars(read).length > 0) throw new Refused(PLAYED_WITH_MODS)
       // A new server plays in online mode, so the account named is the one Mojang says.
       const player = await this.#reading.hostPlayer(read, record.answer ?? {}, true)
       await this.#keep(record, pending, read, player, playsOn, work)

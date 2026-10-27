@@ -206,6 +206,17 @@ describe.skipIf(!hasDatabase)('what can’t make a server', () => {
     })
   }, 120_000)
 
+  test('a world played with mods is made from its pack first, not opened on plain Minecraft', async () => {
+    const owner = await h.user('Sage', 'plus')
+    const files = await serverFolder('vanilla-1.21.11')
+    files['mods/sodium.jar'] = new TextEncoder().encode('a mod')
+    expect(await bringNewWorld(h, owner, zipBytes(files), 'modded.zip')).toMatchObject({
+      status: 'refused',
+      message:
+        'This world was played with mods, and a server made from it alone runs plain Minecraft, which would lose its modded blocks and items. Make the server from the pack it was played with, under “A pack you have”, then bring the world on that server’s World page.',
+    })
+  }, 120_000)
+
   test('a world refused after a ready one leaves that one to make a server from', async () => {
     const owner = await h.user('Nell', 'plus')
     const kept = await bringNewWorld(h, owner, zipBytes(await save('Keep/')), 'keep.zip')

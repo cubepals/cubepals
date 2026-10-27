@@ -76,6 +76,20 @@ export const MAX_WORLD_BYTES = 4 * 1024 ** 3
 /** The largest world upload a disk of `diskGb` has room for. */
 export const worldUploadLimit = (diskGb: number): number => Math.min(MAX_WORLD_BYTES, worldRoomBytes(diskGb))
 
+/** The mods an upload has beside its world, or a Cubepals download names: none for plain Minecraft. */
+export function modJars(read: Read): string[] {
+  const note = read.archive.kept.get(DOWNLOAD_NOTE)
+  return [
+    ...modsBeside(
+      read.archive.files.map((file) => file.name),
+      read.world,
+    ),
+    ...(note === undefined ? [] : jarsInNote(new TextDecoder().decode(note))).filter((jar) =>
+      jar.startsWith('mods/'),
+    ),
+  ]
+}
+
 /** Bytes as the sentences about room say them: gigabytes, to a tenth. */
 const gigabytes = (bytes: number): number => Number((bytes / 1024 ** 3).toFixed(1))
 
@@ -229,16 +243,7 @@ export class WorldReading {
       throw new Refused(
         `This world was last played on Minecraft ${read.facts.gameVersion}, newer than this server's ${serverVersion}. Move the server to ${read.facts.gameVersion} first, then try again.`,
       )
-    const note = read.archive.kept.get(DOWNLOAD_NOTE)
-    const jars = [
-      ...modsBeside(
-        read.archive.files.map((file) => file.name),
-        read.world,
-      ),
-      ...(note === undefined ? [] : jarsInNote(new TextDecoder().decode(note))).filter((jar) =>
-        jar.startsWith('mods/'),
-      ),
-    ]
+    const jars = modJars(read)
     const standing = await loadStanding(this.#db, to.ownerId)
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
     // Held to the room an upload is (`beginWorldUpload`), as the world lies on disk, not as it was sent.
