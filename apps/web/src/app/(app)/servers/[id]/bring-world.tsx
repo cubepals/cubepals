@@ -11,7 +11,7 @@
  * the page that opened this offers. Not where a world is restored, or a backup taken.
  */
 import {
-  defaultPeopleChoice,
+  DEFAULT_PEOPLE_CHOICE,
   type PeopleChoice,
   type ServerView,
   type WorldImportView,
@@ -232,11 +232,7 @@ function LetIn({
 }) {
   const trpc = useTRPC()
   const queries = useQueryClient()
-  // A server that has players of its own keeps its whitelist as it is until its owner says.
-  const [choice, setChoice] = useState<PeopleChoice>(() => ({
-    ...defaultPeopleChoice(people),
-    whitelistOn: false,
-  }))
+  const [choice, setChoice] = useState<PeopleChoice>(DEFAULT_PEOPLE_CHOICE)
   const letIn = useMutation(
     trpc.backups.letInFromUpload.mutationOptions({
       onSuccess: () =>

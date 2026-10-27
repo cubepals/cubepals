@@ -181,8 +181,8 @@ describe.skipIf(!hasDatabase)('the players of the server a world came from', () 
     await h.until(server.id, 'running')
     await h.settled(server.id)
     const { record } = await readAccess(h.db, server.id)
-    // Only its whitelist joined before, so only its whitelist joins now: nobody, until its owner says.
-    expect(record.whitelistEnabled).toBe(true)
+    // Open, as a new server is: a whitelist with nobody on it would keep its owner out too.
+    expect(record.whitelistEnabled).toBe(false)
     expect(record.entries.map((e) => `${e.list} ${e.player.name}`)).toEqual(['ban Griefer'])
   }, 120_000)
 

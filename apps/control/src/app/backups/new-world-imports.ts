@@ -15,7 +15,7 @@ import { createWriteStream } from 'node:fs'
 import { join } from 'node:path'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import { defaultPeopleChoice, type NewWorldImportView, type PeopleChoice } from '@blockly/contracts'
+import { DEFAULT_PEOPLE_CHOICE, type NewWorldImportView, type PeopleChoice } from '@blockly/contracts'
 import { DAY_MS, HOUR_S } from '@blockly/contracts/durations'
 import type { Db, NewWorldFactsJson, Tx, WorldImportAnswerJson, WorldPeopleJson } from '@blockly/db'
 import type { SeededAccess } from '../../domain/access/access.ts'
@@ -439,7 +439,7 @@ export async function broughtWorld(db: Db, ownerId: string, importId: string): P
   return {
     facts: record.facts,
     startsOn: record.startsOn,
-    access: people === null ? null : accessFrom(people, peopleChoice ?? defaultPeopleChoice(people)),
+    access: people === null ? null : accessFrom(people, peopleChoice ?? DEFAULT_PEOPLE_CHOICE),
   }
 }
 

@@ -287,7 +287,7 @@ export class WorldReading {
    * None for a server that plays in offline mode itself, where the names stay the server's.
    */
   async accounts(read: Read, onlineMode: boolean, others: readonly Read[] = []): Promise<Accounts> {
-    const accounts: Accounts = { renames: new Map(), matched: [], unmatched: [], kept: [] }
+    const accounts: Accounts = { renames: new Map(), matched: [], unmatched: [], kept: [], beyond: 0 }
     const properties = read.holds.properties
     if (properties === null || !onlineMode) return accounts
     const raw = read.archive.kept.get(`${properties.slice(0, properties.lastIndexOf('/') + 1)}${NAME_CACHE}`)
@@ -300,6 +300,7 @@ export class WorldReading {
     )
     // Each file name a player has, or is given: two can't land on one.
     const taken = new Set(present)
+    accounts.beyond = Math.max(0, offline.length - MOST_ACCOUNTS)
     for (const one of offline.slice(0, MOST_ACCOUNTS)) {
       // A lookup that fails throws, and the read is tried again: only Mojang's own "nobody" is no account.
       const profile = await this.#profiles.byName(one.name)
@@ -380,6 +381,8 @@ export interface Accounts {
   unmatched: string[]
   /** Names whose account already has files in the world, which stay, as theirs do. */
   kept: string[]
+  /** How many more players there were than are looked up, whose files stay as they are. */
+  beyond: number
 }
 
 /** The names and UUIDs a server's `usercache.json` lists, dashed and lowercase; none where it can't be read. */
@@ -414,6 +417,11 @@ export function accountNotes(accounts: Accounts): string[] {
     ...(accounts.kept.length > 0
       ? [
           `${accounts.kept.join(', ')} already had files under their Minecraft account in the world, so both stay as they were.`,
+        ]
+      : []),
+    ...(accounts.beyond > 0
+      ? [
+          `Cubepals moves the first ${MOST_ACCOUNTS} players of an offline-mode server to their accounts; the files of the ${accounts.beyond} more stay as the server kept them.`,
         ]
       : []),
   ]

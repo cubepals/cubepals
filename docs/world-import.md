@@ -71,7 +71,7 @@ Before the plan:
   `banned-players.json` are read beside its `server.properties`, each player named as the server
   the world goes to knows them, a name no account has left out and said (`world-people.ts`). The
   owner chooses from the list (`world-people.tsx`): nobody is let in until they say, its bans come
-  unless they say not, and only the whitelist joins where only the whitelist did. On the create
+  unless they say not, and the server stays open until they turn its whitelist on. On the create
   page the choice is kept on the import (`newWorlds.choosePeople`) and the new server starts with
   it (`createAccess`); on the world page it is let in at once (`backups.letInFromUpload`,
   `AccessService.letIn`), which never turns a server's whitelist off.
@@ -227,8 +227,9 @@ links or devices, and the entry, inflated-size and time limits the world reader 
 
 A server's folder brings its whitelist, operators and bans. The import shows them as a list the
 player chooses from; nothing is let in without that. Its bans come unless the player says not,
-since a ban lets nobody in, and a server that let in only its whitelist does so again until the
-player says otherwise. Both are shown, and undone on the players page. Without one, who can join
+since a ban lets nobody in. A whitelist is the player's to turn on, with those they let in: on
+with nobody on it, it would keep everyone out. Both are shown, and undone on the players page.
+Without one, who can join
 is what a new server's is, or what the server's is now.
 
 ## What the player sees

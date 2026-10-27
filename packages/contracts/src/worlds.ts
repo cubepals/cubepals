@@ -144,15 +144,16 @@ export const PeopleChoice = z.object({
 export type PeopleChoice = z.infer<typeof PeopleChoice>
 
 /**
- * What is chosen until its owner says otherwise: nobody let in, its bans kept, and only its
- * whitelist joining where only its whitelist did.
+ * What is chosen until its owner says otherwise: nobody let in, its bans kept, and the server open
+ * as a new one is. A whitelist with nobody on it would keep everyone out, its owner too, so it is
+ * theirs to turn on with the players they let in.
  */
-export const defaultPeopleChoice = (people: NonNullable<WorldPeople>): PeopleChoice => ({
+export const DEFAULT_PEOPLE_CHOICE: PeopleChoice = {
   letIn: [],
   operators: [],
   keepBans: true,
-  whitelistOn: people.whitelistOn,
-})
+  whitelistOn: false,
+}
 
 /** Who of the players of the server a world brought for a new server came from its owner lets in. */
 export const ChooseNewWorldPeopleInput = z.object({ importId: z.uuid(), ...PeopleChoice.shape })
@@ -182,7 +183,7 @@ export type NewWorldImportView = ImportView<{
   }
   /** Who could join the server it came from, for its owner to choose from. */
   people: WorldPeople
-  /** Who of them its owner let in so far; null where they haven't said (`defaultPeopleChoice`). */
+  /** Who of them its owner let in so far; null where they haven't said (`DEFAULT_PEOPLE_CHOICE`). */
   chosen: PeopleChoice | null
 }>
 

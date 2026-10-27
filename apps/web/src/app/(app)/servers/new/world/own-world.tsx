@@ -10,7 +10,7 @@
  * with what only they know asked here (`world-questions.tsx`). What it turned out to be comes back
  * to `onReady`, and the server is made to fit it; a file no server could play says why.
  */
-import { defaultPeopleChoice, type NewWorldImportView, PeopleChoice } from '@blockly/contracts'
+import { DEFAULT_PEOPLE_CHOICE, type NewWorldImportView, PeopleChoice } from '@blockly/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { messageOf, useTRPC } from '../../../../../lib/api'
 import { useHandedOnce, useSentImport } from '../../../../../lib/sent-import'
@@ -68,7 +68,7 @@ export function useChosenPeople(read: NewWorldImportView | undefined) {
     choice:
       choose.isPending && choose.variables !== undefined
         ? PeopleChoice.parse(choose.variables)
-        : (ready.chosen ?? defaultPeopleChoice(people)),
+        : (ready.chosen ?? DEFAULT_PEOPLE_CHOICE),
     change: (next: PeopleChoice) => choose.mutate({ importId: ready.importId, ...next }),
     saving: choose.isPending,
     failure: choose.isError ? messageOf(choose.error) : null,
