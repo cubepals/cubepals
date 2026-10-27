@@ -73,8 +73,8 @@ afterAll(async () => {
   await rm(scratch, { recursive: true, force: true })
 })
 
-const server = async (name: string): Promise<{ owner: UserActor; id: string }> => {
-  const owner = await h.user(name, 'plus')
+const server = async (name: string, plan = 'plus'): Promise<{ owner: UserActor; id: string }> => {
+  const owner = await h.user(name, plan)
   const { id } = await h.create(owner)
   await h.until(id, 'running')
   await h.settled(id)
@@ -352,5 +352,18 @@ describe.skipIf(!hasDatabase)('a world last played on a snapshot', () => {
     )
     const world = (await listWorlds(h.db, id)).find((one) => one.name === 'Snapshot World')
     expect(world?.generatedOnVersion).not.toBe('26.4-snapshot-1')
+  }, 120_000)
+})
+
+describe.skipIf(!hasDatabase)('a Paper server’s folder with its plugins', () => {
+  test('is plain Minecraft’s world, brought on a plan without mods, the plugins left out', async () => {
+    const { owner, id } = await server('Ulla', 'free')
+    const files = await serverFolder('paper-1.21.11')
+    files['plugins/EssentialsX.jar'] = new TextEncoder().encode('a plugin')
+    const view = await bringWorld(h, owner, id, zipBytes(files), { fileName: 'server.zip' })
+    expect(view).toMatchObject({ status: 'ready' })
+    if (view.status !== 'ready') return
+    const dir = await unpacked((await broughtBackup(h, view)).archiveKey)
+    expect((await run('ls', ['-A', dir])).stdout).not.toContain('plugins')
   }, 120_000)
 })

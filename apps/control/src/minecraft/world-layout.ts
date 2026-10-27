@@ -65,9 +65,11 @@ const nameOf = (folder: string): string => folder.slice(0, -1).split('/').pop() 
 export function uploadHolds(paths: readonly string[]): UploadHolds {
   const files = paths.filter((path) => !leftBySystem(path))
   const present = new Set(files)
+  // Each look below is by name in a set, never a scan of every file: an upload may hold half a
+  // million of them, and a hostile one as many level.dat files.
+  const withDb = foldersHolding(files, 'db/')
   // Bedrock keeps a level.dat too, beside its name and its `db` folder.
-  const bedrock = (folder: string) =>
-    present.has(`${folder}levelname.txt`) && files.some((path) => path.startsWith(`${folder}db/`))
+  const bedrock = (folder: string) => present.has(`${folder}levelname.txt`) && withDb.has(folder)
   const levels = new Map<string, string>()
   let bedrockSeen = false
   for (const path of files) {
@@ -77,23 +79,18 @@ export function uploadHolds(paths: readonly string[]): UploadHolds {
     if (bedrock(folder)) bedrockSeen = true
     else if (level[2] === undefined || !present.has(`${folder}level.dat`)) levels.set(folder, path)
   }
-  // Deepest first is no matter: a world inside another is the other's (a copy in its folder).
-  const folders = [...levels.keys()].sort((a, b) => a.length - b.length)
-  const outer = folders.filter((folder) => !folders.some((o) => o !== folder && folder.startsWith(o)))
-  const besideOf = (folder: string): string | null => {
-    for (const suffix of BESIDE)
-      if (folder.endsWith(`${suffix}/`)) {
-        const home = `${folder.slice(0, -suffix.length - 1)}/`
-        if (home !== '/' && outer.includes(home)) return home
-      }
-    return null
-  }
-  const worlds: FoundWorld[] = outer
-    .filter((folder) => besideOf(folder) === null)
+  // A world inside another is the other's (a copy in its folder).
+  const outer = new Set([...levels.keys()].filter((folder) => !insideAny(folder, levels)))
+  const homes = homesBeside(outer)
+  const beside = new Map<string, string[]>()
+  for (const [folder, home] of homes) beside.set(home, [...(beside.get(home) ?? []), folder])
+  const worlds: FoundWorld[] = [...outer]
+    .sort((a, b) => a.length - b.length)
+    .filter((folder) => !homes.has(folder))
     .map((folder) => ({
       folder,
       folderName: nameOf(folder),
-      beside: outer.filter((other) => besideOf(other) === folder),
+      beside: beside.get(folder) ?? [],
       levelDat: levels.get(folder) ?? `${folder}level.dat`,
     }))
   if (worlds.length === 0)
@@ -103,13 +100,42 @@ export function uploadHolds(paths: readonly string[]): UploadHolds {
   return { kind: 'java', worlds, properties: serverPropertiesOf(files, worlds) }
 }
 
+/** The folders Paper keeps beside a world (`world_nether/`), each with the world's own folder. */
+function homesBeside(worlds: ReadonlySet<string>): Map<string, string> {
+  const homes = new Map<string, string>()
+  for (const folder of worlds)
+    for (const suffix of BESIDE) {
+      const home = `${folder.slice(0, -suffix.length - 1)}/`
+      if (folder.endsWith(`${suffix}/`) && home !== '/' && worlds.has(home)) homes.set(folder, home)
+    }
+  return homes
+}
+
+/** Every folder, ending in a slash, that holds a folder named `inner` (`db/`) somewhere in the files. */
+function foldersHolding(files: readonly string[], inner: string): Set<string> {
+  const found = new Set<string>()
+  for (const path of files)
+    for (let at = path.indexOf(inner); at !== -1; at = path.indexOf(inner, at + 1))
+      if (at === 0 || path[at - 1] === '/') found.add(path.slice(0, at))
+  return found
+}
+
+/** Whether a folder is inside any of `folders`: the root, or one of the folders around it. */
+function insideAny(folder: string, folders: ReadonlyMap<string, unknown>): boolean {
+  if (folder === '') return false
+  if (folders.has('')) return true
+  for (let slash = folder.indexOf('/'); slash !== folder.length - 1; slash = folder.indexOf('/', slash + 1))
+    if (folders.has(folder.slice(0, slash + 1))) return true
+  return false
+}
+
 /** The `server.properties` of the folder the worlds are in, the outermost where there are several. */
 function serverPropertiesOf(files: readonly string[], worlds: readonly FoundWorld[]): string | null {
+  const homes = new Set(
+    worlds.filter((world) => world.folder !== '').map((world) => folderOf(world.folder.slice(0, -1))),
+  )
   const candidates = files
-    .filter((path) => /(^|\/)server\.properties$/.test(path))
-    .filter((path) =>
-      worlds.some((world) => world.folder !== '' && folderOf(world.folder.slice(0, -1)) === folderOf(path)),
-    )
+    .filter((path) => /(^|\/)server\.properties$/.test(path) && homes.has(folderOf(path)))
     .sort((a, b) => a.length - b.length)
   return candidates[0] ?? null
 }
@@ -174,13 +200,16 @@ export function leftOutOf(paths: readonly string[], world: FoundWorld, most = 8)
   return [...names].sort().slice(0, most)
 }
 
-/** The mods and plugins a server folder ran with, beside the world: jars in its `mods/` and `plugins/`. */
-export function jarsBeside(paths: readonly string[], world: FoundWorld): string[] {
+/**
+ * The mods a server folder ran with, beside the world: the jars in its `mods/`. A plugin adds no
+ * block or item of its own, so a world its plugins ran on is plain Minecraft's.
+ */
+export function modsBeside(paths: readonly string[], world: FoundWorld): string[] {
   const base = world.folder === '' ? '' : folderOf(world.folder.slice(0, -1))
   return paths
     .filter((path) => path.startsWith(base))
     .map((path) => path.slice(base.length))
-    .filter((path) => /^(mods|plugins)\/[^/]+\.jar$/.test(path))
+    .filter((path) => /^mods\/[^/]+\.jar$/.test(path))
 }
 
 /**

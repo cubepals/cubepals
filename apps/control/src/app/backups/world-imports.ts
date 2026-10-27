@@ -40,8 +40,8 @@ import { moddedBrands, type WorldFacts, worldFacts } from '../../minecraft/world
 import {
   chosenWorld,
   type FoundWorld,
-  jarsBeside,
   leftOutOf,
+  modsBeside,
   placeOnServer,
   playerFilePath,
   type UploadHolds,
@@ -379,11 +379,13 @@ export class WorldImports {
       )
     const note = read.archive.kept.get(DOWNLOAD_NOTE)
     const jars = [
-      ...jarsBeside(
+      ...modsBeside(
         read.archive.files.map((file) => file.name),
         read.world,
       ),
-      ...(note === undefined ? [] : jarsInNote(new TextDecoder().decode(note))),
+      ...(note === undefined ? [] : jarsInNote(new TextDecoder().decode(note))).filter((jar) =>
+        jar.startsWith('mods/'),
+      ),
     ]
     const standing = await loadStanding(this.#db, server.ownerId)
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)

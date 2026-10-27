@@ -13,8 +13,8 @@ import { LibraryFileFormats } from '../infra/formats/file-formats.ts'
 import { moddedBrands, worldFacts } from './world-facts.ts'
 import {
   chosenWorld,
-  jarsBeside,
   leftOutOf,
+  modsBeside,
   placeOnServer,
   playerFilePath,
   uploadHolds,
@@ -91,7 +91,7 @@ describe('a server folder', () => {
       expect.arrayContaining(['.paper/', 'config/', 'paper-26.3-226.jar', 'plugins/', 'server.properties']),
     )
     expect(leftOutOf(files, world, 100)).not.toContain('world/')
-    expect(jarsBeside(files, world)).toEqual([])
+    expect(modsBeside(files, world)).toEqual([])
   })
 
   test('wrapped in a folder of its own, as a zip of the folder is', () => {
@@ -176,6 +176,32 @@ describe('what is not a Java world', () => {
 
   test('nothing with a level.dat holds no world', () => {
     expect(uploadHolds(['mods/sodium.jar', 'options.txt'])).toEqual({ kind: 'nothing' })
+  })
+})
+
+describe('a hostile upload’s names', () => {
+  test('are looked at once each, however many level.dat files they hold', () => {
+    // Half a million worlds in folders a few deep: every check a scan of the rest would take hours.
+    const paths = Array.from({ length: 500_000 }, (_, i) =>
+      i % 2 ? `w/${'d/'.repeat(i % 8)}${i}/level.dat` : `w/${'d/'.repeat(i % 8)}${i}/server.properties`,
+    )
+    const started = performance.now()
+    const holds = uploadHolds(paths)
+    expect(performance.now() - started).toBeLessThan(5_000)
+    expect(holds.kind).toBe('java')
+  })
+
+  test('the jars a world ran with are its mods; its plugins add nothing of their own', () => {
+    const holds = uploadHolds([
+      'world/level.dat',
+      'server.properties',
+      'plugins/spark.jar',
+      'mods/create.jar',
+    ])
+    if (holds.kind !== 'java') throw new Error('no world')
+    expect(
+      modsBeside(['world/level.dat', 'plugins/spark.jar', 'mods/create.jar'], holds.worlds[0] as never),
+    ).toEqual(['mods/create.jar'])
   })
 })
 
