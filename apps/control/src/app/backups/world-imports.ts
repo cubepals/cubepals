@@ -106,7 +106,13 @@ export class WorldImports {
       throw new NotFound('Upload')
     await this.#db.transaction((tx) => this.#policy.require(tx, server.ownerId, { kind: 'restore_archive' }))
     const arrived = await requireCapability(this.#caps, 'archives').head(pending.key)
-    if (arrived === null) throw new AppError('invalid_upload', SAID.neverArrived)
+    if (arrived === null) {
+      // A finish asked at the same time may have recorded it since, and its worker may already
+      // have kept the world and removed the upload: that is the same import, not a lost file.
+      const since = await loadWorldImport(this.#db, ticket)
+      if (since !== null && since.serverId === server.id) return { importId: since.id }
+      throw new AppError('invalid_upload', SAID.neverArrived)
+    }
     if (arrived.sizeBytes !== pending.sizeBytes)
       throw new AppError('invalid_upload', 'The file didn’t arrive whole. Upload it again.')
     await this.#db.transaction(async (tx) => {
