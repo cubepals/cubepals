@@ -77,10 +77,6 @@ async function withinADay(tx: Tx, ownerId: string): Promise<void> {
     throw new AppError('rate_limited', 'That’s a lot of worlds for one day. Try again tomorrow.')
 }
 
-/** What a world played with mods is told on the create page, where a server is made from it alone. */
-const PLAYED_WITH_MODS =
-  'This world was played with mods, and a server made from it alone runs plain Minecraft, which would lose its modded blocks and items. Make the server from the pack it was played with, under “A pack you have”, then bring the world on that server’s World page.'
-
 export interface BroughtWorld {
   facts: NewWorldFactsJson
   /** The archive the server's first start unpacks where its world goes. */
@@ -212,9 +208,6 @@ export class NewWorldImports {
           `This world was last played on Minecraft ${read.facts.gameVersion}, newer than any release Cubepals offers yet.`,
         )
       await this.#reading.refuseWhatWontOpen({ ownerId: record.ownerId, serverId: null }, read, playsOn)
-      // A server made from a world alone runs plain Minecraft, which would lose a modded world's
-      // blocks and items: it is made from its pack, and the world brought to it after.
-      if (moddedBrands(read.facts).length > 0 || modJars(read).length > 0) throw new Refused(PLAYED_WITH_MODS)
       // A new server plays in online mode, so the account named is the one Mojang says.
       const player = await this.#reading.hostPlayer(read, record.answer ?? {}, true)
       await this.#keep(record, pending, read, player, playsOn, work)
@@ -263,6 +256,11 @@ export class NewWorldImports {
         (sum, file) => (place(file.name) === null ? sum : sum + file.sizeBytes),
         0,
       ),
+      // Plain Minecraft would lose a modded world's blocks and items, so its server is made from
+      // the pack it was played with (`setups/service.ts`).
+      ...(moddedBrands(read.facts).length > 0 || modJars(read).length > 0
+        ? { moddedWith: moddedBrands(read.facts) }
+        : {}),
     }
     const notes = [
       ...read.notes,
@@ -369,5 +367,6 @@ const asWorld = (record: WorldImportRecord) => ({
     name: record.facts?.name ?? record.name ?? 'Your world',
     gameVersion: record.facts?.gameVersion ?? '',
     playsOn: record.facts?.playsOn ?? '',
+    moddedWith: record.facts?.moddedWith ?? null,
   },
 })

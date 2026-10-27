@@ -2,7 +2,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { PARTY_SIZES, type PartySize, type SetupSourceInput } from '@blockly/contracts'
+/**
+ * The create page's choice in its own address: what to play, the group and the region, kept across
+ * paying for it and across bringing a world (`world/page.tsx`), which may bring the pack it was
+ * played with. Nothing someone typed is kept: the address goes to the payment provider.
+ */
+import { PARTY_SIZES, type PackSourceInput, type PartySize, type SetupSourceInput } from '@blockly/contracts'
 
 /**
  * Paying for it comes back here with the choice, the group and a region picked by hand as they
@@ -13,9 +18,12 @@ export function keptPath(from: SetupSourceInput | null, chosenSize: PartySize | 
   const kept = new URLSearchParams()
   if (from?.kind === 'template') kept.set('template', from.key)
   if (from?.kind === 'template' && from.gameVersion !== undefined) kept.set('version', from.gameVersion)
-  if (from?.kind === 'modpack') kept.set('pack', from.projectId)
-  if (from?.kind === 'curated') kept.set('curated', from.key)
-  if (from?.kind === 'import') kept.set('import', from.importId)
+  // A world played with mods comes back with the pack it was played with.
+  const pack = from?.kind === 'world' ? from.pack : from
+  if (pack?.kind === 'modpack') kept.set('pack', pack.projectId)
+  if (pack?.kind === 'modpack' && pack.versionId !== undefined) kept.set('packVersion', pack.versionId)
+  if (pack?.kind === 'curated') kept.set('curated', pack.key)
+  if (pack?.kind === 'import') kept.set('import', pack.importId)
   if (from?.kind === 'world') kept.set('world', from.importId)
   if (chosenSize !== null) kept.set('size', chosenSize)
   if (region !== null) kept.set('region', region)
@@ -38,12 +46,20 @@ function keptFrom(search: { get(name: string): string | null }): SetupSourceInpu
   const release = search.get('version')
   if (template !== null)
     return { kind: 'template', key: template, ...(release === null ? {} : { gameVersion: release }) }
+  const pack = keptPack(search)
+  const world = search.get('world')
+  if (world === null) return pack
+  return { kind: 'world', importId: world, ...(pack === null ? {} : { pack }) }
+}
+
+/** The pack `keptPath` wrote, on its own or as the one a world was played with. */
+function keptPack(search: { get(name: string): string | null }): PackSourceInput | null {
   const curated = search.get('curated')
   if (curated !== null) return { kind: 'curated', key: curated }
   const pack = search.get('pack')
-  if (pack !== null) return { kind: 'modpack', projectId: pack }
+  const version = search.get('packVersion')
+  if (pack !== null)
+    return { kind: 'modpack', projectId: pack, ...(version === null ? {} : { versionId: version }) }
   const upload = search.get('import')
-  if (upload !== null) return { kind: 'import', importId: upload }
-  const world = search.get('world')
-  return world === null ? null : { kind: 'world', importId: world }
+  return upload === null ? null : { kind: 'import', importId: upload }
 }

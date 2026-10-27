@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import type { PackSourceInput } from '@blockly/contracts'
 import { DAY_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
 import { copying } from '../../domain/listing/trust.ts'
@@ -36,6 +37,7 @@ import type { PackService } from '../packs/service.ts'
 import { CatalogUnavailable, type ModCatalog } from '../ports/catalog.ts'
 import { UnreadableFile } from '../ports/formats.ts'
 import { findByInvite, findLiveBySlug, loadRevision, loadRuntime, loadWorld } from '../servers/persistence.ts'
+import { fittedToWorld, PLAYED_WITH_MODS, packForWorld } from './brought-with-pack.ts'
 import { loadPackChecks, savePackCheck } from './persistence.ts'
 import { StarterWorlds } from './starters.ts'
 import { TEMPLATES, type Template, templateOf } from './templates.ts'
@@ -55,8 +57,11 @@ export type SetupSource =
   | { kind: 'curated'; key: string; version?: string }
   /** A pack its owner uploaded, once Blockly has read it (packs/). */
   | { kind: 'import'; importId: string }
-  /** A world its owner uploaded, once Blockly has read it (`backups/new-world-imports.ts`). */
-  | { kind: 'world'; importId: string }
+  /**
+   * A world its owner uploaded, once Blockly has read it (`backups/new-world-imports.ts`). One
+   * played with mods names the pack it was played with, which the server is made from.
+   */
+  | { kind: 'world'; importId: string; pack?: PackSourceInput }
 
 /** A setup, resolved against the catalog: what a new server would actually run. */
 export interface ResolvedSetup {
@@ -293,6 +298,7 @@ export class SetupService {
     if (viewer?.kind !== 'user') throw new NotFound('Upload')
     const brought = await broughtWorld(this.#db, viewer.userId, importId)
     const { facts } = brought
+    if (facts.moddedWith !== undefined) throw new AppError('invalid_choice', PLAYED_WITH_MODS)
     return {
       setup: {
         gameVersion: facts.playsOn,
@@ -314,7 +320,21 @@ export class SetupService {
    * The setup as a server: the newest release everything in it runs on, the mods it comes with,
    * and the size those need. A template names no version, and a copy keeps the one it runs.
    */
-  async resolve(source: SetupSource, viewer: Actor | null): Promise<ResolvedSetup> {
+  resolve(source: SetupSource, viewer: Actor | null): Promise<ResolvedSetup> {
+    return source.kind === 'world' && source.pack !== undefined
+      ? this.#packOnWorld(source.importId, source.pack, viewer)
+      : this.#resolved(source, viewer)
+  }
+
+  /** A server made from the pack a world was played with, starting on it (`brought-with-pack.ts`). */
+  async #packOnWorld(importId: string, pack: PackSourceInput, viewer: Actor | null): Promise<ResolvedSetup> {
+    if (viewer?.kind !== 'user') throw new NotFound('Upload')
+    const brought = await broughtWorld(this.#db, viewer.userId, importId)
+    const forWorld = await packForWorld(pack, brought, (projectId) => this.#packs.versions(projectId))
+    return fittedToWorld(await this.#resolved(forWorld, viewer), brought)
+  }
+
+  async #resolved(source: SetupSource, viewer: Actor | null): Promise<ResolvedSetup> {
     const chosen: { setup: ServerSetup; from: string; copying: Copying | null; brought?: BroughtWorld } =
       source.kind === 'world'
         ? await this.#fromWorld(source.importId, viewer)

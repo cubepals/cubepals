@@ -15,8 +15,25 @@ describe('a choice carried through the address', () => {
       { kind: 'curated', key: 'create' },
       { kind: 'modpack', projectId: 'abc' },
       { kind: 'import', importId: '0b6c0a6e-5d8e-4b3e-9a43-7d3c1f0c2b11' },
+      { kind: 'modpack', projectId: 'abc', versionId: 'v1' },
       // A world brought on its own page comes back to the create page chosen.
       { kind: 'world', importId: '8f2d8b51-3a7e-4d0c-b0c5-2b9a6d1e4f30' },
+      // A modded one, with the pack it was played with, whichever way that was found.
+      {
+        kind: 'world',
+        importId: '8f2d8b51-3a7e-4d0c-b0c5-2b9a6d1e4f30',
+        pack: { kind: 'modpack', projectId: 'abc', versionId: 'v1' },
+      },
+      {
+        kind: 'world',
+        importId: '8f2d8b51-3a7e-4d0c-b0c5-2b9a6d1e4f30',
+        pack: { kind: 'import', importId: '0b6c0a6e-5d8e-4b3e-9a43-7d3c1f0c2b11' },
+      },
+      {
+        kind: 'world',
+        importId: '8f2d8b51-3a7e-4d0c-b0c5-2b9a6d1e4f30',
+        pack: { kind: 'curated', key: 'create' },
+      },
     ]
     for (const from of choices) expect(back(keptPath(from, '10', 'eu')).from).toEqual(from)
     expect(back(keptPath(null, null, null))).toEqual({ from: null, partySize: null, region: null })

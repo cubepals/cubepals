@@ -120,6 +120,12 @@ export type NewWorldImportView = ImportView<{
     gameVersion: string
     /** The release its server runs: the same, or the next Cubepals offers. */
     playsOn: string
+    /**
+     * The modded server types that opened it (`forge`, `fabric`…), empty where only mods beside it
+     * say it was modded; null for a world plain Minecraft opens. A modded world's server is made
+     * from the pack it was played with (`{ kind: 'world', importId, pack }`).
+     */
+    moddedWith: string[] | null
   }
 }>
 

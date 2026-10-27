@@ -10,6 +10,7 @@
  * (`kept.ts`), where the server is made to fit it. Who plays and the name are asked there, as for
  * any way to play.
  */
+import type { PackSourceInput } from '@blockly/contracts'
 import { ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -19,11 +20,14 @@ import styles from '../create.module.css'
 import { keptPath } from '../kept'
 import { Thumb } from '../thumb'
 import { OwnWorld, type ReadWorld } from './own-world'
+import { PlayedWith } from './played-with'
 
 export default function OwnWorldPage() {
   const router = useRouter()
   const [read, setRead] = useState<ReadWorld | null>(null)
+  const [pack, setPack] = useState<{ source: PackSourceInput; name: string } | null>(null)
   const { world } = read ?? {}
+  const modded = world !== undefined && world.moddedWith !== null
   return (
     <div className={styles.page}>
       <div>
@@ -42,7 +46,13 @@ export default function OwnWorldPage() {
         host. Cubepals finds the world in it and makes a server to fit it, on the same Minecraft, game mode
         and difficulty.
       </p>
-      <OwnWorld onStart={() => setRead(null)} onReady={setRead} />
+      <OwnWorld
+        onStart={() => {
+          setRead(null)
+          setPack(null)
+        }}
+        onReady={setRead}
+      />
       {read !== null && world !== undefined && (
         <div className="bk-stack" style={{ gap: 'var(--space-16)' }}>
           <div className={styles.row} data-picked>
@@ -56,12 +66,26 @@ export default function OwnWorldPage() {
               </span>
             </span>
           </div>
+          {world.moddedWith !== null && <PlayedWith moddedWith={world.moddedWith} onPack={setPack} />}
           <div>
             <Button
               variant="primary"
-              onClick={() => router.push(keptPath({ kind: 'world', importId: read.importId }, null, null))}
+              disabled={modded && pack === null}
+              onClick={() =>
+                router.push(
+                  keptPath(
+                    {
+                      kind: 'world',
+                      importId: read.importId,
+                      ...(pack === null ? {} : { pack: pack.source }),
+                    },
+                    null,
+                    null,
+                  ),
+                )
+              }
             >
-              Make a server with it
+              {pack === null ? 'Make a server with it' : `Make a server with it, from ${pack.name}`}
             </Button>
           </div>
         </div>

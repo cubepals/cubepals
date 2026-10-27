@@ -44,9 +44,17 @@ Before the plan:
   beside it (`diskForBroughtWorld`), up to the plan's largest; a world brought before its server is
   held to what that leaves. The store keeps the archive while a server has the world, and a month
   for one not made yet; another world brought for a new server lets the one before go once it is
-  ready. A world played with mods is refused there until step 4, which makes a server from a pack
-  and a world together: its server is made from its pack, and the world brought on its World page.
-- **Next:** mods (step 4), then the rest and the guide.
+  ready.
+- **Step 4, a modded world's pack, is in.** A world played with mods (a modded server type in its
+  `level.dat`, or mods beside it) is read like any other, with the server types that opened it
+  (`moddedWith`). It isn't made into a server alone: the create page asks for the pack it was
+  played with, found by name or dropped as a file, and the server is made from that pack
+  (`{ kind: 'world', importId, pack }`, `setups/brought-with-pack.ts`), starting on the world in
+  its game mode and difficulty. A pack from the catalog named without a version plays its newest
+  version for the world's own release; a pack on an older Minecraft than the world is refused.
+  Mod ids from Forge's registry data in `level.dat` aren't read yet: that waits on a world a real
+  Forge server saved.
+- **Next:** a pack and a world from one upload (the rest of step 4), then the rest and the guide.
 
 ## What it does
 

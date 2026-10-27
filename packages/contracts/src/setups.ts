@@ -17,14 +17,8 @@ import {
   ServerId,
 } from './server.ts'
 
-/** Where a new server's setup comes from: something Blockly offers, or a server being copied. */
-export const SetupSourceInput = z.discriminatedUnion('kind', [
-  /** Without a version, the newest release everything in the template runs on. */
-  z.object({
-    kind: z.literal('template'),
-    key: z.string().trim().min(1).max(40),
-    gameVersion: z.string().trim().min(1).max(20).optional(),
-  }),
+/** A pack to play: one from the catalog, one Blockly offers by name, or one its owner uploaded. */
+export const PackSourceInput = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('modpack'),
     projectId: z.string().trim().min(1).max(64),
@@ -37,16 +31,31 @@ export const SetupSourceInput = z.discriminatedUnion('kind', [
     key: z.string().trim().min(1).max(40),
     version: z.string().trim().min(1).max(64).optional(),
   }),
+  /** A pack its owner uploaded, once Blockly has read it and built it into one it can run. */
+  z.object({ kind: z.literal('import'), importId: z.uuid() }),
+])
+export type PackSourceInput = z.infer<typeof PackSourceInput>
+
+/** Where a new server's setup comes from: something Blockly offers, or a server being copied. */
+export const SetupSourceInput = z.discriminatedUnion('kind', [
+  /** Without a version, the newest release everything in the template runs on. */
+  z.object({
+    kind: z.literal('template'),
+    key: z.string().trim().min(1).max(40),
+    gameVersion: z.string().trim().min(1).max(20).optional(),
+  }),
   z.object({
     kind: z.literal('server'),
     slug: z.string().trim().toLowerCase().min(ADDRESS_MIN_LENGTH).max(ADDRESS_MAX_LENGTH).optional(),
     /** An invite link's code, which lets a friend copy a server that isn't public. */
     invite: InviteCode.optional(),
   }),
-  /** A pack its owner uploaded, once Blockly has read it and built it into one it can run. */
-  z.object({ kind: z.literal('import'), importId: z.uuid() }),
-  /** A world its owner uploaded, once Blockly has read it: the server is made to fit it. */
-  z.object({ kind: z.literal('world'), importId: z.uuid() }),
+  ...PackSourceInput.options,
+  /**
+   * A world its owner uploaded, once Blockly has read it: the server is made to fit it. A world
+   * played with mods names the pack it was played with, which the server is made from.
+   */
+  z.object({ kind: z.literal('world'), importId: z.uuid(), pack: PackSourceInput.optional() }),
 ])
 export type SetupSourceInput = z.infer<typeof SetupSourceInput>
 

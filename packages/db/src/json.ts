@@ -302,6 +302,11 @@ export interface NewWorldFactsJson {
   difficulty: 'peaceful' | 'easy' | 'normal' | 'hard'
   /** The world as it lies on disk once unpacked, which its server's first disk has room for. */
   sizeBytes: number
+  /**
+   * The modded server types that opened it, empty where only mods beside it say it was modded.
+   * Absent for a world plain Minecraft opens, and on rows written before it existed.
+   */
+  moddedWith?: string[]
 }
 
 /** An uploaded world's own facts, as its server.properties and level.dat say. */
