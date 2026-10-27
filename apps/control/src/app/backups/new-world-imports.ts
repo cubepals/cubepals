@@ -22,7 +22,7 @@ import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import type { ModArtifact } from '../../domain/mods/artifact.ts'
 import { releaseFor } from '../../minecraft/versions.ts'
 import { moddedBrands } from '../../minecraft/world-facts.ts'
-import { placeInLevel, playerFilePath } from '../../minecraft/world-layout.ts'
+import { placeInLevel, playerFilePath, withPlayersRenamed } from '../../minecraft/world-layout.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import type { UserActor } from '../actor.ts'
 import { recordStored } from '../artifacts/persistence.ts'
@@ -48,6 +48,8 @@ import {
   worldsBroughtSince,
 } from './world-import-records.ts'
 import {
+  type Accounts,
+  accountNotes,
   answerFor,
   MAX_WORLD_BYTES,
   modJars,
@@ -235,9 +237,11 @@ export class NewWorldImports {
           `This world was last played on Minecraft ${read.facts.gameVersion}, newer than any release Cubepals offers yet.`,
         )
       await this.#reading.refuseWhatWontOpen({ ownerId: record.ownerId, serverId: null }, read, playsOn)
-      // A new server plays in online mode, so the account named is the one Mojang says.
+      // A new server plays in online mode, so the account named is the one Mojang says, and an
+      // offline-mode server's players are moved to their accounts.
       const player = await this.#reading.hostPlayer(read, record.answer ?? {}, true)
-      await this.#keep(record, pending, read, player, playsOn, work)
+      const accounts = await this.#reading.accounts(read, true)
+      await this.#keep(record, pending, read, { player, accounts }, playsOn, work)
     } finally {
       await archive.close()
     }
@@ -248,19 +252,20 @@ export class NewWorldImports {
     record: WorldImportRecord,
     pending: PendingUpload,
     read: Read,
-    player: { uuid: string; name: string } | null,
+    who: { player: { uuid: string; name: string } | null; accounts: Accounts },
     playsOn: string,
     work: string,
   ): Promise<void> {
+    const { player, accounts } = who
     const store = requireCapability(this.#caps, 'archives')
     const names = read.archive.files.map((file) => file.name)
-    const place = placeInLevel(read.world)
+    const place = withPlayersRenamed(placeInLevel(read.world), accounts.renames)
     const levelPath =
       player === null ? null : playerFilePath(names, read.world, LEVEL, read.facts.gameVersion, player.uuid)
     const hostFile = levelPath === null ? null : levelPath.slice(`${LEVEL}/`.length)
     // Where the world already has a file of the account named, that file stays as the world had it.
     const hostWritten = hostFile !== null && !names.some((name) => place(name) === hostFile)
-    const packed = await this.#pack(read, hostWritten ? hostFile : null, join(work, ARCHIVE_NAME))
+    const packed = await this.#pack(read, place, hostWritten ? hostFile : null, join(work, ARCHIVE_NAME))
     const key = await store.ingestFile(packed.path, packed.sha512)
     // Recorded at once: should what follows fail, the store's sweep finds it unused and lets it go.
     await recordStored(this.#db, { sha512: packed.sha512, key, sizeBytes: packed.sizeBytes, source: 'built' })
@@ -300,6 +305,7 @@ export class NewWorldImports {
         updated: (from) =>
           `It was last played on Minecraft ${from}. Its server runs ${playsOn}, which updates it when it first starts.`,
       }),
+      ...accountNotes(accounts),
     ]
     const kept = await this.#db.transaction(async (tx) => {
       if (!(await claimPendingUpload(tx, pending.id))) return false
@@ -319,13 +325,14 @@ export class NewWorldImports {
    */
   async #pack(
     read: Read,
+    place: (path: string) => string | null,
     hostFile: string | null,
     path: string,
   ): Promise<{ path: string; sha512: string; sizeBytes: number }> {
     const hash = createHash('sha512')
     let sizeBytes = 0
     await pipeline(
-      this.#archives.tarball(this.#inLevel(read, hostFile)),
+      this.#archives.tarball(this.#inLevel(read, place, hostFile)),
       new Transform({
         transform(chunk: Buffer, _encoding, done) {
           hash.update(chunk)
@@ -338,9 +345,12 @@ export class NewWorldImports {
     return { path, sha512: hash.digest('hex'), sizeBytes }
   }
 
-  /** The upload's world inside its own folder, and its host's own file where they get one. */
-  async *#inLevel(read: Read, hostFile: string | null): AsyncIterable<TarballEntry> {
-    const place = placeInLevel(read.world)
+  /** The upload's world inside its own folder, as `place` says, and its host's own file where they get one. */
+  async *#inLevel(
+    read: Read,
+    place: (path: string) => string | null,
+    hostFile: string | null,
+  ): AsyncIterable<TarballEntry> {
     for await (const file of read.archive.entries()) {
       const to = place(file.name)
       if (to === null) await file.data.cancel()

@@ -29,6 +29,7 @@ import { type Harness, hasDatabase, startHarness } from '../../testing/harness.t
 import { MemoryStore } from '../../testing/memory-store.ts'
 import { fabricJar, savedOn, utf8, zipBytes, zipOf } from '../../testing/uploads.ts'
 import { bringNewWorld, PLAYER, save, serverFolder, untilNewRead } from '../../testing/world-imports.ts'
+import { offlineUuid } from '../access/identity.ts'
 import { grownStorage, loadRevision } from '../servers/persistence.ts'
 import { installTuning, tuning } from '../tuning.ts'
 import { listWorlds } from '../worlds/persistence.ts'
@@ -491,5 +492,43 @@ describe.skipIf(!hasDatabase)('a pack with its world, from one upload', () => {
     })
     const [first] = await listWorlds(h.db, server.id)
     expect(first?.startsOn).toEqual(kept?.startsOn ?? null)
+  }, 120_000)
+})
+
+describe.skipIf(!hasDatabase)('an offline-mode server’s players', () => {
+  test('are moved to their Minecraft accounts, and a name with none keeps its files', async () => {
+    const owner = await h.user('Ivy', 'plus')
+    // The fixture's server ran in offline mode, which names players' files for made-up UUIDs.
+    const files = await serverFolder('vanilla-1.21.11')
+    const player = new Uint8Array(await readFile(PLAYER))
+    const alex = offlineUuid('Alex')
+    const ghost = offlineUuid('Ghost')
+    h.profiles.unknown('Ghost')
+    files[`world/playerdata/${alex}.dat`] = player
+    files[`world/stats/${alex}.json`] = utf8('{"stats":{}}')
+    files[`world/advancements/${alex}.json`] = utf8('{}')
+    files[`world/playerdata/${ghost}.dat`] = player
+    files['usercache.json'] = utf8(
+      JSON.stringify([
+        { name: 'Alex', uuid: alex, expiresOn: '2026-11-27 12:00:00 +0000' },
+        { name: 'Ghost', uuid: ghost, expiresOn: '2026-11-27 12:00:00 +0000' },
+      ]),
+    )
+    const ready = await bringNewWorld(h, owner, zipBytes(files), 'offline.zip')
+    if (ready.status !== 'ready') throw new Error(`The import is ${ready.status}`)
+    expect(ready.notes).toEqual(
+      expect.arrayContaining([
+        'Moved a player of the offline-mode server to their Minecraft accounts, with what they carried and their stats: Alex.',
+        'No Minecraft account is called Ghost, so their files stay as the offline-mode server kept them.',
+      ]),
+    )
+
+    // Alex's files under their account's UUID, as the server they go to plays in online mode.
+    const online = normalizeUuid((await h.profiles.byName('Alex'))?.uuid ?? '')
+    const dir = await unpacked(await keptKey(ready.importId))
+    expect(await readFile(join(dir, `playerdata/${online}.dat`))).toEqual(Buffer.from(player))
+    expect(await readdir(join(dir, 'stats'))).toEqual([`${online}.json`])
+    expect(await readdir(join(dir, 'advancements'))).toEqual([`${online}.json`])
+    expect((await readdir(join(dir, 'playerdata'))).sort()).toEqual([`${ghost}.dat`, `${online}.dat`].sort())
   }, 120_000)
 })

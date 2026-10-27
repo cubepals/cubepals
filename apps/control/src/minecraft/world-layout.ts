@@ -261,3 +261,40 @@ export const worldGenSettingsPaths = (world: FoundWorld): string[] => [
   `${world.folder}data/minecraft/world_gen_settings.dat`,
   `${world.folder}dimensions/minecraft/overworld/data/minecraft/world_gen_settings.dat`,
 ]
+
+/**
+ * A player's own files, by the UUID they are named for: their data, stats and advancements, where
+ * every release keeps them (`playerdata/`, `stats/`, `advancements/`, and under `players/` from
+ * 26.1 on). The UUID is the capture's third group.
+ */
+const PLAYER_FILE =
+  /^(.*?)(playerdata|stats|advancements|players\/data|players\/stats|players\/advancements)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\.dat_old|\.dat|\.json)$/i
+
+/** The players a world has files of, by the dashed UUIDs the files are named for. */
+export function playersWithFiles(paths: readonly string[], world: FoundWorld): string[] {
+  const uuids = paths
+    .filter((path) => path.startsWith(world.folder))
+    .map((path) => PLAYER_FILE.exec(path.slice(world.folder.length))?.[3]?.toLowerCase())
+  return [...new Set(uuids.filter((uuid): uuid is string => uuid !== undefined))]
+}
+
+/**
+ * Where a world's files go, as `place` says, with each player's own files renamed from the UUID
+ * they were named for to the one in `renames` (an offline-mode server's players, moved to their
+ * accounts). Every other file goes where `place` says.
+ */
+export function withPlayersRenamed(
+  place: (path: string) => string | null,
+  renames: ReadonlyMap<string, string>,
+): (path: string) => string | null {
+  if (renames.size === 0) return place
+  return (path) => {
+    const to = place(path)
+    const named = to === null ? null : PLAYER_FILE.exec(to)
+    const uuid = named?.[3]?.toLowerCase()
+    const renamed = uuid === undefined ? undefined : renames.get(uuid)
+    return named === null || renamed === undefined
+      ? to
+      : `${named[1] ?? ''}${named[2]}/${renamed}${named[4] ?? ''}`
+  }
+}

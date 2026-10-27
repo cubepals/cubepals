@@ -14,6 +14,7 @@ import {
   planThatRuns,
   worldRoomBytes,
 } from '../../domain/account/entitlements.ts'
+import { normalizeUuid } from '../../minecraft/console.ts'
 import { compareVersions, isRelease } from '../../minecraft/versions.ts'
 import { DOWNLOAD_NOTE, jarsInNote } from '../../minecraft/world-download.ts'
 import { moddedBrands, type WorldFacts, worldFacts } from '../../minecraft/world-facts.ts'
@@ -23,11 +24,12 @@ import {
   leftOutOf,
   modsBeside,
   placeOnServer,
+  playersWithFiles,
   type UploadHolds,
   uploadHolds,
   worldGenSettingsPaths,
 } from '../../minecraft/world-layout.ts'
-import { identityFor } from '../access/identity.ts'
+import { identityFor, offlineUuid } from '../access/identity.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { type DeploymentCapabilities, requireCapability } from '../capabilities.ts'
 import { AppError } from '../errors.ts'
@@ -55,7 +57,9 @@ const LIMITS = {
 }
 /** The few files an upload is read by: what each world says of itself, and its server's settings. */
 const KEPT =
-  /(^|\/)(level\.dat|level\.dat_old|server\.properties|world_gen_settings\.dat|cubepals-download\.txt)$/
+  /(^|\/)(level\.dat|level\.dat_old|server\.properties|world_gen_settings\.dat|cubepals-download\.txt|usercache\.json)$/
+/** How many of an offline-mode server's players are looked up as accounts: a large server's regulars. */
+const MOST_ACCOUNTS = 200
 
 export const SAID = {
   neverArrived: 'The file never arrived. Upload it again.',
@@ -270,6 +274,39 @@ export class WorldReading {
   }
 
   /**
+   * The players of an offline-mode server, moved to their Minecraft accounts (docs/world-import.md
+   * § How Blockly reads it, 6): each name in the server's `usercache.json` whose UUID is the one the
+   * server made up from it, and who has files in the world, looked up as an account. Their files'
+   * new names, who was matched, and who has no account by that name, whose files stay as they are.
+   * None for a server that plays in offline mode itself, where the names stay the server's.
+   */
+  async accounts(read: Read, onlineMode: boolean): Promise<Accounts> {
+    const accounts: Accounts = { renames: new Map(), matched: [], unmatched: [] }
+    const properties = read.holds.properties
+    if (properties === null || !onlineMode) return accounts
+    const raw = read.archive.kept.get(`${properties.slice(0, properties.lastIndexOf('/') + 1)}usercache.json`)
+    if (raw === undefined) return accounts
+    const present = new Set(
+      playersWithFiles(
+        read.archive.files.map((file) => file.name),
+        read.world,
+      ),
+    )
+    const offline = usercacheOf(raw).filter(
+      (one) => one.uuid === offlineUuid(one.name) && present.has(one.uuid),
+    )
+    for (const one of offline.slice(0, MOST_ACCOUNTS)) {
+      const profile = await this.#profiles.byName(one.name).catch(() => null)
+      if (profile === null) accounts.unmatched.push(one.name)
+      else {
+        accounts.renames.set(one.uuid, normalizeUuid(profile.uuid))
+        accounts.matched.push(profile.name)
+      }
+    }
+    return accounts
+  }
+
+  /**
    * The account a single-player world's host played it on, whose own data goes to their player
    * file: asked of its owner, who may say none. Null where there is no host, or none is to get it.
    */
@@ -286,6 +323,47 @@ export class WorldReading {
       throw new Asks({ player: true, problem: `No Minecraft account is called ${answer.player}.` })
     return player
   }
+}
+
+/** An offline-mode server's players, moved to their accounts (`WorldReading.accounts`). */
+export interface Accounts {
+  /** Each player's files' UUID, the one the server made up, to their account's. */
+  renames: Map<string, string>
+  matched: string[]
+  /** Names no Minecraft account has, whose files stay as they are. */
+  unmatched: string[]
+}
+
+/** The names and UUIDs a server's `usercache.json` lists, dashed and lowercase; none where it can't be read. */
+function usercacheOf(raw: Uint8Array): Array<{ name: string; uuid: string }> {
+  try {
+    const listed: unknown = JSON.parse(new TextDecoder().decode(raw))
+    if (!Array.isArray(listed)) return []
+    return listed.flatMap((entry: unknown) => {
+      const { name, uuid } = (entry ?? {}) as { name?: unknown; uuid?: unknown }
+      return typeof name === 'string' && typeof uuid === 'string'
+        ? [{ name, uuid: normalizeUuid(uuid).toLowerCase() }]
+        : []
+    })
+  } catch {
+    return []
+  }
+}
+
+/** What its owner reads of an offline-mode server's players moved to their accounts. */
+export function accountNotes(accounts: Accounts): string[] {
+  return [
+    ...(accounts.matched.length > 0
+      ? [
+          `Moved ${accounts.matched.length === 1 ? 'a player' : `${accounts.matched.length} players`} of the offline-mode server to their Minecraft accounts, with what they carried and their stats: ${accounts.matched.join(', ')}.`,
+        ]
+      : []),
+    ...(accounts.unmatched.length > 0
+      ? [
+          `No Minecraft account is called ${accounts.unmatched.join(', ')}, so their files stay as the offline-mode server kept them.`,
+        ]
+      : []),
+  ]
 }
 
 /**

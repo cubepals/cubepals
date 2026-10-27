@@ -25,7 +25,7 @@ import { nextLevelName } from '../../domain/world/world.ts'
 import { PROPERTIES_FILE } from '../../minecraft/uploads.ts'
 import { isRelease } from '../../minecraft/versions.ts'
 import { DOWNLOAD_NOTE, inWorldDownload } from '../../minecraft/world-download.ts'
-import { placeOnServer, playerFilePath } from '../../minecraft/world-layout.ts'
+import { placeOnServer, playerFilePath, withPlayersRenamed } from '../../minecraft/world-layout.ts'
 import { isLevelName } from '../../minecraft/worlds.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
@@ -58,7 +58,9 @@ import {
   worldImportRefused,
 } from './world-import-records.ts'
 import {
+  type Accounts,
   Asks,
+  accountNotes,
   answerFor,
   LINK_SECONDS,
   notesOn,
@@ -223,7 +225,16 @@ export class WorldImports {
         desired.gameVersion,
       )
       const player = await this.#reading.hostPlayer(read, record.answer ?? {}, desired.settings.onlineMode)
-      await this.#keep({ record, pending, server, read, player, serverVersion: desired.gameVersion })
+      const accounts = await this.#reading.accounts(read, desired.settings.onlineMode)
+      await this.#keep({
+        record,
+        pending,
+        server,
+        read,
+        player,
+        accounts,
+        serverVersion: desired.gameVersion,
+      })
     } finally {
       await archive.close()
     }
@@ -239,9 +250,11 @@ export class WorldImports {
     server: MinecraftServer
     read: Read
     player: { uuid: string; name: string } | null
+    /** An offline-mode server's players, moved to their accounts where the server plays online. */
+    accounts: Accounts
     serverVersion: string
   }): Promise<void> {
-    const { record, pending, server, read, player } = input
+    const { record, pending, server, read, player, accounts } = input
     const store = requireCapability(this.#caps, 'archives')
     const worlds = await listWorlds(this.#db, server.id)
     const fromCubepals = read.archive.kept.has(DOWNLOAD_NOTE)
@@ -267,9 +280,10 @@ export class WorldImports {
       read.holds.properties === PROPERTIES_FILE &&
       read.world.folder === `${levelName}/` &&
       read.world.beside.every((folder) => folder.startsWith(`${levelName}_`)) &&
-      player === null
+      player === null &&
+      accounts.renames.size === 0
     const names = read.archive.files.map((file) => file.name)
-    const place = placeOnServer(read.world, levelName)
+    const place = withPlayersRenamed(placeOnServer(read.world, levelName), accounts.renames)
     const playerPath =
       player === null
         ? null
@@ -287,6 +301,7 @@ export class WorldImports {
           `It was last played on Minecraft ${from}. Restoring it opens it on ${input.serverVersion}, which updates it; this backup stays as it came.`,
         serverVersion: input.serverVersion,
       }),
+      ...accountNotes(accounts),
     ]
     const backupId = randomUUID()
     let key = pending.key
@@ -294,7 +309,7 @@ export class WorldImports {
     if (!asItCame) {
       key = store.newKey('archive', { serverId: server.id, id: backupId })
       sizeBytes = await putStream(
-        this.#archives.tarball(this.#placed(read, levelName, hostWritten ? playerPath : null)),
+        this.#archives.tarball(this.#placed(read, levelName, place, hostWritten ? playerPath : null)),
         await store.archiveTarget(key, LINK_SECONDS, 'browser'),
         mostOf(read.archive),
       )
@@ -323,10 +338,14 @@ export class WorldImports {
   }
 
   /** The upload's world as the server keeps it, with the settings that name it and its host's file. */
-  async *#placed(read: Read, levelName: string, hostFile: string | null): AsyncIterable<TarballEntry> {
+  async *#placed(
+    read: Read,
+    levelName: string,
+    place: (path: string) => string | null,
+    hostFile: string | null,
+  ): AsyncIterable<TarballEntry> {
     const properties = new TextEncoder().encode(`level-name=${levelName}\n`)
     yield { name: PROPERTIES_FILE, sizeBytes: properties.byteLength, data: properties }
-    const place = placeOnServer(read.world, levelName)
     for await (const file of read.archive.entries()) {
       const to = place(file.name)
       if (to === null) {

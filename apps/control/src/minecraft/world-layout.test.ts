@@ -18,7 +18,9 @@ import {
   placeInLevel,
   placeOnServer,
   playerFilePath,
+  playersWithFiles,
   uploadHolds,
+  withPlayersRenamed,
   worldGenSettingsPaths,
 } from './world-layout.ts'
 
@@ -278,5 +280,32 @@ describe('what a world says of itself', () => {
     expect(worldFacts({ Data: { LevelName: 'Old' } }, undefined, null)).toEqual({
       refused: 'This world is from before Minecraft 1.9, too old to open here.',
     })
+  })
+})
+
+describe('an offline-mode server’s players, moved to their accounts', () => {
+  const offline = '5627dd98-e6be-3c21-b8a8-e92344183641'
+  const account = '069a79f4-44e9-4726-a5be-fca90e38aaf5'
+  test('every file of theirs is renamed, where any release keeps it, and nothing else is', () => {
+    const holds = uploadHolds(listing('vanilla-1.21.11'))
+    const world = holds.kind === 'java' ? chosenWorld(holds, 'world') : null
+    if (world === null) throw new Error('no world')
+    const place = withPlayersRenamed(placeOnServer(world, 'world'), new Map([[offline, account]]))
+    expect(place(`world/playerdata/${offline}.dat`)).toBe(`world/playerdata/${account}.dat`)
+    expect(place(`world/playerdata/${offline}.dat_old`)).toBe(`world/playerdata/${account}.dat_old`)
+    expect(place(`world/stats/${offline}.json`)).toBe(`world/stats/${account}.json`)
+    expect(place(`world/advancements/${offline}.json`)).toBe(`world/advancements/${account}.json`)
+    // From 26.1 they are under players/.
+    expect(place(`world/players/data/${offline}.dat`)).toBe(`world/players/data/${account}.dat`)
+    expect(place(`world/players/stats/${offline}.json`)).toBe(`world/players/stats/${account}.json`)
+    // Someone else's, and anything else, as it was.
+    expect(place(`world/playerdata/${account}.dat`)).toBe(`world/playerdata/${account}.dat`)
+    expect(place('world/region/r.0.0.mca')).toBe('world/region/r.0.0.mca')
+    expect(
+      playersWithFiles(
+        [`world/playerdata/${offline}.dat`, `world/stats/${offline}.json`, 'world/level.dat'],
+        world,
+      ),
+    ).toEqual([offline])
   })
 })

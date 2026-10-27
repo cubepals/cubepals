@@ -61,7 +61,14 @@ Before the plan:
   knows, and the server made from the pack starts on it (`pack-world.tsx`), or on a new world if
   they say so. Where its owner may not bring a world, it is past the day's worlds, or it is bigger
   than their plan's largest disk, the pack comes without it.
-- **Next:** the rest (step 5), then the guide.
+- **An offline-mode server's players are moved to their accounts.** A server's folder whose
+  `usercache.json` lists players by the UUIDs an offline-mode server makes up, with files in the
+  world, has each name looked up as a Minecraft account (`WorldReading.accounts`), and their player
+  data, stats and advancements renamed to the account's UUID (`withPlayersRenamed`), for a server
+  that plays in online mode: every new one, and an existing one that does. A name no account has
+  keeps its files, and the notes say who was moved and who wasn't.
+- **Next:** who can join (a server's whitelist, operators and bans) and a server's other worlds,
+  then the guide.
 
 ## What it does
 
