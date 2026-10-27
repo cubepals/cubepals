@@ -60,8 +60,8 @@ export default async function Guide() {
         <ul>
           <li>
             <strong>Who could join comes with it.</strong> Its whitelist, operators and bans are listed, and
-            you choose who comes along. Nobody is let in until you say. Its bans come unless you say not, and
-            a server that let in only its whitelist does the same here.
+            you choose who comes along. Nobody is let in until you say, and the server starts open to anyone.
+            Turn on its whitelist to let in only the players you chose. Its bans come unless you say not.
           </li>
           <li>
             <strong>Players on an offline-mode server keep their things.</strong> Such a server names each
@@ -92,7 +92,8 @@ export default async function Guide() {
           On a server’s <strong>Backups</strong> page, <strong>Upload a world</strong> keeps the world as a
           backup of that server. Restoring it is the next step, and the world the server has now is backed up
           first. A server’s folder holding more than one world, as servers with several worlds do, has each
-          one kept as its own backup.
+          one kept as its own backup. Made into a new server, it starts on the world its{' '}
+          <code>server.properties</code> names; upload the same file on its Backups page to keep the others.
         </p>
       </Part>
 
