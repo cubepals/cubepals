@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PackImportView, PackLinkView, PackUpdateView, PackVersionView } from '@blockly/contracts'
 import { DAY_MS, HOUR_S } from '@blockly/contracts/durations'
-import { type Db, type PackImportJson, schema } from '@blockly/db'
+import { type Db, type PackImportJson, schema, type Tx } from '@blockly/db'
 import { and, count, eq, gt } from 'drizzle-orm'
 import type { PinnedModpack } from '../../domain/mods/modpack.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
@@ -54,6 +54,15 @@ const READ_LINK_SECONDS = HOUR_S
 /** How many packs an account may read in a day: enough to try a few, not to farm the store. */
 const IMPORTS_A_DAY = 25
 
+/** Who reads a world that came inside a pack (`backups/new-world-imports.ts`), from the same upload. */
+export interface WorldsInPacks {
+  /** The world's import, or null where the pack comes without it; the upload is the world's from then. */
+  fromPack(
+    tx: Tx,
+    upload: { ownerId: string; key: string; fileName: string; sizeBytes: number },
+  ): Promise<string | null>
+}
+
 export class PackService {
   readonly #db: Db
   readonly #policy: AccessPolicy
@@ -63,6 +72,7 @@ export class PackService {
   readonly #archives: PackArchives
   readonly #catalog: ModCatalog
   readonly #curseforge: CurseForge
+  readonly #worlds: () => WorldsInPacks
 
   constructor(deps: {
     db: Db
@@ -73,6 +83,7 @@ export class PackService {
     archives: PackArchives
     catalog: ModCatalog
     curseforge: CurseForge
+    worlds: () => WorldsInPacks
   }) {
     this.#db = deps.db
     this.#policy = deps.policy
@@ -82,6 +93,7 @@ export class PackService {
     this.#archives = deps.archives
     this.#catalog = deps.catalog
     this.#curseforge = deps.curseforge
+    this.#worlds = deps.worlds
   }
 
   /** The archive store packs are kept in, which also keeps the worlds templates start on. */
@@ -187,6 +199,7 @@ export class PackService {
         playersNeedIt: result.playersNeedIt,
         notes: result.notes,
       },
+      worldImportId: record.worldImportId,
     }
   }
 
@@ -201,6 +214,8 @@ export class PackService {
     const pending = await loadPendingUpload(this.#db, importId)
     const store = requireCapability(this.#caps, 'archives')
     const work = await mkdtemp(join(tmpdir(), 'blockly-pack-'))
+    // Where a world came inside it, the upload is that world's to read and let go.
+    let worldImportId: string | null = null
     try {
       if (pending === null)
         throw new ImportFailed('The file never arrived. Upload it again.', 'no pending upload')
@@ -228,10 +243,25 @@ export class PackService {
         return
       }
       const key = await store.ingestFile(built.path, built.sha512)
-      await this.#db.transaction(async (tx) => {
+      worldImportId = await this.#db.transaction(async (tx) => {
         await recordStored(tx, { sha512: built.sha512, key, sizeBytes: built.sizeBytes, source: 'built' })
         await savePackContents(tx, { sha512: built.sha512, ...built.contents })
-        await packImportReady(tx, importId, { packSha512: built.sha512, result: built.summary, at })
+        // A world inside it (a launcher's saves, a server's world) is read from the same upload.
+        const world = built.contents.leftOut.some((left) => left.why === 'world')
+          ? await this.#worlds().fromPack(tx, {
+              ownerId: record.ownerId,
+              key: pending.key,
+              fileName: pending.fileName,
+              sizeBytes: pending.sizeBytes,
+            })
+          : null
+        await packImportReady(tx, importId, {
+          packSha512: built.sha512,
+          result: built.summary,
+          at,
+          worldImportId: world,
+        })
+        return world
       })
     } catch (error) {
       if (error instanceof ImportFailed) {
@@ -246,8 +276,7 @@ export class PackService {
     } finally {
       await rm(work, { recursive: true, force: true })
       if (pending !== null)
-        await store
-          .delete(pending.key)
+        await (worldImportId === null ? store.delete(pending.key) : Promise.resolve())
           .then(() => deletePendingUpload(this.#db, pending.id))
           .catch(() => undefined)
     }

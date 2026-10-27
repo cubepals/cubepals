@@ -111,6 +111,7 @@ function PlayingAPack({ view, list }: { view: ServerView; list: ModsView }) {
           description="Drop its file, and Cubepals reads it and moves the server to it, keeping a way back."
         >
           <PackDrop
+            keepsWorld
             disabled={!allowed.ok}
             onReady={(read) =>
               setMoving({

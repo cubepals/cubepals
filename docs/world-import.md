@@ -54,7 +54,14 @@ Before the plan:
   version for the world's own release; a pack on an older Minecraft than the world is refused.
   Mod ids from Forge's registry data in `level.dat` aren't read yet: that waits on a world a real
   Forge server saved.
-- **Next:** a pack and a world from one upload (the rest of step 4), then the rest and the guide.
+- **A pack and its world from one upload are in.** A launcher's export or a server's folder dropped
+  as a pack, holding a world, is built into its pack as before, and the same upload is handed to
+  the world reader (`NewWorldImports.fromPack`) instead of being let go: the pack import names it
+  (`worldImportId`). On the create page the world is read under the pack, asks what only its owner
+  knows, and the server made from the pack starts on it (`pack-world.tsx`), or on a new world if
+  they say so. Where its owner may not bring a world, it is past the day's worlds, or it is bigger
+  than their plan's largest disk, the pack comes without it.
+- **Next:** the rest (step 5), then the guide.
 
 ## What it does
 

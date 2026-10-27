@@ -24,6 +24,27 @@ export type ReadWorld = Extract<NewWorldImportView, { status: 'ready' }>
 /** How often a world being read is asked about: reading a large one takes a minute or two. */
 const READING_POLL_MS = 1500
 
+/**
+ * A world brought for a new server, as it is read: watched until it is ready or refused, and the
+ * owner's answers to what it asks sent back, which come back as the world read again.
+ */
+export function useNewWorld(importId: string | null) {
+  const trpc = useTRPC()
+  const queries = useQueryClient()
+  const answer = useMutation(
+    trpc.newWorlds.answerUpload.mutationOptions({
+      onSuccess: (next) =>
+        queries.setQueryData(trpc.newWorlds.upload.queryKey({ importId: next.importId }), next),
+    }),
+  )
+  const watched = useQuery({
+    ...trpc.newWorlds.upload.queryOptions({ importId: importId ?? '' }),
+    enabled: importId !== null,
+    refetchInterval: (query) => (query.state.data?.status === 'reading' ? READING_POLL_MS : false),
+  })
+  return { watched, answer }
+}
+
 export function OwnWorld({
   disabled,
   onReady,
@@ -35,16 +56,8 @@ export function OwnWorld({
   onStart?: () => void
 }) {
   const trpc = useTRPC()
-  const queries = useQueryClient()
   const begin = useMutation(trpc.newWorlds.beginUpload.mutationOptions())
   const finish = useMutation(trpc.newWorlds.finishUpload.mutationOptions())
-  const answer = useMutation(
-    trpc.newWorlds.answerUpload.mutationOptions({
-      // The answer comes back as the world read again, which this watches until it ends.
-      onSuccess: (next) =>
-        queries.setQueryData(trpc.newWorlds.upload.queryKey({ importId: next.importId }), next),
-    }),
-  )
   const {
     progress: sending,
     importId,
@@ -54,11 +67,7 @@ export function OwnWorld({
     { begin: (file) => begin.mutateAsync(file), finish: (ticket) => finish.mutateAsync({ ticket }) },
     onStart,
   )
-  const watched = useQuery({
-    ...trpc.newWorlds.upload.queryOptions({ importId: importId ?? '' }),
-    enabled: importId !== null,
-    refetchInterval: (query) => (query.state.data?.status === 'reading' ? READING_POLL_MS : false),
-  })
+  const { watched, answer } = useNewWorld(importId)
   const read = watched.data
   useHandedOnce(read, onReady)
 

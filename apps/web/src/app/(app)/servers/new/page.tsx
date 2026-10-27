@@ -53,6 +53,18 @@ import { Ways } from './ways'
  * answer opens the next question, and a bar that stays in view says what is being made and holds
  * the one button that makes it. Nothing here asks about any of what the first answer settled.
  */
+
+/** The pack its owner dropped, as what to play: with the world that came inside it, once that is read. */
+const ownPackSource = (importId: string, world: string | null): SetupSourceInput =>
+  world === null
+    ? { kind: 'import', importId }
+    : { kind: 'world', importId: world, pack: { kind: 'import', importId } }
+
+/** Whether what to play is the pack its owner dropped, on its own or with its world. */
+const isOwnPack = (from: SetupSourceInput | null, pack: ReadPack): boolean =>
+  from?.kind === 'import' ||
+  (from?.kind === 'world' && from.pack?.kind === 'import' && from.pack.importId === pack.importId)
+
 export default function CreateServerPage() {
   return (
     <Suspense fallback={null}>
@@ -204,9 +216,9 @@ function CreateServer() {
     if (await choose(source, hit.projectId)) setPack(hit)
   }
   const pickCurated = (key: string) => void choose({ kind: 'curated', key }, `curated:${key}`)
-  const pickOwnPack = async (read: ReadPack) => {
+  const pickOwnPack = async (read: ReadPack, world: string | null = null) => {
     setOwnPack(read)
-    await choose({ kind: 'import', importId: read.importId }, read.importId)
+    await choose(ownPackSource(read.importId, world), read.importId)
   }
 
   // A template's name and picture are the same for everyone, so the bar says them without waiting.
@@ -387,16 +399,16 @@ function CreateServer() {
               disabled={atLimit !== null}
               onStart={() => {
                 setOwnPack(null)
-                if (from?.kind === 'import') setFrom(null)
+                if (ownPack !== null && isOwnPack(from, ownPack)) setFrom(null)
               }}
               onReady={pickOwnPack}
             />
             {ownPack !== null && (
-              <div className={styles.row} data-picked={from?.kind === 'import' || undefined}>
+              <div className={styles.row} data-picked={isOwnPack(from, ownPack) || undefined}>
                 <Thumb
                   picture={wayPicture('ownpack')}
                   state={
-                    checking === ownPack.importId ? 'busy' : from?.kind === 'import' ? 'picked' : undefined
+                    checking === ownPack.importId ? 'busy' : isOwnPack(from, ownPack) ? 'picked' : undefined
                   }
                 />
                 <span className={styles.rowText}>

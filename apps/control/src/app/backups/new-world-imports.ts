@@ -173,6 +173,33 @@ export class NewWorldImports {
     return { importId: pending.id }
   }
 
+  /**
+   * A world that came inside a pack its owner uploaded (`packs/service.ts`), read from the same
+   * upload as any world brought for a new server is, so a launcher's export or a server's folder
+   * gives the pack and its world from one file. The upload is the world's from here, which lets it
+   * go once read. The pack comes without its world, and null says so, where its owner may not bring
+   * one, it is past the day's worlds, or it is bigger than any disk on their plan has room for.
+   */
+  async fromPack(
+    tx: Tx,
+    upload: { ownerId: string; key: string; fileName: string; sizeBytes: number },
+  ): Promise<string | null> {
+    const standing = await loadStanding(tx, upload.ownerId)
+    const limit = worldUploadLimit(entitlementsFor(standing.plan, standing.limitOverrides).storage.mostGb)
+    if (upload.sizeBytes > limit) return null
+    if (!(await this.#policy.check(tx, upload.ownerId, { kind: 'restore_archive' })).ok) return null
+    if (
+      (await worldsBroughtSince(tx, upload.ownerId, new Date(Date.now() - DAY_MS))) >=
+      tuning().abuse.worldUploadsPerDay
+    )
+      return null
+    const id = randomUUID()
+    await insertPendingUpload(tx, { id, ...upload, serverId: null, kind: 'world', sha512: null })
+    await insertWorldImport(tx, { id, ...upload, serverId: null, name: null })
+    await this.#jobs.enqueueWorldImport(tx, id)
+    return id
+  }
+
   /** An import as its owner sees it: being read, asking, ready as what it is, or refused and why. */
   async view(actor: UserActor, importId: string): Promise<NewWorldImportView> {
     return viewOf(await this.#owned(actor, importId), asWorld)

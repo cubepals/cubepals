@@ -6,7 +6,18 @@
  * Files Blockly keeps and builds from: stored artifacts by hash, uploads in flight, uploaded mods,
  * and the packs read from them.
  */
-import { bigint, boolean, index, integer, jsonb, pgEnum, pgTable, text, uuid } from 'drizzle-orm/pg-core'
+import {
+  type AnyPgColumn,
+  bigint,
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import type {
   ModArtifactJson,
   NewWorldFactsJson,
@@ -123,6 +134,11 @@ export const packImports = pgTable(
     /** The sentence the owner reads when it can't run; the detail stays for admins. */
     refusal: text('refusal'),
     detail: text('detail'),
+    /**
+     * The world that came inside it, read from the same upload for the server made from the pack
+     * to start on (docs/world-import.md); null where it held none, or it came without it.
+     */
+    worldImportId: uuid('world_import_id').references((): AnyPgColumn => worldImports.id),
     createdAt: createdAt(),
     finishedAt: ts('finished_at'),
   },

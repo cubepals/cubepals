@@ -227,10 +227,9 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
   })
   const contents = new PackContents({ db, formats: ports.formats, catalog: ports.catalog })
   const packs = new PackService({
+    ...ports,
     db,
     policy,
-    capabilities: ports.capabilities,
-    jobs: ports.jobs,
     builder: new PackBuilder({
       archives: ports.archives,
       formats: ports.formats,
@@ -238,9 +237,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
       curseforge: ports.curseforge,
       loaderBuilds: ports.loaderBuilds,
     }),
-    archives: ports.archives,
-    catalog: ports.catalog,
-    curseforge: ports.curseforge,
+    worlds: () => backups.newWorlds,
   })
   setups = new SetupService({
     ...ports,

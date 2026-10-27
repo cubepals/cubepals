@@ -27,7 +27,7 @@ import { VANILLA_PAPER_STEP } from '../../minecraft/vanilla-paper.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
-import { savedOn, zipBytes, zipOf } from '../../testing/uploads.ts'
+import { fabricJar, savedOn, utf8, zipBytes, zipOf } from '../../testing/uploads.ts'
 import { bringNewWorld, PLAYER, save, serverFolder, untilNewRead } from '../../testing/world-imports.ts'
 import { grownStorage, loadRevision } from '../servers/persistence.ts'
 import { installTuning, tuning } from '../tuning.ts'
@@ -403,5 +403,54 @@ describe.skipIf(!hasDatabase)('a world played with mods', () => {
     ).rejects.toThrow(
       'This world was last played on Minecraft 1.21.11, and older-pack runs 1.21.1, which can’t open it. Choose the version of the pack the world was played with.',
     )
+  }, 120_000)
+})
+
+describe.skipIf(!hasDatabase)('a pack with its world, from one upload', () => {
+  test('a server’s folder with its mods is read as its pack and its world, and a server made of both', async () => {
+    const owner = await h.user('Rook', 'plus')
+    const folder = await serverFolder('vanilla-1.21.11')
+    const files: Record<string, Uint8Array> = {}
+    for (const [name, bytes] of Object.entries(folder)) files[`Modded-Server/${name}`] = bytes
+    files['Modded-Server/mods/custom.jar'] = fabricJar('custom', { depends: { minecraft: '1.21.11' } })
+    files['Modded-Server/variables.txt'] = utf8(
+      'MINECRAFT_VERSION=1.21.11\nMODLOADER=Fabric\nMODLOADER_VERSION=0.16.14\n',
+    )
+    files['Modded-Server/libraries/net/fabricmc/fabric-loader/0.16.14/loader.jar'] = utf8('x')
+    const bytes = zipBytes(files)
+
+    // Sent once, as a pack.
+    const start = await h.app.packs.beginUpload(owner, {
+      fileName: 'Modded-Server.zip',
+      sizeBytes: bytes.length,
+    })
+    expect((await fetch(start.url, { method: 'PUT', body: bytes, headers: start.headers })).status).toBe(200)
+    const { importId } = await h.app.packs.finishUpload(owner, start.ticket)
+    let pack = await h.app.packs.view(owner, importId)
+    for (let tries = 0; tries < 80 && pack.status === 'reading'; tries++) {
+      await Bun.sleep(250)
+      pack = await h.app.packs.view(owner, importId)
+    }
+    if (pack.status !== 'ready') throw new Error(`The pack is ${pack.status}`)
+    expect(pack.pack).toMatchObject({ gameVersion: '1.21.11', loaderLabel: 'Fabric' })
+    if (pack.worldImportId === null) throw new Error('The pack came without its world')
+
+    // Its world, read from the same upload, which goes once the world is kept.
+    const world = await untilNewRead(h, owner, pack.worldImportId)
+    expect(world).toMatchObject({ status: 'ready', world: { gameVersion: '1.21.11', moddedWith: [] } })
+    expect(store.objects.has(start.ticket)).toBe(false)
+    expect([...store.objects.keys()].some((key) => key.includes(start.ticket))).toBe(false)
+
+    const server = await h.create(owner, {
+      from: { kind: 'world', importId: pack.worldImportId, pack: { kind: 'import', importId } },
+    })
+    const revision = await loadRevision(h.db, server.desiredRevisionId)
+    expect(revision).toMatchObject({ gameVersion: '1.21.11', loader: 'fabric', loaderVersion: '0.16.14' })
+    expect(revision.modpack).toMatchObject({ catalog: 'upload' })
+    const kept = await h.db.query.worldImports.findFirst({
+      where: (t, { eq }) => eq(t.id, pack.worldImportId ?? ''),
+    })
+    const [first] = await listWorlds(h.db, server.id)
+    expect(first?.startsOn).toEqual(kept?.startsOn ?? null)
   }, 120_000)
 })
