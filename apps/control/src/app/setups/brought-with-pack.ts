@@ -10,7 +10,7 @@
 import type { PackSourceInput } from '@blockly/contracts'
 import type { CatalogVersion } from '../../domain/mods/catalog.ts'
 import type { ServerSetup } from '../../domain/setup/setup.ts'
-import { compareVersions } from '../../minecraft/versions.ts'
+import { compareVersions, isRelease } from '../../minecraft/versions.ts'
 import type { BroughtWorld } from '../backups/new-world-imports.ts'
 import { AppError } from '../errors.ts'
 
@@ -19,9 +19,16 @@ export const PLAYED_WITH_MODS =
   'This world was played with mods, which plain Minecraft would lose. Choose the pack it was played with, and its server is made from that.'
 
 /**
+ * The release a world was last saved on, where that is a release; the one Cubepals opens it on
+ * (`playsOn`) for a snapshot, which no pack lists.
+ */
+const ownRelease = (facts: BroughtWorld['facts']): string =>
+  isRelease(facts.gameVersion) ? facts.gameVersion : facts.playsOn
+
+/**
  * The pack to resolve for a world: one from the catalog named without a version plays its newest
- * version that lists the world's own release, where it has one, so the world isn't moved to a
- * newer Minecraft unasked.
+ * version that lists the world's own release, else the one Cubepals opens it on, so the world isn't
+ * moved to a newer Minecraft unasked.
  */
 export async function packForWorld(
   pack: PackSourceInput,
@@ -31,9 +38,12 @@ export async function packForWorld(
   ) => Promise<ReadonlyArray<Pick<CatalogVersion, 'versionId' | 'gameVersions' | 'publishedAt'>>>,
 ): Promise<PackSourceInput> {
   if (pack.kind !== 'modpack' || pack.versionId !== undefined) return pack
-  const own = [...(await versions(pack.projectId))]
-    .filter((version) => version.gameVersions.includes(brought.facts.playsOn))
-    .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())[0]
+  const listed = await versions(pack.projectId)
+  const newest = (release: string) =>
+    [...listed]
+      .filter((version) => version.gameVersions.includes(release))
+      .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())[0]
+  const own = newest(ownRelease(brought.facts)) ?? newest(brought.facts.playsOn)
   return own === undefined ? pack : { ...pack, versionId: own.versionId }
 }
 
@@ -41,23 +51,28 @@ export async function packForWorld(
  * What a pack resolved to, fitted to the world its server starts on: the pack decides what it
  * runs, the world its game mode, difficulty and type, and the disk it needs. A world last saved on
  * a newer Minecraft than the pack's would lose what that release added, so it is refused; one
- * the pack would update is only where its owner chose the pack's version (`pack`), the file or
- * the release Cubepals offers, never a version Cubepals picked for them.
+ * the pack would update is only where its owner chose the pack's version or file (`pack`), never
+ * a newest version Cubepals took for them.
  */
 export function fittedToWorld<
   R extends { gameVersion: string; from: string; notes: string[]; setup: ServerSetup },
 >(resolved: R, brought: BroughtWorld, pack: PackSourceInput): R & { brought: BroughtWorld } {
   const { facts } = brought
-  if (compareVersions(facts.playsOn, resolved.gameVersion) > 0)
+  const own = ownRelease(facts)
+  if (compareVersions(own, resolved.gameVersion) > 0)
     throw new AppError(
       'invalid_choice',
       `This world was last played on Minecraft ${facts.gameVersion}, and ${resolved.from} runs ${resolved.gameVersion}, which can’t open it. Choose the version of the pack the world was played with.`,
     )
-  // Moving a world to a newer Minecraft can't be undone: only where its owner chose the version.
-  if (facts.playsOn !== resolved.gameVersion && pack.kind === 'modpack' && pack.versionId === undefined)
+  // Moving a world to a newer Minecraft can't be undone: only where its owner chose the version,
+  // never a newest one Cubepals took for them, from the catalog or among the releases it offers.
+  const versionTaken =
+    (pack.kind === 'modpack' && pack.versionId === undefined) ||
+    (pack.kind === 'curated' && pack.version === undefined)
+  if (versionTaken && resolved.gameVersion !== own && resolved.gameVersion !== facts.playsOn)
     throw new AppError(
       'invalid_choice',
-      `No version of ${resolved.from} runs Minecraft ${facts.playsOn}, which this world was played on. Choose the version it was played with, or one on a newer Minecraft to update the world to.`,
+      `No version of ${resolved.from} runs Minecraft ${own}, which this world was played on. Choose the version it was played with, or one on a newer Minecraft to update the world to.`,
     )
   const updated = facts.gameVersion !== resolved.gameVersion
   return {

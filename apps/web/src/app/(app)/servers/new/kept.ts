@@ -23,6 +23,7 @@ export function keptPath(from: SetupSourceInput | null, chosenSize: PartySize | 
   if (pack?.kind === 'modpack') kept.set('pack', pack.projectId)
   if (pack?.kind === 'modpack' && pack.versionId !== undefined) kept.set('packVersion', pack.versionId)
   if (pack?.kind === 'curated') kept.set('curated', pack.key)
+  if (pack?.kind === 'curated' && pack.version !== undefined) kept.set('curatedVersion', pack.version)
   if (pack?.kind === 'import') kept.set('import', pack.importId)
   if (from?.kind === 'world') kept.set('world', from.importId)
   if (chosenSize !== null) kept.set('size', chosenSize)
@@ -55,7 +56,9 @@ function keptFrom(search: { get(name: string): string | null }): SetupSourceInpu
 /** The pack `keptPath` wrote, on its own or as the one a world was played with. */
 function keptPack(search: { get(name: string): string | null }): PackSourceInput | null {
   const curated = search.get('curated')
-  if (curated !== null) return { kind: 'curated', key: curated }
+  const release = search.get('curatedVersion')
+  if (curated !== null)
+    return { kind: 'curated', key: curated, ...(release === null ? {} : { version: release }) }
   const pack = search.get('pack')
   const version = search.get('packVersion')
   if (pack !== null)

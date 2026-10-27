@@ -13,6 +13,7 @@ describe('a choice carried through the address', () => {
     const choices: SetupSourceInput[] = [
       { kind: 'template', key: 'survival', gameVersion: '1.21.11' },
       { kind: 'curated', key: 'create' },
+      { kind: 'curated', key: 'create', version: '6.0' },
       { kind: 'modpack', projectId: 'abc' },
       { kind: 'import', importId: '0b6c0a6e-5d8e-4b3e-9a43-7d3c1f0c2b11' },
       { kind: 'modpack', projectId: 'abc', versionId: 'v1' },
@@ -33,6 +34,11 @@ describe('a choice carried through the address', () => {
         kind: 'world',
         importId: '8f2d8b51-3a7e-4d0c-b0c5-2b9a6d1e4f30',
         pack: { kind: 'curated', key: 'create' },
+      },
+      {
+        kind: 'world',
+        importId: '8f2d8b51-3a7e-4d0c-b0c5-2b9a6d1e4f30',
+        pack: { kind: 'curated', key: 'create', version: '6.0' },
       },
     ]
     for (const from of choices) expect(back(keptPath(from, '10', 'eu')).from).toEqual(from)
