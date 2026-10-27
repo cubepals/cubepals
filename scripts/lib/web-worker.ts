@@ -61,7 +61,11 @@ export interface WorkerSite {
   cloudflare: { token: string; accountId: string }
 }
 
-/** What a build or wrangler may have of the shell's own environment: no token, no secret. */
+/**
+ * What a build or wrangler may have of the shell's own environment: no token, no secret. The proxy
+ * and the certificates to trust it are there for a machine whose HTTPS goes through one, where the
+ * build's own fetches (npm, fonts) and wrangler's fail without them.
+ */
 const SHELL = [
   'PATH',
   'HOME',
@@ -73,6 +77,14 @@ const SHELL = [
   'CI',
   'XDG_CACHE_HOME',
   'XDG_CONFIG_HOME',
+  'HTTPS_PROXY',
+  'https_proxy',
+  'HTTP_PROXY',
+  'http_proxy',
+  'NO_PROXY',
+  'no_proxy',
+  'NODE_EXTRA_CA_CERTS',
+  'SSL_CERT_FILE',
 ]
 const shell = () =>
   Object.fromEntries(SHELL.flatMap((name) => (process.env[name] ? [[name, process.env[name]]] : [])))
