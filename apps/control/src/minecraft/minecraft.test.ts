@@ -42,6 +42,10 @@ describe('version order', () => {
     expect(releaseFor('1.19.4')).toBe('1.20.1')
     expect(releaseFor('26.0')).toBe('26.1.2')
     expect(releaseFor('24w14a')).toBe(DEFAULT_GAME_VERSION)
+    // A test build plays on the release it leads up to, which can open it, or the next.
+    expect(releaseFor('1.21.9-pre1')).toBe('1.21.10')
+    expect(releaseFor('1.21.11-rc-1')).toBe('1.21.11')
+    expect(releaseFor('99.1-snapshot-2')).toBeNull()
     expect(releaseFor('99.1')).toBeNull()
   })
 })

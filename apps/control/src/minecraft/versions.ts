@@ -113,13 +113,25 @@ export function oldestReleaseOn(java: number): string | null {
 }
 
 /**
+ * The release a test build leads up to, as its name says: `26.4-snapshot-1`, `26.3-pre-2`,
+ * `26.3-rc-1`, or `1.21.5-pre1`. Null for a weekly snapshot (`25w14a`), whose names stopped before
+ * 26.1 and which every release since opens.
+ */
+const leadsTo = (build: string): string | null =>
+  /^(\d+\.\d+(?:\.\d+)?)-(?:snapshot-|pre-?|rc-?)\d+$/.exec(build)?.[1] ?? null
+
+/**
  * The release a server made for a world plays it on: the world's own where Cubepals offers it,
  * else the next one it offers, since opening a world on a newer release updates it and an older
- * one can't open it. A world last saved by a snapshot plays on the newest. Null for a world newer
- * than every release offered.
+ * one can't open it. A world last saved by a test build plays on the release it leads up to, or
+ * the next; one from a weekly snapshot plays on the newest. Null for a world newer than every
+ * release offered.
  */
 export function releaseFor(worldVersion: string): string | null {
-  if (!isRelease(worldVersion)) return DEFAULT_GAME_VERSION
+  if (!isRelease(worldVersion)) {
+    const release = leadsTo(worldVersion)
+    return release === null ? DEFAULT_GAME_VERSION : releaseFor(release)
+  }
   const newer = OFFERED.map((offered) => offered.id).filter((id) => compareVersions(id, worldVersion) >= 0)
   return newer.sort(compareVersions)[0] ?? null
 }
