@@ -155,6 +155,37 @@ describe('a server with more players than one choice takes', () => {
   })
 })
 
+describe('what a server’s files say of a player', () => {
+  test('a level that isn’t one of Minecraft’s, and a ban’s end it can’t read, aren’t carried as they are', async () => {
+    const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value))
+    const read = {
+      archive: {
+        kept: new Map([
+          [
+            'ops.json',
+            encode([
+              { uuid: offlineUuid('Moderator'), name: 'Moderator', level: 9 },
+              { uuid: offlineUuid('Helper'), name: 'Helper', level: 2 },
+            ]),
+          ],
+          [
+            'banned-players.json',
+            encode([{ uuid: offlineUuid('Griefer'), name: 'Griefer', expires: 'next week' }]),
+          ],
+        ]),
+      },
+      holds: { properties: 'server.properties' },
+      world: { folder: 'world/' },
+    }
+    const people = await peopleOf(read, false, {} as PlayerProfiles)
+    expect(people?.operators.map((p) => [p.name, p.level])).toEqual([
+      ['Moderator', 4],
+      ['Helper', 2],
+    ])
+    expect(people?.bans.map((p) => [p.name, p.expiresAt])).toEqual([['Griefer', null]])
+  })
+})
+
 describe('a player whose account can’t be looked up', () => {
   test('fails the read, to be tried again, rather than being left out as nobody', async () => {
     const files = new Map([

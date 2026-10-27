@@ -88,7 +88,7 @@ export async function peopleOf(
       ...person,
       reason: row.reason,
       // Until when, as Minecraft writes it; null for good.
-      expiresAt: row.expires === null || row.expires === 'forever' ? null : row.expires,
+      expiresAt: row.expires,
     })),
     unknown: [...unknown],
   }
@@ -160,10 +160,13 @@ async function asTheyAre(
 
 /** A ban Minecraft would no longer hold: one whose `expires` has passed. */
 function ranOut(ban: Listed, now: Date): boolean {
-  if (ban.expires === null || ban.expires === 'forever') return false
+  if (ban.expires === null) return false
   const at = Date.parse(ban.expires.replace(' ', 'T').replace(/ ([+-]\d{2})(\d{2})$/, '$1:$2'))
   return !Number.isNaN(at) && at < now.getTime()
 }
+
+/** A date as Minecraft writes it in `banned-players.json`: `2026-02-01 00:00:00 +0000`. */
+const MINECRAFT_DATE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{4}$/
 
 /** The rows of one of a server's access files; none where it is missing or can't be read. */
 function listedIn(raw: Uint8Array | undefined): Listed[] {
@@ -182,9 +185,10 @@ function listedIn(raw: Uint8Array | undefined): Listed[] {
           uuid: normalizeUuid(uuid).toLowerCase(),
           name,
           reason: typeof reason === 'string' ? reason : null,
-          expires: typeof expires === 'string' ? expires : null,
-          // Minecraft's own default for an operator its file gives no level.
-          level: typeof level === 'number' ? level : 4,
+          // Only a date as Minecraft writes one, which the server it goes to reads back; else for good.
+          expires: typeof expires === 'string' && MINECRAFT_DATE.test(expires) ? expires : null,
+          // One of Minecraft's levels; 4, its own default, for an operator its file gives none.
+          level: Number.isInteger(level) ? Math.min(4, Math.max(1, level as number)) : 4,
           bypassesPlayerLimit: bypassesPlayerLimit === true,
         },
       ]

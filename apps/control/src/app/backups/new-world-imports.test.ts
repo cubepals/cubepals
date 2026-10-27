@@ -516,6 +516,8 @@ describe.skipIf(!hasDatabase)('an offline-mode server’s players', () => {
     files['usercache.json'] = utf8(
       JSON.stringify([
         { name: 'Alex', uuid: alex, expiresOn: '2026-11-27 12:00:00 +0000' },
+        // A name the cache lists twice is one player.
+        { name: 'Alex', uuid: alex, expiresOn: '2026-11-20 12:00:00 +0000' },
         { name: 'Ghost', uuid: ghost, expiresOn: '2026-11-27 12:00:00 +0000' },
         { name: 'Steve', uuid: steve, expiresOn: '2026-11-27 12:00:00 +0000' },
       ]),
@@ -529,6 +531,7 @@ describe.skipIf(!hasDatabase)('an offline-mode server’s players', () => {
         'Steve already had files under their Minecraft account in the world, so both stay as they were.',
       ]),
     )
+    expect(ready.notes.join(' ')).not.toContain('Alex already')
 
     // Alex's files under their account's UUID, as the server they go to plays in online mode.
     const online = normalizeUuid((await h.profiles.byName('Alex'))?.uuid ?? '')

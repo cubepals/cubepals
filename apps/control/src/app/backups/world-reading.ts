@@ -400,12 +400,15 @@ function usercacheOf(raw: Uint8Array): Array<{ name: string; uuid: string }> {
   try {
     const listed: unknown = JSON.parse(new TextDecoder().decode(raw))
     if (!Array.isArray(listed)) return []
-    return listed.flatMap((entry: unknown) => {
+    // A player listed twice is one player.
+    const players = new Map<string, { name: string; uuid: string }>()
+    for (const entry of listed) {
       const { name, uuid } = (entry ?? {}) as { name?: unknown; uuid?: unknown }
-      return typeof name === 'string' && typeof uuid === 'string'
-        ? [{ name, uuid: normalizeUuid(uuid).toLowerCase() }]
-        : []
-    })
+      if (typeof name !== 'string' || typeof uuid !== 'string') continue
+      const id = normalizeUuid(uuid).toLowerCase()
+      if (!players.has(id)) players.set(id, { name, uuid: id })
+    }
+    return [...players.values()]
   } catch {
     return []
   }
