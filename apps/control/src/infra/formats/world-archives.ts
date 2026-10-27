@@ -248,16 +248,22 @@ async function tarWorld(
 }
 
 /** A tar entry's bytes as a stream; cancelling it lets the rest of the entry flow past. */
-function streamOf(entry: ReadEntry): ReadableStream<Uint8Array> {
-  const chunks = (entry as AsyncIterable<Buffer>)[Symbol.asyncIterator]()
+function streamOf(entry: ReadEntry, finished: () => void): ReadableStream<Uint8Array> {
+  const chunks = (entry as AsyncIterable<Buffer | undefined>)[Symbol.asyncIterator]()
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
+      // minipass hands the last chunk and the end together, as `{ value, done: true }`.
       const next = await chunks.next()
-      if (next.done) controller.close()
-      else controller.enqueue(new Uint8Array(next.value))
+      if (next.value !== undefined) controller.enqueue(new Uint8Array(next.value))
+      if (!next.done) return
+      controller.close()
+      finished()
     },
-    cancel() {
-      entry.resume()
+    // Skipped, its bytes are read the way a reader reads them, and let go: a resumed entry whose
+    // bytes had all arrived never says it ended, and the next entry would never come.
+    async cancel() {
+      while (!(await chunks.next()).done) {}
+      finished()
     },
   })
 }
@@ -292,9 +298,16 @@ async function* tarEntries(
     () => {},
     (name, entry) => {
       open.add(entry)
-      const read = Promise.race([new Promise<void>((resolve) => entry.on('end', () => resolve())), goneBy])
+      let finished: () => void = () => {}
+      const read = Promise.race([
+        new Promise<void>((resolve) => {
+          finished = resolve
+          entry.on('end', () => resolve())
+        }),
+        goneBy,
+      ])
       void read.then(() => open.delete(entry))
-      queue.push({ name, sizeBytes: entry.size, data: streamOf(entry), read })
+      queue.push({ name, sizeBytes: entry.size, data: streamOf(entry, finished), read })
       wake?.()
       return read
     },

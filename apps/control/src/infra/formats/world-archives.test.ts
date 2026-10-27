@@ -10,7 +10,7 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -128,6 +128,42 @@ describe('opening a world someone uploads', () => {
     }
     expect(seen).toEqual({ 'b/level.dat': 'level' })
   })
+})
+
+describe('a server’s folder read again, some files skipped and some read', () => {
+  test('hands over every file, whole, to its end', async () => {
+    const dir = await folder({})
+    const fixtures = `${import.meta.dir}/../../minecraft/world-fixtures/paper-1.21.11`
+    const names = (await readFile(`${fixtures}/files.txt`, 'utf8')).trim().split('\n')
+    // Its own small files as the server wrote them, the rest as stand-ins.
+    const written = new Map<string, Buffer>()
+    for (const name of names) {
+      const bytes = await readFile(`${fixtures}/${name}`).catch(() =>
+        Buffer.from(`${name} as the server wrote it`),
+      )
+      written.set(name, bytes)
+      await run('mkdir', ['-p', join(dir, name, '..')])
+      await writeFile(join(dir, name), bytes)
+    }
+    const path = join(scratch, 'every-other.tar.gz')
+    await run('tar', ['-czf', path, '-C', dir, '.'])
+    const archive = await archives.openWorld(path, LIMITS)
+    const read: string[] = []
+    let seen = 0
+    for await (const file of archive.entries()) {
+      // Every other file skipped, as a world's rewrite skips what isn't the world.
+      if (seen++ % 2) await file.data.cancel()
+      else {
+        expect(new Uint8Array(await new Response(file.data).arrayBuffer())).toEqual(
+          new Uint8Array(written.get(file.name) ?? []),
+        )
+        read.push(file.name)
+      }
+    }
+    await archive.close()
+    expect(seen).toBe(names.length)
+    expect(read.length).toBe(Math.ceil(names.length / 2))
+  }, 30_000)
 })
 
 describe('a tarball built to do harm is refused before anything is used', () => {

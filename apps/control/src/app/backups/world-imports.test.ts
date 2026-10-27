@@ -367,3 +367,31 @@ describe.skipIf(!hasDatabase)('a Paper server’s folder with its plugins', () =
     expect((await run('ls', ['-A', dir])).stdout).not.toContain('plugins')
   }, 120_000)
 })
+
+describe.skipIf(!hasDatabase)('an upload that says it is a Cubepals download', () => {
+  test('is written again where it holds what no download does: a jar never reaches the server', async () => {
+    const { owner, id } = await server('Vale', 'free')
+    const folder = await mkdtemp(join(scratch, 'claimed-'))
+    const files = {
+      ...(await serverFolder('paper-1.21.11')),
+      'cubepals-download.txt': new TextEncoder().encode('Your world from Cubepals.\n'),
+      'plugins/Backdoor.jar': new TextEncoder().encode('a plugin'),
+    }
+    for (const [path, bytes] of Object.entries(files)) {
+      await run('mkdir', ['-p', join(folder, path, '..')])
+      await writeFile(join(folder, path), bytes)
+    }
+    await run('tar', ['-czf', join(scratch, 'claimed.tar.gz'), '-C', folder, '.'])
+    const view = await bringWorld(
+      h,
+      owner,
+      id,
+      new Uint8Array(await readFile(join(scratch, 'claimed.tar.gz'))),
+      {
+        fileName: 'claimed.tar.gz',
+      },
+    )
+    const dir = await unpacked((await broughtBackup(h, view)).archiveKey)
+    expect((await run('ls', ['-A', dir])).stdout).not.toContain('plugins')
+  }, 120_000)
+})

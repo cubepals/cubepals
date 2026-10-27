@@ -35,7 +35,7 @@ import type { MinecraftServer } from '../../domain/server/server.ts'
 import { nextLevelName } from '../../domain/world/world.ts'
 import { PROPERTIES_FILE } from '../../minecraft/uploads.ts'
 import { compareVersions, isRelease } from '../../minecraft/versions.ts'
-import { DOWNLOAD_NOTE, jarsInNote } from '../../minecraft/world-download.ts'
+import { DOWNLOAD_NOTE, inWorldDownload, jarsInNote } from '../../minecraft/world-download.ts'
 import { moddedBrands, type WorldFacts, worldFacts } from '../../minecraft/world-facts.ts'
 import {
   chosenWorld,
@@ -455,9 +455,11 @@ export class WorldImports {
         ? read.world.folderName
         : nextLevelName(taken))
     // Only a download Cubepals made, as the gzipped tarball it made, is kept as it came: what else
-    // it holds beside the world is what Cubepals put in it (`world-download.ts`).
+    // it holds beside the world is what Cubepals put in it (`world-download.ts`). Its note is a file
+    // anyone can add, so one holding what no download does (a jar) is written again.
     const asItCame =
       fromCubepals &&
+      read.archive.files.every((file) => file.name === DOWNLOAD_NOTE || inWorldDownload(file.name)) &&
       read.archive.format === 'gzip' &&
       read.holds.properties === PROPERTIES_FILE &&
       read.world.folder === `${levelName}/` &&
