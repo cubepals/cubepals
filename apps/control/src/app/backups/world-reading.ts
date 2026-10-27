@@ -99,6 +99,12 @@ export function modJars(read: Read): string[] {
   ]
 }
 
+/** A world as it lies on disk once unpacked, its Nether and End beside it included. */
+function unpackedBytes(read: Read): number {
+  const place = placeOnServer(read.world, 'world')
+  return read.archive.files.reduce((sum, file) => (place(file.name) === null ? sum : sum + file.sizeBytes), 0)
+}
+
 /** Bytes as the sentences about room say them: gigabytes, to a tenth. */
 const gigabytes = (bytes: number): number => Number((bytes / 1024 ** 3).toFixed(1))
 
@@ -240,13 +246,13 @@ export class WorldReading {
 
   /**
    * What would open wrongly, or not at all, on the server it goes to (`serverId`, or one its owner
-   * is making): refused before anything is written.
+   * is making): refused before anything is written. The room a world has there, where it opens.
    */
   async refuseWhatWontOpen(
     to: { ownerId: string; serverId: string | null },
     read: Read,
     serverVersion: string,
-  ): Promise<void> {
+  ): Promise<number> {
     // A snapshot's name says nothing of the releases around it, so it is never called newer.
     if (isRelease(read.facts.gameVersion) && compareVersions(read.facts.gameVersion, serverVersion) > 0)
       throw new Refused(
@@ -261,11 +267,7 @@ export class WorldReading {
       to.serverId === null
         ? broughtWorldRoomBytes(plan.storage.mostGb)
         : worldRoomBytes(Math.max(plan.storage.mostGb, await grownStorage(this.#db, to.serverId)))
-    const place = placeOnServer(read.world, 'world')
-    const unpacked = read.archive.files.reduce(
-      (sum, file) => (place(file.name) === null ? sum : sum + file.sizeBytes),
-      0,
-    )
+    const unpacked = unpackedBytes(read)
     if (unpacked > room)
       throw new Refused(
         `This world is ${gigabytes(unpacked)} GB unpacked, and ${to.serverId === null ? 'a server on your plan' : 'this server'} has room for a world of up to ${gigabytes(room)} GB.`,
@@ -276,6 +278,7 @@ export class WorldReading {
       throw new Refused(
         comesWith('Worlds made with mods', planThatRuns({ tier: '3g', loader: 'fabric', modded: true })),
       )
+    return room
   }
 
   /**
@@ -334,11 +337,18 @@ export class WorldReading {
     const left: string[] = []
     // Only a server's: the other saves of a saves folder are the player's to choose from, one at a time.
     if (read.holds.properties === null) return { reads, left }
+    let total = unpackedBytes(read)
     for (const world of read.holds.worlds.slice(0, MOST_OTHER_WORLDS)) {
       if (world.folder === read.world.folder) continue
       try {
         const other = await this.read(read.archive, { folder: world.folder })
-        await this.refuseWhatWontOpen(to, other, serverVersion)
+        const room = await this.refuseWhatWontOpen(to, other, serverVersion)
+        // Kept together, they fit where one world would: many large ones aren't many times the room.
+        if (total + unpackedBytes(other) > room)
+          throw new Refused(
+            `with the worlds before it, it is more than the ${gigabytes(room)} GB of worlds this server has room for.`,
+          )
+        total += unpackedBytes(other)
         reads.push(other)
       } catch (error) {
         if (!(error instanceof Refused)) throw error

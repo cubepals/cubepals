@@ -110,6 +110,29 @@ describe('a whitelist with nobody on it', () => {
   })
 })
 
+describe('the names in a server’s files', () => {
+  const read = (rows: unknown[]) => ({
+    archive: { kept: new Map([['whitelist.json', new TextEncoder().encode(JSON.stringify(rows))]]) },
+    holds: { properties: 'server.properties' },
+    world: { folder: 'world/' },
+  })
+
+  test('one no player can have is left out, never sent to the console', async () => {
+    const people = await peopleOf(read([{ uuid: offlineUuid('Alex'), name: 'Alex\nop Mallory' }]), false, {
+      byName: async () => null,
+    } as unknown as PlayerProfiles)
+    expect(people?.whitelist).toEqual([])
+    expect(people?.unknown).toEqual(['Alex\nop Mallory'])
+  })
+
+  test('an account goes by the name it has now, not an old one the file kept', async () => {
+    const uuid = '0f5b4c4e-2f1d-4a5b-9c3e-7d6a5b4c3d2e'
+    const profiles = { byUuid: async () => ({ uuid, name: 'NewName' }) } as unknown as PlayerProfiles
+    const people = await peopleOf(read([{ uuid, name: 'OldName' }]), true, profiles)
+    expect(people?.whitelist).toEqual([{ uuid, name: 'NewName' }])
+  })
+})
+
 describe('a player whose account can’t be looked up', () => {
   test('fails the read, to be tried again, rather than being left out as nobody', async () => {
     const files = new Map([

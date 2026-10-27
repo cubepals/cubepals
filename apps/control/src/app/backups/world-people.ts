@@ -13,7 +13,7 @@ import type { WorldPeopleJson, WorldPersonJson } from '@blockly/db'
 import type { AccessEntry, EntryDetails, SeededAccess } from '../../domain/access/access.ts'
 import { ACCESS_FILES } from '../../minecraft/access.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
-import { offlineUuid } from '../access/identity.ts'
+import { isJavaName, offlineUuid } from '../access/identity.ts'
 import type { PlayerProfiles } from '../ports/minecraft.ts'
 
 /** What of a read upload its server's files are found by (`Read` in `world-reading.ts`). */
@@ -106,16 +106,36 @@ function serverFolder(read: Read): string {
   return world.includes('/') ? world.slice(0, world.lastIndexOf('/') + 1) : ''
 }
 
-/** The player a row names to the server a world goes to; null where no account has the name. */
+/** A gamertag as Floodgate writes it: its prefix, and underscores for spaces. */
+const FLOODGATE_NAME = /^\.?[A-Za-z0-9_]{1,16}$/
+
+/**
+ * Whether the server's console takes the name as one player, as access is delivered by name: a
+ * Java name, or a gamertag as Floodgate writes it. Anything else, read from a file anyone can
+ * write, could reach the console as another player, or as another command.
+ */
+const nameable = (listed: Listed): boolean =>
+  isBedrockUuid(listed.uuid) ? FLOODGATE_NAME.test(listed.name) : isJavaName(listed.name)
+
+/**
+ * The player a row names to the server a world goes to; null where no account has the name, or
+ * the name is none a player can have. An account the file names by its UUID goes by the name it
+ * has now, which may not be the one written there: delivered by an old name, the entry would be
+ * another player's who took it since.
+ */
 async function asTheyAre(
   listed: Listed,
   onlineMode: boolean,
   profiles: PlayerProfiles,
 ): Promise<WorldPersonJson | null> {
+  if (!nameable(listed)) return null
   if (isBedrockUuid(listed.uuid)) return { uuid: listed.uuid, name: listed.name }
   if (!onlineMode) return { uuid: offlineUuid(listed.name), name: listed.name }
-  if (listed.uuid !== offlineUuid(listed.name)) return { uuid: listed.uuid, name: listed.name }
   // A lookup that fails throws, and the read is tried again: only Mojang's own "nobody" is unknown.
+  if (listed.uuid !== offlineUuid(listed.name)) {
+    const account = await profiles.byUuid(listed.uuid)
+    return account === null ? null : { uuid: listed.uuid, name: account.name }
+  }
   const profile = await profiles.byName(listed.name)
   return profile === null ? null : { uuid: normalizeUuid(profile.uuid).toLowerCase(), name: profile.name }
 }

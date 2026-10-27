@@ -34,6 +34,7 @@ import {
 import { offlineUuid } from '../access/identity.ts'
 import type { UserActor } from '../actor.ts'
 import { listWorlds } from '../worlds/persistence.ts'
+import { WorldReading } from './world-reading.ts'
 
 const run = promisify(execFile)
 const formats = new LibraryFileFormats()
@@ -264,6 +265,28 @@ describe.skipIf(!hasDatabase)('a server’s folder with other worlds', () => {
     expect(await run('ls', [join(dir, creative.levelName, 'playerdata')]).then((r) => r.stdout.trim())).toBe(
       `${online}.dat`,
     )
+  }, 120_000)
+})
+
+describe.skipIf(!hasDatabase)('a server’s folder with other worlds past its room', () => {
+  test('keeps the ones that fit together, and says why the rest stay out', async () => {
+    const { owner, id } = await server('Tobin')
+    const files = withSecondWorld(await serverFolder('paper-1.21.11'))
+    // A server with room for only one world of that size: the second doesn't fit beside it.
+    const room = spyOn(WorldReading.prototype, 'refuseWhatWontOpen').mockResolvedValue(1)
+    try {
+      const view = await bringWorld(h, owner, id, zipBytes(files), { fileName: 'server.zip' })
+      if (view.status !== 'ready') throw new Error(`The import is ${view.status}`)
+      expect(view.notes.some((note) => note.startsWith('Left out creative: with the worlds before it'))).toBe(
+        true,
+      )
+      const kept = await h.db.query.backups.findMany({
+        where: (t, { and, eq }) => and(eq(t.serverId, id), eq(t.trigger, 'uploaded')),
+      })
+      expect(kept).toHaveLength(1)
+    } finally {
+      room.mockRestore()
+    }
   }, 120_000)
 })
 

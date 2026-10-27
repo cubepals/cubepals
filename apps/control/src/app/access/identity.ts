@@ -22,6 +22,9 @@ export const offlineUuid = (name: string): string =>
 /** What Minecraft lets a Java account be called; anything else can only be a gamertag. */
 const JAVA_NAME = /^[A-Za-z0-9_]{3,16}$/
 
+/** Whether a name is one a Java account can have. */
+export const isJavaName = (name: string): boolean => JAVA_NAME.test(name)
+
 /**
  * The player a name means to a server: its Minecraft account where the server verifies accounts,
  * and otherwise the name itself, exactly as typed. Null where the server verifies accounts and
