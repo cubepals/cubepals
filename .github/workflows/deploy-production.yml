@@ -92,14 +92,16 @@ jobs:
             local/production/production.env \
             infra/terraform/environments/production/config.auto.tfvars.json
           rm -rf "$RUNNER_TEMP/age.key" "$records"
-      # Terraform shows its plan and asks; starting this workflow is the yes.
+      # Terraform shows its plan and asks; starting this workflow is the yes. The Database dump
+      # workflow keeps the secrets it has: changing an environment takes administration rights the
+      # token doesn't need for anything else.
       - name: Deploy
         env:
           GH_TOKEN: ${{ secrets.DEPLOY_GITHUB_TOKEN }}
           COMMAND: ${{ inputs.command }}
         run: |
           if [ "$COMMAND" = apply ]; then
-            echo yes | bun scripts/production.ts apply
+            echo yes | bun scripts/production.ts apply --keep-dump-secrets
           else
             # shellcheck disable=SC2086 # "rollback website" is the command and its argument.
             bun scripts/production.ts $COMMAND
