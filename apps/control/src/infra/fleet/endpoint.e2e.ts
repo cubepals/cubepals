@@ -34,10 +34,11 @@ const endpoint = await startNodeEndpoint({
   blocklydBin: process.env.BLOCKLYD_STATIC_BIN ?? '/nonexistent/blocklyd',
   upgrades: process.env.FLEET_UPGRADES !== 'off',
 })
-process.stdout.write('listening\n')
+// The handler goes first: a parent may signal the moment it reads `listening`.
 process.on('SIGTERM', () => {
   endpoint
     .stop()
     .then(() => pool.end())
     .finally(() => process.exit(0))
 })
+process.stdout.write('listening\n')
