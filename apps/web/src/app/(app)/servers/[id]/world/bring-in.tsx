@@ -59,9 +59,11 @@ export function BringIn({ view }: { view: ServerView }) {
   const takeFolder = (files: PickedFile[]) => {
     const look = lookAt(files)
     if (look.kind !== 'world') return setProblem(SAID[look.kind])
-    if (look.sizeBytes > MOST_BYTES) return setProblem(SAID.tooLarge)
+    // What is sent is the tarball, its headers and padding included, known before anything is read.
+    const tarball = tarOf(files)
+    if (tarball.size > MOST_BYTES) return setProblem(SAID.tooLarge)
     const name = files[0]?.path.split('/')[0] || 'world'
-    setFile(new File([tarOf(files)], `${name}.tar`, { type: 'application/x-tar' }))
+    setFile(new File([tarball], `${name}.tar`, { type: 'application/x-tar' }))
   }
   const take = async (picked: File) => {
     setProblem(null)
@@ -114,7 +116,8 @@ export function BringIn({ view }: { view: ServerView }) {
               const picked = event.target.files
               event.target.value = ''
               setProblem(null)
-              if (picked && picked.length > 0) takeFolder(pickedFrom(picked))
+              // An empty folder comes as no files at all, which is said as such.
+              if (picked) takeFolder(pickedFrom(picked))
             }}
           />
           <Button
