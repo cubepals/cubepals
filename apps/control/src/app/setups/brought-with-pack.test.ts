@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, test } from 'bun:test'
+import type { CatalogVersion } from '../../domain/mods/catalog.ts'
 import type { ServerSetup } from '../../domain/setup/setup.ts'
 import type { BroughtWorld } from '../backups/new-world-imports.ts'
 import { fittedToWorld, packForWorld } from './brought-with-pack.ts'
@@ -46,11 +47,28 @@ const resolved = (gameVersion: string) => ({
 })
 
 describe('the pack a world was played with', () => {
-  test('a catalog pack takes its newest version for the world’s own release, then the one it opens on', async () => {
+  test('a catalog pack takes its newest server version for the world’s own release, then the one it opens on', async () => {
+    const version = (
+      versionId: string,
+      gameVersions: string[],
+      at: number,
+      also: Partial<CatalogVersion> = {},
+    ): CatalogVersion =>
+      ({
+        versionId,
+        gameVersions,
+        publishedAt: new Date(at),
+        environment: 'client_and_server',
+        loaders: ['fabric'],
+        ...also,
+      }) as CatalogVersion
     const versions = async () => [
-      { versionId: 'v3', gameVersions: ['1.21.11'], publishedAt: new Date(3) },
-      { versionId: 'v2', gameVersions: ['1.21.10'], publishedAt: new Date(2) },
-      { versionId: 'v1', gameVersions: ['1.21.10', '1.21.11'], publishedAt: new Date(1) },
+      // The newest is only for players' games, and the one after it names no server type: neither is taken.
+      version('v5', ['1.21.11'], 5, { environment: 'client_only' }),
+      version('v4', ['1.21.11'], 4, { loaders: [] }),
+      version('v3', ['1.21.11'], 3),
+      version('v2', ['1.21.10'], 2),
+      version('v1', ['1.21.10', '1.21.11'], 1),
     ]
     const pack = { kind: 'modpack', projectId: 'valley' } as const
     // A world saved on a release Cubepals doesn't offer, opened on the next: the pack's own for it.

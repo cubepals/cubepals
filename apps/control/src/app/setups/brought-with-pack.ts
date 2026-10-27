@@ -10,7 +10,8 @@
 import type { PackSourceInput } from '@blockly/contracts'
 import type { CatalogVersion } from '../../domain/mods/catalog.ts'
 import type { ServerSetup } from '../../domain/setup/setup.ts'
-import { compareVersions, isRelease } from '../../minecraft/versions.ts'
+import { loaderOfPack, serverEnvironment } from '../../minecraft/mods.ts'
+import { compareVersions, isRelease, packRuns } from '../../minecraft/versions.ts'
 import type { BroughtWorld } from '../backups/new-world-imports.ts'
 import { AppError } from '../errors.ts'
 
@@ -25,23 +26,41 @@ export const PLAYED_WITH_MODS =
 const ownRelease = (facts: BroughtWorld['facts']): string =>
   isRelease(facts.gameVersion) ? facts.gameVersion : facts.playsOn
 
+/** A catalog pack's version, as far as choosing one for a world goes. */
+type ListedVersion = Pick<
+  CatalogVersion,
+  'versionId' | 'gameVersions' | 'publishedAt' | 'environment' | 'loaders'
+>
+
+/**
+ * Whether a server can play this version on `release`, as resolving a pack judges it
+ * (`#pack` in `service.ts`): one for servers, on a server type Cubepals runs it on, listing it.
+ */
+function runsOnServer(version: ListedVersion, release: string): boolean {
+  const loader = loaderOfPack(version.loaders)
+  return (
+    serverEnvironment(version.environment) !== null &&
+    loader !== null &&
+    version.gameVersions.includes(release) &&
+    packRuns(release, loader)
+  )
+}
+
 /**
  * The pack to resolve for a world: one from the catalog named without a version plays its newest
- * version that lists the world's own release, else the one Cubepals opens it on, so the world isn't
- * moved to a newer Minecraft unasked.
+ * version a server runs that lists the world's own release, else the one Cubepals opens it on, so
+ * the world isn't moved to a newer Minecraft unasked.
  */
 export async function packForWorld(
   pack: PackSourceInput,
   brought: BroughtWorld,
-  versions: (
-    projectId: string,
-  ) => Promise<ReadonlyArray<Pick<CatalogVersion, 'versionId' | 'gameVersions' | 'publishedAt'>>>,
+  versions: (projectId: string) => Promise<ReadonlyArray<ListedVersion>>,
 ): Promise<PackSourceInput> {
   if (pack.kind !== 'modpack' || pack.versionId !== undefined) return pack
   const listed = await versions(pack.projectId)
   const newest = (release: string) =>
     [...listed]
-      .filter((version) => version.gameVersions.includes(release))
+      .filter((version) => runsOnServer(version, release))
       .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())[0]
   const own = newest(ownRelease(brought.facts)) ?? newest(brought.facts.playsOn)
   return own === undefined ? pack : { ...pack, versionId: own.versionId }
