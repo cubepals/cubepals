@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto'
 import { DAY_MS, HOUR_S, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
 import { type Db, schema, type Tx } from '@blockly/db'
-import { entitlementsFor, PLAN_KEYS, worldRoomBytes } from '../../domain/account/entitlements.ts'
+import { entitlementsFor, PLAN_KEYS } from '../../domain/account/entitlements.ts'
 import type { RevisionDraft } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { levelNameOf, PROPERTIES_FILE, wantedInWorldArchive } from '../../minecraft/uploads.ts'
@@ -41,6 +41,7 @@ import { insertPendingUpload } from '../uploads/persistence.ts'
 import { keptWorlds } from '../worlds/persistence.ts'
 import { downloadsErased, downloadsToErase } from './download-records.ts'
 import { WorldDownloads } from './downloads.ts'
+import { NewWorldImports } from './new-world-imports.ts'
 import {
   archivesErased,
   archivesToErase,
@@ -56,6 +57,7 @@ import {
   setBackupStatus,
 } from './persistence.ts'
 import { WorldImports } from './world-imports.ts'
+import { MAX_WORLD_BYTES, refusedByName, worldUploadLimit } from './world-reading.ts'
 
 /** Snapshots taken before a change, a restore or a move: the latest few, apart from the owner's own. */
 const SAFETY_KEPT = 3
@@ -64,10 +66,6 @@ const SAFETY: readonly BackupTrigger[] = ['pre_apply', 'pre_restore', 'pre_reloc
 /** Archives outlive their server; one a week keeps a month of retention at four or five copies. */
 const SCHEDULED_ARCHIVE_EVERY_MS = 7 * DAY_MS
 
-/** A world download can be as large as one upload to the store takes. */
-const MAX_WORLD_BYTES = 4 * 1024 ** 3
-/** The largest world download a disk of `diskGb` has room for. */
-const worldUploadLimit = (diskGb: number): number => Math.min(MAX_WORLD_BYTES, worldRoomBytes(diskGb))
 /** Uploading a large world takes a while; the link only has to be valid when it starts. */
 const WORLD_UPLOAD_LINK_SECONDS = HOUR_S
 /** Long enough to read an uploaded world's properties and level.dat. */
@@ -105,6 +103,8 @@ export class BackupService {
   readonly downloads: WorldDownloads
   /** Worlds their owners upload, brought in as backups (`world-imports.ts`). */
   readonly imports: WorldImports
+  /** Worlds their owners upload while making a server, to make it from (`new-world-imports.ts`). */
+  readonly newWorlds: NewWorldImports
 
   constructor(deps: {
     db: Db
@@ -134,7 +134,14 @@ export class BackupService {
     this.#builds = deps.ports.loaderBuilds
     const { official, ports } = deps
     this.downloads = new WorldDownloads({ db: deps.db, policy: deps.policy, official, ...ports })
-    this.imports = new WorldImports({ db: deps.db, policy: deps.policy, events: deps.events, ...ports })
+    this.newWorlds = new NewWorldImports({ db: deps.db, policy: deps.policy, ...ports })
+    this.imports = new WorldImports({
+      db: deps.db,
+      policy: deps.policy,
+      events: deps.events,
+      forNewServers: this.newWorlds,
+      ...ports,
+    })
   }
 
   /** A snapshot now. While the server runs, saving pauses so the world on disk is consistent. */
@@ -553,17 +560,4 @@ export class BackupService {
       data,
     })
   }
-}
-
-/**
- * Why a world can't be uploaded under this name, before it is sent; null where it can. A world
- * comes as a zip or a tarball, gzipped or not; Bedrock's own files and other archivers' are named.
- */
-function refusedByName(fileName: string): string | null {
-  if (/\.(zip|tar|tar\.gz|tgz)$/i.test(fileName)) return null
-  if (/\.(mcworld|mcpack|mcaddon|mctemplate)$/i.test(fileName))
-    return 'This is a Bedrock world. A Cubepals server plays Java worlds, which Bedrock players join too, and can’t open a Bedrock save.'
-  if (/\.(rar|7z)$/i.test(fileName))
-    return 'Cubepals can’t open this kind of file. Zip the world’s folder and upload that.'
-  return 'Upload the world as a zip of its folder, or as the .tar.gz a server download comes as.'
 }

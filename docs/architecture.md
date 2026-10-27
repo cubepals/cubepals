@@ -2178,6 +2178,11 @@ overrides (self-hosting).
   `uploaded` and the facts its `level.dat` gives (`world_facts`): a Cubepals download as the file it
   came in, any other written again as a server keeps it. A world the server never had gets a world
   row that exists only in the backup until it is restored.
+- A world can be brought while a server is made, before it exists (a `world_imports` row with no
+  server): read the same way, then packed as an archive under its bytes (`starts_on`) for the new
+  server's first world, whose first start unpacks it in place of generating one, as a template's
+  world is (`minecraft/starter.ts`). The setup source `{ kind: 'world' }` makes the server on the
+  world's release, or the next offered, in its game mode and difficulty.
 
 **Logs and console.**
 - `LogSource.recent/tail` feed the console view (§13).

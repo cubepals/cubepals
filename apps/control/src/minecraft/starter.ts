@@ -4,13 +4,15 @@
 
 /**
  * Worlds a server starts on instead of generating one: a template's world, made beforehand and
- * kept as an archive, such as the Arcade's (`ARCADE_WORLD`). A world is made this way by its type:
- * the template names the type, and the world's first start unpacks the archive where the world
- * goes, so everything after is the server's own world, backed up, moved and restored as any is.
- * Beyond what the archive holds, the world generates as the void does. Not the world's datapacks
- * or files, which are carried (`carried.ts`), or how a type is generated (`worlds.ts`).
+ * kept as an archive, such as the Arcade's (`ARCADE_WORLD`), or a world its owner brought when
+ * they made the server (`World.startsOn`). A template's world is named by its type: the template
+ * names the type, and beyond what the archive holds, the world generates as the void does. Either
+ * way the world's first start unpacks the archive where the world goes, so everything after is
+ * the server's own world, backed up, moved and restored as any is. Not the world's datapacks or
+ * files, which are carried (`carried.ts`), or how a type is generated (`worlds.ts`).
  */
 import type { ModArtifact } from '../domain/mods/artifact.ts'
+import type { World } from '../domain/world/world.ts'
 import { ARCADE_WORLD } from './arcade/maps.ts'
 import { DATA_DIR } from './jars.ts'
 
@@ -21,6 +23,10 @@ const STARTER_WORLDS: Readonly<Record<string, ModArtifact>> = { [ARCADE_LEVEL]: 
 
 /** The archive a world of this type starts on, or null for a type Minecraft generates. */
 export const starterOf = (levelType: string): ModArtifact | null => STARTER_WORLDS[levelType] ?? null
+
+/** The archive this world starts on: the one its owner brought, else its type's, else none. */
+export const startsOnOf = (world: Pick<World, 'levelType' | 'startsOn'>): ModArtifact | null =>
+  world.startsOn ?? starterOf(world.levelType)
 
 /** Every archive a world starts on, by its bytes: what the store keeps whatever pins it. */
 export const STARTER_SHA512S: readonly string[] = Object.values(STARTER_WORLDS).map(
@@ -53,11 +59,11 @@ export const STARTER_STEP = [
   `|| { rm -f "$f"; echo "Cubepals could not fetch the world $LEVEL starts on" >&2; exit 1; }; fi;`,
 ].join(' ')
 
-/** The variable the step reads, for a world of a type that starts on an archive. */
+/** The variable the step reads, for a world that starts on an archive. */
 export function starterEnv(
-  levelType: string,
+  world: Pick<World, 'levelType' | 'startsOn'>,
   artifactUrl: (artifact: ModArtifact) => string,
 ): Record<string, string> {
-  const starter = starterOf(levelType)
+  const starter = startsOnOf(world)
   return starter === null ? {} : { [STARTER_VARIABLE]: `${starter.sha512} ${artifactUrl(starter)}` }
 }

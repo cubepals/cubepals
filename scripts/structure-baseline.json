@@ -271,7 +271,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/servers/new-server.ts › function draftNewServer": {
-      "n": 27,
+      "n": 25,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/servers/queries.ts › #view": {

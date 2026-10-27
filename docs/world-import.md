@@ -1,11 +1,14 @@
 # Bringing a world in
 
 How a player brings a Minecraft world they already have to a server, from the create page, the
-world page or the backups page. This is the plan for it: what exists, what each kind of world a
-player has looks like, what Blockly does with each, and the order it is built in. Downloads and
-backups are [architecture.md](architecture.md) §9; packs are [modpack-system.md](modpack-system.md).
+world page or the backups page. This is the plan for it: what there was, where it stands, what
+each kind of world a player has looks like, what Blockly does with each, and the order it is built
+in. Downloads and backups are [architecture.md](architecture.md) §9; packs are
+[modpack-system.md](modpack-system.md).
 
-## What exists
+## What there was
+
+Before the plan:
 
 - **The backups page** takes a `.tar.gz` through "Upload a download" (`beginWorldUpload`,
   `finishWorldUpload` in `app/backups/service.ts`). It must be shaped like a server's folder: a
@@ -27,6 +30,20 @@ backups are [architecture.md](architecture.md) §9; packs are [modpack-system.md
 - **A single-player host's inventory** is in `level.dat` (`Data.Player`), which a dedicated server
   ignores: brought over as it is, the player who made the world arrives with nothing.
 
+## Where it stands
+
+- **Built:** the reader (step 1), the world page (step 2) and the create page (step 3).
+- **The create page** offers "Your own world" after Minecraft's own three ways to play. It opens a
+  page of its own, `/servers/new/world`, which takes the world before there is a server
+  (`app/backups/new-world-imports.ts`). Back on the create page the world is chosen
+  (`{ kind: 'world', importId }`), and the server is made on its release, or the next one Cubepals
+  offers, in its game mode and difficulty, with its own name and seed. The world is kept as an
+  archive under its bytes, and the server's first start unpacks it where its world goes
+  (`World.startsOn`, `minecraft/starter.ts`), before the steps that lay a world out for its server
+  type. The store keeps the archive while a server has the world, and a month for one not made yet;
+  bringing another world for a new server lets the one before go.
+- **Next:** mods (step 4), then the rest and the guide.
+
 ## What it does
 
 A player drops what they have. Blockly works out what is in it, makes it a world a server runs,
@@ -37,9 +54,9 @@ Minecraft.
 
 ## Where a player starts
 
-1. **The create page:** a way to play, "Your own world", beside "A pack you have". The server is
-   made to fit the world: its Minecraft version, its game mode, its difficulty, its mods. The
-   party-size step is unchanged.
+1. **The create page:** a way to play, "Your own world", after Minecraft's own three, which opens
+   a page of its own for the world. The server is made to fit the world: its Minecraft version, its
+   game mode, its difficulty, its mods. The party-size step is unchanged.
 2. **The world page:** a section, "Bring a world", beside "Make your own world". The world is added
    as another of the server's worlds; switching to it is the existing switch, with its snapshot.
 3. **The backups page:** "Upload a download" stays and takes everything the other two take.

@@ -27,6 +27,7 @@ import {
   recordStored,
   storedArtifact,
   unreferencedStored,
+  worldStartingOn,
 } from './persistence.ts'
 import { keepReporterStored, reporterJar, reporterPin } from './reporter.ts'
 
@@ -261,8 +262,19 @@ export class ArtifactService {
     }
   }
 
-  /** The archive a world of the server's starts on (`minecraft/starter.ts`), as of that world. */
+  /**
+   * The archive a world of the server's starts on (`minecraft/starter.ts`), as of that world: one its
+   * owner brought, or its type's.
+   */
   async #starter(serverId: string, sha512: string): Promise<LocatedArtifact> {
+    const brought = await worldStartingOn(this.#db, serverId, sha512)
+    if (brought !== null)
+      return {
+        artifact: brought.artifact,
+        pinned: null,
+        name: diskName(brought.artifact),
+        lastModified: brought.since,
+      }
     const levelTypes = startersBySha512(sha512)
     const artifact = levelTypes.length === 0 ? null : starterOf(levelTypes[0] ?? '')
     const since = await firstWorldOfType(this.#db, serverId, levelTypes)

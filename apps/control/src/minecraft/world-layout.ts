@@ -183,6 +183,23 @@ export function placeOnServer(world: FoundWorld, levelName: string): (path: stri
 }
 
 /**
+ * Where a file of the upload goes inside the world's own folder, as a world a new server starts
+ * on is unpacked into it (`starter.ts`): the Nether and End a Paper server kept beside the world
+ * come inside, as every other server type keeps them, and Paper moves them out again when it first
+ * opens the world. Null for what `placeOnServer` leaves out, and for the folders' own files beside
+ * the world, which only Paper reads and makes again.
+ */
+export function placeInLevel(world: FoundWorld): (path: string) => string | null {
+  const place = placeOnServer(world, 'world')
+  return (path) => {
+    const to = place(path)
+    if (to === null) return null
+    if (to.startsWith('world/')) return to.slice('world/'.length)
+    return /^world_nether\/(DIM-1\/.+)$/.exec(to)?.[1] ?? /^world_the_end\/(DIM1\/.+)$/.exec(to)?.[1] ?? null
+  }
+}
+
+/**
  * What a server folder held beside the world, by name, for its owner to read: its top-level files
  * and folders that aren't the world's, at most `most` of them. Folders end in a slash.
  */

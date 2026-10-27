@@ -351,7 +351,7 @@ export interface NewServer {
   memoryTier: string
   createIdempotencyKey: string
   /** How it was made, for knowing which ways to start people use. */
-  createdFrom: 'template' | 'curated' | 'modpack' | 'upload' | 'copy' | 'invite' | 'direct'
+  createdFrom: 'template' | 'curated' | 'modpack' | 'upload' | 'world' | 'copy' | 'invite' | 'direct'
   /** Set for a server made for a while; Blockly deletes it then. */
   expiresAt?: Date | null
 }

@@ -20,7 +20,7 @@ import { DATAPACKS_STEP, datapacksEnv, datapacksOf } from './datapacks.ts'
 import { WAITING_DATAPACK } from './duels-waiting.ts'
 import { DATA_DIR, JAR_LISTS, jarsOf } from './jars.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
-import { STARTER_STEP, starterEnv, starterOf } from './starter.ts'
+import { STARTER_STEP, starterEnv, startsOnOf } from './starter.ts'
 import { STOP_CHEATERS_STEP } from './stop-cheaters.ts'
 import { VANILLA_PAPER_STEP } from './vanilla-paper.ts'
 import { javaFor } from './versions.ts'
@@ -513,13 +513,13 @@ const EXEC_IMAGE = `exec ${IMAGE_ENTRYPOINT} "$@"`
 
 /**
  * The image's own entrypoint, after Blockly's steps, which run as root on the volume: before them,
- * what they call to replace a link where they write (`volume-links.ts`). The first puts the volume's files as the
- * server type reads them (`PAPER_STEP` on Paper, after `VANILLA_PAPER_STEP` on plain Minecraft run
- * on Paper, `DIMENSIONS_STEP` on any other), and the
- * second the world's datapacks (`DATAPACKS_STEP`); the world a template starts on
- * (`STARTER_STEP`), the icon, the pack, the files Cubepals places itself and the list of jars the
- * image installs follow where a server has them, and last what spares the image work it would
- * redo (`WAKE_STEP`).
+ * what they call to replace a link where they write (`volume-links.ts`). The world a server starts
+ * on (`STARTER_STEP`) comes first where it has one, so the steps after it find the world it
+ * unpacked as they find any. The first of those puts the volume's files as the server type reads
+ * them (`PAPER_STEP` on Paper, after `VANILLA_PAPER_STEP` on plain Minecraft run on Paper,
+ * `DIMENSIONS_STEP` on any other), and the second the world's datapacks (`DATAPACKS_STEP`); the
+ * icon, the pack, the files Cubepals places itself and the list of jars the image installs follow
+ * where a server has them, and last what spares the image work it would redo (`WAKE_STEP`).
  */
 function entrypointFor(steps: {
   paper: boolean
@@ -534,10 +534,10 @@ function entrypointFor(steps: {
 }): readonly string[] {
   const script = [
     UNLINKED,
+    ...(steps.starter ? [STARTER_STEP] : []),
     ...(steps.vanilla ? [VANILLA_PAPER_STEP] : []),
     steps.paper ? PAPER_STEP : DIMENSIONS_STEP,
     DATAPACKS_STEP,
-    ...(steps.starter ? [STARTER_STEP] : []),
     ...(steps.icon ? ICON_STEP : []),
     ...(steps.pack ? PACK_STEP : []),
     ...(steps.carried ? [CARRIED_STEP] : []),
@@ -579,7 +579,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
   const entrypoint = entrypointFor({
     paper: type === TYPES.paper,
     vanilla: onPaper,
-    starter: starterOf(world.levelType) !== null,
+    starter: startsOnOf(world) !== null,
     icon: input.iconUrl !== null,
     pack: pack !== null,
     carried: viaPlaced || placesFiles(placing),
@@ -602,7 +602,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
         : {}),
       ...modpackEnv(input),
       ...worldEnv(world),
-      ...starterEnv(world.levelType, input.artifactUrl),
+      ...starterEnv(world, input.artifactUrl),
       ...settingsEnv(revision.settings),
       ...modsEnv(input),
       ...datapacksEnv(revision, input.artifactUrl),

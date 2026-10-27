@@ -8,6 +8,8 @@
  */
 import { bigint, boolean, index, integer, jsonb, pgEnum, pgTable, text, uuid } from 'drizzle-orm/pg-core'
 import type {
+  ModArtifactJson,
+  NewWorldFactsJson,
   PackImportJson,
   PackJarJson,
   PackLeftOutJson,
@@ -141,9 +143,8 @@ export const worldImports = pgTable(
     ownerId: text('owner_id')
       .notNull()
       .references(() => users.id),
-    serverId: uuid('server_id')
-      .notNull()
-      .references(() => minecraftServers.id),
+    /** Null for a world brought while its server is being made, before it exists. */
+    serverId: uuid('server_id').references(() => minecraftServers.id),
     fileName: text('file_name').notNull(),
     sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
     /** What its owner named it, for a world the server has never had. */
@@ -155,11 +156,18 @@ export const worldImports = pgTable(
     backupId: uuid('backup_id').references(() => backups.id),
     /** What Blockly did to bring it, in its owner's words. */
     notes: jsonb('notes').$type<string[]>().notNull().default([]),
+    /** Set once ready, for a world brought before its server: what it is, and what it plays on. */
+    facts: jsonb('facts').$type<NewWorldFactsJson>(),
+    /** Set with `facts`: the world packed as a new server's first start unpacks it. */
+    startsOn: jsonb('starts_on').$type<ModArtifactJson>(),
     /** The sentence the owner reads when it can't be brought; the detail stays for admins. */
     refusal: text('refusal'),
     detail: text('detail'),
     createdAt: createdAt(),
     finishedAt: ts('finished_at'),
   },
-  (t) => [index('world_imports_server').on(t.serverId, t.createdAt)],
+  (t) => [
+    index('world_imports_server').on(t.serverId, t.createdAt),
+    index('world_imports_owner').on(t.ownerId, t.createdAt),
+  ],
 )

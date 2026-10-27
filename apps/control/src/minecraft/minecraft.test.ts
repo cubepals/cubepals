@@ -12,7 +12,7 @@ import { diskName, jarsOf } from './jars.ts'
 import { bootMilestone, classifyLine, saysReady } from './logs.ts'
 import { catalogLoadersFor, projectTypesFor, serverEnvironment } from './mods.ts'
 import { IDENTITY_ENV, imageFor, PLAN_ENV, toRuntimeSpec, withoutOwnSteps } from './runtime-spec.ts'
-import { compareVersions, isRelease, javaFor } from './versions.ts'
+import { compareVersions, DEFAULT_GAME_VERSION, isRelease, javaFor, releaseFor } from './versions.ts'
 import { WAKE_STEP } from './wake-step.ts'
 
 describe('version order', () => {
@@ -34,6 +34,15 @@ describe('version order', () => {
     for (const release of ['1.21.11', '26.3', '26.1.2']) expect(isRelease(release)).toBe(true)
     for (const other of ['24w14a', '1.21-pre1', '1.21.5-rc1', '26.4-snapshot-1'])
       expect(isRelease(other)).toBe(false)
+  })
+
+  test('a world plays on its own release, or the next one offered, never an older one', () => {
+    expect(releaseFor('1.21.11')).toBe('1.21.11')
+    expect(releaseFor('1.21.9')).toBe('1.21.10')
+    expect(releaseFor('1.19.4')).toBe('1.20.1')
+    expect(releaseFor('26.0')).toBe('26.1.2')
+    expect(releaseFor('24w14a')).toBe(DEFAULT_GAME_VERSION)
+    expect(releaseFor('99.1')).toBeNull()
   })
 })
 

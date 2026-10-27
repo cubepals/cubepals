@@ -22,38 +22,20 @@ import { LibraryUploadArchives } from '../../infra/formats/world-archives.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
-import { savedOn, withHost, zipBytes } from '../../testing/uploads.ts'
-import { bringWorld, broughtBackup, untilRead } from '../../testing/world-imports.ts'
+import { savedOn, zipBytes } from '../../testing/uploads.ts'
+import {
+  bringWorld,
+  broughtBackup,
+  PLAYER,
+  save,
+  serverFolder,
+  untilRead,
+} from '../../testing/world-imports.ts'
 import type { UserActor } from '../actor.ts'
 import { listWorlds } from '../worlds/persistence.ts'
 
 const run = promisify(execFile)
-const FIXTURES = `${import.meta.dir}/../../minecraft/world-fixtures`
-const PLAYER = `${import.meta.dir}/../../minecraft/player-fixtures/1.20.1/player.dat`
 const formats = new LibraryFileFormats()
-
-/** A real server's folder as files: its own small files as it wrote them, the rest as stand-ins. */
-async function serverFolder(server: string): Promise<Record<string, Uint8Array>> {
-  const files: Record<string, Uint8Array> = {}
-  for (const path of (await readFile(`${FIXTURES}/${server}/files.txt`, 'utf8')).trim().split('\n'))
-    files[path] = await readFile(`${FIXTURES}/${server}/${path}`).catch(() =>
-      new TextEncoder().encode(`${server} ${path}`),
-    )
-  return files
-}
-
-/** One world of a server's folder as its own save: its files, under `folder`. */
-async function save(folder: string, host = false): Promise<Record<string, Uint8Array>> {
-  const files: Record<string, Uint8Array> = {}
-  for (const [path, bytes] of Object.entries(await serverFolder('vanilla-1.21.11')))
-    if (path.startsWith('world/')) files[`${folder}${path.slice('world/'.length)}`] = bytes
-  if (host)
-    files[`${folder}level.dat`] = await withHost(
-      files[`${folder}level.dat`] as Uint8Array,
-      await readFile(PLAYER),
-    )
-  return files
-}
 
 let h: Harness
 let scratch: string

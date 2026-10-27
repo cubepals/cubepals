@@ -28,6 +28,7 @@ import type {
   CarriedFileJson,
   FailureJson,
   KeptStorageJson,
+  ModArtifactJson,
   ObservedJson,
   OperationProgressJson,
   OperationStepJson,
@@ -121,12 +122,12 @@ export const minecraftServers = pgTable(
     createIdempotencyKey: text('create_idempotency_key').notNull(),
     /**
      * How it was made: from a template, a pack Blockly offers by name (`curated`), a modpack found
-     * in the catalog, a copy of a server someone shared, a server an invite opened, or directly
-     * through the API. It tells which ways to start people use; null for servers made before it was
-     * kept.
+     * in the catalog, a pack (`upload`) or a world its owner uploaded, a copy of a server someone
+     * shared, a server an invite opened, or directly through the API. It tells which ways to start
+     * people use; null for servers made before it was kept.
      */
     createdFrom: text('created_from').$type<
-      'template' | 'curated' | 'modpack' | 'upload' | 'copy' | 'invite' | 'direct'
+      'template' | 'curated' | 'modpack' | 'upload' | 'world' | 'copy' | 'invite' | 'direct'
     >(),
     /** A server made for a while: Blockly deletes it then, unless its owner keeps it (§15.6). */
     expiresAt: ts('expires_at'),
@@ -251,6 +252,11 @@ export const worlds = pgTable(
     levelType: text('level_type').notNull().default('minecraft:normal'),
     hardcore: boolean('hardcore').notNull().default(false),
     generatedOnVersion: text('generated_on_version').notNull(),
+    /**
+     * A world its owner brought: the archive its first start unpacks where it goes, in place of
+     * generating one. Null for a world Minecraft generates, or one a template's type starts on.
+     */
+    startsOn: jsonb('starts_on').$type<ModArtifactJson>(),
     createdAt: createdAt(),
     /** The owner deleted it; the row stays for the backups that were taken of it. */
     deletedAt: ts('deleted_at'),

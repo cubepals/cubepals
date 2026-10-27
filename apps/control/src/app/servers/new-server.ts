@@ -10,6 +10,7 @@
  * it on a runtime and queueing its provisioning is `MinecraftServerService.createMinecraftServer`
  * (`service.ts`), which runs this first.
  */
+import { NAME_MAX_LENGTH } from '@blockly/contracts'
 import type { Db } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { isDatapack } from '../../domain/mods/artifact.ts'
@@ -29,12 +30,14 @@ import { joinRange } from '../../minecraft/clients.ts'
 import {
   DEFAULT_GAME_VERSION,
   DEFAULT_LOADER,
+  isRelease,
   notOffered,
   packRuns,
   supports,
 } from '../../minecraft/versions.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import type { UserActor } from '../actor.ts'
+import type { BroughtWorld } from '../backups/new-world-imports.ts'
 import { AppError } from '../errors.ts'
 import type { LoaderBuilds } from '../ports/loaders.ts'
 import type { RegionCatalog } from '../ports/platform.ts'
@@ -141,15 +144,10 @@ export async function draftNewServer(
     memoryTier,
     createdFrom,
     revision,
-    world: {
-      levelName: nextLevelName([]),
-      name: 'World',
-      // A seed is never copied from another world: it would give away where everything is.
-      seed: request.seed || null,
-      levelType: chosen?.setup.world.levelType ?? 'minecraft:normal',
-      hardcore: chosen?.setup.world.hardcore ?? request.hardcore ?? false,
-      generatedOnVersion: gameVersion,
-    },
+    world:
+      chosen?.brought === undefined
+        ? newWorld(request, chosen, gameVersion)
+        : broughtWorld(chosen.brought, gameVersion),
     plan: standing.plan,
     storageGb: plan.storage.startGb,
     origin: {
@@ -158,6 +156,41 @@ export async function draftNewServer(
         ? {}
         : { curated: chosen.modpack.curated.key, release: chosen.modpack.curated.version }),
     },
+  }
+}
+
+/** A new server's first world, as Minecraft generates it. */
+function newWorld(
+  request: CreateServerRequest,
+  chosen: ResolvedSetup | null,
+  gameVersion: string,
+): NewServerDraft['world'] {
+  return {
+    levelName: nextLevelName([]),
+    name: 'World',
+    // A seed is never copied from another world: it would give away where everything is.
+    seed: request.seed || null,
+    levelType: chosen?.setup.world.levelType ?? 'minecraft:normal',
+    hardcore: chosen?.setup.world.hardcore ?? request.hardcore ?? false,
+    generatedOnVersion: gameVersion,
+  }
+}
+
+/**
+ * A new server's first world, where its owner brought one: their own, by its own name and seed,
+ * which its first start unpacks (`minecraft/starter.ts`). One a snapshot last saved counts as made
+ * on the release the server runs, which is the one it is opened on.
+ */
+function broughtWorld(brought: BroughtWorld, gameVersion: string): NewServerDraft['world'] {
+  const { facts } = brought
+  return {
+    levelName: nextLevelName([]),
+    name: (facts.name ?? 'World').slice(0, NAME_MAX_LENGTH),
+    seed: facts.seed,
+    levelType: facts.levelType,
+    hardcore: facts.hardcore,
+    generatedOnVersion: isRelease(facts.gameVersion) ? facts.gameVersion : gameVersion,
+    startsOn: brought.startsOn,
   }
 }
 
@@ -175,7 +208,8 @@ async function firstPin(
   gameVersion: string,
 ): Promise<string | null> {
   if (chosen !== null && chosen.setup.loaderVersion !== null) return chosen.setup.loaderVersion
-  const fresh = request.from === undefined || request.from.kind === 'template'
+  const fresh =
+    request.from === undefined || request.from.kind === 'template' || request.from.kind === 'world'
   if (loader === 'vanilla' && fresh && (chosen?.mods ?? []).every((mod) => isDatapack(mod)))
     return paperPin(builds, gameVersion, 'plain')
   return loaderPin(builds, loader, gameVersion)
@@ -212,7 +246,10 @@ function startsOnPaper(
 ): boolean {
   if (!isPlain(chosen)) return false
   if (chosen.setup.loaderVersion !== null) return true
-  return (from === undefined || from.kind === 'template') && supports(chosen.gameVersion, 'paper')
+  return (
+    (from === undefined || from.kind === 'template' || from.kind === 'world') &&
+    supports(chosen.gameVersion, 'paper')
+  )
 }
 
 /**

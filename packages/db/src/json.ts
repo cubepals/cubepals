@@ -284,6 +284,24 @@ export interface WorldImportAnswerJson {
   player?: string | null
 }
 
+/**
+ * A world brought before its server is made, as its files say it is, and the release the server
+ * made for it plays it on.
+ */
+export interface NewWorldFactsJson {
+  /** What its player called it, or null where it says nothing. */
+  name: string | null
+  /** The game version that last saved it. */
+  gameVersion: string
+  /** The release its server runs: the one that saved it, or the next Cubepals offers. */
+  playsOn: string
+  seed: string | null
+  levelType: string
+  hardcore: boolean
+  gameMode: 'survival' | 'creative' | 'adventure' | 'spectator'
+  difficulty: 'peaceful' | 'easy' | 'normal' | 'hard'
+}
+
 /** An uploaded world's own facts, as its server.properties and level.dat say. */
 export interface UploadedWorldFactsJson {
   seed: string | null

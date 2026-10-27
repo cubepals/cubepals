@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import type { ModArtifact } from '../mods/artifact.ts'
+
 /** A world's generation identity: fixed when it is created, independent of server settings. */
 export interface World {
   id: string
@@ -14,6 +16,11 @@ export interface World {
   levelType: string
   hardcore: boolean
   generatedOnVersion: string
+  /**
+   * A world its owner brought: the archive its first start unpacks where it goes, in place of
+   * generating one (`minecraft/starter.ts`). Absent or null for one Minecraft generates.
+   */
+  startsOn?: ModArtifact | null
 }
 
 /** Level names are unique per server; a new world never reuses an old directory. */

@@ -45,6 +45,8 @@ export const SetupSourceInput = z.discriminatedUnion('kind', [
   }),
   /** A pack its owner uploaded, once Blockly has read it and built it into one it can run. */
   z.object({ kind: z.literal('import'), importId: z.uuid() }),
+  /** A world its owner uploaded, once Blockly has read it: the server is made to fit it. */
+  z.object({ kind: z.literal('world'), importId: z.uuid() }),
 ])
 export type SetupSourceInput = z.infer<typeof SetupSourceInput>
 

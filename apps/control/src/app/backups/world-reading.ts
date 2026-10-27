@@ -4,6 +4,7 @@
 
 /** An uploaded world read as hostile input: its world found, what it says, what to ask, what refuses it. */
 import { join } from 'node:path'
+import type { WorldImportView } from '@blockly/contracts'
 import { HOUR_S } from '@blockly/contracts/durations'
 import type { Db, WorldImportAnswerJson, WorldImportQuestionJson } from '@blockly/db'
 import {
@@ -12,13 +13,13 @@ import {
   planThatRuns,
   worldRoomBytes,
 } from '../../domain/account/entitlements.ts'
-import type { MinecraftServer } from '../../domain/server/server.ts'
 import { compareVersions, isRelease } from '../../minecraft/versions.ts'
 import { DOWNLOAD_NOTE, jarsInNote } from '../../minecraft/world-download.ts'
-import { type WorldFacts, worldFacts } from '../../minecraft/world-facts.ts'
+import { moddedBrands, type WorldFacts, worldFacts } from '../../minecraft/world-facts.ts'
 import {
   chosenWorld,
   type FoundWorld,
+  leftOutOf,
   modsBeside,
   placeOnServer,
   type UploadHolds,
@@ -28,6 +29,7 @@ import {
 import { identityFor } from '../access/identity.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { type DeploymentCapabilities, requireCapability } from '../capabilities.ts'
+import { AppError } from '../errors.ts'
 import {
   type FileFormats,
   HostileArchive,
@@ -39,6 +41,7 @@ import {
 import type { PlayerProfiles } from '../ports/minecraft.ts'
 import { grownStorage } from '../servers/persistence.ts'
 import type { PendingUpload } from '../uploads/persistence.ts'
+import type { WorldImportRecord } from './world-import-records.ts'
 
 /** Reading and writing a world of a few gigabytes takes a while; the links outlast it. */
 export const LINK_SECONDS = 2 * HOUR_S
@@ -66,6 +69,11 @@ export const SAID = {
   gone: 'This server is gone.',
   cleared: 'The upload was cleared before Cubepals finished reading it. Upload it again.',
 }
+
+/** A world upload can be as large as one upload to the store takes. */
+export const MAX_WORLD_BYTES = 4 * 1024 ** 3
+/** The largest world upload a disk of `diskGb` has room for. */
+export const worldUploadLimit = (diskGb: number): number => Math.min(MAX_WORLD_BYTES, worldRoomBytes(diskGb))
 
 /** Bytes as the sentences about room say them: gigabytes, to a tenth. */
 const gigabytes = (bytes: number): number => Number((bytes / 1024 ** 3).toFixed(1))
@@ -206,8 +214,15 @@ export class WorldReading {
     )
   }
 
-  /** What would open wrongly, or not at all, on this server: refused before anything is written. */
-  async refuseWhatWontOpen(server: MinecraftServer, read: Read, serverVersion: string): Promise<void> {
+  /**
+   * What would open wrongly, or not at all, on the server it goes to (`serverId`, or one its owner
+   * is making): refused before anything is written.
+   */
+  async refuseWhatWontOpen(
+    to: { ownerId: string; serverId: string | null },
+    read: Read,
+    serverVersion: string,
+  ): Promise<void> {
     // A snapshot's name says nothing of the releases around it, so it is never called newer.
     if (isRelease(read.facts.gameVersion) && compareVersions(read.facts.gameVersion, serverVersion) > 0)
       throw new Refused(
@@ -223,10 +238,11 @@ export class WorldReading {
         jar.startsWith('mods/'),
       ),
     ]
-    const standing = await loadStanding(this.#db, server.ownerId)
+    const standing = await loadStanding(this.#db, to.ownerId)
     const plan = entitlementsFor(standing.plan, standing.limitOverrides)
     // Held to the room an upload is (`beginWorldUpload`), as the world lies on disk, not as it was sent.
-    const room = worldRoomBytes(Math.max(plan.storage.mostGb, await grownStorage(this.#db, server.id)))
+    const grown = to.serverId === null ? 0 : await grownStorage(this.#db, to.serverId)
+    const room = worldRoomBytes(Math.max(plan.storage.mostGb, grown))
     const place = placeOnServer(read.world, 'world')
     const unpacked = read.archive.files.reduce(
       (sum, file) => (place(file.name) === null ? sum : sum + file.sizeBytes),
@@ -234,7 +250,7 @@ export class WorldReading {
     )
     if (unpacked > room)
       throw new Refused(
-        `This world is ${gigabytes(unpacked)} GB unpacked, and this server has room for a world of up to ${gigabytes(room)} GB.`,
+        `This world is ${gigabytes(unpacked)} GB unpacked, and ${to.serverId === null ? 'a server on your plan' : 'this server'} has room for a world of up to ${gigabytes(room)} GB.`,
       )
     // A world made with mods is never opened on plain Minecraft on a plan without them: it would
     // lose every modded block and item without a word.
@@ -261,4 +277,117 @@ export class WorldReading {
       throw new Asks({ player: true, problem: `No Minecraft account is called ${answer.player}.` })
     return player
   }
+}
+
+/**
+ * Why a world can't be uploaded under this name, before it is sent; null where it can. A world
+ * comes as a zip or a tarball, gzipped or not; Bedrock's own files and other archivers' are named.
+ */
+export function refusedByName(fileName: string): string | null {
+  if (/\.(zip|tar|tar\.gz|tgz)$/i.test(fileName)) return null
+  if (/\.(mcworld|mcpack|mcaddon|mctemplate)$/i.test(fileName))
+    return 'This is a Bedrock world. A Cubepals server plays Java worlds, which Bedrock players join too, and can’t open a Bedrock save.'
+  if (/\.(rar|7z)$/i.test(fileName))
+    return 'Cubepals can’t open this kind of file. Zip the world’s folder and upload that.'
+  return 'Upload the world as a zip of its folder, or as the .tar.gz a server download comes as.'
+}
+
+/** An owner's answer to what an import asked, with what they said before: refused where it doesn't answer it. */
+export function answerFor(record: WorldImportRecord, answer: WorldImportAnswerJson): WorldImportAnswerJson {
+  const question = record.question ?? {}
+  if (question.worlds !== undefined && !question.worlds.some((world) => world.folder === answer.folder))
+    throw new AppError('invalid_choice', 'Choose one of the worlds in the file.')
+  if (question.player && answer.player === undefined)
+    throw new AppError(
+      'invalid_choice',
+      'Say which Minecraft account played this world, or that none should get it.',
+    )
+  return { ...(record.answer ?? {}), ...answer }
+}
+
+/** An import as its owner sees it: being read, asking, ready as `ready` says, or refused and why. */
+export function viewOf<Ready extends object>(
+  record: WorldImportRecord,
+  ready: (record: WorldImportRecord) => Ready,
+): ImportViewOf<Ready> {
+  const base = { importId: record.id, fileName: record.fileName }
+  switch (record.status) {
+    case 'reading':
+      return { status: 'reading', ...base }
+    case 'asking':
+      return {
+        status: 'asking',
+        ...base,
+        worlds: record.question?.worlds ?? null,
+        player: record.question?.player ?? false,
+        problem: record.question?.problem ?? null,
+      }
+    case 'ready':
+      return { status: 'ready', ...base, notes: record.notes, ...ready(record) }
+    case 'refused':
+      return { status: 'refused', ...base, message: record.refusal ?? SAID.gaveUp }
+  }
+}
+
+/** What `viewOf` makes of an import, ready as `Ready`: `WorldImportView` and `NewWorldImportView`. */
+type ImportViewOf<Ready> = { importId: string; fileName: string } & (
+  | { status: 'reading' }
+  | Pick<Extract<WorldImportView, { status: 'asking' }>, 'status' | 'worlds' | 'player' | 'problem'>
+  | ({ status: 'ready'; notes: string[] } & Ready)
+  | { status: 'refused'; message: string }
+)
+
+/**
+ * What its owner reads Cubepals did, besides what reading found. `levelName` is the world's folder
+ * on a server that has others, null on a new one; `updated` says a world from an older release is
+ * opened on the server's, `serverVersion`.
+ */
+export function notesOn(
+  read: Read,
+  how: {
+    levelName: string | null
+    player: { name: string } | null
+    hostWritten: boolean
+    asItCame: boolean
+    serverVersion: string
+    updated: (from: string) => string
+  },
+): string[] {
+  const notes: string[] = []
+  const name = read.facts.name ?? read.world.folderName
+  const folder = read.world.folder.slice(0, -1)
+  // Said where it was found somewhere a player might not have looked: inside other folders, or
+  // in one named otherwise.
+  if (!how.asItCame && folder !== '' && (folder.includes('/') || folder !== name))
+    notes.push(`Found “${name}” in ${folder}.`)
+  if (how.player !== null)
+    notes.push(
+      how.hostWritten
+        ? `Gave ${how.player.name} what they carried and where they stood in the single-player world.`
+        : `${how.player.name} already had a player file in the world, which stays as it was.`,
+    )
+  const leftOut = leftOutOf(
+    read.archive.files.map((file) => file.name),
+    read.world,
+  )
+  if (!how.asItCame && leftOut.length > 0) notes.push(`Left out what isn’t the world: ${leftOut.join(', ')}.`)
+  const modded = moddedBrands(read.facts)
+  if (modded.length > 0)
+    notes.push(
+      `It was opened with ${modded.join(' and ')}. Blocks and items from its mods are only there on a server running the same mods.`,
+    )
+  if (!isRelease(read.facts.gameVersion))
+    notes.push(
+      `It was last played on the Minecraft snapshot ${read.facts.gameVersion}. A release older than that snapshot can’t open it.`,
+    )
+  else if (compareVersions(read.facts.gameVersion, how.serverVersion) < 0)
+    notes.push(how.updated(read.facts.gameVersion))
+  if (
+    !how.asItCame &&
+    how.levelName !== null &&
+    how.levelName !== read.world.folderName &&
+    read.world.folderName !== ''
+  )
+    notes.push(`Its folder on the server is ${how.levelName}.`)
+  return notes
 }

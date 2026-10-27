@@ -612,7 +612,7 @@ async function rests(j: Journey): Promise<void> {
 
 /** Made, its world downloaded and brought back as a player's own save (`lib/brought-world.ts`). */
 async function bringsIn(j: Journey): Promise<void> {
-  if (await j.begin()) await bringsWorldIn(j)
+  if (await j.begin()) await bringsWorldIn(j, sql)
   await j.trash()
 }
 

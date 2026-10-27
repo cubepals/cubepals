@@ -23,6 +23,7 @@ import {
   supports,
 } from '../../minecraft/versions.ts'
 import type { Actor } from '../actor.ts'
+import { type BroughtWorld, broughtWorld } from '../backups/new-world-imports.ts'
 import type { DeploymentCapabilities } from '../capabilities.ts'
 import { CompatPlugins } from '../compat/service.ts'
 import type { PackCuration } from '../curation/service.ts'
@@ -54,6 +55,8 @@ export type SetupSource =
   | { kind: 'curated'; key: string; version?: string }
   /** A pack its owner uploaded, once Blockly has read it (packs/). */
   | { kind: 'import'; importId: string }
+  /** A world its owner uploaded, once Blockly has read it (`backups/new-world-imports.ts`). */
+  | { kind: 'world'; importId: string }
 
 /** A setup, resolved against the catalog: what a new server would actually run. */
 export interface ResolvedSetup {
@@ -71,6 +74,8 @@ export interface ResolvedSetup {
   copying: Copying | null
   /** What Blockly did with a pack that its owner should know, in one sentence each. */
   notes: string[]
+  /** The world a new server starts on, where its owner brought one; it is made to fit it. */
+  brought?: BroughtWorld
 }
 
 /** A server whose setup is being copied, as the create flow pictures it. */
@@ -147,7 +152,7 @@ export class SetupService {
 
   /** The setup behind a source, with nothing resolved yet. */
   async setupFrom(
-    source: SetupSource,
+    source: Exclude<SetupSource, { kind: 'world' }>,
     viewer: Actor | null,
   ): Promise<{ setup: ServerSetup; from: string; copying: Copying | null }> {
     if (source.kind === 'template') {
@@ -277,11 +282,44 @@ export class SetupService {
   }
 
   /**
+   * A server made to fit a world its owner brought: on the release it plays on, in its game mode
+   * and difficulty, its type and whether it is hardcore. Plain Minecraft: a world's mods come with
+   * a pack of its own.
+   */
+  async #fromWorld(
+    importId: string,
+    viewer: Actor | null,
+  ): Promise<{ setup: ServerSetup; from: string; copying: null; brought: BroughtWorld }> {
+    if (viewer?.kind !== 'user') throw new NotFound('Upload')
+    const brought = await broughtWorld(this.#db, viewer.userId, importId)
+    const { facts } = brought
+    return {
+      setup: {
+        gameVersion: facts.playsOn,
+        loader: 'vanilla',
+        loaderVersion: null,
+        mods: [],
+        modpack: null,
+        settings: { defaultGameMode: facts.gameMode, difficulty: facts.difficulty },
+        world: { levelType: facts.levelType, hardcore: facts.hardcore },
+        party: '5',
+      },
+      from: facts.name ?? 'Your world',
+      copying: null,
+      brought,
+    }
+  }
+
+  /**
    * The setup as a server: the newest release everything in it runs on, the mods it comes with,
    * and the size those need. A template names no version, and a copy keeps the one it runs.
    */
   async resolve(source: SetupSource, viewer: Actor | null): Promise<ResolvedSetup> {
-    const { setup, from, copying } = await this.setupFrom(source, viewer)
+    const chosen: { setup: ServerSetup; from: string; copying: Copying | null; brought?: BroughtWorld } =
+      source.kind === 'world'
+        ? await this.#fromWorld(source.importId, viewer)
+        : await this.setupFrom(source, viewer)
+    const { setup, from, copying, brought } = chosen
     if (source.kind === 'import' && setup.modpack?.catalog === 'upload' && viewer?.kind === 'user') {
       const pinned = await this.#packs.pinnedFrom(viewer, source.importId)
       if (pinned.kind === 'built')
@@ -372,6 +410,7 @@ export class SetupService {
           from,
           copying,
           notes: [],
+          ...(brought === undefined ? {} : { brought }),
         }
       conflicts = plan.conflicts
     }

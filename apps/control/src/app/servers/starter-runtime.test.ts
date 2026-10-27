@@ -56,10 +56,13 @@ async function start(data: string, name = 'world.tar.gz', hash = sha512): Promis
 
 describe('a world that starts on an archive', () => {
   test('its type names the archive and generates as the void beyond it', () => {
-    const env = starterEnv(ARCADE_LEVEL, (artifact) => `https://links.test/${artifact.fileName}`)
+    const env = starterEnv(
+      { levelType: ARCADE_LEVEL },
+      (artifact) => `https://links.test/${artifact.fileName}`,
+    )
     expect(env.BLOCKLY_STARTER).toMatch(/^[0-9a-f]{128} https:\/\/links\.test\/arcade-world\.tar\.gz$/)
     expect(levelTypeEnv(ARCADE_LEVEL).LEVEL_TYPE).toBe('minecraft:flat')
-    expect(starterEnv('minecraft:normal', () => '')).toEqual({})
+    expect(starterEnv({ levelType: 'minecraft:normal' }, () => '')).toEqual({})
   })
 
   test('the first start unpacks it into the world, and a later one leaves the world alone', async () => {

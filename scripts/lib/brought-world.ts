@@ -7,7 +7,8 @@
  * marked, downloaded, and made into what a player has on their own computer, its world folder
  * alone in a zip, which a server's folder or a download is not. Uploaded to the server, it is read,
  * kept as a backup and restored, and the server then runs it, the same seed and the same mark.
- * The journey itself (its account, its server, its steps) is the check's (`staging-check.ts`).
+ * Brought again while a new server is made, the new server starts on it, the same again. The
+ * journey itself (its account, its server, its steps) is the check's (`staging-check.ts`).
  */
 import { randomInt, randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -18,6 +19,7 @@ import type { Api } from './people.ts'
 /** What of the check's journey this one uses. */
 export interface WorldJourney {
   api: Api
+  owner: { email: string }
   server: { id: string }
   step(name: string, run: () => Promise<string | undefined>, limitSeconds?: number): Promise<void>
   // biome-ignore lint/suspicious/noExplicitAny: servers.get, read loosely as the check reads it
@@ -52,7 +54,10 @@ async function readyBackup(
   throw new Error(`no backup was ready within ${seconds}s`)
 }
 
-export async function bringsWorldIn(j: WorldJourney): Promise<void> {
+export async function bringsWorldIn(
+  j: WorldJourney,
+  sql: (statement: string) => Promise<string>,
+): Promise<void> {
   const mark = String(randomInt(1, 1_000_000))
   const markOf = async () =>
     (await j.consoleSays('scoreboard players get check blockly_check')).match(/has (-?\d+)/)?.[1] ?? ''
@@ -152,4 +157,84 @@ export async function bringsWorldIn(j: WorldJourney): Promise<void> {
     },
     1500,
   )
+
+  await j.step(
+    'brought while a server is made, the new server starts on it: the same seed and the same mark',
+    async () => {
+      // Free holds one server, and this account has one already: it holds two for this step.
+      const account = `user_id = (select id from users where email = '${j.owner.email}')`
+      await sql(
+        `update account_standing set limit_overrides = limit_overrides || '{"maxServers": 2}' where ${account}`,
+      )
+      try {
+        return await madeFrom(j, bytes, { seed, mark }, sql)
+      } finally {
+        await sql(
+          `update account_standing set limit_overrides = limit_overrides - 'maxServers' where ${account}`,
+        )
+      }
+    },
+    1800,
+  )
+}
+
+/** The save uploaded for a server not made yet, and read: what the create page picks. */
+async function broughtForNew(j: WorldJourney, bytes: Uint8Array) {
+  const start = await j.api('newWorlds.beginUpload', {
+    fileName: 'Staging World.zip',
+    sizeBytes: bytes.length,
+  })
+  const put = await fetch(start.url, { method: 'PUT', body: bytes, headers: start.headers })
+  if (!put.ok) throw new Error(`the store answered ${put.status} to the upload`)
+  const { importId } = await j.api('newWorlds.finishUpload', { ticket: start.ticket })
+  let read = await j.api('newWorlds.upload', { importId }, 'GET')
+  while (read.status === 'reading') {
+    await Bun.sleep(2000)
+    read = await j.api('newWorlds.upload', { importId }, 'GET')
+  }
+  if (read.status !== 'ready') throw new Error(`it is ${read.status}: ${JSON.stringify(read)}`)
+  return read
+}
+
+/** A new server made from the save, up, asked its seed and mark, and sent to be purged. */
+async function madeFrom(
+  j: WorldJourney,
+  bytes: Uint8Array,
+  was: { seed: string; mark: string },
+  sql: (statement: string) => Promise<string>,
+): Promise<string> {
+  const read = await broughtForNew(j, bytes)
+  const created = await j.api('servers.create', {
+    idempotencyKey: randomUUID(),
+    name: 'Staging Check',
+    partySize: '5',
+    regionKey: 'eu',
+    from: { kind: 'world', importId: read.importId },
+  })
+  try {
+    const deadline = Date.now() + 900_000
+    while ((await j.api('servers.get', { serverId: created.id }, 'GET')).status !== 'running') {
+      if (Date.now() > deadline) throw new Error('the new server never came up')
+      await Bun.sleep(3000)
+    }
+    const said = async (command: string) =>
+      String((await j.api('console.run', { serverId: created.id, command })).output ?? '')
+    const seed = (await said('seed')).match(/-?\d+/)?.[0] ?? ''
+    const mark = (await said('scoreboard players get check blockly_check')).match(/has (-?\d+)/)?.[1] ?? ''
+    if (seed !== was.seed) throw new Error(`the seed was ${was.seed} and is ${seed}`)
+    if (mark !== was.mark) throw new Error(`the mark was ${was.mark} and is ${mark}`)
+    return `${read.world.name} on Minecraft ${read.world.playsOn}: seed ${seed}, mark ${mark}`
+  } finally {
+    await purgedNow(j, created.id, sql)
+  }
+}
+
+/** A server the journey made besides its own, to the trash and purged at once. */
+async function purgedNow(j: WorldJourney, serverId: string, sql: (statement: string) => Promise<string>) {
+  await j.api('servers.delete', { serverId, confirmName: 'Staging Check' }).catch(() => undefined)
+  for (const until = Date.now() + 300_000; Date.now() < until; await Bun.sleep(3000)) {
+    const seen = await j.api('servers.get', { serverId }, 'GET').catch(() => null)
+    if (seen === null || (seen.status === 'deleted' && seen.activeOperation === null)) break
+  }
+  await sql(`update minecraft_servers set purge_after = now() where id = '${serverId}'`).catch(() => '')
 }

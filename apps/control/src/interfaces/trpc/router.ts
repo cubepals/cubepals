@@ -7,12 +7,14 @@ import {
   AddNoteInput,
   AddPlayerInput,
   AllowExtraPlayInput,
+  AnswerNewWorldImportInput,
   AnswerWorldImportInput,
   ApplyModChangeInput,
   ArchiveBackupInput,
   BackupRef,
   BanInput,
   BeginModUploadInput,
+  BeginNewWorldUploadInput,
   BeginPackUploadInput,
   BeginWorldUploadInput,
   BrowseInput,
@@ -29,6 +31,7 @@ import {
   CreateWorldInput,
   DeleteServerInput,
   FinishModUploadInput,
+  FinishNewWorldUploadInput,
   FinishPackUploadInput,
   FinishWorldUploadInput,
   FreshStartInput,
@@ -42,6 +45,7 @@ import {
   ModChangeInput,
   ModSearchInput,
   ModUploadRef,
+  NewWorldImportRef,
   NoteRef,
   NotesRef,
   PackImportRef,
@@ -420,6 +424,26 @@ const packs = router({
     .query(({ ctx, input }) => ctx.services.packs.view(ctx.actor, input.importId)),
 })
 
+/**
+ * Worlds people bring while they make a server, before it exists: sent, read off the request, and
+ * then picked as what the server is made from (`{ kind: 'world', importId }`).
+ */
+const newWorlds = router({
+  beginUpload: authedProcedure
+    .input(BeginNewWorldUploadInput)
+    .mutation(({ ctx, input }) => ctx.services.backups.newWorlds.begin(ctx.actor, input)),
+  finishUpload: authedProcedure
+    .input(FinishNewWorldUploadInput)
+    .mutation(({ ctx, input }) => ctx.services.backups.newWorlds.finish(ctx.actor, input.ticket)),
+  upload: authedProcedure
+    .input(NewWorldImportRef)
+    .query(({ ctx, input }) => ctx.services.backups.newWorlds.view(ctx.actor, input.importId)),
+  answerUpload: authedProcedure.input(AnswerNewWorldImportInput).mutation(({ ctx, input }) => {
+    const { importId, ...answer } = input
+    return ctx.services.backups.newWorlds.answer(ctx.actor, importId, answer)
+  }),
+})
+
 const access = router({
   get: authedProcedure
     .input(ServerRef)
@@ -735,6 +759,7 @@ export const appRouter = router({
   mods,
   packs,
   backups,
+  newWorlds,
   worlds,
   access,
   moderation,

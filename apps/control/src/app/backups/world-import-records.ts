@@ -6,8 +6,15 @@
  * World imports as rows: one made as its upload finishes, what reading it asked, answered, found or
  * refused. How a world is read and brought is `world-imports.ts`'s.
  */
-import { type Queryable, schema, type WorldImportAnswerJson, type WorldImportQuestionJson } from '@blockly/db'
-import { and, eq } from 'drizzle-orm'
+import {
+  type ModArtifactJson,
+  type NewWorldFactsJson,
+  type Queryable,
+  schema,
+  type WorldImportAnswerJson,
+  type WorldImportQuestionJson,
+} from '@blockly/db'
+import { and, eq, isNull, ne } from 'drizzle-orm'
 
 const imports = schema.worldImports
 
@@ -19,7 +26,8 @@ export async function insertWorldImport(
   row: {
     id: string
     ownerId: string
-    serverId: string
+    /** Null for a world brought while its server is being made. */
+    serverId: string | null
     fileName: string
     sizeBytes: number
     name: string | null
@@ -77,6 +85,25 @@ export async function worldImportReady(
     .where(eq(imports.id, id))
 }
 
+/** A world brought before its server, packed and kept for the server its owner makes from it. */
+export async function newWorldImportReady(
+  q: Queryable,
+  id: string,
+  result: { facts: NewWorldFactsJson; startsOn: ModArtifactJson; notes: string[]; at: Date },
+): Promise<void> {
+  await q
+    .update(imports)
+    .set({
+      status: 'ready',
+      facts: result.facts,
+      startsOn: result.startsOn,
+      notes: result.notes,
+      finishedAt: result.at,
+      question: null,
+    })
+    .where(eq(imports.id, id))
+}
+
 export async function worldImportRefused(
   q: Queryable,
   id: string,
@@ -92,4 +119,15 @@ export async function worldImportRefused(
       question: null,
     })
     .where(and(eq(imports.id, id), eq(imports.status, 'reading')))
+}
+
+/**
+ * Its owner brought another world for a server not yet made: the ones before it can't make one
+ * any more, and what they stored is the store's sweep's to let go once nothing uses it.
+ */
+export async function worldsBroughtBefore(q: Queryable, ownerId: string, latestId: string): Promise<void> {
+  await q
+    .update(imports)
+    .set({ startsOn: null })
+    .where(and(eq(imports.ownerId, ownerId), isNull(imports.serverId), ne(imports.id, latestId)))
 }

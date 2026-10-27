@@ -16,10 +16,8 @@ import { useState } from 'react'
 import { messageOf, useTRPC } from '../../../../lib/api'
 import { bytes } from '../../../../lib/present'
 import { putFile } from '../../../../lib/upload'
-import { Button, Modal, Note, ProgressBar, Select, TextField } from '../../../../ui'
-
-/** What a world upload takes: a zip of its folder, or a tarball as a server download comes. */
-export const WORLD_FILES = '.zip,.tar.gz,.tgz,.tar,application/zip,application/gzip,application/x-tar'
+import { Button, Modal, Note, ProgressBar, TextField } from '../../../../ui'
+import { BroughtNotes, WorldQuestions } from '../../world-questions'
 
 /** How often a world being read is asked about: reading a large one takes a minute or two. */
 const READING_POLL_MS = 1500
@@ -167,7 +165,7 @@ function Actions({
   )
 }
 
-/** What the world needs its player to say: which one, and who played it. */
+/** What the world needs its player to say, sent to its import; the dialog watches what follows. */
 function Questions({
   view,
   state,
@@ -187,80 +185,13 @@ function Questions({
         ),
     }),
   )
-  const [folder, setFolder] = useState(state.worlds?.[0]?.folder ?? '')
-  const [player, setPlayer] = useState('')
-  const say = (given: { folder?: string; player?: string | null }) =>
-    answer.mutate({ serverId: view.id, importId: state.importId, ...given })
-  if (state.worlds !== null)
-    return (
-      <form
-        className="bk-stack"
-        style={{ gap: 'var(--space-12)' }}
-        onSubmit={(event) => {
-          event.preventDefault()
-          say({ folder })
-        }}
-      >
-        <p>This file holds more than one world. Which one should this server have?</p>
-        <Select
-          label="World"
-          value={folder}
-          onChange={(event) => setFolder(event.target.value)}
-          options={state.worlds.map((world) => ({
-            value: world.folder,
-            label: [
-              world.name,
-              world.gameVersion && `Minecraft ${world.gameVersion}`,
-              world.folder.slice(0, -1),
-            ]
-              .filter(Boolean)
-              .join(' · '),
-          }))}
-        />
-        <div>
-          <Button type="submit" variant="primary" busy={answer.isPending ? 'Bringing it' : undefined}>
-            Bring this one
-          </Button>
-        </div>
-        {answer.isError && <Note tone="danger">{messageOf(answer.error)}</Note>}
-      </form>
-    )
   return (
-    <form
-      className="bk-stack"
-      style={{ gap: 'var(--space-12)' }}
-      onSubmit={(event) => {
-        event.preventDefault()
-        if (player.trim()) say({ player: player.trim() })
-      }}
-    >
-      <p>
-        This is a single-player world. Who played it? What they carried and where they stood go to that
-        Minecraft account on this server.
-      </p>
-      <TextField
-        label="Minecraft name"
-        maxLength={32}
-        autoComplete="off"
-        value={player}
-        onChange={(event) => setPlayer(event.target.value)}
-        {...(state.problem ? { error: state.problem } : {})}
-      />
-      <div className="bk-row" style={{ gap: 'var(--space-8)' }}>
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={!player.trim()}
-          busy={answer.isPending ? 'Bringing it' : undefined}
-        >
-          Continue
-        </Button>
-        <Button variant="ghost" disabled={answer.isPending} onClick={() => say({ player: null })}>
-          Nobody, just the world
-        </Button>
-      </div>
-      {answer.isError && <Note tone="danger">{messageOf(answer.error)}</Note>}
-    </form>
+    <WorldQuestions
+      asks={state}
+      answering={answer.isPending}
+      failure={answer.isError ? messageOf(answer.error) : null}
+      onAnswer={(given) => answer.mutate({ serverId: view.id, importId: state.importId, ...given })}
+    />
   )
 }
 
@@ -271,13 +202,7 @@ function Kept({ notes }: { notes: string[] }) {
       <p>
         It’s kept as a backup of this server. Restore it to play it; the world it has now is backed up first.
       </p>
-      {notes.length > 0 && (
-        <ul className="type-body-sm" style={{ color: 'var(--ink-muted)', paddingLeft: 'var(--space-16)' }}>
-          {notes.map((note) => (
-            <li key={note}>{note}</li>
-          ))}
-        </ul>
-      )}
+      <BroughtNotes notes={notes} />
     </div>
   )
 }

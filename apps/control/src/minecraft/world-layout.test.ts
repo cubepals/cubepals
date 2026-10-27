@@ -15,6 +15,7 @@ import {
   chosenWorld,
   leftOutOf,
   modsBeside,
+  placeInLevel,
   placeOnServer,
   playerFilePath,
   uploadHolds,
@@ -72,6 +73,20 @@ describe('a server folder', () => {
     expect(place('world_nether/DIM-1/region/r.0.0.mca')).toBe('world-2_nether/DIM-1/region/r.0.0.mca')
     expect(place('world_the_end/level.dat')).toBe('world-2_the_end/level.dat')
     expect(place('world/region/r.0.0.mca')).toBe('world-2/region/r.0.0.mca')
+  })
+
+  test('a world a new server starts on has its Nether and End inside, where other types read them', () => {
+    const holds = uploadHolds(listing('paper-1.21.11'))
+    if (holds.kind !== 'java') throw new Error('no world')
+    const place = placeInLevel(holds.worlds[0] as NonNullable<(typeof holds.worlds)[0]>)
+    expect(place('world/level.dat')).toBe('level.dat')
+    expect(place('world/region/r.0.0.mca')).toBe('region/r.0.0.mca')
+    expect(place('world_nether/DIM-1/region/r.0.0.mca')).toBe('DIM-1/region/r.0.0.mca')
+    expect(place('world_the_end/DIM1/region/r.0.0.mca')).toBe('DIM1/region/r.0.0.mca')
+    // The folders' own level.dat would stand where the world's goes; Paper makes them again.
+    expect(place('world_the_end/level.dat')).toBeNull()
+    expect(place('world_nether/DIM1/region/r.0.0.mca')).toBeNull()
+    expect(place('server.properties')).toBeNull()
   })
 
   test('only the world goes on the server: the lock a game held and the rest of the folder stay out', () => {
@@ -220,6 +235,9 @@ describe('what a world says of itself', () => {
       hardcore: false,
       brands: ['vanilla'],
       hostPlayer: false,
+      // As 26.1 and later write it: by name, in `difficulty_settings`.
+      gameMode: 'survival',
+      difficulty: 'easy',
     })
   })
 
@@ -236,7 +254,14 @@ describe('what a world says of itself', () => {
 
   test('1.21.11 keeps it in its level.dat', async () => {
     const facts = await factsOf('vanilla-1.21.11', 'world/level.dat', null)
-    expect(facts).toMatchObject({ gameVersion: '1.21.11', levelType: 'minecraft:normal', hardcore: false })
+    // Its difficulty by number, as releases before 26.1 write it: 1 is easy.
+    expect(facts).toMatchObject({
+      gameVersion: '1.21.11',
+      levelType: 'minecraft:normal',
+      hardcore: false,
+      gameMode: 'survival',
+      difficulty: 'easy',
+    })
     expect('seed' in facts && facts.seed).toMatch(/^-?\d+$/)
   })
 

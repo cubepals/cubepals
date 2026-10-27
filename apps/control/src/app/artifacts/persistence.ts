@@ -109,6 +109,31 @@ export async function firstWorldOfType(
   return row?.createdAt ?? null
 }
 
+/**
+ * The archive a world of this server's that its owner brought starts on, and when the world was
+ * made: what lets the server fetch it. A deleted world counts, as a restore may bring it back.
+ */
+export async function worldStartingOn(
+  q: Queryable,
+  serverId: string,
+  sha512: string,
+): Promise<{ artifact: ModArtifact; since: Date } | null> {
+  const [row] = await q
+    .select({ startsOn: worlds.startsOn, createdAt: worlds.createdAt })
+    .from(worlds)
+    .innerJoin(servers, eq(servers.id, worlds.serverId))
+    .where(
+      and(
+        eq(worlds.serverId, serverId),
+        ne(servers.status, 'purged'),
+        sql`${worlds.startsOn} ->> 'sha512' = ${sha512}`,
+      ),
+    )
+    .orderBy(asc(worlds.createdAt))
+    .limit(1)
+  return row?.startsOn ? { artifact: row.startsOn, since: row.createdAt } : null
+}
+
 export async function storedArtifact(q: Queryable, sha512: string): Promise<{ key: string } | null> {
   const [row] = await q.select({ key: stored.key }).from(stored).where(eq(stored.sha512, sha512))
   return row ?? null
@@ -144,8 +169,9 @@ const IMPORT_KEPT = sql`interval '30 days'`
  * `before`: the grace period lets an upload wait to be added, and a mirror to be pinned, before it
  * counts as unused. A pack built from an upload waits for its owner a month. Blockly's copy of a
  * curated release is kept for as long as the release was ever checked: withdrawn ones can be
- * offered again, and rolled back to. An archive a world starts on (`minecraft/starter.ts`) is
- * never unused: no revision pins it, and a new server fetches it.
+ * offered again, and rolled back to. An archive a template's world starts on (`minecraft/starter.ts`)
+ * is never unused: no revision pins it, and a new server fetches it. A world its owner brought is
+ * kept while a server that has it is, and a month for a server not yet made from it.
  */
 export async function unreferencedStored(
   q: Queryable,
@@ -165,6 +191,17 @@ export async function unreferencedStored(
           where ${servers.status} <> 'purged'
             and (${revisions.mods} @> jsonb_build_array(jsonb_build_object('artifact', jsonb_build_object('sha512', ${stored.sha512})))
               or ${revisions.modpack} @> jsonb_build_object('artifact', jsonb_build_object('sha512', ${stored.sha512})))
+        )`,
+        sql`not exists (
+          select 1 from ${worlds}
+          join ${servers} on ${servers.id} = ${worlds.serverId}
+          where ${servers.status} <> 'purged'
+            and ${worlds.startsOn} ->> 'sha512' = ${stored.sha512}
+        )`,
+        sql`not exists (
+          select 1 from ${schema.worldImports}
+          where ${schema.worldImports.startsOn} ->> 'sha512' = ${stored.sha512}
+            and ${schema.worldImports.createdAt} > now() - ${IMPORT_KEPT}
         )`,
         sql`not exists (
           select 1 from ${schema.packImports}
@@ -212,6 +249,18 @@ export async function forgetStored(tx: Tx, sha512: string): Promise<boolean> {
     )
     .limit(1)
   if (curated !== undefined) return false
+  const [world] = await tx
+    .select({ id: worlds.id })
+    .from(worlds)
+    .innerJoin(servers, eq(servers.id, worlds.serverId))
+    .where(and(ne(servers.status, 'purged'), sql`${worlds.startsOn} ->> 'sha512' = ${sha512}`))
+    .limit(1)
+  if (world !== undefined) return false
+  // A world brought for a server never made from it can't make one any more.
+  await tx
+    .update(schema.worldImports)
+    .set({ startsOn: null })
+    .where(sql`${schema.worldImports.startsOn} ->> 'sha512' = ${sha512}`)
   await tx.delete(schema.modUploads).where(eq(schema.modUploads.sha512, sha512))
   await tx.delete(schema.packImports).where(eq(schema.packImports.packSha512, sha512))
   await tx.delete(stored).where(eq(stored.sha512, sha512))

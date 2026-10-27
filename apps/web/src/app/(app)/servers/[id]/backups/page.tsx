@@ -29,7 +29,8 @@ import {
   Toggle,
 } from '../../../../../ui'
 import { PlusOffer } from '../../../plus-offer'
-import { BringWorld, WORLD_FILES } from '../bring-world'
+import { WORLD_FILES } from '../../../world-drop'
+import { BringWorld } from '../bring-world'
 import { ChangeState, ConfirmChange, useChanged } from '../settings/shared'
 import { requestId, useServer } from '../use-server'
 import { useWorldDownload } from './use-download'

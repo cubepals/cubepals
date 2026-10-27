@@ -25,7 +25,15 @@ export interface WorldFacts {
   brands: string[]
   /** It holds its single-player host's own data (`Data.Player`), which a server never reads. */
   hostPlayer: boolean
+  /** The game mode it was played in (`GameType`). */
+  gameMode: (typeof GAME_MODES)[number]
+  /** Its difficulty: `Difficulty` before 26.1, `difficulty_settings.difficulty` from then. */
+  difficulty: (typeof DIFFICULTIES)[number]
 }
+
+/** `GameType` and `Difficulty` by the numbers the game writes, in its own order. */
+const GAME_MODES = ['survival', 'creative', 'adventure', 'spectator'] as const
+const DIFFICULTIES = ['peaceful', 'easy', 'normal', 'hard'] as const
 
 /** Server types that run plain Minecraft's blocks and items, whatever they add besides. */
 const PLAIN_BRANDS = new Set(['vanilla', 'paper', 'spigot', 'craftbukkit', 'bukkit', 'purpur', 'folia'])
@@ -63,7 +71,16 @@ export function worldFacts(
       .map((brand) => text(brand)?.trim().toLowerCase())
       .filter((brand): brand is string => !!brand),
     hostPlayer: Object.keys(record(data.Player)).length > 0,
+    gameMode: (typeof data.GameType === 'number' ? GAME_MODES[data.GameType] : undefined) ?? 'survival',
+    difficulty: difficultyOf(data.Difficulty ?? record(data.difficulty_settings).difficulty),
   }
+}
+
+/** A difficulty as either release writes it: a number before 26.1, its name from then. */
+function difficultyOf(value: unknown): WorldFacts['difficulty'] {
+  if (typeof value === 'number') return DIFFICULTIES[value] ?? 'normal'
+  const named = DIFFICULTIES.find((difficulty) => difficulty === text(value))
+  return named ?? 'normal'
 }
 
 /** A long as prismarine-nbt simplifies one, `[high, low]`, as the decimal Minecraft prints. */

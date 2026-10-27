@@ -71,6 +71,7 @@ const ACTS = [
   'more_closed',
   'packs_opened',
   'upload_opened',
+  'world_opened',
   'ways_back',
   'pack_pressed',
   'server_types_opened',

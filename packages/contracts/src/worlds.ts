@@ -80,11 +80,18 @@ export const AnswerWorldImportInput = WorldImportRef.extend({
   player: z.string().overwrite(oneLine).trim().min(1).max(32).nullable().optional(),
 })
 
+/** A world uploaded while a server is being made, before it is sent: it has no server yet. */
+export const BeginNewWorldUploadInput = BeginWorldUploadInput.omit({ serverId: true })
+export const FinishNewWorldUploadInput = z.object({ ticket: z.uuid() })
+/** A world uploaded while a server is being made, by the ticket it was sent with. */
+export const NewWorldImportRef = z.object({ importId: z.uuid() })
+export const AnswerNewWorldImportInput = AnswerWorldImportInput.omit({ serverId: true })
+
 /**
- * An uploaded world as its owner sees it while it is brought in (docs/world-import.md): being
- * read, asking what only they know, kept as a backup with what Cubepals did, or refused and why.
+ * A world upload as its owner sees it while it is read (docs/world-import.md): being read, asking
+ * what only they know, ready as `Ready` says, or refused and why.
  */
-export type WorldImportView = { importId: string; fileName: string } & (
+type ImportView<Ready> = { importId: string; fileName: string } & (
   | { status: 'reading' }
   | {
       status: 'asking'
@@ -95,9 +102,26 @@ export type WorldImportView = { importId: string; fileName: string } & (
       /** Why the last answer didn't do. */
       problem: string | null
     }
-  | { status: 'ready'; backupId: string; notes: string[] }
+  | ({ status: 'ready'; notes: string[] } & Ready)
   | { status: 'refused'; message: string }
 )
+
+/** A world brought to a server: ready as a backup of it, with what Cubepals did. */
+export type WorldImportView = ImportView<{ backupId: string }>
+
+/**
+ * A world brought while a server is being made: ready as what the server is made to fit, for its
+ * owner to make it from (`{ kind: 'world', importId }`).
+ */
+export type NewWorldImportView = ImportView<{
+  world: {
+    name: string
+    /** The release that last saved it. */
+    gameVersion: string
+    /** The release its server runs: the same, or the next Cubepals offers. */
+    playsOn: string
+  }
+}>
 
 export const RestoreBackupInput = z.object({
   ...change,

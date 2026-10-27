@@ -7,9 +7,9 @@
 import type { PackImportView } from '@blockly/contracts'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Upload } from 'lucide-react'
-import { type DragEvent, useEffect, useState } from 'react'
+import { type DragEvent, useState } from 'react'
 import { messageOf, useTRPC } from '../../lib/api'
-import { putFile } from '../../lib/upload'
+import { useHandedOnce, useSentImport } from '../../lib/sent-import'
 import { FileButton, ICON, Note, ProgressBar } from '../../ui'
 
 /** A pack Blockly has read, as the pages that pick one show it. */
@@ -34,9 +34,15 @@ export function PackDrop({
   const trpc = useTRPC()
   const begin = useMutation(trpc.packs.beginUpload.mutationOptions())
   const finish = useMutation(trpc.packs.finishUpload.mutationOptions())
-  const [sending, setSending] = useState<{ name: string; done: number } | null>(null)
-  const [importId, setImportId] = useState<string | null>(null)
-  const [failure, setFailure] = useState<string | null>(null)
+  const {
+    progress: sending,
+    importId,
+    failure,
+    send,
+  } = useSentImport(
+    { begin: (file) => begin.mutateAsync(file), finish: (ticket) => finish.mutateAsync({ ticket }) },
+    onStart,
+  )
   const [over, setOver] = useState(false)
 
   // While Blockly reads the pack, the page asks after it; reading a big server pack takes a while.
@@ -46,33 +52,8 @@ export function PackDrop({
     refetchInterval: (query) => (query.state.data?.status === 'reading' ? 1500 : false),
   })
   const read = reading.data
-  // Each pack read is handed over once. The pages pass a new `onReady` on every render, and
-  // handing it over again would reopen a question someone just answered or cancelled.
-  const [handed, setHanded] = useState<string | null>(null)
-  useEffect(() => {
-    if (read?.status !== 'ready' || read.importId === handed) return
-    setHanded(read.importId)
-    onReady(read)
-  }, [read, onReady, handed])
+  useHandedOnce(read, onReady)
 
-  const send = async (file: File) => {
-    onStart?.()
-    setFailure(null)
-    setImportId(null)
-    try {
-      setSending({ name: file.name, done: 0 })
-      const start = await begin.mutateAsync({ fileName: file.name, sizeBytes: file.size })
-      await putFile(start.url, start.headers, file, (sent) =>
-        setSending({ name: file.name, done: (sent / file.size) * 100 }),
-      )
-      const { importId } = await finish.mutateAsync({ ticket: start.ticket })
-      setImportId(importId)
-    } catch (error) {
-      setFailure(messageOf(error))
-    } finally {
-      setSending(null)
-    }
-  }
   const drop = (event: DragEvent) => {
     event.preventDefault()
     setOver(false)
