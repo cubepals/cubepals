@@ -10,7 +10,7 @@
  */
 import { isBedrockUuid, MOST_WORLD_PEOPLE, type PeopleChoice } from '@blockly/contracts'
 import type { WorldPeopleJson, WorldPersonJson } from '@blockly/db'
-import type { AccessEntry, SeededAccess } from '../../domain/access/access.ts'
+import type { AccessEntry, EntryDetails, SeededAccess } from '../../domain/access/access.ts'
 import { ACCESS_FILES } from '../../minecraft/access.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { offlineUuid } from '../access/identity.ts'
@@ -29,6 +29,9 @@ interface Listed {
   name: string
   reason: string | null
   expires: string | null
+  /** An operator's: what they may do, and whether they join a full server. */
+  level: number
+  bypassesPlayerLimit: boolean
 }
 
 /**
@@ -75,10 +78,16 @@ export async function peopleOf(
     whitelistOn:
       properties !== undefined && /^white-list\s*=\s*true\s*$/m.test(new TextDecoder().decode(properties)),
     whitelist: (await each(whitelist)).map(({ person }) => person),
-    operators: (await each(operators)).map(({ person }) => person),
+    operators: (await each(operators)).map(({ row, person }) => ({
+      ...person,
+      level: row.level,
+      bypassesPlayerLimit: row.bypassesPlayerLimit,
+    })),
     bans: (await each(bans.filter((ban) => !ranOut(ban, now)))).map(({ row, person }) => ({
       ...person,
       reason: row.reason,
+      // Until when, as Minecraft writes it; null for good.
+      expiresAt: row.expires === null || row.expires === 'forever' ? null : row.expires,
     })),
     unknown: [...unknown],
   }
@@ -125,7 +134,10 @@ function listedIn(raw: Uint8Array | undefined): Listed[] {
     const rows: unknown = JSON.parse(new TextDecoder().decode(raw))
     if (!Array.isArray(rows)) return []
     return rows.flatMap((row: unknown) => {
-      const { uuid, name, reason, expires } = (row ?? {}) as Record<string, unknown>
+      const { uuid, name, reason, expires, level, bypassesPlayerLimit } = (row ?? {}) as Record<
+        string,
+        unknown
+      >
       if (typeof uuid !== 'string' || typeof name !== 'string' || !/^[0-9a-f-]{32,36}$/i.test(uuid)) return []
       return [
         {
@@ -133,6 +145,9 @@ function listedIn(raw: Uint8Array | undefined): Listed[] {
           name,
           reason: typeof reason === 'string' ? reason : null,
           expires: typeof expires === 'string' ? expires : null,
+          // Minecraft's own default for an operator its file gives no level.
+          level: typeof level === 'number' ? level : 4,
+          bypassesPlayerLimit: bypassesPlayerLimit === true,
         },
       ]
     })
@@ -147,19 +162,21 @@ function listedIn(raw: Uint8Array | undefined): Listed[] {
  * they said not to. A UUID that isn't one of its players is ignored.
  */
 export function accessFrom(people: WorldPeopleJson, choice: PeopleChoice): SeededAccess {
-  const everyone = new Map([...people.whitelist, ...people.operators].map((p) => [p.uuid, p]))
+  const everyone = new Map<string, WorldPersonJson>(
+    [...people.whitelist, ...people.operators].map((p) => [p.uuid, p]),
+  )
   const chosen = choice.letIn.flatMap((uuid) => everyone.get(uuid.toLowerCase()) ?? [])
-  const operators = new Set(people.operators.map((p) => p.uuid))
+  const operators = new Map(people.operators.map((p) => [p.uuid, p]))
   const entry = (
     list: AccessEntry['list'],
     player: WorldPersonJson,
-    reason?: string | null,
+    details: EntryDetails = {},
   ): AccessEntry => ({
     list,
     player: { uuid: player.uuid, name: player.name },
     state: 'pending_add',
     origin: 'blockly',
-    details: reason ? { reason } : {},
+    details,
     error: null,
   })
   const madeOperators = new Set(choice.operators.map((uuid) => uuid.toLowerCase()))
@@ -169,11 +186,23 @@ export function accessFrom(people: WorldPeopleJson, choice: PeopleChoice): Seede
     whitelistOn: choice.whitelistOn,
     entries: [
       ...chosen.map((player) => entry('whitelist', player)),
-      ...chosen
-        .filter((player) => operators.has(player.uuid) && madeOperators.has(player.uuid))
-        .map((player) => entry('operator', player)),
+      // An operator at the level their server gave them, not more.
+      ...chosen.flatMap((player) => {
+        const operator = operators.get(player.uuid)
+        if (operator === undefined || !madeOperators.has(player.uuid)) return []
+        const { level, bypassesPlayerLimit } = operator
+        return [entry('operator', player, { level, bypassesPlayerLimit })]
+      }),
+      // A ban for a while lasts as long here as it had left there.
       ...(choice.keepBans
-        ? people.bans.filter((ban) => !letIn.has(ban.uuid)).map((ban) => entry('ban', ban, ban.reason))
+        ? people.bans
+            .filter((ban) => !letIn.has(ban.uuid))
+            .map((ban) =>
+              entry('ban', ban, {
+                ...(ban.reason ? { reason: ban.reason } : {}),
+                ...(ban.expiresAt === null ? {} : { expiresAt: ban.expiresAt }),
+              }),
+            )
         : []),
     ],
   }

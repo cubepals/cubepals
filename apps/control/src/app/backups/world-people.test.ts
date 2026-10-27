@@ -17,7 +17,7 @@ import { bringNewWorld, bringWorld, serverFolder } from '../../testing/world-imp
 import { offlineUuid } from '../access/identity.ts'
 import { readAccess } from '../access/persistence.ts'
 import type { PlayerProfiles } from '../ports/minecraft.ts'
-import { peopleOf } from './world-people.ts'
+import { accessFrom, peopleOf } from './world-people.ts'
 
 let h: Harness
 const store = new MemoryStore()
@@ -79,6 +79,29 @@ async function privateServer(): Promise<Uint8Array> {
   return zipBytes(files)
 }
 
+describe('what a choice lets in', () => {
+  test('an operator at the level their server gave them, and a ban for as long as it had left', () => {
+    const people = {
+      whitelistOn: false,
+      whitelist: [],
+      operators: [{ uuid: 'mod', name: 'Mod', level: 2, bypassesPlayerLimit: true }],
+      bans: [{ uuid: 'late', name: 'Late', reason: 'Spam', expiresAt: '2099-01-01 00:00:00 +0000' }],
+      unknown: [],
+    }
+    const { entries } = accessFrom(people, {
+      letIn: ['mod'],
+      operators: ['mod'],
+      keepBans: true,
+      whitelistOn: false,
+    })
+    expect(entries.map((entry) => [entry.list, entry.player.name, entry.details])).toEqual([
+      ['whitelist', 'Mod', {}],
+      ['operator', 'Mod', { level: 2, bypassesPlayerLimit: true }],
+      ['ban', 'Late', { reason: 'Spam', expiresAt: '2099-01-01 00:00:00 +0000' }],
+    ])
+  })
+})
+
 describe('a player whose account can’t be looked up', () => {
   test('fails the read, to be tried again, rather than being left out as nobody', async () => {
     const files = new Map([
@@ -117,8 +140,8 @@ describe.skipIf(!hasDatabase)('the players of the server a world came from', () 
         { uuid: alex, name: 'Alex' },
         { uuid: steve, name: 'Steve' },
       ],
-      operators: [{ uuid: alex, name: 'Alex' }],
-      bans: [{ uuid: griefer, name: 'Griefer', reason: 'Broke the spawn' }],
+      operators: [{ uuid: alex, name: 'Alex', level: 4, bypassesPlayerLimit: false }],
+      bans: [{ uuid: griefer, name: 'Griefer', reason: 'Broke the spawn', expiresAt: null }],
       unknown: ['Ghost'],
     })
     expect(ready.notes).toContain(

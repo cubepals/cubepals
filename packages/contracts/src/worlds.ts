@@ -120,8 +120,9 @@ export type WorldPeople = {
   /** Its server let in only the players on its whitelist. */
   whitelistOn: boolean
   whitelist: WorldPerson[]
-  operators: WorldPerson[]
-  bans: Array<WorldPerson & { reason: string | null }>
+  operators: Array<WorldPerson & { level: number; bypassesPlayerLimit: boolean }>
+  /** Each with its reason, and until when as Minecraft writes it; null for good. */
+  bans: Array<WorldPerson & { reason: string | null; expiresAt: string | null }>
   /** Names in its files that no Minecraft account has, left out. */
   unknown: string[]
 } | null

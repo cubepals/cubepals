@@ -323,8 +323,10 @@ export interface WorldPeopleJson {
   /** Its server let in only the players on its whitelist. */
   whitelistOn: boolean
   whitelist: WorldPersonJson[]
-  operators: WorldPersonJson[]
-  bans: Array<WorldPersonJson & { reason: string | null }>
+  /** Each at the level its server gave them, and whether they join a full server. */
+  operators: Array<WorldPersonJson & { level: number; bypassesPlayerLimit: boolean }>
+  /** Each with its reason, and until when as Minecraft writes it; null for good. */
+  bans: Array<WorldPersonJson & { reason: string | null; expiresAt: string | null }>
   /** Names in its files that no Minecraft account has, which are left out. */
   unknown: string[]
 }
