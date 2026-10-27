@@ -62,6 +62,9 @@ const KEPT =
 /** How many of an offline-mode server's players are looked up as accounts: a large server's regulars. */
 const MOST_ACCOUNTS = 200
 
+/** How many of a server's other worlds an upload brings: more than a server with several has. */
+const MOST_OTHER_WORLDS = 16
+
 export const SAID = {
   neverArrived: 'The file never arrived. Upload it again.',
   notAnArchive:
@@ -307,6 +310,33 @@ export class WorldReading {
     return accounts
   }
 
+  /**
+   * The upload's other worlds, beside the one brought, as a server with several keeps them: each
+   * read on its own, and one that wouldn't open on the server it goes to left out, saying why.
+   */
+  async others(
+    read: Read,
+    to: { ownerId: string; serverId: string | null },
+    serverVersion: string,
+  ): Promise<{ reads: Read[]; left: string[] }> {
+    const reads: Read[] = []
+    const left: string[] = []
+    // Only a server's: the other saves of a saves folder are the player's to choose from, one at a time.
+    if (read.holds.properties === null) return { reads, left }
+    for (const world of read.holds.worlds.slice(0, MOST_OTHER_WORLDS)) {
+      if (world.folder === read.world.folder) continue
+      try {
+        const other = await this.read(read.archive, { folder: world.folder })
+        await this.refuseWhatWontOpen(to, other, serverVersion)
+        reads.push(other)
+      } catch (error) {
+        if (!(error instanceof Refused)) throw error
+        left.push(`Left out ${world.folderName || 'a world'}: ${error.message}`)
+      }
+    }
+    return { reads, left }
+  }
+
   /** Who could join the server the upload came from, named as one checking accounts or not knows them. */
   people(read: Read, onlineMode: boolean): Promise<WorldPeopleJson | null> {
     return peopleOf(read, onlineMode, this.#profiles)
@@ -452,6 +482,8 @@ export function notesOn(
     asItCame: boolean
     serverVersion: string
     updated: (from: string) => string
+    /** The upload's other worlds, kept or named on their own. */
+    others?: readonly FoundWorld[]
   },
 ): string[] {
   const notes: string[] = []
@@ -471,7 +503,12 @@ export function notesOn(
     read.archive.files.map((file) => file.name),
     read.world,
   )
-  if (!how.asItCame && leftOut.length > 0) notes.push(`Left out what isn’t the world: ${leftOut.join(', ')}.`)
+  // The server's other worlds are said of their own (`kept-worlds.ts`).
+  const others = (how.others ?? []).flatMap((world) => [world.folder, ...world.beside])
+  const rest = leftOut.filter(
+    (name) => !others.some((folder) => folder === name || folder.endsWith(`/${name}`)),
+  )
+  if (!how.asItCame && rest.length > 0) notes.push(`Left out what isn’t the world: ${rest.join(', ')}.`)
   const modded = moddedBrands(read.facts)
   if (modded.length > 0)
     notes.push(

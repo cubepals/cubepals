@@ -39,6 +39,7 @@ import {
   loadPendingUpload,
   type PendingUpload,
 } from '../uploads/persistence.ts'
+import { othersForNewServer } from './kept-worlds.ts'
 import {
   insertWorldImport,
   loadWorldImport,
@@ -260,7 +261,12 @@ export class NewWorldImports {
       const player = await this.#reading.hostPlayer(read, record.answer ?? {}, true)
       const accounts = await this.#reading.accounts(read, true)
       const people = await this.#reading.people(read, true)
-      await this.#keep(record, pending, read, { player, accounts, people }, playsOn, work)
+      const { reads: others } = await this.#reading.others(
+        read,
+        { ownerId: record.ownerId, serverId: null },
+        playsOn,
+      )
+      await this.#keep(record, pending, read, { player, accounts, people, others }, playsOn, work)
     } finally {
       await archive.close()
     }
@@ -275,6 +281,8 @@ export class NewWorldImports {
       player: { uuid: string; name: string } | null
       accounts: Accounts
       people: WorldPeopleJson | null
+      /** The upload's other worlds, which its server doesn't start on. */
+      others: Read[]
     },
     playsOn: string,
     work: string,
@@ -325,11 +333,13 @@ export class NewWorldImports {
         hostWritten,
         asItCame: false,
         serverVersion: playsOn,
+        others: who.others.map((other) => other.world),
         updated: (from) =>
           `It was last played on Minecraft ${from}. Its server runs ${playsOn}, which updates it when it first starts.`,
       }),
       ...accountNotes(accounts),
       ...peopleNotes(who.people),
+      ...othersForNewServer(who.others),
     ]
     const kept = await this.#db.transaction(async (tx) => {
       if (!(await claimPendingUpload(tx, pending.id))) return false

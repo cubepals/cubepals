@@ -532,3 +532,20 @@ describe.skipIf(!hasDatabase)('an offline-mode server’s players', () => {
     expect((await readdir(join(dir, 'playerdata'))).sort()).toEqual([`${ghost}.dat`, `${online}.dat`].sort())
   }, 120_000)
 })
+
+describe.skipIf(!hasDatabase)('a server’s folder with other worlds, before its server is made', () => {
+  test('starts the server on its own world, and says how to keep the others', async () => {
+    const owner = await h.user('Wren', 'plus')
+    const files = await serverFolder('paper-1.21.11')
+    for (const [path, bytes] of Object.entries({ ...files }))
+      if (path.startsWith('world/')) files[`creative/${path.slice('world/'.length)}`] = bytes
+    const ready = await bringNewWorld(h, owner, zipBytes(files), 'server.zip')
+    if (ready.status !== 'ready') throw new Error(`The import is ${ready.status}`)
+    expect(ready.notes).toContain(
+      'The file also holds creative. Once the server is made, upload the same file on its Backups page to keep it too.',
+    )
+    expect(ready.notes.find((note) => note.startsWith('Left out what isn’t the world'))).not.toContain(
+      'creative',
+    )
+  }, 120_000)
+})

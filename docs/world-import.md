@@ -75,7 +75,14 @@ Before the plan:
   page the choice is kept on the import (`newWorlds.choosePeople`) and the new server starts with
   it (`createAccess`); on the world page it is let in at once (`backups.letInFromUpload`,
   `AccessService.letIn`), which never turns a server's whitelist off.
-- **Next:** a server's other worlds, then the guide.
+- **A server's other worlds come too.** A server's folder holding more worlds than the one its
+  `server.properties` names, as a server with several keeps them, has each read on its own
+  (`WorldReading.others`). Brought to a server, each is kept as a backup of its own, in a folder
+  of its own (`kept-worlds.ts`), to restore when its owner wants to play it; one that wouldn't open
+  there is left out, saying why. Brought for a new server, the server starts on the one named, and
+  the notes say to upload the same file on its Backups page to keep the others. A saves folder's
+  other saves aren't kept: its owner chose one.
+- **Next:** the guide on the site.
 
 ## What it does
 

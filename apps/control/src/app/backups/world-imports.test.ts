@@ -216,6 +216,43 @@ describe.skipIf(!hasDatabase)('a server’s folder', () => {
   }, 120_000)
 })
 
+describe.skipIf(!hasDatabase)('a server’s folder with other worlds', () => {
+  test('keeps each as a backup of its own, in a folder of its own, and says so', async () => {
+    const { owner, id } = await server('Sasha')
+    const files = await serverFolder('paper-1.21.11')
+    // A second world beside the first, with its Nether, as a server with several keeps them.
+    for (const [path, bytes] of Object.entries({ ...files }))
+      if (path.startsWith('world/')) files[`creative/${path.slice('world/'.length)}`] = bytes
+      else if (path.startsWith('world_nether/'))
+        files[`creative_nether/${path.slice('world_nether/'.length)}`] = bytes
+    const view = await bringWorld(h, owner, id, zipBytes(files), { fileName: 'server.zip' })
+    if (view.status !== 'ready') throw new Error(`The import is ${view.status}`)
+    expect(view.notes).toContain(
+      'Also kept creative, the server’s other world, as a backup to restore when you want to play it.',
+    )
+    expect(view.notes.find((note) => note.startsWith('Left out what isn’t the world'))).not.toContain(
+      'creative',
+    )
+    const kept = await h.db.query.backups.findMany({
+      where: (t, { and, eq }) => and(eq(t.serverId, id), eq(t.trigger, 'uploaded')),
+    })
+    expect(kept).toHaveLength(2)
+    const worlds = await listWorlds(h.db, id)
+    const creative = worlds.find((world) => world.name === 'creative')
+    if (creative === undefined) throw new Error('No world was kept for creative')
+    const backup = kept.find((one) => one.worldId === creative.id)
+    if (backup === undefined || backup.archiveKey === null) throw new Error('No backup was kept for creative')
+    const dir = await unpacked(backup.archiveKey)
+    const { stdout } = await run('ls', ['-A', dir])
+    expect(stdout.trim().split('\n').sort()).toEqual([
+      'archive.tar.gz',
+      `${creative.levelName}`,
+      `${creative.levelName}_nether`,
+      'server.properties',
+    ])
+  }, 120_000)
+})
+
 describe.skipIf(!hasDatabase)('an upload that goes while it is read', () => {
   test('is refused, saying to upload it again, rather than left being read', async () => {
     const { owner, id } = await server('Quinn')

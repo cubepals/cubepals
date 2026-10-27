@@ -47,8 +47,8 @@ import { loadRevisionFields } from '../servers/revision-reads.ts'
 import { claimPendingUpload, loadPendingUpload, type PendingUpload } from '../uploads/persistence.ts'
 import { insertWorld, listWorlds, markPruned, markWorldDeleted } from '../worlds/persistence.ts'
 import { putStream } from './downloads.ts'
+import { type KeptWorld, levelFor, othersNotes, recordKept } from './kept-worlds.ts'
 import type { NewWorldImports } from './new-world-imports.ts'
-import { insertArchive } from './persistence.ts'
 import {
   insertWorldImport,
   loadWorldImport,
@@ -245,6 +245,11 @@ export class WorldImports {
       const player = await this.#reading.hostPlayer(read, record.answer ?? {}, desired.settings.onlineMode)
       const accounts = await this.#reading.accounts(read, desired.settings.onlineMode)
       const people = await this.#reading.people(read, desired.settings.onlineMode)
+      const others = await this.#reading.others(
+        read,
+        { ownerId: server.ownerId, serverId: server.id },
+        desired.gameVersion,
+      )
       await this.#keep({
         record,
         pending,
@@ -253,6 +258,7 @@ export class WorldImports {
         player,
         accounts,
         people,
+        others,
         serverVersion: desired.gameVersion,
       })
     } finally {
@@ -274,24 +280,16 @@ export class WorldImports {
     accounts: Accounts
     /** Who could join the server it came from, for its owner to choose from. */
     people: WorldPeopleJson | null
+    /** The upload's other worlds, each kept as a backup of its own, and those left out. */
+    others: { reads: Read[]; left: string[] }
     serverVersion: string
   }): Promise<void> {
     const { record, pending, server, read, player, accounts } = input
     const store = requireCapability(this.#caps, 'archives')
     const worlds = await listWorlds(this.#db, server.id)
     const fromCubepals = read.archive.kept.has(DOWNLOAD_NOTE)
-    const known = worlds.find(
-      (world) =>
-        world.levelName === read.world.folderName &&
-        (world.seed === null ? fromCubepals : world.seed === read.facts.seed),
-    )
     const taken = worlds.map((world) => world.levelName)
-    // Its own folder's name where that is one Blockly makes and no other world has it.
-    const levelName =
-      known?.levelName ??
-      (isLevelName(read.world.folderName) && !taken.includes(read.world.folderName)
-        ? read.world.folderName
-        : nextLevelName(taken))
+    const { levelName, known } = levelFor(read, worlds, taken, fromCubepals)
     // Only a download Cubepals made, as the gzipped tarball it made, is kept as it came: what else
     // it holds beside the world is what Cubepals put in it (`world-download.ts`). Its note is a file
     // anyone can add, so one holding what no download does (a jar) is written again.
@@ -322,10 +320,13 @@ export class WorldImports {
         updated: (from) =>
           `It was last played on Minecraft ${from}. Restoring it opens it on ${input.serverVersion}, which updates it; this backup stays as it came.`,
         serverVersion: input.serverVersion,
+        others: input.others.reads.map((other) => other.world),
       }),
       ...accountNotes(accounts),
       ...peopleNotes(input.people),
+      ...othersNotes(input.others.reads, input.others.left),
     ]
+    const others = await this.#keptOthers(server, input.others.reads, worlds, [...taken, levelName], accounts)
     const backupId = randomUUID()
     let key = pending.key
     let sizeBytes = pending.sizeBytes
@@ -349,12 +350,15 @@ export class WorldImports {
       sizeBytes,
       notes,
       people: input.people,
+      others,
       serverVersion: input.serverVersion,
     }).catch(async (error: unknown) => {
-      // A retry writes it again under a new key, so the one written here goes with the failure.
-      if (!asItCame) await store.delete(key).catch(() => undefined)
+      // A retry writes them again under new keys, so the ones written here go with the failure.
+      for (const written of [...others.map((other) => other.key), ...(asItCame ? [] : [key])])
+        await store.delete(written).catch(() => undefined)
       throw error
     })
+    if (!kept) for (const other of others) await store.delete(other.key)
     if (!kept && !asItCame) await store.delete(key)
     if (kept && !asItCame) await store.delete(pending.key).catch(() => undefined)
     // The upload was cleared while it was read (it waited past the day uploads are kept).
@@ -400,54 +404,23 @@ export class WorldImports {
     sizeBytes: number
     notes: string[]
     people: WorldPeopleJson | null
+    /** The upload's other worlds, written as backups of their own. */
+    others: KeptWorld[]
     serverVersion: string
   }): Promise<boolean> {
-    const { record, read, server } = input
+    const { record, server } = input
     const now = new Date()
     const standing = await loadStanding(this.#db, server.ownerId)
     const days = Math.max(
       entitlementsFor(standing.plan, standing.limitOverrides).backupPolicy.archiveRetentionDays,
       UPLOADED_KEPT_DAYS,
     )
+    const at = { now, days, serverVersion: input.serverVersion }
     return this.#db.transaction(async (tx) => {
       const locked = await lockServer(tx, server.id)
       if (locked === null || !(await claimPendingUpload(tx, input.pending.id))) return false
-      let worldId = input.known
-      if (worldId === null) {
-        worldId = (
-          await insertWorld(tx, {
-            serverId: locked.id,
-            levelName: input.levelName,
-            name: (record.name || read.facts.name || 'Uploaded world').slice(0, NAME_MAX_LENGTH),
-            seed: read.facts.seed,
-            levelType: read.facts.levelType,
-            hardcore: read.facts.hardcore,
-            generatedOnVersion: isRelease(read.facts.gameVersion)
-              ? read.facts.gameVersion
-              : input.serverVersion,
-          })
-        ).id
-        // Not on the server until the backup is restored.
-        await markWorldDeleted(tx, worldId, now)
-        await markPruned(tx, [worldId], now)
-      }
-      await insertArchive(tx, {
-        id: input.backupId,
-        serverId: locked.id,
-        worldId,
-        revisionId: locked.desiredRevisionId,
-        trigger: 'uploaded',
-        status: 'ready',
-        archiveKey: input.key,
-        sizeBytes: input.sizeBytes,
-        expiresAt: new Date(now.getTime() + days * DAY_MS),
-        worldFacts: {
-          seed: read.facts.seed,
-          levelType: read.facts.levelType,
-          hardcore: read.facts.hardcore,
-          gameVersion: read.facts.gameVersion,
-        },
-      })
+      await recordKept(tx, locked, { ...input, name: record.name }, at)
+      for (const other of input.others) await recordKept(tx, locked, other, at)
       await worldImportReady(tx, record.id, {
         backupId: input.backupId,
         people: input.people,
@@ -458,10 +431,50 @@ export class WorldImports {
         backupId: input.backupId,
         importId: record.id,
         level: input.levelName,
+        ...(input.others.length > 0 ? { others: input.others.map((other) => other.levelName) } : {}),
       })
       await this.#events.publish(tx, { type: 'backup_changed', serverId: locked.id, ownerId: locked.ownerId })
       return true
     })
+  }
+
+  /** The upload's other worlds written as the server keeps them, each in a folder of its own. */
+  async #keptOthers(
+    server: MinecraftServer,
+    reads: readonly Read[],
+    worlds: Parameters<typeof levelFor>[1],
+    taken: string[],
+    accounts: Accounts,
+  ): Promise<KeptWorld[]> {
+    const store = requireCapability(this.#caps, 'archives')
+    const kept: KeptWorld[] = []
+    try {
+      for (const other of reads) {
+        const { levelName, known } = levelFor(other, worlds, taken, false)
+        taken.push(levelName)
+        const backupId = randomUUID()
+        const key = store.newKey('archive', { serverId: server.id, id: backupId })
+        const place = withPlayersRenamed(placeOnServer(other.world, levelName), accounts.renames)
+        const sizeBytes = await putStream(
+          this.#archives.tarball(this.#placed(other, levelName, place, null)),
+          await store.archiveTarget(key, LINK_SECONDS, 'browser'),
+          mostOf(other.archive),
+        )
+        kept.push({
+          read: other,
+          levelName,
+          known: known?.id ?? null,
+          name: other.world.folderName || null,
+          backupId,
+          key,
+          sizeBytes,
+        })
+      }
+    } catch (error) {
+      for (const written of kept) await store.delete(written.key).catch(() => undefined)
+      throw error
+    }
+    return kept
   }
 
   /**
