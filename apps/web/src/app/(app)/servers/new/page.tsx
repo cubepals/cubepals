@@ -65,6 +65,31 @@ const isOwnPack = (from: SetupSourceInput | null, pack: ReadPack): boolean =>
   from?.kind === 'import' ||
   (from?.kind === 'world' && from.pack?.kind === 'import' && from.pack.importId === pack.importId)
 
+/**
+ * The pack its owner dropped: picked once it is read, with its world where it came with one, unless
+ * they chose something else meanwhile, when it is only shown. A new drop lets the last one go.
+ */
+function useOwnPack(
+  from: SetupSourceInput | null,
+  setFrom: (from: SetupSourceInput | null) => void,
+  choose: (source: SetupSourceInput, key: string) => Promise<unknown>,
+) {
+  const [ownPack, setOwnPack] = useState<ReadPack | null>(null)
+  const fromAtDrop = useRef<SetupSourceInput | null>(null)
+  const pickOwnPack = async (read: ReadPack, world: string | null = null) => {
+    setOwnPack(read)
+    if (from !== fromAtDrop.current && !isOwnPack(from, read)) return
+    await choose(ownPackSource(read.importId, world), read.importId)
+  }
+  const dropStarted = () => {
+    setOwnPack(null)
+    const wasOwn = ownPack !== null && isOwnPack(from, ownPack)
+    if (wasOwn) setFrom(null)
+    fromAtDrop.current = wasOwn ? null : from
+  }
+  return { ownPack, setOwnPack, pickOwnPack, dropStarted }
+}
+
 export default function CreateServerPage() {
   return (
     <Suspense fallback={null}>
@@ -104,7 +129,6 @@ function CreateServer() {
   // The pack picked, as its list showed it: its name and picture stand for the choice.
   const [pack, setPack] = useState<ModpackHit | null>(null)
   // A pack they have as a file, once Blockly has read it.
-  const [ownPack, setOwnPack] = useState<ReadPack | null>(null)
   const [partySize, setPartySize] = useState<PartySize | null>(kept.partySize)
   const region = useRegion(options.data?.regions, kept.region)
   const [name, setName] = useState('')
@@ -149,6 +173,7 @@ function CreateServer() {
     if (create.isError) create.reset()
   }
   const { choose, checking, refused, setRefused } = useChoosing({ from, setFrom, judgedAt, moveOn })
+  const { ownPack, setOwnPack, pickOwnPack, dropStarted } = useOwnPack(from, setFrom, choose)
 
   // What Blockly would make of the choice, asked once and used twice: to refuse a choice that
   // can't run before anyone goes any further, and to say what the server will be in the bar.
@@ -216,10 +241,6 @@ function CreateServer() {
     if (await choose(source, hit.projectId)) setPack(hit)
   }
   const pickCurated = (key: string) => void choose({ kind: 'curated', key }, `curated:${key}`)
-  const pickOwnPack = async (read: ReadPack, world: string | null = null) => {
-    setOwnPack(read)
-    await choose(ownPackSource(read.importId, world), read.importId)
-  }
 
   // A template's name and picture are the same for everyone, so the bar says them without waiting.
   const template = from?.kind === 'template' ? TEMPLATE_CARDS.find((one) => one.key === from.key) : undefined
@@ -395,14 +416,7 @@ function CreateServer() {
                 setPicking('ways')
               }}
             />
-            <PackDrop
-              disabled={atLimit !== null}
-              onStart={() => {
-                setOwnPack(null)
-                if (ownPack !== null && isOwnPack(from, ownPack)) setFrom(null)
-              }}
-              onReady={pickOwnPack}
-            />
+            <PackDrop disabled={atLimit !== null} onStart={dropStarted} onReady={pickOwnPack} />
             {ownPack !== null && (
               <div className={styles.row} data-picked={isOwnPack(from, ownPack) || undefined}>
                 <Thumb

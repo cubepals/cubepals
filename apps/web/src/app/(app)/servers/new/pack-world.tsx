@@ -7,8 +7,9 @@
 /**
  * The world that came inside a pack its owner dropped (docs/world-import.md § Mods and plugins):
  * a launcher's saves or a server's world, read from the same upload while the page waits. Once it
- * is ready, the server made from the pack starts on it, which `onWorld` hands the page; what only
- * its owner knows is asked here (`world-questions.tsx`), and they can start on a new world instead.
+ * is read, or can't be, `onWorld` hands the page the pack and its world together, and the server
+ * made from the pack starts on it; what only its owner knows is asked here (`world-questions.tsx`),
+ * and they can start on a new world instead.
  */
 import { useEffect, useRef, useState } from 'react'
 import { messageOf } from '../../../../lib/api'
@@ -28,13 +29,22 @@ export function PackWorld({
   const { watched, answer } = useNewWorld(importId)
   const read = watched.data
   const [fresh, setFresh] = useState(false)
-  const ready = read?.status === 'ready'
-  // Handed once each time the choice changes, whatever the page passes as `onWorld` each render.
+  // Handed once, as soon as the world is read or can't be, whatever the page passes as `onWorld`
+  // each render; after that only when its owner says, so a late answer never undoes their pick.
   const handTo = useRef(onWorld)
   handTo.current = onWorld
+  const handed = useRef(false)
+  const settled =
+    read?.status === 'ready' ? importId : read?.status === 'refused' || watched.isError ? null : undefined
   useEffect(() => {
-    if (ready) handTo.current(fresh ? null : importId)
-  }, [ready, fresh, importId])
+    if (settled === undefined || handed.current) return
+    handed.current = true
+    handTo.current(settled)
+  }, [settled])
+  const toggle = () => {
+    setFresh(!fresh)
+    handTo.current(fresh ? importId : null)
+  }
 
   return (
     <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
@@ -60,7 +70,7 @@ export function PackWorld({
           </p>
           {!fresh && <BroughtNotes notes={read.notes} />}
           <div>
-            <Button variant="ghost" size="sm" onClick={() => setFresh(!fresh)}>
+            <Button variant="ghost" size="sm" onClick={toggle}>
               {fresh ? `Start on ${read.world.name} instead` : 'Start on a new world instead'}
             </Button>
           </div>

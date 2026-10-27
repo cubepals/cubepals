@@ -60,7 +60,10 @@ export function PackDrop({
     refetchInterval: (query) => (query.state.data?.status === 'reading' ? 1500 : false),
   })
   const read = reading.data
-  useHandedOnce(read, onReady)
+  // A pack that came with a world is handed with it, once the world is read (`PackWorld`): handed
+  // alone first, Create would make a server on a new world while the page says it starts on its own.
+  const withWorld = !keepsWorld && read?.status === 'ready' && read.worldImportId !== null
+  useHandedOnce(withWorld ? undefined : read, onReady)
 
   const drop = (event: DragEvent) => {
     event.preventDefault()
