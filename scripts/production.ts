@@ -22,7 +22,9 @@
  *                                     --without-staging says otherwise. The first time, it stops
  *                                     after making the archive and dumps buckets, so their tokens can
  *                                     be made for them. After Terraform, it gives the Database dump
- *                                     workflow its secrets, in the repository's `production` environment
+ *                                     workflow its secrets, in the repository's `production` environment,
+ *                                     unless --keep-dump-secrets leaves the ones it has (where the
+ *                                     GitHub token may not set environment secrets)
  *   bun scripts/production.ts web     main's commit built as the website, pushed as the `production`
  *                                     branch and deployed, when neither Terraform nor anything the
  *                                     Fly apps are built from changed since the last deploy and
@@ -388,7 +390,9 @@ async function apply(): Promise<void> {
   const head = git('rev-parse', 'HEAD')
   buildWorker(site, head, say)
   terraform('apply', '-input=false')
-  setDumpSecrets(values, env)
+  if (process.argv.includes('--keep-dump-secrets'))
+    say('The Database dump workflow keeps the secrets it has (--keep-dump-secrets).')
+  else setDumpSecrets(values, env)
   // The control app first: its release runs the migrations.
   const label = deployLabel(head)
   for (const app of ['control', 'realtime', 'edge'] as const) {
