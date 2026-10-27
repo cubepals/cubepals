@@ -71,16 +71,18 @@ the game keeps its saves, with the player's own system first and a button to cop
 
 ## How it is sent
 
-- **A folder** is sent as a zip that `client-zip` streams from the files as they are read, stored
-  without compression: region files are compressed already. Its size is known before the upload
-  starts (`predictLength`), and nothing is held in memory whole.
+- **A folder** is sent as an uncompressed tarball the browser lays out as a `Blob` of headers and
+  the files' own `File`s (`lib/world-folder.ts`): its size is known before the upload starts,
+  nothing is held in memory whole, and region files are compressed already. Why it isn't a
+  library's is in [dependency-audit.md](dependency-audit.md).
 - **A file** is sent as it is.
 - **Before anything is sent**, the browser looks at the listing (a folder's entries, a zip's
-  central directory) and answers at once for a Bedrock save, no `level.dat`, several worlds, or a
-  file past the size the server takes. The server checks everything again: the browser's look is
-  for speed, not trust.
-- **Large files** go up in parts through the archive store's multipart upload
-  (`s3-archive-store.ts`); a part that fails is sent again, not the whole file.
+  central directory) and answers at once for a Bedrock save, no `level.dat`, or a file past the
+  size the server takes. The server checks everything again: the browser's look is for speed, not
+  trust.
+- **Every upload is one PUT** to a link signed for its size, up to 4 GB, which the store takes in
+  one. Sending it in parts the browser completes needs the bucket to show the page each part's
+  ETag, which it doesn't (dependency-audit.md).
 
 ## Libraries
 
@@ -92,7 +94,7 @@ layout and the decisions.
 | --------------------------------------------- | ---------------------------------------------------------------- |
 | Reading uploaded zips, strictly               | `@zip.js/zip.js`, through `PackArchives` (`pack-archives.ts`)    |
 | A zip's listing in the browser, before upload | `@zip.js/zip.js`, reading the central directory of the `File`    |
-| A folder as a zip, in the browser             | `client-zip`, new, audited as dependency-audit.md says           |
+| A folder as one file, in the browser          | a tarball written here, for the reason dependency-audit.md gives |
 | Reading and writing tarballs                  | `tar` (node-tar), as `readTarball` and `filterTarball` use it    |
 | `level.dat` and player files                  | `prismarine-nbt`, read and written                               |
 | `server.properties`                           | `dot-properties`, through `FileFormats.decode`                   |

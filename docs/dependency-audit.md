@@ -519,6 +519,33 @@ on the bucket for the web origin; RustFS accepted `PutBucketCors` and answered t
 (`docker-compose.yml`'s bucket init sets it locally). R2 supports both; the R2 run is part of the
 blocked R2 item.
 
+## Worlds people bring (2026-10-27)
+
+A world upload is any of the shapes in [world-import.md](world-import.md), read by the same
+libraries as the rest of the uploads, behind `WorldArchives` (`infra/formats/world-archives.ts`).
+Checked against worlds `itzg/minecraft-server` 2026.9.1 made with Minecraft 26.3 and 1.21.11 and
+Paper 26.3-226 and 1.21.11 (`minecraft/world-fixtures/`).
+
+| Need | Library | Observed |
+|---|---|---|
+| A world in a tarball, gzipped or not, every header checked before anything is used | `tar` (node-tar) 7.5.22, `Parser` with `strict: true` | Read what GNU tar 1.35 packs, folders and all; a link, a hard link, a device, `..` and an absolute path are refused by the same rules as a pack's names. node-tar aborts at 1000 times its input inflated, with no floor, so the stream is inflated before it reaches the parser and measured against a pack's floor and ratio |
+| A world in a zip | `@zip.js/zip.js`, as packs are opened (`pack-archives.ts`) | A zip of a folder, and of a saves folder of several worlds |
+| The world's tarball, as a server keeps it | node-tar's `Pack`, fed `ReadEntry`s with headers of its own | GNU tar lists each folder before its files, every entry owned by 1000:1000, the image's `minecraft` user, and the bytes unchanged; gzip level 1, since region files are compressed already |
+| A single-player host's data, as their own player file | `prismarine-nbt` 2.8.0, `parse` then `writeUncompressed` | `Data.Player` written out decodes equal to a real 1.20.1 player file it was made from |
+| Seeds | `prismarine-nbt`'s longs, as `[high, low]` | The seed read from 26.3's `world_gen_settings.dat` is the one the server answered to `/seed` |
+
+**A folder from the browser: written here.** `apps/web/src/lib/world-folder.ts` lays a folder a
+player picked or dropped out as a tarball itself. The upload is one presigned PUT through
+XMLHttpRequest, for its progress, which needs a `Blob` whose size is known before it starts. The
+libraries that write archives in a browser (`client-zip`, zip.js, `@std/tar`, `modern-tar`) give a
+stream. Sending a stream needs `fetch` with a streaming body, which only Chromium sends, or an upload
+in parts that the page completes, which needs the bucket to show the page each part's ETag, and it
+doesn't (`infra/terraform/modules/archive/main.tf`). A ustar header is 512 bytes of fixed fields. A
+`Blob` of the headers and the files' own `File`s is the tarball, its size known before any of it is
+read, and each file is read from disk only as the PUT sends it. GNU tar 1.35 reads it back
+(`world-folder.test.ts`), with names longer than 100 bytes or outside ASCII in POSIX extended
+headers.
+
 ## Realtime TLS over ACME: `acme-client` and Cloudflare's SDK
 
 In `acme` mode (production, §11) the realtime role gets its WebTransport certificate itself:

@@ -30,6 +30,7 @@ import {
 } from '../../../../../ui'
 import { ChangeState, ConfirmChange, changeable, useChanged } from '../settings/shared'
 import { useServer } from '../use-server'
+import { BringIn } from './bring-in'
 
 export default function WorldPage() {
   const server = useServer()
@@ -58,6 +59,7 @@ export default function WorldPage() {
           <NewWorld view={view} />
         </>
       )}
+      <BringIn view={view} />
       {others.length > 0 && <Others view={view} worlds={others} />}
     </>
   )

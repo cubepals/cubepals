@@ -33,6 +33,7 @@ import { BringWorld, WORLD_FILES } from '../bring-world'
 import { ChangeState, ConfirmChange, useChanged } from '../settings/shared'
 import { requestId, useServer } from '../use-server'
 import { useWorldDownload } from './use-download'
+import { useRestoring } from './use-restoring'
 
 /** What the page says backups are, and, where the deployment makes downloads, what one holds. */
 function aboutBackups(kept: number, archives: boolean): string {
@@ -102,7 +103,7 @@ function Backups({
   const trpc = useTRPC()
   const queries = useQueryClient()
   const now = useNow(MINUTE_MS)
-  const [restoring, setRestoring] = useState<BackupView | null>(null)
+  const [restoring, setRestoring] = useRestoring(list.backups)
   const [deleting, setDeleting] = useState<BackupView | null>(null)
   const [bringing, setBringing] = useState<File | null>(null)
   const refresh = () =>
