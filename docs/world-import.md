@@ -82,7 +82,9 @@ Before the plan:
   there is left out, saying why. Brought for a new server, the server starts on the one named, and
   the notes say to upload the same file on its Backups page to keep the others. A saves folder's
   other saves aren't kept: its owner chose one.
-- **Next:** the guide on the site.
+- **The guide is written,** `guides/move-a-minecraft-world-to-a-server`: from single-player, from
+  another host or a server's folder, with mods, and into a server someone has. It waits for review
+  (`approved: false` in `guides.ts`), and its pictures for a run on a local stack.
 
 ## What it does
 

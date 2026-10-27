@@ -49,7 +49,7 @@ function withApproval(guide: Guide, approved: boolean, check: () => void) {
 const first = GUIDES[0] as Guide
 
 describe('guides', () => {
-  test('are the plan’s eight how-to guides, the game modes, Bedrock and the one comparison', () => {
+  test('are the plan’s nine how-to guides, the game modes, Bedrock and the one comparison', () => {
     expect(GUIDES.map((guide) => guide.slug)).toEqual([
       'minecraft-server-for-friends',
       'play-minecraft-java-with-friends',
@@ -58,6 +58,7 @@ describe('guides', () => {
       'minecraft-server-ram',
       'minecraft-server-without-port-forwarding',
       'play-a-modpack-with-friends',
+      'move-a-minecraft-world-to-a-server',
       'minecraft-server-uk-europe',
       'lifesteal-manhunt-skyblock-with-friends',
       'minecraft-bedrock-server',

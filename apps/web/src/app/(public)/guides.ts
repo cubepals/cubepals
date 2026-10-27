@@ -106,6 +106,15 @@ export const GUIDES: readonly Guide[] = [
     approved: true,
   },
   {
+    slug: 'move-a-minecraft-world-to-a-server',
+    title: 'How to move a Minecraft world to a server',
+    description:
+      'Bring a single-player world, or a server’s from another host, to a Cubepals server: same Minecraft, same seed, your things and your players. Mods too.',
+    published: '2026-10-27',
+    modified: '2026-10-27',
+    approved: false,
+  },
+  {
     slug: 'minecraft-server-uk-europe',
     title: 'A Minecraft server for friends in the UK and Europe',
     description:
