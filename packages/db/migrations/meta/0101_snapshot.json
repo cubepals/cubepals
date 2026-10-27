@@ -1,5 +1,5 @@
 {
-  "id": "75ef4db0-100b-41ed-8d0f-5fe838beec62",
+  "id": "f2a9ef55-765d-4deb-828a-8518b041c8d1",
   "prevId": "d1665b7b-3ca4-41f8-82a7-90a76b4adb29",
   "version": "7",
   "dialect": "postgresql",
@@ -1333,6 +1333,13 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "brings_world": {
+          "name": "brings_world",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
         },
         "created_at": {
           "name": "created_at",

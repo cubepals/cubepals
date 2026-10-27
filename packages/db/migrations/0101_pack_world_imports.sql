@@ -1,2 +1,3 @@
 ALTER TABLE "pack_imports" ADD COLUMN "world_import_id" uuid;--> statement-breakpoint
+ALTER TABLE "pack_imports" ADD COLUMN "brings_world" boolean DEFAULT true NOT NULL;--> statement-breakpoint
 ALTER TABLE "pack_imports" ADD CONSTRAINT "pack_imports_world_import_id_world_imports_id_fk" FOREIGN KEY ("world_import_id") REFERENCES "public"."world_imports"("id") ON DELETE no action ON UPDATE no action;

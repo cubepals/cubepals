@@ -96,13 +96,14 @@ export interface PackImportRecord {
   detail: string | null
   /** The world that came inside it, read from the same upload; null where it held none. */
   worldImportId: string | null
+  bringsWorld: boolean
   createdAt: Date
   finishedAt: Date | null
 }
 
 export async function insertPackImport(
   q: Queryable,
-  row: { id: string; ownerId: string; fileName: string; sizeBytes: number },
+  row: { id: string; ownerId: string; fileName: string; sizeBytes: number; bringsWorld?: boolean },
 ): Promise<void> {
   await q.insert(imports).values(row)
 }

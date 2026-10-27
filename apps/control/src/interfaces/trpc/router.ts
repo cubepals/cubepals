@@ -418,7 +418,9 @@ const packs = router({
     .mutation(({ ctx, input }) => ctx.services.packs.beginUpload(ctx.actor, input)),
   finishUpload: authedProcedure
     .input(FinishPackUploadInput)
-    .mutation(({ ctx, input }) => ctx.services.packs.finishUpload(ctx.actor, input.ticket)),
+    .mutation(({ ctx, input }) =>
+      ctx.services.packs.finishUpload(ctx.actor, input.ticket, input.world ?? true),
+    ),
   import: authedProcedure
     .input(PackImportRef)
     .query(({ ctx, input }) => ctx.services.packs.view(ctx.actor, input.importId)),

@@ -48,7 +48,10 @@ export function PackDrop({
     failure,
     send,
   } = useSentImport(
-    { begin: (file) => begin.mutateAsync(file), finish: (ticket) => finish.mutateAsync({ ticket }) },
+    {
+      begin: (file) => begin.mutateAsync(file),
+      finish: (ticket) => finish.mutateAsync({ ticket, world: !keepsWorld }),
+    },
     onStart,
   )
   const [over, setOver] = useState(false)

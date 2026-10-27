@@ -145,7 +145,12 @@ export class PackService {
   }
 
   /** The pack arrived: it is read and built off the request, and its import says when it's ready. */
-  async finishUpload(actor: Actor & { kind: 'user' }, ticket: string): Promise<{ importId: string }> {
+  /** `world` says whether a world inside the pack is read too: not for a server that keeps its own. */
+  async finishUpload(
+    actor: Actor & { kind: 'user' },
+    ticket: string,
+    world = true,
+  ): Promise<{ importId: string }> {
     const pending = await loadPendingUpload(this.#db, ticket)
     if (
       pending === null ||
@@ -165,6 +170,7 @@ export class PackService {
         ownerId: pending.ownerId,
         fileName: pending.fileName,
         sizeBytes: pending.sizeBytes,
+        bringsWorld: world,
       })
       await finishPendingUpload(tx, pending.id, new Date())
       await this.#jobs.enqueuePackImport(tx, pending.id)
@@ -247,14 +253,15 @@ export class PackService {
         await recordStored(tx, { sha512: built.sha512, key, sizeBytes: built.sizeBytes, source: 'built' })
         await savePackContents(tx, { sha512: built.sha512, ...built.contents })
         // A world inside it (a launcher's saves, a server's world) is read from the same upload.
-        const world = built.contents.leftOut.some((left) => left.why === 'world')
-          ? await this.#worlds().fromPack(tx, {
-              ownerId: record.ownerId,
-              key: pending.key,
-              fileName: pending.fileName,
-              sizeBytes: pending.sizeBytes,
-            })
-          : null
+        const world =
+          record.bringsWorld && built.contents.leftOut.some((left) => left.why === 'world')
+            ? await this.#worlds().fromPack(tx, {
+                ownerId: record.ownerId,
+                key: pending.key,
+                fileName: pending.fileName,
+                sizeBytes: pending.sizeBytes,
+              })
+            : null
         // The world's import holds the file now: the pack's upload goes in the same write, so the
         // store's sweep, which clears a finished upload's file, never finds it under the pack.
         if (world !== null) await deletePendingUpload(tx, pending.id)

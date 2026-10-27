@@ -139,6 +139,8 @@ export const packImports = pgTable(
      * to start on (docs/world-import.md); null where it held none, or it came without it.
      */
     worldImportId: uuid('world_import_id').references((): AnyPgColumn => worldImports.id),
+    /** Whether a world inside it is wanted: not where it goes to a server that keeps its own. */
+    bringsWorld: boolean('brings_world').notNull().default(true),
     createdAt: createdAt(),
     finishedAt: ts('finished_at'),
   },

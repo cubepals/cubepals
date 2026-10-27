@@ -406,6 +406,38 @@ describe.skipIf(!hasDatabase)('a world played with mods', () => {
   }, 120_000)
 })
 
+describe.skipIf(!hasDatabase)('a pack with its world, for a server that keeps its own', () => {
+  test('is read as a pack alone: its world is neither read nor counted', async () => {
+    const owner = await h.user('Ash', 'plus')
+    const files: Record<string, Uint8Array> = {}
+    for (const [name, bytes] of Object.entries(await serverFolder('vanilla-1.21.11')))
+      files[`Kept-Server/${name}`] = bytes
+    files['Kept-Server/mods/custom.jar'] = fabricJar('custom', { depends: { minecraft: '1.21.11' } })
+    files['Kept-Server/variables.txt'] = utf8(
+      'MINECRAFT_VERSION=1.21.11\nMODLOADER=Fabric\nMODLOADER_VERSION=0.16.14\n',
+    )
+    files['Kept-Server/libraries/net/fabricmc/fabric-loader/0.16.14/loader.jar'] = utf8('x')
+    const bytes = zipBytes(files)
+    const start = await h.app.packs.beginUpload(owner, {
+      fileName: 'Kept-Server.zip',
+      sizeBytes: bytes.length,
+    })
+    expect((await fetch(start.url, { method: 'PUT', body: bytes, headers: start.headers })).status).toBe(200)
+    const { importId } = await h.app.packs.finishUpload(owner, start.ticket, false)
+    let pack = await h.app.packs.view(owner, importId)
+    for (let tries = 0; tries < 80 && pack.status === 'reading'; tries++) {
+      await Bun.sleep(250)
+      pack = await h.app.packs.view(owner, importId)
+    }
+    if (pack.status !== 'ready') throw new Error(`The pack is ${pack.status}`)
+    expect(pack.worldImportId).toBeNull()
+    const worlds = await h.db.query.worldImports.findMany({
+      where: (t, { eq }) => eq(t.ownerId, owner.userId),
+    })
+    expect(worlds).toEqual([])
+  }, 120_000)
+})
+
 describe.skipIf(!hasDatabase)('a pack with its world, from one upload', () => {
   test('a server’s folder with its mods is read as its pack and its world, and a server made of both', async () => {
     const owner = await h.user('Rook', 'plus')
