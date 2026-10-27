@@ -14,7 +14,6 @@ import { useNow } from '../../../../../lib/hooks'
 import { said, useOutcome } from '../../../../../lib/outcome'
 import { backupTitle, bytes, dayOf, loaderLabel, whenTaken } from '../../../../../lib/present'
 import { sessionName } from '../../../../../lib/session-names'
-import { putFile } from '../../../../../lib/upload'
 import {
   Badge,
   Button,
@@ -27,11 +26,10 @@ import {
   Modal,
   Note,
   PageSkeleton,
-  ProgressBar,
-  TextField,
   Toggle,
 } from '../../../../../ui'
 import { PlusOffer } from '../../../plus-offer'
+import { BringWorld, WORLD_FILES } from '../bring-world'
 import { ChangeState, ConfirmChange, useChanged } from '../settings/shared'
 import { requestId, useServer } from '../use-server'
 import { useWorldDownload } from './use-download'
@@ -186,12 +184,12 @@ function Backups({
             {/* Where the plan doesn't restore downloads it stays, dimmed; the note below says why. */}
             {archives && (
               <FileButton
-                accept=".tar.gz,.tgz,application/gzip"
+                accept={WORLD_FILES}
                 icon={<Upload {...ICON} aria-hidden />}
                 disabled={busy || !list.archives.restore.available}
                 onFile={setBringing}
               >
-                Upload a download
+                Upload a world
               </FileButton>
             )}
             <Button
@@ -316,7 +314,7 @@ function Backups({
         />
       )}
       {bringing && (
-        <BringBack
+        <BringWorld
           view={view}
           file={bringing}
           onClose={() => setBringing(null)}
@@ -355,89 +353,6 @@ function Backups({
         </div>
       </Modal>
     </>
-  )
-}
-
-/**
- * A world downloaded before, sent back: straight to the store, then read for the world it holds
- * and kept as a backup. Restoring it is the next step, offered at once.
- */
-function BringBack({
-  view,
-  file,
-  onClose,
-  onKept,
-}: {
-  view: ServerView
-  file: File
-  onClose: () => void
-  onKept: (backupId: string) => void
-}) {
-  const trpc = useTRPC()
-  const begin = useMutation(trpc.backups.beginUpload.mutationOptions())
-  const finish = useMutation(trpc.backups.finishUpload.mutationOptions())
-  const [name, setName] = useState('')
-  const [progress, setProgress] = useState<{ stage: string; done: number } | null>(null)
-  const [failure, setFailure] = useState<string | null>(null)
-  const send = async () => {
-    setFailure(null)
-    try {
-      setProgress({ stage: 'Uploading…', done: 0 })
-      const start = await begin.mutateAsync({ serverId: view.id, fileName: file.name, sizeBytes: file.size })
-      await putFile(start.url, start.headers, file, (sent) =>
-        setProgress({ stage: 'Uploading…', done: (sent / file.size) * 100 }),
-      )
-      setProgress({ stage: 'Reading the world…', done: 100 })
-      const kept = await finish.mutateAsync({
-        serverId: view.id,
-        ticket: start.ticket,
-        ...(name.trim() ? { name: name.trim() } : {}),
-      })
-      onKept(kept.backupId)
-    } catch (error) {
-      setFailure(messageOf(error))
-      setProgress(null)
-    }
-  }
-  return (
-    <Modal
-      open
-      onClose={progress ? () => {} : onClose}
-      title="Bring back a world"
-      actions={
-        <>
-          <Button variant="ghost" disabled={progress !== null} onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" disabled={progress !== null} onClick={() => void send()}>
-            Upload
-          </Button>
-        </>
-      }
-    >
-      <div className="bk-stack" style={{ gap: 'var(--space-16)' }}>
-        <p>
-          {file.name} · {bytes(file.size)}. It becomes a backup of this server, and you choose whether to
-          restore it next.
-        </p>
-        <TextField
-          label="Name"
-          optional
-          maxLength={40}
-          placeholder="Uploaded world"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          help="Used if this server never had the world before."
-        />
-        {progress && (
-          <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
-            <span className="type-body-sm">{progress.stage}</span>
-            <ProgressBar value={progress.done} label={`Uploading ${file.name}`} />
-          </div>
-        )}
-        {failure && <Note tone="danger">{failure}</Note>}
-      </div>
-    </Modal>
   )
 }
 

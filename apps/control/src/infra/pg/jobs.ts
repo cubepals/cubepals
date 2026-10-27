@@ -59,12 +59,14 @@ const LISTING_ELIGIBILITY = 'listing-eligibility'
 const PACK_IMPORT = 'pack-import'
 /** World downloads to copy out of their archives: one job per copy. */
 const WORLD_DOWNLOAD = 'world-download'
+/** Uploaded worlds to read and bring to their server: one job queued per upload at a time. */
+const WORLD_IMPORT = 'world-import'
 /** Reviewed releases of curated packs to fetch and check: one job per release at a time. */
 const CURATION_INGEST = 'curation-ingest'
 /** Uploaded jars to read for malware: one job per bytes queued or running at a time. */
 const JAR_CHECK = 'jar-check'
 /**
- * The tries after the first that a pack import, a world copy and a release check get: each moves
+ * The tries after the first that a pack or world import, a world copy and a release check get: each moves
  * gigabytes, so one, then its owner is told. Their jobs keep their queue's.
  */
 const HEAVY_RETRIES = 1
@@ -217,6 +219,19 @@ export async function startBoss(
     },
     BACKGROUND_KEPT,
   )
+  // Bringing a world in reads and rewrites one of up to a few gigabytes, and may be asked again
+  // once its owner has answered what it asked: one queued at a time per upload.
+  await ensureQueue(
+    boss,
+    WORLD_IMPORT,
+    {
+      policy: 'standard',
+      retryLimit: HEAVY_RETRIES,
+      retryDelay: 30,
+      expireInSeconds: 3600,
+    },
+    BACKGROUND_KEPT,
+  )
   // A copy reads and writes a world of up to a few gigabytes, as a pack import does.
   await ensureQueue(
     boss,
@@ -330,6 +345,10 @@ export class PgBossJobs implements JobQueue {
 
   async enqueuePackImport(tx: Tx, importId: string): Promise<void> {
     await this.#boss.send(PACK_IMPORT, { importId }, { id: importId, db: fromDrizzle(tx, sql) })
+  }
+
+  async enqueueWorldImport(tx: Tx, importId: string): Promise<void> {
+    await this.#boss.send(WORLD_IMPORT, { importId }, { singletonKey: importId, db: fromDrizzle(tx, sql) })
   }
 
   async enqueueWorldDownload(tx: Tx, downloadId: string): Promise<void> {
@@ -447,33 +466,40 @@ export async function workListingEligibility(
   })
 }
 
+/** What reads an upload off the request that sent it, and what is told when it gave up. */
+export interface Importer {
+  runImport(importId: string): Promise<void>
+  importGaveUp(importId: string, error: string): Promise<void>
+}
+
 /**
  * Reads and builds uploaded packs, one at a time on each worker. The last attempt that fails
  * tells the pack's owner it couldn't be read, rather than leaving it reading forever.
  */
-export async function workPackImports(
+export const workPackImports = (boss: PgBoss, packs: Importer, pollingIntervalSeconds = 2) =>
+  workImports(boss, PACK_IMPORT, packs, pollingIntervalSeconds)
+
+/** Reads uploaded worlds and brings each to its server, as packs are read. */
+export const workWorldImports = (boss: PgBoss, worlds: Importer, pollingIntervalSeconds = 2) =>
+  workImports(boss, WORLD_IMPORT, worlds, pollingIntervalSeconds)
+
+async function workImports(
   boss: PgBoss,
-  handlers: {
-    run: (importId: string) => Promise<void>
-    gaveUp: (importId: string, error: string) => Promise<void>
-  },
-  pollingIntervalSeconds = 2,
+  queue: string,
+  importer: Importer,
+  pollingIntervalSeconds: number,
 ): Promise<void> {
-  await boss.work(
-    PACK_IMPORT,
-    { ...background(pollingIntervalSeconds), localConcurrency: 1 },
-    async ([job]) => {
-      if (!job) return
-      const { importId } = job.data as { importId: string }
-      try {
-        await handlers.run(importId)
-      } catch (error) {
-        if (job.retryCount >= HEAVY_RETRIES)
-          await handlers.gaveUp(importId, error instanceof Error ? error.message : String(error))
-        throw error
-      }
-    },
-  )
+  await boss.work(queue, { ...background(pollingIntervalSeconds), localConcurrency: 1 }, async ([job]) => {
+    if (!job) return
+    const { importId } = job.data as { importId: string }
+    try {
+      await importer.runImport(importId)
+    } catch (error) {
+      if (job.retryCount >= HEAVY_RETRIES)
+        await importer.importGaveUp(importId, error instanceof Error ? error.message : String(error))
+      throw error
+    }
+  })
 }
 
 /**

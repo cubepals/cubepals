@@ -133,6 +133,11 @@ export interface JobQueue {
   enqueueJarCheck(tx: Tx, sha512: string): Promise<void>
   /** `pack-import`: an uploaded pack read and built, once, off the request that sent it. */
   enqueuePackImport(tx: Tx, importId: string): Promise<void>
+  /**
+   * `world-import`: an uploaded world read and brought to its server, off the request that sent
+   * it; asked again once its owner has answered what it asked. One queued at a time per upload.
+   */
+  enqueueWorldImport(tx: Tx, importId: string): Promise<void>
   /** `world-download`: an archive's world copied for its owner to download, once, on a worker. */
   enqueueWorldDownload(tx: Tx, downloadId: string): Promise<void>
   /**

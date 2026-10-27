@@ -4,7 +4,7 @@
 
 import { PassThrough, Readable, Transform } from 'node:stream'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
-import { createGunzip } from 'node:zlib'
+import { createGunzip, gzipSync } from 'node:zlib'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { configure } from '@zip.js/zip.js'
 import { parse as parseProperties } from 'dot-properties'
@@ -130,6 +130,24 @@ export class LibraryFileFormats implements FileFormats {
     } catch (error) {
       throw new UnreadableFile(`Not an NBT file: ${messageOf(error)}`)
     }
+  }
+
+  async nbtPart(bytes: Uint8Array, path: readonly string[]): Promise<Uint8Array | null> {
+    let parsed: nbt.NBT
+    try {
+      parsed = (await nbt.parse(Buffer.from(bytes), 'big')).parsed
+    } catch (error) {
+      throw new UnreadableFile(`Not an NBT file: ${messageOf(error)}`)
+    }
+    let tag: nbt.Tags[nbt.TagType] = parsed
+    for (const key of path) {
+      if (tag.type !== 'compound') return null
+      const next: nbt.Tags[nbt.TagType] | undefined = tag.value[key]
+      if (next === undefined) return null
+      tag = next
+    }
+    if (tag.type !== 'compound') return null
+    return new Uint8Array(gzipSync(nbt.writeUncompressed({ type: 'compound', name: '', value: tag.value })))
   }
 
   async readTarball(

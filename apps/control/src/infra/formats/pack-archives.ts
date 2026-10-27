@@ -380,8 +380,22 @@ function checkedName(entry: Entry): string {
     throw new HostileArchive('unsafe_name', `${JSON.stringify(entry.filename)} is not UTF-8`)
   }
   const name = normalizeFilename(decoded)
-  const path = entry.directory && name.endsWith('/') ? name.slice(0, -1) : name
-  const unsafe = (why: string) => new HostileArchive('unsafe_name', `${JSON.stringify(name)} ${why}`)
+  const path = checkedPath(entry.directory && name.endsWith('/') ? name.slice(0, -1) : name)
+  if (name !== entry.filename)
+    throw new HostileArchive(
+      'malformed',
+      `${JSON.stringify(name)} is also named ${JSON.stringify(entry.filename)}`,
+    )
+  return path
+}
+
+/**
+ * A path held to every rule for a plain relative one, as the archive spells it after
+ * `normalizeFilename`: not empty or absolute, no control or bidirectional character, no empty, "."
+ * or ".." part, no Windows device, within the length and depth limits. A HostileArchive otherwise.
+ */
+export function checkedPath(path: string): string {
+  const unsafe = (why: string) => new HostileArchive('unsafe_name', `${JSON.stringify(path)} ${why}`)
   if (path === '') throw unsafe('is empty')
   if (path.startsWith('/') || DRIVE.test(path)) throw unsafe('is absolute')
   if (UNSAFE_CHARACTERS.test(path)) throw unsafe('holds a control or bidirectional character')
@@ -395,11 +409,6 @@ function checkedName(entry: Entry): string {
     // Windows drops trailing dots and spaces before it looks for a device name.
     if (RESERVED.test(part.replace(/[. ]+$/, ''))) throw unsafe('names a Windows device')
   }
-  if (name !== entry.filename)
-    throw new HostileArchive(
-      'malformed',
-      `${JSON.stringify(name)} is also named ${JSON.stringify(entry.filename)}`,
-    )
   return path
 }
 
@@ -407,12 +416,12 @@ function checkedName(entry: Entry): string {
  * Old PowerShell `Compress-Archive` wrote backslashes, and macOS decomposes accents: both are the
  * same path a player meant, so they are normalised rather than refused.
  */
-function normalizeFilename(name: string): string {
+export function normalizeFilename(name: string): string {
   return name.replaceAll('\\', '/').normalize('NFC')
 }
 
 /** What a case-insensitive disk, or a normalising one, would make of a name. */
-const keyOf = (name: string) => name.normalize('NFC').toLowerCase()
+export const keyOf = (name: string) => name.normalize('NFC').toLowerCase()
 
 /**
  * Each entry's local header and data, at the least, must end before the next entry starts, and

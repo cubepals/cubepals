@@ -4,22 +4,22 @@
 
 /**
  * A world upload that reading stops short of, through a real S3 store and the real reader: the
- * player is told which limit stopped it and what to do, and nothing is kept as a backup.
+ * player is told why and what to do, nothing is kept as a backup, and the upload goes.
  */
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { createServer, type Server } from 'node:http'
-import type { AddressInfo } from 'node:net'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { LibraryFileFormats } from '../../infra/formats/file-formats.ts'
+import { schema } from '@blockly/db'
+import { eq } from 'drizzle-orm'
+import { LibraryUploadArchives } from '../../infra/formats/world-archives.ts'
 import { S3ArchiveStore } from '../../infra/s3/s3-archive-store.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { levelDat } from '../../testing/uploads.ts'
-import type { UserActor } from '../actor.ts'
+import { bringWorld } from '../../testing/world-imports.ts'
 import { listBackups } from '../backups/persistence.ts'
 
 const run = promisify(execFile)
@@ -34,9 +34,6 @@ const s3 = {
 describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('a world upload read no further', () => {
   let h: Harness
   let scratch: string
-  // Answers, then sends nothing: a download that never finishes arriving.
-  let stalled: Server
-  let stalledUrl = ''
   const store = new S3ArchiveStore({
     endpoint: s3.endpoint ?? '',
     bucket: s3.bucket ?? '',
@@ -48,91 +45,72 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('a world upload read
   beforeAll(async () => {
     scratch = await mkdtemp(join(tmpdir(), 'blockly-world-refusals-'))
     h = await startHarness({ capabilities: { archives: store, billing: null } })
-    stalled = createServer((_request, response) => response.writeHead(200).write(''))
-    await new Promise<void>((resolve) => stalled.listen(0, '127.0.0.1', resolve))
-    stalledUrl = `http://127.0.0.1:${(stalled.address() as AddressInfo).port}/world.tar.gz`
   }, 30_000)
 
   afterAll(async () => {
-    stalled.closeAllConnections()
-    stalled.close()
     await h.close()
     await rm(scratch, { recursive: true, force: true })
   })
 
-  /** A server's storage, packed as a download is. */
-  const tarball = async (files: Record<string, string | Uint8Array>) => {
+  /** A folder packed as GNU tar packs it, after `prepare` has done what a test needs on disk. */
+  const tarball = async (
+    files: Record<string, string | Uint8Array>,
+    prepare?: (dir: string) => Promise<void>,
+  ) => {
     const dir = join(scratch, randomUUID())
     for (const [path, content] of Object.entries(files)) {
       await mkdir(join(dir, 'volume', path, '..'), { recursive: true })
       await writeFile(join(dir, 'volume', path), content)
     }
+    await prepare?.(join(dir, 'volume'))
     await run('tar', ['-czf', join(dir, 'world.tar.gz'), '-C', join(dir, 'volume'), '.'])
     return new Uint8Array(await readFile(join(dir, 'world.tar.gz')))
   }
-  const refusal = async (owner: UserActor, id: string, bytes: Uint8Array) => {
-    const start = await h.app.backups.beginWorldUpload(owner, id, {
-      fileName: 'world.tar.gz',
-      sizeBytes: bytes.length,
-    })
-    const put = await fetch(start.url, { method: 'PUT', body: bytes, headers: start.headers })
-    expect(put.status).toBe(200)
-    return h.app.backups.finishWorldUpload(owner, id, start.ticket).then(
-      () => null,
-      (error: { code?: string; message: string }) => ({ code: error.code, message: error.message }),
-    )
-  }
-  /**
-   * The real reader, held to a tighter limit than a real world needs to reach, and reading `from`
-   * in place of the store when given.
-   */
-  const tightened = (limits: { maxInflatedBytes?: number; deadlineMs?: number }, from?: () => string) => {
-    const read = LibraryFileFormats.prototype.readTarball
-    return spyOn(LibraryFileFormats.prototype, 'readTarball').mockImplementation(function (
-      this: LibraryFileFormats,
-      url,
-      options,
-    ) {
-      return read.call(this, from?.() ?? url, { ...options, ...limits })
-    })
-  }
+  const world = { 'server.properties': 'level-name=world\n', 'world/level.dat': levelDat('26.3') }
 
-  test('the player is told which limit stopped it, and what to do', async () => {
-    // Free reads every download whole, looking for mods, so it reads as far as any limit.
+  test('the player is told why, and nothing of the upload is kept', async () => {
     const owner = await h.user('Steve', 'free')
     const { id } = await h.create(owner, { loader: 'vanilla' })
-    const world = { 'server.properties': 'level-name=world\n', 'world/level.dat': levelDat('26.3') }
 
-    const manyWorlds: Record<string, string | Uint8Array> = { ...world }
-    for (let i = 0; i < 70; i++) manyWorlds[`world_${i}/level.dat`] = levelDat('26.3')
-    expect(await refusal(owner, id, await tarball(manyWorlds))).toEqual({
-      code: 'invalid_upload',
-      message: 'This download holds more worlds than one server runs. Upload one server’s download.',
+    // Opened to a tighter limit than any real world reaches, as if it were larger than any disk.
+    const open = LibraryUploadArchives.prototype.openWorld
+    const tight = spyOn(LibraryUploadArchives.prototype, 'openWorld').mockImplementation(function (
+      this: LibraryUploadArchives,
+      path,
+      limits,
+    ) {
+      return open.call(this, path, { ...limits, maxTotalBytes: 10 })
     })
-
-    // Inflated a megabyte at a time, so the first counted is already past this.
-    const small = tightened({ maxInflatedBytes: 1000 })
     try {
-      expect(await refusal(owner, id, await tarball(world))).toEqual({
-        code: 'invalid_upload',
+      expect(await bringWorld(h, owner, id, await tarball(world))).toMatchObject({
+        status: 'refused',
         message: 'This world is larger than any Cubepals server holds.',
       })
     } finally {
-      small.mockRestore()
+      tight.mockRestore()
     }
 
-    // Read from a download that never finishes, so only the deadline ends it.
-    const slow = tightened({ deadlineMs: 200 }, () => stalledUrl)
-    try {
-      expect(await refusal(owner, id, await tarball(world))).toEqual({
-        code: 'invalid_upload',
-        message:
-          'Reading this world took too long. Try a smaller world, or write to support and we’ll help bring this one in.',
-      })
-    } finally {
-      slow.mockRestore()
-    }
+    // A link in the world could reach outside it once unpacked on the server.
+    const linked = await tarball(world, (dir) => symlink('/etc/passwd', join(dir, 'world', 'region')))
+    expect(await bringWorld(h, owner, id, linked)).toMatchObject({
+      status: 'refused',
+      message: 'Cubepals can’t open this file safely. Zip the world’s folder again and upload that.',
+    })
+
+    // A gzip that is no tarball inside.
+    expect(
+      await bringWorld(h, owner, id, new Uint8Array(Bun.gzipSync(new TextEncoder().encode('no tarball')))),
+    ).toMatchObject({
+      status: 'refused',
+      message:
+        'This file isn’t a zip or a .tar.gz, or it was cut short. Zip the world’s folder and upload that.',
+    })
 
     expect((await listBackups(h.db, id)).filter((b) => b.trigger === 'uploaded')).toEqual([])
+    const pending = await h.db
+      .select()
+      .from(schema.pendingUploads)
+      .where(eq(schema.pendingUploads.serverId, id))
+    expect(pending).toEqual([])
   }, 60_000)
 })

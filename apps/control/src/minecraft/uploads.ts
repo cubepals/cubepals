@@ -5,7 +5,8 @@
 import { oneLine } from '@blockly/contracts/plain-text'
 import { isString, list, record, text } from './plain-data.ts'
 import { compareVersions } from './versions.ts'
-import { isLevelName, LEVEL_TYPES, type LevelType } from './worlds.ts'
+import { levelTypeNamed } from './world-facts.ts'
+import { isLevelName, type LevelType } from './worlds.ts'
 
 /**
  * What uploaded files mean to Minecraft (§15.2): the loader metadata inside a mod or plugin jar,
@@ -368,23 +369,11 @@ export function uploadedWorld(
   if (!version) return { refused: 'This world is from before Minecraft 1.9, too old to open here.' }
   return {
     levelName,
-    levelType: levelTypeOf(properties['level-type']),
+    levelType: levelTypeNamed(properties['level-type']),
     seed: oneLine(properties['level-seed'] ?? '').trim() || null,
     hardcore: properties.hardcore?.trim() === 'true',
     gameVersion: version,
   }
-}
-
-/** Older servers wrote `DEFAULT`, `largeBiomes` and friends; anything unknown generates as normal. */
-function levelTypeOf(value: string | undefined): LevelType {
-  const key = (value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/^minecraft:/, '')
-  const named = LEVEL_TYPES.find((t) => t === `minecraft:${key}`)
-  if (named) return named
-  if (key === 'largebiomes') return 'minecraft:large_biomes'
-  return 'minecraft:normal'
 }
 
 // ─── Plain-data helpers ─────────────────────────────────────────────────────────────────────

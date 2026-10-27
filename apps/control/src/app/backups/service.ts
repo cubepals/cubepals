@@ -3,28 +3,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { randomUUID } from 'node:crypto'
-import { NAME_MAX_LENGTH } from '@blockly/contracts'
 import { DAY_MS, HOUR_S, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
 import { type Db, schema, type Tx } from '@blockly/db'
-import {
-  comesWith,
-  entitlementsFor,
-  PLAN_KEYS,
-  planThatRuns,
-  WORLD_SHARE_OF_DISK,
-} from '../../domain/account/entitlements.ts'
+import { entitlementsFor, PLAN_KEYS, WORLD_SHARE_OF_DISK } from '../../domain/account/entitlements.ts'
 import type { RevisionDraft } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
-import {
-  isAddedJar,
-  levelNameOf,
-  PROPERTIES_FILE,
-  type UploadedWorld,
-  uploadedWorld,
-  wantedInWorldArchive,
-} from '../../minecraft/uploads.ts'
+import { levelNameOf, PROPERTIES_FILE, wantedInWorldArchive } from '../../minecraft/uploads.ts'
 import { compareVersions } from '../../minecraft/versions.ts'
-import { DOWNLOAD_NOTE, jarsInNote } from '../../minecraft/world-download.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
 import type { ArtifactService } from '../artifacts/service.ts'
@@ -32,9 +17,10 @@ import { type DeploymentCapabilities, requireCapability } from '../capabilities.
 import { AppError, NotFound } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
-import { type FileFormats, ReadCutShort, UnreadableFile } from '../ports/formats.ts'
+import type { FileFormats, PackArchives, WorldArchives } from '../ports/formats.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { LoaderBuilds } from '../ports/loaders.ts'
+import type { PlayerProfiles } from '../ports/minecraft.ts'
 import { RuntimeUnsupported } from '../ports/runtime.ts'
 import { requireWithinPlan, runsOf } from '../revisions/caps.ts'
 import { pinUnpinned } from '../revisions/pins.ts'
@@ -50,10 +36,9 @@ import {
   lockServer,
   setDesired,
 } from '../servers/persistence.ts'
-import { loadRevisionFields } from '../servers/revision-reads.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
-import { claimPendingUpload, insertPendingUpload, loadPendingUpload } from '../uploads/persistence.ts'
-import { insertWorld, keptWorlds, listWorlds, markPruned, markWorldDeleted } from '../worlds/persistence.ts'
+import { insertPendingUpload } from '../uploads/persistence.ts'
+import { keptWorlds } from '../worlds/persistence.ts'
 import { downloadsErased, downloadsToErase } from './download-records.ts'
 import { WorldDownloads } from './downloads.ts'
 import {
@@ -66,11 +51,11 @@ import {
   insertArchive,
   latestBackup,
   latestRestorePoint,
-  listBackups,
   loadBackup,
   readySnapshots,
   setBackupStatus,
 } from './persistence.ts'
+import { WorldImports } from './world-imports.ts'
 
 /** Snapshots taken before a change, a restore or a move: the latest few, apart from the owner's own. */
 const SAFETY_KEPT = 3
@@ -101,15 +86,6 @@ const MAX_WORLD_FILE_BYTES = 4 * 1024 * 1024
  */
 const MAX_KEPT_WORLD_FILES = 64
 const MAX_KEPT_WORLD_BYTES = 4 * MAX_WORLD_FILE_BYTES
-/** What a player is told when reading their upload stopped short, by the limit that stopped it. */
-const CUT_SHORT_BECAUSE: Record<ReadCutShort['limit'], string> = {
-  kept: 'This download holds more worlds than one server runs. Upload one server’s download.',
-  size: 'This world is larger than any Cubepals server holds.',
-  time: 'Reading this world took too long. Try a smaller world, or write to support and we’ll help bring this one in.',
-}
-/** An uploaded world stays at least this long, whatever the plan keeps, so there is time to restore it. */
-const UPLOADED_KEPT_DAYS = 7
-
 /** Where an archive lives in the store: under its server, named by its backup. */
 
 /**
@@ -128,6 +104,8 @@ export class BackupService {
   readonly #builds: LoaderBuilds
   /** What an archive's owner downloads of it (`downloads.ts`). */
   readonly downloads: WorldDownloads
+  /** Worlds their owners upload, brought in as backups (`world-imports.ts`). */
+  readonly imports: WorldImports
 
   constructor(deps: {
     db: Db
@@ -140,8 +118,10 @@ export class BackupService {
     ports: {
       capabilities: DeploymentCapabilities
       formats: FileFormats
+      archives: PackArchives & WorldArchives
       loaderBuilds: LoaderBuilds
       jobs: JobQueue
+      profiles: PlayerProfiles
     }
   }) {
     this.#db = deps.db
@@ -155,6 +135,7 @@ export class BackupService {
     this.#builds = deps.ports.loaderBuilds
     const { official, ports } = deps
     this.downloads = new WorldDownloads({ db: deps.db, policy: deps.policy, official, ...ports })
+    this.imports = new WorldImports({ db: deps.db, policy: deps.policy, events: deps.events, ...ports })
   }
 
   /** A snapshot now. While the server runs, saving pauses so the world on disk is consistent. */
@@ -221,10 +202,10 @@ export class BackupService {
     file: { fileName: string; sizeBytes: number },
   ): Promise<{ ticket: string; url: string; headers: Record<string, string> }> {
     const fileName = (file.fileName.split(/[\\/]/).pop() ?? '').trim()
-    if (!/\.(tar\.gz|tgz)$/i.test(fileName))
-      throw new AppError('invalid_upload', 'Upload a world you downloaded from Cubepals: a .tar.gz file.')
+    const refused = refusedByName(fileName)
+    if (refused !== null) throw new AppError('invalid_upload', refused)
     if (!Number.isInteger(file.sizeBytes) || file.sizeBytes <= 0 || file.sizeBytes > MAX_WORLD_BYTES)
-      throw new AppError('invalid_upload', 'A world download can be up to 4 GB.')
+      throw new AppError('invalid_upload', 'A world can be up to 4 GB.')
     return this.#db.transaction(async (tx) => {
       const server = authorize(actor, await findServer(tx, serverId))
       // The biggest disk it may have: a world bigger than its disk now gets a bigger one when it is
@@ -235,7 +216,7 @@ export class BackupService {
       if (file.sizeBytes > limit)
         throw new AppError(
           'invalid_upload',
-          `This server has room for a world download of up to ${Number((limit / 1024 ** 3).toFixed(1))} GB.`,
+          `This server has room for a world of up to ${Number((limit / 1024 ** 3).toFixed(1))} GB.`,
         )
       await this.#policy.require(tx, server.ownerId, { kind: 'restore_archive' })
       const store = requireCapability(this.#caps, 'archives')
@@ -257,96 +238,16 @@ export class BackupService {
   }
 
   /**
-   * The second half: the download is read for the world it holds, then kept as a backup of the
-   * server, to be restored like any other. A world the server has never had is recorded as one
-   * that exists only in a backup, until it is restored.
+   * The second half: the world is read off the request, on a worker (`world-imports.ts`), and kept
+   * as a backup of the server, to be restored like any other.
    */
-  async finishWorldUpload(
+  finishWorldUpload(
     actor: Actor,
     serverId: string,
     ticket: string,
     name?: string,
-  ): Promise<BackupRecord> {
-    const server = authorize(actor, await findServer(this.#db, serverId))
-    const pending = await loadPendingUpload(this.#db, ticket)
-    if (pending === null || pending.kind !== 'world' || pending.serverId !== server.id)
-      throw new NotFound('Upload')
-    await this.#db.transaction((tx) => this.#policy.require(tx, server.ownerId, { kind: 'restore_archive' }))
-    const store = requireCapability(this.#caps, 'archives')
-    const arrived = await store.head(pending.key)
-    if (arrived === null) throw new AppError('invalid_upload', 'The file never arrived. Upload it again.')
-    if (arrived.sizeBytes !== pending.sizeBytes)
-      throw new AppError('invalid_upload', 'The file didn’t arrive whole. Upload it again.')
-    const link = await store.presignGet(pending.key, READ_LINK_SECONDS, 'browser')
-    const standing = await loadStanding(this.#db, server.ownerId)
-    const plan = entitlementsFor(standing.plan, standing.limitOverrides)
-    // A world made with mods is looked through whole on a plan without them: opened on plain
-    // Minecraft, it would lose every modded block and item without a word.
-    const { world, addedJars } = await this.#readWorld(link.url, !plan.mayUseMods)
-    if (addedJars && !plan.mayUseMods)
-      throw new AppError(
-        'not_entitled',
-        comesWith('Worlds made with mods', planThatRuns({ tier: '3g', loader: 'fabric', modded: true })),
-      )
-    const desired = await loadRevisionFields(this.#db, server.desiredRevisionId, ['gameVersion'])
-    if (compareVersions(world.gameVersion, desired.gameVersion) > 0)
-      throw new AppError(
-        'version_downgrade',
-        `This world was last played on Minecraft ${world.gameVersion}, newer than this server's ${desired.gameVersion}. Move the server to ${world.gameVersion} first, then try again.`,
-      )
-    const days = Math.max(plan.backupPolicy.archiveRetentionDays, UPLOADED_KEPT_DAYS)
-    const now = new Date()
-
-    return this.#db.transaction(async (tx) => {
-      const locked = authorize(actor, await lockServer(tx, server.id))
-      // One upload is one backup: the same finish asked again gets the backup the first one made.
-      if (!(await claimPendingUpload(tx, pending.id))) {
-        const made = (await listBackups(tx, locked.id)).find((b) => b.archiveKey === pending.key)
-        if (made === undefined) throw new NotFound('Upload')
-        return made
-      }
-      const known = (await listWorlds(tx, locked.id)).find((w) => w.levelName === world.levelName)
-      let worldId = known?.id
-      if (worldId === undefined) {
-        worldId = (
-          await insertWorld(tx, {
-            serverId: locked.id,
-            levelName: world.levelName,
-            name: name?.trim().slice(0, NAME_MAX_LENGTH) || 'Uploaded world',
-            seed: world.seed,
-            levelType: world.levelType,
-            hardcore: world.hardcore,
-            generatedOnVersion: world.gameVersion,
-          })
-        ).id
-        // Not on the server until the backup is restored.
-        await markWorldDeleted(tx, worldId, now)
-        await markPruned(tx, [worldId], now)
-      }
-      const backup = await insertArchive(tx, {
-        id: randomUUID(),
-        serverId: locked.id,
-        worldId,
-        revisionId: locked.desiredRevisionId,
-        trigger: 'uploaded',
-        status: 'ready',
-        archiveKey: pending.key,
-        sizeBytes: arrived.sizeBytes,
-        expiresAt: new Date(now.getTime() + days * DAY_MS),
-        worldFacts: {
-          seed: world.seed,
-          levelType: world.levelType,
-          hardcore: world.hardcore,
-          gameVersion: world.gameVersion,
-        },
-      })
-      await this.#audit(tx, actor, 'server.world_uploaded', locked.id, {
-        backupId: backup.id,
-        level: world.levelName,
-      })
-      await this.#events.publish(tx, { type: 'backup_changed', serverId: locked.id, ownerId: locked.ownerId })
-      return backup
-    })
+  ): Promise<{ importId: string }> {
+    return this.imports.finish(actor, serverId, ticket, name)
   }
 
   /**
@@ -405,68 +306,6 @@ export class BackupService {
       deadlineMs: READ_DEADLINE_MS,
     })
     return names
-  }
-
-  /** The world a download holds: named in its server.properties, described in its level.dat. */
-  async #readWorld(url: string, lookForJars: boolean): Promise<{ world: UploadedWorld; addedJars: boolean }> {
-    const text = new TextDecoder()
-    let addedJars = false
-    const properties = (found: ReadonlyMap<string, Uint8Array>): Record<string, string> | null => {
-      const raw = found.get(PROPERTIES_FILE)
-      return raw === undefined
-        ? null
-        : (this.#formats.decode('properties', text.decode(raw)) as Record<string, string>)
-    }
-    let files: Map<string, Uint8Array>
-    try {
-      files = await this.#formats.readTarball(url, {
-        wanted: (path) => {
-          if (isAddedJar(path)) addedJars = true
-          // A world downloaded from Cubepals names the mods it was played with in its note instead.
-          return wantedInWorldArchive(path) || path === DOWNLOAD_NOTE
-        },
-        enough: (found) => {
-          // Looking for jars reads the whole download: where they sit in it is anyone's guess.
-          if (lookForJars) return false
-          try {
-            const read = properties(found)
-            const level = read === null ? null : levelNameOf(read)
-            return level !== null && found.has(`${level}/level.dat`)
-          } catch {
-            return false
-          }
-        },
-        maxEntryBytes: MAX_WORLD_FILE_BYTES,
-        maxKeptEntries: MAX_KEPT_WORLD_FILES,
-        maxKeptBytes: MAX_KEPT_WORLD_BYTES,
-        maxInflatedBytes: MAX_INFLATED_WORLD_BYTES,
-        deadlineMs: READ_DEADLINE_MS,
-      })
-    } catch (error) {
-      if (error instanceof ReadCutShort) throw new AppError('invalid_upload', CUT_SHORT_BECAUSE[error.limit])
-      if (error instanceof UnreadableFile)
-        throw new AppError('invalid_upload', 'This file isn’t a whole world download (.tar.gz).')
-      throw error
-    }
-    const note = files.get(DOWNLOAD_NOTE)
-    if (note !== undefined && jarsInNote(text.decode(note)).length > 0) addedJars = true
-    let read: Record<string, string> | null
-    try {
-      read = properties(files)
-    } catch {
-      throw new AppError('invalid_upload', 'The download’s server settings can’t be read.')
-    }
-    const level = read === null ? null : levelNameOf(read)
-    const levelDat = level === null ? undefined : files.get(`${level}/level.dat`)
-    const decoded =
-      levelDat === undefined
-        ? undefined
-        : await this.#formats.decodeNbt(levelDat).catch(() => {
-            throw new AppError('invalid_upload', `The world’s ${level}/level.dat can’t be read.`)
-          })
-    const world = uploadedWorld(read, decoded)
-    if ('refused' in world) throw new AppError('invalid_upload', world.refused)
-    return { world, addedJars }
   }
 
   async deleteBackup(actor: Actor, serverId: string, backupId: string): Promise<void> {
@@ -715,4 +554,17 @@ export class BackupService {
       data,
     })
   }
+}
+
+/**
+ * Why a world can't be uploaded under this name, before it is sent; null where it can. A world
+ * comes as a zip or a tarball, gzipped or not; Bedrock's own files and other archivers' are named.
+ */
+function refusedByName(fileName: string): string | null {
+  if (/\.(zip|tar|tar\.gz|tgz)$/i.test(fileName)) return null
+  if (/\.(mcworld|mcpack|mcaddon|mctemplate)$/i.test(fileName))
+    return 'This is a Bedrock world. A Cubepals server plays Java worlds, which Bedrock players join too, and can’t open a Bedrock save.'
+  if (/\.(rar|7z)$/i.test(fileName))
+    return 'Cubepals can’t open this kind of file. Zip the world’s folder and upload that.'
+  return 'Upload the world as a zip of its folder, or as the .tar.gz a server download comes as.'
 }

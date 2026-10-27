@@ -116,6 +116,19 @@ export const levelDat = (version: string): Uint8Array =>
     }),
   )
 
+/**
+ * A single-player save's level.dat: a world's own, with its host's data where the game keeps it in
+ * one (`Data.Player`), taken whole from a player's file.
+ */
+export async function withHost(level: Uint8Array, player: Uint8Array): Promise<Uint8Array> {
+  const world = (await nbt.parse(Buffer.from(level))).parsed
+  const host = (await nbt.parse(Buffer.from(player))).parsed
+  const data = world.value.Data
+  if (data?.type !== 'compound') throw new Error('Not a level.dat')
+  data.value.Player = { type: 'compound', value: host.value }
+  return gzipSync(nbt.writeUncompressed(world))
+}
+
 /** A zip of the given files, as a test uploads one: an app test never reaches for the zip library. */
 export const zipBytes = (files: Record<string, Uint8Array>): Uint8Array => zipSync(files)
 

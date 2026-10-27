@@ -50,7 +50,7 @@ import type { ModCatalog } from './ports/catalog.ts'
 import type { ChangeSignal } from './ports/changes.ts'
 import type { CurseForge } from './ports/curseforge.ts'
 import type { EventBus } from './ports/events.ts'
-import type { FileFormats, PackArchives } from './ports/formats.ts'
+import type { FileFormats, PackArchives, WorldArchives } from './ports/formats.ts'
 import type { JobQueue } from './ports/jobs.ts'
 import type { Limits } from './ports/limits.ts'
 import type { LoaderBuilds } from './ports/loaders.ts'
@@ -102,8 +102,8 @@ export interface ControlPlanePorts {
   loaderBuilds: LoaderBuilds
   /** Reading what people upload: jars and world downloads. */
   formats: FileFormats
-  /** Opening and writing the pack files people upload, as the hostile input they are. */
-  archives: PackArchives
+  /** Opening and writing the pack and world files people upload, as the hostile input they are. */
+  archives: PackArchives & WorldArchives
   /** CurseForge, as far as Blockly may use it: its links (docs/modpack-system.md). */
   curseforge: CurseForge
   capabilities: DeploymentCapabilities

@@ -17,9 +17,11 @@ import { promisify } from 'node:util'
 import { DAY_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
+import { DOWNLOAD_NOTE, downloadNote } from '../../minecraft/world-download.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
 import { levelDat } from '../../testing/uploads.ts'
+import { broughtBackup, untilRead } from '../../testing/world-imports.ts'
 
 const run = promisify(execFile)
 
@@ -61,18 +63,20 @@ describe.skipIf(!hasDatabase)('resting after a restore', () => {
     const { id } = await h.create(owner)
     await h.until(id, 'running')
     await h.settled(id)
-    // A world of the owner's, brought back as a backup to restore later.
+    // A download of the owner's world, brought back as a backup to restore later.
     const bytes = await tarball({
       'server.properties': 'level-name=world\n',
       'world/level.dat': levelDat('26.3'),
       'world/built.txt': 'the castle the owner restored',
+      [DOWNLOAD_NOTE]: downloadNote([]),
     })
     const start = await h.app.backups.beginWorldUpload(owner, id, {
       fileName: 'w.tar.gz',
       sizeBytes: bytes.length,
     })
     await fetch(start.url, { method: 'PUT', body: bytes, headers: start.headers })
-    const uploaded = await h.app.backups.finishWorldUpload(owner, id, start.ticket)
+    const { importId } = await h.app.backups.finishWorldUpload(owner, id, start.ticket)
+    const uploaded = await broughtBackup(h, await untilRead(h, owner, id, importId))
 
     await writeFile(h.minecraft.path(id, 'world/built.txt'), 'the griefed castle')
     await h.app.servers.stop(owner, id, randomUUID())

@@ -18,6 +18,7 @@ import { promisify } from 'node:util'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
 import { levelDat } from '../../testing/uploads.ts'
+import { broughtBackup, untilRead } from '../../testing/world-imports.ts'
 import { listBackups } from '../backups/persistence.ts'
 import { listWorlds } from '../worlds/persistence.ts'
 
@@ -74,7 +75,8 @@ describe.skipIf(!hasDatabase)('restoring one world and the server’s other worl
       sizeBytes: bytes.length,
     })
     await fetch(start.url, { method: 'PUT', body: bytes, headers: start.headers })
-    const uploaded = await h.app.backups.finishWorldUpload(owner, id, start.ticket, 'Elsewhere')
+    const { importId } = await h.app.backups.finishWorldUpload(owner, id, start.ticket, 'Elsewhere')
+    const uploaded = await broughtBackup(h, await untilRead(h, owner, id, importId))
     await h.app.backups.restoreBackup(owner, id, uploaded.id, randomUUID(), { withConfiguration: false })
     await restored(id)
 

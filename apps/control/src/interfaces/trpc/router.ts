@@ -7,6 +7,7 @@ import {
   AddNoteInput,
   AddPlayerInput,
   AllowExtraPlayInput,
+  AnswerWorldImportInput,
   ApplyModChangeInput,
   ArchiveBackupInput,
   BackupRef,
@@ -76,6 +77,7 @@ import {
   UseOurStopCheatersInput,
   WaitingInput,
   WhitelistModeInput,
+  WorldImportRef,
   WorldRef,
 } from '@blockly/contracts'
 import type { RealtimeConnectInfo } from '@blockly/contracts/realtime'
@@ -275,14 +277,18 @@ const backups = router({
   beginUpload: authedProcedure
     .input(BeginWorldUploadInput)
     .mutation(({ ctx, input }) => ctx.services.backups.beginWorldUpload(ctx.actor, input.serverId, input)),
-  finishUpload: authedProcedure.input(FinishWorldUploadInput).mutation(async ({ ctx, input }) => {
-    const backup = await ctx.services.backups.finishWorldUpload(
-      ctx.actor,
-      input.serverId,
-      input.ticket,
-      input.name,
-    )
-    return { backupId: backup.id }
+  /** The world is read on a worker: `upload` says how it went, and `answerUpload` answers what it asks. */
+  finishUpload: authedProcedure
+    .input(FinishWorldUploadInput)
+    .mutation(({ ctx, input }) =>
+      ctx.services.backups.finishWorldUpload(ctx.actor, input.serverId, input.ticket, input.name),
+    ),
+  upload: authedProcedure
+    .input(WorldImportRef)
+    .query(({ ctx, input }) => ctx.services.backups.imports.view(ctx.actor, input.serverId, input.importId)),
+  answerUpload: authedProcedure.input(AnswerWorldImportInput).mutation(({ ctx, input }) => {
+    const { serverId, importId, ...answer } = input
+    return ctx.services.backups.imports.answer(ctx.actor, serverId, importId, answer)
   }),
   /**
    * A mutation: every call makes a new link, and none may be cached. A world download being made

@@ -16,6 +16,7 @@ import { promisify } from 'node:util'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
 import { levelDat } from '../../testing/uploads.ts'
+import { untilRead } from '../../testing/world-imports.ts'
 import { insertArchive, listBackups } from './persistence.ts'
 
 const run = promisify(execFile)
@@ -63,16 +64,20 @@ describe.skipIf(!hasDatabase)('one world upload finished twice at once', () => {
     })
     await fetch(start.url, { method: 'PUT', body: bytes, headers: start.headers })
 
-    // The browser's finish takes a while (the whole download is read on Free); it asks again.
+    // The browser asks again, as it does when an answer is slow: the same import, read once.
     const finishes = await Promise.all([
       h.app.backups.finishWorldUpload(owner, id, start.ticket),
       h.app.backups.finishWorldUpload(owner, id, start.ticket),
     ])
+    expect(finishes).toEqual([{ importId: start.ticket }, { importId: start.ticket }])
+    const view = await untilRead(h, owner, id, start.ticket)
     const uploaded = (await listBackups(h.db, id)).filter((b) => b.trigger === 'uploaded')
     expect(uploaded).toHaveLength(1)
     const [only] = uploaded
     if (only === undefined) throw new Error('the uploaded backup expected')
-    expect(finishes.map((f) => f.id)).toEqual([only.id, only.id])
+    expect(view).toMatchObject({ status: 'ready', backupId: only.id })
+    // Asked again once it is kept, it is the same import still.
+    expect(await h.app.backups.finishWorldUpload(owner, id, start.ticket)).toEqual({ importId: start.ticket })
 
     // No second backup can point at its file, so deleting one never erases another's world.
     const again = insertArchive(h.db, {

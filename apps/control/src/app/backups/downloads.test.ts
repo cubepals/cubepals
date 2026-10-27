@@ -22,8 +22,8 @@ import { downloadNote } from '../../minecraft/world-download.ts'
 import { downloaded } from '../../testing/downloads.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { levelDat } from '../../testing/uploads.ts'
+import { untilRead } from '../../testing/world-imports.ts'
 import type { UserActor } from '../actor.ts'
-import { AppError } from '../errors.ts'
 import { listBackups } from './persistence.ts'
 
 const run = promisify(execFile)
@@ -159,9 +159,11 @@ describe.skipIf(!enabled)('a world download', () => {
       sizeBytes: download.length,
     })
     await fetch(start.url, { method: 'PUT', body: download, headers: start.headers })
-    const refused = await h.app.backups.finishWorldUpload(owner, id, start.ticket).catch((e) => e)
-    expect(refused).toBeInstanceOf(AppError)
-    expect((refused as AppError).code).toBe('not_entitled')
+    const { importId } = await h.app.backups.finishWorldUpload(owner, id, start.ticket)
+    expect(await untilRead(h, owner, id, importId)).toMatchObject({
+      status: 'refused',
+      message: 'Worlds made with mods come with Plus.',
+    })
   }, 60_000)
 })
 

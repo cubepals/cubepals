@@ -31,6 +31,12 @@ export interface FileFormats {
   /** A gzipped NBT file, such as a world's level.dat, as plain data. */
   decodeNbt(bytes: Uint8Array): Promise<unknown>
   /**
+   * The compound at `path` in a gzipped NBT file, as a gzipped NBT file of its own, its tags kept
+   * exactly: a single-player host's data in `level.dat` (`['Data', 'Player']`) as a player file.
+   * Null where there is no compound there.
+   */
+  nbtPart(bytes: Uint8Array, path: readonly string[]): Promise<Uint8Array | null>
+  /**
    * Reads a gzipped tarball from a URL and keeps the entries `wanted` picks, each up to
    * `maxEntryBytes`. It stops as soon as `enough` says it has what it needs, so a large
    * archive is only read as far as that. Paths are relative, without a leading `./`. An archive
@@ -109,6 +115,46 @@ export interface PackArchives {
     path: string,
     entries: AsyncIterable<{ name: string; data: Uint8Array | ReadableStream<Uint8Array> }>,
   ): Promise<{ sizeBytes: number; sha512: string }>
+}
+
+/**
+ * The archives people upload as worlds, opened on this machine: a zip, or a tarball gzipped or
+ * not, told apart by their bytes. Hostile input, checked as `PackArchives.open` checks a pack: every
+ * name a plain relative path, no links, devices or duplicates, and the counts and sizes within
+ * `limits`. A tarball's headers are all read, and checked, before `openWorld` returns.
+ */
+export interface WorldArchives {
+  openWorld(path: string, limits: ArchiveLimits & WorldArchiveKept): Promise<WorldArchive>
+  /**
+   * A gzipped tarball of `entries`, in order, made as they are read and never held whole. Each
+   * file's folders come before it, and every file and folder is owned by the server's own user.
+   */
+  tarball(entries: AsyncIterable<TarballEntry>): ReadableStream<Uint8Array>
+}
+
+/** The small files `open` keeps in memory as it reads: those `keep` picks, up to `maxKeptBytes` in all. */
+export interface WorldArchiveKept {
+  keep(name: string): boolean
+  maxKeptBytes: number
+}
+
+export interface WorldArchive {
+  /** Every file, by its checked name, with its size. */
+  readonly files: ReadonlyArray<{ name: string; sizeBytes: number }>
+  /** The files `keep` picked, by name. */
+  readonly kept: ReadonlyMap<string, Uint8Array>
+  /**
+   * Every file again, in the archive's order. Each one's `data` is read, or cancelled, before the
+   * next is asked for.
+   */
+  entries(): AsyncIterable<{ name: string; sizeBytes: number; data: ReadableStream<Uint8Array> }>
+  close(): Promise<void>
+}
+
+export interface TarballEntry {
+  name: string
+  sizeBytes: number
+  data: ReadableStream<Uint8Array> | Uint8Array
 }
 
 export interface ArchiveLimits {

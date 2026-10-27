@@ -19,6 +19,7 @@ import { Cdn } from '../../testing/cdn.ts'
 import { downloaded } from '../../testing/downloads.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { fabricJar, levelDat, zipOf } from '../../testing/uploads.ts'
+import { bringWorld, broughtBackup } from '../../testing/world-imports.ts'
 import type { UserActor } from '../actor.ts'
 import { listBackups } from '../backups/persistence.ts'
 import { loadRevision } from '../servers/persistence.ts'
@@ -316,15 +317,10 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('uploads', () => {
       await run('tar', ['-czf', join(dir, 'world.tar.gz'), '-C', join(dir, 'volume'), '.'])
       return new Uint8Array(await readFile(join(dir, 'world.tar.gz')))
     }
-    const uploadWorld = async (owner: UserActor, id: string, bytes: Uint8Array, name?: string) => {
-      const start = await h.app.backups.beginWorldUpload(owner, id, {
-        fileName: 'world.tar.gz',
-        sizeBytes: bytes.length,
-      })
-      const put = await fetch(start.url, { method: 'PUT', body: bytes, headers: start.headers })
-      expect(put.status).toBe(200)
-      return h.app.backups.finishWorldUpload(owner, id, start.ticket, name)
-    }
+    const uploadWorld = (owner: UserActor, id: string, bytes: Uint8Array, name?: string) =>
+      bringWorld(h, owner, id, bytes, name === undefined ? {} : { name })
+    const keptWorld = async (owner: UserActor, id: string, bytes: Uint8Array, name?: string) =>
+      broughtBackup(h, await uploadWorld(owner, id, bytes, name))
     const restore = async (owner: UserActor, id: string, backupId: string) => {
       await h.app.backups.restoreBackup(owner, id, backupId, randomUUID(), { withConfiguration: false })
       await h.until(id, (s) => s.lifecycle.status !== 'restoring', 20_000)
@@ -346,7 +342,7 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('uploads', () => {
 
       // A world upload needs no plan of its own: a free, vanilla server takes it.
       const b = await server('free', 'vanilla')
-      const uploaded = await uploadWorld(b.owner, b.id, download)
+      const uploaded = await keptWorld(b.owner, b.id, download)
       if (uploaded.archiveKey) written.push(uploaded.archiveKey)
       const bWorld = (await listWorlds(h.db, b.id)).find((w) => w.levelName === 'world')
       expect(uploaded).toMatchObject({
@@ -379,15 +375,15 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('uploads', () => {
       })
       // Opened on plain Minecraft it would lose every modded block: Free says so and keeps nothing.
       const free = await server('free', 'vanilla')
-      expect(await refusal(uploadWorld(free.owner, free.id, download))).toMatchObject({
-        code: 'not_entitled',
+      expect(await uploadWorld(free.owner, free.id, download)).toMatchObject({
+        status: 'refused',
         message: 'Worlds made with mods come with Plus.',
       })
       const kept = (await listBackups(h.db, free.id)).filter((b) => b.trigger === 'uploaded')
       expect(kept).toEqual([])
       // On Plus it is a backup like any other.
       const plus = await server()
-      const uploaded = await uploadWorld(plus.owner, plus.id, download)
+      const uploaded = await keptWorld(plus.owner, plus.id, download)
       if (uploaded.archiveKey) written.push(uploaded.archiveKey)
       expect(uploaded).toMatchObject({ trigger: 'uploaded', status: 'ready' })
     }, 60_000)
@@ -400,7 +396,7 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('uploads', () => {
         'survival/level.dat': levelDat('26.1.2'),
         'survival/built.txt': 'a flat hardcore world',
       })
-      const uploaded = await uploadWorld(owner, id, download, 'Brought back')
+      const uploaded = await keptWorld(owner, id, download, 'Brought back')
       if (uploaded.archiveKey) written.push(uploaded.archiveKey)
       const hidden = (await listWorlds(h.db, id)).find((w) => w.id === uploaded.worldId)
       expect(hidden).toMatchObject({
@@ -439,7 +435,7 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('uploads', () => {
         ),
       ).toEqual({
         code: 'invalid_upload',
-        message: 'This server has room for a world download of up to 1.8 GB.',
+        message: 'This server has room for a world of up to 1.8 GB.',
       })
       // Plus grows the disk when the world is brought back, so the same download may begin.
       const big = await server()
@@ -450,53 +446,49 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('uploads', () => {
       expect(start.url).toContain('http')
     }, 60_000)
 
-    test('a download Blockly can’t run is refused before it is kept', async () => {
+    test('a world Blockly can’t run is refused before it is kept, and its upload let go', async () => {
       const { owner, id } = await server()
-      const cases: Array<[Record<string, string | Uint8Array>, { code: string; message: string }]> = [
+      const cases: Array<[Record<string, string | Uint8Array>, string]> = [
         [
-          { 'world/level.dat': levelDat('26.3') },
-          {
-            code: 'invalid_upload',
-            message: 'This isn’t a Cubepals download: it has no server.properties naming its world.',
-          },
+          { 'mods/sodium.jar': fabricJar('sodium'), 'options.txt': 'fov:1' },
+          'There’s no world in this file. Upload the world’s own folder, the one with level.dat in it.',
         ],
         [
           { 'server.properties': 'level-name=world\n', 'world/level.dat': levelDat('99.1') },
-          {
-            code: 'version_downgrade',
-            message:
-              "This world was last played on Minecraft 99.1, newer than this server's 26.3. Move the server to 99.1 first, then try again.",
-          },
+          "This world was last played on Minecraft 99.1, newer than this server's 26.3. Move the server to 99.1 first, then try again.",
         ],
         [
           { 'server.properties': 'level-name=world\n', 'world/level.dat': 'not nbt' },
-          { code: 'invalid_upload', message: 'The world’s world/level.dat can’t be read.' },
+          'The world’s level.dat can’t be read.',
+        ],
+        [
+          {
+            'My World/levelname.txt': 'My World',
+            'My World/level.dat': 'bedrock',
+            'My World/db/CURRENT': 'x',
+          },
+          'This is a Bedrock world. A Cubepals server plays Java worlds, which Bedrock players join too, and can’t open a Bedrock save.',
         ],
       ]
-      for (const [files, expected] of cases)
-        expect(await refusal(uploadWorld(owner, id, await tarball(files)))).toEqual(expected)
-      expect(await refusal(uploadWorld(owner, id, new TextEncoder().encode('not a tarball at all')))).toEqual(
-        {
-          code: 'invalid_upload',
-          message: 'This file isn’t a whole world download (.tar.gz).',
-        },
-      )
+      for (const [files, message] of cases)
+        expect(await uploadWorld(owner, id, await tarball(files))).toMatchObject({
+          status: 'refused',
+          message,
+        })
+      expect(await uploadWorld(owner, id, new TextEncoder().encode('not a tarball at all'))).toMatchObject({
+        status: 'refused',
+      })
       expect(
-        await refusal(h.app.backups.beginWorldUpload(owner, id, { fileName: 'world.zip', sizeBytes: 10 })),
-      ).toMatchObject({ code: 'invalid_upload' })
-      // Refused uploads keep nothing as a backup; their files are collected once abandoned.
+        await refusal(h.app.backups.beginWorldUpload(owner, id, { fileName: 'world.rar', sizeBytes: 10 })),
+      ).toEqual({
+        code: 'invalid_upload',
+        message: 'Cubepals can’t open this kind of file. Zip the world’s folder and upload that.',
+      })
+      // Refused uploads keep nothing as a backup, and their files go at once.
       expect((await listBackups(h.db, id)).filter((b) => b.trigger === 'uploaded')).toEqual([])
-      const pending = await h.db
-        .select()
-        .from(schema.pendingUploads)
-        .where(eq(schema.pendingUploads.serverId, id))
-      expect(pending.length).toBe(4)
-      await h.db
-        .update(schema.pendingUploads)
-        .set({ createdAt: new Date(Date.now() - 2 * DAY_MS) })
-        .where(eq(schema.pendingUploads.serverId, id))
-      expect((await h.app.artifacts.collectGarbage()).uploads).toBeGreaterThanOrEqual(4)
-      for (const upload of pending) expect(await store.head(upload.key)).toBeNull()
+      expect(
+        await h.db.select().from(schema.pendingUploads).where(eq(schema.pendingUploads.serverId, id)),
+      ).toEqual([])
     }, 60_000)
   })
 

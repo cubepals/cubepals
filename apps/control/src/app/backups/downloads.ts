@@ -230,7 +230,7 @@ const ONE_PUT_BYTES = 8 * 1024 ** 2
  * time: in one PUT when it is small, else part by part. `most` is how large it can be, which the
  * store plans the parts by. Returns its size.
  */
-async function putStream(
+export async function putStream(
   body: ReadableStream<Uint8Array>,
   target: ArchiveTarget,
   most: number,

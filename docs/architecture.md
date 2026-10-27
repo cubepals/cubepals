@@ -624,7 +624,7 @@ tRPC procedure (parse input, get actor, call ONE method, return)
 | `RevisionService` | `changeSettings`, `changeAuthentication`, `changeVersion`, `changeMods`, `changePack`, `resize`, `rollback` (each refuses taken-down artifacts without an explicit acknowledgement, §15.3) |
 | `WorldService` | `createWorld`, `switchWorld`, `freshStart`, `deleteWorld` (its directories go by `prune_worlds`) |
 | `AccessService` | `add`, `remove` (a whitelist, operator or ban entry), `setWhitelistEnabled`, `refresh` (persist pending + enqueue `access_sync`; never a revision, never a restart) |
-| `BackupService` | `createBackup`, `restoreBackup`, `archiveBackup`, `downloadArchive`, `deleteBackup`, `beginWorldUpload` / `finishWorldUpload` (a download brought back, §15.5) (archive methods need the archives capability) |
+| `BackupService` | `createBackup`, `restoreBackup`, `archiveBackup`, `downloadArchive`, `deleteBackup`, `beginWorldUpload` / `finishWorldUpload` and `imports` (a world brought in, §15.5) (archive methods need the archives capability) |
 | `ConsoleService` | `run` (synchronous, audited, via `ServerConsole`; refuses `ban-ip`/`pardon-ip`, §15.1) |
 | `ListingService` | `setPublic`, `setCopyable`, `report`, `moderate`, `dismissReport`, `trustProject` / `untrustProject` (the allowlist), `catalogMoved`, `sweep`, `reevaluate(serverIds)` (materializes the read model); browsing is `ListingQueries.browse` |
 | `SharingService` | `joinThroughInvite` (§15.6); the pages themselves are `SharingQueries` |
@@ -2170,10 +2170,14 @@ overrides (self-hosting).
 - `expiresAt = min(entitlement retention, provider limit)`. Reconciliation marks backups
   whose snapshot vanished as `expired`.
 - Restore from an archive = `runtime.restore({kind: 'archive', download})`.
-- A download can be brought back: uploaded like a jar (presigned PUT, `pending_uploads`), read
-  for the world its `server.properties` names and its `level.dat` describes, and kept as an
-  archive backup with trigger `uploaded` and those facts (`world_facts`). A world the server
-  never had gets a world row that exists only in the backup until it is restored.
+- A world can be brought in (docs/world-import.md): uploaded like a jar (presigned PUT,
+  `pending_uploads`), then read on a worker (`world-import`, a `world_imports` row) whatever shape
+  it came in: a single-player save, a saves folder, a server's folder or a download, zipped or as a
+  tarball. A question only its owner can answer (which world, which account played a single-player
+  one) leaves it `asking` until they answer. It is kept as an archive backup with trigger
+  `uploaded` and the facts its `level.dat` gives (`world_facts`): a Cubepals download as the file it
+  came in, any other written again as a server keeps it. A world the server never had gets a world
+  row that exists only in the backup until it is restored.
 
 **Logs and console.**
 - `LogSource.recent/tail` feed the console view (§13).

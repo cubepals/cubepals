@@ -70,6 +70,35 @@ export const FinishWorldUploadInput = z.object({
   /** What to call the world, if the server has never had it. */
   name: z.string().overwrite(oneLine).trim().max(NAME_MAX_LENGTH).optional(),
 })
+/** An uploaded world being brought in, by the server it is for and the ticket it was sent with. */
+export const WorldImportRef = z.object({ serverId: ServerId, importId: z.uuid() })
+/** What its owner answers a world import that asked: which world, and who played it. */
+export const AnswerWorldImportInput = WorldImportRef.extend({
+  /** The folder of the world to bring, from the ones it offered. */
+  folder: z.string().max(1024).optional(),
+  /** The Minecraft account that played a single-player world, or null for none. */
+  player: z.string().overwrite(oneLine).trim().min(1).max(32).nullable().optional(),
+})
+
+/**
+ * An uploaded world as its owner sees it while it is brought in (docs/world-import.md): being
+ * read, asking what only they know, kept as a backup with what Cubepals did, or refused and why.
+ */
+export type WorldImportView = { importId: string; fileName: string } & (
+  | { status: 'reading' }
+  | {
+      status: 'asking'
+      /** The worlds the upload holds, to choose one; null where that isn't asked. */
+      worlds: Array<{ folder: string; name: string; gameVersion: string | null }> | null
+      /** It is a single-player world whose host's things go to the account they name. */
+      player: boolean
+      /** Why the last answer didn't do. */
+      problem: string | null
+    }
+  | { status: 'ready'; backupId: string; notes: string[] }
+  | { status: 'refused'; message: string }
+)
+
 export const RestoreBackupInput = z.object({
   ...change,
   backupId: z.uuid(),

@@ -442,10 +442,6 @@
       "n": 43,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
-    "apps/control/src/infra/formats/pack-archives.ts › function checkedName": {
-      "n": 18,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    },
     "apps/control/src/infra/mc-protocol/slp.ts › class SlpProbe › ping › return new Promise((resolve, reject) => { › socket.on('data', (chunk) => {": {
       "n": 24,
       "reason": "Over the threshold when the check began, and not yet looked at."
@@ -1057,7 +1053,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/uploads/uploads.test.ts › describe.skipIf uploads": {
-      "n": 417,
+      "n": 412,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/uploads/uploads.test.ts › describe.skipIf uploads › describe mods and plugins": {
@@ -1065,7 +1061,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/uploads/uploads.test.ts › describe.skipIf uploads › describe worlds": {
-      "n": 147,
+      "n": 142,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/config/config.test.ts › describe configuration": {

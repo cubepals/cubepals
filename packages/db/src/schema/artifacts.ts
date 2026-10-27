@@ -7,8 +7,15 @@
  * and the packs read from them.
  */
 import { bigint, boolean, index, integer, jsonb, pgEnum, pgTable, text, uuid } from 'drizzle-orm/pg-core'
-import type { PackImportJson, PackJarJson, PackLeftOutJson } from '../json.ts'
+import type {
+  PackImportJson,
+  PackJarJson,
+  PackLeftOutJson,
+  WorldImportAnswerJson,
+  WorldImportQuestionJson,
+} from '../json.ts'
 import { users } from './auth.ts'
+import { backups } from './backups.ts'
 import { createdAt, ts } from './columns.ts'
 import { loader, minecraftServers } from './servers.ts'
 
@@ -118,4 +125,41 @@ export const packImports = pgTable(
     finishedAt: ts('finished_at'),
   },
   (t) => [index('pack_imports_owner').on(t.ownerId, t.createdAt)],
+)
+
+export const worldImportStatus = pgEnum('world_import_status', ['reading', 'asking', 'ready', 'refused'])
+
+/**
+ * A world someone uploaded to bring to a server (docs/world-import.md), and what reading it found:
+ * the backup it became, a question only its owner can answer, or the one sentence on why it can't
+ * be brought. Its id is its upload's, which stays in the store until the import is done with it.
+ */
+export const worldImports = pgTable(
+  'world_imports',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id),
+    serverId: uuid('server_id')
+      .notNull()
+      .references(() => minecraftServers.id),
+    fileName: text('file_name').notNull(),
+    sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
+    /** What its owner named it, for a world the server has never had. */
+    name: text('name'),
+    status: worldImportStatus('status').notNull().default('reading'),
+    question: jsonb('question').$type<WorldImportQuestionJson>(),
+    answer: jsonb('answer').$type<WorldImportAnswerJson>(),
+    /** Set once ready: the backup the world became. */
+    backupId: uuid('backup_id').references(() => backups.id),
+    /** What Blockly did to bring it, in its owner's words. */
+    notes: jsonb('notes').$type<string[]>().notNull().default([]),
+    /** The sentence the owner reads when it can't be brought; the detail stays for admins. */
+    refusal: text('refusal'),
+    detail: text('detail'),
+    createdAt: createdAt(),
+    finishedAt: ts('finished_at'),
+  },
+  (t) => [index('world_imports_server').on(t.serverId, t.createdAt)],
 )

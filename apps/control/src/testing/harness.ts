@@ -40,7 +40,7 @@ import { FakeMinecraft } from '../infra/fake/fake-minecraft.ts'
 import { FakeProfiles } from '../infra/fake/fake-profiles.ts'
 import { FakeRuntime, fakeHandleKey } from '../infra/fake/fake-runtime.ts'
 import { LibraryFileFormats } from '../infra/formats/file-formats.ts'
-import { LibraryPackArchives } from '../infra/formats/pack-archives.ts'
+import { LibraryUploadArchives } from '../infra/formats/world-archives.ts'
 import { MemoryLimits } from '../infra/limits/memory-limits.ts'
 import { PgChangeSignal, ROUTES_CHANNEL } from '../infra/pg/changes.ts'
 import { PgNotifyEventBus } from '../infra/pg/events.ts'
@@ -52,6 +52,7 @@ import {
   workListingEligibility,
   workPackImports,
   workWorldDownloads,
+  workWorldImports,
 } from '../infra/pg/jobs.ts'
 import { PgAdvisoryLocks } from '../infra/pg/locks.ts'
 import { createRuntimeApp } from '../interfaces/runtime/artifacts.ts'
@@ -319,7 +320,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       catalog,
       loaderBuilds,
       formats: new OfflineFileFormats(),
-      archives: new LibraryPackArchives(),
+      archives: new LibraryUploadArchives(),
       curseforge: new CurseForgeLinks(),
       capabilities: capabilitiesOf(options, db),
       addressing: new ConfiguredPlayAddressing({
@@ -448,11 +449,8 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
 async function workQueues(boss: PgBoss, app: ControlPlane, url: string): Promise<OperationsWorker> {
   await workArtifactMirror(boss, (artifact) => app.artifacts.mirror(artifact), 0.5)
   await workJarChecks(boss, (sha512) => app.jarChecks.run(sha512), 0.5)
-  await workPackImports(
-    boss,
-    { run: (id) => app.packs.runImport(id), gaveUp: (id, error) => app.packs.importGaveUp(id, error) },
-    0.5,
-  )
+  await workPackImports(boss, app.packs, 0.5)
+  await workWorldImports(boss, app.backups.imports, 0.5)
   await workWorldDownloads(boss, app.backups.downloads, 0.5)
   await workListingEligibility(boss, (serverIds) => app.listings.reevaluate(serverIds), 0.5)
   return startOperationsWorker(url, app)

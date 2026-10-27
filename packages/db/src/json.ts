@@ -265,6 +265,25 @@ export interface IneligibleReasonJson {
   detail?: string
 }
 
+/**
+ * What a world import asks its owner, where only they know (docs/world-import.md): which world,
+ * when the upload holds several, and which Minecraft account played a single-player one.
+ */
+export interface WorldImportQuestionJson {
+  /** The worlds to choose from, by folder, with what each says it is. */
+  worlds?: Array<{ folder: string; name: string; gameVersion: string | null }>
+  /** The world holds its single-player host's own data, which goes to the account they name. */
+  player?: boolean
+  /** Why the last answer didn't do, in its owner's words. */
+  problem?: string
+}
+
+/** Its owner's answer: the world's folder, and the account that played it, or null for none. */
+export interface WorldImportAnswerJson {
+  folder?: string
+  player?: string | null
+}
+
 /** An uploaded world's own facts, as its server.properties and level.dat say. */
 export interface UploadedWorldFactsJson {
   seed: string | null

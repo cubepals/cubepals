@@ -69,7 +69,7 @@ import { flyClient } from './infra/fly/client.ts'
 import { FlyLogSource } from './infra/fly/fly-logs.ts'
 import { FlyRuntime } from './infra/fly/fly-runtime.ts'
 import { LibraryFileFormats } from './infra/formats/file-formats.ts'
-import { LibraryPackArchives } from './infra/formats/pack-archives.ts'
+import { LibraryUploadArchives } from './infra/formats/world-archives.ts'
 import { bedrockCapability } from './infra/geysermc/geysermc.ts'
 import { hangarClient } from './infra/hangar/client.ts'
 import { HangarCatalog } from './infra/hangar/hangar-catalog.ts'
@@ -100,6 +100,7 @@ import {
   workSchedules,
   workServerOperations,
   workWorldDownloads,
+  workWorldImports,
 } from './infra/pg/jobs.ts'
 import { PgAdvisoryLocks } from './infra/pg/locks.ts'
 import { PolarBilling } from './infra/polar/polar-billing.ts'
@@ -489,10 +490,8 @@ async function startWorker(
   await workServerOperations(boss, (attempt) => app.runner.run(attempt), config.operations)
   await workArtifactMirror(boss, (artifact) => app.artifacts.mirror(artifact))
   await workJarChecks(boss, (sha512) => app.jarChecks.run(sha512))
-  await workPackImports(boss, {
-    run: (id) => app.packs.runImport(id),
-    gaveUp: (id, error) => app.packs.importGaveUp(id, error),
-  })
+  await workPackImports(boss, app.packs)
+  await workWorldImports(boss, app.backups.imports)
   await workWorldDownloads(boss, app.backups.downloads)
   await workCuration(boss, {
     run: (release) => app.curation.ingest(release),
@@ -684,7 +683,7 @@ async function main(): Promise<void> {
       catalog: catalogs(config.catalog.userAgent),
       loaderBuilds: new UpstreamLoaderBuilds(),
       formats: new LibraryFileFormats(),
-      archives: new LibraryPackArchives(),
+      archives: new LibraryUploadArchives(),
       curseforge: new CurseForgeLinks(),
       capabilities,
       addressing: new ConfiguredPlayAddressing(config.play),
