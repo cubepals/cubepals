@@ -173,12 +173,7 @@ export class WorldImports {
         return
       }
       if (!(error instanceof Refused)) throw error
-      await worldImportRefused(this.#db, importId, {
-        refusal: error.message,
-        detail: error.detail,
-        at: new Date(),
-      })
-      if (pending !== null) await this.#letGo(pending)
+      await this.#refuse(importId, { refusal: error.message, detail: error.detail }, pending)
     } finally {
       await rm(work, { recursive: true, force: true })
     }
@@ -186,9 +181,11 @@ export class WorldImports {
 
   /** The last attempt failed: its owner reads that it didn't work, and can upload it again. */
   async importGaveUp(importId: string, error: string): Promise<void> {
-    await worldImportRefused(this.#db, importId, { refusal: SAID.gaveUp, detail: error, at: new Date() })
-    const pending = await loadPendingUpload(this.#db, importId)
-    if (pending !== null) await this.#letGo(pending)
+    await this.#refuse(
+      importId,
+      { refusal: SAID.gaveUp, detail: error },
+      await loadPendingUpload(this.#db, importId),
+    )
   }
 
   async #owned(actor: Actor, serverId: string, importId: string): Promise<WorldImportRecord> {
@@ -412,11 +409,20 @@ export class WorldImports {
     })
   }
 
-  /** The upload is no longer needed: its file and its row go, unless the sweep took them first. */
-  async #letGo(pending: PendingUpload): Promise<void> {
-    const store = requireCapability(this.#caps, 'archives')
-    if (await this.#db.transaction((tx) => claimPendingUpload(tx, pending.id)))
-      await store.delete(pending.key)
+  /**
+   * Refused, and its upload no longer needed: the refusal and the upload's row in one write, so the
+   * owner who reads it refused finds nothing of it kept, then its file, unless the sweep took them first.
+   */
+  async #refuse(
+    importId: string,
+    result: { refusal: string; detail?: string | undefined },
+    pending: PendingUpload | null,
+  ): Promise<void> {
+    const claimed = await this.#db.transaction(async (tx) => {
+      await worldImportRefused(tx, importId, { ...result, at: new Date() })
+      return pending !== null && (await claimPendingUpload(tx, pending.id))
+    })
+    if (claimed && pending !== null) await requireCapability(this.#caps, 'archives').delete(pending.key)
   }
 }
 

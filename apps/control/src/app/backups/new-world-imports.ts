@@ -17,7 +17,7 @@ import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { NewWorldImportView } from '@blockly/contracts'
 import { DAY_MS, HOUR_S } from '@blockly/contracts/durations'
-import type { Db, NewWorldFactsJson, WorldImportAnswerJson } from '@blockly/db'
+import type { Db, NewWorldFactsJson, Tx, WorldImportAnswerJson } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import type { ModArtifact } from '../../domain/mods/artifact.ts'
 import { releaseFor } from '../../minecraft/versions.ts'
@@ -70,6 +70,13 @@ const ARCHIVE_NAME = 'world.tar.gz'
 const LEVEL = 'world'
 
 /** A world brought for a new server, as making the server uses it. */
+/** Refused past the worlds its owner may bring in a day (`AbuseLimits.worldUploadsPerDay`). */
+async function withinADay(tx: Tx, ownerId: string): Promise<void> {
+  const since = new Date(Date.now() - DAY_MS)
+  if ((await worldsBroughtSince(tx, ownerId, since)) >= tuning().abuse.worldUploadsPerDay)
+    throw new AppError('rate_limited', 'That’s a lot of worlds for one day. Try again tomorrow.')
+}
+
 /** What a world played with mods is told on the create page, where a server is made from it alone. */
 const PLAYED_WITH_MODS =
   'This world was played with mods, and a server made from it alone runs plain Minecraft, which would lose its modded blocks and items. Make the server from the pack it was played with, under “A pack you have”, then bring the world on that server’s World page.'
@@ -121,9 +128,7 @@ export class NewWorldImports {
           `A server on your plan has room for a world of up to ${Number((limit / 1024 ** 3).toFixed(1))} GB.`,
         )
       await this.#policy.require(tx, actor.userId, { kind: 'restore_archive' })
-      const since = new Date(Date.now() - DAY_MS)
-      if ((await worldsBroughtSince(tx, actor.userId, since)) >= tuning().abuse.worldUploadsPerDay)
-        throw new AppError('rate_limited', 'That’s a lot of worlds for one day. Try again tomorrow.')
+      await withinADay(tx, actor.userId)
       const store = requireCapability(this.#caps, 'archives')
       const id = randomUUID()
       const key = store.newKey('world_upload', { serverId: '', id })
@@ -157,6 +162,8 @@ export class NewWorldImports {
     if (arrived.sizeBytes !== pending.sizeBytes)
       throw new AppError('invalid_upload', 'The file didn’t arrive whole. Upload it again.')
     await this.#db.transaction(async (tx) => {
+      // Asked again as it is read: tickets taken before any was finished count once they are.
+      await withinADay(tx, actor.userId)
       const made = await insertWorldImport(tx, {
         id: pending.id,
         ownerId: actor.userId,

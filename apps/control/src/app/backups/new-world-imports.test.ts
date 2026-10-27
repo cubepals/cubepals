@@ -237,8 +237,14 @@ describe.skipIf(!hasDatabase)('what can’t make a server', () => {
     installTuning({ ...was, abuse: { ...was.abuse, worldUploadsPerDay: 1 } })
     try {
       const owner = await h.user('Fern', 'plus')
+      // A ticket taken before the day's world was finished is refused as it is finished.
+      const early = await h.app.backups.newWorlds.begin(owner, { fileName: 'early.zip', sizeBytes: 1024 })
       expect((await bringNewWorld(h, owner, zipBytes(await save('Today/')), 'today.zip')).status).toBe(
         'ready',
+      )
+      await fetch(early.url, { method: 'PUT', body: new Uint8Array(1024), headers: early.headers })
+      await expect(h.app.backups.newWorlds.finish(owner, early.ticket)).rejects.toThrow(
+        'That’s a lot of worlds for one day. Try again tomorrow.',
       )
       await expect(
         h.app.backups.newWorlds.begin(owner, { fileName: 'more.zip', sizeBytes: 1024 }),
