@@ -8,10 +8,11 @@
  */
 
 import { describe, expect, test } from 'bun:test'
+import type { PackSourceInput } from '@blockly/contracts'
 import type { CatalogVersion } from '../../domain/mods/catalog.ts'
 import type { ServerSetup } from '../../domain/setup/setup.ts'
 import type { BroughtWorld } from '../backups/new-world-imports.ts'
-import { fittedToWorld, packForWorld } from './brought-with-pack.ts'
+import { fittedToWorld, packsForWorld } from './brought-with-pack.ts'
 
 /** A world last saved on `gameVersion`, which Cubepals opens on `playsOn`. */
 const world = (gameVersion: string, playsOn = gameVersion): BroughtWorld => ({
@@ -71,17 +72,16 @@ describe('the pack a world was played with', () => {
       version('v1', ['1.21.10', '1.21.11'], 1),
     ]
     const pack = { kind: 'modpack', projectId: 'valley' } as const
-    // A world saved on a release Cubepals doesn't offer, opened on the next: the pack's own for it.
-    expect(await packForWorld(pack, world('1.21.10', '1.21.11'), versions)).toEqual({
-      ...pack,
-      versionId: 'v2',
-    })
-    expect(await packForWorld(pack, world('1.21.11'), versions)).toEqual({ ...pack, versionId: 'v3' })
+    // A world saved on a release Cubepals doesn't offer, opened on the next: the pack's own for it
+    // first, newest first, then those for the release it opens on.
+    const ids = async (named: PackSourceInput, on: BroughtWorld) =>
+      (await packsForWorld(named, on, versions)).map((one) =>
+        one.kind === 'modpack' ? one.versionId : one.kind,
+      )
+    expect(await ids(pack, world('1.21.10', '1.21.11'))).toEqual(['v2', 'v1', 'v3'])
+    expect(await ids(pack, world('1.21.11'))).toEqual(['v3', 'v1'])
     // A version its owner named is theirs.
-    expect(await packForWorld({ ...pack, versionId: 'v1' }, world('1.21.11'), versions)).toEqual({
-      ...pack,
-      versionId: 'v1',
-    })
+    expect(await ids({ ...pack, versionId: 'v1' }, world('1.21.11'))).toEqual(['v1'])
   })
 
   test('a pack on the world’s own release opens it, though Cubepals would open it on another', () => {

@@ -46,24 +46,29 @@ function runsOnServer(version: ListedVersion, release: string): boolean {
   )
 }
 
+/** How many of a catalog pack's versions are tried for a world, newest first. */
+const MOST_TRIED = 5
+
 /**
- * The pack to resolve for a world: one from the catalog named without a version plays its newest
- * version a server runs that lists the world's own release, else the one Cubepals opens it on, so
- * the world isn't moved to a newer Minecraft unasked.
+ * The packs to resolve for a world, in the order to try them: one from the catalog named without a
+ * version tries its newest versions a server runs that list the world's own release, then those
+ * that list the one Cubepals opens it on, so the world isn't moved to a newer Minecraft unasked and
+ * a version that turns out unusable gives way to an older one. Any other pack is itself.
  */
-export async function packForWorld(
+export async function packsForWorld(
   pack: PackSourceInput,
   brought: BroughtWorld,
   versions: (projectId: string) => Promise<ReadonlyArray<ListedVersion>>,
-): Promise<PackSourceInput> {
-  if (pack.kind !== 'modpack' || pack.versionId !== undefined) return pack
-  const listed = await versions(pack.projectId)
-  const newest = (release: string) =>
-    [...listed]
-      .filter((version) => runsOnServer(version, release))
-      .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())[0]
-  const own = newest(ownRelease(brought.facts)) ?? newest(brought.facts.playsOn)
-  return own === undefined ? pack : { ...pack, versionId: own.versionId }
+): Promise<PackSourceInput[]> {
+  if (pack.kind !== 'modpack' || pack.versionId !== undefined) return [pack]
+  const listed = [...(await versions(pack.projectId))].sort(
+    (a, b) => b.publishedAt.getTime() - a.publishedAt.getTime(),
+  )
+  const on = (release: string) => listed.filter((version) => runsOnServer(version, release))
+  const ids = [
+    ...new Set([...on(ownRelease(brought.facts)), ...on(brought.facts.playsOn)].map((v) => v.versionId)),
+  ]
+  return ids.length === 0 ? [pack] : ids.slice(0, MOST_TRIED).map((versionId) => ({ ...pack, versionId }))
 }
 
 /**

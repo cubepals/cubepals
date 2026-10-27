@@ -37,7 +37,7 @@ import type { PackService } from '../packs/service.ts'
 import { CatalogUnavailable, type ModCatalog } from '../ports/catalog.ts'
 import { UnreadableFile } from '../ports/formats.ts'
 import { findByInvite, findLiveBySlug, loadRevision, loadRuntime, loadWorld } from '../servers/persistence.ts'
-import { fittedToWorld, PLAYED_WITH_MODS, packForWorld } from './brought-with-pack.ts'
+import { fittedToWorld, PLAYED_WITH_MODS, packsForWorld } from './brought-with-pack.ts'
 import { loadPackChecks, savePackCheck } from './persistence.ts'
 import { StarterWorlds } from './starters.ts'
 import { TEMPLATES, type Template, templateOf } from './templates.ts'
@@ -330,10 +330,18 @@ export class SetupService {
   async #packOnWorld(importId: string, pack: PackSourceInput, viewer: Actor | null): Promise<ResolvedSetup> {
     if (viewer?.kind !== 'user') throw new NotFound('Upload')
     const brought = await broughtWorld(this.#db, viewer.userId, importId)
-    const forWorld = await packForWorld(pack, brought, (projectId) =>
-      this.#catalog.modpackVersions(projectId),
-    )
-    return fittedToWorld(await this.#resolved(forWorld, viewer), brought, pack)
+    const tries = await packsForWorld(pack, brought, (projectId) => this.#catalog.modpackVersions(projectId))
+    // A version that can't open the world gives way to the next; the first refusal is the one said.
+    let refused: AppError | undefined
+    for (const forWorld of tries) {
+      try {
+        return fittedToWorld(await this.#resolved(forWorld, viewer), brought, pack)
+      } catch (error) {
+        if (!(error instanceof AppError) || error.code !== 'invalid_choice') throw error
+        refused ??= error
+      }
+    }
+    throw refused
   }
 
   async #resolved(source: SetupSource, viewer: Actor | null): Promise<ResolvedSetup> {

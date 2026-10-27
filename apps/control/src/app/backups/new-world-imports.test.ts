@@ -357,6 +357,18 @@ describe.skipIf(!hasDatabase)('a world played with mods', () => {
         pack: { kind: 'modpack', projectId: 'wide-pack' },
       }),
     ).toMatchObject({ gameVersion: '1.21.11', modpack: { version: 'wp-1' } })
+    // A newest version whose own index runs another release gives way to the next one for it.
+    publishPack('mixed-pack', [
+      { id: 'mp-2', gameVersions: ['1.21.1', '1.21.11'] },
+      { id: 'mp-1', gameVersions: ['1.21.11'] },
+    ])
+    expect(
+      await h.app.queries.setupPreview(owner, {
+        kind: 'world',
+        importId: ready.importId,
+        pack: { kind: 'modpack', projectId: 'mixed-pack' },
+      }),
+    ).toMatchObject({ gameVersion: '1.21.11', modpack: { version: 'mp-1' } })
     // With none for its release, the world isn't moved to a newer Minecraft unasked; its owner picks.
     publishPack('newer-pack', [{ id: 'np-1', gameVersions: ['26.3'] }])
     const newer = { kind: 'modpack', projectId: 'newer-pack' } as const
