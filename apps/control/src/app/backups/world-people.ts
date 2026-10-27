@@ -74,11 +74,12 @@ export async function peopleOf(
     return found
   }
   const properties = read.holds.properties === null ? undefined : read.archive.kept.get(read.holds.properties)
+  const listed = (await each(whitelist)).map(({ person }) => person)
   const people: WorldPeopleJson = {
     whitelistOn:
       properties !== undefined && /^white-list\s*=\s*true\s*$/m.test(new TextDecoder().decode(properties)),
-    whitelist: (await each(whitelist)).map(({ person }) => person),
-    operators: (await each(operators)).map(({ row, person }) => ({
+    whitelist: listed,
+    operators: withinRoom(listed, await each(operators)).map(({ row, person }) => ({
       ...person,
       level: row.level,
       bypassesPlayerLimit: row.bypassesPlayerLimit,
@@ -96,6 +97,23 @@ export async function peopleOf(
     !people.whitelistOn &&
     [people.whitelist, people.operators, people.bans, people.unknown].every((list) => list.length === 0)
   return empty ? null : people
+}
+
+/**
+ * The operators that fit beside the whitelist: together they are the players its owner can let
+ * in, and no more than MOST_WORLD_PEOPLE of them, as many as one choice takes.
+ */
+function withinRoom<T extends { person: WorldPersonJson }>(
+  whitelist: WorldPersonJson[],
+  operators: T[],
+): T[] {
+  const players = new Set(whitelist.map((person) => person.uuid))
+  return operators.filter(({ person }) => {
+    if (players.has(person.uuid)) return true
+    if (players.size >= MOST_WORLD_PEOPLE) return false
+    players.add(person.uuid)
+    return true
+  })
 }
 
 /** The folder the server's own files are in: its `server.properties`', else the one above the world. */

@@ -8,7 +8,7 @@
  * chooses, and those they chose on the server made from it, or the one it was brought to.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import type { PeopleChoice } from '@blockly/contracts'
+import { MOST_WORLD_PEOPLE, type PeopleChoice } from '@blockly/contracts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
@@ -130,6 +130,28 @@ describe('the names in a server’s files', () => {
     const profiles = { byUuid: async () => ({ uuid, name: 'NewName' }) } as unknown as PlayerProfiles
     const people = await peopleOf(read([{ uuid, name: 'OldName' }]), true, profiles)
     expect(people?.whitelist).toEqual([{ uuid, name: 'NewName' }])
+  })
+})
+
+describe('a server with more players than one choice takes', () => {
+  test('shows only as many as can be let in, whitelist first, then its other operators', async () => {
+    const rows = (prefix: string, count: number) =>
+      Array.from({ length: count }, (_, i) => ({ uuid: offlineUuid(`${prefix}${i}`), name: `${prefix}${i}` }))
+    const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value))
+    const read = {
+      archive: {
+        kept: new Map([
+          ['whitelist.json', encode(rows('Wanda', MOST_WORLD_PEOPLE - 1))],
+          ['ops.json', encode([...rows('Wanda', 1), ...rows('Oscar', 5)])],
+        ]),
+      },
+      holds: { properties: 'server.properties' },
+      world: { folder: 'world/' },
+    }
+    const people = await peopleOf(read, false, {} as PlayerProfiles)
+    expect(people?.operators.map((p) => p.name)).toEqual(['Wanda0', 'Oscar0'])
+    const shown = new Set([...(people?.whitelist ?? []), ...(people?.operators ?? [])].map((p) => p.uuid))
+    expect(shown.size).toBe(MOST_WORLD_PEOPLE)
   })
 })
 

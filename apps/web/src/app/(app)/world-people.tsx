@@ -10,7 +10,7 @@
  * whitelist joins. Nobody is let in until they say so. Shown where a world is brought for a new
  * server and to an existing one; what is done with the choice is theirs, not this list's.
  */
-import type { PeopleChoice, WorldPeople } from '@blockly/contracts'
+import { MOST_WORLD_PEOPLE, type PeopleChoice, type WorldPeople } from '@blockly/contracts'
 import { Button, PlayerFace, Toggle } from '../../ui'
 
 /** One player of that server, with whether they operated it. */
@@ -103,7 +103,9 @@ export function WorldPeopleChoice({
                 variant="ghost"
                 size="sm"
                 disabled={disabled}
-                onClick={() => onChange({ ...choice, letIn: players.map((p) => p.uuid) })}
+                onClick={() =>
+                  onChange({ ...choice, letIn: players.slice(0, MOST_WORLD_PEOPLE).map((p) => p.uuid) })
+                }
               >
                 Let everyone in
               </Button>
