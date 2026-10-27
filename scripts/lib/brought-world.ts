@@ -161,16 +161,17 @@ export async function bringsWorldIn(
   await j.step(
     'brought while a server is made, the new server starts on it: the same seed and the same mark',
     async () => {
-      // Free holds one server, and this account has one already: it holds two for this step.
+      // Free holds and runs one server, and this account's first is still running: it holds and
+      // runs two for this step.
       const account = `user_id = (select id from users where email = '${j.owner.email}')`
       await sql(
-        `update account_standing set limit_overrides = limit_overrides || '{"maxServers": 2}' where ${account}`,
+        `update account_standing set limit_overrides = limit_overrides || '{"maxServers": 2, "maxRunning": 2}' where ${account}`,
       )
       try {
         return await madeFrom(j, bytes, { seed, mark }, sql)
       } finally {
         await sql(
-          `update account_standing set limit_overrides = limit_overrides - 'maxServers' where ${account}`,
+          `update account_standing set limit_overrides = limit_overrides - 'maxServers' - 'maxRunning' where ${account}`,
         )
       }
     },
