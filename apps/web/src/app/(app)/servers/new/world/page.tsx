@@ -8,18 +8,20 @@
  * "Your own world", opened from the create page (docs/world-import.md): the world handed over and
  * read (`own-world.tsx`), what Cubepals found in it, and back to the create page with it chosen
  * (`kept.ts`), where the server is made to fit it. Who plays and the name are asked there, as for
- * any way to play.
+ * any way to play. Who of the players of the server it came from comes along is chosen here
+ * (`world-people.tsx`) and kept on the import.
  */
 import type { PackSourceInput } from '@blockly/contracts'
 import { ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { iconSrc } from '../../../../../lib/present'
-import { Button } from '../../../../../ui'
+import { Button, Note } from '../../../../../ui'
+import { WorldPeopleChoice } from '../../../world-people'
 import styles from '../create.module.css'
 import { keptPath } from '../kept'
 import { Thumb } from '../thumb'
-import { OwnWorld, type ReadWorld } from './own-world'
+import { OwnWorld, type ReadWorld, useChosenPeople } from './own-world'
 import { PlayedWith } from './played-with'
 
 export default function OwnWorldPage() {
@@ -28,6 +30,7 @@ export default function OwnWorldPage() {
   const [pack, setPack] = useState<{ source: PackSourceInput; name: string } | null>(null)
   const { world } = read ?? {}
   const modded = world !== undefined && world.moddedWith !== null
+  const people = useChosenPeople(read ?? undefined)
   return (
     <div className={styles.page}>
       <div>
@@ -67,10 +70,14 @@ export default function OwnWorldPage() {
             </span>
           </div>
           {world.moddedWith !== null && <PlayedWith moddedWith={world.moddedWith} onPack={setPack} />}
+          {people !== null && (
+            <WorldPeopleChoice people={people.people} choice={people.choice} onChange={people.change} />
+          )}
+          {people !== null && people.failure !== null && <Note tone="danger">{people.failure}</Note>}
           <div>
             <Button
               variant="primary"
-              disabled={modded && pack === null}
+              disabled={(modded && pack === null) || people?.saving === true}
               onClick={() =>
                 router.push(
                   keptPath(

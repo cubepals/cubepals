@@ -92,6 +92,15 @@ export type AccessCommand =
   /** The server reads its whitelist file again, which Blockly has just written. */
   | { type: 'whitelist_reload' }
 
+/**
+ * Players let in together, as from the server a world its owner brought came from: each entry,
+ * and whether only the whitelist joins from now on.
+ */
+export interface SeededAccess {
+  whitelistOn: boolean
+  entries: AccessEntry[]
+}
+
 export const entryKey = (list: AccessList, uuid: string) => `${list}:${uuid.toLowerCase()}`
 
 export function newAccessRecord(): AccessRecord {

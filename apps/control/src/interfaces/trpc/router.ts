@@ -26,6 +26,7 @@ import {
   ChangeSettingsInput,
   ChangeVersionInput,
   CheckoutInput,
+  ChooseNewWorldPeopleInput,
   CreateBackupInput,
   CreateServerInput,
   CreateWorldInput,
@@ -40,6 +41,7 @@ import {
   ItemIconsInput,
   JoinThroughInviteInput,
   JoinWaitlistInput,
+  LetInFromUploadInput,
   LiftInput,
   ListingRef,
   ModChangeInput,
@@ -294,6 +296,12 @@ const backups = router({
     const { serverId, importId, ...answer } = input
     return ctx.services.backups.imports.answer(ctx.actor, serverId, importId, answer)
   }),
+  /** Who of the players of the server an uploaded world came from its owner lets in. */
+  letInFromUpload: authedProcedure.input(LetInFromUploadInput).mutation(async ({ ctx, input }) => {
+    const { serverId, importId, ...choice } = input
+    const chosen = await ctx.services.backups.imports.chosenPeople(ctx.actor, serverId, importId, choice)
+    await ctx.services.access.letIn(ctx.actor, serverId, chosen)
+  }),
   /**
    * A mutation: every call makes a new link, and none may be cached. A world download being made
    * says so, and `downloadState` says when it's ready.
@@ -443,6 +451,11 @@ const newWorlds = router({
   answerUpload: authedProcedure.input(AnswerNewWorldImportInput).mutation(({ ctx, input }) => {
     const { importId, ...answer } = input
     return ctx.services.backups.newWorlds.answer(ctx.actor, importId, answer)
+  }),
+  /** Who of the players of the server its world came from its owner lets into the server they make. */
+  choosePeople: authedProcedure.input(ChooseNewWorldPeopleInput).mutation(({ ctx, input }) => {
+    const { importId, ...choice } = input
+    return ctx.services.backups.newWorlds.choosePeople(ctx.actor, importId, choice)
   }),
 })
 

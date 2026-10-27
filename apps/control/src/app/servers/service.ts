@@ -174,7 +174,7 @@ export class MinecraftServerService {
         { ...revision, createdBy: requestedBy(madeBy) },
         world,
       )
-      await createAccess(tx, created.server.id)
+      await createAccess(tx, created.server.id, draft.access, requestedBy(madeBy))
       await this.#audit(tx, madeBy, 'server.created', created.server.id, {
         slug,
         gameVersion: revision.gameVersion,

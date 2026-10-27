@@ -6,6 +6,7 @@
  * Files Blockly keeps and builds from: stored artifacts by hash, uploads in flight, uploaded mods,
  * and the packs read from them.
  */
+import type { PeopleChoice } from '@blockly/contracts'
 import {
   type AnyPgColumn,
   bigint,
@@ -26,6 +27,7 @@ import type {
   PackLeftOutJson,
   WorldImportAnswerJson,
   WorldImportQuestionJson,
+  WorldPeopleJson,
 } from '../json.ts'
 import { users } from './auth.ts'
 import { backups } from './backups.ts'
@@ -176,6 +178,10 @@ export const worldImports = pgTable(
     notes: jsonb('notes').$type<string[]>().notNull().default([]),
     /** Set once ready, for a world brought before its server: what it is, and what it plays on. */
     facts: jsonb('facts').$type<NewWorldFactsJson>(),
+    /** Set once ready, where it came from a server: who could join it, for its owner to choose from. */
+    people: jsonb('people').$type<WorldPeopleJson>(),
+    /** Who of them its owner let in, for a world brought before its server; null until they say. */
+    peopleChoice: jsonb('people_choice').$type<PeopleChoice>(),
     /** Set with `facts`: the world packed as a new server's first start unpacks it. */
     startsOn: jsonb('starts_on').$type<ModArtifactJson>(),
     /** The sentence the owner reads when it can't be brought; the detail stays for admins. */

@@ -4,7 +4,13 @@
 
 import { type Queryable, schema, type Tx } from '@blockly/db'
 import { and, desc, eq, gte, sql } from 'drizzle-orm'
-import { type AccessEntry, type AccessRecord, entryKey, newAccessRecord } from '../../domain/access/access.ts'
+import {
+  type AccessEntry,
+  type AccessRecord,
+  entryKey,
+  newAccessRecord,
+  type SeededAccess,
+} from '../../domain/access/access.ts'
 import { lockServer } from '../servers/persistence.ts'
 
 const access = schema.serverAccess
@@ -30,12 +36,24 @@ const toEntry = (row: EntryRow): AccessEntry => ({
   error: row.error,
 })
 
-export async function createAccess(q: Queryable, serverId: string): Promise<void> {
+/**
+ * A new server's who-can-join, with the players its owner let in from the server its world came
+ * from (`seeded`), delivered as it first starts as any change waiting is.
+ */
+export async function createAccess(
+  tx: Tx,
+  serverId: string,
+  seeded: SeededAccess | null = null,
+  requestedBy = 'system',
+): Promise<void> {
   const fresh = newAccessRecord()
-  await q
+  await tx
     .insert(access)
     .values({ serverId, whitelistEnabled: fresh.whitelistEnabled, reseedRequired: fresh.reseedRequired })
     .onConflictDoNothing()
+  if (seeded === null) return
+  if (seeded.whitelistOn) await setWhitelistPending(tx, serverId, true)
+  for (const entry of seeded.entries) await upsertEntry(tx, serverId, entry, requestedBy)
 }
 
 export async function readAccess(q: Queryable, serverId: string): Promise<ReadRecord> {

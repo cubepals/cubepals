@@ -6,7 +6,7 @@
 import { join } from 'node:path'
 import type { WorldImportView } from '@blockly/contracts'
 import { HOUR_S } from '@blockly/contracts/durations'
-import type { Db, WorldImportAnswerJson, WorldImportQuestionJson } from '@blockly/db'
+import type { Db, WorldImportAnswerJson, WorldImportQuestionJson, WorldPeopleJson } from '@blockly/db'
 import {
   broughtWorldRoomBytes,
   comesWith,
@@ -45,6 +45,7 @@ import type { PlayerProfiles } from '../ports/minecraft.ts'
 import { grownStorage } from '../servers/persistence.ts'
 import type { PendingUpload } from '../uploads/persistence.ts'
 import type { WorldImportRecord } from './world-import-records.ts'
+import { peopleOf } from './world-people.ts'
 
 /** Reading and writing a world of a few gigabytes takes a while; the links outlast it. */
 export const LINK_SECONDS = 2 * HOUR_S
@@ -55,9 +56,9 @@ const LIMITS = {
   maxTotalBytes: 64 * 1024 ** 3,
   maxKeptBytes: 32 * 1024 * 1024,
 }
-/** The few files an upload is read by: what each world says of itself, and its server's settings. */
+/** The few files an upload is read by: what each world says of itself, its server's settings and who joined it. */
 const KEPT =
-  /(^|\/)(level\.dat|level\.dat_old|server\.properties|world_gen_settings\.dat|cubepals-download\.txt|usercache\.json)$/
+  /(^|\/)(level\.dat|level\.dat_old|server\.properties|world_gen_settings\.dat|cubepals-download\.txt|usercache\.json|whitelist\.json|ops\.json|banned-players\.json)$/
 /** How many of an offline-mode server's players are looked up as accounts: a large server's regulars. */
 const MOST_ACCOUNTS = 200
 
@@ -306,6 +307,11 @@ export class WorldReading {
     return accounts
   }
 
+  /** Who could join the server the upload came from, named as one checking accounts or not knows them. */
+  people(read: Read, onlineMode: boolean): Promise<WorldPeopleJson | null> {
+    return peopleOf(read, onlineMode, this.#profiles)
+  }
+
   /**
    * The account a single-player world's host played it on, whose own data goes to their player
    * file: asked of its owner, who may say none. Null where there is no host, or none is to get it.
@@ -363,6 +369,14 @@ export function accountNotes(accounts: Accounts): string[] {
           `No Minecraft account is called ${accounts.unmatched.join(', ')}, so their files stay as the offline-mode server kept them.`,
         ]
       : []),
+  ]
+}
+
+/** What its owner reads of the players in its server's files that no account has. */
+export function peopleNotes(people: WorldPeopleJson | null): string[] {
+  if (people === null || people.unknown.length === 0) return []
+  return [
+    `No Minecraft account is called ${people.unknown.join(', ')}, so they aren’t among its players to let in.`,
   ]
 }
 

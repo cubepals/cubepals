@@ -5,7 +5,7 @@
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import { type Db, schema, type Tx } from '@blockly/db'
 import type { AccessEntry, AccessList, PlayerRef } from '../../domain/access/access.ts'
-import { entryKey } from '../../domain/access/access.ts'
+import { entryKey, type SeededAccess } from '../../domain/access/access.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
 import type { DeploymentCapabilities } from '../capabilities.ts'
@@ -82,6 +82,26 @@ export class AccessService {
           { ...existing, state: 'pending_remove', error: null },
           requestedBy(actor),
         )
+    })
+  }
+
+  /**
+   * Players of the server a world came from, let in as its owner chose (docs/world-import.md § Who
+   * can join): each entry added as one typed would be, and the whitelist turned on where they said.
+   * Never turned off: a world brought doesn't open a server that was closed.
+   */
+  async letIn(actor: Actor, serverId: string, chosen: SeededAccess): Promise<void> {
+    if (chosen.entries.length === 0 && !chosen.whitelistOn) return
+    await this.#change(actor, serverId, async (tx, current) => {
+      for (const entry of chosen.entries) {
+        const existing = current.find(
+          (e) => entryKey(e.list, e.player.uuid) === entryKey(entry.list, entry.player.uuid),
+        )
+        if (existing?.state === 'active' || existing?.state === 'pending_add') continue
+        const state = existing?.state === 'pending_remove' ? 'active' : 'pending_add'
+        await upsertEntry(tx, serverId, { ...entry, state }, requestedBy(actor))
+      }
+      if (chosen.whitelistOn) await setWhitelistPending(tx, serverId, true)
     })
   }
 

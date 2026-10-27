@@ -10,7 +10,7 @@
  * with what only they know asked here (`world-questions.tsx`). What it turned out to be comes back
  * to `onReady`, and the server is made to fit it; a file no server could play says why.
  */
-import type { NewWorldImportView } from '@blockly/contracts'
+import { defaultPeopleChoice, type NewWorldImportView, PeopleChoice } from '@blockly/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { messageOf, useTRPC } from '../../../../../lib/api'
 import { useHandedOnce, useSentImport } from '../../../../../lib/sent-import'
@@ -43,6 +43,36 @@ export function useNewWorld(importId: string | null) {
     refetchInterval: (query) => (query.state.data?.status === 'reading' ? READING_POLL_MS : false),
   })
   return { watched, answer }
+}
+
+/**
+ * Who of the players of the server a world came from its owner lets in (`world-people.tsx`): what
+ * they chose so far, or what is chosen until they say, kept on the import as they change it, for
+ * the server they make from it.
+ */
+export function useChosenPeople(read: NewWorldImportView | undefined) {
+  const trpc = useTRPC()
+  const queries = useQueryClient()
+  const choose = useMutation(
+    trpc.newWorlds.choosePeople.mutationOptions({
+      onSuccess: (next) =>
+        queries.setQueryData(trpc.newWorlds.upload.queryKey({ importId: next.importId }), next),
+    }),
+  )
+  const ready = read?.status === 'ready' ? read : null
+  const people = ready?.people ?? null
+  if (ready === null || people === null) return null
+  return {
+    people,
+    // What was just changed shows at once, while it is kept.
+    choice:
+      choose.isPending && choose.variables !== undefined
+        ? PeopleChoice.parse(choose.variables)
+        : (ready.chosen ?? defaultPeopleChoice(people)),
+    change: (next: PeopleChoice) => choose.mutate({ importId: ready.importId, ...next }),
+    saving: choose.isPending,
+    failure: choose.isError ? messageOf(choose.error) : null,
+  }
 }
 
 export function OwnWorld({

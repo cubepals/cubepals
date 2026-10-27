@@ -106,8 +106,60 @@ type ImportView<Ready> = { importId: string; fileName: string } & (
   | { status: 'refused'; message: string }
 )
 
+/** A player in the files of the server a world came from. */
+interface WorldPerson {
+  uuid: string
+  name: string
+}
+
+/**
+ * Who could join the server a world came from (docs/world-import.md § Who can join): nobody is let
+ * in until its owner chooses (`PeopleChoice`). Null where the world came from no server's folder.
+ */
+export type WorldPeople = {
+  /** Its server let in only the players on its whitelist. */
+  whitelistOn: boolean
+  whitelist: WorldPerson[]
+  operators: WorldPerson[]
+  bans: Array<WorldPerson & { reason: string | null }>
+  /** Names in its files that no Minecraft account has, left out. */
+  unknown: string[]
+} | null
+
+/** The most players a server's files are read for: a large server's regulars. */
+export const MOST_WORLD_PEOPLE = 200
+
+/**
+ * Who its owner lets in from the server a world came from, by UUID: each one on the whitelist,
+ * and those of them who operate it. Its bans come too unless they say not to, and whether only the
+ * whitelist joins is theirs to say.
+ */
+export const PeopleChoice = z.object({
+  letIn: z.array(z.guid()).max(MOST_WORLD_PEOPLE),
+  operators: z.array(z.guid()).max(MOST_WORLD_PEOPLE),
+  keepBans: z.boolean(),
+  whitelistOn: z.boolean(),
+})
+export type PeopleChoice = z.infer<typeof PeopleChoice>
+
+/**
+ * What is chosen until its owner says otherwise: nobody let in, its bans kept, and only its
+ * whitelist joining where only its whitelist did.
+ */
+export const defaultPeopleChoice = (people: NonNullable<WorldPeople>): PeopleChoice => ({
+  letIn: [],
+  operators: [],
+  keepBans: true,
+  whitelistOn: people.whitelistOn,
+})
+
+/** Who of the players of the server a world brought for a new server came from its owner lets in. */
+export const ChooseNewWorldPeopleInput = z.object({ importId: z.uuid(), ...PeopleChoice.shape })
+/** Players of the server a world brought to a server came from, let into it as its owner chose. */
+export const LetInFromUploadInput = WorldImportRef.extend(PeopleChoice.shape)
+
 /** A world brought to a server: ready as a backup of it, with what Cubepals did. */
-export type WorldImportView = ImportView<{ backupId: string }>
+export type WorldImportView = ImportView<{ backupId: string; people: WorldPeople }>
 
 /**
  * A world brought while a server is being made: ready as what the server is made to fit, for its
@@ -127,6 +179,10 @@ export type NewWorldImportView = ImportView<{
      */
     moddedWith: string[] | null
   }
+  /** Who could join the server it came from, for its owner to choose from. */
+  people: WorldPeople
+  /** Who of them its owner let in so far; null where they haven't said (`defaultPeopleChoice`). */
+  chosen: PeopleChoice | null
 }>
 
 export const RestoreBackupInput = z.object({

@@ -6,6 +6,7 @@
  * World imports as rows: one made as its upload finishes, what reading it asked, answered, found or
  * refused. How a world is read and brought is `world-imports.ts`'s.
  */
+import type { PeopleChoice } from '@blockly/contracts'
 import {
   type ModArtifactJson,
   type NewWorldFactsJson,
@@ -13,6 +14,7 @@ import {
   schema,
   type WorldImportAnswerJson,
   type WorldImportQuestionJson,
+  type WorldPeopleJson,
 } from '@blockly/db'
 import { and, count, eq, gt, isNull, ne, sql } from 'drizzle-orm'
 
@@ -71,13 +73,14 @@ export async function worldImportAnswered(
 export async function worldImportReady(
   q: Queryable,
   id: string,
-  result: { backupId: string; notes: string[]; at: Date },
+  result: { backupId: string; people: WorldPeopleJson | null; notes: string[]; at: Date },
 ): Promise<void> {
   await q
     .update(imports)
     .set({
       status: 'ready',
       backupId: result.backupId,
+      people: result.people,
       notes: result.notes,
       finishedAt: result.at,
       question: null,
@@ -89,7 +92,13 @@ export async function worldImportReady(
 export async function newWorldImportReady(
   q: Queryable,
   id: string,
-  result: { facts: NewWorldFactsJson; startsOn: ModArtifactJson; notes: string[]; at: Date },
+  result: {
+    facts: NewWorldFactsJson
+    startsOn: ModArtifactJson
+    people: WorldPeopleJson | null
+    notes: string[]
+    at: Date
+  },
 ): Promise<void> {
   await q
     .update(imports)
@@ -97,11 +106,17 @@ export async function newWorldImportReady(
       status: 'ready',
       facts: result.facts,
       startsOn: result.startsOn,
+      people: result.people,
       notes: result.notes,
       finishedAt: result.at,
       question: null,
     })
     .where(eq(imports.id, id))
+}
+
+/** Who of the players of the server its world came from its owner lets in. */
+export async function worldImportPeopleChosen(q: Queryable, id: string, choice: PeopleChoice): Promise<void> {
+  await q.update(imports).set({ peopleChoice: choice }).where(eq(imports.id, id))
 }
 
 export async function worldImportRefused(

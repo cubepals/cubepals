@@ -15,10 +15,11 @@ import { randomUUID } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { WorldImportView } from '@blockly/contracts'
+import type { PeopleChoice, WorldImportView } from '@blockly/contracts'
 import { NAME_MAX_LENGTH } from '@blockly/contracts'
 import { DAY_MS } from '@blockly/contracts/durations'
-import { type Db, schema, type Tx, type WorldImportAnswerJson } from '@blockly/db'
+import { type Db, schema, type Tx, type WorldImportAnswerJson, type WorldPeopleJson } from '@blockly/db'
+import type { SeededAccess } from '../../domain/access/access.ts'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { nextLevelName } from '../../domain/world/world.ts'
@@ -57,6 +58,7 @@ import {
   worldImportReady,
   worldImportRefused,
 } from './world-import-records.ts'
+import { accessFrom } from './world-people.ts'
 import {
   type Accounts,
   Asks,
@@ -64,6 +66,7 @@ import {
   answerFor,
   LINK_SECONDS,
   notesOn,
+  peopleNotes,
   type Read,
   type ReadingDeps,
   Refused,
@@ -143,6 +146,21 @@ export class WorldImports {
   /** An import as its owner sees it: being read, asking, ready as a backup, or refused and why. */
   async view(actor: Actor, serverId: string, importId: string): Promise<WorldImportView> {
     return viewOf(await this.#owned(actor, serverId, importId), asBackup)
+  }
+
+  /**
+   * Who of the players of the server its world came from its owner lets in, as entries for the
+   * server it was brought to (`AccessService.letIn`). Nobody where it came from no server.
+   */
+  async chosenPeople(
+    actor: Actor,
+    serverId: string,
+    importId: string,
+    choice: PeopleChoice,
+  ): Promise<SeededAccess> {
+    const record = await this.#owned(actor, serverId, importId)
+    if (record.status !== 'ready') throw new AppError('invalid_choice', 'This world isn’t ready yet.')
+    return record.people === null ? { whitelistOn: false, entries: [] } : accessFrom(record.people, choice)
   }
 
   /** Its owner answered what it asked: it is read again with the answer. */
@@ -226,6 +244,7 @@ export class WorldImports {
       )
       const player = await this.#reading.hostPlayer(read, record.answer ?? {}, desired.settings.onlineMode)
       const accounts = await this.#reading.accounts(read, desired.settings.onlineMode)
+      const people = await this.#reading.people(read, desired.settings.onlineMode)
       await this.#keep({
         record,
         pending,
@@ -233,6 +252,7 @@ export class WorldImports {
         read,
         player,
         accounts,
+        people,
         serverVersion: desired.gameVersion,
       })
     } finally {
@@ -252,6 +272,8 @@ export class WorldImports {
     player: { uuid: string; name: string } | null
     /** An offline-mode server's players, moved to their accounts where the server plays online. */
     accounts: Accounts
+    /** Who could join the server it came from, for its owner to choose from. */
+    people: WorldPeopleJson | null
     serverVersion: string
   }): Promise<void> {
     const { record, pending, server, read, player, accounts } = input
@@ -302,6 +324,7 @@ export class WorldImports {
         serverVersion: input.serverVersion,
       }),
       ...accountNotes(accounts),
+      ...peopleNotes(input.people),
     ]
     const backupId = randomUUID()
     let key = pending.key
@@ -325,6 +348,7 @@ export class WorldImports {
       key,
       sizeBytes,
       notes,
+      people: input.people,
       serverVersion: input.serverVersion,
     }).catch(async (error: unknown) => {
       // A retry writes it again under a new key, so the one written here goes with the failure.
@@ -375,6 +399,7 @@ export class WorldImports {
     key: string
     sizeBytes: number
     notes: string[]
+    people: WorldPeopleJson | null
     serverVersion: string
   }): Promise<boolean> {
     const { record, read, server } = input
@@ -423,7 +448,12 @@ export class WorldImports {
           gameVersion: read.facts.gameVersion,
         },
       })
-      await worldImportReady(tx, record.id, { backupId: input.backupId, notes: input.notes, at: now })
+      await worldImportReady(tx, record.id, {
+        backupId: input.backupId,
+        people: input.people,
+        notes: input.notes,
+        at: now,
+      })
       await audit(tx, 'system', locked.id, 'server.world_uploaded', {
         backupId: input.backupId,
         importId: record.id,
@@ -459,7 +489,10 @@ function mostOf(archive: WorldArchive): number {
 }
 
 /** A world brought to a server is ready as the backup it became. */
-const asBackup = (record: WorldImportRecord) => ({ backupId: record.backupId as string })
+const asBackup = (record: WorldImportRecord) => ({
+  backupId: record.backupId as string,
+  people: record.people,
+})
 
 async function audit(
   tx: Tx,

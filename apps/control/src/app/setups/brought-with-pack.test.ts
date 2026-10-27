@@ -34,6 +34,7 @@ const world = (gameVersion: string, playsOn = gameVersion): BroughtWorld => ({
     sizeBytes: 1,
     fileName: 'world.tar.gz',
   },
+  access: null,
 })
 
 /** What a pack resolved to, on `gameVersion`. */

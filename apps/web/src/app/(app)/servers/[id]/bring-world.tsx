@@ -10,13 +10,20 @@
  * world kept as a backup with what Cubepals did to bring it. Restoring it is the next step, which
  * the page that opened this offers. Not where a world is restored, or a backup taken.
  */
-import type { ServerView, WorldImportView } from '@blockly/contracts'
+import {
+  defaultPeopleChoice,
+  type PeopleChoice,
+  type ServerView,
+  type WorldImportView,
+  type WorldPeople,
+} from '@blockly/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { messageOf, useTRPC } from '../../../../lib/api'
 import { bytes } from '../../../../lib/present'
 import { putFile } from '../../../../lib/upload'
 import { Button, Modal, Note, ProgressBar, TextField } from '../../../../ui'
+import { WorldPeopleChoice } from '../../world-people'
 import { BroughtNotes, WorldQuestions } from '../../world-questions'
 
 /** How often a world being read is asked about: reading a large one takes a minute or two. */
@@ -115,6 +122,9 @@ export function BringWorld({
         )}
         {state?.status === 'asking' && <Questions view={view} state={state} />}
         {state?.status === 'ready' && <Kept notes={state.notes} />}
+        {state?.status === 'ready' && state.people !== null && (
+          <LetIn view={view} importId={state.importId} people={state.people} />
+        )}
         {state?.status === 'refused' && <Note tone="danger">{state.message}</Note>}
         {watched.isError && <Note tone="danger">{messageOf(watched.error)}</Note>}
         {failure && <Note tone="danger">{failure}</Note>}
@@ -203,6 +213,52 @@ function Kept({ notes }: { notes: string[] }) {
         It’s kept as a backup of this server. Restore it to play it; the world it has now is backed up first.
       </p>
       <BroughtNotes notes={notes} />
+    </div>
+  )
+}
+
+/**
+ * Who of the players of the server the world came from its owner lets into this one: chosen here,
+ * and let in at once, as players added by name are, whether or not they restore the world.
+ */
+function LetIn({
+  view,
+  importId,
+  people,
+}: {
+  view: ServerView
+  importId: string
+  people: NonNullable<WorldPeople>
+}) {
+  const trpc = useTRPC()
+  const queries = useQueryClient()
+  const [choice, setChoice] = useState<PeopleChoice>(() => defaultPeopleChoice(people))
+  const letIn = useMutation(
+    trpc.backups.letInFromUpload.mutationOptions({
+      onSuccess: () =>
+        queries.invalidateQueries({ queryKey: trpc.access.get.queryKey({ serverId: view.id }) }),
+    }),
+  )
+  const nothing =
+    choice.letIn.length === 0 && !choice.whitelistOn && (!choice.keepBans || people.bans.length === 0)
+  return (
+    <div className="bk-stack" style={{ gap: 'var(--space-12)' }}>
+      <WorldPeopleChoice people={people} choice={choice} disabled={letIn.isSuccess} onChange={setChoice} />
+      {letIn.isSuccess ? (
+        <Note tone="success">Done. They’re on this server’s players page.</Note>
+      ) : (
+        <div>
+          <Button
+            variant="secondary"
+            disabled={nothing}
+            busy={letIn.isPending ? 'Letting them in' : undefined}
+            onClick={() => letIn.mutate({ serverId: view.id, importId, ...choice })}
+          >
+            Let them in
+          </Button>
+        </div>
+      )}
+      {letIn.isError && <Note tone="danger">{messageOf(letIn.error)}</Note>}
     </div>
   )
 }

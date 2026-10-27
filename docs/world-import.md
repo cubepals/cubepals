@@ -67,8 +67,15 @@ Before the plan:
   data, stats and advancements renamed to the account's UUID (`withPlayersRenamed`), for a server
   that plays in online mode: every new one, and an existing one that does. A name no account has
   keeps its files, and the notes say who was moved and who wasn't.
-- **Next:** who can join (a server's whitelist, operators and bans) and a server's other worlds,
-  then the guide.
+- **Who can join comes with a server's folder.** Its `whitelist.json`, `ops.json` and
+  `banned-players.json` are read beside its `server.properties`, each player named as the server
+  the world goes to knows them, a name no account has left out and said (`world-people.ts`). The
+  owner chooses from the list (`world-people.tsx`): nobody is let in until they say, its bans come
+  unless they say not, and only the whitelist joins where only the whitelist did. On the create
+  page the choice is kept on the import (`newWorlds.choosePeople`) and the new server starts with
+  it (`createAccess`); on the world page it is let in at once (`backups.letInFromUpload`,
+  `AccessService.letIn`), which never turns a server's whitelist off.
+- **Next:** a server's other worlds, then the guide.
 
 ## What it does
 
@@ -212,8 +219,10 @@ links or devices, and the entry, inflated-size and time limits the world reader 
 ## Who can join
 
 A server's folder brings its whitelist, operators and bans. The import shows them as a list the
-player chooses from; nothing is let in without that. Without one, who can join is what a new
-server's is, or what the server's is now.
+player chooses from; nothing is let in without that. Its bans come unless the player says not,
+since a ban lets nobody in, and a server that let in only its whitelist does so again until the
+player says otherwise. Both are shown, and undone on the players page. Without one, who can join
+is what a new server's is, or what the server's is now.
 
 ## What the player sees
 

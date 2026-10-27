@@ -9,13 +9,15 @@
  * a launcher's saves or a server's world, read from the same upload while the page waits. Once it
  * is read, or can't be, `onWorld` hands the page the pack and its world together, and the server
  * made from the pack starts on it; what only its owner knows is asked here (`world-questions.tsx`),
- * and they can start on a new world instead.
+ * with who of its players come along (`world-people.tsx`), and they can start on a new world
+ * instead.
  */
 import { useEffect, useRef, useState } from 'react'
 import { messageOf } from '../../../../lib/api'
 import { Button, Note } from '../../../../ui'
+import { WorldPeopleChoice } from '../../world-people'
 import { BroughtNotes, WorldQuestions } from '../../world-questions'
-import { useNewWorld } from './world/own-world'
+import { useChosenPeople, useNewWorld } from './world/own-world'
 
 export function PackWorld({
   importId,
@@ -29,6 +31,7 @@ export function PackWorld({
   const { watched, answer } = useNewWorld(importId)
   const read = watched.data
   const [fresh, setFresh] = useState(false)
+  const people = useChosenPeople(read)
   // Handed once, as soon as the world is read or can't be, whatever the page passes as `onWorld`
   // each render; after that only when its owner says, so a late answer never undoes their pick.
   const handTo = useRef(onWorld)
@@ -69,6 +72,12 @@ export function PackWorld({
               : `The server starts on its world, ${read.world.name}, from Minecraft ${read.world.gameVersion}.`}
           </p>
           {!fresh && <BroughtNotes notes={read.notes} />}
+          {!fresh && people !== null && (
+            <WorldPeopleChoice people={people.people} choice={people.choice} onChange={people.change} />
+          )}
+          {!fresh && people !== null && people.failure !== null && (
+            <Note tone="danger">{people.failure}</Note>
+          )}
           <div>
             <Button variant="ghost" size="sm" onClick={toggle}>
               {fresh ? `Start on ${read.world.name} instead` : 'Start on a new world instead'}

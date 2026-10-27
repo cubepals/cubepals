@@ -309,6 +309,26 @@ export interface NewWorldFactsJson {
   moddedWith?: string[]
 }
 
+/** A player in a server's own access files, named as the server a world goes to knows them. */
+export interface WorldPersonJson {
+  uuid: string
+  name: string
+}
+
+/**
+ * Who could join the server a world came from: its whitelist, operators and bans, as its own files
+ * listed them. Nobody is let in by reading them; its owner chooses who is.
+ */
+export interface WorldPeopleJson {
+  /** Its server let in only the players on its whitelist. */
+  whitelistOn: boolean
+  whitelist: WorldPersonJson[]
+  operators: WorldPersonJson[]
+  bans: Array<WorldPersonJson & { reason: string | null }>
+  /** Names in its files that no Minecraft account has, which are left out. */
+  unknown: string[]
+}
+
 /** An uploaded world's own facts, as its server.properties and level.dat say. */
 export interface UploadedWorldFactsJson {
   seed: string | null

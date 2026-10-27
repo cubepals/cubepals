@@ -12,6 +12,7 @@
  */
 import { NAME_MAX_LENGTH } from '@blockly/contracts'
 import type { Db, Tx } from '@blockly/db'
+import type { SeededAccess } from '../../domain/access/access.ts'
 import { diskForBroughtWorld, type Entitlements, entitlementsFor } from '../../domain/account/entitlements.ts'
 import { isDatapack } from '../../domain/mods/artifact.ts'
 import type { CarriedFile } from '../../domain/revision/carried.ts'
@@ -78,6 +79,8 @@ export interface NewServerDraft {
   storageGb: number
   /** That disk where it is past the plan's first, as a world its owner brought needs; else null. */
   grownGb: number | null
+  /** Who it lets in from the server a world its owner brought came from, as they chose; else null. */
+  access: SeededAccess | null
   /** What the audit row adds about where it came from: a template, or a curated pack's release. */
   origin: Record<string, unknown>
 }
@@ -174,15 +177,22 @@ function firstWorld(
   chosen: ResolvedSetup | null,
   gameVersion: string,
   plan: Entitlements,
-): Pick<NewServerDraft, 'world' | 'storageGb' | 'grownGb'> {
+): Pick<NewServerDraft, 'world' | 'storageGb' | 'grownGb' | 'access'> {
   const brought = chosen?.brought
   if (brought === undefined)
-    return { world: newWorld(request, chosen, gameVersion), storageGb: plan.storage.startGb, grownGb: null }
+    return {
+      world: newWorld(request, chosen, gameVersion),
+      storageGb: plan.storage.startGb,
+      grownGb: null,
+      access: null,
+    }
   const disk = diskForBroughtWorld(plan, brought.facts.sizeBytes, brought.startsOn.sizeBytes)
   return {
     world: broughtWorld(brought, gameVersion),
     storageGb: disk,
     grownGb: disk > plan.storage.startGb ? disk : null,
+    // Who its owner let in of the players of the server it came from; nobody they didn't choose.
+    access: brought.access,
   }
 }
 
