@@ -88,6 +88,25 @@ export interface BillingState {
   } | null
 }
 
+/**
+ * A product that sells a paid plan at a price and with hours of its own: an early price. More than
+ * one may sell the same plan, a later one standing for new checkouts while the ones before it go
+ * on speaking for the subscriptions sold on them, archived or not.
+ */
+export interface EarlyProduct {
+  id: string
+  planKey: string
+  /** What it charges a month, in US cents. */
+  priceCents: number
+  /** The play it includes each month, in meter units, in place of the plan's. */
+  includedUnits: number
+  /** The most extra hours a month it lets an owner allow, in place of the plan's; null: the ceiling alone. */
+  mostExtraUnits: number | null
+  /** Sold no more. */
+  archived: boolean
+  createdAt: Date
+}
+
 /** A paid order, as the billing provider reports it: what it was for, and every amount in cents. */
 export interface BillingOrder {
   externalOrderId: string
@@ -223,6 +242,11 @@ export interface BillingProvider {
   sells(planKey: string): boolean
   /** The plan's yearly product is sold here: a checkout for it can be made. */
   sellsYear(planKey: string): Promise<boolean>
+  /**
+   * The product that sells the plan at an early price now, the newest not archived; null when none
+   * does. Nothing offers it on its own: what may be sold at it is Blockly's to decide.
+   */
+  earlyProduct(planKey: string): Promise<EarlyProduct | null>
   /**
    * The subscription ends at the end of the period paid for instead of renewing, as a cancel in
    * the portal would: a year was bought to follow it.
