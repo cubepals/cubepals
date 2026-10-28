@@ -142,7 +142,7 @@ const COVERS = ['', 'the first', 'the first two', 'all three']
 /**
  * What a plan's hours of play are, on the dashed line wherever a plan states them. A month's are
  * set against the three habits, and hours in all as what happens when they are played. A paid
- * plan's opens with why its price is what it is, and ends with where the code is.
+ * plan's ends with where the code is.
  */
 export function PlayHours({
   hours,
@@ -178,13 +178,6 @@ export function PlayHours({
     <Tip
       tip={
         <>
-          {priceCents > 0 && (
-            <p>
-              {dollars(priceCents)} for {hours} hours isn’t cheap, and we know it. Cubepals is small, and
-              plans are what pay for the servers. Hours get cheaper to run as more people play, and the price
-              will follow.
-            </p>
-          )}
           <p>Hours count while your server is on, and everyone on it shares them.</p>
           <ul className="bk-tip__list">
             {PLAY_HABITS.map((habit) => (
