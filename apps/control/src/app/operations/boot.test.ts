@@ -504,7 +504,7 @@ describe('a resume', () => {
       resumed: { runs: true },
     })
     await boot.run(ctx, server, handle, vanilla)
-    expect(seen).toMatchObject({ process: 2, forceStops: 1, marks: ['resume_hung'] })
+    expect(seen).toMatchObject({ process: 2, forceStops: 1, marks: ['resume_hung', 'let_in'] })
   }, 30_000)
 
   test('that runs only near its bound, its output slow to show, is given the time to show it boots', async () => {
@@ -536,6 +536,6 @@ describe('a resume', () => {
     await boot.run(ctx, server, handle, vanilla)
     // Within the bound the test gives it, not the boot's wait.
     expect(Date.now() - asked).toBeLessThan(5_000)
-    expect(seen).toMatchObject({ process: 2, forceStops: 1, marks: ['resume_hung'] })
+    expect(seen).toMatchObject({ process: 2, forceStops: 1, marks: ['resume_hung', 'let_in'] })
   })
 })

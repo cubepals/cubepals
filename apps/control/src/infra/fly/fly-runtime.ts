@@ -109,7 +109,7 @@ import {
   isFlyHandle,
   isFlySnapshot,
 } from './handle.ts'
-import { asleepOn, heldTags, META, machineConfig, portsOf } from './machine-config.ts'
+import { asleepOn, heldTags, META, machineConfig, portsOf, startStep } from './machine-config.ts'
 
 export { keyFromApp } from './fly-runtime/apps.ts'
 export { exportJob, partBatches, partsJob, partsPut, restoreJob } from './fly-runtime/helper-jobs.ts'
@@ -253,7 +253,7 @@ export class FlyRuntime implements MinecraftRuntime {
     })
     await progress.handle(handle)
 
-    await progress.step(asleep === null ? 'booting' : 'resuming')
+    await startStep(progress, existing, asleep)
     await this.start(handle)
     return handle
   }

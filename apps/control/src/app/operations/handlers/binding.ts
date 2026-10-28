@@ -15,7 +15,7 @@ import { PermanentFailure } from '../../errors.ts'
 import type { JobQueue } from '../../ports/jobs.ts'
 import type { ProgressSink, RuntimeHandle } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
-import { findServer, loadRuntime, saveApplied, saveHandle } from '../../servers/persistence.ts'
+import { findServer, loadRuntime, memoryKept, saveApplied, saveHandle } from '../../servers/persistence.ts'
 import type { DesiredRuntime } from '../../servers/specs.ts'
 import type { OperationContext, OperationHandler } from '../runner.ts'
 
@@ -53,6 +53,9 @@ export function serverBinding(deps: {
   const progressSink = (ctx: OperationContext, server: MinecraftServer): ProgressSink => ({
     step: (step) => ctx.step(step),
     handle: (handle) => saveHandle(db, server.id, handle, server.regionKey),
+    // A machine stopped though its last sleep kept its memory: the provider dropped what it kept.
+    mark: async (mark) =>
+      ctx.mark(mark === 'not_asleep' && (await memoryKept(db, server.id)) ? 'memory_lost' : mark),
   })
 
   /** Starts compute and keeps the handle it comes back with, which may reach it at another address. */

@@ -33,7 +33,7 @@ import {
 } from '../../servers/persistence.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { clearPresence, closeInterval, lastActivity } from '../../servers/usage.ts'
-import type { OperationHandler, OperationResult } from '../runner.ts'
+import type { OperationContext, OperationHandler, OperationResult, SleepMark } from '../runner.ts'
 import type { ServerBinding } from './binding.ts'
 import type { GameConsole } from './game-console.ts'
 
@@ -44,6 +44,32 @@ import type { GameConsole } from './game-console.ts'
  * for a reason of its own, and takes a real stop.
  */
 const SLEEPS: ReadonlySet<StopReason> = new Set(['idle', 'user', 'daily'])
+
+/** Why a stop can't keep the memory, from what it knows before asking the server: null where it may. */
+function refusedAtOnce(reason: StopReason, sleeps: boolean, saved: boolean): SleepMark | null {
+  if (!SLEEPS.has(reason)) return 'stop_reason'
+  if (!sleeps) return 'no_sleep'
+  return saved ? null : 'unsaved'
+}
+
+/**
+ * A server asleep with its memory kept where nothing refused it, stopped otherwise; the record
+ * keeps how it went (`SleepMark`), so a wake that boots can be told from one that resumes.
+ */
+async function sleepOrStop(
+  ctx: OperationContext,
+  deps: { db: Db; runtime: Pick<Runtimes, 'sleep' | 'stop'> },
+  handle: RuntimeHandle,
+  refusal: SleepMark | null,
+): Promise<void> {
+  if (refusal !== null) {
+    await deps.runtime.stop(handle)
+    return ctx.mark(refusal)
+  }
+  const kept = (await deps.runtime.sleep(handle)) === 'suspended'
+  await saveMemoryKept(deps.db, ctx.server.id, kept)
+  await ctx.mark(kept ? 'slept' : 'runtime_stopped')
+}
 
 /** Who the idle check's stops are requested by. */
 const IDLE_ACTOR = requestedBy({ kind: 'system', reason: 'idle' })
@@ -119,15 +145,15 @@ export function windingDown(deps: {
   }
 
   /**
-   * Whether a server just saved may sleep with its memory kept rather than stop: nobody on it, as
-   * the game says now (one who joined since the stop was asked would be frozen with it, where a
-   * stop at least says goodbye), and its files written through to its storage, since the provider
-   * may drop the memory it kept and boot from there.
+   * Why a server just saved may not sleep with its memory kept, or null where it may: nobody on
+   * it, as the game says now (one who joined since the stop was asked would be frozen with it,
+   * where a stop at least says goodbye), and its files written through to its storage, since the
+   * provider may drop the memory it kept and boot from there.
    */
-  const mayDoze = async (handle: RuntimeHandle, booted: AppliedConfigJson | null) => {
-    if ((await playersOn(deps.probe, gameOf(runtime, handle, booted))) !== 0) return false
+  const dozeRefusal = async (handle: RuntimeHandle, booted: AppliedConfigJson | null) => {
+    if ((await playersOn(deps.probe, gameOf(runtime, handle, booted))) !== 0) return 'players_on' as const
     const synced = await runtime.exec(handle, ['sync'], 60).catch(() => null)
-    return synced?.exitCode === 0
+    return synced?.exitCode === 0 ? null : ('unsynced' as const)
   }
 
   const stop: OperationHandler = {
@@ -149,9 +175,8 @@ export function windingDown(deps: {
         await deps.players.snapshot(server, handle).catch(() => undefined)
         await ctx.step('stopping')
         // Asleep only once the world is saved: unsaved, a stop saves it on the way down.
-        if (SLEEPS.has(reason) && runtime.sleeps(handle) && saved && (await mayDoze(handle, applied)))
-          await saveMemoryKept(db, server.id, (await runtime.sleep(handle)) === 'suspended')
-        else await runtime.stop(handle)
+        const refused = refusedAtOnce(reason, runtime.sleeps(handle), saved)
+        await sleepOrStop(ctx, { db, runtime }, handle, refused ?? (await dozeRefusal(handle, applied)))
       }
       await db.transaction(async (tx) => {
         const locked = await lockServer(tx, server.id)

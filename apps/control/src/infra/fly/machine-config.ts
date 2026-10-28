@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { createHash } from 'node:crypto'
-import type { RuntimeSpec, RuntimeTags } from '../../app/ports/runtime.ts'
+import type { ProgressSink, RuntimeSpec, RuntimeTags } from '../../app/ports/runtime.ts'
 import type { FlySchemas } from './client.ts'
 
 type Machine = FlySchemas['Machine']
@@ -102,13 +102,27 @@ const specDigest = ({ resumesOn: _resumesOn, ...spec }: RuntimeSpec) =>
  * boot.
  */
 export function asleepOn(machine: Machine | null, spec: RuntimeSpec): string | null {
-  const asleep = machine?.state === 'suspended' || machine?.state === 'suspending'
+  const asleep = isAsleep(machine)
   const metadata = machine?.config?.metadata ?? {}
   const same =
     metadata[META.digest] === specDigest(spec) ||
     (spec.resumesOn !== undefined && metadata[META.resumes] === spec.resumesOn)
   if (!asleep || !same) return null
   return machine?.config?.mounts?.[0]?.volume ?? null
+}
+
+/** Whether a machine is asleep with its memory, or on its way there. */
+const isAsleep = (machine: Machine | null): boolean =>
+  machine?.state === 'suspended' || machine?.state === 'suspending'
+
+/**
+ * A start's step, `resuming` a machine asleep on what it is asked to run (`asleepOn`) or `booting`,
+ * and for a boot the reason, kept on the operation's record (`RuntimeMark`).
+ */
+export async function startStep(progress: ProgressSink, existing: Machine | null, asleep: string | null) {
+  if (asleep === null)
+    await progress.mark?.(existing === null ? 'no_compute' : isAsleep(existing) ? 'other_spec' : 'not_asleep')
+  await progress.step(asleep === null ? 'booting' : 'resuming')
 }
 
 /**
