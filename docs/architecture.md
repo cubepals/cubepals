@@ -1280,7 +1280,7 @@ export interface EdgeRoutes {
     hostname: string
     destination: string /* host:port */
     state?: 'asleep' | 'restarting' // absent while it runs
-    backAt?: string // asleep because the owner's day of play is used: when it is back (ISO)
+    trialOver?: true // asleep, and its owner's free trial is played: no join wakes it
     waking?: true // asleep, and on its way up: woken by a join or a ping
     motd?: string // asleep: the owner's own message, section-sign codes; absent while it is the welcome
     icon?: string // asleep: a link to the owner's picture, a 64 square PNG; new link, new picture
@@ -1292,7 +1292,7 @@ export type WakeResult =
   | { outcome: 'ready'; destination: string }
   | { outcome: 'starting' }                              // still booting when the wait ran out
   | { outcome: 'restarting' }                            // still on its way back from a restart
-  | { outcome: 'denied'; reason: 'unknown' | 'suspended' | 'paused' | 'quota' | 'deleted'; backAt?: string }
+  | { outcome: 'denied'; reason: 'unknown' | 'suspended' | 'paused' | 'quota' | 'deleted' }
 
 // POST /edge/v1/ping-wake { hostname }                 → { waking: boolean } (at once; may start it)
 // POST /edge/v1/idle      { hostname }                 → 204      (a hint; the control plane decides)
@@ -1448,7 +1448,7 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
     per server every 30 s (`apps/edge/ping-wake.ts`). It waits up to 1.5 s for the answer before
     it is answered. While the server wakes, by that ask, a join, or a route that says `waking`, a
     ping is told "Waking up · join in a few seconds" (`WAKING_MOTD`) in place of the sleeping
-    notice. A server whose day of play is used is never asked for.
+    notice. A server whose owner's free trial is played is never asked for.
   - While a join is waking a server, a ping still gets this listener's answer: the control plane
     routes a starting server as `asleep` until it runs, and the wake webhook hands every join to
     the waiting room at once, so mc-router never has a wake in flight to show its loading MOTD for.
