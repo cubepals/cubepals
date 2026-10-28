@@ -38,6 +38,12 @@ const plugin = (id: string, strings: string[] = []) =>
     [`net/example/${id}/Plugin.class`]: classFile({ name: `net/example/${id}/Plugin`, strings }),
   })
 const unique = (name: string) => `${name}${randomUUID().slice(0, 6)}`
+/** A Fabric mod that says it runs only in players' games. */
+const clientMod = (id: string) =>
+  zipBytes({
+    ...unzipBytes(fabricJar(id, { environment: 'client', depends: { minecraft: '1.21.1' } })),
+    [`net/example/${id}/Mod.class`]: classFile({ name: `net/example/${id}/Mod` }),
+  })
 
 let h: Harness
 const store = new MemoryStore()
@@ -223,7 +229,7 @@ describe.skipIf(!hasDatabase)('the jars an uploaded pack keeps, as the lists cha
     ])
   }, 60_000)
 
-  test('one a new signature matches keeps its answer until a pack carrying it is next built', async () => {
+  test('one a new signature matches keeps its answer until a pack carrying it is next built, then its servers’ owners are told', async () => {
     const owner = await h.user('Fin', 'plus')
     const marker = `==${randomUUID().slice(0, 8)}`
     const odd = zipBytes({
@@ -232,14 +238,21 @@ describe.skipIf(!hasDatabase)('the jars an uploaded pack keeps, as the lists cha
     })
     const pack = zipBytes({ 'mods/odd.jar': odd })
     const first = await upload(owner, pack, 'Odd Mods.zip')
-    expect(first).toMatchObject({ status: 'ready' })
+    if (first.status !== 'ready') throw new Error('The pack was refused')
     expect(await checkOf(odd)).toMatchObject({ state: 'clean', checkedAt: expect.any(Date) })
+    const server = await h.create(owner, { from: { kind: 'import', importId: first.importId } })
 
     malware.entries = [{ kind: 'string', value: marker, family: 'Example' }]
     await h.app.jarChecks.refresh()
     expect(await checkOf(odd)).toMatchObject({ state: 'clean', checkedAt: null })
+    expect(h.mail.to(`${owner.userId}@example.test`)).toEqual([])
     expect(await upload(owner, pack, 'Odd Mods.zip')).toMatchObject({ status: 'refused' })
     expect(await checkOf(odd)).toMatchObject({ state: 'quarantined', finding: { match: marker } })
+    // The server that runs it already comes off it at its next start, and its owner is told.
+    const [told] = h.mail.to(`${owner.userId}@example.test`)
+    expect(told?.subject).toStartWith('We’re taking odd.jar off ')
+    const after = (await h.app.specs.desired(h.db, await h.server(server.id))).spec.env
+    expect(after.MODRINTH_OVERRIDES_EXCLUSIONS?.split('\n')).toEqual(['mods/odd.jar'])
   }, 60_000)
 })
 
@@ -488,3 +501,118 @@ describe.skipIf(!hasDatabase)('a jar Blockly left out for players, which a mod o
     ])
   }, 60_000)
 })
+
+describe.skipIf(!hasDatabase)('the jars an uploaded pack leaves to players’ games', () => {
+  test('one it carries, a list names by its digest, refuses the pack', async () => {
+    const owner = await h.user('Max', 'plus')
+    const bad = clientMod(unique('minimap'))
+    malware.entries = [{ kind: 'sha1', value: digest('sha1', bad), family: 'Example' }]
+    await h.app.jarChecks.refresh()
+    const view = await upload(
+      owner,
+      zipBytes({ 'mods/good.jar': mod(unique('good')), 'mods/minimap.jar': bad }),
+      'With Minimap.zip',
+    )
+    expect(view).toMatchObject({
+      status: 'refused',
+      message:
+        'This pack holds minimap.jar, which matches known malware, so Cubepals won’t build a server from it.',
+    })
+  }, 60_000)
+
+  test('one it lists, a list names by its digest, refuses the pack', async () => {
+    const owner = await h.user('Ned', 'plus')
+    const bad = clientMod(unique('zoom'))
+    malware.entries = [{ kind: 'sha512', value: digest('sha512', bad), family: 'Example' }]
+    await h.app.jarChecks.refresh()
+    const view = await upload(owner, listing(bad, 'mods/zoom.jar', 'zoom'), 'Listed Zoom.mrpack')
+    expect(view).toMatchObject({
+      status: 'refused',
+      message:
+        'This pack holds zoom.jar, which matches known malware, so Cubepals won’t build a server from it.',
+    })
+  }, 60_000)
+
+  test('ones no list names are kept with their sha512, checked', async () => {
+    const owner = await h.user('Oda', 'plus')
+    const carried = clientMod(unique('shaders'))
+    const listed = clientMod(unique('hud'))
+    const view = await upload(
+      owner,
+      zipBytes({
+        ...unzipBytes(listing(listed, 'mods/hud.jar', 'hud')),
+        'overrides/mods/shaders.jar': carried,
+      }),
+      'Pretty Pack.mrpack',
+    )
+    if (view.status !== 'ready') throw new Error(`Refused: ${view.status === 'refused' ? view.message : ''}`)
+    const [built] = await h.db
+      .select({ sha512: schema.packImports.packSha512 })
+      .from(schema.packImports)
+      .where(eq(schema.packImports.id, view.importId))
+    const leftOut = (await loadPackContents(h.db, built?.sha512 ?? ''))?.leftOut ?? []
+    expect(leftOut).toContainEqual({ path: 'mods/hud.jar', why: 'players', sha512: digest('sha512', listed) })
+    expect(leftOut).toContainEqual({
+      path: 'mods/shaders.jar',
+      why: 'players',
+      sha512: digest('sha512', carried),
+    })
+    expect(await checkOf(carried)).toMatchObject({ state: 'clean', checkedAt: expect.any(Date) })
+    expect(await checkOf(listed)).toMatchObject({ state: 'clean', checkedAt: null })
+  }, 60_000)
+})
+
+/**
+ * A Modrinth pack listing `bytes` at `path`, which the catalog publishes as for players' games
+ * alone, beside one mod it carries for servers.
+ */
+const listing = (bytes: Uint8Array, path: string, project: string) => {
+  const id = unique(project)
+  const file = cdn.file(id, bytes)
+  h.catalog.publish(
+    {
+      projectId: id,
+      slug: id,
+      name: id,
+      summary: '',
+      iconUrl: null,
+      environments: ['client_only'],
+      downloads: 1,
+    },
+    [
+      {
+        versionId: `${id}-1`,
+        projectId: id,
+        versionLabel: '1',
+        channel: 'release',
+        state: 'listed',
+        environment: 'client_only',
+        loaders: ['fabric'],
+        gameVersions: ['1.21.1'],
+        publishedAt: new Date(Date.UTC(2026, 0, 1)),
+        file,
+        dependencies: [],
+      },
+    ],
+  )
+  const index = {
+    formatVersion: 1,
+    game: 'minecraft',
+    versionId: '1.0',
+    name: 'Listing Pack',
+    files: [
+      {
+        path,
+        hashes: { sha1: digest('sha1', bytes), sha512: file.sha512 },
+        env: { client: 'required', server: 'required' },
+        downloads: [file.url],
+        fileSize: file.sizeBytes,
+      },
+    ],
+    dependencies: { minecraft: '1.21.1', 'fabric-loader': '0.16.14' },
+  }
+  return zipBytes({
+    'modrinth.index.json': utf8(JSON.stringify(index)),
+    'overrides/mods/core.jar': mod(unique('core')),
+  })
+}

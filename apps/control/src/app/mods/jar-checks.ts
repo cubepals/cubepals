@@ -13,17 +13,18 @@
  *   where it is published (`ports/malware.ts`). A jar already uploaded that a list now names is
  *   quarantined, and its owners are told it comes off at their server's next start.
  *
- * A pack's jars, while the pack is built (`packs/build.ts`): each one it carries, wherever it is
- * placed, read the same way (`check`); each one it lists by its download held to the lists by
- * the digests the pack gives (`lookUp`), which only refuse the pack, since a pack's word alone
- * quarantines nothing. A jar a pack left out, which a start finds another mod needs, is looked
- * up the same way before its servers run it (`packs/contents.ts`). Either way the jar's check is
- * kept by its sha512, so a list that names it later quarantines it, its pack's servers leave it
- * out at their next start, and their owners are told. A carried jar's check holds all its
- * digests; a listed one's holds its sha512, and its sha1 only where the catalog vouches for it, so
- * a list that names a listed jar later by its sha1 alone finds it only then. A pack's jar has no
- * bytes kept of its own to read again: when the lists change, its answer stands until a pack
- * carrying it is next built, which reads it again.
+ * A pack's jars, while the pack is built (`packs/build.ts`), kept or left to players' games: each
+ * one it carries, wherever it is placed, read the same way (`check`); each one it lists by its
+ * download held to the lists by the digests the pack gives (`lookUp`), which only refuse the
+ * pack, since a pack's word alone quarantines nothing. A jar a pack left out, which a start finds
+ * another mod needs, is looked up the same way before its servers run it (`packs/contents.ts`).
+ * Either way the jar's check is kept by its sha512, so a list that names it later quarantines it,
+ * its pack's servers leave it out at their next start, and their owners are told. A carried jar's
+ * check holds all its digests; a listed one's holds its sha512, and its sha1 only where the
+ * catalog vouches for it, so a list that names a listed jar later by its sha1 alone finds it only
+ * then. A pack's jar has no bytes kept of its own to read again: when the lists change, its
+ * answer stands until a pack carrying it is next built, which reads it again, and tells the
+ * owners of servers that run it if it is found to be malware.
  *
  * A quarantined jar is kept out of every server: never pinned, left out of each start's spec
  * (`servers/specs.ts`), a pack's by its path, and never handed to a runtime
@@ -196,13 +197,16 @@ export class JarChecks {
   /**
    * A jar a pack carries, held here to what an upload is: its digests looked up, then every class
    * read, and the answer kept like an upload's, so a list that names it by a digest later
-   * quarantines it. A jar read since the lists last changed keeps its answer.
+   * quarantines it. A jar read since the lists last changed keeps its answer. One quarantined here
+   * may run already, on other servers or in other packs: their owners are told, as `run` tells them.
    */
   async check(bytes: Uint8Array): Promise<JarCheck> {
     const digests = digestsOf(bytes)
     const [known] = await this.#db.select().from(checks).where(eq(checks.sha512, digests.sha512))
     if (settled(known)) return known
-    return (await this.screen(digests)) ?? (await this.#judge(bytes, digests))
+    const found = (await this.screen(digests)) ?? (await this.#judge(bytes, digests))
+    if (found.state === 'quarantined' && found.releasedBy === null) await this.#tellOwners(found.sha512)
+    return found
   }
 
   /** A jar read whole, and what it was found to be kept as its check. */
