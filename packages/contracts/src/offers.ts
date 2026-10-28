@@ -30,3 +30,20 @@ export function withOffers(plans: readonly PublicPlan[], offers: readonly Public
         }
   })
 }
+
+/**
+ * A paid plan's card as its own subscriber holds it: the price and hours their subscription pays
+ * for (their entitlements), which stay whatever a new subscriber is offered. Any other plan, or
+ * the trial, as it is.
+ */
+export function asHeld(
+  plan: PublicPlan,
+  held: { plan: string; monthlyPriceCents: number; includedUnits: number | null },
+): PublicPlan {
+  if (plan.key !== held.plan || plan.monthlyPriceCents === 0) return plan
+  return {
+    ...plan,
+    monthlyPriceCents: held.monthlyPriceCents,
+    includedHours: held.includedUnits ?? plan.includedHours,
+  }
+}

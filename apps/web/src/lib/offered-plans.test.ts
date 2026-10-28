@@ -7,7 +7,7 @@
  * read from the offer endpoint, and the plan table's own wherever that can't be read.
  */
 import { afterEach, describe, expect, test } from 'bun:test'
-import { type PublicPlan, withOffers } from '@blockly/contracts'
+import { asHeld, type PublicPlan, withOffers } from '@blockly/contracts'
 import { offeredPlans } from './plans.ts'
 
 const free = {
@@ -75,5 +75,13 @@ describe('the plans as a new subscriber is told them', () => {
       throw new Error('unreachable')
     }) as unknown as typeof fetch
     expect(await offeredPlans(plans)).toEqual(plans)
+  })
+
+  test('leave a subscriber’s own plan at the price and hours they pay', () => {
+    const offered = { ...core, monthlyPriceCents: 700, includedHours: 90 }
+    const held = { plan: 'core', monthlyPriceCents: 999, includedUnits: 40 }
+    expect(asHeld(offered, held)).toMatchObject({ monthlyPriceCents: 999, includedHours: 40 })
+    expect(asHeld(offered, { ...held, plan: 'plus' })).toBe(offered)
+    expect(asHeld(free, { ...held, plan: 'free' })).toBe(free)
   })
 })
