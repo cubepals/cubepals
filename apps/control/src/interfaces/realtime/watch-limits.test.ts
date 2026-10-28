@@ -23,7 +23,7 @@ import { startRealtime } from './server.node.ts'
 
 const ORIGIN = 'https://web.test'
 const RECHECK_MS = 200
-const [ONE, TWO, THREE] = [randomUUID(), randomUUID(), randomUUID()]
+const [ONE, TWO, THREE, SLOW] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()]
 
 const freePort = () =>
   new Promise<number>((resolve) => {
@@ -78,7 +78,11 @@ describe('an open realtime session', () => {
     // The feed's own count of consoles opened, beside made-up answers for what the database holds.
     const counted = new ConsoleFeed(null as never, null as never, [], new MemoryLimits())
     const feed = {
-      canWatch: async (userId: string, serverId: string) => !barred.has(`${userId}:${serverId}`),
+      canWatch: async (userId: string, serverId: string) => {
+        // SLOW's answer takes a moment, so a session's next message arrives while it is asked.
+        if (serverId === SLOW) await Bun.sleep(150)
+        return !barred.has(`${userId}:${serverId}`)
+      },
       stillSignedIn: async ({ userId, sessionId }: TicketHolder) =>
         sessionId === `session-${userId}` && !signedOut.has(userId),
       mayOpen: (userId: string) => counted.mayOpen(userId),
@@ -117,6 +121,16 @@ describe('an open realtime session', () => {
     watch(THREE)
     await Bun.sleep(300)
     expect(histories.sort()).toEqual([ONE, TWO, THREE].sort())
+    client.disconnect()
+  }, 20_000)
+
+  test('a console left while it is still being let in is not opened', async () => {
+    const { client, histories, watch, unwatch } = await browser(fallbackPort, 'user-f')
+    watch(SLOW)
+    await Bun.sleep(50)
+    unwatch(SLOW)
+    await Bun.sleep(400)
+    expect(histories).toEqual([])
     client.disconnect()
   }, 20_000)
 

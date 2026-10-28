@@ -121,12 +121,25 @@ function followConsoles(
   const admitted = async (serverId: string) =>
     (await feed.mayOpen(userId)) && (await stillSignedIn()) && (await feed.canWatch(userId, serverId))
 
+  /**
+   * Each console's latest watch or unwatch. A watch still being let in when another watch or an
+   * unwatch of the same console arrives yields to it, so a joined room is always one `following` holds.
+   */
+  const turns = new Map<string, number>()
+  const nextTurn = (serverId: string) => {
+    const turn = (turns.get(serverId) ?? 0) + 1
+    turns.set(serverId, turn)
+    return turn
+  }
+
   const watch = async (serverId: string) => {
-    const fresh = !following.has(serverId)
-    if (fresh && following.size >= tuning().abuse.consolesPerConnection) return
+    if (!following.has(serverId) && following.size >= tuning().abuse.consolesPerConnection) return
     following.add(serverId)
-    if (!(await admitted(serverId))) {
-      if (fresh) following.delete(serverId)
+    const turn = nextTurn(serverId)
+    const allowed = await admitted(serverId)
+    if (turns.get(serverId) !== turn) return
+    if (!allowed) {
+      await unwatch(serverId)
       return
     }
     await peer.join(consoleRoom(serverId))
@@ -140,6 +153,7 @@ function followConsoles(
     })
   }
   const unwatch = async (serverId: string) => {
+    nextTurn(serverId)
     following.delete(serverId)
     await peer.leave(consoleRoom(serverId))
     deps.stopTailIfUnwatched(serverId)
