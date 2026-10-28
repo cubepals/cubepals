@@ -103,13 +103,18 @@ export class PackContents {
     )
     if (path !== null) {
       const kept = forPlayers.find((l) => l.path === path)?.sha512
-      if (kept !== undefined && (await this.#malware({ sha512: kept }))) return null
-      return (await keepPackJar(this.#db, sha512, path)) ? path : null
+      // An entry kept before its sha512 was: the pack's index gives it, for a jar it lists.
+      const digests =
+        kept !== undefined
+          ? { sha512: kept }
+          : (await this.#indexFiles(packUrl)).find((file) => file.path === path)
+      if (digests !== undefined && (await this.#malware(digests))) return null
+      return (await keepPackJar(this.#db, sha512, path, digests?.sha512)) ? path : null
     }
     // Or the pack itself keeps it off servers (Cabricality 0.3.1 marks Equator so, which its own
     // mod needs): its servers install it anyway, from the pack's own index.
     const known = new Set(pack.leftOut.map((l) => l.path))
-    const offServers = (packUrl === null ? [] : await this.#indexFiles(packUrl)).filter(
+    const offServers = (await this.#indexFiles(packUrl)).filter(
       (file) => file.env.server === 'unsupported' && isJar(file.path) && !known.has(file.path),
     )
     const needed = jarNamed(
@@ -122,8 +127,9 @@ export class PackContents {
     return (await leavePackJarOut(this.#db, sha512, entry)) ? needed : null
   }
 
-  /** The files a pack's index lists; none when it has no index Blockly reads. */
-  async #indexFiles(packUrl: string) {
+  /** The files a pack's index lists; none when it has no index Blockly reads, or no `packUrl`. */
+  async #indexFiles(packUrl: string | null) {
+    if (packUrl === null) return []
     const read = await this.#formats.readRemoteZip(packUrl, {
       wanted: (name) => name === INDEX_FILE,
       maxEntryBytes: INDEX_BYTES,

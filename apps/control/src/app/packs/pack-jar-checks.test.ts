@@ -427,60 +427,61 @@ describe.skipIf(!hasDatabase)('a jar a pack keeps off servers, which a mod of it
   }, 60_000)
 })
 
-describe.skipIf(!hasDatabase)('a jar Blockly left out for players, which a mod of the pack needs', () => {
-  test('one a list names is not put back', async () => {
-    // The catalog says the library only runs in players' games; a mod of the pack needs it anyway.
-    const lib = 'vernal'
-    const library = cdn.file(`${lib}-1`, fabricJar(lib, { depends: { minecraft: '1.21.1' } }))
-    const user = cdn.file(`${lib}-user-1`, fabricJar(`${lib}user`, { depends: { minecraft: '1.21.1' } }))
-    const version = {
-      channel: 'release' as const,
-      state: 'listed' as const,
-      loaders: ['fabric'],
-      gameVersions: ['1.21.1'],
-      publishedAt: new Date(Date.UTC(2026, 0, 1)),
-      dependencies: [],
-    }
-    const project = { slug: lib, name: lib, summary: '', iconUrl: null, downloads: 1 }
-    h.catalog.publish({ ...project, projectId: lib, environments: ['client_only'] }, [
-      {
-        ...version,
-        versionId: `${lib}-1`,
-        projectId: lib,
-        versionLabel: '1',
-        environment: 'client_only',
-        file: library,
-      },
-    ])
-    const entry = (path: string, file: typeof library) => ({
-      path,
-      hashes: { sha1: 'a'.repeat(40), sha512: file.sha512 },
-      env: { client: 'required', server: 'required' },
-      downloads: [file.url],
-      fileSize: file.sizeBytes,
-    })
-    const index = {
-      formatVersion: 1,
-      game: 'minecraft',
-      versionId: '1.0',
-      name: `${lib} pack`,
-      files: [entry(`mods/${lib}-user-1.jar`, user), entry(`mods/${lib}-1.jar`, library)],
-      dependencies: { minecraft: '1.21.1', 'fabric-loader': '0.16.14' },
-    }
-    const pack = cdn.file(`${lib}-pack`, zipBytes({ 'modrinth.index.json': utf8(JSON.stringify(index)) }))
-    h.catalog.publishModpack(
-      { ...project, projectId: `${lib}-pack`, environments: ['client_and_server'], categories: [] },
-      [
-        {
-          ...version,
-          versionId: `${lib}-pack-1`,
-          projectId: `${lib}-pack`,
-          versionLabel: '1.0',
-          environment: 'client_and_server',
-          file: pack,
-        },
-      ],
-    )
+/**
+ * A catalog pack listing `lib`, which the catalog says runs only in players' games, beside a mod
+ * that needs it: a server of it stops as it starts while the library is left out.
+ */
+const packForPlayers = (lib: string) => {
+  const library = cdn.file(`${lib}-1`, fabricJar(lib, { depends: { minecraft: '1.21.1' } }))
+  const user = cdn.file(`${lib}-user-1`, fabricJar(`${lib}user`, { depends: { minecraft: '1.21.1' } }))
+  const version = {
+    channel: 'release' as const,
+    state: 'listed' as const,
+    loaders: ['fabric'],
+    gameVersions: ['1.21.1'],
+    publishedAt: new Date(Date.UTC(2026, 0, 1)),
+    dependencies: [],
+  }
+  const project = { slug: lib, name: lib, summary: '', iconUrl: null, downloads: 1 }
+  h.catalog.publish({ ...project, projectId: lib, environments: ['client_only'] }, [
+    {
+      ...version,
+      versionId: `${lib}-1`,
+      projectId: lib,
+      versionLabel: '1',
+      environment: 'client_only',
+      file: library,
+    },
+  ])
+  const entry = (path: string, file: typeof library) => ({
+    path,
+    hashes: { sha1: 'a'.repeat(40), sha512: file.sha512 },
+    env: { client: 'required', server: 'required' },
+    downloads: [file.url],
+    fileSize: file.sizeBytes,
+  })
+  const path = `mods/${lib}-1.jar`
+  const index = {
+    formatVersion: 1,
+    game: 'minecraft',
+    versionId: '1.0',
+    name: `${lib} pack`,
+    files: [entry(`mods/${lib}-user-1.jar`, user), entry(path, library)],
+    dependencies: { minecraft: '1.21.1', 'fabric-loader': '0.16.14' },
+  }
+  const pack = cdn.file(`${lib}-pack`, zipBytes({ 'modrinth.index.json': utf8(JSON.stringify(index)) }))
+  const projectId = `${lib}-pack`
+  h.catalog.publishModpack({ ...project, projectId, environments: ['client_and_server'], categories: [] }, [
+    {
+      ...version,
+      versionId: `${lib}-pack-1`,
+      projectId,
+      versionLabel: '1.0',
+      environment: 'client_and_server',
+      file: pack,
+    },
+  ])
+  const breaks = () =>
     h.minecraft.breakOn((env) =>
       (env.MODRINTH_EXCLUDE_FILES ?? '').includes(lib)
         ? [
@@ -489,16 +490,99 @@ describe.skipIf(!hasDatabase)('a jar Blockly left out for players, which a mod o
           ].join('\n')
         : null,
     )
-    malware.entries = [{ kind: 'sha512', value: library.sha512, family: 'Example' }]
+  return { projectId, pack, library, path, breaks }
+}
+
+describe.skipIf(!hasDatabase)('a jar Blockly left out for players, which a mod of the pack needs', () => {
+  test('one a list names is not put back', async () => {
+    const lib = packForPlayers('vernal')
+    lib.breaks()
+    malware.entries = [{ kind: 'sha512', value: lib.library.sha512, family: 'Example' }]
     await h.app.jarChecks.refresh()
     const owner = await h.user('Lee', 'plus')
-    const server = await h.create(owner, { from: { kind: 'modpack', projectId: `${lib}-pack` } })
+    const server = await h.create(owner, { from: { kind: 'modpack', projectId: lib.projectId } })
     await h.settled(server.id, 30_000)
     expect((await h.server(server.id)).lifecycle.status).not.toBe('running')
-    expect(await h.minecraft.file(server.id, `mods/${lib}-1.jar`)).toBeNull()
-    expect((await loadPackContents(h.db, pack.sha512))?.leftOut).toEqual([
-      { path: `mods/${lib}-1.jar`, why: 'players', sha512: library.sha512 },
+    expect(await h.minecraft.file(server.id, lib.path)).toBeNull()
+    expect((await loadPackContents(h.db, lib.pack.sha512))?.leftOut).toEqual([
+      { path: lib.path, why: 'players', sha512: lib.library.sha512 },
     ])
+  }, 60_000)
+
+  test('one kept before its sha512 was, a list names, is found by the pack’s index and not put back', async () => {
+    const lib = packForPlayers('autumnal')
+    const owner = await h.user('Mae', 'plus')
+    const server = await h.create(owner, { from: { kind: 'modpack', projectId: lib.projectId } })
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+    // As a row kept before left-out jars had their sha512.
+    await h.db
+      .update(schema.packContents)
+      .set({ leftOut: [{ path: lib.path, why: 'players' }] })
+      .where(eq(schema.packContents.sha512, lib.pack.sha512))
+    malware.entries = [{ kind: 'sha512', value: lib.library.sha512, family: 'Example' }]
+    await h.app.jarChecks.refresh()
+    lib.breaks()
+    await h.app.servers.stop(owner, server.id, randomUUID())
+    await h.until(server.id, 'stopped')
+    await h.app.servers.start(owner, server.id, randomUUID())
+    await h.settled(server.id, 30_000)
+    expect((await h.server(server.id)).lifecycle.status).not.toBe('running')
+    expect((await loadPackContents(h.db, lib.pack.sha512))?.leftOut).toEqual([
+      { path: lib.path, why: 'players' },
+    ])
+  }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('a pack kept before its left-out jars had their sha512', () => {
+  test('gets them when it is uploaded again, each entry keeping what it learned', async () => {
+    const owner = await h.user('Ned', 'plus')
+    const minimap = clientMod(unique('minimap'))
+    const shaders = clientMod(unique('shaders'))
+    const pack = zipBytes({
+      'mods/good.jar': mod(unique('good')),
+      'mods/minimap.jar': minimap,
+      'mods/shaders.jar': shaders,
+    })
+    const first = await upload(owner, pack, 'Old Pack.zip')
+    if (first.status !== 'ready') throw new Error('The pack was refused')
+    const [built] = await h.db
+      .select({ sha512: schema.packImports.packSha512 })
+      .from(schema.packImports)
+      .where(eq(schema.packImports.id, first.importId))
+    const sha512 = built?.sha512 ?? ''
+    // As kept before: no sha512, and one of them learned since to be needed.
+    const players = { path: 'mods/minimap.jar', why: 'players' as const }
+    const needed = { path: 'mods/shaders.jar', why: 'needed' as const }
+    await h.db
+      .update(schema.packContents)
+      .set({ leftOut: [players, needed] })
+      .where(eq(schema.packContents.sha512, sha512))
+
+    expect(await upload(owner, pack, 'Old Pack.zip')).toMatchObject({ status: 'ready' })
+    expect((await loadPackContents(h.db, sha512))?.leftOut).toEqual([
+      { ...players, sha512: digest('sha512', minimap) },
+      { ...needed, sha512: digest('sha512', shaders) },
+    ])
+  }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('the owner of a server running a jar both as a mod and in its pack', () => {
+  test('is told once', async () => {
+    const owner = await h.user('Ola', 'plus')
+    const both = mod(unique('both'))
+    const view = await upload(owner, zipBytes({ 'mods/both.jar': both }), 'Both Ways.zip')
+    if (view.status !== 'ready') throw new Error('The pack was refused')
+    const server = await h.create(owner, { from: { kind: 'import', importId: view.importId } })
+    // A revision written here pins it as a mod too, which a pack server's own changes never do.
+    await h.db
+      .update(schema.serverRevisions)
+      .set({ mods: [cdn.publish(unique('both'), Buffer.from(both))] })
+      .where(eq(schema.serverRevisions.id, (await h.server(server.id)).desiredRevisionId))
+    malware.entries = [{ kind: 'sha512', value: digest('sha512', both), family: 'Example' }]
+    await h.app.jarChecks.refresh()
+    const told = h.mail.to(`${owner.userId}@example.test`).filter((m) => m.subject.startsWith('We’re taking'))
+    expect(told).toHaveLength(1)
   }, 60_000)
 })
 

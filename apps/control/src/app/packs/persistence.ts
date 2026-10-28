@@ -32,26 +32,49 @@ export async function loadPackContents(q: Queryable, sha512: string): Promise<Pa
 }
 
 /**
- * Kept once per file: the same bytes always hold the same things. A build reads the jars placed
- * outside the mods (`otherJars`), so one saves them over a row kept before they were read.
+ * Kept once per file: the same bytes always hold the same things. A build reads more than a build
+ * before it did, so a row kept before gets what this one adds: the jars placed outside the mods
+ * (`otherJars`), when read, and the sha512 of each jar it leaves out where the row has none. What
+ * the row learned since stays: each entry keeps its own `why` (`crashed`, `needed`).
  */
 export async function savePackContents(q: Queryable, record: PackContentsRecord): Promise<void> {
-  const insert = q.insert(contents).values({
-    sha512: record.sha512,
-    name: record.name,
-    versionLabel: record.versionLabel,
-    gameVersion: record.gameVersion,
-    loader: record.loader,
-    loaderVersion: record.loaderVersion,
-    playersNeedIt: record.playersNeedIt,
-    jars: record.jars,
-    otherJars: record.otherJars ?? [],
-    leftOut: record.leftOut,
-    memoryMb: record.memoryMb,
+  await q.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(contents)
+      .values({
+        sha512: record.sha512,
+        name: record.name,
+        versionLabel: record.versionLabel,
+        gameVersion: record.gameVersion,
+        loader: record.loader,
+        loaderVersion: record.loaderVersion,
+        playersNeedIt: record.playersNeedIt,
+        jars: record.jars,
+        otherJars: record.otherJars ?? [],
+        leftOut: record.leftOut,
+        memoryMb: record.memoryMb,
+      })
+      .onConflictDoNothing()
+      .returning({ sha512: contents.sha512 })
+    if (inserted.length > 0) return
+    const [row] = await tx
+      .select({ leftOut: contents.leftOut })
+      .from(contents)
+      .where(eq(contents.sha512, record.sha512))
+      .for('update')
+    if (row === undefined) return
+    const digests = new Map(
+      record.leftOut.flatMap((l) => (l.sha512 === undefined ? [] : [[l.path, l.sha512]])),
+    )
+    const leftOut = row.leftOut.map((l) => {
+      const sha512 = l.sha512 ?? digests.get(l.path)
+      return sha512 === undefined ? l : { ...l, sha512 }
+    })
+    await tx
+      .update(contents)
+      .set({ leftOut, ...(record.otherJars === undefined ? {} : { otherJars: record.otherJars }) })
+      .where(eq(contents.sha512, record.sha512))
   })
-  await (record.otherJars === undefined
-    ? insert.onConflictDoNothing()
-    : insert.onConflictDoUpdate({ target: contents.sha512, set: { otherJars: record.otherJars } }))
 }
 
 /**
@@ -77,10 +100,15 @@ export async function leavePackJarOut(
 
 /**
  * A jar a pack's servers left out for players' games that they run after all: its entry becomes
- * `needed`, keeping its sha512, so the jar checks still find it (`servers/specs.ts`). Says whether
- * it had been left out for players.
+ * `needed`, keeping its sha512, or taking `jarSha512` where it had none, so the jar checks still
+ * find it (`servers/specs.ts`). Says whether it had been left out for players.
  */
-export async function keepPackJar(q: Queryable, sha512: string, path: string): Promise<boolean> {
+export async function keepPackJar(
+  q: Queryable,
+  sha512: string,
+  path: string,
+  jarSha512?: string,
+): Promise<boolean> {
   const [row] = await q
     .select({ leftOut: contents.leftOut })
     .from(contents)
@@ -90,7 +118,13 @@ export async function keepPackJar(q: Queryable, sha512: string, path: string): P
     .update(contents)
     .set({
       leftOut: row.leftOut.map((l) =>
-        l.path === path && l.why === 'players' ? { ...l, why: 'needed' as const } : l,
+        l.path === path && l.why === 'players'
+          ? {
+              ...l,
+              why: 'needed' as const,
+              ...(l.sha512 === undefined && jarSha512 ? { sha512: jarSha512 } : {}),
+            }
+          : l,
       ),
     })
     .where(eq(contents.sha512, sha512))

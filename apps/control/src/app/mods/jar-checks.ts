@@ -455,10 +455,14 @@ export class JarChecks {
 
   /**
    * Each server running a jar now quarantined, as a mod it pins or one of its pack's jars: its
-   * owner told it comes off at the next start.
+   * owner told it comes off at the next start, once for each server, however it runs it.
    */
   async #tellOwners(sha512: string): Promise<void> {
-    for (const { server, fileName } of [...(await this.#pinning(sha512)), ...(await this.#playing(sha512))]) {
+    const running = [...(await this.#pinning(sha512)), ...(await this.#playing(sha512))]
+    // A server pinning the jar as a mod that runs it in its pack too is told once, by the mod's name.
+    const once = new Map<string, ServerRunning>()
+    for (const r of running) if (!once.has(r.server.id)) once.set(r.server.id, r)
+    for (const { server, fileName } of once.values()) {
       const to = await emailOf(this.#db, server.ownerId)
       if (to === null) continue
       await this.#mailer
