@@ -37,8 +37,9 @@ jobs:
         with:
           bun-version: 1.4.3
       # Postgres' own apt repository, for a client of production's major version: pg_dump refuses a
-      # newer server, and the runner's own client is older. A mirror's blip gets two more tries.
-      - name: Install the Postgres 17 client
+      # newer server, and the runner's own client is older. age encrypts the dump before upload.
+      # A mirror's blip gets two more tries.
+      - name: Install the Postgres 17 client and age
         run: |
           sudo install -d /usr/share/postgresql-common/pgdg
           sudo curl -fsSL --retry 3 -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
@@ -46,13 +47,14 @@ jobs:
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" |
             sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
           for wait in 10 30 0; do
-            sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends postgresql-client-17 && break
+            sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends postgresql-client-17 age && break
             [ "$wait" = 0 ] && exit 1
             sleep "$wait"
           done
           echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
-      # Bun alone runs it: nothing is installed in the job that holds production's database.
-      - name: Dump, check and upload
+      # Bun runs it with no dependencies installed: no package's code runs in the job that holds
+      # production's database.
+      - name: Dump, check, encrypt and upload
         run: bun scripts/database-dump.ts
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

@@ -10,6 +10,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   configOf,
+  DUMP_RECIPIENT,
   dumpKey,
   entriesIn,
   jobsKey,
@@ -18,6 +19,7 @@ import {
   megabytes,
   overLimit,
   redact,
+  sealedKey,
 } from './database-dump.ts'
 
 const values = {
@@ -61,6 +63,22 @@ describe('the dump', () => {
     const key = dumpKey(new Date('2026-10-10T03:30:05Z'))
     expect(jobsKey(key)).toBe('blockly-2026-10-10T03-30-05Z.jobs.sql')
     expect([jobsKey(key), key, dumpKey(new Date('2026-10-11T03:30:05Z'))].sort()[1]).toBe(jobsKey(key))
+  })
+
+  test('both go to the bucket encrypted, named after themselves, the jobs still right after the dump', () => {
+    const key = dumpKey(new Date('2026-10-10T03:30:05Z'))
+    expect(sealedKey(key)).toBe('blockly-2026-10-10T03-30-05Z.dump.age')
+    expect(sealedKey(jobsKey(key))).toBe('blockly-2026-10-10T03-30-05Z.jobs.sql.age')
+    const next = sealedKey(dumpKey(new Date('2026-10-11T03:30:05Z')))
+    expect([next, sealedKey(jobsKey(key)), sealedKey(key)].sort()).toEqual([
+      sealedKey(key),
+      sealedKey(jobsKey(key)),
+      next,
+    ])
+  })
+
+  test('they are encrypted to an age public key, never an identity', () => {
+    expect(DUMP_RECIPIENT).toMatch(/^age1[02-9ac-hj-np-z]{58}$/)
   })
 
   test('the jobs travel as base64, which no quote in them can break', () => {

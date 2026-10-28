@@ -14,8 +14,9 @@
  * optionally DUMP_S3_REGION (auto) and DUMP_SIZE_LIMIT_MB (400). pg_dump and pg_restore must be the
  * server's major version or newer.
  *
- * It takes the dump, has pg_restore read it, uploads it under a dated key and checks the bucket holds
- * it whole. The job queue's finished jobs are left out: the jobs still to run, or holding their
+ * It takes the dump, has pg_restore read it, encrypts it with age to DUMP_RECIPIENT, uploads it
+ * under a dated key and checks the bucket holds it whole. The bucket only ever holds the encrypted
+ * copy; the identity that opens it is kept in the private records. The job queue's finished jobs are left out: the jobs still to run, or holding their
  * server's queue, go beside it as `<key>.jobs.sql`, read in the same snapshot, which a restore runs
  * after the dump. Copying every finished job each night was most of what the dump read. Then it fails if the database is past DUMP_SIZE_LIMIT_MB, so that a database nearing
  * Supabase Free's 500 MB is noticed before it fills. The dump is kept either way.
@@ -25,7 +26,8 @@
  * a URL or anything from the dump. With none of the values set it says the dump isn't set up and
  * stops without failing, which is production before `bun scripts/production.ts apply` sets them.
  *
- * It needs Bun and nothing installed, so the job that holds production's database installs no packages.
+ * It needs Bun, the Postgres client and age, and nothing installed with a package manager of its
+ * own, so the job that holds production's database runs no dependency's code.
  */
 
 import { spawnSync } from 'node:child_process'
@@ -74,6 +76,16 @@ export const dumpKey = (now: Date) => `blockly-${now.toISOString().slice(0, 19).
 
 /** The key of the jobs kept beside a dump, listed right after it. */
 export const jobsKey = (dumpKey: string) => dumpKey.replace(/\.dump$/, '.jobs.sql')
+
+/**
+ * The age public key every dump is encrypted to before it leaves the job. A public key, so it lives
+ * here; its identity, which decrypts, is kept in the private records (docs/production.md
+ * § Restoring one). A new pair means a new value here; dumps made before stay with the old one.
+ */
+export const DUMP_RECIPIENT = 'age10va7efc7msmc20q6kqhq7ydsf6ngamaxn4y7ku9528wqf7gkpd9sgwwykq'
+
+/** What the bucket keeps for a file: the file encrypted with age, named after it. */
+export const sealedKey = (key: string) => `${key}.age`
 
 /** The job queue's tables whose rows the dump leaves out: pg-boss's jobs, and what links them. */
 const JOB_TABLES = ['pgboss.job*']
@@ -202,6 +214,14 @@ export async function takeDump(
   return { entries: entriesIn(tool('pg_restore', ['--list', file])), jobs }
 }
 
+/** `path` encrypted with age to DUMP_RECIPIENT, beside it; returns the encrypted file's path. */
+function seal(path: string): string {
+  const sealed = sealedKey(path)
+  tool('age', ['--encrypt', '--recipient', DUMP_RECIPIENT, '--output', sealed, path])
+  if (!(statSync(sealed).size > 0)) throw new Error(`age wrote nothing for ${path}.`)
+  return sealed
+}
+
 /** Uploads `path` under `key`, and checks the bucket holds all of it. */
 async function upload(store: S3Client, key: string, path: string): Promise<number> {
   const bytes = statSync(path).size
@@ -229,10 +249,11 @@ async function dump(config: DumpConfig, work: string): Promise<void> {
     )
 
     const store = new S3Client(config.store)
-    const bytes = await upload(store, key, file)
-    const jobBytes = await upload(store, jobsKey(key), jobsKey(file))
+    const [dumpAt, jobsAt] = [sealedKey(key), sealedKey(jobsKey(key))]
+    const bytes = await upload(store, dumpAt, seal(file))
+    const jobBytes = await upload(store, jobsAt, seal(jobsKey(file)))
     say(
-      `Uploaded ${key} and ${jobsKey(key)}, and the bucket holds all ${bytes} and ${jobBytes} bytes of them.`,
+      `Encrypted with age and uploaded ${dumpAt} and ${jobsAt}, and the bucket holds all ${bytes} and ${jobBytes} bytes of them.`,
     )
 
     const over = overLimit(server.bytes, config.limitBytes)

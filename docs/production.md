@@ -350,10 +350,12 @@ account's plan like any server: a Free account that already has one needs
 
 Every night at 03:37 UTC, the Database dump workflow (`.github/workflows/database-dump.yml`, running
 `scripts/database-dump.ts`) dumps the database with `pg_dump --format=custom`, has `pg_restore`
-read the dump back, and uploads it to `blockly-prod-database-dumps` as
-`blockly-<UTC time>.dump`. The job queue's finished jobs, completed or cancelled, are left out of
-it: the jobs still to run, running or failed go beside it as `blockly-<UTC time>.jobs.sql`, read in
-the same snapshot. The bucket is private, and deletes each dump after 30 days. The run
+read the dump back, encrypts it with age to the public key in the script (`DUMP_RECIPIENT`), and
+uploads it to `blockly-prod-database-dumps` as `blockly-<UTC time>.dump.age`. The job queue's
+finished jobs, completed or cancelled, are left out of it: the jobs still to run, running or failed
+go beside it as `blockly-<UTC time>.jobs.sql.age`, read in the same snapshot and encrypted the same
+way. The bucket holds no unencrypted copy; the identity that decrypts them is kept in the private
+records. The bucket is private, and deletes each dump after 30 days. The run
 fails, and GitHub emails, when any step does, and when the database is past 400 MB of Supabase
 Free's 500: the dump is still taken, and it's time to make room or move to a bigger plan.
 
@@ -368,8 +370,15 @@ sizes, the key and whether each step passed, nothing else.
 ### Restoring one
 
 1. Download the dump and the jobs beside it: Cloudflare → R2 → `blockly-prod-database-dumps` →
-   `blockly-<time>.dump` and `blockly-<time>.jobs.sql` → Download. Check the dump reads:
-   `pg_restore --list <file> | head`.
+   `blockly-<time>.dump.age` and `blockly-<time>.jobs.sql.age` → Download. Decrypt each with the
+   dumps' age identity from the private records, then check the dump reads:
+
+   ```sh
+   age --decrypt --identity <identity file> --output <file> <file>.age
+   pg_restore --list <file> | head
+   ```
+
+   A dump from before they were encrypted has no `.age` and needs no decrypting.
 2. Stop what writes to the database, so nothing changes under the restore:
    `fly machine stop $(fly machine list -a bly-prod-control -q) -a bly-prod-control`, and the same
    for `bly-prod-realtime`.
