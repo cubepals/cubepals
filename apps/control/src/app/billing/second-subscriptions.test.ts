@@ -6,16 +6,23 @@
  * A second subscription to time already paid for, through the real Polar adapter against a
  * stand-in for Polar's API: two Plus checkouts both paid, whichever word comes first, and a month
  * of Plus paid while a year of it runs. The one there first is kept as it is; the second is set to
- * end with its month and what it charged is refunded once. And a renewal refunded in full, tax on
- * top, no longer counts as paid.
+ * end with its month and what it charged is refunded once, a refund Polar refuses asked again
+ * later. And a renewal refunded in full, tax on top, no longer counts as paid.
  */
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
+import type { models } from '../../infra/polar/polar-models.ts'
 import { hasDatabase } from '../../testing/harness.ts'
-import { customerState, orderEvent, type StateSubscription, stateChanged } from '../../testing/polar.ts'
+import {
+  customerState,
+  orderEvent,
+  refundedAlready,
+  type StateSubscription,
+  stateChanged,
+} from '../../testing/polar.ts'
 import { PolarWorld } from '../../testing/polar-world.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import type { UserActor } from '../actor.ts'
@@ -42,11 +49,11 @@ const listed = (id: string, made: Date): StateSubscription => ({
   current_period_start: made.toISOString(),
 })
 
-/** Polar's word that the account pays for `subs` now, the newest listed first. */
-const paying = async (owner: UserActor, subs: StateSubscription[]) => {
+/** Polar's word that the account pays for `subs` now, the newest listed first, and its delivery's answer. */
+const paying = (owner: UserActor, subs: StateSubscription[]) => {
   const state = customerState(owner.userId, { active_subscriptions: subs })
   w.polar.states.set(owner.userId, state)
-  await w.post(stateChanged(state))
+  return w.post(stateChanged(state))
 }
 
 /** What Blockly keeps of the account's subscriptions, by id. */
@@ -145,6 +152,47 @@ test.skipIf(!hasDatabase)(
     expect(w.polar.requests.filter((r) => r.method === 'DELETE')).toHaveLength(0)
     expect(w.h.mail.to(`${owner.userId}@example.test`)).toHaveLength(mails)
     expect((await loadStanding(w.h.db, owner.userId)).plan).toBe('plus')
+  },
+)
+
+test.skipIf(!hasDatabase)(
+  'a refund Polar refuses is audited and asked again later; the standing and the other refunds go through',
+  async () => {
+    const owner = await w.h.user('Tam')
+    const first = randomUUID()
+    const second = randomUUID()
+    const earlier = new Date(Date.now() - 10 * MINUTE_MS)
+    await w.ordered(owner, first, { created_at: earlier.toISOString() })
+    const refused = await w.ordered(owner, second, { created_at: new Date().toISOString() })
+    const taken = await w.ordered(owner, second, { created_at: new Date().toISOString() })
+    const answer = w.polar.reply
+    w.polar.reply = (request) =>
+      request.method === 'POST' &&
+      request.path === '/v1/refunds/' &&
+      (JSON.parse(request.body) as models.RefundCreate).order_id === refused
+        ? refundedAlready
+        : answer(request)
+
+    const delivered = await paying(owner, [listed(second, new Date()), listed(first, earlier)])
+    expect(delivered.ok).toBe(true)
+    expect((await kept(owner)).get(first)).toMatchObject({ status: 'active', cancelAtPeriodEnd: false })
+    expect((await loadStanding(w.h.db, owner.userId)).plan).toBe('plus')
+    expect(ended(second)).toHaveLength(1)
+    expect(w.refunds.filter((r) => r.order_id === taken)).toHaveLength(1)
+    expect(await w.audited(owner, 'billing.second_subscription_refunded')).toEqual([
+      expect.objectContaining({ order: taken, subscription: second }),
+    ])
+    expect(await w.audited(owner, 'billing.second_subscription_refund_not_taken')).toEqual([
+      expect.objectContaining({ order: refused, subscription: second }),
+    ])
+
+    // The order's next word asks for its refund again, and Polar takes it this time.
+    w.polar.reply = answer
+    await w.post(orderEvent(w.orders.get(refused) as never, 'order.updated'))
+    expect(w.refunds.filter((r) => r.order_id === refused)).toEqual([
+      expect.objectContaining({ amount: 1500, reason: 'duplicate' }),
+    ])
+    expect(w.refunds.filter((r) => r.order_id === taken)).toHaveLength(1)
   },
 )
 

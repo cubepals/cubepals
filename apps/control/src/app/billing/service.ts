@@ -453,7 +453,7 @@ export class BillingService {
   /**
    * A smaller plan's subscription still renewing beside a larger one (Plus bought by a year, or at a checkout
    * begun before Core became Plus in place) is set to end with the month it paid for; so is a second one for
-   * time paid already, refunded (`second-subscriptions.ts`). A provider's refusal fails the sync, sent again.
+   * time paid already, refunded (`second-subscriptions.ts`). A refusal to end one fails the sync, sent again.
    */
   async #stopSmallerPlans(state: BillingStanding, provider: string) {
     if (state.subscription === null) return

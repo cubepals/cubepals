@@ -48,7 +48,8 @@ export async function stoppedAsSecond(q: Queryable, userId: string, subscription
 /**
  * Each second subscription the standing lists, beside the subscription in force or as it, set to
  * end where it still renews, marked so its charges are refunded, and its charges kept so far
- * refunded. `reach` is the caller's way of asking the provider.
+ * refunded, each on its own: one the provider refuses is audited and the rest still asked for.
+ * `reach` is the caller's way of asking the provider.
  */
 export async function stopSecondSubscriptions(
   db: Db,
@@ -76,9 +77,29 @@ export async function stopSecondSubscriptions(
           eq(orders.externalSubscriptionId, second.externalSubscriptionId),
         ),
       )
-    for (const order of charged)
-      await reach(() => refundCharge(db, billing, state.userId, second.externalSubscriptionId, order))
+    for (const order of charged) {
+      try {
+        await reach(() => refundCharge(db, billing, state.userId, second.externalSubscriptionId, order))
+      } catch (error) {
+        // The standing is saved whatever the provider says of one refund; it is asked again later.
+        await refundNotTaken(db, state.userId, second.externalSubscriptionId, order.externalOrderId, error)
+      }
+    }
   }
+}
+
+/**
+ * A refund the provider didn't take (refunded by hand already, too old), audited. Its claim was
+ * released (`refundCharge`), so the order's next word, or the next sync, asks for it again.
+ */
+async function refundNotTaken(db: Db, userId: string, subscription: string, order: string, error: unknown) {
+  await db.insert(log).values({
+    actor: 'system:billing',
+    action: 'billing.second_subscription_refund_not_taken',
+    subjectType: 'account',
+    subjectId: userId,
+    data: { order, subscription, error: error instanceof Error ? error.message : String(error) },
+  })
 }
 
 /**
