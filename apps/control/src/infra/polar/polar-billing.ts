@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { BillingTerm } from '@blockly/contracts'
-import { MINUTE_MS } from '@blockly/contracts/durations'
 import { PolarClientError } from '@polar-sh/sdk'
 import { createPolar, errors, type models, webhooks } from '@polar-sh/sdk/2026-10'
-import { z } from 'zod'
+import type { z } from 'zod'
 import {
   type BillingEvent,
   type BillingOrder,
@@ -21,9 +20,28 @@ import {
   WebhookRejected,
 } from '../../app/ports/optional.ts'
 import { discountBody, discountOf } from './polar-discounts.ts'
-import { GIFT_METADATA, giftCheckoutOf, giftOf, giftOrderOf } from './polar-gifts.ts'
-import type { Fields } from './polar-models.ts'
-import { call, largestPaying, moveSubscription, refusal, upgradeSubscription } from './polar-requests.ts'
+import { giftCheckoutUrl, giftOf, giftOrderOf, giftProducts } from './polar-gifts.ts'
+import {
+  CHECKOUT_LEFT_MS,
+  call,
+  largestPaying,
+  moveSubscription,
+  refusal,
+  upgradeSubscription,
+  withEmail,
+} from './polar-requests.ts'
+import {
+  CustomerState,
+  DiscountPage,
+  OpenCheckouts,
+  Order,
+  Payments,
+  Product,
+  Products,
+  Refunds,
+  Subscription,
+  SubscriptionEvent,
+} from './polar-schemas.ts'
 
 /**
  * Polar through its official TypeScript SDK, pinned to API version 2026-10 for requests and for
@@ -52,125 +70,11 @@ export interface PolarBillingOptions {
   baseUrl?: string
 }
 
-// validateEvent checks the signature and the event type, not the payload (checked 2026-09-19),
-// so the fields read here are checked on the way in, each by the SDK's name for it (`Fields`).
-const CustomerState = z.object({
-  id: z.string(),
-  external_id: z.string().nullish(),
-  active_subscriptions: z.array(
-    z.object({
-      id: z.string(),
-      status: z.enum(['active', 'trialing']),
-      product_id: z.string(),
-      current_period_end: z.string(),
-      cancel_at_period_end: z.boolean(),
-      created_at: z.string().nullish(),
-      canceled_at: z.string().nullish(),
-    } satisfies Fields<models.CustomerStateSubscription>),
-  ),
-} satisfies Fields<models.CustomerStateIndividual>)
-
-// A subscription event carries the subscription, and its customer the external id.
-const SubscriptionEvent = z.object({
-  customer: z.object({ external_id: z.string().nullish() } satisfies Fields<models.SubscriptionCustomer>),
-} satisfies Fields<models.Subscription>)
-
-// Products found by their metadata: the one a balance is settled with, the one friends chip in
-// with, and each plan's year.
-const Products = z.object({
-  items: z.array(
-    z.object({
-      id: z.string(),
-      metadata: z.record(z.string(), z.unknown()).default({}),
-    } satisfies Fields<models.Product>),
-  ),
-} satisfies Fields<models.ListResourceProduct>)
-
-// A page of products read whole, each by whoever reads it (`giftOf`).
-const Listed = z.object({ items: z.array(z.unknown()) } satisfies Fields<models.ListResourceProduct>)
-
-// The prices of a plan's product, to tell the metered line of an order from the plan's own.
-const Product = z.object({
-  prices: z.array(
-    z.object({ id: z.string(), amount_type: z.string().nullish() } satisfies Fields<models.ProductPrice>),
-  ),
-} satisfies Fields<models.Product>)
-
-// Checkouts still open, to offer one again rather than make a second.
-const OpenCheckouts = z.object({
-  items: z.array(
-    z.object({
-      url: z.string(),
-      amount: z.number().nullish(),
-      expires_at: z.string(),
-      metadata: z.record(z.string(), z.unknown()).nullish(),
-    } satisfies Fields<models.Checkout>),
-  ),
-} satisfies Fields<models.ListResourceCheckout>)
-
-/** An open checkout is offered again only with this long left on it, to be paid in. */
-const CHECKOUT_LEFT_MS = 15 * MINUTE_MS
-
-// A page of discounts: each is read by `discountOf`, and `max_page` says when to stop.
-const DiscountPage = z.object({
-  items: z.array(z.unknown()),
-  pagination: z.object({ max_page: z.number().int() } satisfies Fields<models.Pagination>),
-} satisfies Fields<models.ListResourceDiscount>)
-
-// Payments tried for an order: one that failed says its charge was tried and declined.
-const Payments = z.object({
-  items: z.array(z.object({ status: z.string() } satisfies Fields<models.Payment>)),
-} satisfies Fields<models.ListResourcePayment>)
-
-// A customer state lists only subscriptions that pay now, `active` or `trialing` (Polar's
-// `SubscriptionStatus.active_statuses`, read 2026-09-26); one whose renewal failed is `past_due`
-// on the subscription itself while Polar retries the charge.
-const Subscription = z.object({
-  status: z.string(),
-  current_period_end: z.string().nullish(),
-  past_due_at: z.string().nullish(),
-} satisfies Fields<models.Subscription>)
-
-// An order's refunds, each with the reason it was given for.
-const Refunds = z.object({
-  items: z.array(z.object({ reason: z.string() } satisfies Fields<models.Refund>)),
-} satisfies Fields<models.ListResourceRefund>)
-
 /**
  * The refund reason a withdrawal is given in Polar: the player asked for their money back.
  * Blockly's own refunds (`refund`) are `duplicate`.
  */
 const WITHDRAWAL_REASON: models.RefundReason = 'customer_request'
-
-// The fields of Polar's `Order` (SDK 2026-10 `models`, read 2026-10-10) that revenue and extra play
-// need: every amount is in cents, the customer carries the external id Blockly gave it, and each
-// line names the price it charged, which says whether it is the metered one.
-const Order = z.object({
-  status: z.string(),
-  subscription_id: z.string().nullish(),
-  metadata: z.record(z.string(), z.unknown()).nullish(),
-  items: z
-    .array(
-      z.object({
-        amount: z.number().int(),
-        product_price_id: z.string().nullish(),
-      } satisfies Fields<models.OrderItemSchema>),
-    )
-    .default([]),
-  id: z.string(),
-  created_at: z.string(),
-  modified_at: z.string().nullish(),
-  subtotal_amount: z.number().int(),
-  discount_amount: z.number().int(),
-  net_amount: z.number().int(),
-  tax_amount: z.number().int(),
-  total_amount: z.number().int(),
-  refunded_amount: z.number().int(),
-  currency: z.string(),
-  billing_reason: z.string(),
-  product_id: z.string().nullish(),
-  customer: z.object({ external_id: z.string().nullish() } satisfies Fields<models.OrderCustomer>),
-} satisfies Fields<models.Order>)
 
 export class PolarBilling implements BillingProvider {
   readonly provider = 'polar'
@@ -406,57 +310,8 @@ export class PolarBilling implements BillingProvider {
     return refunds.items.some((refund) => refund.reason === WITHDRAWAL_REASON)
   }
 
-  /** Every gift product for a plan this deployment sells, cheapest first, read from Polar now. */
-  async giftProducts(): Promise<GiftProduct[]> {
-    const found = Listed.parse(
-      await call('finding the gift products', () =>
-        this.#polar.products.list({ metadata: { ...GIFT_METADATA }, is_archived: false, limit: 100 }),
-      ),
-    )
-    const plans = new Set(this.#plans.values())
-    return found.items
-      .map((item) => giftOf(item, plans))
-      .filter((gift) => gift !== null)
-      .sort((a, b) => a.priceCents - b.priceCents)
-  }
-
-  /**
-   * A checkout for one gift, with no code: a coupon for the plans is not for gifts of them. What it
-   * names is `giftCheckoutOf`'s. One still open for the same buyer and gift is the one to pay.
-   */
-  async giftCheckoutUrl(input: {
-    userId: string | null
-    email: string
-    gift: GiftProduct
-    giftId: string | null
-    returnUrl: string
-  }): Promise<string> {
-    const { customer, metadata } = giftCheckoutOf(input)
-    const open = OpenCheckouts.parse(
-      await call('finding an open gift checkout', () =>
-        this.#polar.checkouts.list({ product_id: input.gift.id, ...customer, status: 'open', limit: 20 }),
-      ),
-    ).items.find(
-      (checkout) =>
-        checkout.metadata?.gift === metadata?.gift &&
-        new Date(checkout.expires_at).getTime() > Date.now() + CHECKOUT_LEFT_MS,
-    )
-    if (open !== undefined) return open.url
-    const checkout = await withEmail(input.email, (email) =>
-      call('starting a gift checkout', () =>
-        this.#polar.checkouts.create({
-          products: [input.gift.id],
-          allow_discount_codes: false,
-          ...customer,
-          metadata,
-          ...email,
-          success_url: input.returnUrl,
-          return_url: input.returnUrl,
-        }),
-      ),
-    )
-    return checkout.url
-  }
+  giftProducts = () => giftProducts(this.#polar, new Set(this.#plans.values()))
+  giftCheckoutUrl = (input: Parameters<typeof giftCheckoutUrl>[1]) => giftCheckoutUrl(this.#polar, input)
 
   async portalUrl(input: { userId: string; returnUrl: string }): Promise<string> {
     const session = await call('opening the customer portal', () =>
@@ -778,25 +633,3 @@ const SUBSCRIPTION_EVENTS: ReadonlySet<string> = new Set([
   'subscription.revoked',
   'subscription.active',
 ])
-
-/**
- * Polar refused the request for the customer's email address. It checks a checkout against each
- * shape one could take and reports every one that failed, so the address is one problem among
- * several; asked again without it, anything else still wrong is refused again.
- */
-function refusesEmail(error: unknown): boolean {
-  if (!(error instanceof errors.HTTPValidationError)) return false
-  return (error.error.detail ?? []).some((problem) => problem.loc?.includes('customer_email'))
-}
-
-/**
- * A checkout made with the customer's email, or without it when Polar won't take the address (one
- * on a reserved domain, as test accounts have): that isn't the person's to fix, so the checkout
- * opens without it and asks them for one.
- */
-function withEmail<T>(email: string, create: (field: { customer_email?: string }) => Promise<T>): Promise<T> {
-  return create({ customer_email: email }).catch((error: unknown) => {
-    if (refusesEmail(error)) return create({})
-    throw error
-  })
-}

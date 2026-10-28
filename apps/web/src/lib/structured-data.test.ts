@@ -23,6 +23,7 @@ const plan = (over: Partial<PublicPlan>): PublicPlan => ({
   sleepsAfterMinutes: 10,
   maxServers: 1,
   maxPlayers: 5,
+  sizes: [{ gb: 3, maxPlayers: 5, hoursAnHour: 1 }],
   mods: false,
   datapacks: false,
   downloads: 'daily',
@@ -77,7 +78,7 @@ describe('structured data', () => {
     })
     expect(free).not.toHaveProperty('priceSpecification')
     expect(free?.description).toBe(
-      '1 server, up to 5 players. 20 hours of play, at most 2 a day. Plain Minecraft. Go back to any of your last 3 sessions, and download your world.',
+      '1 server of 3 GB, up to 5 players. 20 hours of play, at most 2 a day. Plain Minecraft. Go back to any of your last 3 sessions, and download your world.',
     )
     expect(plus).toMatchObject({
       name: 'Plus',
