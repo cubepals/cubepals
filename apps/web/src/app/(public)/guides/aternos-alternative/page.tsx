@@ -148,9 +148,9 @@ export default async function Guide() {
         </p>
         <Shot
           src={`${PICTURES}/free-trial.png`}
-          width={588}
-          height={448}
-          alt="The Account page on the free trial: a Free trial hours card, which says they come once, not every month, with the hours left as a bar, and a Play today card, which says more come every day at midnight."
+          width={584}
+          height={216}
+          alt="The Free trial hours card on the Account page, which says they come once, to play on any day, with the hours left as a bar."
         />
       </Part>
 
