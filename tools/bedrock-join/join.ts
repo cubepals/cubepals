@@ -29,8 +29,9 @@
  * Offline login: there is no Xbox account here, so the edge must run with Xbox sign-in off
  * (BEDROCK_VALIDATE_LOGIN=false). Production keeps it on, and refuses these players.
  *
- * Prints one JSON object on the last line: how many spawned, each player's time to spawn, and each
- * player's kick message and the chat lines they were sent.
+ * Prints one JSON object on the last line: how many spawned, each player's time to spawn, how many
+ * sockets each tried (more than one when an attempt never connected), and each player's kick
+ * message and the chat lines they were sent.
  * Exits 1 unless every player spawned. One machine's clients are the limit on how many players
  * it can join; run more than one machine for more.
  */
@@ -119,6 +120,8 @@ let to = { host: connectHost || typedHost, port: Number(connectPort ?? typedPort
 if (values.via6) to = { host: '127.0.0.1', port: await forwardTo6(values.via6) }
 
 const spawnMs: (number | null)[] = []
+/** How many sockets each player tried: one, unless an attempt never connected. */
+const attempts: number[] = []
 const clients: { disconnect: () => void }[] = []
 /** What each player was told: the reason they were turned away, and the chat lines that reached them. */
 const told: { kicked: string | null; chat: string[] }[] = []
@@ -136,6 +139,7 @@ function join1(index: number): Promise<void> {
   const begun = Date.now()
   const deadline = begun + Number(values.timeout) * 1000
   spawnMs[index] = null
+  attempts[index] = 0
   const heard = { kicked: null as string | null, chat: [] as string[] }
   told[index] = heard
   return new Promise((resolve) => {
@@ -145,6 +149,7 @@ function join1(index: number): Promise<void> {
       resolve()
     }
     const attempt = () => {
+      attempts[index] = (attempts[index] ?? 0) + 1
       const client = createClient({
         host: to.host,
         port: to.port,
@@ -195,7 +200,8 @@ function join1(index: number): Promise<void> {
       })
       // A path through the network can lose every datagram of one socket while another socket's
       // get through, so an attempt that never connected is let go and a new socket tries again, as
-      // a player taps Join again.
+      // a player taps Join again. The edge's relay counts each connection it is opened by
+      // (`cubepals_edge_bedrock_opens_total`): an attempt it never counted was lost on the way.
       setTimeout(() => {
         if (ended || client.status !== ClientStatus.Disconnected || Date.now() + ATTEMPT_MS > deadline) return
         log(username, `not connected after ${ATTEMPT_MS / 1000}s; trying again from a new socket`)
@@ -219,5 +225,5 @@ await Bun.sleep(Number(values.hold) * 1000)
 // times out: a player who joins again at once is not told they are already logged in.
 for (const client of clients) client.disconnect()
 await Bun.sleep(1000)
-process.stdout.write(`${JSON.stringify({ players: count, spawned, spawnMs, told })}\n`)
+process.stdout.write(`${JSON.stringify({ players: count, spawned, spawnMs, attempts, told })}\n`)
 process.exit(spawned === count ? 0 : 1)

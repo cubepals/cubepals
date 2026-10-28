@@ -22,6 +22,7 @@ import { bedrockRelay, type Relay } from './bedrock-relay.ts'
 import { Supervised } from './geyser.ts'
 import { geyserConfig } from './geyser-config.ts'
 import type { Rate } from './limits.ts'
+import { bedrockOpened } from './metrics.ts'
 
 export interface BedrockOptions {
   /** The Floodgate key: base64 of 16 bytes, the same on every Paper server (FLOODGATE_KEY). */
@@ -193,6 +194,7 @@ export function startBedrock(options: BedrockOptions): Bedrock {
         opens: options.opens,
         perAddress: options.perAddress,
         most: options.most,
+        opened: bedrockOpened,
         idleMs: GEYSER_KEEPS_QUIET_SOURCE_MS - 2 * SECOND_MS,
         pongRefreshMs: 5 * SECOND_MS,
       })

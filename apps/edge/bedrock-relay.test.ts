@@ -6,7 +6,7 @@
 
 import { afterEach, expect, test } from 'bun:test'
 import { readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
-import { bedrockRelay, isPing, pongFor, type Relay, type RelayOptions } from './bedrock-relay.ts'
+import { bedrockRelay, isPing, type Open, pongFor, type Relay, type RelayOptions } from './bedrock-relay.ts'
 
 const MAGIC = Uint8Array.from([
   0x00, 0xff, 0xff, 0x00, 0xfe, 0xfe, 0xfe, 0xfe, 0xfd, 0xfd, 0xfd, 0xfd, 0x12, 0x34, 0x56, 0x78,
@@ -174,6 +174,31 @@ test('a datagram that doesn’t open a connection makes no player, and an addres
   for (const other of others) other.socket.send(openRequest(), port, '127.0.0.1')
   await Bun.sleep(150)
   expect(relay.players()).toBe(3)
+})
+
+test('each datagram that opens a connection is told: a player made, or why not', async () => {
+  const outcomes: Open[] = []
+  const { port, relay, state } = await relayed({ opened: (outcome) => outcomes.push(outcome) })
+  await Bun.sleep(100)
+  // Three opens from one address are allowed; the fourth is one too many.
+  const others = await Promise.all([1, 2, 3, 4].map(() => listener()))
+  closers.push(...others.map((o) => () => o.socket.close()))
+  for (const other of others) other.socket.send(openRequest(), port, '127.0.0.1')
+  await Bun.sleep(150)
+  // A player's next datagram is theirs, not another open.
+  const [first] = others
+  first?.socket.send(openRequest(), port, '127.0.0.1')
+  await Bun.sleep(50)
+  expect(outcomes).toEqual(['opened', 'opened', 'opened', 'too_many'])
+
+  // Geyser gone, a newcomer is refused, and that is told too.
+  state.down = true
+  relay.forget()
+  const late = await listener()
+  closers.push(() => late.socket.close())
+  late.socket.send(openRequest(), port, '127.0.0.1')
+  await Bun.sleep(50)
+  expect(outcomes.at(-1)).toBe('not_ready')
 })
 
 test('an address holds only so many players, and one dropped frees its place', async () => {

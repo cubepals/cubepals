@@ -136,6 +136,7 @@ Per edge machine; sum or take quantiles across instances.
 | `cubepals_edge_proxied_bytes_total` | counter | `edition`, `direction` (`up` from players, `down` to them), `edge_region` | Bytes passed between players and what the edge handed them to, counted as each connection closes. |
 | `cubepals_edge_first_byte_seconds` | histogram | `edition`, `intent` (`join`, `ping`), `edge_region` | From the edge accepting a connection to the first byte back through it: the server's, or the waiting room's while it wakes. |
 | `cubepals_edge_geyser_up` | gauge | `edge_region` | 1 while Geyser runs and answers, so Bedrock players can join; 0 while it starts, restarts or failed to. Absent where the edge takes no Bedrock players. |
+| `cubepals_edge_bedrock_opens_total` | counter | `outcome`, `edge_region` | Each datagram opening a Bedrock connection that reached the edge's relay: `opened` (a player made, once per connection), or refused, once per datagram, as `not_ready` (Geyser not answering), `full`, `address_full` or `too_many` (one address opening too fast). A client that never connects while this doesn't move lost its datagrams before the edge. |
 
 ## The join funnel
 

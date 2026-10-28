@@ -55,7 +55,16 @@ export interface RelayOptions {
   pongRefreshMs: number
   /** How often quiet players are looked for. */
   sweepMs?: number
+  /**
+   * Told each time a datagram from a source it doesn't hold opens a connection: whether it made a
+   * player, or why not. A refused source tries again with each open request it sends, and each is
+   * told. What never reaches the relay is never told, which is how the two are told apart.
+   */
+  opened?: (outcome: Open) => void
 }
+
+/** What became of a datagram that opens a connection: a player, or why not. */
+export type Open = 'opened' | 'not_ready' | 'full' | 'address_full' | 'too_many'
 
 /** RakNet's offline message id, in every ping, pong and connection request. */
 const MAGIC = Uint8Array.from([
@@ -262,6 +271,15 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
     upstream.send(framed, geyser.port, geyser.hostname)
   }
 
+  /** Whether a stranger at `address` may open a connection now, or why not. */
+  const openOf = (address: string): Open => {
+    // While Geyser isn't answering, a header sent now would be lost and the player with it.
+    if (!ready()) return 'not_ready'
+    if (players.size >= options.most) return 'full'
+    if (!players.roomFor(address)) return 'address_full'
+    return allowed(openAllowed, options.opens, address) ? 'opened' : 'too_many'
+  }
+
   /** Sends a known player's datagram on; false for a stranger, which may open a connection. */
   const passedOn = (key: string, packet: Uint8Array): boolean => {
     const known = players.get(key)
@@ -290,10 +308,10 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
             front.send(pongFor(pong, packet), port, address)
           return
         }
-        if (passedOn(key, packet)) return
-        // While Geyser isn't answering, a header sent now would be lost and the player with it.
-        if (!opens(packet) || !ready() || players.size >= options.most || !players.roomFor(address)) return
-        if (!allowed(openAllowed, options.opens, address)) return
+        if (passedOn(key, packet) || !opens(packet)) return
+        const open = openOf(address)
+        options.opened?.(open)
+        if (open !== 'opened') return
         const player: Player = {
           upstream: null as unknown as Udp,
           lastAt: Date.now(),

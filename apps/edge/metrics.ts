@@ -14,6 +14,7 @@ import { metrics } from '@opentelemetry/api'
 import { PrometheusExporter } from '@opentelemetry/exporter-prometheus'
 import { MeterProvider } from '@opentelemetry/sdk-metrics'
 import { SECOND_MS } from '../../packages/contracts/src/durations.ts'
+import type { Open } from './bedrock-relay.ts'
 
 const listen = process.env.METRICS_LISTEN
 if (listen) {
@@ -143,6 +144,18 @@ export function firstByteAfter(edition: Edition, intent: 'join' | 'ping', ms: nu
 export function connectionClosed(edition: Edition, up: number, down: number): void {
   proxied.add(up, { edition, direction: 'up', edge_region: EDGE_REGION })
   proxied.add(down, { edition, direction: 'down', edge_region: EDGE_REGION })
+}
+
+const bedrockOpens = meter.createCounter('cubepals_edge_bedrock_opens', {
+  description: 'Datagrams opening a Bedrock connection that reached the relay: a player made, or why not',
+})
+
+/**
+ * A datagram opening a Bedrock connection reached the relay: `opened` (a player made), or refused
+ * as `not_ready` (Geyser isn't answering), `full`, `address_full` or `too_many` (`bedrock-relay.ts`).
+ */
+export function bedrockOpened(outcome: Open): void {
+  bedrockOpens.add(1, { outcome, edge_region: EDGE_REGION })
 }
 
 /** Whether Geyser is up, read as Prometheus scrapes: 1 or 0, and nothing where Bedrock isn't taken. */
