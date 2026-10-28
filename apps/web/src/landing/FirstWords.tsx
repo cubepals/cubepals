@@ -5,8 +5,8 @@
 /**
  * What the first screen says round its button, the same in the film and on a phone: the line under
  * the headline, and the trust facts under the button, one line each. Each fact holds on every plan,
- * the free trial's included: a backup is taken when a server goes to sleep after play (not after a
- * start nobody played), a world can be downloaded and one brought in, and the code is public. Not
+ * the free trial's included: every plan keeps its last sessions to go back to (as many as its card
+ * says), a world can be downloaded and one brought in, and the code is public. Not
  * the headline or the button, which each form sets in its own type, nor the plans' details.
  */
 import { SOURCE_URL } from '../ui/brand'
@@ -27,7 +27,8 @@ export function Trust({ className = '' }: { className?: string }) {
   return (
     <ul className={`${styles.trust} ${className}`}>
       <li>
-        <Tick />A backup every time it sleeps after play
+        <Tick />
+        Go back to any of your last sessions
       </li>
       <li>
         <Tick />
