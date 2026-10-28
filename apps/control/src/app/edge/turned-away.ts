@@ -27,13 +27,21 @@ export type Resting = 'free_hours'
 const cameBy = schema.serverTurnedAway
 const players = schema.serverPlayers
 
-/** Why `server` rests for its owner's play now, where it does: stopped for it, and the play still used. */
-export async function restingFor(q: Queryable, server: MinecraftServer, now: Date): Promise<Resting | null> {
-  const { status, stopReason } = server.lifecycle
-  if (status !== 'stopped' || stopReason !== 'free_hours') return null
-  const standing = await loadStanding(q, server.ownerId)
+/** Whether an owner's free trial's hours are all played now, so no wake of theirs starts. */
+export async function trialPlayed(q: Queryable, ownerId: string, now: Date): Promise<boolean> {
+  const standing = await loadStanding(q, ownerId)
   const total = await playTotal(q, standing, entitlementsOf(standing), now)
-  return total !== null && total.left <= 0 ? 'free_hours' : null
+  return total !== null && total.left <= 0
+}
+
+/**
+ * Why `server` rests for its owner's play now, where it does: asleep or at rest, whatever stopped
+ * it (its own idle time can come first), while the free trial's hours are all played.
+ */
+export async function restingFor(q: Queryable, server: MinecraftServer, now: Date): Promise<Resting | null> {
+  const { status } = server.lifecycle
+  if (status !== 'stopped' && status !== 'stored') return null
+  return (await trialPlayed(q, server.ownerId, now)) ? 'free_hours' : null
 }
 
 /**

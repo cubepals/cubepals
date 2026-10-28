@@ -117,7 +117,12 @@ describe.skipIf(!hasDatabase)('a friend at a server resting for the free trial',
 
     // A friend arrives: let in to wait, then refused. Nothing starts.
     await reach(slug, FRIEND, 'connect')
-    expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({ outcome: 'denied', reason: 'quota' })
+    expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({
+      outcome: 'denied',
+      reason: 'quota',
+      trialOver: true,
+      name: 'Sunset Valley',
+    })
     await reach(slug, FRIEND, 'disconnect')
     expect((await h.server(id)).lifecycle.status).toBe('stopped')
 
@@ -206,7 +211,12 @@ describe.skipIf(!hasDatabase)('a friend at a server out of free hours', () => {
 
     expect(await routeOf(slug)).toMatchObject({ state: 'asleep', trialOver: true, name: 'Sunset Valley' })
     await reach(slug, FRIEND, 'connect')
-    expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({ outcome: 'denied', reason: 'quota' })
+    expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({
+      outcome: 'denied',
+      reason: 'quota',
+      trialOver: true,
+      name: 'Sunset Valley',
+    })
     expect((await h.app.queries.get(actor, id)).cameBy.map((p) => p.name)).toEqual(['Alex'])
     expect((await turnedAwayEvents(id)).map((e) => e.properties)).toEqual([
       { serverId: id, reason: 'free_hours', player: 'Alex', friend: true },
@@ -218,6 +228,40 @@ describe.skipIf(!hasDatabase)('a friend at a server out of free hours', () => {
       .set({ plan: 'plus' })
       .where(eq(schema.accountStanding.userId, actor.userId))
     expect((await routeOf(slug))?.trialOver).toBeUndefined()
+  }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('a friend at a server asleep after its owner’s play ran out', () => {
+  test('asleep for its idle time, with the free trial played since: refused as resting, and kept', async () => {
+    const actor = await h.user('Ana', 'free')
+    const server = await running(actor)
+    const { id, slug } = server
+    await h.app.servers.stop(actor, id, crypto.randomUUID(), 'idle')
+    await h.until(id, 'stopped')
+    await h.settled(id)
+    // The trial's hours run out while it sleeps, on play its free trial shares (another account's).
+    const stoppedAt = new Date(Date.now() - DAY_MS)
+    await h.db.insert(schema.powerIntervals).values({
+      serverId: id,
+      memoryTier: '3g',
+      plan: 'free',
+      startedAt: new Date(stoppedAt.getTime() - 21 * HOUR_MS),
+      stoppedAt,
+    })
+    expect((await h.server(id)).lifecycle.stopReason).toBe('idle')
+
+    await reach(slug, FRIEND, 'connect')
+    expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({
+      outcome: 'denied',
+      reason: 'quota',
+      trialOver: true,
+      name: 'Sunset Valley',
+    })
+    expect((await h.server(id)).lifecycle.status).toBe('stopped')
+    expect((await h.app.queries.get(actor, id)).cameBy.map((p) => p.name)).toEqual(['Alex'])
+    expect((await turnedAwayEvents(id)).map((e) => e.properties)).toEqual([
+      { serverId: id, reason: 'free_hours', player: 'Alex', friend: true },
+    ])
   }, 60_000)
 })
 
