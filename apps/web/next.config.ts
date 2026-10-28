@@ -3,14 +3,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The web app's build: the /api rewrite to the control plane, a phone's landing page, where
- * password managers change a password, standalone output for self-hosting, and what PostHog needs
- * from the build (the environment, the version, source maps).
+ * The web app's build: the /api rewrite to the control plane, a phone's landing page, the headers
+ * every response carries, where password managers change a password, standalone output for
+ * self-hosting, and what PostHog needs from the build (the environment, the version, source maps).
  */
 import { join } from 'node:path'
 import type { NextConfig } from 'next'
 import { PHONE_AGENT, PHONE_HINT } from './src/landing/phone/agent'
 import { indexable } from './src/lib/site'
+import { SITE_HEADERS } from './src/lib/site-headers'
 import { apiUpstream } from './src/lib/upstream'
 
 /**
@@ -63,10 +64,12 @@ export default {
   // The /api rewrite and src/lib/before-next.ts's sign-in paths then agree on case: /API/auth/… is
   // a 404, not a way to the control plane around it.
   experimental: { caseSensitiveRoutes: true },
-  // Every deployment but production says noindex on every response, files and images too, which
-  // the pages' own robots meta can't reach.
+  // Every response carries the site's own headers (src/lib/site-headers.ts). Every deployment but
+  // production also says noindex on every response, files and images too, which the pages' own
+  // robots meta can't reach.
   async headers() {
-    return indexable() ? [] : [{ source: '/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex' }] }]
+    const robots = indexable() ? [] : [{ key: 'X-Robots-Tag', value: 'noindex' }]
+    return [{ source: '/:path*', headers: [...SITE_HEADERS, ...robots] }]
   },
   // Where a password manager sends someone to change a saved password (w3c.github.io/
   // webappsec-change-password-url). A password is changed by a reset link, so it is that page.
