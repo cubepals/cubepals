@@ -173,7 +173,7 @@ describe('every guide’s pictures', () => {
   const pictures = (slug: string) => {
     const page = readFileSync(join(import.meta.dir, 'guides', slug, 'page.tsx'), 'utf8')
     return [...page.matchAll(/<Shot\b[\s\S]*?\/>/g)].map(([shot]) => ({
-      src: (/src=\{?["`]([^"`]+)["`]\}?/.exec(shot)?.[1] ?? '').replace('${PICTURES}', `/guides/${slug}`),
+      src: (/src=\{?["`]([^"`]+)["`]\}?/.exec(shot)?.[1] ?? '').replace(/\$\{PICTURES\}/, `/guides/${slug}`),
       width: Number(/width=\{(\d+)\}/.exec(shot)?.[1]),
       height: Number(/height=\{(\d+)\}/.exec(shot)?.[1]),
     }))

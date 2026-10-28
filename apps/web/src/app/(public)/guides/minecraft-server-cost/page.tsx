@@ -14,7 +14,16 @@ import Link from 'next/link'
 import { dollars, EXTRA_HOUR_CENTS } from '../../../../legal/figures'
 import { daysSaid, hoursAgainSaid, hoursSaid } from '../../../../lib/plans'
 import { PLAY_HABITS, planPoints, priceOf } from '../../../../ui'
-import { FactTable, GuideArticle, GuideLink, guideMetadata, guidePlans, Part, Questions, Shot } from '../article'
+import {
+  FactTable,
+  GuideArticle,
+  GuideLink,
+  guideMetadata,
+  guidePlans,
+  Part,
+  Questions,
+  Shot,
+} from '../article'
 
 const SLUG = 'minecraft-server-cost'
 const PICTURES = `/guides/${SLUG}`

@@ -14,7 +14,16 @@ import Link from 'next/link'
 import { bedrockLive } from '../../../../lib/bedrock'
 import { daysSaid, hoursSaid } from '../../../../lib/plans'
 import { OutLink } from '../../../../ui/out-link'
-import { FactTable, GuideArticle, GuideLink, guideMetadata, guidePlans, Part, Questions, Shot } from '../article'
+import {
+  FactTable,
+  GuideArticle,
+  GuideLink,
+  guideMetadata,
+  guidePlans,
+  Part,
+  Questions,
+  Shot,
+} from '../article'
 
 const SLUG = 'aternos-alternative'
 const PICTURES = `/guides/${SLUG}`
