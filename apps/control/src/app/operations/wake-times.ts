@@ -54,11 +54,11 @@ export function medianOf(medians: WakeMedians, serverId: string, way: WakeWay): 
 }
 
 /**
- * Reads the medians from the wakes of the last `WAKE_TIMES_DAYS` days: every server's, or with
- * `serverId` only that server's own and every server's. A start resumed by its steps (`resumedWake`),
- * booted otherwise; an `unstore` is a world back from rest, its boot included.
+ * Reads the medians from the wakes of the last `WAKE_TIMES_DAYS` days, each server's own and every
+ * server's. A start resumed by its steps (`resumedWake`), booted otherwise; an `unstore` is a world
+ * back from rest, its boot included. Read through `WakeTimes`, which keeps a reading.
  */
-export async function readWakeMedians(q: Queryable, serverId?: string): Promise<WakeMedians> {
+export async function readWakeMedians(q: Queryable): Promise<WakeMedians> {
   const since = new Date(Date.now() - WAKE_TIMES_DAYS * DAY_MS)
   const { rows } = await q.execute<{ server_id: string | null; way: WakeWay; median: number; n: number }>(sql`
     with wakes as (
@@ -75,8 +75,7 @@ export async function readWakeMedians(q: Queryable, serverId?: string): Promise<
     select case when grouping(server_id) = 0 then server_id::text end as server_id, way,
            percentile_cont(0.5) within group (order by seconds)::float8 as median, count(*)::int as n
       from wakes
-     group by grouping sets ((server_id, way), (way))
-    having grouping(server_id) = 1 or ${serverId ?? null}::uuid is null or server_id = ${serverId ?? null}::uuid`)
+     group by grouping sets ((server_id, way), (way))`)
   const medians: WakeMedians = { own: new Map(), all: new Map() }
   for (const row of rows) {
     if (row.server_id === null) {
@@ -100,19 +99,23 @@ const FIRST_RESUME_SECONDS = 2
  */
 export async function expectedWake(
   q: Queryable,
+  times: Pick<WakeTimes, 'medians'>,
   serverId: string,
   operation: { id: string; kind: OperationKind } | null,
 ): Promise<number | null> {
   if (operation?.kind !== 'start' && operation?.kind !== 'unstore') return null
   const path = operation.kind === 'start' ? await wakePathOf(q, operation.id) : null
   const way: WakeWay = path === null ? 'restore' : path === 'resumed' ? 'resume' : 'boot'
-  const median = medianOf(await readWakeMedians(q, serverId), serverId, way)
+  const median = medianOf(await times.medians(), serverId, way)
   if (median !== null || path === null) return median
   const last = await lastWakeSeconds(q, serverId, path)
   return last ?? (path === 'resumed' ? FIRST_RESUME_SECONDS : null)
 }
 
-/** Every server's medians, read again at most every `KEPT_MS`: the edge asks for routes each second. */
+/**
+ * Every server's medians, read again at most every `KEPT_MS`: the edge asks for routes each second,
+ * and a waking server's page about as often.
+ */
 export class WakeTimes {
   readonly #db: Queryable
   readonly #now: () => number
@@ -136,4 +139,15 @@ export class WakeTimes {
     }
     return this.#read.medians
   }
+}
+
+const readings = new WeakMap<Queryable, WakeTimes>()
+
+/** The one reading kept for `db`: the edge's routes and the server pages count from the same. */
+export function wakeTimesOf(db: Queryable): WakeTimes {
+  const kept = readings.get(db)
+  if (kept !== undefined) return kept
+  const times = new WakeTimes(db)
+  readings.set(db, times)
+  return times
 }

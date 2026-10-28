@@ -29,7 +29,7 @@ import {
   wakeStarts,
 } from '../operations/persistence.ts'
 import type { IdleDecision, Schedules } from '../operations/schedules.ts'
-import { medianOf, WakeTimes, wayOf } from '../operations/wake-times.ts'
+import { medianOf, type WakeTimes, wakeTimesOf, wayOf } from '../operations/wake-times.ts'
 import { wakeAnswered } from '../platform/telemetry.ts'
 import type { ChangeSignal } from '../ports/changes.ts'
 import type { EventBus } from '../ports/events.ts'
@@ -168,7 +168,7 @@ export class EdgeService {
     this.#keyring = deps.runtimeSecrets
     this.#wakeWaitMs = deps.wakeWaitMs
     this.#changes = deps.routeChanges ?? null
-    this.#wakeTimes = new WakeTimes(deps.db)
+    this.#wakeTimes = wakeTimesOf(deps.db)
   }
 
   /** Every hostname that should route, with where the edge sends it. */

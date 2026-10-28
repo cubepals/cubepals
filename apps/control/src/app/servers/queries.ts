@@ -57,7 +57,7 @@ import { type Shown, shownOf } from '../edge/routed.ts'
 import { cameByView } from '../edge/turned-away.ts'
 import { packView } from '../mods/pack.ts'
 import { activeOperation, latestOfKind, type OperationRecord } from '../operations/persistence.ts'
-import { expectedWake } from '../operations/wake-times.ts'
+import { expectedWake, type WakeTimes, wakeTimesOf } from '../operations/wake-times.ts'
 import type { PackService } from '../packs/service.ts'
 import { idleMinutesFor } from '../platform/room.ts'
 import type { CatalogHit, ModCatalog } from '../ports/catalog.ts'
@@ -107,6 +107,8 @@ export class ServerQueries {
   #templatesSizedAt = 0
   #sizingTemplates: Promise<void> | null = null
   readonly #templates: ResolvedTemplates
+  /** How long wakes take, for a waking server's countdown. */
+  readonly #wakeTimes: WakeTimes
 
   constructor(deps: {
     db: Db
@@ -131,6 +133,7 @@ export class ServerQueries {
     this.#packs = deps.packs
     this.#curation = deps.curation
     this.#providers = deps.providers
+    this.#wakeTimes = wakeTimesOf(deps.db)
   }
 
   /** The server's configuration history, newest first, each with what it changed. */
@@ -642,7 +645,7 @@ export class ServerQueries {
       region: { key: server.regionKey, label: this.#regions.label(server.regionKey) ?? server.regionKey },
       memoryTier: server.memoryTier,
       activeOperation: operation ? await this.#operationView(operation, server, applied) : null,
-      lastWakeSeconds: await expectedWake(this.#db, server.id, operation),
+      lastWakeSeconds: await expectedWake(this.#db, this.#wakeTimes, server.id, operation),
       players: running
         ? { online: online?.length ?? 0, people: (online ?? []).map((p) => ({ name: p.name, uuid: p.uuid })) }
         : null,

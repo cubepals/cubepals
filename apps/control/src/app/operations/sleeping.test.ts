@@ -20,7 +20,7 @@ import type { UserActor } from '../actor.ts'
 import { listBackups } from '../backups/persistence.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import { lastWakeSeconds } from './persistence.ts'
-import { medianOf, readWakeMedians, type WakeWay } from './wake-times.ts'
+import { medianOf, type WakeWay, wakeTimesOf } from './wake-times.ts'
 
 const operations = schema.serverOperations
 
@@ -37,10 +37,10 @@ async function stepsOfLast(h: Harness, id: string, kind: 'start' | 'stop' = 'sta
 
 /**
  * What the server page counts down from for a wake one way: the median measured for it, its own or
- * every server's, else its last wake that way.
+ * every server's, in the reading the page took, else its last wake that way.
  */
 async function countdownOf(h: Harness, id: string, way: WakeWay): Promise<number | null> {
-  const median = medianOf(await readWakeMedians(h.db, id), id, way)
+  const median = medianOf(await wakeTimesOf(h.db).medians(), id, way)
   return median ?? (await lastWakeSeconds(h.db, id, way === 'resume' ? 'resumed' : 'booted'))
 }
 

@@ -84,13 +84,6 @@ describe.skipIf(!hasDatabase)('wake times', () => {
     expect(medianOf(medians, ids.b, 'resume')).toBeNull()
   })
 
-  test('read for one server, it has its own and every server’s', async () => {
-    const medians = await readWakeMedians(h.db, ids.b)
-    expect(medians.own.size).toBe(0)
-    expect(medianOf(medians, ids.b, 'restore')).toBe(80)
-    expect(medianOf(medians, ids.b, 'boot')).toBeNull()
-  })
-
   test('the way a sleeping server would wake now', () => {
     expect(wayOf('stopped', true)).toBe('resume')
     expect(wayOf('stopped', false)).toBe('boot')
