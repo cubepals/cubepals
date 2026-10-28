@@ -29,6 +29,7 @@ import {
   wakeStarts,
 } from '../operations/persistence.ts'
 import type { IdleDecision, Schedules } from '../operations/schedules.ts'
+import { medianOf, WakeTimes, wayOf } from '../operations/wake-times.ts'
 import { wakeAnswered } from '../platform/telemetry.ts'
 import type { ChangeSignal } from '../ports/changes.ts'
 import type { EventBus } from '../ports/events.ts'
@@ -117,6 +118,8 @@ export class EdgeService {
   readonly #links: ArtifactLinks
   readonly #keyring: SecretKeyring
   readonly #wakeWaitMs: number
+  /** How long each way of waking takes, for a waking server's ping. */
+  readonly #wakeTimes: WakeTimes
   /**
    * The route inputs last read and the fingerprint they were read under; the change mark taken
    * just before (null where none could be heard); when the read ended, by this clock; and how far
@@ -165,6 +168,7 @@ export class EdgeService {
     this.#keyring = deps.runtimeSecrets
     this.#wakeWaitMs = deps.wakeWaitMs
     this.#changes = deps.routeChanges ?? null
+    this.#wakeTimes = new WakeTimes(deps.db)
   }
 
   /** Every hostname that should route, with where the edge sends it. */
@@ -183,11 +187,12 @@ export class EdgeService {
    */
   async listed(): Promise<{ routes: EdgeRoutes; from: Date; unrouted: boolean }> {
     const { print, inputs } = await this.#inputs()
-    const { servers: live, bindings, comingBack, stops, trials, motds, plays } = inputs
+    const { servers: live, bindings, comingBack, booting, stops, trials, motds, plays } = inputs
     const restarting = restartingOf(live, comingBack)
     const unstoring = new Set(comingBack.filter((o) => o.kind === 'unstore').map((o) => o.serverId))
     const out = outOf(stops, new Date())
     const over = trialOver(trials)
+    const medians = await this.#wakeTimes.medians()
     const routes: EdgeRoutes['routes'] = []
     for (const server of live) {
       const { state, back, waking } = runOf(
@@ -196,6 +201,8 @@ export class EdgeService {
         unstoring.has(server.id),
       )
       const binding = bindings.get(server.id)
+      // Memory kept resumes, unless its start already gave up on that and boots.
+      const way = wayOf(server.status, binding?.memoryKept === true && !booting.has(server.id))
       const destination = back ? NOWHERE : this.#destinationOf(server.status, state, binding?.handle)
       if (destination === null) continue
       for (const { address, alias } of this.#addressesOf(server.slug)) {
@@ -205,6 +212,7 @@ export class EdgeService {
           destination,
           ...noticeOf(state, server, out.get(server.id), over.has(server.id)),
           ...(waking ? { waking: true as const } : {}),
+          ...wakeOf(state, medianOf(medians, server.id, way)),
           ...this.#identityOf(server, state, motds),
           ...(binding?.proxyProtocol ? { proxyProtocol: true as const } : {}),
           ...joinsOf(plays, state, binding, server.desiredRevisionId),
@@ -724,6 +732,10 @@ function joinsOf(
   const { release, protocol, oldest, newest } = range
   return { joins: { release, protocol, oldest, ...(newest === null ? {} : { newest }) } }
 }
+
+/** An asleep server's route says how long its wake takes, where that is measured. */
+const wakeOf = (state: 'asleep' | 'restarting' | null, seconds: number | null) =>
+  state === 'asleep' && seconds !== null ? { wakeSeconds: seconds } : {}
 
 /**
  * Where a server's run is, as its routes say: why it can't be joined now (null while it runs);

@@ -514,9 +514,10 @@ export interface ServerView {
   /** The operation currently running or queued, if any. */
   activeOperation: OperationView | null
   /**
-   * While it wakes, how long its last wake the same way took in seconds, which this one is told to
-   * take too: from sleep with its memory kept, or from a boot. Null before its first boot, and
-   * when it isn't waking.
+   * While it wakes, how long a wake the same way takes in seconds, which this one is told to take
+   * too: from sleep with its memory kept, from a boot, or from rest. The median of its own wakes
+   * that way, else of every server's, else its last. Null with none measured, and when it isn't
+   * waking.
    */
   lastWakeSeconds: number | null
   /** Who is on now, each with the UUID the server knows them by, which their face is found by. */
