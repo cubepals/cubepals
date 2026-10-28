@@ -1,5 +1,5 @@
 {
-  "id": "2f7d7238-729b-48b0-b83f-e75d179b51d3",
+  "id": "b4deb455-84c4-479d-ae4f-b937c40690fe",
   "prevId": "872ac2e3-14d1-4e77-878d-d9c6327422d0",
   "version": "7",
   "dialect": "postgresql",
@@ -1238,13 +1238,6 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
-        },
-        "other_jars": {
-          "name": "other_jars",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
         },
         "left_out": {
           "name": "left_out",
@@ -3012,6 +3005,30 @@
         "moves_at": {
           "name": "moves_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "product_id": {
+          "name": "product_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_cents": {
+          "name": "price_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "included_units": {
+          "name": "included_units",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "most_extra_units": {
+          "name": "most_extra_units",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },

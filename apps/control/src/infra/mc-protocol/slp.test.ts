@@ -96,4 +96,28 @@ describe('SlpProbe', () => {
     server = await fakeServer(() => {})
     await expect(ping(server, 200)).rejects.toThrow('timed out')
   })
+
+  test('a reply declaring more than a status string can hold fails at once', async () => {
+    server = await fakeServer((socket) => socket.write(Buffer.concat([varInt(1_000_000), Buffer.alloc(64)])))
+    const started = Date.now()
+    await expect(ping(server, 5000)).rejects.toThrow('A status reply of 1000000 bytes is outside 1 to 98305')
+    expect(Date.now() - started).toBeLessThan(500)
+  })
+
+  test('a reply whose length reads as negative fails at once', async () => {
+    server = await fakeServer((socket) => socket.write(Buffer.from([0xfd, 0xff, 0xff, 0xff, 0x0f, 0])))
+    await expect(ping(server, 5000)).rejects.toThrow('A status reply of -3 bytes is outside 1 to 98305')
+  })
+
+  test('a string longer than its reply fails', async () => {
+    const body = Buffer.concat([varInt(0), varInt(500), Buffer.from('{}')])
+    server = await fakeServer((socket) => socket.write(Buffer.concat([varInt(body.length), body])))
+    await expect(ping(server)).rejects.toThrow('shorter than the string it declares')
+  })
+
+  test('a status as long as a status string can be is read', async () => {
+    const description = '€'.repeat(32_000)
+    server = await fakeServer((socket) => socket.write(statusReply({ ...STATUS, description })))
+    expect(await ping(server)).toEqual({ version: '26.3', online: 1, max: 4 })
+  })
 })

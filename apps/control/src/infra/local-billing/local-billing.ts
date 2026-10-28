@@ -27,6 +27,7 @@ import {
   type BillingState,
   type Discount,
   DiscountRefused,
+  type EarlyProduct,
   type GiftProduct,
   type NewDiscount,
   type OrderNow,
@@ -68,7 +69,7 @@ export interface Ticket {
 
 /** What a page did, as the webhook receives it. */
 export type Delivery =
-  | { type: 'subscription.started'; userId: string; planKey: string }
+  | { type: 'subscription.started'; userId: string; planKey: string; productId?: string }
   | { type: 'subscription.cancelled'; userId: string }
   | {
       type: 'order.paid'
@@ -95,10 +96,19 @@ export class LocalBilling implements BillingProvider {
   /** Discount codes made here, newest first. */
   readonly #discounts: Discount[] = []
   readonly #gifts: readonly GiftProduct[]
+  readonly #early: readonly EarlyProduct[]
 
-  constructor(options: { db: Db; secret: string; webOrigin: string; gifts?: readonly GiftProduct[] }) {
+  constructor(options: {
+    db: Db
+    secret: string
+    webOrigin: string
+    gifts?: readonly GiftProduct[]
+    /** Products at an early price it sells, as a provider would hold them; none unless given. */
+    early?: readonly EarlyProduct[]
+  }) {
     this.#db = options.db
     this.#gifts = options.gifts ?? []
+    this.#early = options.early ?? []
     // A key of its own, so nothing signed here passes for anything signed with the secret itself.
     this.#key = createHmac('sha256', options.secret).update('local-billing').digest()
     this.#webOrigin = options.webOrigin
@@ -131,6 +141,12 @@ export class LocalBilling implements BillingProvider {
     return true
   }
 
+  /** The newest of those it was given for the plan, not archived; as Polar's offers one. */
+  async earlyProduct(planKey: string): Promise<EarlyProduct | null> {
+    const offered = this.#early.filter((product) => product.planKey === planKey && !product.archived)
+    return offered.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null
+  }
+
   /** The move is the record `BillingService` writes; here nothing else applies it, and a plan runs its year. */
   async moveToPlan(externalSubscriptionId: string): Promise<{ appliesAt: Date }> {
     const [row] = await this.#db
@@ -140,11 +156,23 @@ export class LocalBilling implements BillingProvider {
     return { appliesAt: row?.end ?? new Date() }
   }
 
-  /** Its record of who pays is `billing_subscriptions` itself: the plan is the larger one from now, renewing. */
+  /**
+   * Its record of who pays is `billing_subscriptions` itself: the plan is the larger one from now,
+   * renewing, on the plan's own product, so it sells what the plan table says.
+   */
   async upgradeSubscription(externalSubscriptionId: string, planKey: string): Promise<void> {
     await this.#db
       .update(schema.billingSubscriptions)
-      .set({ planKey, cancelAtPeriodEnd: false, canceledAt: null, updatedAt: new Date() })
+      .set({
+        planKey,
+        productId: null,
+        priceCents: null,
+        includedUnits: null,
+        mostExtraUnits: null,
+        cancelAtPeriodEnd: false,
+        canceledAt: null,
+        updatedAt: new Date(),
+      })
       .where(eq(schema.billingSubscriptions.externalSubscriptionId, externalSubscriptionId))
   }
 
@@ -303,10 +331,33 @@ export class LocalBilling implements BillingProvider {
               status: 'active',
               currentPeriodEnd: new Date(Date.now() + PERIOD_MS),
               cancelAtPeriodEnd: false,
+              ...this.#product(event.productId),
             }
           : null,
     }
     return { kind: 'standing', state }
+  }
+
+  /**
+   * The product a subscription is on and what it sells the plan with: one of its early products, or
+   * any other, which sells the plan's own. Nothing for a delivery that names none.
+   */
+  #product(
+    productId: string | undefined,
+  ): Pick<NonNullable<BillingState['subscription']>, 'productId' | 'terms'> {
+    if (productId === undefined) return {}
+    const early = this.#early.find((product) => product.id === productId)
+    return {
+      productId,
+      terms:
+        early === undefined
+          ? null
+          : {
+              priceCents: early.priceCents,
+              includedUnits: early.includedUnits,
+              mostExtraUnits: early.mostExtraUnits,
+            },
+    }
   }
 
   /**
@@ -347,6 +398,7 @@ export class LocalBilling implements BillingProvider {
               status: 'active',
               currentPeriodEnd: paying.currentPeriodEnd ?? new Date(Date.now() + PERIOD_MS),
               cancelAtPeriodEnd: paying.cancelAtPeriodEnd,
+              ...this.#product(paying.productId ?? undefined),
             },
     }
   }

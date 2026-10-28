@@ -127,6 +127,16 @@ export type WorldPeople = {
   unknown: string[]
 } | null
 
+/** A modded server type a world was opened with (its level.dat's `ServerBrands`), as a person says it. */
+export const brandName = (brand: string): string => BRAND_NAMES[brand] ?? brand
+
+const BRAND_NAMES: Record<string, string> = {
+  forge: 'Forge',
+  neoforge: 'NeoForge',
+  fabric: 'Fabric',
+  quilt: 'Quilt',
+}
+
 /** The most players a server's files are read for: a large server's regulars. */
 export const MOST_WORLD_PEOPLE = 200
 

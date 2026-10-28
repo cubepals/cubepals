@@ -47,6 +47,9 @@ const FROM_A_MODPACK = {
 // Billing end to end (§15.4): checkout and portal links from the real Polar adapter
 // against a stand-in for Polar's API, webhooks signed with the deployment's secret through the
 // route Polar calls, the plan they put an account on, and what a smaller plan stops.
+/** Places that aren't a path in the app, however they are written. */
+const AWAY = ['//evil.test/x', '/\\evil.test', 'https://evil.test/', '/\t/evil.test', '/\r\n/evil.test']
+
 describe.skipIf(!hasDatabase)('billing', () => {
   let h: Harness
   let webhook: ReturnType<typeof createBillingWebhook>
@@ -125,9 +128,8 @@ describe.skipIf(!hasDatabase)('billing', () => {
       'http://localhost:3000/account?from=billing&next=%2Fservers%2Fnew%3Fpack%3Dabc',
     )
     // Only ever a path in the app: another site is never where a checkout lands.
-    for (const away of ['//evil.test/x', '/\\evil.test', 'https://evil.test/'])
-      await h.app.billing.startCheckout(owner, 'plus', { next: away })
-    for (const request of polar.requests.slice(-3))
+    for (const away of AWAY) await h.app.billing.startCheckout(owner, 'plus', { next: away })
+    for (const request of polar.requests.slice(-AWAY.length))
       expect(JSON.parse(request.body).success_url).toBe('http://localhost:3000/account?from=billing')
     const started = await h.db
       .select({ data: schema.auditLog.data })
@@ -141,9 +143,7 @@ describe.skipIf(!hasDatabase)('billing', () => {
     expect(started.map((row) => row.data)).toEqual([
       { plan: 'plus', reason: 'account' },
       { plan: 'plus', reason: 'modpack', terms: TERMS_VERSION, startNow: true },
-      { plan: 'plus', reason: 'account' },
-      { plan: 'plus', reason: 'account' },
-      { plan: 'plus', reason: 'account' },
+      ...AWAY.map(() => ({ plan: 'plus', reason: 'account' })),
     ])
     expect(await refusal(h.app.billing.startCheckout(owner, 'free'))).toBe('invalid_choice')
     expect(await refusal(h.app.billing.customerPortal(owner))).toBe('invalid_choice')

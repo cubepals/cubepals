@@ -85,7 +85,33 @@ export interface BillingState {
     createdAt?: Date
     /** When it was set to end, where the provider says; null while it renews. */
     canceledAt?: Date | null
+    /** The provider's product it is on, where the provider names one. */
+    productId?: string
+    /**
+     * What its product sells the plan with, where it sets terms of its own (an early price); null
+     * on the plan's own product. Kept with the subscription the first time it is seen on it.
+     */
+    terms?: { priceCents: number; includedUnits: number; mostExtraUnits: number | null } | null
   } | null
+}
+
+/**
+ * A product that sells a paid plan at a price and with hours of its own: an early price. More than
+ * one may sell the same plan, a later one standing for new checkouts while the ones before it go
+ * on speaking for the subscriptions sold on them, archived or not.
+ */
+export interface EarlyProduct {
+  id: string
+  planKey: string
+  /** What it charges a month, in US cents. */
+  priceCents: number
+  /** The play it includes each month, in meter units, in place of the plan's. */
+  includedUnits: number
+  /** The most extra hours a month it lets an owner allow, in place of the plan's; null: the ceiling alone. */
+  mostExtraUnits: number | null
+  /** Sold no more. */
+  archived: boolean
+  createdAt: Date
 }
 
 /** A paid order, as the billing provider reports it: what it was for, and every amount in cents. */
@@ -223,6 +249,11 @@ export interface BillingProvider {
   sells(planKey: string): boolean
   /** The plan's yearly product is sold here: a checkout for it can be made. */
   sellsYear(planKey: string): Promise<boolean>
+  /**
+   * The product that sells the plan at an early price now, the newest not archived; null when none
+   * does. Nothing offers it on its own: what may be sold at it is Blockly's to decide.
+   */
+  earlyProduct(planKey: string): Promise<EarlyProduct | null>
   /**
    * The subscription ends at the end of the period paid for instead of renewing, as a cancel in
    * the portal would: a year was bought to follow it.

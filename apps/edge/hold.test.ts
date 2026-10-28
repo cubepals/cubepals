@@ -76,3 +76,22 @@ test('a held join names who it logs in as, once its Login Start has arrived whol
   // Not a Login Start: no name is read from it.
   expect(new Held({ ...join(), bytes: Uint8Array.from([...handshake, ...packet(1, [0])]) }).name).toBeNull()
 })
+
+test('a held join that keeps sending whole packets past what a login takes is let go', () => {
+  const held = new Held(join())
+  const large = packet(0x7f, new Array(10_000).fill(1))
+  const taken = Array.from({ length: 10 }, () => held.receive(large))
+  expect(taken.slice(0, 6).every(Boolean)).toBe(true)
+  expect(taken.at(-1)).toBe(false)
+  expect(held.refused).toBe(true)
+  expect(held.settled).toBe(false)
+  expect(held.replay()).toEqual(new Uint8Array())
+})
+
+test('a held join that sends more packets than a login takes is let go', () => {
+  const held = new Held(join())
+  const small = packet(0x7f, [1])
+  const taken = Array.from({ length: 100 }, () => held.receive(small))
+  expect(taken.slice(0, 60).every(Boolean)).toBe(true)
+  expect(held.refused).toBe(true)
+})

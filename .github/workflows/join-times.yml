@@ -1,0 +1,120 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+name: Join times
+
+# How long a join takes on staging, with real Java and Bedrock clients (scripts/join-times.ts).
+# Bedrock is UDP, which a cloud session can't send and a GitHub runner can. It times what staging
+# runs now: it deploys nothing. The edge's Xbox sign-in check is off for the run, since its Bedrock
+# players are headless clients with no account, and on again after, whatever happened. Staging is
+# left as the run found it: stopped again only if it was stopped before. Only people with write
+# access see "Run workflow". It shares the Nightly's concurrency group: neither changes staging
+# under the other.
+on:
+  workflow_dispatch:
+    inputs:
+      n:
+        description: Joins per server, state and client
+        default: "5"
+      templates:
+        description: Templates to make servers from, comma separated
+        default: arcade,duels
+      states:
+        description: States to join from, comma separated (awake, sleep, cold, rest)
+        default: awake,sleep,cold,rest
+      clients:
+        description: Clients, comma separated (java, bedrock)
+        default: java,bedrock
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  times:
+    name: "Join times: Java and Bedrock on staging"
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
+        with:
+          version: 0.4.111
+      # The release ships only `flyctl`; the scripts call it `fly`, as its installer names it.
+      - run: ln -s flyctl "$(dirname "$(command -v flyctl)")/fly" && fly version
+      - run: bun install --frozen-lockfile
+      # The Java client: mineflayer, which the players probe installs where it runs.
+      - run: bun add --no-save mineflayer@4.39.0
+      # The headless Bedrock client is outside the workspaces: it needs a native RakNet build.
+      - run: bun install --frozen-lockfile
+        working-directory: tools/bedrock-join
+      - name: Was staging up?
+        id: before
+        run: |
+          if fly machines list -a bly-staging-control --json | grep -q '"state": *"started"'; then
+            echo "up=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "up=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Start staging
+        run: bun scripts/staging.ts start
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          STAGING_STATE: ${{ secrets.STAGING_STATE }}
+          POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
+          STAGING_DATABASE: ${{ vars.STAGING_DATABASE }}
+      # Xbox sign-in off on the staging edge: it restarts, and Geyser with it. The setting goes back
+      # in the step that always runs below, which is why it comes before anything that can fail.
+      - name: Turn the edge's Xbox sign-in check off
+        id: validation
+        if: contains(inputs.clients, 'bedrock')
+        run: fly secrets set BEDROCK_VALIDATE_LOGIN=false -a bly-staging-edge
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Join times
+        shell: bash
+        run: |
+          bun scripts/join-times.ts --n "$N" --templates "$TEMPLATES" --states "$STATES" --clients "$CLIENTS" | tee join-times.log
+        env:
+          N: ${{ inputs.n }}
+          TEMPLATES: ${{ inputs.templates }}
+          STATES: ${{ inputs.states }}
+          CLIENTS: ${{ inputs.clients }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          STAGING_STATE: ${{ secrets.STAGING_STATE }}
+          STAGING_DATABASE: ${{ vars.STAGING_DATABASE }}
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      - name: Table of times
+        if: always()
+        run: |
+          if [ -f join-times.log ]; then
+            sed -n '/^| Server/,$p' join-times.log >> "$GITHUB_STEP_SUMMARY"
+          fi
+      # A second try covers a blip reaching Fly, as the stop below has.
+      - name: Turn the edge's Xbox sign-in check on
+        if: always() && steps.validation.conclusion != 'skipped'
+        run: |
+          fly secrets set BEDROCK_VALIDATE_LOGIN=true -a bly-staging-edge ||
+            (sleep 60 && fly secrets set BEDROCK_VALIDATE_LOGIN=true -a bly-staging-edge)
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Stop staging, as it was
+        if: always() && steps.before.outputs.up == 'false'
+        run: bun scripts/staging.ts stop || (sleep 60 && bun scripts/staging.ts stop)
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          STAGING_STATE: ${{ secrets.STAGING_STATE }}
+          POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
+          STAGING_DATABASE: ${{ vars.STAGING_DATABASE }}

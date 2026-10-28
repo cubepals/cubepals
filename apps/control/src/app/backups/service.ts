@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto'
 import { DAY_MS, HOUR_S, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
 import { type Db, schema, type Tx } from '@blockly/db'
-import { entitlementsFor, PLAN_KEYS } from '../../domain/account/entitlements.ts'
+import { entitlementsFor, entitlementsOf, PLAN_KEYS } from '../../domain/account/entitlements.ts'
 import type { RevisionDraft } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { levelNameOf, PROPERTIES_FILE, wantedInWorldArchive } from '../../minecraft/uploads.ts'
@@ -175,7 +175,7 @@ export class BackupService {
       const server = authorize(actor, await lockServer(tx, serverId))
       await this.#policy.require(tx, server.ownerId, { kind: 'create_archive' })
       const standing = await loadStanding(tx, server.ownerId)
-      const perDay = entitlementsFor(standing.plan, standing.limitOverrides).backupPolicy.downloadsPerDay
+      const perDay = entitlementsOf(standing).backupPolicy.downloadsPerDay
       if (perDay !== null && (await downloadsSince(tx, server.id, new Date(Date.now() - DAY_MS))) >= perDay)
         throw new AppError(
           'rate_limited',
@@ -217,7 +217,7 @@ export class BackupService {
       // The biggest disk it may have: a world bigger than its disk now gets a bigger one when it is
       // brought back, where its plan's disks grow.
       const standing = await loadStanding(tx, server.ownerId)
-      const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+      const plan = entitlementsOf(standing)
       const limit = worldUploadLimit(Math.max(plan.storage.mostGb, await grownStorage(tx, server.id)))
       if (file.sizeBytes > limit)
         throw new AppError(
@@ -386,7 +386,7 @@ export class BackupService {
         }
         // A backup's settings are a configuration like any other: within the plan it runs on now.
         const standing = await loadStanding(tx, server.ownerId)
-        requireWithinPlan(entitlementsFor(standing.plan, standing.limitOverrides), draft)
+        requireWithinPlan(entitlementsOf(standing), draft)
         await pinUnpinned(this.#builds, draft)
         draft.acknowledgedRevoked = await acknowledged(tx, draft, options)
         const revision = await insertRevision(tx, server.id, draft, requestedBy(actor))
@@ -425,7 +425,7 @@ export class BackupService {
    */
   async enforceRetention(server: MinecraftServer, ending?: string): Promise<void> {
     const standing = await loadStanding(this.#db, server.ownerId)
-    const kept = entitlementsFor(standing.plan, standing.limitOverrides).backupPolicy.snapshotsKept
+    const kept = entitlementsOf(standing).backupPolicy.snapshotsKept
     // A backup a listed world is kept in is the only place that world is: it stays while it is.
     const holding = new Set((await keptWorlds(this.#db, server.id)).values())
     for (const id of await backupsInUse(this.#db, server.id, ending)) holding.add(id)
@@ -456,7 +456,7 @@ export class BackupService {
       await this.#db.transaction(async (tx) => {
         // The weekly history is a plan's; a download of the world now is everyone's.
         const standing = await loadStanding(tx, server.ownerId)
-        if (!entitlementsFor(standing.plan, standing.limitOverrides).backupPolicy.archiveEnabled) return
+        if (!entitlementsOf(standing).backupPolicy.archiveEnabled) return
         const decision = await this.#policy.check(tx, server.ownerId, { kind: 'create_archive' })
         if (!decision.ok) return
         await this.#queueArchive(tx, server, snapshot, {

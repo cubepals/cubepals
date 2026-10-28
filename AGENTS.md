@@ -36,6 +36,17 @@ Fraud and abuse tuning, costs and margins, competitors, pricing history, strateg
 
 Never put `@` before a name in a commit message or a PR body, not even inside backticks. Commits do not render markdown, and a squash merge copies the PR body into the commit, so `@s` becomes a mention of the GitHub user "s". Write "the s selector" or "the player" instead. In issues and comments, selectors, package scopes and emails go inside backticks closed on the same line.
 
+## Guides
+
+Every guide on the site shows the screens it walks through. A guide is written with its pictures, not before them, and isn't approved without them.
+
+- **Taken from a local stack** (`bun run dev`, `bun run dev:accounts`), in the light theme at 1×, cropped to what the step shows: a card, a question, a button, not the whole page.
+- **Kept beside the guide,** under `apps/web/public/guides/<slug>/`, and shown with `Shot` at the size the file is, with alt text that says what is in it. Where the page renders a number from the plan table, the alt text names none.
+- **Addresses read as players see them:** `<slug>.play.cubepals.com` (`PLAY_DOMAIN=play.cubepals.com` on the control plane). `maple-hollow` is kept for Cubepals' own images.
+- **A picture goes stale with its screen.** A change to a screen a guide shows takes the picture again.
+
+`guides.test.ts` holds every guide to at least one picture, each a file at the size its page gives it.
+
 ## Titles and slips
 
 A PR or commit title says what changed, plainly, the way someone reading the history wants it. It doesn't state the motive. When something public goes wrong (a title, a mention, a post), stop, say what happened, and ask; don't close, reopen or force-push to cover it.

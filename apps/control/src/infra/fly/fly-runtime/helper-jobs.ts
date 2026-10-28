@@ -98,7 +98,21 @@ export function partsPut(line: string): PutPart[] {
     }))
 }
 
-/** Fills an empty volume from an archive; extracting as root keeps the archive's owners. */
+/**
+ * Fills an empty volume from an archive. Every file comes out as root's, /data included, with the
+ * helper's umask for its mode and no setuid or setgid bit; an entry that is neither a regular file
+ * nor a directory (a link, a device, a FIFO, a socket) is taken out again before anything runs on
+ * the volume. The game image gives /data to the server's user on start, since it isn't that
+ * user's (itzg's `start`, unless `SKIP_CHOWN_DATA`).
+ */
 export function restoreJob(url: string): string {
-  return job(`  curl -fsSL ${quote(url)} | tar -xzf - -C /data && echo restored`)
+  return job(
+    [
+      `  curl -fsSL ${quote(url)} | tar -xzf - -C /data --no-same-owner --no-same-permissions &&`,
+      '  find /data -xdev ! -type f ! -type d -exec rm -f {} + &&',
+      '  chmod -R ug-s /data &&',
+      '  chown 0:0 /data &&',
+      '  echo restored',
+    ].join('\n'),
+  )
 }

@@ -11,7 +11,7 @@
  */
 import { type AppliedConfigJson, type Db, type Queryable, schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
-import { entitlementsFor, grownDisk } from '../../../domain/account/entitlements.ts'
+import { entitlementsOf, grownDisk } from '../../../domain/account/entitlements.ts'
 import type { StopReason } from '../../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { DATA_DIR } from '../../../minecraft/jars.ts'
@@ -113,7 +113,7 @@ export function windingDown(deps: {
     if (!Number.isFinite(kilobytes)) return
     const usedBytes = kilobytes * 1024
     const standing = await loadStanding(db, server.ownerId)
-    const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+    const plan = entitlementsOf(standing)
     const current = Math.max(plan.storage.startGb, await grownStorage(db, server.id))
     await recordDisk(db, server.id, usedBytes, new Date(), grownDisk(plan, current, usedBytes) ?? undefined)
   }

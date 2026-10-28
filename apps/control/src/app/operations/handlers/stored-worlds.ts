@@ -10,7 +10,7 @@
  */
 import { DAY_MS } from '@blockly/contracts/durations'
 import { type AppliedConfigJson, type Db, schema, type Tx } from '@blockly/db'
-import { entitlementsFor } from '../../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { markReseed } from '../../access/persistence.ts'
 import { loadControls, loadStanding } from '../../accounts/persistence.ts'
@@ -80,7 +80,7 @@ export function storedWorlds(deps: {
     if (!(await loadControls(db)).storingEnabled) return 'Resting worlds is paused.'
     if ((await keptStorage(db, server.id, now)).length > 0) return KEEPING_REBUILDS_STORAGE
     const standing = await loadStanding(db, server.ownerId)
-    const days = asked ? 0 : entitlementsFor(standing.plan, standing.limitOverrides).storeAfterIdleDays
+    const days = asked ? 0 : entitlementsOf(standing).storeAfterIdleDays
     if (now.getTime() - server.lastActiveAt.getTime() < days * DAY_MS) return 'It was played recently.'
     return null
   }

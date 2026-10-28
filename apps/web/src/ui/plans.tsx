@@ -23,14 +23,24 @@ import { Tip } from './tip'
 export const forSale = (plan: Pick<PublicPlan, 'available'>): boolean =>
   (plan.available as boolean | undefined) !== false
 
+/** The sizes a plan's servers run at, smallest first; none where the answer predates them. */
+export const sizesOf = (plan: Pick<PublicPlan, 'sizes'>): PublicPlan['sizes'] =>
+  Array.isArray(plan.sizes) ? plan.sizes : []
+
+/** A plan's sizes in a few words: "3 GB", "3 to 16 GB". Empty where the answer predates them. */
+export function gbSaid(plan: Pick<PublicPlan, 'sizes'>): string {
+  const sizes = sizesOf(plan)
+  const [first, last] = [sizes[0], sizes.at(-1)]
+  if (first === undefined || last === undefined) return ''
+  return first === last ? `${first.gb} GB` : `${first.gb} to ${last.gb} GB`
+}
+
 /** What an extra hour costs on a plan, in cents; null where the plan has none or the answer predates it. */
 export const extraHourOf = (plan: Pick<PublicPlan, 'extraHourCents'>): number | null =>
   typeof plan.extraHourCents === 'number' ? plan.extraHourCents : null
 
 export function pitchOf(plan: Pick<PublicPlan, 'key' | 'maxPlayers'>, bedrock = false): string {
   switch (plan.key) {
-    case 'free':
-      return 'Try plain Minecraft with friends, no card'
     case 'core':
       return `Plain Minecraft for you and ${plan.maxPlayers - 1} friends${bedrock ? ', Java and Bedrock together' : ''}`
     case 'plus':
@@ -41,15 +51,17 @@ export function pitchOf(plan: Pick<PublicPlan, 'key' | 'maxPlayers'>, bedrock = 
 }
 
 /**
- * A plan in the four things people choose on, in their words: no gigabytes, units or minutes.
+ * A plan in the four things people choose on, in their words: no units or minutes, and its servers'
+ * memory only as their size, so nobody wonders whether it is unlimited.
  * The free trial says what it is rather than what it lacks, so nothing on it is crossed out. Starting when
  * someone joins is every plan's and the page's headline, so no card repeats it.
  */
 export function planPoints(plan: PublicPlan): string[] {
+  const gb = gbSaid(plan)
   return [
     plan.maxServers === 1
-      ? `1 server, up to ${plan.maxPlayers} players`
-      : `Up to ${plan.maxServers} servers and ${plan.maxPlayers} players`,
+      ? `1 server${gb ? ` of ${gb}` : ''}, up to ${plan.maxPlayers} players`
+      : `Up to ${plan.maxServers} servers and ${plan.maxPlayers} players${gb ? `, ${gb} each` : ''}`,
     hoursPoint(plan),
     addOns(plan),
     keptPoint(plan),
@@ -96,6 +108,28 @@ export function PlanPoint({ plan, point }: { plan: PublicPlan; point: string }) 
   ) : (
     point
   )
+}
+
+/**
+ * The free trial, said on the plan it starts: "Starts with a free trial: 20 hours of play, at most
+ * 2 a day, no card", its hours on their dashed line. One element, so a card's row lays it out whole.
+ */
+export function TrialPoint({ trial }: { trial: PublicPlan }) {
+  return (
+    <span>
+      Starts with a free trial: <PlanPoint plan={trial} point={hoursPoint(trial)} />, no card
+    </span>
+  )
+}
+
+/** A card's points, with the free trial right after the hours of the plan it starts. */
+function pointsOf(plan: PublicPlan, trial: PublicPlan | undefined): { key: string; said: ReactNode }[] {
+  return planPoints(plan).flatMap((point) => {
+    const said = { key: point, said: <PlanPoint plan={plan} point={point} /> }
+    return trial && point === hoursPoint(plan)
+      ? [said, { key: 'trial', said: <TrialPoint trial={trial} /> }]
+      : [said]
+  })
 }
 
 /**
@@ -213,9 +247,13 @@ export function eachOf(
 /** A price as it is said: "$0", "$15 a month". */
 export const priceOf = (cents: number): string => (cents === 0 ? '$0' : `${dollars(cents)} a month`)
 
-/** One plan as the account page shows it. The public pages have their own card (`plan-card.tsx`). */
+/**
+ * One paid plan as the account page shows it, the free trial said on the plan it starts, as the
+ * public pages do. The public pages have their own card (`plan-card.tsx`).
+ */
 export function PlanCard({
   plan,
+  trial,
   current = false,
   action,
   mark,
@@ -224,14 +262,16 @@ export function PlanCard({
   note,
 }: {
   plan: PublicPlan
+  /** The free trial, on the plan it starts. */
+  trial?: PublicPlan | undefined
   /** Whether Bedrock is on, for the card's first line (`lib/bedrock.ts`). */
   bedrock?: boolean
   /** The card is the dark one: the player's own plan. */
   solid?: boolean
   /** Small print that belongs to this plan, under its details. */
   note?: ReactNode
-  /** The plan the person is on, marked as theirs. */
-  current?: boolean
+  /** The plan the person is on, marked as theirs; `'trial'` on the plan whose free trial they're on. */
+  current?: boolean | 'trial'
   action?: ReactNode
   /** The page's mark for the card coming into view, so it is counted (app/(public)/steps.ts). */
   mark?: Readonly<Record<`data-${string}`, string>>
@@ -241,7 +281,7 @@ export function PlanCard({
     <section className="bk-plan" aria-label={plan.name} data-paid={solid || undefined} {...mark}>
       <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)', justifyContent: 'space-between' }}>
         <h3 className="type-eyebrow">{plan.name}</h3>
-        {current && <Badge tone="grass">Yours</Badge>}
+        {current && <Badge tone="grass">{current === 'trial' ? 'Your free trial' : 'Yours'}</Badge>}
       </div>
       <p className="type-heading-sm bk-plan__pitch">{pitchOf(plan, bedrock)}</p>
       <p className="bk-plan__price">
@@ -254,10 +294,10 @@ export function PlanCard({
         </p>
       )}
       <ul className="bk-plan__points">
-        {planPoints(plan).map((point) => (
-          <li key={point} className="type-body-sm">
+        {pointsOf(plan, trial).map((point) => (
+          <li key={point.key} className="type-body-sm">
             <Check size={16} strokeWidth={2.25} aria-hidden />
-            <PlanPoint plan={plan} point={point} />
+            {point.said}
           </li>
         ))}
       </ul>
