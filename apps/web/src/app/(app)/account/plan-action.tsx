@@ -50,6 +50,9 @@ function MoveDown({ plan, planNow, from }: { plan: PublicPlan; planNow: string; 
   const move = useMutation(
     trpc.billing.moveTo.mutationOptions({
       onSuccess: () => queries.invalidateQueries({ queryKey: trpc.account.overview.queryKey() }),
+      // A move refused (the price changed since it was shown) asks again, so the button carries
+      // the price the page now shows, as the checkout page does.
+      onError: () => asked.mutate({ plan: plan.key }),
     }),
   )
   const now = `${planNow[0]?.toUpperCase() ?? ''}${planNow.slice(1)}`
