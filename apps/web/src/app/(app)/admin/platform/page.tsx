@@ -26,6 +26,7 @@ import {
   Toggle,
 } from '../../../../ui'
 import { AdminTabs } from '../tabs'
+import { EarlyPrice } from './early-price'
 
 type Controls = Omit<
   PlatformControlsView,
@@ -40,6 +41,7 @@ type Controls = Omit<
   | 'serverCeiling'
   | 'runtimeKeys'
   | 'createsFull'
+  | 'earlyRoom'
 >
 type Switch =
   | 'provisioningEnabled'
@@ -175,6 +177,7 @@ function Platform({ view }: { view: PlatformControlsView }) {
       </FormSection>
 
       <FlySuspend />
+      <EarlyPrice view={view} />
       <Spend view={view} />
       <Caps view={view} />
       <Catalog view={view} />

@@ -146,6 +146,12 @@ export const platformControls = pgTable(
     earlyPointsPlus: integer('early_points_plus').notNull().default(0),
     earlyValidUntil: ts('early_valid_until'),
     earlyRoomSetAt: ts('early_room_set_at'),
+    /**
+     * When an admin closed the early price, and who: while set, the room counts as none whatever
+     * is set from outside, until an admin opens it again. Null while it is open.
+     */
+    earlyClosedSince: ts('early_closed_since'),
+    earlyClosedBy: text('early_closed_by'),
     updatedBy: text('updated_by'),
     updatedAt: updatedAt(),
   },

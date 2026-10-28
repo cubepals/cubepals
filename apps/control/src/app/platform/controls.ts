@@ -13,6 +13,8 @@ import {
   lockCapacity,
 } from '../accounts/persistence.ts'
 import { type Actor, requestedBy, runsThePlatform } from '../actor.ts'
+import { openHolds } from '../billing/early-holds.ts'
+import { readEarlyRoom, setEarlyClosed } from '../billing/early-room.ts'
 import type { CatalogSync, CatalogTransition } from '../catalog/sync.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { CatalogUnavailable } from '../ports/catalog.ts'
@@ -73,7 +75,31 @@ export class PlatformControlsService {
       playDomains: await this.#playDomains(),
       serverCeiling: this.#serverCeiling,
       runtimeKeys: await this.#keys(),
+      earlyRoom: await this.#earlyRoom(),
     }
+  }
+
+  /** The room for early checkouts as last set, and the checkout pages holding an early price now. */
+  async #earlyRoom(): Promise<PlatformControlsView['earlyRoom']> {
+    const room = await readEarlyRoom(this.#db)
+    return {
+      roomPoints: room.roomPoints,
+      points: room.points,
+      validUntil: room.validUntil?.toISOString() ?? null,
+      setAt: room.setAt?.toISOString() ?? null,
+      closedSince: room.closedSince?.toISOString() ?? null,
+      closedBy: room.closedBy,
+      holds: await openHolds(this.#db),
+    }
+  }
+
+  /**
+   * Closes the early price now, or opens it again (`setEarlyClosed`): what is set from outside
+   * can't open it while an admin has it closed. Prices already paid stay as they are.
+   */
+  async setEarlyClosed(actor: Actor, closed: boolean): Promise<void> {
+    if (!runsThePlatform(actor)) throw new NotFound('Platform')
+    await setEarlyClosed(this.#db, requestedBy(actor), closed)
   }
 
   /** Today's figure, as the watchdog last wrote it; an older day's only says when it last ran. */

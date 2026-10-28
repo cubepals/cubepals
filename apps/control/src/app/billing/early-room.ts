@@ -9,7 +9,8 @@
  * Room past its time counts as none, so the early price closes by itself when nothing renews it.
  * Each change of room or points is audited.
  *
- * It decides no checkout's price, which is read from it, and shows no admin anything.
+ * An admin can close it, and it stays closed, whatever is set, until one opens it again
+ * (`setEarlyClosed`). It decides no checkout's price, which is read from it.
  */
 import { HOUR_MS } from '@blockly/contracts/durations'
 import { type Db, type Queryable, schema } from '@blockly/db'
@@ -31,6 +32,9 @@ export interface EarlyRoom {
    * A checkout paid after this is in no figure it was worked out from yet.
    */
   setAt: Date | null
+  /** When an admin closed it, and who: while closed, it counts as none. Null while open. */
+  closedSince: Date | null
+  closedBy: string | null
 }
 
 /**
@@ -54,6 +58,8 @@ export async function readEarlyRoom(q: Queryable): Promise<EarlyRoom> {
       plus: controls.earlyPointsPlus,
       validUntil: controls.earlyValidUntil,
       setAt: controls.earlyRoomSetAt,
+      closedSince: controls.earlyClosedSince,
+      closedBy: controls.earlyClosedBy,
     })
     .from(controls)
     .where(eq(controls.id, 1))
@@ -63,12 +69,41 @@ export async function readEarlyRoom(q: Queryable): Promise<EarlyRoom> {
     points: { core: row.core, plus: row.plus },
     validUntil: row.validUntil,
     setAt: row.setAt,
+    closedSince: row.closedSince,
+    closedBy: row.closedBy,
   }
 }
 
-/** The room there is now: none once its setting's time has passed, or before one was set. */
+/** The room there is now: none while an admin has it closed, once its setting's time has passed, or before one was set. */
 export const roomNow = (room: EarlyRoom, now: Date): number =>
-  room.validUntil !== null && room.validUntil > now ? room.roomPoints : 0
+  room.closedSince === null && room.validUntil !== null && room.validUntil > now ? room.roomPoints : 0
+
+/**
+ * An admin closes the early price now, or opens it again: closed, the room counts as none whatever
+ * is set from outside, and nobody's price already paid changes. Audited with who did it.
+ */
+export async function setEarlyClosed(db: Db, by: string, closed: boolean): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.select({ id: controls.id }).from(controls).where(eq(controls.id, 1)).for('update')
+    const before = await readEarlyRoom(tx)
+    if ((before.closedSince !== null) === closed) return
+    await tx
+      .update(controls)
+      .set(
+        closed
+          ? { earlyClosedSince: new Date(), earlyClosedBy: by }
+          : { earlyClosedSince: null, earlyClosedBy: null },
+      )
+      .where(eq(controls.id, 1))
+    await tx.insert(schema.auditLog).values({
+      actor: by,
+      action: closed ? 'platform.early_room_closed' : 'platform.early_room_opened',
+      subjectType: 'platform',
+      subjectId: 'early_room',
+      data: { roomPoints: before.roomPoints },
+    })
+  })
+}
 
 /** Sets the room, refusing what is past `maxPoints` or holds too far ahead. */
 export class EarlyRoomControl {

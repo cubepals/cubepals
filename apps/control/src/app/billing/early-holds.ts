@@ -16,7 +16,7 @@
  */
 import { HOUR_MS } from '@blockly/contracts/durations'
 import { type Db, type Queryable, schema, type Tx } from '@blockly/db'
-import { and, eq, gt, isNotNull, isNull, or, sum } from 'drizzle-orm'
+import { and, eq, gt, isNotNull, isNull, or, sql, sum } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import type { DeploymentCapabilities } from '../capabilities.ts'
 import type { EarlyProduct } from '../ports/optional.ts'
@@ -179,4 +179,14 @@ export async function holdPaid(tx: Tx, userId: string, productId: string, now: D
     .update(holds)
     .set({ paidAt: now })
     .where(and(eq(holds.userId, userId), eq(holds.productId, productId), isNull(holds.paidAt)))
+}
+
+/** The holds that count against the room now, and the points they took, for the admin page. */
+export async function openHolds(q: Queryable, now = new Date()): Promise<{ count: number; points: number }> {
+  const room = await readEarlyRoom(q)
+  const [row] = await q
+    .select({ count: sql<number>`count(*)::int`, points: sum(holds.points) })
+    .from(holds)
+    .where(counting(room, now))
+  return { count: row?.count ?? 0, points: Number(row?.points ?? 0) }
 }

@@ -14,6 +14,7 @@ import {
   AuditSearchInput,
   CreateTestAccountInput,
   CuratedReleaseInput,
+  EarlyClosedInput,
   FleetSearchInput,
   FlySuspendInput,
   HealthOperationsInput,
@@ -175,6 +176,10 @@ export const admin = router({
   setPlatform: adminProcedure
     .input(PlatformControlsInput)
     .mutation(({ ctx, input }) => ctx.services.platformControls.set(ctx.actor, input)),
+  /** Close the early price now, or open it again: nothing set from outside opens it while closed. */
+  setEarlyClosed: adminProcedure
+    .input(EarlyClosedInput)
+    .mutation(({ ctx, input }) => ctx.services.platformControls.setEarlyClosed(ctx.actor, input.closed)),
   /** Whether servers put to sleep on Fly are suspended or stopped, and where that comes from. */
   flySuspend: adminProcedure.query(({ ctx }) => ctx.services.flySuspend.view(ctx.actor)),
   setFlySuspend: adminProcedure

@@ -56,7 +56,23 @@ export interface PlatformControlsView {
    * many servers holding compute last booted on an earlier one. Those can go once that is 0.
    */
   runtimeKeys: { version: number; previousVersions: number[]; behind: number }
+  /**
+   * The room for checkouts at an early price, as last set from outside: the room and what a
+   * checkout of each plan takes, in points, until when it holds and when it was set; whether an
+   * admin has it closed; and the checkout pages holding an early price now, with what they took.
+   */
+  earlyRoom: {
+    roomPoints: number
+    points: { core: number; plus: number }
+    validUntil: string | null
+    setAt: string | null
+    closedSince: string | null
+    closedBy: string | null
+    holds: { count: number; points: number }
+  }
 }
+
+export const EarlyClosedInput = z.object({ closed: z.boolean() })
 
 /** One UTC day's cost, from what the control plane recorded. */
 export interface SpendView {
