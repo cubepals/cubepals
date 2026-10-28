@@ -16,7 +16,13 @@ import { type Db, type Queryable, schema } from '@blockly/db'
 import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm'
 import { PAID_PLANS } from '../../domain/account/entitlements.ts'
 import { type DeploymentCapabilities, requireCapability } from '../capabilities.ts'
-import type { BillingOrder, BillingProvider, BillingStanding, BillingState } from '../ports/optional.ts'
+import {
+  type BillingOrder,
+  type BillingProvider,
+  type BillingStanding,
+  type BillingState,
+  BillingUnavailable,
+} from '../ports/optional.ts'
 import { claimRefund, releaseRefund } from './balance.ts'
 import { PAID_ORDER } from './persistence.ts'
 
@@ -80,28 +86,43 @@ export async function stopSecondSubscriptions(
   for (const second of seconds) {
     if (!second.cancelAtPeriodEnd) await reach(() => billing.stopRenewing(second.externalSubscriptionId))
     await markStopped(db, state.userId, second, paid)
-    const charged = await db
-      .select({
-        externalOrderId: orders.externalOrderId,
-        status: orders.status,
-        netCents: orders.netCents,
-        refundedCents: orders.refundedCents,
-      })
-      .from(orders)
-      .where(
-        and(
-          eq(orders.provider, billing.provider),
-          eq(orders.userId, state.userId),
-          eq(orders.externalSubscriptionId, second.externalSubscriptionId),
-        ),
-      )
-    for (const order of charged) {
-      try {
-        await reach(() => refundCharge(db, billing, state.userId, second.externalSubscriptionId, order))
-      } catch (error) {
-        // The standing is saved whatever the provider says of one refund; it is asked again later.
-        await refundNotTaken(db, state.userId, second.externalSubscriptionId, order.externalOrderId, error)
-      }
+    await refundCharges(db, billing, state.userId, second.externalSubscriptionId, reach)
+  }
+}
+
+/**
+ * Every charge of a second subscription kept so far, refunded each on its own. The provider not
+ * answering fails the word, which it delivers again; a refund it refuses is audited, the rest are
+ * still asked for, and the standing is saved all the same: it is asked again later.
+ */
+async function refundCharges(
+  db: Db,
+  billing: BillingProvider,
+  userId: string,
+  subscription: string,
+  reach: <T>(call: () => Promise<T>) => Promise<T>,
+): Promise<void> {
+  const charged = await db
+    .select({
+      externalOrderId: orders.externalOrderId,
+      status: orders.status,
+      netCents: orders.netCents,
+      refundedCents: orders.refundedCents,
+    })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.provider, billing.provider),
+        eq(orders.userId, userId),
+        eq(orders.externalSubscriptionId, subscription),
+      ),
+    )
+  for (const order of charged) {
+    try {
+      await reach(() => refundCharge(db, billing, userId, subscription, order))
+    } catch (error) {
+      if (error instanceof BillingUnavailable) throw error
+      await refundNotTaken(db, userId, subscription, order.externalOrderId, error)
     }
   }
 }
@@ -123,8 +144,9 @@ async function refundNotTaken(db: Db, userId: string, subscription: string, orde
 /**
  * An order's word (`BillingService.receiveWebhook`): a charge of a subscription stopped as a
  * second one is refunded, as `stopSecondSubscriptions` refunds those it finds kept already. A
- * refund the provider doesn't take is audited and the rest of the order's word goes on: the next
- * sync, or the order's next word, asks for it again.
+ * refund the provider refuses is audited and the rest of the order's word goes on: the next sync,
+ * or the order's next word, asks for it again. The provider not answering fails the word, which
+ * it delivers again.
  */
 export async function refundSecondCharge(
   db: Db,
@@ -136,7 +158,10 @@ export async function refundSecondCharge(
   if (!(await stoppedAsSecond(db, order.userId, sub))) return
   const userId = order.userId
   await refundCharge(db, requireCapability(capabilities, 'billing'), userId, sub, order).catch(
-    (error: unknown) => refundNotTaken(db, userId, sub, order.externalOrderId, error),
+    async (error: unknown) => {
+      if (error instanceof BillingUnavailable) throw error
+      await refundNotTaken(db, userId, sub, order.externalOrderId, error)
+    },
   )
 }
 

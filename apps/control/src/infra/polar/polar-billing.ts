@@ -516,15 +516,25 @@ export class PolarBilling implements BillingProvider {
     }
   }
 
-  /** A refund through Polar, which takes the amount before tax and refunds the tax on it with it. */
+  /**
+   * A refund through Polar, which takes the amount before tax and refunds the tax on it with it.
+   * Polar answers an order refunded in full already with a 403 of its own, a refusal and not Polar
+   * being unavailable, as `call` takes other 403s.
+   */
   async refund(input: { externalOrderId: string; cents: number; why: string }): Promise<void> {
     await call('refunding an order', () =>
-      this.#polar.refunds.create({
-        order_id: input.externalOrderId,
-        amount: input.cents,
-        reason: 'duplicate',
-        comment: input.why,
-      }),
+      this.#polar.refunds
+        .create({
+          order_id: input.externalOrderId,
+          amount: input.cents,
+          reason: 'duplicate',
+          comment: input.why,
+        })
+        .catch((error: unknown) => {
+          if (error instanceof errors.RefundedAlready)
+            throw new Error(`Polar refused the refund: ${refusal(error)}`)
+          throw error
+        }),
     )
   }
 

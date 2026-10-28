@@ -339,7 +339,10 @@ export interface BillingProvider {
     giftId: string | null
     returnUrl: string
   }): Promise<string>
-  /** Gives back `cents` of a paid order, before tax (the provider refunds its tax with it). */
+  /**
+   * Gives back `cents` of a paid order, before tax (the provider refunds its tax with it). The
+   * provider not answering is BillingUnavailable; one it refuses (refunded already) is any other error.
+   */
   refund(input: { externalOrderId: string; cents: number; why: string }): Promise<void>
   /** The customer's standing now; null for someone who was never a customer. */
   stateOf(userId: string): Promise<BillingState | null>
