@@ -1,11 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(gh workflow run deploy-production.yml:*)",
       "Bash(gh run watch:*)",
       "Bash(gh run view:*)",
       "Bash(gh run list:*)",
-      "Bash(env -u GH_TOKEN gh workflow run deploy-production.yml:*)",
       "Bash(env -u GH_TOKEN gh run watch:*)",
       "Bash(env -u GH_TOKEN gh run view:*)",
       "Bash(env -u GH_TOKEN gh run list:*)"
