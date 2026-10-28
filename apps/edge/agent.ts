@@ -23,7 +23,7 @@ import { drainOf, serveDrain } from './drain.ts'
 import { exampleAt } from './example-address.ts'
 import { type FrontOptions, front, geyserDoor, pipe, playersOnline } from './front.ts'
 import { forServer, Unwrap } from './header.ts'
-import { Held, LOGIN_QUERIES, turnAway } from './hold.ts'
+import { Held, LOGIN_QUERIES, sendAway, turnAway } from './hold.ts'
 import { JoinTrace } from './join-trace.ts'
 import { Gate } from './limits.ts'
 import { mappings } from './mappings.ts'
@@ -109,6 +109,7 @@ const LIMITS = {
       burst: Number(env('ADDRESS_CONNECTIONS_BURST', '30')),
     },
     greeting: Number(env('ADDRESS_GREETING', '10')),
+    open: Number(env('ADDRESS_OPEN_CONNECTIONS', '64')),
   },
   server: {
     connections: {
@@ -570,9 +571,7 @@ async function hold(client: Socket, join: Join, header: Uint8Array | null): Prom
       JSON.stringify({ join: trace.record({ fromPlayer: client.bytesRead, toPlayer: client.bytesWritten }) }),
     ),
   )
-  client.on('data', (chunk: Buffer) => {
-    if (!held.receive(chunk)) client.destroy()
-  })
+  client.on('data', (chunk: Buffer) => held.receive(chunk) || sendAway(client, TURNED_AWAY.starting))
   // A client from before 1.13 can't be spoken to while it waits, so it waits only as long as it would.
   const speaks = join.protocol >= LOGIN_QUERIES
   const keepAlive = speaks ? setInterval(() => client.write(held.ask()), 10_000) : undefined

@@ -339,7 +339,7 @@ which the project's charts leave out.
 | `FLOODGATE_KEY` | unset: Bedrock players aren't taken | the same key as the control plane's, base64 of 16 bytes. With it the agent starts Geyser (`apps/edge/bedrock.ts`) and answers Bedrock on UDP `BEDROCK_PORT` | Terraform (edge) |
 | `BEDROCK_PORT`, `BEDROCK_BIND` | `19132`, `fly-global-services` | same: the one address Fly delivers UDP to | toml |
 | `BEDROCK_VALIDATE_LOGIN` | `true` | `true`. `false` skips Xbox sign-in and is for a test edge whose headless clients have no account (`tools/bedrock-join`); the Bedrock E2E workflow sets it on staging for its run and back after | — |
-| `BEDROCK_PONGS_PER_SECOND`, `BEDROCK_PONGS_BURST`, `BEDROCK_TOTAL_PONGS_PER_SECOND`, `BEDROCK_TOTAL_PONGS_BURST`, `BEDROCK_OPENS_PER_SECOND`, `BEDROCK_OPENS_BURST`, `BEDROCK_MOST_PLAYERS` | `2`, `10`, `200`, `400`, `1`, `10`, `2000` | same: pongs sent per address and in all, new connections opened per address, players held at once | — |
+| `BEDROCK_PONGS_PER_SECOND`, `BEDROCK_PONGS_BURST`, `BEDROCK_TOTAL_PONGS_PER_SECOND`, `BEDROCK_TOTAL_PONGS_BURST`, `BEDROCK_OPENS_PER_SECOND`, `BEDROCK_OPENS_BURST`, `BEDROCK_ADDRESS_PLAYERS`, `BEDROCK_MOST_PLAYERS` | `2`, `10`, `200`, `400`, `1`, `10`, `32`, `2000` | same: pongs sent per address and in all, new connections opened per address, players held per address (an IPv6 one by its /64) and at once | — |
 | `GEYSER_JAR`, `GEYSER_DIR`, `GEYSER_WARM`, `GEYSER_HEAP` | the image's jar, `/tmp/geyser`, the game files fetched at image build, `768m` | same, with `GEYSER_HEAP` set in the toml to fit the machine. The jar's build is pinned in `apps/edge/Dockerfile` and raised with `bun scripts/geyser.ts bump` | — |
 | `EDGE_ID` | `local-edge` | the machine's hostname | — |
 | `ROUTES_POLL_MS` | `1000` | same | — |
@@ -354,7 +354,7 @@ which the project's charts leave out.
 | `ROUTER_PORT` | `25561` (mc-router, behind the agent's front door) | same | — |
 | `ROUTER_API_PORT` | `25560` (mc-router's API, on the machine only: how routes change) | same | — |
 | `CONNECT_TIMEOUT_MS`, `IDLE_TIMEOUT_MS` | `10000`, `60000` (a connection the edge makes: to connect, then with nothing passing either way) | same | — |
-| `ADDRESS_CONNECTIONS_PER_SECOND`, `ADDRESS_CONNECTIONS_BURST`, `ADDRESS_GREETING` | `5`, `30`, `10` (per address, an IPv6 one by its /64) | same | — |
+| `ADDRESS_CONNECTIONS_PER_SECOND`, `ADDRESS_CONNECTIONS_BURST`, `ADDRESS_GREETING`, `ADDRESS_OPEN_CONNECTIONS` | `5`, `30`, `10`, `64` (per address, an IPv6 one by its /64; the last counts connections let through and still open, across every server, Geyser's own left out) | same | — |
 | `SERVER_CONNECTIONS_PER_SECOND`, `SERVER_CONNECTIONS_BURST`, `SERVER_OPEN_CONNECTIONS` | `20`, `100`, `300` (per server) | same | — |
 | `BUSY_JOIN` | `This server is busy right now · join again in a moment` | same | — |
 

@@ -18,7 +18,7 @@ import { join } from './minecraft.ts'
 /** A sleeping 26.3 server with no Via plugins, as the staging check makes. */
 const JOINS = { release: '26.3', protocol: 777, oldest: 777, newest: 777 }
 const ROOMY = {
-  address: { connections: { perSecond: 100, burst: 100 }, greeting: 100 },
+  address: { connections: { perSecond: 100, burst: 100 }, greeting: 100, open: 100 },
   server: { connections: { perSecond: 100, burst: 100 }, open: 100 },
 }
 

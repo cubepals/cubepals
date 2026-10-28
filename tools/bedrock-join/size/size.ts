@@ -161,6 +161,7 @@ async function up(n: string, size: string, memory: string) {
     GEYSER_HEAP: Number(memory) >= 2048 ? '768m' : '512m',
     BEDROCK_OPENS_PER_SECOND: '1000',
     BEDROCK_OPENS_BURST: '1000',
+    BEDROCK_ADDRESS_PLAYERS: '1000',
     BEDROCK_PONGS_PER_SECOND: '1000',
     BEDROCK_PONGS_BURST: '1000',
     BEDROCK_TOTAL_PONGS_PER_SECOND: '1000',
@@ -168,6 +169,7 @@ async function up(n: string, size: string, memory: string) {
     ADDRESS_CONNECTIONS_PER_SECOND: '1000',
     ADDRESS_CONNECTIONS_BURST: '1000',
     ADDRESS_GREETING: '1000',
+    ADDRESS_OPEN_CONNECTIONS: '1000',
   }
   fly([
     'machine',
