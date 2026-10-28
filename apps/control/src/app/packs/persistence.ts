@@ -31,24 +31,27 @@ export async function loadPackContents(q: Queryable, sha512: string): Promise<Pa
   }
 }
 
-/** Kept once per file: the same bytes always hold the same things. */
+/**
+ * Kept once per file: the same bytes always hold the same things. A build reads the jars placed
+ * outside the mods (`otherJars`), so one saves them over a row kept before they were read.
+ */
 export async function savePackContents(q: Queryable, record: PackContentsRecord): Promise<void> {
-  await q
-    .insert(contents)
-    .values({
-      sha512: record.sha512,
-      name: record.name,
-      versionLabel: record.versionLabel,
-      gameVersion: record.gameVersion,
-      loader: record.loader,
-      loaderVersion: record.loaderVersion,
-      playersNeedIt: record.playersNeedIt,
-      jars: record.jars,
-      otherJars: record.otherJars ?? [],
-      leftOut: record.leftOut,
-      memoryMb: record.memoryMb,
-    })
-    .onConflictDoNothing()
+  const insert = q.insert(contents).values({
+    sha512: record.sha512,
+    name: record.name,
+    versionLabel: record.versionLabel,
+    gameVersion: record.gameVersion,
+    loader: record.loader,
+    loaderVersion: record.loaderVersion,
+    playersNeedIt: record.playersNeedIt,
+    jars: record.jars,
+    otherJars: record.otherJars ?? [],
+    leftOut: record.leftOut,
+    memoryMb: record.memoryMb,
+  })
+  await (record.otherJars === undefined
+    ? insert.onConflictDoNothing()
+    : insert.onConflictDoUpdate({ target: contents.sha512, set: { otherJars: record.otherJars } }))
 }
 
 /**

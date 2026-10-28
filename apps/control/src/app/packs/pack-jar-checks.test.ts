@@ -216,6 +216,40 @@ describe.skipIf(!hasDatabase)('the jars an uploaded pack keeps, as the lists cha
     ])
   }, 60_000)
 
+  test('a pack kept before its jars outside the mods were read gets them when it is uploaded again', async () => {
+    const owner = await h.user('Gil', 'plus')
+    const helper = plugin(unique('helper'))
+    const pack = zipBytes({ 'mods/good.jar': mod(unique('good')), 'plugins/helper.jar': helper })
+    const first = await upload(owner, pack, 'Kept Pack.zip')
+    if (first.status !== 'ready') throw new Error('The pack was refused')
+    // As a pack built before these jars were read was kept: none of them, and no check of its own.
+    const [built] = await h.db
+      .select({ sha512: schema.packImports.packSha512 })
+      .from(schema.packImports)
+      .where(eq(schema.packImports.id, first.importId))
+    const sha512 = built?.sha512 ?? ''
+    await h.db
+      .update(schema.packContents)
+      .set({ otherJars: [] })
+      .where(eq(schema.packContents.sha512, sha512))
+    await h.db.delete(schema.jarChecks).where(eq(schema.jarChecks.sha512, digest('sha512', helper)))
+
+    const again = await upload(owner, pack, 'Kept Pack.zip')
+    if (again.status !== 'ready') throw new Error('The pack was refused')
+    const [row] = await h.db
+      .select({ otherJars: schema.packContents.otherJars })
+      .from(schema.packContents)
+      .where(eq(schema.packContents.sha512, sha512))
+    expect(row?.otherJars.map((jar) => jar.path)).toEqual(['plugins/helper.jar'])
+    expect(await checkOf(helper)).toMatchObject({ state: 'clean' })
+
+    const server = await h.create(owner, { from: { kind: 'import', importId: again.importId } })
+    malware.entries = [{ kind: 'sha512', value: digest('sha512', helper), family: 'Example' }]
+    await h.app.jarChecks.refresh()
+    const after = (await h.app.specs.desired(h.db, await h.server(server.id))).spec.env
+    expect(after.MODRINTH_OVERRIDES_EXCLUSIONS?.split('\n')).toContain('plugins/helper.jar')
+  }, 60_000)
+
   test('one a new signature matches keeps its answer until a pack carrying it is next built', async () => {
     const owner = await h.user('Fin', 'plus')
     const marker = `==${randomUUID().slice(0, 8)}`
