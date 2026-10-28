@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** What the Worker does before Next: www sent on, and sign-in calls told the browser's real address. */
+/** What the Worker does before Next: www sent on, and calls counted by address told the browser's real one. */
 import { afterEach, describe, expect, test } from 'bun:test'
 import { beforeNext, toControlPlane } from './before-next'
 
@@ -42,9 +42,14 @@ describe('a request before Next sees it', () => {
     }
   })
 
-  test('a sign-in call carries the address the edge saw, never the one the browser claimed', () => {
+  test('a call counted by address carries the one the edge saw, never the one the browser claimed', () => {
     configured()
-    for (const path of ['/api/auth', '/api/auth/sign-in/email']) {
+    for (const path of [
+      '/api/auth',
+      '/api/auth/sign-in/email',
+      '/api/trpc/sharing.invite',
+      '/api/public/invites/x',
+    ]) {
       const passed = beforeNext(new Request(`https://cubepals.com${path}`, { headers: forged })) as Request
       expect(passed.headers.get('x-blockly-client')).toBe('198.51.100.1')
       expect(passed.headers.get('x-blockly-proxy')).toBe('a-proxy-secret-long-enough')
@@ -54,7 +59,7 @@ describe('a request before Next sees it', () => {
 
   test('other paths pass untouched, a differently cased one included', () => {
     configured()
-    for (const path of ['/api/trpc/servers.list', '/API/auth/get-session', '/api/authority']) {
+    for (const path of ['/api/health', '/API/auth/get-session', '/api/authority', '/api/trpcx']) {
       const request = new Request(`https://cubepals.com${path}`, { headers: forged })
       expect(beforeNext(request)).toBe(request)
     }

@@ -64,28 +64,23 @@ export function daysSaid(days: number): string {
 }
 
 /**
- * A plan's hours of play as people say them: "20 hours in all, at most 2 a day", "120 hours a
- * month", "2 hours every day".
+ * A plan's hours of play as people say them: "20 hours in all, any day you like", "120 hours a
+ * month".
  */
-export const hoursSaid = (plan: Pick<PublicPlan, 'includedHours' | 'per' | 'totalHours'>): string => {
-  if (plan.totalHours !== null) return `${plan.totalHours} hours in all, at most ${plan.includedHours} a day`
-  return `${plan.includedHours} hours ${plan.per === 'day' ? 'every day' : 'a month'}`
-}
+export const hoursSaid = (plan: Pick<PublicPlan, 'includedHours' | 'totalHours'>): string =>
+  plan.totalHours !== null
+    ? `${plan.totalHours} hours in all, any day you like`
+    : `${plan.includedHours} hours a month`
 
 /**
  * When the plans' hours start again, as a sentence about running out says it: "the hours start
- * again: the free trial’s at midnight where you are, until its 20 are played; Core’s and Plus’s on
- * the 1st".
+ * again: Core’s and Plus’s on the 1st". Hours that come once, the free trial's, never start again,
+ * so they are left out; what their end means is said apart.
  */
 export function hoursAgainSaid(plans: readonly PublicPlan[]): string {
-  // Plans whose hours start again together are said together: "Core’s and Plus’s on the 1st".
-  const groups: Array<{ names: string[]; when: string }> = []
-  for (const plan of plans) {
-    const when = `${plan.per === 'day' ? 'at midnight where you are' : 'on the 1st'}${plan.totalHours === null ? '' : `, until its ${plan.totalHours} are played`}`
-    const group = groups.find((each) => each.when === when)
-    if (group) group.names.push(`${planSaid(plan)}’s`)
-    else groups.push({ names: [`${planSaid(plan)}’s`], when })
-  }
-  const each = groups.map(({ names, when }) => `${names.join(' and ')} ${when}`)
-  return each.length > 0 ? `the hours start again: ${each.join('; ')}` : 'the hours start again'
+  const monthly = plans.filter((plan) => plan.totalHours === null)
+  const names = monthly.map((plan) => `${planSaid(plan)}’s`)
+  return names.length > 0
+    ? `the hours start again: ${names.join(' and ')} on the 1st`
+    : 'the hours start again'
 }

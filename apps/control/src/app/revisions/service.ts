@@ -4,7 +4,7 @@
 
 import { ONLINE_MODE_KEPT } from '@blockly/contracts'
 import { type Db, schema, type Tx } from '@blockly/db'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import { type PinnedModpack, samePack } from '../../domain/mods/modpack.ts'
 import type { CarriedFile } from '../../domain/revision/carried.ts'
@@ -185,7 +185,7 @@ export class RevisionService {
     return this.#change(actor, serverId, requestId, 'apply', options, async (tx, server, desired) => {
       if (desired.settings.onlineMode === onlineMode) return null
       const standing = await loadStanding(tx, server.ownerId)
-      if (!onlineMode && !entitlementsFor(standing.plan, standing.limitOverrides).mayTurnOffOnlineMode)
+      if (!onlineMode && !entitlementsOf(standing).mayTurnOffOnlineMode)
         throw new AppError('not_entitled', ONLINE_MODE_KEPT)
       const draft: RevisionDraft = {
         ...draftOf(desired),
@@ -462,7 +462,7 @@ export class RevisionService {
       const next = await plan(tx, server, desired)
       if (next === null) return server
       const standing = await loadStanding(tx, server.ownerId)
-      const entitlements = entitlementsFor(standing.plan, standing.limitOverrides)
+      const entitlements = entitlementsOf(standing)
       if (next.draft) requireWithinPlan(entitlements, next.draft)
       // A size the plan no longer offers moves to the closest one it does at this change, which
       // says so; until now the server kept running on it.

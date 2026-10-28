@@ -14,11 +14,11 @@ export interface PlanFigures {
   priceCents: number
   /** Price of a year paid at once, which never renews on its own; null: not sold by the year. */
   yearPriceCents: number | null
-  /** Hours of play included each `per` (a large server spends two an hour, the largest four). */
+  /** Hours of play included each month, or once (`per`); a large server spends two an hour, the largest four. */
   hours: number
-  /** Whether the hours come every day, from the player's midnight, or every month, from their midnight on the 1st. */
-  per: 'day' | 'month'
-  /** Hours of play included once, in all, with `hours` the most a day; null: none. */
+  /** Whether the hours come every month, from the player's midnight on the 1st, or once, to play on any day. */
+  per: 'month' | 'once'
+  /** Hours of play included once, in all, to play on any day; null: none. */
   totalHours: number | null
   /** The most of a month's unused hours that carry into the next month, once; null: none carry. */
   carryHours: number | null
@@ -41,8 +41,8 @@ export const FREE: PlanFigures = {
   name: 'Free',
   priceCents: 0,
   yearPriceCents: null,
-  hours: 2,
-  per: 'day',
+  hours: 20,
+  per: 'once',
   totalHours: 20,
   carryHours: null,
   maxServers: 1,

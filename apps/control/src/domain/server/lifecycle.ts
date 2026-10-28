@@ -40,7 +40,10 @@ export type StopReason =
   | 'hours'
   /** The account owes for a payment that didn't go through. */
   | 'unpaid'
-  /** Today's play ran out: it sleeps, and play is back at the owner's midnight. */
+  /**
+   * Today's play ran out, from when Free counted its play by the day: nothing stops a server for it
+   * now, and a server stopped for it then sleeps like any other.
+   */
   | 'daily'
   /** The plan's hours in all ran out (Free's 20): it keeps its world, and starts again on Plus. */
   | 'free_hours'

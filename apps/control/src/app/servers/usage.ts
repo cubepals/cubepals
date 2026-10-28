@@ -393,8 +393,8 @@ export async function claimSessionWarning(q: Queryable, serverId: string, minute
 }
 
 /**
- * Fixes when the current session ends for the day's play, unless that is fixed already; the moment
- * it ends at either way, or null when the server has no open session.
+ * Fixes when the current session ends for the plan's play, unless that is fixed already; the
+ * moment it ends at either way, or null when the server has no open session.
  */
 export async function fixPlayEnd(q: Queryable, serverId: string, at: Date): Promise<Date | null> {
   await q
@@ -402,6 +402,17 @@ export async function fixPlayEnd(q: Queryable, serverId: string, at: Date): Prom
     .set({ playEndsAt: at })
     .where(and(eq(intervals.serverId, serverId), isNull(intervals.stoppedAt), isNull(intervals.playEndsAt)))
   return (await openSession(q, serverId))?.playEndsAt ?? null
+}
+
+/**
+ * Lets go of the current session's fixed end and the warnings said for it, once the play it ended
+ * for is no longer running out: the next check works the end out again, and warns afresh.
+ */
+export async function releasePlayEnd(q: Queryable, serverId: string): Promise<void> {
+  await q
+    .update(intervals)
+    .set({ playEndsAt: null, sessionWarnedMinutes: null })
+    .where(and(eq(intervals.serverId, serverId), isNull(intervals.stoppedAt)))
 }
 
 /** A warning that couldn't be sent goes back to unsent, so the next check tries again. */

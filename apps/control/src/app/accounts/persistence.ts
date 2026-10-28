@@ -25,7 +25,7 @@ import { METER_UNITS } from '../../domain/account/meter.ts'
 import { type AccountStanding, newStanding } from '../../domain/account/standing.ts'
 import type { PlatformControls } from '../../domain/policy/policy.ts'
 import type { ServerStatus } from '../../domain/server/lifecycle.ts'
-import { billedBy, billedPlan, PAYING, type PlanSource } from '../billing/persistence.ts'
+import { billedBy, PAYING, type PlanSource } from '../billing/persistence.ts'
 import { tuning } from '../tuning.ts'
 
 const standing = schema.accountStanding
@@ -63,14 +63,23 @@ const toStanding = (row: typeof standing.$inferSelect): AccountStanding => ({
 
 /**
  * An account's standing, with the plan in force: a paying subscription's plan when there is one,
- * then a redeemed gift's, otherwise the plan set on the account (free, or one an admin gave it). Every entitlement is
- * read through here.
+ * with what it was sold with, then a redeemed gift's, otherwise the plan set on the account (free,
+ * or one an admin gave it). Every entitlement is read through here.
  */
 export async function loadStanding(q: Queryable, userId: string, now = new Date()): Promise<AccountStanding> {
   const [row] = await q.select().from(standing).where(eq(standing.userId, userId))
-  const found = row ? toStanding(row) : newStanding(userId)
-  const billed = await billedPlan(q, userId, now)
-  return billed === null ? found : { ...found, plan: billed }
+  return billedStanding(q, row ? toStanding(row) : newStanding(userId), now)
+}
+
+/** A standing with the plan its billing gives it now, as `loadStanding` reads it. */
+async function billedStanding(q: Queryable, found: AccountStanding, now: Date): Promise<AccountStanding> {
+  const billed = await billedBy(q, found.userId, now)
+  if (billed === null) return found
+  return {
+    ...found,
+    plan: billed.plan,
+    ...(billed.soldWith === undefined ? {} : { soldWith: billed.soldWith }),
+  }
 }
 
 /** `loadStanding` for each of `userIds`, their rows read in one go, for a sweep over many accounts. */
@@ -86,11 +95,8 @@ export async function loadStandings(
     .where(inArray(standing.userId, [...userIds]))
   const found = new Map(rows.map((row) => [row.userId, toStanding(row)]))
   const standings = new Map<string, AccountStanding>()
-  for (const userId of userIds) {
-    const read = found.get(userId) ?? newStanding(userId)
-    const billed = await billedPlan(q, userId, now)
-    standings.set(userId, billed === null ? read : { ...read, plan: billed })
-  }
+  for (const userId of userIds)
+    standings.set(userId, await billedStanding(q, found.get(userId) ?? newStanding(userId), now))
   return standings
 }
 

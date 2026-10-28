@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { Tx } from '@blockly/db'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import {
   type Command,
   decide,
@@ -184,5 +184,5 @@ export class ServerTransitions {
 /** Whether a server's owner is on a paid plan, whose wakes go ahead of other wakes. */
 async function paidPlan(tx: Tx, server: MinecraftServer): Promise<boolean> {
   const standing = await loadStanding(tx, server.ownerId)
-  return entitlementsFor(standing.plan, standing.limitOverrides).monthlyPriceCents > 0
+  return entitlementsOf(standing).monthlyPriceCents > 0
 }

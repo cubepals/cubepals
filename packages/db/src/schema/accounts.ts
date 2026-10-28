@@ -135,6 +135,17 @@ export const platformControls = pgTable(
     /** What ran out when they closed: `servers`, `running`, `runtimes` or `queue`. */
     createsFullBecause: text('creates_full_because'),
     createsFullSince: ts('creates_full_since'),
+    /**
+     * Room for checkouts at an early price, in points, as an operator last set it, and the points
+     * one checkout of Core and of Plus takes from it (`app/billing/early-room.ts`). It holds until
+     * `earlyValidUntil` and counts as none after, so with nothing renewing it the room closes by
+     * itself. None until it is set.
+     */
+    earlyRoomPoints: integer('early_room_points').notNull().default(0),
+    earlyPointsCore: integer('early_points_core').notNull().default(0),
+    earlyPointsPlus: integer('early_points_plus').notNull().default(0),
+    earlyValidUntil: ts('early_valid_until'),
+    earlyRoomSetAt: ts('early_room_set_at'),
     updatedBy: text('updated_by'),
     updatedAt: updatedAt(),
   },

@@ -48,7 +48,7 @@ import { createPolar } from '@polar-sh/sdk/2026-10'
 import { GAME_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { pointRecord } from './lib/cloudflare-dns.ts'
 import { afterStop, asleep, awake, type Machine, serve } from './lib/control-wake.ts'
-import { stagingProducts } from './lib/polar-products.ts'
+import { stagingBilling, stagingProducts } from './lib/polar-products.ts'
 import { DATABASE_APP, databaseKind, ensureDatabase, startDatabase } from './lib/staging-database.ts'
 import { buildWorker, deployWorker } from './lib/web-worker.ts'
 import { allowing, type Bucket, changeCors, sharePreviewKeys } from './preview-uploads.ts'
@@ -465,10 +465,7 @@ async function up(): Promise<void> {
     EDGE_TOKEN: state.edgeToken,
     RUNTIME_SECRETS_KEY: state.runtimeKey,
     FLOODGATE_KEY: state.floodgateKey,
-    POLAR_ACCESS_TOKEN: process.env.POLAR_ACCESS_TOKEN ?? '',
-    POLAR_WEBHOOK_SECRET: state.webhook.secret,
-    POLAR_SERVER: 'sandbox',
-    POLAR_PRODUCTS: stagingProducts(),
+    ...stagingBilling(state.webhook.secret),
   }
   const lines = Object.entries(config)
     .map(([name, value]) => `${name}=${value}`)

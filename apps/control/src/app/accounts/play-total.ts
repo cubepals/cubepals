@@ -7,9 +7,9 @@
  * owner's servers ran on that plan, in meter units, and what is left. Only runs started on the
  * plan count, so play on Plus spends none of it and coming back to Free starts no new block. Runs
  * from before runs kept their plan count toward nothing, which is how every account began with
- * all 20. The free play of accounts that share this one's (`free-play.ts`) counts as its own, as it
- * does for the day. Test accounts are held to the day only, as before. Stopping a run when it is
- * used is the session check's; the day's play beside it is `play-today.ts`'s.
+ * all 20. The free play of accounts that share this one's (`free-play.ts`) counts as its own. The
+ * 20 are played on any day, for as long as a group plays. Test accounts have no such block.
+ * Stopping a run when it is used is the session check's.
  */
 import type { ServerView } from '@blockly/contracts'
 import { type Queryable, schema } from '@blockly/db'

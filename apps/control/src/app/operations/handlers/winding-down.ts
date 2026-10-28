@@ -11,7 +11,7 @@
  */
 import { type AppliedConfigJson, type Db, type Queryable, schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
-import { entitlementsFor, grownDisk } from '../../../domain/account/entitlements.ts'
+import { entitlementsOf, grownDisk } from '../../../domain/account/entitlements.ts'
 import type { StopReason } from '../../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { DATA_DIR } from '../../../minecraft/jars.ts'
@@ -39,9 +39,9 @@ import type { GameConsole } from './game-console.ts'
 
 /**
  * The stops that put a server to sleep: nobody played for a while, or a woken one nobody joined
- * (both `idle`), or its owner's, or the end of the day's play (`daily`), which a join wakes from
- * once midnight comes. Every other stop comes before a change, or ends play for a reason of its
- * own, and takes a real stop.
+ * (both `idle`), or its owner's, or the end of a day's play (`daily`) from when Free counted its
+ * play by the day, for a stop asked for then. Every other stop comes before a change, or ends play
+ * for a reason of its own, and takes a real stop.
  */
 const SLEEPS: ReadonlySet<StopReason> = new Set(['idle', 'user', 'daily'])
 
@@ -113,7 +113,7 @@ export function windingDown(deps: {
     if (!Number.isFinite(kilobytes)) return
     const usedBytes = kilobytes * 1024
     const standing = await loadStanding(db, server.ownerId)
-    const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+    const plan = entitlementsOf(standing)
     const current = Math.max(plan.storage.startGb, await grownStorage(db, server.id))
     await recordDisk(db, server.id, usedBytes, new Date(), grownDisk(plan, current, usedBytes) ?? undefined)
   }

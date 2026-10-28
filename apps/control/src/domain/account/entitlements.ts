@@ -4,6 +4,7 @@
 
 import type { Loader } from '../revision/revision.ts'
 import type { MemoryTier } from '../server/size.ts'
+import type { AccountStanding, SoldTerms } from './standing.ts'
 
 /** What a plan allows. Plan facts only: whether a deployment supports a feature is separate. */
 export interface Entitlements {
@@ -32,7 +33,8 @@ export interface Entitlements {
    * The play a plan includes each month, in meter units (`meter.ts`): one unit is an hour on the
    * smallest size, and bigger sizes spend them faster, in proportion to what they cost. A month
    * runs from the owner's midnight on the 1st, and what is left of it, up to `carryUnits`, carries
-   * into the next month once (`accounts/play-month.ts`). Null means no monthly block: a plan that counts its play by the day (`dailyUnits`), or none at all.
+   * into the next month once (`accounts/play-month.ts`). Null means no monthly block: a plan whose
+   * play comes once (`totalUnits`), or none at all.
    */
   includedUnits: number | null
   /**
@@ -42,14 +44,9 @@ export interface Entitlements {
    */
   carryUnits: number | null
   /**
-   * The play a plan includes each day, in meter units, from the owner's local midnight to the next
-   * (`play-day.ts`). Nothing carries over and there is no monthly total. Null: no daily block.
-   */
-  dailyUnits: number | null
-  /**
-   * The play a plan includes in all, once for the life of the account, in meter units, on top of
-   * any daily block: only runs started on the plan count (`accounts/play-total.ts`), so leaving it
-   * and coming back starts no new block. Once it is used, servers keep their worlds and start
+   * The play a plan includes in all, once for the life of the account, in meter units, played
+   * whenever the owner likes: only runs started on the plan count (`accounts/play-total.ts`), so
+   * leaving it and coming back starts no new block. Once it is used, servers keep their worlds and start
    * again on a paid plan. Null: no such block.
    */
   totalUnits: number | null
@@ -163,9 +160,9 @@ const EVERY_LOADER: readonly Loader[] = ['vanilla', 'paper', 'fabric', 'quilt', 
 
 // The plan table is product policy. Change values here; nothing else encodes them.
 //
-// Free is plain Minecraft bounded by its hours: 20 in all, at most 2 a day, from the owner's
-// midnight. The hours already bound a free server's running time, so there is no cap on how long
-// one run lasts: the AFK kick and the idle stop end a forgotten one.
+// Free is plain Minecraft bounded by its hours: 20 in all, played whenever its owner likes. The
+// hours already bound a free server's running time, so there is no cap on how long one run lasts:
+// the AFK kick and the idle stop end a forgotten one.
 const PLANS: Record<string, Entitlements> = {
   free: {
     plan: 'free',
@@ -175,10 +172,9 @@ const PLANS: Record<string, Entitlements> = {
     maxRunning: 1,
     allowedMemoryTiers: ['3g'],
     legacyMemoryTiers: ['2g', '4g'],
-    // 20 hours of play once, at most 2 of them a day, and no monthly total.
+    // 20 hours of play once, on any day, and no monthly total.
     includedUnits: null,
     carryUnits: null,
-    dailyUnits: 2,
     totalUnits: 20,
     mayBuyMore: false,
     mostExtraUnits: null,
@@ -222,7 +218,6 @@ const PLANS: Record<string, Entitlements> = {
     legacyMemoryTiers: [],
     includedUnits: 40,
     carryUnits: null,
-    dailyUnits: null,
     totalUnits: null,
     mayBuyMore: true,
     // 60 extra hours is the most the provider bills on Core's price; Plus covers more.
@@ -267,7 +262,6 @@ const PLANS: Record<string, Entitlements> = {
     includedUnits: 120,
     // Up to 50 of a month's unused hours carry into the next, so a month holds at most 170.
     carryUnits: 50,
-    dailyUnits: null,
     totalUnits: null,
     // Extra hours, 25¢ each (meter.ts), up to a limit the owner sets under the account's ceiling
     // (`AbuseLimits.extraCeiling`), billed on the next Plus payment. Who may allow them is `extra-play.ts`'s to say.
@@ -324,9 +318,27 @@ export const PLAN_KEYS: readonly string[] = ['free', ...PAID_PLANS]
 export const runsOn = (entitlements: Entitlements, tier: MemoryTier): boolean =>
   entitlements.allowedMemoryTiers.includes(tier) || entitlements.legacyMemoryTiers.includes(tier)
 
-export function entitlementsFor(plan: string, overrides: LimitOverrides = {}): Entitlements {
-  const base = PLANS[plan] ?? PLANS.free
-  if (base === undefined) throw new Error('The free plan must exist')
+/**
+ * What `plan` allows: the plan table, then what the subscription paying for it was sold with
+ * (`sold`, a price and hours of its own), then an admin's `overrides`, which win over both.
+ */
+export function entitlementsFor(
+  plan: string,
+  overrides: LimitOverrides = {},
+  sold?: SoldTerms,
+): Entitlements {
+  const table = PLANS[plan] ?? PLANS.free
+  if (table === undefined) throw new Error('The free plan must exist')
+  // Sold terms are for a paid plan's monthly block: a plan without one has nothing they replace.
+  const base =
+    sold === undefined || table.includedUnits === null
+      ? table
+      : {
+          ...table,
+          monthlyPriceCents: sold.priceCents,
+          includedUnits: sold.includedUnits,
+          mostExtraUnits: sold.mostExtraUnits ?? table.mostExtraUnits,
+        }
   return {
     ...base,
     maxServers: overrides.maxServers ?? base.maxServers,
@@ -339,6 +351,11 @@ export function entitlementsFor(plan: string, overrides: LimitOverrides = {}): E
     idleShutdownAfterMinutes: overrides.idleShutdownAfterMinutes ?? base.idleShutdownAfterMinutes,
   }
 }
+
+/** What an account's standing allows: its plan, as its subscription was sold, under an admin's limits. */
+export const entitlementsOf = (
+  standing: Pick<AccountStanding, 'plan' | 'limitOverrides' | 'soldWith'>,
+): Entitlements => entitlementsFor(standing.plan, standing.limitOverrides, standing.soldWith)
 
 /** What a server runs, as a plan sees it: its size, its type, and whether anything is added. */
 export interface Runs {

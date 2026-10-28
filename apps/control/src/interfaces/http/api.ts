@@ -11,7 +11,7 @@ import type { Authenticator } from '../../app/ports/auth.ts'
 import { appRouter } from '../trpc/router.ts'
 import type { Services } from '../trpc/trpc.ts'
 import { brandPackRoutes } from './brand-pack.ts'
-import { type AddressTrust, withClientAddress } from './client-address.ts'
+import { type AddressTrust, clientAddressOf, withClientAddress } from './client-address.ts'
 import { measured } from './measured.ts'
 import { ownPagesOnly } from './origins.ts'
 import { createPublicApp } from './public.ts'
@@ -81,6 +81,7 @@ export function createApiApp(deps: {
       items: deps.services.items,
       icons: deps.services.icons,
       platform: () => deps.services.platform.capabilities,
+      addresses: deps.addresses,
     }),
   )
 
@@ -109,6 +110,7 @@ export function createApiApp(deps: {
         return {
           actor: session === null ? null : { kind: 'user' as const, userId: session.userId },
           impersonatedBy: session?.impersonatedBy ?? null,
+          clientAddress: clientAddressOf(req.headers, deps.addresses),
           ...(session === null ? {} : { sessionId: session.sessionId }),
           session: deps.auth.switchFor(req.headers, resHeaders),
           services: deps.services,

@@ -19,7 +19,8 @@ import { DAY_MS } from '@blockly/contracts/durations'
 import { type Db, type Queryable, schema } from '@blockly/db'
 import { and, desc, eq, gte, sql } from 'drizzle-orm'
 import { heldMilli, milliFor } from '../../domain/account/chip-in.ts'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
+import { shownName } from '../../domain/listing/author.ts'
 import { dollars } from '../../domain/policy/spend.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { emailVerified, isTestAccount, loadStanding } from '../accounts/persistence.ts'
@@ -45,7 +46,7 @@ export async function offersChipIn(
   if (!billing || server.deletedAt !== null) return false
   const standing = await loadStanding(q, server.ownerId)
   if (standing.status !== 'active') return false
-  if (entitlementsFor(standing.plan, standing.limitOverrides).includedUnits === null) return false
+  if (entitlementsOf(standing).includedUnits === null) return false
   const [closed] = await q
     .select({ id: schema.chipInClosed.serverId })
     .from(schema.chipInClosed)
@@ -231,7 +232,11 @@ export class ChipIns {
     return drawn
   }
 
-  /** What the owner sees of a server's chip-ins. */
+  /**
+   * What the owner sees of a server's chip-ins. Each friend is named as a guestbook names them,
+   * "Davi H.", since the owner of a public server may be a stranger to them; "A friend" where the
+   * account has no name to show.
+   */
   async view(actor: Actor, serverId: string): Promise<ChipInsView> {
     const server = await this.#owned(actor, serverId)
     const rows = await this.#db
@@ -256,7 +261,11 @@ export class ChipIns {
       offered: await offersChipIn(this.#db, server, this.#caps.billing !== null),
       hoursLeft: Math.floor((pending?.left.get(server.id) ?? 0) * 10) / 10,
       people: rows
-        .map((row) => ({ name: row.name, hours: heldMilli(row) / 1000, at: row.at.toISOString() }))
+        .map((row) => ({
+          name: shownName(row.name) ?? 'A friend',
+          hours: heldMilli(row) / 1000,
+          at: row.at.toISOString(),
+        }))
         .filter((row) => row.hours > 0),
     }
   }

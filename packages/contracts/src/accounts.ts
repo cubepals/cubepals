@@ -193,9 +193,7 @@ export interface EntitlementsView {
   includedUnits: number | null
   /** The most of a month's unused block that carries into the next month, once, in units. Null: none. */
   carryUnits: number | null
-  /** The play the plan includes each day, from the owner's midnight, in units. Null: none. */
-  dailyUnits: number | null
-  /** The play the plan includes in all, once, in units, with the day's on top. Null: none. */
+  /** The play the plan includes in all, once, in units, played on any day. Null: none. */
   totalUnits: number | null
   /** Whether the owner may allow play past the included block, and be charged for it. */
   mayBuyMore: boolean
@@ -284,10 +282,10 @@ export interface AccountOverviewView {
     servers: number
     running: number
     /**
-     * Today's play on a plan that counts it by the day: units played since the owner's midnight,
-     * the day's block, and when the next day's begins. Null on a plan that counts none.
+     * Always null: no plan counts its play by the day. Still sent, so a site from before, which
+     * reads it, meets none while the site and the API deploy apart.
      */
-    today: { units: number; included: number; backAt: string } | null
+    today: null
     /** The plan's play in all, once (Free's 20 hours): units played on it, and the block. */
     total: { units: number; included: number } | null
     /** Play this month, in meter units, and what that is in hours on the sizes actually run. */
@@ -385,13 +383,13 @@ export interface PublicPlan {
   monthlyPriceCents: number
   /** A year paid at once, which never renews on its own; null: not sold by the year. */
   yearlyPriceCents: number | null
-  /** Hours of play the plan includes each `per`; a large server uses two an hour. */
+  /** Hours of play the plan includes each month, or once (`per`); a large server uses two an hour. */
   includedHours: number
-  /** Whether the hours come every day, from the player's midnight, or every month. */
-  per: 'day' | 'month'
+  /** Whether the hours come every month, from the player's midnight on the 1st, or once, to play on any day. */
+  per: 'month' | 'once'
   /** What an hour past the included ones costs, in US cents, where the owner may allow them; null: none. */
   extraHourCents: number | null
-  /** Hours the plan includes in all, once, with `includedHours` the most a day; null: none. */
+  /** Hours the plan includes in all, once, played on any day; null: none. */
   totalHours: number | null
   /** Minutes after everyone leaves before a server sleeps, and stops using hours. */
   sleepsAfterMinutes: number | null

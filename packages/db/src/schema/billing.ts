@@ -54,6 +54,17 @@ export const billingSubscriptions = pgTable(
      */
     movesToPlan: text('moves_to_plan'),
     movesAt: ts('moves_at'),
+    /** The provider's product it is on, as last reported; null before that was kept. */
+    productId: text('product_id'),
+    /**
+     * What it was sold with where its product sets terms of its own (an early price): its price
+     * a month in US cents, its hours a month in meter units, and the most extra hours it lets an
+     * owner allow (null: the plan's). Set from the product when the subscription is first seen on
+     * it and never changed after; all null on a plan's own product, which follows the plan table.
+     */
+    priceCents: integer('price_cents'),
+    includedUnits: integer('included_units'),
+    mostExtraUnits: integer('most_extra_units'),
     /** When the provider made it; which of an account's subscriptions is its newest. */
     createdAt: createdAt(),
     updatedAt: updatedAt(),
