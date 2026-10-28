@@ -198,6 +198,7 @@ const AbuseLimits = z
       joinReportsPerSecond: Count.default(DEFAULT_ABUSE_LIMITS.joinReportsPerSecond),
       joinReportBytes: Count.default(DEFAULT_ABUSE_LIMITS.joinReportBytes),
       worldUploadsPerDay: Count.default(DEFAULT_ABUSE_LIMITS.worldUploadsPerDay),
+      refreshesPerMinute: Count.default(DEFAULT_ABUSE_LIMITS.refreshesPerMinute),
       publicReadsPerMinute: z
         .strictObject({ page: Count, status: Count, invite: Count, invites: Count })
         .default(DEFAULT_ABUSE_LIMITS.publicReadsPerMinute),
