@@ -143,13 +143,13 @@ export async function playersSeen(
 }
 
 /**
- * A server stopped because its owner's play ran out, the day's or the free trial's, with `online`
- * players still on it: kept once for the stop it was (`key`).
+ * A server stopped because its owner's free trial's hours ran out, with `online` players still on
+ * it: kept once for the stop it was (`key`).
  */
 export async function playEnded(
   q: Queryable,
   server: { id: string; ownerId: string },
-  reason: 'daily' | 'free_hours',
+  reason: 'free_hours',
   key: string,
   online: number,
 ): Promise<void> {

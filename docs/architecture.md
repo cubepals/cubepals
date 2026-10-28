@@ -347,9 +347,9 @@ billing webhook sync. `Entitlements` are derived from it, falling back to the fr
 
 **Entitlements** (derived, never stored; the whole table is `domain/account/entitlements.ts`):
 - `monthlyPriceCents`, `maxServers`, `maxRunning`, `allowedMemoryTiers`, `legacyMemoryTiers`
-- `includedUnits` (hours of play a month, a large size counting two; or none), `dailyUnits` (hours
-  of play a day from the owner's local midnight, the same way; or none), `totalUnits` (hours of
-  play once, counting only runs started on the plan, `power_intervals.plan`; or none), `mayBuyMore`
+- `includedUnits` (hours of play a month, a large size counting two; or none), `totalUnits` (hours
+  of play once, to play on any day, counting only runs started on the plan, `power_intervals.plan`;
+  or none), `mayBuyMore`
   (extra hours past them; off until billing meters them end to end), `idleShutdownAfter` (or `never`)
 - `playerIdleKickMinutes` (Minecraft's own AFK kick), `mayChooseAfkKick`, `maxSessionMinutes`
   (null on every plan; an admin override only), `worldRadius` (the world border's largest radius)
@@ -1003,14 +1003,14 @@ Outcomes are written down in `job_health`, the successes of a minute together:
   While running room is tight, a free server's idle time is shorter (`CAPACITY_TUNING`); a paid one's never is.
 - `creates-room`: closes creates by themselves when there is no room, and reopens them once there is.
 - `session-check`: a running server is told in game 10 and 2 minutes before its current run ends,
-  each once, then stopped the ordinary way. A run ends where its plan's day of play runs out
-  (`dailyUnits`, counted from the owner's local midnight in the time zone their browser reported,
-  UTC until it has; a run crossing midnight counts toward each day it fell in), `stop{daily}`, which
-  puts it to sleep; where the plan's play in all runs out (`totalUnits`, Free's 20),
-  `stop{free_hours}`, which keeps the world and waits for Plus; or where it reaches `maxSessionMinutes`, `stop{session_cap}`, after which the
-  owner may start it again at once. The day's end is fixed on the run (`power_intervals.play_ends_at`)
-  once its first warning is due, never sooner than ten minutes on. No plan sets a session cap; it is
-  an admin's per-account override.
+  each once, then stopped the ordinary way. A run ends where the plan's play in all runs out
+  (`totalUnits`, Free's 20, played on any day), `stop{free_hours}`, which keeps the world and
+  waits for a paid plan; or where it reaches `maxSessionMinutes`, `stop{session_cap}`, after which
+  the owner may start it again at once. The play's end is fixed on the run
+  (`power_intervals.play_ends_at`) once its first warning is due, never sooner than ten minutes on,
+  and let go if play is no longer running out. No plan sets a session cap; it is an admin's
+  per-account override. `stop{daily}` is from when Free counted its play by the day: a server
+  stopped for it then sleeps like any other.
 - `backup-schedule`: per entitlement. Skips servers with no activity since their last restore
   point, and skips the archive tier when the deployment has no archives. A restore point is
   mostly a sleep's: a `stop` for `idle`, `user` or `daily` queues a `backup{sleep}` once the
@@ -1028,7 +1028,7 @@ Outcomes are written down in `job_health`, the successes of a minute together:
   trash, as its owner deleting it would (§15.6).
 - `standing-sweep`: every minute. Suspended accounts' servers stop and terminated ones' close,
   including any that were mid-way through other work when the standing changed. For the rest it
-  warns as a month's play runs out and stops everything once it has (a day's is `session-check`'s);
+  warns as a month's play runs out and stops everything once it has (the free trial's is `session-check`'s);
   otherwise it stops what the
   plan doesn't run, and the servers started last beyond its running limit (§15.5 billing).
 - `usage-close`: closes power intervals for servers seen stopped.
@@ -1436,11 +1436,10 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
     "Sleeping · join to wake it up" in grey under it, with its own picture, which the agent
     fetches once per link (`apps/edge/asleep.ts`). A server whose route carries neither is
     answered "Sleeping · join to wake it up" alone, with the list's default picture. Where the
-    route carries `backAt`, the message is
-    "Today’s play is used up · back at midnight, in 3 h 12 min", counted down at the edge
-    (`packages/contracts/src/play-today.ts`, compiled into the agent as it is). It never calls the
-    wake webhook and is never reported as a session, so it never wakes a server or keeps one up.
-    A join refused with `backAt` is turned away in the same words.
+    route carries `trialOver`, the message is "Resting for now" under the server's own
+    (`apps/edge/resting.ts`). It never calls the wake webhook and is never reported as a session,
+    so it never wakes a server or keeps one up. A join refused with `trialOver` is told whose
+    server it reached and that its owner's free trial is used up.
   - A join (2) to a sleeping server goes to the wake webhook first, whose `{"backend": …}` is where
     mc-router connects it (the waiting room, below), so a join reaches this listener only when it
     arrived in the moment another join was asking. mc-router holds it until that ask is over, and
@@ -2248,7 +2247,7 @@ overrides (self-hosting).
 `planGap(plan, runs, 'offered' | 'startable')`, says whether a plan runs a size, a server type and
 mods, and `planThatRuns` names the plan that would. Creating, changing, starting, the lapse sweep
 and the create flow's cards all ask it. Free runs Vanilla and Paper without plugins on the 3 GB
-size, one server, 20 hours in all, at most 2 a day; Plus runs everything on 3, 4, 8 and 16 GB,
+size, one server, 20 hours in all, on any day; Plus runs everything on 3, 4, 8 and 16 GB,
 three servers, 120 hours a month. A size counts one hour an hour, two for a large one, or four for
 the largest (`domain/account/meter.ts`). The pricing page reads
 the same table through `GET /api/public/plans` and `billing.plans`. The size behind each answer to

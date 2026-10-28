@@ -7,7 +7,7 @@
  * the accounts whose free play counts as its own, which are those of a group Blockly is sure of
  * (`high`); the links admins are shown; and whether an admin holds it. How groups are scored and
  * written is `free-links.ts`'s, and what Blockly and an admin do with them `free-play-guard.ts`'s.
- * Who counts free play by these is `play-today.ts` and `play-total.ts`.
+ * Who counts free play by these is `play-total.ts`.
  */
 import { type Queryable, schema } from '@blockly/db'
 import { and, count, eq, gte, isNotNull, isNull, ne, or } from 'drizzle-orm'

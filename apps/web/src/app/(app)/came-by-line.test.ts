@@ -14,23 +14,33 @@ const time = (iso: string) =>
 const person = (name: string, when: string) => ({ name, uuid: crypto.randomUUID(), at: when })
 
 test('nobody came by: nothing to say', () => {
-  expect(cameByLine({ cameBy: [], stopReason: 'daily', name: 'Sunset Valley' }, now)).toBeNull()
+  expect(cameByLine({ cameBy: [], stopReason: 'free_hours', name: 'Sunset Valley' }, now)).toBeNull()
 })
 
 test('on the server’s page: who, when, and what they were told, not why it rests again', () => {
   const when = at(9, 54)
   expect(
-    cameByLine({ cameBy: [person('Alex', when)], stopReason: 'daily', name: 'Sunset Valley' }, now),
-  ).toBe(`Alex tried to join at ${time(when)}. Cubepals told them when it’s back.`)
+    cameByLine({ cameBy: [person('Alex', when)], stopReason: 'free_hours', name: 'Sunset Valley' }, now),
+  ).toBe(`Alex tried to join at ${time(when)}. Cubepals told them it’s resting for now.`)
 })
 
 test('on the list of servers it names the server, and says yesterday for yesterday', () => {
   const when = at(22, 10, 16)
   expect(
-    cameByLine({ cameBy: [person('Alex', when)], stopReason: 'daily', name: 'Sunset Valley' }, now, true),
+    cameByLine(
+      { cameBy: [person('Alex', when)], stopReason: 'free_hours', name: 'Sunset Valley' },
+      now,
+      true,
+    ),
   ).toBe(
-    `Alex tried to join Sunset Valley yesterday at ${time(when)}, after today’s play was used up. Cubepals told them when it’s back.`,
+    `Alex tried to join Sunset Valley yesterday at ${time(when)}, after your free trial’s hours were played. Cubepals told them it’s resting for now.`,
   )
+})
+
+test('a server resting for anything else, a day’s play from before included, says nothing of who came', () => {
+  const cameBy = [person('Alex', at(9, 54))]
+  expect(cameByLine({ cameBy, stopReason: 'daily', name: 'Sunset Valley' }, now)).toBeNull()
+  expect(cameByLine({ cameBy, stopReason: 'idle', name: 'Sunset Valley' }, now, true)).toBeNull()
 })
 
 test('several came by after the free trial: the first two by name, and the latest try', () => {

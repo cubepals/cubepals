@@ -3,16 +3,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The day a plan's daily play is counted over, and the month its monthly block is: from the
- * owner's local midnight to the next, or from their midnight on the 1st to the next 1st, in the time
- * zone their browser reported, or UTC until one has. A zone reported later takes over once the month
- * has begun again in both, and the month and day it takes over in run from when they began in the
- * zone before. Only the clock lives here; what was played in it is `accounts/play-today.ts`'s and
+ * The month a plan's monthly block is counted over: from the owner's local midnight on the 1st to
+ * the next 1st, in the time zone their browser reported, or UTC until one has. A zone reported
+ * later takes over once the month has begun again in both, and the month it takes over in runs
+ * from when it began in the zone before. Only the clock lives here; what was played in it is
  * `accounts/play-month.ts`'s.
  */
 import { SECOND_MS } from '@blockly/contracts/durations'
 
-/** Where a day is counted until the owner's browser has said where they are. */
+/** Where a month is counted until the owner's browser has said where they are. */
 export const DEFAULT_TIME_ZONE = 'UTC'
 
 /** Whether `zone` is a time zone this runtime knows, as a browser reports one ("Europe/Paris"). */
@@ -66,24 +65,11 @@ function midnightOf(year: number, month: number, day: number, zone: string): Dat
   return new Date(utc - offsetAt(new Date(first), zone))
 }
 
-/** When the local day `at` falls in began, in `zone`. */
-export function dayStart(at: Date, zone: string): Date {
-  const { year, month, day } = wallClock(at, zone)
-  const start = midnightOf(year, month, day, zone)
-  // A midnight a clock change moved can land a moment after `at`; the day began by `at`.
-  return start.getTime() > at.getTime() ? at : start
-}
-
-/** When the next local day begins after `at`, in `zone`: when daily play is back. */
-export function nextDayStart(at: Date, zone: string): Date {
-  const { year, month, day } = wallClock(at, zone)
-  return midnightOf(year, month, day + 1, zone)
-}
-
 /** When the local month `at` falls in began, in `zone`: midnight on its 1st. */
 export function monthStart(at: Date, zone: string): Date {
   const { year, month } = wallClock(at, zone)
   const start = midnightOf(year, month, 1, zone)
+  // A midnight a clock change moved can land a moment after `at`; the month began by `at`.
   return start.getTime() > at.getTime() ? at : start
 }
 
@@ -95,7 +81,7 @@ export function nextMonthStart(at: Date, zone: string): Date {
 
 /**
  * Where the zone in force took over from the one before (`AccountStanding.timeZoneFrom`), and when
- * the month and day it took over in began, in the zone before (`timeZoneBegan`).
+ * the month it took over in began, in the zone before (`timeZoneBegan`).
  */
 export interface ZoneChange {
   from: Date
@@ -119,12 +105,6 @@ export function zoneTakesOver(now: Date, zone: string, next: string): Date {
 export function monthBegan(at: Date, zone: string, change: ZoneChange | null): Date {
   const start = monthStart(at, zone)
   return change !== null && start.getTime() === monthStart(change.from, zone).getTime() ? change.began : start
-}
-
-/** When the day `at` falls in began, in `zone`, the day a zone took over in as `monthBegan` has it. */
-export function dayBegan(at: Date, zone: string, change: ZoneChange | null): Date {
-  const start = dayStart(at, zone)
-  return change !== null && start.getTime() === dayStart(change.from, zone).getTime() ? change.began : start
 }
 
 /** The local month `at` falls in, in `zone`, as the date of its 1st: "2026-10-01". */
