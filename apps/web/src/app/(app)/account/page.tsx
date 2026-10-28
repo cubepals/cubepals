@@ -4,7 +4,13 @@
 
 'use client'
 
-import { type AccountOverviewView, UPGRADE_REASONS, type UpgradeReason } from '@blockly/contracts'
+import {
+  type AccountOverviewView,
+  type PublicPlan,
+  sameSitePath,
+  UPGRADE_REASONS,
+  type UpgradeReason,
+} from '@blockly/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -18,6 +24,7 @@ import { dayOf, loaderLabel } from '../../../lib/present'
 import {
   BlockMeter,
   Button,
+  cardsOf,
   FormRow,
   FormSection,
   LoadFailed,
@@ -424,7 +431,7 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
   useEffect(() => {
     if (asked.current || params.get('from') !== 'billing' || !billing?.available) return
     asked.current = true
-    const next = params.get('next')
+    const next = sameSitePath(params.get('next'))
     router.replace('/account')
     refresh.mutate(undefined, {
       onSuccess: () => {
@@ -432,7 +439,7 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
         void queries
           .query(trpc.account.overview.queryOptions())
           .then((now) => billingReturned(before, now.plan))
-        if (next !== null && /^\/(?![/\\])/.test(next)) router.replace(next)
+        if (next !== null) router.replace(next)
       },
     })
   }, [params, billing, refresh, router, overview.plan, queries, trpc])
@@ -661,22 +668,33 @@ function Includes({ overview }: { overview: AccountOverviewView }) {
   )
 }
 
-/** The plans side by side, as the pricing page shows them, with the way to change plan. */
+/**
+ * The plans side by side, as the pricing page shows them: a card to each paid plan, the free trial
+ * on the one it starts, and the way to change plan. Someone on the trial finds it on that card.
+ */
 function Plans({ overview }: { overview: AccountOverviewView }) {
   const trpc = useTRPC()
   const plans = useQuery(trpc.billing.plans.queryOptions())
   const sells = overview.features.find((f) => f.feature === 'billing')?.available === true
-  if (plans.data === undefined || plans.data.length < 2) return null
+  if (plans.data === undefined) return null
+  const { trial, cards, starter } = cardsOf(plans.data)
+  if (cards.length === 0) return null
+  const onTrial = plans.data.some((plan) => plan.monthlyPriceCents === 0 && plan.key === overview.plan.key)
+  const yours = (plan: PublicPlan): boolean | 'trial' => {
+    if (plan.key === overview.plan.key) return true
+    return onTrial && plan === starter ? 'trial' : false
+  }
   return (
     <FormSection title="Plans">
       <div className="bk-plans">
-        {plans.data.map((plan) => (
+        {cards.map((plan) => (
           <PlanCard
             key={plan.key}
             plan={plan}
-            current={plan.key === overview.plan.key}
+            trial={plan === starter ? trial : undefined}
+            current={yours(plan)}
             // Only the player's own plan is dark, so the eye lands on theirs.
-            solid={plan.key === overview.plan.key}
+            solid={yours(plan) !== false}
             mark={seenMark(`plan_${plan.key}`)}
             action={planAction(plan, overview, sells)}
           />

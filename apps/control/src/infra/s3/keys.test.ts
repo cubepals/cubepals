@@ -21,4 +21,8 @@ describe('S3 archive keys', () => {
     expect(store.newKey('world_upload', scope)).toBe('archives/srv/uploads/x1.tar.gz')
     expect(store.newKey('mod_upload', scope)).toBe('uploads/staging/x1')
   })
+
+  test('a world brought before its server exists has a key of its own, never an empty segment', () => {
+    expect(store.newKey('world_upload', { serverId: '', id: 'x1' })).toBe('uploads/worlds/x1.tar.gz')
+  })
 })

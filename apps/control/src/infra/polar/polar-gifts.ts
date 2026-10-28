@@ -7,15 +7,15 @@
  * metadata `purpose: gift`, `plan` and `months`, at one fixed price, read back as a gift; anything
  * else is not one. The products are made in Polar, like the plans', so a new gift (a year of Plus)
  * is a product there and nothing here. A gift made before its checkout is named in the checkout's
- * metadata, which Polar copies to the order, and read back from there with who paid. Requests
- * themselves are PolarBilling's.
+ * metadata, which Polar copies to the order, and read back from there with who paid. The two
+ * requests a gift takes are here, made with PolarBilling's client.
  */
 import type { createPolar, models } from '@polar-sh/sdk/2026-10'
 import { z } from 'zod'
 import type { GiftProduct } from '../../app/ports/optional.ts'
 import type { Fields } from './polar-models.ts'
 import { CHECKOUT_LEFT_MS, call, withEmail } from './polar-requests.ts'
-import { Listed, OpenCheckouts } from './polar-schemas.ts'
+import { Listed, OpenCheckouts, PricedProduct } from './polar-schemas.ts'
 
 type Polar = ReturnType<typeof createPolar>
 
@@ -63,27 +63,12 @@ export function giftOrderOf(
   return { gift, giftId: id.success ? id.data : null, payerEmail: order.customer.email ?? null }
 }
 
-const PolarGift = z.object({
-  id: z.string(),
-  is_recurring: z.boolean(),
-  is_archived: z.boolean(),
-  metadata: z.record(z.string(), z.unknown()),
-  prices: z.array(
-    z.object({
-      amount_type: z.string(),
-      is_archived: z.boolean().nullish(),
-      price_amount: z.number().int().nullish(),
-      price_currency: z.string().nullish(),
-    } satisfies Fields<models.ProductPrice>),
-  ),
-} satisfies Fields<models.Product>)
-
 /**
  * A gift product for one of `plans`, or null: one that recurs, names no plan this deployment
  * sells, gives no whole number of months, or has no fixed price in dollars sells no gift here.
  */
 export function giftOf(data: unknown, plans: ReadonlySet<string>): GiftProduct | null {
-  const parsed = PolarGift.safeParse(data)
+  const parsed = PricedProduct.safeParse(data)
   if (!parsed.success) return null
   const product = parsed.data
   if (product.is_recurring || product.is_archived) return null

@@ -6,12 +6,14 @@
  * Bringing a world someone uploaded to their server (docs/world-import.md): the upload read on a
  * worker, its world found whatever shape it came in, a question asked where only its owner knows
  * the answer, and the world kept as a backup of the server, which its owner restores like any
- * other. A world in a Cubepals download is kept as the file it came in; any other is written
- * again as a server keeps it (`minecraft/world-layout.ts`), and what was done is said.
+ * other. A world in a Cubepals download is kept as the file it came in, copied from the bytes that
+ * were read to a key of the store's choosing; any other is written again as a server keeps it
+ * (`minecraft/world-layout.ts`), and what was done is said.
  *
  * Not where an upload is begun (`BackupService.beginWorldUpload`) or a backup restored.
  */
 import { randomUUID } from 'node:crypto'
+import { openAsBlob } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -67,6 +69,7 @@ import {
   type ReadingDeps,
   Refused,
   SAID,
+  uploadIn,
   viewOf,
   WorldReading,
 } from './world-reading.ts'
@@ -249,6 +252,7 @@ export class WorldImports {
       await this.#keep({
         record,
         pending,
+        upload: uploadIn(work),
         server,
         read,
         player,
@@ -263,12 +267,16 @@ export class WorldImports {
   }
 
   /**
-   * The world kept as a backup of the server: the upload itself, where it already is a Cubepals
-   * download of a world in its own name, else the world written again as the server keeps it.
+   * The world kept as a backup of the server, under a key of its own: the upload's bytes as they
+   * were read, where it already is a Cubepals download of a world in its own name, else the world
+   * written again as the server keeps it. Never the upload's own key, which its link can still
+   * put other bytes under until the link expires.
    */
   async #keep(input: {
     record: WorldImportRecord
     pending: PendingUpload
+    /** The upload as it was fetched to this machine and read. */
+    upload: string
     server: MinecraftServer
     read: Read
     player: { uuid: string; name: string } | null
@@ -323,16 +331,15 @@ export class WorldImports {
       ...othersNotes(input.others.reads, input.others.left),
     ]
     const backupId = randomUUID()
-    let key = pending.key
-    let sizeBytes = pending.sizeBytes
-    if (!asItCame) {
-      key = store.newKey('archive', { serverId: server.id, id: backupId })
-      sizeBytes = await putStream(
-        this.#archives.tarball(this.#placed(read, levelName, place, hostWritten ? playerPath : null)),
-        await store.archiveTarget(key, LINK_SECONDS, 'browser'),
-        mostOf(read.archive),
-      )
-    }
+    const key = store.newKey('archive', { serverId: server.id, id: backupId })
+    const target = await store.archiveTarget(key, LINK_SECONDS, 'browser')
+    const sizeBytes = asItCame
+      ? await putStream((await openAsBlob(input.upload)).stream(), target, pending.sizeBytes)
+      : await putStream(
+          this.#archives.tarball(this.#placed(read, levelName, place, hostWritten ? playerPath : null)),
+          target,
+          mostOf(read.archive),
+        )
     // Written after the world itself, which a failure among them takes with it.
     const others = await this.#keptOthers(
       server,
@@ -341,7 +348,7 @@ export class WorldImports {
       [...taken, levelName],
       accounts,
     ).catch(async (error: unknown) => {
-      if (!asItCame) await store.delete(key).catch(() => undefined)
+      await store.delete(key).catch(() => undefined)
       throw error
     })
     const kept = await this.#record({
@@ -360,13 +367,13 @@ export class WorldImports {
       serverVersion: input.serverVersion,
     }).catch(async (error: unknown) => {
       // A retry writes them again under new keys, so the ones written here go with the failure.
-      for (const written of [...others.map((other) => other.key), ...(asItCame ? [] : [key])])
+      for (const written of [...others.map((other) => other.key), key])
         await store.delete(written).catch(() => undefined)
       throw error
     })
     if (!kept) for (const other of others) await store.delete(other.key)
-    if (!kept && !asItCame) await store.delete(key)
-    if (kept && !asItCame) await store.delete(pending.key).catch(() => undefined)
+    if (!kept) await store.delete(key)
+    if (kept) await store.delete(pending.key).catch(() => undefined)
     // The upload was cleared while it was read (it waited past the day uploads are kept).
     if (!kept) throw new Refused(SAID.cleared, 'the pending upload was taken while the import ran')
   }

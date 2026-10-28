@@ -112,7 +112,7 @@ import {
 import { asleepOn, heldTags, META, machineConfig, portsOf } from './machine-config.ts'
 
 export { keyFromApp } from './fly-runtime/apps.ts'
-export { exportJob, partBatches, partsJob, partsPut } from './fly-runtime/helper-jobs.ts'
+export { exportJob, partBatches, partsJob, partsPut, restoreJob } from './fly-runtime/helper-jobs.ts'
 export { observationOf, stateOf } from './fly-runtime/observation.ts'
 
 type Machine = FlySchemas['Machine']
