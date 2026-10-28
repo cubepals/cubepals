@@ -111,9 +111,14 @@ async function refundCharges(
   for (const order of older) await holdForPerson(db, userId, subscription, order)
   if (newest === undefined) return
   try {
-    await reach(() => refundCharge(db, billing, userId, subscription, newest))
+    await refundCharge(db, billing, userId, subscription, newest)
   } catch (error) {
-    if (error instanceof BillingUnavailable) throw error
+    // The provider not answering fails the sync as `reach` fails it for the caller; anything else
+    // is a refusal.
+    if (error instanceof BillingUnavailable)
+      return reach(() => {
+        throw error
+      })
     await refundNotTaken(db, userId, subscription, newest.externalOrderId, error)
   }
 }

@@ -270,6 +270,32 @@ test.skipIf(!hasDatabase)(
 )
 
 test.skipIf(!hasDatabase)(
+  'Polar not answering a refund during a sync fails the sync, and the word delivered again refunds it',
+  async () => {
+    const owner = await w.h.user('Xia')
+    const first = randomUUID()
+    const second = randomUUID()
+    const earlier = new Date(Date.now() - 10 * MINUTE_MS)
+    await paying(owner, [listed(first, earlier)])
+    const charged = await w.ordered(owner, second, { created_at: new Date().toISOString() })
+    const answer = w.polar.reply
+    w.polar.reply = (request) =>
+      request.method === 'POST' && request.path === '/v1/refunds/'
+        ? { status: 503, body: {} }
+        : answer(request)
+
+    const failed = await paying(owner, [listed(second, new Date()), listed(first, earlier)])
+    expect(failed.ok).toBe(false)
+    expect(await w.audited(owner, 'billing.second_subscription_refund_not_taken')).toEqual([])
+
+    w.polar.reply = answer
+    const again = await paying(owner, w.polar.states.get(owner.userId)?.active_subscriptions ?? [])
+    expect(again.ok).toBe(true)
+    expect(w.refunds.filter((r) => r.order_id === charged)).toHaveLength(1)
+  },
+)
+
+test.skipIf(!hasDatabase)(
   'one subscription set to end and one bought after it that renews: the renewing one is in force, untouched',
   async () => {
     const owner = await w.h.user('Uma')
