@@ -164,7 +164,7 @@ const say = (line: string) => process.stdout.write(`${line}\n`)
 /** A Postgres tool's standard output. Its error, when it fails, is redacted where it is printed. */
 function tool(command: string, args: string[]): string {
   const result = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 256 * MB })
-  if (result.error) throw new Error(`${command}: ${result.error.message}. Is the Postgres client installed?`)
+  if (result.error) throw new Error(`${command}: ${result.error.message}. Is ${command} installed?`)
   if (result.status !== 0)
     throw new Error(`${command} failed (exit ${result.status}): ${result.stderr.trim()}`)
   return result.stdout
