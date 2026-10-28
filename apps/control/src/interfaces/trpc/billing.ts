@@ -10,13 +10,17 @@
 import { CheckoutInput, OfferInput, type PlanOfferView, withOffers } from '@blockly/contracts'
 import { z } from 'zod'
 import { publicPlans } from '../../app/accounts/queries.ts'
+import { shownOffersOf } from '../../app/billing/shown-offers.ts'
 import { authedProcedure, publicProcedure, router } from './trpc.ts'
 
 /** Paid plans: the table, checkout, moves between plans, the provider's portal and what is owed. */
 export const billing = router({
   /** Every plan as the pricing page shows it, for anyone: the table everything enforces. */
   plans: publicProcedure.query(async ({ ctx }) =>
-    withOffers(publicPlans(ctx.services.platform.capabilities), await ctx.services.billing.liveOffers()),
+    withOffers(
+      publicPlans(ctx.services.platform.capabilities),
+      await shownOffersOf(ctx.services.billing).read(),
+    ),
   ),
   checkout: authedProcedure.input(CheckoutInput).mutation(({ ctx, input }) =>
     ctx.services.billing.startCheckout(ctx.actor, input.plan, {

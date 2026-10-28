@@ -54,6 +54,11 @@ describe('the plans as a new subscriber is told them', () => {
     ]
     expect(withOffers(plans, offers)).toEqual([free, { ...core, monthlyPriceCents: 700, includedHours: 90 }])
     expect(withOffers(plans, [])).toEqual(plans)
+    // An offer that doesn't say its hours keeps the plan's.
+    expect(withOffers(plans, [{ plan: 'core', priceCents: 700, includedHours: null }])[1]).toMatchObject({
+      monthlyPriceCents: 700,
+      includedHours: 40,
+    })
   })
 
   test('are read from the offer endpoint, and are the plan table’s own when it fails', async () => {

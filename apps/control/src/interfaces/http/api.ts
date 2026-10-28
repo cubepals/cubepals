@@ -7,6 +7,7 @@ import type { AuthMethods } from '@blockly/contracts'
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { getHTTPStatusCodeFromError } from '@trpc/server/http'
 import { Hono } from 'hono'
+import { shownOffersOf } from '../../app/billing/shown-offers.ts'
 import type { Authenticator } from '../../app/ports/auth.ts'
 import { appRouter } from '../trpc/router.ts'
 import type { Services } from '../trpc/trpc.ts'
@@ -82,7 +83,7 @@ export function createApiApp(deps: {
       icons: deps.services.icons,
       platform: () => deps.services.platform.capabilities,
       addresses: deps.addresses,
-      offers: () => deps.services.billing.liveOffers(),
+      offers: () => shownOffersOf(deps.services.billing).read(),
     }),
   )
 

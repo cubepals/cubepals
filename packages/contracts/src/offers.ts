@@ -13,7 +13,8 @@ import type { PublicPlan } from './accounts.ts'
 export interface PublicOffer {
   plan: string
   priceCents: number
-  includedHours: number
+  /** Null where the price's product doesn't say: the plan's own hours stand. */
+  includedHours: number | null
 }
 
 /** The plans with each offer's price and hours in place of the plan table's, for the cards people choose on. */
@@ -22,6 +23,10 @@ export function withOffers(plans: readonly PublicPlan[], offers: readonly Public
     const offer = offers.find((each) => each.plan === plan.key)
     return offer === undefined || plan.per !== 'month' || plan.monthlyPriceCents === 0
       ? plan
-      : { ...plan, monthlyPriceCents: offer.priceCents, includedHours: offer.includedHours }
+      : {
+          ...plan,
+          monthlyPriceCents: offer.priceCents,
+          includedHours: offer.includedHours ?? plan.includedHours,
+        }
   })
 }

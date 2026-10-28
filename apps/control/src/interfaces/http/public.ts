@@ -32,7 +32,7 @@ export function createPublicApp(deps: {
   platform: () => Pick<PlatformCapabilities, 'unsoldPlans'>
   /** Whose word on a client's address is believed, since each address's reads are counted. */
   addresses: AddressTrust
-  /** What a month of each paid plan charges a new subscriber now (`BillingService.liveOffers`). */
+  /** What a month of each paid plan charges a new subscriber now, read once a minute (`ShownOffers`). */
   offers: () => Promise<PublicOffer[]>
 }): Hono {
   const app = new Hono()

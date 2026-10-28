@@ -419,7 +419,7 @@ export class BillingService {
     return offers.map((offer) => ({
       plan: offer.planKey,
       priceCents: offer.priceCents,
-      includedHours: offer.includedUnits ?? 0,
+      includedHours: offer.includedUnits,
     }))
   }
 
