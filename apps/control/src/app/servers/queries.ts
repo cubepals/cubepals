@@ -55,13 +55,8 @@ import type { PackCuration } from '../curation/service.ts'
 import { type Shown, shownOf } from '../edge/routed.ts'
 import { cameByView } from '../edge/turned-away.ts'
 import { packView } from '../mods/pack.ts'
-import {
-  activeOperation,
-  lastWakeSeconds,
-  latestOfKind,
-  type OperationRecord,
-  wakePathOf,
-} from '../operations/persistence.ts'
+import { activeOperation, latestOfKind, type OperationRecord } from '../operations/persistence.ts'
+import { expectedWake, type WakeTimes, wakeTimesOf } from '../operations/wake-times.ts'
 import type { PackService } from '../packs/service.ts'
 import { idleMinutesFor } from '../platform/room.ts'
 import type { CatalogHit, ModCatalog } from '../ports/catalog.ts'
@@ -111,6 +106,8 @@ export class ServerQueries {
   #templatesSizedAt = 0
   #sizingTemplates: Promise<void> | null = null
   readonly #templates: ResolvedTemplates
+  /** How long wakes take, for a waking server's countdown. */
+  readonly #wakeTimes: WakeTimes
 
   constructor(deps: {
     db: Db
@@ -135,6 +132,7 @@ export class ServerQueries {
     this.#packs = deps.packs
     this.#curation = deps.curation
     this.#providers = deps.providers
+    this.#wakeTimes = wakeTimesOf(deps.db)
   }
 
   /** The server's configuration history, newest first, each with what it changed. */
@@ -574,18 +572,6 @@ export class ServerQueries {
   }
 
   /**
-   * While it wakes, how long its last wake the same way took: from sleep with its memory kept while
-   * it resumes, and from a boot otherwise, a resume its provider turned into a boot included. A
-   * first resume expects what resumes measured. Read only while it wakes, since nothing else shows it.
-   */
-  async #wakeEstimate(server: MinecraftServer, operation: OperationRecord | null): Promise<number | null> {
-    if (operation?.kind !== 'start') return null
-    const path = await wakePathOf(this.#db, operation.id)
-    const last = await lastWakeSeconds(this.#db, server.id, path)
-    return last ?? (path === 'resumed' ? FIRST_RESUME_SECONDS : null)
-  }
-
-  /**
    * When a running server sleeps if nobody joins, by the rule the idle check stops it by. Said only
    * while nobody is on: the idle check skips a server in use.
    */
@@ -657,7 +643,7 @@ export class ServerQueries {
       region: { key: server.regionKey, label: this.#regions.label(server.regionKey) ?? server.regionKey },
       memoryTier: server.memoryTier,
       activeOperation: operation ? await this.#operationView(operation, server, applied) : null,
-      lastWakeSeconds: await this.#wakeEstimate(server, operation),
+      lastWakeSeconds: await expectedWake(this.#db, this.#wakeTimes, server.id, operation),
       players: running
         ? { online: online?.length ?? 0, people: (online ?? []).map((p) => ({ name: p.name, uuid: p.uuid })) }
         : null,
@@ -705,12 +691,6 @@ function operationView(op: OperationRecord, change: OperationView['change']): Op
     startedAt: op.startedAt?.toISOString() ?? null,
   }
 }
-
-/**
- * What a server's first resume is told to expect: Fly resumed in under a second, and a player was in
- * the world within 2 s.
- */
-const FIRST_RESUME_SECONDS = 2
 
 /** How long the access page mentions an IP ban Blockly lifted. */
 const LIFTED_SHOWN_MS = 7 * DAY_MS

@@ -22,6 +22,7 @@ import { loadRevision } from '../servers/persistence.ts'
 import { serverBinding } from './handlers/binding.ts'
 import { lastWakeSeconds } from './persistence.ts'
 import type { OperationContext } from './runner.ts'
+import { medianOf, type WakeWay, wakeTimesOf } from './wake-times.ts'
 
 const operations = schema.serverOperations
 
@@ -34,6 +35,15 @@ async function stepsOfLast(h: Harness, id: string, kind: 'start' | 'stop' = 'sta
     .orderBy(desc(operations.createdAt))
     .limit(1)
   return (row?.steps ?? []).map((entry) => entry.step).filter((step) => step !== 'attempt')
+}
+
+/**
+ * What the server page counts down from for a wake one way: the median measured for it, its own or
+ * every server's, in the reading the page took, else its last wake that way.
+ */
+async function countdownOf(h: Harness, id: string, way: WakeWay): Promise<number | null> {
+  const median = medianOf(await wakeTimesOf(h.db).medians(), id, way)
+  return median ?? (await lastWakeSeconds(h.db, id, way === 'resume' ? 'resumed' : 'booted'))
 }
 
 /** Whether the server's last start resumed it, as its steps say. */
@@ -293,12 +303,12 @@ describe.skipIf(!hasDatabase)('a sleep or a wake that doesn’t go as planned', 
     let resuming = await h.app.queries.get(owner, id)
     while (resuming.activeOperation?.step == null) resuming = await h.app.queries.get(owner, id)
     expect(resuming.activeOperation?.step).toBe('resuming')
-    expect(resuming.lastWakeSeconds).toBe(await lastWakeSeconds(h.db, id, 'resumed'))
+    expect(resuming.lastWakeSeconds).toBe(await countdownOf(h, id, 'resume'))
     // …then, unanswered, a boot, with what this server's boots take.
     for (let at = Date.now(); Date.now() - at < 15_000; await Bun.sleep(100)) {
       const view = await h.app.queries.get(owner, id)
       if (view.activeOperation?.step !== 'resuming') {
-        expect(view.lastWakeSeconds).toBe(await lastWakeSeconds(h.db, id, 'booted'))
+        expect(view.lastWakeSeconds).toBe(await countdownOf(h, id, 'boot'))
         break
       }
     }
@@ -355,7 +365,8 @@ describe.skipIf(!hasDatabase)('a sleep or a wake that doesn’t go as planned', 
       for (let at = Date.now(); Date.now() - at < 5_000; await Bun.sleep(50)) {
         const view = await h.app.queries.get(owner, id)
         if (view.activeOperation?.step !== 'resuming') continue
-        expect(view.lastWakeSeconds).toBe(2)
+        // What resumes measured, or 2 s while none are: a resume's few seconds either way, not a boot's.
+        expect(view.lastWakeSeconds).toBe((await countdownOf(h, id, 'resume')) ?? 2)
         break
       }
     } finally {

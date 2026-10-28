@@ -454,9 +454,10 @@ const RESUME_SECONDS = 15
 
 /**
  * Where a wake has got to and how long is left, so the line moves with the server rather than
- * standing still under a spinner: the step it is on, and a countdown from how long this server's
- * last wake took. A server that never woke yet counts down from the measured median, and so does
- * a resume that turned into a boot: its last resume's second or two says nothing about a boot.
+ * standing still under a spinner: the step it is on, and a countdown from how long a wake the
+ * same way takes (`lastWakeSeconds`). One with nothing measured counts down from the step's own
+ * median, and so does a resume that turned into a boot: a resume's second or two says nothing
+ * about a boot.
  */
 export function wakeLine(server: ServerView, now: number): string {
   const operation = server.activeOperation
@@ -464,7 +465,7 @@ export function wakeLine(server: ServerView, now: number): string {
   if (operation === null || progress === null) return 'Waking up'
   const last = server.lastWakeSeconds
   const booting = isBooting(operation.step) && last !== null && last < RESUME_SECONDS
-  const expected = operation.kind === 'start' && last !== null && !booting ? last : progress.expectedSeconds
+  const expected = isWake(operation) && last !== null && !booting ? last : progress.expectedSeconds
   return `${progress.steps[progress.index]?.label ?? 'Waking up'} · ${etaLine(operation.createdAt, expected, now)}`
 }
 

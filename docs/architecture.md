@@ -1449,11 +1449,16 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   - A ping to a server that isn't waking yet first asks `POST /edge/v1/ping-wake`, at most once
     per server every 30 s (`apps/edge/ping-wake.ts`). It waits up to 1.5 s for the answer before
     it is answered. While the server wakes, by that ask, a join, or a route that says `waking`, a
-    ping is told "Waking up · join in a few seconds" (`WAKING_MOTD`) in place of the sleeping
-    notice. A server whose owner's free trial is played is never asked for.
+    ping is told "Waking your world · about N seconds" in place of the sleeping notice, N what is
+    left of the median of that server's wakes the way it wakes now (`EdgeRoute.wakeSeconds`,
+    `app/operations/wake-times.ts`), counted from when the edge first saw it waking; with nothing
+    measured, or past it, only "Waking your world" (`apps/edge/waking-line.ts`). A server whose
+    owner's free trial is played is never asked for.
   - While a join is waking a server, a ping still gets this listener's answer: the control plane
     routes a starting server as `asleep` until it runs, and the wake webhook hands every join to
-    the waiting room at once, so mc-router never has a wake in flight to show its loading MOTD for.
+    the waiting room at once. A ping that arrives in the moment mc-router asks the webhook about a
+    join gets its loading MOTD, "One moment" (`LOADING_MOTD`): about the first second of a join,
+    as the Java probe saw it on staging.
 - **The waiting room** (`apps/edge/hold.ts`). A wake takes 40 to 60 s on Fly, and a Minecraft
   client gives up on a connection that says nothing for 30 s. mc-router holds a join silently
   while the wake webhook runs, and closes it without a word when the webhook fails, so the first

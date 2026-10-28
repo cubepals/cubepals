@@ -35,6 +35,7 @@ import { restingJoin, restingStatus } from './resting.ts'
 import { RouterRoutes } from './router.ts'
 import { VisitReporter } from './visit-reporter.ts'
 import { sourceKey, VISIT_TIMES, Visits } from './visits.ts'
+import { wakingLine } from './waking-line.ts'
 
 const env = (name: string, fallback?: string): string => {
   const value = process.env[name] ?? fallback
@@ -59,8 +60,6 @@ const RESTARTING = {
 /** Where a sleeping server's hostname goes: a notice of the agent's that answers pings and holds joins. */
 const SLEEPING = `127.0.0.1:${env('SLEEPING_PORT', '25563')}`
 const ASLEEP: NoticeText = { status: env('ASLEEP_MOTD', 'Sleeping · join to wake it up'), join: null }
-/** What a ping is told of a sleeping server on its way up, woken by a join or by a ping before it. */
-const WAKING_MOTD = env('WAKING_MOTD', 'Waking up · join in a few seconds')
 /** How long a ping waits to hear whether its server is waking, and how long its answer stands. */
 const PING_WAKE_WAIT_MS = Number(env('PING_WAKE_WAIT_MS', '1500'))
 const PING_WAKE_EVERY_MS = Number(env('PING_WAKE_EVERY_MS', '30000'))
@@ -186,6 +185,7 @@ const poll = new RoutesPoll(
     const running = new Set(routes.filter((r) => r.state === undefined).map((r) => r.destination))
     for (const destination of unreachable) if (!running.has(destination)) unreachable.delete(destination)
     for (const destination of asked.keys()) if (!running.has(destination)) asked.delete(destination)
+    wakingLine.keep(routes, (name) => pingWakes.waking(name))
     return applyRoutes()
   },
 )
@@ -466,10 +466,10 @@ function asleep(address: string): NoticeText {
   const name = hostnameOf({ address })
   const route = routes.find((r) => r.hostname === name)
   const icon = route?.icon === undefined ? undefined : icons.get(route.icon)
-  const waking = route?.waking === true || pingWakes.waking(name)
+  const waking = wakingLine.of(name, route?.waking === true || pingWakes.waking(name), route?.wakeSeconds)
   const status = resting(route)
     ? restingStatus(route?.motd)
-    : asleepMessage(route?.motd, waking ? WAKING_MOTD : ASLEEP.status)
+    : asleepMessage(route?.motd, waking ?? ASLEEP.status)
   return { ...ASLEEP, status, ...(icon ? { icon } : {}), ...(route?.joins ? { joins: route.joins } : {}) }
 }
 
@@ -725,7 +725,7 @@ const child = Bun.spawn(
     '-auto-scale-asleep-motd',
     ASLEEP.status,
     '-auto-scale-loading-motd',
-    env('LOADING_MOTD', 'Starting up · try again in a moment'),
+    env('LOADING_MOTD', 'One moment'),
     '-webhook-url',
     `http://127.0.0.1:${AGENT_PORT}/session`,
     '-connection-rate-limit',

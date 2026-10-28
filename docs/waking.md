@@ -68,8 +68,9 @@ whole life and an image pull onto the volume's host.
 - **A ping from a player starts the wake.** Opening the multiplayer screen pings the saved servers
   it shows, so a ping of a sleeping server is often seconds before the click. The edge asks the
   control plane to wake a sleeping server it is pinged for (`POST /edge/v1/ping-wake`), with the
-  address the ping came from, waits up to 1.5 s for the answer, and the list shows "Waking up ·
-  join in a few seconds" when one started. The join then waits only for what is left of the boot.
+  address the ping came from, waits up to 1.5 s for the answer, and the list shows "Waking your
+  world · about N seconds" when one started, N what is left of the median of the server's own
+  wakes that way, or every server's (below). The join then waits only for what is left of the boot.
   Anything on the internet can ping: scanners, sites that list servers, bots. So the control plane
   wakes a server for a ping only when:
   - the ping comes from a network one of the server's own players joined it from, within
@@ -108,6 +109,13 @@ whole life and an image pull onto the volume's host.
   of a stopped wake; a player who opens the list while friends gather may find it up. The ping's
   handshake is the first the edge hears of a player, and it asks at once, before the status
   request is read, so the edge can't start it sooner.
+- **The list says how long, as measured.** A sleeping server's route carries how long a wake the
+  way it would wake now takes (`wakeSeconds`): from memory kept, a boot, or from rest. It is the
+  median of the wakes that way that succeeded in the last 30 days, from the ask to running: the
+  server's own once it has three, else every server's once there are five, else nothing, and the
+  list says only "Waking your world" (`app/operations/wake-times.ts`). A resume its start gives up
+  on, where the memory was gone, boots from its disk: from then its route carries a boot's median,
+  and the line counts down from that. The server page's countdown counts down from the same median.
 - **Every edge says a server is waking.** A server on its way up, by a join or a ping, is routed
   as asleep with `waking`, so every ping gets "Waking up" while it boots. That includes a world
   coming back from rest, which used to have no route at all until it was back.

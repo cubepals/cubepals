@@ -46,6 +46,12 @@ export const EdgeRoute = z.object({
    */
   waking: z.literal(true).optional(),
   /**
+   * An asleep server's wake, in whole seconds: the median of its own wakes the way it would wake
+   * now (from memory, a boot or from rest), else of every server's (`wake-times.ts`). The edge
+   * tells a ping of a waking server about how long is left. Absent with too few measured.
+   */
+  wakeSeconds: z.number().int().positive().optional(),
+  /**
    * An asleep server's own message, as the game reads it (section-sign codes), which the edge
    * shows a ping in place of its own notice. Absent while the message is still Blockly's welcome.
    */

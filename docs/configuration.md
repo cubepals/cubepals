@@ -348,7 +348,8 @@ which the project's charts leave out.
 | `AGENT_PORT` | `8090` (mc-router's webhooks) | same | — |
 | `NOTICE_PORT`, `SLEEPING_PORT` | `25564`, `25563` (the restarting and sleeping notices) | same | — |
 | `RESTARTING_MOTD`, `RESTARTING_JOIN` | `Restarting · back in a moment`, `Restarting · join again in a moment` | same | — |
-| `ASLEEP_MOTD`, `LOADING_MOTD` | `Sleeping · join to wake it up`, `Starting up · try again in a moment` | same | — |
+| `ASLEEP_MOTD`, `LOADING_MOTD` | `Sleeping · join to wake it up`, `One moment` | same | — |
+| `WAKING_MOTD` | empty: a waking server's ping is told `Waking your world · about N seconds`, N what is left of its wake's measured median (`apps/edge/waking-line.ts`); set, it is said instead | same | — |
 | `EXAMPLE_MOTD`, `EXAMPLE_JOIN` | `Just an example address` and `Make your own at cubepals.com` on two lines; `You found our example address. Make a server of your own at cubepals.com and send your friends its address.` (Cubepals' example address, `your-server` under each of `PLAY_DOMAINS`: `apps/edge/example-address.ts`) | same | — |
 | `ROUTER_BIN` | `/mc-router` | same | — |
 | `CONNECTION_RATE_LIMIT` | `1000` (mc-router's `-connection-rate-limit`, every server together) | same | — |

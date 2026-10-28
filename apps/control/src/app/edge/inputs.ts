@@ -16,7 +16,7 @@
  * what the flags lead to (`routed.ts`).
  */
 import { type Db, type Queryable, schema } from '@blockly/db'
-import { and, inArray, isNull, type SQL, type SQLWrapper, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, type SQL, type SQLWrapper, sql } from 'drizzle-orm'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import { type Loader, type OtherVersions, otherVersionsOf } from '../../domain/revision/revision.ts'
 import type { ServerStatus } from '../../domain/server/lifecycle.ts'
@@ -55,6 +55,8 @@ export interface RouteInputs {
   bindings: Map<string, Binding>
   /** Open operations that bring a server back by themselves, and whether it was running. */
   comingBack: Array<{ serverId: string; kind: (typeof COMES_BACK)[number]; running: boolean }>
+  /** Servers whose open start boots: a resume given up on boots from its disk, as a plain boot does. */
+  booting: Set<string>
   /** Servers stopped for their owner's free trial's hours, with the owner's plan (`trialOver`). */
   trials: Awaited<ReturnType<typeof trialStops>>
   /** The message of the day each asleep server's revision sets. */
@@ -75,6 +77,8 @@ interface Binding {
   revisionId: string | null
   /** Which of Cubepals' Via plugins that boot placed; null for a boot from before one said. */
   compat: string[] | null
+  /** Its sleep kept its memory, so a wake resumes it (`wake-times.ts`'s way). */
+  memoryKept: boolean
 }
 
 /** What a revision runs, as far as which clients it takes. */
@@ -121,6 +125,7 @@ const bindingRows = (q: Queryable, providers: readonly string[]) =>
       proxyProtocol: sql<boolean>`coalesce((${runtimes.applied}->>'proxyProtocol')::boolean, false)`,
       revisionId: sql<string | null>`${runtimes.applied}->>'revisionId'`,
       compat: sql<string[] | null>`${runtimes.applied}->'compat'`,
+      memoryKept: sql<boolean>`${runtimes.memoryKeptAt} is not null`,
     })
     .from(runtimes)
     .where(
@@ -139,6 +144,18 @@ const comingBackRows = (q: Queryable) =>
     })
     .from(operations)
     .where(and(inArray(operations.kind, [...COMES_BACK]), inArray(operations.status, ['queued', 'running'])))
+
+const bootingRows = (q: Queryable) =>
+  q
+    .select({ serverId: operations.serverId })
+    .from(operations)
+    .where(
+      and(
+        eq(operations.kind, 'start'),
+        inArray(operations.status, ['queued', 'running']),
+        sql`${operations.steps} @> '[{"step":"booting"}]'::jsonb`,
+      ),
+    )
 
 /** Which Via plugins are pinned for which release: a pin or its removal moves what a next boot places. */
 const pinRows = (q: Queryable) =>
@@ -193,7 +210,7 @@ export async function fingerprint(q: Queryable, providers: readonly string[]): P
   const { rows } = await q.execute<{ v: string }>(sql`select concat_ws(' ',
     floor(extract(epoch from statement_timestamp()) * 1000)::bigint,
     left(md5(concat_ws('|', ${digestOf(serverRows(q))}, ${digestOf(bindingRows(q, providers))},
-      ${digestOf(comingBackRows(q))}, ${digestOf(trialStops(q))},
+      ${digestOf(comingBackRows(q))}, ${digestOf(bootingRows(q))}, ${digestOf(trialStops(q))},
       ${digestOf(pinRows(q))})), 16),
     ${waiting(sql`${servers.routedAt}`)},
     ${waiting(sql`${servers.routeListedAt}`)}) as v`)
@@ -225,6 +242,7 @@ export async function readInputs(
                 proxyProtocol: b.proxyProtocol,
                 revisionId: b.revisionId,
                 compat: b.compat,
+                memoryKept: b.memoryKept,
               },
             ]),
           ),
@@ -232,6 +250,7 @@ export async function readInputs(
             ...row,
             kind: row.kind as (typeof COMES_BACK)[number],
           })),
+          booting: new Set((await bootingRows(tx)).map((row) => row.serverId)),
           trials: await trialStops(tx),
           motds: await motdsOf(
             tx,

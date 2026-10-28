@@ -243,7 +243,7 @@ export async function latestOfKind(
  */
 export type WakePath = 'resumed' | 'booted'
 
-const resumedWake = sql<boolean>`coalesce(${operations.steps} @> '[{"step":"resuming"}]'::jsonb and not ${operations.steps} @> '[{"step":"booting"}]'::jsonb, false)`
+export const resumedWake = sql<boolean>`coalesce(${operations.steps} @> '[{"step":"resuming"}]'::jsonb and not ${operations.steps} @> '[{"step":"booting"}]'::jsonb, false)`
 
 /**
  * Whether the operation failed in waking its server rather than over what the server runs: it
