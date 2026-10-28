@@ -31,7 +31,7 @@ import { holdBegun, observeGeyser, polled } from './metrics.ts'
 import { hostnameOf, type Join, Notice, type NoticeText, pingOf, statusRequest } from './notice.ts'
 import { PingWakes } from './ping-wake.ts'
 import { RoutesPoll } from './poll.ts'
-import { type Resting, restingJoin, restingStatus } from './resting.ts'
+import { restingJoin, restingStatus } from './resting.ts'
 import { RouterRoutes } from './router.ts'
 import { VisitReporter } from './visit-reporter.ts'
 import { sourceKey, VISIT_TIMES, Visits } from './visits.ts'
@@ -455,30 +455,21 @@ const pingWakes = new PingWakes(
   PING_WAKE_EVERY_MS,
 )
 
-/**
- * Why its owner's play leaves it resting, where it does: today's is used up, until their next day
- * begins, or the free trial's hours are. Then no ping or join wakes it.
- */
-function restingOf(route: EdgeRoutes['routes'][number] | undefined): Resting | null {
-  if (route?.trialOver === true) return { for: 'trial' }
-  const backAt = route?.backAt === undefined ? null : new Date(route.backAt)
-  return backAt !== null && backAt.getTime() > Date.now() ? { for: 'today', backAt } : null
-}
+/** Whether its owner's free trial's hours are played, leaving it resting: then no ping or join wakes it. */
+const resting = (route: EdgeRoutes['routes'][number] | undefined): boolean => route?.trialOver === true
 
 /**
  * What a ping to a sleeping server is told: its own message and picture, and that a join wakes it,
- * or that it is waking already; or, while its owner's play for today is used up, when it is back.
+ * or that it is waking already; or, once its owner's free trial is played, that it rests.
  */
 function asleep(address: string): NoticeText {
   const name = hostnameOf({ address })
   const route = routes.find((r) => r.hostname === name)
   const icon = route?.icon === undefined ? undefined : icons.get(route.icon)
-  const resting = restingOf(route)
   const waking = route?.waking === true || pingWakes.waking(name)
-  const status =
-    resting !== null
-      ? restingStatus(resting, route?.motd, new Date())
-      : asleepMessage(route?.motd, waking ? WAKING_MOTD : ASLEEP.status)
+  const status = resting(route)
+    ? restingStatus(route?.motd)
+    : asleepMessage(route?.motd, waking ? WAKING_MOTD : ASLEEP.status)
   return { ...ASLEEP, status, ...(icon ? { icon } : {}), ...(route?.joins ? { joins: route.joins } : {}) }
 }
 
@@ -490,7 +481,7 @@ function asleep(address: string): NoticeText {
  */
 async function pinged(hostname: string, address: string | null): Promise<void> {
   const route = routes.find((r) => r.hostname === hostname)
-  if (route?.state !== 'asleep' || route.waking === true || restingOf(route) !== null) return
+  if (route?.state !== 'asleep' || route.waking === true || resting(route)) return
   await Promise.race([pingWakes.ask(hostname, address), Bun.sleep(PING_WAKE_WAIT_MS)])
 }
 
@@ -630,18 +621,12 @@ function heldVisit(header: Uint8Array | null) {
 }
 
 /**
- * What a held join that can't go on is told. Refused for play used up, it hears whose server it
- * reached and when it is back (`resting.ts`); refused for anything else, why, in a line.
+ * What a held join that can't go on is told. Refused for the free trial played out, it hears whose
+ * server it reached (`resting.ts`); refused for anything else, why, in a line.
  */
 function refusal(result: WakeResult | null, route: EdgeRoutes['routes'][number] | undefined): string {
   if (result?.outcome !== 'denied' || result.reason !== 'quota') return TURNED_AWAY[whyNot(result)]
-  const resting: Resting | null =
-    result.backAt === undefined
-      ? route?.trialOver === true
-        ? { for: 'trial' }
-        : null
-      : { for: 'today', backAt: new Date(result.backAt) }
-  return resting === null ? TURNED_AWAY.quota : restingJoin(resting, route?.name, new Date())
+  return resting(route) ? restingJoin(route?.name) : TURNED_AWAY.quota
 }
 
 /**

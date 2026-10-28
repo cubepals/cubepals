@@ -3,14 +3,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A friend who reaches a server resting for its owner's play: what the edge is told, what the
- * owner sees afterwards, and what is counted. The edge lets the join in to wait and says so (a
+ * A friend who reaches a server resting for its owner's free trial: what the edge is told, what
+ * the owner sees afterwards, and what is counted. The edge lets the join in to wait and says so (a
  * connect), then asks for a wake, which is refused; this drives both as the edge does.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
-import { and, eq, isNull, like, sql } from 'drizzle-orm'
+import { and, eq, isNull, like } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
 import { FUNNEL } from '../insight/record.ts'
@@ -31,13 +31,19 @@ afterAll(async () => {
   if (hasDatabase) await h.close()
 })
 
-/** A time zone where it is about noon now, so today's play stays today's whenever this runs. */
-function noonZone(): string {
-  const ahead = 12 - new Date().getUTCHours()
-  return ahead >= 0 ? `Etc/GMT-${ahead}` : `Etc/GMT+${-ahead}`
-}
-
 const open = isNull(schema.powerIntervals.stoppedAt)
+
+/** A finished run on Free, `hours` long, two days back. */
+const playedBefore = (serverId: string, hours: number) => {
+  const stoppedAt = new Date(Date.now() - 2 * DAY_MS)
+  return h.db.insert(schema.powerIntervals).values({
+    serverId,
+    memoryTier: '3g',
+    plan: 'free',
+    startedAt: new Date(stoppedAt.getTime() - hours * HOUR_MS),
+    stoppedAt,
+  })
+}
 
 const running = async (actor: UserActor) => {
   const server = await h.create(actor, { name: 'Sunset Valley' })
@@ -70,29 +76,27 @@ const turnedAwayEvents = (serverId: string) =>
 const routeOf = async (slug: string) =>
   (await h.app.edge.routes()).routes.find((r) => r.hostname === `${slug}.play.test`)
 
-describe.skipIf(!hasDatabase)('a friend at a server resting for today', () => {
-  test('after today’s play: refused saying when it is back, kept for the owner, and counted', async () => {
+describe.skipIf(!hasDatabase)('a friend at a server resting for the free trial', () => {
+  test('after the 20 hours, with the owner on: counted, refused, kept for the owner, and a paid plan wakes it', async () => {
     const actor = await h.user('Steve', 'free')
-    await h.db
-      .update(schema.accountStanding)
-      .set({ timeZone: noonZone() })
-      .where(eq(schema.accountStanding.userId, actor.userId))
     const server = await running(actor)
     const { id, slug } = server
 
-    // The owner plays, as the server itself sees it, until today's play is used up with them on.
+    // The owner plays, as the server itself sees it, until the 20 hours are used up with them on:
+    // 19 hours on another day, and this run over an hour long.
     await reach(slug, OWNER, 'connect')
     await h.db
       .update(schema.serverPlayers)
       .set({ playedSeconds: 110 * 60, confirmedAt: new Date() })
       .where(eq(schema.serverPlayers.serverId, id))
+    await playedBefore(id, 19)
     await h.db
       .update(schema.powerIntervals)
-      .set({ startedAt: new Date(Date.now() - 125 * MINUTE_MS) })
+      .set({ startedAt: new Date(Date.now() - 65 * MINUTE_MS) })
       .where(and(eq(schema.powerIntervals.serverId, id), open))
     await h.app.schedules.sessionCheck()
     expect(await h.app.schedules.sessionCheck(new Date(Date.now() + 11 * MINUTE_MS))).toBe(1)
-    expect((await h.until(id, 'stopped')).lifecycle.stopReason).toBe('daily')
+    expect((await h.until(id, 'stopped')).lifecycle.stopReason).toBe('free_hours')
     await h.settled(id)
 
     // The stop with someone on is counted, once.
@@ -105,17 +109,15 @@ describe.skipIf(!hasDatabase)('a friend at a server resting for today', () => {
           like(schema.insightEvents.subject, `${id}:%`),
         ),
       )
-    expect(ended.map((e) => e.properties)).toEqual([{ serverId: id, reason: 'daily', online: 1 }])
+    expect(ended.map((e) => e.properties)).toEqual([{ serverId: id, reason: 'free_hours', online: 1 }])
 
-    // The route tells the edge it rests until the owner's next day, and its name.
-    const view = await h.app.queries.get(actor, id)
-    const backAt = view.playToday?.backAt
-    expect(await routeOf(slug)).toMatchObject({ state: 'asleep', backAt, name: 'Sunset Valley' })
-    expect(view.cameBy).toEqual([])
+    // The route tells the edge it rests until the plan changes, and its name.
+    expect(await routeOf(slug)).toMatchObject({ state: 'asleep', trialOver: true, name: 'Sunset Valley' })
+    expect((await h.app.queries.get(actor, id)).cameBy).toEqual([])
 
-    // A friend arrives: let in to wait, then refused, with when it is back. Nothing starts.
+    // A friend arrives: let in to wait, then refused. Nothing starts.
     await reach(slug, FRIEND, 'connect')
-    expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({ outcome: 'denied', reason: 'quota', backAt })
+    expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({ outcome: 'denied', reason: 'quota' })
     await reach(slug, FRIEND, 'disconnect')
     expect((await h.server(id)).lifecycle.status).toBe('stopped')
 
@@ -126,7 +128,7 @@ describe.skipIf(!hasDatabase)('a friend at a server resting for today', () => {
       'Alex',
     ])
     expect((await turnedAwayEvents(id)).map((e) => e.properties)).toEqual([
-      { serverId: id, reason: 'daily', player: 'Alex', friend: true },
+      { serverId: id, reason: 'free_hours', player: 'Alex', friend: true },
     ])
 
     // The owner trying their own server is counted, but isn't news to them.
@@ -134,15 +136,12 @@ describe.skipIf(!hasDatabase)('a friend at a server resting for today', () => {
     expect((await h.app.queries.get(actor, id)).cameBy.map((p) => p.name)).toEqual(['Alex'])
     expect((await turnedAwayEvents(id)).map((e) => e.properties.friend).sort()).toEqual([false, true])
 
-    // A new day: it wakes for a join like any server, and the note is gone once it has run.
+    // On a paid plan it wakes for a join like any server, and the note is gone once it has run.
     await h.db
-      .update(schema.powerIntervals)
-      .set({
-        startedAt: sql`${schema.powerIntervals.startedAt} - interval '1 day'`,
-        stoppedAt: sql`${schema.powerIntervals.stoppedAt} - interval '1 day'`,
-      })
-      .where(eq(schema.powerIntervals.serverId, id))
-    expect((await routeOf(slug))?.backAt).toBeUndefined()
+      .update(schema.accountStanding)
+      .set({ plan: 'plus' })
+      .where(eq(schema.accountStanding.userId, actor.userId))
+    expect((await routeOf(slug))?.trialOver).toBeUndefined()
     expect((await routeOf(slug))?.name).toBeUndefined()
     await reach(slug, FRIEND, 'connect')
     expect((await turnedAwayEvents(id)).length).toBe(2)
@@ -152,20 +151,38 @@ describe.skipIf(!hasDatabase)('a friend at a server resting for today', () => {
   }, 60_000)
 })
 
+describe.skipIf(!hasDatabase)(
+  'a server stopped for a day’s play before the trial stopped counting days',
+  () => {
+    test('sleeps like any other: its route says nothing of it, and a join wakes it', async () => {
+      const actor = await h.user('Mia', 'free')
+      const server = await running(actor)
+      await h.app.servers.stop(actor, server.id, crypto.randomUUID(), 'idle')
+      await h.until(server.id, 'stopped')
+      await h.settled(server.id)
+      await h.db
+        .update(schema.minecraftServers)
+        .set({ stopReason: 'daily' })
+        .where(eq(schema.minecraftServers.id, server.id))
+      const route = await routeOf(server.slug)
+      expect(route).toMatchObject({ state: 'asleep' })
+      expect(route?.trialOver).toBeUndefined()
+      expect(route?.name).toBeUndefined()
+      await reach(server.slug, FRIEND, 'connect')
+      expect(await turnedAwayEvents(server.id)).toEqual([])
+      expect(await h.app.edge.wake(`${server.slug}.play.test`)).toMatchObject({ outcome: 'ready' })
+      await h.settled(server.id)
+    }, 60_000)
+  },
+)
+
 describe.skipIf(!hasDatabase)('a friend at a server out of free hours', () => {
   test('after the free trial: the route says so, a friend is refused and kept, Plus wakes it', async () => {
     const actor = await h.user('Lee', 'free')
     const server = await running(actor)
     const { id, slug } = server
-    // 19 hours played on other days, and this run 55 minutes long: five minutes left.
-    const stoppedAt = new Date(Date.now() - 2 * DAY_MS)
-    await h.db.insert(schema.powerIntervals).values({
-      serverId: id,
-      memoryTier: '3g',
-      plan: 'free',
-      startedAt: new Date(stoppedAt.getTime() - 19 * HOUR_MS),
-      stoppedAt,
-    })
+    // 19 hours played on another day, and this run two hours long: played out.
+    await playedBefore(id, 19)
     await h.db
       .update(schema.powerIntervals)
       .set({ startedAt: new Date(Date.now() - 2 * HOUR_MS) })

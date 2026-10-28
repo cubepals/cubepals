@@ -4,11 +4,10 @@
 
 /**
  * Warns a run in game as it nears its end, then stops it there, the ordinary way. A run ends where
- * its plan's day of play runs out (Free's 2 hours from the owner's midnight, `accounts/play-today.ts`),
- * where its play in all does (Free's 20 hours, `accounts/play-total.ts`), or at a cap on one run,
- * which only an admin sets; the earliest. The day's end puts the server to sleep; the end of the
- * 20 stops it until the account has Plus. The month's hours are the standing sweep's (`accounts/`), and the stop itself is
- * the `stop` operation's.
+ * its plan's play in all runs out (Free's 20 hours, `accounts/play-total.ts`), or at a cap on one
+ * run, which only an admin sets; the earliest. The end of the 20 stops it until the account has a
+ * paid plan. The month's hours are the standing sweep's (`accounts/`), and the stop itself is the
+ * `stop` operation's.
  */
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
@@ -20,7 +19,6 @@ import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { announce } from '../../../minecraft/console.ts'
 import { PORT_NAMES } from '../../../minecraft/runtime-spec.ts'
 import { loadStanding } from '../../accounts/persistence.ts'
-import { minutesOfPlayLeft, type PlayToday, playToday } from '../../accounts/play-today.ts'
 import { type PlayTotal, playTotal } from '../../accounts/play-total.ts'
 import type { Actor } from '../../actor.ts'
 import { playEnded } from '../../insight/record.ts'
@@ -35,6 +33,7 @@ import {
   fixPlayEnd,
   openSession,
   presenceFor,
+  releasePlayEnd,
   releaseSessionWarning,
 } from '../../servers/usage.ts'
 
@@ -44,7 +43,6 @@ const SESSION_WARNINGS = [10, 2] as const
 /** A session's end is the platform's own doing, not the owner's or an admin's. */
 const ENDED_BY: Record<SessionEnd['reason'], Actor> = {
   session_cap: { kind: 'system', reason: 'session_cap' },
-  daily: { kind: 'system', reason: 'play_today' },
   free_hours: { kind: 'system', reason: 'play_total' },
 }
 
@@ -52,8 +50,6 @@ const ENDED_BY: Record<SessionEnd['reason'], Actor> = {
 const WARNING: Record<SessionEnd['reason'], (minutes: number) => string> = {
   session_cap: (minutes) =>
     `Server stops in ${minutes} minutes, saving the world first. You can join again right after.`,
-  daily: (minutes) =>
-    `Today’s play ends in ${minutes} minutes. The world is saved, and play is back at midnight.`,
   free_hours: (minutes) =>
     (() => {
       const paid = planOnSaleHere()
@@ -64,33 +60,26 @@ const WARNING: Record<SessionEnd['reason'], (minutes: number) => string> = {
 /** What a stop for each end is keyed by, with the session's start: one stop each. */
 const KEYED: Record<SessionEnd['reason'], string> = {
   session_cap: 'session',
-  daily: 'today',
   free_hours: 'total',
 }
 
 /** When the session a server is in ends, and why; `minutes` is the cap, or the play it ends. */
 interface SessionEnd {
   at: Date
-  reason: 'session_cap' | 'daily' | 'free_hours'
+  reason: 'session_cap' | 'free_hours'
   minutes: number
 }
 
 /**
- * Minutes of play left at `rate` units an hour, and which play runs out first: the day's or the
- * plan's in all, with how long that is (`minutes`). Null on a plan that counts neither.
+ * Minutes of the plan's play in all left at `rate` units an hour, with how long that play is
+ * (`minutes`). Null on a plan that counts none.
  */
 function playLeft(
-  today: PlayToday | null,
   total: PlayTotal | null,
   rate: number,
-  now: Date,
-): { left: number; reason: 'daily' | 'free_hours'; minutes: number } | null {
-  if (today === null && total === null) return null
-  const dayLeft = today === null ? Number.POSITIVE_INFINITY : minutesOfPlayLeft(today, rate, now)
-  const totalLeft = total === null ? Number.POSITIVE_INFINITY : (total.left / rate) * 60
-  if (total !== null && totalLeft <= dayLeft)
-    return { left: totalLeft, reason: 'free_hours', minutes: total.included * 60 }
-  return { left: dayLeft, reason: 'daily', minutes: (today?.included ?? 0) * 60 }
+): { left: number; reason: 'free_hours'; minutes: number } | null {
+  if (total === null) return null
+  return { left: (total.left / rate) * 60, reason: 'free_hours', minutes: total.included * 60 }
 }
 
 type Session = { startedAt: Date; warnedMinutes: number | null; playEndsAt: Date | null }
@@ -106,11 +95,11 @@ export function sessionCaps(deps: {
   const { db, runtime, specs, events, service } = deps
 
   /**
-   * `session-check`: a server whose session ends (its plan's day of play runs out, or an admin
+   * `session-check`: a server whose session ends (its plan's play in all runs out, or an admin
    * capped how long one run lasts) is told in game 10 and 2 minutes before, then stopped the
    * ordinary way, which saves the world first. Each warning goes out once, whatever restarts in
    * between, and one whose moment passed unseen is skipped rather than sent late. After a cap the
-   * owner can start it again at once; after the day's play, at their midnight.
+   * owner can start it again at once; after the play in all, with a paid plan.
    */
   const sessionCheck = async (now: Date): Promise<number> => {
     let stopped = 0
@@ -118,7 +107,7 @@ export function sessionCaps(deps: {
     for (const server of running) {
       const standing = await loadStanding(db, server.ownerId)
       const plan = entitlementsOf(standing)
-      if (plan.maxSessionMinutes === null && plan.dailyUnits === null && plan.totalUnits === null) continue
+      if (plan.maxSessionMinutes === null && plan.totalUnits === null) continue
       const session = await openSession(db, server.id)
       if (session === null) continue
       // The owner's servers running together spend the plan's play together.
@@ -149,10 +138,12 @@ export function sessionCaps(deps: {
         }
 
   /**
-   * Where the plan's play runs out for this session: the day's, or the plan's in all (Free's 20
-   * hours), whichever comes first. Once its first warning is due, the end is fixed on the session,
-   * and never sooner than that warning's minutes away: a run already past its play when it began
-   * being counted (as on the day Free changed) is warned like any other, never cut off.
+   * Where the plan's play in all (Free's 20 hours) runs out for this session. Once its first
+   * warning is due, the end is fixed on the session, and never sooner than that warning's minutes
+   * away: a run already past its play when it began being counted (as on the day Free changed) is
+   * warned like any other, never cut off. An end fixed while play was nearly out holds only while
+   * it still is: once more is left than the first warning's minutes (the plan changed, or how it
+   * counts did), the end and its warnings are let go, and the run goes on to its new end.
    */
   const playEnd = async (
     server: MinecraftServer,
@@ -162,12 +153,12 @@ export function sessionCaps(deps: {
     rate: number,
     now: Date,
   ): Promise<SessionEnd | null> => {
-    const today = await playToday(db, standing, plan, now)
-    const play = playLeft(today, await playTotal(db, standing, plan, now), rate, now)
+    const play = playLeft(await playTotal(db, standing, plan, now), rate)
     if (play === null) return null
     const { left, reason, minutes } = play
-    if (session.playEndsAt !== null) return { at: session.playEndsAt, reason, minutes }
     const first = SESSION_WARNINGS[0]
+    if (session.playEndsAt !== null && left > first) await releasePlayEnd(db, server.id)
+    else if (session.playEndsAt !== null) return { at: session.playEndsAt, reason, minutes }
     if (left > first) return { at: new Date(now.getTime() + left * MINUTE_MS), reason, minutes }
     const at = await fixPlayEnd(db, server.id, new Date(now.getTime() + Math.max(left, first) * MINUTE_MS))
     return at === null ? null : { at, reason, minutes }

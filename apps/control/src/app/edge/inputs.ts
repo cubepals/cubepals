@@ -20,7 +20,6 @@ import { and, inArray, isNull, type SQL, type SQLWrapper, sql } from 'drizzle-or
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import { type Loader, type OtherVersions, otherVersionsOf } from '../../domain/revision/revision.ts'
 import type { ServerStatus } from '../../domain/server/lifecycle.ts'
-import { dailyStops } from '../accounts/play-today.ts'
 import { trialStops } from '../accounts/play-total.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import { motdsOf } from '../servers/persistence.ts'
@@ -56,7 +55,6 @@ export interface RouteInputs {
   bindings: Map<string, Binding>
   /** Open operations that bring a server back by themselves, and whether it was running. */
   comingBack: Array<{ serverId: string; kind: (typeof COMES_BACK)[number]; running: boolean }>
-  stops: Array<{ id: string; zone: string | null; stoppedAt: Date | null }>
   /** Servers stopped for their owner's free trial's hours, with the owner's plan (`trialOver`). */
   trials: Awaited<ReturnType<typeof trialStops>>
   /** The message of the day each asleep server's revision sets. */
@@ -195,7 +193,7 @@ export async function fingerprint(q: Queryable, providers: readonly string[]): P
   const { rows } = await q.execute<{ v: string }>(sql`select concat_ws(' ',
     floor(extract(epoch from statement_timestamp()) * 1000)::bigint,
     left(md5(concat_ws('|', ${digestOf(serverRows(q))}, ${digestOf(bindingRows(q, providers))},
-      ${digestOf(comingBackRows(q))}, ${digestOf(dailyStops(q))}, ${digestOf(trialStops(q))},
+      ${digestOf(comingBackRows(q))}, ${digestOf(trialStops(q))},
       ${digestOf(pinRows(q))})), 16),
     ${waiting(sql`${servers.routedAt}`)},
     ${waiting(sql`${servers.routeListedAt}`)}) as v`)
@@ -234,7 +232,6 @@ export async function readInputs(
             ...row,
             kind: row.kind as (typeof COMES_BACK)[number],
           })),
-          stops: await dailyStops(tx),
           trials: await trialStops(tx),
           motds: await motdsOf(
             tx,

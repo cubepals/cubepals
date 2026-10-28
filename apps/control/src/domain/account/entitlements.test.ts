@@ -19,19 +19,19 @@ import {
 import { centsFor, isLarge, METER_UNITS, UNIT_CENTS, unitsFor } from './meter.ts'
 
 describe('entitlements', () => {
-  test('free is plain Minecraft on one small server, 2 hours a day at most, with no cap on a single run', () => {
+  test('free is plain Minecraft on one small server, 20 hours to play any day, with no cap on a single run', () => {
     const free = entitlementsFor('free')
     expect(free).toMatchObject({
       maxServers: 1,
       maxRunning: 1,
       allowedMemoryTiers: ['3g'],
-      // At most 2 a day, from the owner's midnight, with no monthly total.
+      // 20 hours once, played whenever the owner likes, with no monthly total.
       includedUnits: null,
-      dailyUnits: 2,
+      totalUnits: 20,
       mayBuyMore: false,
       idleShutdownAfterMinutes: 10,
       playerIdleKickMinutes: 15,
-      // The day's hours bound the cost; a countdown in chat on every run would only add worry.
+      // The 20 hours bound the cost; a countdown in chat on every run would only add worry.
       maxSessionMinutes: null,
       allowedLoaders: ['vanilla', 'paper'],
       mayUseMods: false,
@@ -39,8 +39,8 @@ describe('entitlements', () => {
       settingCaps: { maxPlayers: 5, viewDistance: 8, simulationDistance: 6 },
       worldRadius: 2500,
     })
-    // A paid plan counts by the month, with no daily block.
-    for (const plan of PAID_PLANS) expect(entitlementsFor(plan).dailyUnits).toBeNull()
+    // No plan counts its play by the day: a paid one counts by the month, with no block in all.
+    for (const plan of PAID_PLANS) expect(entitlementsFor(plan).totalUnits).toBeNull()
   })
 
   test('plus runs everything, with 120 hours on sizes up to the large one', () => {
@@ -149,7 +149,7 @@ describe('entitlements', () => {
     expect(entitlementsFor('free', { maxServers: 4, maxRunning: 2 })).toMatchObject({
       maxServers: 4,
       maxRunning: 2,
-      dailyUnits: 2,
+      totalUnits: 20,
     })
   })
 
@@ -170,7 +170,6 @@ describe('core', () => {
       legacyMemoryTiers: [],
       includedUnits: 40,
       carryUnits: null,
-      dailyUnits: null,
       totalUnits: null,
       // Extra hours past the 40, as on Plus.
       mayBuyMore: true,

@@ -136,15 +136,9 @@ export interface PolicyFacts {
   /**
    * Hours chipped in that the server being started has left, in units: it may start once the
    * month's hours, and any extra allowed, are used, and run on them (`domain/account/chip-in.ts`).
-   * Zero for anything else, and on a plan that counts play by the day.
+   * Zero for anything else, and on a plan with no monthly hours.
    */
   chippedInLeft: number
-  /**
-   * Today's play on a plan that counts it by the day: units left since the owner's midnight, and
-   * when it is back, as players read it everywhere ("Back at midnight, in 3 h 12 min"). Null on a
-   * plan that counts none.
-   */
-  today: { left: number; back: string } | null
   /**
    * The plan's play in all, once (Free's 20 hours): units left of it. Null on a plan with no such
    * block, or a test account.
@@ -401,8 +395,8 @@ function sizeRefusal(runs: Runs): string {
 }
 
 /**
- * What a start is told once the plan's play is used, the month's (with any extra allowed), the
- * plan's in all, or the day's; null while there is some left. A day's says when it is back, in the words used everywhere.
+ * What a start is told once the plan's play is used, the month's (with any extra allowed) or the
+ * plan's in all; null while there is some left.
  */
 function playUsedUp(entitlements: Entitlements, facts: PolicyFacts): string | null {
   const month = entitlements.includedUnits
@@ -417,9 +411,7 @@ function playUsedUp(entitlements: Entitlements, facts: PolicyFacts): string | nu
     const paid = planOnSale(facts.deployment.unsoldPlans ?? [])
     return `You’ve played the ${total} hours of your free trial. Your worlds are kept${paid === null ? '' : `, and ${planName(paid)} starts them again`}.${SHARED[facts.freeSharedBecause ?? 'none']}`
   }
-  if (facts.today === null || facts.today.left > 0) return null
-  const hours = entitlements.dailyUnits ?? 0
-  return `You’ve played today’s ${hours} hour${plural(hours)}. ${facts.today.back}.${SHARED[facts.freeSharedBecause ?? 'none']}`
+  return null
 }
 
 /** Why free hours ran out sooner than this account's own play, said after the refusal. */

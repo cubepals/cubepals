@@ -17,8 +17,10 @@ import { FUNNEL, noteOnce } from '../insight/record.ts'
 import { listingsOfOwner } from '../listings/persistence.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { JobQueue } from '../ports/jobs.ts'
+import type { Limits } from '../ports/limits.ts'
 import { type BillingOrder, type BillingState, BillingUnavailable } from '../ports/optional.ts'
 import type { Mailer } from '../ports/platform.ts'
+import { tuning } from '../tuning.ts'
 import {
   accountsWithLapses,
   type BillingSource,
@@ -122,6 +124,15 @@ const DAY = new Intl.DateTimeFormat('en-GB', {
 const day = (at: Date) => DAY.format(at)
 
 /**
+ * Refused past `AbuseLimits.refreshesPerMinute` asks for one account's standing in a minute: the
+ * account page asks once on coming back from a checkout or the portal.
+ */
+async function refreshAllowed(limits: Limits, userId: string): Promise<void> {
+  if (!(await limits.allow(`billing-refresh:${userId}`, tuning().abuse.refreshesPerMinute)))
+    throw new AppError('rate_limited', 'That’s a lot of checks at once. Wait a minute, then try again.')
+}
+
+/**
  * Paid plans: checkout and the customer portal through the billing provider, and the
  * provider's word on who pays for what, kept in `billing_subscriptions`. The plan in force follows
  * from it (`loadStanding`), and whatever a smaller plan no longer allows stops.
@@ -133,6 +144,7 @@ export class BillingService {
   readonly #accounts: AccountService
   readonly #jobs: JobQueue
   readonly #mailer: Mailer
+  readonly #limits: Limits
   /** Extra play, counted and sent to the provider to be billed (`extra-play-report`). */
   readonly usage: ExtraUsage
   /** Coupon codes, made and deleted by admins. */
@@ -160,6 +172,7 @@ export class BillingService {
     accounts: AccountService
     jobs: JobQueue
     mailer: Mailer
+    limits: Limits
     webOrigin: string
   }) {
     this.#db = deps.db
@@ -168,6 +181,7 @@ export class BillingService {
     this.#accounts = deps.accounts
     this.#jobs = deps.jobs
     this.#mailer = deps.mailer
+    this.#limits = deps.limits
     this.usage = new ExtraUsage({ db: deps.db, billing: deps.capabilities.billing })
     this.coupons = new Coupons({ db: deps.db, capabilities: deps.capabilities })
     this.chipIns = new ChipIns({
@@ -236,7 +250,7 @@ export class BillingService {
     const product = offer?.productId ?? undefined
     // The subscription that pays for a smaller plan becomes this one: nothing renews beside it.
     if (offer && (await upgradeInPlace(this.#db, billing, user.id, planKey, actor, this.#reach, product))) {
-      await this.refresh(actor)
+      await this.refresh(actor, false)
       return { url: returnUrl.toString() }
     }
     const url = await this.#reach(() =>
@@ -405,7 +419,7 @@ export class BillingService {
     if (offer.productId === null || offer.priceCents !== priceCents)
       throw new AppError('invalid_choice', 'That price isn’t open any more. Your plan stays as it is.')
     await switchToEarly(this.#db, billing, user.id, offer.productId, actor, this.#reach)
-    await this.refresh(actor)
+    await this.refresh(actor, false)
   }
 
   /** The provider's page for changing or cancelling a subscription. */
@@ -419,15 +433,12 @@ export class BillingService {
     return { url }
   }
 
-  /**
-   * Asks the provider for the person's standing now, for when they come back from a checkout
-   * before its webhook arrives.
-   */
-  async refresh(actor: Actor): Promise<void> {
+  /** The provider's word now, on coming back from a checkout before its webhook (`refreshAllowed`). */
+  async refresh(actor: Actor, counted = true): Promise<void> {
     const user = await this.#person(actor)
+    if (counted) await refreshAllowed(this.#limits, user.id)
     await this.#db.transaction((tx) => this.#policy.require(tx, user.id, { kind: 'billing' }))
-    const billing = requireCapability(this.#caps, 'billing')
-    const state = await this.#reach(() => billing.stateOf(user.id))
+    const state = await this.#reach(() => requireCapability(this.#caps, 'billing').stateOf(user.id))
     // Never a customer: nothing pays for a plan.
     await this.syncSubscription(state ?? { userId: user.id, subscription: null }, requestedBy(actor), 'user')
   }

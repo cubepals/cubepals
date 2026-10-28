@@ -16,15 +16,15 @@
  */
 import { CHIP_IN_CENTS, type ChipInsView } from '@blockly/contracts'
 import { DAY_MS } from '@blockly/contracts/durations'
-import { type Db, type Queryable, schema } from '@blockly/db'
+import { type Db, type Queryable, schema, type Tx } from '@blockly/db'
 import { and, desc, eq, gte, sql } from 'drizzle-orm'
 import { heldMilli, milliFor } from '../../domain/account/chip-in.ts'
 import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import { shownName } from '../../domain/listing/author.ts'
 import { dollars } from '../../domain/policy/spend.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
-import { emailVerified, isTestAccount, loadStanding } from '../accounts/persistence.ts'
-import { type Actor, requestedBy } from '../actor.ts'
+import { emailVerified, isTestAccount, loadStanding, lockAccountActions } from '../accounts/persistence.ts'
+import { type Actor, requestedBy, type UserActor } from '../actor.ts'
 import { type DeploymentCapabilities, requireCapability } from '../capabilities.ts'
 import { AppError, NotFound } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
@@ -54,6 +54,15 @@ export async function offersChipIn(
   return closed === undefined
 }
 
+/** What the chip-ins started that match `where` came to, in cents. */
+async function started(q: Queryable, where: ReturnType<typeof and>): Promise<number> {
+  const [row] = await q
+    .select({ cents: sql<string>`coalesce(sum((${log.data}->>'cents')::int), 0)` })
+    .from(log)
+    .where(and(eq(log.action, 'billing.chip_in_started'), where))
+  return Number(row?.cents ?? 0)
+}
+
 export class ChipIns {
   readonly #db: Db
   readonly #policy: AccessPolicy
@@ -75,7 +84,8 @@ export class ChipIns {
   /**
    * A checkout for `cents` of hours on `server`, reached from `page` (its public page or an
    * invitation, where the payer comes back to). Refused past the caps (`AbuseLimits.chipIn`), counted
-   * from the checkouts started in the last day, so a stolen card can't do much.
+   * from the checkouts started in the last day, so a stolen card can't do much. The start is kept
+   * before its checkout is made, and dropped again if the provider makes none.
    */
   async start(
     actor: Actor,
@@ -105,20 +115,7 @@ export class ChipIns {
     if (!(await emailVerified(this.#db, actor.userId)))
       throw new AppError('email_unverified', 'Confirm your email address first — we sent you a link.')
     await this.#db.transaction((tx) => this.#policy.require(tx, actor.userId, { kind: 'billing' }))
-    const since = new Date(Date.now() - DAY_MS)
-    const caps = tuning().abuse.chipIn
-    const byPayer = await this.#started(and(eq(log.subjectId, actor.userId), gte(log.at, since)))
-    if (byPayer + cents > caps.payerDayCents)
-      throw new AppError(
-        'limit_reached',
-        `You can chip in up to ${dollars(caps.payerDayCents)} a day. Try again tomorrow.`,
-      )
-    const toServer = await this.#started(and(sql`${log.data}->>'server' = ${server.id}`, gte(log.at, since)))
-    if (toServer + cents > caps.serverDayCents)
-      throw new AppError(
-        'limit_reached',
-        `${server.name} has had all the chip-ins it can take today. Try again tomorrow.`,
-      )
+    const counted = await this.#db.transaction((tx) => this.#within(tx, actor, server, cents))
     const returnUrl = new URL(page, this.#webOrigin)
     returnUrl.searchParams.set('chipped', '1')
     const url = await billing
@@ -129,31 +126,59 @@ export class ChipIns {
         cents,
         returnUrl: returnUrl.toString(),
       })
-      .catch((error: unknown) => {
+      .catch(async (error: unknown) => {
+        // Payments not answering (an outage, a timeout) may still have made the checkout, so its
+        // start stays counted. Any other failure is a refusal that made none, so the start is taken
+        // back; if that fails too, it stays counted for the day and the payer still hears why.
         if (error instanceof BillingUnavailable)
           throw new AppError(
             'billing_unavailable',
             'Payments are not answering right now. Try again in a minute.',
           )
+        await this.#db
+          .delete(log)
+          .where(eq(log.id, counted))
+          .catch(() => undefined)
         throw error
       })
-    await this.#db.insert(log).values({
-      actor: requestedBy(actor),
-      action: 'billing.chip_in_started',
-      subjectType: 'account',
-      subjectId: actor.userId,
-      data: { server: server.id, cents },
-    })
     return { url }
   }
 
-  /** What the chip-ins started that match `where` came to, in cents. */
-  async #started(where: ReturnType<typeof and>): Promise<number> {
-    const [row] = await this.#db
-      .select({ cents: sql<string>`coalesce(sum((${log.data}->>'cents')::int), 0)` })
-      .from(log)
-      .where(and(eq(log.action, 'billing.chip_in_started'), where))
-    return Number(row?.cents ?? 0)
+  /**
+   * The chip-in counted against the day's caps (`AbuseLimits.chipIn`) and kept as started, under
+   * the payer's and the server's locks, so each start counts every one before it; answers the
+   * entry that counts it. Refused past either cap.
+   */
+  async #within(tx: Tx, actor: UserActor, server: MinecraftServer, cents: number): Promise<string> {
+    // Always the payer first, then the server, so two starts never wait on each other's.
+    await lockAccountActions(tx, actor.userId)
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`chip-in-started:${server.id}`}))`)
+    const since = new Date(Date.now() - DAY_MS)
+    const caps = tuning().abuse.chipIn
+    const byPayer = await started(tx, and(eq(log.subjectId, actor.userId), gte(log.at, since)))
+    if (byPayer + cents > caps.payerDayCents)
+      throw new AppError(
+        'limit_reached',
+        `You can chip in up to ${dollars(caps.payerDayCents)} a day. Try again tomorrow.`,
+      )
+    const toServer = await started(tx, and(sql`${log.data}->>'server' = ${server.id}`, gte(log.at, since)))
+    if (toServer + cents > caps.serverDayCents)
+      throw new AppError(
+        'limit_reached',
+        `${server.name} has had all the chip-ins it can take today. Try again tomorrow.`,
+      )
+    const [entry] = await tx
+      .insert(log)
+      .values({
+        actor: requestedBy(actor),
+        action: 'billing.chip_in_started',
+        subjectType: 'account',
+        subjectId: actor.userId,
+        data: { server: server.id, cents },
+      })
+      .returning({ id: log.id })
+    if (entry === undefined) throw new Error('the chip-in was not kept as started')
+    return entry.id
   }
 
   /**

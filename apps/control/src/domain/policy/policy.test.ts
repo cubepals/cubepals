@@ -38,7 +38,6 @@ const facts = (patch: Partial<PolicyFacts> = {}): PolicyFacts => ({
   createsInLastHour: 0,
   unitsThisMonth: 0,
   carriedThisMonth: 0,
-  today: { left: 2, back: 'Back at midnight, in 3 h 12 min' },
   totalLeft: 20,
   extraUnitsAllowed: 0,
   extraOffBecause: null,
@@ -113,12 +112,12 @@ describe('evaluate', () => {
     expect(evaluate(paused, { kind: 'restart_server', runs: plain('3g') })).toMatchObject({
       code: 'platform_paused',
     })
-    // The free plan's 2 hours a day.
-    const today = (left: number) => facts({ today: { left, back: 'Back at midnight, in 3 h 12 min' } })
-    expect(evaluate(today(0), { kind: 'restart_server', runs: plain('3g') })).toMatchObject({
+    // The free trial's 20 hours in all.
+    const total = (left: number) => facts({ totalLeft: left })
+    expect(evaluate(total(0), { kind: 'restart_server', runs: plain('3g') })).toMatchObject({
       code: 'limit_reached',
     })
-    expect(evaluate(today(0.5), { kind: 'start_server', runs: plain('3g') })).toEqual({ ok: true })
+    expect(evaluate(total(0.5), { kind: 'start_server', runs: plain('3g') })).toEqual({ ok: true })
     // A size the free plan sold before still starts; a bigger one it never sold doesn't.
     expect(evaluate(facts(), { kind: 'start_server', runs: plain('4g') })).toEqual({ ok: true })
     expect(evaluate(facts(), { kind: 'create_server', memoryTier: '4g' })).toMatchObject({
@@ -375,25 +374,15 @@ describe('money guards at their trip points', () => {
     })
   })
 
-  test('Free’s 2 hours a day and Plus’s 120 a month: the last minute starts, none past it', () => {
+  test('Free’s 20 hours on any day and Plus’s 120 a month: the last minute starts, none past it', () => {
     const free = entitlementsFor('free')
-    const back = 'Back at midnight, in 3 h 12 min'
-    expect(evaluate(facts({ entitlements: free, today: { left: 0.01, back } }), start)).toEqual({ ok: true })
-    // Out for today, a start or a wake from a join is told when play is back, in the words the
-    // server page and the server list use.
-    expect(evaluate(facts({ entitlements: free, today: { left: 0, back } }), start)).toEqual({
-      ok: false,
-      code: 'limit_reached',
-      message: 'You’ve played today’s 2 hours. Back at midnight, in 3 h 12 min.',
-    })
-    // Free has no monthly total: any number of hours this month starts while today has some left.
-    expect(
-      evaluate(facts({ entitlements: free, unitsThisMonth: 60, today: { left: 1, back } }), start),
-    ).toEqual({
+    expect(evaluate(facts({ entitlements: free, totalLeft: 0.01 }), start)).toEqual({ ok: true })
+    // Free has no monthly total and no daily one: any number of hours starts while the 20 last.
+    expect(evaluate(facts({ entitlements: free, unitsThisMonth: 60, totalLeft: 1 }), start)).toEqual({
       ok: true,
     })
     const plus = entitlementsFor('plus')
-    expect(evaluate(facts({ entitlements: plus, today: null, unitsThisMonth: 119.9 }), start)).toEqual({
+    expect(evaluate(facts({ entitlements: plus, totalLeft: null, unitsThisMonth: 119.9 }), start)).toEqual({
       ok: true,
     })
     expect(evaluate(facts({ entitlements: plus, unitsThisMonth: 120 }), start)).toMatchObject({
@@ -523,12 +512,11 @@ describe('free play', () => {
     expect(evaluate(paid, { kind: 'start_server', runs: plain('3g') })).toEqual({ ok: true })
   })
 
-  test('shared free hours say why they ran out sooner, the day’s and the 20 alike', () => {
+  test('shared free hours say why they ran out sooner', () => {
     const start = { kind: 'start_server', runs: plain('3g') } as const
-    const back = 'Back at midnight, in 3 h 12 min'
-    expect(evaluate(facts({ today: { left: 0, back }, freeSharedBecause: 'email' }), start)).toMatchObject({
+    expect(evaluate(facts({ totalLeft: 0, freeSharedBecause: 'email' }), start)).toMatchObject({
       message:
-        'You’ve played today’s 2 hours. Back at midnight, in 3 h 12 min. Your free trial is shared with your other Cubepals account at this email.',
+        'You’ve played the 20 hours of your free trial. Your worlds are kept, and Core starts them again. Your free trial is shared with your other Cubepals account at this email.',
     })
     expect(evaluate(facts({ totalLeft: 0, freeSharedBecause: 'players' }), start)).toMatchObject({
       message:
@@ -538,12 +526,11 @@ describe('free play', () => {
 })
 
 describe('Free’s 20 hours in all', () => {
-  test('played out, a start is refused whatever is left today, and told what helps', () => {
+  test('played out, a start is refused and told what helps', () => {
     const free = entitlementsFor('free')
-    const today = { left: 2, back: 'Back at midnight, in 3 h 12 min' }
     const start = { kind: 'start_server', runs: plain('3g') } as const
-    expect(evaluate(facts({ entitlements: free, totalLeft: 0.01, today }), start)).toEqual({ ok: true })
-    expect(evaluate(facts({ entitlements: free, totalLeft: 0, today }), start)).toEqual({
+    expect(evaluate(facts({ entitlements: free, totalLeft: 0.01 }), start)).toEqual({ ok: true })
+    expect(evaluate(facts({ entitlements: free, totalLeft: 0 }), start)).toEqual({
       ok: false,
       code: 'limit_reached',
       message:
@@ -555,7 +542,7 @@ describe('Free’s 20 hours in all', () => {
 describe('Core', () => {
   const core = entitlementsFor('core')
   const refused = (capability: Parameters<typeof evaluate>[1], patch: Partial<PolicyFacts> = {}) =>
-    evaluate(facts({ entitlements: core, today: null, totalLeft: null, ...patch }), capability)
+    evaluate(facts({ entitlements: core, totalLeft: null, ...patch }), capability)
 
   test('runs plain Minecraft on its one size, and nothing more', () => {
     expect(refused({ kind: 'create_server', memoryTier: '3g' })).toEqual({ ok: true })

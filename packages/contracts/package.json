@@ -17,7 +17,6 @@
     "./minecraft-font": "./src/minecraft-font.ts",
     "./published-maps": "./src/published-maps.ts",
     "./local": "./src/local.ts",
-    "./play-today": "./src/play-today.ts",
     "./meter": "./src/meter.ts",
     "./names": "./src/names.ts",
     "./seal": "./src/seal.ts",
