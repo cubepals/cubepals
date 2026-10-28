@@ -5,6 +5,7 @@
 import { z } from 'zod'
 import { CheckoutConsent } from './agreements.ts'
 import type { DenialCode } from './errors.ts'
+import { sameSitePath } from './return-path.ts'
 import type { Loader } from './server.ts'
 
 export const ACCOUNT_STATUSES = ['active', 'suspended', 'terminated'] as const
@@ -368,7 +369,7 @@ export const CheckoutInput = z.object({
   next: z
     .string()
     .max(500)
-    .regex(/^\/(?![/\\])/)
+    .refine((path) => sameSitePath(path) !== null)
     .optional(),
 })
 
