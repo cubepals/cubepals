@@ -3,9 +3,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { SECOND_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import type { LogSource } from '../ports/platform.ts'
+import { ConsoleFeed } from './feed.ts'
 
 // A console that opens mid-game shows what came before (§13): the server's recent output,
 // classified the way the live tail is.
@@ -55,5 +58,31 @@ describe.skipIf(!hasDatabase)('console history', () => {
       .set({ handle: null })
       .where(eq(schema.serverRuntimes.serverId, created.id))
     expect(await h.app.feed.recent(created.id, 50)).toEqual([])
+  }, 30_000)
+
+  test('people opening one console together share one read of its output', async () => {
+    const owner = await h.user()
+    const created = await h.create(owner)
+    await h.until(created.id, 'running')
+    await h.settled(created.id)
+    let reads = 0
+    const logs: LogSource = {
+      recent: (handle, limit) => {
+        reads++
+        return h.minecraft.recent(handle, limit)
+      },
+      tail: (handle, signal) => h.minecraft.tail(handle, signal),
+    }
+    const feed = new ConsoleFeed(h.db, logs, [...h.runtimes.keys()], { allow: async () => true })
+
+    const [first, second] = await Promise.all([feed.recent(created.id, 50), feed.recent(created.id, 50)])
+    expect(first.length).toBeGreaterThan(0)
+    expect(second).toEqual(first)
+    expect(await feed.recent(created.id, 50)).toEqual(first)
+    expect(reads).toBe(1)
+    // A moment later, whoever opens it reads it afresh.
+    await Bun.sleep(3 * SECOND_MS)
+    await feed.recent(created.id, 50)
+    expect(reads).toBe(2)
   }, 30_000)
 })

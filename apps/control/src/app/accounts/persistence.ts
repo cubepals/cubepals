@@ -25,7 +25,8 @@ import { METER_UNITS } from '../../domain/account/meter.ts'
 import { type AccountStanding, newStanding } from '../../domain/account/standing.ts'
 import type { PlatformControls } from '../../domain/policy/policy.ts'
 import type { ServerStatus } from '../../domain/server/lifecycle.ts'
-import { billedBy, billedPlan, PAYING, type PlanSource } from '../billing/persistence.ts'
+import { billedBy, PAYING, type PlanSource } from '../billing/persistence.ts'
+import { tuning } from '../tuning.ts'
 
 const standing = schema.accountStanding
 const servers = schema.minecraftServers
@@ -62,14 +63,23 @@ const toStanding = (row: typeof standing.$inferSelect): AccountStanding => ({
 
 /**
  * An account's standing, with the plan in force: a paying subscription's plan when there is one,
- * then a redeemed gift's, otherwise the plan set on the account (free, or one an admin gave it). Every entitlement is
- * read through here.
+ * with what it was sold with, then a redeemed gift's, otherwise the plan set on the account (free,
+ * or one an admin gave it). Every entitlement is read through here.
  */
 export async function loadStanding(q: Queryable, userId: string, now = new Date()): Promise<AccountStanding> {
   const [row] = await q.select().from(standing).where(eq(standing.userId, userId))
-  const found = row ? toStanding(row) : newStanding(userId)
-  const billed = await billedPlan(q, userId, now)
-  return billed === null ? found : { ...found, plan: billed }
+  return billedStanding(q, row ? toStanding(row) : newStanding(userId), now)
+}
+
+/** A standing with the plan its billing gives it now, as `loadStanding` reads it. */
+async function billedStanding(q: Queryable, found: AccountStanding, now: Date): Promise<AccountStanding> {
+  const billed = await billedBy(q, found.userId, now)
+  if (billed === null) return found
+  return {
+    ...found,
+    plan: billed.plan,
+    ...(billed.soldWith === undefined ? {} : { soldWith: billed.soldWith }),
+  }
 }
 
 /** `loadStanding` for each of `userIds`, their rows read in one go, for a sweep over many accounts. */
@@ -85,11 +95,8 @@ export async function loadStandings(
     .where(inArray(standing.userId, [...userIds]))
   const found = new Map(rows.map((row) => [row.userId, toStanding(row)]))
   const standings = new Map<string, AccountStanding>()
-  for (const userId of userIds) {
-    const read = found.get(userId) ?? newStanding(userId)
-    const billed = await billedPlan(q, userId, now)
-    standings.set(userId, billed === null ? read : { ...read, plan: billed })
-  }
+  for (const userId of userIds)
+    standings.set(userId, await billedStanding(q, found.get(userId) ?? newStanding(userId), now))
   return standings
 }
 
@@ -136,6 +143,26 @@ export async function ownersRunning(q: Queryable): Promise<string[]> {
   return rows.map((r) => r.ownerId)
 }
 
+/**
+ * Whether `sessionId` is still `userId`'s sign-in session, unexpired, on an account that is neither
+ * suspended nor closed: what keeps a realtime session open. Signing out, a password reset and the
+ * end of a test account's use all delete the session.
+ */
+export async function stillSignedIn(
+  q: Queryable,
+  userId: string,
+  sessionId: string,
+  now = new Date(),
+): Promise<boolean> {
+  const sessions = schema.authSessions
+  const [row] = await q
+    .select({ status: standing.status })
+    .from(sessions)
+    .leftJoin(standing, eq(standing.userId, sessions.userId))
+    .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId), gt(sessions.expiresAt, now)))
+  return row !== undefined && (row.status ?? 'active') === 'active'
+}
+
 // ─── Admins ─────────────────────────────────────────────────────────────────────────────────
 
 const admins = schema.platformAdmins
@@ -148,6 +175,18 @@ export async function isAdmin(q: Queryable, userId: string): Promise<boolean> {
 export async function grantAdmin(q: Queryable, userId: string, grantedBy: string): Promise<boolean> {
   const rows = await q.insert(admins).values({ userId, grantedBy }).onConflictDoNothing().returning()
   return rows.length > 0
+}
+
+/**
+ * An admin because ADMIN_EMAILS lists the account's confirmed email. On becoming one it is signed
+ * in only where that happened: every session but `keep` (null: every one) ends.
+ */
+export async function grantListedAdmin(q: Queryable, userId: string, keep: string | null): Promise<void> {
+  if (!(await grantAdmin(q, userId, 'config'))) return
+  const sessions = schema.authSessions
+  await q
+    .delete(sessions)
+    .where(and(eq(sessions.userId, userId), keep === null ? undefined : ne(sessions.id, keep)))
 }
 
 export async function revokeAdmin(q: Queryable, userId: string): Promise<void> {
@@ -541,6 +580,8 @@ export async function recordSignupSource(
  * one a subscription pays for (or holds through its grace), one with a paid year still running,
  * one an admin gave another plan, a
  * closed one, a test account, and an admin's own. An account whose standing isn't written yet is free.
+ * One whose email isn't confirmed counts only for its first `unconfirmedPlaceHours`, and again
+ * once it is confirmed.
  */
 export async function countFreeAccounts(q: Queryable): Promise<number> {
   const standing = schema.accountStanding
@@ -555,6 +596,7 @@ export async function countFreeAccounts(q: Queryable): Promise<number> {
     .select({ one: sql`1` })
     .from(schema.planYears)
     .where(and(eq(schema.planYears.userId, schema.users.id), gt(schema.planYears.endsAt, sql`now()`)))
+  const unconfirmedFor = sql`make_interval(hours => ${tuning().abuse.unconfirmedPlaceHours})`
   const [row] = await q
     .select({ n: count() })
     .from(schema.users)
@@ -563,6 +605,7 @@ export async function countFreeAccounts(q: Queryable): Promise<number> {
     .where(
       and(
         isNull(schema.platformAdmins.userId),
+        or(eq(schema.users.emailVerified, true), gt(schema.users.createdAt, sql`now() - ${unconfirmedFor}`)),
         notExists(paying),
         notExists(paidYear),
         or(

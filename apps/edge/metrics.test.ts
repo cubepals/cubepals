@@ -31,7 +31,7 @@ const door = front({
   port: 0,
   router: router.address().port,
   proxied: false,
-  gate: new Gate({ address: { ...roomy, greeting: 100 }, server: { ...roomy, open: 100 } }),
+  gate: new Gate({ address: { ...roomy, greeting: 100, open: 100 }, server: { ...roomy, open: 100 } }),
   known: () => true,
   plain: () => true,
   busy: 'Busy',

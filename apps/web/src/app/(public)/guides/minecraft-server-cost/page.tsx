@@ -5,7 +5,8 @@
 /**
  * The guide to how much a Minecraft server costs. Every price, hour and limit is
  * rendered from the plan table, and the play habits from the plan cards' own guidance, so nothing
- * here can drift from what the pricing page says.
+ * here can drift from what the pricing page says. The picture is from a local stack, and its alt
+ * text names no number.
  */
 import type { PublicPlan } from '@blockly/contracts'
 import type { Metadata } from 'next'
@@ -13,9 +14,19 @@ import Link from 'next/link'
 import { dollars, EXTRA_HOUR_CENTS } from '../../../../legal/figures'
 import { daysSaid, hoursAgainSaid, hoursSaid } from '../../../../lib/plans'
 import { PLAY_HABITS, planPoints, priceOf } from '../../../../ui'
-import { FactTable, GuideArticle, GuideLink, guideMetadata, guidePlans, Part, Questions } from '../article'
+import {
+  FactTable,
+  GuideArticle,
+  GuideLink,
+  guideMetadata,
+  guidePlans,
+  Part,
+  Questions,
+  Shot,
+} from '../article'
 
 const SLUG = 'minecraft-server-cost'
+const PICTURES = `/guides/${SLUG}`
 
 /** The most a month's hours cover, as the plan cards say it: "a couple of evenings a week". */
 const covers = (hours: number) =>
@@ -24,14 +35,12 @@ const covers = (hours: number) =>
     ?.said.toLowerCase()
 
 /**
- * Who a plan's hours cover, in a sentence. A day's hours start again every day, so they cover a
- * group's play by the day, however many days a week; a month's are set against the habits.
+ * Who a plan's hours cover, in a sentence. The trial's come once, to play on any day; a month's
+ * are set against the habits.
  */
 function howFar(plan: PublicPlan): string {
   if (plan.totalHours !== null)
-    return `The trial’s ${plan.totalHours} hours, at most ${plan.includedHours} a day, are enough for a group to find out whether it plays.`
-  if (plan.per === 'day')
-    return `${plan.name} covers a group that plays up to ${plan.includedHours} hours a day, every day.`
+    return `The trial’s ${plan.totalHours} hours, played on any day and for as long as you like, are enough for a group to find out whether it plays.`
   const covered = covers(plan.includedHours)
   return covered
     ? `${plan.name}’s ${plan.includedHours} hours a month cover a group that plays ${covered}.`
@@ -89,6 +98,13 @@ export default async function Guide() {
           your plan unless you allow it. Prices are in US dollars and include VAT where it applies;{' '}
           <Link href="/pricing">Pricing</Link> has the details.
         </p>
+        <Shot
+          src={`${PICTURES}/play-this-month.png`}
+          width={588}
+          height={536}
+          alt="The Play this month card on the Account page of a paid plan: the hours left this month as a bar, then Extra play you allow, set to None, which says what an hour past the plan costs and that Cubepals stops your servers at the number you set, then Kick players who stand still, after 15 minutes."
+          caption="Extra play is off until you set a limit."
+        />
       </Part>
 
       {plans.length > 0 && (

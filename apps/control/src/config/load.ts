@@ -371,6 +371,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
     defaultRuntime,
     // Operators' API on the internal listener (scripts/runtimes.ts, scripts/fleet.ts).
     operatorToken: env.OPERATOR_TOKEN || env.FLEET_OPERATOR_TOKEN || null,
+    earlyRoom: earlyRoomOf(env),
     floodgateKey: floodgateKeyOf(env),
     artifacts: {
       runtimeFacingUrl: env.ARTIFACTS_RUNTIME_FACING_URL,
@@ -426,4 +427,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): DeploymentConf
   if (problems.length > 0)
     throw new Error(`The deployment configuration is inconsistent:\n  ${problems.join('\n  ')}`)
   return parsed.data
+}
+
+/** Room for early checkouts: the route's token, none turning it off, and the most room it may set, 0 unless given. */
+function earlyRoomOf(env: NodeJS.ProcessEnv): { token: string | null; maxPoints: number } {
+  return { token: env.EARLY_ROOM_TOKEN || null, maxPoints: Number(env.EARLY_ROOM_MAX_POINTS || 0) }
 }

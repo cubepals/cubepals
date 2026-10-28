@@ -15,11 +15,12 @@ import { HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
 import { Impersonation } from '../../app/accounts/impersonation.ts'
-import { ensureStanding, grantAdmin } from '../../app/accounts/persistence.ts'
+import { ensureStanding, grantAdmin, stillSignedIn } from '../../app/accounts/persistence.ts'
 import { createApiApp } from '../../interfaces/http/api.ts'
 import type { Services } from '../../interfaces/trpc/trpc.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { authMail } from '../../testing/outbox.ts'
+import { JoseRealtimeTickets } from '../realtime/jose-tickets.ts'
 import { betterAuthenticator } from './better-auth.ts'
 
 const ORIGIN = 'http://localhost:3000'
@@ -54,6 +55,7 @@ class Jar {
 
 let h: Harness
 let app: ReturnType<typeof createApiApp>
+const tickets = new JoseRealtimeTickets('a-ticket-secret-0123456789abcdef', 'local')
 
 // One harness for the file, where there is a database: booting is the slow part.
 beforeAll(async () => {
@@ -82,6 +84,8 @@ beforeAll(async () => {
       accountQueries: h.app.accountQueries,
       impersonation: new Impersonation({ db: h.db }),
       insight: { report: () => undefined },
+      tickets,
+      realtime: { url: 'https://rt.test', fallbackUrl: 'wss://rt.test', certificateSha256: async () => null },
     } as unknown as Services,
   })
 }, 30_000)
@@ -107,7 +111,7 @@ const read = (procedure: string, jar: Jar, input: unknown = {}) =>
 const sessionOf = async (jar: Jar) =>
   (await (await send('/api/auth/get-session', jar)).json()) as {
     user: { id: string; email: string }
-    session: { impersonatedBy?: string | null; expiresAt: string }
+    session: { id: string; impersonatedBy?: string | null; expiresAt: string }
   } | null
 
 /** Someone signed up and signed in with a password, and their browser. */
@@ -245,5 +249,49 @@ describe.skipIf(!hasDatabase)('who may use one', () => {
       expect((await send(path, admin.jar, body)).status).toBe(404)
     expect((await send('/api/auth/admin/list-users', admin.jar)).status).toBe(404)
     expect((await sessionOf(admin.jar))?.user.id).toBe(admin.userId)
+  })
+})
+
+describe.skipIf(!hasDatabase)('what keeps a realtime session open', () => {
+  /** The ticket `realtime.connectInfo` hands this browser, as the realtime role reads it. */
+  const ticketFor = async (jar: Jar) => {
+    const response = await read('realtime.connectInfo', jar)
+    expect(response.status).toBe(200)
+    const [answer] = (await response.json()) as [{ result: { data: { ticket: string } } }]
+    return tickets.verify(answer.result.data.ticket)
+  }
+
+  test('its sign-in, until it is signed out or its account suspended', async () => {
+    const person = await signedIn('player')
+    const holder = await ticketFor(person.jar)
+    expect(holder).toEqual({
+      userId: person.userId,
+      sessionId: (await sessionOf(person.jar))?.session.id ?? '',
+    })
+    if (holder === null) throw new Error('no ticket')
+    expect(await stillSignedIn(h.db, holder.userId, holder.sessionId)).toBe(true)
+    expect(await stillSignedIn(h.db, 'someone-else', holder.sessionId)).toBe(false)
+    const out = await send('/api/auth/sign-out', person.jar, {})
+    expect(out.status).toBe(200)
+    expect(await stillSignedIn(h.db, holder.userId, holder.sessionId)).toBe(false)
+
+    const other = await signedIn('other')
+    const theirs = await ticketFor(other.jar)
+    if (theirs === null) throw new Error('no ticket')
+    expect(await stillSignedIn(h.db, theirs.userId, theirs.sessionId)).toBe(true)
+    await h.app.accounts.suspend({ kind: 'admin', userId: 'staff' }, other.userId, 'a test')
+    expect(await stillSignedIn(h.db, theirs.userId, theirs.sessionId)).toBe(false)
+  })
+
+  test("a test account's, until Switch back", async () => {
+    const admin = await anAdmin()
+    const tester = await aTestAccount(admin.userId)
+    admin.jar.take(await trpc('admin.useAs', admin.jar, { userId: tester }))
+    const using = await ticketFor(admin.jar)
+    expect(using?.userId).toBe(tester)
+    if (using === null) throw new Error('no ticket')
+    expect(await stillSignedIn(h.db, using.userId, using.sessionId)).toBe(true)
+    admin.jar.take(await trpc('account.switchBack', admin.jar))
+    expect(await stillSignedIn(h.db, using.userId, using.sessionId)).toBe(false)
   })
 })

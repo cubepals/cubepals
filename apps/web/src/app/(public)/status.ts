@@ -27,6 +27,7 @@ export const playingLine = (status: PublicStatus): string =>
 import { InviteCode } from '@blockly/contracts'
 import { WEB_PORT } from '@blockly/contracts/local'
 import { headers } from 'next/headers'
+import { clientAddressHeaders } from '../../lib/client-address'
 import { apiUpstream, RENDER_READ_MS } from '../../lib/upstream'
 
 /**
@@ -49,9 +50,23 @@ export async function publicUrl(path: string): Promise<string> {
  */
 export type PublicRead = PublicStatus | 'missing' | 'unanswered'
 
+/**
+ * Whose browser a read is for: Blockly counts public reads for each address. Nothing outside a
+ * request, which has no browser behind it.
+ */
+async function askingFor(): Promise<Record<string, string>> {
+  try {
+    return clientAddressHeaders(await headers())
+  } catch {
+    return {}
+  }
+}
+
 async function read(path: string): Promise<PublicRead> {
+  const asking = await askingFor()
   try {
     const response = await fetch(`${apiUpstream()}${path}`, {
+      headers: asking,
       cache: 'no-store',
       signal: AbortSignal.timeout(RENDER_READ_MS),
     })

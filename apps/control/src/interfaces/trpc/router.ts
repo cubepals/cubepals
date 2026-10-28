@@ -599,7 +599,8 @@ const realtime = router({
       url: ctx.services.realtime.url,
       fallbackUrl: ctx.services.realtime.fallbackUrl,
       certificateSha256: await ctx.services.realtime.certificateSha256(),
-      ticket: await ctx.services.tickets.issue(ctx.actor.userId),
+      // Outside HTTP there is no sign-in session, and a ticket naming none opens nothing.
+      ticket: await ctx.services.tickets.issue({ userId: ctx.actor.userId, sessionId: ctx.sessionId ?? '' }),
     }),
   ),
 })
@@ -725,10 +726,12 @@ const sharing = router({
   /** Anyone may open a public page, signed in or not. */
   page: publicProcedure
     .input(PageRef)
-    .query(({ ctx, input }) => ctx.services.sharingQueries.page(input.slug, ctx.actor, { reactions: true })),
+    .query(({ ctx, input }) =>
+      ctx.services.sharingQueries.page(input.slug, ctx.actor, { reactions: true, from: ctx.clientAddress }),
+    ),
   invite: publicProcedure
     .input(InviteRef)
-    .query(({ ctx, input }) => ctx.services.sharingQueries.invite(input.code, ctx.actor)),
+    .query(({ ctx, input }) => ctx.services.sharingQueries.invite(input.code, ctx.actor, ctx.clientAddress)),
   /** The invitee puts their own Minecraft name on the whitelist; no account needed. */
   join: publicProcedure
     .input(JoinThroughInviteInput)

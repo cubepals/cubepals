@@ -11,6 +11,18 @@ import type { ZoneChange } from './play-day.ts'
 
 type AccountStatus = 'active' | 'suspended' | 'terminated'
 
+/**
+ * What a subscription was sold with, where its product sets terms of its own (an early price): a
+ * price, hours a month and, where it caps them, the most extra hours an owner may allow. They stay
+ * with the subscription for as long as it is on that product, whatever the plan table later says.
+ */
+export interface SoldTerms {
+  priceCents: number
+  includedUnits: number
+  /** Null: the plan's own cap. */
+  mostExtraUnits: number | null
+}
+
 export interface Restrictions {
   provisioning?: boolean
   publicListing?: boolean
@@ -49,13 +61,13 @@ export interface AccountStanding {
   /** The last extra-play email sent, as `YYYY-MM:mark` (0, 80 or 100); null before any. */
   extraWarned: string | null
   /**
-   * Where the owner is, as their browser last reported it ("Europe/Paris"): where a plan's day
-   * begins (`play-day.ts`). Null until it has, and the day is UTC's.
+   * Where the owner is, as their browser last reported it ("Europe/Paris"): where a plan's month
+   * begins (`play-day.ts`). Null until it has, and the month is UTC's.
    */
   timeZone: string | null
   /**
-   * When `timeZone` took over from the zone before, and when the month and day it took over in
-   * began (`play-day.ts` `ZoneChange`); null when it has been the zone from the start.
+   * When `timeZone` took over from the zone before, and when the month it took over in began
+   * (`play-day.ts` `ZoneChange`); null when it has been the zone from the start.
    */
   timeZoneFrom: Date | null
   timeZoneBegan: Date | null
@@ -67,6 +79,11 @@ export interface AccountStanding {
   nextTimeZoneFrom: Date | null
   /** Cubepals' own, for testing it: never billed, and left out of its numbers and analytics. */
   testAccount: boolean
+  /**
+   * What the subscription paying for the plan was sold with, where its product set terms of its
+   * own (`SoldTerms`); absent where the plan table's apply: no subscription, or a plan's own product.
+   */
+  soldWith?: SoldTerms
 }
 
 export function newStanding(userId: string): AccountStanding {

@@ -45,14 +45,16 @@ export async function call<T>(what: string, request: () => Promise<T>): Promise<
 
 /**
  * Of an account's subscriptions that pay at once (Core, then Plus bought over it), the one for the
- * largest plan: `products` lists each plan's product, the smallest first. Others are left out.
+ * largest plan: `rank` is where a product's plan stands, the smallest first, and below 0 for one
+ * that sells no plan, which is left out.
  */
 export function largestPaying<T extends { product_id: string }>(
   subscriptions: readonly T[],
-  products: readonly string[],
+  rank: (productId: string) => number,
 ): T | undefined {
-  const rank = (subscription: T) => products.indexOf(subscription.product_id)
-  return subscriptions.filter((each) => rank(each) >= 0).sort((a, b) => rank(b) - rank(a))[0]
+  return subscriptions
+    .filter((each) => rank(each.product_id) >= 0)
+    .sort((a, b) => rank(b.product_id) - rank(a.product_id))[0]
 }
 
 /**

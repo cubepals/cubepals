@@ -6,8 +6,8 @@
 
 /**
  * The bottom bar's last item on a phone or tablet, where the sidebar isn't shown: More, which
- * opens what the bar has no room for. That is the server pages past the bar's first few, then the
- * account: who is signed in, the Account page, Admin for admins, and Sign out. Feedback has its own
+ * opens what the bar has no room for. That is the server pages past the bar's first few, the
+ * Guides, then the account: who is signed in, the Account page, Admin for admins, and Sign out. Feedback has its own
  * button at the foot of the page there, so it isn't repeated here.
  *
  * It does not decide which pages are in it: the frame (./frame.tsx) hands it what's left over.
@@ -25,6 +25,7 @@ export type NavEntry = { href: string; label: string; icon: LucideIcon; trailing
 export function MoreMenu({
   email,
   pages,
+  guides,
   account,
   admin,
   isAdmin,
@@ -33,6 +34,8 @@ export function MoreMenu({
   email: string
   /** The server's pages the bar has no room for; empty away from a server. */
   pages: readonly NavEntry[]
+  /** The how-tos on the site. */
+  guides: NavEntry
   account: NavEntry
   /** Admin, shown to an admin only. */
   admin: NavEntry
@@ -42,7 +45,7 @@ export function MoreMenu({
   const [open, setOpen] = useState(false)
   const yours = isAdmin ? [account, admin] : [account]
   // Pressed while on one of its pages, More is lit as the bar's other items are on theirs.
-  const here = [...pages, ...yours].some((entry) => entry.href === pathname)
+  const here = [...pages, guides, ...yours].some((entry) => entry.href === pathname)
   const row = (entry: NavEntry) => (
     <Link
       key={entry.href}
@@ -76,6 +79,7 @@ export function MoreMenu({
     >
       <div className="bk-menu">
         {pages.map(row)}
+        {row(guides)}
         <p className="bk-menu__note">Signed in as {email}</p>
         {yours.map(row)}
         <SignOut />

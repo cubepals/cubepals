@@ -5,6 +5,7 @@
 import { DAY_MS, HOUR_MS } from '@blockly/contracts/durations'
 import { type Queryable, schema, type Tx } from '@blockly/db'
 import {
+  type AnyColumn,
   and,
   count,
   desc,
@@ -20,9 +21,9 @@ import {
   or,
   sql,
 } from 'drizzle-orm'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import { type BillingFacts, type ExtraPlay, extraPlay } from '../../domain/account/extra-play.ts'
-import type { AccountStanding } from '../../domain/account/standing.ts'
+import type { AccountStanding, SoldTerms } from '../../domain/account/standing.ts'
 import type { BillingOrder } from '../ports/optional.ts'
 import { tuning } from '../tuning.ts'
 
@@ -76,8 +77,19 @@ export interface SubscriptionRecord {
   /** A smaller plan it moves to at `movesAt`, the end of the period paid for; null: it stays. */
   movesToPlan: string | null
   movesAt: Date | null
+  /** The provider's product it is on, and what it was sold with there (`SoldTerms`), all null on a plan's own. */
+  productId: string | null
+  priceCents: number | null
+  includedUnits: number | null
+  mostExtraUnits: number | null
   createdAt: Date
   updatedAt: Date
+}
+
+/** What a subscription on a product was sold with, as `saveSubscription` is told it. */
+export interface SavedTerms {
+  productId: string | null
+  terms: SoldTerms | null
 }
 
 /**
@@ -89,6 +101,14 @@ export async function billedPlan(q: Queryable, userId: string, now = new Date())
   return (await billedBy(q, userId, now))?.plan ?? null
 }
 
+/** What the paying subscription row holds of its terms, read in one go with its plan. */
+const paidTerms = sql<{
+  plan: string
+  price: number | null
+  units: number | null
+  most: number | null
+}>`json_build_object('plan', ${subscriptions.planKey}, 'price', ${subscriptions.priceCents}, 'units', ${subscriptions.includedUnits}, 'most', ${subscriptions.mostExtraUnits})`
+
 /** What gives the account a plan now (`billedPlan`): a subscription, a year paid at once, or a gift. */
 export type PlanSource = 'subscription' | 'year' | 'gift'
 
@@ -97,9 +117,9 @@ export async function billedBy(
   q: Queryable,
   userId: string,
   now = new Date(),
-): Promise<{ plan: string; from: PlanSource } | null> {
+): Promise<{ plan: string; from: PlanSource; soldWith?: SoldTerms } | null> {
   const paying = q
-    .select({ planKey: subscriptions.planKey })
+    .select({ paid: paidTerms })
     .from(subscriptions)
     .where(
       and(
@@ -134,11 +154,20 @@ export async function billedBy(
     )
     .limit(1)
   const gift = giftRunning(q, userId, now)
-  const { rows } = await q.execute<{ subscription: string | null; year: string | null; gift: string | null }>(
-    sql`select (${paying}) as subscription, (${year}) as year, (${gift}) as gift`,
-  )
+  const { rows } = await q.execute<{
+    subscription: { plan: string; price: number | null; units: number | null; most: number | null } | null
+    year: string | null
+    gift: string | null
+  }>(sql`select (${paying}) as subscription, (${year}) as year, (${gift}) as gift`)
   const row = rows[0]
-  if (row?.subscription) return { plan: row.subscription, from: 'subscription' }
+  const paid = row?.subscription
+  if (paid) {
+    const soldWith =
+      paid.price === null || paid.units === null
+        ? undefined
+        : { priceCents: paid.price, includedUnits: paid.units, mostExtraUnits: paid.most }
+    return { plan: paid.plan, from: 'subscription', ...(soldWith === undefined ? {} : { soldWith }) }
+  }
   if (row?.year) return { plan: row.year, from: 'year' }
   if (row?.gift) return { plan: row.gift, from: 'gift' }
   return null
@@ -207,19 +236,33 @@ export async function latestSubscription(q: Queryable, userId: string): Promise<
  */
 export async function saveSubscription(
   tx: Tx,
-  subscription: Omit<
+  {
+    productId,
+    terms,
+    ...subscription
+  }: Omit<
     SubscriptionRecord,
-    'updatedAt' | 'pastDueAt' | 'createdAt' | 'movesToPlan' | 'movesAt'
-  > & {
-    createdAt?: Date
-  },
+    | 'updatedAt'
+    | 'pastDueAt'
+    | 'createdAt'
+    | 'movesToPlan'
+    | 'movesAt'
+    | 'productId'
+    | 'priceCents'
+    | 'includedUnits'
+    | 'mostExtraUnits'
+  > &
+    Partial<SavedTerms> & {
+      createdAt?: Date
+    },
 ): Promise<void> {
   const made = subscription.createdAt === undefined ? {} : { createdAt: subscription.createdAt }
+  const sold = soldColumns(productId, terms)
   // Set to end: when the provider says, or else the first Blockly heard of it. Renewing: never.
   const canceledAt = subscription.cancelAtPeriodEnd ? (subscription.canceledAt ?? new Date()) : null
   await tx
     .insert(subscriptions)
-    .values({ ...subscription, ...made, canceledAt, pastDueAt: null, updatedAt: new Date() })
+    .values({ ...subscription, ...made, ...sold, canceledAt, pastDueAt: null, updatedAt: new Date() })
     .onConflictDoUpdate({
       target: [subscriptions.provider, subscriptions.externalSubscriptionId],
       set: {
@@ -235,6 +278,7 @@ export async function saveSubscription(
             ? sql`coalesce(${subscriptions.canceledAt}, ${canceledAt})`
             : canceledAt,
         pastDueAt: null,
+        ...soldOnChange(sold),
         // A move to a smaller plan is done once the provider says the subscription is on it, and
         // off once it says the subscription ends: nothing moves from a plan that is ending.
         ...(subscription.cancelAtPeriodEnd
@@ -246,6 +290,34 @@ export async function saveSubscription(
         updatedAt: new Date(),
       },
     })
+}
+
+/** The columns a subscription's product and terms are kept in; nothing when the provider named no product. */
+function soldColumns(productId: string | null | undefined, terms: SoldTerms | null | undefined) {
+  if (productId === undefined || productId === null) return {}
+  return {
+    productId,
+    priceCents: terms?.priceCents ?? null,
+    includedUnits: terms?.includedUnits ?? null,
+    mostExtraUnits: terms?.mostExtraUnits ?? null,
+  }
+}
+
+/**
+ * The terms a subscription was sold with stay while it is on that product: only a move to another
+ * product (a plan bought over it, the price of the day taken) sets them again, from the new one.
+ */
+function soldOnChange(sold: ReturnType<typeof soldColumns>) {
+  if (sold.productId === undefined) return {}
+  const moved = sql`${subscriptions.productId} is distinct from ${sold.productId}`
+  const kept = (column: AnyColumn, value: number | null) =>
+    sql`case when ${moved} then ${value}::integer else ${column} end`
+  return {
+    productId: sold.productId,
+    priceCents: kept(subscriptions.priceCents, sold.priceCents),
+    includedUnits: kept(subscriptions.includedUnits, sold.includedUnits),
+    mostExtraUnits: kept(subscriptions.mostExtraUnits, sold.mostExtraUnits),
+  }
 }
 
 /** A move to a smaller plan at `at`, the end of the period paid for, as the provider took it. */
@@ -677,7 +749,7 @@ export async function extraPlayNow(
   standing: AccountStanding,
 ): Promise<{ decision: ExtraPlay; owedCents: number }> {
   const facts = await billingFacts(q, standing.userId)
-  const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+  const plan = entitlementsOf(standing)
   return {
     decision: standing.testAccount
       ? { may: false, why: TEST_NO_EXTRA }

@@ -335,7 +335,9 @@ class Arrival {
       this.#count('refused', 'wrong_game')
       return void this.#client.end(turnAway(refused))
     }
-    const admitted = gate.admit(known(handshake.hostname) ? handshake.hostname : '')
+    // Geyser's door is counted per server only: the relay caps each Bedrock address itself.
+    const from = this.#geyser ? null : (this.#source?.address ?? null)
+    const admitted = gate.admit(known(handshake.hostname) ? handshake.hostname : '', from)
     if (!admitted) {
       // A ping just goes unanswered; a join hears why, in Cubepals' words.
       if (handshake.joining) this.#client.end(turnAway(busy))

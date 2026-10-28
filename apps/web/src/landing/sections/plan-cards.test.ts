@@ -19,8 +19,8 @@ const free: PublicPlan = {
   available: true,
   monthlyPriceCents: 0,
   yearlyPriceCents: null,
-  includedHours: 2,
-  per: 'day',
+  includedHours: 20,
+  per: 'once',
   extraHourCents: null,
   totalHours: 20,
   sleepsAfterMinutes: 10,
@@ -170,7 +170,7 @@ describe('the landing’s plan cards', () => {
   test('the details hold the hours, the trial, the rules and the prices', () => {
     expect(coreCard).toContain('See everything in Core')
     expect(coreCard).toContain('40 hours of play each month, then 25¢ an hour')
-    expect(coreCard).toContain('Starts with a free trial: 20 hours of play, at most 2 a day , no card')
+    expect(coreCard).toContain('Starts with a free trial: 20 hours of play, any day you like , no card')
     expect(coreCard).toContain('Hours count only while your server is awake, not for each player')
     expect(coreCard).toContain('A 3 GB server, for up to 5 players, on the free trial too')
     expect(coreCard).toContain('Plain Minecraft: vanilla or Paper')

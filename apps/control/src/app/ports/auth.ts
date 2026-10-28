@@ -24,6 +24,8 @@ export interface Authenticator {
 
 interface SignedIn {
   userId: string
+  /** The sign-in session's own id, which signing out or a password reset ends. */
+  sessionId: string
   /** The admin using this test account's session ("Use as this account"); null for its own. */
   impersonatedBy: string | null
 }

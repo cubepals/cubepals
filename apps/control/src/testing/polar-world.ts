@@ -68,6 +68,8 @@ export class PolarWorld {
   readonly #products: Record<string, string>
   /** The Polar adapter the control plane runs on, once started. */
   billing: PolarBilling | null = null
+  /** Products at an early price Polar holds, archived ones too (`earlyProduct` in `polar.ts`). */
+  readonly early: models.Product[] = []
 
   constructor(products: Record<string, string> = { core: CORE_PRODUCT, plus: PLUS_PRODUCT }) {
     this.#products = products
@@ -125,6 +127,8 @@ export class PolarWorld {
     if (url.pathname === '/v1/products/') return this.#found(url)
     const plan = [PLUS_PRODUCT, CORE_PRODUCT].find((each) => url.pathname.startsWith(`/v1/products/${each}`))
     if (plan !== undefined) return { status: 200, body: product(plan) }
+    const early = this.early.find((each) => url.pathname.startsWith(`/v1/products/${each.id}`))
+    if (early !== undefined) return { status: 200, body: early }
     if (method === 'POST') return this.#write(url.pathname, body)
     if (url.pathname === '/v1/checkouts/') return this.#open(url)
     if (url.pathname === '/v1/refunds/') {
@@ -214,6 +218,7 @@ export class PolarWorld {
 
   /** One-time products, found by their metadata, which the query names. */
   #found(url: URL): Answer {
+    if (url.searchParams.get('metadata[terms]') === 'early') return list(this.early)
     if (url.searchParams.get('metadata[term]') === 'year')
       return list([product(YEAR, { name: 'Plus, a year', metadata: { plan: 'plus', term: 'year' } })])
     if (url.searchParams.get('metadata[purpose]') === 'chip_in') return list([product(CHIP_IN)])

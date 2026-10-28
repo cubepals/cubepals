@@ -11,7 +11,7 @@ import { Note, PlayerFace } from '../../ui'
 import { cameByLine } from './came-by-line'
 
 /**
- * The people who tried to join while the server rested for its owner's play, with their faces:
+ * The people who tried to join while the server rested for its owner's free trial, with their faces:
  * on the server's page, and on the list of servers for a page about more than one (`named`).
  * Gone once the server has run again.
  */

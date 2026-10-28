@@ -8,6 +8,7 @@ import { ownEmail } from '@blockly/contracts'
 import { type DehydratedState, useMutation, useQuery } from '@tanstack/react-query'
 import {
   Archive,
+  BookOpen,
   Box,
   Compass,
   Globe,
@@ -104,7 +105,7 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
     for (const name of SOURCE_PARAMS) rest.delete(name)
     router.replace(rest.size > 0 ? `${pathname}?${rest}` : pathname)
   }, [carried, search, pathname, router, recordSource])
-  // Where the person is, as their browser says: a plan's day of play starts at their midnight.
+  // Where the person is, as their browser says: a plan's month of play starts at their midnight on the 1st.
   // Said whenever it differs from what Cubepals has, so nobody ever picks a time zone.
   const setTimeZone = useMutation(trpc.account.setTimeZone.mutationOptions())
   const zoneKept = me.data?.timeZone
@@ -174,6 +175,8 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
 
   const servers: NavEntry = { href: '/servers', label: 'Servers', icon: Box }
   const browse: NavEntry = { href: '/browse', label: 'Browse', icon: Compass }
+  // The how-tos on the site: moving a world, a modpack, who can join. Opens the public page.
+  const guides: NavEntry = { href: '/guides', label: 'Guides', icon: BookOpen }
   const admin: NavEntry = {
     href: '/admin',
     label: 'Admin',
@@ -193,6 +196,7 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
         <div className="bk-appnav__group">
           {item(servers)}
           {item(browse)}
+          {item(guides)}
           {item(account)}
           {me.data?.admin && item(admin)}
         </div>
@@ -249,6 +253,7 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
         <MoreMenu
           email={user.email}
           pages={serverItems.slice(BAR_PAGES)}
+          guides={guides}
           account={account}
           admin={admin}
           isAdmin={me.data?.admin === true}

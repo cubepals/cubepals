@@ -5,7 +5,7 @@
 import type { AlertKey, AlertView } from '@blockly/contracts'
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
-import { entitlementsFor, PLAN_KEYS } from '../../domain/account/entitlements.ts'
+import { entitlementsFor, entitlementsOf, PLAN_KEYS } from '../../domain/account/entitlements.ts'
 import { unreviewedLinks } from '../accounts/free-play.ts'
 import { adminInbox, loadStanding } from '../accounts/persistence.ts'
 import type { Actor } from '../actor.ts'
@@ -174,8 +174,7 @@ export class PlatformAlerts {
     let outgrown = 0
     for (const { ownerId, bytes } of await worldDataByAccount(this.#db, least * 2 ** 30)) {
       const standing = await loadStanding(this.#db, ownerId, now)
-      if (bytes > entitlementsFor(standing.plan, standing.limitOverrides).storage.paidForGb * 2 ** 30)
-        outgrown++
+      if (bytes > entitlementsOf(standing).storage.paidForGb * 2 ** 30) outgrown++
     }
     if (outgrown > 0)
       conditions.push({
