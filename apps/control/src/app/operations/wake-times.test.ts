@@ -127,7 +127,7 @@ describe.skipIf(!hasDatabase)('wake times', () => {
 
   test('one still going to sleep or to another host says no time', async () => {
     const servers = schema.minecraftServers
-    // A server being put to rest has no route at all (`ROUTABLE`).
+    // Not `storing`: a server being put to rest isn't `ROUTABLE`, so it has no route to look at.
     for (const status of ['stopping', 'relocating'] as const) {
       await h.db.update(servers).set({ status }).where(eq(servers.id, ids.a))
       try {
