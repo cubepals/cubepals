@@ -187,6 +187,12 @@ test.skipIf(!hasDatabase)(
       expect.objectContaining({ order: refused, subscription: second }),
     ])
 
+    // The order's own word, while Polar still refuses, is kept as any order's is; the refusal is
+    // audited again.
+    const still = await w.post(orderEvent(w.orders.get(refused) as never, 'order.updated'))
+    expect(still.ok).toBe(true)
+    expect(await w.audited(owner, 'billing.second_subscription_refund_not_taken')).toHaveLength(2)
+
     // The order's next word asks for its refund again, and Polar takes it this time.
     w.polar.reply = answer
     await w.post(orderEvent(w.orders.get(refused) as never, 'order.updated'))

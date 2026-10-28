@@ -104,7 +104,9 @@ async function refundNotTaken(db: Db, userId: string, subscription: string, orde
 
 /**
  * An order's word (`BillingService.receiveWebhook`): a charge of a subscription stopped as a
- * second one is refunded, as `stopSecondSubscriptions` refunds those it finds kept already.
+ * second one is refunded, as `stopSecondSubscriptions` refunds those it finds kept already. A
+ * refund the provider doesn't take is audited and the rest of the order's word goes on: the next
+ * sync, or the order's next word, asks for it again.
  */
 export async function refundSecondCharge(
   db: Db,
@@ -114,7 +116,10 @@ export async function refundSecondCharge(
   const sub = order.externalSubscriptionId
   if (order.userId === null || sub === null || !PAID_ORDER.includes(order.status)) return
   if (!(await stoppedAsSecond(db, order.userId, sub))) return
-  await refundCharge(db, requireCapability(capabilities, 'billing'), order.userId, sub, order)
+  const userId = order.userId
+  await refundCharge(db, requireCapability(capabilities, 'billing'), userId, sub, order).catch(
+    (error: unknown) => refundNotTaken(db, userId, sub, order.externalOrderId, error),
+  )
 }
 
 /**
