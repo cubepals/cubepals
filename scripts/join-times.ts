@@ -33,10 +33,12 @@ import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
+import { SECOND_MS } from '@blockly/contracts/durations'
 import { SQL } from 'bun'
 import { runScheduledNow } from '../apps/control/src/infra/pg/jobs.ts'
 import { fly } from './lib/fly-async.ts'
 import { type Api, people } from './lib/people.ts'
+import { restNow } from './lib/rest-now.ts'
 import { reachDatabase } from './lib/staging-database.ts'
 
 const WEB = 'https://staging.cubepals.com'
@@ -193,12 +195,17 @@ async function into(made: Made, wanted: State): Promise<string> {
     for (const machine of await machines(made.id))
       if (machine.state === 'suspended') await fly(['machine', 'stop', machine.id, '-a', appOf(made.id)])
   if (wanted === 'rest') {
-    // Weeks without play, as far as the sweep can tell, then the sweep itself, as the staging check rests one.
-    await sql(
-      `update minecraft_servers set last_active_at = now() - interval '40 days' where id = '${made.id}'`,
-    )
-    await runScheduledNow(reached.nodeUrl, 'store-sweep')
-    await waitFor(made, (v) => v.status === 'stored' && v.activeOperation === null, 'rested', 1500)
+    // Weeks without play, as far as the sweep can tell, then the sweep itself, once the backup and
+    // the archive the stop left are done, as the staging check rests one.
+    await restNow({
+      sql,
+      sweep: () => runScheduledNow(reached.nodeUrl, 'store-sweep'),
+      serverId: made.id,
+      idleDays: 40,
+      limitMs: 1500 * SECOND_MS,
+      note: (line) => say(`${made.template}: ${line}`),
+    })
+    await waitFor(made, (v) => v.status === 'stored' && v.activeOperation === null, 'rested', 300)
     return 'stored'
   }
   return [...new Set((await machines(made.id)).map((m) => m.state))].join(',')

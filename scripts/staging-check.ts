@@ -46,7 +46,7 @@ import { spawn } from 'node:child_process'
 import { createHash, randomInt, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3'
-import { MINUTE_MS } from '@blockly/contracts/durations'
+import { MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import { MAIL_PORT } from '@blockly/contracts/local'
 import { SQL } from 'bun'
 import { TEMPLATES } from '../apps/control/src/app/setups/templates.ts'
@@ -58,6 +58,7 @@ import { fly } from './lib/fly-async.ts'
 import { type Edge, join, login } from './lib/minecraft.ts'
 import { ownGameJoins } from './lib/own-game-joins.ts'
 import { type Api, people } from './lib/people.ts'
+import { restNow } from './lib/rest-now.ts'
 import { reachDatabase } from './lib/staging-database.ts'
 
 const WEB = 'https://staging.cubepals.com'
@@ -571,12 +572,16 @@ async function rests(j: Journey): Promise<void> {
       await j.waitFor((v) => v.status === 'stopped', 'stopped', 300)
       await j.settled()
       // Two weeks without play, as far as the sweep can tell, then the sweep itself, rather than
-      // waiting for its hour.
-      await sql(
-        `update minecraft_servers set last_active_at = now() - interval '15 days' where id = '${j.server.id}'`,
-      )
-      await sweep('store-sweep')
-      const stored = await j.waitFor((v) => v.status === 'stored', 'rested', 1200)
+      // waiting for its hour, once the backup and the archive the stop left are done.
+      await restNow({
+        sql: (statement) => database.unsafe(statement) as Promise<Record<string, unknown>[]>,
+        sweep: () => sweep('store-sweep'),
+        serverId: j.server.id,
+        idleDays: 15,
+        limitMs: 1200 * SECOND_MS,
+        note: (line) => j.say(`   ${line}`),
+      })
+      const stored = await j.waitFor((v) => v.status === 'stored', 'rested', 300)
       check(stored.status === 'stored', `it is ${stored.status}`)
       const machines = await machinesOf(j.server.id)
       const volumes = await keptVolumes(j.server.id)
