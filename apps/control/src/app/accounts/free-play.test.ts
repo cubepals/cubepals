@@ -22,7 +22,6 @@ import { recordEdgePresence, replacePresence } from '../servers/usage.ts'
 import { tuning } from '../tuning.ts'
 import { freeSharers } from './free-play.ts'
 import { loadStanding } from './persistence.ts'
-import { playToday } from './play-today.ts'
 import { playTotal } from './play-total.ts'
 
 let h: Harness
@@ -37,23 +36,10 @@ function harness(): void {
   })
 }
 
-/**
- * A time zone where it is about noon now, so a run of a few hours in the past stays inside the
- * owner's today whenever the test runs. `Etc/GMT-5` is five hours ahead of UTC.
- */
-function noonZone(): string {
-  const ahead = 12 - new Date().getUTCHours()
-  return ahead >= 0 ? `Etc/GMT-${ahead}` : `Etc/GMT+${-ahead}`
-}
-
 /** Accounts made in this file, a week apart from each other, so which came first is never a tie. */
 let made = 0
 const owner = async (plan = 'free') => {
   const actor = await h.user('Steve', plan)
-  await h.db
-    .update(schema.accountStanding)
-    .set({ timeZone: noonZone() })
-    .where(eq(schema.accountStanding.userId, actor.userId))
   await h.db
     .update(schema.users)
     .set({ createdAt: new Date(Date.now() - (100 - made++) * 7 * DAY_MS) })
@@ -100,9 +86,10 @@ const verified = async (serverId: string, hours: Record<string, number>) => {
 }
 /** An offline-mode player's ID: made from a name, version 3. */
 const offline = () => `${randomUUID().slice(0, 14)}3${randomUUID().slice(15)}`
-const today = async (actor: UserActor) => {
+/** The free trial's hours in all, as the account counts them. */
+const total = async (actor: UserActor) => {
   const standing = await loadStanding(h.db, actor.userId)
-  return playToday(h.db, standing, entitlementsFor(standing.plan), new Date())
+  return playTotal(h.db, standing, entitlementsFor(standing.plan), new Date())
 }
 const sharers = async (actor: UserActor) => (await freeSharers(h.db, actor.userId, new Date())).ids.sort()
 const linksAmong = (actors: readonly UserActor[]) =>
@@ -229,7 +216,7 @@ describe.skipIf(!hasDatabase)('one main player on several free accounts', () => 
     const firstServer = await stopped(first)
     await verified(firstServer.id, { [steve]: 4, [friend]: 1 })
     await verified((await stopped(second)).id, { [steve]: 4, [friend]: 1 })
-    await ran(firstServer.id, 2 * 60)
+    await ran(firstServer.id, 20 * 60)
 
     // Two: medium. Admins see it; nothing changes for the accounts.
     expect(await h.app.accounts.freePlay.relink()).toBe(0)
@@ -238,17 +225,16 @@ describe.skipIf(!hasDatabase)('one main player on several free accounts', () => 
     ])
     expect((await h.app.alerts.active(staff)).map((a) => a.key)).toContain('free_accounts_linked')
     expect(await sharers(second)).toEqual([second.userId])
-    expect((await today(second))?.left).toBeGreaterThan(1.9)
+    expect((await total(second))?.left).toBeGreaterThan(19.9)
 
-    // Three: high. The later two draw on the first one's hours, the day's and the 20.
+    // Three: high. The later two draw on the first one's 20 hours.
     const third = await owner()
     const thirdServer = await stopped(third)
     await verified(thirdServer.id, { [steve]: 4, [friend]: 1 })
     expect(await h.app.accounts.freePlay.relink()).toBe(2)
     expect(await sharers(third)).toEqual([first.userId, second.userId, third.userId].sort())
-    expect(await today(third)).toMatchObject({ left: 0 })
-    const standing = await loadStanding(h.db, third.userId)
-    expect((await playTotal(h.db, standing, entitlementsFor('free'), new Date()))?.units).toBeCloseTo(2, 1)
+    expect(await total(third)).toMatchObject({ left: 0 })
+    expect((await total(third))?.units).toBeCloseTo(20, 1)
     await expect(h.app.servers.start(third, thirdServer.id, randomUUID())).rejects.toMatchObject({
       code: 'limit_reached',
       message: expect.stringContaining(
@@ -281,11 +267,11 @@ describe.skipIf(!hasDatabase)('one inbox’s accounts', () => {
     await h.app.accounts.freePlay.signedUp(first.userId, 'steve@example.test')
     await h.app.accounts.freePlay.signedUp(second.userId, 'steve@example.test')
     await h.app.accounts.freePlay.signedUp(paid.userId, 'steve@example.test')
-    await ran((await stopped(first)).id, 60)
-    expect((await today(second))?.units).toBeCloseTo(1, 1)
+    await ran((await stopped(first)).id, 10 * 60)
+    expect((await total(second))?.units).toBeCloseTo(10, 1)
     const secondServer = await stopped(second)
-    await ran(secondServer.id, 60)
-    expect((await today(first))?.units).toBeCloseTo(2, 1)
+    await ran(secondServer.id, 10 * 60)
+    expect((await total(first))?.units).toBeCloseTo(20, 1)
     expect(await sharers(first)).toEqual([first.userId, second.userId].sort())
     await expect(h.app.servers.start(second, secondServer.id, randomUUID())).rejects.toMatchObject({
       code: 'limit_reached',

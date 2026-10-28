@@ -37,7 +37,6 @@ import {
 } from '../../../ui'
 import { ctaMark, planMark, seenMark } from '../../(public)/steps'
 import { FreeHoursUsed } from '../free-hours-used'
-import { OutForToday } from '../out-for-today'
 import { PlusOffer } from '../plus-offer'
 import { planAction } from './plan-action'
 
@@ -81,7 +80,6 @@ function Account() {
       )}
       <Plan overview={overview.data} />
       <PlayTotal overview={overview.data} />
-      <PlayToday overview={overview.data} />
       <Play overview={overview.data} />
       <Includes overview={overview.data} />
       <Plans overview={overview.data} />
@@ -162,7 +160,7 @@ function Play({ overview }: { overview: AccountOverviewView }) {
   return (
     <FormSection
       title="Play this month"
-      description={`${countedFrom(u.monthBegan, u.timeZone, new Date())}${zoneFrom(u.nextTimeZone, 'month')}${fromLastMonth(u.carriedUnits)}${comesBack(e.carryUnits)}`}
+      description={`${countedFrom(u.monthBegan, u.timeZone, new Date())}${zoneFrom(u.nextTimeZone)}${fromLastMonth(u.carriedUnits)}${comesBack(e.carryUnits)}`}
     >
       <BlockMeter left={left} included={included} label="This month's play" />
       {share >= 100 ? (
@@ -245,38 +243,13 @@ function PlayTotal({ overview }: { overview: AccountOverviewView }) {
   if (total === null) return null
   const share = Math.round(Math.min(1, total.units / total.included) * 100)
   return (
-    <FormSection title="Free trial hours" description="They come once, not every month.">
+    <FormSection title="Free trial hours" description="They come once, to play on any day.">
       <BlockMeter
         left={Math.max(0, total.included - total.units)}
         included={total.included}
         label="Your free trial hours"
       />
       {share >= 100 && <FreeHoursUsed hours={total.included} next="/account" />}
-    </FormSection>
-  )
-}
-
-/**
- * Today's play, on a plan that counts it by the day: what is played of it, and once it is used,
- * when it is back. Nothing carries over, so there is nothing to save up or warn about by email.
- */
-function PlayToday({ overview }: { overview: AccountOverviewView }) {
-  const today = overview.usage.today
-  const total = overview.usage.total
-  // Once the hours in all are played, midnight brings none back: the section above says so.
-  if (today === null || (total !== null && total.units >= total.included)) return null
-  const share = Math.round(Math.min(1, today.units / today.included) * 100)
-  return (
-    <FormSection
-      title="Play today"
-      description={`${zoneFrom(overview.usage.nextTimeZone, 'day')}More every day at midnight.`}
-    >
-      <BlockMeter
-        left={Math.max(0, today.included - today.units)}
-        included={today.included}
-        label="Today's play"
-      />
-      {share >= 100 && <OutForToday hours={today.included} backAt={today.backAt} next="/account" />}
     </FormSection>
   )
 }

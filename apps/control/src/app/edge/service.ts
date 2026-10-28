@@ -7,7 +7,6 @@ import { HOUR_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { EdgeRoutes, PingWakeResult, SessionEvent, WakeClaim, WakeResult } from '@blockly/contracts/edge'
 import { motdForGame } from '@blockly/contracts/server-list'
 import type { AppliedConfigJson, Db } from '@blockly/db'
-import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import { welcome } from '../../domain/revision/revision.ts'
 import { keptAt, keptFor } from '../../domain/server/kept-addresses.ts'
 import { type OperationKind, ROUTABLE, type ServerStatus } from '../../domain/server/lifecycle.ts'
@@ -16,9 +15,7 @@ import { clientRange, RELEASES } from '../../minecraft/clients.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { COMPAT } from '../../minecraft/mods.ts'
 import { PORT_NAMES } from '../../minecraft/runtime-spec.ts'
-import { loadStanding } from '../accounts/persistence.ts'
-import { outOf, playToday } from '../accounts/play-today.ts'
-import { playTotal, trialOver } from '../accounts/play-total.ts'
+import { trialOver } from '../accounts/play-total.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
 import { AppError, type AppErrorCode } from '../errors.ts'
 import {
@@ -183,10 +180,9 @@ export class EdgeService {
    */
   async listed(): Promise<{ routes: EdgeRoutes; from: Date; unrouted: boolean }> {
     const { print, inputs } = await this.#inputs()
-    const { servers: live, bindings, comingBack, stops, trials, motds, plays } = inputs
+    const { servers: live, bindings, comingBack, trials, motds, plays } = inputs
     const restarting = restartingOf(live, comingBack)
     const unstoring = new Set(comingBack.filter((o) => o.kind === 'unstore').map((o) => o.serverId))
-    const out = outOf(stops, new Date())
     const over = trialOver(trials)
     const routes: EdgeRoutes['routes'] = []
     for (const server of live) {
@@ -203,7 +199,7 @@ export class EdgeService {
           hostname: address.hostname,
           ...alias,
           destination,
-          ...noticeOf(state, server, out.get(server.id), over.has(server.id)),
+          ...noticeOf(state, server, over.has(server.id)),
           ...(waking ? { waking: true as const } : {}),
           ...this.#identityOf(server, state, motds),
           ...(binding?.proxyProtocol ? { proxyProtocol: true as const } : {}),
@@ -531,7 +527,7 @@ export class EdgeService {
       return null
     } catch (error) {
       if (!(error instanceof AppError)) throw error
-      if (error.code !== 'invalid_transition') return this.#refused(server, error)
+      if (error.code !== 'invalid_transition') return this.#refused(error)
       // A join at another edge asked first, and the start it asked for runs: this one waits on it.
       // Any other status: the server moved on (a rest, a move) after the join read it.
       return (await findServer(this.#db, server.id))?.lifecycle.status === 'starting' ? null : MOVED_ON
@@ -588,24 +584,8 @@ export class EdgeService {
   }
 
   /** What a join is told when its start was refused. */
-  async #refused(server: MinecraftServer, error: AppError): Promise<WakeResult> {
-    const reason = REFUSED[error.code] ?? 'unknown'
-    const backAt = error.code === 'limit_reached' ? await this.#backAt(server) : null
-    return { outcome: 'denied', reason, ...(backAt === null ? {} : { backAt: backAt.toISOString() }) }
-  }
-
-  /**
-   * When the owner's play is back, where a wake was refused because today's is used; else null,
-   * and null once the plan's play in all is used too: midnight brings none of that back.
-   */
-  async #backAt(server: MinecraftServer): Promise<Date | null> {
-    const standing = await loadStanding(this.#db, server.ownerId)
-    const plan = entitlementsOf(standing)
-    const now = new Date()
-    const total = await playTotal(this.#db, standing, plan, now)
-    if (total !== null && total.left <= 0) return null
-    const today = await playToday(this.#db, standing, plan, now)
-    return today !== null && today.left <= 0 ? today.backAt : null
+  #refused(error: AppError): WakeResult {
+    return { outcome: 'denied', reason: REFUSED[error.code] ?? 'unknown' }
   }
 
   /**
@@ -743,18 +723,15 @@ function runOf(
 
 /**
  * What a route says about a server that isn't running: why, and for one asleep because its owner's
- * play ran out, its name and when it is back: at their next day for the day's play (`backAt`), or
- * not by itself for the free trial's hours (`trialOver`).
+ * free trial's hours are played, its name and that it doesn't come back by itself (`trialOver`).
  */
 function noticeOf(
   state: 'asleep' | 'restarting' | null,
   server: Pick<RouteServer, 'name'>,
-  backAt: Date | undefined,
   trial: boolean,
-): Pick<EdgeRoutes['routes'][number], 'state' | 'backAt' | 'trialOver' | 'name'> {
+): Pick<EdgeRoutes['routes'][number], 'state' | 'trialOver' | 'name'> {
   if (state !== 'asleep') return state === null ? {} : { state }
-  if (trial) return { state, trialOver: true, name: server.name }
-  return backAt === undefined ? { state } : { state, backAt: backAt.toISOString(), name: server.name }
+  return trial ? { state, trialOver: true, name: server.name } : { state }
 }
 
 /**

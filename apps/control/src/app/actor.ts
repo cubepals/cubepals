@@ -18,8 +18,6 @@ export type Actor =
         | 'entitlement'
         | 'reconcile'
         | 'session_cap'
-        /** A plan's daily play, run out for the day. */
-        | 'play_today'
         /** A plan's play in all (Free's 20 hours), used up. */
         | 'play_total'
         | 'invite'

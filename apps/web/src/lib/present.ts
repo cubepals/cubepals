@@ -31,14 +31,8 @@ export function presentStatus(
   now = Date.now(),
 ): { pill: PillStatus; label?: string; detail: string } {
   // Out of its owner's play, nothing wakes it, whatever put it to sleep: that is all there is to say.
-  const out = outOfPlay(server)
-  if (out === 'today')
-    return {
-      pill: 'sleeping',
-      label: 'Resting',
-      detail: 'Resting until midnight. Nobody can wake it before then',
-    }
-  if (out === 'trial') return { pill: 'stopped', detail: 'The free trial is over. Its world is kept' }
+  if (outOfPlay(server) === 'trial')
+    return { pill: 'stopped', detail: 'The free trial is over. Its world is kept' }
   switch (server.status) {
     case 'provisioning':
       return { pill: 'settingUp', detail: 'Building your world' }

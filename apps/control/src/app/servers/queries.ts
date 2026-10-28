@@ -49,7 +49,6 @@ import {
 } from '../../minecraft/versions.ts'
 import { liftedIpBans, readAccess } from '../access/persistence.ts'
 import { loadControls, loadStanding } from '../accounts/persistence.ts'
-import { playToday, todayView } from '../accounts/play-today.ts'
 import { playTotal, totalView } from '../accounts/play-total.ts'
 import { type Actor, authorize } from '../actor.ts'
 import type { PackCuration } from '../curation/service.ts'
@@ -611,7 +610,6 @@ export class ServerQueries {
     const sessionStart =
       running && plan.maxSessionMinutes !== null ? await openIntervalStart(this.#db, server.id) : null
     const played = await lastActivity(this.#db, server.id)
-    const today = await playToday(this.#db, standing, plan, new Date())
     const total = await playTotal(this.#db, standing, plan, new Date())
     // A size the plan no longer offers keeps running; the owner's next change moves it.
     const movesTo = plan.allowedMemoryTiers.includes(server.memoryTier)
@@ -672,7 +670,7 @@ export class ServerQueries {
           ? null
           : new Date(sessionStart.getTime() + plan.maxSessionMinutes * MINUTE_MS).toISOString(),
       sleepsAt: await this.#sleepsAt(server, online, played, await idleMinutesFor(this.#db, plan)),
-      playToday: todayView(today, server.memoryTier),
+      playToday: null,
       playTotal: totalView(total, server.memoryTier),
       cameBy: await cameByView(this.#db, server),
       movesToSize: movesTo === null ? null : { tier: movesTo, label: sizeLabel(movesTo) },

@@ -39,6 +39,7 @@ import {
   trustProject,
   untrustProject,
 } from './persistence.ts'
+import { pageShown } from './reachable.ts'
 
 /** What each reason a mod isn't trusted means to its server's owner. */
 const UNTRUSTED_COPY: Record<string, string> = {
@@ -148,20 +149,15 @@ export class ListingService {
     })
   }
 
-  /** Anyone signed in can flag a listing they see; once, until an admin looks at it. */
+  /** Anyone signed in can flag a server's page they see; once, until an admin looks at it. */
   async report(actor: Actor, serverId: string, reason: string): Promise<void> {
     if (actor.kind === 'system' || actor.kind === 'operator') throw new NotFound('Listing')
     const why = reason.trim()
     if (why.length < 3 || why.length > 500)
       throw new AppError('invalid_choice', 'Say what is wrong in 3 to 500 characters.')
-    const listing = await loadListing(this.#db, serverId)
+    // Any page a stranger can open, in the directory or not, can be flagged.
     const server = await findServer(this.#db, serverId)
-    const visible =
-      listing !== null &&
-      listing.visibility === 'published' &&
-      listing.moderation === 'clear' &&
-      listing.eligible
-    if (!visible || server === null || server.deletedAt !== null) throw new NotFound('Listing')
+    if (server === null || !(await pageShown(this.#db, server))) throw new NotFound('Listing')
     if (server.ownerId === actor.userId) throw new AppError('invalid_choice', 'This is your own server.')
     if (await openReportBy(this.#db, serverId, actor.userId))
       throw new AppError('invalid_choice', 'You reported this listing already; an admin will look at it.')

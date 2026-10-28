@@ -42,7 +42,6 @@ import {
   searchAccounts,
 } from './persistence.ts'
 import type { PlayMonth } from './play-month.ts'
-import { playToday } from './play-today.ts'
 import { type PlayTotal, playTotal } from './play-total.ts'
 
 /** Play is shown to one decimal: enough to see it move, not so much that it reads as a bill. */
@@ -209,7 +208,6 @@ export class AccountQueries {
     const gifted = await giftedPlan(this.#db, userId, now)
     const { decision, owedCents } = await extraPlayNow(this.#db, standing)
     const ceiling = decision.may ? decision.ceiling : 0
-    const today = await playToday(this.#db, standing, entitlements, now)
     const total = await playTotal(this.#db, standing, entitlements, now)
     const capability = (feature: Feature): Capability =>
       feature === 'create_server'
@@ -255,10 +253,7 @@ export class AccountQueries {
       usage: {
         servers: owned.servers,
         running: owned.running,
-        today:
-          today === null
-            ? null
-            : { units: round(today.units), included: today.included, backAt: today.backAt.toISOString() },
+        today: null,
         total: totalSaid(total),
         unitsThisMonth: round(await meteredUnitsSince(this.#db, userId, monthBegan, now)),
         hoursThisMonth: round(await runHoursSince(this.#db, userId, monthBegan, now)),
@@ -395,8 +390,8 @@ export function publicPlans(sold: { unsoldPlans: readonly string[] }): PublicPla
       name: planName(key),
       monthlyPriceCents: plan.monthlyPriceCents,
       yearlyPriceCents: plan.yearlyPriceCents,
-      includedHours: plan.dailyUnits ?? plan.includedUnits ?? 0,
-      per: plan.dailyUnits === null ? 'month' : 'day',
+      includedHours: plan.includedUnits ?? plan.totalUnits ?? 0,
+      per: plan.includedUnits === null && plan.totalUnits !== null ? 'once' : 'month',
       extraHourCents: plan.mayBuyMore ? UNIT_CENTS : null,
       totalHours: plan.totalUnits,
       sleepsAfterMinutes: plan.idleShutdownAfterMinutes,

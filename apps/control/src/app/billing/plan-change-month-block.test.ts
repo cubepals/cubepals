@@ -63,7 +63,7 @@ test.skipIf(!hasDatabase || monthRoom < 5 * HOUR_MS)(
     expect(standing.plan).toBe('free')
     const overview = await w.h.app.accountQueries.overview(owner)
     expect(overview.entitlements.includedUnits).toBe(entitlementsFor('free').includedUnits)
-    expect(overview.entitlements.dailyUnits).toBe(entitlementsFor('free').dailyUnits)
+    expect(overview.entitlements.totalUnits).toBe(entitlementsFor('free').totalUnits)
   },
   60_000,
 )

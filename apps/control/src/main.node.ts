@@ -108,6 +108,7 @@ import { PostHogInsight } from './infra/posthog/posthog-insight.ts'
 import { JoseRealtimeTickets } from './infra/realtime/jose-tickets.ts'
 import { mintPinnedCertificate } from './infra/realtime/pinned-certificate.ts'
 import { S3ArchiveStore } from './infra/s3/s3-archive-store.ts'
+import { earlyRoomRoute } from './interfaces/billing/early-room.ts'
 import { createBillingWebhook } from './interfaces/billing/webhook.ts'
 import { createInternalApp } from './interfaces/edge/internal.ts'
 import { createApiApp } from './interfaces/http/api.ts'
@@ -620,12 +621,12 @@ function insightFor(config: DeploymentConfig): PostHogInsight | null {
 }
 
 /**
- * The billing provider's webhooks and, locally, the checkout and portal pages that stand in for
- * Polar's and deliver to them.
+ * The billing provider's webhooks, where the room for early checkouts is set, and, locally, the
+ * checkout and portal pages that stand in for Polar's and deliver to them.
  */
-function billingRoutes(billing: BillingService, provider: BillingProvider | null): Hono {
+function billingRoutes(billing: BillingService, provider: BillingProvider | null, room: Hono): Hono {
   const webhook = createBillingWebhook({ billing })
-  const routes = new Hono().route('/', webhook)
+  const routes = new Hono().route('/', webhook).route('/', room)
   if (provider instanceof LocalBilling) routes.route('/', localCheckoutPages({ billing: provider, webhook }))
   return routes
 }
@@ -726,7 +727,7 @@ async function main(): Promise<void> {
     // Game runtimes fetch their jars from the same public listener, under /runtime (§15.2).
     api.route('/', createRuntimeApp(app))
     // The billing provider's webhooks, reaching the same listener as the web app's /api.
-    api.route('/', billingRoutes(app.billing, capabilities.billing))
+    api.route('/', billingRoutes(app.billing, capabilities.billing, earlyRoomRoute(db, config.earlyRoom)))
     const apiServer = serve({
       fetch: api.fetch,
       hostname: hostPort(config.listen.api).host,

@@ -105,7 +105,7 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
     for (const name of SOURCE_PARAMS) rest.delete(name)
     router.replace(rest.size > 0 ? `${pathname}?${rest}` : pathname)
   }, [carried, search, pathname, router, recordSource])
-  // Where the person is, as their browser says: a plan's day of play starts at their midnight.
+  // Where the person is, as their browser says: a plan's month of play starts at their midnight on the 1st.
   // Said whenever it differs from what Cubepals has, so nobody ever picks a time zone.
   const setTimeZone = useMutation(trpc.account.setTimeZone.mutationOptions())
   const zoneKept = me.data?.timeZone

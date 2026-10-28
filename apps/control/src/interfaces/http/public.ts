@@ -13,6 +13,7 @@ import type { ItemIcons } from '../../app/items/icons.ts'
 import type { ServerIcons } from '../../app/server-icons/service.ts'
 import type { SharingQueries } from '../../app/sharing/queries.ts'
 import { serverCard } from './card.ts'
+import { type AddressTrust, clientAddressOf } from './client-address.ts'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const SHA256 = /^[0-9a-f]{64}$/
@@ -29,8 +30,12 @@ export function createPublicApp(deps: {
   icons: ServerIcons
   /** What this deployment sells (each paid plan): what the plans say of it. */
   platform: () => Pick<PlatformCapabilities, 'unsoldPlans'>
+  /** Whose word on a client's address is believed, since each address's reads are counted. */
+  addresses: AddressTrust
 }): Hono {
   const app = new Hono()
+  /** The address of the client asking, which its reads are counted by. */
+  const from = (c: Context) => clientAddressOf(c.req.raw.headers, deps.addresses)
 
   const cached = (c: Context) => {
     c.header('Cache-Control', 'public, max-age=30')
@@ -38,9 +43,9 @@ export function createPublicApp(deps: {
   }
 
   /**
-   * The reads themselves are counted, per server and per code, in `SharingQueries`: whoever is
-   * asking can change their address, but not which server they are asking about. Here that
-   * refusal becomes the status code a machine reading this endpoint understands.
+   * The reads themselves are counted, for each address per server and per code, in
+   * `SharingQueries`. Here that refusal becomes the status code a machine reading this endpoint
+   * understands.
    */
   const busy = (c: Context) => {
     c.header('Retry-After', '60')
@@ -65,7 +70,7 @@ export function createPublicApp(deps: {
   /** The status a page or a bot reads. */
   app.get('/api/public/servers/:slug', async (c) => {
     const slug = c.req.param('slug') ?? ''
-    const view = await deps.sharing.page(slug, null).catch((error) => {
+    const view = await deps.sharing.page(slug, null, { from: from(c) }).catch((error) => {
       if (tooMany(error)) return 'busy' as const
       throw error
     })
@@ -78,7 +83,7 @@ export function createPublicApp(deps: {
   /** The same, behind an invite link, so a shared invitation can show what it points at. */
   app.get('/api/public/invites/:code', async (c) => {
     const code = c.req.param('code') ?? ''
-    const view = await deps.sharing.invite(code).catch((error) => {
+    const view = await deps.sharing.invite(code, null, from(c)).catch((error) => {
       if (tooMany(error)) return 'busy' as const
       throw error
     })
@@ -95,7 +100,7 @@ export function createPublicApp(deps: {
   app.get('/api/public/servers/:slug/badge.svg', async (c) => {
     const slug = c.req.param('slug') ?? ''
     // A picture that can't be drawn right now is drawn as itself, not as an error page.
-    const view = await deps.sharing.page(slug, null).catch((error) => {
+    const view = await deps.sharing.page(slug, null, { from: from(c) }).catch((error) => {
       if (tooMany(error)) return null
       throw error
     })
@@ -111,17 +116,19 @@ export function createPublicApp(deps: {
    * state the JSON says, cached like it, and a private server has none to show.
    */
   app.get('/api/public/servers/:slug/card.png', async (c) => {
-    const view = await deps.sharing.page(c.req.param('slug') ?? '', null).catch((error) => {
-      if (tooMany(error)) return null
-      throw error
-    })
+    const view = await deps.sharing
+      .page(c.req.param('slug') ?? '', null, { from: from(c) })
+      .catch((error) => {
+        if (tooMany(error)) return null
+        throw error
+      })
     if (view === null) return c.json({ error: 'not_public' }, 404)
     return picture(c, view, false)
   })
 
   /** The same, for an invitation, which says who it is for. */
   app.get('/api/public/invites/:code/card.png', async (c) => {
-    const view = await deps.sharing.invite(c.req.param('code') ?? '').catch((error) => {
+    const view = await deps.sharing.invite(c.req.param('code') ?? '', null, from(c)).catch((error) => {
       if (tooMany(error)) return null
       throw error
     })

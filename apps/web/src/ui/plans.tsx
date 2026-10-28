@@ -91,18 +91,13 @@ function addOns(plan: PublicPlan): string {
 /** A plan's hours of play, as the line its dashed explainer sits on. */
 export const hoursPoint = (plan: PublicPlan) =>
   plan.totalHours !== null
-    ? `${plan.totalHours} hours of play, at most ${plan.includedHours} a day`
-    : `${plan.includedHours} hours of play ${plan.per === 'day' ? 'every day' : 'each month'}${extraHourOf(plan) === null ? '' : `, then ${extraHourOf(plan)}¢ an hour`}`
+    ? `${plan.totalHours} hours of play, any day you like`
+    : `${plan.includedHours} hours of play each month${extraHourOf(plan) === null ? '' : `, then ${extraHourOf(plan)}¢ an hour`}`
 
 /** One of a plan's points as a card shows it: the hours on the dashed line that says what they are. */
 export function PlanPoint({ plan, point }: { plan: PublicPlan; point: string }) {
   return point === hoursPoint(plan) ? (
-    <PlayHours
-      hours={plan.includedHours}
-      per={plan.per}
-      total={plan.totalHours}
-      priceCents={plan.monthlyPriceCents}
-    >
+    <PlayHours hours={plan.includedHours} total={plan.totalHours} priceCents={plan.monthlyPriceCents}>
       {point}
     </PlayHours>
   ) : (
@@ -111,8 +106,8 @@ export function PlanPoint({ plan, point }: { plan: PublicPlan; point: string }) 
 }
 
 /**
- * The free trial, said on the plan it starts: "Starts with a free trial: 20 hours of play, at most
- * 2 a day, no card", its hours on their dashed line. One element, so a card's row lays it out whole.
+ * The free trial, said on the plan it starts: "Starts with a free trial: 20 hours of play, any day
+ * you like, no card", its hours on their dashed line. One element, so a card's row lays it out whole.
  */
 export function TrialPoint({ trial }: { trial: PublicPlan }) {
   return (
@@ -146,40 +141,33 @@ const COVERS = ['', 'the first', 'the first two', 'all three']
 
 /**
  * What a plan's hours of play are, on the dashed line wherever a plan states them. A month's are
- * set against the three habits; a day's start again at the player's midnight, so they are said as
- * that, and hours in all as what happens when they are played. A paid plan's opens with why its price is what it is, and ends with where the code is.
+ * set against the three habits, and hours in all as what happens when they are played. A paid
+ * plan's opens with why its price is what it is, and ends with where the code is.
  */
 export function PlayHours({
   hours,
-  per = 'month',
   total = null,
   priceCents,
   children,
 }: {
   hours: number
-  /** Whether the hours come every day or every month; the paid offers are by the month. */
-  per?: PublicPlan['per']
-  /** Hours included once, in all, with `hours` the most a day; null: none. */
+  /** Hours included once, in all, to play on any day; null: none, and `hours` come each month. */
   total?: number | null
   priceCents: number
   children: ReactNode
 }) {
   const covered = PLAY_HABITS.filter((habit) => habit.hours <= hours).length
-  if (per === 'day')
+  if (total !== null)
     return (
       <Tip
         tip={
           <>
             <p>Hours count while your server is on, and everyone on it shares them.</p>
-            {total === null ? (
-              <p>They start again at midnight where you are, every day. Unused ones don’t carry over.</p>
-            ) : (
-              <p>
-                They come once, not every month: {total} in all, at most {hours} a day from midnight where you
-                are. Once they’re played, the trial ends and nothing is charged. Your world is kept and you
-                can still download it, and a paid plan starts it again.
-              </p>
-            )}
+            <p>
+              They come once, not every month: {total} in all, to play on any day, for as long as you like.
+              Once they’re played, the trial ends and nothing is charged. Your world is kept and you can still
+              download it, and a paid plan starts it again.
+            </p>
           </>
         }
       >

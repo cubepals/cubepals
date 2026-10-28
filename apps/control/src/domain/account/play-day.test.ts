@@ -2,17 +2,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** The play day and the play month: where each begins, in the owner's time zone. */
+/** The play month: where it begins, in the owner's time zone. */
 import { describe, expect, test } from 'bun:test'
 import {
   DEFAULT_TIME_ZONE,
-  dayBegan,
-  dayStart,
   isTimeZone,
   monthBegan,
   monthOf,
   monthStart,
-  nextDayStart,
   nextMonthStart,
   startOfMonth,
   zoneTakesOver,
@@ -20,33 +17,10 @@ import {
 
 const at = (iso: string) => new Date(iso)
 
-describe('the play day', () => {
-  test('is counted in UTC until the owner’s browser says where they are', () => {
+describe('the owner’s time zone', () => {
+  test('is UTC until the owner’s browser says where they are', () => {
     expect(DEFAULT_TIME_ZONE).toBe('UTC')
-    expect(dayStart(at('2026-10-12T15:30:00Z'), 'UTC')).toEqual(at('2026-10-12T00:00:00Z'))
-    expect(nextDayStart(at('2026-10-12T15:30:00Z'), 'UTC')).toEqual(at('2026-10-13T00:00:00Z'))
-  })
-
-  test('begins at local midnight, ahead of UTC and behind it', () => {
-    // 01:30 in Paris (UTC+2 in October) is still the 12th there, from 22:00 UTC on the 11th.
-    expect(dayStart(at('2026-10-11T23:30:00Z'), 'Europe/Paris')).toEqual(at('2026-10-11T22:00:00Z'))
-    expect(nextDayStart(at('2026-10-11T23:30:00Z'), 'Europe/Paris')).toEqual(at('2026-10-12T22:00:00Z'))
-    // 20:00 in Los Angeles (UTC-7) on the 11th is 03:00 UTC on the 12th.
-    expect(dayStart(at('2026-10-12T03:00:00Z'), 'America/Los_Angeles')).toEqual(at('2026-10-11T07:00:00Z'))
-    expect(nextDayStart(at('2026-10-12T03:00:00Z'), 'America/Los_Angeles')).toEqual(
-      at('2026-10-12T07:00:00Z'),
-    )
-    // Half-hour zones too.
-    expect(dayStart(at('2026-10-12T10:00:00Z'), 'Asia/Kolkata')).toEqual(at('2026-10-11T18:30:00Z'))
-  })
-
-  test('crosses the month, the year and a clock change', () => {
-    expect(nextDayStart(at('2026-12-31T12:00:00Z'), 'UTC')).toEqual(at('2027-01-01T00:00:00Z'))
-    // Paris goes back an hour on 25 October 2026: that day is 25 hours long.
-    const start = dayStart(at('2026-10-25T12:00:00Z'), 'Europe/Paris')
-    const next = nextDayStart(at('2026-10-25T12:00:00Z'), 'Europe/Paris')
-    expect(start).toEqual(at('2026-10-24T22:00:00Z'))
-    expect(next).toEqual(at('2026-10-25T23:00:00Z'))
+    expect(monthStart(at('2026-10-12T15:30:00Z'), DEFAULT_TIME_ZONE)).toEqual(at('2026-10-01T00:00:00Z'))
   })
 
   test('knows a real time zone from anything else', () => {
@@ -99,28 +73,23 @@ describe('a time zone that changes', () => {
     expect(zoneTakesOver(at('2026-11-10T00:00:00Z'), 'UTC', kiritimati)).toEqual(at('2026-12-01T00:00:00Z'))
   })
 
-  test('to a zone ahead: its first month and day begin where the zone before left off', () => {
+  test('to a zone ahead: its first month begins where the zone before left off', () => {
     const change = { from: at('2026-12-01T00:00:00Z'), began: at('2026-12-01T00:00:00Z') }
     // Kiritimati's December began 14 hours earlier, in the month UTC had already counted.
     expect(monthBegan(at('2026-12-01T05:00:00Z'), kiritimati, change)).toEqual(change.began)
-    expect(dayBegan(at('2026-12-01T05:00:00Z'), kiritimati, change)).toEqual(change.began)
-    // From then on, the 1st and midnight are Kiritimati's.
+    // From then on, the 1st is Kiritimati's.
     expect(monthBegan(at('2027-01-10T00:00:00Z'), kiritimati, change)).toEqual(at('2026-12-31T10:00:00Z'))
-    expect(dayBegan(at('2026-12-01T12:00:00Z'), kiritimati, change)).toEqual(at('2026-12-01T10:00:00Z'))
   })
 
-  test('to a zone behind: its first month and day run on from when they began in the zone before', () => {
+  test('to a zone behind: its first month runs on from when it began in the zone before', () => {
     // Kiritimati's December began at 10:00 UTC on 30 November; UTC's begins 14 hours later.
     const change = { from: at('2026-12-01T00:00:00Z'), began: at('2026-11-30T10:00:00Z') }
     expect(monthBegan(at('2026-12-20T00:00:00Z'), 'UTC', change)).toEqual(change.began)
-    expect(dayBegan(at('2026-12-01T05:00:00Z'), 'UTC', change)).toEqual(change.began)
-    expect(dayBegan(at('2026-12-02T05:00:00Z'), 'UTC', change)).toEqual(at('2026-12-02T00:00:00Z'))
     expect(monthBegan(at('2027-01-10T00:00:00Z'), 'UTC', change)).toEqual(at('2027-01-01T00:00:00Z'))
   })
 
   test('changes nothing when there was no change', () => {
     const now = at('2026-10-12T15:30:00Z')
     expect(monthBegan(now, kiritimati, null)).toEqual(monthStart(now, kiritimati))
-    expect(dayBegan(now, kiritimati, null)).toEqual(dayStart(now, kiritimati))
   })
 })

@@ -18,10 +18,10 @@ import { pickStyle, shownName } from '../../domain/listing/author.ts'
 import { cleanNote, sameNote } from '../../domain/listing/note.ts'
 import { saysOfficial } from '../../domain/server/held-names.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
-import { actionsSince, isAdmin, loadControls, loadStanding } from '../accounts/persistence.ts'
+import { actionsSince, isAdmin } from '../accounts/persistence.ts'
 import { type Actor, requestedBy } from '../actor.ts'
 import { AppError, NotFound } from '../errors.ts'
-import { loadListing } from '../listings/persistence.ts'
+import { pageShown } from '../listings/reachable.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import { findServer } from '../servers/persistence.ts'
 import {
@@ -131,7 +131,7 @@ export class GuestbookService {
           body: note.body,
         })
       // Where strangers can't read the guestbook any more, its author sees only that theirs went.
-      return owner || admin || (await isShown(tx, server))
+      return owner || admin || (await pageShown(tx, server))
         ? notesView(tx, server, userId, admin, this.#avatarStyles)
         : { notes: [], total: 0, signature: noteName(await accountName(tx, userId)) }
     })
@@ -153,25 +153,13 @@ async function asAdmin(q: Queryable, actor: Actor): Promise<boolean> {
 }
 
 /**
- * The server behind a page strangers can see, or nothing: its owner made it public, no admin
- * removed it, the directory isn't paused, the owner is in good standing and it isn't deleted.
- * The page's own rule, so wherever the page opens, its guestbook does too.
+ * The server behind a page strangers can see, or nothing. The page's own rule
+ * (`listings/reachable.ts`), so wherever the page opens, its guestbook does too, and nowhere else.
  */
 async function shownServer(q: Queryable, serverId: string): Promise<MinecraftServer> {
   const server = await findServer(q, serverId)
-  if (server === null || !(await isShown(q, server))) throw new NotFound('Listing')
+  if (server === null || !(await pageShown(q, server))) throw new NotFound('Listing')
   return server
-}
-
-async function isShown(q: Queryable, server: MinecraftServer): Promise<boolean> {
-  if (server.deletedAt !== null) return false
-  const listing = await loadListing(q, server.id)
-  return (
-    listing?.visibility === 'published' &&
-    listing.moderation === 'clear' &&
-    (await loadControls(q)).publicListingEnabled &&
-    (await loadStanding(q, server.ownerId)).status === 'active'
-  )
 }
 
 /**
