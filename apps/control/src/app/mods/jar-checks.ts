@@ -13,9 +13,13 @@
  *   where it is published (`ports/malware.ts`). A jar already uploaded that a list now names is
  *   quarantined, and its owners are told it comes off at their server's next start.
  *
+ * A jar an uploaded pack carries is read the same way while the pack is built (`check`), and one
+ * it lists by its download is held to the lists' digests (`screen`, `packs/build.ts`).
+ *
  * A quarantined jar is kept out of every server: never pinned, left out of each start's spec
- * (`servers/specs.ts`), and never handed to a runtime (`artifacts/service.ts`). The owner's world
- * and other files are never touched. An operator who finds it isn't malware releases it.
+ * (`servers/specs.ts`), a pack's by its path, and never handed to a runtime
+ * (`artifacts/service.ts`). The owner's world and other files are never touched. An operator who
+ * finds it isn't malware releases it.
  */
 import { MINUTE_S } from '@blockly/contracts/durations'
 import { type Db, schema, type Tx } from '@blockly/db'
@@ -102,7 +106,7 @@ export class JarChecks {
    * An upload's digests, looked up before anything of it is kept: a jar a list names is
    * quarantined, and returned for the upload to be refused. Null for any other.
    */
-  async screen(digests: JarDigests): Promise<JarCheck | null> {
+  async screen(digests: Pick<JarDigests, 'sha1' | 'sha512'> & Partial<JarDigests>): Promise<JarCheck | null> {
     const [known] = await this.#db.select().from(checks).where(eq(checks.sha512, digests.sha512))
     if (known !== undefined && known.releasedBy !== null) return null
     if (known?.state === 'quarantined') return known
@@ -150,21 +154,42 @@ export class JarChecks {
     const bytes = await readAll(link.url, stored.sizeBytes)
     const digests = digestsOf(bytes)
     if (digests.sha512 !== sha512) throw new Error(`The stored jar ${sha512} holds other bytes`)
+    if ((await this.#judge(bytes, digests)).state === 'quarantined') await this.#tellOwners(sha512)
+  }
+
+  /**
+   * A jar a pack carries, held here to what an upload is: its digests looked up, then every class
+   * read, and the answer kept like an upload's, so `refresh` holds it to the lists as they change.
+   * A jar checked before keeps its answer.
+   */
+  async check(bytes: Uint8Array): Promise<JarCheck> {
+    const digests = digestsOf(bytes)
+    const [known] = await this.#db.select().from(checks).where(eq(checks.sha512, digests.sha512))
+    if (known !== undefined && known.state !== 'checking') return known
+    return (await this.screen(digests)) ?? (await this.#judge(bytes, digests))
+  }
+
+  /** A jar read whole, and what it was found to be kept as its check. */
+  async #judge(bytes: Uint8Array, digests: JarDigests): Promise<JarCheck> {
     const found = (await allowed(this.#db, digests.sha1))
       ? { finding: null, flags: [] }
       : await this.#read(bytes, digests, await this.#signatures(), 0)
-    const state = found.finding !== null ? 'quarantined' : found.flags.length > 0 ? 'flagged' : 'clean'
-    await this.#db.transaction(async (tx) => {
-      await tx
-        .update(checks)
-        .set({ ...digests, state, finding: found.finding, flags: found.flags, checkedAt: new Date() })
-        .where(eq(checks.sha512, sha512))
-      await audit(tx, 'system:jar-check', `mods.jar_${state}`, sha512, {
+    const state: JarCheck['state'] =
+      found.finding !== null ? 'quarantined' : found.flags.length > 0 ? 'flagged' : 'clean'
+    return this.#db.transaction(async (tx) => {
+      const set = { ...digests, state, finding: found.finding, flags: found.flags, checkedAt: new Date() }
+      const [row] = await tx
+        .insert(checks)
+        .values(set)
+        .onConflictDoUpdate({ target: checks.sha512, set })
+        .returning()
+      if (row === undefined) throw new Error('The check just recorded is missing')
+      await audit(tx, 'system:jar-check', `mods.jar_${state}`, digests.sha512, {
         finding: found.finding,
         flags: found.flags,
       })
+      return row
     })
-    if (state === 'quarantined') await this.#tellOwners(sha512)
   }
 
   /**

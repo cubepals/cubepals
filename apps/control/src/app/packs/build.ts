@@ -44,6 +44,8 @@ import {
 import { startFilesWanted, startInfo } from '../../minecraft/server-pack.ts'
 import { fits, type ModMetadata } from '../../minecraft/uploads.ts'
 import { LOADER_LABELS, offeredVersions } from '../../minecraft/versions.ts'
+import type { JarCheck } from '../mods/jar-check-records.ts'
+import type { JarChecks } from '../mods/jar-checks.ts'
 import type { CatalogFileMatch, ModCatalog } from '../ports/catalog.ts'
 import type { CurseForge } from '../ports/curseforge.ts'
 import {
@@ -61,7 +63,9 @@ import { jarMetadata } from './jars.ts'
  * file is read as hostile input, recognised, and written again as a Modrinth pack, the one shape
  * the image installs every pack from. Mods the catalog publishes are listed by their catalog
  * download, where their authors count them; the rest travel inside the pack, as the owner's own
- * files for the owner's own server. Nothing in it is run here.
+ * files for the owner's own server. Every jar it keeps is checked as an uploaded jar is
+ * (`mods/jar-checks.ts`), and one that matches known malware refuses the pack. Nothing in it is
+ * run here.
  */
 
 /** Limits on what an upload may hold once opened (the archive research's, 2026-09-26). */
@@ -110,6 +114,14 @@ class Refused extends Error {
   }
 }
 
+/** A jar from the upload, hashed and read for what it says of itself. */
+interface JarFacts {
+  sha1: string
+  sha512: string
+  size: number
+  metadata: ModMetadata | null
+}
+
 /** A file from the upload, and where it goes on the server. */
 interface Placement {
   from: string
@@ -137,6 +149,7 @@ export class PackBuilder {
   readonly #catalog: ModCatalog
   readonly #curseforge: CurseForge
   readonly #builds: LoaderBuilds
+  readonly #checks: Pick<JarChecks, 'screen' | 'check'>
 
   constructor(deps: {
     archives: PackArchives
@@ -144,12 +157,14 @@ export class PackBuilder {
     catalog: ModCatalog
     curseforge: CurseForge
     loaderBuilds: LoaderBuilds
+    jarChecks: Pick<JarChecks, 'screen' | 'check'>
   }) {
     this.#archives = deps.archives
     this.#formats = deps.formats
     this.#catalog = deps.catalog
     this.#curseforge = deps.curseforge
     this.#builds = deps.loaderBuilds
+    this.#checks = deps.jarChecks
   }
 
   /**
@@ -458,10 +473,7 @@ export class PackBuilder {
   async #finish(archive: PackArchive, plan: Plan, fileName: string, workDir: string): Promise<BuildResult> {
     // Every jar headed for the mods folder is hashed once and read for what it says of itself.
     const jars = plan.place.filter((p) => p.to.startsWith('mods/') && isJar(p.to))
-    const read = new Map<
-      string,
-      { sha1: string; sha512: string; size: number; metadata: ModMetadata | null }
-    >()
+    const read = new Map<string, JarFacts>()
     for (const jar of jars) {
       const bytes = await archive.read(jar.from, PACK_LIMITS.maxFileBytes)
       read.set(jar.from, {
@@ -533,6 +545,7 @@ export class PackBuilder {
         })
       else embedded.push(jar)
     }
+    await this.#checkJars(archive, files, embedded)
 
     const identity = await this.#identity(
       plan,
@@ -599,6 +612,27 @@ export class PackBuilder {
         leftOut,
         memoryMb: identity.memoryMb,
       },
+    }
+  }
+
+  /**
+   * The jars the pack keeps held to an uploaded jar's checks: those it carries read whole, those
+   * it lists by their download looked up by the digests it gives, which the image checks the
+   * download against. A jar that matches known malware refuses the pack.
+   */
+  async #checkJars(archive: PackArchive, listed: readonly PackFile[], carried: readonly Placement[]) {
+    const refuse = (path: string, check: JarCheck) =>
+      new Refused(
+        `This pack holds ${path.split('/').pop() ?? path}, which matches known malware, so Cubepals won’t build a server from it.`,
+        `${path}: ${check.finding?.match ?? 'quarantined'}`,
+      )
+    for (const file of listed.filter((f) => isJar(f.path))) {
+      const check = await this.#checks.screen({ sha1: file.sha1, sha512: file.sha512 })
+      if (check !== null) throw refuse(file.path, check)
+    }
+    for (const jar of carried) {
+      const check = await this.#checks.check(await archive.read(jar.from, PACK_LIMITS.maxFileBytes))
+      if (check.state === 'quarantined' && check.releasedBy === null) throw refuse(jar.to, check)
     }
   }
 

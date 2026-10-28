@@ -230,13 +230,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     ...ports,
     db,
     policy,
-    builder: new PackBuilder({
-      archives: ports.archives,
-      formats: ports.formats,
-      catalog: ports.catalog,
-      curseforge: ports.curseforge,
-      loaderBuilds: ports.loaderBuilds,
-    }),
+    builder: new PackBuilder({ ...ports, jarChecks }),
     worlds: () => backups.newWorlds,
   })
   setups = new SetupService({

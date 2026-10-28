@@ -279,15 +279,28 @@ const filesDigest = (files: readonly CarriedFile[]): string =>
 
 /**
  * A revision without the jars found to be malware since it was pinned (`mods/jar-checks.ts`): each
- * comes off at the server's next start, and its other files and world stay as they are.
+ * comes off at the server's next start, and its other files and world stay as they are. A pack's
+ * jar is left out by its path, whether the pack lists it or carries it.
  */
 async function withoutMalware(q: Queryable, revision: ServerRevision): Promise<ServerRevision> {
-  const malware = await quarantinedOf(
-    q,
-    revision.mods.map((m) => m.artifact.sha512),
-  )
+  const pack = revision.modpack
+  const packJars = pack === null ? [] : ((await loadPackContents(q, pack.artifact.sha512))?.jars ?? [])
+  const malware = await quarantinedOf(q, [
+    ...revision.mods.map((m) => m.artifact.sha512),
+    ...packJars.map((jar) => jar.sha512),
+  ])
   if (malware.size === 0) return revision
-  return { ...revision, mods: revision.mods.filter((m) => !malware.has(m.artifact.sha512)) }
+  const offPack = packJars
+    .filter((jar) => malware.has(jar.sha512))
+    // As a crash leaves one out (`leaveOutNow`): listed by its path, carried in the overrides.
+    .flatMap((jar) => [jar.path, `overrides/${jar.path}`])
+  return {
+    ...revision,
+    mods: revision.mods.filter((m) => !malware.has(m.artifact.sha512)),
+    ...(pack === null || offPack.length === 0
+      ? {}
+      : { modpack: { ...pack, leaveOut: [...new Set([...(pack.leaveOut ?? []), ...offPack])] } }),
+  }
 }
 
 /**
