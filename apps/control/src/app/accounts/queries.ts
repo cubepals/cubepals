@@ -15,11 +15,11 @@ import {
   planName,
 } from '../../domain/account/entitlements.ts'
 import { ceilingsFor } from '../../domain/account/extra-play.ts'
-import { UNIT_CENTS } from '../../domain/account/meter.ts'
+import { METER_UNITS, UNIT_CENTS } from '../../domain/account/meter.ts'
 import { DEFAULT_TIME_ZONE, monthStart } from '../../domain/account/play-day.ts'
 import type { AccountStanding } from '../../domain/account/standing.ts'
 import type { Capability, DenialCode } from '../../domain/policy/policy.ts'
-import { type MemoryTier, PARTY, playerCapacity, sizeLabel } from '../../domain/server/size.ts'
+import { type MemoryTier, memoryMb, PARTY, playerCapacity, sizeLabel } from '../../domain/server/size.ts'
 import { type Actor, runsThePlatform } from '../actor.ts'
 import { settleable } from '../billing/balance.ts'
 import { meteredMonth, meteredUnitsSince } from '../billing/chip-in-meter.ts'
@@ -385,6 +385,10 @@ export function publicPlans(sold: { unsoldPlans: readonly string[] }): PublicPla
   return PLAN_KEYS.map((key) => {
     const plan = entitlementsFor(key)
     const largest = Math.max(...plan.allowedMemoryTiers.map(playerCapacity))
+    const players = (tier: MemoryTier) =>
+      plan.settingCaps === null
+        ? playerCapacity(tier)
+        : Math.min(playerCapacity(tier), plan.settingCaps.maxPlayers)
     return {
       key,
       name: planName(key),
@@ -397,6 +401,13 @@ export function publicPlans(sold: { unsoldPlans: readonly string[] }): PublicPla
       sleepsAfterMinutes: plan.idleShutdownAfterMinutes,
       maxServers: plan.maxServers,
       maxPlayers: plan.settingCaps === null ? largest : Math.min(largest, plan.settingCaps.maxPlayers),
+      sizes: [...plan.allowedMemoryTiers]
+        .sort((a, b) => memoryMb(a) - memoryMb(b))
+        .map((tier) => ({
+          gb: memoryMb(tier) / 1024,
+          maxPlayers: players(tier),
+          hoursAnHour: METER_UNITS[tier],
+        })),
       available: !sold.unsoldPlans.includes(key),
       mods: plan.mayUseMods,
       datapacks: plan.mayUseDatapacks,

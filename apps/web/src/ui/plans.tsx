@@ -23,6 +23,18 @@ import { Tip } from './tip'
 export const forSale = (plan: Pick<PublicPlan, 'available'>): boolean =>
   (plan.available as boolean | undefined) !== false
 
+/** The sizes a plan's servers run at, smallest first; none where the answer predates them. */
+export const sizesOf = (plan: Pick<PublicPlan, 'sizes'>): PublicPlan['sizes'] =>
+  Array.isArray(plan.sizes) ? plan.sizes : []
+
+/** A plan's sizes in a few words: "3 GB", "3 to 16 GB". Empty where the answer predates them. */
+export function gbSaid(plan: Pick<PublicPlan, 'sizes'>): string {
+  const sizes = sizesOf(plan)
+  const [first, last] = [sizes[0], sizes.at(-1)]
+  if (first === undefined || last === undefined) return ''
+  return first === last ? `${first.gb} GB` : `${first.gb} to ${last.gb} GB`
+}
+
 /** What an extra hour costs on a plan, in cents; null where the plan has none or the answer predates it. */
 export const extraHourOf = (plan: Pick<PublicPlan, 'extraHourCents'>): number | null =>
   typeof plan.extraHourCents === 'number' ? plan.extraHourCents : null
@@ -41,15 +53,17 @@ export function pitchOf(plan: Pick<PublicPlan, 'key' | 'maxPlayers'>, bedrock = 
 }
 
 /**
- * A plan in the four things people choose on, in their words: no gigabytes, units or minutes.
+ * A plan in the four things people choose on, in their words: no units or minutes, and its servers'
+ * memory only as their size, so nobody wonders whether it is unlimited.
  * The free trial says what it is rather than what it lacks, so nothing on it is crossed out. Starting when
  * someone joins is every plan's and the page's headline, so no card repeats it.
  */
 export function planPoints(plan: PublicPlan): string[] {
+  const gb = gbSaid(plan)
   return [
     plan.maxServers === 1
-      ? `1 server, up to ${plan.maxPlayers} players`
-      : `Up to ${plan.maxServers} servers and ${plan.maxPlayers} players`,
+      ? `1 server${gb ? ` of ${gb}` : ''}, up to ${plan.maxPlayers} players`
+      : `Up to ${plan.maxServers} servers and ${plan.maxPlayers} players${gb ? `, ${gb} each` : ''}`,
     hoursPoint(plan),
     addOns(plan),
     keptPoint(plan),

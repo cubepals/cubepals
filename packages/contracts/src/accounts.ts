@@ -397,6 +397,11 @@ export interface PublicPlan {
   maxServers: number
   /** The most players the plan's largest server holds. */
   maxPlayers: number
+  /**
+   * The sizes the plan's servers run at, smallest first: memory in GB, the most players each holds,
+   * and how many of the plan's hours an hour on it counts.
+   */
+  sizes: { gb: number; maxPlayers: number; hoursAnHour: number }[]
   /** Mods, plugins and modpacks. */
   mods: boolean
   /** Datapacks, which a plan allows apart from mods. */
