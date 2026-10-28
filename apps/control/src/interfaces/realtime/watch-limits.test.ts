@@ -51,65 +51,65 @@ async function browser(port: number, userId: string) {
   return { client, histories, watch, unwatch }
 }
 
-describe('an open realtime session', () => {
-  const was = tuning()
-  let realtime: { stop(): Promise<void> }
-  let fallbackPort: number
-  const NativeWebSocket = globalThis.WebSocket
-  /** Accounts whose sign-in has ended, and consoles (`user:server`) an account may no longer watch. */
-  const signedOut = new Set<string>()
-  const barred = new Set<string>()
+const was = tuning()
+let realtime: { stop(): Promise<void> }
+let fallbackPort: number
+const NativeWebSocket = globalThis.WebSocket
+/** Accounts whose sign-in has ended, and consoles (`user:server`) an account may no longer watch. */
+const signedOut = new Set<string>()
+const barred = new Set<string>()
 
-  beforeAll(async () => {
-    installTuning({ ...was, abuse: { ...was.abuse, consolesPerConnection: 2, consoleWatchesPerMinute: 5 } })
-    globalThis.WebSocket = class extends NativeWebSocket {
-      constructor(url: string | URL, protocols?: string | string[]) {
-        super(url, { headers: { Origin: ORIGIN }, ...(protocols ? { protocols } : {}) } as never)
-      }
-    } as typeof WebSocket
-    const cert = await mintPinnedCertificate('127.0.0.1')
-    fallbackPort = await freePort()
-    const events: EventBus = { publish: async () => {}, subscribe: async () => async () => {} }
-    // Each test signs in as its own account: the ticket is the account's id.
-    const tickets: RealtimeTickets = {
-      issue: async ({ userId }) => userId,
-      verify: async (ticket) => ({ userId: ticket, sessionId: `session-${ticket}` }),
+beforeAll(async () => {
+  installTuning({ ...was, abuse: { ...was.abuse, consolesPerConnection: 2, consoleWatchesPerMinute: 5 } })
+  globalThis.WebSocket = class extends NativeWebSocket {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      super(url, { headers: { Origin: ORIGIN }, ...(protocols ? { protocols } : {}) } as never)
     }
-    // The feed's own count of consoles opened, beside made-up answers for what the database holds.
-    const counted = new ConsoleFeed(null as never, null as never, [], new MemoryLimits())
-    const feed = {
-      canWatch: async (userId: string, serverId: string) => {
-        // SLOW's answer takes a moment, so a session's next message arrives while it is asked.
-        if (serverId === SLOW) await Bun.sleep(150)
-        // BROKEN's answer fails, as a database that doesn't answer does.
-        if (serverId === BROKEN) throw new Error('the database did not answer')
-        return !barred.has(`${userId}:${serverId}`)
-      },
-      stillSignedIn: async ({ userId, sessionId }: TicketHolder) =>
-        sessionId === `session-${userId}` && !signedOut.has(userId),
-      mayOpen: (userId: string) => counted.mayOpen(userId),
-      recent: async () => [],
-      tail: async function* () {},
-    } as unknown as ConsoleFeed
-    realtime = await startRealtime({
-      listen: { host: '127.0.0.1', port: await freePort() },
-      fallbackListen: { host: '127.0.0.1', port: fallbackPort },
-      tls: { cert: cert.cert, privKey: cert.privKey },
-      allowedOrigins: [ORIGIN],
-      events,
-      tickets,
-      console: feed,
-      presence: async () => [],
-      recheckMs: RECHECK_MS,
-    })
+  } as typeof WebSocket
+  const cert = await mintPinnedCertificate('127.0.0.1')
+  fallbackPort = await freePort()
+  const events: EventBus = { publish: async () => {}, subscribe: async () => async () => {} }
+  // Each test signs in as its own account: the ticket is the account's id.
+  const tickets: RealtimeTickets = {
+    issue: async ({ userId }) => userId,
+    verify: async (ticket) => ({ userId: ticket, sessionId: `session-${ticket}` }),
+  }
+  // The feed's own count of consoles opened, beside made-up answers for what the database holds.
+  const counted = new ConsoleFeed(null as never, null as never, [], new MemoryLimits())
+  const feed = {
+    canWatch: async (userId: string, serverId: string) => {
+      // SLOW's answer takes a moment, so a session's next message arrives while it is asked.
+      if (serverId === SLOW) await Bun.sleep(150)
+      // BROKEN's answer fails, as a database that doesn't answer does.
+      if (serverId === BROKEN) throw new Error('the database did not answer')
+      return !barred.has(`${userId}:${serverId}`)
+    },
+    stillSignedIn: async ({ userId, sessionId }: TicketHolder) =>
+      sessionId === `session-${userId}` && !signedOut.has(userId),
+    mayOpen: (userId: string) => counted.mayOpen(userId),
+    recent: async () => [],
+    tail: async function* () {},
+  } as unknown as ConsoleFeed
+  realtime = await startRealtime({
+    listen: { host: '127.0.0.1', port: await freePort() },
+    fallbackListen: { host: '127.0.0.1', port: fallbackPort },
+    tls: { cert: cert.cert, privKey: cert.privKey },
+    allowedOrigins: [ORIGIN],
+    events,
+    tickets,
+    console: feed,
+    presence: async () => [],
+    recheckMs: RECHECK_MS,
   })
+})
 
-  afterAll(async () => {
-    installTuning(was)
-    globalThis.WebSocket = NativeWebSocket
-    await realtime?.stop()
-  })
+afterAll(async () => {
+  installTuning(was)
+  globalThis.WebSocket = NativeWebSocket
+  await realtime?.stop()
+})
 
+describe('an open realtime session, as it follows consoles', () => {
   test('follows only so many consoles at once', async () => {
     const { client, histories, watch, unwatch } = await browser(fallbackPort, 'user-a')
     watch(ONE)
@@ -166,7 +166,9 @@ describe('an open realtime session', () => {
     one.client.disconnect()
     two.client.disconnect()
   }, 20_000)
+})
 
+describe('an open realtime session, once its sign-in or its access ends', () => {
   test('is closed at its next watch once its sign-in has ended', async () => {
     const { client, histories, watch } = await browser(fallbackPort, 'user-c')
     signedOut.add('user-c')

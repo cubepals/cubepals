@@ -156,28 +156,34 @@ function followConsoles(
       if (answer === 'wait') return await giveUp()
       if (answer === 'closed' || !current()) return
       if (answer === 'barred') return await unwatch(serverId)
-      await peer.join(consoleRoom(serverId))
-      if (!current()) return await leftWhileJoining(serverId)
-      open.add(serverId)
-      void deps.startTail(serverId)
-      // What came before, to this watcher alone. A line that also arrives live is dropped by
-      // the page, which knows each line by its time and text.
-      const lines = await feed.recent(serverId, BACKFILL)
-      if (!current()) return
-      peer.emit('consoleHistory', {
-        serverId,
-        lines: lines.map((l) => ({ at: l.at.toISOString(), text: l.text, level: l.level })),
-      })
+      await openConsole(serverId, current)
     } catch (error) {
       await giveUp()
       throw error
     }
   }
-  /** An unwatch that came while its watch was joining leaves again; a newer watch goes on alone. */
-  const leftWhileJoining = async (serverId: string) => {
-    if (following.has(serverId)) return
-    await peer.leave(consoleRoom(serverId))
-    deps.stopTailIfUnwatched(serverId)
+  /**
+   * Joins a console let in and sends it what came before, while its watch is still the latest. An
+   * unwatch that came while it was joining leaves again; a newer watch goes on alone.
+   */
+  const openConsole = async (serverId: string, current: () => boolean) => {
+    await peer.join(consoleRoom(serverId))
+    if (!current()) {
+      if (following.has(serverId)) return
+      await peer.leave(consoleRoom(serverId))
+      deps.stopTailIfUnwatched(serverId)
+      return
+    }
+    open.add(serverId)
+    void deps.startTail(serverId)
+    // What came before, to this watcher alone. A line that also arrives live is dropped by
+    // the page, which knows each line by its time and text.
+    const lines = await feed.recent(serverId, BACKFILL)
+    if (!current()) return
+    peer.emit('consoleHistory', {
+      serverId,
+      lines: lines.map((l) => ({ at: l.at.toISOString(), text: l.text, level: l.level })),
+    })
   }
   const unwatch = async (serverId: string) => {
     nextTurn(serverId)
