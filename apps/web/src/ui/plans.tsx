@@ -106,8 +106,8 @@ export function PlanPoint({ plan, point }: { plan: PublicPlan; point: string }) 
 }
 
 /**
- * The free trial, said on the plan it starts: "Starts with a free trial: 20 hours of play, at most
- * 2 a day, no card", its hours on their dashed line. One element, so a card's row lays it out whole.
+ * The free trial, said on the plan it starts: "Starts with a free trial: 20 hours of play, any day
+ * you like, no card", its hours on their dashed line. One element, so a card's row lays it out whole.
  */
 export function TrialPoint({ trial }: { trial: PublicPlan }) {
   return (
