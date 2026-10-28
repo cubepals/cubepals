@@ -136,6 +136,26 @@ export async function ownersRunning(q: Queryable): Promise<string[]> {
   return rows.map((r) => r.ownerId)
 }
 
+/**
+ * Whether `sessionId` is still `userId`'s sign-in session, unexpired, on an account that is neither
+ * suspended nor closed: what keeps a realtime session open. Signing out, a password reset and the
+ * end of a test account's use all delete the session.
+ */
+export async function stillSignedIn(
+  q: Queryable,
+  userId: string,
+  sessionId: string,
+  now = new Date(),
+): Promise<boolean> {
+  const sessions = schema.authSessions
+  const [row] = await q
+    .select({ status: standing.status })
+    .from(sessions)
+    .leftJoin(standing, eq(standing.userId, sessions.userId))
+    .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId), gt(sessions.expiresAt, now)))
+  return row !== undefined && (row.status ?? 'active') === 'active'
+}
+
 // ─── Admins ─────────────────────────────────────────────────────────────────────────────────
 
 const admins = schema.platformAdmins

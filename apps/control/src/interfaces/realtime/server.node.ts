@@ -2,19 +2,27 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { MINUTE_MS } from '@blockly/contracts/durations'
 import { type RealtimeMap, realtimeContract } from '@blockly/contracts/realtime'
-import { type ConnectRequest, createServer, refuse, type ServerPeer, TransportError } from 'transport-io'
+import {
+  CloseCode,
+  type ConnectRequest,
+  createServer,
+  refuse,
+  type ServerPeer,
+  TransportError,
+} from 'transport-io'
 import { listenHttp3 } from 'transport-io/node-transport'
 import { listenWebSocket } from 'transport-io/websocket-node-transport'
 import type { ConsoleFeed } from '../../app/console/feed.ts'
 import { observeRealtime, realtimeConnected } from '../../app/platform/telemetry.ts'
 import type { DomainEvent, EventBus } from '../../app/ports/events.ts'
-import type { RealtimeTickets } from '../../app/ports/tickets.ts'
+import type { RealtimeTickets, TicketHolder } from '../../app/ports/tickets.ts'
+import { tuning } from '../../app/tuning.ts'
 import { originAllowed } from '../http/origins.ts'
 
-interface Peer {
-  userId: string
-}
+/** Each session is its ticket's: the account, and the sign-in session that asked for it. */
+type Peer = TicketHolder
 
 export interface RealtimeOptions {
   listen: { host: string; port: number }
@@ -26,6 +34,8 @@ export interface RealtimeOptions {
   console: ConsoleFeed
   /** Who is on a server now: presence events carry only the count. */
   presence: (serverId: string) => Promise<{ uuid: string; name: string }[]>
+  /** How often an open session is checked again: RECHECK_MS unless a test says otherwise. */
+  recheckMs?: number
 }
 
 const userRoom = (userId: string) => `user:${userId}`
@@ -33,6 +43,12 @@ const consoleRoom = (serverId: string) => `console:${serverId}`
 
 /** How many earlier lines a console gets when it opens. */
 const BACKFILL = 200
+
+/**
+ * How often an open session's sign-in, and each console it follows, is checked again. A session
+ * whose sign-in has ended is closed; a console its account may no longer watch is left.
+ */
+const RECHECK_MS = MINUTE_MS
 
 /** While a server is in one of these, its output is worth following. */
 const TAILED = new Set(['provisioning', 'starting', 'running', 'stopping'])
@@ -72,9 +88,74 @@ const authorizer =
       return answer
     }
     if (!originAllowed(headers.origin, options.allowedOrigins)) return answered('origin', refuse('origin'))
-    const userId = await options.tickets.verify(query.get('ticket') ?? '')
-    return userId === null ? answered('ticket', refuse('ticket')) : answered('accepted', { userId })
+    const holder = await options.tickets.verify(query.get('ticket') ?? '')
+    return holder === null ? answered('ticket', refuse('ticket')) : answered('accepted', holder)
   }
+
+/**
+ * The consoles one session follows: each `watch` is let in while the session's sign-in stands,
+ * within the account's and the connection's limits (`AbuseLimits`), and only to a console the
+ * account may watch; it is sent what the server printed before. Every `recheckMs` the sign-in and
+ * each console are checked again. Returns what stops the rechecks, for when the session closes.
+ */
+function followConsoles(
+  peer: ServerPeer<RealtimeMap, Peer>,
+  deps: {
+    feed: ConsoleFeed
+    recheckMs: number
+    startTail: (serverId: string) => Promise<void>
+    stopTailIfUnwatched: (serverId: string) => void
+  },
+): () => void {
+  const { feed } = deps
+  const { userId } = peer.data
+  /** The consoles this session follows, or is being let into. */
+  const following = new Set<string>()
+
+  /** Whether the session's sign-in still stands; when it doesn't, the session is closed. */
+  const stillSignedIn = async () => {
+    if (await feed.stillSignedIn(peer.data)) return true
+    peer.close(CloseCode.WT_UNAUTHORIZED, 'signed out')
+    return false
+  }
+  const admitted = async (serverId: string) =>
+    (await feed.mayOpen(userId)) && (await stillSignedIn()) && (await feed.canWatch(userId, serverId))
+
+  const watch = async (serverId: string) => {
+    const fresh = !following.has(serverId)
+    if (fresh && following.size >= tuning().abuse.consolesPerConnection) return
+    following.add(serverId)
+    if (!(await admitted(serverId))) {
+      if (fresh) following.delete(serverId)
+      return
+    }
+    await peer.join(consoleRoom(serverId))
+    void deps.startTail(serverId)
+    // What came before, to this watcher alone. A line that also arrives live is dropped by
+    // the page, which knows each line by its time and text.
+    const lines = await feed.recent(serverId, BACKFILL)
+    peer.emit('consoleHistory', {
+      serverId,
+      lines: lines.map((l) => ({ at: l.at.toISOString(), text: l.text, level: l.level })),
+    })
+  }
+  const unwatch = async (serverId: string) => {
+    following.delete(serverId)
+    await peer.leave(consoleRoom(serverId))
+    deps.stopTailIfUnwatched(serverId)
+  }
+  // An admin who stops being one keeps only the consoles of servers they own.
+  const recheck = async () => {
+    if (!(await stillSignedIn())) return
+    for (const serverId of [...following])
+      if (!(await feed.canWatch(userId, serverId))) await unwatch(serverId)
+  }
+
+  peer.on('watch', ({ serverId }) => void watch(serverId).catch(settle('a watch')))
+  peer.on('unwatch', ({ serverId }) => void unwatch(serverId).catch(settle('an unwatch')))
+  const rechecks = setInterval(() => void recheck().catch(settle('a recheck')), deps.recheckMs)
+  return () => clearInterval(rechecks)
+}
 
 /**
  * The realtime role: exactly one per deployment (Transport.io rooms live in one process). It
@@ -128,25 +209,14 @@ export async function startRealtime(options: RealtimeOptions): Promise<{ stop():
   server.onSession((peer: ServerPeer<RealtimeMap, Peer>) => {
     browsers.opened()
     peer.join(userRoom(peer.data.userId)).catch(settle('joining a person to their room'))
-    const watch = async (serverId: string) => {
-      if (!(await options.console.canWatch(peer.data.userId, serverId))) return
-      await peer.join(consoleRoom(serverId))
-      void startTail(serverId)
-      // What came before, to this watcher alone. A line that also arrives live is dropped by
-      // the page, which knows each line by its time and text.
-      const lines = await options.console.recent(serverId, BACKFILL)
-      peer.emit('consoleHistory', {
-        serverId,
-        lines: lines.map((l) => ({ at: l.at.toISOString(), text: l.text, level: l.level })),
-      })
-    }
-    const unwatch = async (serverId: string) => {
-      await peer.leave(consoleRoom(serverId))
-      stopTailIfUnwatched(serverId)
-    }
-    peer.on('watch', ({ serverId }) => void watch(serverId).catch(settle('a watch')))
-    peer.on('unwatch', ({ serverId }) => void unwatch(serverId).catch(settle('an unwatch')))
+    const stopFollowing = followConsoles(peer, {
+      feed: options.console,
+      recheckMs: options.recheckMs ?? RECHECK_MS,
+      startTail,
+      stopTailIfUnwatched,
+    })
     void peer.closed.then(() => {
+      stopFollowing()
       browsers.closed()
       for (const serverId of tails.keys()) stopTailIfUnwatched(serverId)
     })

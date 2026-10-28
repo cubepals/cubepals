@@ -18,7 +18,7 @@ const signedInAs = (userId: () => string | null) => ({
   handle: async () => new Response(null, { status: 404 }),
   sessionOf: async () => {
     const id = userId()
-    return id === null ? null : { userId: id, impersonatedBy: null }
+    return id === null ? null : { userId: id, sessionId: `session-${id}`, impersonatedBy: null }
   },
   switchFor: () => ({ impersonate: async () => {}, stopImpersonating: async () => {} }),
 })
