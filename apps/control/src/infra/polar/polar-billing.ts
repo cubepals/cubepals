@@ -23,7 +23,7 @@ import {
 import { discountBody, discountOf } from './polar-discounts.ts'
 import { GIFT_METADATA, giftCheckoutOf, giftOf, giftOrderOf } from './polar-gifts.ts'
 import type { Fields } from './polar-models.ts'
-import { call, largestPaying, moveSubscription, refusal, upgradeSubscription } from './polar-requests.ts'
+import { call, moveSubscription, paying, refusal, upgradeSubscription } from './polar-requests.ts'
 
 /**
  * Polar through its official TypeScript SDK, pinned to API version 2026-10 for requests and for
@@ -735,7 +735,7 @@ export class PolarBilling implements BillingProvider {
   #standing(data: unknown): BillingState | null {
     const state = CustomerState.parse(data)
     if (!state.external_id) return null
-    const paid = largestPaying(state.active_subscriptions, [...this.#plans.keys()])
+    const { paid, others } = paying(state.active_subscriptions, this.#plans)
     return {
       userId: state.external_id,
       externalCustomerId: state.id,
@@ -751,6 +751,7 @@ export class PolarBilling implements BillingProvider {
               ...(paid.created_at ? { createdAt: new Date(paid.created_at) } : {}),
               canceledAt: paid.canceled_at ? new Date(paid.canceled_at) : null,
             },
+      others,
     }
   }
 }

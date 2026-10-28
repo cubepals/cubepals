@@ -8,7 +8,7 @@
  */
 import { PolarClientError, PolarError, PolarRateLimitError } from '@polar-sh/sdk'
 import type { createPolar, models } from '@polar-sh/sdk/2026-10'
-import { BillingUnavailable } from '../../app/ports/optional.ts'
+import { type BillingState, BillingUnavailable } from '../../app/ports/optional.ts'
 
 /**
  * What Polar said was wrong with a request: its first problem's message, or its own summary. A
@@ -39,16 +39,42 @@ export async function call<T>(what: string, request: () => Promise<T>): Promise<
   }
 }
 
+/** A subscription as a customer's state lists it, as far as which pays for what goes. */
+interface Listed {
+  id: string
+  product_id: string
+  cancel_at_period_end: boolean
+  created_at?: string | null
+}
+
 /**
  * Of an account's subscriptions that pay at once (Core, then Plus bought over it), the one for the
- * largest plan: `products` lists each plan's product, the smallest first. Others are left out.
+ * largest plan, and of two for it the one made first (`paid`); and every other for a plan, as
+ * `BillingState.others`. `plans` maps each plan's product to its plan, the smallest first.
  */
-export function largestPaying<T extends { product_id: string }>(
+export function paying<T extends Listed>(
   subscriptions: readonly T[],
-  products: readonly string[],
-): T | undefined {
+  plans: ReadonlyMap<string, string>,
+): { paid: T | undefined; others: NonNullable<BillingState['others']> } {
+  const products = [...plans.keys()]
   const rank = (subscription: T) => products.indexOf(subscription.product_id)
-  return subscriptions.filter((each) => rank(each) >= 0).sort((a, b) => rank(b) - rank(a))[0]
+  const made = (subscription: T) => (subscription.created_at ? Date.parse(subscription.created_at) : 0)
+  const paid = subscriptions
+    .filter((each) => rank(each) >= 0)
+    .sort((a, b) => rank(b) - rank(a) || made(a) - made(b))[0]
+  const others = subscriptions.flatMap((each) => {
+    const planKey = plans.get(each.product_id)
+    if (planKey === undefined || each === paid) return []
+    return [
+      {
+        externalSubscriptionId: each.id,
+        planKey,
+        cancelAtPeriodEnd: each.cancel_at_period_end,
+        ...(each.created_at ? { createdAt: new Date(each.created_at) } : {}),
+      },
+    ]
+  })
+  return { paid, others }
 }
 
 /**

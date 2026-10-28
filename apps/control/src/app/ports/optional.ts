@@ -86,7 +86,24 @@ export interface BillingState {
     /** When it was set to end, where the provider says; null while it renews. */
     canceledAt?: Date | null
   } | null
+  /**
+   * The other subscriptions the provider says pay now, each for a plan, beside `subscription`;
+   * absent where the provider lists only that one.
+   */
+  others?: Array<{
+    externalSubscriptionId: string
+    planKey: string
+    cancelAtPeriodEnd: boolean
+    createdAt?: Date
+  }>
 }
+
+/**
+ * What the provider says an account pays for now, as a sync reads it: the customer's id only where
+ * the provider gave one (a refresh for someone who was never a customer has none).
+ */
+export type BillingStanding = Pick<BillingState, 'userId' | 'subscription' | 'others'> &
+  Partial<Pick<BillingState, 'externalCustomerId'>>
 
 /** A paid order, as the billing provider reports it: what it was for, and every amount in cents. */
 export interface BillingOrder {

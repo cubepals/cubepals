@@ -17,7 +17,12 @@ import { FUNNEL, noteOnce } from '../insight/record.ts'
 import { listingsOfOwner } from '../listings/persistence.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { JobQueue } from '../ports/jobs.ts'
-import { type BillingOrder, type BillingState, BillingUnavailable, type OrderNow } from '../ports/optional.ts'
+import {
+  type BillingOrder,
+  type BillingStanding,
+  BillingUnavailable,
+  type OrderNow,
+} from '../ports/optional.ts'
 import type { Mailer } from '../ports/platform.ts'
 import {
   accountsWithLapses,
@@ -54,6 +59,7 @@ import {
   untoldAbout,
 } from './persistence.ts'
 import { moveToSmaller, requireNotSmaller, smallerRenewing, upgradeInPlace } from './plan-moves.ts'
+import { refundSecondCharge, stopSecondSubscriptions } from './second-subscriptions.ts'
 import {
   accountsWithYearsEnded,
   markReminded,
@@ -319,6 +325,7 @@ export class BillingService {
     if (order.userId === null) return this.gifts.received(provider, order)
     await this.#overpaid.balancePaid(order)
     await this.#overpaid.paidTwice(order)
+    await refundSecondCharge(this.#db, this.#caps, order)
     await this.chipIns.record(provider, order)
     await auditRenewal(this.#db, provider, order)
     if (order.paysForYear) await this.#yearPaid(order)
@@ -373,11 +380,7 @@ export class BillingService {
    * (the plan lasts a grace period then, and one past it is ended at the provider), and what the
    * resulting plan no longer allows stops.
    */
-  async syncSubscription(
-    state: Pick<BillingState, 'userId' | 'subscription'> & { externalCustomerId?: string },
-    by: string,
-    source: BillingSource,
-  ): Promise<void> {
+  async syncSubscription(state: BillingStanding, by: string, source: BillingSource): Promise<void> {
     const [user] = await this.#db
       .select({ id: schema.users.id })
       .from(schema.users)
@@ -448,16 +451,17 @@ export class BillingService {
   }
 
   /**
-   * A smaller plan's subscription still renewing beside a larger one (Plus bought by a year, or at
-   * a checkout begun before Core became Plus in place) is set to end with the month it paid for. A
-   * refusal from the provider fails the sync, which the provider's webhook delivers again.
+   * A smaller plan's subscription still renewing beside a larger one (Plus bought by a year, or at a checkout
+   * begun before Core became Plus in place) is set to end with the month it paid for; so is a second one for
+   * time paid already, refunded (`second-subscriptions.ts`). A provider's refusal fails the sync, sent again.
    */
-  async #stopSmallerPlans(state: Pick<BillingState, 'userId' | 'subscription'>, provider: string) {
+  async #stopSmallerPlans(state: BillingStanding, provider: string) {
     if (state.subscription === null) return
     const billing = requireCapability(this.#caps, 'billing')
     for (const id of await smallerRenewing(this.#db, state.userId, provider, state.subscription)) {
       await this.#reach(() => billing.stopRenewing(id))
     }
+    await stopSecondSubscriptions(this.#db, billing, state, this.#reach)
   }
 
   /**

@@ -108,7 +108,8 @@ export const billingOrders = pgTable(
     settledBy: text('settled_by'),
     /**
      * When Blockly asked the provider to refund it: a balance order that paid what was settled
-     * already, or an order a balance had settled that was then charged as well.
+     * already, an order a balance had settled that was then charged as well, or a charge of a
+     * second subscription to time already paid for.
      */
     refundAskedAt: ts('refund_asked_at'),
     /**
