@@ -145,6 +145,10 @@ export const WakeResult = z.discriminatedUnion('outcome', [
      * `broken`: it failed over what the server runs, which its owner sees and has to change.
      */
     reason: z.enum(['unknown', 'suspended', 'paused', 'quota', 'deleted', 'failed', 'broken']),
+    /** Refused because the owner's free trial's hours are all played, as on the route. */
+    trialOver: z.literal(true).optional(),
+    /** The server's name, on a refusal for its owner's play: the player hears whose server it is. */
+    name: z.string().optional(),
   }),
 ])
 export type WakeResult = z.infer<typeof WakeResult>

@@ -49,7 +49,7 @@ import { type Fingerprint, fingerprint, type RouteInputs, type RouteServer, read
 import { forgetAddresses, joinEnded, knownAddress } from './known-addresses.ts'
 import { pingWake } from './ping-wake.ts'
 import { EDGE_SAID_EVERY_MS, forgetQuietEdges, markListed, sawEdge, seen } from './routed.ts'
-import { restingFor, turnedAway } from './turned-away.ts'
+import { restingFor, trialPlayed, turnedAway } from './turned-away.ts'
 
 /**
  * The application side of the edge protocol. It resolves hostnames and destinations; the edge
@@ -535,7 +535,7 @@ export class EdgeService {
       return null
     } catch (error) {
       if (!(error instanceof AppError)) throw error
-      if (error.code !== 'invalid_transition') return this.#refused(error)
+      if (error.code !== 'invalid_transition') return this.#refused(server, error)
       // A join at another edge asked first, and the start it asked for runs: this one waits on it.
       // Any other status: the server moved on (a rest, a move) after the join read it.
       return (await findServer(this.#db, server.id))?.lifecycle.status === 'starting' ? null : MOVED_ON
@@ -591,9 +591,16 @@ export class EdgeService {
     return waking ? 'waking' : 'running'
   }
 
-  /** What a join is told when its start was refused. */
-  #refused(error: AppError): WakeResult {
-    return { outcome: 'denied', reason: REFUSED[error.code] ?? 'unknown' }
+  /**
+   * What a join is told when its start was refused: for its owner's free trial, played, whose
+   * server it is and that it isn't back by itself.
+   */
+  async #refused(server: MinecraftServer, error: AppError): Promise<WakeResult> {
+    const reason = REFUSED[error.code] ?? 'unknown'
+    const played = error.code === 'limit_reached' && (await trialPlayed(this.#db, server.ownerId, new Date()))
+    return played
+      ? { outcome: 'denied', reason, trialOver: true, name: server.name }
+      : { outcome: 'denied', reason }
   }
 
   /**

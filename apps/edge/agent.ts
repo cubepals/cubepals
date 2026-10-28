@@ -626,7 +626,9 @@ function heldVisit(header: Uint8Array | null) {
  */
 function refusal(result: WakeResult | null, route: EdgeRoutes['routes'][number] | undefined): string {
   if (result?.outcome !== 'denied' || result.reason !== 'quota') return TURNED_AWAY[whyNot(result)]
-  return resting(route) ? restingJoin(route?.name) : TURNED_AWAY.quota
+  return result.trialOver === true || resting(route)
+    ? restingJoin(result.name ?? route?.name)
+    : TURNED_AWAY.quota
 }
 
 /**

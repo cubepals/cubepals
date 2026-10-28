@@ -1441,7 +1441,10 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
     route carries `trialOver`, the message is "Resting for now" under the server's own
     (`apps/edge/resting.ts`). It never calls the wake webhook and is never reported as a session,
     so it never wakes a server or keeps one up. A join refused with `trialOver` is told whose
-    server it reached and that its owner's free trial is used up.
+    server it reached, by the name on the refusal, and that its owner's free trial is used up. The
+    control plane says so whenever the trial's hours are all played, whatever last stopped the
+    server (its idle time can come first), and keeps the player for the owner to see
+    (`app/edge/turned-away.ts`).
   - A join (2) to a sleeping server goes to the wake webhook first, whose `{"backend": …}` is where
     mc-router connects it (the waiting room, below), so a join reaches this listener only when it
     arrived in the moment another join was asking. mc-router holds it until that ask is over, and
