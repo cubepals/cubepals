@@ -16,6 +16,7 @@ import type { PublicStatus } from '../../app/(public)/status'
 import { ctaMark } from '../../app/(public)/steps'
 import { heroSmallPrint } from '../../lib/bedrock'
 import type { RoomKey } from '../engine/chunk'
+import { Support, Trust } from '../FirstWords'
 import type { Tone } from '../kit'
 import {
   addressOf,
@@ -114,10 +115,7 @@ export function Night({
         <h1 className={`bl-display ${styles.headline}`}>
           <span>Send your friends</span> <span>the address.</span> <span>They’re in.</span>
         </h1>
-        <p className={`bl-lede ${styles.support}`}>
-          Make a server in three decisions. {bedrock ? 'Friends on PC, phones and tablets' : 'Your friends'}{' '}
-          join from the normal game, whenever they like.
-        </p>
+        <Support bedrock={bedrock} className={`bl-lede ${styles.support}`} />
         <div className={styles.go}>
           <Link href={create} className="bl-btn bl-btn--lg" {...ctaMark('hero_create')}>
             Create a server
@@ -132,6 +130,7 @@ export function Night({
             )}
           </p>
         </div>
+        <Trust />
         <Arcade status={arcade} className={styles.arcade} />
       </div>
     </Beat>

@@ -292,6 +292,8 @@ export class BootSequence {
     }
 
     await this.#letIn(ctx, server, handle, revision, proxyProtocol, leftOut)
+    // Kept on the record: what follows is the platform's own reading, and its time is the boot's.
+    await ctx.mark('let_in')
 
     // Up, yet without all it was told to load: Paper goes on past a plugin it can't load, and the
     // server says so rather than passing for one that runs everything. A log followed from now

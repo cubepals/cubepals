@@ -13,7 +13,7 @@ import { HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import type { models } from '../../infra/polar/polar-models.ts'
 import { hasDatabase } from '../../testing/harness.ts'
-import { orderEvent } from '../../testing/polar.ts'
+import { failing, orderEvent } from '../../testing/polar.ts'
 import { CHIP_IN, PolarWorld } from '../../testing/polar-world.ts'
 import type { UserActor } from '../actor.ts'
 import { installTuning, tuning } from '../tuning.ts'
@@ -146,6 +146,39 @@ test.skipIf(!hasDatabase)(
     expect(await refusal(chipIn(friend, freeServer.inviteCode, 500))).toBe(
       'This server doesn’t take chip-ins right now.',
     )
+  },
+)
+
+test.skipIf(!hasDatabase)(
+  'chip-ins started at once are each counted against the day’s caps, and so is one Polar didn’t answer',
+  async () => {
+    const { owner } = await w.subscriber('Kim')
+    const server = await stoppedServer(owner)
+    const friend = await w.h.user('Lou')
+    const was = tuning()
+    installTuning({ ...was, abuse: { ...was.abuse, chipIn: { payerDayCents: 6000, serverDayCents: 8000 } } })
+
+    // Polar doesn't answer, so it may have made the checkout: the start stays counted.
+    const held = w.polar.reply
+    w.polar.reply = (request) =>
+      request.method === 'POST' && request.path.startsWith('/v1/checkouts') ? failing() : held(request)
+    expect(await refusal(chipIn(friend, server.inviteCode, 2000))).toBe(
+      'Payments are not answering right now. Try again in a minute.',
+    )
+    w.reset()
+
+    const results = await Promise.all(
+      Array.from({ length: 6 }, () => refusal(chipIn(friend, server.inviteCode, 2000))),
+    )
+    expect(results.filter((r) => r === null)).toHaveLength(2)
+    expect(
+      results.filter((r) => r === 'You can chip in up to $60.00 a day. Try again tomorrow.'),
+    ).toHaveLength(4)
+
+    // From everyone at once, the server's own cap holds too.
+    const others = await Promise.all(['Max', 'Ned', 'Oli'].map((name) => w.h.user(name)))
+    const toServer = await Promise.all(others.map((payer) => refusal(chipIn(payer, server.inviteCode, 1500))))
+    expect(toServer.filter((r) => r === null)).toHaveLength(1)
   },
 )
 

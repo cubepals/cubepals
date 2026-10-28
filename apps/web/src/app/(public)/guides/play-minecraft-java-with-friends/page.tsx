@@ -83,8 +83,8 @@ export default function Guide() {
 
       <Part id="quickest" title="The quickest way to a server">
         <p>
-          On Cubepals it’s three decisions: what to play, who’s playing, and a name. Then you send the
-          address.{' '}
+          On Cubepals it’s a few decisions: what to play and a name, and who’s playing where a plan has more
+          than one size. Then you send the address.{' '}
           <GuideLink to="minecraft-server-for-friends">Making a server for friends, step by step</GuideLink>{' '}
           walks through it, and <GuideLink to="minecraft-server-cost">what a server costs</GuideLink> covers
           the money. The plans are on <Link href="/pricing">Pricing</Link>.

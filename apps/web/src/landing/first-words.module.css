@@ -1,0 +1,24 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/* The trust facts (FirstWords.tsx): small and quiet under the button, a tick before each, in the ink
+   of the text around them. Positioned so they sit over the sky, as the words above them do. */
+.trust {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9375rem;
+  line-height: 1.35;
+}
+.tick {
+  margin-inline-end: 0.5em;
+}
+.trust a {
+  text-decoration: underline;
+}

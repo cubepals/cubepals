@@ -9,6 +9,7 @@ import { DiagnosedFailure, inFull, inPlainWords, PermanentFailure } from '../err
 import { operationEnded, operationFailed } from '../platform/telemetry.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { JobAttempt } from '../ports/jobs.ts'
+import type { RuntimeMark } from '../ports/runtime.ts'
 import { findServer, lockServer } from '../servers/persistence.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
 import {
@@ -41,9 +42,34 @@ export type OperationStep =
  * What an operation's record keeps for the platform beside its steps, never shown as one:
  * `resume_hung`, a resume given up on and started fresh (`resume.ts`); `host_refused`, a start its
  * server's own host couldn't serve; `no_room`, one its runtime had no room for, which went back to
- * sleep (both `handlers/host-refused.ts`).
+ * sleep (both `handlers/host-refused.ts`). The rest say why a wake booted (`RuntimeMark`, and
+ * `memory_lost` where its last sleep kept its memory and the provider stopped it since), how a
+ * sleep went (`SleepMark`), and when a boot let its players in (`let_in`, `boot.ts`).
  */
-type OperationMark = 'resume_hung' | 'host_refused' | 'no_room'
+type OperationMark =
+  | 'resume_hung'
+  | 'host_refused'
+  | 'no_room'
+  | 'memory_lost'
+  | 'let_in'
+  | RuntimeMark
+  | SleepMark
+
+/**
+ * How a sleep ended, on the stop that put the server to sleep (`handlers/winding-down.ts`):
+ * `slept`, with its memory kept; otherwise stopped, and why: `stop_reason`, a stop that is no
+ * sleep; `unsaved`, its world not saved; `players_on`, someone on it as it went; `unsynced`, its
+ * files not written through; `no_sleep`, a runtime that only stops; `runtime_stopped`, the runtime
+ * stopped it instead (its switch off, or the provider wouldn't keep the memory).
+ */
+export type SleepMark =
+  | 'slept'
+  | 'stop_reason'
+  | 'unsaved'
+  | 'players_on'
+  | 'unsynced'
+  | 'no_sleep'
+  | 'runtime_stopped'
 
 export interface OperationContext {
   op: OperationRecord

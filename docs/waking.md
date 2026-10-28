@@ -11,9 +11,15 @@ Blockly does about it. A resume that hangs, and the fallbacks for it, are
    minutes, Plus 15), or after the 5-minute probation for a run a connection woke and nobody
    joined (`domain/server/idle.ts`). Where the suspend switch is on
    (`app/platform/suspend-switch.ts`, `FLY_SUSPEND`), Fly keeps its memory, once the world is
-   saved, nobody is on, and its files are written through (`mayDoze`,
+   saved, nobody is on, and its files are written through (`dozeRefusal`,
    `app/operations/handlers/winding-down.ts`). Otherwise it stops. A sleep that kept the memory
    says so in `server_runtimes.memory_kept_at`, which the next run's start clears.
+
+   Each record says how it went, as marks among the operation's steps: the stop's `slept`, or why
+   it stopped instead (`stop_reason`, `unsaved`, `players_on`, `unsynced`, `no_sleep`,
+   `runtime_stopped`); a start that boots, why (`not_asleep`, `memory_lost` where the sleep kept
+   the memory and the machine was found stopped, `other_spec`, `no_compute`); and a boot's
+   `let_in`, once its players may join, before the platform reads what the boot printed.
 2. **Stopped.** Nothing in Blockly turns a suspended machine into a stopped one after a while. The
    memory goes when:
    - Fly drops it: a host migration, maintenance, a lost snapshot. Fly promises no resume and

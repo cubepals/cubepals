@@ -80,6 +80,11 @@ export interface AbuseLimits {
    */
   worldUploadsPerDay: number
   /**
+   * Times one account may ask the billing provider for its standing a minute (`billing.refresh`),
+   * as its account page does once on coming back from a checkout or the portal.
+   */
+  refreshesPerMinute: number
+  /**
    * Public reads one address may make of one server a minute (`app/sharing/queries.ts`): the page
    * people open, and the status, badge and card around it; of one invitation, whose title and page
    * count as two; and of invitations across every code.
@@ -141,6 +146,7 @@ export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {
   joinReportsPerSecond: 10,
   joinReportBytes: 65_536,
   worldUploadsPerDay: 10,
+  refreshesPerMinute: 10,
   publicReadsPerMinute: { page: 120, status: 240, invite: 60, invites: 1200 },
   consoleWatchesPerMinute: 60,
   consolesPerConnection: 10,

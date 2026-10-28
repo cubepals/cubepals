@@ -136,10 +136,19 @@ export interface RuntimeObservation {
 /** `resuming`: compute asleep with its memory kept is started as it was, and nothing else is done. */
 type RuntimeStep = 'allocating' | 'waiting_for_room' | 'storage' | 'compute' | 'booting' | 'resuming'
 
+/**
+ * Why a start boots rather than resumes, where a runtime can tell: `not_asleep`, its compute
+ * stopped rather than asleep with its memory; `other_spec`, asleep on another spec than the one
+ * asked for; `no_compute`, nothing there to start yet.
+ */
+export type RuntimeMark = 'not_asleep' | 'other_spec' | 'no_compute'
+
 export interface ProgressSink {
   step(name: RuntimeStep): Promise<void>
   /** Persist immediately, so a crash mid-provision leaves nothing unfindable. */
   handle(handle: RuntimeHandle): Promise<void>
+  /** Kept on the operation's record beside its steps, for the platform; a runtime may say none. */
+  mark?(mark: RuntimeMark): Promise<void>
 }
 
 export type RestoreSource =
