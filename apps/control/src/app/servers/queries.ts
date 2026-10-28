@@ -22,7 +22,7 @@ import type {
 } from '@blockly/contracts'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
-import { type Entitlements, entitlementsFor } from '../../domain/account/entitlements.ts'
+import { type Entitlements, entitlementsOf } from '../../domain/account/entitlements.ts'
 import { changeKind, describeChanges, type Loader, SETTING_BOUNDS } from '../../domain/revision/revision.ts'
 import { bedtime } from '../../domain/server/idle.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
@@ -167,7 +167,7 @@ export class ServerQueries {
     const server = authorize(actor, await findServer(this.#db, serverId))
     const revision = await loadRevisionFields(this.#db, server.desiredRevisionId, ['gameVersion', 'settings'])
     const standing = await loadStanding(this.#db, server.ownerId)
-    const entitlements = entitlementsFor(standing.plan, standing.limitOverrides)
+    const entitlements = entitlementsOf(standing)
     // The plan's caps are the page's bounds too, so the form asks for a value it can save.
     const caps = entitlements.settingCaps
     const capped = (bounds: { min: number; max: number }, cap: number | undefined) =>
@@ -287,7 +287,7 @@ export class ServerQueries {
 
   async createOptions(actor: Actor & { kind: 'user' }): Promise<CreateOptions> {
     const standing = await loadStanding(this.#db, actor.userId)
-    const entitlements = entitlementsFor(standing.plan, standing.limitOverrides)
+    const entitlements = entitlementsOf(standing)
     // Each template judged as a preview judges it: its size at the smallest party against this
     // plan. A template whose size isn't known yet (just started, or the catalogue away) is
     // offered as usual, and the preview on picking it is the answer.
@@ -413,7 +413,7 @@ export class ServerQueries {
     const browsing = input.text.trim() === ''
     const { hits } = await this.#catalog.searchModpacks(input)
     const standing = await loadStanding(this.#db, actor.userId)
-    const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+    const plan = entitlementsOf(standing)
     const ids = hits.map((hit) => hit.projectId)
     const checks = await loadPackChecks(this.#db, this.#catalog.id, ids)
     // What no one has checked yet is checked now, off the request, so the next list knows it.
@@ -471,7 +471,7 @@ export class ServerQueries {
         page: null,
       }
     const standing = await loadStanding(this.#db, actor.userId)
-    const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+    const plan = entitlementsOf(standing)
     const checks = await loadPackChecks(this.#db, this.#catalog.id, [project.projectId])
     const hit = this.#hit(project, plan, checks.get(project.projectId)?.refusal ?? null)
     if (found.versionRef === null) return { kind: 'pack', hit, versionId: null, versionLabel: null }
@@ -510,7 +510,7 @@ export class ServerQueries {
   ): Promise<SetupPreview> {
     const resolved = await this.#templates.resolve(from, actor)
     const standing = await loadStanding(this.#db, actor.userId)
-    const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+    const plan = entitlementsOf(standing)
     const size = sizeOf(partySize, resolved.tier)
     const fit = planFit(plan, resolved.from, {
       tier: size,
@@ -607,7 +607,7 @@ export class ServerQueries {
     const lastChange = await latestOfKind(this.#db, server.id, 'apply')
     const running = server.lifecycle.status === 'running'
     const standing = await loadStanding(this.#db, server.ownerId)
-    const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+    const plan = entitlementsOf(standing)
     const sessionStart =
       running && plan.maxSessionMinutes !== null ? await openIntervalStart(this.#db, server.id) : null
     const played = await lastActivity(this.#db, server.id)

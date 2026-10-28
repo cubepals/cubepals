@@ -13,7 +13,7 @@
  */
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
-import { entitlementsFor } from '../../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../../domain/account/entitlements.ts'
 import { bedtime } from '../../../domain/server/idle.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { loadStanding } from '../../accounts/persistence.ts'
@@ -84,7 +84,7 @@ export function idleStops(deps: {
     const run = await openRun(db, server.id)
     const played = await lastActivity(db, server.id)
     const standing = await loadStanding(db, server.ownerId)
-    const minutes = await idleMinutesFor(db, entitlementsFor(standing.plan, standing.limitOverrides))
+    const minutes = await idleMinutesFor(db, entitlementsOf(standing))
     // A run a connection woke that nobody joined is stopped early, whatever the plan allows an
     // idle server: waking something has to be worth its money, and nothing here can be forged.
     // Otherwise the plan's idle time counts from this run's start or the last play in it, never

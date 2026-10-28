@@ -9,7 +9,7 @@
  * Taking backups is `backups.ts`; rebuilding a lost host from one is `moving.ts`.
  */
 import type { Db } from '@blockly/db'
-import { diskForWorld, entitlementsFor } from '../../../domain/account/entitlements.ts'
+import { diskForWorld, entitlementsOf } from '../../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { markReseed } from '../../access/persistence.ts'
 import type { AccessReconciler } from '../../access/reconciler.ts'
@@ -158,7 +158,7 @@ export function restoring(deps: RestoringDeps) {
       // plan's disks grow: the restore makes new storage from the spec anyway.
       if (chosen.tier === 'archive' && chosen.sizeBytes !== null) {
         const standing = await loadStanding(db, server.ownerId)
-        const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+        const plan = entitlementsOf(standing)
         const current = Math.max(plan.storage.startGb, await grownStorage(db, server.id))
         const bigger = diskForWorld(plan, current, chosen.sizeBytes)
         if (bigger !== null) await growStorage(db, server.id, bigger)

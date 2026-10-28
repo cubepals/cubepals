@@ -4,7 +4,7 @@
 
 import { offensive } from '@blockly/contracts/names'
 import { type Db, schema, type Tx } from '@blockly/db'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import { copying, eligibility, trust } from '../../domain/listing/trust.ts'
 import { catalogOfId } from '../../domain/mods/catalog.ts'
 import { emailOf, loadStanding } from '../accounts/persistence.ts'
@@ -300,7 +300,7 @@ export class ListingService {
       const result = eligibility({
         trust: verdict,
         standing,
-        entitlements: entitlementsFor(standing.plan, standing.limitOverrides),
+        entitlements: entitlementsOf(standing),
         deleted: server.deletedAt !== null,
         offensiveName: [server.name, server.slug].some(offensive),
       })

@@ -6,7 +6,7 @@ import { DESCRIPTION_MAX_LENGTH, NAME_MAX_LENGTH, SERVER_ICONS, SERVER_TAGS } fr
 import { DAY_MS, HOUR_MS } from '@blockly/contracts/durations'
 import { type Db, schema, type Tx } from '@blockly/db'
 import { and, eq, sql } from 'drizzle-orm'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import { type RevisionDraft, welcome } from '../../domain/revision/revision.ts'
 import { type Command, decide, type OperationKind, type StopReason } from '../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
@@ -362,7 +362,7 @@ export class MinecraftServerService {
     )
     const now = new Date()
     const standing = await loadStanding(tx, server.ownerId)
-    const retention = entitlementsFor(standing.plan, standing.limitOverrides).trashRetentionDays
+    const retention = entitlementsOf(standing).trashRetentionDays
     await markDeleted(tx, deleted, now, new Date(now.getTime() + retention * DAY_MS))
     // Deletion is an eligibility input (§5): the listing's read model follows it at once.
     await this.#jobs.enqueueEligibility([server.id], tx)

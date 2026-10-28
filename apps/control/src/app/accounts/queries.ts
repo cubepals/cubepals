@@ -10,6 +10,7 @@ import {
   type Entitlements,
   EXTRA_CHOICES,
   entitlementsFor,
+  entitlementsOf,
   PAID_PLANS,
   PLAN_KEYS,
   planName,
@@ -199,7 +200,7 @@ export class AccountQueries {
     if (actor.kind === 'system' || actor.kind === 'operator') throw new NotFound('Account')
     const userId = actor.userId
     const standing = await loadStanding(this.#db, userId, now)
-    const entitlements = entitlementsFor(standing.plan, standing.limitOverrides)
+    const entitlements = entitlementsOf(standing)
     const owned = await countServers(this.#db, userId)
     const month = await meteredMonth(this.#db, standing, entitlements, now)
     const zone = standing.timeZone ?? DEFAULT_TIME_ZONE

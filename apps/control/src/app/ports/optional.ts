@@ -85,6 +85,13 @@ export interface BillingState {
     createdAt?: Date
     /** When it was set to end, where the provider says; null while it renews. */
     canceledAt?: Date | null
+    /** The provider's product it is on, where the provider names one. */
+    productId?: string
+    /**
+     * What its product sells the plan with, where it sets terms of its own (an early price); null
+     * on the plan's own product. Kept with the subscription the first time it is seen on it.
+     */
+    terms?: { priceCents: number; includedUnits: number; mostExtraUnits: number | null } | null
   } | null
 }
 
