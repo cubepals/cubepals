@@ -45,7 +45,12 @@ export function localCheckoutPages(deps: {
     if (ticket?.userId == null || ticket.planKey === null) return c.html(expired(), 400)
     // A year is one order, with no subscription to renew it.
     if (!ticket.year)
-      await deliver({ type: 'subscription.started', userId: ticket.userId, planKey: ticket.planKey })
+      await deliver({
+        type: 'subscription.started',
+        userId: ticket.userId,
+        planKey: ticket.planKey,
+        ...(ticket.productId === undefined ? {} : { productId: ticket.productId }),
+      })
     await deliver({
       type: 'order.paid',
       userId: ticket.userId,

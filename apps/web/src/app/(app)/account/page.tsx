@@ -40,6 +40,7 @@ import { FreeHoursUsed } from '../free-hours-used'
 import { OutForToday } from '../out-for-today'
 import { PlusOffer } from '../plus-offer'
 import { planAction } from './plan-action'
+import { PriceSwitch } from './price-switch'
 
 /** The signed-in person's plan: what it allows, what they use of it, and upgrading or managing it. */
 export default function AccountPage() {
@@ -589,6 +590,7 @@ function billingActions(overview: AccountOverviewView, opening: boolean, openPor
   if (billed === null && !renewable) return undefined
   return (
     <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)' }}>
+      {billed !== null && <PriceSwitch />}
       {renewable && (
         <Button
           variant="primary"

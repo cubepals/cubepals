@@ -371,7 +371,24 @@ export const CheckoutInput = z.object({
     .max(500)
     .refine((path) => sameSitePath(path) !== null)
     .optional(),
+  /** The price a month the checkout page showed (`PlanOfferView`), which the checkout must charge. */
+  priceCents: z.number().int().min(0).optional(),
 })
+
+/**
+ * What a month of a plan charges a person who buys it now, as their checkout page shows it before
+ * they pay: its price and hours, which are the plan's own, or an early price's while there is
+ * one, held for the page. `early` is for the account's own records, never a label shown.
+ */
+export interface PlanOfferView {
+  plan: string
+  priceCents: number
+  includedUnits: number | null
+  mostExtraUnits: number | null
+  early: boolean
+}
+
+export const OfferInput = z.object({ plan: z.string().trim().min(1).max(40) })
 
 /**
  * A plan as the pricing page reads it, for anyone, signed in or not: only what someone deciding

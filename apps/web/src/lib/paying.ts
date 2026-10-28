@@ -44,14 +44,14 @@ const PAYING_EVENTS = {
 
 type Plan = AccountOverviewView['plan']
 
-/** The checkout page showed a plan to buy. */
-export function checkoutOpened(plan: string, term: BillingTerm, reason: UpgradeReason): void {
-  capture(PAYING_EVENTS.checkoutOpened, { plan, term, reason })
+/** The checkout page showed a plan to buy, at an early price or its own (`terms`). */
+export function checkoutOpened(plan: string, term: BillingTerm, reason: UpgradeReason, early = false): void {
+  capture(PAYING_EVENTS.checkoutOpened, { plan, term, reason, ...(early ? { terms: 'early' } : {}) })
 }
 
 /** On to the payment provider's page. */
-export function checkoutContinued(plan: string, term: BillingTerm): void {
-  capture(PAYING_EVENTS.checkoutContinued, { plan, term }, true)
+export function checkoutContinued(plan: string, term: BillingTerm, early = false): void {
+  capture(PAYING_EVENTS.checkoutContinued, { plan, term, ...(early ? { terms: 'early' } : {}) }, true)
 }
 
 /** Back from the provider's pages: whether the plan, or the year paid for, is another than before. */

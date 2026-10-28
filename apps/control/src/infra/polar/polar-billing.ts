@@ -117,18 +117,24 @@ export class PolarBilling implements BillingProvider {
     email: string
     planKey: string
     term?: BillingTerm
+    productId?: string
     returnUrl: string
   }): Promise<string> {
-    const product =
-      input.term === 'year' ? await this.#yearProduct(input.planKey) : this.#products[input.planKey]
+    const early = input.term !== 'year' && input.productId !== undefined
+    const product = early
+      ? input.productId
+      : input.term === 'year'
+        ? await this.#yearProduct(input.planKey)
+        : this.#products[input.planKey]
     if (product === undefined)
       throw new Error(`No Polar product sells the ${input.planKey} plan by the ${input.term}`)
     const checkout = await withEmail(input.email, (email) =>
       call('starting a checkout', () =>
         this.#polar.checkouts.create({
           products: [product],
-          // Polar's default too, said here so a code always has a place to be typed.
-          allow_discount_codes: true,
+          // Polar's default too, said here so a code always has a place to be typed; the early
+          // price takes none.
+          allow_discount_codes: !early,
           external_customer_id: input.userId,
           ...email,
           success_url: input.returnUrl,
@@ -261,9 +267,10 @@ export class PolarBilling implements BillingProvider {
   }
 
   sells = (planKey: string) => Object.hasOwn(this.#products, planKey)
-  moveToPlan = (id: string, plan: string) => moveSubscription(this.#polar, this.#products[plan], id)
-  upgradeSubscription = (id: string, plan: string) =>
-    upgradeSubscription(this.#polar, this.#products[plan], id)
+  moveToPlan = (id: string, plan: string, product?: string) =>
+    moveSubscription(this.#polar, product ?? this.#products[plan], id)
+  upgradeSubscription = (id: string, plan: string, product?: string) =>
+    upgradeSubscription(this.#polar, product ?? this.#products[plan], id)
   sellsYear = async (planKey: string) => (await this.#yearProduct(planKey)) !== undefined
   earlyProduct = (planKey: string) => this.#early.newest(planKey)
 

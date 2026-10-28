@@ -9,15 +9,16 @@
  * month or for a year paid at once (which never renews, and is also how a year is renewed), and
  * the two things the person agrees to before it starts (the Terms, and that it starts now inside
  * the 14 days they could cancel in: a full refund below 30 hours played, the unplayed part past
- * it). The API refuses a checkout without them, and the audit log keeps them with it. Then the
- * payment page, which is Polar's.
+ * it). The API refuses a checkout without them, and the audit log keeps them with it. A month's
+ * price and hours are the ones the control plane holds for this page when it opens
+ * (`billing.offer`), the price the checkout then charges. Then the payment page, which is Polar's.
  */
 
-import type { AccountOverviewView, EntitlementsView } from '@blockly/contracts'
+import type { AccountOverviewView, EntitlementsView, PlanOfferView } from '@blockly/contracts'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useState } from 'react'
 import { FULL_REFUND_UNDER_HOURS } from '../../../legal/figures'
 import { consentFor, UNCONSENTED } from '../../../lib/agreement'
 import { messageOf, useTRPC } from '../../../lib/api'
@@ -109,29 +110,36 @@ function Offer({
   startsAt: string | null
 }) {
   const trpc = useTRPC()
+  const { plan, term = 'month' } = ask
+  const { month, ask: holdPrice } = useHeldMonth(ask, offered)
   const checkout = useMutation(
-    trpc.billing.checkout.mutationOptions({ onSuccess: ({ url }) => window.location.assign(url) }),
+    trpc.billing.checkout.mutationOptions({
+      onSuccess: ({ url }) => window.location.assign(url),
+      // The price may have changed since the page opened: the page asks again, and shows it.
+      onError: holdPrice,
+    }),
   )
   const [terms, setTerms] = useState(false)
   const [startNow, setStartNow] = useState(false)
   const [unticked, setUnticked] = useState(false)
   const consent = consentFor(terms, startNow)
-  const { plan, term = 'month', reason } = ask
-  useEffect(() => checkoutOpened(plan, term, reason), [plan, term, reason])
+  const early = month?.early ?? false
   const pay = () => {
     if (consent === null) {
       setUnticked(true)
       return
     }
-    checkoutContinued(plan, term)
+    checkoutContinued(plan, term, early)
     checkout.mutate({
       plan: ask.plan,
       term: ask.term ?? 'month',
       reason: ask.reason,
       consent,
       ...(ask.next ? { next: ask.next } : {}),
+      ...(month === null ? {} : { priceCents: month.priceCents }),
     })
   }
+  if (term === 'month' && month === null) return <Skeleton width={240} height={36} />
   const yearly = ask.term === 'year' ? offered.yearlyPriceCents : null
   return (
     <div className="bk-stack" style={{ gap: 'var(--space-24)', maxWidth: 'var(--width-form)' }}>
@@ -147,7 +155,7 @@ function Offer({
           Two boxes to tick, then you pay on Polar’s secure page and come straight back.
         </p>
       </header>
-      <Price ask={ask} name={name} offered={offered} startsAt={startsAt} />
+      <Price ask={ask} name={name} offered={offered} month={month} startsAt={startsAt} />
       <div className="bk-stack" style={{ gap: 'var(--space-16)' }}>
         <Checkbox checked={terms} onChange={setTerms} invalid={unticked && !terms}>
           I agree to the{' '}
@@ -199,19 +207,24 @@ function Price({
   ask,
   name,
   offered,
+  month,
   startsAt,
 }: {
   ask: CheckoutAsk
   name: string
   offered: EntitlementsView
+  /** The month as the page holds it; null for a year. */
+  month: PlanOfferView | null
   startsAt: string | null
 }) {
   const yearly = ask.term === 'year' ? offered.yearlyPriceCents : null
+  const hours = month?.includedUnits ?? offered.includedUnits
+  const monthly = month?.priceCents ?? offered.monthlyPriceCents
   const included = (
     <>
-      {offered.includedUnits !== null && (
-        <PlayHours hours={offered.includedUnits} priceCents={offered.monthlyPriceCents}>
-          {offered.includedUnits} hours of play
+      {hours !== null && (
+        <PlayHours hours={hours} priceCents={monthly}>
+          {hours} hours of play
         </PlayHours>
       )}{' '}
       each month, up to {offered.maxServers} servers.
@@ -226,7 +239,7 @@ function Price({
       {yearly === null ? (
         <Card
           flat
-          title={`${name}: ${dollars(offered.monthlyPriceCents)} a month`}
+          title={`${name}: ${dollars(monthly)} a month`}
           description={<>VAT included where it applies. Renews every month until you cancel. {included}</>}
         />
       ) : (
@@ -253,6 +266,38 @@ function Price({
     </>
   )
 }
+
+/**
+ * The month as the page holds it (`billing.offer`), asked for when the page opens and again by
+ * `ask`; null while it is asked for, and always for a year, whose price is the plan's own. One the
+ * page couldn't be told is the plan's own. Says the checkout opened once there is a price to show.
+ */
+function useHeldMonth(ask: CheckoutAsk, offered: EntitlementsView) {
+  const trpc = useTRPC()
+  const { plan, term = 'month', reason } = ask
+  const held = useMutation(trpc.billing.offer.mutationOptions())
+  const holdPrice = held.mutate
+  const askAgain = useCallback(() => {
+    if (term === 'month') holdPrice({ plan })
+  }, [plan, term, holdPrice])
+  useEffect(askAgain, [askAgain])
+  const month = term === 'month' ? (held.data ?? (held.isError ? ownOffer(plan, offered) : null)) : null
+  const early = month?.early ?? false
+  const shown = term === 'year' || month !== null
+  useEffect(() => {
+    if (shown) checkoutOpened(plan, term, reason, early)
+  }, [plan, term, reason, early, shown])
+  return { month, ask: askAgain }
+}
+
+/** A month at the plan's own price and hours, where the page couldn't be told what it is held at. */
+const ownOffer = (plan: string, offered: EntitlementsView): PlanOfferView => ({
+  plan,
+  priceCents: offered.monthlyPriceCents,
+  includedUnits: offered.includedUnits,
+  mostExtraUnits: offered.mostExtraUnits,
+  early: false,
+})
 
 /** A price as it is said: "$15", or "$4.50" where there are cents. */
 const dollars = (cents: number) => `$${cents % 100 === 0 ? cents / 100 : (cents / 100).toFixed(2)}`

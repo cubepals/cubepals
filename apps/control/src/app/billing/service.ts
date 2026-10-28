@@ -31,6 +31,7 @@ import {
 import { settleable } from './balance.ts'
 import { ChipIns } from './chip-ins.ts'
 import { Coupons } from './coupons.ts'
+import { EarlyHolds, holdPaid, type PlanOffer, planOwn } from './early-holds.ts'
 import { SubscriptionEnding } from './ending.ts'
 import { auditRenewal, ExtraUsage } from './extra-usage.ts'
 import { Gifts, giftsAfterPaidTime } from './gifts.ts'
@@ -45,7 +46,14 @@ import {
   settleOtherSubscriptions,
   subscriptionsLeftOut,
 } from './persistence.ts'
-import { moveToSmaller, requireNotSmaller, smallerRenewing, upgradeInPlace } from './plan-moves.ts'
+import {
+  moveToSmaller,
+  onPlanPrice,
+  requireNotSmaller,
+  smallerRenewing,
+  switchToEarly,
+  upgradeInPlace,
+} from './plan-moves.ts'
 import {
   accountsWithYearsEnded,
   markReminded,
@@ -54,6 +62,33 @@ import {
   yearsAhead,
   yearsToRemind,
 } from './years.ts'
+
+/** A checkout started, as the audit log keeps it with what the person agreed to on its page. */
+function checkoutStarted(
+  actor: Actor,
+  userId: string,
+  planKey: string,
+  term: BillingTerm,
+  options: { reason?: UpgradeReason; consent?: CheckoutConsent },
+  product: string | undefined,
+) {
+  return {
+    actor: requestedBy(actor),
+    action: 'billing.checkout_started',
+    subjectType: 'account',
+    subjectId: userId,
+    data: {
+      plan: planKey,
+      // A year is said; the month, as every checkout before years, isn't.
+      ...(term === 'year' ? { term } : {}),
+      reason: options.reason ?? 'account',
+      ...(product === undefined ? {} : { early: true }),
+      ...(options.consent === undefined
+        ? {}
+        : { terms: options.consent.terms, startNow: options.consent.startNow }),
+    },
+  }
+}
 
 /** The provider's word on the subscription that pays, as `saveSubscription` keeps it. */
 function savedOf(
@@ -112,6 +147,8 @@ export class BillingService {
   readonly #ending: SubscriptionEnding
   /** Payments that failed, and what is owed from them. */
   readonly #owed: OwedPayments
+  /** The price a checkout will charge, held while its page is open. */
+  readonly #holds: EarlyHolds
   readonly #webOrigin: string
   /** Where the web app's account page is, for the provider to send people back to. */
   readonly #returnUrl: string
@@ -143,6 +180,7 @@ export class BillingService {
     this.#overpaid = new Overpayments(deps)
     this.#ending = new SubscriptionEnding(deps)
     this.#owed = new OwedPayments(deps)
+    this.#holds = new EarlyHolds(deps)
     this.#webOrigin = deps.webOrigin
     // The page reads the provider's word when people come back, before the webhook arrives.
     this.#returnUrl = new URL('/account?from=billing', deps.webOrigin).toString()
@@ -159,7 +197,14 @@ export class BillingService {
   async startCheckout(
     actor: Actor,
     planKey: string,
-    options: { term?: BillingTerm; reason?: UpgradeReason; next?: string; consent?: CheckoutConsent } = {},
+    options: {
+      term?: BillingTerm
+      reason?: UpgradeReason
+      next?: string
+      consent?: CheckoutConsent
+      /** The price a month the checkout page showed, which the checkout must charge. */
+      priceCents?: number
+    } = {},
   ): Promise<{ url: string }> {
     const user = await this.#person(actor)
     const term = options.term ?? 'month'
@@ -187,8 +232,10 @@ export class BillingService {
     const returnUrl = new URL(this.#returnUrl)
     const next = sameSitePath(options.next)
     if (next !== null) returnUrl.searchParams.set('next', next)
+    const offer = await this.#offerFor(user.id, planKey, term, options.priceCents)
+    const product = offer?.productId ?? undefined
     // The subscription that pays for a smaller plan becomes this one: nothing renews beside it.
-    if (term === 'month' && (await upgradeInPlace(this.#db, billing, user.id, planKey, actor, this.#reach))) {
+    if (offer && (await upgradeInPlace(this.#db, billing, user.id, planKey, actor, this.#reach, product))) {
       await this.refresh(actor)
       return { url: returnUrl.toString() }
     }
@@ -198,27 +245,52 @@ export class BillingService {
         email: user.email,
         planKey,
         term,
-        priceCents: (term === 'year' ? plan.yearlyPriceCents : null) ?? plan.monthlyPriceCents,
+        priceCents: offer?.priceCents ?? plan.yearlyPriceCents ?? plan.monthlyPriceCents,
+        ...(product === undefined ? {} : { productId: product }),
         returnUrl: returnUrl.toString(),
       }),
     )
-    await this.#db.insert(schema.auditLog).values({
-      actor: requestedBy(actor),
-      action: 'billing.checkout_started',
-      subjectType: 'account',
-      subjectId: user.id,
-      // What the person agreed to on the checkout page, kept with the checkout it started.
-      data: {
-        plan: planKey,
-        // A year is said; the month, as every checkout before years, isn't.
-        ...(term === 'year' ? { term } : {}),
-        reason: options.reason ?? 'account',
-        ...(options.consent === undefined
-          ? {}
-          : { terms: options.consent.terms, startNow: options.consent.startNow }),
-      },
-    })
+    await this.#db
+      .insert(schema.auditLog)
+      .values(checkoutStarted(actor, user.id, planKey, term, options, product))
     return { url }
+  }
+
+  /**
+   * What a checkout will charge: for a month, the price its page showed and holds
+   * (`EarlyHolds.offer`), refused when it is no longer that price so the page shows the new one
+   * before any payment; for a year, null, and any hold for a month is let go.
+   */
+  async #offerFor(
+    userId: string,
+    planKey: string,
+    term: BillingTerm,
+    shown?: number,
+  ): Promise<PlanOffer | null> {
+    if (term === 'year') {
+      await this.#holds.release(userId)
+      return null
+    }
+    const offer = await this.#holds.offer(userId, planKey)
+    if (shown !== undefined && shown !== offer.priceCents)
+      throw new AppError(
+        'invalid_choice',
+        `${planName(planKey)} is ${dollars(offer.priceCents)} a month now. Check the price, then continue.`,
+      )
+    return offer
+  }
+
+  /**
+   * What a month of `planKey` charges the person if they buy it now, held for their checkout page
+   * (`EarlyHolds.offer`). Their own plan isn't one they buy, and is answered at its own price.
+   */
+  async offer(actor: Actor, planKey: string): Promise<PlanOffer> {
+    const user = await this.#person(actor)
+    if (!PAID_PLANS.includes(planKey))
+      throw new AppError('invalid_choice', `There is no ${planKey} plan to buy.`)
+    await this.#db.transaction((tx) => this.#policy.require(tx, user.id, { kind: 'billing' }))
+    if ((await loadStanding(this.#db, user.id)).plan === planKey) return planOwn(planKey)
+    return this.#holds.offer(user.id, planKey)
   }
 
   /**
@@ -274,12 +346,49 @@ export class BillingService {
     return { url }
   }
 
-  /** Plus down to Core and the like: at the month's end, Plus until then (`plan-moves.ts`). */
-  async moveToSmaller(actor: Actor, planKey: string): Promise<{ plan: string; at: Date }> {
+  /**
+   * Plus down to Core and the like: at the month's end, Plus until then (`plan-moves.ts`), at the
+   * price a month the page showed (`priceCents`, as `offer` answered it).
+   */
+  async moveToSmaller(
+    actor: Actor,
+    planKey: string,
+    priceCents?: number,
+  ): Promise<{ plan: string; at: Date }> {
     const user = await this.#person(actor)
     await this.#db.transaction((tx) => this.#policy.require(tx, user.id, { kind: 'billing' }))
     const billing = requireCapability(this.#caps, 'billing')
-    return moveToSmaller(this.#db, billing, user.id, planKey, actor, (call) => this.#reach(call))
+    const offer = await this.#offerFor(user.id, planKey, 'month', priceCents)
+    const product = offer?.productId ?? undefined
+    return moveToSmaller(this.#db, billing, user.id, planKey, actor, (call) => this.#reach(call), product)
+  }
+
+  /**
+   * The early price of the person's own plan, where their monthly subscription pays its own price
+   * and the plan has one now (`EarlyHolds.peek`); null otherwise. Holds nothing.
+   */
+  async switchable(actor: Actor): Promise<PlanOffer | null> {
+    const user = await this.#person(actor)
+    const billing = this.#caps.billing
+    const sub = billing ? await onPlanPrice(this.#db, billing, user.id) : null
+    if (sub === null) return null
+    const offer = await this.#holds.peek(sub.planKey)
+    return offer.productId === null ? null : offer
+  }
+
+  /** The person's subscription takes its plan's early price now, at the price their page showed. */
+  async switchPrice(actor: Actor, priceCents: number): Promise<void> {
+    const user = await this.#person(actor)
+    await this.#db.transaction((tx) => this.#policy.require(tx, user.id, { kind: 'billing' }))
+    const billing = requireCapability(this.#caps, 'billing')
+    const sub = await onPlanPrice(this.#db, billing, user.id)
+    if (sub === null)
+      throw new AppError('invalid_choice', 'Your plan isn’t one that can change its price now.')
+    const offer = await this.#holds.offer(user.id, sub.planKey)
+    if (offer.productId === null || offer.priceCents !== priceCents)
+      throw new AppError('invalid_choice', 'That price isn’t open any more. Your plan stays as it is.')
+    await switchToEarly(this.#db, billing, user.id, offer.productId, actor, this.#reach)
+    await this.refresh(actor)
   }
 
   /** The provider's page for changing or cancelling a subscription. */
@@ -424,6 +533,8 @@ export class BillingService {
       const paid = state.subscription
       if (paid !== null && state.externalCustomerId !== undefined)
         await saveSubscription(tx, savedOf(state.userId, provider, state.externalCustomerId, paid))
+      // A subscription on an early product is what its account's hold became.
+      if (paid?.terms && paid.productId) await holdPaid(tx, state.userId, paid.productId, now)
       await settleOtherSubscriptions(tx, state.userId, provider, keep, pastDue)
       // Kept renewing over a gift redeemed to start when it ended: the gift waits for the paid time.
       const giftsMoved =

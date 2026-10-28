@@ -50,6 +50,8 @@ export async function moveToSmaller(
   wanted: string,
   actor: Actor,
   reach: <T>(call: () => Promise<T>) => Promise<T>,
+  /** The early product it moves to, in place of the plan's own (`EarlyHolds.offer`). */
+  productId?: string,
 ): Promise<{ plan: string; at: Date }> {
   const sub = await latestSubscription(db, userId)
   if (sub === null || sub.provider !== billing.provider || !PAYING.includes(sub.status))
@@ -59,14 +61,19 @@ export async function moveToSmaller(
   if (!billing.sells(wanted)) throw new AppError('invalid_choice', `${planName(wanted)} isn’t available yet.`)
   if (sub.cancelAtPeriodEnd)
     throw new AppError('invalid_choice', `${planName(sub.planKey)} already ends with this month.`)
-  const { appliesAt } = await reach(() => billing.moveToPlan(sub.externalSubscriptionId, wanted))
+  const { appliesAt } = await reach(() => billing.moveToPlan(sub.externalSubscriptionId, wanted, productId))
   await recordMove(db, billing.provider, sub.externalSubscriptionId, wanted, appliesAt)
   await db.insert(schema.auditLog).values({
     actor: requestedBy(actor),
     action: 'billing.plan_move_scheduled',
     subjectType: 'account',
     subjectId: userId,
-    data: { from: sub.planKey, to: wanted, at: appliesAt.toISOString() },
+    data: {
+      from: sub.planKey,
+      to: wanted,
+      at: appliesAt.toISOString(),
+      ...(productId === undefined ? {} : { early: true }),
+    },
   })
   return { plan: wanted, at: appliesAt }
 }
@@ -84,19 +91,56 @@ export async function upgradeInPlace(
   wanted: string,
   actor: Actor,
   reach: <T>(call: () => Promise<T>) => Promise<T>,
+  /** The early product it becomes, in place of the plan's own (`EarlyHolds.offer`). */
+  productId?: string,
 ): Promise<boolean> {
   const sub = await latestSubscription(db, userId)
   if (sub === null || sub.provider !== billing.provider || !PAYING.includes(sub.status)) return false
   if (PAID_PLANS.indexOf(sub.planKey) >= PAID_PLANS.indexOf(wanted)) return false
-  await reach(() => billing.upgradeSubscription(sub.externalSubscriptionId, wanted))
+  await reach(() => billing.upgradeSubscription(sub.externalSubscriptionId, wanted, productId))
   await db.insert(schema.auditLog).values({
     actor: requestedBy(actor),
     action: 'billing.plan_upgraded_in_place',
     subjectType: 'account',
     subjectId: userId,
-    data: { from: sub.planKey, to: wanted },
+    data: { from: sub.planKey, to: wanted, ...(productId === undefined ? {} : { early: true }) },
   })
   return true
+}
+
+/**
+ * The account's monthly subscription on its plan's own price, where it pays and renews: one that
+ * may take the plan's early price in its place. Null for any other.
+ */
+export async function onPlanPrice(db: Db, billing: BillingProvider, userId: string) {
+  const sub = await latestSubscription(db, userId)
+  if (sub === null || sub.provider !== billing.provider || !PAYING.includes(sub.status)) return null
+  return sub.cancelAtPeriodEnd || sub.includedUnits !== null ? null : sub
+}
+
+/**
+ * The monthly subscription on its plan's own price takes the plan's early price now, on the same
+ * subscription (`upgradeSubscription`): the provider settles the difference for the rest of the
+ * month, and the hours it was sold with apply from then. Audited with the plan it stays on.
+ */
+export async function switchToEarly(
+  db: Db,
+  billing: BillingProvider,
+  userId: string,
+  productId: string,
+  actor: Actor,
+  reach: <T>(call: () => Promise<T>) => Promise<T>,
+): Promise<void> {
+  const sub = await onPlanPrice(db, billing, userId)
+  if (sub === null) throw new AppError('invalid_choice', 'Your plan isn’t one that can change its price now.')
+  await reach(() => billing.upgradeSubscription(sub.externalSubscriptionId, sub.planKey, productId))
+  await db.insert(schema.auditLog).values({
+    actor: requestedBy(actor),
+    action: 'billing.price_switched',
+    subjectType: 'account',
+    subjectId: userId,
+    data: { plan: sub.planKey, early: true },
+  })
 }
 
 /** The account's subscriptions still renewing for a plan smaller than the one now paying (`paying`). */

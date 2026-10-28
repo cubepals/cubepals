@@ -15,7 +15,7 @@ import type { ReactNode } from 'react'
 import { messageOf, useTRPC } from '../../../lib/api'
 import { checkoutHref } from '../../../lib/checkout'
 import { dayOf } from '../../../lib/present'
-import { Button, forSale, Note } from '../../../ui'
+import { Button, forSale, Note, priceOf } from '../../../ui'
 import { planMark } from '../../(public)/steps'
 
 /** What goes under `plan`'s card, if anything: the person's own plan and one not for sale have none. */
@@ -38,26 +38,50 @@ export function planAction(plan: PublicPlan, overview: AccountOverviewView, sell
   return <MoveDown plan={plan} planNow={overview.plan.key} from={billed.periodEnd} />
 }
 
-/** A move to a smaller plan from the day the month paid for ends: the plan now stays until then. */
+/**
+ * A move to a smaller plan from the day the month paid for ends: the plan now stays until then.
+ * The first press asks what the smaller plan would charge (`billing.offer`), and shows it; the
+ * second moves at that price.
+ */
 function MoveDown({ plan, planNow, from }: { plan: PublicPlan; planNow: string; from: string }) {
   const trpc = useTRPC()
   const queries = useQueryClient()
+  const asked = useMutation(trpc.billing.offer.mutationOptions())
   const move = useMutation(
     trpc.billing.moveTo.mutationOptions({
       onSuccess: () => queries.invalidateQueries({ queryKey: trpc.account.overview.queryKey() }),
     }),
   )
   const now = `${planNow[0]?.toUpperCase() ?? ''}${planNow.slice(1)}`
+  const offer = asked.data
+  if (offer === undefined)
+    return (
+      <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
+        <Button
+          variant="outline"
+          busy={asked.isPending ? 'Checking' : undefined}
+          onClick={() => asked.mutate({ plan: plan.key })}
+        >
+          {plan.name} from {dayOf(from)}
+        </Button>
+        <p className="type-body-sm">{now} stays until then. Your worlds are kept.</p>
+        {asked.isError && <Note tone="danger">{messageOf(asked.error)}</Note>}
+      </div>
+    )
   return (
     <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
+      <p className="type-body-sm">
+        {plan.name} is {priceOf(offer.priceCents)}
+        {offer.includedUnits === null ? '' : `, with ${offer.includedUnits} hours of play`}, from{' '}
+        {dayOf(from)}. {now} stays until then. Your worlds are kept.
+      </p>
       <Button
         variant="outline"
         busy={move.isPending ? 'Moving' : undefined}
-        onClick={() => move.mutate({ plan: plan.key })}
+        onClick={() => move.mutate({ plan: plan.key, priceCents: offer.priceCents })}
       >
-        {plan.name} from {dayOf(from)}
+        Move to {plan.name}
       </Button>
-      <p className="type-body-sm">{now} stays until then. Your worlds are kept.</p>
       {move.isError && <Note tone="danger">{messageOf(move.error)}</Note>}
     </div>
   )

@@ -240,6 +240,8 @@ export interface BillingProvider {
     planKey: string
     term?: BillingTerm
     priceCents?: number
+    /** A product at an early price to sell the month on, in place of the plan's own; it takes no code. */
+    productId?: string
     returnUrl: string
   }): Promise<string>
   /**
@@ -263,14 +265,19 @@ export interface BillingProvider {
    * The subscription changes to another plan's product when the period paid for ends, and keeps
    * its own until then (Plus to Core). Answers when it applies.
    */
-  moveToPlan(externalSubscriptionId: string, planKey: string): Promise<{ appliesAt: Date }>
+  moveToPlan(
+    externalSubscriptionId: string,
+    planKey: string,
+    productId?: string,
+  ): Promise<{ appliesAt: Date }>
   /**
    * The subscription becomes another plan's product now, the one subscription kept (Core to Plus):
    * the larger plan's price replaces the smaller, the difference for the rest of the period is
    * charged at once, and no second subscription renews beside it. One set to end with its period
-   * is made to renew first: the provider changes the product of none else.
+   * is made to renew first: the provider changes the product of none else. `productId`, for either:
+   * a product at an early price for the plan, in place of the plan's own.
    */
-  upgradeSubscription(externalSubscriptionId: string, planKey: string): Promise<void>
+  upgradeSubscription(externalSubscriptionId: string, planKey: string, productId?: string): Promise<void>
   /**
    * The subscription ends now, and nothing more is charged for it: its first month was withdrawn,
    * or its renewal is still unpaid when the plan's grace runs out. One ended already stays ended.

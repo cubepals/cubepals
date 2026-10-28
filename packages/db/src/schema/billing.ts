@@ -76,6 +76,29 @@ export const billingSubscriptions = pgTable(
 )
 
 /**
+ * The price a checkout will charge, held for an account while its checkout page is open: a plan's
+ * early price, taken from the room for early checkouts (`platform_controls.early_room_points`) in
+ * one locked step, so holds never take more than the room. One per account; it counts against the
+ * room until it expires unpaid, or, once paid, until the room is set again after the payment.
+ */
+export const earlyHolds = pgTable('early_holds', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  planKey: text('plan_key').notNull(),
+  /** The provider's product the checkout sells, at the price and hours below. */
+  productId: text('product_id').notNull(),
+  points: integer('points').notNull(),
+  priceCents: integer('price_cents').notNull(),
+  includedUnits: integer('included_units').notNull(),
+  mostExtraUnits: integer('most_extra_units'),
+  expiresAt: ts('expires_at').notNull(),
+  /** When a subscription on its product was first heard of for the account; null until then. */
+  paidAt: ts('paid_at'),
+  createdAt: createdAt(),
+})
+
+/**
  * What the billing provider was paid, one row per order, as its order webhooks report it: the
  * amounts and fees as charged. A later event about the same order (paid, then refunded) updates
  * its row.

@@ -55,6 +55,8 @@ export interface Ticket {
   priceCents: number
   /** A checkout for a year of the plan, paid once, rather than a subscription. */
   year?: boolean
+  /** The early product a month is sold on, in place of the plan's own. */
+  productId?: string
   /** The gift a gift page sells, the gift made before its checkout, and the email it is paid with. */
   gift?: GiftProduct
   giftId?: string
@@ -119,6 +121,7 @@ export class LocalBilling implements BillingProvider {
     planKey: string
     term?: BillingTerm
     priceCents?: number
+    productId?: string
     returnUrl: string
   }): Promise<string> {
     return this.#link({
@@ -127,6 +130,7 @@ export class LocalBilling implements BillingProvider {
       planKey: input.planKey,
       priceCents: input.priceCents ?? 0,
       ...(input.term === 'year' ? { year: true } : {}),
+      ...(input.term !== 'year' && input.productId !== undefined ? { productId: input.productId } : {}),
       returnUrl: input.returnUrl,
     })
   }
@@ -158,17 +162,22 @@ export class LocalBilling implements BillingProvider {
 
   /**
    * Its record of who pays is `billing_subscriptions` itself: the plan is the larger one from now,
-   * renewing, on the plan's own product, so it sells what the plan table says.
+   * renewing, on the early product named, with what it sells, or on the plan's own.
    */
-  async upgradeSubscription(externalSubscriptionId: string, planKey: string): Promise<void> {
+  async upgradeSubscription(
+    externalSubscriptionId: string,
+    planKey: string,
+    productId?: string,
+  ): Promise<void> {
+    const { terms } = this.#product(productId)
     await this.#db
       .update(schema.billingSubscriptions)
       .set({
         planKey,
-        productId: null,
-        priceCents: null,
-        includedUnits: null,
-        mostExtraUnits: null,
+        productId: productId ?? null,
+        priceCents: terms?.priceCents ?? null,
+        includedUnits: terms?.includedUnits ?? null,
+        mostExtraUnits: terms?.mostExtraUnits ?? null,
         cancelAtPeriodEnd: false,
         canceledAt: null,
         updatedAt: new Date(),
