@@ -167,6 +167,8 @@ describe('what the owner is told', () => {
         { path: 'mods/fogoverrides.jar', why: 'crashed' },
       ]),
     ).toEqual(['mods/sodium.jar', 'mods/fogoverrides.jar', 'overrides/mods/fogoverrides.jar'])
+    // One left out for players that another mod turned out to need runs.
+    expect(leaveOutNow(pinned, [{ path: 'mods/sodium.jar', why: 'needed' }])).toEqual([])
   })
 
   test('only what they’d want to know', () => {

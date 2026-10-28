@@ -6,9 +6,11 @@
  * The jars an uploaded pack keeps, held to the checks an uploaded jar gets (`mods/jar-checks.ts`):
  * one a list names by its digest or a signature matches refuses the pack, wherever the pack places
  * it, and one a list names by its digest after the pack was built comes off its servers at their
- * next start. Every jar here is built in the test; none is real malware.
+ * next start, its owners told. A jar a pack left out that a start finds another mod needs is held
+ * to the same checks before it runs, and after. Every jar here is built in the test; none is real
+ * malware.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { createHash, randomUUID } from 'node:crypto'
 import type { PackImportView } from '@blockly/contracts'
 import { schema } from '@blockly/db'
@@ -19,6 +21,7 @@ import { FakeMalwareLists } from '../../testing/malware.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
 import { classFile, fabricJar, unzipBytes, utf8, zipBytes } from '../../testing/uploads.ts'
 import type { UserActor } from '../actor.ts'
+import { loadPackContents } from './persistence.ts'
 
 const digest = (algorithm: string, bytes: Uint8Array) => createHash(algorithm).update(bytes).digest('hex')
 /** A Fabric mod for Minecraft 1.21.1 whose one class is a whole class file. */
@@ -58,6 +61,10 @@ afterAll(async () => {
 beforeEach(async () => {
   malware.entries = []
   if (hasDatabase) await h.app.jarChecks.refresh()
+})
+
+afterEach(() => {
+  if (hasDatabase) h.minecraft.breakOn(() => null)
 })
 
 /** What a browser does: ask, put the bytes where it was told, say it is done; then wait for the read. */
@@ -118,7 +125,7 @@ describe.skipIf(!hasDatabase)('the jars an uploaded pack keeps', () => {
     })
   }, 60_000)
 
-  test('a clean one builds, and comes off its servers at the next start once a list names it', async () => {
+  test('a clean one builds, and comes off its servers at the next start once a list names it, its owner told', async () => {
     const owner = await h.user('Cai', 'plus')
     const alpha = mod(`alpha${randomUUID().slice(0, 6)}`)
     const beta = mod(`beta${randomUUID().slice(0, 6)}`)
@@ -137,6 +144,9 @@ describe.skipIf(!hasDatabase)('the jars an uploaded pack keeps', () => {
     await h.app.jarChecks.refresh()
     const after = (await h.app.specs.desired(h.db, await h.server(server.id))).spec.env
     expect(after.MODRINTH_OVERRIDES_EXCLUSIONS?.split('\n')).toEqual(['mods/alpha.jar'])
+    // Its owner is told, as for a mod of their own.
+    const [told] = h.mail.to(`${owner.userId}@example.test`)
+    expect(told?.subject).toStartWith('We’re taking alpha.jar off ')
   }, 60_000)
 
   test('one it places outside its mods, a list names by its digest, refuses the pack', async () => {
@@ -311,3 +321,170 @@ describe.skipIf(!hasDatabase)(
     }, 60_000)
   },
 )
+
+/**
+ * A catalog pack whose index keeps `lib` off servers, which its own mod needs: a server of it
+ * stops as it starts until the pack's servers install the library anyway.
+ */
+const packNeeding = (lib: string) => {
+  const core = cdn.file(`${lib}-core-1`, fabricJar(`${lib}core`, { depends: { minecraft: '1.21.1' } }))
+  const library = cdn.file(`${lib}-2.5.3`, fabricJar(lib, { depends: { minecraft: '1.21.1' } }))
+  const entry = (path: string, file: typeof core, server: string) => ({
+    path,
+    hashes: { sha1: 'a'.repeat(40), sha512: file.sha512 },
+    env: { client: 'required', server },
+    downloads: [file.url],
+    fileSize: file.sizeBytes,
+  })
+  const path = `mods/${lib}-2.5.3.jar`
+  const index = {
+    formatVersion: 1,
+    game: 'minecraft',
+    versionId: '1.0',
+    name: `${lib} pack`,
+    files: [entry(`mods/${lib}-core-1.jar`, core, 'required'), entry(path, library, 'unsupported')],
+    dependencies: { minecraft: '1.21.1', 'fabric-loader': '0.16.14' },
+  }
+  const pack = cdn.file(`${lib}-pack`, zipBytes({ 'modrinth.index.json': utf8(JSON.stringify(index)) }))
+  const project = { projectId: `${lib}-pack`, slug: `${lib}-pack`, name: `${lib} pack`, summary: '' }
+  h.catalog.publishModpack(
+    { ...project, iconUrl: null, environments: ['client_and_server'], downloads: 1, categories: [] },
+    [
+      {
+        versionId: `${lib}-1`,
+        projectId: project.projectId,
+        versionLabel: '1.0',
+        channel: 'release',
+        state: 'listed',
+        environment: 'client_and_server',
+        loaders: ['fabric'],
+        gameVersions: ['1.21.1'],
+        publishedAt: new Date(Date.UTC(2026, 0, 1)),
+        file: pack,
+        dependencies: [],
+      },
+    ],
+  )
+  h.minecraft.breakOn((env) =>
+    (env.MODRINTH_FORCE_INCLUDE_FILES ?? '').includes(lib)
+      ? null
+      : [
+          'Some of your mods are incompatible',
+          `${lib} core requires version [2.5.3, ∞) of ${lib}, which is missing!`,
+        ].join('\n'),
+  )
+  return { projectId: project.projectId, pack, library, path }
+}
+
+describe.skipIf(!hasDatabase)('a jar a pack keeps off servers, which a mod of it needs', () => {
+  test('one a list names is not installed after all', async () => {
+    const needed = packNeeding('equinox')
+    malware.entries = [{ kind: 'sha512', value: needed.library.sha512, family: 'Example' }]
+    await h.app.jarChecks.refresh()
+    const owner = await h.user('Jo', 'plus')
+    const server = await h.create(owner, { from: { kind: 'modpack', projectId: needed.projectId } })
+    await h.settled(server.id, 30_000)
+    expect((await h.server(server.id)).lifecycle.status).not.toBe('running')
+    expect(await h.minecraft.file(server.id, needed.path)).toBeNull()
+    expect((await loadPackContents(h.db, needed.pack.sha512))?.leftOut ?? []).toEqual([])
+    const env = (await h.app.specs.desired(h.db, await h.server(server.id))).spec.env
+    expect(env.MODRINTH_FORCE_INCLUDE_FILES).toBeUndefined()
+  }, 60_000)
+
+  test('one installed comes off at the next start once a list names it, its owner told', async () => {
+    const needed = packNeeding('solstice')
+    const owner = await h.user('Kit', 'plus')
+    const server = await h.create(owner, { from: { kind: 'modpack', projectId: needed.projectId } })
+    await h.settled(server.id, 30_000)
+    expect((await h.server(server.id)).lifecycle).toMatchObject({ status: 'running' })
+    expect(await h.minecraft.file(server.id, needed.path)).not.toBeNull()
+    expect((await loadPackContents(h.db, needed.pack.sha512))?.leftOut).toEqual([
+      { path: needed.path, why: 'needed', sha512: needed.library.sha512 },
+    ])
+    const before = (await h.app.specs.desired(h.db, await h.server(server.id))).spec.env
+    expect(before.MODRINTH_FORCE_INCLUDE_FILES).toContain('solstice')
+
+    malware.entries = [{ kind: 'sha512', value: needed.library.sha512, family: 'Example' }]
+    await h.app.jarChecks.refresh()
+    const after = (await h.app.specs.desired(h.db, await h.server(server.id))).spec.env
+    expect(after.MODRINTH_FORCE_INCLUDE_FILES).toBeUndefined()
+    expect(after.MODRINTH_EXCLUDE_FILES).toContain('solstice')
+    const [told] = h.mail.to(`${owner.userId}@example.test`)
+    expect(told?.subject).toStartWith('We’re taking solstice-2.5.3.jar off ')
+  }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('a jar Blockly left out for players, which a mod of the pack needs', () => {
+  test('one a list names is not put back', async () => {
+    // The catalog says the library only runs in players' games; a mod of the pack needs it anyway.
+    const lib = 'vernal'
+    const library = cdn.file(`${lib}-1`, fabricJar(lib, { depends: { minecraft: '1.21.1' } }))
+    const user = cdn.file(`${lib}-user-1`, fabricJar(`${lib}user`, { depends: { minecraft: '1.21.1' } }))
+    const version = {
+      channel: 'release' as const,
+      state: 'listed' as const,
+      loaders: ['fabric'],
+      gameVersions: ['1.21.1'],
+      publishedAt: new Date(Date.UTC(2026, 0, 1)),
+      dependencies: [],
+    }
+    const project = { slug: lib, name: lib, summary: '', iconUrl: null, downloads: 1 }
+    h.catalog.publish({ ...project, projectId: lib, environments: ['client_only'] }, [
+      {
+        ...version,
+        versionId: `${lib}-1`,
+        projectId: lib,
+        versionLabel: '1',
+        environment: 'client_only',
+        file: library,
+      },
+    ])
+    const entry = (path: string, file: typeof library) => ({
+      path,
+      hashes: { sha1: 'a'.repeat(40), sha512: file.sha512 },
+      env: { client: 'required', server: 'required' },
+      downloads: [file.url],
+      fileSize: file.sizeBytes,
+    })
+    const index = {
+      formatVersion: 1,
+      game: 'minecraft',
+      versionId: '1.0',
+      name: `${lib} pack`,
+      files: [entry(`mods/${lib}-user-1.jar`, user), entry(`mods/${lib}-1.jar`, library)],
+      dependencies: { minecraft: '1.21.1', 'fabric-loader': '0.16.14' },
+    }
+    const pack = cdn.file(`${lib}-pack`, zipBytes({ 'modrinth.index.json': utf8(JSON.stringify(index)) }))
+    h.catalog.publishModpack(
+      { ...project, projectId: `${lib}-pack`, environments: ['client_and_server'], categories: [] },
+      [
+        {
+          ...version,
+          versionId: `${lib}-pack-1`,
+          projectId: `${lib}-pack`,
+          versionLabel: '1.0',
+          environment: 'client_and_server',
+          file: pack,
+        },
+      ],
+    )
+    h.minecraft.breakOn((env) =>
+      (env.MODRINTH_EXCLUDE_FILES ?? '').includes(lib)
+        ? [
+            'Incompatible mods found!',
+            `\t - Mod '${lib} user' (${lib}user) 1.0.0 requires any version of ${lib}, which is missing!`,
+          ].join('\n')
+        : null,
+    )
+    malware.entries = [{ kind: 'sha512', value: library.sha512, family: 'Example' }]
+    await h.app.jarChecks.refresh()
+    const owner = await h.user('Lee', 'plus')
+    const server = await h.create(owner, { from: { kind: 'modpack', projectId: `${lib}-pack` } })
+    await h.settled(server.id, 30_000)
+    expect((await h.server(server.id)).lifecycle.status).not.toBe('running')
+    expect(await h.minecraft.file(server.id, `mods/${lib}-1.jar`)).toBeNull()
+    expect((await loadPackContents(h.db, pack.sha512))?.leftOut).toEqual([
+      { path: `mods/${lib}-1.jar`, why: 'players', sha512: library.sha512 },
+    ])
+  }, 60_000)
+})

@@ -225,7 +225,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     policy,
     catalogMoved: (moved) => listings.catalogMoved(moved),
   })
-  const contents = new PackContents({ db, formats: ports.formats, catalog: ports.catalog })
+  const contents = new PackContents({ db, formats: ports.formats, catalog: ports.catalog, jarChecks })
   const packs = new PackService({
     ...ports,
     db,

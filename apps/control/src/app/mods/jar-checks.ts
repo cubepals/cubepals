@@ -16,10 +16,14 @@
  * A pack's jars, while the pack is built (`packs/build.ts`): each one it carries, wherever it is
  * placed, read the same way (`check`); each one it lists by its download held to the lists by
  * the digests the pack gives (`lookUp`), which only refuse the pack, since a pack's word alone
- * quarantines nothing. Either way the jar's check is kept by its sha512, so a list that names it
- * by a digest later quarantines it and its pack's servers leave it out at their next start. A
- * pack's jar has no bytes kept of its own to read again: when the lists change, its answer
- * stands until a pack carrying it is next built, which reads it again.
+ * quarantines nothing. A jar a pack left out, which a start finds another mod needs, is looked
+ * up the same way before its servers run it (`packs/contents.ts`). Either way the jar's check is
+ * kept by its sha512, so a list that names it later quarantines it, its pack's servers leave it
+ * out at their next start, and their owners are told. A carried jar's check holds all its
+ * digests; a listed one's holds its sha512, and its sha1 only where the catalog vouches for it, so
+ * a list that names a listed jar later by its sha1 alone finds it only then. A pack's jar has no
+ * bytes kept of its own to read again: when the lists change, its answer stands until a pack
+ * carrying it is next built, which reads it again.
  *
  * A quarantined jar is kept out of every server: never pinned, left out of each start's spec
  * (`servers/specs.ts`), a pack's by its path, and never handed to a runtime
@@ -28,7 +32,7 @@
  */
 import { MINUTE_S } from '@blockly/contracts/durations'
 import { type Db, schema, type Tx } from '@blockly/db'
-import { and, eq, inArray, isNull, ne, notInArray, sql } from 'drizzle-orm'
+import { and, type Column, eq, inArray, isNull, ne, notInArray, or, sql } from 'drizzle-orm'
 import { classConstants } from '../../minecraft/class-constants.ts'
 import {
   FLAG_NOTES,
@@ -136,17 +140,18 @@ export class JarChecks {
    * gives (`claimed`) and the sha1 the catalog has for its sha512 (`vouched`), where it has one.
    * A quarantined check or a list that names any of them refuses the pack and nothing more: the
    * pack's word alone quarantines no jar. Any other is kept as a check unread, by its sha512 and
-   * the catalog's sha1 alone, so a list that names it later quarantines it. What matched, or null.
+   * the catalog's sha1 alone, so a list that names it later by its sha512, or by its sha1 where
+   * the catalog vouches for one, quarantines it. What matched, or null.
    */
   async lookUp(
-    claimed: Pick<JarDigests, 'sha1' | 'sha512'>,
+    claimed: Pick<JarDigests, 'sha512'> & Partial<Pick<JarDigests, 'sha1'>>,
     vouched: string | null,
   ): Promise<Pick<Finding, 'match'> | null> {
     const [known] = await this.#db.select().from(checks).where(eq(checks.sha512, claimed.sha512))
     const released = known !== undefined && known.releasedBy !== null
     if (!released && known?.state === 'quarantined') return { match: known.finding?.match ?? 'quarantined' }
     // A release holds for the bytes an operator looked at: digests the catalog vouches for.
-    if (released && claimed.sha1 === vouched) return null
+    if (released && (claimed.sha1 ?? null) === vouched) return null
     const finding = await knownBad(this.#db, claimed)
     if (finding !== null) return finding
     await this.#db
@@ -444,15 +449,24 @@ export class JarChecks {
     return { finding: null, flags: [...flags].sort() }
   }
 
-  /** Each server running a jar now quarantined: its owner told it comes off at the next start. */
+  /**
+   * Each server running a jar now quarantined, as a mod it pins or one of its pack's jars: its
+   * owner told it comes off at the next start.
+   */
   async #tellOwners(sha512: string): Promise<void> {
+    for (const { server, fileName } of [...(await this.#pinning(sha512)), ...(await this.#playing(sha512))]) {
+      const to = await emailOf(this.#db, server.ownerId)
+      if (to === null) continue
+      await this.#mailer
+        .send({ to, ...jarTakenOff({ server, fileName, origin: this.#webOrigin }) })
+        .catch((error: unknown) => console.error('jar-check: telling the owner', error))
+    }
+  }
+
+  /** The servers pinning a jar as a mod, each with the jar's file name. */
+  async #pinning(sha512: string): Promise<ServerRunning[]> {
     const pinning = await this.#db
-      .select({
-        id: schema.minecraftServers.id,
-        name: schema.minecraftServers.name,
-        ownerId: schema.minecraftServers.ownerId,
-        mods: schema.serverRevisions.mods,
-      })
+      .select({ ...serverColumns, mods: schema.serverRevisions.mods })
       .from(schema.minecraftServers)
       .innerJoin(
         schema.serverRevisions,
@@ -465,15 +479,66 @@ export class JarChecks {
           sql`${schema.serverRevisions.mods} @> ${JSON.stringify([{ artifact: { sha512 } }])}::jsonb`,
         ),
       )
-    for (const server of pinning) {
-      const to = await emailOf(this.#db, server.ownerId)
-      const mod = server.mods.find((m) => m.artifact.sha512 === sha512)
-      if (to === null || mod === undefined) continue
-      await this.#mailer
-        .send({ to, ...jarTakenOff({ server, fileName: mod.artifact.fileName, origin: this.#webOrigin }) })
-        .catch((error: unknown) => console.error('jar-check: telling the owner', error))
-    }
+    return pinning.flatMap(({ mods, ...server }) => {
+      const mod = mods.find((m) => m.artifact.sha512 === sha512)
+      return mod === undefined ? [] : [{ server, fileName: mod.artifact.fileName }]
+    })
   }
+
+  /**
+   * The servers playing a pack that runs a jar, as one of its mods, one it places elsewhere, or
+   * one it left out that a mod of it needs: each with the jar's file name in the pack.
+   */
+  async #playing(sha512: string): Promise<ServerRunning[]> {
+    const contents = schema.packContents
+    const holds = (column: Column, entry: object) => sql`${column} @> ${JSON.stringify([entry])}::jsonb`
+    const playing = await this.#db
+      .select({
+        ...serverColumns,
+        jars: contents.jars,
+        otherJars: contents.otherJars,
+        leftOut: contents.leftOut,
+      })
+      .from(schema.minecraftServers)
+      .innerJoin(
+        schema.serverRevisions,
+        eq(schema.serverRevisions.id, schema.minecraftServers.desiredRevisionId),
+      )
+      .innerJoin(
+        contents,
+        sql`${contents.sha512} = ${schema.serverRevisions.modpack} -> 'artifact' ->> 'sha512'`,
+      )
+      .where(
+        and(
+          ne(schema.minecraftServers.status, 'purged'),
+          or(
+            holds(contents.jars, { sha512 }),
+            holds(contents.otherJars, { sha512 }),
+            holds(contents.leftOut, { sha512, why: 'needed' }),
+          ),
+        ),
+      )
+    return playing.flatMap(({ jars, otherJars, leftOut, ...server }) => {
+      // A jar its pack left out after all (a crash) is off already.
+      const off = new Set(leftOut.filter((l) => l.why !== 'needed').map((l) => l.path))
+      const runs = [...jars, ...otherJars, ...leftOut.filter((l) => l.why === 'needed')]
+      const path = runs.find((jar) => jar.sha512 === sha512 && !off.has(jar.path))?.path
+      return path === undefined ? [] : [{ server, fileName: path.split('/').pop() ?? path }]
+    })
+  }
+}
+
+/** A server's columns its owner's email names. */
+const serverColumns = {
+  id: schema.minecraftServers.id,
+  name: schema.minecraftServers.name,
+  ownerId: schema.minecraftServers.ownerId,
+}
+
+/** A server running a jar, and the jar's file name as its owner knows it. */
+interface ServerRunning {
+  server: { id: string; name: string; ownerId: string }
+  fileName: string
 }
 
 /**

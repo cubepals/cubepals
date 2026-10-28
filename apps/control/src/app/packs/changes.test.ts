@@ -344,7 +344,8 @@ describe.skipIf(!hasDatabase)('pack changes', () => {
     await h.settled(server.id, 30_000)
     expect((await h.server(server.id)).lifecycle).toMatchObject({ status: 'running' })
     expect(await h.minecraft.file(server.id, 'mods/need-lib-1.jar')).not.toBeNull()
-    expect((await loadPackContents(h.db, pack.sha512))?.leftOut).toEqual([])
+    // Kept as one it needs, by its sha512 (`pack-jar-checks.test.ts` holds it to the jar checks).
+    expect((await loadPackContents(h.db, pack.sha512))?.leftOut).toMatchObject([{ why: 'needed' }])
   }, 60_000)
 
   test('a library the pack itself keeps off servers, which its own mod needs, is installed anyway', async () => {
@@ -417,10 +418,9 @@ describe.skipIf(!hasDatabase)('pack changes', () => {
     await h.settled(server.id, 30_000)
     expect((await h.server(server.id)).lifecycle).toMatchObject({ status: 'running' })
     expect(await h.minecraft.file(server.id, 'mods/equator-2.5.3.jar')).not.toBeNull()
-    expect((await loadPackContents(h.db, pack.sha512))?.leftOut).toContainEqual({
-      path: 'mods/equator-2.5.3.jar',
-      why: 'needed',
-    })
+    expect((await loadPackContents(h.db, pack.sha512))?.leftOut).toMatchObject([
+      { path: 'mods/equator-2.5.3.jar', why: 'needed', sha512: equator.sha512 },
+    ])
     // Nothing is said to be left out for players: it's installed.
     expect((await h.app.modQueries.list(owner, server.id)).packLeftOut).toEqual([])
   }, 60_000)

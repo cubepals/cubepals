@@ -75,16 +75,24 @@ export async function leavePackJarOut(
   return true
 }
 
-/** A jar a pack's servers left out that they run after all. Says whether it had been left out. */
+/**
+ * A jar a pack's servers left out for players' games that they run after all: its entry becomes
+ * `needed`, keeping its sha512, so the jar checks still find it (`servers/specs.ts`). Says whether
+ * it had been left out for players.
+ */
 export async function keepPackJar(q: Queryable, sha512: string, path: string): Promise<boolean> {
   const [row] = await q
     .select({ leftOut: contents.leftOut })
     .from(contents)
     .where(eq(contents.sha512, sha512))
-  if (row === undefined || !row.leftOut.some((l) => l.path === path)) return false
+  if (row === undefined || !row.leftOut.some((l) => l.path === path && l.why === 'players')) return false
   await q
     .update(contents)
-    .set({ leftOut: row.leftOut.filter((l) => l.path !== path) })
+    .set({
+      leftOut: row.leftOut.map((l) =>
+        l.path === path && l.why === 'players' ? { ...l, why: 'needed' as const } : l,
+      ),
+    })
     .where(eq(contents.sha512, sha512))
   return true
 }

@@ -134,10 +134,15 @@ export interface PackLeftOutJson {
   path: string
   /**
    * `crashed`: a mod that stopped a server of this pack as it started, being for players' games.
-   * `needed`: not left out at all, the opposite: a file the pack itself keeps off servers that a mod
-   * of it needs, which its servers install anyway.
+   * `needed`: not left out at all, the opposite: a jar the pack keeps off servers, or Blockly left
+   * out for players' games, that a mod of it needs, which its servers install anyway.
    */
   why: 'players' | 'crashed' | 'needed' | 'world' | 'launcher' | 'program' | 'clutter'
+  /**
+   * The jar's sha512, where it is known (a catalog pack's jars for players, and the `needed`
+   * ones): one that can run is held to the jar checks by it (`mods/jar-checks.ts`).
+   */
+  sha512?: string
 }
 
 /** What reading an uploaded pack found, once it is ready. */
