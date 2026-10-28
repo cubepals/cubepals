@@ -143,7 +143,12 @@ describe.skipIf(!hasDatabase)('Free’s 20 hours', () => {
       code: 'limit_reached',
       message: REFUSED,
     })
-    expect(await h.app.edge.wake(`${server.slug}.play.test`)).toEqual({ outcome: 'denied', reason: 'quota' })
+    expect(await h.app.edge.wake(`${server.slug}.play.test`)).toEqual({
+      outcome: 'denied',
+      reason: 'quota',
+      trialOver: true,
+      name: server.name,
+    })
 
     // The world is kept and still downloads; the account page says what is left.
     const overview = await h.app.accountQueries.overview(actor)
