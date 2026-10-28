@@ -240,7 +240,7 @@ describe('PolarBilling', () => {
 
   test('nothing paid, a product no plan names, and a stranger report no plan', async () => {
     const standing = async (state: CustomerState) => {
-      reply = () => ({ status: 200, body: state })
+      reply = () => ({ status: 200, body: requests.at(-1)?.path.includes('terms') ? page([]) : state })
       const delivery = signed(stateChanged(state))
       const event = await billing.receive(delivery.body, delivery.headers)
       return event?.kind === 'standing' ? event.state : null
@@ -484,7 +484,7 @@ test('of two subscriptions for one plan the one made first is in force, and the 
     [CORE_PRODUCT, 'core'],
     [PLUS_PRODUCT, 'plus'],
   ])
-  const { paid, others } = paying([later, core, plus], plans)
+  const { paid, others } = paying([later, core, plus], plans, ['core', 'plus'])
   expect(paid?.id).toBe(plus.id)
   expect(others).toEqual([
     {
@@ -507,7 +507,7 @@ test('of a subscription set to end and one for its plan made after it that renew
   if (plus === undefined) throw new Error('the state lists no subscription')
   const ending = { ...plus, id: 'sub_ending', cancel_at_period_end: true }
   const again = { ...plus, id: 'sub_again', created_at: '2026-09-20T00:00:00Z' }
-  const { paid, others } = paying([ending, again], new Map([[PLUS_PRODUCT, 'plus']]))
+  const { paid, others } = paying([ending, again], new Map([[PLUS_PRODUCT, 'plus']]), ['core', 'plus'])
   expect(paid?.id).toBe('sub_again')
   expect(others.map((other) => other.externalSubscriptionId)).toEqual(['sub_ending'])
 })

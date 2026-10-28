@@ -29,6 +29,15 @@ const LOCK_WAIT_MS = 15_000
 const TRY_AGAIN_MS = 500
 /** Vanilla reads each packet with one read of at most 1460 bytes; 14 of them are framing. */
 const MAX_COMMAND_BYTES = 1446
+/** A reply's length field counts its id, its type and the two trailing NULs: 10 bytes at least. */
+const LEAST_REPLY_LENGTH = 10
+/**
+ * Vanilla splits an answer into bodies of at most 4096 UTF-16 units, each at most 3 bytes in
+ * UTF-8, so no reply it sends has a length field above this.
+ */
+const MOST_REPLY_LENGTH = LEAST_REPLY_LENGTH + 4096 * 3
+/** The most characters a connection holds of one command's answer: far past any command's output. */
+const MOST_ANSWER_CHARACTERS = 1024 * 1024
 
 export interface RconTimings {
   /** Connecting, and then the password's answer: a server that accepts and never answers is hung. */
@@ -55,6 +64,13 @@ class PasswordRefused extends ConsoleUnavailable {
  */
 class Dropped extends ConsoleUnavailable {}
 
+/** The server sent what RCON can't carry: a length out of bounds, or an answer too long to hold. */
+class Unreadable extends ConsoleUnavailable {
+  constructor(what: string) {
+    super(`The console sent ${what}`)
+  }
+}
+
 type Waiter = { resolve: (reply: Reply) => void; reject: (error: Error) => void }
 
 function packet(id: number, type: number, body: string): Buffer {
@@ -73,7 +89,11 @@ class Connection {
   readonly #waiters: Waiter[] = []
   /** Replies that arrived before anyone asked for them. */
   readonly #replies: Reply[] = []
-  #buffer = Buffer.alloc(0)
+  /** What has arrived of the next reply, not yet joined: joining is put off until it is whole. */
+  #pending: Buffer[] = []
+  #pendingBytes = 0
+  /** How many bytes the next reply needs, once its length is known. */
+  #needed = 4
   #failure: Error | null = null
   #nextId = 1
 
@@ -144,11 +164,19 @@ class Connection {
       let first = await this.#next()
       while (first.id !== id) first = await this.#next()
       const parts = [first.body]
+      let characters = first.body.length
       const sentinel = this.#send(0, '')
       for (;;) {
         const reply = await this.#next()
         if (reply.id === sentinel) return parts.join('')
-        if (reply.id === id) parts.push(reply.body)
+        if (reply.id !== id) continue
+        parts.push(reply.body)
+        characters += reply.body.length
+        if (characters > MOST_ANSWER_CHARACTERS) {
+          const failure = new Unreadable(`an answer over ${MOST_ANSWER_CHARACTERS} characters`)
+          this.#fail(failure)
+          throw failure
+        }
       }
     } finally {
       clearTimeout(deadline)
@@ -173,14 +201,26 @@ class Connection {
   }
 
   #receive(chunk: Buffer): void {
-    this.#buffer = Buffer.concat([this.#buffer, chunk])
-    while (this.#buffer.length >= 4) {
-      const length = this.#buffer.readInt32LE(0)
-      if (this.#buffer.length < length + 4) return
-      const id = this.#buffer.readInt32LE(4)
+    this.#pending.push(chunk)
+    this.#pendingBytes += chunk.length
+    while (!this.#failure && this.#pendingBytes >= this.#needed) {
+      const buffer = this.#pending.length === 1 ? (this.#pending[0] as Buffer) : Buffer.concat(this.#pending)
+      this.#pending = [buffer]
+      const length = buffer.readInt32LE(0)
+      if (length < LEAST_REPLY_LENGTH || length > MOST_REPLY_LENGTH) {
+        const bounds = `${LEAST_REPLY_LENGTH} to ${MOST_REPLY_LENGTH}`
+        this.#fail(new Unreadable(`a reply of length ${length}, outside ${bounds}`))
+        return
+      }
+      this.#needed = length + 4
+      if (buffer.length < this.#needed) return
+      const id = buffer.readInt32LE(4)
       // Body runs from byte 12 to the two trailing NULs.
-      const body = this.#buffer.toString('utf8', 12, length + 2)
-      this.#buffer = this.#buffer.subarray(length + 4)
+      const body = buffer.toString('utf8', 12, length + 2)
+      const rest = buffer.subarray(length + 4)
+      this.#pending = rest.length > 0 ? [rest] : []
+      this.#pendingBytes = rest.length
+      this.#needed = 4
       const waiter = this.#waiters.shift()
       if (waiter) waiter.resolve({ id, body })
       else this.#replies.push({ id, body })

@@ -1336,7 +1336,9 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   - A join to a server being put to rest (`storing`) waits for that to finish, then wakes it.
   - Each server may be woken by a connection only so many times an hour (`AbuseLimits.wakesPerHour`,
     set in private configuration); past that the wake is `denied: quota`. Nothing about a
-    connection proves who sent it, and each wake costs the owner a run.
+    connection proves who sent it, and each wake costs the owner a run. Only a join that gives the
+    name of a player the server saw on it, from a network its own players joined it from lately
+    (`app/edge/known-addresses.ts`), wakes it past that.
   - A deleted server's address answers `denied: deleted`, so its players are told.
 - **`pingWake(hostname, address)`** (`app/edge/ping-wake.ts`). A server list pinged an asleep
   server, often just before a join. It starts the server as a wake would, without waiting for it,

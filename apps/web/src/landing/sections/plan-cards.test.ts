@@ -26,6 +26,7 @@ const free: PublicPlan = {
   sleepsAfterMinutes: 10,
   maxServers: 1,
   maxPlayers: 5,
+  sizes: [{ gb: 3, maxPlayers: 5, hoursAnHour: 1 }],
   mods: false,
   datapacks: false,
   downloads: 'daily',
@@ -57,6 +58,12 @@ const plus: PublicPlan = {
   includedHours: 120,
   maxServers: 3,
   maxPlayers: 100,
+  sizes: [
+    { gb: 3, maxPlayers: 5, hoursAnHour: 1 },
+    { gb: 4, maxPlayers: 10, hoursAnHour: 1 },
+    { gb: 8, maxPlayers: 50, hoursAnHour: 2 },
+    { gb: 16, maxPlayers: 100, hoursAnHour: 4 },
+  ],
   mods: true,
   datapacks: true,
 }
@@ -165,12 +172,15 @@ describe('the landing’s plan cards', () => {
     expect(coreCard).toContain('40 hours of play each month, then 25¢ an hour')
     expect(coreCard).toContain('Starts with a free trial: 20 hours of play, at most 2 a day , no card')
     expect(coreCard).toContain('Hours count only while your server is awake, not for each player')
+    expect(coreCard).toContain('A 3 GB server, for up to 5 players, on the free trial too')
     expect(coreCard).toContain('Plain Minecraft: vanilla or Paper')
     expect(coreCard).toContain('$2 each, shared by five friends')
     expect(plusCard).toContain('See everything in Plus')
     expect(plusCard).toContain('120 hours of play each month')
     expect(plusCard).toContain('Go back to any of your last 14 sessions')
-    expect(plusCard).toContain('counts two hours for each hour it runs')
+    expect(plusCard).toContain(
+      'Servers of 3, 4, 8 or 16 GB, sized for your group and game. 8 GB holds up to 50 players and counts two hours for each hour it runs; 16 GB holds up to 100 and counts four',
+    )
     expect(plusCard).toContain('$5 each, shared by five friends')
     expect(plusCard).toContain('Plugins and datapacks work too')
     // The year is said once, under the price.

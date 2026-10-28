@@ -5,6 +5,7 @@
 import { z } from 'zod'
 import { CheckoutConsent } from './agreements.ts'
 import type { DenialCode } from './errors.ts'
+import { sameSitePath } from './return-path.ts'
 import type { Loader } from './server.ts'
 
 export const ACCOUNT_STATUSES = ['active', 'suspended', 'terminated'] as const
@@ -368,7 +369,7 @@ export const CheckoutInput = z.object({
   next: z
     .string()
     .max(500)
-    .regex(/^\/(?![/\\])/)
+    .refine((path) => sameSitePath(path) !== null)
     .optional(),
 })
 
@@ -397,6 +398,11 @@ export interface PublicPlan {
   maxServers: number
   /** The most players the plan's largest server holds. */
   maxPlayers: number
+  /**
+   * The sizes the plan's servers run at, smallest first: memory in GB, the most players each holds,
+   * and how many of the plan's hours an hour on it counts.
+   */
+  sizes: { gb: number; maxPlayers: number; hoursAnHour: number }[]
   /** Mods, plugins and modpacks. */
   mods: boolean
   /** Datapacks, which a plan allows apart from mods. */

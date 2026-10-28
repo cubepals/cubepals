@@ -6,9 +6,13 @@
  * How a request to Polar fails, for PolarBilling: Polar out of reach as BillingUnavailable, and a
  * refusal in Polar's own words; and the few requests and choices too small for a file of their own.
  */
+import { MINUTE_MS } from '@blockly/contracts/durations'
 import { PolarClientError, PolarError, PolarRateLimitError } from '@polar-sh/sdk'
-import type { createPolar, models } from '@polar-sh/sdk/2026-10'
+import { type createPolar, errors, type models } from '@polar-sh/sdk/2026-10'
 import { type BillingState, BillingUnavailable } from '../../app/ports/optional.ts'
+
+/** An open checkout is offered again only with this long left on it, to be paid in. */
+export const CHECKOUT_LEFT_MS = 15 * MINUTE_MS
 
 /**
  * What Polar said was wrong with a request: its first problem's message, or its own summary. A
@@ -51,14 +55,14 @@ interface Listed {
  * Of an account's subscriptions that pay at once (Core, then Plus bought over it), the one for the
  * largest plan, and of two for it the one that renews (one set to end, then bought again), then the
  * one made first (`paid`); and every other for a plan, as `BillingState.others`. `plans` maps each
- * plan's product to its plan, the smallest first.
+ * subscription's product to the plan it sells, and `ranked` lists the plans smallest first.
  */
 export function paying<T extends Listed>(
   subscriptions: readonly T[],
   plans: ReadonlyMap<string, string>,
+  ranked: readonly string[],
 ): { paid: T | undefined; others: NonNullable<BillingState['others']> } {
-  const products = [...plans.keys()]
-  const rank = (subscription: T) => products.indexOf(subscription.product_id)
+  const rank = (subscription: T) => ranked.indexOf(plans.get(subscription.product_id) ?? '')
   const made = (subscription: T) => (subscription.created_at ? Date.parse(subscription.created_at) : 0)
   const paid = subscriptions
     .filter((each) => rank(each) >= 0)
@@ -122,4 +126,29 @@ export async function upgradeSubscription(
   await call('changing a subscription to another plan', () =>
     polar.subscriptions.update(id, { product_id: product, proration_behavior: 'invoice' }),
   )
+}
+
+/**
+ * Polar refused the request for the customer's email address. It checks a checkout against each
+ * shape one could take and reports every one that failed, so the address is one problem among
+ * several; asked again without it, anything else still wrong is refused again.
+ */
+function refusesEmail(error: unknown): boolean {
+  if (!(error instanceof errors.HTTPValidationError)) return false
+  return (error.error.detail ?? []).some((problem) => problem.loc?.includes('customer_email'))
+}
+
+/**
+ * A checkout made with the customer's email, or without it when Polar won't take the address (one
+ * on a reserved domain, as test accounts have): that isn't the person's to fix, so the checkout
+ * opens without it and asks them for one.
+ */
+export function withEmail<T>(
+  email: string,
+  create: (field: { customer_email?: string }) => Promise<T>,
+): Promise<T> {
+  return create({ customer_email: email }).catch((error: unknown) => {
+    if (refusesEmail(error)) return create({})
+    throw error
+  })
 }
