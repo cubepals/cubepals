@@ -20,6 +20,7 @@ import {
   WebhookRejected,
 } from '../../app/ports/optional.ts'
 import { discountBody, discountOf } from './polar-discounts.ts'
+import { EARLY_METADATA, EarlyProducts } from './polar-early.ts'
 import { giftCheckoutUrl, giftOf, giftOrderOf, giftProducts } from './polar-gifts.ts'
 import {
   CHECKOUT_LEFT_MS,
@@ -51,7 +52,8 @@ import {
  * no subscription that ends rather than renewing, so the year is Blockly's to keep (`plan_years`).
  * Extra play is sent as `play.extra` events, which the "Extra play" meter sums and the plan's
  * metered price bills on its next payment; no id of either is configured. Gifts are one-time
- * products found by their metadata (`polar-gifts.ts`).
+ * products found by their metadata (`polar-gifts.ts`), and so are a plan's products at an early
+ * price (`polar-early.ts`), which sell, renew and bill extra play as the plan's own does.
  */
 
 /** The event name the "Extra play" meter counts (docs/configuration.md, Polar). */
@@ -89,6 +91,8 @@ export class PolarBilling implements BillingProvider {
   readonly #purposes = new Map<string, string | null>()
   /** Each one-time product that sells a year of a plan → that plan, found by metadata once. */
   #years: Map<string, string> | null = null
+  /** Every product at an early price for a plan sold here, archived ones too. */
+  readonly #early: EarlyProducts
 
   constructor(options: PolarBillingOptions) {
     this.#polar = createPolar({
@@ -99,6 +103,13 @@ export class PolarBilling implements BillingProvider {
     this.#webhookSecret = options.webhookSecret
     this.#products = options.products
     this.#plans = new Map(Object.entries(options.products).map(([plan, product]) => [product, plan]))
+    this.#early = new EarlyProducts(
+      (page) =>
+        call('finding the early products', () =>
+          this.#polar.products.list({ metadata: { ...EARLY_METADATA }, page, limit: 100 }),
+        ),
+      new Set(this.#plans.values()),
+    )
   }
 
   async checkoutUrl(input: {
@@ -254,6 +265,12 @@ export class PolarBilling implements BillingProvider {
   upgradeSubscription = (id: string, plan: string) =>
     upgradeSubscription(this.#polar, this.#products[plan], id)
   sellsYear = async (planKey: string) => (await this.#yearProduct(planKey)) !== undefined
+  earlyProduct = (planKey: string) => this.#early.newest(planKey)
+
+  /** The plan a product sells: one configuration names, or one at an early price; null for neither. */
+  async #planOf(productId: string): Promise<string | null> {
+    return this.#plans.get(productId) ?? (await this.#early.planOf(productId))
+  }
 
   /** The one-time product that sells a year of the plan, if there is one. */
   async #yearProduct(planKey: string): Promise<string | undefined> {
@@ -349,7 +366,7 @@ export class PolarBilling implements BillingProvider {
       }
     }
     if (event.type !== 'customer.state_changed') return null
-    const sent = this.#standing(event.data)
+    const sent = await this.#standing(event.data)
     if (sent === null) return null
     // A customer Polar no longer has pays for nothing.
     return { kind: 'standing', state: (await this.stateOf(sent.userId)) ?? { ...sent, subscription: null } }
@@ -357,14 +374,9 @@ export class PolarBilling implements BillingProvider {
 
   async #order(data: unknown): Promise<BillingOrder> {
     const order = Order.parse(data)
-    let extraCents = 0
-    for (const item of order.items)
-      if (
-        item.product_price_id &&
-        order.product_id &&
-        (await this.#metered(order.product_id, item.product_price_id))
-      )
-        extraCents += item.amount
+    // The plan its product sells: the plan's own product, or one at an early price.
+    const plan = order.product_id ? await this.#planOf(order.product_id) : null
+    const extraCents = plan === null ? 0 : await this.#extraCents(order)
     const settles = String(order.metadata?.settles ?? '')
       .split(',')
       .filter((id) => id.length > 0)
@@ -372,28 +384,24 @@ export class PolarBilling implements BillingProvider {
     const balance =
       settles.length > 0 &&
       !!order.product_id &&
-      !this.#plans.has(order.product_id) &&
+      plan === null &&
       order.product_id === (await this.#balanceProduct())
-    const chipIn = await this.#chipIn(order)
+    const chipIn = plan === null ? await this.#chipIn(order) : null
     // Only a product no monthly plan names, and not the chip-in one, can sell a year.
     const year =
-      order.product_id && !this.#plans.has(order.product_id) && chipIn === null
+      order.product_id && plan === null && chipIn === null
         ? (await this.#yearProducts()).get(order.product_id)
         : undefined
     // A gift is a product of its own, read only for an order no plan, balance, chip-in or year
     // accounts for.
     const gift =
-      order.product_id &&
-      !this.#plans.has(order.product_id) &&
-      !balance &&
-      chipIn === null &&
-      year === undefined
+      order.product_id && plan === null && !balance && chipIn === null && year === undefined
         ? await this.#gift(order.product_id)
         : null
     return {
       externalOrderId: order.id,
       userId: order.customer.external_id ?? null,
-      planKey: order.product_id ? (this.#plans.get(order.product_id) ?? year ?? null) : null,
+      planKey: plan ?? year ?? null,
       billingReason: order.billing_reason,
       currency: order.currency,
       subtotalCents: order.subtotal_amount,
@@ -415,13 +423,26 @@ export class PolarBilling implements BillingProvider {
     }
   }
 
+  /** What an order for a plan's product charged for extra play: its metered lines. */
+  async #extraCents(order: z.infer<typeof Order>): Promise<number> {
+    let cents = 0
+    for (const item of order.items)
+      if (
+        item.product_price_id &&
+        order.product_id &&
+        (await this.#metered(order.product_id, item.product_price_id))
+      )
+        cents += item.amount
+    return cents
+  }
+
   /**
-   * The server an order chipped in to, or null. Only an order for the chip-in product chips in:
-   * metadata on anything else is not ours.
+   * The server an order for a product that sells no plan chipped in to, or null. Only an order for
+   * the chip-in product chips in: metadata on anything else is not ours.
    */
   async #chipIn(order: z.infer<typeof Order>): Promise<string | null> {
     const server = String(order.metadata?.server ?? '')
-    if (server.length === 0 || !order.product_id || this.#plans.has(order.product_id)) return null
+    if (server.length === 0 || !order.product_id) return null
     return order.product_id === (await this.#purpose(CHIP_IN)) ? server : null
   }
 
@@ -437,11 +458,11 @@ export class PolarBilling implements BillingProvider {
   }
 
   /**
-   * Whether a price of a plan's product is metered. A product no plan names has nothing metered
-   * Blockly reports; a price it doesn't know yet (one added since) has the product read again.
+   * Whether a price of a plan's product is metered: asked only of a product that sells a plan, since
+   * nothing else has metered play Blockly reports. A price it doesn't know yet (one added since) has
+   * the product read again.
    */
   async #metered(productId: string, priceId: string): Promise<boolean> {
-    if (!this.#plans.has(productId)) return false
     let prices = this.#prices.get(productId)
     if (prices === undefined || !prices.has(priceId)) {
       const product = Product.parse(
@@ -585,12 +606,22 @@ export class PolarBilling implements BillingProvider {
 
   /**
    * A customer Blockly didn't create has no external id and isn't anyone's standing. A
-   * subscription to a product no plan names grants nothing.
+   * subscription to a product that sells no plan here grants nothing; one at an early price grants
+   * its plan, as the plan's own product does.
    */
-  #standing(data: unknown): BillingState | null {
+  async #standing(data: unknown): Promise<BillingState | null> {
     const state = CustomerState.parse(data)
     if (!state.external_id) return null
-    const paid = largestPaying(state.active_subscriptions, [...this.#plans.keys()])
+    const plans = new Map<string, string>()
+    for (const { product_id } of state.active_subscriptions) {
+      const plan = await this.#planOf(product_id)
+      if (plan !== null) plans.set(product_id, plan)
+    }
+    // The plans smallest first, as configuration lists them.
+    const ranked = Object.keys(this.#products)
+    const paid = largestPaying(state.active_subscriptions, (product) =>
+      ranked.indexOf(plans.get(product) ?? ''),
+    )
     return {
       userId: state.external_id,
       externalCustomerId: state.id,
@@ -599,7 +630,7 @@ export class PolarBilling implements BillingProvider {
           ? null
           : {
               externalSubscriptionId: paid.id,
-              planKey: this.#plans.get(paid.product_id) ?? '',
+              planKey: plans.get(paid.product_id) ?? '',
               status: paid.status,
               currentPeriodEnd: new Date(paid.current_period_end),
               cancelAtPeriodEnd: paid.cancel_at_period_end,

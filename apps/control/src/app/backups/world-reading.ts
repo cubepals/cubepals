@@ -50,6 +50,8 @@ import { peopleOf } from './world-people.ts'
 
 /** Reading and writing a world of a few gigabytes takes a while; the links outlast it. */
 export const LINK_SECONDS = 2 * HOUR_S
+/** Where in `work` an upload is fetched to and read from. */
+export const uploadIn = (work: string): string => join(work, 'upload')
 /** What opening an upload holds it to: more files and bytes than a world has, not more. */
 const LIMITS = {
   maxFiles: 500_000,
@@ -161,11 +163,11 @@ export class WorldReading {
     this.#profiles = deps.profiles
   }
 
-  /** The upload fetched to `work` and opened, or why it can't be. */
+  /** The upload fetched to `work` (`uploadIn`) and opened, or why it can't be. */
   async open(pending: PendingUpload, work: string): Promise<WorldArchive> {
     const store = requireCapability(this.#caps, 'archives')
     const link = await store.presignGet(pending.key, LINK_SECONDS, 'browser')
-    const path = join(work, 'upload')
+    const path = uploadIn(work)
     await this.#archives.fetchTo(link.url, path, pending.sizeBytes).catch((error: unknown) => {
       if (error instanceof HostileArchive) throw new Refused(SAID.tooLarge, error.message)
       throw error

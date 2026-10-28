@@ -206,6 +206,34 @@ export const product = (id: string, patch: Partial<models.Product> = {}): models
   ...patch,
 })
 
+/**
+ * A product at an early price for `metadata.plan`: monthly and private, with a fixed price of its own
+ * and the metered one extra play is billed by, both tax inclusive.
+ */
+export const earlyProduct = (
+  id: string,
+  metadata: Record<string, string | number>,
+  cents: number,
+  patch: Partial<models.Product> = {},
+): models.Product =>
+  product(id, {
+    name: `Cubepals ${metadata.plan}`,
+    visibility: 'private',
+    recurring_interval: 'month',
+    recurring_interval_count: 1,
+    is_recurring: true,
+    metadata: { terms: 'early', ...metadata },
+    prices: [
+      {
+        ...price(`${id.slice(0, -1)}1`, id, false),
+        price_amount: cents,
+        tax_behavior: 'inclusive',
+      } as models.ProductPrice,
+      { ...price(`${id.slice(0, -1)}2`, id, true), tax_behavior: 'inclusive' } as models.ProductPrice,
+    ],
+    ...patch,
+  })
+
 /** A subscription: Plus, cancelled and ended, unless patched. */
 export const subscription = (id: string, patch: Partial<models.Subscription> = {}): models.Subscription => ({
   id,

@@ -67,6 +67,7 @@ export function createInternalApp(deps: { edge: EdgeService; joins: JoinService;
       request.data.hostname,
       understands.includes('failed'),
       request.data.name,
+      request.data.address,
     )
     return c.json(forEdge(woken, understands))
   })

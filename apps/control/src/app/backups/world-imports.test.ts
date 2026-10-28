@@ -20,9 +20,10 @@ import { eq, sql } from 'drizzle-orm'
 import { LibraryFileFormats } from '../../infra/formats/file-formats.ts'
 import { LibraryUploadArchives } from '../../infra/formats/world-archives.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
+import { downloadNote } from '../../minecraft/world-download.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
-import { savedOn, zipBytes } from '../../testing/uploads.ts'
+import { levelDat, savedOn, zipBytes } from '../../testing/uploads.ts'
 import {
   bringWorld,
   broughtBackup,
@@ -425,6 +426,36 @@ describe.skipIf(!hasDatabase)('a Paper server’s folder with its plugins', () =
 })
 
 describe.skipIf(!hasDatabase)('an upload that says it is a Cubepals download', () => {
+  test('is kept as the bytes that were read, under a key of its own, whatever its link puts after', async () => {
+    const { owner, id } = await server('Wren', 'free')
+    const folder = await mkdtemp(join(scratch, 'download-'))
+    const files = {
+      'server.properties': 'level-name=world\n',
+      'world/level.dat': levelDat('26.3'),
+      'world/region/r.0.0.mca': 'a region',
+      'cubepals-download.txt': downloadNote([]),
+    }
+    for (const [path, bytes] of Object.entries(files)) {
+      await run('mkdir', ['-p', join(folder, path, '..')])
+      await writeFile(join(folder, path), bytes)
+    }
+    await run('tar', ['-czf', join(scratch, 'download.tar.gz'), '-C', folder, '.'])
+    const bytes = await readFile(join(scratch, 'download.tar.gz'))
+    const start = await h.app.backups.beginWorldUpload(owner, id, {
+      fileName: 'download.tar.gz',
+      sizeBytes: bytes.length,
+    })
+    await fetch(start.url, { method: 'PUT', body: bytes, headers: start.headers })
+    const { importId } = await h.app.backups.finishWorldUpload(owner, id, start.ticket)
+    const backup = await broughtBackup(h, await untilRead(h, owner, id, importId))
+    expect(backup.archiveKey).toBe(store.newKey('archive', { serverId: id, id: backup.id }))
+    expect(store.objects.get(backup.archiveKey ?? '')).toEqual(bytes)
+    // The upload's link still takes a body of its length; the backup stays what was read.
+    const other = Buffer.alloc(bytes.length, 1)
+    await fetch(start.url, { method: 'PUT', body: other, headers: start.headers })
+    expect(store.objects.get(backup.archiveKey ?? '')).toEqual(bytes)
+  }, 120_000)
+
   test('is written again where it holds what no download does: a jar never reaches the server', async () => {
     const { owner, id } = await server('Vale', 'free')
     const folder = await mkdtemp(join(scratch, 'claimed-'))
