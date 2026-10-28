@@ -65,9 +65,11 @@ const plus: PublicPlan = {
   deletedAfterDays: null,
 }
 
-/** What a card says, its tags taken out. */
-const textOf = (card: Parameters<typeof renderToStaticMarkup>[0]) =>
-  renderToStaticMarkup(card).replace(/<[^>]+>/g, '')
+type Card = Parameters<typeof renderToStaticMarkup>[0]
+/** A card as the page gets it. */
+const htmlOf = (card: Card) => renderToStaticMarkup(card)
+/** A card's points in order, each as the markup of its list item. */
+const pointsOf = (card: Card) => htmlOf(card).split('<li').slice(1)
 
 // What the pricing, landing and account pages say about a plan: what people choose on, in their
 // words, and never a machine's.
@@ -154,18 +156,20 @@ describe('plans as people read them', () => {
   })
 
   test('the account page says the free trial on Core, after its hours, as the public pages do', () => {
-    const said = textOf(createElement(PlanCard, { plan: core, trial: free }))
-    expect(said).toContain(
-      '40 hours of play each month, then 25¢ an hourStarts with a free trial: 20 hours of play, at most 2 a day, no card',
-    )
-    expect(textOf(createElement(PlanCard, { plan: plus }))).not.toContain('free trial')
+    const points = pointsOf(createElement(PlanCard, { plan: core, trial: free }))
+    const hours = points.findIndex((point) => point.includes('40 hours of play each month, then 25¢ an hour'))
+    expect(hours).toBeGreaterThanOrEqual(0)
+    const trial = points[hours + 1] ?? ''
+    for (const part of ['Starts with a free trial: ', '20 hours of play, at most 2 a day', ', no card'])
+      expect(trial).toContain(part)
+    expect(htmlOf(createElement(PlanCard, { plan: plus }))).not.toContain('free trial')
   })
 
   test('someone on the free trial finds it on the plan it starts', () => {
-    expect(textOf(createElement(PlanCard, { plan: core, trial: free, current: 'trial' }))).toContain(
+    expect(htmlOf(createElement(PlanCard, { plan: core, trial: free, current: 'trial' }))).toContain(
       'Your free trial',
     )
-    const plusYours = textOf(createElement(PlanCard, { plan: plus, current: true }))
+    const plusYours = htmlOf(createElement(PlanCard, { plan: plus, current: true }))
     expect(plusYours).toContain('Yours')
     expect(plusYours).not.toContain('Your free trial')
   })
