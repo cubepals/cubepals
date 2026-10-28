@@ -10,7 +10,7 @@
  *
  *   bun probe.js load <host> <name> <counts, e.g. 25,50,100> <minutes per step>
  *   bun probe.js bots <host> <first> <count>
- *   bun probe.js join <address> <name> [version] [seconds]
+ *   bun probe.js join <address> <name> [version] [seconds] [stay]
  *
  * A player is put in an arena by number, ten to each, and fights whoever is nearest: it looks at
  * them, runs at them, jumps and strafes now and then, and swings when close, about four times a
@@ -21,7 +21,8 @@
  * `join` is one player's join through the edge, timed as the player feels it: the server list's
  * ping and its line, then the connection, the login answered, the configuration done and the
  * player in the world, with what the list said each second while the join was held, and the
- * reason if the join was turned away. It needs no console.
+ * reason if the join was turned away. It stays in the world `stay` seconds (none by default) before
+ * it leaves. It needs no console.
  */
 import { readFileSync, writeSync } from 'node:fs'
 import { MINUTE_MS } from '@blockly/contracts/durations'
@@ -367,7 +368,13 @@ function textOf(component: unknown): string {
  * login, and the list's line each second while the join waits, as a friend's list beside it
  * would show it.
  */
-async function joinOnce(address: string, name: string, version: string, seconds: number): Promise<void> {
+async function joinOnce(
+  address: string,
+  name: string,
+  version: string,
+  seconds: number,
+  stay: number,
+): Promise<void> {
   const mineflayer = ((await import(MINEFLAYER)) as { default: Mineflayer }).default
   const protocol = ((await import(PROTOCOL)) as { default: Protocol }).default
   const ping = () => protocol.ping({ host: address, port: GAME_PORT, version, closeTimeout: 5000 })
@@ -426,6 +433,7 @@ async function joinOnce(address: string, name: string, version: string, seconds:
   })
   over = true
   emit({ job: 'join', address, name, version, before, steps, lines, ...ended })
+  if (ended.kicked === undefined && ended.error === undefined) await Bun.sleep(stay * 1000)
   ;(bot as unknown as { quit(): void }).quit()
 }
 
@@ -438,11 +446,11 @@ function safeJson(text: string): unknown {
   }
 }
 
-const [job = '', host = '', a = '', b = '', c = ''] = process.argv.slice(2)
+const [job = '', host = '', a = '', b = '', c = '', d = ''] = process.argv.slice(2)
 try {
   if (job === 'load') await load(host, a, b.split(',').map(Number), Number(c))
   else if (job === 'bots') await bots(host, Number(a), Number(b))
-  else if (job === 'join') await joinOnce(host, a, b || '1.21.11', Number(c || 240))
+  else if (job === 'join') await joinOnce(host, a, b || '1.21.11', Number(c || 240), Number(d || 0))
   else throw new Error(`no job ${job}`)
   process.exit(0)
 } catch (error) {

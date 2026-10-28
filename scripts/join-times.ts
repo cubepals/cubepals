@@ -20,7 +20,8 @@
  *   cold   asleep, with its machine stopped, as Fly dropping its memory leaves it
  *   rest   in the archive store, its machine and volume let go
  *
- * Each join prints one JSON line; the run ends with a table of the time from the connection to
+ * Each player stays in the world past the control plane's presence reading, so its wake counts as
+ * joined. Each join prints one JSON line; the run ends with a table of the time from the connection to
  * the player in the world (Java: the client's spawn; Bedrock: its spawn), n, p50 and p90, by
  * template, state and client, and the server-list lines the Java client saw while it waited.
  * Then the servers go to the trash and are purged.
@@ -49,6 +50,13 @@ type Client = (typeof CLIENTS)[number]
 const JAVA_VERSION = '1.21.11'
 /** The longest one join may take, a wake from the archive store included. */
 const JOIN_SECONDS = 300
+/**
+ * How long each player stays in the world: past the control plane's presence reading, once a
+ * minute, so the server sees them on. A woken run nobody was seen on counts toward the server's
+ * hourly cap on wakes from connections (`AbuseLimits.wakesPerHour`), and a run of joins would
+ * soon be refused as asleep.
+ */
+const STAY_SECONDS = 70
 
 const { values } = parseArgs({
   options: {
@@ -200,7 +208,16 @@ async function into(made: Made, wanted: State): Promise<string> {
 async function joinOnce(client: Client, address: string, name: string): Promise<Record<string, unknown>> {
   const args =
     client === 'java'
-      ? ['bun', 'scripts/lib/players-probe.ts', 'join', address, name, JAVA_VERSION, String(JOIN_SECONDS)]
+      ? [
+          'bun',
+          'scripts/lib/players-probe.ts',
+          'join',
+          address,
+          name,
+          JAVA_VERSION,
+          String(JOIN_SECONDS),
+          String(STAY_SECONDS),
+        ]
       : [
           'bun',
           'tools/bedrock-join/join.ts',
@@ -209,7 +226,7 @@ async function joinOnce(client: Client, address: string, name: string): Promise<
           '--username',
           name,
           '--hold',
-          '3',
+          String(STAY_SECONDS),
           '--timeout',
           String(JOIN_SECONDS),
         ]
