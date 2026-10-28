@@ -276,14 +276,14 @@ try {
         .api('servers.delete', { serverId: server.id, confirmName: view.name })
         .catch(() => undefined)
   }
-  if (made.length > 0) {
-    await sql(
-      `update minecraft_servers set status = 'deleted', deleted_at = coalesce(deleted_at, now()), purge_after = now() - interval '1 minute'
-       where create_idempotency_key like '${KEY_PREFIX}%' and status <> 'purged'`,
-    )
-    await runScheduledNow(reached.nodeUrl, 'purge-sweep')
-    say(`\n${made.length} servers to the trash and the purge`)
-  }
+  // Whatever got made, a server whose making failed partway included: every server with this
+  // run's mark that isn't purged yet goes to the trash and the purge.
+  const left = await sql(
+    `update minecraft_servers set status = 'deleted', deleted_at = coalesce(deleted_at, now()), purge_after = now() - interval '1 minute'
+     where create_idempotency_key like '${KEY_PREFIX}%' and status <> 'purged' returning id`,
+  )
+  await runScheduledNow(reached.nodeUrl, 'purge-sweep')
+  say(`\n${left.length} servers to the trash and the purge`)
   await database.close()
 }
 process.exit(0)
