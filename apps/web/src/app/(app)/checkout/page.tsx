@@ -240,7 +240,12 @@ function Price({
         <Card
           flat
           title={`${name}: ${dollars(monthly)} a month`}
-          description={<>VAT included where it applies. Renews every month until you cancel. {included}</>}
+          description={
+            <>
+              VAT included where it applies. Renews every month until you cancel. {included} Your price and
+              hours stay the same while you stay subscribed.
+            </>
+          }
         />
       ) : (
         <Card

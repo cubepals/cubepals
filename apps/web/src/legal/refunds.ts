@@ -63,7 +63,7 @@ export const REFUNDS: Policy = {
         {
           list: [
             `**Less than ${FULL_REFUND_UNDER_HOURS} hours played: a full refund.** You don’t have to give a reason.`,
-            `**${FULL_REFUND_UNDER_HOURS} hours or more: you pay for what you played.** We keep the share of the price for the hours you used, out of the ${PLUS.hours} ${PLUS.name} includes, and refund the rest. For example, if you played 60 hours, we keep 60/${PLUS.hours} of the price and refund ${PLUS.hours - 60}/${PLUS.hours}. Once you have played all ${PLUS.hours}, there is nothing left to refund.`,
+            `**${FULL_REFUND_UNDER_HOURS} hours or more: you pay for what you played.** We keep the share of the price for the hours you used, out of the hours your plan includes each month, and refund the rest. For example, on ${PLUS.name} with ${PLUS.hours} hours a month, if you played 60 hours, we keep 60/${PLUS.hours} of the price and refund ${PLUS.hours - 60}/${PLUS.hours}. Once you have played all of them, there is nothing left to refund.`,
           ],
         },
         `**If you bought a year,** the same applies to its first month, a twelfth of what you paid (${dollars(MONTH_OF_YEAR)} of ${dollars(YEAR)}), and the other eleven months are refunded in full. For example, if you played 60 hours, we keep 60/${PLUS.hours} of ${dollars(MONTH_OF_YEAR)}, which is ${dollars((MONTH_OF_YEAR * 60) / PLUS.hours)}, and refund ${dollars(YEAR - (MONTH_OF_YEAR * 60) / PLUS.hours)}.`,
