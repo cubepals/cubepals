@@ -150,7 +150,7 @@ test.skipIf(!hasDatabase)(
 )
 
 test.skipIf(!hasDatabase)(
-  'chip-ins started at once are each counted against the day’s caps, and one Polar made no checkout for is not',
+  'chip-ins started at once are each counted against the day’s caps, and so is one Polar didn’t answer',
   async () => {
     const { owner } = await w.subscriber('Kim')
     const server = await stoppedServer(owner)
@@ -158,7 +158,7 @@ test.skipIf(!hasDatabase)(
     const was = tuning()
     installTuning({ ...was, abuse: { ...was.abuse, chipIn: { payerDayCents: 6000, serverDayCents: 8000 } } })
 
-    // Polar makes no checkout: nothing is counted, and the whole day is still there.
+    // Polar doesn't answer, so it may have made the checkout: the start stays counted.
     const held = w.polar.reply
     w.polar.reply = (request) =>
       request.method === 'POST' && request.path.startsWith('/v1/checkouts') ? failing() : held(request)
@@ -170,10 +170,10 @@ test.skipIf(!hasDatabase)(
     const results = await Promise.all(
       Array.from({ length: 6 }, () => refusal(chipIn(friend, server.inviteCode, 2000))),
     )
-    expect(results.filter((r) => r === null)).toHaveLength(3)
+    expect(results.filter((r) => r === null)).toHaveLength(2)
     expect(
       results.filter((r) => r === 'You can chip in up to $60.00 a day. Try again tomorrow.'),
-    ).toHaveLength(3)
+    ).toHaveLength(4)
 
     // From everyone at once, the server's own cap holds too.
     const others = await Promise.all(['Max', 'Ned', 'Oli'].map((name) => w.h.user(name)))

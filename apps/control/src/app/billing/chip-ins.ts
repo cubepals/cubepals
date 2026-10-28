@@ -126,17 +126,18 @@ export class ChipIns {
         returnUrl: returnUrl.toString(),
       })
       .catch(async (error: unknown) => {
-        // No checkout was made, so the start kept for it counts against no cap. If taking it back
-        // fails too, the start stays counted for the day and the payer still hears the reason.
-        await this.#db
-          .delete(log)
-          .where(eq(log.id, counted))
-          .catch(() => undefined)
+        // Payments not answering (an outage, a timeout) may still have made the checkout, so its
+        // start stays counted. Any other failure is a refusal that made none, so the start is taken
+        // back; if that fails too, it stays counted for the day and the payer still hears why.
         if (error instanceof BillingUnavailable)
           throw new AppError(
             'billing_unavailable',
             'Payments are not answering right now. Try again in a minute.',
           )
+        await this.#db
+          .delete(log)
+          .where(eq(log.id, counted))
+          .catch(() => undefined)
         throw error
       })
     return { url }
