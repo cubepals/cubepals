@@ -726,10 +726,12 @@ const sharing = router({
   /** Anyone may open a public page, signed in or not. */
   page: publicProcedure
     .input(PageRef)
-    .query(({ ctx, input }) => ctx.services.sharingQueries.page(input.slug, ctx.actor, { reactions: true })),
+    .query(({ ctx, input }) =>
+      ctx.services.sharingQueries.page(input.slug, ctx.actor, { reactions: true, from: ctx.clientAddress }),
+    ),
   invite: publicProcedure
     .input(InviteRef)
-    .query(({ ctx, input }) => ctx.services.sharingQueries.invite(input.code, ctx.actor)),
+    .query(({ ctx, input }) => ctx.services.sharingQueries.invite(input.code, ctx.actor, ctx.clientAddress)),
   /** The invitee puts their own Minecraft name on the whitelist; no account needed. */
   join: publicProcedure
     .input(JoinThroughInviteInput)

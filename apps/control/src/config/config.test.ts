@@ -473,6 +473,11 @@ describe('private tuning', () => {
     expect(loadConfig({ ...env, ABUSE_LIMITS: JSON.stringify(older) }).abuseLimits).toEqual(abuse)
   })
 
+  test('a deployment’s limits from before public reads were counted per address take their defaults', () => {
+    const { publicReadsPerMinute: _, ...older } = abuse
+    expect(loadConfig({ ...env, ABUSE_LIMITS: JSON.stringify(older) }).abuseLimits).toEqual(abuse)
+  })
+
   test('a deployment’s limits from before the console caps existed take their defaults', () => {
     const { consoleWatchesPerMinute: _w, consolesPerConnection: _c, ...older } = abuse
     expect(loadConfig({ ...env, ABUSE_LIMITS: JSON.stringify(older) }).abuseLimits).toEqual(abuse)

@@ -158,12 +158,13 @@ test.skipIf(!hasDatabase)(
     const { owner } = await w.subscriber('Gus')
     expect(await w.h.app.accounts.allowExtraPlay(owner, 20)).toBe(20)
     const server = await stoppedServer(owner)
-    const friend = await w.h.user('Hal')
+    const friend = await w.h.user('Hal Jordan')
     const order = await w.chippedIn(friend, server.id, 500)
 
     const seen = await w.h.app.billing.chipIns.view(owner, server.id)
     expect(seen).toMatchObject({ open: true, offered: true, hoursLeft: 20 })
-    expect(seen.people).toEqual([{ name: 'Hal', hours: 20, at: expect.any(String) }])
+    // Named as a guestbook names them, never by the whole account name.
+    expect(seen.people).toEqual([{ name: 'Hal J.', hours: 20, at: expect.any(String) }])
     // Polar delivering the same order again keeps one chip-in.
     await w.post(orderEvent(w.orders.get(order) as models.Order, 'order.paid'))
     expect((await w.h.app.billing.chipIns.view(owner, server.id)).people).toHaveLength(1)
@@ -200,7 +201,7 @@ test.skipIf(!hasDatabase)(
       orderEvent({ ...held, status: 'partially_refunded', refunded_amount: 250 }, 'order.refunded'),
     )
     const refunded = await w.h.app.billing.chipIns.view(owner, server.id)
-    expect(refunded.people).toEqual([{ name: 'Hal', hours: 10, at: expect.any(String) }])
+    expect(refunded.people).toEqual([{ name: 'Hal J.', hours: 10, at: expect.any(String) }])
     expect(refunded.hoursLeft).toBeCloseTo(5, 1)
   },
 )

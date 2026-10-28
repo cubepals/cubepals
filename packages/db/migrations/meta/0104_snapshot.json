@@ -1,5 +1,5 @@
 {
-  "id": "3121688d-fb55-4862-9ef9-71476b9a0f42",
+  "id": "6d7bf338-5bb7-4b1b-8e22-951d4ea09a62",
   "prevId": "b4deb455-84c4-479d-ae4f-b937c40690fe",
   "version": "7",
   "dialect": "postgresql",
@@ -956,6 +956,39 @@
           "primaryKey": false,
           "notNull": false
         },
+        "early_room_points": {
+          "name": "early_room_points",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "early_points_core": {
+          "name": "early_points_core",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "early_points_plus": {
+          "name": "early_points_plus",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "early_valid_until": {
+          "name": "early_valid_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "early_room_set_at": {
+          "name": "early_room_set_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "updated_by": {
           "name": "updated_by",
           "type": "text",
@@ -1238,13 +1271,6 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
-        },
-        "other_jars": {
-          "name": "other_jars",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
         },
         "left_out": {
           "name": "left_out",

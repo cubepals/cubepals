@@ -4,7 +4,13 @@
 
 import { describe, expect, test } from 'bun:test'
 import { CLIENT_ADDRESS_HEADER } from '../../app/ports/auth.ts'
-import { type AddressTrust, FORWARDED_BY, FORWARDED_CLIENT, withClientAddress } from './client-address.ts'
+import {
+  type AddressTrust,
+  clientAddressOf,
+  FORWARDED_BY,
+  FORWARDED_CLIENT,
+  withClientAddress,
+} from './client-address.ts'
 
 const SECRET = 'a-proxy-secret-long-enough'
 const ON_FLY = { proxySecret: SECRET, hostHeader: 'fly-client-ip' }
@@ -68,5 +74,15 @@ describe('the client address sign-in counts by', () => {
     expect(passed.method).toBe('POST')
     expect(passed.headers.get('cookie')).toBe('a=b')
     expect(await passed.json()).toEqual({ email: 'x@example.test' })
+  })
+})
+
+describe('the client address public reads count by', () => {
+  test('is the one sign-in counts by, read without changing the request', () => {
+    const vouched = new Headers({ [FORWARDED_CLIENT]: '203.0.113.7', [FORWARDED_BY]: SECRET })
+    expect(clientAddressOf(vouched, ON_FLY)).toBe('203.0.113.7')
+    const claimed = new Headers({ [FORWARDED_CLIENT]: '203.0.113.7', 'fly-client-ip': '198.51.100.1' })
+    expect(clientAddressOf(claimed, ON_FLY)).toBe('198.51.100.1')
+    expect(clientAddressOf(claimed, { proxySecret: null, hostHeader: null })).toBeNull()
   })
 })

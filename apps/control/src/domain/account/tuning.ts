@@ -80,6 +80,12 @@ export interface AbuseLimits {
    */
   worldUploadsPerDay: number
   /**
+   * Public reads one address may make of one server a minute (`app/sharing/queries.ts`): the page
+   * people open, and the status, badge and card around it; of one invitation, whose title and page
+   * count as two; and of invitations across every code.
+   */
+  publicReadsPerMinute: { page: number; status: number; invite: number; invites: number }
+  /**
    * What the realtime role lets one account open (`interfaces/realtime/server.node.ts`): consoles a
    * minute, across all its browsers, and consoles one browser's connection follows at once. A page
    * about a server opens its console; past either, that console shows nothing new until there is room.
@@ -135,6 +141,7 @@ export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {
   joinReportsPerSecond: 10,
   joinReportBytes: 65_536,
   worldUploadsPerDay: 10,
+  publicReadsPerMinute: { page: 120, status: 240, invite: 60, invites: 1200 },
   consoleWatchesPerMinute: 60,
   consolesPerConnection: 10,
   unconfirmedPlaceHours: 24,
