@@ -13,8 +13,9 @@ interface OffersSource {
 /**
  * The offers the pricing page and the public endpoint show, read once a minute at most: every
  * page and every caller in that minute shares one answer, and callers who ask while it is being
- * read wait for that read rather than starting their own. A read that fails isn't kept. Not for a
- * checkout, which asks `BillingService.offer` for the price it will charge.
+ * read wait for that read rather than starting their own. A read that fails answers no offers, so
+ * the plan table stands, and isn't kept. Not for a checkout, which asks `BillingService.offer` for
+ * the price it will charge.
  */
 export class ShownOffers {
   readonly #read: () => Promise<PublicOffer[]>
@@ -29,12 +30,13 @@ export class ShownOffers {
   read(): Promise<PublicOffer[]> {
     const at = this.#now()
     if (this.#kept !== null && at - this.#kept.at < MINUTE_MS) return this.#kept.offers
-    const offers = this.#read()
+    const offers = this.#read().catch((error: unknown) => {
+      console.error(`billing: offers unread, the plan table stands: ${(error as Error).message}`)
+      if (this.#kept === kept) this.#kept = null
+      return []
+    })
     const kept = { at, offers }
     this.#kept = kept
-    offers.catch(() => {
-      if (this.#kept === kept) this.#kept = null
-    })
     return offers
   }
 }

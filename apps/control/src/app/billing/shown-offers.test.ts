@@ -30,7 +30,7 @@ describe('the offers the pricing page shows', () => {
     expect(reads).toBe(2)
   })
 
-  test('are read again at once after a read fails', async () => {
+  test('are none when a read fails, so the plan table stands, and are read again at once', async () => {
     let fail = true
     const shown = new ShownOffers(
       async () => {
@@ -39,7 +39,7 @@ describe('the offers the pricing page shows', () => {
       },
       () => 0,
     )
-    await expect(shown.read()).rejects.toThrow('database away')
+    expect(await shown.read()).toEqual([])
     fail = false
     expect(await shown.read()).toEqual([CORE])
   })
