@@ -4,7 +4,9 @@
 
 import { describe, expect, test } from 'bun:test'
 import type { PublicPlan } from '@blockly/contracts'
-import { extraHourOf, forSale, pitchOf, planPoints, priceOf } from '../ui/plans.tsx'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { extraHourOf, forSale, PlanCard, pitchOf, planPoints, priceOf } from '../ui/plans.tsx'
 import { daysSaid, hoursAgainSaid, hoursSaid } from './plans.ts'
 
 const free: PublicPlan = {
@@ -63,6 +65,10 @@ const plus: PublicPlan = {
   deletedAfterDays: null,
 }
 
+/** What a card says, its tags taken out. */
+const textOf = (card: Parameters<typeof renderToStaticMarkup>[0]) =>
+  renderToStaticMarkup(card).replace(/<[^>]+>/g, '')
+
 // What the pricing, landing and account pages say about a plan: what people choose on, in their
 // words, and never a machine's.
 describe('plans as people read them', () => {
@@ -116,10 +122,9 @@ describe('plans as people read them', () => {
   })
 
   test('each card leads with who it is for, and never with hours', () => {
-    expect(pitchOf(free)).toBe('Try plain Minecraft with friends, no card')
     expect(pitchOf(core, true)).toBe('Plain Minecraft for you and 4 friends, Java and Bedrock together')
     expect(pitchOf(plus)).toBe('Mods, plugins and modpacks, for bigger groups')
-    for (const plan of [free, core, plus]) expect(pitchOf(plan)).not.toMatch(/hour/i)
+    for (const plan of [core, plus]) expect(pitchOf(plan)).not.toMatch(/hour/i)
   })
 
   test('Core promises nothing about Bedrock until Bedrock is on', () => {
@@ -146,6 +151,23 @@ describe('plans as people read them', () => {
       'the hours start again: the free trial’s at midnight where you are, until its 20 are played; Plus’s on the 1st',
     )
     expect(hoursAgainSaid([])).toBe('the hours start again')
+  })
+
+  test('the account page says the free trial on Core, after its hours, as the public pages do', () => {
+    const said = textOf(createElement(PlanCard, { plan: core, trial: free }))
+    expect(said).toContain(
+      '40 hours of play each month, then 25¢ an hourStarts with a free trial: 20 hours of play, at most 2 a day, no card',
+    )
+    expect(textOf(createElement(PlanCard, { plan: plus }))).not.toContain('free trial')
+  })
+
+  test('someone on the free trial finds it on the plan it starts', () => {
+    expect(textOf(createElement(PlanCard, { plan: core, trial: free, current: 'trial' }))).toContain(
+      'Your free trial',
+    )
+    const plusYours = textOf(createElement(PlanCard, { plan: plus, current: true }))
+    expect(plusYours).toContain('Yours')
+    expect(plusYours).not.toContain('Your free trial')
   })
 
   test('days as people say them', () => {
