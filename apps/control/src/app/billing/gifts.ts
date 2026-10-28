@@ -16,7 +16,7 @@
  * Not here: the plan's own checkout and subscriptions (`service.ts`).
  */
 import type { GiftOptionView, GiftView, RedeemedGiftView } from '@blockly/contracts'
-import { DAY_MS, HOUR_MS } from '@blockly/contracts/durations'
+import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { type Db, type Queryable, schema, type Tx } from '@blockly/db'
 import { and, asc, count, desc, eq, gt, isNotNull, isNull, lte, max, ne, sql } from 'drizzle-orm'
 import { emailOf, isTestAccount, loadStanding, lockStanding } from '../accounts/persistence.ts'
@@ -28,7 +28,12 @@ import { AppError, NotFound } from '../errors.ts'
 import { listingsOfOwner } from '../listings/persistence.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { JobQueue } from '../ports/jobs.ts'
-import { type BillingOrder, BillingUnavailable, type GiftProduct } from '../ports/optional.ts'
+import {
+  type BillingOrder,
+  type BillingProvider,
+  BillingUnavailable,
+  type GiftProduct,
+} from '../ports/optional.ts'
 import type { Mailer } from '../ports/platform.ts'
 import { tuning } from '../tuning.ts'
 import { type AuditEntry, planChange, writeEntries } from './audit.ts'
@@ -39,6 +44,9 @@ import { addMonths, lastYearEnd } from './years.ts'
 const gifts = schema.planGifts
 
 const REFUSED = 'That code doesn’t work. Check it against the email it came in.'
+
+/** How long the gifts on sale are taken as the provider last listed them, before it is asked again. */
+const ON_SALE_KEPT_MS = 5 * MINUTE_MS
 
 /**
  * What an order paid for: a gift made before its checkout, which the order names (`giftId`), with
@@ -54,6 +62,8 @@ export class Gifts {
   readonly #jobs: JobQueue
   readonly #mailer: Mailer
   readonly #webOrigin: string
+  /** The gifts on sale as the provider last listed them, and when it was asked. */
+  #onSale: { at: number; gifts: Promise<GiftProduct[]> } | null = null
 
   constructor(deps: {
     db: Db
@@ -76,8 +86,24 @@ export class Gifts {
   /** The gifts on sale, for anyone; none where the deployment takes no payments. */
   async options(): Promise<GiftOptionView[]> {
     if (this.#caps.billing === null) return []
-    const billing = this.#caps.billing
-    return reach(() => billing.giftProducts())
+    return this.#giftProducts(this.#caps.billing)
+  }
+
+  /**
+   * The gift products, as the provider listed them in the last `ON_SALE_KEPT_MS`: one listing
+   * answers every read meanwhile, those that come while it is being asked included. A listing that
+   * failed is asked for again by the next read.
+   */
+  #giftProducts(billing: BillingProvider): Promise<GiftProduct[]> {
+    const now = Date.now()
+    if (this.#onSale === null || now - this.#onSale.at >= ON_SALE_KEPT_MS) {
+      const asked = { at: now, gifts: reach(() => billing.giftProducts()) }
+      this.#onSale = asked
+      asked.gifts.catch(() => {
+        if (this.#onSale === asked) this.#onSale = null
+      })
+    }
+    return this.#onSale.gifts
   }
 
   /**
@@ -99,7 +125,7 @@ export class Gifts {
         `You’ve bought ${most} gifts today, the most for one day. You can buy more tomorrow.`,
       )
     const billing = requireCapability(this.#caps, 'billing')
-    const gift = (await reach(() => billing.giftProducts())).find((option) => option.id === optionId)
+    const gift = (await this.#giftProducts(billing)).find((option) => option.id === optionId)
     if (gift === undefined) throw new AppError('invalid_choice', 'That gift isn’t on sale any more.')
     const returnUrl = new URL('/gift?bought=1', this.#webOrigin).toString()
     const url = await reach(() =>

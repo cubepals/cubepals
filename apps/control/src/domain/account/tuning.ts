@@ -79,6 +79,11 @@ export interface AbuseLimits {
    * (`app/backups/new-world-imports.ts`): each is up to 4 GB, and read on a worker.
    */
   worldUploadsPerDay: number
+  /**
+   * Times one account may ask the billing provider for its standing a minute (`billing.refresh`),
+   * as its account page does once on coming back from a checkout or the portal.
+   */
+  refreshesPerMinute: number
 }
 
 /** The figures the runtime economics report prices a margin with (`app/runtimes/economics.ts`). */
@@ -122,6 +127,7 @@ export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {
   joinReportsPerSecond: 10,
   joinReportBytes: 65_536,
   worldUploadsPerDay: 10,
+  refreshesPerMinute: 10,
 }
 
 /** Round figures for development and tests. */
