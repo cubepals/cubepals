@@ -9,7 +9,7 @@
  */
 import type { PublicPlan } from '@blockly/contracts'
 import type { ReactNode } from 'react'
-import { dollars, eachOf, forSale, hoursPoint, keptPoint, PlanPoint, priceOf } from './plans'
+import { dollars, eachOf, forSale, gbSaid, hoursPoint, keptPoint, PlanPoint, priceOf, sizesOf } from './plans'
 
 /** The trial, the paid plans that get a card each, and the one the trial starts. */
 export function cardsOf(plans: readonly PublicPlan[]) {
@@ -63,9 +63,32 @@ export function offerPoints(plan: PublicPlan, bedrock: boolean): { said: string;
   ]
 }
 
-/** What bigger groups run on, said in the details of the plan that has them. */
-const LARGE_SERVERS =
-  'Big modpacks and groups of 20 or more run on a large server, which counts two hours for each hour it runs. Groups of more than 50 run on the largest, which counts four.'
+const TIMES: Record<number, string> = { 2: 'two', 3: 'three', 4: 'four' }
+
+/**
+ * How big a plan's servers are, from its sizes, so "is it unlimited?" has its answer: one size and
+ * the players it holds, or every size, with the ones that count more than an hour for each hour
+ * they run. Null where the answer predates the sizes.
+ */
+function sizePoint(plan: PublicPlan, trial?: PublicPlan): string | null {
+  const sizes = sizesOf(plan)
+  const [only] = sizes
+  if (only === undefined) return null
+  if (sizes.length === 1) {
+    const same = trial !== undefined && gbSaid(trial) === gbSaid(plan)
+    return `A ${only.gb} GB server, for up to ${only.maxPlayers} players${same ? ', on the free trial too' : ''}`
+  }
+  const gbs = sizes.map((size) => size.gb)
+  const listed = `${gbs.slice(0, -1).join(', ')} or ${gbs.at(-1)} GB`
+  const counted = sizes
+    .filter((size) => size.hoursAnHour > 1)
+    .map((size, i) =>
+      i === 0
+        ? `${size.gb} GB holds up to ${size.maxPlayers} players and counts ${TIMES[size.hoursAnHour] ?? size.hoursAnHour} hours for each hour it runs`
+        : `${size.gb} GB holds up to ${size.maxPlayers} and counts ${TIMES[size.hoursAnHour] ?? size.hoursAnHour}`,
+    )
+  return `Servers of ${listed}, sized for your group and game${counted.length > 0 ? `. ${counted.join('; ')}` : ''}`
+}
 
 /**
  * "See everything in Core": the rest of a plan, opened in place. The hours sit on their dashed
@@ -103,9 +126,10 @@ export function PlanDetails({
             Starts with a free trial: <PlanPoint plan={trial} point={hoursPoint(trial)} />, no card
           </li>
         )}
+        {sizePoint(plan, trial) && <li>{sizePoint(plan, trial)}</li>}
         <li>Hours count only while your server is awake, not for each player</li>
         <li>{keptPoint(plan)}</li>
-        <li>{plan.mods ? LARGE_SERVERS : 'Plain Minecraft: vanilla or Paper'}</li>
+        {!plan.mods && <li>Plain Minecraft: vanilla or Paper</li>}
         {plan.mods && <li>{plan.datapacks ? 'Plugins and datapacks work too' : 'Plugins work too'}</li>}
         {plan.yearlyPriceCents && year !== false ? (
           <li>{year ?? `Or ${dollars(plan.yearlyPriceCents)} for a year, paid once`}</li>

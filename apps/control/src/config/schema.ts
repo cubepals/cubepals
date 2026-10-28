@@ -200,6 +200,7 @@ const AbuseLimits = z
       worldUploadsPerDay: Count.default(DEFAULT_ABUSE_LIMITS.worldUploadsPerDay),
       consoleWatchesPerMinute: Count.default(DEFAULT_ABUSE_LIMITS.consoleWatchesPerMinute),
       consolesPerConnection: Count.default(DEFAULT_ABUSE_LIMITS.consolesPerConnection),
+      unconfirmedPlaceHours: Count.default(DEFAULT_ABUSE_LIMITS.unconfirmedPlaceHours),
     },
     { error: 'ABUSE_LIMITS is the deployment’s abuse limits, as JSON (docs/configuration.md)' },
   )

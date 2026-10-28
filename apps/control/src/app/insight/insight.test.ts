@@ -27,6 +27,7 @@ const billing: BillingProvider = {
   checkoutUrl: async () => 'https://billing.test/checkout',
   sells: () => true,
   sellsYear: async () => false,
+  earlyProduct: async () => null,
   stopRenewing: async () => {},
   moveToPlan: async () => ({ appliesAt: new Date() }),
   upgradeSubscription: async () => {},

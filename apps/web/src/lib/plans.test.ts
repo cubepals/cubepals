@@ -20,6 +20,7 @@ const free: PublicPlan = {
   sleepsAfterMinutes: 10,
   maxServers: 1,
   maxPlayers: 5,
+  sizes: [{ gb: 3, maxPlayers: 5, hoursAnHour: 1 }],
   mods: false,
   datapacks: false,
   downloads: 'daily',
@@ -55,6 +56,11 @@ const plus: PublicPlan = {
   sleepsAfterMinutes: 15,
   maxServers: 3,
   maxPlayers: 40,
+  sizes: [
+    { gb: 3, maxPlayers: 5, hoursAnHour: 1 },
+    { gb: 4, maxPlayers: 10, hoursAnHour: 1 },
+    { gb: 8, maxPlayers: 40, hoursAnHour: 2 },
+  ],
   mods: true,
   datapacks: true,
   downloads: 'history',
@@ -69,7 +75,7 @@ describe('plans as people read them', () => {
   test('The free trial says what it is, with nothing crossed out', () => {
     expect(priceOf(free.monthlyPriceCents)).toBe('$0')
     expect(planPoints(free)).toEqual([
-      '1 server, up to 5 players',
+      '1 server of 3 GB, up to 5 players',
       '20 hours of play, at most 2 a day',
       'Plain Minecraft',
       'Go back to any of your last 3 sessions, and download your world',
@@ -80,7 +86,7 @@ describe('plans as people read them', () => {
     expect(priceOf(plus.monthlyPriceCents)).toBe('$25 a month')
     expect(priceOf(450)).toBe('$4.50 a month')
     expect(planPoints(plus)).toEqual([
-      'Up to 3 servers and 40 players',
+      'Up to 3 servers and 40 players, 3 to 8 GB each',
       '120 hours of play each month, then 25¢ an hour',
       'Modpacks, mods, plugins and datapacks',
       'Go back to any of your last 14 sessions, and a weekly download',
@@ -93,10 +99,11 @@ describe('plans as people read them', () => {
   })
 
   test('a plans answer from before the new fields still reads: no clause says undefined, and no plan looks off sale', () => {
-    // What an API that predates `extraHourCents` and `available` sends.
-    const { extraHourCents: _e, available: _a, ...old } = plus
+    // What an API that predates `extraHourCents`, `available` and `sizes` sends.
+    const { extraHourCents: _e, available: _a, sizes: _s, ...old } = plus
     const oldPlus = old as unknown as PublicPlan
     expect(planPoints(oldPlus).join(' ')).not.toContain('undefined')
+    expect(planPoints(oldPlus)[0]).toBe('Up to 3 servers and 40 players')
     expect(planPoints(oldPlus)[1]).toBe('120 hours of play each month')
     expect(forSale(oldPlus)).toBe(true)
     expect(extraHourOf(oldPlus)).toBeNull()
@@ -108,7 +115,7 @@ describe('plans as people read them', () => {
   test('Core is one server for a group of friends, with its hours in the details', () => {
     expect(priceOf(core.monthlyPriceCents)).toBe('$9.99 a month')
     expect(planPoints(core)).toEqual([
-      '1 server, up to 5 players',
+      '1 server of 3 GB, up to 5 players',
       '40 hours of play each month, then 25¢ an hour',
       'Plain Minecraft',
       'Go back to any of your last 14 sessions, and a weekly download',
@@ -127,10 +134,11 @@ describe('plans as people read them', () => {
     expect(pitchOf(core, false)).not.toMatch(/bedrock/i)
   })
 
-  test('nothing a plan says is about machines, and nothing says "turn on"', () => {
+  test('nothing a plan says is about machines but its servers’ size, and nothing says "turn on"', () => {
     const said = [...planPoints(free), ...planPoints(core), ...planPoints(plus), pitchOf(core)].join(' ')
-    for (const word of ['GB', 'RAM', 'CPU', 'unit', 'vCPU', 'machine', 'volume', 'turn on'])
+    for (const word of ['RAM', 'CPU', 'unit', 'vCPU', 'machine', 'volume', 'turn on'])
       expect(said).not.toContain(word)
+    expect(pitchOf(core)).not.toContain('GB')
   })
 
   test('hours as people say them, and when they start again', () => {

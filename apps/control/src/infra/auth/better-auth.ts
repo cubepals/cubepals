@@ -5,9 +5,9 @@
 import { DISPOSABLE_EMAIL, PASSWORD_MIN_LENGTH, SIGNUPS_FULL, type SignUpAgreement } from '@blockly/contracts'
 import { HOUR_S, MINUTE_S } from '@blockly/contracts/durations'
 import { type Db, schema } from '@blockly/db'
-import { betterAuth } from 'better-auth'
+import { betterAuth, type GenericEndpointContext } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { APIError, createAuthMiddleware, isAPIError } from 'better-auth/api'
+import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from 'better-auth/api'
 import { expireCookie } from 'better-auth/cookies'
 import { captcha } from 'better-auth/plugins'
 import { admin } from 'better-auth/plugins/admin'
@@ -70,8 +70,14 @@ export interface AuthOptions {
    * the Terms it was made under (null only for an account made outside a request).
    */
   onAccountCreated: (userId: string, agreement: SignUpAgreement | null) => Promise<void>
-  /** Told about every account that is created or changes, with whether its email is confirmed. */
-  onAccount?: (user: { id: string; email: string; emailVerified: boolean }) => Promise<void>
+  /**
+   * Told about every account that is created or changes, with whether its email is confirmed,
+   * and the session the request carries for it, the one to keep (null: none).
+   */
+  onAccount?: (
+    user: { id: string; email: string; emailVerified: boolean },
+    keep: string | null,
+  ) => Promise<void>
   /** Told when someone sets a new password through a reset link, for the account's audit log. */
   onPasswordReset?: (userId: string) => Promise<void>
 }
@@ -252,16 +258,21 @@ export function createAuth(options: AuthOptions) {
             await options.onAccountCreated(user.id, (context && agreements.get(context)) ?? null)
             const address = context?.request?.headers.get(options.clientAddressHeader) ?? null
             await options.onSignedUp?.(user.id, emailKey(user.email), address)
-            await options.onAccount?.(user)
+            await options.onAccount?.(user, null)
             // Google or GitHub vouched for the address, so the account is ready now. An email
             // sign-up, or a provider that didn't vouch, is welcomed once it confirms.
             if (user.emailVerified) await welcome(user)
           },
         },
-        // Confirming an email is an update; a listed admin becomes one only once it is confirmed.
+        // Confirming an email is an update, the only one /verify-email makes (changing an email is
+        // off). Only the browser that confirmed stays signed in, and a listed admin becomes one
+        // only once it is confirmed.
         update: {
-          async after(user) {
-            await options.onAccount?.(user)
+          async after(user, context) {
+            const confirmed = context?.path === '/verify-email' && user.emailVerified
+            const keep = confirmed && context ? await sessionFor(user.id, context) : null
+            if (confirmed && context) await endSessionsBut(context, user.id, keep)
+            await options.onAccount?.(user, keep)
           },
         },
       },
@@ -303,6 +314,19 @@ async function admitSignUp(options: AuthOptions, email: string): Promise<void> {
       code: SIGNUPS_FULL,
       message: "Cubepals is full for now. Leave your email and we'll tell you when there's room.",
     })
+}
+
+/** The session this request carries for the account, or null when it carries none of its own. */
+async function sessionFor(userId: string, context: GenericEndpointContext): Promise<string | null> {
+  const found = await getSessionFromCtx(context).catch(() => null)
+  return found?.user.id === userId ? found.session.id : null
+}
+
+/** Ends every session of the account but `keep` (null: every one), through Better Auth's own store. */
+async function endSessionsBut(context: GenericEndpointContext, userId: string, keep: string | null) {
+  const store = context.context.internalAdapter
+  const ending = (await store.listSessions(userId)).filter((s) => s.id !== keep).map((s) => s.token)
+  if (ending.length > 0) await store.deleteSessions(ending)
 }
 
 export type Auth = ReturnType<typeof createAuth>

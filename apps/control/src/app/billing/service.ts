@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { BillingTerm, CheckoutConsent, UpgradeReason } from '@blockly/contracts'
+import { type BillingTerm, type CheckoutConsent, sameSitePath, type UpgradeReason } from '@blockly/contracts'
 import { type Db, schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { entitlementsFor, PAID_PLANS, planName } from '../../domain/account/entitlements.ts'
@@ -168,8 +168,8 @@ export class BillingService {
       )
     const billing = requireCapability(this.#caps, 'billing')
     const returnUrl = new URL(this.#returnUrl)
-    if (options.next !== undefined && /^\/(?![/\\])/.test(options.next))
-      returnUrl.searchParams.set('next', options.next)
+    const next = sameSitePath(options.next)
+    if (next !== null) returnUrl.searchParams.set('next', next)
     // The subscription that pays for a smaller plan becomes this one: nothing renews beside it.
     if (term === 'month' && (await upgradeInPlace(this.#db, billing, user.id, planKey, actor, this.#reach))) {
       await this.refresh(actor)

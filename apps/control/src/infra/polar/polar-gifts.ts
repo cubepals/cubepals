@@ -7,16 +7,20 @@
  * metadata `purpose: gift`, `plan` and `months`, at one fixed price, read back as a gift; anything
  * else is not one. The products are made in Polar, like the plans', so a new gift (a year of Plus)
  * is a product there and nothing here. A gift made before its checkout is named in the checkout's
- * metadata, which Polar copies to the order, and read back from there with who paid. Requests
- * themselves are PolarBilling's.
+ * metadata, which Polar copies to the order, and read back from there with who paid. The two
+ * requests a gift takes are here, made with PolarBilling's client.
  */
-import type { models } from '@polar-sh/sdk/2026-10'
+import type { createPolar, models } from '@polar-sh/sdk/2026-10'
 import { z } from 'zod'
 import type { GiftProduct } from '../../app/ports/optional.ts'
 import type { Fields } from './polar-models.ts'
+import { CHECKOUT_LEFT_MS, call, withEmail } from './polar-requests.ts'
+import { Listed, OpenCheckouts, PricedProduct } from './polar-schemas.ts'
+
+type Polar = ReturnType<typeof createPolar>
 
 /** The metadata that marks a product as a gift, and the products list is filtered on. */
-export const GIFT_METADATA = { purpose: 'gift' } as const
+const GIFT_METADATA = { purpose: 'gift' } as const
 
 /**
  * What a gift checkout names. Its customer: the account paying, or for a guest none of ours, and
@@ -59,27 +63,12 @@ export function giftOrderOf(
   return { gift, giftId: id.success ? id.data : null, payerEmail: order.customer.email ?? null }
 }
 
-const PolarGift = z.object({
-  id: z.string(),
-  is_recurring: z.boolean(),
-  is_archived: z.boolean(),
-  metadata: z.record(z.string(), z.unknown()),
-  prices: z.array(
-    z.object({
-      amount_type: z.string(),
-      is_archived: z.boolean().nullish(),
-      price_amount: z.number().int().nullish(),
-      price_currency: z.string().nullish(),
-    } satisfies Fields<models.ProductPrice>),
-  ),
-} satisfies Fields<models.Product>)
-
 /**
  * A gift product for one of `plans`, or null: one that recurs, names no plan this deployment
  * sells, gives no whole number of months, or has no fixed price in dollars sells no gift here.
  */
 export function giftOf(data: unknown, plans: ReadonlySet<string>): GiftProduct | null {
-  const parsed = PolarGift.safeParse(data)
+  const parsed = PricedProduct.safeParse(data)
   if (!parsed.success) return null
   const product = parsed.data
   if (product.is_recurring || product.is_archived) return null
@@ -93,4 +82,58 @@ export function giftOf(data: unknown, plans: ReadonlySet<string>): GiftProduct |
   )
   if (price?.price_amount == null) return null
   return { id: product.id, planKey, months, priceCents: price.price_amount }
+}
+
+/** Every gift product for a plan this deployment sells, cheapest first, read from Polar now. */
+export async function giftProducts(polar: Polar, plans: ReadonlySet<string>): Promise<GiftProduct[]> {
+  const found = Listed.parse(
+    await call('finding the gift products', () =>
+      polar.products.list({ metadata: { ...GIFT_METADATA }, is_archived: false, limit: 100 }),
+    ),
+  )
+  return found.items
+    .map((item) => giftOf(item, plans))
+    .filter((gift) => gift !== null)
+    .sort((a, b) => a.priceCents - b.priceCents)
+}
+
+/**
+ * A checkout for one gift, with no code: a coupon for the plans is not for gifts of them. What it
+ * names is `giftCheckoutOf`'s. One still open for the same buyer and gift is the one to pay.
+ */
+export async function giftCheckoutUrl(
+  polar: Polar,
+  input: {
+    userId: string | null
+    email: string
+    gift: GiftProduct
+    giftId: string | null
+    returnUrl: string
+  },
+): Promise<string> {
+  const { customer, metadata } = giftCheckoutOf(input)
+  const open = OpenCheckouts.parse(
+    await call('finding an open gift checkout', () =>
+      polar.checkouts.list({ product_id: input.gift.id, ...customer, status: 'open', limit: 20 }),
+    ),
+  ).items.find(
+    (checkout) =>
+      checkout.metadata?.gift === metadata?.gift &&
+      new Date(checkout.expires_at).getTime() > Date.now() + CHECKOUT_LEFT_MS,
+  )
+  if (open !== undefined) return open.url
+  const checkout = await withEmail(input.email, (email) =>
+    call('starting a gift checkout', () =>
+      polar.checkouts.create({
+        products: [input.gift.id],
+        allow_discount_codes: false,
+        ...customer,
+        metadata,
+        ...email,
+        success_url: input.returnUrl,
+        return_url: input.returnUrl,
+      }),
+    ),
+  )
+  return checkout.url
 }

@@ -40,6 +40,7 @@ import {
   emailOf,
   ensureStanding,
   grantAdmin,
+  grantListedAdmin,
   holdFreePlace,
   insertTestUser,
   isAdmin,
@@ -104,6 +105,9 @@ function extraOffer(plan: Entitlements): {
     },
   }
 }
+
+/** An account as the auth layer tells of it, for the admins ADMIN_EMAILS lists. */
+type ListedUser = { id: string; email: string; emailVerified: boolean }
 
 /**
  * Account standing, as admins set it (§4). Suspension stops what the account
@@ -395,7 +399,7 @@ export class AccountService {
    */
   async bootstrapAdmins(): Promise<void> {
     await this.#db.transaction(async (tx) => {
-      for (const userId of await verifiedByEmail(tx, this.#configured)) await grantAdmin(tx, userId, 'config')
+      for (const id of await verifiedByEmail(tx, this.#configured)) await grantListedAdmin(tx, id, null)
       for (const admin of await listAdmins(tx))
         if (admin.grantedBy === 'config' && !this.#configured.includes(admin.email.toLowerCase()))
           await revokeAdmin(tx, admin.userId)
@@ -464,10 +468,10 @@ export class AccountService {
     })
   }
 
-  /** A new or newly confirmed account whose email is listed becomes an admin. */
-  async configuredAdmin(user: { id: string; email: string; emailVerified: boolean }): Promise<void> {
+  /** A new or newly confirmed account whose email is listed becomes an admin, signed in only at `keep`. */
+  async configuredAdmin(user: ListedUser, keep: string | null = null): Promise<void> {
     if (!user.emailVerified || !this.#configured.includes(user.email.toLowerCase())) return
-    await grantAdmin(this.#db, user.id, 'config')
+    await grantListedAdmin(this.#db, user.id, keep)
   }
 
   isAdmin(userId: string): Promise<boolean> {

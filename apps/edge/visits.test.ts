@@ -101,6 +101,7 @@ const loginStart = (name: string) => packet(0, [...string(name), ...new Array(16
 
 /** What the stand-in control plane was sent, and the names the stand-in server heard. */
 const reports: VisitReport[] = []
+const wakes: { hostname: string; name?: string; address?: string }[] = []
 const reached = new Set<string>()
 /** The agent's front door. */
 let front = 0
@@ -171,8 +172,9 @@ describe.skipIf(ROUTER_BIN === '')('the agent’s visits', () => {
           return new Response(null, { status: 204 })
         }
         if (path.endsWith('/wake')) {
-          const { hostname } = (await request.json()) as { hostname: string }
-          if (hostname === 'held.play.test') await Bun.sleep(500)
+          const asked = (await request.json()) as (typeof wakes)[number]
+          wakes.push(asked)
+          if (asked.hostname === 'held.play.test') await Bun.sleep(500)
           const wakeOperationId = '01900000-0000-7000-8000-00000000000a'
           return Response.json({ outcome: 'ready', destination, wakeOperationId })
         }
@@ -227,6 +229,11 @@ describe.skipIf(ROUTER_BIN === '')('the agent’s visits', () => {
 
   test('a join held in the waiting room: woken, then handed over', async () => {
     await joins('held.play.test', 'VisitorHeld')
+    // Its wake says the name it gave and where it came from, as the front door read it.
+    expect(wakes.find((w) => w.hostname === 'held.play.test')).toMatchObject({
+      name: 'VisitorHeld',
+      address: '127.0.0.1',
+    })
     const [open, close, ...rest] = await halves('VisitorHeld')
     expect(rest).toEqual([])
     expect(open).toMatchObject({ path: 'held', wakeOperationId: '01900000-0000-7000-8000-00000000000a' })

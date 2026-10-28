@@ -14,6 +14,7 @@
  * Not for deciding how long to wait or where the join goes: that is the agent's.
  */
 
+import type { Socket } from 'node:net'
 import { type Join, packet, readVarInt, string, varInt } from './notice.ts'
 
 /** The first protocol version (1.13) whose clients answer a login query. */
@@ -26,12 +27,17 @@ const ANSWER = 0x02
 const CHANNEL = 'blockly:wake'
 /** The longest name a Login Start carries, 16 characters, in bytes. */
 const NAME_BYTES = 16 * 4
-/** Far more than a handshake and a login ever take: past this, the client is sending something else. */
-const MOST_PENDING = 64 * 1024
+/**
+ * Far more than a handshake and a login ever take, in bytes and in packets, all of it kept or
+ * still arriving: past either, the client is sending something else.
+ */
+const MOST_HELD = 64 * 1024
+const MOST_KEPT_PACKETS = 64
 
 export class Held {
   /** Every packet the client sent that the server still has to get, in order. */
   readonly #kept: Uint8Array[] = []
+  #keptBytes = 0
   /** What arrived of a packet that hasn't arrived whole yet. */
   #pending = new Uint8Array(0)
   #asked = 0
@@ -67,11 +73,19 @@ export class Held {
       const id = readVarInt(received, length.next)
       // An answer to one of the hold's own queries is the hold's; the server never asked it.
       if (id?.value === ANSWER && this.#answered < this.#asked) this.#answered++
-      else this.#kept.push(received.slice(offset, end))
+      else {
+        this.#kept.push(received.slice(offset, end))
+        this.#keptBytes += end - offset
+      }
       offset = end
     }
     this.#pending = received.slice(offset)
-    this.#refused = this.#pending.length > MOST_PENDING
+    this.#refused =
+      this.#keptBytes + this.#pending.length > MOST_HELD || this.#kept.length > MOST_KEPT_PACKETS
+    if (this.#refused) {
+      this.#kept.length = 0
+      this.#pending = new Uint8Array(0)
+    }
     return !this.#refused
   }
 
@@ -99,7 +113,7 @@ export class Held {
 
   /** Whether every query has been answered, so nothing of the hold's is still on its way. */
   get settled(): boolean {
-    return this.#answered >= this.#asked
+    return !this.#refused && this.#answered >= this.#asked
   }
 
   /** Everything the client sent, but the answers: what the server gets first. */
@@ -118,4 +132,11 @@ export class Held {
 /** What turns a held join away: login's disconnect, with the message the player reads. */
 export function turnAway(text: string): Uint8Array {
   return packet(0, string(JSON.stringify({ text })))
+}
+
+/** Turns `client` away at once: the disconnect, then the connection closes once it is sent. */
+export function sendAway(client: Socket, text: string): void {
+  if (client.writableEnded) return
+  client.write(turnAway(text))
+  client.destroySoon()
 }

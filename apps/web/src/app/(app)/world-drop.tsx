@@ -138,7 +138,7 @@ export function WorldDrop({
       {saves && (
         <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
           <span className="type-body-sm">On {saves.system}, Minecraft keeps single-player worlds in</span>
-          <CopyField value={saves.path} />
+          <CopyField value={saves.path} label="Copy" />
         </div>
       )}
       {problem && <Note tone="danger">{problem}</Note>}

@@ -8,8 +8,8 @@
  * socket, and decides nothing about what a refused client is told (that is `front.ts`'s).
  *
  * - An address (an IPv6 one by its /64, which one machine usually holds whole) may hold only a
- *   few connections that haven't said where they are going, and open only so many a second, pings
- *   and joins alike.
+ *   few connections that haven't said where they are going, only so many that have, and open only
+ *   so many a second, pings and joins alike.
  * - A server may take only so many new connections a second, and hold only so many open.
  */
 
@@ -22,12 +22,13 @@ export interface Rate {
 }
 
 export interface Limits {
-  address: { connections: Rate; greeting: number }
+  /** `open` counts the connections let through that are still open, across every server. */
+  address: { connections: Rate; greeting: number; open: number }
   server: { connections: Rate; open: number }
 }
 
 /** Which limit refused a connection. */
-export type Refusal = 'address-rate' | 'address-greeting' | 'server-rate' | 'server-open'
+export type Refusal = 'address-rate' | 'address-greeting' | 'address-open' | 'server-rate' | 'server-open'
 
 export class Bucket {
   readonly rate: Rate
@@ -89,6 +90,8 @@ export function addressKey(address: string): string {
 export class Gate {
   readonly #addresses = new Map<string, Tally>()
   readonly #servers = new Map<string, Tally>()
+  /** Connections let through and still open, by address key; an address is gone once it has none. */
+  readonly #admitted = new Map<string, number>()
   /** Refusals since the last `sweep`, by limit and by what it counted. */
   readonly #refused = new Map<string, number>()
 
@@ -114,15 +117,28 @@ export class Gate {
   }
 
   /**
-   * A connection said it is going to `server`. Null refuses it; otherwise call what comes back
-   * once it closes.
+   * A connection from `address` said it is going to `server`. Null refuses it; otherwise call what
+   * comes back once it closes. A null `address` is counted against the server alone.
    */
-  admit(server: string): (() => void) | null {
+  admit(server: string, address: string | null = null): (() => void) | null {
+    const key = address === null ? null : addressKey(address)
+    const admitted = key === null ? 0 : (this.#admitted.get(key) ?? 0)
+    if (key !== null && admitted >= this.limits.address.open) return this.#refuse('address-open', key)
     const tally = this.#tally(this.#servers, server, this.limits.server.connections)
     if (tally.open >= this.limits.server.open) return this.#refuse('server-open', server)
     if (!tally.bucket.take(this.now())) return this.#refuse('server-rate', server)
     tally.open++
-    return once(() => tally.open--)
+    if (key !== null) this.#admitted.set(key, admitted + 1)
+    return once(() => {
+      tally.open--
+      if (key !== null) this.#release(key)
+    })
+  }
+
+  #release(key: string): void {
+    const left = (this.#admitted.get(key) ?? 1) - 1
+    if (left > 0) this.#admitted.set(key, left)
+    else this.#admitted.delete(key)
   }
 
   /** Forgets what no longer limits anything, and hands back the refusals since the last sweep. */

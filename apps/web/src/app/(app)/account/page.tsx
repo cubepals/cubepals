@@ -4,7 +4,12 @@
 
 'use client'
 
-import { type AccountOverviewView, UPGRADE_REASONS, type UpgradeReason } from '@blockly/contracts'
+import {
+  type AccountOverviewView,
+  sameSitePath,
+  UPGRADE_REASONS,
+  type UpgradeReason,
+} from '@blockly/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -451,7 +456,7 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
   useEffect(() => {
     if (asked.current || params.get('from') !== 'billing' || !billing?.available) return
     asked.current = true
-    const next = params.get('next')
+    const next = sameSitePath(params.get('next'))
     router.replace('/account')
     refresh.mutate(undefined, {
       onSuccess: () => {
@@ -459,7 +464,7 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
         void queries
           .query(trpc.account.overview.queryOptions())
           .then((now) => billingReturned(before, now.plan))
-        if (next !== null && /^\/(?![/\\])/.test(next)) router.replace(next)
+        if (next !== null) router.replace(next)
       },
     })
   }, [params, billing, refresh, router, overview.plan, queries, trpc])
