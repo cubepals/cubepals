@@ -280,11 +280,12 @@ const filesDigest = (files: readonly CarriedFile[]): string =>
 /**
  * A revision without the jars found to be malware since it was pinned (`mods/jar-checks.ts`): each
  * comes off at the server's next start, and its other files and world stay as they are. A pack's
- * jar is left out by its path, whether the pack lists it or carries it.
+ * jar is left out by its path, whether the pack lists it or carries it, in its mods or elsewhere.
  */
 async function withoutMalware(q: Queryable, revision: ServerRevision): Promise<ServerRevision> {
   const pack = revision.modpack
-  const packJars = pack === null ? [] : ((await loadPackContents(q, pack.artifact.sha512))?.jars ?? [])
+  const contents = pack === null ? null : await loadPackContents(q, pack.artifact.sha512)
+  const packJars = [...(contents?.jars ?? []), ...(contents?.otherJars ?? [])]
   const malware = await quarantinedOf(q, [
     ...revision.mods.map((m) => m.artifact.sha512),
     ...packJars.map((jar) => jar.sha512),

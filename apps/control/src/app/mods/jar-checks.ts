@@ -13,8 +13,12 @@
  *   where it is published (`ports/malware.ts`). A jar already uploaded that a list now names is
  *   quarantined, and its owners are told it comes off at their server's next start.
  *
- * A jar an uploaded pack carries is read the same way while the pack is built (`check`), and one
- * it lists by its download is held to the lists' digests (`screen`, `packs/build.ts`).
+ * A pack's jars, while the pack is built (`packs/build.ts`): each one it carries, wherever it is
+ * placed, read the same way (`check`); each one it lists by its download held to the lists'
+ * digests (`lookUp`). Either way the jar's check is kept by its sha512, so a list that names it
+ * by a digest later quarantines it and its pack's servers leave it out at their next start. A
+ * pack's jar has no bytes kept of its own to read again: when the lists change, its answer
+ * stands until a pack carrying it is next built, which reads it again.
  *
  * A quarantined jar is kept out of every server: never pinned, left out of each start's spec
  * (`servers/specs.ts`), a pack's by its path, and never handed to a runtime
@@ -127,16 +131,28 @@ export class JarChecks {
   }
 
   /**
-   * An upload's check, begun in the transaction that records it: a jar checked before keeps its
+   * A jar a pack lists by its download, whose bytes aren't here to read: its digests looked up as
+   * `screen` does, and kept as a check unread, so a list that names it later quarantines it.
+   */
+  async lookUp(digests: Pick<JarDigests, 'sha1' | 'sha512'>): Promise<JarCheck | null> {
+    const found = await this.screen(digests)
+    if (found === null)
+      await this.#db
+        .insert(checks)
+        .values({ ...digests, state: 'clean' })
+        .onConflictDoNothing()
+    return found
+  }
+
+  /**
+   * An upload's check, begun in the transaction that records it: a jar read before keeps its
    * answer; any other is queued to be read, and can't go on a server until it has been.
    */
   async start(tx: Tx, digests: JarDigests): Promise<void> {
     const [known] = await tx.select().from(checks).where(eq(checks.sha512, digests.sha512))
-    if (known !== undefined && known.state !== 'checking') return
-    await tx
-      .insert(checks)
-      .values(digests)
-      .onConflictDoUpdate({ target: checks.sha512, set: { sha1: digests.sha1, sha256: digests.sha256 } })
+    if (settled(known)) return
+    const set = { sha1: digests.sha1, sha256: digests.sha256, state: 'checking' as const }
+    await tx.insert(checks).values(digests).onConflictDoUpdate({ target: checks.sha512, set })
     await this.#jobs.enqueueJarCheck(tx, digests.sha512)
   }
 
@@ -159,13 +175,13 @@ export class JarChecks {
 
   /**
    * A jar a pack carries, held here to what an upload is: its digests looked up, then every class
-   * read, and the answer kept like an upload's, so `refresh` holds it to the lists as they change.
-   * A jar checked before keeps its answer.
+   * read, and the answer kept like an upload's, so a list that names it by a digest later
+   * quarantines it. A jar read since the lists last changed keeps its answer.
    */
   async check(bytes: Uint8Array): Promise<JarCheck> {
     const digests = digestsOf(bytes)
     const [known] = await this.#db.select().from(checks).where(eq(checks.sha512, digests.sha512))
-    if (known !== undefined && known.state !== 'checking') return known
+    if (settled(known)) return known
     return (await this.screen(digests)) ?? (await this.#judge(bytes, digests))
   }
 
@@ -231,16 +247,7 @@ export class JarChecks {
       })
     }
     const quarantined = await this.#byDigest()
-    // A new signature may be in a jar already read, so every jar read before is read again.
-    if (changed) {
-      const read = await this.#db
-        .select({ sha512: checks.sha512 })
-        .from(checks)
-        .where(and(inArray(checks.state, ['clean', 'flagged']), isNull(checks.releasedBy)))
-      await this.#db.transaction(async (tx) => {
-        for (const { sha512 } of read) await this.#jobs.enqueueJarCheck(tx, sha512)
-      })
-    }
+    if (changed) await this.#readAgain()
     await this.#unchecked()
     return quarantined
   }
@@ -325,6 +332,27 @@ export class JarChecks {
       await this.#tellOwners(jar.sha512)
     }
     return jars.length
+  }
+
+  /**
+   * A new signature may be in a jar already read, so every jar read before is read again: one
+   * whose bytes are kept, now; a pack's, which has none of its own, when a pack carrying it is
+   * next built (`check`), its answer standing until then.
+   */
+  async #readAgain(): Promise<void> {
+    const read = and(inArray(checks.state, ['clean', 'flagged']), isNull(checks.releasedBy))
+    const kept = this.#db.select({ sha512: schema.storedArtifacts.sha512 }).from(schema.storedArtifacts)
+    const stored = await this.#db
+      .select({ sha512: checks.sha512 })
+      .from(checks)
+      .where(and(read, inArray(checks.sha512, kept)))
+    await this.#db.transaction(async (tx) => {
+      await tx
+        .update(checks)
+        .set({ checkedAt: null })
+        .where(and(read, notInArray(checks.sha512, kept)))
+      for (const { sha512 } of stored) await this.#jobs.enqueueJarCheck(tx, sha512)
+    })
   }
 
   /** Jars uploaded before checks existed, queued to be read. */
@@ -431,6 +459,16 @@ export class JarChecks {
         .catch((error: unknown) => console.error('jar-check: telling the owner', error))
     }
   }
+}
+
+/**
+ * Whether a jar's check is an answer to keep: quarantined, or read whole since the lists last
+ * changed. A jar still to be read, one a pack only lists (`lookUp`) and a pack's jar the lists
+ * changed after (`#readAgain`) have none yet; the last two say so by no `checkedAt`.
+ */
+function settled(check: JarCheck | undefined): check is JarCheck {
+  if (check === undefined || check.state === 'checking') return false
+  return check.state === 'quarantined' || check.checkedAt !== null
 }
 
 async function audit(

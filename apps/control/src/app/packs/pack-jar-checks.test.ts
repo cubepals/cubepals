@@ -4,15 +4,16 @@
 
 /**
  * The jars an uploaded pack keeps, held to the checks an uploaded jar gets (`mods/jar-checks.ts`):
- * one a list names by its digest or a signature matches refuses the pack, and one a list names
- * after the pack was built comes off its servers at their next start. Every jar here is built in
- * the test; none is real malware.
+ * one a list names by its digest or a signature matches refuses the pack, wherever the pack places
+ * it, and one a list names by its digest after the pack was built comes off its servers at their
+ * next start. Every jar here is built in the test; none is real malware.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { createHash, randomUUID } from 'node:crypto'
 import type { PackImportView } from '@blockly/contracts'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
+import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { FakeMalwareLists } from '../../testing/malware.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
@@ -27,13 +28,23 @@ const mod = (id: string) =>
     [`net/example/${id}/Mod.class`]: classFile({ name: `net/example/${id}/Mod` }),
   })
 
+/** A plugin jar whose one class is a whole class file, holding `strings`. */
+const plugin = (id: string, strings: string[] = []) =>
+  zipBytes({
+    'plugin.yml': utf8(`name: ${id}\nmain: net.example.${id}.Plugin\nversion: 1.0\n`),
+    [`net/example/${id}/Plugin.class`]: classFile({ name: `net/example/${id}/Plugin`, strings }),
+  })
+const unique = (name: string) => `${name}${randomUUID().slice(0, 6)}`
+
 let h: Harness
 const store = new MemoryStore()
+const cdn = new Cdn()
 const malware = new FakeMalwareLists()
 
 beforeAll(async () => {
   if (!hasDatabase) return
   await store.start()
+  await cdn.start()
   h = await startHarness({ capabilities: { archives: store, billing: null, malware } })
 }, 30_000)
 
@@ -41,6 +52,7 @@ afterAll(async () => {
   if (!hasDatabase) return
   await h.close()
   store.close()
+  cdn.close()
 })
 
 beforeEach(async () => {
@@ -125,5 +137,101 @@ describe.skipIf(!hasDatabase)('the jars an uploaded pack keeps', () => {
     await h.app.jarChecks.refresh()
     const after = (await h.app.specs.desired(h.db, await h.server(server.id))).spec.env
     expect(after.MODRINTH_OVERRIDES_EXCLUSIONS?.split('\n')).toEqual(['mods/alpha.jar'])
+  }, 60_000)
+
+  test('one it places outside its mods, a list names by its digest, refuses the pack', async () => {
+    const owner = await h.user('Dov', 'plus')
+    const bad = plugin(unique('bad'))
+    malware.entries = [{ kind: 'sha512', value: digest('sha512', bad), family: 'Example' }]
+    await h.app.jarChecks.refresh()
+    const view = await upload(
+      owner,
+      zipBytes({ 'mods/good.jar': mod(unique('good')), 'plugins/bad.jar': bad }),
+      'With Plugin.zip',
+    )
+    expect(view).toMatchObject({
+      status: 'refused',
+      message:
+        'This pack holds bad.jar, which matches known malware, so Cubepals won’t build a server from it.',
+    })
+  }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('the jars an uploaded pack keeps, as the lists change', () => {
+  test('one it lists and one outside its mods get checks, and come off at the next start once a list names them', async () => {
+    const owner = await h.user('Eda', 'plus')
+    const listed = mod(unique('listed'))
+    const helper = plugin(unique('helper'))
+    const download = cdn.publish(unique('listed'), Buffer.from(listed)).artifact.ref
+    if (download.kind !== 'remote') throw new Error('The test CDN published no URL')
+    const index = {
+      formatVersion: 1,
+      game: 'minecraft',
+      versionId: '1.0',
+      name: 'Listed Pack',
+      files: [
+        {
+          path: 'mods/listed.jar',
+          hashes: { sha1: digest('sha1', listed), sha512: digest('sha512', listed) },
+          env: { client: 'required', server: 'required' },
+          downloads: [download.url],
+          fileSize: listed.length,
+        },
+      ],
+      dependencies: { minecraft: '1.21.1', 'fabric-loader': '0.16.14' },
+    }
+    const view = await upload(
+      owner,
+      zipBytes({
+        'modrinth.index.json': utf8(JSON.stringify(index)),
+        'overrides/plugins/helper.jar': helper,
+      }),
+      'Listed Pack.mrpack',
+    )
+    if (view.status !== 'ready') throw new Error(`Refused: ${view.status === 'refused' ? view.message : ''}`)
+    // The listed jar is looked up by its digests only; the carried one is read whole.
+    expect(await checkOf(listed)).toMatchObject({
+      state: 'clean',
+      sha1: digest('sha1', listed),
+      checkedAt: null,
+    })
+    expect(await checkOf(helper)).toMatchObject({ state: 'clean', checkedAt: expect.any(Date) })
+    const server = await h.create(owner, { from: { kind: 'import', importId: view.importId } })
+    const before = (await h.app.specs.desired(h.db, await h.server(server.id))).spec.env
+    expect(before.MODRINTH_OVERRIDES_EXCLUSIONS).toBeUndefined()
+
+    malware.entries = [
+      { kind: 'sha1', value: digest('sha1', listed), family: 'Example' },
+      { kind: 'sha512', value: digest('sha512', helper), family: 'Example' },
+    ]
+    await h.app.jarChecks.refresh()
+    expect(await checkOf(listed)).toMatchObject({ state: 'quarantined' })
+    expect(await checkOf(helper)).toMatchObject({ state: 'quarantined' })
+    const after = (await h.app.specs.desired(h.db, await h.server(server.id))).spec.env
+    // The listed one by the pack's index, the carried one by its overrides.
+    expect(after.MODRINTH_EXCLUDE_FILES).toContain('listed')
+    expect(after.MODRINTH_OVERRIDES_EXCLUSIONS?.split('\n').sort()).toEqual([
+      'mods/listed.jar',
+      'plugins/helper.jar',
+    ])
+  }, 60_000)
+
+  test('one a new signature matches keeps its answer until a pack carrying it is next built', async () => {
+    const owner = await h.user('Fin', 'plus')
+    const marker = `==${randomUUID().slice(0, 8)}`
+    const odd = zipBytes({
+      ...unzipBytes(mod(unique('odd'))),
+      'net/example/Odd.class': classFile({ name: 'net/example/Odd', strings: [marker] }),
+    })
+    const pack = zipBytes({ 'mods/odd.jar': odd })
+    const first = await upload(owner, pack, 'Odd Mods.zip')
+    expect(first).toMatchObject({ status: 'ready' })
+    expect(await checkOf(odd)).toMatchObject({ state: 'clean', checkedAt: expect.any(Date) })
+
+    malware.entries = [{ kind: 'string', value: marker, family: 'Example' }]
+    await h.app.jarChecks.refresh()
+    expect(await checkOf(odd)).toMatchObject({ state: 'clean', checkedAt: null })
+    expect(await upload(owner, pack, 'Odd Mods.zip')).toMatchObject({ status: 'refused' })
+    expect(await checkOf(odd)).toMatchObject({ state: 'quarantined', finding: { match: marker } })
   }, 60_000)
 })

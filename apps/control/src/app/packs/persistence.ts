@@ -25,6 +25,7 @@ export async function loadPackContents(q: Queryable, sha512: string): Promise<Pa
     loaderVersion: row.loaderVersion,
     playersNeedIt: row.playersNeedIt,
     jars: row.jars,
+    otherJars: row.otherJars,
     leftOut: row.leftOut,
     memoryMb: row.memoryMb,
   }
@@ -43,6 +44,7 @@ export async function savePackContents(q: Queryable, record: PackContentsRecord)
       loaderVersion: record.loaderVersion,
       playersNeedIt: record.playersNeedIt,
       jars: record.jars,
+      otherJars: record.otherJars ?? [],
       leftOut: record.leftOut,
       memoryMb: record.memoryMb,
     })

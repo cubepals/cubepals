@@ -165,8 +165,8 @@ instance). A server pack named only by its file is read from the name:
 ### Resolve
 
 `app/packs/contents.ts` reads a pack once and keeps what it holds by the file's sha512
-(`pack_contents`): its Minecraft, loader and build, every jar a server installs, and the ones left
-out with why. Catalog packs are read by HTTP ranges, not downloaded whole.
+(`pack_contents`): its Minecraft, loader and build, every jar a server installs as a mod, the
+other jars it carries (`other_jars`), and the ones left out with why. Catalog packs are read by HTTP ranges, not downloaded whole.
 
 #### Sides
 
