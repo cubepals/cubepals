@@ -501,3 +501,13 @@ test('of two subscriptions for one plan the one made first is in force, and the 
     },
   ])
 })
+
+test('of a subscription set to end and one for its plan made after it that renews, the renewing one is in force', () => {
+  const [plus] = state('user_123').active_subscriptions
+  if (plus === undefined) throw new Error('the state lists no subscription')
+  const ending = { ...plus, id: 'sub_ending', cancel_at_period_end: true }
+  const again = { ...plus, id: 'sub_again', created_at: '2026-09-20T00:00:00Z' }
+  const { paid, others } = paying([ending, again], new Map([[PLUS_PRODUCT, 'plus']]))
+  expect(paid?.id).toBe('sub_again')
+  expect(others.map((other) => other.externalSubscriptionId)).toEqual(['sub_ending'])
+})

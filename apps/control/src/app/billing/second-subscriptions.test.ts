@@ -7,7 +7,8 @@
  * stand-in for Polar's API: two Plus checkouts both paid, whichever word comes first, and a month
  * of Plus paid while a year of it runs. The one there first is kept as it is; the second is set to
  * end with its month and what it charged is refunded once, a refund Polar refuses asked again
- * later. And a renewal refunded in full, tax on top, no longer counts as paid.
+ * later. One bought again after another was set to end is no second one. And a renewal refunded in
+ * full, tax on top, no longer counts as paid.
  */
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -193,6 +194,27 @@ test.skipIf(!hasDatabase)(
       expect.objectContaining({ amount: 1500, reason: 'duplicate' }),
     ])
     expect(w.refunds.filter((r) => r.order_id === taken)).toHaveLength(1)
+  },
+)
+
+test.skipIf(!hasDatabase)(
+  'one subscription set to end and one bought after it that renews: the renewing one is in force, untouched',
+  async () => {
+    const owner = await w.h.user('Uma')
+    const ending = randomUUID()
+    const again = randomUUID()
+    const earlier = new Date(Date.now() - 10 * MINUTE_MS)
+    const endingListed = { ...listed(ending, earlier), cancel_at_period_end: true }
+    await paying(owner, [endingListed])
+    await w.ordered(owner, ending, { created_at: earlier.toISOString() })
+    const charged = await w.ordered(owner, again, { created_at: new Date().toISOString() })
+    await paying(owner, [listed(again, new Date()), endingListed])
+
+    expect(w.updates.filter((u) => u.id === again || u.id === ending)).toHaveLength(0)
+    expect(w.refunds.filter((r) => r.order_id === charged)).toHaveLength(0)
+    expect((await kept(owner)).get(again)).toMatchObject({ status: 'active', cancelAtPeriodEnd: false })
+    expect((await loadStanding(w.h.db, owner.userId)).plan).toBe('plus')
+    expect(await w.audited(owner, 'billing.second_subscription_stopped')).toEqual([])
   },
 )
 

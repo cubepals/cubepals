@@ -49,8 +49,9 @@ interface Listed {
 
 /**
  * Of an account's subscriptions that pay at once (Core, then Plus bought over it), the one for the
- * largest plan, and of two for it the one made first (`paid`); and every other for a plan, as
- * `BillingState.others`. `plans` maps each plan's product to its plan, the smallest first.
+ * largest plan, and of two for it the one that renews (one set to end, then bought again), then the
+ * one made first (`paid`); and every other for a plan, as `BillingState.others`. `plans` maps each
+ * plan's product to its plan, the smallest first.
  */
 export function paying<T extends Listed>(
   subscriptions: readonly T[],
@@ -61,7 +62,12 @@ export function paying<T extends Listed>(
   const made = (subscription: T) => (subscription.created_at ? Date.parse(subscription.created_at) : 0)
   const paid = subscriptions
     .filter((each) => rank(each) >= 0)
-    .sort((a, b) => rank(b) - rank(a) || made(a) - made(b))[0]
+    .sort(
+      (a, b) =>
+        rank(b) - rank(a) ||
+        Number(a.cancel_at_period_end) - Number(b.cancel_at_period_end) ||
+        made(a) - made(b),
+    )[0]
   const others = subscriptions.flatMap((each) => {
     const planKey = plans.get(each.product_id)
     if (planKey === undefined || each === paid) return []
