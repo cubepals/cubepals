@@ -126,8 +126,12 @@ export class ChipIns {
         returnUrl: returnUrl.toString(),
       })
       .catch(async (error: unknown) => {
-        // No checkout was made, so the start kept for it counts against no cap.
-        await this.#db.delete(log).where(eq(log.id, counted))
+        // No checkout was made, so the start kept for it counts against no cap. If taking it back
+        // fails too, the start stays counted for the day and the payer still hears the reason.
+        await this.#db
+          .delete(log)
+          .where(eq(log.id, counted))
+          .catch(() => undefined)
         if (error instanceof BillingUnavailable)
           throw new AppError(
             'billing_unavailable',
