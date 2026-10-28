@@ -36,6 +36,7 @@ import {
   EmptyState,
   GetPack,
   ICON,
+  InviteCopy,
   JavaAndBedrock,
   Note,
   PackBadge,
@@ -709,7 +710,7 @@ function FirstFriend({ server }: { server: ServerView }) {
     <Note tone="success">
       <span className="bk-stack" style={{ gap: 'var(--space-12)' }}>
         <span>Nobody has joined yet. This link shows your friends what the server is and how to get in.</span>
-        <CopyField value={share.data.inviteUrl} label="Copy link" mark={ctaMark('copy_invite')} />
+        <InviteCopy serverId={server.id} url={share.data.inviteUrl} label="Copy link" />
         <span>
           <button
             type="button"

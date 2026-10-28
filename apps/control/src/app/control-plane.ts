@@ -267,7 +267,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     templatesKeptMs: settings.templatesKeptMs,
   })
   const access = new AccessService({ ...ports, db, policy, transitions, events })
-  const sharing = new SharingService({ db, access })
+  const sharing = new SharingService({ db, access, limits: ports.limits })
   const accounts = new AccountService({
     db,
     servers,

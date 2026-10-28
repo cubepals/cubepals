@@ -9,8 +9,9 @@
  * are matched, an hour at most; then only a hash of its network remains. Rows go after 35 days.
  *
  * The edge's half is written by `visits.ts`, the server's matched to it by `server-events.ts`, and
- * a client's `ip:port` spelt one way by `sources.ts`; signals are raised by `signals.ts`, and
- * operators read all of it through `queries.ts`.
+ * a client's `ip:port` spelt one way by `sources.ts`; a join the game refused for its whitelist or
+ * a ban is told by `refusals.ts`; signals are raised by `signals.ts`, and operators read all of it
+ * through `queries.ts`.
  */
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type {

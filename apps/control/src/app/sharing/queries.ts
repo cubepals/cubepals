@@ -44,7 +44,7 @@ import { listWorlds } from '../worlds/persistence.ts'
  * like that, so its limits count each open twice. A read whose address isn't known is counted with
  * every other such read.
  */
-const perAddress = (key: string, from: string | null | undefined) => `${key}@${from ?? 'unknown'}`
+export const perAddress = (key: string, from: string | null | undefined) => `${key}@${from ?? 'unknown'}`
 
 /**
  * What everyone but the owner sees (§15.6): a server's own page, the same page as an invitation,

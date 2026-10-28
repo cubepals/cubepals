@@ -136,3 +136,23 @@ Per edge machine; sum or take quantiles across instances.
 | `cubepals_edge_proxied_bytes_total` | counter | `edition`, `direction` (`up` from players, `down` to them), `edge_region` | Bytes passed between players and what the edge handed them to, counted as each connection closes. |
 | `cubepals_edge_first_byte_seconds` | histogram | `edition`, `intent` (`join`, `ping`), `edge_region` | From the edge accepting a connection to the first byte back through it: the server's, or the waiting room's while it wakes. |
 | `cubepals_edge_geyser_up` | gauge | `edge_region` | 1 while Geyser runs and answers, so Bedrock players can join; 0 while it starts, restarts or failed to. Absent where the edge takes no Bedrock players. |
+
+## The join funnel
+
+Where a server's joins stop, and why. These are not Prometheus figures, as they are about one server and one account: each step is a row in Postgres, or a funnel event kept once in `insight_events` (`FUNNEL` in `apps/control/src/app/insight/record.ts`) and sent to PostHog by the worker, about the owner's account and carrying the server's id. A join is one row in `joins` (`apps/control/src/app/joins/`), put together from the edge's report and the server's own, and kept 35 days; `left_reason` says why one stopped.
+
+| Step | Where it is recorded |
+|---|---|
+| Server created | `server_created`, once per server. |
+| Invite shared | `invite_shared`, once per server: the owner copied its invite link, from Share, the Players page or the server's page (`sharing.inviteShared`). |
+| Invite opened | `invite_opened`, once per server: someone other than the owner opened `/join/<code>` in a browser. The page calls `sharing.inviteOpened` once it has shown the invitation; the page's own read, its title and its card picture keep nothing, so a link preview never counts. |
+| Join tried | A `joins` row with `kind = 'join'`: `connected_at` at the edge, `handed_at` once it was handed to the server, then `login_at` to `in_world_at` from the server's reporter. |
+| Stopped: version | `left_reason = 'refused:wrong_game'`: the edge turned away a client the server can't take. |
+| Stopped: hours used | `left_reason = 'refused:quota'`; and `join_turned_away` for each try, with its `reason` (`free_hours`), and `server_turned_away` for who came by. |
+| Stopped: whitelist | `left_reason = 'refused:whitelist'`: handed to the server, never in the world, and when the edge said it ended, the server's whitelist was on with the player on neither it nor the operators (`joins/refusals.ts`). |
+| Stopped: banned | `left_reason = 'refused:banned'`: the same, with the player banned there. A ban is read first, as the game reads it. |
+| Stopped: left during the wait | `left_reason = 'gave_up_waiting'`: the player left the waiting room before the server was up. |
+| Stopped: couldn't start | `left_reason` is `refused:failed`, `refused:broken` or `refused:unreachable`; or `refused:starting`, `refused:rest`, `refused:stop` or `refused:backup`, where the wait ran out first. |
+| Stopped: other | Any other `left_reason` (`refused:busy`, `refused:restarting`, `refused:paused`, …), or none on a join that never reached the world. |
+| First session | `server_first_join`, once per server: the server itself said someone was on. |
+| Played again | A later join that reached the world, by the same player on the same server (`joins` by `player_uuid`; `server_players.last_seen_at`); for the account, `moment_first_week`. |

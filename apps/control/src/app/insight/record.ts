@@ -15,6 +15,10 @@ import { and, asc, countDistinct, eq, gt, sql } from 'drizzle-orm'
 export const FUNNEL = {
   signedUp: 'signed_up',
   serverCreated: 'server_created',
+  /** The owner copied the server's invite link (`sharing.inviteShared`). */
+  inviteShared: 'invite_shared',
+  /** Someone opened the invitation in a browser: a link preview runs no script, so never one. */
+  inviteOpened: 'invite_opened',
   serverFirstStarted: 'server_first_started',
   serverFirstJoin: 'server_first_join',
   firstFriendJoined: 'moment_first_friend_joined',

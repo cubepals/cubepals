@@ -4,9 +4,9 @@
 
 /**
  * The funnel, feedback and the good-moment question end to end, against a stand-in for PostHog:
- * each event kept once where it happens and sent once by the worker's pass, feedback's exact
- * payload and pacing, when the question is asked, and what every event says of its account:
- * whether it is ours, and where it came from.
+ * each event kept once where it happens and sent once by the worker's pass, an invitation's steps
+ * among them; feedback's exact payload and pacing, when the question is asked, and what every
+ * event says of its account: whether it is ours, and where it came from.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -17,7 +17,9 @@ import { type Harness, hasDatabase, startHarness } from '../../testing/harness.t
 import { RecordedInsight } from '../../testing/insight.ts'
 import { grantAdmin, loadStanding } from '../accounts/persistence.ts'
 import type { UserActor } from '../actor.ts'
+import { NotFound } from '../errors.ts'
 import type { BillingProvider } from '../ports/optional.ts'
+import { tuning } from '../tuning.ts'
 import { FUNNEL } from './record.ts'
 import { FEEDBACK_SURVEY, MOMENT_SURVEY } from './service.ts'
 
@@ -298,6 +300,55 @@ describe.skipIf(!hasDatabase)('the funnel, for servers and their players', () =>
     await h.app.schedules.presenceSync()
     await h.app.schedules.presenceSync()
     expect((await sent(owner.userId)).map((e) => e.event)).toEqual([FUNNEL.firstWeek])
+  }, 30_000)
+})
+
+// An invitation's steps: its owner sharing it, then someone opening it in a browser.
+describe.skipIf(!hasDatabase)('the funnel, for an invitation', () => {
+  test('a shared invite is its owner’s, once per server, and someone else’s server is not found', async () => {
+    const owner = await h.user()
+    const { id } = await h.create(owner)
+    await sent(owner.userId)
+    await h.app.sharing.inviteShared(owner, id)
+    await h.app.sharing.inviteShared(owner, id)
+    const events = await sent(owner.userId)
+    expect(events.map((e) => [e.event, e.properties])).toEqual([[FUNNEL.inviteShared, { serverId: id }]])
+
+    // Another account's server, never shared by its owner: not found, and nothing kept for anyone.
+    const other = await h.user('Alex')
+    const theirs = await h.create(other)
+    await sent(other.userId)
+    expect(await h.app.sharing.inviteShared(owner, theirs.id).catch((e) => e)).toBeInstanceOf(NotFound)
+    expect(await sent(other.userId)).toEqual([])
+    expect(await sent(owner.userId)).toEqual([])
+  }, 30_000)
+
+  test('an opened invite is kept from the page in a browser alone, once per server, never the owner’s', async () => {
+    const owner = await h.user()
+    const { id, inviteCode } = await h.create(owner)
+    await sent(owner.userId)
+    // The invitation's own read, which a link preview makes too, keeps nothing; nor does its owner.
+    await h.app.sharingQueries.invite(inviteCode)
+    await h.app.sharingQueries.invite(inviteCode, owner)
+    await h.app.sharing.inviteOpened(inviteCode, owner)
+    expect(await sent(owner.userId)).toEqual([])
+
+    await h.app.sharing.inviteOpened(inviteCode, null)
+    await h.app.sharing.inviteOpened(inviteCode, await h.user('Alex'))
+    const events = await sent(owner.userId)
+    expect(events.map((e) => [e.event, e.properties])).toEqual([[FUNNEL.inviteOpened, { serverId: id }]])
+    // A code that is none answers just the same.
+    expect(await h.app.sharing.inviteOpened('not-a-code', null)).toBeUndefined()
+  }, 30_000)
+
+  test('past the minute’s opens of one code, nothing is kept', async () => {
+    const owner = await h.user()
+    const { inviteCode } = await h.create(owner)
+    await sent(owner.userId)
+    for (let i = 0; i < tuning().abuse.publicReadsPerMinute.invite; i++)
+      await h.app.sharing.inviteOpened(inviteCode, owner)
+    await h.app.sharing.inviteOpened(inviteCode, null)
+    expect(await sent(owner.userId)).toEqual([])
   }, 30_000)
 })
 

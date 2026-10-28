@@ -18,7 +18,7 @@ export { eachOf, extraHourOf, forSale, PLAY_HABITS, PlanCard, PlayHours, planPoi
 export { Popover } from './popover'
 export { PackBadge, PlayerRow, ServerCard } from './product'
 export { OfficialSeal } from './seal'
-export { ShareButton } from './share'
+export { InviteCopy, ShareButton } from './share'
 export { type PillStatus, ProvisioningPanel, type ProvisioningStep, StatusPill } from './status'
 export { SuggestField } from './suggest'
 export {

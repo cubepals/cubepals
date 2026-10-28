@@ -22,8 +22,9 @@ import { Note, Skeleton } from './surfaces'
  * One Share action, wherever a server is (§15.6). Everything about giving the server to someone
  * else lives behind it: the invite link friends open, the address to paste into Minecraft, the
  * switch that makes a page anyone can find, whether others may make one like it, and whether
- * friends may chip in to it. The one
- * other place to copy the invite link is the Players page, where an owner looks for their friends.
+ * friends may chip in to it. The invite link is also copied from the Players page, where an owner
+ * looks for their friends, and from the server's page until somebody joins: each copy is
+ * `InviteCopy`'s.
  */
 export function ShareButton({ serverId, name }: { serverId: string; name: string }) {
   const [open, setOpen] = useState(false)
@@ -80,7 +81,7 @@ function ShareSheet({ serverId, name, onClose }: { serverId: string; name: strin
         <div className="bk-stack" style={{ gap: 'var(--space-20)' }}>
           <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
             <span className="bk-field__label">Invite a friend</span>
-            <CopyField value={view.inviteUrl} label="Copy invite" mark={{ 'data-cta': 'copy_invite' }} />
+            <InviteCopy serverId={serverId} url={view.inviteUrl} label="Copy invite" />
             <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
               {view.whitelistOnly
                 ? 'It shows them what to install, and adds them to the players who may join.'
@@ -147,5 +148,23 @@ function ShareSheet({ serverId, name, onClose }: { serverId: string; name: strin
         </div>
       )}
     </Modal>
+  )
+}
+
+/**
+ * The invite link and a button that copies it, counted as `cta_pressed` in the page's own steps
+ * and, for the owner's account, as the invite shared. That word is sent and forgotten: whatever
+ * becomes of it, the copy is done and says so.
+ */
+export function InviteCopy({ serverId, url, label }: { serverId: string; url: string; label: string }) {
+  const trpc = useTRPC()
+  const shared = useMutation(trpc.sharing.inviteShared.mutationOptions())
+  return (
+    <CopyField
+      value={url}
+      label={label}
+      mark={{ 'data-cta': 'copy_invite' }}
+      onCopied={() => shared.mutate({ serverId })}
+    />
   )
 }

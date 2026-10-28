@@ -6,7 +6,8 @@
  * The edge's half of each join (`VisitReport`), written into its row: the server the address
  * reaches, and how it reached it, resolved as the edge's routes are; the client's network as a
  * hash keyed to the server, as `known_addresses` keeps it; and every other column only while it is
- * empty, so a later half never overwrites what an earlier one said. `left_at` keeps the earliest.
+ * empty, so a later half never overwrites what an earlier one said. `left_at` keeps the earliest,
+ * and once it is known, a join the game refused for its whitelist or a ban says so (`refusals.ts`).
  *
  * Not for the server's half: that is `server-events.ts`.
  */
@@ -21,6 +22,7 @@ import { wakeCompleted } from '../platform/telemetry.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import type { SecretKeyring } from '../secrets.ts'
 import { findLiveBySlug } from '../servers/persistence.ts'
+import { noteRefusal } from './refusals.ts'
 import { addressOfSource, sourceOf } from './sources.ts'
 
 const joins = schema.joins
@@ -131,6 +133,8 @@ export async function recordVisits(
     set.leftAt = sql`least(${joins.leftAt}, excluded.left_at)`
     set.detail = sql`${joins.detail} || excluded.detail`
     await q.insert(joins).values(row).onConflictDoUpdate({ target: joins.id, set })
+    // Its end is known now: where the game turned it away for its own lists, that is why.
+    if (row.leftAt !== null) await noteRefusal(q, row.id)
     // Timed once, by the report that first says the server was ready.
     const asked = before?.wakeAskedAt ?? row.wakeAskedAt
     if (before?.readyAt == null && row.readyAt != null && asked != null)

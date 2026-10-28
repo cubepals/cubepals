@@ -739,6 +739,16 @@ const sharing = router({
   own: authedProcedure
     .input(ServerRef)
     .query(({ ctx, input }) => ctx.services.sharingQueries.share(ctx.actor, input.serverId)),
+  /** The owner copied the invite link. */
+  inviteShared: authedProcedure
+    .input(ServerRef)
+    .mutation(({ ctx, input }) => ctx.services.sharing.inviteShared(ctx.actor, input.serverId)),
+  /** The invitation's page ran in someone's browser; it answers nothing either way. */
+  inviteOpened: publicProcedure
+    .input(InviteRef)
+    .mutation(({ ctx, input }) =>
+      ctx.services.sharing.inviteOpened(input.code, ctx.actor, ctx.clientAddress),
+    ),
 })
 
 const platform = router({

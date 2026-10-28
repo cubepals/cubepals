@@ -119,6 +119,7 @@ export function CopyField({
   label = 'Copy address',
   concealed = false,
   mark,
+  onCopied,
 }: {
   value: string
   label?: string
@@ -126,6 +127,8 @@ export function CopyField({
   concealed?: boolean
   /** The page's mark for a press of the button, so the copy is counted (app/(public)/steps.ts). */
   mark?: Readonly<Record<`data-${string}`, string>>
+  /** Told once the value is copied, or selected to copy: after, so it can't hold the copy back. */
+  onCopied?: () => void
 }) {
   const [done, setDone] = useState<'copied' | 'selected' | null>(null)
   const shown = useRef<HTMLSpanElement>(null)
@@ -155,6 +158,7 @@ export function CopyField({
             window.getSelection()?.selectAllChildren(shown.current)
             setDone('selected')
           }
+          onCopied?.()
         }}
       >
         <span className="bk-btn__icon bk-swap" aria-hidden>

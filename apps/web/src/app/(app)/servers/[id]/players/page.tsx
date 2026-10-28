@@ -25,6 +25,7 @@ import {
   CopyField,
   EmptyState,
   FormSection,
+  InviteCopy,
   LoadFailed,
   Note,
   PageSkeleton,
@@ -233,7 +234,7 @@ function InviteCard({ server, whitelistOnly }: { server: ServerView; whitelistOn
       ) : share.isError ? (
         <LoadFailed error={messageOf(share.error)} onRetry={() => void share.refetch()} />
       ) : (
-        <CopyField value={share.data.inviteUrl} label="Copy link" />
+        <InviteCopy serverId={server.id} url={share.data.inviteUrl} label="Copy link" />
       )}
       <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
         <span className="bk-field__label">Or just the address</span>
