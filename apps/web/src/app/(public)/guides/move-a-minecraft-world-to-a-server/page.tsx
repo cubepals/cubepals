@@ -6,13 +6,14 @@
  * The guide to moving a world a player already has to a Cubepals server: from single-player, from
  * another host or a server's folder, and with mods (docs/world-import.md). The steps follow the
  * create page's "Your own world" and a server's Backups page, and the saves folders are the ones
- * the drop target names. It has no pictures yet; they come from a run on a local stack.
+ * the drop target names. The pictures are from a local stack.
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { GuideArticle, GuideLink, guideMetadata, guidePlans, Part, Questions } from '../article'
+import { GuideArticle, GuideLink, guideMetadata, guidePlans, Part, Questions, Shot } from '../article'
 
 const SLUG = 'move-a-minecraft-world-to-a-server'
+const PICTURES = `/guides/${SLUG}`
 
 export const generateMetadata = (): Metadata => guideMetadata(SLUG)
 
@@ -49,6 +50,25 @@ export default async function Guide() {
             Choose <strong>Make a server with it</strong>, then who’s playing and a name, as for any server.
           </li>
         </ol>
+        <Shot
+          src={`${PICTURES}/drop.png`}
+          width={710}
+          height={241}
+          alt="The drop on the create page’s Your own world: Drop the world’s folder here, or its zip, with Choose a folder and Choose a zip buttons. Below it: On Windows, Minecraft keeps single-player worlds in %APPDATA%\.minecraft\saves, with a Copy button."
+        />
+        <Shot
+          src={`${PICTURES}/who-played.png`}
+          width={710}
+          height={226}
+          alt="This is a single-player world. Who played it? What they carried and where they stood go to that Minecraft account on the server. A Minecraft name field with Steve typed in, a Continue button, and Nobody, just the world."
+        />
+        <Shot
+          src={`${PICTURES}/ready.png`}
+          width={710}
+          height={224}
+          alt="The world read: Gave Steve what they carried and where they stood in the single-player world. Under it, the world Maple Hollow, Minecraft 26.3, picked, and a Make a server with it button."
+          caption="What Cubepals did with the world is said above it, before anything is made."
+        />
       </Part>
 
       <Part id="another-host" title="From another host or a server’s folder">
@@ -73,6 +93,12 @@ export default async function Guide() {
             page lists what was.
           </li>
         </ul>
+        <Shot
+          src={`${PICTURES}/who-can-join.png`}
+          width={710}
+          height={242}
+          alt="Who can join, read from a server’s folder: Its server let these 2 players in. Choose who comes here too; nobody does until you say. Steve, with Operator and Let in turned on, and Alex, with Let in turned on. Under them, Only players let in can join is on, and Keep its ban: Herobrine is on."
+        />
       </Part>
 
       <Part id="mods" title="A world played with mods">
@@ -85,6 +111,12 @@ export default async function Guide() {
           <GuideLink to="play-a-modpack-with-friends">playing a modpack with friends</GuideLink> covers the
           rest.
         </p>
+        <Shot
+          src={`${PICTURES}/mods.png`}
+          width={710}
+          height={304}
+          alt="The world Cog Valley, Minecraft 26.3, and under it: It was played with Fabric mods. Plain Minecraft would lose their blocks and items, so its server is made from the pack it was played with. Find the pack, or drop its file. A Search modpacks field follows, for packs published on Modrinth."
+        />
       </Part>
 
       <Part id="existing-server" title="Into a server you already have">
@@ -95,6 +127,12 @@ export default async function Guide() {
           one kept as its own backup. Made into a new server, it starts on the world its{' '}
           <code>server.properties</code> names; upload the same file on its Backups page to keep the others.
         </p>
+        <Shot
+          src={`${PICTURES}/backups.png`}
+          width={478}
+          height={302}
+          alt="Bring a world, after a server’s folder is uploaded on the Backups page: It’s kept as a backup of this server. Restore it to play it; the world it has now is backed up first. The notes list what was left out, say it was last played on Minecraft 1.21.11 and that restoring it opens it on 26.2, name its folder on the server, and say Also kept creative, the server’s other world, as a backup to restore when you want to play it."
+        />
       </Part>
 
       <Part id="versions" title="Which Minecraft it runs">

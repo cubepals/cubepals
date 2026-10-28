@@ -112,6 +112,8 @@ export interface Context {
   session?: SessionSwitch
   /** The address of the client behind the request, where it is known (`http/client-address.ts`). */
   clientAddress?: string | null
+  /** The id of the request's sign-in session, which a realtime ticket names. Absent outside HTTP. */
+  sessionId?: string
   services: Services
 }
 

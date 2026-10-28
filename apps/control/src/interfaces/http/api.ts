@@ -111,6 +111,7 @@ export function createApiApp(deps: {
           actor: session === null ? null : { kind: 'user' as const, userId: session.userId },
           impersonatedBy: session?.impersonatedBy ?? null,
           clientAddress: clientAddressOf(req.headers, deps.addresses),
+          ...(session === null ? {} : { sessionId: session.sessionId }),
           session: deps.auth.switchFor(req.headers, resHeaders),
           services: deps.services,
         }

@@ -102,6 +102,7 @@ async function relayed(options: Partial<RelayOptions> = {}, strict = false, memo
     pongs: { perSecond: 0, burst: 2 },
     totalPongs: { perSecond: 0, burst: 3 },
     opens: { perSecond: 0, burst: 3 },
+    perAddress: 10,
     most: 10,
     idleMs: 60_000,
     pongRefreshMs: 60_000,
@@ -173,6 +174,30 @@ test('a datagram that doesn’t open a connection makes no player, and an addres
   for (const other of others) other.socket.send(openRequest(), port, '127.0.0.1')
   await Bun.sleep(150)
   expect(relay.players()).toBe(3)
+})
+
+test('an address holds only so many players, and one dropped frees its place', async () => {
+  const { port, relay } = await relayed({
+    opens: { perSecond: 0, burst: 10 },
+    perAddress: 2,
+    idleMs: 150,
+    sweepMs: 30,
+  })
+  await Bun.sleep(100)
+  const others = await Promise.all([1, 2, 3].map(() => listener()))
+  closers.push(...others.map((o) => () => o.socket.close()))
+  for (const other of others) other.socket.send(openRequest(), port, '127.0.0.1')
+  await Bun.sleep(100)
+  expect(relay.players()).toBe(2)
+  const left = others.filter((other) => opened(other) === 0)
+  expect(left).toHaveLength(1)
+  // Quiet past the idle time, both are dropped, and the address may hold players again.
+  await Bun.sleep(300)
+  expect(relay.players()).toBe(0)
+  left[0]?.socket.send(openRequest(), port, '127.0.0.1')
+  await Bun.sleep(100)
+  expect(relay.players()).toBe(1)
+  expect(opened(left[0] ?? { heard: [] })).toBe(1)
 })
 
 test('a quiet player is dropped', async () => {

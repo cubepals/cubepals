@@ -26,6 +26,7 @@ import { type AccountStanding, newStanding } from '../../domain/account/standing
 import type { PlatformControls } from '../../domain/policy/policy.ts'
 import type { ServerStatus } from '../../domain/server/lifecycle.ts'
 import { billedBy, billedPlan, PAYING, type PlanSource } from '../billing/persistence.ts'
+import { tuning } from '../tuning.ts'
 
 const standing = schema.accountStanding
 const servers = schema.minecraftServers
@@ -136,6 +137,26 @@ export async function ownersRunning(q: Queryable): Promise<string[]> {
   return rows.map((r) => r.ownerId)
 }
 
+/**
+ * Whether `sessionId` is still `userId`'s sign-in session, unexpired, on an account that is neither
+ * suspended nor closed: what keeps a realtime session open. Signing out, a password reset and the
+ * end of a test account's use all delete the session.
+ */
+export async function stillSignedIn(
+  q: Queryable,
+  userId: string,
+  sessionId: string,
+  now = new Date(),
+): Promise<boolean> {
+  const sessions = schema.authSessions
+  const [row] = await q
+    .select({ status: standing.status })
+    .from(sessions)
+    .leftJoin(standing, eq(standing.userId, sessions.userId))
+    .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId), gt(sessions.expiresAt, now)))
+  return row !== undefined && (row.status ?? 'active') === 'active'
+}
+
 // ─── Admins ─────────────────────────────────────────────────────────────────────────────────
 
 const admins = schema.platformAdmins
@@ -148,6 +169,18 @@ export async function isAdmin(q: Queryable, userId: string): Promise<boolean> {
 export async function grantAdmin(q: Queryable, userId: string, grantedBy: string): Promise<boolean> {
   const rows = await q.insert(admins).values({ userId, grantedBy }).onConflictDoNothing().returning()
   return rows.length > 0
+}
+
+/**
+ * An admin because ADMIN_EMAILS lists the account's confirmed email. On becoming one it is signed
+ * in only where that happened: every session but `keep` (null: every one) ends.
+ */
+export async function grantListedAdmin(q: Queryable, userId: string, keep: string | null): Promise<void> {
+  if (!(await grantAdmin(q, userId, 'config'))) return
+  const sessions = schema.authSessions
+  await q
+    .delete(sessions)
+    .where(and(eq(sessions.userId, userId), keep === null ? undefined : ne(sessions.id, keep)))
 }
 
 export async function revokeAdmin(q: Queryable, userId: string): Promise<void> {
@@ -541,6 +574,8 @@ export async function recordSignupSource(
  * one a subscription pays for (or holds through its grace), one with a paid year still running,
  * one an admin gave another plan, a
  * closed one, a test account, and an admin's own. An account whose standing isn't written yet is free.
+ * One whose email isn't confirmed counts only for its first `unconfirmedPlaceHours`, and again
+ * once it is confirmed.
  */
 export async function countFreeAccounts(q: Queryable): Promise<number> {
   const standing = schema.accountStanding
@@ -555,6 +590,7 @@ export async function countFreeAccounts(q: Queryable): Promise<number> {
     .select({ one: sql`1` })
     .from(schema.planYears)
     .where(and(eq(schema.planYears.userId, schema.users.id), gt(schema.planYears.endsAt, sql`now()`)))
+  const unconfirmedFor = sql`make_interval(hours => ${tuning().abuse.unconfirmedPlaceHours})`
   const [row] = await q
     .select({ n: count() })
     .from(schema.users)
@@ -563,6 +599,7 @@ export async function countFreeAccounts(q: Queryable): Promise<number> {
     .where(
       and(
         isNull(schema.platformAdmins.userId),
+        or(eq(schema.users.emailVerified, true), gt(schema.users.createdAt, sql`now() - ${unconfirmedFor}`)),
         notExists(paying),
         notExists(paidYear),
         or(

@@ -46,6 +46,30 @@ export const Products = z.object({
   ),
 } satisfies Fields<models.ListResourceProduct>)
 
+// A page of products, each read by whoever reads it (`earlyOf`), and `max_page` says when to stop.
+export const ProductPage = z.object({
+  items: z.array(z.unknown()),
+  pagination: z.object({ max_page: z.number().int() } satisfies Fields<models.Pagination>),
+} satisfies Fields<models.ListResourceProduct>)
+
+// A product read whole, with its prices: a gift (`giftOf`), or one at an early price (`earlyOf`).
+export const PricedProduct = z.object({
+  id: z.string(),
+  created_at: z.string().nullish(),
+  is_recurring: z.boolean(),
+  recurring_interval: z.string().nullish(),
+  is_archived: z.boolean(),
+  metadata: z.record(z.string(), z.unknown()),
+  prices: z.array(
+    z.object({
+      amount_type: z.string(),
+      is_archived: z.boolean().nullish(),
+      price_amount: z.number().int().nullish(),
+      price_currency: z.string().nullish(),
+    } satisfies Fields<models.ProductPrice>),
+  ),
+} satisfies Fields<models.Product>)
+
 // A page of products read whole, each by whoever reads it (`giftOf`).
 export const Listed = z.object({ items: z.array(z.unknown()) } satisfies Fields<models.ListResourceProduct>)
 

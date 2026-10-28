@@ -237,7 +237,7 @@ describe('PolarBilling', () => {
 
   test('nothing paid, a product no plan names, and a stranger report no plan', async () => {
     const standing = async (state: CustomerState) => {
-      reply = () => ({ status: 200, body: state })
+      reply = () => ({ status: 200, body: requests.at(-1)?.path.includes('terms') ? page([]) : state })
       const delivery = signed(stateChanged(state))
       const event = await billing.receive(delivery.body, delivery.headers)
       return event?.kind === 'standing' ? event.state : null
