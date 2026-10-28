@@ -6,6 +6,9 @@
  * The shell scripts helper machines run, and what they print read back: an archive of a volume
  * sent in one PUT or left for parts, the parts sent, and a volume filled from an archive. Pure:
  * running a script on a machine, and the result line it leaves, is `helper-machine.ts`.
+ *
+ * A job that writes to the volume flushes it before it gives its result: the helper is destroyed
+ * by force the moment it has (`helperJob`), which drops whatever the kernel hadn't written yet.
  */
 
 import type { PartsUpload, PutPart, UploadTarget } from '../../../app/ports/runtime.ts'
@@ -27,7 +30,7 @@ const headerArgs = (headers: Record<string, string>) =>
 /**
  * Archives the volume beside itself and measures it. One PUT carries it: uploaded to the
  * presigned URL (`put <sha> <size>`). Larger: left on the volume for `partsJob` (`parts <sha>
- * <size>`).
+ * <size>`), which reads it on another helper once this one is gone, so it is flushed first.
  */
 export function exportJob(target: UploadTarget, maxPutBytes: number): string {
   return job(
@@ -35,6 +38,7 @@ export function exportJob(target: UploadTarget, maxPutBytes: number): string {
       '  cd /data &&',
       '  rm -f .blockly-export.tgz &&',
       '  tar -czf .blockly-export.tgz --exclude=./.blockly-export.tgz . &&',
+      '  sync &&',
       "  sha=$(sha256sum .blockly-export.tgz | cut -d' ' -f1) &&",
       '  size=$(stat -c %s .blockly-export.tgz) &&',
       `  if [ "$size" -gt ${maxPutBytes} ]; then echo "parts $sha $size"; else`,
@@ -103,7 +107,9 @@ export function partsPut(line: string): PutPart[] {
  * helper's umask for its mode and no setuid or setgid bit; an entry that is neither a regular file
  * nor a directory (a link, a device, a FIFO, a socket) is taken out again before anything runs on
  * the volume. The game image gives /data to the server's user on start, since it isn't that
- * user's (itzg's `start`, unless `SKIP_CHOWN_DATA`).
+ * user's (itzg's `start`, unless `SKIP_CHOWN_DATA`). It says `restored` only once the volume
+ * holds it all: the server boots on the volume after the helper is destroyed, and without the
+ * flush the files written last could come back empty, its level.dat among them.
  */
 export function restoreJob(url: string): string {
   return job(
@@ -112,6 +118,7 @@ export function restoreJob(url: string): string {
       '  find /data -xdev ! -type f ! -type d -exec rm -f {} + &&',
       '  chmod -R ug-s /data &&',
       '  chown 0:0 /data &&',
+      '  sync &&',
       '  echo restored',
     ].join('\n'),
   )

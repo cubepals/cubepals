@@ -45,7 +45,7 @@ row; the other two columns are one wake each.
 |---|---|---|---|
 | Asked, until Fly starts the machine | 0.6 s | 1.4 s | 1.2 s |
 | A volume made, and a helper machine on it | | | 6 s |
-| The copy downloaded and unpacked (one `curl \| tar -xz` stream), then the helper gone | | | 11 s |
+| The copy downloaded and unpacked (one `curl \| tar -xz` stream), flushed to the volume, then the helper gone | | | 11 s |
 | The server's machine made, pulling its image onto a host that didn't have it | | | 15 s |
 | The machine started on its volume | 0.7 s | 1.4 s | 3 s |
 | The image's start scripts | | 4 s | 6 s |

@@ -74,23 +74,71 @@ const key = () => {
   return keys.at(-1) ?? ''
 }
 
+/** The helper's image, pulled where this machine hasn't it yet. */
+async function helperImage(): Promise<void> {
+  const present = await docker
+    .getImage(HELPER)
+    .inspect()
+    .then(
+      () => true,
+      () => false,
+    )
+  if (present) return
+  const stream = await docker.pull(HELPER)
+  await new Promise((resolve, reject) =>
+    docker.modem.followProgress(stream, (error) => (error ? reject(error) : resolve(null))),
+  )
+}
+
+/**
+ * `script` run with a `sync` that notes it ran, first on the PATH, its result led by whether it
+ * did: `synced ok …` or `unsynced ok …`.
+ */
+const noted = (script: string) =>
+  [
+    'mkdir -p /tmp/shim',
+    `printf '#!/bin/sh\necho synced >> /tmp/calls\n' > /tmp/shim/sync && chmod +x /tmp/shim/sync`,
+    'export PATH=/tmp/shim:$PATH',
+    script,
+    'echo "$(cat /tmp/calls 2>/dev/null || echo unsynced) $(cat /tmp/job.result)" > /tmp/job.result',
+  ].join('\n')
+
+// The helper is destroyed by force the moment its job gives a result, and what the kernel hadn't
+// written to the volume by then is lost: a world restored that way booted with an empty level.dat.
+describe.skipIf(!existsSync(SOCKET))('a helper job that writes to the volume', () => {
+  const flushed = `${volume}-flushed`
+
+  beforeAll(async () => {
+    await helperImage()
+    await docker.createVolume({ Name: flushed })
+  }, 240_000)
+
+  afterAll(async () => {
+    await docker
+      .getVolume(flushed)
+      .remove()
+      .catch(() => undefined)
+  })
+
+  test('flushes the world it restored before it says so', async () => {
+    const made =
+      'mkdir -p /tmp/w/world && echo level > /tmp/w/world/level.dat && tar -czf /tmp/a.tgz -C /tmp/w .'
+    expect(await run(noted(`${made}\n${restoreJob('file:///tmp/a.tgz')}`), flushed)).toBe(
+      'synced ok restored',
+    )
+  }, 120_000)
+
+  test('flushes the archive it leaves for the parts, which another helper reads', async () => {
+    const said = await run(noted(exportJob({ url: 'http://127.0.0.1:9/unused', headers: {} }, 0)), flushed)
+    expect(said).toMatch(/^synced ok parts [0-9a-f]{64} \d+$/)
+  }, 120_000)
+})
+
 describe.skipIf(!existsSync(SOCKET) || !s3.endpoint || !s3.bucket)(
   'Fly’s helper jobs, in the helper image',
   () => {
     beforeAll(async () => {
-      const present = await docker
-        .getImage(HELPER)
-        .inspect()
-        .then(
-          () => true,
-          () => false,
-        )
-      if (!present) {
-        const stream = await docker.pull(HELPER)
-        await new Promise((resolve, reject) =>
-          docker.modem.followProgress(stream, (error) => (error ? reject(error) : resolve(null))),
-        )
-      }
+      await helperImage()
       await docker.createVolume({ Name: volume })
       await docker.createVolume({ Name: restored })
       // A world of 20 MiB that doesn't compress: its archive is three parts of 8 MiB.
