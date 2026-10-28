@@ -11,6 +11,18 @@ import type { ZoneChange } from './play-day.ts'
 
 type AccountStatus = 'active' | 'suspended' | 'terminated'
 
+/**
+ * What a subscription was sold with, where its product sets terms of its own (an early price): a
+ * price, hours a month and, where it caps them, the most extra hours an owner may allow. They stay
+ * with the subscription for as long as it is on that product, whatever the plan table later says.
+ */
+export interface SoldTerms {
+  priceCents: number
+  includedUnits: number
+  /** Null: the plan's own cap. */
+  mostExtraUnits: number | null
+}
+
 export interface Restrictions {
   provisioning?: boolean
   publicListing?: boolean
@@ -67,6 +79,11 @@ export interface AccountStanding {
   nextTimeZoneFrom: Date | null
   /** Cubepals' own, for testing it: never billed, and left out of its numbers and analytics. */
   testAccount: boolean
+  /**
+   * What the subscription paying for the plan was sold with, where its product set terms of its
+   * own (`SoldTerms`); absent where the plan table's apply: no subscription, or a plan's own product.
+   */
+  soldWith?: SoldTerms
 }
 
 export function newStanding(userId: string): AccountStanding {

@@ -109,6 +109,14 @@ whole life and an image pull onto the volume's host.
   then every 5 s. A small world's copy was done well inside the 5 s the helper used to wait
   between reads.
 
+## Measuring it
+
+`bun scripts/join-times.ts` times joins on staging with the real clients, Java and Bedrock, from
+each state above (awake, asleep, stopped, at rest), into servers made from Cubepals' own templates:
+n joins each, with the median and the 90th percentile from the connection to the player in the
+world, and the server-list lines the Java client saw while it waited. Bedrock is UDP, so it runs
+from the Join times workflow's runner.
+
 ## On the fleet
 
 Servers on Cubepals' own machines sleep and wake through blocklyd (`infra/fleet/fleet-runtime/power.ts`).

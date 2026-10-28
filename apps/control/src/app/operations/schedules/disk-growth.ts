@@ -8,7 +8,7 @@
  * (`handlers/winding-down.ts`); how big a disk grows is `domain/account/entitlements.ts`'s.
  */
 import type { Db } from '@blockly/db'
-import { entitlementsFor, grownDisk } from '../../../domain/account/entitlements.ts'
+import { entitlementsOf, grownDisk } from '../../../domain/account/entitlements.ts'
 import { announce } from '../../../minecraft/console.ts'
 import { DATA_DIR } from '../../../minecraft/jars.ts'
 import { PORT_NAMES } from '../../../minecraft/runtime-spec.ts'
@@ -41,7 +41,7 @@ export function growingDisks(deps: {
     let grown = 0
     for (const server of await listByStatus(db, 'running')) {
       const standing = await loadStanding(db, server.ownerId)
-      const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+      const plan = entitlementsOf(standing)
       if (plan.storage.mostGb <= plan.storage.startGb) continue
       const { handle } = await loadRuntime(db, server.id, runtime.providers)
       if (handle === null) continue

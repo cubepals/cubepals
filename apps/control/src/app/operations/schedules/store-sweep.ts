@@ -9,7 +9,7 @@
  */
 import { DAY_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
-import { entitlementsFor, PLAN_KEYS } from '../../../domain/account/entitlements.ts'
+import { entitlementsFor, entitlementsOf, PLAN_KEYS } from '../../../domain/account/entitlements.ts'
 import { loadControls, loadStanding } from '../../accounts/persistence.ts'
 import { keptStorage } from '../../servers/kept-storage.ts'
 import { idleSince, lockServer } from '../../servers/persistence.ts'
@@ -49,7 +49,7 @@ export function storingIdle(deps: {
     for (const server of await idleSince(db, new Date(now.getTime() - shortest * DAY_MS), limit * 5)) {
       if (queued >= limit) break
       const standing = await loadStanding(db, server.ownerId)
-      const days = entitlementsFor(standing.plan, standing.limitOverrides).storeAfterIdleDays
+      const days = entitlementsOf(standing).storeAfterIdleDays
       if (now.getTime() - server.lastActiveAt.getTime() < days * DAY_MS) continue
       if (await heldBack(server.id, now)) continue
       // One try per stretch of idleness, and another after each that ended without resting it: at

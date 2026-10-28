@@ -11,7 +11,7 @@
 import { DAY_MS } from '@blockly/contracts/durations'
 import { type Db, schema } from '@blockly/db'
 import { and, isNull, lte } from 'drizzle-orm'
-import { entitlementsFor, PLAN_KEYS } from '../../../domain/account/entitlements.ts'
+import { entitlementsFor, entitlementsOf, PLAN_KEYS } from '../../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { emailOf, loadControls, loadStanding } from '../../accounts/persistence.ts'
 import type { Actor } from '../../actor.ts'
@@ -59,7 +59,7 @@ export function expiring(deps: {
     const firstWarning = new Date(now.getTime() - (Math.min(...kept) - WARN_DAYS[0]) * DAY_MS)
     for (const server of await unplayedSince(db, firstWarning, limit)) {
       const standing = await loadStanding(db, server.ownerId)
-      const days = entitlementsFor(standing.plan, standing.limitOverrides).deleteAfterIdleDays
+      const days = entitlementsOf(standing).deleteAfterIdleDays
       if (days === null) continue
       const due = server.lastActiveAt.getTime() + days * DAY_MS
       const warned = warningOf(await deletionWarned(db, server.id), server.lastActiveAt)

@@ -5,7 +5,7 @@
 import type { Availability, BackupsView, BackupView } from '@blockly/contracts'
 import { DAY_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import type { Capability, Decision } from '../../domain/policy/policy.ts'
 import { compareVersions } from '../../minecraft/versions.ts'
 import { loadStanding } from '../accounts/persistence.ts'
@@ -52,7 +52,7 @@ export class BackupQueries {
         toAvailability(await this.#policy.check(tx, server.ownerId, capability)),
       )
     return {
-      kept: entitlementsFor(standing.plan, standing.limitOverrides).backupPolicy.snapshotsKept,
+      kept: entitlementsOf(standing).backupPolicy.snapshotsKept,
       inProgress: await pendingOfKind(this.#db, server.id, 'backup'),
       timeZone: standing.timeZone,
       archives: {

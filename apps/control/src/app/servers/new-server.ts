@@ -13,7 +13,7 @@
 import { NAME_MAX_LENGTH } from '@blockly/contracts'
 import type { Db, Tx } from '@blockly/db'
 import type { SeededAccess } from '../../domain/access/access.ts'
-import { diskForBroughtWorld, type Entitlements, entitlementsFor } from '../../domain/account/entitlements.ts'
+import { diskForBroughtWorld, type Entitlements, entitlementsOf } from '../../domain/account/entitlements.ts'
 import { isDatapack } from '../../domain/mods/artifact.ts'
 import type { CarriedFile } from '../../domain/revision/carried.ts'
 import {
@@ -109,7 +109,7 @@ export async function draftNewServer(
   const party = PARTY[request.partySize]
   const memoryTier = chosen === null ? party.tier : sizeOf(request.partySize, chosen.tier)
   const standing = await loadStanding(sources.db, actor.userId)
-  const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+  const plan = entitlementsOf(standing)
   const settings = fittedDefaults(plan, {
     ...defaultSettings({
       name: request.name,

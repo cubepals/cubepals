@@ -19,7 +19,7 @@
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { type Db, type Queryable, schema } from '@blockly/db'
 import { and, asc, count, desc, eq, gt, gte, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm'
-import { type Entitlements, entitlementsFor } from '../../domain/account/entitlements.ts'
+import { type Entitlements, entitlementsOf } from '../../domain/account/entitlements.ts'
 import { extraBeforeStop, extraPlay } from '../../domain/account/extra-play.ts'
 import { UNIT_CENTS } from '../../domain/account/meter.ts'
 import {
@@ -123,7 +123,7 @@ export class ExtraUsage {
    */
   async count(userId: string, now = new Date(), read?: AccountStanding): Promise<boolean> {
     const standing = read ?? (await loadStanding(this.#db, userId, now))
-    const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+    const plan = entitlementsOf(standing)
     if (plan.includedUnits === null) return false
     const zone = standing.timeZone ?? DEFAULT_TIME_ZONE
     const allowance = await this.#allowance(standing, plan, now)
@@ -505,7 +505,7 @@ export class ExtraUsage {
  */
 export async function keepPlayedBlock(q: Queryable, userId: string, now: Date): Promise<void> {
   const standing = await loadStanding(q, userId, now)
-  const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+  const plan = entitlementsOf(standing)
   const month = await meteredMonth(q, standing, plan, now)
   if (month !== null && month.units > 0)
     await keepMonthBlock(
