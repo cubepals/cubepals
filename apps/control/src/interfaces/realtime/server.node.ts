@@ -109,8 +109,10 @@ function followConsoles(
 ): () => void {
   const { feed } = deps
   const { userId } = peer.data
-  /** The consoles this session follows, or is being let into. */
+  /** The consoles this session follows, or is being let into: what counts against its limit. */
   const following = new Set<string>()
+  /** The consoles whose room this session has joined. */
+  const open = new Set<string>()
 
   /** Whether the session's sign-in still stands; when it doesn't, the session is closed. */
   const stillSignedIn = async () => {
@@ -118,8 +120,16 @@ function followConsoles(
     peer.close(CloseCode.WT_UNAUTHORIZED, 'signed out')
     return false
   }
-  const admitted = async (serverId: string) =>
-    (await feed.mayOpen(userId)) && (await stillSignedIn()) && (await feed.canWatch(userId, serverId))
+  /**
+   * Whether a watch may open its console now: `wait` while the account has opened its share of
+   * consoles this minute, `closed` once the sign-in has ended, `barred` for a console the account
+   * may not watch.
+   */
+  const admission = async (serverId: string) => {
+    if (!(await feed.mayOpen(userId))) return 'wait'
+    if (!(await stillSignedIn())) return 'closed'
+    return (await feed.canWatch(userId, serverId)) ? 'open' : 'barred'
+  }
 
   /**
    * Each console's latest watch or unwatch. A watch still being let in when another watch or an
@@ -136,25 +146,43 @@ function followConsoles(
     if (!following.has(serverId) && following.size >= tuning().abuse.consolesPerConnection) return
     following.add(serverId)
     const turn = nextTurn(serverId)
-    const allowed = await admitted(serverId)
-    if (turns.get(serverId) !== turn) return
-    if (!allowed) {
-      await unwatch(serverId)
-      return
+    const current = () => turns.get(serverId) === turn
+    // A watch that doesn't open its console gives its place back; one already open stays open.
+    const giveUp = async () => {
+      if (current() && !open.has(serverId)) await unwatch(serverId)
     }
-    await peer.join(consoleRoom(serverId))
-    void deps.startTail(serverId)
-    // What came before, to this watcher alone. A line that also arrives live is dropped by
-    // the page, which knows each line by its time and text.
-    const lines = await feed.recent(serverId, BACKFILL)
-    peer.emit('consoleHistory', {
-      serverId,
-      lines: lines.map((l) => ({ at: l.at.toISOString(), text: l.text, level: l.level })),
-    })
+    try {
+      const answer = await admission(serverId)
+      if (answer === 'wait') return await giveUp()
+      if (answer === 'closed' || !current()) return
+      if (answer === 'barred') return await unwatch(serverId)
+      await peer.join(consoleRoom(serverId))
+      if (!current()) return await leftWhileJoining(serverId)
+      open.add(serverId)
+      void deps.startTail(serverId)
+      // What came before, to this watcher alone. A line that also arrives live is dropped by
+      // the page, which knows each line by its time and text.
+      const lines = await feed.recent(serverId, BACKFILL)
+      if (!current()) return
+      peer.emit('consoleHistory', {
+        serverId,
+        lines: lines.map((l) => ({ at: l.at.toISOString(), text: l.text, level: l.level })),
+      })
+    } catch (error) {
+      await giveUp()
+      throw error
+    }
+  }
+  /** An unwatch that came while its watch was joining leaves again; a newer watch goes on alone. */
+  const leftWhileJoining = async (serverId: string) => {
+    if (following.has(serverId)) return
+    await peer.leave(consoleRoom(serverId))
+    deps.stopTailIfUnwatched(serverId)
   }
   const unwatch = async (serverId: string) => {
     nextTurn(serverId)
     following.delete(serverId)
+    open.delete(serverId)
     await peer.leave(consoleRoom(serverId))
     deps.stopTailIfUnwatched(serverId)
   }

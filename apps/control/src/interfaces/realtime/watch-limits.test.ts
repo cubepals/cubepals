@@ -23,7 +23,7 @@ import { startRealtime } from './server.node.ts'
 
 const ORIGIN = 'https://web.test'
 const RECHECK_MS = 200
-const [ONE, TWO, THREE, SLOW] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()]
+const [ONE, TWO, THREE, SLOW, BROKEN] = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()]
 
 const freePort = () =>
   new Promise<number>((resolve) => {
@@ -81,6 +81,8 @@ describe('an open realtime session', () => {
       canWatch: async (userId: string, serverId: string) => {
         // SLOW's answer takes a moment, so a session's next message arrives while it is asked.
         if (serverId === SLOW) await Bun.sleep(150)
+        // BROKEN's answer fails, as a database that doesn't answer does.
+        if (serverId === BROKEN) throw new Error('the database did not answer')
         return !barred.has(`${userId}:${serverId}`)
       },
       stillSignedIn: async ({ userId, sessionId }: TicketHolder) =>
@@ -131,6 +133,26 @@ describe('an open realtime session', () => {
     unwatch(SLOW)
     await Bun.sleep(400)
     expect(histories).toEqual([])
+    client.disconnect()
+  }, 20_000)
+
+  test('a console that fails to open gives its place back', async () => {
+    const { client, histories, watch } = await browser(fallbackPort, 'user-g')
+    watch(BROKEN)
+    await Bun.sleep(200)
+    watch(ONE)
+    watch(TWO)
+    await Bun.sleep(300)
+    expect(histories.sort()).toEqual([ONE, TWO].sort())
+    client.disconnect()
+  }, 20_000)
+
+  test('a console already open stays open when its account has opened its share this minute', async () => {
+    const { client, histories, watch } = await browser(fallbackPort, 'user-h')
+    for (let i = 0; i < 6; i++) watch(ONE)
+    await Bun.sleep(400)
+    expect(histories.length).toBe(5)
+    expect([...client.getSnapshot().rooms]).toContain(`console:${ONE}`)
     client.disconnect()
   }, 20_000)
 
