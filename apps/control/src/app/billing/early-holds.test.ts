@@ -243,6 +243,15 @@ describe.skipIf(!hasDatabase)('plan changes at the held price', () => {
     expect((await w.h.app.billing.offer(next, 'core')).productId).toBe(EARLY_CORE)
   })
 
+  test('a switch at a price no longer open lets its hold go', async () => {
+    const owner = await w.h.user('Switch late')
+    await w.standing(owner, randomUUID(), { product_id: CORE_PRODUCT })
+    await open(1)
+    await expect(w.h.app.billing.switchPrice(owner, 650)).rejects.toThrow('isn’t open any more')
+    const next = await w.h.user('Switch next')
+    expect((await w.h.app.billing.offer(next, 'core')).productId).toBe(EARLY_CORE)
+  })
+
   test('a subscription on its plan’s own price can take the early price now, and only through the room', async () => {
     const owner = await w.h.user('Switch')
     const sub = randomUUID()

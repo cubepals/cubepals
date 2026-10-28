@@ -416,9 +416,15 @@ export class BillingService {
     if (sub === null)
       throw new AppError('invalid_choice', 'Your plan isn’t one that can change its price now.')
     const offer = await this.#holds.offer(user.id, sub.planKey)
-    if (offer.productId === null || offer.priceCents !== priceCents)
-      throw new AppError('invalid_choice', 'That price isn’t open any more. Your plan stays as it is.')
-    await switchToEarly(this.#db, billing, user.id, offer.productId, actor, this.#reach)
+    try {
+      if (offer.productId === null || offer.priceCents !== priceCents)
+        throw new AppError('invalid_choice', 'That price isn’t open any more. Your plan stays as it is.')
+      await switchToEarly(this.#db, billing, user.id, offer.productId, actor, this.#reach)
+    } catch (error) {
+      // A switch that didn't happen gives its room back, as a refused move does.
+      await this.#holds.release(user.id)
+      throw error
+    }
     await this.refresh(actor, false)
   }
 
