@@ -26,7 +26,7 @@
 import { HOUR_MS } from '@blockly/contracts/durations'
 import type { PingWakeResult } from '@blockly/contracts/edge'
 import type { Db } from '@blockly/db'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { meteredMonth } from '../billing/chip-in-meter.ts'
@@ -105,6 +105,6 @@ async function worthWaking(
   }
   // Past its included hours, a run nobody joined would be paid for: only a join wakes it then.
   const standing = await loadStanding(db, server.ownerId)
-  const month = await meteredMonth(db, standing, entitlementsFor(standing.plan, standing.limitOverrides), now)
+  const month = await meteredMonth(db, standing, entitlementsOf(standing), now)
   return month === null || month.units < month.included + month.carried
 }

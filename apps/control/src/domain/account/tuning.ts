@@ -80,6 +80,13 @@ export interface AbuseLimits {
    */
   worldUploadsPerDay: number
   /**
+   * What the realtime role lets one account open (`interfaces/realtime/server.node.ts`): consoles a
+   * minute, across all its browsers, and consoles one browser's connection follows at once. A page
+   * about a server opens its console; past either, that console shows nothing new until there is room.
+   */
+  consoleWatchesPerMinute: number
+  consolesPerConnection: number
+  /**
    * How long a new account whose email isn't confirmed yet takes a free place, in hours
    * (`countFreeAccounts` in `app/accounts/persistence.ts`). Once confirmed it takes one for good;
    * one never confirmed stops taking one, so sign-up stays open for the people who do confirm.
@@ -128,6 +135,8 @@ export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {
   joinReportsPerSecond: 10,
   joinReportBytes: 65_536,
   worldUploadsPerDay: 10,
+  consoleWatchesPerMinute: 60,
+  consolesPerConnection: 10,
   unconfirmedPlaceHours: 24,
 }
 

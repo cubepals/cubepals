@@ -21,7 +21,7 @@ import type { PeopleChoice, WorldImportView } from '@blockly/contracts'
 import { NAME_MAX_LENGTH } from '@blockly/contracts'
 import { type Db, schema, type Tx, type WorldImportAnswerJson, type WorldPeopleJson } from '@blockly/db'
 import type { SeededAccess } from '../../domain/access/access.ts'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { PROPERTIES_FILE } from '../../minecraft/uploads.ts'
 import { DOWNLOAD_NOTE, inWorldDownload } from '../../minecraft/world-download.ts'
@@ -424,10 +424,7 @@ export class WorldImports {
     const { record, server } = input
     const now = new Date()
     const standing = await loadStanding(this.#db, server.ownerId)
-    const days = Math.max(
-      entitlementsFor(standing.plan, standing.limitOverrides).backupPolicy.archiveRetentionDays,
-      UPLOADED_KEPT_DAYS,
-    )
+    const days = Math.max(entitlementsOf(standing).backupPolicy.archiveRetentionDays, UPLOADED_KEPT_DAYS)
     const at = { now, days, serverVersion: input.serverVersion }
     return this.#db.transaction(async (tx) => {
       const locked = await lockServer(tx, server.id)

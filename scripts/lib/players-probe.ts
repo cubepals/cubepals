@@ -10,12 +10,19 @@
  *
  *   bun probe.js load <host> <name> <counts, e.g. 25,50,100> <minutes per step>
  *   bun probe.js bots <host> <first> <count>
+ *   bun probe.js join <address> <name> [version] [seconds] [stay]
  *
  * A player is put in an arena by number, ten to each, and fights whoever is nearest: it looks at
  * them, runs at them, jumps and strafes now and then, and swings when close, about four times a
  * second, as a player clicking does. Two in fifty queue for the Duels plugin's own arena instead.
  * Each result is one JSON line on stdout; it needs RCON_PASSWORD. Not for anything but the bench:
  * it trusts its arguments.
+ *
+ * `join` is one player's join through the edge, timed as the player feels it: the server list's
+ * ping and its line, then the connection, the login answered, the configuration done and the
+ * player in the world, with what the list said each second while the join was held, and the
+ * reason if the join was turned away. It stays in the world `stay` seconds (none by default) before
+ * it leaves. It needs no console.
  */
 import { readFileSync, writeSync } from 'node:fs'
 import { MINUTE_MS } from '@blockly/contracts/durations'
@@ -55,10 +62,26 @@ interface Mineflayer {
     username: string
     auth: 'offline'
     hideErrors: boolean
+    version?: string
   }): Bot
+}
+/** As much of minecraft-protocol, mineflayer's own, as `join` uses: the server list's ping. */
+interface Protocol {
+  ping(options: { host: string; port: number; version: string; closeTimeout: number }): Promise<{
+    description: unknown
+    latency: number
+    version?: { name: string; protocol: number }
+  }>
+}
+/** The client under a bot, for the moments of a join mineflayer doesn't name. */
+interface Wire {
+  on(event: 'connect', listener: () => void): void
+  on(event: 'state', listener: (state: string) => void): void
+  on(event: 'encryption_begin' | 'compress' | 'success', listener: () => void): void
 }
 // By a name in a variable, so nothing here resolves it before it runs where it is installed.
 const MINEFLAYER = 'mineflayer'
+const PROTOCOL = 'minecraft-protocol'
 
 /** Players to an arena, and to a `bots` process. */
 const PER_ARENA = 10
@@ -332,10 +355,102 @@ async function bots(host: string, first: number, count: number): Promise<void> {
   await new Promise(() => {})
 }
 
-const [job = '', host = '', a = '', b = '', c = ''] = process.argv.slice(2)
+/** A chat component as the list shows it, colours and all left out: its text and its extras'. */
+function textOf(component: unknown): string {
+  if (typeof component === 'string') return plain(component)
+  if (component === null || typeof component !== 'object') return ''
+  const { text = '', extra = [] } = component as { text?: string; extra?: unknown[] }
+  return plain(String(text)) + extra.map(textOf).join('')
+}
+
+/**
+ * One join, timed from the moment it connects: the list's line first, then each step of the
+ * login, and the list's line each second while the join waits, as a friend's list beside it
+ * would show it.
+ */
+async function joinOnce(
+  address: string,
+  name: string,
+  version: string,
+  seconds: number,
+  stay: number,
+): Promise<void> {
+  const mineflayer = ((await import(MINEFLAYER)) as { default: Mineflayer }).default
+  const protocol = ((await import(PROTOCOL)) as { default: Protocol }).default
+  const ping = () => protocol.ping({ host: address, port: GAME_PORT, version, closeTimeout: 5000 })
+  const before = await ping().then(
+    (answer) => ({ ms: answer.latency, line: textOf(answer.description), version: answer.version?.name }),
+    (error: unknown) => ({ error: messageOf(error) }),
+  )
+  const started = Date.now()
+  const since = () => Date.now() - started
+  const steps: Record<string, number> = {}
+  const lines: { ms: number; line: string }[] = []
+  let over = false
+  const watch = async () => {
+    while (!over) {
+      const answer = await ping().catch(() => undefined)
+      const line = answer === undefined ? '' : textOf(answer.description)
+      if (!over && line !== '' && line !== lines.at(-1)?.line) lines.push({ ms: since(), line })
+      await Bun.sleep(1000)
+    }
+  }
+  const bot = mineflayer.createBot({
+    host: address,
+    port: GAME_PORT,
+    username: name,
+    auth: 'offline',
+    hideErrors: true,
+    version,
+  })
+  const wire = (bot as unknown as { _client: Wire })._client
+  const mark = (step: string) => {
+    if (steps[step] === undefined) steps[step] = since()
+  }
+  wire.on('connect', () => mark('connected'))
+  wire.on('state', mark)
+  // The server's first answer to the login: it is up and has the player. A server that checks
+  // accounts asks for encryption here, which a player with no account can't give, so on such a
+  // server this is as far as the join is timed.
+  for (const first of ['encryption_begin', 'compress', 'success'] as const)
+    wire.on(first, () => mark('answered'))
+  void watch()
+  const ended = await new Promise<{ kicked?: string; error?: string }>((resolve) => {
+    const timer = setTimeout(() => resolve({ error: `not in the world in ${seconds}s` }), seconds * 1000)
+    bot.on('spawn', () => {
+      mark('spawned')
+      clearTimeout(timer)
+      resolve({})
+    })
+    bot.on('kicked', (reason) => {
+      clearTimeout(timer)
+      resolve({ kicked: textOf(typeof reason === 'string' ? safeJson(reason) : reason) })
+    })
+    bot.on('error', (error) => {
+      clearTimeout(timer)
+      resolve({ error: messageOf(error) })
+    })
+  })
+  over = true
+  emit({ job: 'join', address, name, version, before, steps, lines, ...ended })
+  if (ended.kicked === undefined && ended.error === undefined) await Bun.sleep(stay * 1000)
+  ;(bot as unknown as { quit(): void }).quit()
+}
+
+/** A kick's reason, which arrives as JSON text or as plain text. */
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+const [job = '', host = '', a = '', b = '', c = '', d = ''] = process.argv.slice(2)
 try {
   if (job === 'load') await load(host, a, b.split(',').map(Number), Number(c))
   else if (job === 'bots') await bots(host, Number(a), Number(b))
+  else if (job === 'join') await joinOnce(host, a, b || '1.21.11', Number(c || 240), Number(d || 0))
   else throw new Error(`no job ${job}`)
   process.exit(0)
 } catch (error) {

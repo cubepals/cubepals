@@ -15,7 +15,7 @@
 import type { ServerView } from '@blockly/contracts'
 import { type Queryable, schema } from '@blockly/db'
 import { and, desc, eq, gt, max } from 'drizzle-orm'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { playTotal } from '../accounts/play-total.ts'
@@ -32,7 +32,7 @@ export async function restingFor(q: Queryable, server: MinecraftServer, now: Dat
   const { status, stopReason } = server.lifecycle
   if (status !== 'stopped' || stopReason !== 'free_hours') return null
   const standing = await loadStanding(q, server.ownerId)
-  const total = await playTotal(q, standing, entitlementsFor(standing.plan, standing.limitOverrides), now)
+  const total = await playTotal(q, standing, entitlementsOf(standing), now)
   return total !== null && total.left <= 0 ? 'free_hours' : null
 }
 

@@ -58,6 +58,8 @@ const PLUS_STANDING: BillingState = {
     cancelAtPeriodEnd: false,
     createdAt: new Date('2026-09-01T00:00:00Z'),
     canceledAt: null,
+    productId: PLUS,
+    terms: null,
   },
 }
 

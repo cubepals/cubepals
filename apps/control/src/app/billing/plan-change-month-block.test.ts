@@ -11,7 +11,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { HOUR_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsFor, entitlementsOf } from '../../domain/account/entitlements.ts'
 import { hasDatabase } from '../../testing/harness.ts'
 import { PolarWorld } from '../../testing/polar-world.ts'
 import { loadStanding } from '../accounts/persistence.ts'
@@ -78,7 +78,7 @@ test.skipIf(!hasDatabase || monthRoom < 5 * HOUR_MS)(
       includedUnits: 2,
     })
     const standing = await loadStanding(w.h.db, owner.userId)
-    const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+    const plan = entitlementsOf(standing)
     expect((await meteredMonth(w.h.db, standing, plan, new Date()))?.included).toBe(2)
   },
   60_000,

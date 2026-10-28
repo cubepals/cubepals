@@ -19,7 +19,7 @@ import { DEFAULT_PEOPLE_CHOICE, type NewWorldImportView, type PeopleChoice } fro
 import { DAY_MS, HOUR_S } from '@blockly/contracts/durations'
 import type { Db, NewWorldFactsJson, Tx, WorldImportAnswerJson, WorldPeopleJson } from '@blockly/db'
 import type { SeededAccess } from '../../domain/access/access.ts'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import type { ModArtifact } from '../../domain/mods/artifact.ts'
 import { releaseFor } from '../../minecraft/versions.ts'
 import { moddedBrands } from '../../minecraft/world-facts.ts'
@@ -126,7 +126,7 @@ export class NewWorldImports {
       throw new AppError('invalid_upload', 'A world can be up to 4 GB.')
     return this.#db.transaction(async (tx) => {
       const standing = await loadStanding(tx, actor.userId)
-      const limit = worldUploadLimit(entitlementsFor(standing.plan, standing.limitOverrides).storage.mostGb)
+      const limit = worldUploadLimit(entitlementsOf(standing).storage.mostGb)
       if (file.sizeBytes > limit)
         throw new AppError(
           'invalid_upload',
@@ -194,7 +194,7 @@ export class NewWorldImports {
     upload: { ownerId: string; key: string; fileName: string; sizeBytes: number },
   ): Promise<string | null> {
     const standing = await loadStanding(tx, upload.ownerId)
-    const limit = worldUploadLimit(entitlementsFor(standing.plan, standing.limitOverrides).storage.mostGb)
+    const limit = worldUploadLimit(entitlementsOf(standing).storage.mostGb)
     if (upload.sizeBytes > limit) return null
     if (!(await this.#policy.check(tx, upload.ownerId, { kind: 'restore_archive' })).ok) return null
     if (

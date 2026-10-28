@@ -269,7 +269,20 @@ export class PolarBilling implements BillingProvider {
 
   /** The plan a product sells: one configuration names, or one at an early price; null for neither. */
   async #planOf(productId: string): Promise<string | null> {
-    return this.#plans.get(productId) ?? (await this.#early.planOf(productId))
+    return this.#plans.get(productId) ?? (await this.#early.of(productId))?.planKey ?? null
+  }
+
+  /** What a plan's product sells it with: an early product's price and hours; null for the plan's own. */
+  async #termsOf(productId: string): Promise<NonNullable<BillingState['subscription']>['terms']> {
+    if (this.#plans.has(productId)) return null
+    const early = await this.#early.of(productId)
+    return early === null
+      ? null
+      : {
+          priceCents: early.priceCents,
+          includedUnits: early.includedUnits,
+          mostExtraUnits: early.mostExtraUnits,
+        }
   }
 
   /** The one-time product that sells a year of the plan, if there is one. */
@@ -631,6 +644,8 @@ export class PolarBilling implements BillingProvider {
           : {
               externalSubscriptionId: paid.id,
               planKey: plans.get(paid.product_id) ?? '',
+              productId: paid.product_id,
+              terms: await this.#termsOf(paid.product_id),
               status: paid.status,
               currentPeriodEnd: new Date(paid.current_period_end),
               cancelAtPeriodEnd: paid.cancel_at_period_end,

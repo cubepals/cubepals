@@ -63,6 +63,28 @@ import {
   yearsToRemind,
 } from './years.ts'
 
+/** The provider's word on the subscription that pays, as `saveSubscription` keeps it. */
+function savedOf(
+  userId: string,
+  provider: string,
+  externalCustomerId: string,
+  paid: NonNullable<BillingState['subscription']>,
+): Parameters<typeof saveSubscription>[1] {
+  return {
+    userId,
+    provider,
+    externalCustomerId,
+    externalSubscriptionId: paid.externalSubscriptionId,
+    planKey: paid.planKey,
+    status: paid.status,
+    currentPeriodEnd: paid.currentPeriodEnd,
+    cancelAtPeriodEnd: paid.cancelAtPeriodEnd,
+    ...(paid.createdAt === undefined ? {} : { createdAt: paid.createdAt }),
+    canceledAt: paid.canceledAt ?? null,
+    ...(paid.productId === undefined ? {} : { productId: paid.productId, terms: paid.terms ?? null }),
+  }
+}
+
 /** A day as refusals say it: "26 October 2027". */
 const DAY = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
@@ -406,18 +428,7 @@ export class BillingService {
       }
       const paid = state.subscription
       if (paid !== null && state.externalCustomerId !== undefined)
-        await saveSubscription(tx, {
-          userId: state.userId,
-          provider,
-          externalCustomerId: state.externalCustomerId,
-          externalSubscriptionId: paid.externalSubscriptionId,
-          planKey: paid.planKey,
-          status: paid.status,
-          currentPeriodEnd: paid.currentPeriodEnd,
-          cancelAtPeriodEnd: paid.cancelAtPeriodEnd,
-          ...(paid.createdAt === undefined ? {} : { createdAt: paid.createdAt }),
-          canceledAt: paid.canceledAt ?? null,
-        })
+        await saveSubscription(tx, savedOf(state.userId, provider, state.externalCustomerId, paid))
       await settleOtherSubscriptions(tx, state.userId, provider, keep, pastDue)
       // Kept renewing over a gift redeemed to start when it ended: the gift waits for the paid time.
       const giftsMoved =

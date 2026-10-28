@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { and, eq, gt, isNull } from 'drizzle-orm'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsFor, entitlementsOf } from '../../domain/account/entitlements.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { playTotal } from '../accounts/play-total.ts'
@@ -57,7 +57,7 @@ const ran = (serverId: string, plan: string | null, hours: number, daysAgo: numb
 }
 const total = async (actor: UserActor) => {
   const standing = await loadStanding(h.db, actor.userId)
-  return playTotal(h.db, standing, entitlementsFor(standing.plan, standing.limitOverrides), new Date())
+  return playTotal(h.db, standing, entitlementsOf(standing), new Date())
 }
 const setPlan = (actor: UserActor, plan: string) =>
   h.db.update(schema.accountStanding).set({ plan }).where(eq(schema.accountStanding.userId, actor.userId))

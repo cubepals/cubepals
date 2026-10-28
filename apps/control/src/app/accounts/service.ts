@@ -8,6 +8,7 @@ import { type Db, schema, type Tx } from '@blockly/db'
 import {
   type Entitlements,
   entitlementsFor,
+  entitlementsOf,
   PAID_PLANS,
   planGap,
   planName,
@@ -308,7 +309,7 @@ export class AccountService {
     if (minutes !== null && minutes !== 0 && (!Number.isInteger(minutes) || minutes < 5 || minutes > 120))
       throw new AppError('invalid_choice', 'An AFK kick is between 5 and 120 minutes, or never.')
     const standing = await loadStanding(this.#db, actor.userId)
-    if (!entitlementsFor(standing.plan, standing.limitOverrides).mayChooseAfkKick)
+    if (!entitlementsOf(standing).mayChooseAfkKick)
       throw new AppError('not_entitled', 'Your plan keeps Cubepals’ own AFK kick. Plus lets you set it.')
     await this.#db.transaction(async (tx) => {
       const locked = await lockStanding(tx, actor.userId)
@@ -556,7 +557,7 @@ export class AccountService {
    */
   async enforceLimits(userId: string, read?: AccountStanding): Promise<number> {
     const standing = read ?? (await loadStanding(this.#db, userId))
-    const allowed = entitlementsFor(standing.plan, standing.limitOverrides)
+    const allowed = entitlementsOf(standing)
     // Money owed from a payment that didn't go through stops everything until it is paid.
     const { decision, owedCents } = await extraPlayNow(this.#db, standing)
     if (owedCents > 0) return await this.stopServersOf(userId, 'unpaid')
@@ -603,7 +604,7 @@ export class AccountService {
    */
   async warnAboutPlay(userId: string, now = new Date(), read?: AccountStanding): Promise<number | null> {
     const standing = read ?? (await loadStanding(this.#db, userId))
-    const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+    const plan = entitlementsOf(standing)
     if (plan.totalUnits !== null) return await this.#warnAboutTotal(standing, plan, now)
     if (plan.includedUnits === null || plan.includedUnits === 0) return null
     const { decision } = await extraPlayNow(this.#db, standing)

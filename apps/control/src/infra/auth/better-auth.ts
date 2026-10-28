@@ -340,7 +340,11 @@ export function betterAuthenticator(options: AuthOptions): Authenticator {
     async sessionOf(headers) {
       const found = await auth.api.getSession({ headers })
       if (found === null) return null
-      return { userId: found.user.id, impersonatedBy: found.session.impersonatedBy ?? null }
+      return {
+        userId: found.user.id,
+        sessionId: found.session.id,
+        impersonatedBy: found.session.impersonatedBy ?? null,
+      }
     },
     switchFor(request, response) {
       const keep = (set: Headers) => {

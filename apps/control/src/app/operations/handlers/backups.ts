@@ -12,7 +12,7 @@
 import { setTimeout as delay } from 'node:timers/promises'
 import { DAY_MS } from '@blockly/contracts/durations'
 import type { AppliedConfigJson, Db } from '@blockly/db'
-import { entitlementsFor } from '../../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { loadStanding } from '../../accounts/persistence.ts'
 import {
@@ -180,7 +180,7 @@ export function backingUp(deps: BackingUpDeps) {
           `The store holds ${stored === null ? 'nothing' : `${stored.sizeBytes} bytes`} of the ${exported.sizeBytes} sent`,
         )
       const standing = await loadStanding(db, server.ownerId)
-      const days = entitlementsFor(standing.plan, standing.limitOverrides).backupPolicy.archiveRetentionDays
+      const days = entitlementsOf(standing).backupPolicy.archiveRetentionDays
       await db.transaction(async (tx) => {
         await archiveReady(tx, target.id, exported, new Date(Date.now() + days * DAY_MS))
         await deps.events.publish(tx, {
