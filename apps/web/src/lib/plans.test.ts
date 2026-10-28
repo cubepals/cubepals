@@ -15,8 +15,8 @@ const free: PublicPlan = {
   available: true,
   monthlyPriceCents: 0,
   yearlyPriceCents: null,
-  includedHours: 2,
-  per: 'day',
+  includedHours: 20,
+  per: 'once',
   extraHourCents: null,
   totalHours: 20,
   sleepsAfterMinutes: 10,
@@ -84,7 +84,7 @@ describe('plans as people read them', () => {
     expect(priceOf(free.monthlyPriceCents)).toBe('$0')
     expect(planPoints(free)).toEqual([
       '1 server of 3 GB, up to 5 players',
-      '20 hours of play, at most 2 a day',
+      '20 hours of play, any day you like',
       'Plain Minecraft',
       'Go back to any of your last 3 sessions, and download your world',
     ])
@@ -150,16 +150,13 @@ describe('plans as people read them', () => {
 
   test('hours as people say them, and when they start again', () => {
     expect([hoursSaid(free), hoursSaid(core), hoursSaid(plus)]).toEqual([
-      '20 hours in all, at most 2 a day',
+      '20 hours in all, any day you like',
       '40 hours a month',
       '120 hours a month',
     ])
-    expect(hoursAgainSaid([free, core, plus])).toBe(
-      'the hours start again: the free trial’s at midnight where you are, until its 20 are played; Core’s and Plus’s on the 1st',
-    )
-    expect(hoursAgainSaid([free, plus])).toBe(
-      'the hours start again: the free trial’s at midnight where you are, until its 20 are played; Plus’s on the 1st',
-    )
+    // The free trial's hours come once and never start again: its end is said apart.
+    expect(hoursAgainSaid([free, core, plus])).toBe('the hours start again: Core’s and Plus’s on the 1st')
+    expect(hoursAgainSaid([free, plus])).toBe('the hours start again: Plus’s on the 1st')
     expect(hoursAgainSaid([])).toBe('the hours start again')
   })
 

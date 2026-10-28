@@ -115,29 +115,26 @@ describe('presentStatus', () => {
 
     expect(presentStatus(stopped('policy')).pill).toBe('suspended')
 
-    // Out of the owner's play, whatever put it to sleep, nothing says a join or the button wakes it.
+    // Out of the free trial's hours, whatever put it to sleep, nothing says a join or the button wakes it.
     const out = (stopReason: ServerView['stopReason'], status: ServerView['status'] = 'stopped') =>
       ({
         ...stopped(stopReason),
         status,
-        playToday: { hours: 2, hoursLeft: 0, backAt: '2026-10-18T00:00:00Z' },
-        playTotal: { hours: 20, hoursLeft: 4 },
+        playToday: null,
+        playTotal: { hours: 20, hoursLeft: 0 },
       }) as ServerView
-    for (const server of [out('daily'), out('idle'), out('user'), out(null, 'stored')])
+    for (const server of [out('free_hours'), out('idle'), out('user'), out(null, 'stored')])
       expect(presentStatus(server)).toEqual({
-        pill: 'sleeping',
-        label: 'Resting',
-        detail: 'Resting until midnight. Nobody can wake it before then',
+        pill: 'stopped',
+        detail: 'The free trial is over. Its world is kept',
       })
-    expect(presentStatus({ ...out('idle'), playTotal: { hours: 20, hoursLeft: 0 } })).toEqual({
-      pill: 'stopped',
-      detail: 'The free trial is over. Its world is kept',
-    })
-    // A crash keeps its own words, and a running server is never resting.
+    // A crash keeps its own words, and a running server is never out.
     expect(presentStatus(out('crash')).pill).toBe('crashed')
-    expect(presentStatus({ ...out(null, 'running'), players: null, notLoaded: [] }).label).not.toBe('Resting')
-    // With today's play left, a day's stop is asleep like any.
-    expect(presentStatus({ ...out('daily'), playToday: { hours: 2, hoursLeft: 1, backAt: '' } }).detail).toBe(
+    expect(presentStatus({ ...out(null, 'running'), players: null, notLoaded: [] }).detail).not.toContain(
+      'free trial is over',
+    )
+    // With trial hours left, a day's stop from before is asleep like any.
+    expect(presentStatus({ ...out('daily'), playTotal: { hours: 20, hoursLeft: 4 } }).detail).toBe(
       'Asleep until someone joins, or you wake it here',
     )
     expect(presentStatus(stopped('entitlement')).pill).toBe('suspended')

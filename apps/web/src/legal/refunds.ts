@@ -133,7 +133,7 @@ export const REFUNDS: Policy = {
         {
           list: [
             `servers that need ${PLUS.name} (mods, plugins or modpacks, larger sizes, or more servers than Free allows) stop and wait, whole, until you have ${PLUS.name} again or change them to fit Free;`,
-            `your account then has what is left of Free’s ${FREE.totalHours} hours, at most ${FREE.hours} a day, and Free’s other limits;`,
+            `your account then has what is left of Free’s ${FREE.totalHours} hours, and Free’s other limits;`,
             `your worlds follow Free’s rules from then on: a world nobody plays rests in storage after ${FREE.restsAfterDays} days, and one nobody has played for a year can be deleted, after two emails. Download anything you want to keep.`,
           ],
         },

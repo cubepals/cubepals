@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
-import { backAtMidnight } from '@blockly/contracts/play-today'
 import type { Tx } from '@blockly/db'
 import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import { extraUnits } from '../../domain/account/extra-play.ts'
@@ -28,7 +27,6 @@ import {
   lockCapacity,
   lockOwnerCapacity,
 } from '../accounts/persistence.ts'
-import { playToday } from '../accounts/play-today.ts'
 import { playTotalLeft } from '../accounts/play-total.ts'
 import { chippedInLeft, meteredMonth } from '../billing/chip-in-meter.ts'
 import { extraPlayNow } from '../billing/persistence.ts'
@@ -90,7 +88,6 @@ async function accountFacts(
   const standing = await loadStanding(tx, accountId)
   const extra = await extraPlayNow(tx, standing)
   const entitlements = entitlementsOf(standing)
-  const today = await playToday(tx, standing, entitlements, now)
   const month = await meteredMonth(tx, standing, entitlements, now)
   return {
     standing,
@@ -105,7 +102,6 @@ async function accountFacts(
       capability.serverId !== undefined
         ? ((await chippedInLeft(tx, accountId, now)).get(capability.serverId) ?? 0)
         : 0,
-    today: today === null ? null : { left: today.left, back: backAtMidnight(now, today.backAt) },
     totalLeft: await playTotalLeft(tx, standing, entitlements, now),
     extraUnitsAllowed: extraUnits(extra.decision),
     extraOffBecause: extra.decision.may ? null : extra.decision.why,

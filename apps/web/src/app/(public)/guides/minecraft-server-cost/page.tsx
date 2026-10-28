@@ -35,14 +35,12 @@ const covers = (hours: number) =>
     ?.said.toLowerCase()
 
 /**
- * Who a plan's hours cover, in a sentence. A day's hours start again every day, so they cover a
- * group's play by the day, however many days a week; a month's are set against the habits.
+ * Who a plan's hours cover, in a sentence. The trial's come once, to play on any day; a month's
+ * are set against the habits.
  */
 function howFar(plan: PublicPlan): string {
   if (plan.totalHours !== null)
-    return `The trial’s ${plan.totalHours} hours, at most ${plan.includedHours} a day, are enough for a group to find out whether it plays.`
-  if (plan.per === 'day')
-    return `${plan.name} covers a group that plays up to ${plan.includedHours} hours a day, every day.`
+    return `The trial’s ${plan.totalHours} hours, played on any day and for as long as you like, are enough for a group to find out whether it plays.`
   const covered = covers(plan.includedHours)
   return covered
     ? `${plan.name}’s ${plan.includedHours} hours a month cover a group that plays ${covered}.`

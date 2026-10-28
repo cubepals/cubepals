@@ -121,13 +121,13 @@ test('one notice speaks for many servers, each by the address its client dialled
   const dialled: string[] = []
   const notice = new Notice((address) => {
     dialled.push(address)
-    return { status: 'Today’s play is used up · back at midnight, in 3 h 12 min', join: null }
+    return { status: 'Sunset Valley · Resting for now', join: null }
   })
   notice.receive(handshake(1))
   const answer = readString(notice.receive(packet(0, [])).reply[0] ?? new Uint8Array())
   expect(dialled).toEqual(['lobby.play.test'])
   expect(JSON.parse(answer.text).description).toEqual({
-    text: 'Today’s play is used up · back at midnight, in 3 h 12 min',
+    text: 'Sunset Valley · Resting for now',
   })
 })
 

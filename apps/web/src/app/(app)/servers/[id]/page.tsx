@@ -47,7 +47,6 @@ import {
 import { ctaMark } from '../../../(public)/steps'
 import { CameBy } from '../../came-by'
 import { FreeHoursUsed } from '../../free-hours-used'
-import { OutForToday } from '../../out-for-today'
 import { PlusOffer } from '../../plus-offer'
 import { BootLine } from './boot-line'
 import { useChanged } from './settings/shared'
@@ -313,7 +312,7 @@ function Actions({ server, wake }: { server: ServerView; wake: Wake }) {
         </Note>
       )}
       <CameBy server={server} />
-      <Today server={server} />
+      <TrialLeft server={server} />
       {server.deletesAt !== null && <Unplayed server={server} at={server.deletesAt} />}
       {server.expiresAt !== null && (
         <MadeForAWhile server={server} at={server.expiresAt} onKept={() => kept.settled()} />
@@ -335,32 +334,21 @@ const POWER_PRESS = { sleep: 'server_sleep', wake: 'server_wake', start: 'server
  */
 const restsNow = (server: ServerView) => outOfPlay(server) !== null && server.activeOperation === null
 
-/** Out for today: the plan plays by the day, and today's is used. The server rests until midnight. */
-const outForToday = (server: ServerView) => outOfPlay(server) === 'today'
-
 /** The plan's hours in all are played (Free's 20): it waits, world kept, for Plus. */
 const outForGood = (server: ServerView) => outOfPlay(server) === 'trial'
 
 /**
- * On a plan that plays by the day: what is left of today's, or of the hours in all where those
- * end first, or, once they are used, when play is back, or that only Plus brings it back.
+ * On the free trial: what is left of its hours, to play on any day, or, once they are played, that
+ * a paid plan starts the server again.
  */
-function Today({ server }: { server: ServerView }) {
-  const today = server.playToday
+function TrialLeft({ server }: { server: ServerView }) {
   const total = server.playTotal
-  if (outForGood(server) && total !== null) return <FreeHoursUsed hours={total.hours} />
-  if (today === null) return null
-  if (outForToday(server)) return <OutForToday hours={today.hours} backAt={today.backAt} />
-  if (total !== null && total.hoursLeft < today.hoursLeft)
-    return (
-      <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-        {hoursAndMinutes(total.hoursLeft * 60)} left of your free trial.
-      </p>
-    )
-  if (today.hoursLeft <= 0) return null
+  if (total === null) return null
+  if (outForGood(server)) return <FreeHoursUsed hours={total.hours} />
+  if (total.hoursLeft <= 0) return null
   return (
     <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-      {hoursAndMinutes(today.hoursLeft * 60)} of play left today.
+      {hoursAndMinutes(total.hoursLeft * 60)} left of your free trial.
     </p>
   )
 }
@@ -369,8 +357,8 @@ function Today({ server }: { server: ServerView }) {
 function Refused({ server, error }: { server: ServerView; error: unknown }) {
   // A server its plan no longer runs (mods after Plus ended) waits for the plan that does.
   if (codeOf(error) === 'not_entitled') return <PlusOffer why={messageOf(error)} reason="mods" />
-  // Out for today, a refused wake says what the line above already does.
-  if ((outForToday(server) || outForGood(server)) && codeOf(error) === 'limit_reached') return null
+  // Out of the free trial, a refused wake says what the line above already does.
+  if (outForGood(server) && codeOf(error) === 'limit_reached') return null
   return <Note tone="danger">{messageOf(error)}</Note>
 }
 
@@ -662,9 +650,7 @@ function PlayersCard({ server }: { server: ServerView }) {
 
 /** Who can join a server that isn't running: anyone, once it wakes, unless its owner's play is out. */
 function playersLine(server: ServerView): string {
-  const out = outOfPlay(server)
-  if (out === 'today') return 'Your friends can join again from midnight.'
-  if (out === 'trial') return 'Nobody can join while the free trial is over.'
+  if (outOfPlay(server) === 'trial') return 'Nobody can join while the free trial is over.'
   return 'Start the server and your friends can join.'
 }
 
