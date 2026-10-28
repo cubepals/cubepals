@@ -17,6 +17,7 @@ import { DAY_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { type Queryable, schema } from '@blockly/db'
 import { sql } from 'drizzle-orm'
 import type { OperationKind, ServerStatus } from '../../domain/server/lifecycle.ts'
+import { inFull } from '../errors.ts'
 import { lastWakeSeconds, resumedWake, wakePathOf } from './persistence.ts'
 
 const operations = schema.serverOperations
@@ -122,15 +123,16 @@ export class WakeTimes {
     this.#now = now
   }
 
+  /** A read that fails gives none, so the routes go out without times, and is tried again at the next ask. */
   medians(): Promise<WakeMedians> {
     const now = this.#now()
     if (this.#read === null || now - this.#read.at >= KEPT_MS) {
-      const medians = readWakeMedians(this.#db)
-      this.#read = { at: now, medians }
-      // A failed read is tried again at the next ask, not kept for ten minutes.
-      medians.catch(() => {
+      const medians: Promise<WakeMedians> = readWakeMedians(this.#db).catch((error) => {
+        console.warn(`wake times: couldn't read them (${inFull(error)})`)
         if (this.#read?.medians === medians) this.#read = null
+        return { own: new Map(), all: new Map() }
       })
+      this.#read = { at: now, medians }
     }
     return this.#read.medians
   }

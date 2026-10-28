@@ -107,6 +107,21 @@ describe.skipIf(!hasDatabase)('wake times', () => {
     expect(times.medians()).not.toBe(first)
   })
 
+  test('a read that fails gives none, and is tried again', async () => {
+    let fail = true
+    const db = new Proxy(h.db, {
+      get: (target, key, receiver) =>
+        key === 'execute' && fail
+          ? () => Promise.reject(new Error('no database'))
+          : Reflect.get(target, key, receiver),
+    })
+    const times = new WakeTimes(db, () => 0)
+    const none = await times.medians()
+    expect(none.all.size + none.own.size).toBe(0)
+    fail = false
+    expect(medianOf(await times.medians(), ids.a, 'boot')).toBe(40)
+  })
+
   test('an asleep server’s route says how long its wake takes', async () => {
     const route = (await h.app.edge.routes()).routes.find((r) => r.hostname === hostnameOfA)
     expect(route?.state).toBe('asleep')
