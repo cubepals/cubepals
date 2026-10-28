@@ -104,7 +104,7 @@ jobs:
           fi
       # A second try covers a blip reaching Fly, as the stop below has.
       - name: Turn the edge's Xbox sign-in check on
-        if: always() && steps.validation.conclusion == 'success'
+        if: always() && steps.validation.conclusion != 'skipped'
         run: |
           fly secrets set BEDROCK_VALIDATE_LOGIN=true -a bly-staging-edge ||
             (sleep 60 && fly secrets set BEDROCK_VALIDATE_LOGIN=true -a bly-staging-edge)

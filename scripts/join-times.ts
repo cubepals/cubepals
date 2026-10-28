@@ -255,6 +255,7 @@ const secondsOf = (ms: number) => (ms / 1000).toFixed(1)
 
 const made: Made[] = []
 const rows: string[] = []
+let failures = 0
 const lines = new Map<string, Set<string>>()
 try {
   for (const template of templates) made.push(await make(template))
@@ -269,8 +270,10 @@ try {
           const result = await joinOnce(client, `${server.slug}.${PLAY_DOMAIN}`, name)
           say(JSON.stringify({ template: server.template, state: wanted, client, held, ...result }))
           const ms = inWorldMs(client, result)
-          if (ms === null) failed++
-          else times.push(ms)
+          if (ms === null) {
+            failed++
+            failures++
+          } else times.push(ms)
           for (const seen of (result.lines ?? []) as { line: string }[]) {
             const key = `${server.template} ${wanted}`
             lines.set(key, (lines.get(key) ?? new Set()).add(seen.line.replaceAll('\n', ' / ')))
@@ -303,4 +306,5 @@ try {
   say(`\n${left.length} servers to the trash and the purge`)
   await database.close()
 }
-process.exit(0)
+// A join that didn't reach the world is a run to look at, whatever the table shows.
+process.exit(failures > 0 ? 1 : 0)
