@@ -15,7 +15,6 @@ import { randomUUID } from 'node:crypto'
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
-import type { models } from '../../infra/polar/polar-models.ts'
 import { hasDatabase } from '../../testing/harness.ts'
 import {
   customerState,
@@ -180,7 +179,7 @@ test.skipIf(!hasDatabase)(
 )
 
 test.skipIf(!hasDatabase)(
-  'a refund Polar refuses is audited and asked again later; the standing and the other refunds go through',
+  'a refund Polar refuses is noted once and asked again later; the standing goes through',
   async () => {
     const owner = await w.h.user('Tam')
     const first = randomUUID()
@@ -188,33 +187,24 @@ test.skipIf(!hasDatabase)(
     const earlier = new Date(Date.now() - 10 * MINUTE_MS)
     await w.ordered(owner, first, { created_at: earlier.toISOString() })
     const refused = await w.ordered(owner, second, { created_at: new Date().toISOString() })
-    const taken = await w.ordered(owner, second, { created_at: new Date().toISOString() })
     const answer = w.polar.reply
     w.polar.reply = (request) =>
-      request.method === 'POST' &&
-      request.path === '/v1/refunds/' &&
-      (JSON.parse(request.body) as models.RefundCreate).order_id === refused
-        ? refundedAlready
-        : answer(request)
+      request.method === 'POST' && request.path === '/v1/refunds/' ? refundedAlready : answer(request)
 
     const delivered = await paying(owner, [listed(second, new Date()), listed(first, earlier)])
     expect(delivered.ok).toBe(true)
     expect((await kept(owner)).get(first)).toMatchObject({ status: 'active', cancelAtPeriodEnd: false })
     expect((await loadStanding(w.h.db, owner.userId)).plan).toBe('plus')
     expect(ended(second)).toHaveLength(1)
-    expect(w.refunds.filter((r) => r.order_id === taken)).toHaveLength(1)
-    expect(await w.audited(owner, 'billing.second_subscription_refunded')).toEqual([
-      expect.objectContaining({ order: taken, subscription: second }),
-    ])
     expect(await w.audited(owner, 'billing.second_subscription_refund_not_taken')).toEqual([
       expect.objectContaining({ order: refused, subscription: second }),
     ])
 
-    // The order's own word, while Polar still refuses, is kept as any order's is; the refusal is
-    // audited again.
+    // The order's own word, while Polar still refuses as before, is kept as any order's is, and the
+    // same refusal is not noted twice.
     const still = await w.post(orderEvent(w.orders.get(refused) as never, 'order.updated'))
     expect(still.ok).toBe(true)
-    expect(await w.audited(owner, 'billing.second_subscription_refund_not_taken')).toHaveLength(2)
+    expect(await w.audited(owner, 'billing.second_subscription_refund_not_taken')).toHaveLength(1)
 
     // The order's next word asks for its refund again, and Polar takes it this time.
     w.polar.reply = answer
@@ -222,7 +212,34 @@ test.skipIf(!hasDatabase)(
     expect(w.refunds.filter((r) => r.order_id === refused)).toEqual([
       expect.objectContaining({ amount: 1500, reason: 'duplicate' }),
     ])
-    expect(w.refunds.filter((r) => r.order_id === taken)).toHaveLength(1)
+  },
+)
+
+test.skipIf(!hasDatabase)(
+  'a second subscription found after it renewed has its newest charge refunded and the older ones held for a person',
+  async () => {
+    const owner = await w.h.user('Uli')
+    const first = randomUUID()
+    const second = randomUUID()
+    const earlier = new Date(Date.now() - 90 * MINUTE_MS)
+    await w.ordered(owner, first, { created_at: earlier.toISOString() })
+    const older = await w.ordered(owner, second, {
+      created_at: new Date(Date.now() - 60 * MINUTE_MS).toISOString(),
+    })
+    const newest = await w.ordered(owner, second, { created_at: new Date().toISOString() })
+
+    const ours = () => w.refunds.filter((r) => r.order_id === older || r.order_id === newest)
+    await paying(owner, [listed(second, new Date(Date.now() - 60 * MINUTE_MS)), listed(first, earlier)])
+    expect(ours().map((r) => r.order_id)).toEqual([newest])
+    expect(await w.audited(owner, 'billing.second_subscription_refund_held')).toEqual([
+      expect.objectContaining({ order: older, subscription: second, cents: 1500 }),
+    ])
+
+    // Said again, the older charge is neither refunded nor noted twice, and its own word holds it too.
+    await paying(owner, w.polar.states.get(owner.userId)?.active_subscriptions ?? [])
+    await w.post(orderEvent(w.orders.get(older) as never, 'order.updated'))
+    expect(ours().map((r) => r.order_id)).toEqual([newest])
+    expect(await w.audited(owner, 'billing.second_subscription_refund_held')).toHaveLength(1)
   },
 )
 

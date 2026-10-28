@@ -35,6 +35,9 @@ type Other = NonNullable<BillingState['others']>[number]
 const STOPPED = 'billing.second_subscription_stopped'
 /** A subscription stopped as a second one that later became the one in force, paying as any does. */
 const IN_FORCE = 'billing.second_subscription_in_force'
+/** An older charge of a second subscription, kept for a person to decide on, not refunded. */
+const HELD = 'billing.second_subscription_refund_held'
+const NOT_TAKEN = 'billing.second_subscription_refund_not_taken'
 const WHY = 'A second subscription to time already paid for.'
 
 /**
@@ -91,9 +94,11 @@ export async function stopSecondSubscriptions(
 }
 
 /**
- * Every charge of a second subscription kept so far, refunded each on its own. The provider not
- * answering fails the word, which it delivers again; a refund it refuses is audited, the rest are
- * still asked for, and the standing is saved all the same: it is asked again later.
+ * The newest charge of a second subscription, refunded: the one that paid again for time already
+ * paid for. Older charges, kept from before it was found (two subscriptions both renewing for
+ * months), are never refunded on their own: each is noted once for a person to decide. The
+ * provider not answering fails the word, which it delivers again; a refund it refuses is noted
+ * and the standing saved all the same; it is asked again later.
  */
 async function refundCharges(
   db: Db,
@@ -102,7 +107,20 @@ async function refundCharges(
   subscription: string,
   reach: <T>(call: () => Promise<T>) => Promise<T>,
 ): Promise<void> {
-  const charged = await db
+  const [newest, ...older] = await chargesOf(db, billing.provider, userId, subscription)
+  for (const order of older) await holdForPerson(db, userId, subscription, order)
+  if (newest === undefined) return
+  try {
+    await reach(() => refundCharge(db, billing, userId, subscription, newest))
+  } catch (error) {
+    if (error instanceof BillingUnavailable) throw error
+    await refundNotTaken(db, userId, subscription, newest.externalOrderId, error)
+  }
+}
+
+/** A second subscription's charges kept so far, the newest first. */
+const chargesOf = (db: Db, provider: string, userId: string, subscription: string) =>
+  db
     .select({
       externalOrderId: orders.externalOrderId,
       status: orders.status,
@@ -112,41 +130,51 @@ async function refundCharges(
     .from(orders)
     .where(
       and(
-        eq(orders.provider, billing.provider),
+        eq(orders.provider, provider),
         eq(orders.userId, userId),
         eq(orders.externalSubscriptionId, subscription),
       ),
     )
-  for (const order of charged) {
-    try {
-      await reach(() => refundCharge(db, billing, userId, subscription, order))
-    } catch (error) {
-      if (error instanceof BillingUnavailable) throw error
-      await refundNotTaken(db, userId, subscription, order.externalOrderId, error)
-    }
-  }
+    .orderBy(desc(orders.orderedAt))
+
+type Charge = Awaited<ReturnType<typeof chargesOf>>[number]
+
+/** The latest note of `action` about one order, if any. */
+async function latestNote(db: Db, userId: string, action: string, order: string) {
+  const [row] = await db
+    .select({ data: log.data })
+    .from(log)
+    .where(and(eq(log.action, action), eq(log.subjectId, userId), sql`${log.data}->>'order' = ${order}`))
+    .orderBy(desc(log.at))
+    .limit(1)
+  return row
+}
+
+/** An older charge of a second subscription that still holds money, noted once for a person. */
+async function holdForPerson(db: Db, userId: string, subscription: string, order: Charge) {
+  const cents = order.netCents - order.refundedCents
+  if (!PAID_ORDER.includes(order.status) || cents <= 0) return
+  if (await latestNote(db, userId, HELD, order.externalOrderId)) return
+  await mark(db, userId, HELD, { order: order.externalOrderId, subscription, cents })
 }
 
 /**
- * A refund the provider didn't take (refunded by hand already, too old), audited. Its claim was
- * released (`refundCharge`), so the order's next word, or the next sync, asks for it again.
+ * A refund the provider didn't take (refunded by hand already, too old), noted once for each thing
+ * it said. Its claim was released (`refundCharge`), so the order's next word, or the next sync,
+ * asks for it again.
  */
 async function refundNotTaken(db: Db, userId: string, subscription: string, order: string, error: unknown) {
-  await db.insert(log).values({
-    actor: 'system:billing',
-    action: 'billing.second_subscription_refund_not_taken',
-    subjectType: 'account',
-    subjectId: userId,
-    data: { order, subscription, error: error instanceof Error ? error.message : String(error) },
-  })
+  const said = error instanceof Error ? error.message : String(error)
+  if ((await latestNote(db, userId, NOT_TAKEN, order))?.data.error === said) return
+  await mark(db, userId, NOT_TAKEN, { order, subscription, error: said })
 }
 
 /**
- * An order's word (`BillingService.receiveWebhook`): a charge of a subscription stopped as a
- * second one is refunded, as `stopSecondSubscriptions` refunds those it finds kept already. A
- * refund the provider refuses is audited and the rest of the order's word goes on: the next sync,
- * or the order's next word, asks for it again. The provider not answering fails the word, which
- * it delivers again.
+ * An order's word (`BillingService.receiveWebhook`): the newest charge of a subscription stopped as
+ * a second one is refunded, as `stopSecondSubscriptions` refunds it; an older one is noted for a
+ * person. A refund the provider refuses is noted and the rest of the order's word goes on: the
+ * next sync, or the order's next word, asks for it again. The provider not answering fails the
+ * word, which it delivers again.
  */
 export async function refundSecondCharge(
   db: Db,
@@ -157,12 +185,14 @@ export async function refundSecondCharge(
   if (order.userId === null || sub === null || !PAID_ORDER.includes(order.status)) return
   if (!(await stoppedAsSecond(db, order.userId, sub))) return
   const userId = order.userId
-  await refundCharge(db, requireCapability(capabilities, 'billing'), userId, sub, order).catch(
-    async (error: unknown) => {
-      if (error instanceof BillingUnavailable) throw error
-      await refundNotTaken(db, userId, sub, order.externalOrderId, error)
-    },
-  )
+  const billing = requireCapability(capabilities, 'billing')
+  const [newest] = await chargesOf(db, billing.provider, userId, sub)
+  if (newest !== undefined && newest.externalOrderId !== order.externalOrderId)
+    return holdForPerson(db, userId, sub, order)
+  await refundCharge(db, billing, userId, sub, order).catch(async (error: unknown) => {
+    if (error instanceof BillingUnavailable) throw error
+    await refundNotTaken(db, userId, sub, order.externalOrderId, error)
+  })
 }
 
 /**
