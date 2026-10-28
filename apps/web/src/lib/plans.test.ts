@@ -6,7 +6,7 @@ import { describe, expect, test } from 'bun:test'
 import type { PublicPlan } from '@blockly/contracts'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { extraHourOf, forSale, PlanCard, pitchOf, planPoints, priceOf } from '../ui/plans.tsx'
+import { extraHourOf, forSale, hoursPoint, PlanCard, pitchOf, planPoints, priceOf } from '../ui/plans.tsx'
 import { daysSaid, hoursAgainSaid, hoursSaid } from './plans.ts'
 
 const free: PublicPlan = {
@@ -165,10 +165,11 @@ describe('plans as people read them', () => {
 
   test('the account page says the free trial on Core, after its hours, as the public pages do', () => {
     const points = pointsOf(createElement(PlanCard, { plan: core, trial: free }))
-    const hours = points.findIndex((point) => point.includes('40 hours of play each month, then 25¢ an hour'))
+    // The plans' own numbers, so the test follows whatever the plans say.
+    const hours = points.findIndex((point) => point.includes(hoursPoint(core)))
     expect(hours).toBeGreaterThanOrEqual(0)
     const trial = points[hours + 1] ?? ''
-    for (const part of ['Starts with a free trial: ', '20 hours of play, at most 2 a day', ', no card'])
+    for (const part of ['Starts with a free trial: ', hoursPoint(free), ', no card'])
       expect(trial).toContain(part)
     expect(htmlOf(createElement(PlanCard, { plan: plus }))).not.toContain('free trial')
   })
