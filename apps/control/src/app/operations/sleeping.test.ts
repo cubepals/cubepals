@@ -19,7 +19,9 @@ import { MemoryStore } from '../../testing/memory-store.ts'
 import type { UserActor } from '../actor.ts'
 import { listBackups } from '../backups/persistence.ts'
 import { loadRevision } from '../servers/persistence.ts'
+import { serverBinding } from './handlers/binding.ts'
 import { lastWakeSeconds } from './persistence.ts'
+import type { OperationContext } from './runner.ts'
 
 const operations = schema.serverOperations
 
@@ -87,7 +89,7 @@ describe.skipIf(!hasDatabase)('which stops put a server to sleep', () => {
       await stop(owner, id, reason)
       expect(h.runtime.machine(id)?.state).toBe('suspended')
       // Saved first, then written through to its disk, then asleep.
-      expect(await stepsOfLast(h, id, 'stop')).toEqual(['saving', 'stopping'])
+      expect(await stepsOfLast(h, id, 'stop')).toEqual(['saving', 'stopping', 'slept'])
       expect((await h.server(id)).lifecycle).toMatchObject({ status: 'stopped', stopReason: reason })
 
       const steps = await start(owner, id)
@@ -100,12 +102,33 @@ describe.skipIf(!hasDatabase)('which stops put a server to sleep', () => {
     expect(await lastWakeSeconds(h.db, id, 'booted')).toBeNull()
   }, 60_000)
 
+  test('a machine found stopped though its last sleep kept its memory reads, on the record, as memory lost', async () => {
+    const { owner, id } = await running()
+    await stop(owner, id)
+    expect(await stepsOfLast(h, id, 'stop')).toEqual(['saving', 'stopping', 'slept'])
+    const marks: string[] = []
+    const ctx = { mark: async (mark: string) => void marks.push(mark) } as unknown as OperationContext
+    // Only the database is read to say what a runtime's mark means.
+    const sink = serverBinding({ db: h.db, runtime: {} as never, jobs: {} as never }).progressSink(
+      ctx,
+      await h.server(id),
+    )
+    await sink.mark?.('not_asleep')
+    await sink.mark?.('other_spec')
+    // A start spends the memory kept: a machine stopped after that just wasn't asleep.
+    await start(owner, id)
+    await sink.mark?.('not_asleep')
+    expect(marks).toEqual(['memory_lost', 'other_spec', 'not_asleep'])
+  })
+
   test('a stop for anything but sleep, a restart or a change stops it for real', async () => {
     const { owner, id } = await running()
     const sleeps = spyOn(h.runtime.sleeps, 'sleep')
     try {
       await stop(owner, id, 'maintenance')
       expect(h.runtime.machine(id)?.state).toBe('stopped')
+      // The record says why it didn't sleep.
+      expect(await stepsOfLast(h, id, 'stop')).toEqual(['saving', 'stopping', 'stop_reason'])
       expect(await start(owner, id)).not.toContain('resuming')
 
       await h.app.servers.restart(owner, id, randomUUID())
