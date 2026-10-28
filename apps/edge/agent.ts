@@ -467,7 +467,9 @@ function asleep(address: string): NoticeText {
   const route = routes.find((r) => r.hostname === name)
   const icon = route?.icon === undefined ? undefined : icons.get(route.icon)
   const waking = wakingLine.of(name, route?.waking === true || pingWakes.waking(name), route?.wakeSeconds)
-  const status = resting(route) ? restingStatus(route?.motd) : asleepMessage(route?.motd, waking ?? ASLEEP.status)
+  const status = resting(route)
+    ? restingStatus(route?.motd)
+    : asleepMessage(route?.motd, waking ?? ASLEEP.status)
   return { ...ASLEEP, status, ...(icon ? { icon } : {}), ...(route?.joins ? { joins: route.joins } : {}) }
 }
 
