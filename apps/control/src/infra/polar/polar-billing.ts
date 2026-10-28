@@ -25,8 +25,8 @@ import { giftCheckoutUrl, giftOf, giftOrderOf, giftProducts } from './polar-gift
 import {
   CHECKOUT_LEFT_MS,
   call,
-  largestPaying,
   moveSubscription,
+  paying,
   refusal,
   upgradeSubscription,
   withEmail,
@@ -536,15 +536,25 @@ export class PolarBilling implements BillingProvider {
     }
   }
 
-  /** A refund through Polar, which takes the amount before tax and refunds the tax on it with it. */
+  /**
+   * A refund through Polar, which takes the amount before tax and refunds the tax on it with it.
+   * Polar answers an order refunded in full already with a 403 of its own, a refusal and not Polar
+   * being unavailable, as `call` takes other 403s.
+   */
   async refund(input: { externalOrderId: string; cents: number; why: string }): Promise<void> {
     await call('refunding an order', () =>
-      this.#polar.refunds.create({
-        order_id: input.externalOrderId,
-        amount: input.cents,
-        reason: 'duplicate',
-        comment: input.why,
-      }),
+      this.#polar.refunds
+        .create({
+          order_id: input.externalOrderId,
+          amount: input.cents,
+          reason: 'duplicate',
+          comment: input.why,
+        })
+        .catch((error: unknown) => {
+          if (error instanceof errors.RefundedAlready)
+            throw new Error(`Polar refused the refund: ${refusal(error)}`)
+          throw error
+        }),
     )
   }
 
@@ -639,9 +649,7 @@ export class PolarBilling implements BillingProvider {
     }
     // The plans smallest first, as configuration lists them.
     const ranked = Object.keys(this.#products)
-    const paid = largestPaying(state.active_subscriptions, (product) =>
-      ranked.indexOf(plans.get(product) ?? ''),
-    )
+    const { paid, others } = paying(state.active_subscriptions, plans, ranked)
     return {
       userId: state.external_id,
       externalCustomerId: state.id,
@@ -659,6 +667,7 @@ export class PolarBilling implements BillingProvider {
               ...(paid.created_at ? { createdAt: new Date(paid.created_at) } : {}),
               canceledAt: paid.canceled_at ? new Date(paid.canceled_at) : null,
             },
+      others,
     }
   }
 }

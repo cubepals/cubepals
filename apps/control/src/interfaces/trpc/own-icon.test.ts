@@ -2,7 +2,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { describe, expect, test } from 'bun:test'
+/**
+ * An owner's own server icon as the page sends it: kept as its pixels alone, and refused unless it
+ * is a 64 square PNG, by its header before any of it is decoded.
+ */
+import { describe, expect, spyOn, test } from 'bun:test'
 import { crc32 } from 'node:zlib'
 import { OWN_ICON_MAX_BYTES } from '@blockly/contracts'
 import { PNG } from 'pngjs'
@@ -45,5 +49,22 @@ describe('an owner’s own icon', () => {
     expect(refusal(picture(65, 64))).toBe('invalid_choice')
     expect(refusal(picture(32, 32))).toBe('invalid_choice')
     expect(refusal(new Uint8Array(OWN_ICON_MAX_BYTES + 1))).toBe('invalid_choice')
+  })
+
+  test('refuses one whose header says another size before decoding any of it', () => {
+    // A 64 square PNG whose header is rewritten to say 4096 square, its checksum made again.
+    const sent = Buffer.from(picture())
+    sent.writeUInt32BE(4096, 16)
+    sent.writeUInt32BE(4096, 20)
+    sent.writeUInt32BE(crc32(sent.subarray(12, 29)), 29)
+    const read = spyOn(PNG.sync, 'read')
+    try {
+      expect(refusal(sent)).toBe('invalid_choice')
+      expect(read).not.toHaveBeenCalled()
+      expect(refusal(picture())).toBe('none')
+      expect(read).toHaveBeenCalledTimes(1)
+    } finally {
+      read.mockRestore()
+    }
   })
 })

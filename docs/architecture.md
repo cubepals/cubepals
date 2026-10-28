@@ -619,7 +619,7 @@ tRPC procedure (parse input, get actor, call ONE method, return)
 | `MinecraftServerService` | `createMinecraftServer`, `suggestAddress`, `start`, `stop`, `stopForMaintenance` (admin), `restart`, `retry`, `relocate`, `relocateForPlatform`, `deleteServer`, `terminate`, `undeleteServer`; `saveIdentity` (name, description, icon, tags), `changeAddress`, `resetInvite`, `keep` (a server made for a while, §15.6), `keepWorld` (§15.5 retention) |
 | `SetupService` | `setupFrom`, `resolve` (what a new server runs, §15.6), `checkPacks`, `unchecked`, `checkBrowsed` (`pack-checks`), `pinnedPack` |
 | `ModService` | `search`, `versions`, `plan` / `apply` (a mod change, resolved as one set by `domain/mods/resolve.ts`, the catalog states it saw written through to the cache), `planVersion` / `changeVersion`, `resolveNew` (for a server not made yet); `beginUpload` / `finishUpload` (presigned PUT → verify sha512 and jar, refuse known malware → `StoredArtifact` + `ModUpload`, `jar-check` queued), `deleteUpload` |
-| `JarChecks` | uploaded jars against the lists of known malware (§15.2): `screen` / `start` at upload, `run` (the `jar-check` job), `refresh` (`malware-lists`), `list` / `release` for operators |
+| `JarChecks` | uploaded jars against the lists of known malware (§15.2): `screen` / `start` at upload, `check` / `lookUp` while a pack is built, `run` (the `jar-check` job), `refresh` (`malware-lists`), `list` / `release` for operators |
 | `PackService` | packs people bring (docs/modpack-system.md): `beginUpload` / `finishUpload`, `runImport` / `importGaveUp` (the `pack-import` job), `view`, `pinnedFrom`, `linkOf`, `versions`, `updateFor`, `server` |
 | `RevisionService` | `changeSettings`, `changeAuthentication`, `changeVersion`, `changeMods`, `changePack`, `resize`, `rollback` (each refuses taken-down artifacts without an explicit acknowledgement, §15.3) |
 | `WorldService` | `createWorld`, `switchWorld`, `freshStart`, `deleteWorld` (its directories go by `prune_worlds`) |
@@ -1942,9 +1942,19 @@ PaperMC's catalog, and not on Modrinth: OldCombatMechanics and VaultUnlocked amo
    bytecode flags (network class loading, `Runtime.exec`/`ProcessBuilder`, `sun.misc.Unsafe`,
    writes outside the server folder, obfuscation) only mark it `flagged` for operators.
 
+**Jars in uploaded packs.** While an uploaded pack is built (`packs/build.ts`), every jar it
+carries, in its mods folder or wherever else it is placed, is read as step 5 reads an upload, and
+every jar it lists by its download is looked up by the digests the pack gives. One that matches
+refuses the pack. Each gets a `jar_checks` row by its sha512, and `pack_contents` keeps each one's
+path and sha512 (`jars`, and `other_jars` for those outside its mods), so a jar a list later
+names by a digest is quarantined and left out of its pack's servers at their next start. A
+pack's jar has no bytes kept of its own: when the lists change, its answer stands until a pack
+carrying it is next built, which reads it again. A jar a pack only lists is read when its bytes
+next arrive, uploaded or carried in a pack.
+
 The lists are fetched by `malware-lists` every six hours and at each worker start, from where
 each is published (`infra/malware/`: MCAntiMalware's `database.db`, GPL-3.0 scanner, data read
-in place). A list that changed re-reads every jar, and a jar a list now names by digest is
+in place). A list that changed re-reads every uploaded jar, and a jar a list now names by digest is
 quarantined, its owners emailed. A quarantined jar is never pinned, is left out of every
 start's spec (`servers/specs.ts`), so it comes off at the next start, and `locate` never hands
 it to a runtime; the world and other files stay. Operators read and release checks with

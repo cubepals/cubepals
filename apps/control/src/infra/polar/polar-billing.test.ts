@@ -12,6 +12,7 @@ import type { webhooks } from '@polar-sh/sdk/2026-10'
 import { type BillingState, BillingUnavailable, WebhookRejected } from '../../app/ports/optional.ts'
 import {
   type Answer,
+  CORE_PRODUCT,
   type CustomerState,
   checkout,
   customer,
@@ -39,6 +40,7 @@ import {
   webhookSecret,
 } from '../../testing/polar.ts'
 import { PolarBilling } from './polar-billing.ts'
+import { paying } from './polar-requests.ts'
 
 const PLUS = PLUS_PRODUCT
 const SECRET = webhookSecret()
@@ -61,6 +63,7 @@ const PLUS_STANDING: BillingState = {
     productId: PLUS,
     terms: null,
   },
+  others: [],
 }
 
 describe('PolarBilling', () => {
@@ -472,4 +475,41 @@ describe('PolarBilling paying a balance', () => {
       external_customer_id: 'user_9',
     })
   })
+})
+
+test('of two subscriptions for one plan the one made first is in force, and the other is listed beside it', () => {
+  const [plus] = state('user_123').active_subscriptions
+  if (plus === undefined) throw new Error('the state lists no subscription')
+  const later = { ...plus, id: 'sub_later', created_at: '2026-09-20T00:00:00Z', cancel_at_period_end: true }
+  const core = { ...plus, id: 'sub_core', product_id: CORE_PRODUCT, created_at: '2026-08-01T00:00:00Z' }
+  const plans = new Map([
+    [CORE_PRODUCT, 'core'],
+    [PLUS_PRODUCT, 'plus'],
+  ])
+  const { paid, others } = paying([later, core, plus], plans, ['core', 'plus'])
+  expect(paid?.id).toBe(plus.id)
+  expect(others).toEqual([
+    {
+      externalSubscriptionId: 'sub_later',
+      planKey: 'plus',
+      cancelAtPeriodEnd: true,
+      createdAt: new Date('2026-09-20T00:00:00Z'),
+    },
+    {
+      externalSubscriptionId: 'sub_core',
+      planKey: 'core',
+      cancelAtPeriodEnd: false,
+      createdAt: new Date('2026-08-01T00:00:00Z'),
+    },
+  ])
+})
+
+test('of a subscription set to end and one for its plan made after it that renews, the renewing one is in force', () => {
+  const [plus] = state('user_123').active_subscriptions
+  if (plus === undefined) throw new Error('the state lists no subscription')
+  const ending = { ...plus, id: 'sub_ending', cancel_at_period_end: true }
+  const again = { ...plus, id: 'sub_again', created_at: '2026-09-20T00:00:00Z' }
+  const { paid, others } = paying([ending, again], new Map([[PLUS_PRODUCT, 'plus']]), ['core', 'plus'])
+  expect(paid?.id).toBe('sub_again')
+  expect(others.map((other) => other.externalSubscriptionId)).toEqual(['sub_ending'])
 })

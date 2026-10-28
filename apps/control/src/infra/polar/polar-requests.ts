@@ -9,7 +9,7 @@
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import { PolarClientError, PolarError, PolarRateLimitError } from '@polar-sh/sdk'
 import { type createPolar, errors, type models } from '@polar-sh/sdk/2026-10'
-import { BillingUnavailable } from '../../app/ports/optional.ts'
+import { type BillingState, BillingUnavailable } from '../../app/ports/optional.ts'
 
 /** An open checkout is offered again only with this long left on it, to be paid in. */
 export const CHECKOUT_LEFT_MS = 15 * MINUTE_MS
@@ -43,18 +43,48 @@ export async function call<T>(what: string, request: () => Promise<T>): Promise<
   }
 }
 
+/** A subscription as a customer's state lists it, as far as which pays for what goes. */
+interface Listed {
+  id: string
+  product_id: string
+  cancel_at_period_end: boolean
+  created_at?: string | null
+}
+
 /**
  * Of an account's subscriptions that pay at once (Core, then Plus bought over it), the one for the
- * largest plan: `rank` is where a product's plan stands, the smallest first, and below 0 for one
- * that sells no plan, which is left out.
+ * largest plan, and of two for it the one that renews (one set to end, then bought again), then the
+ * one made first (`paid`); and every other for a plan, as `BillingState.others`. `plans` maps each
+ * subscription's product to the plan it sells, and `ranked` lists the plans smallest first.
  */
-export function largestPaying<T extends { product_id: string }>(
+export function paying<T extends Listed>(
   subscriptions: readonly T[],
-  rank: (productId: string) => number,
-): T | undefined {
-  return subscriptions
-    .filter((each) => rank(each.product_id) >= 0)
-    .sort((a, b) => rank(b.product_id) - rank(a.product_id))[0]
+  plans: ReadonlyMap<string, string>,
+  ranked: readonly string[],
+): { paid: T | undefined; others: NonNullable<BillingState['others']> } {
+  const rank = (subscription: T) => ranked.indexOf(plans.get(subscription.product_id) ?? '')
+  const made = (subscription: T) => (subscription.created_at ? Date.parse(subscription.created_at) : 0)
+  const paid = subscriptions
+    .filter((each) => rank(each) >= 0)
+    .sort(
+      (a, b) =>
+        rank(b) - rank(a) ||
+        Number(a.cancel_at_period_end) - Number(b.cancel_at_period_end) ||
+        made(a) - made(b),
+    )[0]
+  const others = subscriptions.flatMap((each) => {
+    const planKey = plans.get(each.product_id)
+    if (planKey === undefined || each === paid) return []
+    return [
+      {
+        externalSubscriptionId: each.id,
+        planKey,
+        cancelAtPeriodEnd: each.cancel_at_period_end,
+        ...(each.created_at ? { createdAt: new Date(each.created_at) } : {}),
+      },
+    ]
+  })
+  return { paid, others }
 }
 
 /**

@@ -35,6 +35,7 @@ import {
   writeEntries,
 } from './audit.ts'
 import { PAST_DUE_GRACE_MS, type SubscriptionRecord } from './persistence.ts'
+import { stoppedAsSecond } from './second-subscriptions.ts'
 
 const subscriptions = schema.billingSubscriptions
 
@@ -81,6 +82,8 @@ export class SubscriptionEnding {
     const sub = order.externalSubscriptionId
     if (order.userId === null || sub === null || order.planKey === null) return
     if (order.paysForYear || order.refundedCents <= 0) return
+    // A second subscription's charge given back is no withdrawal: it is set to end already.
+    if (await stoppedAsSecond(this.#db, order.userId, sub)) return
     const billing = requireCapability(this.#caps, 'billing')
     const [open] = await this.#db
       .select({ id: subscriptions.id })

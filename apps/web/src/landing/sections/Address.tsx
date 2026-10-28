@@ -7,8 +7,8 @@
  * arrives at one door, which reads the name they typed and sends them through, and answers for a
  * server that is asleep. The demonstration knocks on it by itself, and lets someone else knock.
  *
- * The heading says "while the server sleeps", not "always": a resting world has no route while it
- * is being woken or put away, and an unknown name is closed without an answer.
+ * The heading names the one door, not an address that always answers: a resting world has no route
+ * while it is being woken or put away, and an unknown name is closed without an answer.
  */
 import type { PublicPlan } from '@blockly/contracts'
 import { Demo, Facts, Section } from '../kit'
@@ -21,7 +21,7 @@ export function Address({ plans = [], bare }: { plans?: PublicPlan[]; bare?: boo
 
   return (
     <Section bare={bare} tone="stone" room="edge" className={styles.address}>
-      <h2 className="bl-h2">One address that answers while the server sleeps</h2>
+      <h2 className="bl-h2">One door for every player</h2>
       <p className="bl-lede">
         Every player arrives at one door, the edge, which reads the name they typed and sends them through. A
         join is what wakes a sleeping server.

@@ -175,15 +175,16 @@ export function jarNamed(paths: readonly string[], name: string): string | null 
 
 /**
  * What a pack server leaves out now: what was pinned with it, and what its pack learned since
- * (`crashed`: a mod that stopped one of its servers as it started), less what the pack put back.
- * A learned jar may be one the pack lists or one it carries in its overrides; both are said.
+ * (`crashed`: a mod that stopped one of its servers as it started), less what the pack put back
+ * (gone from what it left out, or `needed`). A learned jar may be one the pack lists or one it carries in its overrides; both are said.
  */
 export function leaveOutNow(
   pinned: readonly string[],
   learned: ReadonlyArray<{ path: string; why: string }> | null,
 ): string[] {
   if (learned === null) return [...pinned]
-  const still = new Set(learned.map((l) => l.path))
+  // A `needed` entry is one its servers run after all.
+  const still = new Set(learned.filter((l) => l.why !== 'needed').map((l) => l.path))
   const crashed = learned
     .filter((l) => l.why === 'crashed')
     .flatMap((l) => (/^(server-)?overrides\//.test(l.path) ? [l.path] : [l.path, `overrides/${l.path}`]))

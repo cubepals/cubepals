@@ -4,7 +4,8 @@
 
 import { PassThrough, Readable, Transform } from 'node:stream'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
-import { createGunzip, gzipSync } from 'node:zlib'
+import { promisify } from 'node:util'
+import { createGunzip, gunzip, gzipSync } from 'node:zlib'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { configure } from '@zip.js/zip.js'
 import { parse as parseProperties } from 'dot-properties'
@@ -124,21 +125,11 @@ export class LibraryFileFormats implements FileFormats {
   }
 
   async decodeNbt(bytes: Uint8Array): Promise<unknown> {
-    try {
-      const { parsed } = await nbt.parse(Buffer.from(bytes), 'big')
-      return nbt.simplify(parsed)
-    } catch (error) {
-      throw new UnreadableFile(`Not an NBT file: ${messageOf(error)}`)
-    }
+    return nbt.simplify(await parsedNbt(bytes))
   }
 
   async nbtPart(bytes: Uint8Array, path: readonly string[]): Promise<Uint8Array | null> {
-    let parsed: nbt.NBT
-    try {
-      parsed = (await nbt.parse(Buffer.from(bytes), 'big')).parsed
-    } catch (error) {
-      throw new UnreadableFile(`Not an NBT file: ${messageOf(error)}`)
-    }
+    const parsed = await parsedNbt(bytes)
     let tag: nbt.Tags[nbt.TagType] = parsed
     for (const key of path) {
       if (tag.type !== 'compound') return null
@@ -339,5 +330,26 @@ const MAX_JAR_RECORDS = 20_000
 const MAX_SCANNED_RECORDS = 150_000
 const BATCH_BYTES = 64 * 1024 * 1024
 const INFLATED_CHUNK_BYTES = 1024 * 1024
+
+/** A level.dat or a player's file is kilobytes inflated, a heavily modded one a few megabytes. */
+const MAX_NBT_BYTES = 64 * 1024 * 1024
+/** gzip's magic bytes (RFC 1952): a file that starts with them is gzipped. */
+const GZIP_MAGIC = [0x1f, 0x8b]
+const gunzipped = promisify(gunzip)
+
+/**
+ * An NBT file as Minecraft writes it, gzipped or not, inflated here up to `MAX_NBT_BYTES` and
+ * parsed as it is then: prismarine-nbt's own `parse` inflates with no limit.
+ */
+async function parsedNbt(bytes: Uint8Array): Promise<nbt.NBT> {
+  try {
+    let data = Buffer.from(bytes)
+    if (GZIP_MAGIC.every((byte, at) => data[at] === byte))
+      data = await gunzipped(data, { maxOutputLength: MAX_NBT_BYTES })
+    return nbt.parseUncompressed(data, 'big')
+  } catch (error) {
+    throw new UnreadableFile(`Not an NBT file: ${messageOf(error)}`)
+  }
+}
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))

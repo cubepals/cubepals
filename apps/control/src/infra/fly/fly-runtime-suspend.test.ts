@@ -45,7 +45,12 @@ async function running(options: { suspend?: boolean; switchless?: boolean; spec?
     ...(options.switchless ? {} : { suspend: async () => flipped.on }),
   })
   const steps: string[] = []
-  const progress: ProgressSink = { step: async (step) => void steps.push(step), handle: async () => {} }
+  const marks: string[] = []
+  const progress: ProgressSink = {
+    step: async (step) => void steps.push(step),
+    handle: async () => {},
+    mark: async (mark) => void marks.push(mark),
+  }
   const handle = await runtime.ensureProvisioned(
     KEY,
     { regionKey: 'eu-central' },
@@ -55,6 +60,7 @@ async function running(options: { suspend?: boolean; switchless?: boolean; spec?
   const machine = fake.machines.get(APP)?.[0]
   if (machine === undefined) throw new Error('no machine')
   steps.length = 0
+  marks.length = 0
   fake.calls.length = 0
   fake.startedFrom.length = 0
   // Writing 3 GB of memory out takes a while: a few reads see it still suspending.
@@ -63,7 +69,7 @@ async function running(options: { suspend?: boolean; switchless?: boolean; spec?
     if (runtime.sleep === undefined) throw new Error('This runtime does not suspend')
     return runtime.sleep(h)
   }
-  return { fake, runtime, handle, machine, steps, progress, sleep, flipped }
+  return { fake, runtime, handle, machine, steps, marks, progress, sleep, flipped }
 }
 
 /** Once Fly has the suspend: the machine is writing its memory out. */
@@ -140,12 +146,13 @@ describe('FlyRuntime putting a server to sleep with Fly’s suspend', () => {
 
 describe('FlyRuntime with a server asleep: waking it, or stopping it', () => {
   test('a wake on the configuration it slept on resumes it, posting and changing nothing first', async () => {
-    const { fake, runtime, handle, machine, steps, progress, sleep } = await running()
+    const { fake, runtime, handle, machine, steps, marks, progress, sleep } = await running()
     await sleep()
     fake.calls.length = 0
     const woken = await runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, spec, progress)
     expect(woken).toBe(handle)
     expect(steps).toEqual(['resuming'])
+    expect(marks).toEqual([])
     expect(fake.startedFrom).toEqual(['suspended'])
     expect(machine.state).toBe('started')
     // Only the listing that found it asleep, and the start: no secrets, app, address or update.
@@ -196,14 +203,24 @@ describe('FlyRuntime with a server asleep: waking it, or stopping it', () => {
   })
 
   test('a wake on a new configuration drops the memory it kept and boots that configuration', async () => {
-    const { fake, runtime, machine, steps, progress, sleep } = await running()
+    const { fake, runtime, machine, steps, marks, progress, sleep } = await running()
     await sleep()
     const changed = { ...spec, env: { ...spec.env, VERSION: '26.4' } }
     await runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, changed, progress)
     expect(steps).toEqual(['allocating', 'storage', 'compute', 'booting'])
+    // Kept on the record: it booted because it slept on another configuration.
+    expect(marks).toEqual(['other_spec'])
     expect(fake.count(`POST /v1/apps/${APP}/secrets`)).toBe(1)
     expect(fake.startedFrom).toEqual(['stopped'])
     expect((machine.config.env as Record<string, string>).VERSION).toBe('26.4')
+  })
+
+  test('a wake of a machine stopped rather than asleep boots it, and says it was not asleep', async () => {
+    const { runtime, handle, steps, marks, progress } = await running()
+    await runtime.stop(handle)
+    await runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, spec, progress)
+    expect(steps).toContain('booting')
+    expect(marks).toEqual(['not_asleep'])
   })
 
   test('a stop, a kill or a decommission of a machine asleep stops it for real', async () => {

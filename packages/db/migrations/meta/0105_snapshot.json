@@ -1,5 +1,5 @@
 {
-  "id": "29b4efe0-14a2-48f6-903c-51e53c8d06f1",
+  "id": "38e929d4-1aef-4151-8340-4064fec3ee53",
   "prevId": "6d7bf338-5bb7-4b1b-8e22-951d4ea09a62",
   "version": "7",
   "dialect": "postgresql",
@@ -1271,6 +1271,13 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
+        },
+        "other_jars": {
+          "name": "other_jars",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
         },
         "left_out": {
           "name": "left_out",
@@ -3130,94 +3137,6 @@
             "id"
           ],
           "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.early_holds": {
-      "name": "early_holds",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "plan_key": {
-          "name": "plan_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "product_id": {
-          "name": "product_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "points": {
-          "name": "points",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "price_cents": {
-          "name": "price_cents",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "included_units": {
-          "name": "included_units",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "most_extra_units": {
-          "name": "most_extra_units",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "paid_at": {
-          "name": "paid_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "early_holds_user_id_users_id_fk": {
-          "name": "early_holds_user_id_users_id_fk",
-          "tableFrom": "early_holds",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },

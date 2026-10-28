@@ -25,28 +25,56 @@ export async function loadPackContents(q: Queryable, sha512: string): Promise<Pa
     loaderVersion: row.loaderVersion,
     playersNeedIt: row.playersNeedIt,
     jars: row.jars,
+    otherJars: row.otherJars,
     leftOut: row.leftOut,
     memoryMb: row.memoryMb,
   }
 }
 
-/** Kept once per file: the same bytes always hold the same things. */
+/**
+ * Kept once per file: the same bytes always hold the same things. A build reads more than a build
+ * before it did, so a row kept before gets what this one adds: the jars placed outside the mods
+ * (`otherJars`), when read, and the sha512 of each jar it leaves out where the row has none. What
+ * the row learned since stays: each entry keeps its own `why` (`crashed`, `needed`).
+ */
 export async function savePackContents(q: Queryable, record: PackContentsRecord): Promise<void> {
-  await q
-    .insert(contents)
-    .values({
-      sha512: record.sha512,
-      name: record.name,
-      versionLabel: record.versionLabel,
-      gameVersion: record.gameVersion,
-      loader: record.loader,
-      loaderVersion: record.loaderVersion,
-      playersNeedIt: record.playersNeedIt,
-      jars: record.jars,
-      leftOut: record.leftOut,
-      memoryMb: record.memoryMb,
+  await q.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(contents)
+      .values({
+        sha512: record.sha512,
+        name: record.name,
+        versionLabel: record.versionLabel,
+        gameVersion: record.gameVersion,
+        loader: record.loader,
+        loaderVersion: record.loaderVersion,
+        playersNeedIt: record.playersNeedIt,
+        jars: record.jars,
+        otherJars: record.otherJars ?? [],
+        leftOut: record.leftOut,
+        memoryMb: record.memoryMb,
+      })
+      .onConflictDoNothing()
+      .returning({ sha512: contents.sha512 })
+    if (inserted.length > 0) return
+    const [row] = await tx
+      .select({ leftOut: contents.leftOut })
+      .from(contents)
+      .where(eq(contents.sha512, record.sha512))
+      .for('update')
+    if (row === undefined) return
+    const digests = new Map(
+      record.leftOut.flatMap((l) => (l.sha512 === undefined ? [] : [[l.path, l.sha512]])),
+    )
+    const leftOut = row.leftOut.map((l) => {
+      const sha512 = l.sha512 ?? digests.get(l.path)
+      return sha512 === undefined ? l : { ...l, sha512 }
     })
-    .onConflictDoNothing()
+    await tx
+      .update(contents)
+      .set({ leftOut, ...(record.otherJars === undefined ? {} : { otherJars: record.otherJars }) })
+      .where(eq(contents.sha512, record.sha512))
+  })
 }
 
 /**
@@ -70,16 +98,35 @@ export async function leavePackJarOut(
   return true
 }
 
-/** A jar a pack's servers left out that they run after all. Says whether it had been left out. */
-export async function keepPackJar(q: Queryable, sha512: string, path: string): Promise<boolean> {
+/**
+ * A jar a pack's servers left out for players' games that they run after all: its entry becomes
+ * `needed`, keeping its sha512, or taking `jarSha512` where it had none, so the jar checks still
+ * find it (`servers/specs.ts`). Says whether it had been left out for players.
+ */
+export async function keepPackJar(
+  q: Queryable,
+  sha512: string,
+  path: string,
+  jarSha512?: string,
+): Promise<boolean> {
   const [row] = await q
     .select({ leftOut: contents.leftOut })
     .from(contents)
     .where(eq(contents.sha512, sha512))
-  if (row === undefined || !row.leftOut.some((l) => l.path === path)) return false
+  if (row === undefined || !row.leftOut.some((l) => l.path === path && l.why === 'players')) return false
   await q
     .update(contents)
-    .set({ leftOut: row.leftOut.filter((l) => l.path !== path) })
+    .set({
+      leftOut: row.leftOut.map((l) =>
+        l.path === path && l.why === 'players'
+          ? {
+              ...l,
+              why: 'needed' as const,
+              ...(l.sha512 === undefined && jarSha512 ? { sha512: jarSha512 } : {}),
+            }
+          : l,
+      ),
+    })
     .where(eq(contents.sha512, sha512))
   return true
 }

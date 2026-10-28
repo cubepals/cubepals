@@ -44,6 +44,7 @@ import {
 import { startFilesWanted, startInfo } from '../../minecraft/server-pack.ts'
 import { fits, type ModMetadata } from '../../minecraft/uploads.ts'
 import { LOADER_LABELS, offeredVersions } from '../../minecraft/versions.ts'
+import type { JarChecks } from '../mods/jar-checks.ts'
 import type { CatalogFileMatch, ModCatalog } from '../ports/catalog.ts'
 import type { CurseForge } from '../ports/curseforge.ts'
 import {
@@ -61,7 +62,9 @@ import { jarMetadata } from './jars.ts'
  * file is read as hostile input, recognised, and written again as a Modrinth pack, the one shape
  * the image installs every pack from. Mods the catalog publishes are listed by their catalog
  * download, where their authors count them; the rest travel inside the pack, as the owner's own
- * files for the owner's own server. Nothing in it is run here.
+ * files for the owner's own server. Every jar it keeps, wherever it is placed, and every one it
+ * leaves to players' games, is checked as an uploaded jar is (`mods/jar-checks.ts`), and one that
+ * matches known malware refuses the pack. Nothing in it is run here.
  */
 
 /** Limits on what an upload may hold once opened (the archive research's, 2026-09-26). */
@@ -96,6 +99,8 @@ export interface BuiltContents {
   loaderVersion: string | null
   playersNeedIt: boolean
   jars: PackJarJson[]
+  /** The other jars it carries, outside the ones it runs as mods; none where not said. */
+  otherJars?: PackJarJson[]
   leftOut: PackLeftOutJson[]
   memoryMb: number | null
 }
@@ -109,6 +114,17 @@ class Refused extends Error {
     this.detail = detail
   }
 }
+
+/** A jar from the upload, hashed and read for what it says of itself. */
+interface JarFacts {
+  sha1: string
+  sha512: string
+  size: number
+  metadata: ModMetadata | null
+}
+
+/** A jar the built pack keeps as a mod, where it goes, and which side runs it. */
+type KeptJar = Omit<JarFacts, 'sha1'> & { path: string; side: string }
 
 /** A file from the upload, and where it goes on the server. */
 interface Placement {
@@ -137,6 +153,7 @@ export class PackBuilder {
   readonly #catalog: ModCatalog
   readonly #curseforge: CurseForge
   readonly #builds: LoaderBuilds
+  readonly #checks: Pick<JarChecks, 'lookUp' | 'check'>
 
   constructor(deps: {
     archives: PackArchives
@@ -144,12 +161,14 @@ export class PackBuilder {
     catalog: ModCatalog
     curseforge: CurseForge
     loaderBuilds: LoaderBuilds
+    jarChecks: Pick<JarChecks, 'lookUp' | 'check'>
   }) {
     this.#archives = deps.archives
     this.#formats = deps.formats
     this.#catalog = deps.catalog
     this.#curseforge = deps.curseforge
     this.#builds = deps.loaderBuilds
+    this.#checks = deps.jarChecks
   }
 
   /**
@@ -458,10 +477,7 @@ export class PackBuilder {
   async #finish(archive: PackArchive, plan: Plan, fileName: string, workDir: string): Promise<BuildResult> {
     // Every jar headed for the mods folder is hashed once and read for what it says of itself.
     const jars = plan.place.filter((p) => p.to.startsWith('mods/') && isJar(p.to))
-    const read = new Map<
-      string,
-      { sha1: string; sha512: string; size: number; metadata: ModMetadata | null }
-    >()
+    const read = new Map<string, JarFacts>()
     for (const jar of jars) {
       const bytes = await archive.read(jar.from, PACK_LIMITS.maxFileBytes)
       read.set(jar.from, {
@@ -480,13 +496,7 @@ export class PackBuilder {
     const leftForPlayers: string[] = []
     const files: PackFile[] = []
     const embedded: Placement[] = []
-    const kept: Array<{
-      path: string
-      sha512: string
-      size: number
-      side: string
-      metadata: ModMetadata | null
-    }> = []
+    const kept: KeptJar[] = []
 
     // What the pack lists already: each download held to the catalog's rule, each side checked
     // against the catalog's record of that file.
@@ -494,7 +504,7 @@ export class PackBuilder {
       const match = published.get(file.sha512)
       const side = jarSide({ catalog: match?.version.environment ?? null })
       if (isJar(file.path) && side === 'client') {
-        leftOut.push({ path: file.path, why: 'players' })
+        leftOut.push({ path: file.path, why: 'players', sha512: file.sha512 })
         leftForPlayers.push(file.path)
         continue
       }
@@ -517,7 +527,7 @@ export class PackBuilder {
       const match: CatalogFileMatch | undefined = published.get(facts.sha512)
       const side = jarSide({ catalog: match?.version.environment ?? null, metadata: facts.metadata })
       if (side === 'client') {
-        leftOut.push({ path: jar.to, why: 'players' })
+        leftOut.push({ path: jar.to, why: 'players', sha512: facts.sha512 })
         leftForPlayers.push(jar.to)
         continue
       }
@@ -533,15 +543,14 @@ export class PackBuilder {
         })
       else embedded.push(jar)
     }
-
+    const others = plan.place.filter((p) => !(p.to.startsWith('mods/') && isJar(p.to)))
+    const otherJars = await this.#checkJars(archive, { files, published, embedded, others, leftOut, jars })
     const identity = await this.#identity(
       plan,
       kept.map((jar) => jar.metadata).filter((m): m is ModMetadata => m !== null),
     )
     if (kept.length === 0)
       throw new Refused('This pack holds no mods a server runs, so there’s nothing to build a server from.')
-
-    const others = plan.place.filter((p) => !(p.to.startsWith('mods/') && isJar(p.to)))
     const loaderKey = PACK_LOADERS[identity.loader]
     const index = {
       formatVersion: 1,
@@ -596,10 +605,68 @@ export class PackBuilder {
         loaderVersion: identity.loaderVersion,
         playersNeedIt,
         jars: kept.map((jar) => ({ path: jar.path, sha512: jar.sha512, sizeBytes: jar.size })),
+        otherJars,
         leftOut,
         memoryMb: identity.memoryMb,
       },
     }
+  }
+
+  /**
+   * Every jar the pack keeps, or leaves to players' games, held to an uploaded jar's checks: each
+   * it carries read whole, in its mods folder or wherever else it is placed; each it lists by its
+   * download looked up by the digests it gives, which the image checks the download against,
+   * beside the sha1 the catalog has for it (`published`). One left to players' games is held to
+   * them too, by the sha512 kept for it, since a start can put it back: read whole where the pack
+   * carries it, or looked up with the catalog's sha1 where it lists it (it is the catalog that
+   * says it is for players' games). A jar that matches known malware refuses the pack. Of the files
+   * it places outside its mods, returns the jars, by the bytes each holds.
+   */
+  async #checkJars(
+    archive: PackArchive,
+    pack: {
+      files: readonly PackFile[]
+      published: ReadonlyMap<string, CatalogFileMatch>
+      embedded: readonly Placement[]
+      others: readonly Placement[]
+      leftOut: readonly PackLeftOutJson[]
+      /** Every jar it carries for its mods folder, kept or not. */
+      jars: readonly Placement[]
+    },
+  ): Promise<PackJarJson[]> {
+    const others = pack.others.filter((p) => isJar(p.to))
+    const forPlayers = pack.leftOut.flatMap((l) =>
+      l.why === 'players' && l.sha512 !== undefined ? [{ path: l.path, sha512: l.sha512 }] : [],
+    )
+    const carried = pack.jars.filter((jar) => forPlayers.some((l) => l.path === jar.to))
+    const listed: Array<{ path: string; sha512: string; sha1?: string }> = [
+      ...pack.files.filter((f) => isJar(f.path)),
+      ...forPlayers.filter((l) => !carried.some((jar) => jar.to === l.path)),
+    ]
+    const refuse = (path: string, match: string) =>
+      new Refused(
+        `This pack holds ${path.split('/').pop() ?? path}, which matches known malware, so Cubepals won’t build a server from it.`,
+        `${path}: ${match}`,
+      )
+    for (const file of listed) {
+      const vouched = pack.published.get(file.sha512)?.file.sha1 ?? null
+      const sha1 = file.sha1 ?? vouched
+      const found = await this.#checks.lookUp(
+        sha1 === null ? { sha512: file.sha512 } : { sha512: file.sha512, sha1 },
+        vouched,
+      )
+      if (found !== null) throw refuse(file.path, found.match)
+    }
+    const otherJars: PackJarJson[] = []
+    for (const jar of [...pack.embedded, ...carried, ...others]) {
+      const bytes = await archive.read(jar.from, PACK_LIMITS.maxFileBytes)
+      const check = await this.#checks.check(bytes)
+      if (check.state === 'quarantined' && check.releasedBy === null)
+        throw refuse(jar.to, check.finding?.match ?? 'quarantined')
+      if (others.includes(jar))
+        otherJars.push({ path: jar.to, sha512: check.sha512, sizeBytes: bytes.length })
+    }
+    return otherJars
   }
 
   /**

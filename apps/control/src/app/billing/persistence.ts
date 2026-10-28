@@ -617,7 +617,8 @@ export async function billingFacts(q: Queryable, userId: string): Promise<Billin
     sql`${orders.planKey} is not null`,
     inArray(orders.status, PAID_ORDER),
     gt(orders.netCents, 0),
-    lt(orders.refundedCents, orders.totalCents),
+    // The refund is before tax, as the net is.
+    lt(orders.refundedCents, orders.netCents),
   )
   const [all] = await q.select({ n: count() }).from(orders).where(paid)
   const [renewals] = await q

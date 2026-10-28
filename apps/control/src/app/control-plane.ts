@@ -225,18 +225,12 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     policy,
     catalogMoved: (moved) => listings.catalogMoved(moved),
   })
-  const contents = new PackContents({ db, formats: ports.formats, catalog: ports.catalog })
+  const contents = new PackContents({ db, formats: ports.formats, catalog: ports.catalog, jarChecks })
   const packs = new PackService({
     ...ports,
     db,
     policy,
-    builder: new PackBuilder({
-      archives: ports.archives,
-      formats: ports.formats,
-      catalog: ports.catalog,
-      curseforge: ports.curseforge,
-      loaderBuilds: ports.loaderBuilds,
-    }),
+    builder: new PackBuilder({ ...ports, jarChecks }),
     worlds: () => backups.newWorlds,
   })
   setups = new SetupService({

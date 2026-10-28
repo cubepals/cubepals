@@ -925,7 +925,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/control-plane.ts › function composeControlPlane": {
-      "n": 222,
+      "n": 217,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/curation/catalog-check.ts › function checkCatalogRelease": {
@@ -997,11 +997,11 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/packs/build.ts › #finish": {
-      "n": 121,
+      "n": 116,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/packs/changes.test.ts › describe.skipIf pack changes": {
-      "n": 349,
+      "n": 348,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/packs/packs.test.ts › describe.skipIf packs people bring": {

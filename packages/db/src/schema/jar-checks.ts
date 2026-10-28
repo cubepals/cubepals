@@ -34,6 +34,10 @@ export const jarChecks = pgTable(
      * quarantine it again.
      */
     releasedBy: text('released_by'),
+    /**
+     * When it was read whole, or a list named it. Null while it waits to be read, for a jar a pack
+     * only lists by its download, and for a pack's jar the lists changed after it was read.
+     */
     checkedAt: ts('checked_at'),
     createdAt: createdAt(),
   },

@@ -165,8 +165,24 @@ instance). A server pack named only by its file is read from the name:
 ### Resolve
 
 `app/packs/contents.ts` reads a pack once and keeps what it holds by the file's sha512
-(`pack_contents`): its Minecraft, loader and build, every jar a server installs, and the ones left
-out with why. Catalog packs are read by HTTP ranges, not downloaded whole.
+(`pack_contents`): its Minecraft, loader and build, every jar a server installs as a mod, the
+other jars it carries (`other_jars`), and the ones left out with why. Catalog packs are read by HTTP ranges, not downloaded whole.
+Each jar of an uploaded pack, kept or left to players' games, gets its check while the pack is
+built (`mods/jar-checks.ts`). A pack kept before its jars were checked gets them the next time it is
+built, with its `other_jars` and the sha512 of each jar it leaves out where the row has none, each
+entry keeping what was learned of it: until then a list that names one of its jars can't leave it
+out. A carried jar is read whole, and its check holds all its digests; a listed one is looked up by
+the digests the pack gives, and its check holds its sha512, and its sha1 only where the catalog
+vouches for it. So a list that names a listed jar later finds it by its sha512, and by its sha1 only
+then. A list that names one of a pack's jars later, or a new build that reads one again and finds
+it, leaves it out of the pack's servers at their next start, and their owners are told, once for
+each server.
+
+A jar a pack leaves out is kept with its sha512 where it is known (`left_out.sha512`): its jars for
+players' games, and the ones a start finds a mod needs (below). Before a start puts one back or
+installs it anyway, it is looked up by those digests (for a catalog pack's entry kept without its
+sha512, by the hashes the pack's index gives the jar), and one a list or a quarantined check names
+stays out; once it runs, it is held to the lists like the pack's other jars.
 
 #### Sides
 
@@ -252,7 +268,7 @@ Some failures only a start can reveal, and a pack server learns from them instea
   optional on servers and which stops a dedicated server). Its jar is left out
   (`pack_contents.left_out`, `crashed`) and the start goes on.
 - **A mod Blockly left out that another one needs**, because the catalog marked it for players'
-  games. It is put back and the start goes on.
+  games. It is put back (`left_out`, now `needed`) and the start goes on.
 - **A library the pack itself keeps off servers that its own mod needs** (seen on the real image:
   Cabricality 0.3.1 marks Equator unsupported on servers, and its own mod requires it). Found in
   the pack's index and installed anyway (`MODRINTH_FORCE_INCLUDE_FILES`).

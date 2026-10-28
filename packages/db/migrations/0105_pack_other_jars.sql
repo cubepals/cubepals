@@ -1,0 +1,1 @@
+ALTER TABLE "pack_contents" ADD COLUMN "other_jars" jsonb DEFAULT '[]'::jsonb NOT NULL;

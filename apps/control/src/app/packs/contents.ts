@@ -7,6 +7,7 @@ import type { Db, PackJarJson, PackLeftOutJson } from '@blockly/db'
 import { INDEX_FILE, isJar, playersNeedIt, readIndex, serverFiles } from '../../minecraft/mrpack.ts'
 import { jarNamed, jarSide } from '../../minecraft/pack-build.ts'
 import { HAND_DOWNLOADS, handDownloads } from '../../minecraft/packs.ts'
+import type { JarChecks } from '../mods/jar-checks.ts'
 import type { ModCatalog } from '../ports/catalog.ts'
 import { type FileFormats, UnreadableFile } from '../ports/formats.ts'
 import { jarMetadata } from './jars.ts'
@@ -24,7 +25,8 @@ import {
  * runs on, as its own index says rather than the catalog's tags; the jars a server installs from
  * it; and which it leaves to players' games, by the catalog's record of each jar rather than the
  * pack's own marks, which are often wrong (COBBLEVERSE and Better MC mark every mod as needed on
- * the server).
+ * the server). A jar left out that a start finds another mod needs is held to the jar checks
+ * before its servers run it (`mods/jar-checks.ts`), and kept with its sha512 so they go on finding it.
  */
 
 /** Jars a pack carries inside itself are read to be checked, up to this much of them in all. */
@@ -39,13 +41,20 @@ export class PackContents {
   readonly #db: Db
   readonly #formats: FileFormats
   readonly #catalog: ModCatalog
+  readonly #checks: Pick<JarChecks, 'lookUp'>
   /** Reads in flight, so two picks of one version read it once. */
   readonly #reading = new Map<string, Promise<CatalogPackContents>>()
 
-  constructor(deps: { db: Db; formats: FileFormats; catalog: ModCatalog }) {
+  constructor(deps: {
+    db: Db
+    formats: FileFormats
+    catalog: ModCatalog
+    jarChecks: Pick<JarChecks, 'lookUp'>
+  }) {
     this.#db = deps.db
     this.#formats = deps.formats
     this.#catalog = deps.catalog
+    this.#checks = deps.jarChecks
   }
 
   /** What a pack file holds, from the database when it was read before. */
@@ -81,35 +90,66 @@ export class PackContents {
   /**
    * A mod another mod of the pack needs, named by the id its loader printed, which Blockly left
    * out as being for players' games, or which the pack at `packUrl` keeps off servers itself: the
-   * pack's servers run it after all. Never a mod that stopped a server itself. The jar's path, or
-   * null.
+   * pack's servers run it after all. Never a mod that stopped a server itself, and never a jar the
+   * jar checks know as malware by the digests known for it (`lookUp`). The jar's path, or null.
    */
   async keepAfterCrash(sha512: string, mod: string, packUrl: string | null = null): Promise<string | null> {
     const pack = await loadPackContents(this.#db, sha512)
     if (pack === null) return null
+    const forPlayers = pack.leftOut.filter((l) => l.why === 'players')
     const path = jarNamed(
-      pack.leftOut.filter((l) => l.why === 'players').map((l) => l.path),
+      forPlayers.map((l) => l.path),
       mod,
     )
-    if (path !== null) return (await keepPackJar(this.#db, sha512, path)) ? path : null
+    if (path !== null) {
+      const kept = forPlayers.find((l) => l.path === path)?.sha512
+      // An entry kept before its sha512 was: the pack's index gives it, for a jar it lists.
+      const digests =
+        kept !== undefined
+          ? { sha512: kept }
+          : (await this.#indexFiles(packUrl)).find((file) => file.path === path)
+      if (digests !== undefined && (await this.#malware(digests))) return null
+      return (await keepPackJar(this.#db, sha512, path, digests?.sha512)) ? path : null
+    }
     // Or the pack itself keeps it off servers (Cabricality 0.3.1 marks Equator so, which its own
     // mod needs): its servers install it anyway, from the pack's own index.
-    if (packUrl === null) return null
+    const known = new Set(pack.leftOut.map((l) => l.path))
+    const offServers = (await this.#indexFiles(packUrl)).filter(
+      (file) => file.env.server === 'unsupported' && isJar(file.path) && !known.has(file.path),
+    )
+    const needed = jarNamed(
+      offServers.map((file) => file.path),
+      mod,
+    )
+    const file = offServers.find((f) => f.path === needed)
+    if (needed === null || file === undefined || (await this.#malware(file))) return null
+    const entry: PackLeftOutJson = { path: needed, why: 'needed', sha512: file.sha512 }
+    return (await leavePackJarOut(this.#db, sha512, entry)) ? needed : null
+  }
+
+  /** The files a pack's index lists; none when it has no index Blockly reads, or no `packUrl`. */
+  async #indexFiles(packUrl: string | null) {
+    if (packUrl === null) return []
     const read = await this.#formats.readRemoteZip(packUrl, {
       wanted: (name) => name === INDEX_FILE,
       maxEntryBytes: INDEX_BYTES,
     })
     const bytes = read.entries.get(INDEX_FILE)
-    if (bytes === undefined) return null
+    if (bytes === undefined) return []
     const index = readIndex(this.#formats.decode('json', new TextDecoder().decode(bytes)))
-    if ('refused' in index) return null
-    const known = new Set(pack.leftOut.map((l) => l.path))
-    const offServers = index.files
-      .filter((file) => file.env.server === 'unsupported' && isJar(file.path) && !known.has(file.path))
-      .map((file) => file.path)
-    const needed = jarNamed(offServers, mod)
-    if (needed === null) return null
-    return (await leavePackJarOut(this.#db, sha512, { path: needed, why: 'needed' })) ? needed : null
+    return 'refused' in index ? [] : index.files
+  }
+
+  /**
+   * Whether a pack's jar is known as malware, by the digests the pack gives and the sha1 the
+   * catalog has for its sha512, where it has one. Looking it up keeps a check of it, so a list that
+   * names it later takes it off its pack's servers.
+   */
+  async #malware(digests: { sha512: string; sha1?: string }): Promise<boolean> {
+    const vouched = (await this.#catalog.filesByHash([digests.sha512])).get(digests.sha512)?.file.sha1 ?? null
+    const sha1 = digests.sha1 ?? vouched
+    const claimed = sha1 === null ? { sha512: digests.sha512 } : { sha512: digests.sha512, sha1 }
+    return (await this.#checks.lookUp(claimed, vouched)) !== null
   }
 
   /** A catalog pack version's file, read once. */
@@ -165,14 +205,14 @@ export class PackContents {
       const match = published.get(file.sha512)
       const side = jarSide({ catalog: match?.version.environment ?? null })
       if (side === 'client' && !needed.has(match?.version.projectId ?? ''))
-        leftOut.push({ path: file.path, why: 'players' })
+        leftOut.push({ path: file.path, why: 'players', sha512: file.sha512 })
       else jars.push({ path: file.path, sha512: file.sha512, sizeBytes: file.sizeBytes })
     }
     for (const jar of carriedJars) {
       const match = published.get(jar.sha512)
       const side = jarSide({ catalog: match?.version.environment ?? null, metadata: jar.metadata })
       if (side === 'client' && !needed.has(match?.version.projectId ?? ''))
-        leftOut.push({ path: jar.name, why: 'players' })
+        leftOut.push({ path: jar.name, why: 'players', sha512: jar.sha512 })
       else jars.push({ path: jar.path, sha512: jar.sha512, sizeBytes: jar.size })
     }
     const contents: PackContentsRecord = {

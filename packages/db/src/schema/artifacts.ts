@@ -106,6 +106,12 @@ export const packContents = pgTable('pack_contents', {
   playersNeedIt: boolean('players_need_it').notNull(),
   /** The jars a server installs, with the bytes each should hold. */
   jars: jsonb('jars').$type<PackJarJson[]>().notNull(),
+  /**
+   * The other jars it carries, outside the ones it runs as mods (a plugin, a mod's own folder),
+   * with the bytes each should hold: checked as its mods are, and left out of every start once
+   * found to be malware.
+   */
+  otherJars: jsonb('other_jars').$type<PackJarJson[]>().notNull().default([]),
   /** What the server leaves out, and why, for the owner to see. */
   leftOut: jsonb('left_out').$type<PackLeftOutJson[]>().notNull(),
   /** The memory its author starts it with, in megabytes; null when it says nothing. */

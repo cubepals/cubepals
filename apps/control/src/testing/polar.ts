@@ -61,6 +61,15 @@ export const tokenRefused = (status: 401 | 403) => ({
       : ({ error: 'NotPermitted', detail: 'Not permitted' } satisfies models.NotPermitted),
 })
 
+/** Polar refusing a refund of an order refunded in full already: 403, as the SDK maps `RefundedAlready`. */
+export const refundedAlready = {
+  status: 403,
+  body: {
+    error: 'RefundedAlready',
+    detail: 'Order is already fully refunded.',
+  } satisfies models.RefundedAlready,
+}
+
 /** One page of a list, the last unless `maxPage` says otherwise. */
 export const page = <T>(items: T[], maxPage = 1) => ({
   items,

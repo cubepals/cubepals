@@ -279,15 +279,41 @@ const filesDigest = (files: readonly CarriedFile[]): string =>
 
 /**
  * A revision without the jars found to be malware since it was pinned (`mods/jar-checks.ts`): each
- * comes off at the server's next start, and its other files and world stay as they are.
+ * comes off at the server's next start, and its other files and world stay as they are. A pack's
+ * jar is left out by its path, whether the pack lists it or carries it, in its mods or elsewhere,
+ * and so is one it left out that a mod of it needs (`needed`), which is no longer forced in. It
+ * runs after `withWhatItsPackLearned`, whose `forceInclude` it takes from.
  */
 async function withoutMalware(q: Queryable, revision: ServerRevision): Promise<ServerRevision> {
-  const malware = await quarantinedOf(
-    q,
-    revision.mods.map((m) => m.artifact.sha512),
+  const pack = revision.modpack
+  const contents = pack === null ? null : await loadPackContents(q, pack.artifact.sha512)
+  const needed = (contents?.leftOut ?? []).flatMap((l) =>
+    l.why === 'needed' && l.sha512 !== undefined ? [{ path: l.path, sha512: l.sha512 }] : [],
   )
+  const packJars = [...(contents?.jars ?? []), ...(contents?.otherJars ?? []), ...needed]
+  const malware = await quarantinedOf(q, [
+    ...revision.mods.map((m) => m.artifact.sha512),
+    ...packJars.map((jar) => jar.sha512),
+  ])
   if (malware.size === 0) return revision
-  return { ...revision, mods: revision.mods.filter((m) => !malware.has(m.artifact.sha512)) }
+  const off = packJars.filter((jar) => malware.has(jar.sha512)).map((jar) => jar.path)
+  // As a crash leaves one out (`leaveOutNow`): listed by its path, carried in the overrides.
+  const offPack = off.flatMap((path) =>
+    /^(server-)?overrides\//.test(path) ? [path] : [path, `overrides/${path}`],
+  )
+  const mods = revision.mods.filter((m) => !malware.has(m.artifact.sha512))
+  if (pack === null || offPack.length === 0) return { ...revision, mods }
+  const forceInclude = (pack.forceInclude ?? []).filter((path) => !off.includes(path))
+  const { forceInclude: _forced, ...rest } = pack
+  return {
+    ...revision,
+    mods,
+    modpack: {
+      ...rest,
+      leaveOut: [...new Set([...(pack.leaveOut ?? []), ...offPack])],
+      ...(forceInclude.length === 0 ? {} : { forceInclude }),
+    },
+  }
 }
 
 /**

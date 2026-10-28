@@ -10,7 +10,7 @@ import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { gzipSync } from 'node:zlib'
+import { gunzipSync, gzipSync } from 'node:zlib'
 import { strToU8, zipSync } from 'fflate'
 import nbt from 'prismarine-nbt'
 import { UnreadableFile } from '../../app/ports/formats.ts'
@@ -238,5 +238,33 @@ describe('a jar read whole', () => {
     expect(() =>
       formats.eachZipEntry(jar.subarray(0, 40), { wanted: () => true, maxEntryBytes: 1024, visit: () => {} }),
     ).toThrow(UnreadableFile)
+  })
+})
+
+describe('NBT files', () => {
+  test('an NBT file that inflates past any level.dat or player file is refused unread', async () => {
+    // A compound of eight byte arrays of 10 MiB each, 80 MiB in all: each array as prismarine-nbt
+    // writes an empty one, its length then set and its bytes added, and the compound's end.
+    const length = 10 * 1024 * 1024
+    const arrays = Array.from({ length: 8 }, (_, at) => {
+      const empty = nbt.writeUncompressed({
+        type: 'compound',
+        name: '',
+        value: { [`a${at}`]: { type: 'byteArray', value: [] } },
+      })
+      // The compound's own tag and empty name before it, its end after.
+      const array = Buffer.from(empty.subarray(3, -1))
+      array.writeInt32BE(length, array.length - 4)
+      return [array, Buffer.alloc(length)]
+    })
+    const huge = Buffer.concat([Buffer.from([0x0a, 0, 0]), ...arrays.flat(), Buffer.from([0])])
+    expect(nbt.parseUncompressed(huge, 'big').value.a7?.type).toBe('byteArray')
+    const gzipped = gzipSync(huge)
+    await expect(formats.decodeNbt(gzipped)).rejects.toBeInstanceOf(UnreadableFile)
+    await expect(formats.nbtPart(gzipped, ['Data'])).rejects.toBeInstanceOf(UnreadableFile)
+    // Real files, gzipped as Minecraft writes them and not, still read.
+    const player = await readFile(`${import.meta.dir}/../../minecraft/player-fixtures/1.20.1/player.dat`)
+    const plain = Buffer.from(gunzipSync(player))
+    expect(await formats.decodeNbt(plain)).toEqual(await formats.decodeNbt(player))
   })
 })
