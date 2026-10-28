@@ -50,6 +50,7 @@ The coarser print a slow device falls back to gives up the shadow map first.
 | `landing/Layouts.tsx` | Which form a screen gets, by width, before anything runs and after |
 | `landing/film/` | The film: `FilmPage.tsx` (which beats, in which order, and each beat's proof), `Beat` (a screen with a shot and a caption) and `useBeat` (its cues, played on arrival on a clock that scrolling hurries, `clock.ts`), `Proof` (the section opened over a beat), `Film.tsx` (every beat, and what each tells the stage), `proofs.tsx` (the proofs, loaded after the page), `Arcade.tsx` (the first screen's line about Cubepals' own Arcade, as it is now). The header is the public pages' own (`app/(public)/header.tsx`) |
 | `landing/phone/` | The phone's page: `Phone.tsx` (the page), `Still.tsx` (the two pictures of the chunk) and `printer.ts` (what prints them, once each, in a worker, `still.worker.ts`), `agent.ts` (how a phone is told apart) |
+| `landing/FirstWords.tsx` | What the first screen says round its button, in the film and on a phone: the line under the headline and the trust facts |
 | `landing/landing.css` | The whole look: tones, type, frames, buttons, dither, the gauge, the cursor |
 | `landing/kit.tsx` | `Section`, `Demo`, `Facts`, `Strata`: what a section is built from |
 | `landing/stage.ts` | What the chunk is doing (asleep or awake, who is on the path, which room is lit, whether the pointer is on a block), shared between the canvas, the cursor and the demonstrations |

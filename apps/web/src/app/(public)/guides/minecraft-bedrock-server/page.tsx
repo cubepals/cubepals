@@ -151,7 +151,7 @@ function OneServer() {
         <p>Xbox, PlayStation and Switch can’t add a server, so they can’t join.</p>
       </Part>
 
-      <Part id="sleeps" title="It sleeps when nobody plays">
+      <Part id="sleeps" title="Nobody has to start it">
         <p>
           Nobody has to start it for anyone. When a friend joins, on Java or Bedrock, it wakes, and when
           everyone has gone it goes back to sleep. You don’t need to be online, and your computer doesn’t need

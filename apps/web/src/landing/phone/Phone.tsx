@@ -12,6 +12,7 @@ import Link from 'next/link'
 import { SiteHeader } from '../../app/(public)/header'
 import { ctaMark, seenMark } from '../../app/(public)/steps'
 import { heroSmallPrint } from '../../lib/bedrock'
+import { Support, Trust } from '../FirstWords'
 import { Follow } from '../Follow'
 import type { Landed } from '../Landing'
 import { lastSaid, PlansSaid, trialSaid } from '../sections/Plans'
@@ -32,9 +33,7 @@ export function Phone({ create, signedIn, plans, getPlan, bedrock }: Landed) {
         <h1 className={`bl-display ${styles.headline}`}>
           <span>Send your friends</span> <span>the address.</span> <span>They’re in.</span>
         </h1>
-        <p className={`bl-lede ${styles.support}`}>
-          Make a server in three decisions.{bedrock && ' Friends on PC, phones and tablets join it.'}
-        </p>
+        <Support bedrock={bedrock} className={`bl-lede ${styles.support}`} />
         <div className={styles.go}>
           <Link href={create} className="bl-btn bl-btn--lg" {...ctaMark('hero_create')}>
             Create a server
@@ -49,6 +48,7 @@ export function Phone({ create, signedIn, plans, getPlan, bedrock }: Landed) {
             )}
           </p>
         </div>
+        <Trust />
         <Still still="night" first={night} className={styles.still} />
         <p className={styles.line} {...seenMark('the-address')}>
           Share the address.

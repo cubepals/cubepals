@@ -46,9 +46,9 @@ export const GUIDES: readonly Guide[] = [
     slug: 'minecraft-server-for-friends',
     title: 'How to make a Minecraft server for friends',
     description:
-      'Make a Minecraft server for you and your friends in three decisions: what to play, who’s playing, and a name. Start with a free trial. For Java Edition.',
+      'Make a Minecraft server for you and your friends in a few decisions: what to play and a name. Start with a free trial. For Java Edition.',
     published: '2026-10-10',
-    modified: '2026-10-11',
+    modified: '2026-10-28',
     approved: true,
   },
   {
@@ -57,7 +57,7 @@ export const GUIDES: readonly Guide[] = [
     description:
       'The ways to play Minecraft: Java Edition with friends, on the same Wi-Fi or far apart, and which one lets them play when you’re not on.',
     published: '2026-10-10',
-    modified: '2026-10-10',
+    modified: '2026-10-28',
     approved: true,
   },
   {
@@ -138,7 +138,7 @@ export const GUIDES: readonly Guide[] = [
     description:
       'One Minecraft server for friends on Bedrock and Java, in the same world. It sleeps when nobody plays and wakes when a friend joins.',
     published: '2026-10-22',
-    modified: '2026-10-22',
+    modified: '2026-10-28',
     approved: true,
     bedrock: true,
   },

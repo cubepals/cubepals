@@ -45,7 +45,7 @@ export function Sleep({ plans, bare }: { plans: PublicPlan[]; bare?: boolean }) 
 
   return (
     <Section bare={bare} tone="stone" room="sleep" className={styles.sleep}>
-      <h2 className="bl-h2">Asleep is its normal state</h2>
+      <h2 className="bl-h2">Awake around the people on it</h2>
       <p className="bl-lede">
         A server runs while someone is on it, and for{' '}
         {minutes === null ? 'a few minutes' : `${minutes} minutes${onPaid}`} after the last player leaves.
