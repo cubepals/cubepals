@@ -125,6 +125,21 @@ describe.skipIf(!hasDatabase)('wake times', () => {
     expect(running?.wakeSeconds).toBeUndefined()
   })
 
+  test('one still going to sleep or to another host says no time', async () => {
+    const servers = schema.minecraftServers
+    // A server being put to rest has no route at all (`ROUTABLE`).
+    for (const status of ['stopping', 'relocating'] as const) {
+      await h.db.update(servers).set({ status }).where(eq(servers.id, ids.a))
+      try {
+        const route = (await h.app.edge.routes()).routes.find((r) => r.hostname === hostnameOfA)
+        expect(route?.state).toBe('asleep')
+        expect(route?.wakeSeconds).toBeUndefined()
+      } finally {
+        await h.db.update(servers).set({ status: 'stopped' }).where(eq(servers.id, ids.a))
+      }
+    }
+  })
+
   test('a resume its start gave up on is told a boot’s time from then', async () => {
     const wakeOfA = async () =>
       (await h.app.edge.routes()).routes.find((r) => r.hostname === hostnameOfA)?.wakeSeconds

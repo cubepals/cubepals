@@ -214,7 +214,7 @@ export class EdgeService {
           destination,
           ...noticeOf(state, server, over.has(server.id)),
           ...(waking ? { waking: true as const } : {}),
-          ...wakeOf(state, medianOf(medians, server.id, way)),
+          ...wakeOf(state, server.status, medianOf(medians, server.id, way)),
           ...this.#identityOf(server, state, motds),
           ...(binding?.proxyProtocol ? { proxyProtocol: true as const } : {}),
           ...joinsOf(plays, state, binding, server.desiredRevisionId),
@@ -729,9 +729,13 @@ function joinsOf(
   return { joins: { release, protocol, oldest, ...(newest === null ? {} : { newest }) } }
 }
 
-/** An asleep server's route says how long its wake takes, where that is measured. */
-const wakeOf = (state: 'asleep' | 'restarting' | null, seconds: number | null) =>
-  state === 'asleep' && seconds !== null ? { wakeSeconds: seconds } : {}
+/**
+ * An asleep server's route says how long its wake takes, where that is measured. Not while it
+ * still goes to sleep or to another host: a wake asked for then waits for that first, which no
+ * measured wake times.
+ */
+const wakeOf = (state: 'asleep' | 'restarting' | null, status: ServerStatus, seconds: number | null) =>
+  state === 'asleep' && seconds !== null && !MOVING_ON.has(status) ? { wakeSeconds: seconds } : {}
 
 /**
  * Where a server's run is, as its routes say: why it can't be joined now (null while it runs);

@@ -1455,8 +1455,11 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
     ping is told "Waking your world · about N seconds" in place of the sleeping notice, N what is
     left of the median of that server's wakes the way it wakes now (`EdgeRoute.wakeSeconds`,
     `app/operations/wake-times.ts`), counted from when the edge first saw it waking; with nothing
-    measured, or past it, only "Waking your world" (`apps/edge/waking-line.ts`). A server whose
-    owner's free trial is played is never asked for.
+    measured, or past it, only "Waking your world" (`apps/edge/waking-line.ts`). A join this edge
+    holds counts from its ask, before the route can say so: one that came while its server was
+    still going to sleep or to another host waits for that before the start is asked for, and the
+    route carries no time until then. A server whose owner's free trial is played is never asked
+    for.
   - While a join is waking a server, a ping still gets this listener's answer: the control plane
     routes a starting server as `asleep` until it runs, and the wake webhook hands every join to
     the waiting room at once. A ping that arrives in the moment mc-router asks the webhook about a

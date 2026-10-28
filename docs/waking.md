@@ -116,9 +116,13 @@ whole life and an image pull onto the volume's host.
   list says only "Waking your world" (`app/operations/wake-times.ts`). A resume its start gives up
   on, where the memory was gone, boots from its disk: from then its route carries a boot's median,
   and the line counts down from that. The server page's countdown counts down from the same median.
+  A server still going to sleep or to another host carries no time: a join then waits for that to
+  finish before its wake starts, which no measured wake covers.
 - **Every edge says a server is waking.** A server on its way up, by a join or a ping, is routed
   as asleep with `waking`, so every ping gets "Waking up" while it boots. That includes a world
-  coming back from rest, which used to have no route at all until it was back.
+  coming back from rest, which used to have no route at all until it was back. The edge holding a
+  join says so from the moment the join asks, before the route can: a join that came while its
+  server was still going to sleep waits for that before the start is asked for.
 - **The copy is read sooner.** A helper job's result is read every second for its first 20 s,
   then every 5 s. A small world's copy was done well inside the 5 s the helper used to wait
   between reads.

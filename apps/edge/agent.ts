@@ -185,7 +185,7 @@ const poll = new RoutesPoll(
     const running = new Set(routes.filter((r) => r.state === undefined).map((r) => r.destination))
     for (const destination of unreachable) if (!running.has(destination)) unreachable.delete(destination)
     for (const destination of asked.keys()) if (!running.has(destination)) asked.delete(destination)
-    wakingLine.keep(routes, (name) => pingWakes.waking(name))
+    wakingLine.keep(routes, wakingHere)
     return applyRoutes()
   },
 )
@@ -316,6 +316,15 @@ async function wake(serverAddress: string): Promise<Response> {
 
 /** Wakes in flight, by hostname, with what each join said: joins that arrive together share one. */
 const waking = new Map<string, { said: string; asked: Promise<WakeResult> }>()
+
+/**
+ * Whether this edge is waking `hostname` itself: a ping here asked for its wake, or a join here
+ * waits on one. Its route says so only once the start is asked for, and a join that came while
+ * its server was still going to sleep, to rest or to another host waits for that first.
+ */
+function wakingHere(hostname: string): boolean {
+  return pingWakes.waking(hostname) || waking.has(hostname)
+}
 
 /**
  * Asks the control plane to wake a server for a join that `said` its name and address, which waits up
@@ -466,7 +475,7 @@ function asleep(address: string): NoticeText {
   const name = hostnameOf({ address })
   const route = routes.find((r) => r.hostname === name)
   const icon = route?.icon === undefined ? undefined : icons.get(route.icon)
-  const waking = wakingLine.of(name, route?.waking === true || pingWakes.waking(name), route?.wakeSeconds)
+  const waking = wakingLine.of(name, route?.waking === true || wakingHere(name), route?.wakeSeconds)
   const status = resting(route)
     ? restingStatus(route?.motd)
     : asleepMessage(route?.motd, waking ?? ASLEEP.status)
