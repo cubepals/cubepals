@@ -5,9 +5,10 @@
 /**
  * A join the game turned away for its own lists says so once the edge reports it ended and the
  * server told of its login, in either order: the whitelist, where the player is on neither it nor
- * the operators, and a ban, read first. Nothing else is given a reason: a join that never logged
- * in, one that reached the world, one the edge turned away, one the server already explained, or
- * one whose player nobody knows.
+ * the operators, and a ban, read first. On a server with no reporter, by its lists alone. Nothing
+ * else is given a reason: a join that never logged in on a server that reports, one that reached
+ * the world, one the edge turned away, one the server already explained, or one whose player
+ * nobody knows.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -36,9 +37,10 @@ afterAll(async () => {
 type List = 'whitelist' | 'operator' | 'ban'
 type Entry = { list: List; uuid?: string; state?: 'active' | 'pending_add' | 'pending_remove' }
 
-/** A server of its own, its whitelist on or off, with Steve on the lists given. */
-const server = async (whitelist: boolean, lists: Entry[] = []) => {
+/** A server of its own, its whitelist on or off, with Steve on the lists given; one that reports, unless not. */
+const server = async (whitelist: boolean, lists: Entry[] = [], reports = true) => {
   const made = await h.create(await h.user(), { name: 'Refusals' })
+  if (reports) await h.app.joins.recordServerEvents(made.id, [{ kind: 'boot', at: at(0) }])
   const access = schema.serverAccess
   await h.db
     .insert(access)
@@ -97,6 +99,22 @@ describe.skipIf(!hasDatabase)('a join the game refused', () => {
     expect(await ended(await server(false, [{ list: 'ban', uuid: own }]))).toBe('refused:banned')
   }, 30_000)
 
+  test('on a server with no reporter, by its lists alone', async () => {
+    const vanilla = await server(true, [], false)
+    expect(await ended(vanilla, {}, [])).toBe('refused:whitelist')
+    expect(await ended(vanilla, { handedAt: undefined }, [])).toBeNull()
+    // Once on the whitelist, the same server lets him past it.
+    await h.db.insert(schema.serverAccessEntries).values({
+      serverId: vanilla.id,
+      list: 'whitelist',
+      playerUuid: STEVE.uuid,
+      playerName: STEVE.name,
+      state: 'active',
+      origin: 'blockly',
+    })
+    expect(await ended(vanilla, {}, [])).toBeNull()
+  }, 30_000)
+
   test('once the server tells of the login, when the edge told of the end first', async () => {
     const to = await server(true)
     const joinId = randomUUID()
@@ -133,7 +151,7 @@ describe.skipIf(!hasDatabase)('a join the game refused', () => {
     expect(await ended(await closed(), {}, [inWorld, left])).toBe('kicked')
     // Turned away at the edge, with its own reason; never handed over; nobody to look for.
     const refused = { path: 'refused' as const, handedAt: undefined, leftReason: 'refused:wrong_game' }
-    expect(await ended(await closed(), refused)).toBe('refused:wrong_game')
+    expect(await ended(quiet, refused, [])).toBe('refused:wrong_game')
     expect(await ended(quiet, { handedAt: undefined }, [])).toBeNull()
     expect(await ended(quiet, { player: { name: STEVE.name } }, [])).toBeNull()
   }, 30_000)
