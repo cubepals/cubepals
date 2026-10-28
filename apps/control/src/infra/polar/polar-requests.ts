@@ -6,9 +6,13 @@
  * How a request to Polar fails, for PolarBilling: Polar out of reach as BillingUnavailable, and a
  * refusal in Polar's own words; and the few requests and choices too small for a file of their own.
  */
+import { MINUTE_MS } from '@blockly/contracts/durations'
 import { PolarClientError, PolarError, PolarRateLimitError } from '@polar-sh/sdk'
 import { type createPolar, errors, type models } from '@polar-sh/sdk/2026-10'
 import { BillingUnavailable } from '../../app/ports/optional.ts'
+
+/** An open checkout is offered again only with this long left on it, to be paid in. */
+export const CHECKOUT_LEFT_MS = 15 * MINUTE_MS
 
 /**
  * What Polar said was wrong with a request: its first problem's message, or its own summary. A

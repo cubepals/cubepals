@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { BillingTerm } from '@blockly/contracts'
-import { MINUTE_MS } from '@blockly/contracts/durations'
 import { PolarClientError } from '@polar-sh/sdk'
 import { createPolar, errors, type models, webhooks } from '@polar-sh/sdk/2026-10'
 import type { z } from 'zod'
@@ -21,8 +20,9 @@ import {
   WebhookRejected,
 } from '../../app/ports/optional.ts'
 import { discountBody, discountOf } from './polar-discounts.ts'
-import { GIFT_METADATA, giftCheckoutOf, giftOf, giftOrderOf } from './polar-gifts.ts'
+import { giftCheckoutUrl, giftOf, giftOrderOf, giftProducts } from './polar-gifts.ts'
 import {
+  CHECKOUT_LEFT_MS,
   call,
   largestPaying,
   moveSubscription,
@@ -33,7 +33,6 @@ import {
 import {
   CustomerState,
   DiscountPage,
-  Listed,
   OpenCheckouts,
   Order,
   Payments,
@@ -70,9 +69,6 @@ export interface PolarBillingOptions {
   /** Tests point this at a stand-in for Polar. */
   baseUrl?: string
 }
-
-/** An open checkout is offered again only with this long left on it, to be paid in. */
-const CHECKOUT_LEFT_MS = 15 * MINUTE_MS
 
 /**
  * The refund reason a withdrawal is given in Polar: the player asked for their money back.
@@ -314,57 +310,8 @@ export class PolarBilling implements BillingProvider {
     return refunds.items.some((refund) => refund.reason === WITHDRAWAL_REASON)
   }
 
-  /** Every gift product for a plan this deployment sells, cheapest first, read from Polar now. */
-  async giftProducts(): Promise<GiftProduct[]> {
-    const found = Listed.parse(
-      await call('finding the gift products', () =>
-        this.#polar.products.list({ metadata: { ...GIFT_METADATA }, is_archived: false, limit: 100 }),
-      ),
-    )
-    const plans = new Set(this.#plans.values())
-    return found.items
-      .map((item) => giftOf(item, plans))
-      .filter((gift) => gift !== null)
-      .sort((a, b) => a.priceCents - b.priceCents)
-  }
-
-  /**
-   * A checkout for one gift, with no code: a coupon for the plans is not for gifts of them. What it
-   * names is `giftCheckoutOf`'s. One still open for the same buyer and gift is the one to pay.
-   */
-  async giftCheckoutUrl(input: {
-    userId: string | null
-    email: string
-    gift: GiftProduct
-    giftId: string | null
-    returnUrl: string
-  }): Promise<string> {
-    const { customer, metadata } = giftCheckoutOf(input)
-    const open = OpenCheckouts.parse(
-      await call('finding an open gift checkout', () =>
-        this.#polar.checkouts.list({ product_id: input.gift.id, ...customer, status: 'open', limit: 20 }),
-      ),
-    ).items.find(
-      (checkout) =>
-        checkout.metadata?.gift === metadata?.gift &&
-        new Date(checkout.expires_at).getTime() > Date.now() + CHECKOUT_LEFT_MS,
-    )
-    if (open !== undefined) return open.url
-    const checkout = await withEmail(input.email, (email) =>
-      call('starting a gift checkout', () =>
-        this.#polar.checkouts.create({
-          products: [input.gift.id],
-          allow_discount_codes: false,
-          ...customer,
-          metadata,
-          ...email,
-          success_url: input.returnUrl,
-          return_url: input.returnUrl,
-        }),
-      ),
-    )
-    return checkout.url
-  }
+  giftProducts = () => giftProducts(this.#polar, new Set(this.#plans.values()))
+  giftCheckoutUrl = (input: Parameters<typeof giftCheckoutUrl>[1]) => giftCheckoutUrl(this.#polar, input)
 
   async portalUrl(input: { userId: string; returnUrl: string }): Promise<string> {
     const session = await call('opening the customer portal', () =>
