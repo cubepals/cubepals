@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { AuthMethods } from '@blockly/contracts'
+import { type AuthMethods, sameSitePath } from '@blockly/contracts'
 import { apiUpstream, RENDER_READ_MS } from '../../lib/upstream'
 
 /**
@@ -46,8 +46,5 @@ type Param = string | string[] | undefined
 
 export const firstParam = (value: Param): string | null => (Array.isArray(value) ? value[0] : value) ?? null
 
-/** A place to go after signing in, kept to paths on this origin: never `//host` or `/\host`. */
-export function localPath(value: Param): string | null {
-  const path = firstParam(value)
-  return path?.startsWith('/') && !path.startsWith('//') && !path.startsWith('/\\') ? path : null
-}
+/** A place to go after signing in: a path on this site, as the browser would read it, or null. */
+export const localPath = (value: Param): string | null => sameSitePath(firstParam(value))

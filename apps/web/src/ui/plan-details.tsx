@@ -4,12 +4,24 @@
 
 /**
  * What a plan card on the public pages says: a paid plan's few lines of what you get on its face,
- * and everything else in its details, opened in place. The free trial has no card of its own: it
- * is how the first paid plan starts. Not for the account page, whose cards list a plan's points.
+ * and everything else in its details, opened in place. The free trial has no card of its own, here
+ * or on the account page: it is how the first paid plan starts (`cardsOf`). Not for the account
+ * page's cards, which list a plan's points.
  */
 import type { PublicPlan } from '@blockly/contracts'
 import type { ReactNode } from 'react'
-import { dollars, eachOf, forSale, gbSaid, hoursPoint, keptPoint, PlanPoint, priceOf, sizesOf } from './plans'
+import {
+  dollars,
+  eachOf,
+  forSale,
+  gbSaid,
+  hoursPoint,
+  keptPoint,
+  PlanPoint,
+  priceOf,
+  sizesOf,
+  TrialPoint,
+} from './plans'
 
 /** The trial, the paid plans that get a card each, and the one the trial starts. */
 export function cardsOf(plans: readonly PublicPlan[]) {
@@ -123,7 +135,7 @@ export function PlanDetails({
         </li>
         {trial && (
           <li>
-            Starts with a free trial: <PlanPoint plan={trial} point={hoursPoint(trial)} />, no card
+            <TrialPoint trial={trial} />
           </li>
         )}
         {sizePoint(plan, trial) && <li>{sizePoint(plan, trial)}</li>}

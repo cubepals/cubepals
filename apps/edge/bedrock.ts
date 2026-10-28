@@ -45,6 +45,8 @@ export interface BedrockOptions {
   pongs: Rate
   totalPongs: Rate
   opens: Rate
+  /** Players one address (an IPv6 one by its /64) may hold at once. */
+  perAddress: number
   most: number
 }
 
@@ -72,6 +74,7 @@ export function bedrockFromEnv(env: NodeJS.ProcessEnv, front: number): BedrockOp
       burst: number('BEDROCK_TOTAL_PONGS_BURST', 400),
     },
     opens: { perSecond: number('BEDROCK_OPENS_PER_SECOND', 1), burst: number('BEDROCK_OPENS_BURST', 10) },
+    perAddress: number('BEDROCK_ADDRESS_PLAYERS', 32),
     most: number('BEDROCK_MOST_PLAYERS', 2000),
   }
 }
@@ -188,6 +191,7 @@ export function startBedrock(options: BedrockOptions): Bedrock {
         pongs: options.pongs,
         totalPongs: options.totalPongs,
         opens: options.opens,
+        perAddress: options.perAddress,
         most: options.most,
         idleMs: GEYSER_KEEPS_QUIET_SOURCE_MS - 2 * SECOND_MS,
         pongRefreshMs: 5 * SECOND_MS,

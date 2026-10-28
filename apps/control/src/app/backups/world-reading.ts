@@ -4,7 +4,7 @@
 
 /** An uploaded world read as hostile input: its world found, what it says, what to ask, what refuses it. */
 import { join } from 'node:path'
-import type { WorldImportView } from '@blockly/contracts'
+import { brandName, type WorldImportView } from '@blockly/contracts'
 import { HOUR_S } from '@blockly/contracts/durations'
 import type { Db, WorldImportAnswerJson, WorldImportQuestionJson, WorldPeopleJson } from '@blockly/db'
 import {
@@ -14,7 +14,7 @@ import {
   planThatRuns,
   worldRoomBytes,
 } from '../../domain/account/entitlements.ts'
-import { NAME_CACHE } from '../../minecraft/access.ts'
+import { ACCESS_FILES, NAME_CACHE } from '../../minecraft/access.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { compareVersions, isRelease } from '../../minecraft/versions.ts'
 import { DOWNLOAD_NOTE, jarsInNote } from '../../minecraft/world-download.ts'
@@ -50,6 +50,8 @@ import { peopleOf } from './world-people.ts'
 
 /** Reading and writing a world of a few gigabytes takes a while; the links outlast it. */
 export const LINK_SECONDS = 2 * HOUR_S
+/** Where in `work` an upload is fetched to and read from. */
+export const uploadIn = (work: string): string => join(work, 'upload')
 /** What opening an upload holds it to: more files and bytes than a world has, not more. */
 const LIMITS = {
   maxFiles: 500_000,
@@ -57,6 +59,9 @@ const LIMITS = {
   maxTotalBytes: 64 * 1024 ** 3,
   maxKeptBytes: 32 * 1024 * 1024,
 }
+/** The server's files beside the world that are read for its players, so never said to be left out. */
+const READ_BESIDE: ReadonlySet<string> = new Set([...ACCESS_FILES, NAME_CACHE])
+
 /** The few files an upload is read by: what each world says of itself, its server's settings and who joined it. */
 const KEPT =
   /(^|\/)(level\.dat|level\.dat_old|server\.properties|world_gen_settings\.dat|cubepals-download\.txt|usercache\.json|whitelist\.json|ops\.json|banned-players\.json)$/
@@ -161,11 +166,11 @@ export class WorldReading {
     this.#profiles = deps.profiles
   }
 
-  /** The upload fetched to `work` and opened, or why it can't be. */
+  /** The upload fetched to `work` (`uploadIn`) and opened, or why it can't be. */
   async open(pending: PendingUpload, work: string): Promise<WorldArchive> {
     const store = requireCapability(this.#caps, 'archives')
     const link = await store.presignGet(pending.key, LINK_SECONDS, 'browser')
-    const path = join(work, 'upload')
+    const path = uploadIn(work)
     await this.#archives.fetchTo(link.url, path, pending.sizeBytes).catch((error: unknown) => {
       if (error instanceof HostileArchive) throw new Refused(SAID.tooLarge, error.message)
       throw error
@@ -543,14 +548,17 @@ export function notesOn(
   )
   // The server's other worlds are said of their own (`kept-worlds.ts`).
   const others = (how.others ?? []).flatMap((world) => [world.folder, ...world.beside])
+  // Who could join and who is who are read from the server's files (`world-people.ts`), not left out.
   const rest = leftOut.filter(
-    (name) => !others.some((folder) => folder === name || folder.endsWith(`/${name}`)),
+    (name) =>
+      !others.some((folder) => folder === name || folder.endsWith(`/${name}`)) &&
+      !READ_BESIDE.has(name.slice(name.lastIndexOf('/') + 1)),
   )
   if (!how.asItCame && rest.length > 0) notes.push(`Left out what isn’t the world: ${rest.join(', ')}.`)
   const modded = moddedBrands(read.facts)
   if (modded.length > 0)
     notes.push(
-      `It was opened with ${modded.join(' and ')}. Blocks and items from its mods are only there on a server running the same mods.`,
+      `It was opened with ${modded.map(brandName).join(' and ')}. Blocks and items from its mods are only there on a server running the same mods.`,
     )
   if (!isRelease(read.facts.gameVersion))
     notes.push(

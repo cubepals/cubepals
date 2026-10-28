@@ -15,7 +15,8 @@
  *   or costs it a socket. A pong is far larger than the ping that asks for it, so an address is
  *   answered only so many a second.
  * - A peer exists only once it opens a RakNet connection (the first packet a player sends), and
- *   only while Geyser answers; the address's new peers are rate limited and the peers held capped.
+ *   only while Geyser answers; the address's new peers are rate limited, and the peers held are
+ *   capped per address and in all.
  * - Geyser forgets a source's header when the source goes quiet, and forgets every source when it
  *   starts over, and a datagram from a source it has forgotten is dropped. So the relay forgets a
  *   quiet player first, and every player when Geyser starts over (`forget`): a player who sends
@@ -41,6 +42,8 @@ export interface RelayOptions {
   totalPongs: Rate
   /** How many new connections one address may open. */
   opens: Rate
+  /** How many players one address (an IPv6 one by its /64) may hold at once. */
+  perAddress: number
   /** How many players are held at most. */
   most: number
   /**
@@ -103,8 +106,60 @@ interface Player {
   upstream: Udp
   /** When the player last sent: Geyser's replies don't count, as they don't keep its header. */
   lastAt: number
+  /** The address it is counted under (`addressKey`). */
+  address: string
   /** Datagrams that came while the upstream socket was being made. */
   waiting: Uint8Array[] | null
+}
+
+/** The players held, by source, and how many each address holds: at most `perAddress`. */
+class Peers {
+  readonly #bySource = new Map<string, Player>()
+  readonly #perAddress = new Map<string, number>()
+  readonly #most: number
+
+  constructor(perAddress: number) {
+    this.#most = perAddress
+  }
+
+  get size(): number {
+    return this.#bySource.size
+  }
+
+  get(key: string): Player | undefined {
+    return this.#bySource.get(key)
+  }
+
+  [Symbol.iterator](): MapIterator<[string, Player]> {
+    return this.#bySource.entries()
+  }
+
+  /** Whether `address` may hold another player. */
+  roomFor(address: string): boolean {
+    return this.#of(addressKey(address)) < this.#most
+  }
+
+  #of(key: string): number {
+    return this.#perAddress.get(key) ?? 0
+  }
+
+  add(key: string, player: Player): void {
+    this.#bySource.set(key, player)
+    this.#perAddress.set(player.address, this.#of(player.address) + 1)
+  }
+
+  drop(key: string, player: Player): void {
+    player.upstream?.close()
+    if (this.#bySource.get(key) !== player) return
+    this.#bySource.delete(key)
+    const left = this.#of(player.address) - 1
+    if (left > 0) this.#perAddress.set(player.address, left)
+    else this.#perAddress.delete(player.address)
+  }
+
+  clear(): void {
+    for (const [key, player] of this.#bySource) this.drop(key, player)
+  }
 }
 
 export interface Relay {
@@ -180,17 +235,13 @@ function pongProbes(
 /** Opens the relay's socket. */
 export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
   const { bind, geyser } = options
-  const players = new Map<string, Player>()
+  const players = new Peers(options.perAddress)
   const pongAllowed = new Map<string, Bucket>()
   const openAllowed = new Map<string, Bucket>()
   const totalPongs = new Bucket(options.totalPongs, Date.now())
   let pong: Uint8Array | null = null
   let pongAt = 0
   const ready = () => pong !== null && Date.now() - pongAt < 3 * options.pongRefreshMs
-  const drop = (key: string, player: Player) => {
-    player.upstream?.close()
-    players.delete(key)
-  }
 
   const allowed = (buckets: Map<string, Bucket>, rate: Rate, address: string): boolean => {
     const key = addressKey(address)
@@ -217,7 +268,7 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
     if (known === undefined) return false
     // Quiet for that long, they are a stranger to Geyser too: what they send now starts over.
     if (Date.now() - known.lastAt >= options.idleMs) {
-      drop(key, known)
+      players.drop(key, known)
       return false
     }
     known.lastAt = Date.now()
@@ -241,14 +292,15 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
         }
         if (passedOn(key, packet)) return
         // While Geyser isn't answering, a header sent now would be lost and the player with it.
-        if (!opens(packet) || !ready() || players.size >= options.most) return
+        if (!opens(packet) || !ready() || players.size >= options.most || !players.roomFor(address)) return
         if (!allowed(openAllowed, options.opens, address)) return
         const player: Player = {
           upstream: null as unknown as Udp,
           lastAt: Date.now(),
+          address: addressKey(address),
           waiting: [Uint8Array.from(packet)],
         }
-        players.set(key, player)
+        players.add(key, player)
         void Bun.udpSocket({
           hostname: '127.0.0.1',
           socket: {
@@ -285,7 +337,8 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
   const sweeping = setInterval(
     () => {
       const now = Date.now()
-      for (const [key, player] of players) if (now - player.lastAt >= options.idleMs) drop(key, player)
+      for (const [key, player] of players)
+        if (now - player.lastAt >= options.idleMs) players.drop(key, player)
       for (const buckets of [pongAllowed, openAllowed])
         for (const [key, bucket] of buckets) if (bucket.full(now)) buckets.delete(key)
     },
@@ -297,14 +350,13 @@ export async function bedrockRelay(options: RelayOptions): Promise<Relay> {
     ready,
     forget() {
       pong = null
-      for (const [key, player] of players) drop(key, player)
+      players.clear()
     },
     close() {
       clearInterval(asking)
       clearInterval(sweeping)
       front.close()
       probing.close()
-      for (const player of players.values()) player.upstream?.close()
       players.clear()
     },
   }

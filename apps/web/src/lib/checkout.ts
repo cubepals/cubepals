@@ -2,7 +2,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { BILLING_TERMS, type BillingTerm, UPGRADE_REASONS, type UpgradeReason } from '@blockly/contracts'
+import {
+  BILLING_TERMS,
+  type BillingTerm,
+  sameSitePath,
+  UPGRADE_REASONS,
+  type UpgradeReason,
+} from '@blockly/contracts'
 
 /**
  * The way to a paid plan's payment page. Every "Get Plus" goes to /checkout first, which asks
@@ -18,15 +24,12 @@ export interface CheckoutAsk {
   next?: string
 }
 
-/** Only ever a path on this site: never `//host` or `/\host`. */
-const local = (path: string | null | undefined): path is string =>
-  typeof path === 'string' && /^\/(?![/\\])/.test(path)
-
 /** The checkout page's address for an ask. */
 export function checkoutHref({ plan, term, reason, next }: CheckoutAsk): string {
   const query = new URLSearchParams({ plan, reason })
   if (term === 'year') query.set('term', term)
-  if (local(next)) query.set('next', next)
+  const back = sameSitePath(next)
+  if (back !== null) query.set('next', back)
   return `/checkout?${query}`
 }
 
@@ -38,6 +41,6 @@ export function checkoutOf(params: URLSearchParams): CheckoutAsk | null {
   const reason = UPGRADE_REASONS.find((known): known is UpgradeReason => known === said) ?? 'account'
   const asked = params.get('term')
   const term = BILLING_TERMS.find((known): known is BillingTerm => known === asked) ?? 'month'
-  const next = params.get('next')
-  return local(next) ? { plan, term, reason, next } : { plan, term, reason }
+  const next = sameSitePath(params.get('next'))
+  return next !== null ? { plan, term, reason, next } : { plan, term, reason }
 }
