@@ -167,6 +167,9 @@ instance). A server pack named only by its file is read from the name:
 `app/packs/contents.ts` reads a pack once and keeps what it holds by the file's sha512
 (`pack_contents`): its Minecraft, loader and build, every jar a server installs as a mod, the
 other jars it carries (`other_jars`), and the ones left out with why. Catalog packs are read by HTTP ranges, not downloaded whole.
+Each jar of an uploaded pack gets its check while the pack is built (`mods/jar-checks.ts`). A pack
+kept before its jars were checked gets them, and its `other_jars`, the next time it is built: until
+then a list that names one of its jars can't leave it out.
 
 #### Sides
 
