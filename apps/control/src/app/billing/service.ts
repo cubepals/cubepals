@@ -2,7 +2,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { type BillingTerm, type CheckoutConsent, sameSitePath, type UpgradeReason } from '@blockly/contracts'
+import {
+  type BillingTerm,
+  type CheckoutConsent,
+  type PublicOffer,
+  sameSitePath,
+  type UpgradeReason,
+} from '@blockly/contracts'
 import { type Db, schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { entitlementsFor, PAID_PLANS, planName } from '../../domain/account/entitlements.ts'
@@ -398,6 +404,23 @@ export class BillingService {
       await this.#holds.release(user.id)
       throw error
     }
+  }
+
+  /**
+   * What a month of each paid plan sold here charges a new subscriber now, for the pricing page:
+   * its early price while the room takes that checkout and two more, so a card rarely shows a
+   * price its checkout can't give, or its own (`EarlyHolds.peek`). Holds nothing.
+   */
+  async liveOffers(): Promise<PublicOffer[]> {
+    const billing = this.#caps.billing
+    if (!billing) return []
+    const sold = PAID_PLANS.filter((plan) => billing.sells(plan))
+    const offers = await Promise.all(sold.map((plan) => this.#holds.peek(plan, 2)))
+    return offers.map((offer) => ({
+      plan: offer.planKey,
+      priceCents: offer.priceCents,
+      includedHours: offer.includedUnits ?? 0,
+    }))
   }
 
   /**

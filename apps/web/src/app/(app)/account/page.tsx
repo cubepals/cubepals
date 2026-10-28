@@ -698,7 +698,7 @@ function Plans({ overview }: { overview: AccountOverviewView }) {
             // Only the player's own plan is dark, so the eye lands on theirs.
             solid={yours(plan) !== false}
             mark={seenMark(`plan_${plan.key}`)}
-            action={planAction(plan, overview, sells)}
+            action={planAction(plan, plans.data, overview, sells)}
           />
         ))}
       </div>

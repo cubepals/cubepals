@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { PlatformCapabilities, PublicServerView } from '@blockly/contracts'
+import type { PlatformCapabilities, PublicOffer, PublicServerView } from '@blockly/contracts'
 import { DAY_S, HOUR_S } from '@blockly/contracts/durations'
 import { type Context, Hono } from 'hono'
 import { PNG } from 'pngjs'
@@ -32,6 +32,8 @@ export function createPublicApp(deps: {
   platform: () => Pick<PlatformCapabilities, 'unsoldPlans'>
   /** Whose word on a client's address is believed, since each address's reads are counted. */
   addresses: AddressTrust
+  /** What a month of each paid plan charges a new subscriber now (`BillingService.liveOffers`). */
+  offers: () => Promise<PublicOffer[]>
 }): Hono {
   const app = new Hono()
   /** The address of the client asking, which its reads are counted by. */
@@ -59,6 +61,8 @@ export function createPublicApp(deps: {
     c.header('Access-Control-Allow-Origin', '*')
     return c.json(publicPlans(deps.platform()))
   })
+
+  serveOffer(app, deps.offers)
 
   /** The size behind each answer to "Who is playing?", from the table servers are made with. */
   app.get('/api/public/sizes', (c) => {
@@ -258,4 +262,16 @@ ${rightWidth === 0 ? '' : `<text x="${leftWidth + 12}" y="14" fill="#10241a">${f
 </g>
 </svg>
 `
+}
+
+/**
+ * What a month of each paid plan charges someone who subscribes now: a minute of caching, since
+ * it can change for everyone at once. Only the price and hours, never what decides them.
+ */
+function serveOffer(app: Hono, offers: () => Promise<PublicOffer[]>): void {
+  app.get('/api/public/offer', async (c) => {
+    c.header('Cache-Control', 'public, max-age=60')
+    c.header('Access-Control-Allow-Origin', '*')
+    return c.json(await offers())
+  })
 }

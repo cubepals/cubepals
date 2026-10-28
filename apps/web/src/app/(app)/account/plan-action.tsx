@@ -18,12 +18,22 @@ import { dayOf } from '../../../lib/present'
 import { Button, forSale, Note, priceOf } from '../../../ui'
 import { planMark } from '../../(public)/steps'
 
-/** What goes under `plan`'s card, if anything: the person's own plan and one not for sale have none. */
-export function planAction(plan: PublicPlan, overview: AccountOverviewView, sells: boolean): ReactNode {
+/**
+ * What goes under `plan`'s card, if anything: the person's own plan and one not for sale have none.
+ * `plans` is every plan, the smallest first: a plan after the person's own is a larger one, whatever
+ * either charges a month now.
+ */
+export function planAction(
+  plan: PublicPlan,
+  plans: readonly PublicPlan[],
+  overview: AccountOverviewView,
+  sells: boolean,
+): ReactNode {
   const { billed } = overview.plan
   if (!sells || !forSale(plan) || plan.monthlyPriceCents === 0 || plan.key === overview.plan.key)
     return undefined
-  if (plan.monthlyPriceCents > overview.entitlements.monthlyPriceCents)
+  const rank = (key: string) => plans.findIndex((each) => each.key === key)
+  if (rank(plan.key) > rank(overview.plan.key))
     return (
       <Button
         variant="primary"

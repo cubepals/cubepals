@@ -53,18 +53,22 @@ export function PlusOffer({
   useShown(counted, overview.data === undefined ? null : !lineOnly)
   if (lineOnly) return <Note tone="info">{why}</Note>
   const name = `${plan[0]?.toUpperCase() ?? ''}${plan.slice(1)}`
+  // What a month charges someone who subscribes now, as the plan cards say it (`billing.plans`).
+  const now = listed.data?.find((p) => p.key === plan)
+  const price = now?.monthlyPriceCents ?? offered.monthlyPriceCents
+  const hours = offered.includedUnits === null ? null : (now?.includedHours ?? offered.includedUnits)
   return (
     <Card
       flat
       title={why}
       description={
         <>
-          {dollars(offered.monthlyPriceCents)} a month ·{' '}
-          {offered.includedUnits === null ? (
+          {dollars(price)} a month ·{' '}
+          {hours === null ? (
             'Unlimited hours of play'
           ) : (
-            <PlayHours hours={offered.includedUnits} priceCents={offered.monthlyPriceCents}>
-              {offered.includedUnits} hours of play
+            <PlayHours hours={hours} priceCents={price}>
+              {hours} hours of play
             </PlayHours>
           )}{' '}
           · {offered.maxServers === 1 ? '1 server' : `up to ${offered.maxServers} servers`}

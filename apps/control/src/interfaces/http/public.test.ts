@@ -20,6 +20,7 @@ describe('public sizes', () => {
     icons: {} as ServerIcons,
     platform: () => ({ unsoldPlans: [] }),
     addresses: { proxySecret: null, hostHeader: null },
+    offers: async () => [],
   })
 
   test('each answer to who is playing, with the players it holds and its memory', async () => {
@@ -44,6 +45,7 @@ describe('public plans', () => {
     icons: {} as ServerIcons,
     platform: () => ({ unsoldPlans: [] }),
     addresses: { proxySecret: null, hostHeader: null },
+    offers: async () => [],
   })
 
   test('Free, Core and Plus, with what each costs and includes', async () => {
@@ -141,6 +143,7 @@ describe('player faces', () => {
     icons: {} as ServerIcons,
     platform: () => ({ unsoldPlans: [] }),
     addresses: { proxySecret: null, hostHeader: null },
+    offers: async () => [],
   })
 
   test('an 8×8 picture, cached for the hour Blockly keeps it', async () => {
@@ -195,6 +198,7 @@ describe('public reads', () => {
     icons: {} as ServerIcons,
     platform: () => ({ unsoldPlans: [] }),
     addresses: { proxySecret: null, hostHeader: 'fly-client-ip' },
+    offers: async () => [],
   })
 
   test('are counted by the address the host saw', async () => {

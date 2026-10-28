@@ -6,7 +6,7 @@
  * The plan and size tables as the public pages read them, and the few ways their numbers are said
  * in words. Not for the account's own plan, which the signed-in pages read through the API.
  */
-import type { PublicPlan, PublicSize } from '@blockly/contracts'
+import { type PublicOffer, type PublicPlan, type PublicSize, withOffers } from '@blockly/contracts'
 import { planSaid } from '../ui/plans'
 import { markPartial } from './partial-render'
 import { apiUpstream, RENDER_READ_MS } from './upstream'
@@ -32,6 +32,27 @@ export async function publicPlans(keptSeconds?: number): Promise<PublicPlan[]> {
   } catch {
     markPartial()
     return []
+  }
+}
+
+/** How long what a month charges now may be kept: the control plane keeps it as long. */
+const OFFER_KEPT_SECONDS = 60
+
+/**
+ * The plans with what a month of each charges someone who subscribes now (`/api/public/offer`), for
+ * the cards and words people choose on: the plan's own price and hours, or an early price's while
+ * one is open, kept a minute. Where it can't be read, the plan table's own. Never for what is
+ * cached longer or sent (structured data, the title), which keeps `plans` as they are.
+ */
+export async function offeredPlans(plans: readonly PublicPlan[]): Promise<PublicPlan[]> {
+  try {
+    const response = await fetch(`${apiUpstream()}/api/public/offer`, {
+      signal: AbortSignal.timeout(RENDER_READ_MS),
+      next: { revalidate: OFFER_KEPT_SECONDS },
+    })
+    return withOffers(plans, response.ok ? ((await response.json()) as PublicOffer[]) : [])
+  } catch {
+    return [...plans]
   }
 }
 

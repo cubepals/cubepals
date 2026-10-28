@@ -15,7 +15,7 @@ import type { ReactNode } from 'react'
 import { Presses } from '../app/(public)/presses'
 import type { PublicStatus } from '../app/(public)/status'
 import { bedrockLive } from '../lib/bedrock'
-import { publicPlans } from '../lib/plans'
+import { offeredPlans, publicPlans } from '../lib/plans'
 import { currentSession } from '../lib/session'
 import { canonicalOrigin } from '../lib/site'
 import { sourceOf, withSource } from '../lib/source'
@@ -30,7 +30,10 @@ export interface Landed {
   signedIn: boolean
   /** Where "Create a server" leads. */
   create: string
+  /** The plans as people choose on them: what a month of each charges now (`offeredPlans`). */
   plans: PublicPlan[]
+  /** The plan table's own figures, for the structured data, which is kept longer than a minute. */
+  table: PublicPlan[]
   /** Where a paid plan's button leads, by plan key, for a month or a year. */
   getPlan: (key: string, term?: 'month' | 'year') => string
   /** Cubepals' own Arcade as anyone can see it, or null unless it is known to be awake or asleep. */
@@ -69,12 +72,13 @@ export async function landingOf(
   const source = sourceOf(await searchParams)
   const create = signedIn ? '/servers/new' : withSource('/sign-up', source)
   // Kept five minutes: one reading serves everyone who lands in that time.
-  const [plans, arcade] = await Promise.all([publicPlans(300), arcadeNow()])
+  const [table, arcade] = await Promise.all([publicPlans(300), arcadeNow()])
+  const plans = await offeredPlans(table)
   const getPlan = (key: string, term: 'month' | 'year' = 'month') => {
     const account = `/account?get=${key}${term === 'year' ? '&term=year' : ''}&reason=pricing`
     return signedIn ? account : withSource(`/sign-up?next=${encodeURIComponent(account)}`, source)
   }
-  return { signedIn, create, plans, getPlan, arcade, bedrock: bedrockLive() }
+  return { signedIn, create, plans, table, getPlan, arcade, bedrock: bedrockLive() }
 }
 
 /** The frame the page's forms are set in. `film` marks the one the film is in. */

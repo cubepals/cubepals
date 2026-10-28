@@ -33,7 +33,7 @@ export function FreeHoursUsed({ hours, next }: { hours: number; next?: string })
       </Note>
       {monthly && (
         <PlusOffer
-          why={`${monthly.key.charAt(0).toUpperCase()}${monthly.key.slice(1)} starts them again, with ${monthly.entitlements.includedUnits} hours a month.`}
+          why={`${monthly.key.charAt(0).toUpperCase()}${monthly.key.slice(1)} starts them again, with ${listed.data?.find((plan) => plan.key === monthly.key)?.includedHours ?? monthly.entitlements.includedUnits} hours a month.`}
           plan={monthly.key}
           reason="hours"
           {...(next === undefined ? {} : { next })}

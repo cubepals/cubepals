@@ -7,7 +7,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { digits, pixel } from '../../../landing/fonts'
 import { bedrockLive } from '../../../lib/bedrock'
-import { publicPlans } from '../../../lib/plans'
+import { offeredPlans, publicPlans } from '../../../lib/plans'
 import { canonicalOrigin, pageMetadata } from '../../../lib/site'
 import { appSchema, JsonLd } from '../../../lib/structured-data'
 import { cardsOf, plansSaid, priceOf } from '../../../ui'
@@ -43,14 +43,16 @@ export async function generateMetadata(): Promise<Metadata> {
  * enforces, so nothing here can promise what a server won't do.
  */
 export default async function PricingPage() {
-  const plans = await publicPlans()
+  // What people choose on says what a month charges now; the structured data, the plan table's own.
+  const table = await publicPlans()
+  const plans = await offeredPlans(table)
   const { plus } = byKind(plans)
   const { trial, cards, starter } = cardsOf(plans)
   const bedrock = bedrockLive()
   const costGuide = publishedGuides().find((guide) => guide.slug === 'minecraft-server-cost')
   return (
     <>
-      <JsonLd schema={appSchema(plans, canonicalOrigin())} />
+      <JsonLd schema={appSchema(table, canonicalOrigin())} />
       <header className="bk-stack" style={{ gap: 'var(--space-8)' }}>
         <h1 className="type-display-md" style={{ color: 'var(--ink)' }}>
           {plansSaid(plans)}.

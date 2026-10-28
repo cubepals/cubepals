@@ -82,6 +82,7 @@ export function createApiApp(deps: {
       icons: deps.services.icons,
       platform: () => deps.services.platform.capabilities,
       addresses: deps.addresses,
+      offers: () => deps.services.billing.liveOffers(),
     }),
   )
 
