@@ -7,7 +7,7 @@ import { HOUR_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { EdgeRoutes, PingWakeResult, SessionEvent, WakeClaim, WakeResult } from '@blockly/contracts/edge'
 import { motdForGame } from '@blockly/contracts/server-list'
 import type { AppliedConfigJson, Db } from '@blockly/db'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import { welcome } from '../../domain/revision/revision.ts'
 import { keptAt, keptFor } from '../../domain/server/kept-addresses.ts'
 import { type OperationKind, ROUTABLE, type ServerStatus } from '../../domain/server/lifecycle.ts'
@@ -600,7 +600,7 @@ export class EdgeService {
    */
   async #backAt(server: MinecraftServer): Promise<Date | null> {
     const standing = await loadStanding(this.#db, server.ownerId)
-    const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+    const plan = entitlementsOf(standing)
     const now = new Date()
     const total = await playTotal(this.#db, standing, plan, now)
     if (total !== null && total.left <= 0) return null

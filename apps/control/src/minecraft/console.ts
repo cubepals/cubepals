@@ -60,11 +60,34 @@ export function isPlainCommand(command: string): boolean {
   return command.length > 0 && command.length <= 256 && !/\p{Cc}/u.test(command)
 }
 
-/** Commands people may not run from Blockly's console, with the reason shown to them. */
+const IP_BANS =
+  'IP bans cannot work on Cubepals: every player reaches your server through the same address. Ban the player instead.'
+
+/** Commands people may not run from Blockly's console, by name, with the reason shown to them. */
+const REFUSED: Readonly<Record<string, string>> = {
+  'ban-ip': IP_BANS,
+  'pardon-ip': IP_BANS,
+  stop: 'Use the Stop button, so Cubepals knows the server is off on purpose.',
+}
+
+/** A command's name as the game reads it: without a leading slash or the `minecraft:` namespace. */
+const nameOf = (word: string) =>
+  word
+    .replace(/^\//, '')
+    .toLowerCase()
+    .replace(/^minecraft:/, '')
+
+/**
+ * Commands people may not run from Blockly's console, with the reason shown to them. A command is
+ * known by its name with or without its namespace, and `execute … run` is read through to the
+ * command it runs, however deep.
+ */
 export function refusedCommand(command: string): string | null {
-  const verb = command.trim().replace(/^\//, '').split(/\s+/)[0]?.toLowerCase()
-  if (verb === 'ban-ip' || verb === 'pardon-ip')
-    return 'IP bans cannot work on Cubepals: every player reaches your server through the same address. Ban the player instead.'
-  if (verb === 'stop') return 'Use the Stop button, so Cubepals knows the server is off on purpose.'
+  const words = command.trim().split(/\s+/)
+  const names = [nameOf(words[0] ?? '')]
+  if (names[0] === 'execute')
+    for (let i = 1; i < words.length - 1; i++)
+      if (words[i]?.toLowerCase() === 'run') names.push(nameOf(words[i + 1] ?? ''))
+  for (const name of names) if (Object.hasOwn(REFUSED, name)) return REFUSED[name] ?? null
   return null
 }

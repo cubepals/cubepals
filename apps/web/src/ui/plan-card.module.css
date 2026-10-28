@@ -22,8 +22,8 @@
 }
 
 /* The paper card: ink on white, ink pictures. Side by side, the cards share their five rows (name,
-   price, button, lines, details), so each row stays level with its neighbour's and neither card
-   has a hole. */
+   price, button, lines, details) while their details are closed, so each row stays level with its
+   neighbour's and neither card has a hole. */
 .card {
   --plan-card-inset: var(--space-16);
   --plan-card-quiet: var(--muted);
@@ -38,6 +38,28 @@
   font-family: var(--display);
   font-variation-settings: "SHRP" 30;
   font-size: 18px;
+}
+/* Each card folds and opens on its own. One card open: its details also take a last, flexible row
+   that only it spans, so the open card grows and the closed one keeps its height, its rows still
+   level with the open one's. A flexible row takes only what the open card needs beyond the rows
+   both share. */
+.cards:has(details[open]) {
+  grid-template-rows: repeat(5, auto) 1fr;
+}
+.card:has(details[open]) {
+  grid-row: span 6;
+}
+.card details[open] {
+  grid-row: span 2;
+}
+/* Both open: each card as tall as its own words, so neither is stretched to the other's. */
+.cards:has(> :first-child details[open]):has(> :last-child details[open]) .card {
+  grid-row: auto;
+  grid-template-rows: none;
+  align-self: start;
+}
+.cards:has(> :first-child details[open]):has(> :last-child details[open]) .card details {
+  grid-row: auto;
 }
 .card :focus-visible {
   outline: calc(var(--px) * 1.5) solid var(--fg);

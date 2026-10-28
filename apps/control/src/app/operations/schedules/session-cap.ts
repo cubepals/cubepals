@@ -12,7 +12,7 @@
  */
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
-import { type Entitlements, entitlementsFor, planName } from '../../../domain/account/entitlements.ts'
+import { type Entitlements, entitlementsOf, planName } from '../../../domain/account/entitlements.ts'
 import { METER_UNITS } from '../../../domain/account/meter.ts'
 import { planOnSaleHere } from '../../../domain/account/on-sale.ts'
 import type { AccountStanding } from '../../../domain/account/standing.ts'
@@ -117,7 +117,7 @@ export function sessionCaps(deps: {
     const running = await listByStatus(db, 'running')
     for (const server of running) {
       const standing = await loadStanding(db, server.ownerId)
-      const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+      const plan = entitlementsOf(standing)
       if (plan.maxSessionMinutes === null && plan.dailyUnits === null && plan.totalUnits === null) continue
       const session = await openSession(db, server.id)
       if (session === null) continue

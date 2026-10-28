@@ -10,7 +10,7 @@ import type { Db, WorldImportAnswerJson, WorldImportQuestionJson, WorldPeopleJso
 import {
   broughtWorldRoomBytes,
   comesWith,
-  entitlementsFor,
+  entitlementsOf,
   planThatRuns,
   worldRoomBytes,
 } from '../../domain/account/entitlements.ts'
@@ -265,7 +265,7 @@ export class WorldReading {
       )
     const jars = modJars(read)
     const standing = await loadStanding(this.#db, to.ownerId)
-    const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+    const plan = entitlementsOf(standing)
     // Held to the room an upload is (`beginWorldUpload`), as the world lies on disk, not as it was sent.
     // A new server's first start unpacks it beside its archive (`diskForBroughtWorld`).
     const room =

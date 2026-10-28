@@ -1532,10 +1532,16 @@ Replacing mc-router means rewriting `apps/edge` against the same protocol. Nothi
 - **Rooms.**
   - `onSession` joins `user:<userId>` from the ticket.
   - `watch` is authorized by the realtime role against the DB (owner, or admin) and joins
-    `console:<serverId>`.
+    `console:<serverId>`. It is let in only while the session's sign-in stands, within
+    `ABUSE_LIMITS.consolesPerConnection` (consoles one connection follows at once) and
+    `consoleWatchesPerMinute` (consoles one account opens a minute) (`ConsoleFeed`).
+  - Every minute each session's sign-in is checked again, and each console it follows: a session
+    whose sign-in has ended (signed out, a password reset, a test account's use over) or whose
+    account is no longer active is closed; a console it may no longer watch is left.
   - When a console room's member count goes 0→1, the realtime role starts
     `LogSource.tail(handle)`, and each new watcher gets the last 200 lines from
-    `LogSource.recent` as `consoleHistory`. At 1→0 it stops.
+    `LogSource.recent` as `consoleHistory`, one read shared by everyone opening it at once. At
+    1→0 it stops.
 - **Fan-out.** Services and workers publish through `EventBus` = `pg_notify('blockly_events', json)`
   **inside the domain transaction**, so an event exists only if the write committed. The
   realtime role LISTENs, on `DATABASE_DIRECT_URL` (past Managed Postgres's pooler, which closes a
@@ -1544,8 +1550,10 @@ Replacing mc-router means rewriting `apps/edge` against the same protocol. Nothi
 - **Connecting.**
   1. tRPC `realtime.connectInfo` returns `{ url: config.realtime.publicUrl, certificateSha256?, ticket }`.
      The hash is present in pinned mode.
-  2. The ticket is an HMAC of `{ userId, aud: deploymentId, exp: now + 60s }`.
-  3. `authorize` verifies it and checks `headers.origin` against the web origins.
+  2. The ticket is an HS256 JWT of `{ sub: userId, sid: sign-in session id, jti, aud: deploymentId,
+     exp: now + 60s }` (`infra/realtime/jose-tickets.ts`).
+  3. `authorize` verifies it, once: a ticket opens one session. It checks `headers.origin`
+     against the web origins.
   4. The client's `connect` callback runs this on every reconnect.
 - **Singleton.** One machine of its own Fly app (`bly-<deployment>-realtime`, the control
   plane's image with `ROLES=realtime`, `infra/fly/realtime.toml`), restart `always`. It is an app

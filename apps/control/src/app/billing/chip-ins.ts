@@ -19,7 +19,7 @@ import { DAY_MS } from '@blockly/contracts/durations'
 import { type Db, type Queryable, schema } from '@blockly/db'
 import { and, desc, eq, gte, sql } from 'drizzle-orm'
 import { heldMilli, milliFor } from '../../domain/account/chip-in.ts'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import { dollars } from '../../domain/policy/spend.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { emailVerified, isTestAccount, loadStanding } from '../accounts/persistence.ts'
@@ -45,7 +45,7 @@ export async function offersChipIn(
   if (!billing || server.deletedAt !== null) return false
   const standing = await loadStanding(q, server.ownerId)
   if (standing.status !== 'active') return false
-  if (entitlementsFor(standing.plan, standing.limitOverrides).includedUnits === null) return false
+  if (entitlementsOf(standing).includedUnits === null) return false
   const [closed] = await q
     .select({ id: schema.chipInClosed.serverId })
     .from(schema.chipInClosed)

@@ -6,16 +6,27 @@
  * The guide that compares Cubepals with Aternos for a group of friends on Java Edition. What it
  * says of Aternos comes only from Aternos’s own support pages, each read on 15 October 2026 and
  * linked where its fact is used; nothing else about Aternos is claimed. Everything about Cubepals
- * here comes from the plan table, so no number is typed by hand.
+ * here comes from the plan table, so no number is typed by hand. The pictures are from a local
+ * stack, and their alt text names no number either.
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { bedrockLive } from '../../../../lib/bedrock'
 import { daysSaid, hoursSaid } from '../../../../lib/plans'
 import { OutLink } from '../../../../ui/out-link'
-import { FactTable, GuideArticle, GuideLink, guideMetadata, guidePlans, Part, Questions } from '../article'
+import {
+  FactTable,
+  GuideArticle,
+  GuideLink,
+  guideMetadata,
+  guidePlans,
+  Part,
+  Questions,
+  Shot,
+} from '../article'
 
 const SLUG = 'aternos-alternative'
+const PICTURES = `/guides/${SLUG}`
 
 /**
  * Aternos’s own pages, each read on 15 October 2026. The one fact a link goes with is the only
@@ -107,6 +118,12 @@ export default async function Guide() {
           On Cubepals, there is nothing to press. The server keeps its place in your friends’ Multiplayer list
           from the start, and a friend who joins wakes it from the game itself.
         </p>
+        <Shot
+          src={`${PICTURES}/asleep.png`}
+          width={590}
+          height={314}
+          alt="A Cubepals server, Maple Hollow, marked Sleeping: Nobody was on, so it went to sleep. Joining wakes it. Its address, maple-hollow.play.cubepals.com, is the same as when it’s on, with a Copy address button and a Wake it up button below."
+        />
         <p>
           On Aternos, you press Start on its website, and a friend who joins an offline server through{' '}
           <OutLink href={ATERNOS.dawn}>Dawn</OutLink> can start it too. When Aternos is at its full number of
@@ -129,6 +146,12 @@ export default async function Guide() {
           step, and <GuideLink to="minecraft-server-that-sleeps">how the sleeping works</GuideLink> explains
           the waking on a join.
         </p>
+        <Shot
+          src={`${PICTURES}/free-trial.png`}
+          width={588}
+          height={448}
+          alt="The Account page on the free trial: a Free trial hours card, which says they come once, not every month, with the hours left as a bar, and a Play today card, which says more come every day at midnight."
+        />
       </Part>
 
       <Questions

@@ -4,7 +4,9 @@
 
 import { describe, expect, test } from 'bun:test'
 import type { PublicPlan } from '@blockly/contracts'
-import { extraHourOf, forSale, pitchOf, planPoints, priceOf } from '../ui/plans.tsx'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { extraHourOf, forSale, hoursPoint, PlanCard, pitchOf, planPoints, priceOf } from '../ui/plans.tsx'
 import { daysSaid, hoursAgainSaid, hoursSaid } from './plans.ts'
 
 const free: PublicPlan = {
@@ -69,6 +71,12 @@ const plus: PublicPlan = {
   deletedAfterDays: null,
 }
 
+type Card = Parameters<typeof renderToStaticMarkup>[0]
+/** A card as the page gets it. */
+const htmlOf = (card: Card) => renderToStaticMarkup(card)
+/** A card's points in order, each as the markup of its list item. */
+const pointsOf = (card: Card) => htmlOf(card).split('<li').slice(1)
+
 // What the pricing, landing and account pages say about a plan: what people choose on, in their
 // words, and never a machine's.
 describe('plans as people read them', () => {
@@ -123,10 +131,9 @@ describe('plans as people read them', () => {
   })
 
   test('each card leads with who it is for, and never with hours', () => {
-    expect(pitchOf(free)).toBe('Try plain Minecraft with friends, no card')
     expect(pitchOf(core, true)).toBe('Plain Minecraft for you and 4 friends, Java and Bedrock together')
     expect(pitchOf(plus)).toBe('Mods, plugins and modpacks, for bigger groups')
-    for (const plan of [free, core, plus]) expect(pitchOf(plan)).not.toMatch(/hour/i)
+    for (const plan of [core, plus]) expect(pitchOf(plan)).not.toMatch(/hour/i)
   })
 
   test('Core promises nothing about Bedrock until Bedrock is on', () => {
@@ -154,6 +161,26 @@ describe('plans as people read them', () => {
       'the hours start again: the free trial’s at midnight where you are, until its 20 are played; Plus’s on the 1st',
     )
     expect(hoursAgainSaid([])).toBe('the hours start again')
+  })
+
+  test('the account page says the free trial on Core, after its hours, as the public pages do', () => {
+    const points = pointsOf(createElement(PlanCard, { plan: core, trial: free }))
+    // The plans' own numbers, so the test follows whatever the plans say.
+    const hours = points.findIndex((point) => point.includes(hoursPoint(core)))
+    expect(hours).toBeGreaterThanOrEqual(0)
+    const trial = points[hours + 1] ?? ''
+    for (const part of ['Starts with a free trial: ', hoursPoint(free), ', no card'])
+      expect(trial).toContain(part)
+    expect(htmlOf(createElement(PlanCard, { plan: plus }))).not.toContain('free trial')
+  })
+
+  test('someone on the free trial finds it on the plan it starts', () => {
+    expect(htmlOf(createElement(PlanCard, { plan: core, trial: free, current: 'trial' }))).toContain(
+      'Your free trial',
+    )
+    const plusYours = htmlOf(createElement(PlanCard, { plan: plus, current: true }))
+    expect(plusYours).toContain('Yours')
+    expect(plusYours).not.toContain('Your free trial')
   })
 
   test('days as people say them', () => {

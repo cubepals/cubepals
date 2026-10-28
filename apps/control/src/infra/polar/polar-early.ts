@@ -95,9 +95,9 @@ export class EarlyProducts {
     return newestEarly((await this.#all()).values(), planKey)
   }
 
-  /** The plan a product at an early price sells; null for a product that is none of them. */
-  async planOf(productId: string): Promise<string | null> {
-    return (await this.#all(productId)).get(productId)?.planKey ?? null
+  /** The product at an early price with this id; null for a product that is none of them. */
+  async of(productId: string): Promise<EarlyProduct | null> {
+    return (await this.#all(productId)).get(productId) ?? null
   }
 
   /** By id, read again past `EARLY_KEPT_MS`, or past a minute when `missing` is one they don't hold. */

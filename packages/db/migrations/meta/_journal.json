@@ -722,6 +722,13 @@
       "when": 1793120143306,
       "tag": "0102_world_import_people",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1793163462560,
+      "tag": "0103_subscription_terms",
+      "breakpoints": true
     }
   ]
 }

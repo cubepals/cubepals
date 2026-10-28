@@ -599,7 +599,8 @@ const realtime = router({
       url: ctx.services.realtime.url,
       fallbackUrl: ctx.services.realtime.fallbackUrl,
       certificateSha256: await ctx.services.realtime.certificateSha256(),
-      ticket: await ctx.services.tickets.issue(ctx.actor.userId),
+      // Outside HTTP there is no sign-in session, and a ticket naming none opens nothing.
+      ticket: await ctx.services.tickets.issue({ userId: ctx.actor.userId, sessionId: ctx.sessionId ?? '' }),
     }),
   ),
 })

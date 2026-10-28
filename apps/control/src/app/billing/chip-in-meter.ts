@@ -18,7 +18,7 @@ import { HOUR_S } from '@blockly/contracts/durations'
 import { type Queryable, schema } from '@blockly/db'
 import { and, eq, inArray, lte, sql } from 'drizzle-orm'
 import { draw, heldMilli, type Span, unitsWithin } from '../../domain/account/chip-in.ts'
-import { type Entitlements, entitlementsFor } from '../../domain/account/entitlements.ts'
+import { type Entitlements, entitlementsOf } from '../../domain/account/entitlements.ts'
 import { METER_UNITS } from '../../domain/account/meter.ts'
 import { DEFAULT_TIME_ZONE, monthOf, nextMonthStart } from '../../domain/account/play-day.ts'
 import type { AccountStanding } from '../../domain/account/standing.ts'
@@ -67,7 +67,7 @@ export async function pendingDraws(q: Queryable, ownerId: string, to: Date): Pro
   const mark = marked?.at ?? new Date(Math.min(...paid.map((row) => row.at.getTime())))
   const { left, credits } = atMark(paid, mark, await drawnUnits(q, ownerId, mark))
   const standing = await loadStanding(q, ownerId, to)
-  const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+  const plan = entitlementsOf(standing)
   const anything = credits.length > 0 || [...left.values()].some((units) => units > 0)
   if (plan.includedUnits === null || !anything || to <= mark) {
     for (const credit of credits) left.set(credit.serverId, (left.get(credit.serverId) ?? 0) + credit.units)
@@ -211,7 +211,7 @@ export async function chippedInLeft(
   const pending = await pendingDraws(q, ownerId, now)
   if (pending === null) return new Map()
   const standing = await loadStanding(q, ownerId, now)
-  if (entitlementsFor(standing.plan, standing.limitOverrides).includedUnits === null) return new Map()
+  if (entitlementsOf(standing).includedUnits === null) return new Map()
   return new Map([...pending.left].filter(([, units]) => units > 0))
 }
 
