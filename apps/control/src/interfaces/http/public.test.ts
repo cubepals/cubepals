@@ -58,9 +58,9 @@ describe('public plans', () => {
         available: true,
         monthlyPriceCents: 0,
         yearlyPriceCents: null,
-        // 20 hours in all, at most 2 a day from the player's midnight, and no monthly total.
-        includedHours: 2,
-        per: 'day',
+        // 20 hours in all, once, played on any day, and no monthly total.
+        includedHours: 20,
+        per: 'once',
         extraHourCents: null,
         totalHours: 20,
         sleepsAfterMinutes: 10,

@@ -23,15 +23,12 @@ describe('the play clock on the account page', () => {
     expect(countedFrom('2026-11-30T10:00:00Z', 'UTC', new Date('2026-12-05T00:00:00Z'))).toBe('')
   })
 
-  test('says when a waiting zone takes over, for the month and for the day', () => {
+  test('says when a waiting zone takes over', () => {
     const next = { zone: 'America/New_York', from: '2026-11-01T04:00:00Z' }
-    expect(zoneFrom(next, 'month')).toBe(
-      'Your hours reset at midnight on the 1st, New York time, from 1 November. ',
+    expect(zoneFrom(next)).toBe('Your hours reset at midnight on the 1st, New York time, from 1 November. ')
+    expect(zoneFrom({ zone: 'Etc/UTC', from: '2026-12-01T00:00:00Z' })).toBe(
+      'Your hours reset at midnight on the 1st, UTC, from 1 December. ',
     )
-    expect(zoneFrom(next, 'day')).toBe('Your day resets at midnight, New York time, from 1 November. ')
-    expect(zoneFrom({ zone: 'Etc/UTC', from: '2026-12-01T00:00:00Z' }, 'day')).toBe(
-      'Your day resets at midnight, UTC, from 1 December. ',
-    )
-    expect(zoneFrom(null, 'month')).toBe('')
+    expect(zoneFrom(null)).toBe('')
   })
 })

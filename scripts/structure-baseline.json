@@ -117,7 +117,7 @@
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     },
     "apps/web/src/landing/sections/SleepDemo.tsx": {
-      "n": 1082,
+      "n": 1080,
       "reason": "The landing page, written before the check reached its branch; not yet split up."
     }
   },

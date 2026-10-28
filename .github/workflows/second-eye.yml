@@ -308,7 +308,7 @@ jobs:
       # the runner's files, the git config the action writes its token into).
       - id: claude
         if: steps.newer.outputs.superseded != 'true'
-        uses: anthropics/claude-code-action@db77d4d3c98f3f6380e7cd45ffba2342a3dbde3c # v1.0.254
+        uses: anthropics/claude-code-action@aa8a7738e48bf30a40ee499ce818bef081c5ab5e # v1.0.257
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # The job's own read-only token, in place of the Claude app's; Claude has no tool to use it.

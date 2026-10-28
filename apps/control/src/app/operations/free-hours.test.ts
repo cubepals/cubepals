@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Free's 20 hours in all, with at most 2 a day on top: only runs started on Free count, so
- * accounts begin with all 20 and Plus spends none of them. A run that gets to the end of the 20 is
- * warned in game, then stops with its world kept; starting or joining it is refused until the
- * account has Plus, and nothing says it comes back at midnight.
+ * Free's 20 hours in all, played on any day for as long as the group plays: only runs started on
+ * Free count, so accounts begin with all 20 and Plus spends none of them. A run that gets to the
+ * end of the 20 is warned in game, then stops with its world kept; starting or joining it is
+ * refused until the account has Plus, and nothing says it comes back at midnight.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
@@ -44,7 +44,7 @@ const stopped = async (actor: UserActor, id: string) => {
   await h.until(id, 'stopped')
   await h.settled(id)
 }
-/** A finished run on `plan`, `hours` long, ending `daysAgo` days back: outside today's play. */
+/** A finished run on `plan`, `hours` long, ending `daysAgo` days back. */
 const ran = (serverId: string, plan: string | null, hours: number, daysAgo: number) => {
   const stoppedAt = new Date(Date.now() - daysAgo * DAY_MS)
   return h.db.insert(schema.powerIntervals).values({
@@ -95,7 +95,7 @@ describe.skipIf(!hasDatabase)('Free’s 20 hours', () => {
     expect((await total(actor))?.left).toBeCloseTo(18, 1)
   }, 60_000)
 
-  test('test accounts, and accounts an admin gave monthly hours, are held to the day as before', async () => {
+  test('test accounts, and accounts an admin gave monthly hours, have no 20 in all', async () => {
     const actor = await h.user('Kim')
     await h.db
       .update(schema.accountStanding)
@@ -181,5 +181,49 @@ describe.skipIf(!hasDatabase)('Free’s 20 hours', () => {
     expect(h.mail.sent.at(-1)?.subject).toBe('Your Cubepals free trial is over')
     expect(h.mail.sent.at(-1)?.text).toContain('Your worlds are kept, and you can still download them.')
     expect(await h.app.accounts.warnAboutPlay(actor.userId)).toBeNull()
+  }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('Free’s 20 hours on any day', () => {
+  test('a run goes on past 2 hours in one day, with nothing said and nothing stopped', async () => {
+    const actor = await h.user('Ola')
+    const server = await running(actor)
+    const id = server.id
+    // Three hours today already, and this run started an hour and a half ago.
+    await ran(id, 'free', 3, 0.1)
+    await h.db
+      .update(schema.powerIntervals)
+      .set({ startedAt: new Date(Date.now() - 90 * MINUTE_MS) })
+      .where(and(eq(schema.powerIntervals.serverId, id), isNull(schema.powerIntervals.stoppedAt)))
+    expect(await h.app.schedules.sessionCheck()).toBe(0)
+    expect(h.minecraft.said(id)).toEqual([])
+    expect((await h.server(id)).lifecycle.status).toBe('running')
+    const view = await h.app.queries.get(actor, id)
+    expect(view.playToday).toBeNull()
+    expect(view.playTotal?.hoursLeft).toBeCloseTo(15.5, 1)
+    expect((await h.app.accountQueries.overview(actor)).usage.today).toBeNull()
+    // Later the same day, still running, with no end fixed.
+    expect(await h.app.schedules.sessionCheck(new Date(Date.now() + 2 * HOUR_MS))).toBe(0)
+    expect(h.minecraft.said(id)).toEqual([])
+    const [open] = await h.db
+      .select()
+      .from(schema.powerIntervals)
+      .where(and(eq(schema.powerIntervals.serverId, id), isNull(schema.powerIntervals.stoppedAt)))
+    expect(open?.playEndsAt).toBeNull()
+  }, 60_000)
+
+  test('an end fixed while play was nearly out lets the run go on once there is play again', async () => {
+    // As for a run whose end was fixed for the day's play, which no plan counts any more.
+    const actor = await h.user('Ida')
+    const { id } = await running(actor)
+    const open = and(eq(schema.powerIntervals.serverId, id), isNull(schema.powerIntervals.stoppedAt))
+    await h.db
+      .update(schema.powerIntervals)
+      .set({ playEndsAt: new Date(Date.now() + 5 * MINUTE_MS), sessionWarnedMinutes: 10 })
+      .where(open)
+    expect(await h.app.schedules.sessionCheck(new Date(Date.now() + 6 * MINUTE_MS))).toBe(0)
+    expect((await h.server(id)).lifecycle.status).toBe('running')
+    const [row] = await h.db.select().from(schema.powerIntervals).where(open)
+    expect(row).toMatchObject({ playEndsAt: null, sessionWarnedMinutes: null })
   }, 60_000)
 })

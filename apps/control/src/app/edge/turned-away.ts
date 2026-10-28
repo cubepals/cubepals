@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Someone who came to a server while it rested for its owner's play: today's used up, or the free
- * trial's hours. The edge lets every join to a server that isn't running in to wait, and says so
+ * Someone who came to a server while it rested for its owner's play: the free trial's hours, all
+ * played. The edge lets every join to a server that isn't running in to wait, and says so
  * (a connect, `EdgeService.recordSession`), but one to a resting server can only be turned away
  * (`apps/edge/resting.ts`). So a connect to a resting server is a turned-away join: kept for the
  * owner to see who came by, unless it was the server's own main player, and counted, either way.
@@ -18,12 +18,11 @@ import { and, desc, eq, gt, max } from 'drizzle-orm'
 import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { loadStanding } from '../accounts/persistence.ts'
-import { playToday } from '../accounts/play-today.ts'
 import { playTotal } from '../accounts/play-total.ts'
 import { FUNNEL, noteOnce } from '../insight/record.ts'
 
-/** Why a server rests for its owner's play, as its stop says. */
-export type Resting = 'daily' | 'free_hours'
+/** Why a server rests for its owner's play, as its stop says: the free trial's hours are played. */
+export type Resting = 'free_hours'
 
 const cameBy = schema.serverTurnedAway
 const players = schema.serverPlayers
@@ -31,15 +30,10 @@ const players = schema.serverPlayers
 /** Why `server` rests for its owner's play now, where it does: stopped for it, and the play still used. */
 export async function restingFor(q: Queryable, server: MinecraftServer, now: Date): Promise<Resting | null> {
   const { status, stopReason } = server.lifecycle
-  if (status !== 'stopped' || (stopReason !== 'daily' && stopReason !== 'free_hours')) return null
+  if (status !== 'stopped' || stopReason !== 'free_hours') return null
   const standing = await loadStanding(q, server.ownerId)
-  const plan = entitlementsOf(standing)
-  if (stopReason === 'free_hours') {
-    const total = await playTotal(q, standing, plan, now)
-    return total !== null && total.left <= 0 ? 'free_hours' : null
-  }
-  const today = await playToday(q, standing, plan, now)
-  return today !== null && today.left <= 0 ? 'daily' : null
+  const total = await playTotal(q, standing, entitlementsOf(standing), now)
+  return total !== null && total.left <= 0 ? 'free_hours' : null
 }
 
 /**

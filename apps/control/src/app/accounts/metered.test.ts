@@ -14,6 +14,9 @@ import { runUnitsSince } from './persistence.ts'
  * Play measured in units, and spent only as far as the owner allowed (§15.5). A unit is an hour
  * of play, and a large server uses two.
  */
+const TRIAL_PLAYED =
+  'You’ve played the 20 hours of your free trial. Your worlds are kept, and Core starts them again.'
+
 describe.skipIf(!hasDatabase)('metered play', () => {
   let h: Harness
 
@@ -35,11 +38,12 @@ describe.skipIf(!hasDatabase)('metered play', () => {
   const at = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 15))
 
   /** A run that happened: one closed interval, on a size, for a number of hours, ended before `at`. */
-  const ran = async (serverId: string, tier: string, hours: number, endedHoursAgo = 0) => {
+  const ran = async (serverId: string, tier: string, hours: number, endedHoursAgo = 0, plan?: string) => {
     const stoppedAt = new Date(at.getTime() - endedHoursAgo * HOUR_MS)
     await h.db.insert(schema.powerIntervals).values({
       serverId,
       memoryTier: tier,
+      plan,
       startedAt: new Date(stoppedAt.getTime() - hours * HOUR_MS),
       stoppedAt,
     })
@@ -86,9 +90,7 @@ describe.skipIf(!hasDatabase)('metered play', () => {
 
   test('play past the included block is refused until the owner allows it, and only that far', async () => {
     const owner = await h.user('Alex')
-    // Free includes 2 hours a day, and does not sell more. Twelve hours ahead of UTC, `at` is noon.
-    // The browser says so before anything is played, so the day is counted there at once.
-    await h.app.accounts.setTimeZone(owner, 'Etc/GMT-12')
+    // Free includes 20 hours in all, to play on any day, and does not sell more.
     const server = await h.create(owner)
     await h.until(server.id, 'running')
     await h.settled(server.id)
@@ -96,8 +98,8 @@ describe.skipIf(!hasDatabase)('metered play', () => {
     await h.until(server.id, 'stopped')
     await h.settled(server.id)
 
-    await ran(server.id, '3g', 3, 1)
-    expect(await start(owner, server.id)).toBe('You’ve played today’s 2 hours. Back at midnight, in 12 h.')
+    await ran(server.id, '3g', 20, 1, 'free')
+    expect(await start(owner, server.id)).toBe(TRIAL_PLAYED)
     // Free can't allow more; saying so is the whole answer.
     const asked = await h.app.accounts.allowExtraPlay(owner, 50).then(
       () => null,

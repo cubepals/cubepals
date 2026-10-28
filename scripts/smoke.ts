@@ -190,11 +190,11 @@ if (owner === undefined) {
   process.exit(1)
 }
 
-await step('starts on the free plan: plain Minecraft, 20 hours, at most 2 a day', async () => {
+await step('starts on the free plan: plain Minecraft, 20 hours to play on any day', async () => {
   const { entitlements } = await api('account.overview', {}, 'GET')
   check(entitlements.plan === 'free', `plan is ${entitlements.plan}`)
-  // Play is counted in hours on the one size free sells: 20 in all, 2 a day, and no monthly total.
-  check(entitlements.totalUnits === 20 && entitlements.dailyUnits === 2, 'play is not 20 h, 2 a day')
+  // Play is counted in hours on the one size free sells: 20 in all, on any day, and no monthly total.
+  check(entitlements.totalUnits === 20 && !('dailyUnits' in entitlements), 'play is not 20 h on any day')
   check(entitlements.mayBuyMore === false, 'free can buy more play')
   check(entitlements.playerIdleKickMinutes === 15, 'the AFK kick is not 15 minutes')
   // The plan's hours bound the cost; no plan caps how long one run lasts.
@@ -202,7 +202,7 @@ await step('starts on the free plan: plain Minecraft, 20 hours, at most 2 a day'
   check(entitlements.allowedMemoryTiers.join() === '3g', 'sizes are not just 3 GB')
   check(entitlements.allowedLoaders.join() === 'vanilla,paper', 'free runs more than Vanilla and Paper')
   check(entitlements.mayUseMods === false, 'free runs mods')
-  return `${entitlements.totalUnits} h, ${entitlements.dailyUnits} a day, ${entitlements.allowedLoaders.join(' and ')}`
+  return `${entitlements.totalUnits} h on any day, ${entitlements.allowedLoaders.join(' and ')}`
 })
 
 await step('is told what its plan does not run, before anything boots', async () => {

@@ -61,13 +61,13 @@ export interface AccountStanding {
   /** The last extra-play email sent, as `YYYY-MM:mark` (0, 80 or 100); null before any. */
   extraWarned: string | null
   /**
-   * Where the owner is, as their browser last reported it ("Europe/Paris"): where a plan's day
-   * begins (`play-day.ts`). Null until it has, and the day is UTC's.
+   * Where the owner is, as their browser last reported it ("Europe/Paris"): where a plan's month
+   * begins (`play-day.ts`). Null until it has, and the month is UTC's.
    */
   timeZone: string | null
   /**
-   * When `timeZone` took over from the zone before, and when the month and day it took over in
-   * began (`play-day.ts` `ZoneChange`); null when it has been the zone from the start.
+   * When `timeZone` took over from the zone before, and when the month it took over in began
+   * (`play-day.ts` `ZoneChange`); null when it has been the zone from the start.
    */
   timeZoneFrom: Date | null
   timeZoneBegan: Date | null

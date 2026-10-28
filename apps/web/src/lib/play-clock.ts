@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * When the account page says a plan's day and month begin: from when this month's hours count,
- * when that wasn't the 1st, and the time zone a reported change brings, from when. Only the
- * sentences live here; the clock itself is the control plane's (`domain/account/play-day.ts`).
+ * When the account page says a plan's month begins: from when this month's hours count, when that
+ * wasn't the 1st, and the time zone a reported change brings, from when. Only the sentences live
+ * here; the clock itself is the control plane's (`domain/account/play-day.ts`).
  */
 
 /** A day as the page says it, in `zone`: "1 December". */
@@ -44,14 +44,11 @@ export function countedFrom(monthBegan: string, zone: string, now: Date): string
 }
 
 /**
- * A time zone waiting to take over, as a sentence: what resets at its midnight, and from when.
- * Nothing when none waits, or when the control plane answering is older and doesn't say.
+ * A time zone waiting to take over, as a sentence: that the month's hours reset at its midnight on
+ * the 1st, and from when. Nothing when none waits, or when the control plane answering is older
+ * and doesn't say.
  */
-export function zoneFrom(
-  next: { zone: string; from: string } | null | undefined,
-  what: 'month' | 'day',
-): string {
+export function zoneFrom(next: { zone: string; from: string } | null | undefined): string {
   if (next === null || next === undefined) return ''
-  const when = what === 'month' ? 'Your hours reset at midnight on the 1st' : 'Your day resets at midnight'
-  return `${when}, ${zoneSaid(next.zone)}, from ${dayIn(next.from, next.zone)}. `
+  return `Your hours reset at midnight on the 1st, ${zoneSaid(next.zone)}, from ${dayIn(next.from, next.zone)}. `
 }

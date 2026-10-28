@@ -165,27 +165,25 @@ function awakeIn(week: readonly string[], tailHours: number): number {
 }
 
 /**
- * What a week comes to against a plan's hours: a month of weeks like it, in whole hours; on a plan
- * by the day, its longest evening until the last player leaves (the day's hours running out after
- * that only ends the wait before sleep).
+ * What a week comes to against a plan's hours: a month of weeks like it, in whole hours; on hours
+ * that come once, the free trial's, the week itself, since they are spent once and never come back.
  */
 const usedBy = (week: readonly string[], tailHours: number, plan: PublicPlan | null): number =>
-  plan?.per === 'day'
-    ? Math.max(0, ...week.map((evening) => awakeIn([evening], tailHours) / 60 - tailHours))
+  plan?.per === 'once'
+    ? Math.round(awakeIn(week, tailHours) / 60)
     : Math.round((awakeIn(week, tailHours) / 60) * WEEKS_A_MONTH)
 
 /** The tally that sets the week against the plan's hours: its name, and what the week comes to. */
 const tallyOf = (used: number, plan: PublicPlan | null) =>
-  plan?.per === 'day'
-    ? { name: 'The longest evening this week', about: '', value: spanOf(Math.round(used * 60)) }
+  plan?.per === 'once'
+    ? { name: 'This week', about: 'about ', value: `${used} h` }
     : { name: 'A month of weeks like this', about: 'about ', value: `${used} h` }
 
-/** A plan's hours on its chip: a day's said, a month's only to a screen reader, as it always was. */
+/** A plan's hours on its chip: the number, and to a screen reader whether they come each month or once. */
 function PlanHours({ plan }: { plan: PublicPlan }) {
-  if (plan.per === 'day') return <>{plan.includedHours} h a day</>
   return (
     <>
-      {plan.includedHours} h<span className={styles.sr}> a month</span>
+      {plan.includedHours} h<span className={styles.sr}>{plan.per === 'once' ? ' in all' : ' a month'}</span>
     </>
   )
 }

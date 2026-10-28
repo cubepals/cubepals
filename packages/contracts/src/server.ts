@@ -538,11 +538,10 @@ export interface ServerView {
    */
   sleepsAt: string | null
   /**
-   * Today's play, on a plan that counts it by the day: the hours it includes, the hours left of it
-   * since the owner's midnight on this server (a large size spends two an hour), and when the next
-   * day's begins. Null on a plan that counts none.
+   * Always null: no plan counts its play by the day. Still sent, so a site from before, which reads
+   * it, meets none while the site and the API deploy apart.
    */
-  playToday: { hours: number; hoursLeft: number; backAt: string } | null
+  playToday: null
   /**
    * The play its plan includes in all, once (Free's 20 hours): the hours, and the hours left of
    * them on this server. Null on a plan with no such block.

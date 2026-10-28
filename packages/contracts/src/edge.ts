@@ -31,17 +31,12 @@ export const EdgeRoute = z.object({
    */
   state: z.enum(['asleep', 'restarting']).optional(),
   /**
-   * An asleep server whose owner has used the day's play their plan includes: when it is back, at
-   * their midnight. The edge says so to a ping, in `play-today.ts`'s words.
-   */
-  backAt: z.iso.datetime().optional(),
-  /**
    * An asleep server whose owner has played all of their free trial's hours: no join wakes it
    * until their plan changes, and the edge says so to a ping and a join.
    */
   trialOver: z.literal(true).optional(),
   /**
-   * The server's name, on a route resting for either reason above, so the edge can say whose
+   * The server's name, on a route resting for its owner's free trial, so the edge can say whose
    * server a refused join reached. Cubepals' welcome, shown to a ping while it runs, names it too.
    */
   name: z.string().optional(),
@@ -144,8 +139,6 @@ export const WakeResult = z.discriminatedUnion('outcome', [
      * `broken`: it failed over what the server runs, which its owner sees and has to change.
      */
     reason: z.enum(['unknown', 'suspended', 'paused', 'quota', 'deleted', 'failed', 'broken']),
-    /** Refused because the day's play is used: when it is back, as on the route. */
-    backAt: z.iso.datetime().optional(),
   }),
 ])
 export type WakeResult = z.infer<typeof WakeResult>

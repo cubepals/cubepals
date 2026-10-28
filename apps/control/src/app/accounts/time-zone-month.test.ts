@@ -61,4 +61,13 @@ describe.skipIf(!hasDatabase)('a time zone reported at the end of a used-up mont
     await h.app.accounts.setTimeZone(actor, 'Pacific/Kiritimati')
     expect(await check()).toMatchObject({ ok: false, code: 'limit_reached' })
   }, 60_000)
+
+  test('the time zone is the browser’s, and one Cubepals doesn’t know leaves it as it was', async () => {
+    const actor = await h.user('Remy', 'plus')
+    expect((await h.app.accountQueries.me(actor)).timeZone).toBeNull()
+    await h.app.accounts.setTimeZone(actor, 'Mars/Olympus')
+    expect((await h.app.accountQueries.me(actor)).timeZone).toBeNull()
+    await h.app.accounts.setTimeZone(actor, 'Europe/Paris')
+    expect((await h.app.accountQueries.me(actor)).timeZone).toBe('Europe/Paris')
+  }, 30_000)
 })

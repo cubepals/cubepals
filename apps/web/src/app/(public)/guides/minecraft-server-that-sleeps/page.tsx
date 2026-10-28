@@ -77,7 +77,7 @@ export default async function Guide() {
         <p>
           Hours only count while it’s running. A server for friends spends most of the week with nobody on it,
           and a sleeping one uses none of your hours in that time. That’s what lets{' '}
-          {free ? `the free trial include ${hoursSaid(free)}` : 'the free trial work'} with nothing to pay.{' '}
+          {free ? `the free trial include ${hoursSaid(free)},` : 'the free trial work'} with nothing to pay.{' '}
           <GuideLink to="minecraft-server-cost">What a server costs</GuideLink> goes through the plans.
         </p>
       </Part>
