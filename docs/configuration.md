@@ -232,6 +232,8 @@ regions nodes enroll into (`RUNTIME_REGION_MAP` may, where the fleet is the defa
 | `POLAR_WEBHOOK_SECRET` | optional | secret | optional (off at launch) | secret | `whsec_…`, from the webhook endpoint in Polar's dashboard (`<WEB_CANONICAL_ORIGIN>/api/billing/webhook`, API version 2026-10, events `customer.state_changed`, `order.created`, `order.updated`, `order.paid`, `order.refunded`, `subscription.active`, `subscription.past_due`, `subscription.canceled`, `subscription.uncanceled` and `subscription.revoked`) |
 | `POLAR_SERVER` | `sandbox` | `sandbox` | `production` | tf | Named explicitly |
 | `POLAR_PRODUCTS` | optional | op | optional (off at launch) | op | `core:<product id>,plus:<product id>`, one for each paid plan on sale; a plan without one is not for sale yet, and the control plane says so at start. Production takes it with the two secrets above or none of them ([production.md](production.md#billing-later)) |
+| `EARLY_ROOM_TOKEN` | optional | secret | optional | secret | Bearer token of `PUT /api/billing/early-room`, which sets the room for checkouts at an early price, each plan's points and until when they hold (`apps/control/src/app/billing/early-room.ts`). None turns the route off |
+| `EARLY_ROOM_MAX_POINTS` | optional | op | optional | op | The most room that route may set, in points; it refuses more. Left out: 0, so it opens nothing |
 | `GIFTS_BY_EMAIL` | `false` | `false` | `false` | tf | Gifts emailed to the person they are for, bought with or without an account. Off, a gift is a code emailed to the account that bought it, and Polar's order for a gift a guest started is not kept |
 
 ### Room for new servers

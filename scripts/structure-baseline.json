@@ -1225,7 +1225,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "scripts/staging.ts › function up": {
-      "n": 143,
+      "n": 140,
       "reason": "Over the threshold when the check began, and not yet looked at. Two lines longer: the line that gives the control plane its Floodgate key, and the one that saves it with the state."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk": {

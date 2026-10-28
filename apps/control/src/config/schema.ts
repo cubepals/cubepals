@@ -428,6 +428,12 @@ export const DeploymentConfig = z.object({
   /** The operators' API's bearer token (scripts/runtimes.ts, scripts/fleet.ts); none turns it off. */
   operatorToken: Secret.nullable(),
   /**
+   * Room for early checkouts (`app/billing/early-room.ts`): the bearer token of the one route that
+   * sets it (EARLY_ROOM_TOKEN; none turns the route off), and the most room it may set
+   * (EARLY_ROOM_MAX_POINTS), past which it refuses: 0, closed, unless configured.
+   */
+  earlyRoom: z.object({ token: Secret.nullable(), maxPoints: z.number().int().min(0) }),
+  /**
    * The key Paper servers and the edge share to take Bedrock players in (FLOODGATE_KEY): 16 bytes as
    * base64. None, and no server is given Floodgate, since a key of its own would not match the edge's.
    */
