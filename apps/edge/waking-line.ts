@@ -57,6 +57,19 @@ export class WakingLine {
     this.#since.set(hostname, since)
     return this.#fixed === '' ? wakingNotice(seconds, now - since) : this.#fixed
   }
+
+  /**
+   * Forgets each wake whose server is waking no more by its route, nor by a ping's ask
+   * (`stillWaking`): one that ran since counts its next wake down afresh, however soon it comes.
+   */
+  keep(
+    routes: readonly { hostname: string; waking?: true }[],
+    stillWaking: (hostname: string) => boolean,
+  ): void {
+    const waking = new Set(routes.filter((r) => r.waking === true).map((r) => r.hostname))
+    for (const hostname of this.#since.keys())
+      if (!waking.has(hostname) && !stillWaking(hostname)) this.#since.delete(hostname)
+  }
 }
 
 /** The agent's: an operator's own words in `WAKING_MOTD` instead of the countdown, where set. */

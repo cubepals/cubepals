@@ -46,6 +46,23 @@ describe('the line by hostname', () => {
     expect(line.of('a.play.test', true, 37)).toBe('Waking your world · about 40 seconds')
   })
 
+  test('a server that ran since counts its next wake down afresh, however soon it comes', () => {
+    let now = 1_000_000
+    const line = new WakingLine('', () => now)
+    line.of('a.play.test', true, 37)
+    line.of('b.play.test', true, 37)
+    line.of('c.play.test', true, 37)
+    now += 30 * SECOND_MS
+    // The routes say a runs now and b still wakes; c is waking by a ping's ask alone.
+    line.keep(
+      [{ hostname: 'b.play.test', waking: true }, { hostname: 'a.play.test' }],
+      (name) => name === 'c.play.test',
+    )
+    expect(line.of('a.play.test', true, 37)).toBe('Waking your world · about 40 seconds')
+    expect(line.of('b.play.test', true, 37)).toBe('Waking your world · about 7 seconds')
+    expect(line.of('c.play.test', true, 37)).toBe('Waking your world · about 7 seconds')
+  })
+
   test('a wake its route never said had ended is forgotten after a while', () => {
     let now = 1_000_000
     const line = new WakingLine('', () => now)

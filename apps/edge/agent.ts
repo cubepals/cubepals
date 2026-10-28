@@ -185,6 +185,7 @@ const poll = new RoutesPoll(
     const running = new Set(routes.filter((r) => r.state === undefined).map((r) => r.destination))
     for (const destination of unreachable) if (!running.has(destination)) unreachable.delete(destination)
     for (const destination of asked.keys()) if (!running.has(destination)) asked.delete(destination)
+    wakingLine.keep(routes, (name) => pingWakes.waking(name))
     return applyRoutes()
   },
 )
