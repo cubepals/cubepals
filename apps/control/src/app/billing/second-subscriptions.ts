@@ -13,7 +13,7 @@
  * (`smallerRenewing`), and a year bought while a subscription renews (`BillingService.#yearPaid`).
  */
 import { type Db, type Queryable, schema } from '@blockly/db'
-import { and, eq, gt, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm'
 import { PAID_PLANS } from '../../domain/account/entitlements.ts'
 import { type DeploymentCapabilities, requireCapability } from '../capabilities.ts'
 import type { BillingOrder, BillingProvider, BillingStanding, BillingState } from '../ports/optional.ts'
@@ -27,23 +27,33 @@ type Subscription = NonNullable<BillingState['subscription']>
 type Other = NonNullable<BillingState['others']>[number]
 
 const STOPPED = 'billing.second_subscription_stopped'
+/** A subscription stopped as a second one that later became the one in force, paying as any does. */
+const IN_FORCE = 'billing.second_subscription_in_force'
 const WHY = 'A second subscription to time already paid for.'
 
-/** Whether the subscription was stopped as a second one (`stopSecondSubscriptions`). */
+/**
+ * Whether the subscription was stopped as a second one (`stopSecondSubscriptions`) and is one
+ * still: its latest mark says so, not that it became the subscription in force since.
+ */
 export async function stoppedAsSecond(q: Queryable, userId: string, subscription: string): Promise<boolean> {
-  const [marked] = await q
-    .select({ id: log.id })
+  const [latest] = await q
+    .select({ action: log.action })
     .from(log)
     .where(
       and(
-        eq(log.action, STOPPED),
+        inArray(log.action, [STOPPED, IN_FORCE]),
         eq(log.subjectId, userId),
         sql`${log.data}->>'subscription' = ${subscription}`,
       ),
     )
+    .orderBy(desc(log.at))
     .limit(1)
-  return marked !== undefined
+  return latest?.action === STOPPED
 }
+
+/** Marks a subscription's change, as `stoppedAsSecond` reads it. */
+const mark = (db: Db, userId: string, action: string, data: Record<string, unknown>) =>
+  db.insert(log).values({ actor: 'system:billing', action, subjectType: 'account', subjectId: userId, data })
 
 /**
  * Each second subscription the standing lists, beside the subscription in force or as it, set to
@@ -59,7 +69,15 @@ export async function stopSecondSubscriptions(
 ): Promise<void> {
   const paid = state.subscription
   if (paid === null) return
-  for (const second of await secondsOf(db, state.userId, paid, state.others ?? [])) {
+  const seconds = await secondsOf(db, state.userId, paid, state.others ?? [])
+  // One stopped as a second that is now the one in force, the first having ended, pays as any does.
+  const inForce = paid.externalSubscriptionId
+  if (
+    !seconds.some((s) => s.externalSubscriptionId === inForce) &&
+    (await stoppedAsSecond(db, state.userId, inForce))
+  )
+    await mark(db, state.userId, IN_FORCE, { subscription: inForce, plan: paid.planKey })
+  for (const second of seconds) {
     if (!second.cancelAtPeriodEnd) await reach(() => billing.stopRenewing(second.externalSubscriptionId))
     await markStopped(db, state.userId, second, paid)
     const charged = await db
@@ -172,18 +190,12 @@ async function secondsOf(
 /** Kept on the account's audit log, once: what its charges are refunded by (`refundSecondCharge`). */
 async function markStopped(db: Db, userId: string, second: Subscription | Other, paid: Subscription) {
   if (await stoppedAsSecond(db, userId, second.externalSubscriptionId)) return
-  await db.insert(log).values({
-    actor: 'system:billing',
-    action: STOPPED,
-    subjectType: 'account',
-    subjectId: userId,
-    data: {
-      subscription: second.externalSubscriptionId,
-      plan: second.planKey,
-      ...(second.externalSubscriptionId === paid.externalSubscriptionId
-        ? {}
-        : { besides: paid.externalSubscriptionId }),
-    },
+  await mark(db, userId, STOPPED, {
+    subscription: second.externalSubscriptionId,
+    plan: second.planKey,
+    ...(second.externalSubscriptionId === paid.externalSubscriptionId
+      ? {}
+      : { besides: paid.externalSubscriptionId }),
   })
 }
 

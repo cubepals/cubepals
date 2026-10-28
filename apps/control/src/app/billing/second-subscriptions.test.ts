@@ -157,6 +157,29 @@ test.skipIf(!hasDatabase)(
 )
 
 test.skipIf(!hasDatabase)(
+  'one stopped as a second that becomes the one in force once the first ends pays as any does',
+  async () => {
+    const owner = await w.h.user('Vic')
+    const first = randomUUID()
+    const second = randomUUID()
+    const earlier = new Date(Date.now() - 10 * MINUTE_MS)
+    await paying(owner, [listed(first, earlier)])
+    const charged = await w.ordered(owner, second, { created_at: new Date().toISOString() })
+    await paying(owner, [listed(second, new Date()), listed(first, earlier)])
+    expect(w.refunds.filter((r) => r.order_id === charged)).toHaveLength(1)
+
+    // The first ends, and the owner has the second renew again: it is the one in force now.
+    await paying(owner, [listed(second, new Date())])
+    expect(await w.audited(owner, 'billing.second_subscription_in_force')).toEqual([
+      expect.objectContaining({ subscription: second, plan: 'plus' }),
+    ])
+    const renewal = await w.ordered(owner, second, { created_at: new Date().toISOString() })
+    expect(w.refunds.filter((r) => r.order_id === renewal)).toHaveLength(0)
+    expect((await loadStanding(w.h.db, owner.userId)).plan).toBe('plus')
+  },
+)
+
+test.skipIf(!hasDatabase)(
   'a refund Polar refuses is audited and asked again later; the standing and the other refunds go through',
   async () => {
     const owner = await w.h.user('Tam')
