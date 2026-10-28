@@ -5,7 +5,8 @@
 /**
  * Which paid plans the billing provider has no product for, as the control plane booted with them,
  * for the few places that name the plan to buy and have no capabilities of their own: the in-game
- * warning when the trial ends, and the email about it. Set once when the control plane is composed.
+ * warning when the trial ends, the email about it, and the one when a friend came to a server
+ * resting for its owner's play. Set once when the control plane is composed.
  * Not for what a plan allows (`entitlements.ts`).
  */
 import { planOnSale } from './entitlements.ts'

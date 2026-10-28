@@ -14,7 +14,7 @@ import { paymentFailed, paymentOwed } from './emails/billing.ts'
 import { giftPreviews } from './emails/gift-previews.ts'
 import { giftReminder, giftWords } from './emails/gifts.ts'
 import { addressChanged, unlisted } from './emails/notices.ts'
-import { extraWarning, playWarning } from './emails/play.ts'
+import { extraWarning, friendTurnedAway, playWarning } from './emails/play.ts'
 import { keepingWorld, listingRemoved, serverRebuilt } from './emails/servers.ts'
 import { type Email, esc, INK, meter } from './emails.ts'
 
@@ -161,6 +161,19 @@ const EMAILS: Array<{
     name: 'unlisted',
     email: unlisted({ server: bay, join: 'sunrise-bay.play.cubepals.com', origin: ORIGIN }),
     subject: 'Your server is no longer listed in Browse',
+    shape: 'layout',
+    link: `${ORIGIN}/servers/srv_7Kq2`,
+  },
+  {
+    name: 'came by after the trial',
+    email: friendTurnedAway({
+      player: 'Alex',
+      server: bay,
+      trialHours: 20,
+      paid: { name: 'Plus', hours: 40 },
+      origin: ORIGIN,
+    }),
+    subject: 'Alex tried to join Sunrise <Bay>',
     shape: 'layout',
     link: `${ORIGIN}/servers/srv_7Kq2`,
   },
@@ -326,6 +339,36 @@ describe('notices', () => {
       expect(html).toContain('>Open your server</a>')
     },
   )
+
+  test.each(EMAILS.filter((e) => e.name.startsWith('came by')))(
+    '$name: who came, to which server, why it rests and what brings it back, from the unread address',
+    (e) => {
+      const { html, text } = e.email
+      expect(text).toContain('\n\nThis mailbox isn’t read.\n\nCubepals')
+      expect(html).toContain('You get this because you own this server on Cubepals. This mailbox isn’t read.')
+      expect(html).not.toContain('Reply to this email')
+      expect(html).toContain('>Open your server</a>')
+      expect(html).toContain(`<strong style="color:${INK}">Sunrise &lt;Bay&gt;</strong>`)
+      expect(text).toContain('Anyone else who comes while it rests is on your server’s page.')
+    },
+  )
+
+  test('the owner hears the trial is played, that their world is kept, and what starts it again', () => {
+    const [trial] = EMAILS.filter((e) => e.name.startsWith('came by')).map((e) => e.email.text)
+    expect(trial).toContain(
+      'Alex tried to join Sunrise <Bay>, but it’s resting: you’ve played the 20 hours of your free trial. Cubepals told them it’s resting for now. Your world is kept.',
+    )
+    expect(trial).toContain('Plus starts it again, with 40 hours a month.')
+    // Where no plan by the month is on sale, nothing is offered.
+    const unsold = friendTurnedAway({
+      player: 'Alex',
+      server: bay,
+      trialHours: 20,
+      paid: null,
+      origin: ORIGIN,
+    })
+    expect(unsold.text).not.toContain('hours a month')
+  })
 })
 
 describe('account emails', () => {

@@ -4,10 +4,10 @@
 
 /**
  * A friend who reaches a server resting for its owner's free trial: what the edge is told, what
- * the owner sees afterwards, and what is counted. The edge lets the join in to wait and says so (a
- * connect), then asks for a wake, which is refused; this drives both as the edge does.
+ * the owner sees afterwards and is emailed, and what is counted. The edge lets the join in to wait
+ * and says so (a connect), then asks for a wake, which is refused; this drives both as the edge does.
  */
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { and, eq, isNull, like } from 'drizzle-orm'
@@ -17,6 +17,7 @@ import { FUNNEL } from '../insight/record.ts'
 
 const OWNER = { name: 'Steve', uuid: '0f2c5d3a-9b6e-4f10-a1b2-c3d4e5f60718' }
 const FRIEND = { name: 'Alex', uuid: '5f2c5d3a-9b6e-4f10-a1b2-c3d4e5f60718' }
+const ANOTHER = { name: 'Sam', uuid: '6f2c5d3a-9b6e-4f10-a1b2-c3d4e5f60718' }
 
 let h: Harness
 
@@ -75,6 +76,27 @@ const turnedAwayEvents = (serverId: string) =>
 
 const routeOf = async (slug: string) =>
   (await h.app.edge.routes()).routes.find((r) => r.hostname === `${slug}.play.test`)
+
+/** The emails telling `userId` who came by, as their inbox holds them. */
+const toldOf = (userId: string) =>
+  h.mail.to(`${userId}@example.test`).filter((m) => m.notice && m.subject.includes(' tried to join '))
+
+/** Plays `id` through the rest of the free trial, as the session check finds it, and waits for it to rest. */
+async function playOutTrial(id: string) {
+  await playedBefore(id, 19)
+  await h.db
+    .update(schema.powerIntervals)
+    .set({ startedAt: new Date(Date.now() - 2 * HOUR_MS) })
+    .where(and(eq(schema.powerIntervals.serverId, id), open))
+  await h.app.schedules.sessionCheck()
+  await h.app.schedules.sessionCheck(new Date(Date.now() + 11 * MINUTE_MS))
+  expect((await h.until(id, 'stopped')).lifecycle.stopReason).toBe('free_hours')
+  await h.settled(id)
+}
+
+/** Gives `id`'s owner the trial's hours back, as a paid month would let it run, by forgetting its runs. */
+const playedNothing = (id: string) =>
+  h.db.delete(schema.powerIntervals).where(eq(schema.powerIntervals.serverId, id))
 
 describe.skipIf(!hasDatabase)('a friend at a server resting for the free trial', () => {
   test('after the 20 hours, with the owner on: counted, refused, kept for the owner, and a paid plan wakes it', async () => {
@@ -221,6 +243,10 @@ describe.skipIf(!hasDatabase)('a friend at a server out of free hours', () => {
     expect((await turnedAwayEvents(id)).map((e) => e.properties)).toEqual([
       { serverId: id, reason: 'free_hours', player: 'Alex', friend: true },
     ])
+    // The owner is emailed why it rests: the free trial's hours, played.
+    expect(toldOf(actor.userId).map((m) => m.text.split('\n')[0])).toEqual([
+      'Alex tried to join Sunset Valley, but it’s resting: you’ve played the 20 hours of your free trial. Cubepals told them it’s resting for now. Your world is kept.',
+    ])
 
     // On Plus it is a sleeping server like any other: the next join wakes it.
     await h.db
@@ -275,5 +301,66 @@ describe.skipIf(!hasDatabase)('a friend at a sleeping server', () => {
     await reach(server.slug, FRIEND, 'connect')
     expect(await turnedAwayEvents(server.id)).toEqual([])
     expect((await routeOf(server.slug))?.name).toBeUndefined()
+  }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('the owner emailed about a friend turned away', () => {
+  test('once a rest, for the first friend it keeps away, and again in the next rest', async () => {
+    const actor = await h.user('Robin', 'free')
+    const { id, slug } = await running(actor)
+    // The owner plays it, so their player is the server's main one, until the trial is played.
+    await reach(slug, OWNER, 'connect')
+    await h.db
+      .update(schema.serverPlayers)
+      .set({ playedSeconds: 110 * 60, confirmedAt: new Date() })
+      .where(eq(schema.serverPlayers.serverId, id))
+    await playOutTrial(id)
+    expect(toldOf(actor.userId)).toEqual([])
+
+    // The owner trying their own server is no news.
+    await reach(slug, OWNER, 'connect')
+    expect(toldOf(actor.userId)).toEqual([])
+
+    // A friend comes: one email, from the address nobody reads, with the way to the server's page.
+    await reach(slug, FRIEND, 'connect')
+    const told = toldOf(actor.userId)
+    expect(told.map((m) => m.subject)).toEqual(['Alex tried to join Sunset Valley'])
+    expect(told[0]?.text).toContain('you’ve played the 20 hours of your free trial.')
+    expect(told[0]?.text).toContain(`http://localhost:3000/servers/${id}`)
+
+    // The same friend again, and another: on the page, not in another email.
+    await reach(slug, FRIEND, 'connect')
+    await reach(slug, ANOTHER, 'connect')
+    expect((await h.app.queries.get(actor, id)).cameBy.map((p) => p.name)).toEqual(['Sam', 'Alex'])
+    expect(toldOf(actor.userId)).toHaveLength(1)
+
+    // Hours again: it runs, rests again, and the next friend to come is news again.
+    await playedNothing(id)
+    expect(await h.app.edge.wake(`${slug}.play.test`)).toMatchObject({ outcome: 'ready' })
+    await h.settled(id)
+    await playOutTrial(id)
+    await reach(slug, ANOTHER, 'connect')
+    expect((await h.app.queries.get(actor, id)).cameBy.map((p) => p.name)).toEqual(['Sam'])
+    expect(toldOf(actor.userId).map((m) => m.subject)).toEqual([
+      'Alex tried to join Sunset Valley',
+      'Sam tried to join Sunset Valley',
+    ])
+  }, 60_000)
+
+  test('an email that fails is logged, and the friend is kept all the same', async () => {
+    const actor = await h.user('Ash', 'free')
+    const { id, slug } = await running(actor)
+    await playOutTrial(id)
+    const send = spyOn(h.mail, 'send').mockRejectedValue(new Error('mail is down'))
+    const logged = spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await reach(slug, FRIEND, 'connect')
+      expect(logged).toHaveBeenCalledWith(`came-by notice for ${id} failed`, expect.any(Error))
+    } finally {
+      send.mockRestore()
+      logged.mockRestore()
+    }
+    expect((await h.app.queries.get(actor, id)).cameBy.map((p) => p.name)).toEqual(['Alex'])
+    expect(toldOf(actor.userId)).toEqual([])
   }, 60_000)
 })

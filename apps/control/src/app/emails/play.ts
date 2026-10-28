@@ -7,10 +7,11 @@
  * (`AccountService.warnAboutPlay`), the same for Free's hours in all, and as extra play the owner allowed is used: when it starts,
  * at four fifths of their limit and at all of it (`warnAboutExtra`). Hours here are hours on the
  * smallest server, which is what a unit is, and the email says so rather than teaching anyone the
- * word "unit". Included play is said as what is left, the way the account page says it.
+ * word "unit". Included play is said as what is left, the way the account page says it. Last, the
+ * notice that a friend came to a server resting for its owner's play (`edge/came-by-notice.ts`).
  */
 import { dollars } from '../../domain/policy/spend.ts'
-import { ACCOUNT, type Email, layout, meter, p } from '../emails.ts'
+import { ACCOUNT, type Email, esc, INK, layout, meter, OWNER, p } from '../emails.ts'
 
 /** Hours left as people say them: "less than an hour", "about an hour", "about 12 hours". */
 function leftSaid(left: number): string {
@@ -218,6 +219,47 @@ export function freeHoursWarning(input: {
       body: meter(Math.round(left * 10) / 10, input.included, 'left') + said.map(p).join(''),
       action: { label: 'Open your account', url: account },
       why: ACCOUNT,
+    }),
+  }
+}
+
+/**
+ * A friend came to the owner's server while it rested for their free trial, played, and was told
+ * so: the first one a rest kept away (`edge/came-by-notice.ts`), since anyone after is on the
+ * server's page. `trialHours` is the trial's hours in all, as the plan says them. `paid` is the plan
+ * by the month on sale here, which brings it back. From the address nobody reads, so it says so
+ * instead of offering a reply.
+ */
+export function friendTurnedAway(input: {
+  player: string
+  server: { id: string; name: string }
+  trialHours: number
+  paid: { name: string; hours: number } | null
+  origin: string
+}): Email {
+  const page = `${input.origin}/servers/${input.server.id}`
+  const subject = `${input.player} tried to join ${input.server.name}`
+  const { paid } = input
+  const came = (player: string, server: string) =>
+    `${player} tried to join ${server}, but it’s resting: you’ve played the ${input.trialHours} hours of your free trial. Cubepals told them it’s resting for now. Your world is kept.`
+  const again = paid === null ? null : `${paid.name} starts it again, with ${paid.hours} hours a month.`
+  const later = 'Anyone else who comes while it rests is on your server’s page.'
+  const lines = [came(input.player, input.server.name), ...(again === null ? [] : [again]), later]
+  const strong = (text: string) => `<strong style="color:${INK}">${esc(text)}</strong>`
+  const preheader = 'Your world is kept.'
+  return {
+    subject,
+    preheader,
+    text: [...lines, '', page, '', 'This mailbox isn’t read.', '', 'Cubepals'].join('\n'),
+    html: layout({
+      origin: input.origin,
+      preheader,
+      chip: { label: 'Free trial over', tone: 'quiet' },
+      heading: `${esc(input.player)} tried to join ${esc(input.server.name)}`,
+      body: [came(strong(input.player), strong(input.server.name)), ...lines.slice(1)].map(p).join(''),
+      action: { label: 'Open your server', url: page },
+      why: OWNER,
+      unread: true,
     }),
   }
 }

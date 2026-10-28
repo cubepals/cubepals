@@ -894,6 +894,12 @@ textarea.bk-input {
   background: var(--status-info-soft);
   color: var(--status-info);
 }
+/* Something about to run out, before it does: the warm amber, apart from a plain note's grey and
+   the red of what failed. */
+.bk-note--warning {
+  background: var(--status-online-soft);
+  color: var(--status-online);
+}
 .bk-note--danger {
   background: var(--status-danger-soft);
   color: var(--status-danger);

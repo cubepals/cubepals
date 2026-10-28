@@ -117,7 +117,13 @@ export function LoadFailed({ error, onRetry }: { error: ReactNode; onRetry: () =
   )
 }
 
-export function Note({ tone, children }: { tone: 'info' | 'danger' | 'success'; children: ReactNode }) {
+export function Note({
+  tone,
+  children,
+}: {
+  tone: 'info' | 'warning' | 'danger' | 'success'
+  children: ReactNode
+}) {
   return (
     <div className={`bk-note bk-note--${tone}`} role={tone === 'danger' ? 'alert' : 'status'}>
       {children}

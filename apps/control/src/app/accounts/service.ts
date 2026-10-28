@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { SignUpAgreement, SignupSource } from '@blockly/contracts'
+import { PLAY_WARNING_AT, type SignUpAgreement, type SignupSource } from '@blockly/contracts'
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import { type Db, schema, type Tx } from '@blockly/db'
 import {
@@ -81,7 +81,7 @@ const WAITLIST_PER_MINUTE = 30
  * sleep. Half says nothing: a month half played is a month going as it should. Later ones say what the earlier ones did, so a warning that
  * arrives late still makes sense on its own.
  */
-const WARN_AT = [80, 100] as const
+const WARN_AT = [PLAY_WARNING_AT, 100] as const
 
 /**
  * What an email about running out says of extra hours and the plan with more than this one: its name, and how many extra

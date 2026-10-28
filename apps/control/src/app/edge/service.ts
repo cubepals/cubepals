@@ -30,7 +30,7 @@ import { medianOf, type WakeTimes, wakeTimesOf, wayOf } from '../operations/wake
 import { wakeAnswered } from '../platform/telemetry.ts'
 import type { ChangeSignal } from '../ports/changes.ts'
 import type { EventBus } from '../ports/events.ts'
-import type { PlayAddress, PlayAddressing } from '../ports/platform.ts'
+import type { Mailer, PlayAddress, PlayAddressing } from '../ports/platform.ts'
 import type { Endpoint, RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
 import type { SecretKeyring } from '../secrets.ts'
@@ -45,6 +45,7 @@ import {
 } from '../servers/usage.ts'
 import type { ServerWaiter } from '../servers/waiter.ts'
 import { tuning } from '../tuning.ts'
+import { CameByNotice } from './came-by-notice.ts'
 import { type Fingerprint, fingerprint, type RouteInputs, type RouteServer, readInputs } from './inputs.ts'
 import { forgetAddresses, joinEnded, knownAddress } from './known-addresses.ts'
 import { pingWake } from './ping-wake.ts'
@@ -139,6 +140,8 @@ export class EdgeService {
   #forgotAt = 0
   /** Starts joins asked for that are under way, by server: joins that arrive together share one. */
   readonly #starts = new Map<string, Promise<WakeResult | null>>()
+  /** Emails an owner the first friend a rest of their server kept away. */
+  readonly #cameBy: CameByNotice
 
   constructor(deps: {
     db: Db
@@ -153,6 +156,8 @@ export class EdgeService {
     runtimeSecrets: SecretKeyring
     wakeWaitMs: number
     routeChanges?: ChangeSignal
+    mailer: Mailer
+    webOrigin: string
   }) {
     this.#db = deps.db
     this.#addressing = deps.addressing
@@ -166,6 +171,7 @@ export class EdgeService {
     this.#wakeWaitMs = deps.wakeWaitMs
     this.#changes = deps.routeChanges ?? null
     this.#wakeTimes = wakeTimesOf(deps.db)
+    this.#cameBy = new CameByNotice(deps)
   }
 
   /** Every hostname that should route, with where the edge sends it. */
@@ -655,14 +661,14 @@ export class EdgeService {
     const uuid = normalizeUuid(event.player.uuid)
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(uuid)) return
     const player = { uuid, name: event.player.name }
-    await this.#db.transaction(async (tx) => {
+    const told = await this.#db.transaction(async (tx) => {
       await recordEdgePresence(tx, server.id, player, event.event, new Date(event.at))
       // Which address people join through: an alias left from a domain move can go once it's quiet.
       const domain = this.#addressing.domainFor(event.hostname)
       if (event.event === 'connect' && domain !== null) await recordDomainJoin(tx, domain, new Date(event.at))
       // Let in to wait for a server resting for its owner's play: the edge can only turn it away.
       const resting = event.event === 'connect' ? await restingFor(tx, server, new Date()) : null
-      if (resting !== null) await turnedAway(tx, server, player, resting, new Date(event.at))
+      const first = resting !== null && (await turnedAway(tx, server, player, resting, new Date(event.at)))
       if (event.event === 'disconnect')
         await joinEnded(tx, this.#keyring, server.id, event.address, player, new Date(event.at))
       const online = (await presenceFor(tx, [server.id])).get(server.id) ?? []
@@ -672,7 +678,10 @@ export class EdgeService {
         ownerId: server.ownerId,
         online: online.length,
       })
+      return first
     })
+    // The owner hears of the first friend a rest kept away once that is stored; later ones are on its page.
+    if (told) await this.#cameBy.friendCame(server, player)
   }
 }
 

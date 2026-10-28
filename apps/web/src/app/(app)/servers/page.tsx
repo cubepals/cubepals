@@ -12,6 +12,7 @@ import { messageOf, useTRPC } from '../../../lib/api'
 import { coverFor, presentStatus } from '../../../lib/present'
 import { Button, EmptyState, ICON, ServerCard, Skeleton } from '../../../ui'
 import { CameBy } from '../came-by'
+import { HoursLeft } from '../hours-left'
 import { usePrefetch } from '../prefetch'
 import styles from './first-world.module.css'
 
@@ -121,6 +122,9 @@ export default function ServersPage() {
         <>
           {servers.data.map((server) => (
             <CameBy key={server.id} server={server} named />
+          ))}
+          {servers.data.map((server) => (
+            <HoursLeft key={server.id} server={server} named />
           ))}
           <div className="bk-grid bk-grid--three">
             {servers.data.map((server) => {

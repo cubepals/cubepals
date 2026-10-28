@@ -4,7 +4,7 @@
 
 'use client'
 
-import { hoursAndMinutes, letsBedrockIn, type OperationView, type ServerView } from '@blockly/contracts'
+import { letsBedrockIn, type OperationView, type ServerView } from '@blockly/contracts'
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Moon, Play, RotateCw, Sunrise } from 'lucide-react'
@@ -47,6 +47,7 @@ import {
 import { ctaMark } from '../../../(public)/steps'
 import { CameBy } from '../../came-by'
 import { FreeHoursUsed } from '../../free-hours-used'
+import { HoursLeft } from '../../hours-left'
 import { PlusOffer } from '../../plus-offer'
 import { BootLine } from './boot-line'
 import { useChanged } from './settings/shared'
@@ -338,19 +339,14 @@ const restsNow = (server: ServerView) => outOfPlay(server) !== null && server.ac
 const outForGood = (server: ServerView) => outOfPlay(server) === 'trial'
 
 /**
- * On the free trial: what is left of its hours, to play on any day, or, once they are played, that
- * a paid plan starts the server again.
+ * On the free trial: what is left of its hours, to play on any day, warned of once it is low, or,
+ * once they are played, that a paid plan starts the server again.
  */
 function TrialLeft({ server }: { server: ServerView }) {
   const total = server.playTotal
   if (total === null) return null
   if (outForGood(server)) return <FreeHoursUsed hours={total.hours} />
-  if (total.hoursLeft <= 0) return null
-  return (
-    <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-      {hoursAndMinutes(total.hoursLeft * 60)} left of your free trial.
-    </p>
-  )
+  return <HoursLeft server={server} />
 }
 
 /** Why a button's press was refused, with the way on where there is one. */

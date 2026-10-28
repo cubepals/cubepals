@@ -8,13 +8,14 @@
  * (a connect, `EdgeService.recordSession`), but one to a resting server can only be turned away
  * (`apps/edge/resting.ts`). So a connect to a resting server is a turned-away join: kept for the
  * owner to see who came by, unless it was the server's own main player, and counted, either way.
+ * The first friend kept in a rest is also emailed to the owner (`came-by-notice.ts`).
  *
  * Not for deciding whether a server rests (the access policy refuses its start), or for what the
  * player is told (the edge's).
  */
 import type { ServerView } from '@blockly/contracts'
 import { type Queryable, schema } from '@blockly/db'
-import { and, desc, eq, gt, max } from 'drizzle-orm'
+import { and, desc, eq, gt, max, sql } from 'drizzle-orm'
 import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { loadStanding } from '../accounts/persistence.ts'
@@ -47,7 +48,9 @@ export async function restingFor(q: Queryable, server: MinecraftServer, now: Dat
 /**
  * A join to `server`, resting for `reason`, was turned away. Nothing links an account to a player,
  * so the server's main player, the one it has seen play longest, counts as its owner: anyone else
- * is kept for the owner, their latest try only. Every one is counted.
+ * is kept for the owner, their latest try only. Every one is counted. Answers whether this is the
+ * first friend kept since the server last stopped, whom the owner is told of once this commits
+ * (`came-by-notice.ts`); friends who come together are kept one after the other, so only one is.
  */
 export async function turnedAway(
   q: Queryable,
@@ -55,7 +58,7 @@ export async function turnedAway(
   player: { uuid: string; name: string },
   reason: Resting,
   at: Date,
-): Promise<void> {
+): Promise<boolean> {
   const [main] = await q
     .select({ uuid: players.playerUuid })
     .from(players)
@@ -63,6 +66,7 @@ export async function turnedAway(
     .orderBy(desc(players.playedSeconds))
     .limit(1)
   const friend = main?.uuid !== player.uuid
+  const first = friend && (await firstInRest(q, server.id))
   if (friend)
     await q
       .insert(cameBy)
@@ -78,6 +82,32 @@ export async function turnedAway(
     properties: { serverId: server.id, reason, player: player.name, friend },
     at,
   })
+  return first
+}
+
+/**
+ * Whether nobody has been kept at `serverId` since it last stopped, held until the transaction
+ * ends so that of two friends arriving together, the second sees the first.
+ */
+async function firstInRest(q: Queryable, serverId: string): Promise<boolean> {
+  await q.execute(sql`select pg_advisory_xact_lock(hashtext(${`blockly:came-by:${serverId}`}))`)
+  const stopped = await lastStop(q, serverId)
+  if (stopped === null) return false
+  const [kept] = await q
+    .select({ at: cameBy.at })
+    .from(cameBy)
+    .where(and(eq(cameBy.serverId, serverId), gt(cameBy.at, stopped)))
+    .limit(1)
+  return kept === undefined
+}
+
+/** When the server last stopped; null if it never has. */
+async function lastStop(q: Queryable, serverId: string): Promise<Date | null> {
+  const [stopped] = await q
+    .select({ at: max(schema.powerIntervals.stoppedAt) })
+    .from(schema.powerIntervals)
+    .where(eq(schema.powerIntervals.serverId, serverId))
+  return stopped?.at ?? null
 }
 
 /**
@@ -89,15 +119,12 @@ export async function cameByView(
   server: Pick<MinecraftServer, 'id' | 'lifecycle'>,
 ): Promise<ServerView['cameBy']> {
   if (server.lifecycle.status !== 'stopped') return []
-  const [stopped] = await q
-    .select({ at: max(schema.powerIntervals.stoppedAt) })
-    .from(schema.powerIntervals)
-    .where(eq(schema.powerIntervals.serverId, server.id))
-  if (!stopped?.at) return []
+  const stopped = await lastStop(q, server.id)
+  if (stopped === null) return []
   const rows = await q
     .select({ name: cameBy.playerName, uuid: cameBy.playerUuid, at: cameBy.at })
     .from(cameBy)
-    .where(and(eq(cameBy.serverId, server.id), gt(cameBy.at, stopped.at)))
+    .where(and(eq(cameBy.serverId, server.id), gt(cameBy.at, stopped)))
     .orderBy(desc(cameBy.at))
   return rows.map((row) => ({ ...row, at: row.at.toISOString() }))
 }
