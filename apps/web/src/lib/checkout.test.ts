@@ -2,6 +2,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * The checkout page's address: the plan, the term and the reason it carries, and the path it
+ * comes back to, which is only ever one on this site.
+ */
+
 import { describe, expect, test } from 'bun:test'
 import { checkoutHref, checkoutOf } from './checkout.ts'
 
@@ -20,7 +25,14 @@ describe('the way to a payment page', () => {
   })
 
   test('never sends anyone to another site afterwards', () => {
-    for (const away of ['//evil.test/x', '/\\evil.test', 'https://evil.test/']) {
+    for (const away of [
+      '//evil.test/x',
+      '/\\evil.test',
+      'https://evil.test/',
+      '/\t/evil.test',
+      '/\n/evil.test',
+      '/..//evil.test',
+    ]) {
       expect(checkoutHref({ plan: 'plus', reason: 'account', next: away })).toBe(
         '/checkout?plan=plus&reason=account',
       )

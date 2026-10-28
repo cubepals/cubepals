@@ -79,6 +79,12 @@ export interface AbuseLimits {
    * (`app/backups/new-world-imports.ts`): each is up to 4 GB, and read on a worker.
    */
   worldUploadsPerDay: number
+  /**
+   * How long a new account whose email isn't confirmed yet takes a free place, in hours
+   * (`countFreeAccounts` in `app/accounts/persistence.ts`). Once confirmed it takes one for good;
+   * one never confirmed stops taking one, so sign-up stays open for the people who do confirm.
+   */
+  unconfirmedPlaceHours: number
 }
 
 /** The figures the runtime economics report prices a margin with (`app/runtimes/economics.ts`). */
@@ -122,6 +128,7 @@ export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {
   joinReportsPerSecond: 10,
   joinReportBytes: 65_536,
   worldUploadsPerDay: 10,
+  unconfirmedPlaceHours: 24,
 }
 
 /** Round figures for development and tests. */

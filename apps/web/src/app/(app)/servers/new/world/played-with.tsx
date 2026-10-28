@@ -10,18 +10,10 @@
  * dropped as a file (`pack-drop.tsx`). Plain Minecraft would lose the world's modded blocks and
  * items, so its server is made from the pack, and only what it is comes back to `onPack`.
  */
-import type { ModpackHit, PackSourceInput } from '@blockly/contracts'
+import { brandName, type ModpackHit, type PackSourceInput } from '@blockly/contracts'
 import { useState } from 'react'
 import { PackDrop } from '../../../pack-drop'
 import { Modpacks } from '../modpacks'
-
-/** The server types a world was opened with, as a person says them. */
-const LOADER_NAMES: Record<string, string> = {
-  forge: 'Forge',
-  neoforge: 'NeoForge',
-  fabric: 'Fabric',
-  quilt: 'Quilt',
-}
 
 export function PlayedWith({
   moddedWith,
@@ -33,7 +25,7 @@ export function PlayedWith({
 }) {
   const [file, setFile] = useState(false)
   const [picked, setPicked] = useState<{ hit: ModpackHit; versionId: string | null } | null>(null)
-  const loaders = moddedWith.map((brand) => LOADER_NAMES[brand] ?? brand)
+  const loaders = moddedWith.map(brandName)
   return (
     <div className="bk-stack" style={{ gap: 'var(--space-12)' }}>
       <p className="type-body">

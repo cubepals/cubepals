@@ -5,7 +5,7 @@
 /** The front door: what it reads off a connection, and what it lets through to a stand-in mc-router. */
 
 import { afterEach, expect, test } from 'bun:test'
-import { type AddressInfo, connect, createServer, type Server } from 'node:net'
+import { type AddressInfo, connect, createServer, type Server, type Socket } from 'node:net'
 import { proxyHeader, readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
 import { front, geyserDoor, playersOnline, readHandshake, readProxyLine } from './front.ts'
 import { turnAway } from './hold.ts'
@@ -115,7 +115,7 @@ async function frontDoor(limits: Limits, proxied: boolean, timeouts = { connectM
 }
 
 const ROOMY: Limits = {
-  address: { connections: { perSecond: 100, burst: 100 }, greeting: 100 },
+  address: { connections: { perSecond: 100, burst: 100 }, greeting: 100, open: 100 },
   server: { connections: { perSecond: 100, burst: 100 }, open: 100 },
 }
 
@@ -420,4 +420,55 @@ test('a join waiting for routes keeps its place among the address’s greeting c
   expect(first.destroyed).toBe(false)
   expect(behind.received).toEqual([])
   first.destroy()
+})
+
+/** A join from `address` through a PROXY line, left open; resolves with what it heard by then. */
+async function joinFrom(port: number, address: string): Promise<{ socket: Socket; heard: () => Uint8Array }> {
+  const chunks: Buffer[] = []
+  const socket = connect(port, '127.0.0.1')
+  socket.on('data', (chunk) => chunks.push(chunk))
+  socket.on('error', () => undefined)
+  socket.write(
+    Uint8Array.from([
+      ...encode(`PROXY TCP4 ${address} 10.0.0.1 51234 25565\r\n`),
+      ...joinRequest('a.play.test'),
+    ]),
+  )
+  await Bun.sleep(100)
+  return { socket, heard: () => new Uint8Array(Buffer.concat(chunks)) }
+}
+
+test('an address holds only so many open connections, and a closed one frees its place', async () => {
+  const limits: Limits = { ...ROOMY, address: { ...ROOMY.address, open: 2 } }
+  const { port, behind } = await frontDoor(limits, true)
+  const first = await joinFrom(port, '203.0.113.7')
+  const second = await joinFrom(port, '203.0.113.7')
+  const third = await joinFrom(port, '203.0.113.7')
+  expect(third.heard()).toEqual(turnAway('Busy'))
+  const elsewhere = await joinFrom(port, '203.0.113.8')
+  expect(elsewhere.heard()).toEqual(new Uint8Array())
+  first.socket.destroy()
+  await Bun.sleep(50)
+  const again = await joinFrom(port, '203.0.113.7')
+  expect(again.heard()).toEqual(new Uint8Array())
+  for (const join of [second, third, elsewhere, again]) join.socket.destroy()
+  await Bun.sleep(50)
+  expect(behind.received).toHaveLength(4)
+})
+
+test('joins at Geyser’s door are not held to an address’s open connections', async () => {
+  const limits: Limits = { ...ROOMY, address: { ...ROOMY.address, open: 1 } }
+  const { options, behind } = await frontDoor(limits, true)
+  const door = await geyserDoor(options)
+  open.push(door.server)
+  const header = proxyHeader({ address: '198.51.100.9', port: 40000 }, { address: '127.0.0.1', port: 25565 })
+  const joins = [1, 2].map(() => connect(door.port, '127.0.0.1'))
+  for (const join of joins) {
+    join.on('error', () => undefined)
+    join.write(Uint8Array.from([...header, ...joinRequest('a.play.test')]))
+  }
+  await Bun.sleep(150)
+  for (const join of joins) join.destroy()
+  await Bun.sleep(50)
+  expect(behind.received).toHaveLength(2)
 })

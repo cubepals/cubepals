@@ -6,11 +6,13 @@
  * The free-account cap, through the real Better Auth asking the real
  * account service: the last place is taken and the next sign-up refused, by email and by a
  * provider, with nothing written; two at once at the last place get one account; the owner always
- * gets in; which accounts take a place; and the waitlist offered instead.
+ * gets in; which accounts take a place, an unconfirmed one only for a while; and the waitlist
+ * offered instead.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { SIGNUPS_FULL, TERMS_VERSION } from '@blockly/contracts'
+import { HOUR_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import {
@@ -20,6 +22,7 @@ import {
   grantAdmin,
 } from '../../app/accounts/persistence.ts'
 import { AccountService } from '../../app/accounts/service.ts'
+import { tuning } from '../../app/tuning.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { authMail } from '../../testing/outbox.ts'
 import { authHandler, createAuth } from './better-auth.ts'
@@ -142,6 +145,18 @@ describe.skipIf(!hasDatabase)('sign-up past the free-account cap', () => {
       .set({ heldUntil: new Date(Date.now() - 1000) })
       .where(eq(schema.signupHolds.email, unfinished))
     expect(await h.app.accounts.signupsOpen()).toBe(true)
+  })
+
+  test('an account never confirmed gives its place back, and takes it again once confirmed', async () => {
+    await leaveRoomFor(1)
+    const unconfirmed = address()
+    expect((await signUp(unconfirmed)).status).toBe(200)
+    expect(await h.app.accounts.signupsOpen()).toBe(false)
+    const placeEnded = new Date(Date.now() - (tuning().abuse.unconfirmedPlaceHours + 1) * HOUR_MS)
+    await h.db.update(schema.users).set({ createdAt: placeEnded }).where(eq(schema.users.email, unconfirmed))
+    expect(await h.app.accounts.signupsOpen()).toBe(true)
+    await h.db.update(schema.users).set({ emailVerified: true }).where(eq(schema.users.email, unconfirmed))
+    expect(await h.app.accounts.signupsOpen()).toBe(false)
   })
 
   test('the owner, as ADMIN_EMAILS lists them, can always make their account', async () => {

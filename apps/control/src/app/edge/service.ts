@@ -4,7 +4,7 @@
 
 import { BLOCKLY_ICON } from '@blockly/contracts'
 import { HOUR_MS, SECOND_MS } from '@blockly/contracts/durations'
-import type { EdgeRoutes, PingWakeResult, SessionEvent, WakeResult } from '@blockly/contracts/edge'
+import type { EdgeRoutes, PingWakeResult, SessionEvent, WakeClaim, WakeResult } from '@blockly/contracts/edge'
 import { motdForGame } from '@blockly/contracts/server-list'
 import type { AppliedConfigJson, Db } from '@blockly/db'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
@@ -48,7 +48,7 @@ import {
 import type { ServerWaiter } from '../servers/waiter.ts'
 import { tuning } from '../tuning.ts'
 import { type Fingerprint, fingerprint, type RouteInputs, type RouteServer, readInputs } from './inputs.ts'
-import { forgetAddresses, joinEnded } from './known-addresses.ts'
+import { forgetAddresses, joinEnded, knownAddress } from './known-addresses.ts'
 import { pingWake } from './ping-wake.ts'
 import { EDGE_SAID_EVERY_MS, forgetQuietEdges, markListed, sawEdge, seen } from './routed.ts'
 import { restingFor, turnedAway } from './turned-away.ts'
@@ -349,10 +349,11 @@ export class EdgeService {
    * start that failed for good in waking is tried again, which only an edge that words such a
    * failure asks for; an older one, told the server still starts, would ask again every few
    * seconds, and start it again each time. `name`: the name the join gave as it began to log in,
-   * which only chooses whether its wake counts among the hour's (`#mayStart`).
+   * and `address`: where it connected from, which only choose whether its wake counts among the
+   * hour's (`#mayStart`).
    */
-  async wake(hostname: string, retries = true, name?: string): Promise<WakeResult> {
-    const result = await this.#wakeFor(hostname, retries, name)
+  async wake(hostname: string, retries = true, name?: string, address?: string): Promise<WakeResult> {
+    const result = await this.#wakeFor(hostname, retries, { name, address })
     wakeAnswered(
       result.outcome,
       result.outcome === 'denied'
@@ -364,7 +365,7 @@ export class EdgeService {
     return result
   }
 
-  async #wakeFor(hostname: string, retries: boolean, name: string | undefined): Promise<WakeResult> {
+  async #wakeFor(hostname: string, retries: boolean, join: WakeClaim): Promise<WakeResult> {
     const deadline = Date.now() + this.#wakeWaitMs
     const left = () => Math.max(0, deadline - Date.now())
     const slug = this.#addressing.slugFor(hostname)
@@ -377,7 +378,7 @@ export class EdgeService {
     }
     // By the database's clock, which writes the starts this wake may ask for: this one may differ.
     const began = await databaseNow(this.#db)
-    const result = await this.#woken(server, left, retries, name)
+    const result = await this.#woken(server, left, retries, join)
     if (result.outcome !== 'ready' && result.outcome !== 'starting') return result
     const [start] = await wakeStarts(this.#db, server.id, began)
     return start === undefined ? result : { ...result, wakeOperationId: start.id }
@@ -388,13 +389,13 @@ export class EdgeService {
     server: MinecraftServer,
     left: () => number,
     retries: boolean,
-    name: string | undefined,
+    join: WakeClaim,
   ): Promise<WakeResult> {
     const settled = await this.#settled(server, left)
     if (typeof settled === 'object') return settled
 
     if (settled !== 'running') {
-      const unstarted = await this.#shared(server, settled, name, left, retries)
+      const unstarted = await this.#shared(server, settled, join, left, retries)
       if (unstarted !== null) return unstarted
     }
 
@@ -415,7 +416,7 @@ export class EdgeService {
   async #shared(
     server: MinecraftServer,
     status: ServerStatus,
-    name: string | undefined,
+    join: WakeClaim,
     left: () => number,
     retries: boolean,
   ): Promise<WakeResult | null> {
@@ -425,7 +426,7 @@ export class EdgeService {
       const shared = await under
       if (shared?.outcome !== 'asleep') return shared
     }
-    const start = this.#mayStart(server.id, status, name)
+    const start = this.#mayStart(server.id, status, join)
       .then((may) => (may ? this.#start(server, left, retries) : LEFT_ASLEEP))
       .finally(() => this.#starts.delete(server.id))
     this.#starts.set(server.id, start)
@@ -433,16 +434,24 @@ export class EdgeService {
   }
 
   /**
-   * Whether a join may start the server. One already starting starts nothing new. A player the
-   * server itself has seen on it before always may; the hours its owner's plan includes bound what
-   * their wakes run. Every other join shares the hour's wakes nobody joined
+   * Whether a join may start the server. One already starting starts nothing new. A join that
+   * gives the name of a player the server itself has seen on it, from a network its own players
+   * joined it from lately (`known-addresses.ts`), always may; the hours its owner's plan includes
+   * bound what their wakes run. The name is only what the client said before it logged in, so on
+   * its own it never lifts the count. Every other join shares the hour's wakes nobody joined
    * (`AbuseLimits.wakesPerHour`), and once those are used, the server is left asleep; a woken run
    * nobody joins sleeps after the probation (WAKE_PROBATION_MS).
    */
-  async #mayStart(serverId: string, status: ServerStatus, name: string | undefined): Promise<boolean> {
+  async #mayStart(serverId: string, status: ServerStatus, join: WakeClaim): Promise<boolean> {
     if (status === 'starting') return true
-    if (name !== undefined && (await playedHere(this.#db, serverId, name))) return true
-    return (await unjoinedWakes(this.#db, serverId, new Date())) < tuning().abuse.wakesPerHour
+    const now = new Date()
+    if (
+      join.name !== undefined &&
+      (await knownAddress(this.#db, this.#keyring, serverId, join.address, now)) &&
+      (await playedHere(this.#db, serverId, join.name))
+    )
+      return true
+    return (await unjoinedWakes(this.#db, serverId, now)) < tuning().abuse.wakesPerHour
   }
 
   /**

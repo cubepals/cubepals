@@ -442,10 +442,6 @@
       "n": 43,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
-    "apps/control/src/infra/mc-protocol/slp.ts › class SlpProbe › ping › return new Promise((resolve, reject) => { › socket.on('data', (chunk) => {": {
-      "n": 24,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    },
     "apps/control/src/infra/modrinth/modrinth-catalog.ts › class ModrinthCatalog › linkOf": {
       "n": 17,
       "reason": "Over the threshold when the check began, and not yet looked at."

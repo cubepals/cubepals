@@ -374,7 +374,7 @@ function authOptions(config: DeploymentConfig, db: Db, app: ControlPlane): AuthO
     signupAllowlist:
       config.auth.signupAllowlist.length > 0 ? [...config.auth.admins, ...config.auth.signupAllowlist] : [],
     onAccountCreated: (userId, agreement) => app.accounts.opened(userId, agreement),
-    onAccount: (user) => app.accounts.configuredAdmin(user),
+    onAccount: (user, keep) => app.accounts.configuredAdmin(user, keep),
     onPasswordReset: (userId) => app.accounts.passwordReset(userId),
   }
 }

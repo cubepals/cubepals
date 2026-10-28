@@ -27,6 +27,7 @@ import {
   type BillingState,
   type Discount,
   DiscountRefused,
+  type EarlyProduct,
   type GiftProduct,
   type NewDiscount,
   type OrderNow,
@@ -95,10 +96,19 @@ export class LocalBilling implements BillingProvider {
   /** Discount codes made here, newest first. */
   readonly #discounts: Discount[] = []
   readonly #gifts: readonly GiftProduct[]
+  readonly #early: readonly EarlyProduct[]
 
-  constructor(options: { db: Db; secret: string; webOrigin: string; gifts?: readonly GiftProduct[] }) {
+  constructor(options: {
+    db: Db
+    secret: string
+    webOrigin: string
+    gifts?: readonly GiftProduct[]
+    /** Products at an early price it sells, as a provider would hold them; none unless given. */
+    early?: readonly EarlyProduct[]
+  }) {
     this.#db = options.db
     this.#gifts = options.gifts ?? []
+    this.#early = options.early ?? []
     // A key of its own, so nothing signed here passes for anything signed with the secret itself.
     this.#key = createHmac('sha256', options.secret).update('local-billing').digest()
     this.#webOrigin = options.webOrigin
@@ -129,6 +139,12 @@ export class LocalBilling implements BillingProvider {
   /** Every plan is sold by the year here, as by the month. */
   async sellsYear(): Promise<boolean> {
     return true
+  }
+
+  /** The newest of those it was given for the plan, not archived; as Polar's offers one. */
+  async earlyProduct(planKey: string): Promise<EarlyProduct | null> {
+    const offered = this.#early.filter((product) => product.planKey === planKey && !product.archived)
+    return offered.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null
   }
 
   /** The move is the record `BillingService` writes; here nothing else applies it, and a plan runs its year. */

@@ -2853,6 +2853,10 @@ details[open] > .bk-disclosure::before {
   flex-direction: column;
   gap: var(--space-8);
 }
+/* The dark card's own ink: grass is near-black in the light theme, which vanishes on it. */
+.bk-plan[data-paid] .bk-plan__points svg {
+  color: var(--ink-inverse);
+}
 
 /* Where a pack's file is dropped: the whole area takes the drop, the button inside picks one. */
 .bk-drop {
