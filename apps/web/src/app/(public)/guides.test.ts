@@ -4,9 +4,12 @@
 
 /**
  * Tests for the review step each guide goes through: an unapproved one
- * is a 404 in production, noindex elsewhere, and left out of the index and the footers.
+ * is a 404 in production, noindex elsewhere, and left out of the index and the footers. And every
+ * guide's pictures, which it has whether approved or not.
  */
 import { afterEach, describe, expect, test } from 'bun:test'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { canonicalOrigin, UNLISTED } from '../../lib/site.ts'
 import sitemap from '../sitemap.ts'
 import { guideMetadata } from './guides/article.tsx'
@@ -160,4 +163,32 @@ describe('the Bedrock guide', () => {
     expect(guideMetadata(bedrock.slug).robots).toEqual(UNLISTED)
     expect(sitemap().map((page) => page.url)).not.toContain(`${canonicalOrigin()}/guides/${bedrock.slug}`)
   })
+})
+
+/**
+ * Every guide shows the screens it walks through (AGENTS.md § Guides): at least one picture, each a
+ * file under public/ at the size its page gives it, so none is missing or drawn stretched.
+ */
+describe('every guide’s pictures', () => {
+  const pictures = (slug: string) => {
+    const page = readFileSync(join(import.meta.dir, 'guides', slug, 'page.tsx'), 'utf8')
+    return [...page.matchAll(/<Shot\b[\s\S]*?\/>/g)].map(([shot]) => ({
+      src: (/src=\{?["`]([^"`]+)["`]\}?/.exec(shot)?.[1] ?? '').replace(/\$\{PICTURES\}/, `/guides/${slug}`),
+      width: Number(/width=\{(\d+)\}/.exec(shot)?.[1]),
+      height: Number(/height=\{(\d+)\}/.exec(shot)?.[1]),
+    }))
+  }
+  /** A PNG's size, from its header. */
+  const sizeOf = (bytes: Buffer) => ({ width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) })
+
+  for (const guide of GUIDES)
+    test(`${guide.slug} shows its screens, at the size each was taken`, () => {
+      const shots = pictures(guide.slug)
+      expect(shots.length).toBeGreaterThan(0)
+      for (const shot of shots) {
+        const file = join(import.meta.dir, '../../../public', shot.src)
+        expect(existsSync(file)).toBe(true)
+        expect(sizeOf(readFileSync(file))).toEqual({ width: shot.width, height: shot.height })
+      }
+    })
 })

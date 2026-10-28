@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsFor, entitlementsOf } from '../../domain/account/entitlements.ts'
 import { nextMonthStart } from '../../domain/account/play-day.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
@@ -104,7 +104,7 @@ describe.skipIf(!hasDatabase)('the play month', () => {
 
   const month = async (actor: UserActor, at: Date) => {
     const standing = await loadStanding(h.db, actor.userId, at)
-    return meteredMonth(h.db, standing, entitlementsFor(standing.plan, standing.limitOverrides), at)
+    return meteredMonth(h.db, standing, entitlementsOf(standing), at)
   }
 
   test('starts again at the owner’s midnight on the 1st, not UTC’s', async () => {
@@ -200,7 +200,7 @@ describe.skipIf(!hasDatabase)('the play month after Free', () => {
 
   const month = async (actor: UserActor, at: Date) => {
     const standing = await loadStanding(h.db, actor.userId, at)
-    return meteredMonth(h.db, standing, entitlementsFor(standing.plan, standing.limitOverrides), at)
+    return meteredMonth(h.db, standing, entitlementsOf(standing), at)
   }
 
   /** A Free account made months before `first`, in `zone`. */

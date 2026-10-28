@@ -8,7 +8,7 @@
 
 import { connect, createServer, type Socket } from 'node:net'
 import { hostname } from 'node:os'
-import type { EdgeRoutes, PingWakeResult, SessionEvent, WakeResult } from '@blockly/contracts/edge'
+import type { EdgeRoutes, PingWakeResult, SessionEvent, WakeClaim, WakeResult } from '@blockly/contracts/edge'
 // Copied into the image beside the agent (Dockerfile): the one place play coming back is worded.
 import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { EDGE_ID_HEADER, NEWER_OUTCOMES, NEWER_REASONS } from '../../packages/contracts/src/edge-poll.ts'
@@ -23,7 +23,7 @@ import { drainOf, serveDrain } from './drain.ts'
 import { exampleAt } from './example-address.ts'
 import { type FrontOptions, front, geyserDoor, pipe, playersOnline } from './front.ts'
 import { forServer, Unwrap } from './header.ts'
-import { Held, LOGIN_QUERIES, turnAway } from './hold.ts'
+import { Held, LOGIN_QUERIES, sendAway, turnAway } from './hold.ts'
 import { JoinTrace } from './join-trace.ts'
 import { Gate } from './limits.ts'
 import { mappings } from './mappings.ts'
@@ -61,10 +61,7 @@ const SLEEPING = `127.0.0.1:${env('SLEEPING_PORT', '25563')}`
 const ASLEEP: NoticeText = { status: env('ASLEEP_MOTD', 'Sleeping · join to wake it up'), join: null }
 /** What a ping is told of a sleeping server on its way up, woken by a join or by a ping before it. */
 const WAKING_MOTD = env('WAKING_MOTD', 'Waking up · join in a few seconds')
-/**
- * How long a ping waits to hear whether its server is waking before it is answered, and how long
- * an answer stands before another ping asks again.
- */
+/** How long a ping waits to hear whether its server is waking, and how long its answer stands. */
 const PING_WAKE_WAIT_MS = Number(env('PING_WAKE_WAIT_MS', '1500'))
 const PING_WAKE_EVERY_MS = Number(env('PING_WAKE_EVERY_MS', '30000'))
 /** Where a join goes that has to wait for its server: the agent's waiting room, which wakes it. */
@@ -109,6 +106,7 @@ const LIMITS = {
       burst: Number(env('ADDRESS_CONNECTIONS_BURST', '30')),
     },
     greeting: Number(env('ADDRESS_GREETING', '10')),
+    open: Number(env('ADDRESS_OPEN_CONNECTIONS', '64')),
   },
   server: {
     connections: {
@@ -316,28 +314,28 @@ async function wake(serverAddress: string): Promise<Response> {
   return Response.json({ backend: unreachable.has(result.destination) ? NOTICE : result.destination })
 }
 
-/** Wakes in flight, by hostname, with the name each join gave: joins that arrive together share one. */
-const waking = new Map<string, { name: string | undefined; asked: Promise<WakeResult> }>()
+/** Wakes in flight, by hostname, with what each join said: joins that arrive together share one. */
+const waking = new Map<string, { said: string; asked: Promise<WakeResult> }>()
 
 /**
- * Asks the control plane to wake a server for a join that gave `name`, which waits up to 25 s for
- * it to come up. Where the wake it shared left the server asleep for another name, it asks for its own.
+ * Asks the control plane to wake a server for a join that `said` its name and address, which waits up
+ * to 25 s for it to come up. Where the wake it shared left the server asleep for another, it asks again.
  */
-async function wakeOnce(hostname: string, name?: string): Promise<WakeResult> {
-  const inFlight = waking.get(hostname)
+async function wakeOnce(hostname: string, said: WakeClaim = {}): Promise<WakeResult> {
+  const [inFlight, key] = [waking.get(hostname), JSON.stringify(said)]
   if (inFlight) {
     const shared = await inFlight.asked
-    return shared.outcome === 'asleep' && inFlight.name !== name ? wakeOnce(hostname, name) : shared
+    return shared.outcome === 'asleep' && inFlight.said !== key ? wakeOnce(hostname, said) : shared
   }
   const understands = [...NEWER_REASONS, ...NEWER_OUTCOMES]
-  const body = JSON.stringify({ hostname, understands, ...(name === undefined ? {} : { name }) })
+  const body = JSON.stringify({ hostname, understands, ...said })
   const asked = control('/wake', { method: 'POST', body })
     .then(async (response) => {
       if (!response.ok) throw new Error(`wake answered ${response.status}`)
       return (await response.json()) as WakeResult
     })
     .finally(() => waking.delete(hostname))
-  waking.set(hostname, { name, asked })
+  waking.set(hostname, { said: key, asked })
   return asked
 }
 
@@ -570,17 +568,15 @@ async function hold(client: Socket, join: Join, header: Uint8Array | null): Prom
       JSON.stringify({ join: trace.record({ fromPlayer: client.bytesRead, toPlayer: client.bytesWritten }) }),
     ),
   )
-  client.on('data', (chunk: Buffer) => {
-    if (!held.receive(chunk)) client.destroy()
-  })
+  client.on('data', (chunk: Buffer) => held.receive(chunk) || sendAway(client, TURNED_AWAY.starting))
   // A client from before 1.13 can't be spoken to while it waits, so it waits only as long as it would.
   const speaks = join.protocol >= LOGIN_QUERIES
   const keepAlive = speaks ? setInterval(() => client.write(held.ask()), 10_000) : undefined
-  const name = await nameOf(client, held)
-  trace.named(name)
+  const said = { name: await nameOf(client, held), address: sourceOf(header) ?? undefined }
+  trace.named(said.name)
   trace.mark('wakeAsked')
   visit.seen({ wakeAskedAt: new Date().toISOString() })
-  const result = await wakeWhile(client, hostnameOf(join), name, Date.now() + (speaks ? HOLD_MS : 0)).finally(
+  const result = await wakeWhile(client, hostnameOf(join), said, Date.now() + (speaks ? HOLD_MS : 0)).finally(
     () => clearInterval(keepAlive),
   )
   const ready = result?.outcome === 'ready'
@@ -666,11 +662,11 @@ async function nameOf(client: Socket, held: Held): Promise<string | undefined> {
 async function wakeWhile(
   client: Socket,
   hostname: string,
-  name: string | undefined,
+  said: WakeClaim,
   deadline: number,
 ): Promise<WakeResult | null> {
   for (;;) {
-    const result = await wakeOnce(hostname, name).catch(() => null)
+    const result = await wakeOnce(hostname, said).catch(() => null)
     const over = result?.outcome === 'ready' || result?.outcome === 'denied' || result?.outcome === 'asleep'
     if (over || client.destroyed || Date.now() >= deadline) return result
     await Bun.sleep(2_000)

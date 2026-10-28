@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto'
 import { BLOCKLY_ICON } from '@blockly/contracts'
 import type { Queryable } from '@blockly/db'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import type { CarriedFile } from '../../domain/revision/carried.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
@@ -171,7 +171,7 @@ export class RuntimeSpecs {
     const world = await loadWorld(q, config.worldId)
     const standing = await loadStanding(q, server.ownerId)
     const official = (await loadListing(q, server.id))?.official === true
-    const plan = entitlementsFor(standing.plan, standing.limitOverrides)
+    const plan = entitlementsOf(standing)
     const { current } = this.#secrets
     const input = {
       serverId: server.id,

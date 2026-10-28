@@ -128,3 +128,16 @@ export function eligibility(input: {
   if (input.offensiveName) reasons.push({ code: 'offensive_name' })
   return { eligible: reasons.length === 0, reasons }
 }
+
+/** Reasons that keep a server's page from everyone but its owner, and not only from the directory. */
+const OUT_OF_VIEW: ReadonlySet<string> = new Set<IneligibleCode>(['restricted', 'offensive_name'])
+
+/**
+ * Whether a listing's reasons keep its page, and all that hangs off it, from strangers: an admin
+ * restricted the account's public listing, or the name or address is offensive. A server that
+ * hasn't booted yet, or runs mods Blockly hasn't checked, stays out of the directory only, and its
+ * page opens for whoever has the link.
+ */
+export function outOfView(reasons: readonly { code: string }[]): boolean {
+  return reasons.some((reason) => OUT_OF_VIEW.has(reason.code))
+}

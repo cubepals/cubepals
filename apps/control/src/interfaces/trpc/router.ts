@@ -25,7 +25,6 @@ import {
   ChangePackInput,
   ChangeSettingsInput,
   ChangeVersionInput,
-  CheckoutInput,
   ChooseNewWorldPeopleInput,
   CreateBackupInput,
   CreateServerInput,
@@ -88,8 +87,8 @@ import {
 } from '@blockly/contracts'
 import type { RealtimeConnectInfo } from '@blockly/contracts/realtime'
 import { z } from 'zod'
-import { publicPlans } from '../../app/accounts/queries.ts'
 import { admin } from './admin.ts'
+import { billing } from './billing.ts'
 import { chipIns } from './chip-ins.ts'
 import { gifts } from './gifts.ts'
 import { insight } from './insight.ts'
@@ -600,7 +599,8 @@ const realtime = router({
       url: ctx.services.realtime.url,
       fallbackUrl: ctx.services.realtime.fallbackUrl,
       certificateSha256: await ctx.services.realtime.certificateSha256(),
-      ticket: await ctx.services.tickets.issue(ctx.actor.userId),
+      // Outside HTTP there is no sign-in session, and a ticket naming none opens nothing.
+      ticket: await ctx.services.tickets.issue({ userId: ctx.actor.userId, sessionId: ctx.sessionId ?? '' }),
     }),
   ),
 })
@@ -684,28 +684,6 @@ const account = router({
   }),
 })
 
-const billing = router({
-  /** Every plan as the pricing page shows it, for anyone: the table everything enforces. */
-  plans: publicProcedure.query(({ ctx }) => publicPlans(ctx.services.platform.capabilities)),
-  checkout: authedProcedure.input(CheckoutInput).mutation(({ ctx, input }) =>
-    ctx.services.billing.startCheckout(ctx.actor, input.plan, {
-      term: input.term,
-      reason: input.reason,
-      consent: input.consent,
-      ...(input.next === undefined ? {} : { next: input.next }),
-    }),
-  ),
-  /** A smaller plan from the month's end, the plan now staying until then (`plan-moves.ts`). */
-  moveTo: authedProcedure
-    .input(z.object({ plan: z.string().trim().min(1).max(40) }))
-    .mutation(({ ctx, input }) => ctx.services.billing.moveToSmaller(ctx.actor, input.plan)),
-  portal: authedProcedure.mutation(({ ctx }) => ctx.services.billing.customerPortal(ctx.actor)),
-  /** What is owed and can no longer be retried, paid at once (`BillingService.settleBalance`). */
-  settle: authedProcedure.mutation(({ ctx }) => ctx.services.billing.settleBalance(ctx.actor)),
-  /** After a checkout: the provider's word now, before its webhook arrives. */
-  refresh: authedProcedure.mutation(({ ctx }) => ctx.services.billing.refresh(ctx.actor)),
-})
-
 const listings = router({
   /** The directory: anyone may read it, signed in or not. */
   browse: publicProcedure
@@ -748,10 +726,12 @@ const sharing = router({
   /** Anyone may open a public page, signed in or not. */
   page: publicProcedure
     .input(PageRef)
-    .query(({ ctx, input }) => ctx.services.sharingQueries.page(input.slug, ctx.actor, { reactions: true })),
+    .query(({ ctx, input }) =>
+      ctx.services.sharingQueries.page(input.slug, ctx.actor, { reactions: true, from: ctx.clientAddress }),
+    ),
   invite: publicProcedure
     .input(InviteRef)
-    .query(({ ctx, input }) => ctx.services.sharingQueries.invite(input.code, ctx.actor)),
+    .query(({ ctx, input }) => ctx.services.sharingQueries.invite(input.code, ctx.actor, ctx.clientAddress)),
   /** The invitee puts their own Minecraft name on the whitelist; no account needed. */
   join: publicProcedure
     .input(JoinThroughInviteInput)

@@ -8,9 +8,9 @@
  * unmaintained, so this is where it happens instead:
  *
  * - the `www.` name of the site's host is sent to the host itself for good, path and query kept;
- * - a call to the control plane's sign-in endpoints says whose browser it came from
- *   (client-address.ts), and nothing the browser claimed about that goes with it. Only /api/auth
- *   reads it, so nothing else pays for the copy;
+ * - a call to the control plane's sign-in endpoints, its procedures or its public reads says whose
+ *   browser it came from (client-address.ts), and nothing the browser claimed about that goes with
+ *   it. Only those count by address, so nothing else pays for the copy;
  * - a call to /api goes to the control plane as it is, and its answer comes back as it is
  *   (toControlPlane). next.config.ts's rewrite does the same in development and the self-hosted
  *   image, but on the Worker it follows redirects itself, so sign-in's last redirect, the one that
@@ -21,8 +21,11 @@ import { CLAIMED, clientAddressHeaders } from './client-address'
 import { canonicalOrigin } from './site'
 import { apiUpstream } from './upstream'
 
-/** The sign-in endpoints, case included: next.config.ts's caseSensitiveRoutes makes /API/auth a 404. */
-const SIGN_IN = /^\/api\/auth(\/|$)/
+/**
+ * The control plane's routes that count by address: sign-in, the procedures and the public reads,
+ * case included, since next.config.ts's caseSensitiveRoutes makes /API/auth a 404.
+ */
+const COUNTED = /^\/api\/(auth|trpc|public)(\/|$)/
 
 /** The request Next should get, or the answer that stands in for it. */
 export function beforeNext(request: Request): Request | Response {
@@ -30,7 +33,7 @@ export function beforeNext(request: Request): Request | Response {
   const site = new URL(canonicalOrigin())
   if (url.hostname === `www.${site.hostname}`)
     return Response.redirect(`${site.origin}${url.pathname}${url.search}`, 308)
-  if (!SIGN_IN.test(url.pathname)) return request
+  if (!COUNTED.test(url.pathname)) return request
   const headers = new Headers(request.headers)
   for (const name of CLAIMED) headers.delete(name)
   for (const [name, value] of Object.entries(clientAddressHeaders(request.headers))) headers.set(name, value)

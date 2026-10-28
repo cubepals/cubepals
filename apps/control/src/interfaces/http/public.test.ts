@@ -19,6 +19,7 @@ describe('public sizes', () => {
     items: {} as ItemIcons,
     icons: {} as ServerIcons,
     platform: () => ({ unsoldPlans: [] }),
+    addresses: { proxySecret: null, hostHeader: null },
   })
 
   test('each answer to who is playing, with the players it holds and its memory', async () => {
@@ -42,6 +43,7 @@ describe('public plans', () => {
     items: {} as ItemIcons,
     icons: {} as ServerIcons,
     platform: () => ({ unsoldPlans: [] }),
+    addresses: { proxySecret: null, hostHeader: null },
   })
 
   test('Free, Core and Plus, with what each costs and includes', async () => {
@@ -64,6 +66,7 @@ describe('public plans', () => {
         sleepsAfterMinutes: 10,
         maxServers: 1,
         maxPlayers: 5,
+        sizes: [{ gb: 3, maxPlayers: 5, hoursAnHour: 1 }],
         mods: false,
         datapacks: false,
         downloads: 'daily',
@@ -84,6 +87,7 @@ describe('public plans', () => {
         sleepsAfterMinutes: 15,
         maxServers: 1,
         maxPlayers: 5,
+        sizes: [{ gb: 3, maxPlayers: 5, hoursAnHour: 1 }],
         mods: false,
         datapacks: false,
         downloads: 'history',
@@ -104,6 +108,12 @@ describe('public plans', () => {
         sleepsAfterMinutes: 15,
         maxServers: 3,
         maxPlayers: 100,
+        sizes: [
+          { gb: 3, maxPlayers: 5, hoursAnHour: 1 },
+          { gb: 4, maxPlayers: 10, hoursAnHour: 1 },
+          { gb: 8, maxPlayers: 50, hoursAnHour: 2 },
+          { gb: 16, maxPlayers: 100, hoursAnHour: 4 },
+        ],
         mods: true,
         datapacks: true,
         downloads: 'history',
@@ -130,6 +140,7 @@ describe('player faces', () => {
     items: {} as ItemIcons,
     icons: {} as ServerIcons,
     platform: () => ({ unsoldPlans: [] }),
+    addresses: { proxySecret: null, hostHeader: null },
   })
 
   test('an 8×8 picture, cached for the hour Blockly keeps it', async () => {
@@ -161,5 +172,41 @@ describe('player faces', () => {
     const response = await app.request('/api/public/players/069a79f444e94726a5befca90e38aaf6/face.png')
     expect(response.status).toBe(503)
     expect(response.headers.get('cache-control')).toBe('no-store')
+  })
+})
+
+// Each address's reads are counted on their own (`SharingQueries`), so each read says whose it is.
+describe('public reads', () => {
+  const asked: unknown[] = []
+  const sharing = {
+    page: async (_slug: string, _viewer: null, options: { from?: string | null }) => {
+      asked.push(options.from)
+      return null
+    },
+    invite: async (_code: string, _viewer: null, from: string | null) => {
+      asked.push(from)
+      return null
+    },
+  } as unknown as SharingQueries
+  const app = createPublicApp({
+    sharing,
+    faces: {} as PlayerFaces,
+    items: {} as ItemIcons,
+    icons: {} as ServerIcons,
+    platform: () => ({ unsoldPlans: [] }),
+    addresses: { proxySecret: null, hostHeader: 'fly-client-ip' },
+  })
+
+  test('are counted by the address the host saw', async () => {
+    const headers = { 'fly-client-ip': '198.51.100.4' }
+    for (const path of [
+      '/api/public/servers/sunset',
+      '/api/public/servers/sunset/badge.svg',
+      '/api/public/servers/sunset/card.png',
+      '/api/public/invites/abcdefghijkm',
+      '/api/public/invites/abcdefghijkm/card.png',
+    ])
+      await app.request(path, { headers })
+    expect(asked).toEqual(Array(5).fill('198.51.100.4'))
   })
 })

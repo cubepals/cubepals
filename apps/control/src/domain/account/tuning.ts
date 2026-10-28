@@ -84,6 +84,25 @@ export interface AbuseLimits {
    * as its account page does once on coming back from a checkout or the portal.
    */
   refreshesPerMinute: number
+  /**
+   * Public reads one address may make of one server a minute (`app/sharing/queries.ts`): the page
+   * people open, and the status, badge and card around it; of one invitation, whose title and page
+   * count as two; and of invitations across every code.
+   */
+  publicReadsPerMinute: { page: number; status: number; invite: number; invites: number }
+  /**
+   * What the realtime role lets one account open (`interfaces/realtime/server.node.ts`): consoles a
+   * minute, across all its browsers, and consoles one browser's connection follows at once. A page
+   * about a server opens its console; past either, that console shows nothing new until there is room.
+   */
+  consoleWatchesPerMinute: number
+  consolesPerConnection: number
+  /**
+   * How long a new account whose email isn't confirmed yet takes a free place, in hours
+   * (`countFreeAccounts` in `app/accounts/persistence.ts`). Once confirmed it takes one for good;
+   * one never confirmed stops taking one, so sign-up stays open for the people who do confirm.
+   */
+  unconfirmedPlaceHours: number
 }
 
 /** The figures the runtime economics report prices a margin with (`app/runtimes/economics.ts`). */
@@ -128,6 +147,10 @@ export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {
   joinReportBytes: 65_536,
   worldUploadsPerDay: 10,
   refreshesPerMinute: 10,
+  publicReadsPerMinute: { page: 120, status: 240, invite: 60, invites: 1200 },
+  consoleWatchesPerMinute: 60,
+  consolesPerConnection: 10,
+  unconfirmedPlaceHours: 24,
 }
 
 /** Round figures for development and tests. */

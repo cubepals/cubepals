@@ -1336,7 +1336,9 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   - A join to a server being put to rest (`storing`) waits for that to finish, then wakes it.
   - Each server may be woken by a connection only so many times an hour (`AbuseLimits.wakesPerHour`,
     set in private configuration); past that the wake is `denied: quota`. Nothing about a
-    connection proves who sent it, and each wake costs the owner a run.
+    connection proves who sent it, and each wake costs the owner a run. Only a join that gives the
+    name of a player the server saw on it, from a network its own players joined it from lately
+    (`app/edge/known-addresses.ts`), wakes it past that.
   - A deleted server's address answers `denied: deleted`, so its players are told.
 - **`pingWake(hostname, address)`** (`app/edge/ping-wake.ts`). A server list pinged an asleep
   server, often just before a join. It starts the server as a wake would, without waiting for it,
@@ -1530,10 +1532,16 @@ Replacing mc-router means rewriting `apps/edge` against the same protocol. Nothi
 - **Rooms.**
   - `onSession` joins `user:<userId>` from the ticket.
   - `watch` is authorized by the realtime role against the DB (owner, or admin) and joins
-    `console:<serverId>`.
+    `console:<serverId>`. It is let in only while the session's sign-in stands, within
+    `ABUSE_LIMITS.consolesPerConnection` (consoles one connection follows at once) and
+    `consoleWatchesPerMinute` (consoles one account opens a minute) (`ConsoleFeed`).
+  - Every minute each session's sign-in is checked again, and each console it follows: a session
+    whose sign-in has ended (signed out, a password reset, a test account's use over) or whose
+    account is no longer active is closed; a console it may no longer watch is left.
   - When a console room's member count goes 0→1, the realtime role starts
     `LogSource.tail(handle)`, and each new watcher gets the last 200 lines from
-    `LogSource.recent` as `consoleHistory`. At 1→0 it stops.
+    `LogSource.recent` as `consoleHistory`, one read shared by everyone opening it at once. At
+    1→0 it stops.
 - **Fan-out.** Services and workers publish through `EventBus` = `pg_notify('blockly_events', json)`
   **inside the domain transaction**, so an event exists only if the write committed. The
   realtime role LISTENs, on `DATABASE_DIRECT_URL` (past Managed Postgres's pooler, which closes a
@@ -1542,8 +1550,10 @@ Replacing mc-router means rewriting `apps/edge` against the same protocol. Nothi
 - **Connecting.**
   1. tRPC `realtime.connectInfo` returns `{ url: config.realtime.publicUrl, certificateSha256?, ticket }`.
      The hash is present in pinned mode.
-  2. The ticket is an HMAC of `{ userId, aud: deploymentId, exp: now + 60s }`.
-  3. `authorize` verifies it and checks `headers.origin` against the web origins.
+  2. The ticket is an HS256 JWT of `{ sub: userId, sid: sign-in session id, jti, aud: deploymentId,
+     exp: now + 60s }` (`infra/realtime/jose-tickets.ts`).
+  3. `authorize` verifies it, once: a ticket opens one session. It checks `headers.origin`
+     against the web origins.
   4. The client's `connect` callback runs this on every reconnect.
 - **Singleton.** One machine of its own Fly app (`bly-<deployment>-realtime`, the control
   plane's image with `ROLES=realtime`, `infra/fly/realtime.toml`), restart `always`. It is an app
@@ -2537,10 +2547,13 @@ makes it public, and whether others may make one like it.
   (`app/sharing/queries.ts`), written for a player: what the server is, who is on, what to install
   (usually nothing), and the address. It says nothing about machines, regions or sizes.
 - The page exists while the server is public (`published`), not removed by moderation, the
-  directory switch is on and the owner's account is active. Its owner sees it before anyone else
-  can.
+  directory switch is on, the owner's account is active and not restricted from public listing,
+  and its name and address pass. Its owner sees it before anyone else can. Its status, badge and
+  card, its guestbook and stars, Report, chipping in and copying from it all follow the same rule
+  (`app/listings/reachable.ts`); a server out of the directory only for its mods, or for not
+  having booted yet, keeps its page.
 - An invitation works while the server is private: only a takedown or the owner's standing stops
-  it. It does the one thing a page can't: while the whitelist is on, its holder puts their own
+  it, and the same goes for joining and copying through it. It does the one thing a page can't: while the whitelist is on, its holder puts their own
   Minecraft name on it, with no Blockly account (`SharingService.joinThroughInvite`, through
   `AccessService.add`, audited). One link lets in at most 10 people an hour, and `resetInvite`
   issues a new code, which ends the old link and its count.
@@ -2554,10 +2567,12 @@ makes it public, and whether others may make one like it.
 
 **Limits on public reads.** Nobody signs in to reach these, so `AccessPolicy` has no account to
 bound. The `Limits` port (`app/ports/limits.ts`; `MemoryLimits`, in each process, on
-`rate-limiter-flexible`) counts each minute by what is asked about, never by who asks: a page
-people open 120, a server's status (its title, JSON, badge and card) 240, one invite code 60, and
-every invite together 1,200. A refusal says Blockly is busy for a moment, and the status JSON
-answers 429 with `Retry-After`. Player faces count under a key of their own (§15.5).
+`rate-limiter-flexible`) counts each minute by what is asked about, for each client address
+(`interfaces/http/client-address.ts`; the web tier forwards it on `/api/auth`, `/api/trpc` and
+`/api/public`): a page people open, a server's status (its title, JSON, badge and card), one invite
+code, and every invite together, at `ABUSE_LIMITS.publicReadsPerMinute`. Reads whose address isn't
+known share one count. A refusal says Blockly is busy for a moment, and the status JSON answers
+429 with `Retry-After`. Player faces count under a key of their own (§15.5).
 
 **Failures in owners' words.** An owner reads what happened and what to do, never a stack trace
 (`app/errors.ts`).

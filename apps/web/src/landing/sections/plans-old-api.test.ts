@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
 
 /**
- * The landing's plans against a plans API from before `available` and `extraHourCents` existed,
- * which is what the site meets for the minutes the site and the API deploy apart: a paid plan
- * still has its button, and no clause says undefined.
+ * The landing's plans against a plans API from before `available`, `extraHourCents` and `sizes`
+ * existed, which is what the site meets for the minutes the site and the API deploy apart: a paid
+ * plan still has its button, no clause says undefined, and no size is made up.
  */
 import { describe, expect, test } from 'bun:test'
 import type { PublicPlan } from '@blockly/contracts'
@@ -13,7 +13,8 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { PlansSaid } from './Plans'
 
-const oldShape = (plan: Omit<PublicPlan, 'available' | 'extraHourCents'>) => plan as unknown as PublicPlan
+const oldShape = (plan: Omit<PublicPlan, 'available' | 'extraHourCents' | 'sizes'>) =>
+  plan as unknown as PublicPlan
 const base = {
   yearlyPriceCents: null,
   sleepsAfterMinutes: 15,
@@ -68,10 +69,11 @@ describe('the landing’s plans against an older plans API', () => {
     expect(alone).toContain('Not available yet')
   })
 
-  test('no clause says undefined, and Plus names no server type', () => {
+  test('no clause says undefined or a size it wasn’t given, and Plus names no server type', () => {
     // What people read: the markup's class names are the test runner's, with no stylesheet behind them.
     const said = html.replace(/<[^>]+>/g, ' ')
     expect(said).not.toContain('undefined')
+    expect(said).not.toMatch(/\bGB\b/)
     expect(said).not.toMatch(/vanilla|paper/i)
   })
 })

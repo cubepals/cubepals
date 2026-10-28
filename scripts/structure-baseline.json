@@ -283,7 +283,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/setups/service.ts › setupFrom": {
-      "n": 27,
+      "n": 24,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/setups/service.ts › #pack": {
@@ -440,10 +440,6 @@
     },
     "apps/control/src/infra/formats/pack-archives.ts › function checkedFiles": {
       "n": 43,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    },
-    "apps/control/src/infra/mc-protocol/slp.ts › class SlpProbe › ping › return new Promise((resolve, reject) => { › socket.on('data', (chunk) => {": {
-      "n": 24,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/modrinth/modrinth-catalog.ts › class ModrinthCatalog › linkOf": {
@@ -1041,7 +1037,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/setups/service.ts › setupFrom": {
-      "n": 104,
+      "n": 102,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/setups/setups.test.ts › describe.skipIf setups": {
@@ -1229,7 +1225,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "scripts/staging.ts › function up": {
-      "n": 143,
+      "n": 140,
       "reason": "Over the threshold when the check began, and not yet looked at. Two lines longer: the line that gives the control plane its Floodgate key, and the one that saves it with the state."
     },
     "apps/web/src/landing/Chunk.tsx › function Chunk": {

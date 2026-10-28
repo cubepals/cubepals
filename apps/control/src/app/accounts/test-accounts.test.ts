@@ -30,6 +30,7 @@ const billing: BillingProvider = {
   },
   sells: () => true,
   sellsYear: async () => false,
+  earlyProduct: async () => null,
   stopRenewing: async () => {},
   moveToPlan: async () => ({ appliesAt: new Date() }),
   upgradeSubscription: async () => {},

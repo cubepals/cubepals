@@ -731,3 +731,30 @@ describe('what a server type runs', () => {
     expect(serverEnvironment('singleplayer_only')).toBeNull()
   })
 })
+
+describe('refused console commands', () => {
+  test('are known with or without the minecraft namespace, in any case', () => {
+    for (const command of ['stop', '/stop', 'minecraft:stop', '/Minecraft:STOP', 'minecraft:ban-ip 1.2.3.4'])
+      expect(refusedCommand(command)).not.toBeNull()
+    expect(refusedCommand('minecraft:pardon-ip 1.2.3.4')).toBe(refusedCommand('ban-ip 1.2.3.4'))
+  })
+
+  test('are refused when execute runs them, however deep', () => {
+    expect(refusedCommand('execute run stop')).toBe(refusedCommand('stop'))
+    expect(refusedCommand('minecraft:execute as @a at @s run minecraft:stop')).toBe(refusedCommand('stop'))
+    expect(refusedCommand('execute if entity @a run execute run ban-ip 1.2.3.4')).toBe(
+      refusedCommand('ban-ip x'),
+    )
+  })
+
+  test('leave everything else alone', () => {
+    for (const command of [
+      'say stop',
+      'execute as @a run say stop',
+      'stopsound @a',
+      'execute run',
+      'tell Steve run stop',
+    ])
+      expect(refusedCommand(command)).toBeNull()
+  })
+})

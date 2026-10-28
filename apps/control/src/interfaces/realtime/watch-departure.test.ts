@@ -48,13 +48,18 @@ describe('a watch from a peer that leaves while it is checked', () => {
     const cert = await mintPinnedCertificate('127.0.0.1')
     fallbackPort = await freePort()
     const events: EventBus = { publish: async () => {}, subscribe: async () => async () => {} }
-    const tickets: RealtimeTickets = { issue: async () => 'ticket', verify: async () => 'user-1' }
+    const tickets: RealtimeTickets = {
+      issue: async () => 'ticket',
+      verify: async () => ({ userId: 'user-1', sessionId: 'session-1' }),
+    }
     // The database takes a moment to say whose the server is, as it does under any load.
     const feed = {
       canWatch: async () => {
         await Bun.sleep(300)
         return true
       },
+      stillSignedIn: async () => true,
+      mayOpen: async () => true,
       recent: async () => [],
       tail: async function* () {},
     } as unknown as ConsoleFeed

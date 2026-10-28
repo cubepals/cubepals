@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { BillingTerm, CheckoutConsent, UpgradeReason } from '@blockly/contracts'
+import { type BillingTerm, type CheckoutConsent, sameSitePath, type UpgradeReason } from '@blockly/contracts'
 import { type Db, schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { entitlementsFor, PAID_PLANS, planName } from '../../domain/account/entitlements.ts'
@@ -64,6 +64,28 @@ import {
   yearsAhead,
   yearsToRemind,
 } from './years.ts'
+
+/** The provider's word on the subscription that pays, as `saveSubscription` keeps it. */
+function savedOf(
+  userId: string,
+  provider: string,
+  externalCustomerId: string,
+  paid: NonNullable<BillingState['subscription']>,
+): Parameters<typeof saveSubscription>[1] {
+  return {
+    userId,
+    provider,
+    externalCustomerId,
+    externalSubscriptionId: paid.externalSubscriptionId,
+    planKey: paid.planKey,
+    status: paid.status,
+    currentPeriodEnd: paid.currentPeriodEnd,
+    cancelAtPeriodEnd: paid.cancelAtPeriodEnd,
+    ...(paid.createdAt === undefined ? {} : { createdAt: paid.createdAt }),
+    canceledAt: paid.canceledAt ?? null,
+    ...(paid.productId === undefined ? {} : { productId: paid.productId, terms: paid.terms ?? null }),
+  }
+}
 
 /** A day as refusals say it: "26 October 2027". */
 const DAY = new Intl.DateTimeFormat('en-GB', {
@@ -182,8 +204,8 @@ export class BillingService {
       )
     const billing = requireCapability(this.#caps, 'billing')
     const returnUrl = new URL(this.#returnUrl)
-    if (options.next !== undefined && /^\/(?![/\\])/.test(options.next))
-      returnUrl.searchParams.set('next', options.next)
+    const next = sameSitePath(options.next)
+    if (next !== null) returnUrl.searchParams.set('next', next)
     // The subscription that pays for a smaller plan becomes this one: nothing renews beside it.
     if (term === 'month' && (await upgradeInPlace(this.#db, billing, user.id, planKey, actor, this.#reach))) {
       await this.refresh(actor, false)
@@ -417,18 +439,7 @@ export class BillingService {
       }
       const paid = state.subscription
       if (paid !== null && state.externalCustomerId !== undefined)
-        await saveSubscription(tx, {
-          userId: state.userId,
-          provider,
-          externalCustomerId: state.externalCustomerId,
-          externalSubscriptionId: paid.externalSubscriptionId,
-          planKey: paid.planKey,
-          status: paid.status,
-          currentPeriodEnd: paid.currentPeriodEnd,
-          cancelAtPeriodEnd: paid.cancelAtPeriodEnd,
-          ...(paid.createdAt === undefined ? {} : { createdAt: paid.createdAt }),
-          canceledAt: paid.canceledAt ?? null,
-        })
+        await saveSubscription(tx, savedOf(state.userId, provider, state.externalCustomerId, paid))
       await settleOtherSubscriptions(tx, state.userId, provider, keep, pastDue)
       // Kept renewing over a gift redeemed to start when it ended: the gift waits for the paid time.
       const giftsMoved =

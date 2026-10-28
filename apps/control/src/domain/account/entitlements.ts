@@ -4,6 +4,7 @@
 
 import type { Loader } from '../revision/revision.ts'
 import type { MemoryTier } from '../server/size.ts'
+import type { AccountStanding, SoldTerms } from './standing.ts'
 
 /** What a plan allows. Plan facts only: whether a deployment supports a feature is separate. */
 export interface Entitlements {
@@ -324,9 +325,27 @@ export const PLAN_KEYS: readonly string[] = ['free', ...PAID_PLANS]
 export const runsOn = (entitlements: Entitlements, tier: MemoryTier): boolean =>
   entitlements.allowedMemoryTiers.includes(tier) || entitlements.legacyMemoryTiers.includes(tier)
 
-export function entitlementsFor(plan: string, overrides: LimitOverrides = {}): Entitlements {
-  const base = PLANS[plan] ?? PLANS.free
-  if (base === undefined) throw new Error('The free plan must exist')
+/**
+ * What `plan` allows: the plan table, then what the subscription paying for it was sold with
+ * (`sold`, a price and hours of its own), then an admin's `overrides`, which win over both.
+ */
+export function entitlementsFor(
+  plan: string,
+  overrides: LimitOverrides = {},
+  sold?: SoldTerms,
+): Entitlements {
+  const table = PLANS[plan] ?? PLANS.free
+  if (table === undefined) throw new Error('The free plan must exist')
+  // Sold terms are for a paid plan's monthly block: a plan without one has nothing they replace.
+  const base =
+    sold === undefined || table.includedUnits === null
+      ? table
+      : {
+          ...table,
+          monthlyPriceCents: sold.priceCents,
+          includedUnits: sold.includedUnits,
+          mostExtraUnits: sold.mostExtraUnits ?? table.mostExtraUnits,
+        }
   return {
     ...base,
     maxServers: overrides.maxServers ?? base.maxServers,
@@ -339,6 +358,11 @@ export function entitlementsFor(plan: string, overrides: LimitOverrides = {}): E
     idleShutdownAfterMinutes: overrides.idleShutdownAfterMinutes ?? base.idleShutdownAfterMinutes,
   }
 }
+
+/** What an account's standing allows: its plan, as its subscription was sold, under an admin's limits. */
+export const entitlementsOf = (
+  standing: Pick<AccountStanding, 'plan' | 'limitOverrides' | 'soldWith'>,
+): Entitlements => entitlementsFor(standing.plan, standing.limitOverrides, standing.soldWith)
 
 /** What a server runs, as a plan sees it: its size, its type, and whether anything is added. */
 export interface Runs {

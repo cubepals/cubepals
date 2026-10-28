@@ -100,13 +100,18 @@ export type EdgeRoutes = z.infer<typeof EdgeRoutes>
  * is answered as before it was added.
  *
  * `name`: the name the joining client gave as it began to log in, where it gave one. Claimed by the
- * client: it only chooses which wakes a server's hour counts it among, never who may join.
+ * client. `address`: where the join came from, as the edge's front door read it. Together they
+ * only choose which wakes a server's hour counts it among, never who may join: a name lifts the
+ * hour's count only from a network the server's own players joined it from lately.
  */
 export const WakeRequest = z.object({
   hostname: z.string(),
   understands: z.array(z.string()).optional(),
   name: z.string().max(16).optional(),
+  address: z.string().optional(),
 })
+/** What a join said of itself as it asked for a wake. */
+export type WakeClaim = Pick<z.infer<typeof WakeRequest>, 'name' | 'address'>
 export const WakeResult = z.discriminatedUnion('outcome', [
   /**
    * `proxyProtocol` as on the server's route, for the run it is in now. `wakeOperationId`, here and

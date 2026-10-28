@@ -7,6 +7,7 @@ import { schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
+import { installTuning, tuning } from '../tuning.ts'
 
 /**
  * Sharing a server end to end (§15.6): the page anyone can open, the same page as an invitation,
@@ -182,4 +183,53 @@ describe.skipIf(!hasDatabase)('sharing', () => {
     const stranger = await h.user('Alex')
     expect(await refusal(h.app.sharingQueries.share(stranger, id))).toBe('NotFound')
   }, 40_000)
+})
+
+// Public reads are counted for each address, so one address reading too much is refused alone.
+describe.skipIf(!hasDatabase)('public reads, for each address', () => {
+  let h: Harness
+
+  beforeAll(async () => {
+    h = await startHarness()
+  }, 30_000)
+
+  afterAll(async () => {
+    await h.close()
+  })
+
+  const refusal = (work: Promise<unknown>) =>
+    work.then(
+      () => 'none',
+      (error: { code?: string }) => error.code,
+    )
+
+  test('one address past a page’s minute leaves it open to the rest', async () => {
+    const owner = await h.user()
+    const created = await h.create(owner)
+    await h.until(created.id, 'running')
+    await h.settled(created.id)
+    await h.app.listings.setPublic(owner, created.id, true)
+    const was = tuning()
+    const limits = { page: 2, status: 2, invite: 2, invites: 3 }
+    installTuning({ ...was, abuse: { ...was.abuse, publicReadsPerMinute: limits } })
+    try {
+      const open = (from: string) => h.app.sharingQueries.page(created.slug, null, { reactions: true, from })
+      const invited = (code: string, from: string) => h.app.sharingQueries.invite(code, null, from)
+      for (let i = 0; i < 2; i++) expect(await open('198.51.100.7')).not.toBeNull()
+      expect(await refusal(open('198.51.100.7'))).toBe('rate_limited')
+      expect(await open('198.51.100.8')).not.toBeNull()
+
+      for (let i = 0; i < 2; i++) expect(await invited(created.inviteCode, '198.51.100.7')).not.toBeNull()
+      expect(await refusal(invited(created.inviteCode, '198.51.100.7'))).toBe('rate_limited')
+      expect(await invited(created.inviteCode, '198.51.100.8')).not.toBeNull()
+
+      // Across every code, too: codes that lead nowhere count.
+      for (const guess of ['aaaaaaaaaaaa', 'bbbbbbbbbbbb', 'cccccccccccc'])
+        expect(await invited(guess, '203.0.113.5')).toBeNull()
+      expect(await refusal(invited(created.inviteCode, '203.0.113.5'))).toBe('rate_limited')
+      expect(await invited(created.inviteCode, '203.0.113.6')).not.toBeNull()
+    } finally {
+      installTuning(was)
+    }
+  }, 60_000)
 })

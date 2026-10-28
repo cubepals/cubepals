@@ -297,6 +297,20 @@ export const VALUES: Value[] = [
     optional: 'billing',
   },
   {
+    name: 'EARLY_ROOM_TOKEN',
+    goes: ['secret'],
+    where:
+      'only to sell at an early price: the private records, the bearer token of the route that sets the room for early checkouts (docs/configuration.md)',
+    optional: 'early price',
+  },
+  {
+    name: 'EARLY_ROOM_MAX_POINTS',
+    goes: ['operator'],
+    where: 'the private records: the most room that route may set, in points (docs/configuration.md)',
+    optional: 'early price',
+    shape: (value) => (/^\d+$/.test(value) ? null : 'is a whole number'),
+  },
+  {
     name: 'AUTH_GITHUB_CLIENT_ID',
     goes: ['secret'],
     where:

@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { connect, createServer, type Server, type Socket } from 'node:net'
 import type { Locks } from '../../app/ports/locks.ts'
+import { ConsoleUnavailable } from '../../app/ports/minecraft.ts'
 import { RconConsole } from './rcon.ts'
 
 /** Locks for one process, which is all these tests need to show sessions taking turns. */
@@ -84,6 +85,20 @@ function flycast(console: Server, closed: number): Promise<Server> {
     upstream.on('close', () => socket.destroy())
   })
   return new Promise((resolve) => proxy.listen(0, '127.0.0.1', () => resolve(proxy)))
+}
+
+/** A console that answers the first thing it is sent with `bytes`, and then stays open. */
+function answersWith(bytes: Buffer): Promise<Server> {
+  const server = createServer((socket) => socket.once('data', () => socket.write(bytes)))
+  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server)))
+}
+
+/** A reply's first eight bytes: its length field, as given, and an id. */
+const replyHead = (length: number, id = 1) => {
+  const head = Buffer.alloc(8)
+  head.writeInt32LE(length, 0)
+  head.writeInt32LE(id, 4)
+  return head
 }
 
 let server: Server | null = null
@@ -194,5 +209,38 @@ describe('RconConsole', () => {
       error: 'Commands longer than 1446 bytes do not fit in one RCON packet',
     })
     expect(results[1]).toEqual({ ok: true, output: 'ran lis' })
+  })
+
+  test('a reply whose length is shorter than its header ends the connection', async () => {
+    server = await answersWith(replyHead(-4))
+    const started = Date.now()
+    const failure = await rcon()
+      .run(target(server), 'list')
+      .catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(ConsoleUnavailable)
+    expect((failure as Error).message).toBe('The console sent a reply of length -4, outside 10 to 12298')
+    expect(Date.now() - started).toBeLessThan(250)
+  })
+
+  test('a reply longer than RCON carries ends the connection before it arrives', async () => {
+    server = await answersWith(Buffer.concat([replyHead(1_000_000), Buffer.alloc(64)]))
+    await expect(rcon().run(target(server), 'list')).rejects.toThrow(
+      'The console sent a reply of length 1000000, outside 10 to 12298',
+    )
+  })
+
+  test('a long answer in characters wider than a byte still fits', async () => {
+    const long = 'é€😀'.repeat(3_000)
+    server = await vanillaRcon('secret', () => long)
+    expect(await rcon().run(target(server), 'list')).toBe(long)
+  })
+
+  test('an answer past what a connection holds ends it', async () => {
+    server = await vanillaRcon('secret', () => 'x'.repeat(1_100_000))
+    const results = await rcon().runAll(target(server), ['list', 'seed'])
+    expect(results).toEqual([
+      { ok: false, error: 'The console sent an answer over 1048576 characters' },
+      { ok: false, error: 'The console sent an answer over 1048576 characters' },
+    ])
   })
 })

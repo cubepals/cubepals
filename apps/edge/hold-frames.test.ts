@@ -15,7 +15,7 @@
 import { afterAll, describe, expect, test } from 'bun:test'
 import { type AddressInfo, connect, createServer } from 'node:net'
 import { join } from 'node:path'
-import { Held } from './hold.ts'
+import { Held, turnAway } from './hold.ts'
 import { packet, string, varInt } from './notice.ts'
 
 const HOLD = join(import.meta.dir, 'hold.ts')
@@ -124,6 +124,8 @@ describe('a negative frame length in the waiting room', () => {
       },
     })
     let agent: ReturnType<typeof Bun.spawn> | undefined
+    /** The waiting room's port, once the first test has started the agent. */
+    let waitingPort = 0
 
     afterAll(async () => {
       agent?.kill('SIGKILL')
@@ -133,6 +135,7 @@ describe('a negative frame length in the waiting room', () => {
 
     test('the connection is refused at once, and no server wakes for it', async () => {
       const [waiting, ...others] = await Promise.all(Array.from({ length: 7 }, freePort))
+      waitingPort = waiting ?? 0
       const [agentPort, notice, sleeping, minecraft, router, routerApi] = others
       agent = Bun.spawn(['bun', AGENT], {
         env: {
@@ -149,6 +152,7 @@ describe('a negative frame length in the waiting room', () => {
           ROUTER_API_PORT: String(routerApi),
           // No mc-router: the waiting room listens before the agent waits on it.
           ROUTER_BIN: 'true',
+          STILL_STARTING_JOIN: 'Still starting',
         },
         stdout: 'ignore',
         stderr: 'ignore',
@@ -157,5 +161,20 @@ describe('a negative frame length in the waiting room', () => {
       expect(await closedWithin(waiting ?? 0, bytes, 1_000)).toBe(true)
       expect(asked.filter((path) => path.endsWith('/wake'))).toEqual([])
     }, 20_000)
+
+    test('a held join that sends past what a login takes hears it can’t go on, and is closed', async () => {
+      const socket = connect(waitingPort, '127.0.0.1')
+      const heard: Buffer[] = []
+      socket.on('data', (chunk) => heard.push(chunk))
+      socket.on('error', () => {})
+      const closed = new Promise<void>((resolve) => socket.once('close', () => resolve()))
+      await new Promise((resolve) => socket.once('connect', resolve))
+      socket.write(Uint8Array.from([...handshake, ...login]))
+      await Bun.sleep(200)
+      const large = packet(0x7f, new Array(10_000).fill(1))
+      for (let i = 0; i < 10 && !socket.destroyed; i++) socket.write(large)
+      await Promise.race([closed, Bun.sleep(3_000).then(() => Promise.reject(new Error('still open')))])
+      expect(Buffer.concat(heard).includes(Buffer.from(turnAway('Still starting')))).toBe(true)
+    }, 10_000)
   })
 })

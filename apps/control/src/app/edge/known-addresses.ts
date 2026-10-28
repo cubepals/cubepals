@@ -4,7 +4,8 @@
 
 /**
  * The networks a server's own players join it from, so a server-list ping from one of them may
- * wake the server before the join (`ping-wake.ts`), and a ping from anywhere else may not. A
+ * wake the server before the join (`ping-wake.ts`), and a ping from anywhere else may not; and a
+ * join from one under a player's name isn't held to the hour's wakes (`service.ts`). A
  * network counts once a join from it ends that the server itself saw the player on, and for
  * `AbuseLimits.knownAddressDays` after the last such join; then it is forgotten.
  *
@@ -13,8 +14,8 @@
  * key, and the same network is a different hash on every server. Rotating the runtime key forgets
  * them all, which costs only an early wake or two.
  *
- * Not for who may join: an address is a hint for whether to warm a server up early, never a reason
- * to turn anyone away.
+ * Not for who may join a running server: an address only chooses whether a server warms up early,
+ * and which wakes the hour counts.
  */
 import { createHmac } from 'node:crypto'
 import { DAY_MS, MINUTE_MS } from '@blockly/contracts/durations'

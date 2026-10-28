@@ -5,7 +5,7 @@
 import { HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { backAtMidnight } from '@blockly/contracts/play-today'
 import type { Tx } from '@blockly/db'
-import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import { extraUnits } from '../../domain/account/extra-play.ts'
 import { installUnsoldPlans } from '../../domain/account/on-sale.ts'
 import {
@@ -89,7 +89,7 @@ async function accountFacts(
 ): Promise<Omit<PolicyFacts, 'deployment' | 'controls' | 'serverCeiling' | 'global' | 'room' | 'roomRules'>> {
   const standing = await loadStanding(tx, accountId)
   const extra = await extraPlayNow(tx, standing)
-  const entitlements = entitlementsFor(standing.plan, standing.limitOverrides)
+  const entitlements = entitlementsOf(standing)
   const today = await playToday(tx, standing, entitlements, now)
   const month = await meteredMonth(tx, standing, entitlements, now)
   return {

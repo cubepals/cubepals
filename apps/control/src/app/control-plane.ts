@@ -404,7 +404,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     edge,
     joins: new JoinService({ ...ports, ...settings }),
     stopCheaters: new StopCheatersService({ db, policy, transitions, events }),
-    feed: new ConsoleFeed(db, ports.logs, runtime.providers),
+    feed: new ConsoleFeed(db, ports.logs, runtime.providers, ports.limits),
   }
 }
 
