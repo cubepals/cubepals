@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A join the game turned away for its own lists says so once the edge reports it ended: the
- * whitelist, where the player is on neither it nor the operators, and a ban, read first. Nothing
- * else is given a reason: a join that reached the world, one the edge turned away, one the server
- * already explained, or one whose player nobody knows.
+ * A join the game turned away for its own lists says so once the edge reports it ended and the
+ * server told of its login, in either order: the whitelist, where the player is on neither it nor
+ * the operators, and a ban, read first. Nothing else is given a reason: a join that never logged
+ * in, one that reached the world, one the edge turned away, one the server already explained, or
+ * one whose player nobody knows.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -19,6 +20,8 @@ import { offlineUuid } from '../access/identity.ts'
 const STEVE = { name: 'Steve', uuid: '8667ba71-b85a-4004-af54-457a9734eed7' }
 const t0 = Date.parse('2026-10-21T10:00:00.000Z')
 const at = (ms: number) => new Date(t0 + ms).toISOString()
+/** The server's word that Steve logged in: his account verified, before the game reads its lists. */
+const login: ServerJoinEvent = { kind: 'login', at: at(100), uuid: STEVE.uuid, name: STEVE.name }
 
 let h: Harness
 
@@ -53,11 +56,11 @@ const server = async (whitelist: boolean, lists: Entry[] = []) => {
   return { id: made.id, address: `${(await h.server(made.id)).slug}.play.test` }
 }
 
-/** Steve's join to `to`, handed over and ended as the edge reports it; its reason after. */
+/** Steve's join to `to`, handed over, logged in and ended as the edge reports it; its reason after. */
 const ended = async (
   to: { id: string; address: string },
   fields: Partial<VisitReport> = {},
-  events: ServerJoinEvent[] = [],
+  events: ServerJoinEvent[] = [login],
 ) => {
   const joinId = randomUUID()
   const visit = { joinId, edgeId: 'edge-1', region: 'fra', address: to.address, source: '203.0.113.7:50001' }
@@ -94,10 +97,34 @@ describe.skipIf(!hasDatabase)('a join the game refused', () => {
     expect(await ended(await server(false, [{ list: 'ban', uuid: own }]))).toBe('refused:banned')
   }, 30_000)
 
+  test('once the server tells of the login, when the edge told of the end first', async () => {
+    const to = await server(true)
+    const joinId = randomUUID()
+    const visit = {
+      joinId,
+      edgeId: 'edge-1',
+      region: 'fra',
+      address: to.address,
+      source: '203.0.113.7:50002',
+    }
+    const half = { ...visit, connectedAt: at(0), player: STEVE, path: 'direct' as const, handedAt: at(30) }
+    await h.app.joins.recordVisits([{ ...half, phase: 'open' }])
+    await h.app.joins.recordVisits([{ ...half, phase: 'close', leftAt: at(900) }])
+    const reason = async () =>
+      (await h.db.select().from(schema.joins).where(eq(schema.joins.id, joinId)))[0]?.leftReason ?? null
+    expect(await reason()).toBeNull()
+    await h.app.joins.recordServerEvents(to.id, [login])
+    expect(await reason()).toBe('refused:whitelist')
+  }, 30_000)
+
   test('and nothing else is given a reason', async () => {
     // Each on a server of its own, its whitelist on and Steve not on it, so one join's events
     // can't be matched to another's.
     const closed = () => server(true)
+    // Never logged in: the game refused the account before it read its lists, or the client left.
+    // With no word from the server, these can share one.
+    const quiet = await closed()
+    expect(await ended(quiet, {}, [])).toBeNull()
     // In the world: the game let them in.
     const inWorld = { kind: 'in_world' as const, at: at(500), uuid: STEVE.uuid, name: STEVE.name }
     expect(await ended(await closed(), {}, [inWorld])).toBeNull()
@@ -107,7 +134,7 @@ describe.skipIf(!hasDatabase)('a join the game refused', () => {
     // Turned away at the edge, with its own reason; never handed over; nobody to look for.
     const refused = { path: 'refused' as const, handedAt: undefined, leftReason: 'refused:wrong_game' }
     expect(await ended(await closed(), refused)).toBe('refused:wrong_game')
-    expect(await ended(await closed(), { handedAt: undefined })).toBeNull()
-    expect(await ended(await closed(), { player: { name: STEVE.name } })).toBeNull()
+    expect(await ended(quiet, { handedAt: undefined }, [])).toBeNull()
+    expect(await ended(quiet, { player: { name: STEVE.name } }, [])).toBeNull()
   }, 30_000)
 })

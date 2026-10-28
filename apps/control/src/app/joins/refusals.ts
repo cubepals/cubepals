@@ -6,10 +6,13 @@
  * Why the game turned a join away at login, where its reason is one of the lists Blockly keeps
  * for the server: the player is banned there, or its whitelist is on and they are on neither the
  * whitelist nor the operators, whom the game lets past it. The edge handed such a join on and saw
- * only the connection end; the game refuses it before anything the reporter reports. So a join
- * that ended after it was handed over, never reached the world, and has no reason yet is read
- * against the server's lists as they stand when the edge says it ended, a ban first, as the game
- * checks one first.
+ * only the connection end, and the reporter tells of the login and nothing after. The game checks
+ * its lists once it has verified the account and the reporter has told of the login, so a join
+ * that logged in, ended, never reached the world and has no reason yet is read against the
+ * server's lists as they stand, a ban first, as the game checks one first. It is read when the
+ * edge says the join ended and again when the server's word of the login comes, whichever is
+ * last. A join that never logged in, its account unverified or its client gone first, is given
+ * no reason here.
  *
  * Not for a join the edge turned away, which carries its own reason, nor for why a player left
  * once in (`server-events.ts`).
@@ -33,7 +36,7 @@ export async function noteRefusal(q: Queryable, id: string): Promise<void> {
       and(
         eq(joins.id, id),
         isNotNull(joins.leftAt),
-        isNotNull(joins.handedAt),
+        isNotNull(joins.loginAt),
         isNull(joins.inWorldAt),
         isNull(joins.leftReason),
       ),

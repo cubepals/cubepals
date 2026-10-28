@@ -149,7 +149,7 @@ Where a server's joins stop, and why. These are not Prometheus figures, as they 
 | Join tried | A `joins` row with `kind = 'join'`: `connected_at` at the edge, `handed_at` once it was handed to the server, then `login_at` to `in_world_at` from the server's reporter. |
 | Stopped: version | `left_reason = 'refused:wrong_game'`: the edge turned away a client the server can't take. |
 | Stopped: hours used | `left_reason = 'refused:quota'`; and `join_turned_away` for each try, with its `reason` (`free_hours`), and `server_turned_away` for who came by. |
-| Stopped: whitelist | `left_reason = 'refused:whitelist'`: handed to the server, never in the world, and when the edge said it ended, the server's whitelist was on with the player on neither it nor the operators (`joins/refusals.ts`). |
+| Stopped: whitelist | `left_reason = 'refused:whitelist'`: logged in (the game checks its lists once it has verified the account), never in the world, and once both the edge's end and the server's login were in, the server's whitelist was on with the player on neither it nor the operators (`joins/refusals.ts`). A join that never logged in, its account unverified or its client gone first, falls under Other. |
 | Stopped: banned | `left_reason = 'refused:banned'`: the same, with the player banned there. A ban is read first, as the game reads it. |
 | Stopped: left during the wait | `left_reason = 'gave_up_waiting'`: the player left the waiting room before the server was up. |
 | Stopped: couldn't start | `left_reason` is `refused:failed`, `refused:broken` or `refused:unreachable`; or `refused:starting`, `refused:rest`, `refused:stop` or `refused:backup`, where the wait ran out first. |

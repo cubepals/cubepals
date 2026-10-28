@@ -7,7 +7,8 @@
  * by the client's `ip:port` where the server knew it, which is the edge's own `source` on a server
  * that reads a PROXY header; else by the player's UUID on a join the edge handed over moments
  * before, or one this server already reported on; else a row of its own, saying the edge's half is
- * missing. A `boot` keeps the server's latest word on what it runs.
+ * missing. A `boot` keeps the server's latest word on what it runs. A login told of after the edge
+ * said the join ended may show the game turned it away for its own lists (`refusals.ts`).
  *
  * Not for the edge's half: that is `visits.ts`.
  */
@@ -18,6 +19,7 @@ import { and, desc, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm'
 import { joinCompleted } from '../platform/telemetry.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import { findServer } from '../servers/persistence.ts'
+import { noteRefusal } from './refusals.ts'
 import { sourceOf } from './sources.ts'
 import { samePlayer, uuidOf } from './visits.ts'
 
@@ -113,6 +115,9 @@ async function recordMoment(
       ...(event.kind === 'in_world' && event.tick ? { tick: event.tick } : {}),
     })
     .where(eq(joins.id, id))
+  // The edge may have told of its end already: where the game turned it away for its own lists,
+  // that is why.
+  if (event.kind === 'login') await noteRefusal(q, id)
   // Timed once, from the edge's handshake; a join the edge said nothing of has no handshake.
   if (before !== undefined && before.inWorldAt === null && before.detail.edge !== 'missing')
     joinCompleted(before.path, before.edgeRegion, at.getTime() - before.connectedAt.getTime())
