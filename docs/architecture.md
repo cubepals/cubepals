@@ -2537,10 +2537,13 @@ makes it public, and whether others may make one like it.
   (`app/sharing/queries.ts`), written for a player: what the server is, who is on, what to install
   (usually nothing), and the address. It says nothing about machines, regions or sizes.
 - The page exists while the server is public (`published`), not removed by moderation, the
-  directory switch is on and the owner's account is active. Its owner sees it before anyone else
-  can.
+  directory switch is on, the owner's account is active and not restricted from public listing,
+  and its name and address pass. Its owner sees it before anyone else can. Its status, badge and
+  card, its guestbook and stars, Report, chipping in and copying from it all follow the same rule
+  (`app/listings/reachable.ts`); a server out of the directory only for its mods, or for not
+  having booted yet, keeps its page.
 - An invitation works while the server is private: only a takedown or the owner's standing stops
-  it. It does the one thing a page can't: while the whitelist is on, its holder puts their own
+  it, and the same goes for joining and copying through it. It does the one thing a page can't: while the whitelist is on, its holder puts their own
   Minecraft name on it, with no Blockly account (`SharingService.joinThroughInvite`, through
   `AccessService.add`, audited). One link lets in at most 10 people an hour, and `resetInvite`
   issues a new code, which ends the old link and its count.
@@ -2554,10 +2557,12 @@ makes it public, and whether others may make one like it.
 
 **Limits on public reads.** Nobody signs in to reach these, so `AccessPolicy` has no account to
 bound. The `Limits` port (`app/ports/limits.ts`; `MemoryLimits`, in each process, on
-`rate-limiter-flexible`) counts each minute by what is asked about, never by who asks: a page
-people open 120, a server's status (its title, JSON, badge and card) 240, one invite code 60, and
-every invite together 1,200. A refusal says Blockly is busy for a moment, and the status JSON
-answers 429 with `Retry-After`. Player faces count under a key of their own (§15.5).
+`rate-limiter-flexible`) counts each minute by what is asked about, for each client address
+(`interfaces/http/client-address.ts`; the web tier forwards it on `/api/auth`, `/api/trpc` and
+`/api/public`): a page people open, a server's status (its title, JSON, badge and card), one invite
+code, and every invite together, at `ABUSE_LIMITS.publicReadsPerMinute`. Reads whose address isn't
+known share one count. A refusal says Blockly is busy for a moment, and the status JSON answers
+429 with `Retry-After`. Player faces count under a key of their own (§15.5).
 
 **Failures in owners' words.** An owner reads what happened and what to do, never a stack trace
 (`app/errors.ts`).

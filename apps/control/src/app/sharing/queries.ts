@@ -12,7 +12,7 @@ import type { MinecraftServer } from '../../domain/server/server.ts'
 import { formatJoinAddress } from '../../minecraft/address.ts'
 import { LOADER_LABELS } from '../../minecraft/versions.ts'
 import { readAccess } from '../access/persistence.ts'
-import { loadControls, loadStanding } from '../accounts/persistence.ts'
+import { loadControls } from '../accounts/persistence.ts'
 import type { Actor } from '../actor.ts'
 import { offersChipIn } from '../billing/chip-ins.ts'
 import type { DeploymentCapabilities } from '../capabilities.ts'
@@ -22,6 +22,7 @@ import { AppError, NotFound } from '../errors.ts'
 import { tally } from '../guestbook/persistence.ts'
 import { trustOf } from '../listings/judge.ts'
 import { loadListing } from '../listings/persistence.ts'
+import { inviteOpen, pageShown } from '../listings/reachable.ts'
 import { packView } from '../mods/pack.ts'
 import type { ModCatalog } from '../ports/catalog.ts'
 import type { Limits } from '../ports/limits.ts'
@@ -31,18 +32,19 @@ import { findByInvite, findLiveBySlug, findServer, loadRuntime } from '../server
 import { loadRevisionFields, WITHOUT_FILES } from '../servers/revision-reads.ts'
 import { presenceFor } from '../servers/usage.ts'
 import { creditsOf } from '../setups/templates.ts'
+import { tuning } from '../tuning.ts'
 import { listWorlds } from '../worlds/persistence.ts'
 
 /**
- * What one minute of honest use looks like on each public read. The page people open is counted
- * apart from the reads around it: the title an open page or a pasted link shows, the JSON, the
- * badge and the card. So an open counts once against the page, and nothing polling a server's
- * status can shut its page on the people opening it; the status has room for every open's title
- * and the bots besides. An invitation's two reads, its title and its page, can't be told apart
- * like that, so its limits count each open twice: thirty friends opening one link in a minute,
- * and six hundred invitations opened across every link.
+ * Public reads are counted for each client address (`AbuseLimits.publicReadsPerMinute`), so one
+ * address reading too much is refused alone. The page people open is counted apart from the reads
+ * around it: the title an open page or a pasted link shows, the JSON, the badge and the card. So an
+ * open counts once against the page, and nothing polling a server's status can shut its page on
+ * the people opening it. An invitation's two reads, its title and its page, can't be told apart
+ * like that, so its limits count each open twice. A read whose address isn't known is counted with
+ * every other such read.
  */
-const PER_MINUTE = { page: 120, status: 240, invite: 60, invites: 1200 } as const
+const perAddress = (key: string, from: string | null | undefined) => `${key}@${from ?? 'unknown'}`
 
 /**
  * What everyone but the owner sees (§15.6): a server's own page, the same page as an invitation,
@@ -89,18 +91,19 @@ export class SharingQueries {
   async page(
     slug: string,
     viewer: Actor | null,
-    options: { reactions?: boolean } = {},
+    options: { reactions?: boolean; from?: string | null } = {},
   ): Promise<PublicServerView | null> {
     // The page people open is the read that shows its stars and notes.
     const opened = options.reactions === true
+    const limits = tuning().abuse.publicReadsPerMinute
     await this.#within(
-      opened ? `page:${slug}` : `status:${slug}`,
-      opened ? PER_MINUTE.page : PER_MINUTE.status,
+      perAddress(opened ? `page:${slug}` : `status:${slug}`, options.from),
+      opened ? limits.page : limits.status,
     )
     const server = await findLiveBySlug(this.#db, slug)
     if (server === null) return null
     const owner = viewer?.kind === 'user' && viewer.userId === server.ownerId
-    const shown = await this.#shown(server)
+    const shown = await pageShown(this.#db, server)
     if (!owner && !shown) return null
     const reader =
       viewer === null || viewer.kind === 'system' || viewer.kind === 'operator' ? null : viewer.userId
@@ -115,18 +118,22 @@ export class SharingQueries {
     })
   }
 
-  /** The same page, reached through an invite link: it works while the server is private. */
-  async invite(code: string, viewer: Actor | null = null): Promise<PublicServerView | null> {
-    // Per code, and across every code at once: one invitation being opened by the friends it
-    // was sent to is ordinary; thousands of different codes in a minute is somebody guessing.
-    await this.#within(`invite:${code}`, PER_MINUTE.invite)
-    await this.#within('invites', PER_MINUTE.invites)
+  /**
+   * The same page, reached through an invite link: it works while the server is private. `from` is
+   * the address of the client asking, which its reads are counted by.
+   */
+  async invite(
+    code: string,
+    viewer: Actor | null = null,
+    from: string | null = null,
+  ): Promise<PublicServerView | null> {
+    // Per code, and across every code at once, for each address: one invitation being opened by
+    // the friends it was sent to is ordinary; thousands of different codes in a minute is not.
+    const limits = tuning().abuse.publicReadsPerMinute
+    await this.#within(perAddress(`invite:${code}`, from), limits.invite)
+    await this.#within(perAddress('invites', from), limits.invites)
     const server = await findByInvite(this.#db, code)
-    if (server === null) return null
-    // An invitation is the owner's own link, so only a takedown stops it.
-    const listing = await loadListing(this.#db, server.id)
-    if (listing?.moderation === 'removed') return null
-    if ((await loadStanding(this.#db, server.ownerId)).status !== 'active') return null
+    if (server === null || !(await inviteOpen(this.#db, server))) return null
     const owner = viewer?.kind === 'user' && viewer.userId === server.ownerId
     return this.#view(server, { invited: true, preview: false, yours: owner, reactions: null })
   }
@@ -142,14 +149,13 @@ export class SharingQueries {
   ): Promise<{ server: MinecraftServer; page: string } | null> {
     if ('code' in to) {
       const server = await findByInvite(this.#db, to.code)
-      if (server === null || (await loadListing(this.#db, server.id))?.moderation === 'removed') return null
-      if ((await loadStanding(this.#db, server.ownerId)).status !== 'active') return null
+      if (server === null || !(await inviteOpen(this.#db, server))) return null
       return { server, page: `/join/${to.code}` }
     }
     const server = await findLiveBySlug(this.#db, to.slug)
     if (server === null) return null
     const owner = viewer?.kind === 'user' && viewer.userId === server.ownerId
-    if (!owner && !(await this.#shown(server))) return null
+    if (!owner && !(await pageShown(this.#db, server))) return null
     return { server, page: `/server/${server.slug}` }
   }
 
@@ -195,21 +201,12 @@ export class SharingQueries {
 
   /**
    * What one minute of honest reading looks like. Nobody signs in to reach these, so there is no
-   * account to count against; what is counted is the thing being asked about, which whoever is
-   * asking cannot change. So a refusal is everyone's busy minute, never the reader's own doing,
-   * and it says so.
+   * account to count against; what is counted is the thing being asked about, for each address
+   * asking. A refusal says only that Cubepals is busy for a moment.
    */
   async #within(key: string, limit: number): Promise<void> {
     if (!(await this.#limits.allow(key, limit)))
       throw new AppError('rate_limited', 'Cubepals is busy for a moment. Try again shortly.')
-  }
-
-  /** Whether anyone may open this server's page: the owner's choice, moderation and standing. */
-  async #shown(server: MinecraftServer): Promise<boolean> {
-    const listing = await loadListing(this.#db, server.id)
-    if (listing === null || listing.visibility !== 'published' || listing.moderation !== 'clear') return false
-    if (!(await loadControls(this.#db)).publicListingEnabled) return false
-    return (await loadStanding(this.#db, server.ownerId)).status === 'active'
   }
 
   async #view(

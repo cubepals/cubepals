@@ -10,6 +10,7 @@ import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import type { PinnedModpack } from '../../domain/mods/modpack.ts'
 import type { ModConflict } from '../../domain/mods/resolve.ts'
 import type { Loader } from '../../domain/revision/revision.ts'
+import type { MinecraftServer } from '../../domain/server/server.ts'
 import { type MemoryTier, memoryMb, PARTY, type PartySize } from '../../domain/server/size.ts'
 import { type ServerSetup, setupOf } from '../../domain/setup/setup.ts'
 import { loaderOfPack, serverEnvironment } from '../../minecraft/mods.ts'
@@ -31,6 +32,7 @@ import type { PackCuration } from '../curation/service.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { trustOf } from '../listings/judge.ts'
 import { loadListing } from '../listings/persistence.ts'
+import { inviteOpen, pageShown } from '../listings/reachable.ts'
 import type { ModService } from '../mods/service.ts'
 import type { PackContents } from '../packs/contents.ts'
 import type { PackService } from '../packs/service.ts'
@@ -247,15 +249,13 @@ export class SetupService {
         ? await findByInvite(this.#db, source.invite)
         : await findLiveBySlug(this.#db, source.slug ?? '')
     if (server === null) throw new NotFound('Server')
+    const owner = await this.#mayCopy(server, source.invite !== undefined, viewer)
     // Only what a server actually booted can be copied: that is the configuration known to work.
     const { applied } = await loadRuntime(this.#db, server.id, this.#providers)
     if (applied === null)
       throw new AppError('invalid_choice', 'That server hasn’t started yet, so there is nothing to copy.')
     const revision = await loadRevision(this.#db, applied.revisionId)
     const world = await loadWorld(this.#db, applied.worldId)
-    const owner = viewer?.kind === 'user' && viewer.userId === server.ownerId
-    const allowed = owner || source.invite !== undefined || (await this.#shared(server.id))
-    if (!allowed) throw new NotFound('Server')
     if (revision.mods.some((mod) => !('projectId' in mod.source)))
       throw new AppError(
         'invalid_choice',
@@ -675,15 +675,21 @@ export class SetupService {
     )
   }
 
+  /**
+   * Whether the viewer owns the server they would copy. Anyone else copies it the way it can be
+   * opened, its invitation or its public page, only while that lets people in.
+   */
+  async #mayCopy(server: MinecraftServer, byInvite: boolean, viewer: Actor | null): Promise<boolean> {
+    const owner = viewer?.kind === 'user' && viewer.userId === server.ownerId
+    if (owner) return true
+    const reached = byInvite ? await inviteOpen(this.#db, server) : await pageShown(this.#db, server)
+    if (!reached) throw new NotFound('Server')
+    return false
+  }
+
   /** One exact version of a catalog pack, pinned as a server would play it: for a pack change. */
   pinnedPack(projectId: string, versionId: string) {
     return this.#pack(projectId, versionId)
-  }
-
-  /** Whether a server is shared widely enough that its setup may be copied by a stranger. */
-  async #shared(serverId: string): Promise<boolean> {
-    const listing = await loadListing(this.#db, serverId)
-    return listing !== null && listing.visibility === 'published' && listing.moderation === 'clear'
   }
 }
 

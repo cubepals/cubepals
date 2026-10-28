@@ -79,6 +79,12 @@ export interface AbuseLimits {
    * (`app/backups/new-world-imports.ts`): each is up to 4 GB, and read on a worker.
    */
   worldUploadsPerDay: number
+  /**
+   * Public reads one address may make of one server a minute (`app/sharing/queries.ts`): the page
+   * people open, and the status, badge and card around it; of one invitation, whose title and page
+   * count as two; and of invitations across every code.
+   */
+  publicReadsPerMinute: { page: number; status: number; invite: number; invites: number }
 }
 
 /** The figures the runtime economics report prices a margin with (`app/runtimes/economics.ts`). */
@@ -122,6 +128,7 @@ export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {
   joinReportsPerSecond: 10,
   joinReportBytes: 65_536,
   worldUploadsPerDay: 10,
+  publicReadsPerMinute: { page: 120, status: 240, invite: 60, invites: 1200 },
 }
 
 /** Round figures for development and tests. */

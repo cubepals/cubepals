@@ -9,10 +9,9 @@ import { and, eq, gte, max, sql } from 'drizzle-orm'
 import { namedBy } from '../access/identity.ts'
 import { readAccess } from '../access/persistence.ts'
 import type { AccessService } from '../access/service.ts'
-import { loadStanding } from '../accounts/persistence.ts'
 import type { Actor } from '../actor.ts'
 import { AppError, NotFound } from '../errors.ts'
-import { loadListing } from '../listings/persistence.ts'
+import { inviteOpen } from '../listings/reachable.ts'
 import { findByInvite } from '../servers/persistence.ts'
 import { loadRevisionFields } from '../servers/revision-reads.ts'
 import { tuning } from '../tuning.ts'
@@ -35,10 +34,7 @@ export class SharingService {
 
   async joinThroughInvite(code: string, playerName: string): Promise<JoinThroughInviteResult> {
     const server = await findByInvite(this.#db, code)
-    if (server === null) throw new NotFound('Invite')
-    const listing = await loadListing(this.#db, server.id)
-    if (listing?.moderation === 'removed') throw new NotFound('Invite')
-    if ((await loadStanding(this.#db, server.ownerId)).status !== 'active') throw new NotFound('Invite')
+    if (server === null || !(await inviteOpen(this.#db, server))) throw new NotFound('Invite')
 
     const access = await readAccess(this.#db, server.id)
     const whitelisted = access.record.whitelistEnabledPending ?? access.record.whitelistEnabled
