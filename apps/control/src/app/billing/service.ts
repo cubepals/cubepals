@@ -20,6 +20,7 @@ import type { JobQueue } from '../ports/jobs.ts'
 import {
   type BillingOrder,
   type BillingStanding,
+  type BillingState,
   BillingUnavailable,
   type OrderNow,
 } from '../ports/optional.ts'
