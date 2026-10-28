@@ -22,7 +22,7 @@ describe('SITE_HEADERS', () => {
       'Content-Security-Policy': "frame-ancestors 'none'",
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
-      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+      'Strict-Transport-Security': 'max-age=31536000',
     })
   })
 })

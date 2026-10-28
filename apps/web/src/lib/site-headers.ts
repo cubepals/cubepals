@@ -5,7 +5,7 @@
 /**
  * The headers every answer from the site carries: no page of it is shown inside another site's
  * frame, a file is read as the type it says it is, another site is told only which origin a link
- * came from, and the browser keeps to HTTPS for the site and every name under it.
+ * came from, and the browser keeps to HTTPS for the site.
  *
  * Three places send them, so that each kind of answer gets them once: next.config.ts's headers()
  * for whatever Next answers (on the Worker, OpenNext's routing applies it, `/_next/image`
@@ -24,7 +24,7 @@ export const SITE_HEADERS: readonly { key: string; value: string }[] = [
   { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+  { key: 'Strict-Transport-Security', value: 'max-age=31536000' },
 ]
 
 /**
