@@ -16,7 +16,7 @@
  */
 import { HOUR_MS } from '@blockly/contracts/durations'
 import { type Db, type Queryable, schema, type Tx } from '@blockly/db'
-import { and, eq, gt, isNull, or, sum } from 'drizzle-orm'
+import { and, eq, gt, isNotNull, isNull, or, sum } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import type { DeploymentCapabilities } from '../capabilities.ts'
 import type { EarlyProduct } from '../ports/optional.ts'
@@ -64,13 +64,14 @@ const pointsOf = (room: EarlyRoom, planKey: string): number =>
   planKey === 'core' || planKey === 'plus' ? room.points[planKey] : 0
 
 /**
- * The holds that still count against the room: ones not yet expired, and of those paid, the ones
- * paid since the room was last set, which the setting could not yet count.
+ * The holds that still count against the room: unpaid ones until they expire, and paid ones, however
+ * long ago their hour ended, until the room is set from figures read after the payment, which count
+ * the subscription it became.
  */
 const counting = (room: EarlyRoom, now: Date) =>
-  and(
-    gt(holds.expiresAt, now),
-    room.setAt === null ? isNull(holds.paidAt) : or(isNull(holds.paidAt), gt(holds.paidAt, room.setAt)),
+  or(
+    and(isNull(holds.paidAt), gt(holds.expiresAt, now)),
+    room.setAt === null ? isNotNull(holds.paidAt) : gt(holds.paidAt, room.setAt),
   )
 
 /** The room left for another hold now: what is set, less what counted holds took. */

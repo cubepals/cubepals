@@ -49,12 +49,13 @@ beforeEach(async () => {
   await open(0)
 })
 
-/** Room for `checkouts` of Core, at 100 points each, and Plus at 300. */
-const open = (checkouts: number) =>
+/** Room for `checkouts` of Core, at 100 points each, and Plus at 300, from figures read at `readAt`. */
+const open = (checkouts: number, readAt?: Date) =>
   room.set({
     roomPoints: checkouts * 100,
     points: { core: 100, plus: 300 },
     validUntil: new Date(Date.now() + 30 * MINUTE_MS),
+    readAt,
   })
 const lastCheckout = () => [...w.checkouts.values()].at(-1)?.asked
 
@@ -132,6 +133,26 @@ describe.skipIf(!hasDatabase)('the price a checkout holds', () => {
     // Set again, the room counts the subscription itself: the paid hold no longer does.
     await open(1)
     expect((await w.h.app.billing.offer(other, 'core')).productId).toBe(EARLY_CORE)
+  })
+
+  test('a hold paid late in its hour still counts after it, until figures read after the payment', async () => {
+    const start = Date.now()
+    try {
+      await open(1)
+      const owner = await w.h.user('Late payer')
+      await w.h.app.billing.offer(owner, 'core')
+      setSystemTime(new Date(start + 50 * MINUTE_MS))
+      await w.standing(owner, randomUUID(), { product_id: EARLY_CORE })
+      setSystemTime(new Date(start + 61 * MINUTE_MS))
+      // Set again from figures read before the payment: they don't count it, so the hold still does.
+      await open(1, new Date(start + 49 * MINUTE_MS))
+      const next = await w.h.user('Next')
+      expect((await w.h.app.billing.offer(next, 'core')).productId).toBeNull()
+      await open(1, new Date(start + 60 * MINUTE_MS))
+      expect((await w.h.app.billing.offer(next, 'core')).productId).toBe(EARLY_CORE)
+    } finally {
+      setSystemTime()
+    }
   })
 
   test('a checkout at a price the page no longer shows is refused before any payment', async () => {
