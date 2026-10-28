@@ -94,8 +94,10 @@ export class EarlyHolds {
 
   /**
    * What a month of `planKey` charges `userId` if they buy it now: the hold they have on it, a new
-   * one where there is room, or the plan's own. Any hold on another plan is let go. A provider
-   * that can't say what it sells early leaves the plan's own price.
+   * one where there is room, or the plan's own. An unpaid hold on another plan is let go. A paid
+   * one stays while it counts against the room (the subscription it became isn't counted yet), and
+   * meanwhile the account is offered the plan's own price. A provider that can't say what it sells
+   * early leaves the plan's own price.
    */
   async offer(userId: string, planKey: string, now = new Date()): Promise<PlanOffer> {
     const product = await this.#earlyWhereRoom(planKey, now)
@@ -109,9 +111,10 @@ export class EarlyHolds {
       const [held] = await tx.select().from(holds).where(eq(holds.userId, userId))
       if (held && held.planKey === planKey && held.expiresAt > now && held.paidAt === null)
         return offerOf({ ...held, id: held.productId })
+      const room = await readEarlyRoom(tx)
+      if (held?.paidAt && (room.setAt === null || held.paidAt > room.setAt)) return planOwn(planKey)
       if (held) await tx.delete(holds).where(eq(holds.userId, userId))
       if (product === null) return planOwn(planKey)
-      const room = await readEarlyRoom(tx)
       const points = pointsOf(room, planKey)
       if (points < 1 || (await roomLeft(tx, room, now)) < points) return planOwn(planKey)
       await tx.insert(holds).values({
@@ -141,9 +144,12 @@ export class EarlyHolds {
     return points >= 1 && left >= points * (1 + spare) ? offerOf(product) : planOwn(planKey)
   }
 
-  /** The account's hold goes: what it buys now is not a month of that plan. */
+  /**
+   * The account's unpaid hold goes: what it buys now is not a month of that plan. A paid one stays
+   * until the room no longer counts it.
+   */
   async release(userId: string): Promise<void> {
-    await this.#db.delete(holds).where(eq(holds.userId, userId))
+    await this.#db.delete(holds).where(and(eq(holds.userId, userId), isNull(holds.paidAt)))
   }
 
   /**

@@ -360,7 +360,24 @@ export class BillingService {
     const billing = requireCapability(this.#caps, 'billing')
     const offer = await this.#offerFor(user.id, planKey, 'month', priceCents)
     const product = offer?.productId ?? undefined
-    return moveToSmaller(this.#db, billing, user.id, planKey, actor, (call) => this.#reach(call), product)
+    try {
+      const moved = await moveToSmaller(
+        this.#db,
+        billing,
+        user.id,
+        planKey,
+        actor,
+        (call) => this.#reach(call),
+        product,
+      )
+      // Its early month starts when the move applies: the hold counts until the room is set from
+      // figures read after then, which count the subscription on its new product.
+      if (product) await this.#db.transaction((tx) => holdPaid(tx, user.id, product, moved.at))
+      return moved
+    } catch (error) {
+      await this.#holds.release(user.id)
+      throw error
+    }
   }
 
   /**

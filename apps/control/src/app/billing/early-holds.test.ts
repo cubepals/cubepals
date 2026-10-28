@@ -12,11 +12,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, setSystemTime, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { TERMS_VERSION } from '@blockly/contracts'
-import { MINUTE_MS } from '@blockly/contracts/durations'
+import { DAY_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { hasDatabase } from '../../testing/harness.ts'
-import { CORE_PRODUCT, earlyProduct, PLUS_PRODUCT } from '../../testing/polar.ts'
+import { CORE_PRODUCT, earlyProduct, PLUS_PRODUCT, subscription } from '../../testing/polar.ts'
 import { PolarWorld } from '../../testing/polar-world.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { EarlyRoomControl } from './early-room.ts'
@@ -155,6 +155,23 @@ describe.skipIf(!hasDatabase)('the price a checkout holds', () => {
     }
   })
 
+  test('a paid hold stays when its owner opens another plan or a year, while the room counts it', async () => {
+    await open(3)
+    const owner = await w.h.user('Paid Core')
+    await w.h.app.billing.offer(owner, 'core')
+    await w.standing(owner, randomUUID(), { product_id: EARLY_CORE })
+    expect((await w.h.app.billing.offer(owner, 'plus')).productId).toBeNull()
+    await w.h.app.billing.startCheckout(owner, 'core', { ...CONSENT, term: 'year' }).catch(() => undefined)
+    const [hold] = await w.h.db
+      .select()
+      .from(schema.earlyHolds)
+      .where(eq(schema.earlyHolds.userId, owner.userId))
+    expect(hold?.paidAt).not.toBeNull()
+    // Set again, the room counts the subscription: the paid hold can make way for a new one.
+    await open(3)
+    expect((await w.h.app.billing.offer(owner, 'plus')).productId).toBe(EARLY_PLUS)
+  })
+
   test('a checkout at a price the page no longer shows is refused before any payment', async () => {
     await open(1)
     const owner = await w.h.user('Stale')
@@ -190,6 +207,12 @@ describe.skipIf(!hasDatabase)('plan changes at the held price', () => {
     const owner = await w.h.user('Down')
     const sub = randomUUID()
     await w.standing(owner, sub, { product_id: PLUS_PRODUCT })
+    // Its month ends in three weeks, when Polar applies the move.
+    const periodEnd = new Date(Date.now() + 21 * DAY_MS).toISOString()
+    w.subscriptions.set(
+      sub,
+      subscription(sub, { status: 'active', ended_at: null, current_period_end: periodEnd }),
+    )
     await open(1)
     const offer = await w.h.app.billing.offer(owner, 'core')
     expect(offer.priceCents).toBe(700)
@@ -198,6 +221,26 @@ describe.skipIf(!hasDatabase)('plan changes at the held price', () => {
       id: sub,
       body: { product_id: EARLY_CORE, proration_behavior: 'next_period' },
     })
+    // The move applies at the month's end: its room stays taken past the hour and a new setting.
+    setSystemTime(new Date(Date.now() + 61 * MINUTE_MS))
+    try {
+      await open(1)
+      const next = await w.h.user('After the move')
+      expect((await w.h.app.billing.offer(next, 'core')).productId).toBeNull()
+    } finally {
+      setSystemTime()
+    }
+  })
+
+  test('a move down that is refused lets its hold go', async () => {
+    const owner = await w.h.user('No plan')
+    await open(1)
+    const offer = await w.h.app.billing.offer(owner, 'core')
+    await expect(w.h.app.billing.moveToSmaller(owner, 'core', offer.priceCents)).rejects.toThrow(
+      'no plan paid by the month',
+    )
+    const next = await w.h.user('Next in line')
+    expect((await w.h.app.billing.offer(next, 'core')).productId).toBe(EARLY_CORE)
   })
 
   test('a subscription on its plan’s own price can take the early price now, and only through the room', async () => {
