@@ -113,13 +113,12 @@ async function refundCharges(
   try {
     await refundCharge(db, billing, userId, subscription, newest)
   } catch (error) {
-    // The provider not answering fails the sync as `reach` fails it for the caller; anything else
-    // is a refusal.
+    // The provider not answering fails the sync as `reach` fails it for the caller.
     if (error instanceof BillingUnavailable)
       return reach(() => {
         throw error
       })
-    await refundNotTaken(db, userId, subscription, newest.externalOrderId, error)
+    throw error
   }
 }
 
@@ -194,10 +193,7 @@ export async function refundSecondCharge(
   const [newest] = await chargesOf(db, billing.provider, userId, sub)
   if (newest !== undefined && newest.externalOrderId !== order.externalOrderId)
     return holdForPerson(db, userId, sub, order)
-  await refundCharge(db, billing, userId, sub, order).catch(async (error: unknown) => {
-    if (error instanceof BillingUnavailable) throw error
-    await refundNotTaken(db, userId, sub, order.externalOrderId, error)
-  })
+  await refundCharge(db, billing, userId, sub, order)
 }
 
 /**
@@ -261,8 +257,9 @@ async function markStopped(db: Db, userId: string, second: Subscription | Other,
 
 /**
  * What a second subscription's order paid and still holds, before tax, refunded through the
- * provider once (`claimRefund`) and audited. One the provider doesn't take is released, and asked
- * for again with the next word about it.
+ * provider once (`claimRefund`) and audited. One the provider refuses is released, noted
+ * (`refundNotTaken`) and asked for again with the next word about it; the provider not answering,
+ * or anything else failing, is the caller's to fail.
  */
 async function refundCharge(
   db: Db,
@@ -278,7 +275,9 @@ async function refundCharge(
     await billing.refund({ externalOrderId: order.externalOrderId, cents, why: WHY })
   } catch (error) {
     await releaseRefund(db, billing.provider, order.externalOrderId)
-    throw error
+    // The provider not answering is the caller's to fail; anything else it said is a refusal.
+    if (error instanceof BillingUnavailable) throw error
+    return refundNotTaken(db, userId, subscription, order.externalOrderId, error)
   }
   await db.insert(log).values({
     actor: 'system:billing',
