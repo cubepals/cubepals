@@ -14,8 +14,9 @@
  *   quarantined, and its owners are told it comes off at their server's next start.
  *
  * A pack's jars, while the pack is built (`packs/build.ts`): each one it carries, wherever it is
- * placed, read the same way (`check`); each one it lists by its download held to the lists'
- * digests (`lookUp`). Either way the jar's check is kept by its sha512, so a list that names it
+ * placed, read the same way (`check`); each one it lists by its download held to the lists by
+ * the digests the pack gives (`lookUp`), which only refuse the pack, since a pack's word alone
+ * quarantines nothing. Either way the jar's check is kept by its sha512, so a list that names it
  * by a digest later quarantines it and its pack's servers leave it out at their next start. A
  * pack's jar has no bytes kept of its own to read again: when the lists change, its answer
  * stands until a pack carrying it is next built, which reads it again.
@@ -131,17 +132,31 @@ export class JarChecks {
   }
 
   /**
-   * A jar a pack lists by its download, whose bytes aren't here to read: its digests looked up as
-   * `screen` does, and kept as a check unread, so a list that names it later quarantines it.
+   * A jar a pack lists by its download, whose bytes aren't here to read, by the digests the pack
+   * gives (`claimed`) and the sha1 the catalog has for its sha512 (`vouched`), where it has one.
+   * A quarantined check or a list that names any of them refuses the pack and nothing more: the
+   * pack's word alone quarantines no jar. Any other is kept as a check unread, by its sha512 and
+   * the catalog's sha1 alone, so a list that names it later quarantines it. What matched, or null.
    */
-  async lookUp(digests: Pick<JarDigests, 'sha1' | 'sha512'>): Promise<JarCheck | null> {
-    const found = await this.screen(digests)
-    if (found === null)
-      await this.#db
-        .insert(checks)
-        .values({ ...digests, state: 'clean' })
-        .onConflictDoNothing()
-    return found
+  async lookUp(
+    claimed: Pick<JarDigests, 'sha1' | 'sha512'>,
+    vouched: string | null,
+  ): Promise<Pick<Finding, 'match'> | null> {
+    const [known] = await this.#db.select().from(checks).where(eq(checks.sha512, claimed.sha512))
+    const released = known !== undefined && known.releasedBy !== null
+    if (!released && known?.state === 'quarantined') return { match: known.finding?.match ?? 'quarantined' }
+    // A release holds for the bytes an operator looked at: digests the catalog vouches for.
+    if (released && claimed.sha1 === vouched) return null
+    const finding = await knownBad(this.#db, claimed)
+    if (finding !== null) return finding
+    await this.#db
+      .insert(checks)
+      .values({ sha512: claimed.sha512, sha1: vouched, state: 'clean' })
+      .onConflictDoUpdate({
+        target: checks.sha512,
+        set: { sha1: sql`coalesce(${checks.sha1}, excluded.sha1)` },
+      })
+    return null
   }
 
   /**

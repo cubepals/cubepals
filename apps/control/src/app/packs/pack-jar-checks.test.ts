@@ -189,19 +189,16 @@ describe.skipIf(!hasDatabase)('the jars an uploaded pack keeps, as the lists cha
       'Listed Pack.mrpack',
     )
     if (view.status !== 'ready') throw new Error(`Refused: ${view.status === 'refused' ? view.message : ''}`)
-    // The listed jar is looked up by its digests only; the carried one is read whole.
-    expect(await checkOf(listed)).toMatchObject({
-      state: 'clean',
-      sha1: digest('sha1', listed),
-      checkedAt: null,
-    })
+    // The listed jar is looked up by its digests only, and kept by its sha512 alone, since no
+    // catalog vouches for the sha1 the pack gives; the carried one is read whole.
+    expect(await checkOf(listed)).toMatchObject({ state: 'clean', sha1: null, checkedAt: null })
     expect(await checkOf(helper)).toMatchObject({ state: 'clean', checkedAt: expect.any(Date) })
     const server = await h.create(owner, { from: { kind: 'import', importId: view.importId } })
     const before = (await h.app.specs.desired(h.db, await h.server(server.id))).spec.env
     expect(before.MODRINTH_OVERRIDES_EXCLUSIONS).toBeUndefined()
 
     malware.entries = [
-      { kind: 'sha1', value: digest('sha1', listed), family: 'Example' },
+      { kind: 'sha512', value: digest('sha512', listed), family: 'Example' },
       { kind: 'sha512', value: digest('sha512', helper), family: 'Example' },
     ]
     await h.app.jarChecks.refresh()
@@ -214,40 +211,6 @@ describe.skipIf(!hasDatabase)('the jars an uploaded pack keeps, as the lists cha
       'mods/listed.jar',
       'plugins/helper.jar',
     ])
-  }, 60_000)
-
-  test('a pack kept before its jars outside the mods were read gets them when it is uploaded again', async () => {
-    const owner = await h.user('Gil', 'plus')
-    const helper = plugin(unique('helper'))
-    const pack = zipBytes({ 'mods/good.jar': mod(unique('good')), 'plugins/helper.jar': helper })
-    const first = await upload(owner, pack, 'Kept Pack.zip')
-    if (first.status !== 'ready') throw new Error('The pack was refused')
-    // As a pack built before these jars were read was kept: none of them, and no check of its own.
-    const [built] = await h.db
-      .select({ sha512: schema.packImports.packSha512 })
-      .from(schema.packImports)
-      .where(eq(schema.packImports.id, first.importId))
-    const sha512 = built?.sha512 ?? ''
-    await h.db
-      .update(schema.packContents)
-      .set({ otherJars: [] })
-      .where(eq(schema.packContents.sha512, sha512))
-    await h.db.delete(schema.jarChecks).where(eq(schema.jarChecks.sha512, digest('sha512', helper)))
-
-    const again = await upload(owner, pack, 'Kept Pack.zip')
-    if (again.status !== 'ready') throw new Error('The pack was refused')
-    const [row] = await h.db
-      .select({ otherJars: schema.packContents.otherJars })
-      .from(schema.packContents)
-      .where(eq(schema.packContents.sha512, sha512))
-    expect(row?.otherJars.map((jar) => jar.path)).toEqual(['plugins/helper.jar'])
-    expect(await checkOf(helper)).toMatchObject({ state: 'clean' })
-
-    const server = await h.create(owner, { from: { kind: 'import', importId: again.importId } })
-    malware.entries = [{ kind: 'sha512', value: digest('sha512', helper), family: 'Example' }]
-    await h.app.jarChecks.refresh()
-    const after = (await h.app.specs.desired(h.db, await h.server(server.id))).spec.env
-    expect(after.MODRINTH_OVERRIDES_EXCLUSIONS?.split('\n')).toContain('plugins/helper.jar')
   }, 60_000)
 
   test('one a new signature matches keeps its answer until a pack carrying it is next built', async () => {
@@ -269,3 +232,82 @@ describe.skipIf(!hasDatabase)('the jars an uploaded pack keeps, as the lists cha
     expect(await checkOf(odd)).toMatchObject({ state: 'quarantined', finding: { match: marker } })
   }, 60_000)
 })
+
+describe.skipIf(!hasDatabase)(
+  'the jars an uploaded pack keeps, by what it says and what was kept before',
+  () => {
+    test('a pack giving a jar a digest a list names is refused, and the jar it claims to be is not touched', async () => {
+      const owner = await h.user('Hal', 'plus')
+      const popular = mod(unique('popular'))
+      const download = cdn.publish(unique('popular'), Buffer.from(popular)).artifact.ref
+      if (download.kind !== 'remote') throw new Error('The test CDN published no URL')
+      // Another owner's server runs the jar already, read whole.
+      const other = await upload(
+        await h.user('Ida', 'plus'),
+        zipBytes({ 'mods/popular.jar': popular }),
+        'Mine.zip',
+      )
+      expect(other).toMatchObject({ status: 'ready' })
+      const bad = '0'.repeat(40)
+      malware.entries = [{ kind: 'sha1', value: bad, family: 'Example' }]
+      await h.app.jarChecks.refresh()
+      const index = {
+        formatVersion: 1,
+        game: 'minecraft',
+        versionId: '1.0',
+        name: 'Claiming Pack',
+        files: [
+          {
+            path: 'mods/popular.jar',
+            hashes: { sha1: bad, sha512: digest('sha512', popular) },
+            env: { client: 'required', server: 'required' },
+            downloads: [download.url],
+            fileSize: popular.length,
+          },
+        ],
+        dependencies: { minecraft: '1.21.1', 'fabric-loader': '0.16.14' },
+      }
+      const view = await upload(
+        owner,
+        zipBytes({ 'modrinth.index.json': utf8(JSON.stringify(index)) }),
+        'Claiming Pack.mrpack',
+      )
+      expect(view).toMatchObject({ status: 'refused' })
+      expect(await checkOf(popular)).toMatchObject({ state: 'clean', sha1: digest('sha1', popular) })
+    }, 60_000)
+
+    test('a pack kept before its jars outside the mods were read gets them when it is uploaded again', async () => {
+      const owner = await h.user('Gil', 'plus')
+      const helper = plugin(unique('helper'))
+      const pack = zipBytes({ 'mods/good.jar': mod(unique('good')), 'plugins/helper.jar': helper })
+      const first = await upload(owner, pack, 'Kept Pack.zip')
+      if (first.status !== 'ready') throw new Error('The pack was refused')
+      // As a pack built before these jars were read was kept: none of them, and no check of its own.
+      const [built] = await h.db
+        .select({ sha512: schema.packImports.packSha512 })
+        .from(schema.packImports)
+        .where(eq(schema.packImports.id, first.importId))
+      const sha512 = built?.sha512 ?? ''
+      await h.db
+        .update(schema.packContents)
+        .set({ otherJars: [] })
+        .where(eq(schema.packContents.sha512, sha512))
+      await h.db.delete(schema.jarChecks).where(eq(schema.jarChecks.sha512, digest('sha512', helper)))
+
+      const again = await upload(owner, pack, 'Kept Pack.zip')
+      if (again.status !== 'ready') throw new Error('The pack was refused')
+      const [row] = await h.db
+        .select({ otherJars: schema.packContents.otherJars })
+        .from(schema.packContents)
+        .where(eq(schema.packContents.sha512, sha512))
+      expect(row?.otherJars.map((jar) => jar.path)).toEqual(['plugins/helper.jar'])
+      expect(await checkOf(helper)).toMatchObject({ state: 'clean' })
+
+      const server = await h.create(owner, { from: { kind: 'import', importId: again.importId } })
+      malware.entries = [{ kind: 'sha512', value: digest('sha512', helper), family: 'Example' }]
+      await h.app.jarChecks.refresh()
+      const after = (await h.app.specs.desired(h.db, await h.server(server.id))).spec.env
+      expect(after.MODRINTH_OVERRIDES_EXCLUSIONS?.split('\n')).toContain('plugins/helper.jar')
+    }, 60_000)
+  },
+)

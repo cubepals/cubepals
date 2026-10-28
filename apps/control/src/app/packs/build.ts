@@ -44,7 +44,6 @@ import {
 import { startFilesWanted, startInfo } from '../../minecraft/server-pack.ts'
 import { fits, type ModMetadata } from '../../minecraft/uploads.ts'
 import { LOADER_LABELS, offeredVersions } from '../../minecraft/versions.ts'
-import type { JarCheck } from '../mods/jar-check-records.ts'
 import type { JarChecks } from '../mods/jar-checks.ts'
 import type { CatalogFileMatch, ModCatalog } from '../ports/catalog.ts'
 import type { CurseForge } from '../ports/curseforge.ts'
@@ -545,7 +544,7 @@ export class PackBuilder {
       else embedded.push(jar)
     }
     const others = plan.place.filter((p) => !(p.to.startsWith('mods/') && isJar(p.to)))
-    const otherJars = await this.#checkJars(archive, files, embedded, others)
+    const otherJars = await this.#checkJars(archive, { files, published }, embedded, others)
     const identity = await this.#identity(
       plan,
       kept.map((jar) => jar.metadata).filter((m): m is ModMetadata => m !== null),
@@ -616,31 +615,33 @@ export class PackBuilder {
   /**
    * Every jar the pack keeps held to an uploaded jar's checks: each it carries read whole, in its
    * mods folder or wherever else it is placed; each it lists by its download looked up by the
-   * digests it gives, which the image checks the download against. A jar that matches known
-   * malware refuses the pack. Of the files it places outside its mods, returns the jars, by the
-   * bytes each holds.
+   * digests it gives, which the image checks the download against, beside the sha1 the catalog has
+   * for it (`published`). A jar that matches known malware refuses the pack. Of the files it places
+   * outside its mods, returns the jars, by the bytes each holds.
    */
   async #checkJars(
     archive: PackArchive,
-    listed: readonly PackFile[],
+    listed: { files: readonly PackFile[]; published: ReadonlyMap<string, CatalogFileMatch> },
     mods: readonly Placement[],
     placed: readonly Placement[],
   ): Promise<PackJarJson[]> {
     const others = placed.filter((p) => isJar(p.to))
-    const refuse = (path: string, check: JarCheck) =>
+    const refuse = (path: string, match: string) =>
       new Refused(
         `This pack holds ${path.split('/').pop() ?? path}, which matches known malware, so Cubepals won’t build a server from it.`,
-        `${path}: ${check.finding?.match ?? 'quarantined'}`,
+        `${path}: ${match}`,
       )
-    for (const file of listed.filter((f) => isJar(f.path))) {
-      const check = await this.#checks.lookUp({ sha1: file.sha1, sha512: file.sha512 })
-      if (check !== null) throw refuse(file.path, check)
+    for (const file of listed.files.filter((f) => isJar(f.path))) {
+      const vouched = listed.published.get(file.sha512)?.file.sha1 ?? null
+      const found = await this.#checks.lookUp({ sha1: file.sha1, sha512: file.sha512 }, vouched)
+      if (found !== null) throw refuse(file.path, found.match)
     }
     const otherJars: PackJarJson[] = []
     for (const jar of [...mods, ...others]) {
       const bytes = await archive.read(jar.from, PACK_LIMITS.maxFileBytes)
       const check = await this.#checks.check(bytes)
-      if (check.state === 'quarantined' && check.releasedBy === null) throw refuse(jar.to, check)
+      if (check.state === 'quarantined' && check.releasedBy === null)
+        throw refuse(jar.to, check.finding?.match ?? 'quarantined')
       if (others.includes(jar))
         otherJars.push({ path: jar.to, sha512: check.sha512, sizeBytes: bytes.length })
     }
