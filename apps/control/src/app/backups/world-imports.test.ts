@@ -177,7 +177,7 @@ describe.skipIf(!hasDatabase)('a server’s folder', () => {
     expect(view).toMatchObject({ status: 'ready' })
     if (view.status !== 'ready') return
     expect(view.notes).toContain(
-      'Left out what isn’t the world: banned-ips.json, banned-players.json, bukkit.yml, commands.yml, config/, eula.txt, help.yml, ops.json.',
+      'Left out what isn’t the world: banned-ips.json, bukkit.yml, commands.yml, config/, eula.txt, help.yml.',
     )
     const dir = await unpacked((await broughtBackup(h, view)).archiveKey)
     expect(await readFile(join(dir, 'world-2_nether/DIM-1/region/r.0.0.mca'), 'utf8')).toBe(

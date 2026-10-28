@@ -223,7 +223,9 @@ export class S3ArchiveStore implements ArchiveStore {
       case 'archive':
         return `archives/${serverId}/${id}.tar.gz`
       case 'world_upload':
-        return `archives/${serverId}/uploads/${id}.tar.gz`
+        // A world brought before its server exists has no server to sit under. An empty segment
+        // (`archives//…`) is a key some stores refuse, RustFS among them.
+        return serverId === '' ? `uploads/worlds/${id}.tar.gz` : `archives/${serverId}/uploads/${id}.tar.gz`
       case 'world_download':
         return `archives/${serverId}/downloads/${id}.tar.gz`
       case 'mod_upload':

@@ -89,7 +89,7 @@ export function WorldPeopleChoice({
                   />
                 )}
                 <Toggle
-                  ariaLabel={`Let ${player.name} in`}
+                  label="Let in"
                   checked={letIn.has(player.uuid)}
                   disabled={disabled}
                   onChange={(on) => toggleIn(player.uuid, on)}
