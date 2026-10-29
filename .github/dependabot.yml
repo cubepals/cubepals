@@ -9,8 +9,9 @@
 # when published, one pull request per ecosystem. Bun has no Dependabot security updates, so its
 # fixes come with the monthly ones.
 # Each pull request is labelled `kind/deps` here, never a label per ecosystem; tools/labels adds
-# its area and size. Each is assigned to v0id-user, and each waits for a person to merge it: the
-# nightly installs and builds every Bun package, so none merges by itself.
+# its area and size. Each is assigned to v0id-user. Minor and patch
+# updates merge themselves once `check` passes (workflows/dependabot.yml); majors, actions and
+# anything that moves Next wait for a person.
 version: 2
 updates:
   - package-ecosystem: bun
