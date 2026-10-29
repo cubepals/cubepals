@@ -6,7 +6,7 @@
 
 /**
  * Where a player hands over a world they have (docs/world-import.md): its folder dropped or
- * picked, or its zip, with where the game keeps its saves on their computer. A folder is looked at
+ * picked, or its zip, with where their launcher keeps its saves on their computer (`saves-folder.tsx`). A folder is looked at
  * and laid out as one file here (`lib/world-folder.ts`), and the wrong thing is said before
  * anything is sent. What becomes of the file is the page's: the world page sends it to a server,
  * the create page to the server it makes.
@@ -14,7 +14,8 @@
 import { FolderOpen, Upload } from 'lucide-react'
 import { type DragEvent, useRef, useState } from 'react'
 import { droppedFrom, lookAt, lookInZip, type PickedFile, pickedFrom, tarOf } from '../../lib/world-folder'
-import { Button, CopyField, FileButton, ICON, Note } from '../../ui'
+import { Button, FileButton, ICON, Note } from '../../ui'
+import { SavesFolder } from './saves-folder'
 
 /** What a world upload takes: a zip of its folder, or a tarball as a server download comes. */
 export const WORLD_FILES = '.zip,.tar.gz,.tgz,.tar,application/zip,application/gzip,application/x-tar'
@@ -31,17 +32,6 @@ const SAID = {
   tooLarge: 'This world is larger than 4 GB, more than an upload takes.',
 }
 
-/** Where Minecraft keeps single-player worlds on the system this browser runs on, if it says. */
-function savesHere(): { system: string; path: string } | null {
-  if (typeof navigator === 'undefined') return null
-  const agent = navigator.userAgent
-  if (/Windows/.test(agent)) return { system: 'Windows', path: '%APPDATA%\\.minecraft\\saves' }
-  if (/Mac OS X/.test(agent) && !/iPhone|iPad/.test(agent))
-    return { system: 'macOS', path: '~/Library/Application Support/minecraft/saves' }
-  if (/Linux/.test(agent) && !/Android/.test(agent)) return { system: 'Linux', path: '~/.minecraft/saves' }
-  return null
-}
-
 export function WorldDrop({
   disabled,
   onFile,
@@ -53,7 +43,6 @@ export function WorldDrop({
   const [problem, setProblem] = useState<string | null>(null)
   const [over, setOver] = useState(false)
   const folderInput = useRef<HTMLInputElement>(null)
-  const saves = savesHere()
 
   const takeFolder = (files: PickedFile[]) => {
     const look = lookAt(files)
@@ -135,12 +124,7 @@ export function WorldDrop({
           </FileButton>
         </div>
       </div>
-      {saves && (
-        <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
-          <span className="type-body-sm">On {saves.system}, Minecraft keeps single-player worlds in</span>
-          <CopyField value={saves.path} label="Copy" />
-        </div>
-      )}
+      <SavesFolder />
       {problem && <Note tone="danger">{problem}</Note>}
     </div>
   )

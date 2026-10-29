@@ -113,6 +113,12 @@ the game keeps its saves, with the player's own system first and a button to cop
 | Linux   | `~/.minecraft/saves`                                        |
 | Launcher instance (Prism, MultiMC, CurseForge, Modrinth) | the instance's `saves` folder |
 
+The player says which launcher they played on ("Your launcher", the Minecraft Launcher until they
+pick another, remembered on that browser). For CurseForge, the Modrinth App and Prism Launcher the
+drop names where that launcher keeps its instances, and the way to the worlds inside one; for
+another launcher, it says to open the instance's folder from the launcher. The folders, and where
+each comes from, are in `apps/web/src/lib/saves-folders.ts`.
+
 ## What a player can drop
 
 | What                                              | How it is known                                          | What happens                                  |

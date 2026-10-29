@@ -39,7 +39,9 @@ export default async function Guide() {
             Drop the world’s folder, or a zip of it, or use <strong>Choose a folder</strong>. Minecraft keeps
             single-player worlds in <code>%APPDATA%\.minecraft\saves</code> on Windows,{' '}
             <code>~/Library/Application Support/minecraft/saves</code> on macOS and{' '}
-            <code>~/.minecraft/saves</code> on Linux. The page shows the one for your computer.
+            <code>~/.minecraft/saves</code> on Linux. The page shows the one for your computer, and for the
+            launcher you pick: CurseForge, the Modrinth App and Prism Launcher keep each instance’s worlds in
+            that instance’s own folder.
           </li>
           <li>
             Say which Minecraft account played it. In single-player, what you carry and where you stand are
@@ -53,8 +55,9 @@ export default async function Guide() {
         <Shot
           src={`${PICTURES}/drop.png`}
           width={710}
-          height={241}
-          alt="The drop on the create page’s Your own world: Drop the world’s folder here, or its zip, with Choose a folder and Choose a zip buttons. Below it: On Windows, Minecraft keeps single-player worlds in %APPDATA%\.minecraft\saves, with a Copy button."
+          height={378}
+          alt="The drop on the create page’s Your own world: Drop the world’s folder here, or its zip, with Choose a folder and Choose a zip buttons. Below it, Your launcher is set to Prism Launcher: On Windows, Prism Launcher keeps each instance in its own folder in %APPDATA%\PrismLauncher\instances, with a Copy button, then: Open the instance you played, then minecraft\saves."
+          caption="Pick the launcher you played on, and the page says where it keeps your worlds."
         />
         <Shot
           src={`${PICTURES}/who-played.png`}
