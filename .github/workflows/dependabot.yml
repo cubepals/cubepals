@@ -6,9 +6,10 @@ name: Dependabot
 
 # Dependabot's minor and patch groups merge themselves once `check` passes, as a security group
 # would. Majors and actions wait for a person: they can break what a pull request's CI doesn't
-# run, such as the nightly. So does any update that moves Next, a security fix included: Next
-# 16.4.0 passed CI and its Worker failed every request in production, so a Next update merges
-# only after it has run on staging. The groups are in .github/dependabot.yml.
+# run, such as the nightly. So does any update that moves the website's runtime (next, its adapter
+# opennextjs/cloudflare, or wrangler), a security fix included: Next 16.4.0 passed CI and its
+# Worker failed every request in production, so the runtime moves only after it has run on
+# staging. The groups are in .github/dependabot.yml.
 on: pull_request
 
 permissions: {}
@@ -30,8 +31,8 @@ jobs:
           NAMES: ${{ steps.meta.outputs.dependency-names }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          if tr ',' '\n' <<< "$NAMES" | tr -d ' ' | grep -qx next; then
-            echo "This update moves Next, so it waits for a run on staging."
+          if tr ',' '\n' <<< "$NAMES" | tr -d ' ' | grep -qxE 'next|@opennextjs/cloudflare|wrangler'; then
+            echo "This update moves the website's runtime, so it waits for a run on staging."
             exit 0
           fi
           gh pr merge --auto --squash "$PR"
