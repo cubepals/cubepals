@@ -270,17 +270,6 @@ export async function startRealtime(options: RealtimeOptions): Promise<{ stop():
     })
   })
 
-  const unsubscribe = await options.events.subscribe((event) => {
-    forward(event)
-    if (event.type === 'operation_progress' && event.step !== null && BOOTING.has(event.step))
-      void startTail(event.serverId)
-    if (event.type !== 'server_changed') return
-    // A tail follows one workload, and not every provider's tail ends with it. Leaving these
-    // statuses can mean the workload is gone or replaced (restore, relocate, update).
-    if (TAILED.has(event.status)) void startTail(event.serverId)
-    else endTail(event.serverId)
-  })
-
   function forward(event: DomainEvent) {
     const to = server.to(userRoom(event.ownerId))
     switch (event.type) {
@@ -328,6 +317,20 @@ export async function startRealtime(options: RealtimeOptions): Promise<{ stop():
   // Resolves once the event table is built and the accept loop runs; the fallback needs both.
   await server.listen(listener)
   server.withFallback(fallback)
+
+  // Events are taken only once the server listens: one that came sooner would reach rooms that
+  // aren't there yet, which throws, and a throw from the database's listener ends the process.
+  // None is owed to anyone before then, as no browser can be connected.
+  const unsubscribe = await options.events.subscribe((event) => {
+    forward(event)
+    if (event.type === 'operation_progress' && event.step !== null && BOOTING.has(event.step))
+      void startTail(event.serverId)
+    if (event.type !== 'server_changed') return
+    // A tail follows one workload, and not every provider's tail ends with it. Leaving these
+    // statuses can mean the workload is gone or replaced (restore, relocate, update).
+    if (TAILED.has(event.status)) void startTail(event.serverId)
+    else endTail(event.serverId)
+  })
 
   return {
     async stop() {
