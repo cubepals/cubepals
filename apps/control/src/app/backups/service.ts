@@ -365,7 +365,7 @@ export class BackupService {
       // An upload brings a world, never a configuration: its own version must open here, or the
       // server moves up to it.
       if (backup.worldFacts !== null) options = { ...options, withConfiguration: false }
-      const upTo = movesUpTo(backup.worldFacts, desired.gameVersion, options.moveUp)
+      const upTo = movesUpTo(backup.worldFacts, desired, options.moveUp)
       const then = await loadRevision(tx, backup.revisionId)
       if (!options.withConfiguration && compareVersions(then.gameVersion, desired.gameVersion) > 0)
         throw new AppError(

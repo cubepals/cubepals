@@ -5,27 +5,31 @@
 /**
  * A server moved up to the Minecraft a world it restores was last played on, as its owner chose
  * when restoring a world they brought (`BackupService.restoreBackup`): the server as it is, on that
- * release, with its server type's build for it. Only a server without mods or a pack moves here;
- * one with them changes version in its settings, where its mods are resolved again. Not where a
- * version change is made otherwise (`RevisionService.changeVersion`).
+ * release, with its server type's build for it. Only a server without mods or a pack moves here
+ * (`movesWithWorld`); one with them changes version in its settings, where its mods are resolved
+ * again. Not where a version change is made otherwise (`RevisionService.changeVersion`).
  */
 import { type RevisionDraft, runsOnPaper, type ServerRevision } from '../../domain/revision/revision.ts'
-import { compareVersions, notOffered, supports } from '../../minecraft/versions.ts'
+import { compareVersions, isRelease, notOffered, supports } from '../../minecraft/versions.ts'
 import { AppError } from '../errors.ts'
 import type { LoaderBuilds } from '../ports/loaders.ts'
 import { loaderPin, paperPin } from '../revisions/pins.ts'
 import { draftOf } from '../revisions/service.ts'
 
+/** Whether a server moves up with a world it restores: one with mods or a pack changes version in its settings, where its mods are resolved again. */
+export const movesWithWorld = (desired: Pick<ServerRevision, 'mods' | 'modpack'>): boolean =>
+  desired.modpack === null && desired.mods.length === 0
+
+/** The release a world was last played on where it is newer than the server's; null otherwise, a snapshot's included, whose name orders against no release. */
+export const newerRelease = (played: string, serverVersion: string): string | null =>
+  isRelease(played) && compareVersions(played, serverVersion) > 0 ? played : null
+
+/** The server on the release a world it restores was last played on, with its server type's build for it. */
 export async function movedUp(
   builds: LoaderBuilds,
   desired: ServerRevision,
   gameVersion: string,
 ): Promise<RevisionDraft> {
-  if (desired.modpack !== null || desired.mods.length > 0)
-    throw new AppError(
-      'invalid_choice',
-      `This server has mods, which have to move to Minecraft ${gameVersion} with it. Change its version in Settings, then restore the world.`,
-    )
   if (!supports(gameVersion, desired.loader))
     throw new AppError('invalid_choice', notOffered(desired.loader, gameVersion))
   const loaderVersion =
@@ -45,18 +49,22 @@ export async function movedUp(
 
 /**
  * The release a restore moves its server up to: a world brought in from a newer Minecraft than the
- * server has, where its owner chose to move up. Null where the world opens as the server is; a
- * newer one its owner didn't choose to move up for is refused.
+ * server has, where its owner chose to move up and the server moves with it. Null where the world
+ * opens as the server is. A newer one is refused otherwise, saying what to do.
  */
 export function movesUpTo(
   facts: { gameVersion: string } | null,
-  serverVersion: string,
+  desired: Pick<ServerRevision, 'gameVersion' | 'mods' | 'modpack'>,
   moveUp: boolean | undefined,
 ): string | null {
-  if (facts === null || compareVersions(facts.gameVersion, serverVersion) <= 0) return null
-  if (moveUp) return facts.gameVersion
-  throw new AppError(
-    'version_downgrade',
-    `This world was last played on Minecraft ${facts.gameVersion}, newer than this server's ${serverVersion}. Restore it moving the server up to ${facts.gameVersion}.`,
-  )
+  const newer = facts === null ? null : newerRelease(facts.gameVersion, desired.gameVersion)
+  if (newer === null) return null
+  const was = `This world was last played on Minecraft ${newer}, newer than this server's ${desired.gameVersion}.`
+  if (!movesWithWorld(desired))
+    throw new AppError(
+      'version_downgrade',
+      `${was} Change the server to ${newer} in Settings, so its mods move with it, then restore the world.`,
+    )
+  if (moveUp) return newer
+  throw new AppError('version_downgrade', `${was} Restore it moving the server up to ${newer}.`)
 }

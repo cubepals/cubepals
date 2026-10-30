@@ -13,8 +13,9 @@ import { type Actor, authorize } from '../actor.ts'
 import { pendingOfKind } from '../operations/persistence.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import { findServer } from '../servers/persistence.ts'
-import { type RevisionSummary, summariesOf } from '../servers/revision-reads.ts'
+import { loadRevisionFields, type RevisionSummary, summariesOf } from '../servers/revision-reads.ts'
 import { listWorlds } from '../worlds/persistence.ts'
+import { movesWithWorld, newerRelease } from './moved-up.ts'
 import { type BackupRecord, listBackups } from './persistence.ts'
 
 /** A failed archive stays in view this long, so its owner learns it didn't happen. */
@@ -46,6 +47,9 @@ export class BackupQueries {
       ...listed.map((b) => b.revisionId),
     ])
     const desired = summaryOf(revisions, server.desiredRevisionId)
+    const movesServer = movesWithWorld(
+      await loadRevisionFields(this.#db, server.desiredRevisionId, ['mods', 'modpack']),
+    )
     const standing = await loadStanding(this.#db, server.ownerId)
     const availability = (capability: Capability) =>
       this.#db.transaction(async (tx) =>
@@ -78,15 +82,21 @@ export class BackupQueries {
             mods: revision.modNames.length,
           },
           needsConfiguration: compareVersions(revision.gameVersion, desired.gameVersion) > 0,
-          movesServerTo:
-            backup.worldFacts !== null &&
-            compareVersions(backup.worldFacts.gameVersion, desired.gameVersion) > 0
-              ? backup.worldFacts.gameVersion
-              : null,
+          newerWorld: newerWorldOf(backup, desired.gameVersion, movesServer),
         }
       }),
     }
   }
+}
+
+/** A brought world from a newer release than the server's, and whether restoring it moves the server up. */
+function newerWorldOf(
+  backup: Pick<BackupRecord, 'worldFacts'>,
+  serverVersion: string,
+  movesServer: boolean,
+): BackupView['newerWorld'] {
+  const newer = backup.worldFacts === null ? null : newerRelease(backup.worldFacts.gameVersion, serverVersion)
+  return newer === null ? null : { gameVersion: newer, movesServer }
 }
 
 export const summaryOf = (found: Map<string, RevisionSummary>, id: string): RevisionSummary => {

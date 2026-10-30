@@ -18,7 +18,7 @@ import {
   type WorldPeople,
 } from '@blockly/contracts'
 import { SECOND_MS } from '@blockly/contracts/durations'
-import { compareVersions } from '@blockly/contracts/release-order'
+import { compareVersions, isRelease } from '@blockly/contracts/release-order'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../lib/api'
@@ -102,7 +102,7 @@ export function BringWorld({
               onChange={(event) => setName(event.target.value)}
               help="What this server calls the world, if it never had it before."
             />
-            <NewerWorld file={file} serverVersion={view.gameVersion} />
+            <NewerWorld file={file} view={view} />
           </>
         )}
         {progress !== null && <UploadProgress name={file.name} sent={progress.sent} total={progress.total} />}
@@ -176,7 +176,7 @@ function Actions({
  * a newer one is kept all the same, and restoring it moves the server up, which the player hears
  * now rather than after the upload.
  */
-function NewerWorld({ file, serverVersion }: { file: File; serverVersion: string }) {
+function NewerWorld({ file, view }: { file: File; view: ServerView }) {
   const [played, setPlayed] = useState<string | null>(null)
   useEffect(() => {
     let current = true
@@ -185,11 +185,16 @@ function NewerWorld({ file, serverVersion }: { file: File; serverVersion: string
       current = false
     }
   }, [file])
-  if (played === null || compareVersions(played, serverVersion) <= 0) return null
+  // A snapshot's name orders against no release, so only a release is called newer.
+  if (played === null || !isRelease(played) || compareVersions(played, view.gameVersion) <= 0) return null
+  const plain = view.modCount === 0 && view.modpack === null
   return (
     <Note tone="info">
-      It was last played on Minecraft {played}, newer than this server’s {serverVersion}. Cubepals keeps it,
-      and restoring it moves the server up to {played}.
+      It was last played on Minecraft {played}, newer than this server’s {view.gameVersion}. Cubepals keeps
+      it, and{' '}
+      {plain
+        ? `restoring it moves the server up to ${played}.`
+        : `the server moves to ${played} in Settings first, so its mods move with it.`}
     </Note>
   )
 }

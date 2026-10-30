@@ -336,6 +336,7 @@ export class NewWorldImports {
         others: who.others.map((other) => other.world),
         updated: (from) =>
           `It was last played on Minecraft ${from}. Its server runs ${playsOn}, which updates it when it first starts.`,
+        newer: (to) => `It was last played on Minecraft ${to}, newer than ${playsOn}.`,
       }),
       ...accountNotes(accounts),
       ...peopleNotes(who.people),

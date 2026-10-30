@@ -46,6 +46,7 @@ import { claimPendingUpload, loadPendingUpload, type PendingUpload } from '../up
 import { listWorlds } from '../worlds/persistence.ts'
 import { putStream } from './downloads.ts'
 import { type KeptWorld, levelFor, othersNotes, recordKept } from './kept-worlds.ts'
+import { movesWithWorld } from './moved-up.ts'
 import type { NewWorldImports } from './new-world-imports.ts'
 import {
   insertWorldImport,
@@ -235,6 +236,8 @@ export class WorldImports {
       const desired = await loadRevisionFields(this.#db, server.desiredRevisionId, [
         'gameVersion',
         'settings',
+        'mods',
+        'modpack',
       ])
       await this.#reading.refuseWhatWontOpen(
         { ownerId: server.ownerId, serverId: server.id },
@@ -260,6 +263,7 @@ export class WorldImports {
         people,
         others,
         serverVersion: desired.gameVersion,
+        movesServer: movesWithWorld(desired),
       })
     } finally {
       await archive.close()
@@ -287,6 +291,8 @@ export class WorldImports {
     /** The upload's other worlds, each kept as a backup of its own, and those left out. */
     others: { reads: Read[]; left: string[] }
     serverVersion: string
+    /** Whether restoring a world from a newer release moves the server up (`movesWithWorld`). */
+    movesServer: boolean
   }): Promise<void> {
     const { record, pending, server, read, player, accounts } = input
     const store = requireCapability(this.#caps, 'archives')
@@ -323,6 +329,10 @@ export class WorldImports {
         asItCame,
         updated: (from) =>
           `It was last played on Minecraft ${from}. Restoring it opens it on ${input.serverVersion}, which updates it; this backup stays as it came.`,
+        newer: (to) =>
+          input.movesServer
+            ? `It was last played on Minecraft ${to}, newer than this server’s ${input.serverVersion}. Restoring it moves the server up to ${to}.`
+            : `It was last played on Minecraft ${to}, newer than this server’s ${input.serverVersion}. Change the server to ${to} in Settings, so its mods move with it, then restore it.`,
         serverVersion: input.serverVersion,
         others: input.others.reads.map((other) => other.world),
       }),

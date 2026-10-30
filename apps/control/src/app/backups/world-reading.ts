@@ -523,21 +523,19 @@ type ImportViewOf<Ready> = { importId: string; fileName: string } & (
 /** What the Minecraft a world was last played on means here: a snapshot, an older release, a newer one. */
 function versionNote(
   played: string,
-  how: { serverVersion: string; updated: (from: string) => string },
+  how: { serverVersion: string; updated: (from: string) => string; newer: (to: string) => string },
 ): string | null {
   if (!isRelease(played))
     return `It was last played on the Minecraft snapshot ${played}. A release older than that snapshot can’t open it.`
   const order = compareVersions(played, how.serverVersion)
   if (order < 0) return how.updated(played)
-  if (order > 0)
-    return `It was last played on Minecraft ${played}, newer than this server’s ${how.serverVersion}. Restoring it moves the server up to ${played}.`
-  return null
+  return order > 0 ? how.newer(played) : null
 }
 
 /**
  * What its owner reads Cubepals did, besides what reading found. `levelName` is the world's folder
  * on a server that has others, null on a new one; `updated` says a world from an older release is
- * opened on the server's, `serverVersion`.
+ * opened on the server's, `serverVersion`, and `newer` what a world from a newer one takes.
  */
 export function notesOn(
   read: Read,
@@ -548,6 +546,7 @@ export function notesOn(
     asItCame: boolean
     serverVersion: string
     updated: (from: string) => string
+    newer: (to: string) => string
     /** The upload's other worlds, kept or named on their own. */
     others?: readonly FoundWorld[]
   },
