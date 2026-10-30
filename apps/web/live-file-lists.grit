@@ -1,0 +1,34 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+// A Biome plugin (biome.json): no read of a browser's live file list in the site but through
+// src/lib/chosen-files.ts, which copies the list before it empties. An input's `files` empties
+// when the input is cleared, and a drop's `files` and `items` once its event is over, so a list
+// read a line too late is silently empty: every folder picked in Chrome was once "empty" this way.
+//
+// Every `.files` is caught, whatever holds it, since an input can be reached by any name; a list
+// that is no browser's says so with `// biome-ignore lint/plugin: <why>`. Its tests are in
+// src/lib/chosen-files.test.ts. biome.json's globs for it start with `**/`: Biome matches a
+// plugin's `includes` against a file's whole path, not its path in the repository.
+
+language js
+
+or {
+  `$_.files`,
+  `$_?.files`,
+  JsObjectBindingPatternShorthandProperty(identifier=`files`),
+  JsObjectBindingPatternProperty(member=`files`),
+  or {
+    `$transfer.items`,
+    `$transfer?.items`
+  } where {
+    $transfer <: or {
+      `$_.dataTransfer`,
+      `$_?.dataTransfer`,
+      `dataTransfer`
+    }
+  }
+} as $read where {
+  register_diagnostic(span=$read, message="This reads a live file list, which is empty once its input is cleared or its drop is over. Take the files with chosenFiles, droppedFiles or droppedEntries from apps/web/src/lib/chosen-files.ts.", severity="error")
+}

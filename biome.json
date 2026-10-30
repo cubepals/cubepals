@@ -46,5 +46,15 @@
       }
     }
   },
+  "plugins": [
+    {
+      "path": "./apps/web/live-file-lists.grit",
+      "includes": [
+        "**/apps/web/**",
+        "!**/apps/web/src/lib/chosen-files.ts",
+        "!**/apps/web/src/lib/chosen-files.test.ts"
+      ]
+    }
+  ],
   "assist": { "actions": { "source": { "organizeImports": "on" } } }
 }
