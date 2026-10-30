@@ -7,6 +7,7 @@
 import { Check, Copy } from 'lucide-react'
 import Link from 'next/link'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { chosenFiles } from '../lib/chosen-files'
 import { Button } from './Button'
 
 /** A native dialog: focus trapping, Esc and the top layer for free. Opens and closes by `open`. */
@@ -199,9 +200,7 @@ export function FileButton({
         tabIndex={-1}
         aria-hidden
         onChange={(event) => {
-          const file = event.target.files?.[0]
-          // The same file chosen again is a new choice.
-          event.target.value = ''
+          const [file] = chosenFiles(event)
           if (file) onFile(file)
         }}
       />

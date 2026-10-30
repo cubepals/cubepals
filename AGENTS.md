@@ -74,6 +74,8 @@ The checks stop things getting worse. They can't tell whether a seam is in the r
 
 **The care.** A person who has never seen Blockly should be able to find where a thing lives, trust that the file holds one job, and change it without reading ten other files or breaking a neighbor. Split by what changes together, not by what is easy to cut. One job per file, nameable without "and", and named for the job, not a category. Don't split too far: ten tiny files that must all be opened to follow one flow are worse than one honest file. Dependencies point one way. The surface stays narrow and the same: what was private stays private, and what outsiders import keeps its old path. The header and the directory index say what each file is for and what it is deliberately not for, short and true, for someone who hasn't read the rest. Discipline over cleverness: if you are unsure where something belongs, leave it where it was and report it.
 
+**Chosen and dropped files** are read in the website only through `apps/web/src/lib/chosen-files.ts`, which copies the browser's list before it empties; `bun run lint` fails on any other read (`apps/web/live-file-lists.grit`).
+
 ## Values from elsewhere
 
 A value that belongs to another system is taken from that system, never typed out again. That covers a library's error codes and messages, a protocol's numbers (tRPC's JSON-RPC codes, Postgres' SQLSTATEs, HTTP statuses), an API's shapes, and another module's enum or limit.

@@ -13,6 +13,7 @@ import { SERVER_ICONS, type ServerIcon, type ServerView } from '@blockly/contrac
 import { ImagePlus } from 'lucide-react'
 import Image from 'next/image'
 import { type ChangeEvent, useRef, useState } from 'react'
+import { chosenFiles } from '../../../../../lib/chosen-files'
 import { type OwnIconPicked, squareIcon } from '../../../../../lib/own-icon'
 import { iconSrc } from '../../../../../lib/present'
 
@@ -60,8 +61,7 @@ export function IconPicker({ choice }: { choice: IconChoice }) {
   const file = useRef<HTMLInputElement>(null)
   const [problem, setProblem] = useState<string | null>(null)
   const chosen = async (event: ChangeEvent<HTMLInputElement>) => {
-    const picked = event.target.files?.[0]
-    event.target.value = ''
+    const [picked] = chosenFiles(event)
     if (picked === undefined) return
     try {
       choice.takeOwn(await squareIcon(picked))

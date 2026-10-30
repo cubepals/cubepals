@@ -13,6 +13,7 @@
 import type { ModChangeInput, ModsView, ServerView } from '@blockly/contracts'
 import { Upload } from 'lucide-react'
 import { type DragEvent, useState } from 'react'
+import { droppedFiles } from '../../../../../lib/chosen-files'
 import { FileButton, FormSection, ICON, Note } from '../../../../../ui'
 import { PlusOffer } from '../../../plus-offer'
 import { changeable } from '../settings/shared'
@@ -38,7 +39,7 @@ export function OwnDatapacks({
   const drop = (event: DragEvent) => {
     event.preventDefault()
     setOver(false)
-    const file = event.dataTransfer.files[0]
+    const [file] = droppedFiles(event)
     if (file && open) void own.send(file)
   }
 

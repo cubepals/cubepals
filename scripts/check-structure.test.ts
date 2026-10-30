@@ -20,12 +20,23 @@ afterAll(() => {
   for (const dir of made) rmSync(dir, { recursive: true, force: true })
 })
 
-/** A git checkout holding `files`, the repository's biome.json, and `baseline` as its baseline. */
+/** The repository's biome.json and the plugins it names, without which Biome doesn't start. */
+const BIOME: string[] = [
+  'biome.json',
+  ...(JSON.parse(readFileSync(resolve(import.meta.dir, '../biome.json'), 'utf8')).plugins ?? []).map(
+    (plugin: string | { path: string }) => (typeof plugin === 'string' ? plugin : plugin.path),
+  ),
+]
+
+/** A git checkout holding `files`, the repository's Biome setup, and `baseline` as its baseline. */
 function tree(files: Record<string, string>, baseline: object = {}): string {
   const dir = mkdtempSync(join(tmpdir(), 'structure-'))
   made.push(dir)
   Bun.spawnSync(['git', 'init', '-q'], { cwd: dir })
-  copyFileSync(resolve(import.meta.dir, '../biome.json'), join(dir, 'biome.json'))
+  for (const path of BIOME) {
+    mkdirSync(dirname(join(dir, path)), { recursive: true })
+    copyFileSync(resolve(import.meta.dir, '..', path), join(dir, path))
+  }
   for (const [path, content] of Object.entries({
     ...files,
     'scripts/structure-baseline.json': JSON.stringify(baseline),
