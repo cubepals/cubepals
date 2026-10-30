@@ -38,19 +38,20 @@ export function lookAt(files: ReadonlyArray<{ path: string; file: { size: number
   return { kind: 'world', sizeBytes: files.reduce((sum, file) => sum + file.file.size, 0) }
 }
 
-/** The files a folder picker gave, by the paths it gives them (`webkitRelativePath`). */
-export function pickedFrom(list: FileList | readonly File[]): PickedFile[] {
-  return [...list].map((file) => ({ path: file.webkitRelativePath || file.name, file }))
+/**
+ * The files a folder picker gave, by the paths it gives them (`webkitRelativePath`): a copy of its
+ * list (`chosenFiles` in `chosen-files.ts`), since clearing the picker empties the list itself.
+ */
+export function pickedFrom(list: readonly File[]): PickedFile[] {
+  return list.map((file) => ({ path: file.webkitRelativePath || file.name, file }))
 }
 
 /**
- * The files a drop holds, folders walked: a browser hands a dropped folder over as an entry to
- * read, a hundred names at a time, rather than as files.
+ * The files a drop held, folders walked: a browser hands a dropped folder over as an entry to
+ * read, a hundred names at a time, rather than as files. The entries are taken while the drop's
+ * event runs (`droppedEntries` in `chosen-files.ts`), and walked after.
  */
-export async function droppedFrom(items: DataTransferItemList): Promise<PickedFile[]> {
-  const entries = [...items]
-    .map((item) => item.webkitGetAsEntry?.() ?? null)
-    .filter((entry): entry is FileSystemEntry => entry !== null)
+export async function droppedFrom(entries: readonly FileSystemEntry[]): Promise<PickedFile[]> {
   const files: PickedFile[] = []
   const walk = async (entry: FileSystemEntry, path: string): Promise<void> => {
     if (entry.isFile) {

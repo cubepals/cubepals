@@ -13,6 +13,7 @@
  */
 import { FolderOpen, Upload } from 'lucide-react'
 import { type DragEvent, useRef, useState } from 'react'
+import { chosenFiles, droppedEntries, droppedFiles } from '../../lib/chosen-files'
 import { droppedFrom, lookAt, lookInZip, type PickedFile, pickedFrom, tarOf } from '../../lib/world-folder'
 import { Button, FileButton, ICON, Note } from '../../ui'
 import { SavesFolder } from './saves-folder'
@@ -66,11 +67,12 @@ export function WorldDrop({
     setOver(false)
     setProblem(null)
     if (disabled) return
-    const items = event.dataTransfer.items
-    const only = event.dataTransfer.files[0]
-    const isFolder = [...items].some((item) => item.webkitGetAsEntry?.()?.isDirectory)
+    // Taken before the walk awaits anything: a drop's lists are empty once its event is over.
+    const [only] = droppedFiles(event)
+    const entries = droppedEntries(event)
+    const isFolder = entries.some((entry) => entry.isDirectory)
     if (!isFolder && only !== undefined) return void take(only)
-    takeFolder(await droppedFrom(items))
+    takeFolder(await droppedFrom(entries))
   }
 
   return (
@@ -99,13 +101,10 @@ export function WorldDrop({
             multiple
             {...{ webkitdirectory: '' }}
             onChange={(event) => {
-              // Copied before the input is cleared: the browser's list is live, and clearing the
-              // input empties it, which made every folder read as empty.
-              const picked = event.target.files ? [...event.target.files] : null
-              event.target.value = ''
+              const picked = chosenFiles(event)
               setProblem(null)
               // An empty folder comes as no files at all, which is said as such.
-              if (picked) takeFolder(pickedFrom(picked))
+              takeFolder(pickedFrom(picked))
             }}
           />
           <Button

@@ -9,6 +9,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Upload } from 'lucide-react'
 import { type DragEvent, useState } from 'react'
 import { messageOf, useTRPC } from '../../lib/api'
+import { droppedFiles } from '../../lib/chosen-files'
 import { useHandedOnce, useSentImport } from '../../lib/sent-import'
 import { FileButton, ICON, Note, ProgressBar } from '../../ui'
 import { PackWorld } from './servers/new/pack-world'
@@ -71,7 +72,7 @@ export function PackDrop({
   const drop = (event: DragEvent) => {
     event.preventDefault()
     setOver(false)
-    const file = event.dataTransfer.files[0]
+    const [file] = droppedFiles(event)
     if (file && !disabled && sending === null) void send(file)
   }
 
