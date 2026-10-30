@@ -99,7 +99,9 @@ export function WorldDrop({
             multiple
             {...{ webkitdirectory: '' }}
             onChange={(event) => {
-              const picked = event.target.files
+              // Copied before the input is cleared: the browser's list is live, and clearing the
+              // input empties it, which made every folder read as empty.
+              const picked = event.target.files ? [...event.target.files] : null
               event.target.value = ''
               setProblem(null)
               // An empty folder comes as no files at all, which is said as such.
