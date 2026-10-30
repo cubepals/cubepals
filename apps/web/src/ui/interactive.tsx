@@ -211,27 +211,26 @@ export function FileButton({
   )
 }
 
-/** How far along a long task is, from 0 to 100. */
-export function ProgressBar({
-  value,
-  label,
-  onPaper,
-}: {
-  value: number
-  label: string
-  /** On a light card rather than the dark provisioning panel, where the track has to be light. */
-  onPaper?: boolean
-}) {
+/**
+ * How far along a long task is, from 0 to 100, or null for one with no known end, where a short
+ * fill sweeps across so it reads as working rather than stuck. The track is light: it sits on a
+ * card, and a dark one reads as a full bar. The dark provisioning panel draws its own.
+ */
+export function ProgressBar({ value, label }: { value: number | null; label: string }) {
   return (
     <div
-      className={onPaper ? 'bk-prov__bar bk-prov__bar--paper' : 'bk-prov__bar'}
+      className={
+        value === null
+          ? 'bk-prov__bar bk-prov__bar--paper bk-prov__bar--moving'
+          : 'bk-prov__bar bk-prov__bar--paper'
+      }
       role="progressbar"
       aria-label={label}
       aria-valuemin={0}
       aria-valuemax={100}
-      aria-valuenow={Math.round(value)}
+      aria-valuenow={value === null ? undefined : Math.round(value)}
     >
-      <div className="bk-prov__fill" style={{ '--progress': value } as React.CSSProperties} />
+      <div className="bk-prov__fill" style={{ '--progress': value ?? 0 } as React.CSSProperties} />
     </div>
   )
 }

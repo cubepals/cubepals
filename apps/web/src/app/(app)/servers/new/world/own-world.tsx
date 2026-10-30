@@ -15,7 +15,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
 import { useHandedOnce, useSentImport } from '../../../../../lib/sent-import'
-import { Note, ProgressBar } from '../../../../../ui'
+import { Note } from '../../../../../ui'
+import { UploadProgress } from '../../../upload-progress'
 import { WorldDrop } from '../../../world-drop'
 import { BroughtNotes, WorldQuestions } from '../../../world-questions'
 
@@ -100,6 +101,7 @@ export function OwnWorld({
     importId,
     failure,
     send,
+    stop,
   } = useSentImport(
     { begin: (file) => begin.mutateAsync(file), finish: (ticket) => finish.mutateAsync({ ticket }) },
     onStart,
@@ -113,10 +115,7 @@ export function OwnWorld({
     <div className="bk-stack" style={{ gap: 'var(--space-12)' }}>
       <WorldDrop disabled={disabled || busy} onFile={(file) => void send(file)} />
       {sending !== null && (
-        <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
-          <span className="type-body-sm">{sending.name}: sending it…</span>
-          <ProgressBar value={sending.done} label={`Sending ${sending.name}`} />
-        </div>
+        <UploadProgress name={sending.name} sent={sending.sent} total={sending.total} onStop={stop} />
       )}
       {read?.status === 'reading' && (
         <p className="type-body-sm" role="status">

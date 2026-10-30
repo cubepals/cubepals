@@ -6,12 +6,12 @@
 
 /**
  * A file sent to be read on a worker, as the pages that take a pack or a world send one: begun,
- * put straight to the store with its progress (`upload.ts`), finished, and the import it became
- * handed back to watch. What the import says, and what the page makes of it, is the page's.
+ * put straight to the store with its progress (`upload.ts`), which the player can stop, finished,
+ * and the import it became handed back to watch. What the import says, and what the page makes of it, is the page's.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { messageOf } from './api'
-import { putFile } from './upload'
+import { isStopped, putFile } from './upload'
 
 /** How the control plane takes the file: where to put it, then that it arrived. */
 export interface ImportSending {
@@ -24,27 +24,37 @@ export interface ImportSending {
 }
 
 export function useSentImport(sending: ImportSending, onStart?: () => void) {
-  const [progress, setProgress] = useState<{ name: string; done: number } | null>(null)
+  const [progress, setProgress] = useState<{ name: string; sent: number; total: number } | null>(null)
   const [importId, setImportId] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
+  const stopping = useRef<AbortController | null>(null)
   const send = async (file: File) => {
     onStart?.()
     setFailure(null)
     setImportId(null)
+    const controller = new AbortController()
+    stopping.current = controller
     try {
-      setProgress({ name: file.name, done: 0 })
+      setProgress({ name: file.name, sent: 0, total: file.size })
       const start = await sending.begin({ fileName: file.name, sizeBytes: file.size })
-      await putFile(start.url, start.headers, file, (sent) =>
-        setProgress({ name: file.name, done: (sent / Math.max(file.size, 1)) * 100 }),
+      await putFile(
+        start.url,
+        start.headers,
+        file,
+        (sent) => setProgress({ name: file.name, sent, total: file.size }),
+        controller.signal,
       )
       setImportId((await sending.finish(start.ticket)).importId)
     } catch (error) {
-      setFailure(messageOf(error))
+      if (!isStopped(error)) setFailure(messageOf(error))
     } finally {
+      stopping.current = null
       setProgress(null)
     }
   }
-  return { progress, importId, failure, send }
+  /** Stops the file going up; nothing is said, since the player asked. */
+  const stop = () => stopping.current?.abort()
+  return { progress, importId, failure, send, stop }
 }
 
 /**

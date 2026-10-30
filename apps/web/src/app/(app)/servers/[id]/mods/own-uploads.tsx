@@ -13,11 +13,12 @@
 import type { ModUploadView, ServerView } from '@blockly/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
 import { bytes } from '../../../../../lib/present'
-import { putFile, sha512Of } from '../../../../../lib/upload'
+import { isStopped, putFile, sha512Of } from '../../../../../lib/upload'
 import { Badge, Button, FormRow, ICON, Note, ProgressBar } from '../../../../../ui'
+import { UploadProgress } from '../../../upload-progress'
 
 /** A file that passed, and the upload it became. */
 interface Uploaded {
@@ -45,7 +46,14 @@ export function useOwnUploads(
   const refresh = () =>
     queries.invalidateQueries({ queryKey: trpc.mods.uploads.queryKey({ serverId: view.id }) })
   const remove = useMutation(trpc.mods.deleteUpload.mutationOptions({ onSuccess: refresh }))
-  const [sending, setSending] = useState<{ name: string; stage: string; done: number } | null>(null)
+  // Reading and checking a file have no known end; the upload between them does.
+  const [sending, setSending] = useState<{
+    name: string
+    stage: string
+    sent: number | null
+    total: number
+  } | null>(null)
+  const stopping = useRef<AbortController | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   // The upload just sent, offered once Cubepals has checked it.
   const [waiting, setWaiting] = useState<Uploaded | null>(null)
@@ -53,7 +61,7 @@ export function useOwnUploads(
   const send = async (file: File) => {
     setFailure(null)
     try {
-      setSending({ name: file.name, stage: 'Reading the file…', done: 0 })
+      setSending({ name: file.name, stage: 'Reading the file…', sent: null, total: file.size })
       const sha512 = await sha512Of(file)
       const start = await begin.mutateAsync({
         serverId: view.id,
@@ -63,18 +71,26 @@ export function useOwnUploads(
       })
       let done: Uploaded
       if (start.kind === 'upload') {
-        await putFile(start.url, start.headers, file, (sent) =>
-          setSending({ name: file.name, stage: 'Uploading…', done: (sent / file.size) * 100 }),
+        const controller = new AbortController()
+        stopping.current = controller
+        setSending({ name: file.name, stage: 'Uploading…', sent: 0, total: file.size })
+        await putFile(
+          start.url,
+          start.headers,
+          file,
+          (sent) => setSending({ name: file.name, stage: 'Uploading…', sent, total: file.size }),
+          controller.signal,
         )
-        setSending({ name: file.name, stage: 'Checking it…', done: 100 })
+        setSending({ name: file.name, stage: 'Checking it…', sent: null, total: file.size })
         const finished = await finish.mutateAsync({ serverId: view.id, ticket: start.ticket })
         done = { uploadId: finished.uploadId, fileName: file.name }
       } else done = { uploadId: start.uploadId, fileName: file.name }
       await refresh()
       setWaiting(done)
     } catch (error) {
-      setFailure(messageOf(error))
+      if (!isStopped(error)) setFailure(messageOf(error))
     } finally {
+      stopping.current = null
       setSending(null)
     }
   }
@@ -96,12 +112,20 @@ export function useOwnUploads(
     /** How far a file has got, and why sending, listing or deleting didn't work, where one didn't. */
     status: (
       <>
-        {sending && (
+        {sending && sending.sent !== null && (
+          <UploadProgress
+            name={sending.name}
+            sent={sending.sent}
+            total={sending.total}
+            onStop={() => stopping.current?.abort()}
+          />
+        )}
+        {sending && sending.sent === null && (
           <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
             <span className="type-body-sm">
               {sending.name}: {sending.stage}
             </span>
-            <ProgressBar value={sending.done} label={`Uploading ${sending.name}`} />
+            <ProgressBar value={null} label={`${sending.stage} ${sending.name}`} />
           </div>
         )}
         {waiting && <span className="type-body-sm">{waiting.fileName}: Checking…</span>}
