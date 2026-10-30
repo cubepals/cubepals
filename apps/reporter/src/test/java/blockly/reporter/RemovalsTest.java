@@ -73,7 +73,8 @@ class RemovalsTest {
         List<String> kicked = new ArrayList<>();
         Removals removals = new Removals(queued::add, name -> standIn(Player.class, kicked));
         ConsoleCommandSender console = standIn(ConsoleCommandSender.class, new ArrayList<>());
-        for (String reason : List.of("movement", "speed", "impossible")) run(removals, console, "Alex", reason);
+        for (String reason : List.of("movement", "speed", "impossible"))
+            assertTrue(run(removals, console, "Alex", reason));
         assertEquals(
                 List.of(
                         "Removed for moving in a way the game can’t. You can rejoin.",
@@ -96,7 +97,30 @@ class RemovalsTest {
         ConsoleCommandSender console = standIn(ConsoleCommandSender.class, told);
         run(new Removals(queued::add, name -> standIn(Player.class, new ArrayList<>())), console, "Alex", "flying");
         assertEquals(List.of("Usage: cubepals-remove <player> <movement|speed|impossible>"), told);
-        run(new Removals(queued::add, name -> null), console, "Alex", "speed");
+        assertTrue(run(new Removals(queued::add, name -> null), console, "Alex", "speed"));
         assertEquals(0, queued.size());
+    }
+
+    @Test
+    void missingOrExtraArgumentsNeverLookUpAPlayer() {
+        List<String> told = new ArrayList<>();
+        ConsoleCommandSender console = standIn(ConsoleCommandSender.class, told);
+        Removals removals = new Removals(null, name -> {
+            throw new AssertionError("invalid command must not look up a player");
+        });
+        assertTrue(run(removals, console));
+        assertTrue(run(removals, console, "Alex"));
+        assertTrue(run(removals, console, "Alex", "speed", "extra"));
+        assertEquals(3, told.size());
+        for (String message : told)
+            assertEquals("Usage: cubepals-remove <player> <movement|speed|impossible>", message);
+    }
+
+    @Test
+    void aServerThatDoesNotReportStillRemovesThePlayer() {
+        List<String> kicked = new ArrayList<>();
+        Removals removals = new Removals(null, name -> standIn(Player.class, kicked));
+        assertTrue(run(removals, standIn(ConsoleCommandSender.class, new ArrayList<>()), "Alex", "speed"));
+        assertEquals(List.of(Removals.MESSAGES.get("speed")), kicked);
     }
 }

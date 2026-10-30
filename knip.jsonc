@@ -16,11 +16,12 @@
       // suspend-bench.ts, players-bench.ts and load-test.ts copy onto a Fly machine and run there.
       "entry": [
         "scripts/*.ts",
+        "scripts/quality/*.mjs",
         "scripts/lib/suspend-probe.ts",
         "scripts/lib/players-probe.ts",
         "scripts/lib/load-probe.ts"
       ],
-      "project": ["scripts/**/*.ts"],
+      "project": ["scripts/**/*.{ts,mjs}"],
       // check-structure.ts runs it by its binary's path.
       "ignoreDependencies": ["jscpd"]
     },

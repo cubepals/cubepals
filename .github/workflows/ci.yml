@@ -11,9 +11,22 @@ on:
   # The merge queue's check of a pull request on top of what is queued ahead of it; the jobs and
   # their names are the same, so `check` is the one answer there too.
   merge_group:
+  schedule:
+    - cron: '41 3 * * *'
+  workflow_dispatch:
+    inputs:
+      full_quality:
+        description: Run mutation testing across the complete source inventory
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+
+# A newer PR revision supersedes its earlier evidence; main and scheduled runs finish normally.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # A change to nothing but prose skips the rest. `check` still reports, so it can stay required.
@@ -25,15 +38,15 @@ jobs:
       pull-requests: read
     outputs:
       # The queue tests everything: what a merge changes is what the commits ahead of it changed too.
-      code: ${{ github.event_name == 'merge_group' && 'true' || steps.filter.outputs.code }}
-      reporter: ${{ github.event_name == 'merge_group' && 'true' || steps.reporter.outputs.reporter }}
+      code: ${{ (github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.filter.outputs.code }}
+      reporter: ${{ (github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.reporter.outputs.reporter }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
-        if: github.event_name != 'merge_group'
+        if: github.event_name != 'merge_group' && github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
         with:
           predicate-quantifier: every
           filters: |
@@ -49,12 +62,13 @@ jobs:
       # Its own step: under `every` above, a file would have to match all of these at once.
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: reporter
-        if: github.event_name != 'merge_group'
+        if: github.event_name != 'merge_group' && github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
         with:
           filters: |
             reporter:
               - 'apps/reporter/**'
               - '.github/workflows/ci.yml'
+              - 'scripts/quality/reporter*'
 
   static:
     name: Lint, types and structure
@@ -64,6 +78,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -82,6 +97,7 @@ jobs:
             sleep "$wait"
           done
       - run: bun run openapi:install
+      - run: bun run quality:install
       - name: API types match their pinned specs
         run: bun run openapi:check
       - run: bun run lint
@@ -89,11 +105,29 @@ jobs:
       - run: bun run check:boundaries
       - run: bun run check:structure
       - run: bun run check:deprecated
+      - name: Quality gates reject missing evidence and policy tampering
+        run: |
+          node --test scripts/quality/*.test.mjs
+          python3 scripts/quality/reporter_test.py
+      - name: Real defects and superficial tests are rejected
+        run: |
+          node scripts/quality/behavior-proof.mjs
+          node scripts/quality/mutation-selftest.mjs
       # A workflow GitHub can't parse fails without running and is easy to miss.
       - name: Workflows parse and their scripts pass shellcheck
         run: |
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
           ./actionlint -color
+      - name: Keep executable quality proof evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-quality-proofs
+          path: |
+            coverage/behavior-proof/
+            coverage/mutation-proof/
+          if-no-files-found: error
+          retention-days: 14
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: 1.15.3
@@ -214,17 +248,58 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: '21'
-      - name: Build and test
-        working-directory: apps/reporter
-        run: ./gradlew build --no-daemon --console=plain
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.4
+      - name: Identify Java comparison
+        id: quality
+        env:
+          QUALITY_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || 'HEAD^' }}
+        run: node scripts/quality/prepare.mjs coverage/reporter
+      - name: Measure Java coverage on base and proposed source
+        env:
+          BASE: ${{ steps.quality.outputs.base }}
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/quality-java-base" "$BASE"
+          cp apps/reporter/build.gradle.kts "$RUNNER_TEMP/quality-java-base/apps/reporter/build.gradle.kts"
+          (cd "$RUNNER_TEMP/quality-java-base/apps/reporter" && ./gradlew test jacocoTestReport --no-daemon --console=plain)
+          (cd apps/reporter && ./gradlew build jacocoTestReport --no-daemon --console=plain)
+          cp "$RUNNER_TEMP/quality-java-base/apps/reporter/build/reports/jacoco/test/jacocoTestReport.xml" coverage/reporter/base.xml
+          cp apps/reporter/build/reports/jacoco/test/jacocoTestReport.xml coverage/reporter/head.xml
+          python3 scripts/quality/reporter.py coverage --head coverage/reporter/head.xml --base coverage/reporter/base.xml --changed coverage/reporter/changed.json --root .
+      - name: Mutation checks cover changed classes and test dependencies
+        env:
+          FULL_QUALITY: ${{ github.event_name == 'schedule' || inputs.full_quality == true }}
+        run: |
+          args=()
+          if [ "$FULL_QUALITY" = true ]; then args+=(--full); fi
+          classes=$(python3 scripts/quality/reporter.py scope --changed coverage/reporter/changed.json --root . --output coverage/reporter/subjects.json "${args[@]}")
+          if [ -n "$classes" ]; then
+            (cd apps/reporter && ./gradlew pitest "-PqualityClasses=$classes" --no-daemon --console=plain)
+            cp apps/reporter/build/reports/pitest/mutations.xml coverage/reporter/mutations.xml
+            python3 scripts/quality/reporter.py mutation --report coverage/reporter/mutations.xml --subjects coverage/reporter/subjects.json
+          fi
+      - name: Java gates reject real defects, weak tests and coverage loss
+        run: python3 scripts/quality/reporter-proof.py
+      - name: Keep Java quality evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: reporter-quality
+          path: |
+            coverage/reporter/
+            coverage/reporter-proof/
+          if-no-files-found: error
+          retention-days: 14
 
   # The suite spends most of its time waiting on the job queue's half-second poll, test after test,
-  # so it is split across machines: every fourth file to each, each with its own services.
+  # so the existing domain groups run on separate machines, each with its own services.
   test:
     name: Tests, ${{ matrix.group }}
     needs: changes
@@ -237,18 +312,18 @@ jobs:
       matrix:
         include:
           - group: Server lifecycle
-            paths: apps/control/src/app/operations
+            quality: lifecycle
           - group: Machine providers
-            paths: apps/control/src/infra/fly apps/control/src/infra/docker apps/control/src/infra/boat apps/control/src/infra/fleet apps/control/src/infra/s3 apps/control/src/app/runtimes
+            quality: providers
           - group: Backups, worlds and versions
-            paths: apps/control/src/app/backups apps/control/src/app/revisions apps/control/src/app/worlds apps/control/src/app/servers apps/control/src/app/setups apps/control/src/app/console apps/control/src/app/players apps/control/src/app/uploads apps/control/src/app/artifacts
+            quality: worlds
           - group: Mods, packs and listings
-            paths: apps/control/src/app/mods apps/control/src/app/packs apps/control/src/app/curation apps/control/src/app/listings
+            quality: mods
           - group: Web app, edge and scripts
-            paths: apps/web apps/edge scripts
+            quality: web
           # Every test no group above names, so a new one is never left out.
           - group: Accounts, billing and the rest of the control plane
-            paths: . :!apps/control/src/app/operations :!apps/control/src/infra/fly :!apps/control/src/infra/docker :!apps/control/src/infra/boat :!apps/control/src/infra/fleet :!apps/control/src/infra/s3 :!apps/control/src/app/runtimes :!apps/control/src/app/backups :!apps/control/src/app/revisions :!apps/control/src/app/worlds :!apps/control/src/app/servers :!apps/control/src/app/setups :!apps/control/src/app/console :!apps/control/src/app/players :!apps/control/src/app/uploads :!apps/control/src/app/artifacts :!apps/control/src/app/mods :!apps/control/src/app/packs :!apps/control/src/app/curation :!apps/control/src/app/listings :!apps/web :!apps/edge :!scripts
+            quality: rest
     services:
       postgres:
         image: mirror.gcr.io/library/postgres:17-alpine
@@ -272,6 +347,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       # Mirrors refuse bursts when parallel jobs pull at once, so each pull retries. The Docker
       # runtime's tests run helpers on alpine and curl; pulled here, no test pulls them itself, and
@@ -291,7 +367,6 @@ jobs:
       # The edge's tests run a real mc-router: the one the edge's image is built with, copied out
       # of the image apps/edge/Dockerfile names.
       - name: Fetch mc-router
-        if: matrix.group == 'Web app, edge and scripts'
         run: |
           image=$(sed -n 's/^FROM \(ghcr\.io\/itzg\/mc-router[^ ]*\) AS router$/\1/p' apps/edge/Dockerfile)
           for wait in 2 5 10 20 40 0; do
@@ -333,6 +408,7 @@ jobs:
             sleep "$wait"
           done
       - run: bun run openapi:install
+      - run: bun run quality:install
       - name: Create the test bucket
         run: |
           for _ in $(seq 1 60); do
@@ -341,16 +417,47 @@ jobs:
             sleep 1
           done
           exit 1
-      # The same files `bun test` finds on its own, dealt out by position. The console shows the
-      # same as without the JUnit report, and the exit code is the same.
-      - name: Test ${{ matrix.group }}
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.3
+          terraform_wrapper: false
+      - name: Identify the measured base and changed files
+        id: quality
         env:
-          PATHS: ${{ matrix.paths }}
-        # Pathspecs, unquoted on purpose so each is its own argument; the :! ones exclude.
+          QUALITY_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || 'HEAD^' }}
+        run: node scripts/quality/prepare.mjs coverage/quality
+      - name: Measure the unchanged base with the same test group
+        env:
+          BASE: ${{ steps.quality.outputs.base }}
+          GROUP: ${{ matrix.quality }}
         run: |
-          # shellcheck disable=SC2086
-          git ls-files -- $PATHS | grep -E '\.test\.tsx?$' | sed 's|^|./|' |
-            xargs bun test --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"
+          git worktree add --detach "$RUNNER_TEMP/quality-base" "$BASE"
+          (cd "$RUNNER_TEMP/quality-base" && bun install --frozen-lockfile && bun run openapi:install)
+          node scripts/quality/run-shard.mjs "$RUNNER_TEMP/quality-base" "$GROUP" "$GITHUB_WORKSPACE/coverage/quality/base"
+      - name: Test ${{ matrix.group }} with branch coverage
+        env:
+          GROUP: ${{ matrix.quality }}
+        run: |
+          node scripts/quality/run-shard.mjs "$GITHUB_WORKSPACE" "$GROUP" "$GITHUB_WORKSPACE/coverage/quality/head"
+          cp "coverage/quality/head/$GROUP.xml" "$RUNNER_TEMP/junit.xml"
+      - name: Tests kill defects in affected source files
+        env:
+          GROUP: ${{ matrix.quality }}
+          FULL_QUALITY: ${{ github.event_name == 'schedule' || inputs.full_quality == true }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          args=()
+          if [ "$FULL_QUALITY" = true ]; then args+=(--full); fi
+          if [ "$EVENT_NAME" = schedule ]; then args+=(--rotation "$(( $(date -u +%u) - 1 ))"); fi
+          node scripts/quality/mutation-cli.mjs --changed coverage/quality/changed.json --group "$GROUP" --output "coverage/quality/mutation/$GROUP" "${args[@]}"
+      - name: Keep mandatory quality evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: quality-${{ matrix.quality }}
+          path: coverage/quality/
+          if-no-files-found: error
+          retention-days: 14
       # Each test's result, for the pull request's comment (ci-comment.yml). It never fails the job.
       - name: Keep the test results
         if: ${{ !cancelled() }}
@@ -361,6 +468,47 @@ jobs:
           path: ${{ runner.temp }}/junit.xml
           if-no-files-found: ignore
           retention-days: 7
+
+  # Percentages are computed from the union of all six shards, never from an aggregate average.
+  quality:
+    name: Per-file test quality
+    needs: [changes, test]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.4
+      - run: bun install --frozen-lockfile
+      - run: bun run quality:install
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: quality-*
+          path: coverage/quality
+          merge-multiple: true
+      - name: Enforce every source file and all six evidence shards
+        run: |
+          node scripts/quality/coverage.mjs merge --output coverage/quality/base.json --expected-shards 6 coverage/quality/base/*.json
+          node scripts/quality/coverage.mjs merge --output coverage/quality/head.json --expected-shards 6 coverage/quality/head/*.json
+          node scripts/quality/coverage.mjs check --report coverage/quality/head.json --base coverage/quality/base.json --changed coverage/quality/changed.json --root . --output coverage/quality/findings.json
+
+      - name: Keep merged coverage and legacy deficit findings
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: per-file-coverage-findings
+          path: |
+            coverage/quality/base.json
+            coverage/quality/head.json
+            coverage/quality/findings.json
+          if-no-files-found: error
+          retention-days: 14
 
   # Every file says whose it is and under what license, in its own SPDX lines or in REUSE.toml.
   # It runs on every change, prose included: a new picture or document needs its line too.
@@ -373,13 +521,16 @@ jobs:
           persist-credentials: false
       - run: pipx run reuse==6.2.0 lint
 
-  # The one check branch protection requires. It passes when every part passed or was skipped.
+  # The required aggregate rejects missing work and unexpected skips, including failed dependencies.
   check:
-    needs: [changes, licenses, static, test, worker, images, reporter]
+    needs: [changes, licenses, static, test, quality, worker, images, reporter]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Every part passed or was skipped
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Every required part succeeded
         env:
           NEEDS: ${{ toJSON(needs) }}
-        run: echo "$NEEDS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")'
+        run: node scripts/quality/aggregate.mjs
