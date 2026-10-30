@@ -20,11 +20,12 @@ type Layer = (typeof LAYERS)[number]
  * (`@blockly/contracts/server-list`), how wide its font draws each character
  * (`@blockly/contracts/minecraft-font`), where published maps are
  * (`@blockly/contracts/published-maps`), the check marks and seals typed text refuses
- * (`@blockly/contracts/seal`), and typed text as plain text (`@blockly/contracts/plain-text`).
+ * (`@blockly/contracts/seal`), typed text as plain text (`@blockly/contracts/plain-text`), and
+ * Minecraft's releases in order (`@blockly/contracts/release-order`).
  * None imports anything itself.
  */
 const PURE_PACKAGES =
-  /^@blockly\/contracts\/(durations|example-address|limits|minecraft-font|motd-layout|plain-text|published-maps|seal|server-list)$/
+  /^@blockly\/contracts\/(durations|example-address|limits|minecraft-font|motd-layout|plain-text|published-maps|release-order|seal|server-list)$/
 const APP_PACKAGES = /^(@blockly\/(db|contracts)(\/.*)?|drizzle-orm(\/.*)?|zod|node:.*)$/
 
 /** A string literal holding a hostname, with or without a scheme (§17). */

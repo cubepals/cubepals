@@ -78,6 +78,11 @@ export class BackupQueries {
             mods: revision.modNames.length,
           },
           needsConfiguration: compareVersions(revision.gameVersion, desired.gameVersion) > 0,
+          movesServerTo:
+            backup.worldFacts !== null &&
+            compareVersions(backup.worldFacts.gameVersion, desired.gameVersion) > 0
+              ? backup.worldFacts.gameVersion
+              : null,
         }
       }),
     }

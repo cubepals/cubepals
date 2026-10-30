@@ -40,6 +40,11 @@ export interface BackupView {
   configuration: { revisionNumber: number; gameVersion: string; loader: Loader; mods: number }
   /** Its world is from a newer game version than the server has now: only its configuration opens it. */
   needsConfiguration: boolean
+  /**
+   * A world brought in from a newer Minecraft than the server has now: the release restoring it
+   * moves the server up to (`moveUp`). Null for any other backup.
+   */
+  movesServerTo: string | null
 }
 
 export interface BackupsView {
@@ -203,6 +208,8 @@ export const RestoreBackupInput = z.object({
   /** The settings and mods from then come back too. */
   withConfiguration: z.boolean(),
   acknowledgeRevoked: z.boolean().optional(),
+  /** For a world brought in from a newer Minecraft (`movesServerTo`): the server moves up to it. */
+  moveUp: z.boolean().optional(),
 })
 /** An admin restoring one of someone's backups, as its owner would; why goes in the audit log. */
 export const AdminRestoreInput = RestoreBackupInput.extend({ reason: z.string().trim().min(1).max(500) })

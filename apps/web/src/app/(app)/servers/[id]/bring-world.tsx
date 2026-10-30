@@ -17,10 +17,14 @@ import {
   type WorldImportView,
   type WorldPeople,
 } from '@blockly/contracts'
+import { SECOND_MS } from '@blockly/contracts/durations'
+import { compareVersions } from '@blockly/contracts/release-order'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../lib/api'
+import { playedOn } from '../../../../lib/level-version'
 import { bytes } from '../../../../lib/present'
+import { readingLeft } from '../../../../lib/reading-pace'
 import { useSentImport } from '../../../../lib/sent-import'
 import { Button, Modal, Note, ProgressBar, TextField } from '../../../../ui'
 import { UploadProgress } from '../../upload-progress'
@@ -98,15 +102,11 @@ export function BringWorld({
               onChange={(event) => setName(event.target.value)}
               help="What this server calls the world, if it never had it before."
             />
+            <NewerWorld file={file} serverVersion={view.gameVersion} />
           </>
         )}
         {progress !== null && <UploadProgress name={file.name} sent={progress.sent} total={progress.total} />}
-        {reading && (
-          <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
-            <span className="type-body-sm">Reading the world… A large one takes a minute or two.</span>
-            <ProgressBar value={null} label="Reading the world" />
-          </div>
-        )}
+        {reading && <ReadingWorld sizeBytes={file.size} />}
         {state?.status === 'asking' && <Questions view={view} state={state} />}
         {state?.status === 'ready' && <Kept notes={state.notes} />}
         {state?.status === 'ready' && state.people !== null && (
@@ -168,6 +168,50 @@ function Actions({
         Upload
       </Button>
     </>
+  )
+}
+
+/**
+ * What the file says of the Minecraft it was last played on, read before it is sent: a world from
+ * a newer one is kept all the same, and restoring it moves the server up, which the player hears
+ * now rather than after the upload.
+ */
+function NewerWorld({ file, serverVersion }: { file: File; serverVersion: string }) {
+  const [played, setPlayed] = useState<string | null>(null)
+  useEffect(() => {
+    let current = true
+    void playedOn(file).then((version) => current && setPlayed(version))
+    return () => {
+      current = false
+    }
+  }, [file])
+  if (played === null || compareVersions(played, serverVersion) <= 0) return null
+  return (
+    <Note tone="info">
+      It was last played on Minecraft {played}, newer than this server’s {serverVersion}. Cubepals keeps it,
+      and restoring it moves the server up to {played}.
+    </Note>
+  )
+}
+
+/** The world being read on a worker, with a countdown from its size (`reading-pace.ts`). */
+function ReadingWorld({ sizeBytes }: { sizeBytes: number }) {
+  const [startedAt] = useState(() => Date.now())
+  const [now, setNow] = useState(startedAt)
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), SECOND_MS)
+    return () => clearInterval(timer)
+  }, [])
+  return (
+    <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
+      <span className="type-body-sm">
+        Reading the world, {bytes(sizeBytes)}: finding it, checking it and keeping it as a backup.
+      </span>
+      <ProgressBar value={null} label="Reading the world" />
+      <span className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
+        {readingLeft(sizeBytes, startedAt, now)}
+      </span>
+    </div>
   )
 }
 

@@ -319,6 +319,7 @@ const backups = router({
     await ctx.services.backups.restoreBackup(ctx.actor, input.serverId, input.backupId, input.requestId, {
       withConfiguration: input.withConfiguration,
       acknowledgeRevoked: input.acknowledgeRevoked,
+      moveUp: input.moveUp,
     })
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),

@@ -390,6 +390,7 @@ function Restore({
       backupId: backup.id,
       withConfiguration,
       acknowledgeRevoked,
+      ...(backup.movesServerTo === null ? {} : { moveUp: true }),
     })
   return (
     <ConfirmChange
@@ -400,7 +401,13 @@ function Restore({
           ? `Go back to how it was ${sessionName(backup.createdAt, now, zone ?? undefined).phrase}?`
           : `Restore the backup from ${whenTaken(backup.createdAt, now).toLowerCase()}?`
       }
-      confirmLabel={view.status === 'running' ? 'Restore and restart' : 'Restore'}
+      confirmLabel={
+        backup.movesServerTo !== null
+          ? `Move to ${backup.movesServerTo} and restore`
+          : view.status === 'running'
+            ? 'Restore and restart'
+            : 'Restore'
+      }
       working="Bringing the world back"
       error={restore.error}
       onConfirm={(requestId) => send(requestId, false)}
@@ -412,6 +419,13 @@ function Restore({
           : `${backup.world.name} goes back to how it was then.`}{' '}
         Who can join stays as it is now: bans, operators and the whitelist are put back after the restore.
       </p>
+      {backup.movesServerTo !== null && (
+        <Note tone="info">
+          It was last played on Minecraft {backup.movesServerTo}, so the server moves up from{' '}
+          {view.gameVersion} to {backup.movesServerTo} to open it. A world can’t go back to an older
+          Minecraft, so the server stays on {backup.movesServerTo}.
+        </Note>
+      )}
       {backup.trigger !== 'uploaded' && (
         <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
           <Toggle
