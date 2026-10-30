@@ -1069,6 +1069,25 @@ textarea.bk-input {
   translate: calc(var(--progress, 0) * 1% - 100%) 0;
   transition: translate 400ms var(--ease);
 }
+/* No known end: a short fill sweeps across, so the bar reads as working rather than stuck. */
+.bk-prov__bar--moving .bk-prov__fill {
+  width: 30%;
+  translate: -100% 0;
+  animation: bk-sweep 1.4s var(--ease) infinite;
+}
+@keyframes bk-sweep {
+  to {
+    translate: 340% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bk-prov__bar--moving .bk-prov__fill {
+    width: 100%;
+    translate: none;
+    animation: none;
+    opacity: 0.4;
+  }
+}
 .bk-prov__steps {
   display: flex;
   flex-direction: column;

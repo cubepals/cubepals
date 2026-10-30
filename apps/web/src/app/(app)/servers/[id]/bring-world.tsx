@@ -21,8 +21,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { messageOf, useTRPC } from '../../../../lib/api'
 import { bytes } from '../../../../lib/present'
-import { putFile } from '../../../../lib/upload'
+import { useSentImport } from '../../../../lib/sent-import'
 import { Button, Modal, Note, ProgressBar, TextField } from '../../../../ui'
+import { UploadProgress } from '../../upload-progress'
 import { WorldPeopleChoice } from '../../world-people'
 import { BroughtNotes, WorldQuestions } from '../../world-questions'
 
@@ -45,9 +46,11 @@ export function BringWorld({
   const begin = useMutation(trpc.backups.beginUpload.mutationOptions())
   const finish = useMutation(trpc.backups.finishUpload.mutationOptions())
   const [name, setName] = useState('')
-  const [sent, setSent] = useState<number | null>(null)
-  const [importId, setImportId] = useState<string | null>(null)
-  const [failure, setFailure] = useState<string | null>(null)
+  const { progress, importId, failure, send, stop } = useSentImport({
+    begin: (chosen) => begin.mutateAsync({ serverId: view.id, ...chosen }),
+    finish: (ticket) =>
+      finish.mutateAsync({ serverId: view.id, ticket, ...(name.trim() ? { name: name.trim() } : {}) }),
+  })
   const watched = useQuery({
     ...trpc.backups.upload.queryOptions({ serverId: view.id, importId: importId ?? '' }),
     enabled: importId !== null,
@@ -55,42 +58,31 @@ export function BringWorld({
   })
   const state = watched.data ?? null
 
-  const send = async () => {
-    setFailure(null)
-    try {
-      setSent(0)
-      const start = await begin.mutateAsync({ serverId: view.id, fileName: file.name, sizeBytes: file.size })
-      await putFile(start.url, start.headers, file, setSent)
-      const started = await finish.mutateAsync({
-        serverId: view.id,
-        ticket: start.ticket,
-        ...(name.trim() ? { name: name.trim() } : {}),
-      })
-      setImportId(started.importId)
-    } catch (error) {
-      setFailure(messageOf(error))
-      setSent(null)
-    }
+  const uploading = progress !== null
+  const reading = importId !== null && (state === null || state.status === 'reading')
+  // While the file goes up, closing stops it; once it is up, the world is read whatever the page does.
+  const close = () => {
+    stop()
+    onClose()
   }
-
-  const busy = sent !== null && (importId === null || state === null || state.status === 'reading')
   return (
     <Modal
       open
-      onClose={busy ? () => {} : onClose}
+      onClose={reading ? () => {} : close}
       title="Bring a world"
       actions={
         <Actions
           state={state}
-          sending={sent !== null}
-          onSend={() => void send()}
-          onClose={onClose}
+          sending={uploading || importId !== null}
+          uploading={uploading}
+          onSend={() => void send(file)}
+          onClose={close}
           onKept={onKept}
         />
       }
     >
       <div className="bk-stack" style={{ gap: 'var(--space-16)' }}>
-        {sent === null && (
+        {!uploading && importId === null && (
           <>
             <p>
               {file.name} · {bytes(file.size)}. Cubepals finds the world in it, whether it’s a single-player
@@ -108,16 +100,11 @@ export function BringWorld({
             />
           </>
         )}
-        {sent !== null && importId === null && (
-          <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
-            <span className="type-body-sm">Uploading…</span>
-            <ProgressBar value={(sent / Math.max(file.size, 1)) * 100} label={`Uploading ${file.name}`} />
-          </div>
-        )}
-        {importId !== null && (state === null || state.status === 'reading') && (
+        {progress !== null && <UploadProgress name={file.name} sent={progress.sent} total={progress.total} />}
+        {reading && (
           <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
             <span className="type-body-sm">Reading the world… A large one takes a minute or two.</span>
-            <ProgressBar value={100} label="Reading the world" />
+            <ProgressBar value={null} label="Reading the world" />
           </div>
         )}
         {state?.status === 'asking' && <Questions view={view} state={state} />}
@@ -136,12 +123,15 @@ export function BringWorld({
 function Actions({
   state,
   sending,
+  uploading,
   onSend,
   onClose,
   onKept,
 }: {
   state: WorldImportView | null
   sending: boolean
+  /** The file is going up, and Cancel stops it. */
+  uploading: boolean
   onSend: () => void
   onClose: () => void
   onKept: (backupId: string) => void
@@ -161,6 +151,12 @@ function Actions({
     return (
       <Button variant="ghost" onClick={onClose}>
         Close
+      </Button>
+    )
+  if (uploading)
+    return (
+      <Button variant="ghost" onClick={onClose}>
+        Cancel
       </Button>
     )
   return (

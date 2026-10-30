@@ -11,8 +11,9 @@ import { type DragEvent, useState } from 'react'
 import { messageOf, useTRPC } from '../../lib/api'
 import { droppedFiles } from '../../lib/chosen-files'
 import { useHandedOnce, useSentImport } from '../../lib/sent-import'
-import { FileButton, ICON, Note, ProgressBar } from '../../ui'
+import { FileButton, ICON, Note } from '../../ui'
 import { PackWorld } from './servers/new/pack-world'
+import { UploadProgress } from './upload-progress'
 
 /** A pack Blockly has read, as the pages that pick one show it. */
 export type ReadPack = Extract<PackImportView, { status: 'ready' }>
@@ -48,6 +49,7 @@ export function PackDrop({
     importId,
     failure,
     send,
+    stop,
   } = useSentImport(
     {
       begin: (file) => begin.mutateAsync(file),
@@ -103,10 +105,7 @@ export function PackDrop({
         </FileButton>
       </div>
       {sending !== null && (
-        <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
-          <span className="type-body-sm">{sending.name}: sending it…</span>
-          <ProgressBar value={sending.done} label={`Sending ${sending.name}`} />
-        </div>
+        <UploadProgress name={sending.name} sent={sending.sent} total={sending.total} onStop={stop} />
       )}
       {read?.status === 'reading' && (
         <p className="type-body-sm" role="status">
