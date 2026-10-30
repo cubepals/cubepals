@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Audits or provisions classic main protection without replacing unrelated required checks,
- * review rules, or push restrictions. Needs a GitHub credential with repository administration.
+ * Audits or provisions classic main protection and verified commit signatures without replacing
+ * unrelated required checks, review rules, or push restrictions. Needs repository administration.
  * It cannot install an organization required-workflow rule or prevent an administrator editing
  * protection; use a separately administered required workflow for a stronger trust boundary.
  *
@@ -18,9 +18,10 @@ const BRANCH = 'main'
 const REQUIRED = ['check', 'Quality policy']
 const ACTIONS_APP = 15368
 
-function api(path, body) {
+function api(path, body, method = body ? 'PUT' : 'GET') {
   const args = ['api', path]
-  if (body) args.push('--method', 'PUT', '--input', '-')
+  if (method !== 'GET') args.push('--method', method)
+  if (body) args.push('--input', '-')
   return JSON.parse(
     execFileSync('gh', args, {
       encoding: 'utf8',
@@ -57,7 +58,7 @@ function reviewPolicy(current) {
   return result
 }
 
-function problems(current) {
+function problems(current, signatures) {
   const checks = current.required_status_checks?.checks ?? []
   const missing = REQUIRED.filter(
     (context) => !checks.some((check) => check.context === context && check.app_id === ACTIONS_APP),
@@ -68,6 +69,7 @@ function problems(current) {
     ...(!current.required_status_checks?.strict
       ? ['Required checks do not require an up-to-date branch']
       : []),
+    ...(signatures?.enabled !== true ? ['Verified signed commits are not required'] : []),
   ]
 }
 
@@ -76,6 +78,7 @@ try {
   if (!['--check', '--apply'].includes(mode) || process.argv.length > 3)
     throw new Error('usage: protection.mjs [--check|--apply]')
   const endpoint = `repos/${REPOSITORY}/branches/${BRANCH}/protection`
+  const signaturesEndpoint = `${endpoint}/required_signatures`
   let current = api(endpoint)
   if (mode === '--apply') {
     const checks = [...(current.required_status_checks?.checks ?? [])]
@@ -105,13 +108,17 @@ try {
     ]) {
       if (current[key] !== undefined) body[key] = current[key].enabled
     }
+    // Signature protection has its own endpoint; the bulk protection PUT cannot enable it.
+    // Enable it first so denied signature administration cannot leave a partially applied gate.
+    api(signaturesEndpoint, undefined, 'POST')
     api(endpoint, body)
     current = api(endpoint)
   }
-  const failures = problems(current)
+  const signatures = api(signaturesEndpoint)
+  const failures = problems(current, signatures)
   if (failures.length) throw new Error(failures.join('\n'))
   process.stdout.write(
-    'Main requires CI and the quality policy, including administrators, on an up-to-date branch.\n',
+    'Main requires CI, the quality policy and verified signed commits, including administrators, on an up-to-date branch.\n',
   )
 } catch (error) {
   const detail = error.stderr?.toString().trim() || error.message

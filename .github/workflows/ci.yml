@@ -261,6 +261,7 @@ jobs:
         id: quality
         env:
           QUALITY_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || 'HEAD^' }}
+          QUALITY_PR_HEAD: ${{ github.event.pull_request.head.sha || '' }}
         run: node scripts/quality/prepare.mjs coverage/reporter
       - name: Measure Java coverage on base and proposed source
         env:
@@ -425,6 +426,7 @@ jobs:
         id: quality
         env:
           QUALITY_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || 'HEAD^' }}
+          QUALITY_PR_HEAD: ${{ github.event.pull_request.head.sha || '' }}
         run: node scripts/quality/prepare.mjs coverage/quality
       - name: Measure the unchanged base with the same test group
         env:

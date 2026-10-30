@@ -106,4 +106,7 @@ checks run separately from trusted base code and publish their result on the exa
 commit. Protecting that status on the server is necessary: repository files alone cannot prevent
 an administrator or an unprotected workflow from bypassing checks. The installation instructions
 include an administrator-enforcement check and describe the stronger independently administered
-workflow/App boundary needed against deliberately malicious workflow spoofing.
+workflow/App boundary needed against deliberately malicious workflow spoofing. Activation also
+requires GitHub-verified signed commits on `main`; the installer enables and independently checks
+the dedicated commit-signature protection setting while preserving existing branch protections.
+Rollout commits must be signed too, with no unsigned bootstrap fallback.

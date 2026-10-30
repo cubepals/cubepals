@@ -9,40 +9,38 @@
  * Use bun test --preload ./scripts/quality/coverage-preload.mjs with QUALITY_REPORT set.
  */
 import { afterAll } from 'bun:test'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, relative, resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { plugin } from 'bun'
-import { inventory, sourceFiles } from './inventory.mjs'
-import { createInstrumenter } from './toolchain.mjs'
 
 const root = resolve(process.env.QUALITY_ROOT ?? process.cwd())
 const output = process.env.QUALITY_REPORT
 if (!output) throw new Error('QUALITY_REPORT must name the coverage evidence file')
-const entries = inventory(root)
-const templates = {}
-const contents = new Map()
-function instrumenterFor(path) {
-  return createInstrumenter({
-    coverageVariable: '__qualityCoverage__',
-    coverageGlobalScope: 'globalThis',
-    coverageGlobalScopeFunc: false,
-    esModules: true,
-    compact: false,
-    preserveComments: true,
-    produceSourceMap: false,
-    parserPlugins: [
-      ...(/\.[cm]?tsx?$/.test(path) ? ['typescript'] : []),
-      ...(/\.[jt]sx$/.test(path) ? ['jsx'] : []),
-      'importAttributes',
-    ],
-  })
+const preparedDirectory = mkdtempSync(join(tmpdir(), 'quality-instrument-'))
+let prepared
+try {
+  const preparedPath = join(preparedDirectory, 'modules.json')
+  const command = spawnSync(
+    'node',
+    [fileURLToPath(new URL('./coverage-prepare.mjs', import.meta.url)), root, preparedPath],
+    {
+      cwd: root,
+      encoding: 'utf8',
+      maxBuffer: 4 * 1024 * 1024,
+    },
+  )
+  if (command.error) throw command.error
+  if (command.status !== 0) throw new Error(`Coverage instrumentation failed: ${command.stderr}`)
+  prepared = JSON.parse(readFileSync(preparedPath, 'utf8'))
+} finally {
+  rmSync(preparedDirectory, { recursive: true, force: true })
 }
-for (const path of sourceFiles(entries)) {
-  const instrumenter = instrumenterFor(path)
-  const text = readFileSync(resolve(root, path), 'utf8')
-  contents.set(path, instrumenter.instrumentSync(text, path))
-  templates[path] = structuredClone(instrumenter.lastFileCoverage())
-}
+const entries = prepared.inventory
+const templates = prepared.templates
+const contents = new Map(Object.entries(prepared.contents))
 
 // Hook only measured files. Passing dependencies through onLoad changes Bun's CommonJS module
 // detection even when their bytes are unchanged, breaking packages such as Ajv's default export.

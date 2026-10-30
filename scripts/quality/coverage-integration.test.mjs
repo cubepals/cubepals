@@ -167,3 +167,39 @@ export function accepts(value: number) { return new Validator().valid(value) }`,
     rmSync(root, { recursive: true, force: true })
   }
 })
+
+test('instrumentation preserves dependency error constructors and native stack capture', () => {
+  const root = fixture()
+  try {
+    mkdirSync(join(root, 'node_modules/quality-errors'), { recursive: true })
+    writeFileSync(
+      join(root, 'node_modules/quality-errors/package.json'),
+      JSON.stringify({
+        name: 'quality-errors',
+        main: 'index.js',
+      }),
+    )
+    // This prototype-based Error shape is used by follow-redirects, loaded by the ACME client.
+    // Babel's in-process stack formatter makes Bun reject its otherwise valid capture call.
+    writeFileSync(
+      join(root, 'node_modules/quality-errors/index.js'),
+      `function DependencyError() {
+      Error.captureStackTrace(this, this.constructor)
+    }
+    DependencyError.prototype = new Error('dependency error')
+    const captured = new DependencyError()
+    module.exports = class Validator {
+      valid(value) { return captured instanceof Error && value >= 0 && value <= 2 }
+    }`,
+    )
+    writeFileSync(
+      join(root, 'apps/range.ts'),
+      `import Validator from 'quality-errors'
+export function accepts(value: number) { return new Validator().valid(value) }`,
+    )
+    const report = run(root, 'errors.json')
+    assert.equal(fileMetrics(report.files['apps/range.ts']).functions.percent, 100)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})

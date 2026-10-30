@@ -37,7 +37,11 @@ node scripts/quality/protection.mjs --check
 
 This preserves existing required checks, review rules, and push restrictions. It adds the
 `Quality policy` status beside `check`, requires an up-to-date branch, and enables enforcement
-for administrators. A missing permission fails; it does not silently claim success.
+for administrators. It also enables GitHub's **Require signed commits** protection for `main`
+through the dedicated `required_signatures` endpoint, then independently reads that setting back.
+`--check` fails unless verified signatures are required; a missing permission, missing setting,
+or unsuccessful verification fails closed. Rollout commits must also be signed and verified;
+disabling signing or using unsigned commits is not a bootstrap fallback.
 
 Then open an ordinary PR and a deliberately failing policy PR. Confirm the expected status is
 attached to each current head and that GitHub refuses to merge the latter. The local adversarial
@@ -45,12 +49,19 @@ suite tests the actual controller on temporary Git repositories:
 
 ```sh
 node --test scripts/quality/policy.test.mjs
+node --test scripts/quality/protection.test.mjs
 ```
+
+The protection tests replace `gh` with a local fixture. They prove that unsigned-commit
+protection cannot be reported as enabled when it is absent, disabled, unreadable, or unchanged
+after an enable request, and that existing checks, reviews, and push restrictions are preserved.
+They make no live repository changes.
 
 At implementation time, both available GitHub credentials returned HTTP 403 for protection
 administration. The readable branch summary showed `check`, title and label checks required,
 with enforcement only for non-administrators. Repository-side activation and real GitHub merge
-rejection therefore remain unverified until the installation steps succeed.
+rejection, including required verified commit signatures, therefore remain unverified until
+the installation steps succeed.
 
 ## Stronger isolation and policy updates
 
