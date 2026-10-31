@@ -6,9 +6,10 @@ import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
-import { eq, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { protocolOf } from '../../minecraft/clients.ts'
 import { VIABACKWARDS, VIAVERSION } from '../../minecraft/mods.ts'
+import { backdateRun } from '../../testing/backdated-run.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { Actor } from '../actor.ts'
 import { IDLE_GRACE_MS, WAKE_PROBATION_MS } from '../operations/schedules.ts'
@@ -313,10 +314,7 @@ describe.skipIf(!hasDatabase)('edge', () => {
     await h.until(id, 'running')
     await h.settled(id)
     // Running for two hours, and nobody seen since: past the free plan's 15 minutes.
-    await h.db
-      .update(schema.powerIntervals)
-      .set({ startedAt: sql`now() - interval '2 hours'` })
-      .where(eq(schema.powerIntervals.serverId, id))
+    await backdateRun(h.db, id, 2 * HOUR_MS)
     await h.db.delete(schema.serverActivity).where(eq(schema.serverActivity.serverId, id))
 
     // Just after this process started, presence may simply not have been read yet.

@@ -9,9 +9,10 @@
  */
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
-import { MINUTE_MS } from '@blockly/contracts/durations'
+import { HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
+import { backdateRun } from '../../testing/backdated-run.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { IDLE_GRACE_MS } from './schedules.ts'
 
@@ -32,10 +33,7 @@ describe.skipIf(!hasDatabase)('the idle check leaves a server a player just join
     const { id, slug } = await h.create(owner)
     await h.until(id, 'running')
     await h.settled(id)
-    await h.db
-      .update(schema.powerIntervals)
-      .set({ startedAt: sql`now() - interval '2 hours'` })
-      .where(eq(schema.powerIntervals.serverId, id))
+    await backdateRun(h.db, id, 2 * HOUR_MS)
     await h.db.delete(schema.serverActivity).where(eq(schema.serverActivity.serverId, id))
     return { id, slug }
   }

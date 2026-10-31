@@ -254,14 +254,24 @@ export async function openIntervalStart(q: Queryable, serverId: string): Promise
   return (await openRun(q, serverId))?.startedAt ?? null
 }
 
-/** The run a server is in now: when it started, and whether a connection is what started it. */
+/**
+ * The run a server is in now: when it started, whether a connection is what started it, and when
+ * it last became running. A change or a restore takes a running server down and back inside one
+ * run, so `readyAt` can be later than `startedAt`; usage counts from the start, idle time from the
+ * later of the two (`domain/server/idle.ts`).
+ */
 export async function openRun(
   q: Queryable,
   serverId: string,
-): Promise<{ startedAt: Date; woken: boolean } | null> {
+): Promise<{ startedAt: Date; woken: boolean; readyAt: Date | null } | null> {
   const [row] = await q
-    .select({ startedAt: intervals.startedAt, woken: intervals.woken })
+    .select({
+      startedAt: intervals.startedAt,
+      woken: intervals.woken,
+      readyAt: schema.minecraftServers.readyAt,
+    })
     .from(intervals)
+    .innerJoin(schema.minecraftServers, eq(schema.minecraftServers.id, intervals.serverId))
     .where(and(eq(intervals.serverId, serverId), isNull(intervals.stoppedAt)))
   return row ?? null
 }

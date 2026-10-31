@@ -38,25 +38,38 @@ export interface Bedtime {
 /**
  * When a running server with nobody on it goes to sleep, or null when its plan never sleeps it.
  *
- * Its plan's idle time counts from whichever came last: somebody playing, or this run starting.
- * A world woken from its page gets the whole window from the moment it is running, however long
- * ago anyone last played it, and however long its wake took; one woken by a connection that
- * nobody followed gets only the probation.
+ * Its plan's idle time counts from whichever came last: somebody playing, or the server becoming
+ * running. A world woken from its page gets the whole window from the moment it is running, however
+ * long ago anyone last played it, and however long its wake took; one woken by a connection that
+ * nobody followed gets only the probation. A change or a restore that takes it down and back stays
+ * in the same run, since its usage goes on counting through it, but nobody could join while it was
+ * down: either window counts again from when it is running again.
  */
 export function bedtime(
-  run: { startedAt: Date; woken: boolean } | null,
+  run: {
+    startedAt: Date
+    /** When it last became running; null where that isn't known, and the run's start stands. */
+    readyAt: Date | null
+    woken: boolean
+  } | null,
   /** When somebody was last seen on it, in this run or any before it. */
   played: Date | null,
   /** The plan's idle time; null when it never sleeps an idle server. */
   idleMinutes: number | null,
 ): Bedtime | null {
   const playedThisRun = played !== null && (run === null || played >= run.startedAt)
-  if (run?.woken && !playedThisRun)
-    return { at: new Date(run.startedAt.getTime() + WAKE_PROBATION_MS), why: 'nobody_joined' }
+  const up = run === null ? null : later(run.startedAt, run.readyAt)
+  if (up !== null && run?.woken && !playedThisRun)
+    return { at: new Date(up.getTime() + WAKE_PROBATION_MS), why: 'nobody_joined' }
   if (idleMinutes === null) return null
-  const since = playedThisRun ? played : (run?.startedAt ?? played)
+  const since = up === null ? played : later(up, playedThisRun ? played : null)
   if (since === null) return null
   return { at: new Date(since.getTime() + idleMinutes * MINUTE_MS), why: 'idle' }
+}
+
+/** The later of two moments, where the second may be missing. */
+function later(a: Date, b: Date | null): Date {
+  return b !== null && b > a ? b : a
 }
 
 /**
