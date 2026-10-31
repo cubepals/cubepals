@@ -41,11 +41,11 @@
     "quality:install": "bun install --cwd tools/quality --frozen-lockfile"
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "3.1154.0",
-    "@biomejs/biome": "2.5.15",
-    "@modelcontextprotocol/sdk": "1.32.1",
+    "@aws-sdk/client-s3": "3.1156.0",
+    "@biomejs/biome": "2.6.2",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@polar-sh/sdk": "1.0.2",
-    "@types/bun": "1.4.3",
+    "@types/bun": "1.4.4",
     "@types/node": "22.20.5",
     "fast-check": "4.10.2",
     "jscpd": "5.4.2",
