@@ -240,13 +240,21 @@ A world played with mods comes with them, as one change its owner confirms when 
   Prism instance's `minecraft/` does, else the folder it sits in, as a server's folder holds its
   world. Forge's registry data isn't read yet.
 - **Before it is sent,** the browser reads `ServerBrands` with the version (`levelOf` in
-  `lib/level-version.ts`), so the page can say the world was played with Fabric mods and ask for
-  the instance. `lib/instance-folders.ts` says which folder to pick on each system
-  (`instancePickOn`: Prism's instances folder, and `minecraft/mods` inside an instance), tells an
-  instance picked whole (`instanceIn`), and gives the files sent with the world chosen from it
-  (`sentWith`): the world, the jars in its mods folder and the sources recorded for them,
-  `mmc-pack.json` and `instance.cfg`. Its other worlds, resource packs, shaders, screenshots and
-  logs stay on the computer. A mods folder picked on its own is sent as `mods/` beside the world.
+  `lib/level-version.ts`), so the Bring a world dialog says the world was played with Fabric mods
+  and asks for the instance, where none are with it (`bring-world-mods.tsx`). `lib/instance-folders.ts`
+  says which folder to pick on each system, for the launcher the player picked under the drop
+  (`instancePickOn`: Prism's instances folder, and `minecraft/mods` inside an instance;
+  `modsFolderOn`: the Minecraft Launcher's `mods` beside its `saves`), tells an instance picked
+  whole (`instanceIn`), and gives the files sent with the world chosen from it (`sentWith`): the
+  world, the jars in its mods folder and the sources recorded for them, `mmc-pack.json` and
+  `instance.cfg`. Its other worlds, resource packs, shaders, screenshots and logs stay on the
+  computer, and the dialog asks which world only where it holds more than one.
+- **What is sent** is `lib/brought-files.ts`'s, one upload either way. A folder picked for the
+  mods of a world's folder (an instance, its game folder or its mods folder, `modsIn`) adds them
+  beside the world, where the control plane reads them (`modsSent`, `playedFrom`): its jars and
+  sources in `mods/`, and `mmc-pack.json` and `instance.cfg` with them. A zip can't be added to in
+  the browser, so for a world that came as one, the instance is asked for and the world is taken
+  from it, the one named as the zip's `level.dat` names it.
 - **A launcher's instance,** from each launcher's own source (`minecraft/instance-layout.ts` cites
   each): Prism Launcher and MultiMC keep `instance.cfg` and `mmc-pack.json` (the components it
   runs: Minecraft, the loader and their versions; `PackProfile.cpp`) in the instance's folder, and
@@ -273,9 +281,10 @@ A world played with mods comes with them, as one change its owner confirms when 
   A mods folder is read for its first 500 jars, each up to the 128 MB an uploaded jar can be.
 - **What is kept:** the loader and each mod, with the world's backup (`world_facts.mods`, and the
   brands as `moddedWith`), shown as `playedWith` on the import (`WorldImportView`) and on the
-  backups page (`BackupView`), and said in the notes: "It was played with Fabric and 2 mods: Tree
-  Harvester and Vein Miner. Restoring it with them moves the server to Fabric with them." and "Left
-  out Sodium: only players’ games run it."
+  backups page (`BackupView`). The page says it where the world is played, rather than among what
+  Cubepals did (`bring-world-lines.ts`): "Played with Fabric and 2 mods: Tree Harvester, Vein
+  Miner. Your server moves to Fabric with them." and "Left out Sodium: only players’ games run
+  it." The instance's own files, read for its loader, aren't said to be left out.
 - **Restoring it with them** (`withMods`, `app/backups/restored-mods.ts`) moves the server to that
   loader with those mods in the restore's own step, resolved as any change of mods is
   (`ModService.planOn`), the server's own mods resolved again with them: each brings what it
@@ -284,11 +293,15 @@ A world played with mods comes with them, as one change its owner confirms when 
   moves the server up as well only where its owner chose that too (`moveUp`). Moving loader isn't
   one-way: the restore's snapshot and the revision before it are the way back. Mods that can't run
   together refuse the restore, naming them; a server that plays a pack is refused, as any lone mod
-  change is.
-- **A world played with mods, with none in the upload,** is kept, and its notes ask for the instance
-  it was played in or its mods folder, so they come too. On the create page, the pack it was played
-  with is asked for (`{ kind: 'world', importId, pack }`); a world brought there doesn't read the
-  mods beside it yet.
+  change is, and the dialog shows the refusal's words. The dialog's Play, and Backups' Play it,
+  send `withMods` wherever mods come, with `moveUp` for a world from a newer release: with its
+  mods, a server that has mods of its own moves up too, rather than in its settings first.
+- **A world played with mods, with none in the upload,** is kept, and the dialog says its mods
+  didn't come and asks for the instance again; Play then reads "Play Life without its mods". The
+  instance picked, the world goes up again with them as a new upload (there is no adding to an
+  import that is read), and the one without them stays in Backups. On the create page, the pack it
+  was played with is asked for (`{ kind: 'world', importId, pack }`); a world brought there doesn't
+  read the mods beside it yet.
 - **An instance, an export or a server folder dropped as a pack** on the create page is built by
   the pack importer (`app/packs/build.ts`), and the world in it handed to the world import.
 - **Not yet:** a mod's `config/` doesn't come, and CurseForge's ids in a source are never used; a
@@ -325,7 +338,10 @@ On the world page (and from "Upload a world" on Backups) the dialog, `servers/[i
 with its words in `bring-world-lines.ts`, reads as the player's own world coming in:
 
 1. **The file,** with what Cubepals does with it, a name to give it (its name in Minecraft, read in
-   the browser, as the placeholder), and the early note for a world from a newer release.
+   the browser, as the placeholder), and the early note for a world from a newer release. A world
+   played with mods that aren't with it asks for its instance here, and Upload reads "Upload
+   without its mods" until it is added. An instance picked whole says what of it is sent, and asks
+   which world where it holds more than one.
 2. **"Bringing Maple Hollow to your server":** the upload with its pace and Cancel, then "Reading
    Maple Hollow" with the countdown (`lib/reading-pace.ts`), then any questions. The name is the
    one given, else the one `level.dat` has, else "your world".
@@ -333,9 +349,11 @@ with its words in `bring-world-lines.ts`, reads as the player's own world coming
    import's `world`, `WorldImportView`), what Cubepals did, who of its old server's players to let
    in, and what playing it does: the server restarts into it (or wakes on it, asleep), the world it
    has now is kept and can be switched back to from Backups, and, for a world from a newer
-   release, the one line that the server moves up for good.
+   release, the one line that the server moves up for good. A world brought with its mods names
+   them, what playing it does to the server's loader, and those left out and why.
 4. **"Play Maple Hollow"** restores the backup the world waits in from the dialog itself
-   (`backups.restore`, with `moveUp` where it moves the server), and the dialog closes onto the
+   (`backups.restore`, with `moveUp` where it moves the server and `withMods` where its mods
+   came), and the dialog closes onto the
    page's own progress. **"Not now"** leaves it waiting in Backups, listed under the world's name
    with "Uploaded by you" and a "Play it" button.
 
