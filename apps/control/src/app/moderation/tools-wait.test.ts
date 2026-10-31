@@ -20,8 +20,7 @@ let h: Harness
 let moderation: ModerationService
 const cdn = new Cdn()
 
-beforeAll(async () => {
-  if (!hasDatabase) return
+async function prepare() {
   await cdn.start()
   h = await startHarness()
   // As the API builds it (main.node.ts).
@@ -63,13 +62,12 @@ beforeAll(async () => {
         } satisfies CatalogVersion,
       ],
     )
-}, 30_000)
+}
 
-afterAll(async () => {
-  if (!hasDatabase) return
+async function close() {
   await h.close()
   cdn.close()
-})
+}
 
 const occupied = async () => {
   const owner = await h.user(undefined, 'plus')
@@ -89,6 +87,9 @@ const desiredMods = async (id: string) =>
   (await loadRevision(h.db, (await h.server(id)).desiredRevisionId)).mods
 
 describe.skipIf(!hasDatabase)('the moderation tools while players are on', () => {
+  beforeAll(prepare, 30_000)
+  afterAll(close)
+
   test('wait for everyone to leave where the owner chose to, saved as what the server runs next', async () => {
     const { owner, id } = await occupied()
     await moderation.setTools(owner, id, { enabled: true, chatFilter: false, when: 'empty' }, randomUUID())
