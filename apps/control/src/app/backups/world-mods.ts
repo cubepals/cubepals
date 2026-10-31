@@ -73,7 +73,15 @@ export class WorldMods {
     const found: BroughtModsJson = { loader, catalog: [], own: [], forPlayers: [], refused: [] }
     const unread = (paths: readonly string[], why: string) =>
       found.refused.push(...paths.map((path) => ({ name: nameOf(path), fileName: nameOf(path), why })))
-    unread(files.jars.slice(MOST_JARS), `Cubepals reads the first ${MOST_JARS} mods of a world.`)
+    // Past the first, one entry for them all: an upload may hold any number.
+    const past = files.jars.slice(MOST_JARS)
+    const first = past[0]
+    if (first !== undefined)
+      found.refused.push({
+        name: `${past.length} more ${past.length === 1 ? 'mod' : 'mods'}`,
+        fileName: nameOf(first),
+        why: `Cubepals reads the first ${MOST_JARS} mods of a world.`,
+      })
     unread(tooLarge, `It is larger than the ${MAX_JAR_BYTES / 1024 ** 2} MB a mod can be.`)
     await this.#sort(await matchJars(this.#catalog, jars, sources), jars, ownerId, found)
     return found
