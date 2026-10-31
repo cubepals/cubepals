@@ -39,7 +39,7 @@ function canonical(value) {
   return value
 }
 
-const equal = (left, right) => JSON.stringify(canonical(left)) === JSON.stringify(canonical(right))
+export const equal = (left, right) => JSON.stringify(canonical(left)) === JSON.stringify(canonical(right))
 
 function withoutQualityDependencies(manifest) {
   const result = structuredClone(manifest)
@@ -92,7 +92,7 @@ function manifestIsQualityOnly(before, after) {
 }
 
 /** Bun keys encode nested packages as name/name, with a scope belonging to its next segment. */
-function packageChain(key) {
+export function packageChain(key) {
   const parts = key.split('/')
   const chain = []
   for (let index = 0; index < parts.length; index++) {
@@ -103,7 +103,7 @@ function packageChain(key) {
   return chain
 }
 
-function dependencyKey(lock, parent, name) {
+export function dependencyKey(lock, parent, name) {
   const chain = parent ? packageChain(parent) : []
   for (let length = chain.length; length >= 0; length--) {
     const key = [...chain.slice(0, length), name].join('/')
@@ -112,7 +112,7 @@ function dependencyKey(lock, parent, name) {
   return undefined
 }
 
-function packageDependencies(entry) {
+export function packageDependencies(entry) {
   if (!Array.isArray(entry) || typeof entry[0] !== 'string') throw new Error('Invalid package record')
   const result = []
   for (const group of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
