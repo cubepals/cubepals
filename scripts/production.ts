@@ -50,6 +50,7 @@
 import { spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { SECOND_MS } from '@blockly/contracts/durations'
 import { authWorks } from './lib/auth-through-website.ts'
 import { pingIndexNow } from './lib/indexnow.ts'
 import { buildWorker } from './lib/web-worker.ts'
@@ -135,6 +136,9 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv, input?: st
     process.exit(1)
   }
 }
+
+/** How long a stopped Terraform apply waits before it runs again. */
+const APPLY_RETRY_MS = 15 * SECOND_MS
 
 const git = (...args: string[]) => spawnSync('git', args, { encoding: 'utf8' }).stdout.trim()
 
@@ -367,14 +371,28 @@ async function apply(): Promise<void> {
   writeFileSync(backend, backendConfig(values.CLOUDFLARE_ACCOUNT_ID ?? ''))
   const terraform = (...args: string[]) => run('terraform', [`-chdir=${ENVIRONMENT_DIR}`, ...args], env)
   terraform('init', '-input=false', `-backend-config=${backend}`)
+  // Fly's API sometimes times out while Terraform reads an app's secrets ("List Secrets Error …
+  // deadline exceeded"), which stops the apply before it changes anything. Terraform changes only
+  // what differs, so the same apply run again rides that out: two more tries, a little apart.
+  const apply = (...args: string[]) => {
+    for (let tries = 1; ; tries++) {
+      const done = spawnSync('terraform', [`-chdir=${ENVIRONMENT_DIR}`, 'apply', ...args], {
+        stdio: 'inherit',
+        env,
+      })
+      if (done.error) throw new Error(`terraform: ${done.error.message}. Is it installed?`)
+      if (done.status === 0) return
+      if (tries === 3) {
+        say(`terraform apply stopped (exit ${done.status}). Fix what it says, then run apply again.`)
+        process.exit(1)
+      }
+      say(`terraform apply stopped (exit ${done.status}); trying again.`)
+      Bun.sleepSync(APPLY_RETRY_MS)
+    }
+  }
 
   if (bucketFirst) {
-    terraform(
-      'apply',
-      '-input=false',
-      '-target=module.environment.module.archive',
-      '-target=module.database_dumps',
-    )
+    apply('-input=false', '-target=module.environment.module.archive', '-target=module.database_dumps')
     say('')
     say(
       `The buckets, ${environment().settings.ARCHIVE_S3_BUCKET} and ${DUMPS_BUCKET}, are made. Now make their tokens and put them in the file:`,
@@ -389,7 +407,7 @@ async function apply(): Promise<void> {
   const site = productionSite(values, environment())
   const head = git('rev-parse', 'HEAD')
   buildWorker(site, head, say)
-  terraform('apply', '-input=false')
+  apply('-input=false')
   if (process.argv.includes('--keep-dump-secrets'))
     say('The Database dump workflow keeps the secrets it has (--keep-dump-secrets).')
   else setDumpSecrets(values, env)
