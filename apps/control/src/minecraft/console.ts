@@ -15,7 +15,7 @@ export const LIST_UUIDS = 'list uuids'
  * version Blockly runs reads, the ones that read text as SNBT included.
  */
 export function announce(message: string): string {
-  const text = message.replace(/\p{Cc}/gu, ' ').trim()
+  const text = oneLine(message)
   const line = {
     text: '',
     extra: [
@@ -25,6 +25,19 @@ export function announce(message: string): string {
   }
   return `tellraw @a ${JSON.stringify(line)}`
 }
+
+/**
+ * Turns every player out with `reason`, which their game shows them as it drops them. A server
+ * with plugins knows the game's own command by its full name, where a plugin may answer to `kick`;
+ * vanilla knows only the short one. Whichever runs second finds nobody left to turn out.
+ */
+export function kickEveryone(reason: string): string[] {
+  const text = oneLine(reason)
+  return [`minecraft:kick @a ${text}`, `kick @a ${text}`]
+}
+
+/** Text as one line of a command: control characters, a line break among them, become spaces. */
+const oneLine = (text: string) => text.replace(/\p{Cc}/gu, ' ').trim()
 
 export interface OnlinePlayers {
   online: number
