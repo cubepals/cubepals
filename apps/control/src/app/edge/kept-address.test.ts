@@ -65,11 +65,16 @@ describe.skipIf(!hasDatabase)('a kept address', () => {
 
     // A join at it wakes Arcade, and is sent where a join at Arcade's own address is.
     const woken = await h.app.edge.wake('sunset-valley.play.test')
-    expect(woken).toMatchObject({ outcome: 'ready', destination: expect.stringContaining(':') })
+    expect(woken.outcome).toBe('ready')
+    if (woken.outcome !== 'ready') throw new Error('The kept address did not wake Arcade')
+    expect(woken.destination).toContain(':')
     expect((await h.server(made.id)).lifecycle.status).toBe('running')
+    // Ready means the server accepts joins; its start can still be finishing. Once it settles,
+    // a join at the server's own address has no in-flight wake operation to report.
+    await h.settled(made.id)
     expect(await h.app.edge.wake('arcade.play.test')).toEqual({
       outcome: 'ready',
-      destination: (woken as { destination: string }).destination,
+      destination: woken.destination,
     })
     const running = (await h.app.edge.routes()).routes
     const destination = running.find((r) => r.hostname === 'arcade.play.test')?.destination
