@@ -124,8 +124,7 @@ test('the signaling door passes what Fly’s proxy sends to Geyser as it came, a
     }),
   )
   await new Promise<void>((done) => geyser.listen(0, '127.0.0.1', done))
-  const door = signalingDoor(0, `127.0.0.1:${(geyser.address() as AddressInfo).port}`)
-  await once(door, 'listening')
+  const door = await signalingDoor(0, `127.0.0.1:${(geyser.address() as AddressInfo).port}`)
   const request =
     'GET / HTTP/1.1\r\nHost: maple-hollow.play.example.test:19132\r\nX-Forwarded-For: 198.51.100.7\r\n\r\n'
   const client = connect((door.address() as AddressInfo).port, '127.0.0.1')
@@ -136,4 +135,10 @@ test('the signaling door passes what Fly’s proxy sends to Geyser as it came, a
   client.destroy()
   door.close()
   geyser.close()
+})
+
+test('a signaling door that can’t listen says so, so the edge tries it again', async () => {
+  const taken = await signalingDoor(0, '127.0.0.1:1')
+  await expect(signalingDoor((taken.address() as AddressInfo).port, '127.0.0.1:1')).rejects.toThrow()
+  taken.close()
 })

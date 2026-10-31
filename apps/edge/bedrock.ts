@@ -224,25 +224,40 @@ export async function untilItHolds<T>(
  * The door Fly's proxy hands NetherNet's signaling to, on every address: each connection is passed
  * to Geyser's own signaling at `geyser`, as it came, the player named by Fly in X-Forwarded-For.
  */
-export function signalingDoor(port: number, geyser: string): Server {
+export async function signalingDoor(port: number, geyser: string): Promise<Server> {
   const door = createServer((client) => {
     pipe(client, geyser, new Uint8Array(0), { connectMs: 5 * SECOND_MS, idleMs: SIGNALING_IDLE_MS })
   })
+  await new Promise<void>((listening, failed) => {
+    door.once('error', failed)
+    door.listen(port, '0.0.0.0', () => {
+      door.off('error', failed)
+      listening()
+    })
+  })
   door.on('error', (error) => console.error('[geyser] the NetherNet signaling door failed', error))
-  door.listen(port, '0.0.0.0')
   return door
 }
 
-/** The public IPv4 behind `name`, which NetherNet players are told to reach; null without a name. */
+/**
+ * The public IPv4 behind `name`, which NetherNet players are told to reach. Null without a name,
+ * or when it doesn't resolve: Java's path and RakNet players never depend on it.
+ */
 async function publicAddressOf(name: string | null): Promise<string | null> {
-  return name === null ? null : (await lookup(name, { family: 4 })).address
+  if (name === null) return null
+  try {
+    return (await lookup(name, { family: 4 })).address
+  } catch (error) {
+    console.error(`[geyser] ${name} did not resolve`, error)
+    return null
+  }
 }
 
 /**
- * Starts Geyser, supervised, and the relay in front of it. Returns at once: Geyser listens on Fly's
- * UDP address, which may not be there yet, so finding it, the public address, starting Geyser and
- * the relay's bind are tried again in the background until they hold, and never make the caller
- * wait or fail. A wrong key is the one thing that fails here, as nothing would ever fix it.
+ * Starts Geyser, supervised, the relay in front of it and NetherNet's signaling door. Returns at
+ * once: Geyser listens on Fly's UDP address, which may not be there yet, so finding it, starting
+ * Geyser and the relay's and the door's binds are tried again in the background until they hold,
+ * and never make the caller wait or fail. A wrong key is the one thing that fails here, as nothing would ever fix it.
  */
 export function startBedrock(options: BedrockOptions): Bedrock {
   if (Buffer.from(options.key, 'base64').length !== KEY_BYTES)
@@ -283,26 +298,29 @@ export function startBedrock(options: BedrockOptions): Bedrock {
       if (geyser === null) {
         const publicAddress = await publicAddressOf(options.advertise)
         geyser = startGeyser({ address, publicAddress })
-        door = signalingDoor(options.signalingPort, `${address}:${GEYSER_SIGNALING_PORT}`)
         console.error(
           publicAddress === null
             ? "[geyser] no public address to give: NetherNet players can't reach this edge"
             : `[geyser] NetherNet players play at ${publicAddress}:${options.webrtcPort}`,
         )
       }
-      relay = await bedrockRelay({
-        bind: { hostname: address, port: options.port },
-        geyser: { hostname: address, port: GEYSER_PORT },
-        pongs: options.pongs,
-        totalPongs: options.totalPongs,
-        opens: options.opens,
-        perAddress: options.perAddress,
-        most: options.most,
-        opened: bedrockOpened,
-        idleMs: GEYSER_KEEPS_QUIET_SOURCE_MS - 2 * SECOND_MS,
-        pongRefreshMs: 5 * SECOND_MS,
-      })
-      console.error(`[geyser] Bedrock players join at ${address}:${options.port}`)
+      if (relay === null) {
+        relay = await bedrockRelay({
+          bind: { hostname: address, port: options.port },
+          geyser: { hostname: address, port: GEYSER_PORT },
+          pongs: options.pongs,
+          totalPongs: options.totalPongs,
+          opens: options.opens,
+          perAddress: options.perAddress,
+          most: options.most,
+          opened: bedrockOpened,
+          idleMs: GEYSER_KEEPS_QUIET_SOURCE_MS - 2 * SECOND_MS,
+          pongRefreshMs: 5 * SECOND_MS,
+        })
+        console.error(`[geyser] Bedrock players join at ${address}:${options.port}`)
+      }
+      // After the relay, so a door that can't open yet never keeps RakNet players out.
+      door ??= await signalingDoor(options.signalingPort, `${address}:${GEYSER_SIGNALING_PORT}`)
     },
     (error) => console.error('[geyser] the Bedrock port could not be opened; trying again', error),
     () => stopped,
@@ -310,7 +328,7 @@ export function startBedrock(options: BedrockOptions): Bedrock {
   let answered = false
   return {
     status() {
-      const up = geyser?.state === 'running' && relay?.ready() === true
+      const up = geyser?.state === 'running' && relay?.ready() === true && door?.listening === true
       answered ||= up
       return {
         state: up ? 'up' : answered ? 'down' : 'starting',
