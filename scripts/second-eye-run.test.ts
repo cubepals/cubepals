@@ -56,13 +56,20 @@ beforeEach(() => {
   fetcher = spyOn(globalThis, 'fetch').mockImplementation(
     Object.assign(
       async (url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        const headers = new Headers(init?.headers)
+        expect(headers.get('authorization')).toBe('Bearer test-token')
+        expect(headers.get('accept')).toBe('application/vnd.github+json')
+        expect(headers.get('content-type')).toBe('application/json')
         const path = String(url).replace('https://api.github.com/', '')
         const method = init?.method ?? 'GET'
         calls.push({ path, method, body: init?.body ? JSON.parse(String(init.body)) : undefined })
         if (method !== 'GET') return Response.json({})
         if (path.endsWith('/pulls/42'))
           return Response.json({ head: { sha: head }, labels: labels.map((name) => ({ name })) })
-        if (path.includes('/comments?')) return Response.json(comments)
+        if (path.includes('/comments?')) {
+          const page = Number(new URL(String(url)).searchParams.get('page') ?? 1)
+          return Response.json(comments.slice((page - 1) * 100, page * 100))
+        }
         if (path.includes('/files?')) return Response.json(files)
         if (path.endsWith('/status')) return Response.json({ statuses })
         throw new Error(`Unexpected GitHub request: ${path}`)
@@ -285,4 +292,21 @@ test('draft and forced review starts record their actual decision', async () => 
   ]
   await runSecondEyeComment()
   expect(readFileSync(process.env.GITHUB_OUTPUT, 'utf8')).toBe('review=true\nnotice=running\n')
+})
+
+test('availability updates only the bot’s marked comment, including on later pages', async () => {
+  process.env.NOTICE = 'unavailable'
+  process.env.REVIEWED = JSON.stringify({ sha: SHA })
+  comments = Array.from({ length: 100 }, (_, id) => ({
+    id,
+    body: `${MARKER}\nNot our review`,
+    user: { login: 'someone-else' },
+  }))
+  comments.push({ id: 101, body: 'A different bot comment', user: { login: 'github-actions[bot]' } })
+  comments.push({ id: 102, body: `${MARKER}\nEarlier findings`, user: { login: 'github-actions[bot]' } })
+  await runSecondEyeComment()
+  expect(calls.filter((call) => call.method === 'PATCH').map((call) => call.path)).toEqual([
+    `repos/${REPO}/issues/comments/102`,
+  ])
+  expect(calls.some((call) => call.path.endsWith('page=2'))).toBe(true)
 })
