@@ -82,6 +82,10 @@ Before the plan:
   left out, saying why. Brought for a new server, the server starts on the one named, and
   the notes say to upload the same file on its Backups page to keep the others. A saves folder's
   other saves aren't kept: its owner chose one.
+- **A world's mods come with it.** On the world page, a world brought with the instance it was
+  played in, or with its mods folder, comes with its loader and mods: each matched on Modrinth,
+  its owner's own jars kept as their uploads, and those only players' games run left out. Restoring
+  it with them (`withMods`) moves the server to that loader with them (§ Mods and plugins).
 - **The guide is published,** `guides/move-a-minecraft-world-to-a-server`: from single-player, from
   another host or a server's folder, with mods, and into a server someone has. Its pictures wait for
   a run on a local stack.
@@ -130,7 +134,7 @@ each comes from, are in `apps/web/src/lib/saves-folders.ts`.
 | A `saves` folder, or a zip of one                 | several folders with a `level.dat`                       | the player picks one                          |
 | A zip or tarball of a world folder                | one `level.dat`, at the root or one folder down          | read as a world                               |
 | A server's folder, zipped or as a tarball         | `server.properties` beside a world folder                | the world `level-name` names; its settings    |
-| A launcher instance or export with `saves/`       | the pack importer's `detect` finds an instance or export | mods through the pack importer, world as here |
+| A launcher instance or export with `saves/`       | the pack importer's `detect` finds an instance or export | its mods matched and kept with the world (§ Mods and plugins); on the create page, built as a pack |
 | A Cubepals download                               | `server.properties` and the download's note              | as today                                      |
 | A Bedrock save (`.mcworld`, or `db/` with `levelname.txt`) | its layout                                      | refused: Bedrock saves aren't converted       |
 | `.rar`, `.7z`                                     | the name                                                 | refused: asked for a zip                      |
@@ -169,6 +173,8 @@ layout and the decisions.
 | A Minecraft name's account                    | Mojang's profile API, through `PlayerProfiles`                   |
 | An offline-mode player's UUID                 | `offlineUuid` (`app/access/identity.ts`)                         |
 | Which mod a jar is                            | Modrinth's `version_files` lookup by hash (`filesByHash`)       |
+| A Prism instance's components                 | `mmc-pack.json`, read as a pack's are (`instanceIdentity`)       |
+| The source Prism recorded for a mod           | `.pw.toml`, packwiz's format, through `FileFormats` (`packwizMod`) |
 | Upload in parts                               | S3 multipart upload, through the archive store                   |
 
 Region files are copied as they are and never decoded, so no chunk format is read.
@@ -225,19 +231,72 @@ links or devices, and the entry, inflated-size and time limits the world reader 
 
 ## Mods and plugins
 
-- **Known from** `level.dat` (`Data.WasModded`, `ServerBrands`, Forge's registry data), jars in
-  `mods/` or `plugins/`, and launcher instance files.
-- **An instance, an export or a server folder with mods** is both a pack and a world: the pack
-  importer (`app/packs/build.ts`) builds the pack from it, and the worlds it leaves out today are
-  handed to the world import. A server is made from the pack, with the world as its world.
-- **A world played with mods, with no mods in the upload,** is never opened on plain Minecraft,
-  as now. The player is asked for the pack it was played with: a launcher export to drop, or one
-  from the modpack catalog, with packs named by the mod ids in `ServerBrands` and the registry
-  data put first.
-- **Client-only mods** are left out, as the pack importer leaves them out now.
+A world played with mods comes with them, as one change its owner confirms when they restore it.
+
+- **What says it was modded:** its `level.dat`'s `ServerBrands` (`moddedWith`; Paper and Mojang's
+  own server add no blocks or items, `@blockly/contracts/server-brands`), and the jars beside it in
+  the mods folder of the game folder it was played from (`gameFolderOf` in
+  `minecraft/world-layout.ts`): the folder holding its `saves/`, as a launcher's `.minecraft/` or a
+  Prism instance's `minecraft/` does, else the folder it sits in, as a server's folder holds its
+  world. Forge's registry data isn't read yet.
+- **Before it is sent,** the browser reads `ServerBrands` with the version (`levelOf` in
+  `lib/level-version.ts`), so the page can say the world was played with Fabric mods and ask for
+  the instance. `lib/instance-folders.ts` says which folder to pick on each system
+  (`instancePickOn`: Prism's instances folder, and `minecraft/mods` inside an instance), tells an
+  instance picked whole (`instanceIn`), and gives the files sent with the world chosen from it
+  (`sentWith`): the world, the jars in its mods folder and the sources recorded for them,
+  `mmc-pack.json` and `instance.cfg`. Its other worlds, resource packs, shaders, screenshots and
+  logs stay on the computer. A mods folder picked on its own is sent as `mods/` beside the world.
+- **A launcher's instance,** from each launcher's own source (`minecraft/instance-layout.ts` cites
+  each): Prism Launcher and MultiMC keep `instance.cfg` and `mmc-pack.json` (the components it
+  runs: Minecraft, the loader and their versions; `PackProfile.cpp`) in the instance's folder, and
+  the game's folder below it, `minecraft/` or, where only that exists, `.minecraft/`
+  (`MinecraftInstance::gameRoot`), with `saves/` and `mods/` in it. A mod installed from Prism's own
+  browser has its source in `mods/.index/<slug>.pw.toml` (`ResourceFolderModel::indexDir`,
+  `Packwiz.cpp`), in packwiz's format: its file's name, `side`, `[download]` with `hash-format`
+  (`sha512` for Modrinth, `sha1` for CurseForge) and `hash`, and `[update.modrinth]` `mod-id` and
+  `version`, or `[update.curseforge]` `project-id` and `file-id`. CurseForge's and the Modrinth
+  App's instances have `saves/` and `mods/` at their top.
+- **The loader** is the instance's, its `mmc-pack.json` read as the pack importer reads one
+  (`instanceIdentity`), else the world's `ServerBrands`, else the one its jars are written for
+  (`runsOn`). The loader's build is Cubepals' to pick, as for a pack.
+- **Each jar is matched** (`app/mods/jar-matches.ts`): by the source Prism recorded for it, where
+  that names a Modrinth version and the hash it records is the jar's own (`GET /v2/versions`), else
+  by the jar's sha512 (`POST /v2/version_files`, `filesByHash`). A source recorded for other bytes,
+  the jar replaced since, says nothing of it. Which side runs it is decided as for a pack's jars
+  (`jarSide`): Modrinth's environment for that file, else the jar's own word, and for a jar Modrinth
+  doesn't have, its source's `side`.
+- **What comes:** a mod Modrinth has, as the version it was played with; a jar Modrinth doesn't
+  have, as its owner's own upload, held to an upload's checks (`app/mods/own-jars.ts`): their plan
+  takes uploaded mods, it matches no known malware and its classes are read then, and it is a mod
+  a server runs. Mods only players' games run (shaders, minimaps, Sodium) are left out and named.
+  A mods folder is read for its first 500 jars, each up to the 128 MB an uploaded jar can be.
+- **What is kept:** the loader and each mod, with the world's backup (`world_facts.mods`, and the
+  brands as `moddedWith`), shown as `playedWith` on the import (`WorldImportView`) and on the
+  backups page (`BackupView`), and said in the notes: "It was played with Fabric and 2 mods: Tree
+  Harvester and Vein Miner. Restoring it with them moves the server to Fabric with them." and "Left
+  out Sodium: only players’ games run it."
+- **Restoring it with them** (`withMods`, `app/backups/restored-mods.ts`) moves the server to that
+  loader with those mods in the restore's own step, resolved as any change of mods is
+  (`ModService.planOn`), the server's own mods resolved again with them: each brings what it
+  depends on (Collective, for Serilum's mods), as the version it was played with where the server
+  runs the world's release, else that mod's newest for the server's. A world from a newer release
+  moves the server up as well only where its owner chose that too (`moveUp`). Moving loader isn't
+  one-way: the restore's snapshot and the revision before it are the way back. Mods that can't run
+  together refuse the restore, naming them; a server that plays a pack is refused, as any lone mod
+  change is.
+- **A world played with mods, with none in the upload,** is kept, and its notes ask for the instance
+  it was played in or its mods folder, so they come too. On the create page, the pack it was played
+  with is asked for (`{ kind: 'world', importId, pack }`); a world brought there doesn't read the
+  mods beside it yet.
+- **An instance, an export or a server folder dropped as a pack** on the create page is built by
+  the pack importer (`app/packs/build.ts`), and the world in it handed to the world import.
+- **Not yet:** a mod's `config/` doesn't come, and CurseForge's ids in a source are never used; a
+  jar from CurseForge comes as its owner's own where Modrinth doesn't have the same bytes.
 - **Plugins** from a Paper server's `plugins/` are matched as a server pack's are, and their data
   folders come with them.
-- **What a plan runs** is decided as now (`requireWithinPlan`, `mayUseMods`).
+- **What a plan runs** is decided as now (`requireWithinPlan`, `mayUseMods`): a world with jars
+  beside it is refused on a plan without mods.
 
 ## Who can join
 
@@ -297,7 +356,8 @@ Each is a pull request of its own, with its tests.
 3. **The create page.** "Your own world": an import its owner holds before there is a server, as a
    pack import is, a `{ kind: 'world', importId }` setup source in `SetupSourceInput`, and the
    version choice.
-4. **Mods.** A pack and a world from one upload, and the question for a modded world without mods.
+4. **Mods.** A pack and a world from one upload, the question for a modded world without mods,
+   and a world's own mods brought with it from its instance or mods folder.
 5. **The rest.** Offline-mode players, the whitelist and operators, a server's other worlds.
 6. **The guide** on the site.
 
