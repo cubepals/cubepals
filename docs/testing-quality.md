@@ -1,8 +1,10 @@
 # Test quality gates
 
-The existing Bun runner, six service-backed CI shards, Gradle/JUnit reporter tests, and runtime
-fakes remain the test infrastructure. Istanbul adds real JavaScript/TypeScript branch counters;
-Stryker runs the existing Bun tests against mutated source. JaCoCo and PIT supply the equivalent
+The existing Bun runner, service-backed CI shards, Gradle/JUnit reporter tests, and runtime
+fakes remain the test infrastructure. The Bun suite now uses seven groups: lifecycle, providers,
+worlds, mods, web, access, and rest. The access group separates access, connections, and platform
+tests from the largest remaining control-plane group. Istanbul adds real JavaScript/TypeScript
+branch counters; Stryker runs the existing Bun tests against mutated source. JaCoCo and PIT supply the equivalent
 evidence for the Java reporter. Fast-check exercises useful input spaces without replacing the
 existing example and integration tests.
 
@@ -34,8 +36,9 @@ commit independently. Coverage findings list existing deficits by file instead o
 an invented passing score. Live branch-protection findings and the remaining activation step are
 documented in [the policy trust boundary](../scripts/quality/README.md).
 
-The first complete JavaScript/TypeScript measurement covered 1,163 source files. It recorded
-1,675 below-floor metrics across 715 files and rejected 11 coverage regressions across six
+The first complete JavaScript/TypeScript measurement, using the earlier six-shard layout,
+covered 1,163 source files. It recorded 1,675 below-floor metrics across 715 files and rejected
+11 coverage regressions across six
 unchanged files. Deterministic tests address the missed failure paths. These findings and the
 seeded-defect proofs demonstrate gaps in test evidence; they did not establish a production bug.
 
@@ -59,12 +62,16 @@ shard evidence fails. The checker compares source hashes with the proposed check
 Each test shard measures both the comparison commit and the proposed source. For a PR, the
 comparison is the checked-out merge's validated first parent, so another merged PR does not
 become part of this PR's quality obligations. The baseline run writes a manifest of test paths
-and hashes. On the proposed source, identical tests run first, then added or modified tests run
-in a separate Bun process. Both phases use Bun's per-file module isolation. The parent validates
-and retains the first phase's evidence before starting the second. Tracked source, tests,
-fixtures, and configuration must match their input snapshot after each phase.
+and hashes. On the proposed source, identical tests run first, then added or modified tests.
+Every test file runs sequentially in a fresh Bun process. Instrumentation runs once per baseline
+or proposed-source shard in a separate Node process; the test processes reuse a hashed compiled
+module cache. This isolates native module state as well as JavaScript globals between test files.
+After each file, the parent validates its JUnit result and exact coverage fragment, retains the
+counters in memory, and removes the fragment before starting the next process. Tracked source,
+tests, fixtures, and configuration must match their input snapshot after every file; the runtime
+manifest must retain its hash. There is no fallback to shared Bun module realms.
 
-The checker merges all six shard reports before comparing per-file metrics. This preserves
+The checker merges all seven shard reports before comparing per-file metrics. This preserves
 coverage provided by integration tests in another shard. CI requires service variables, a
 nonempty test run, every selected test file in JUnit, and no unexpected skipped cases. Only the
 two existing live blocklyd test files may skip here; the separate fleet workflow supplies their
@@ -132,8 +139,7 @@ source in the working checkout is not mutated. The policy proofs also reject ins
 hooks that could rewrite the coverage controller, changes to Lefthook configuration and its
 dependencies, trusted install dependency changes, and executable-name shadowing. All package
 script entrypoints are protected, including pre/post hooks around ordinary CI commands.
-Behavioral,
-Stryker, and reporter proof reports and logs are written under `coverage/`.
+Behavioral, Stryker, and reporter proof reports and logs are written under `coverage/`.
 
 For a service-enabled CI shard, after its baseline measurement has produced the test manifest,
 the workflow is the reference:
@@ -141,7 +147,7 @@ the workflow is the reference:
 ```sh
 node scripts/quality/run-shard.mjs "$PWD" web "$PWD/coverage/quality/head" \
   "$PWD/coverage/quality/base/manifests/web.json"
-node scripts/quality/coverage.mjs merge --expected-shards 6 --output coverage/head.json coverage/quality/head/*.json
+node scripts/quality/coverage.mjs merge --expected-shards 7 --output coverage/head.json coverage/quality/head/*.json
 node scripts/quality/coverage.mjs check --report coverage/head.json --base coverage/base.json \
   --changed coverage/changed.json --root . --output coverage/findings.json
 ```
@@ -156,8 +162,9 @@ requires GitHub-verified signed commits on `main`; the installer enables and ind
 the dedicated commit-signature protection setting while preserving existing branch protections.
 Rollout commits must be signed too, with no unsigned bootstrap fallback.
 
-Module isolation, separate phases, input snapshots, and lexical policy checks are complementary
+Separate test processes, ordered phases, input snapshots, and lexical policy checks are complementary
 controls. They are not a security sandbox for arbitrary JavaScript or a proof that expected
-values are independent of application code. Executable tests can inspect their process and
-shared filesystem. The trust-boundary document states these limits and the stronger external
+values are independent of application code. Processes still share the filesystem and test services;
+process isolation does not prevent malicious filesystem writes. The trust-boundary document
+states these limits and the stronger external
 workflow/App controls required against malicious status spoofing.

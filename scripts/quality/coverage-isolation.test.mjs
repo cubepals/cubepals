@@ -10,14 +10,14 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { fileMetrics, validateReport } from './coverage.mjs'
-import { mergeFragments } from './coverage-fragments.mjs'
+import { createFragmentCollector, mergeFragments } from './coverage-fragments.mjs'
 import { assertInputsUnchanged, partitionTests, snapshotInputs } from './coverage-inputs.mjs'
 import { checkJUnit } from './coverage-junit.mjs'
 import { liveFleet } from './evidence-policy.mjs'
@@ -89,6 +89,35 @@ test('an unimported source remains present with zero counters in sparse fragment
   const report = merge(fixture)
   assert.equal(fileMetrics(report.files['apps/subject.ts']).functions.percent, 0)
   assert.equal(fileMetrics(report.files['apps/subject.ts']).branches.percent, 0)
+})
+
+test('per-file acceptance retains complete branch evidence across separate batches', () => {
+  const fixture = counters()
+  const collector = createFragmentCollector(fixture.prepared, fixture.expected, fixture.options)
+  for (const [index, fragment] of fixture.fragments.entries())
+    collector.accept([fragment], [fixture.expected[index]])
+  assert.deepEqual(collector.finish().files['apps/subject.ts'].b, { 0: [1, 2], 1: [1, 1] })
+})
+
+test('per-file acceptance rejects a duplicate submitted in a later batch', () => {
+  const fixture = counters()
+  const collector = createFragmentCollector(fixture.prepared, fixture.expected, fixture.options)
+  collector.accept([fixture.fragments[0]], [fixture.expected[0]])
+  assert.throws(() => collector.accept([fixture.fragments[0]], [fixture.expected[0]]))
+  assert.throws(() => collector.accept([], [fixture.expected[0]]))
+})
+
+test('per-file acceptance cannot finish while a test has not reported', () => {
+  const fixture = counters()
+  const collector = createFragmentCollector(fixture.prepared, fixture.expected, fixture.options)
+  collector.accept([fixture.fragments[0]], [fixture.expected[0]])
+  assert.throws(() => collector.finish())
+})
+
+test('per-file acceptance rejects evidence from a different current test', () => {
+  const fixture = counters()
+  const collector = createFragmentCollector(fixture.prepared, fixture.expected, fixture.options)
+  assert.throws(() => collector.accept([fixture.fragments[0]], [fixture.expected[1]]))
 })
 
 const invalidFragments = {
@@ -239,7 +268,7 @@ function reportAt(reportDir, group = 'rest') {
   return validateReport(JSON.parse(readFileSync(join(reportDir, `${group}.json`), 'utf8')))
 }
 
-test('isolated shard retains the branch union and rejects deliberate removal of isolation', (t) => {
+test('separate test processes retain the branch union while one shared process leaks state', (t) => {
   const root = repository(t)
   write(root, 'apps/subject.ts', `export ${source}`)
   write(root, 'apps/dependency.ts', 'export const answer = () => 7; export const state = { value: 7 }')
@@ -248,10 +277,12 @@ test('isolated shard retains the branch union and rejects deliberate removal of 
     root,
     'apps/01-negative.test.ts',
     `import { test, expect, mock } from 'bun:test'
+import { appendFileSync } from 'node:fs'
 import { sign } from './subject.ts'
 import { state } from './dependency.ts'
 test('negative branch with deliberate process pollution', () => {
   expect(sign(-1)).toBe(-1)
+  appendFileSync('process-evidence.jsonl', JSON.stringify({ pid: process.pid }) + '\\n')
   globalThis.qualityPollution = 17
   process.env.QUALITY_ISOLATION_SENTINEL = 'leak'
   state.value = 17
@@ -262,6 +293,7 @@ test('negative branch with deliberate process pollution', () => {
     root,
     'apps/02-positive.test.ts',
     `import { test, expect } from 'bun:test'
+import { appendFileSync } from 'node:fs'
 import { sign } from './subject.ts'
 import { answer, state } from './dependency.ts'
 test('positive branch has independent state', () => {
@@ -270,48 +302,59 @@ test('positive branch has independent state', () => {
   expect(answer()).toBe(7)
   expect(state.value).toBe(7)
   expect(sign(1)).toBe(1)
+  appendFileSync('process-evidence.jsonl', JSON.stringify({ pid: process.pid }) + '\\n')
 })`,
   )
   write(
     root,
     'apps/03-zero.test.ts',
     `import { test, expect } from 'bun:test'
+import { appendFileSync } from 'node:fs'
 import { sign } from './subject.ts'
 test('zero branch has independent state', () => {
   expect(globalThis.qualityPollution).toBeUndefined()
   expect(process.env.QUALITY_ISOLATION_SENTINEL).toBeUndefined()
   expect(sign(0)).toBe(0)
+  appendFileSync('process-evidence.jsonl', JSON.stringify({ pid: process.pid }) + '\\n')
 })`,
   )
   track(root)
+  const tests = ['apps/01-negative.test.ts', 'apps/02-positive.test.ts', 'apps/03-zero.test.ts']
+  const base = join(root, 'base-tests.json')
+  writeFileSync(
+    base,
+    JSON.stringify({
+      version: 1,
+      tests: tests.map((path) => ({
+        path,
+        sha256: fileHash(readFileSync(join(root, path))),
+      })),
+    }),
+  )
   const reportDir = join(root, 'reports')
-  successful(run(root, reportDir))
+  successful(run(root, reportDir, base))
+  const pids = readFileSync(join(root, 'process-evidence.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line).pid)
+  assert.equal(pids.length, 3)
+  assert.equal(new Set(pids).size, 3, 'every unchanged test must run in a new operating-system process')
   const report = reportAt(reportDir)
   assert.deepEqual(report.files['apps/subject.ts'].b, { 0: [1, 2], 1: [1, 1] })
   assert.deepEqual(report.files['apps/subject.ts'].f, { 0: 3 })
   assert.equal(fileMetrics(report.files['apps/unimported.ts']).functions.percent, 0)
   const manifest = JSON.parse(readFileSync(join(reportDir, 'manifests/rest.json'), 'utf8'))
-  assert.deepEqual(manifest.tests.map((entry) => entry.path).sort(), [
-    'apps/01-negative.test.ts',
-    'apps/02-positive.test.ts',
-    'apps/03-zero.test.ts',
-  ])
-  const defectiveBun = join(root, 'defective-bun.mjs')
-  writeFileSync(
-    defectiveBun,
-    `#!${process.execPath}
-import { spawnSync } from 'node:child_process'
-const args = process.argv.slice(2).map((value) => value === '--isolate' ? '--no-isolate' : value)
-const result = spawnSync(${JSON.stringify(bun)}, args, { stdio: 'inherit', env: process.env })
-process.exit(result.status ?? 1)
-`,
-  )
-  chmodSync(defectiveBun, 0o755)
-  const rejectedDir = join(root, 'rejected-reports')
-  const rejected = run(root, rejectedDir, undefined, { QUALITY_BUN: defectiveBun })
+  assert.deepEqual(manifest.tests.map((entry) => entry.path).sort(), tests)
+  const env = { ...process.env }
+  delete env.QUALITY_ISOLATION_SENTINEL
+  const rejected = spawnSync(bun, ['test', '--no-isolate', ...tests.map((path) => `./${path}`)], {
+    cwd: root,
+    encoding: 'utf8',
+    timeout: 30_000,
+    env,
+  })
   assert.notEqual(rejected.status, 0, rejected.stdout + rejected.stderr)
   assert.match(rejected.stderr, /qualityPollution|independent state|toBeUndefined/)
-  assert.equal(existsSync(join(rejectedDir, 'rest.json')), false)
 })
 
 test('unchanged tests finish in a separate process before lexically earlier additions', (t) => {
@@ -323,7 +366,7 @@ import { sign } from './subject.ts'
 test('unchanged negative branch', () => {
   expect(existsSync('added-ran.json')).toBe(false)
   expect(sign(-1)).toBe(-1)
-  writeFileSync('original-ran.json', JSON.stringify({ pid: process.pid }))
+  writeFileSync('original-ran.json', JSON.stringify({ pid: process.pid, parts: process.env.QUALITY_PARTS }))
 })`
   write(root, 'apps/z-original.test.ts', original)
   for (const [path, value] of [
@@ -334,14 +377,14 @@ test('unchanged negative branch', () => {
       root,
       path,
       `import { test, expect } from 'bun:test'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { sign } from './subject.ts'
 test('later branch runs after original evidence is complete', () => {
   const original = JSON.parse(readFileSync('original-ran.json', 'utf8'))
   expect(process.pid).not.toBe(original.pid)
-  expect(existsSync(join(dirname(process.env.QUALITY_PARTS), 'unchanged'))).toBe(false)
+  expect(existsSync(original.parts)).toBe(false)
   expect(sign(${value})).toBe(${value})
+  appendFileSync('changed-pids.jsonl', JSON.stringify({ pid: process.pid }) + '\\n')
   writeFileSync('added-ran.json', 'true')
 })`,
     )
@@ -361,6 +404,12 @@ test('later branch runs after original evidence is complete', () => {
   const reportDir = join(root, 'reports')
   successful(run(root, reportDir, manifest))
   const report = reportAt(reportDir)
+  const pids = readFileSync(join(root, 'changed-pids.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line).pid)
+  assert.equal(pids.length, 2)
+  assert.equal(new Set(pids).size, 2, 'every changed test must run in a new operating-system process')
   assert.deepEqual(report.files['apps/subject.ts'].b, { 0: [1, 2], 1: [1, 1] })
   assert.deepEqual(report.files['apps/subject.ts'].f, { 0: 3 })
 })

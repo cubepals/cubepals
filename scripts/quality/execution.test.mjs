@@ -4,8 +4,11 @@
 
 /** Evidence cannot vanish behind a green aggregate, an empty test run, or a skipped scenario. */
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { verifyJobs } from './aggregate.mjs'
+import { inventory } from './inventory.mjs'
 import { checkJUnit } from './run-shard.mjs'
 import { groupOf, groups } from './shards.mjs'
 
@@ -69,6 +72,39 @@ test('the shard remainder assigns new test paths and every known group is reacha
   for (const [group, prefixes] of Object.entries(groups)) {
     assert.equal(groupOf(`${prefixes[0] ?? 'packages/new/'}some.test.ts`), group)
   }
+})
+
+test('the access split preserves every actual source and test in exactly one partition', () => {
+  const entries = inventory(fileURLToPath(new URL('../../', import.meta.url))).filter(
+    ({ kind }) => kind === 'source' || kind === 'test',
+  )
+  const previous = Object.entries(groups).filter(([group]) => group !== 'access')
+  const before = new Map(previous.map(([group]) => [group, []]))
+  const after = new Map(Object.keys(groups).map((group) => [group, []]))
+  for (const { path } of entries) {
+    const matching = Object.entries(groups).filter(([, prefixes]) =>
+      prefixes.some((prefix) => path.startsWith(prefix)),
+    )
+    assert.ok(matching.length <= 1, `Overlapping partitions: ${path}`)
+    const oldGroup =
+      previous.find(([, prefixes]) => prefixes.some((prefix) => path.startsWith(prefix)))?.[0] ?? 'rest'
+    before.get(oldGroup).push(path)
+    after.get(groupOf(path)).push(path)
+  }
+  assert.ok(after.get('access').length > 0, 'The new partition must carry actual evidence')
+  assert.deepEqual([...after.get('rest'), ...after.get('access')].sort(), before.get('rest').sort())
+  for (const [group, paths] of before) {
+    if (group !== 'rest') assert.deepEqual(after.get(group), paths)
+  }
+  assert.equal(new Set([...after.values()].flat()).size, entries.length)
+})
+
+test('the workflow schedules every partition and requires the same number of evidence shards', () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
+  const matrix = [...workflow.matchAll(/^\s+quality: ([a-z]+)$/gm)].map((match) => match[1])
+  assert.deepEqual(matrix.sort(), Object.keys(groups).sort())
+  const counts = [...workflow.matchAll(/--expected-shards (\d+)/g)].map((match) => Number(match[1]))
+  assert.deepEqual(counts, [matrix.length, matrix.length])
 })
 
 test('nested describe suites retain failure and skip enforcement', () => {

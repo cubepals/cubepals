@@ -311,8 +311,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # Grouped by what they test, near even in time (main's run on 2026-10-09: 50 to 160 seconds each,
-      # the web app's far less).
+      # Grouped by domain, with access and connection scenarios separated from accounts and billing
+      # so their service-backed tests run concurrently on independent machines.
       matrix:
         include:
           - group: Server lifecycle
@@ -323,6 +323,8 @@ jobs:
             quality: worlds
           - group: Mods, packs and listings
             quality: mods
+          - group: Access, connections and platform
+            quality: access
           - group: Web app, edge and scripts
             quality: web
           # Every test no group above names, so a new one is never left out.
@@ -476,7 +478,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # Percentages are computed from the union of all six shards, never from an aggregate average.
+  # Percentages are computed from the union of all seven shards, never from an aggregate average.
   quality:
     name: Per-file test quality
     needs: [changes, test]
@@ -499,10 +501,10 @@ jobs:
           pattern: quality-*
           path: coverage/quality
           merge-multiple: true
-      - name: Enforce every source file and all six evidence shards
+      - name: Enforce every source file and all seven evidence shards
         run: |
-          node scripts/quality/coverage.mjs merge --output coverage/quality/base.json --expected-shards 6 coverage/quality/base/*.json
-          node scripts/quality/coverage.mjs merge --output coverage/quality/head.json --expected-shards 6 coverage/quality/head/*.json
+          node scripts/quality/coverage.mjs merge --output coverage/quality/base.json --expected-shards 7 coverage/quality/base/*.json
+          node scripts/quality/coverage.mjs merge --output coverage/quality/head.json --expected-shards 7 coverage/quality/head/*.json
           node scripts/quality/coverage.mjs check --report coverage/quality/head.json --base coverage/quality/base.json --changed coverage/quality/changed.json --root . --output coverage/quality/findings.json
 
       - name: Keep merged coverage and legacy deficit findings

@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Prepares branch instrumentation once, then runs each test file in Bun's isolated module realm.
- * Existing unmodified tests finish before new or changed tests start; the parent validates and
- * retains their evidence before that second process can affect filesystem or service state.
+ * Prepares branch instrumentation once, then starts a fresh Bun process for every test file.
+ * Existing unmodified tests finish before new or changed tests start. The parent validates and
+ * retains each file's evidence before the next process can affect filesystem or service state.
+ * Process boundaries also isolate native addons, whose lifetime outlasts Bun's module realms.
  * JUnit, exact sparse fragments and unchanged tracked inputs are required for a complete shard.
  */
 import { spawnSync } from 'node:child_process'
@@ -25,7 +26,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { mergeReports, validateReport } from './coverage.mjs'
 import { writeRuntimeManifest } from './coverage-cache.mjs'
-import { mergeFragments } from './coverage-fragments.mjs'
+import { createFragmentCollector } from './coverage-fragments.mjs'
 import { assertInputsUnchanged, partitionTests, snapshotInputs, testManifest } from './coverage-inputs.mjs'
 import { checkJUnit, mergeJUnit } from './coverage-junit.mjs'
 import { groupOf, groups } from './shards.mjs'
@@ -109,58 +110,63 @@ export function runShard({ root, group, reportDir, baseManifest }) {
     let executed = 0
     for (const phase of phases) {
       const phaseName = `${group}:${phase.name}`
-      const parts = join(temporary, phase.name)
-      const phaseJUnit = join(temporary, `${phase.name}.xml`)
-      mkdirSync(parts)
-      const result = spawnSync(
-        process.env.QUALITY_BUN ?? 'bun',
-        [
-          'test',
-          '--isolate',
-          '--preload',
-          fileURLToPath(new URL('./coverage-preload.mjs', import.meta.url)),
-          '--reporter=junit',
-          `--reporter-outfile=${phaseJUnit}`,
-          ...phase.tests.map((file) => `./${file}`),
-        ],
-        {
-          cwd: root,
-          env: {
-            ...process.env,
-            QUALITY_ROOT: root,
-            QUALITY_REPORT: report,
-            QUALITY_SHARD: group,
-            QUALITY_PREPARED: runtime.path,
-            QUALITY_PREPARED_SHA256: preparedSha256,
-            QUALITY_PARTS: parts,
-            QUALITY_PHASE: phaseName,
+      const collector = createFragmentCollector(prepared, phase.tests, { preparedSha256, phase: phaseName })
+      for (const testPath of phase.tests) {
+        const identity = `${phase.name}-${sha256(testPath)}`
+        const parts = join(temporary, identity)
+        const fileJUnit = join(temporary, `${identity}.xml`)
+        mkdirSync(parts)
+        const result = spawnSync(
+          process.env.QUALITY_BUN ?? 'bun',
+          [
+            'test',
+            '--preload',
+            fileURLToPath(new URL('./coverage-preload.mjs', import.meta.url)),
+            '--reporter=junit',
+            `--reporter-outfile=${fileJUnit}`,
+            `./${testPath}`,
+          ],
+          {
+            cwd: root,
+            env: {
+              ...process.env,
+              QUALITY_ROOT: root,
+              QUALITY_REPORT: report,
+              QUALITY_SHARD: group,
+              QUALITY_PREPARED: runtime.path,
+              QUALITY_PREPARED_SHA256: preparedSha256,
+              QUALITY_PARTS: parts,
+              QUALITY_PHASE: phaseName,
+            },
+            stdio: 'inherit',
+            timeout: Math.max(1, deadline - Date.now()),
           },
-          stdio: 'inherit',
-          timeout: Math.max(1, deadline - Date.now()),
-        },
-      )
-      assertInputsUnchanged(root, inputs)
-      if (sha256(readFileSync(runtime.path)) !== preparedSha256)
-        throw new Error('Test run modified the prepared coverage manifest')
-      if (result.status !== 0)
-        throw new Error(`Test shard ${phaseName} failed (${result.status ?? result.error ?? result.signal})`)
-      const xml = readFileSync(phaseJUnit, 'utf8')
-      executed += checkJUnit(xml, phase.tests, { allowOptionalOnly: true })
-      const fragments = readdirSync(parts)
-        .sort()
-        .map((name) => {
-          const path = join(parts, name)
-          if (!/^[a-f0-9]{64}\.json$/.test(name) || !lstatSync(path).isFile())
-            throw new Error(`Unexpected coverage fragment entry: ${name}`)
-          const fragment = JSON.parse(readFileSync(path, 'utf8'))
-          if (!fragment.test || name !== `${sha256(fragment.test.path)}.json`)
-            throw new Error(`Coverage fragment filename does not match its test: ${name}`)
-          return fragment
-        })
-      // Absorb evidence in trusted parent memory before subsequent tests can touch its files.
-      reports.push(mergeFragments(prepared, fragments, phase.tests, { preparedSha256, phase: phaseName }))
-      documents.push(xml)
-      rmSync(parts, { recursive: true, force: true })
+        )
+        assertInputsUnchanged(root, inputs)
+        if (sha256(readFileSync(runtime.path)) !== preparedSha256)
+          throw new Error('Test run modified the prepared coverage manifest')
+        if (result.status !== 0)
+          throw new Error(`Test file ${testPath} failed (${result.status ?? result.error ?? result.signal})`)
+        const xml = readFileSync(fileJUnit, 'utf8')
+        executed += checkJUnit(xml, [testPath], { allowOptionalOnly: true })
+        const fragments = readdirSync(parts)
+          .sort()
+          .map((name) => {
+            const path = join(parts, name)
+            if (!/^[a-f0-9]{64}\.json$/.test(name) || !lstatSync(path).isFile())
+              throw new Error(`Unexpected coverage fragment entry: ${name}`)
+            const fragment = JSON.parse(readFileSync(path, 'utf8'))
+            if (!fragment.test || name !== `${sha256(fragment.test.path)}.json`)
+              throw new Error(`Coverage fragment filename does not match its test: ${name}`)
+            return fragment
+          })
+        // Absorb evidence in trusted parent memory before subsequent tests can touch its files.
+        collector.accept(fragments, [testPath])
+        documents.push(xml)
+        rmSync(parts, { recursive: true, force: true })
+        rmSync(fileJUnit, { force: true })
+      }
+      reports.push(collector.finish())
       console.warn(`${phaseName}: ${phase.tests.length} isolated test files verified`)
     }
     const combined = mergeReports(reports, reports.length)

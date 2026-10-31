@@ -30,6 +30,16 @@ export const groups = {
     'apps/control/src/app/curation/',
     'apps/control/src/app/listings/',
   ],
+  access: [
+    'apps/control/src/app/access/',
+    'apps/control/src/app/compat/',
+    'apps/control/src/app/edge/',
+    'apps/control/src/app/joins/',
+    'apps/control/src/app/moderation/',
+    'apps/control/src/app/platform/',
+    'apps/control/src/app/policy/',
+    'apps/control/src/app/stop-cheaters/',
+  ],
   web: ['apps/web/', 'apps/edge/', 'scripts/'],
   rest: [],
 }

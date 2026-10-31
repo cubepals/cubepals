@@ -39,8 +39,9 @@ must protect its new repository-controlled inputs too.
 
 New and changed production files must meet their per-file coverage floors and the 80% mutation
 floor. Existing files retain measured coverage through a non-regression ratchet. The initial
-complete hosted measurement covered 1,163 source files: 715 had 1,675 legacy metric deficits
-(605 branch, 566 function, and 504 line deficits). Those deficits are visible debt, not evidence
+complete hosted measurement, using the earlier six-shard layout, covered 1,163 source files:
+715 had 1,675 legacy metric deficits (605 branch, 566 function, and 504 line deficits).
+Those deficits are visible debt, not evidence
 that the files satisfy the new floors. The first complete comparison rejected 11 regressed
 metrics across six unchanged files. Deterministic failure-path tests address the missing evidence;
 the audit and seeded mutations did not establish an existing production defect.
@@ -52,11 +53,18 @@ regular executable test file can be classified separately from changes to existi
 does not retrospectively require every legacy module imported by a large integration harness
 to meet the mutation floor merely because another test was added. The runner executes original,
 identical tests first using the baseline run's `base/manifests/GROUP.json` path/hash manifest.
-Each file has an isolated Bun module realm; added or modified tests run in a later process.
-The parent validates and retains original-test evidence before that later process starts. Tracked
-source, tests, fixtures, and configuration must match their input snapshot after each phase.
-This prevents additions from replacing the original test evidence. It is not an operating-system
-sandbox. The Java reporter continues to use class-based PIT selection for its test changes.
+Each test file runs sequentially in a fresh Bun process; added or modified files start only after
+the original files finish. Instrumentation runs once per baseline or proposed-source shard in a
+separate Node process, and each test process reuses the hashed compiled module cache. After each
+file, the parent verifies its JUnit and exact coverage fragment, retains the evidence in memory,
+and removes the fragment before the next process starts. Tracked source, tests, fixtures, and
+configuration must match their input snapshot after every file, and the runtime manifest hash
+must remain unchanged. This preserves original-test evidence across later test executions and
+avoids shared native module state. There is no fallback to shared Bun module realms.
+The seven coverage groups are lifecycle, providers, worlds, mods, web, access, and rest; the
+aggregate requires all seven reports. Fresh processes still share files and external services:
+process isolation is not a security sandbox and does not prevent malicious filesystem writes.
+The Java reporter continues to use class-based PIT selection for its test changes.
 
 The classification never removes independent obligations. Changed production remains a mutation
 subject. Dependency and runner-configuration changes retain conservative scope, except when
