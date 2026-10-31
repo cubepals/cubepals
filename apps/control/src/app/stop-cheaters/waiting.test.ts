@@ -168,9 +168,6 @@ describe.skipIf(!hasDatabase)('Stop cheaters while players are on', () => {
     expect(await waitingOf(id)).toBeNull()
     expect(await applies(id)).toHaveLength(0)
   }, 60_000)
-})
-
-describe.skipIf(!hasDatabase)('a waiting change dropped', () => {
   test('dropping a waiting version that only made Grim available leaves the owner’s switch alone', async () => {
     const papers = offeredVersions()
       .filter((offered) => supports(offered.id, 'paper'))
