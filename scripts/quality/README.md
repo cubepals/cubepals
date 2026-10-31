@@ -115,8 +115,33 @@ also contributes its proposed dependencies and must still meet the mutation floo
 Changed modules reached only through tests are conservatively treated as potential test support:
 their affected tests retain both dependency closures. Assertion-library imports receive the same
 treatment. Ambiguous dependency mappings and changed fixture/data inputs expand scope instead
-of trusting an unproved mapping. No directory name exempts executable test helpers from coverage
-or mutation. Scheduled runs still audit the complete source inventory in stable partitions.
+of trusting an unproved mapping. Adding or changing production source retains full scope when
+any test dependency remains unresolved: new modules can change dynamic-loader fallback behavior,
+and even modules with production importers and direct tests can also be test oracles.
+The base view also holds the committed JSON, CSS and HTML files under `apps`, `packages`, `scripts`
+and `tools`, read from Git and never executed, so static data imports resolve in both revisions
+without relaxing the fallback for genuinely unknown imports. No directory name exempts executable test
+helpers from coverage or mutation. Scheduled runs audit the complete source inventory in stable partitions.
+
+An existing test file that only gained plain cases after every existing one (`test-appends.mjs`),
+with everything else byte-for-byte as before except names added to an existing import, counts as an
+addition. Any other edit keeps the edited-test rule. The policy lets a new control-plane test file
+carry exactly `describe.skipIf(!hasDatabase)` when it starts the database harness. Every other new
+skip is refused, and CI's JUnit evidence still refuses a skipped case.
+
+A dependency-only update (`dependency-impact.mjs`: only `bun.lock`, manifests whose registry
+versions moved, and `.github/dependabot.yml`) owes no new-code floor, because no source or test
+byte changed. The whole suite and the coverage ratchet still run. Tests that load an updated
+package themselves, or through a module only tests reach, are its possible weaker oracles: their
+source closures are measured with those tests on the base worktree and must reach the same score on
+the head. Any other changed file makes the update ineligible, so a weakened test in the same pull
+request keeps the full-scope rule and its own subjects. Packages whose install holds only type
+declarations and documents are inert. The reasoning and its limits are in
+[docs/testing-quality.md](../../docs/testing-quality.md#dependency-only-updates).
+
+A subject that reaches its time budget records the remaining mutants as `budget-exhausted`: no
+kill credit, counted against the score, and named in the failure. Stryker always finishes and
+reports instead of being stopped mid-run.
 
 Support classification is conservative graph analysis, not a proof of a function's semantic
 role. A function shared by production and tests can also calculate expected results without

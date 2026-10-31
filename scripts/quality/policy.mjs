@@ -126,6 +126,45 @@ export function escapeHatches(source, isTest, javaTest = false) {
   return findings
 }
 
+// The one skip a new test file may add: database tests skip only where no Postgres is given.
+// CI always gives one, and its JUnit evidence refuses any skipped case, so this never skips there.
+const DATABASE_SKIP = 'test modifier: describe . skipIf ( ! hasDatabase )'
+const HARNESS = 'apps/control/src/testing/harness.ts'
+
+/**
+ * A new test file may carry exactly one `describe.skipIf(!hasDatabase)`, and only when it needs
+ * the database: `hasDatabase` and `startHarness` are imported, unrenamed, from the control
+ * plane's harness, `startHarness` is called, and nothing else in the file binds `hasDatabase`.
+ */
+export function databaseSkipAllowed(path, source) {
+  if (!TEST.test(path) || !path.startsWith('apps/control/src/')) return false
+  if (escapeHatches(source, true).filter((finding) => finding === DATABASE_SKIP).length !== 1) return false
+  const code = tokens(source).filter((token) => token.type !== 'comment')
+  const imported = new Set()
+  for (let i = 0; i < code.length; i++) {
+    if (code[i].value !== 'import' || code[i + 1]?.value !== '{') continue
+    let end = i + 2
+    while (end < code.length && code[end].value !== '}') end++
+    const from = code[end + 1]?.value === 'from' ? code[end + 2] : undefined
+    if (from?.type !== 'string' || !from.value.startsWith('.')) continue
+    const target = new URL(from.value, `file:///${path}`).pathname.slice(1)
+    if (target !== HARNESS) continue
+    const names = code.slice(i + 2, end)
+    for (let n = 0; n < names.length; n++) {
+      const name = names[n].value
+      if (
+        ['hasDatabase', 'startHarness'].includes(name) &&
+        names[n + 1]?.value !== 'as' &&
+        names[n - 1]?.value !== 'as'
+      )
+        imported.add(name)
+    }
+  }
+  const uses = (name) => code.filter((token) => token.type === 'code' && token.value === name).length
+  const called = code.some((token, i) => token.value === 'startHarness' && code[i + 1]?.value === '(')
+  return imported.has('hasDatabase') && imported.has('startHarness') && called && uses('hasDatabase') === 2
+}
+
 function addedOccurrences(before, after) {
   const remaining = new Map()
   for (const value of before) remaining.set(value, (remaining.get(value) ?? 0) + 1)
@@ -306,6 +345,7 @@ export function inspectChanges(changes) {
       escapeHatches(before ?? '', TEST.test(path) || JAVA_TEST.test(path), JAVA_TEST.test(path)),
       escapeHatches(after, TEST.test(path) || JAVA_TEST.test(path), JAVA_TEST.test(path)),
     )) {
+      if (before === null && finding === DATABASE_SKIP && databaseSkipAllowed(path, after)) continue
       errors.push(`${path}: added ${finding}`)
     }
   }
