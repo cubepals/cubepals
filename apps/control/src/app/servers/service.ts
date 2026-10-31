@@ -30,6 +30,7 @@ import type { RuntimePlacement } from '../runtimes/service.ts'
 import { keepSentIcon, type OwnIcon } from '../server-icons/persistence.ts'
 import type { SetupService } from '../setups/service.ts'
 import { newInviteCode } from './invites.ts'
+import { keptUp } from './kept-up.ts'
 import { checkNewServer, mayGive, redescribed, refuseAddress, renamed } from './names.ts'
 import { bindNewRuntime, type CreateServerRequest, draftNewServer } from './new-server.ts'
 import {
@@ -626,7 +627,7 @@ export class MinecraftServerService {
       })
       // Only what was done is audited: a stop of a stopped server did nothing.
       if (audit && result.operation !== null) await this.#audit(tx, actor, audit.action, serverId, audit.data)
-      return result.server
+      return keptUp(tx, this.#policy, actor, command, result.server)
     })
   }
 

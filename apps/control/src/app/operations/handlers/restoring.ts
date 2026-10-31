@@ -27,6 +27,7 @@ import { openInterval } from '../../servers/usage.ts'
 import { reopenWorlds, type WorldRecord } from '../../worlds/persistence.ts'
 import { enqueuePrune } from '../../worlds/service.ts'
 import type { BootSequence } from '../boot.ts'
+import { loadOperation, type OperationRecord } from '../persistence.ts'
 import { NoLongerApplies, type OperationContext, type OperationHandler } from '../runner.ts'
 import { appliedConfig, bootedBack, type ServerBinding } from './binding.ts'
 import type { GameConsole } from './game-console.ts'
@@ -112,13 +113,26 @@ function bringingBack(deps: RestoringDeps) {
     await runtime.stop(started)
   }
 
-  return { bringBack, leaveAsAsked }
+  /**
+   * Whether the server is up after this restore, and whose run it then is: up where it ran, or where
+   * someone asked meanwhile to play it, a join or its owner pressing Start (`keepUpAfterRestore`),
+   * whose run it is. Read as late as it can be, just before the server would go back to sleep: a
+   * join after that waits for the sleep, then wakes it, as one at any other sleep does.
+   */
+  const afterwards = async (op: OperationRecord, up: boolean) => {
+    const input = up ? null : (await loadOperation(db, op.id))?.input
+    const who = input?.running === true && typeof input.keptUpFor === 'string' ? input.keptUpFor : null
+    if (who === null) return { up, by: undefined }
+    return { up: true, by: { requestedBy: who, idempotencyKey: op.idempotencyKey } }
+  }
+
+  return { bringBack, leaveAsAsked, afterwards }
 }
 
 export function restoring(deps: RestoringDeps) {
   const { db, runtime, transitions, specs, bindingOf, booted, stopWhatFailed, mayBoot, preflight, putBack } =
     deps
-  const { bringBack, leaveAsAsked } = bringingBack(deps)
+  const { bringBack, leaveAsAsked, afterwards } = bringingBack(deps)
   const others = otherWorlds({ ...deps, pack: deps.copies.pack })
 
   /**
@@ -147,7 +161,9 @@ export function restoring(deps: RestoringDeps) {
     async run(ctx) {
       const server = ctx.server
       const input = ctx.op.input as { backupId: string; running: boolean; fromFailure?: boolean }
-      const { up, refusal } = await mayBoot(server, input)
+      const may = await mayBoot(server, input)
+      const { refusal } = may
+      let { up } = may
       const binding = await bindingOf(server.id)
       const chosen = await loadBackup(db, input.backupId)
       if (chosen === null || chosen.status !== 'ready') return goneMeanwhile(server, binding)
@@ -173,9 +189,12 @@ export function restoring(deps: RestoringDeps) {
       const before = await deps.copies.capture(server, binding.handle, previous, 'pre_restore')
       await markReseed(db, server.id)
       let left: WorldRecord[]
+      /** Whose run it is, where someone asked meanwhile to play a server it would stop. */
+      let by: { requestedBy: string; idempotencyKey: string } | undefined
       try {
         const started = await bringBack(ctx, server, chosen, desired)
         left = await others.bringBack(started, before, besides)
+        ;({ up, by } = await afterwards(ctx.op, up))
         await leaveAsAsked(server, started, up)
       } catch (error) {
         if (nothingToGoBackFrom(error)) throw error
@@ -209,8 +228,9 @@ export function restoring(deps: RestoringDeps) {
         // The backup brought back every world directory it held, deleted ones included.
         await reopenWorlds(tx, server.id, desired.world.id)
         await others.settle(tx, chosen, left, before)
-        // Running again counts again; one that ran all along keeps the interval it has.
-        if (up) await openInterval(tx, server.id, locked.memoryTier, new Date())
+        // Running again counts again; one that ran all along keeps the interval it has. One a join
+        // kept up is a woken run, as if the join had woken it.
+        if (up) await openInterval(tx, server.id, locked.memoryTier, new Date(), by)
         const restored = await transitions.outcome(tx, locked, {
           type: 'restored',
           running: up,
