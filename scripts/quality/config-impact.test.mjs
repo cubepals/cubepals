@@ -14,10 +14,33 @@ import {
   configurationOnlyAffectsQuality,
   configurationOnlyRoutesNodeControllers,
   qualityOnlyChanges,
+  structureBaselineOnlyShrinks,
 } from './config-impact.mjs'
 
 const originalBunConfiguration = '[install]\nlinker = "hoisted"\n'
 const bunConfiguration = readFileSync(new URL('../../bunfig.toml', import.meta.url), 'utf8')
+
+test('structure metadata may only retain, tighten or remove existing allowances', () => {
+  const base = { size: { 'apps/file.ts': { n: 900, reason: 'Existing size.' } } }
+  assert.equal(structureBaselineOnlyShrinks(base, base), true)
+  assert.equal(
+    structureBaselineOnlyShrinks(base, { size: { 'apps/file.ts': { n: 850, reason: 'Existing size.' } } }),
+    true,
+  )
+  assert.equal(structureBaselineOnlyShrinks(base, { size: {} }), true)
+  assert.equal(structureBaselineOnlyShrinks(base, {}), true)
+  for (const after of [
+    { size: { 'apps/file.ts': { n: 901, reason: 'Existing size.' } } },
+    { size: { 'apps/new.ts': { n: 900, reason: 'New allowance.' } } },
+    { other: {} },
+    { size: { 'apps/file.ts': { n: 850, reason: 'Changed metadata.' } } },
+    { size: { 'apps/file.ts': { n: -1, reason: 'Existing size.' } } },
+    { size: { 'apps/file.ts': { n: '850', reason: 'Existing size.' } } },
+    [],
+    null,
+  ])
+    assert.equal(structureBaselineOnlyShrinks(base, after), false)
+})
 
 function fixture() {
   const beforeManifest = {

@@ -87,7 +87,7 @@ export function references(text, file) {
   return { imports: [...imports], ambiguous, templates }
 }
 
-export function dependencyGraph(root, files) {
+export function dependencyGraph(root, files, { includeData = false } = {}) {
   const known = new Set(files)
   const graph = new Map()
   const ambiguous = new Set()
@@ -98,7 +98,8 @@ export function dependencyGraph(root, files) {
     for (const specifier of refs.imports) {
       try {
         const dependency = resolveImport(root, file, specifier)
-        if (known.has(dependency)) dependencies.add(dependency)
+        if (known.has(dependency) || (includeData && /\.(?:json|css|html)$/.test(dependency ?? '')))
+          dependencies.add(dependency)
       } catch {
         ambiguous.add(file)
       }
