@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { fileMetrics, validateReport } from './coverage.mjs'
 import { inventory } from './inventory.mjs'
 
@@ -48,7 +49,7 @@ function run(root, report) {
     {
       cwd: root,
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: 30 * SECOND_MS,
       env: { ...process.env, QUALITY_ROOT: root, QUALITY_REPORT: join(root, report), QUALITY_SHARD: 'proof' },
     },
   )

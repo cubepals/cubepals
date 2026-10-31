@@ -9,6 +9,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
+import { SECOND_MS } from '../../packages/contracts/src/durations.ts'
 
 test('local gates run Node controllers once and retain every neighboring Bun test format', () => {
   const root = mkdtempSync(join(tmpdir(), 'quality-local-discovery-'))
@@ -26,7 +27,7 @@ test('local gates run Node controllers once and retain every neighboring Bun tes
       cwd: root,
       env,
       encoding: 'utf8',
-      timeout: 15000,
+      timeout: 15 * SECOND_MS,
       maxBuffer: 1024 * 1024,
     })
     assert.ifError(result.error)

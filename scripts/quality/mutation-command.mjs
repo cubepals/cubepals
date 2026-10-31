@@ -10,6 +10,7 @@
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { readMutationJUnit } from './mutation-evidence.mjs'
 
 const manifest = JSON.parse(readFileSync(process.argv[2], 'utf8'))
@@ -25,7 +26,7 @@ try {
     mutant === 'baseline' ? null : JSON.parse(readFileSync(join(manifest.evidence, 'baseline.json'), 'utf8'))
   // Finish before Stryker's outer timeout so even a synchronous infinite loop leaves evidence.
   const timeout = baseline
-    ? Math.min(manifest.timeoutMs, Math.ceil(baseline.durationMs * 1.5) + 3000)
+    ? Math.min(manifest.timeoutMs, Math.ceil(baseline.durationMs * 1.5) + 3 * SECOND_MS)
     : manifest.timeoutMs
   const run = spawnSync(
     manifest.bun,

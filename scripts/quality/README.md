@@ -11,6 +11,11 @@ PR edits rerun the policy check, including changes to the target branch.
 
 `policy.mjs` protects the quality controller, workflows, ownership file, test configuration,
 reporter Gradle configuration and wrapper, and every package script entrypoint. This includes
+the dependency-free `packages/contracts/src/durations.ts` leaf: controllers import its canonical
+units before their input snapshots. Direct relative imports avoid workspace export redirection,
+and the policy rejects changes to that executable dependency through ordinary PRs. Existing
+execution budgets are unchanged.
+The protected entrypoints also include
 install lifecycle scripts and the pre/post hooks Bun runs around ordinary CI commands. Lefthook
 configuration variants, rc files, hook directories, and the current hook's two repository scripts
 are protected, as are package-manager rc files and package binary declarations. The existing

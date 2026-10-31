@@ -22,6 +22,7 @@ import {
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { MINUTE_MS } from '../../packages/contracts/src/durations.ts'
 import { mutationEnvironment, mutationSnapshot } from './mutation.mjs'
 import { XMLParser, XMLValidator } from './toolchain.mjs'
 
@@ -143,7 +144,7 @@ function runTests({ snapshot, tests, name, reportDir, bun, services }) {
       cwd: snapshot,
       env: environment,
       encoding: 'utf8',
-      timeout: services ? 120_000 : 60_000,
+      timeout: services ? 2 * MINUTE_MS : MINUTE_MS,
       maxBuffer: 16 * 1024 * 1024,
     },
   )

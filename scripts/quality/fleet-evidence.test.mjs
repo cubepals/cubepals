@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { checkJUnit } from './coverage-junit.mjs'
 import { liveFleet } from './evidence-policy.mjs'
 import { XMLParser } from './toolchain.mjs'
@@ -45,7 +46,7 @@ function xml(file, body = '<testcase name="live contract"/>', { suite = '', root
 function runGate(reports) {
   return spawnSync(process.execPath, [join(here, 'fleet-evidence.mjs'), ...reports], {
     encoding: 'utf8',
-    timeout: 30_000,
+    timeout: 30 * SECOND_MS,
   })
 }
 
@@ -65,7 +66,7 @@ function bunReport(root, file, output, env = process.env) {
     cwd: root,
     env,
     encoding: 'utf8',
-    timeout: 30_000,
+    timeout: 30 * SECOND_MS,
   })
   assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`)
   return readFileSync(output, 'utf8')

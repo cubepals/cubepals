@@ -16,6 +16,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
+import { SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { fileMetrics, validateReport } from './coverage.mjs'
 import { createFragmentCollector, mergeFragments } from './coverage-fragments.mjs'
 import { assertInputsUnchanged, partitionTests, snapshotInputs } from './coverage-inputs.mjs'
@@ -256,7 +257,7 @@ function run(root, reportDir, manifest, extraEnv = {}, group = 'rest') {
   return spawnSync(
     process.execPath,
     [join(here, 'run-shard.mjs'), root, group, reportDir, ...(manifest ? [manifest] : [])],
-    { cwd: root, encoding: 'utf8', timeout: 90_000, env },
+    { cwd: root, encoding: 'utf8', timeout: 90 * SECOND_MS, env },
   )
 }
 
@@ -350,7 +351,7 @@ test('zero branch has independent state', () => {
   const rejected = spawnSync(bun, ['test', '--no-isolate', ...tests.map((path) => `./${path}`)], {
     cwd: root,
     encoding: 'utf8',
-    timeout: 30_000,
+    timeout: 30 * SECOND_MS,
     env,
   })
   assert.notEqual(rejected.status, 0, rejected.stdout + rejected.stderr)

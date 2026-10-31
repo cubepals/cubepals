@@ -9,6 +9,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { runMutation } from './mutation.mjs'
 
 export function proveMutation(output, { bun = 'bun' } = {}) {
@@ -45,8 +46,8 @@ export function proveMutation(output, { bun = 'bun' } = {}) {
         additionalTestsByFile: { [subject]: additional },
         reportDir: join(output, name),
         bun,
-        timeoutMs: 15_000,
-        subjectTimeoutMs: 180_000,
+        timeoutMs: 15 * SECOND_MS,
+        subjectTimeoutMs: 3 * MINUTE_MS,
       })
     const baseline = run('strong')
     assert.equal(baseline.passed, true)

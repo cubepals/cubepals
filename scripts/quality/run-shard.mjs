@@ -24,6 +24,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { MINUTE_MS } from '../../packages/contracts/src/durations.ts'
 import { mergeReports, validateReport } from './coverage.mjs'
 import { writeRuntimeManifest } from './coverage-cache.mjs'
 import { createFragmentCollector } from './coverage-fragments.mjs'
@@ -82,7 +83,7 @@ export function runShard({ root, group, reportDir, baseManifest }) {
   const manifest = resolve(reportDir, 'manifests', `${group}.json`)
   for (const path of [junit, report, manifest]) rmSync(path, { force: true })
   const temporary = mkdtempSync(join(tmpdir(), `quality-${group}-`))
-  const deadline = Date.now() + 1_800_000
+  const deadline = Date.now() + 30 * MINUTE_MS
   try {
     const preparedPath = join(temporary, 'prepared.json')
     const selection = join(temporary, 'tests.json')

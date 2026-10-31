@@ -14,6 +14,8 @@ import { pathToFileURL } from 'node:url'
 
 const PROTECTED = [
   /^scripts\/quality(?:\/|\.)/,
+  // Controllers import this dependency-free leaf before input snapshots or proposed tests run.
+  /^packages\/contracts\/src\/durations\.ts$/,
   /^\.github\/workflows\//,
   /^\.github\/CODEOWNERS$/,
   /(?:^|\/)bunfig\.toml$/,

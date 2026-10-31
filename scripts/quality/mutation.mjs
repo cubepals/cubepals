@@ -27,6 +27,7 @@ import {
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { requireQuality } from './toolchain.mjs'
 
 const command = fileURLToPath(new URL('./mutation-command.mjs', import.meta.url))
@@ -236,8 +237,8 @@ export function runMutation({
   threshold = 80,
   bun = 'bun',
   node = 'node',
-  timeoutMs = 300_000,
-  subjectTimeoutMs = 1_200_000,
+  timeoutMs = 5 * MINUTE_MS,
+  subjectTimeoutMs = 20 * MINUTE_MS,
   collectAll = false,
 }) {
   if (subjects.length === 0) throw new Error('No mutation subjects; caller must prove a non-code-only change')
@@ -250,7 +251,10 @@ export function runMutation({
   const candidateInput = join(reportDir, 'candidate-input.json')
   const candidateOutput = join(reportDir, 'candidates.json')
   writeFileSync(candidateInput, JSON.stringify({ root, subjects, output: candidateOutput }))
-  execFileSync(node, [candidatesCommand, candidateInput], { env: mutationEnvironment(), timeout: 300_000 })
+  execFileSync(node, [candidatesCommand, candidateInput], {
+    env: mutationEnvironment(),
+    timeout: 5 * MINUTE_MS,
+  })
   const candidates = JSON.parse(readFileSync(candidateOutput, 'utf8'))
   const snapshot = mutationSnapshot(root)
   const result = { passed: true, complete: false, files: [], failures: [] }
@@ -320,9 +324,9 @@ export function runMutation({
               reporters: ['json', 'clear-text'],
               jsonReporter: { fileName: reportPath },
               thresholds: { high: threshold, low: threshold, break: threshold },
-              timeoutMS: 5000,
+              timeoutMS: 5 * SECOND_MS,
               timeoutFactor: 1.5,
-              dryRunTimeoutMinutes: Math.ceil(timeoutMs / 60_000),
+              dryRunTimeoutMinutes: Math.ceil(timeoutMs / MINUTE_MS),
               tempDirName: join(snapshot, '.stryker-tmp'),
               cleanTempDir: 'always',
             }),

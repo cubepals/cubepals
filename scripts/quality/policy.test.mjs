@@ -98,6 +98,10 @@ function repository(run) {
     put('bun.lock', JSON.stringify(lock))
     put('apps/example.test.ts', "test.skipIf(!database)('service', () => expect(read()).toBe(1))\n")
     put('apps/example.ts', 'export const read = () => 1\n')
+    put(
+      'packages/contracts/src/durations.ts',
+      readFileSync(new URL('../../packages/contracts/src/durations.ts', import.meta.url), 'utf8'),
+    )
     run({ cwd, put, commit, base: commit() })
   } finally {
     rmSync(cwd, { recursive: true, force: true })
@@ -353,6 +357,15 @@ test('the real controller rejects an always-success package command', () => {
     'package.json',
     JSON.stringify({ ...packageJson, scripts: { ...packageJson.scripts, test: 'true' } }),
     /protected test command/,
+  )
+})
+
+test('the real controller rejects code injected into its canonical duration dependency', () => {
+  const source = readFileSync(new URL('../../packages/contracts/src/durations.ts', import.meta.url), 'utf8')
+  rejected(
+    'packages/contracts/src/durations.ts',
+    `${source}\nprocess.exit(0)\n`,
+    /protected quality infrastructure/,
   )
 })
 

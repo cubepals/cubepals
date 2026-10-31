@@ -9,6 +9,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import { SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import {
   configurationOnlyAffectsQuality,
   configurationOnlyRoutesNodeControllers,
@@ -142,7 +143,7 @@ test('only the exact Node-controller routing preserves the rest of Bun configura
     bunConfiguration.replace('[install]\nlinker = "hoisted"\n', ''),
   ])
     assert.equal(configurationOnlyRoutesNodeControllers(originalBunConfiguration, changed, manifest), false)
-  const prior = `${originalBunConfiguration}\n[test]\ntimeout = 30000\n`
+  const prior = `${originalBunConfiguration}\n[test]\ntimeout = ${30 * SECOND_MS}\n`
   assert.equal(
     configurationOnlyRoutesNodeControllers(
       prior,
