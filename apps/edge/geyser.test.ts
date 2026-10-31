@@ -48,6 +48,27 @@ test('it is running while the child is, and stopping ends it for good', async ()
   expect(child.restarts).toBe(0)
 })
 
+test('a restart ends the child and the loop starts it again, telling of the exit', async () => {
+  let exits = 0
+  const child = new Supervised({
+    command: ['bun', '-e', 'setInterval(() => {}, 1000)'],
+    cwd: '.',
+    env: { PATH: process.env.PATH ?? '' },
+    prefix: '[geyser]',
+    firstWaitMs: 20,
+    exited: () => exits++,
+  })
+  const spy = spyOn(console, 'error').mockImplementation(() => {})
+  const running = child.run()
+  await Bun.sleep(100)
+  child.restart()
+  while (child.restarts < 1) await Bun.sleep(20)
+  expect(exits).toBe(1)
+  child.stop()
+  await running
+  spy.mockRestore()
+})
+
 test('the child sees the environment it is given and none of the agent’s own', async () => {
   process.env.FLOODGATE_KEY_FOR_TEST = 'a-secret'
   const logged: string[] = []

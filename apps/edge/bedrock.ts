@@ -303,8 +303,9 @@ export function startBedrock(options: BedrockOptions): Bedrock {
       () => stopped,
     )
     if (found === null || stopped) return
-    geyser?.stop()
-    geyser = startGeyser({ address, publicAddress: found })
+    // Through the supervisor, which waits for the old Geyser to exit and has the relay forget it.
+    prepareGeyserDir(options, { address, publicAddress: found })
+    geyser?.restart()
     console.error(`[geyser] NetherNet players play at ${found}:${options.webrtcPort}`)
   }
 

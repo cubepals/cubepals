@@ -76,6 +76,11 @@ export class Supervised {
     }
   }
 
+  /** Ends the running child so the loop starts it again, as after any exit: for a changed config. */
+  restart(): void {
+    this.#child?.kill('SIGTERM')
+  }
+
   stop(signal: NodeJS.Signals = 'SIGTERM'): void {
     this.#stopped = true
     this.#child?.kill(signal)
