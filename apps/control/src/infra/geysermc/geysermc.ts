@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * GeyserMC's download service and Xbox lookup, which give Blockly Floodgate's Paper jar (checked
- * against the hash they list for it) and the Xbox user id behind a gamertag. A gamertag their cache
+ * GeyserMC's download service, Xbox lookup and skins, which give Blockly Floodgate's Paper jar
+ * (checked against the hash they list for it), the Xbox user id behind a gamertag, and the skin a
+ * Bedrock player wears (as a texture id, which Mojang's adapter fetches). A gamertag their cache
  * has not seen is no player here; only a server error is a failure.
  */
 
@@ -19,6 +20,11 @@ import type { FloodgateJar, GeyserMc } from '../../app/ports/geysermc.ts'
  */
 const DOWNLOADS = 'https://download.geysermc.org/v2/projects/floodgate'
 const XBOX = 'https://api.geysermc.org/v2/xbox/xuid'
+/**
+ * A Bedrock player's skin as Geyser uploaded it (measured 2026-10-31): `{"texture_id": …}` with
+ * the id of a texture on Mojang's host, signed for Java; an empty object for an XUID it has none for.
+ */
+const SKINS = 'https://api.geysermc.org/v2/skin'
 /** The jar for Paper and Spigot, which are one. */
 const JAR = 'spigot'
 /** Floodgate’s jar is about 11 MB; anything far larger is not it. */
@@ -76,6 +82,15 @@ export class GeyserMcService implements GeyserMc {
     const xuid = response.ok ? /"xuid"\s*:\s*"?(\d+)/.exec(await response.text())?.[1] : undefined
     this.#seen.set(key, { at: Date.now(), xuid: xuid ?? null })
     return xuid ?? null
+  }
+
+  async skinTextureOf(xuid: string): Promise<string | null> {
+    if (!/^\d{1,20}$/.test(xuid)) return null
+    const response = await this.#fetch(`${SKINS}/${xuid}`, { signal: AbortSignal.timeout(5 * SECOND_MS) })
+    if (response.status >= 500) throw new Error(`GeyserMC answered ${response.status}`)
+    if (!response.ok) return null
+    const id = ((await response.json()) as { texture_id?: unknown }).texture_id
+    return typeof id === 'string' && id !== '' ? id : null
   }
 
   async #json<T>(url: string): Promise<T> {

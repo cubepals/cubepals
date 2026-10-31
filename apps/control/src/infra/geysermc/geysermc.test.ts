@@ -70,3 +70,19 @@ describe('a gamertag’s Xbox user id', () => {
     await expect(service.xuidOf('Pixel')).rejects.toThrow('503')
   })
 })
+
+describe('a Bedrock player’s skin', () => {
+  test('is the texture id GeyserMC lists for the XUID, none where it has none, a failure when it is down', async () => {
+    const service = new GeyserMcService({
+      fetch: answering({
+        '/v2/skin/2535419996414087': () => Response.json({ texture_id: 'ab12cd', is_steve: true }),
+        '/v2/skin/1': () => Response.json({}),
+        '/v2/skin/2': () => new Response('', { status: 503 }),
+      }),
+    })
+    expect(await service.skinTextureOf('2535419996414087')).toBe('ab12cd')
+    expect(await service.skinTextureOf('1')).toBeNull()
+    expect(await service.skinTextureOf('not digits')).toBeNull()
+    await expect(service.skinTextureOf('2')).rejects.toThrow('503')
+  })
+})

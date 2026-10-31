@@ -365,7 +365,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     packChanges: new PackChanges({ db, setups, packs, revisions, curation }),
     access,
     players,
-    faces: new PlayerFaces({ profiles, limits: ports.limits }),
+    faces: new PlayerFaces({ profiles, limits: ports.limits, bedrock: ports.capabilities.bedrock }),
     reconciler,
     artifacts,
     backups,

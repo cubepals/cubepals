@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test'
+import { floodgateUuid } from '@blockly/contracts'
+import { FakeGeyserMc } from '../../infra/fake/fake-geysermc.ts'
 import { FakeProfiles } from '../../infra/fake/fake-profiles.ts'
 import { MemoryLimits } from '../../infra/limits/memory-limits.ts'
 import type { PlayerProfiles } from '../ports/minecraft.ts'
@@ -76,6 +78,7 @@ describe('player faces', () => {
     const uuid = await accountOf(profiles, 'Steve')
     let asked = 0
     const failing: PlayerProfiles = {
+      skinOfTexture: async () => null,
       byName: (name) => profiles.byName(name),
       byUuid: (id) => profiles.byUuid(id),
       skinOf: async () => {
@@ -95,5 +98,25 @@ describe('player faces', () => {
     const faces = new PlayerFaces({ profiles, limits: { allow: async () => false } })
     expect(await faces.face(await accountOf(profiles, 'Steve'))).toBe('unavailable')
     expect(profiles.skinLookups).toBe(0)
+  })
+
+  test('a Bedrock player’s face is the skin they joined in, found by their XUID and never by their gamertag', async () => {
+    const profiles = new FakeProfiles()
+    profiles.wear('Pixel', plainSkin([10, 200, 30]))
+    const bedrock = new FakeGeyserMc()
+    bedrock.dress('2535419996414087', 'ab12cd')
+    profiles.serve('ab12cd', plainSkin([200, 90, 20]))
+    const faces = new PlayerFaces({ profiles, limits: new MemoryLimits(), bedrock: { geyser: bedrock } })
+
+    const face = await faces.face(floodgateUuid('2535419996414087'))
+    expect([...(face as Uint8Array).slice(0, 4)]).toEqual([200, 90, 20, 255])
+    // Mojang is never asked about a Bedrock player, whose gamertag may be a Java account's name.
+    expect(profiles.skinLookups).toBe(0)
+    expect(await faces.face(floodgateUuid('2535400000000000'))).toBeNull()
+  })
+
+  test('without Bedrock, a Bedrock player has no face here, and the page draws its own', async () => {
+    const faces = new PlayerFaces({ profiles: new FakeProfiles(), limits: new MemoryLimits() })
+    expect(await faces.face(floodgateUuid('2535419996414087'))).toBeNull()
   })
 })
