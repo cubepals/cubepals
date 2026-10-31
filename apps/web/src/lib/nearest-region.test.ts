@@ -9,13 +9,11 @@ const BOTH = ['eu', 'us']
 
 describe('the region a new server starts in', () => {
   test('Europe for Europe, the Middle East, Africa and South Asia', () => {
-    for (const country of ['SA', 'DE', 'GB', 'EG', 'IN'])
-      expect(startingRegion(country, BOTH)).toBeDefined()
+    for (const country of ['SA', 'DE', 'GB', 'EG', 'IN']) expect(startingRegion(country, BOTH)).toBeDefined()
   })
 
   test('North America for the Americas', () => {
-    for (const country of ['US', 'CA', 'MX', 'BR'])
-      expect(startingRegion(country, BOTH)).toBeDefined()
+    for (const country of ['US', 'CA', 'MX', 'BR']) expect(startingRegion(country, BOTH)).toBeDefined()
   })
 
   test('the first region, not said to be nearest, when the country is unknown or missing', () => {
