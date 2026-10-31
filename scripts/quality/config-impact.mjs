@@ -241,6 +241,9 @@ export function structureBaselineOnlyShrinks(before, after) {
     if (!object(entries) || !object(before[rule])) return false
     for (const [path, entry] of Object.entries(entries)) {
       const previous = before[rule][path]
+      // The real baseline also has reason-only entries and header lists. Identical metadata
+      // carries no new allowance; only a changed numeric entry needs the ratchet proof below.
+      if (Object.hasOwn(before[rule], path) && equal(entry, previous)) continue
       if (
         !object(entry) ||
         !object(previous) ||
