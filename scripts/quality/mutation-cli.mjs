@@ -2,10 +2,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** CI entrypoint: one exhaustive source partition, with incremental test-aware subject selection. */
+/**
+ * CI entrypoint: one exhaustive source partition, with incremental test-aware subject selection.
+ * A dependency-only update measures its subjects on the base worktree (`--base-root`, installed
+ * from the base lockfile) and holds the head to those scores.
+ */
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { inventory, sourceFiles } from './inventory.mjs'
 import { runMutation } from './mutation.mjs'
@@ -23,6 +27,7 @@ const { values } = parseArgs({
     rotation: { type: 'string' },
     output: { type: 'string' },
     root: { type: 'string', default: process.cwd() },
+    'base-root': { type: 'string' },
   },
 })
 if (
@@ -105,6 +110,17 @@ if (subjects.length === 0) {
     JSON.stringify({ passed: true, complete: true, files: [], reason, ...selection }, null, 2),
   )
   process.stdout.write(`${reason}; scope evidence: ${resolve(output, 'scope.json')}\n`)
+} else if (scope.baseScore) {
+  const thresholds = baseScores(subjects)
+  runMutation({
+    root,
+    subjects,
+    testsByFile: scope.testsByFile,
+    additionalTestsByFile: {},
+    reportDir: output,
+    thresholds,
+    collectAll: true,
+  })
 } else
   runMutation({
     root,
@@ -114,3 +130,37 @@ if (subjects.length === 0) {
     reportDir: output,
     collectAll: values.full,
   })
+
+/** The same tests against the same mutants on the base revision; incomplete evidence fails. */
+function baseScores(selected) {
+  if (!values['base-root'])
+    throw new Error('A dependency-only update needs --base-root to measure base scores')
+  const baseRoot = resolve(values['base-root'])
+  const baseHead = execFileSync('git', ['rev-parse', '--verify', 'HEAD^{commit}'], {
+    cwd: baseRoot,
+    encoding: 'utf8',
+  }).trim()
+  if (baseHead !== values.base) throw new Error('--base-root is not a checkout of the authoritative --base')
+  for (const file of new Set([...selected, ...selected.flatMap((subject) => scope.testsByFile[subject])])) {
+    if (!readFileSync(resolve(baseRoot, file)).equals(readFileSync(resolve(root, file))))
+      throw new Error(`${file} differs between base and head; it is not a dependency-only update`)
+  }
+  const base = runMutation({
+    root: baseRoot,
+    subjects: selected,
+    testsByFile: scope.testsByFile,
+    additionalTestsByFile: {},
+    reportDir: join(output, 'base'),
+    threshold: 0,
+    collectAll: true,
+  })
+  // A mutant that timed out counts as undetected on both sides; one never run lowers nothing.
+  const incomplete = base.files.filter((row) => row.unevaluated)
+  if (incomplete.length)
+    throw new Error(
+      `Base scores are incomplete: mutants were not evaluated within the budget in ${incomplete.map((row) => row.file).join(', ')}`,
+    )
+  const scores = Object.fromEntries(base.files.map((row) => [row.file, row.score ?? 0]))
+  writeFileSync(join(output, 'base-scores.json'), JSON.stringify(scores, null, 2))
+  return scores
+}
