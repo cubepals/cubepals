@@ -40,7 +40,8 @@ name: Second eye
 #
 # The gate job sets one status, "Second eye gate", on every pull request's head for a ruleset to
 # require: it passes at once when no sensitive path changed, and otherwise fails until a review
-# has finished, saying that it waits for v0id-user to request one.
+# has finished, saying that it waits for v0id-user to request one. An explicit provider HTTP 429
+# skips this optional review with an availability notice; every other failure still fails.
 on:
   pull_request:
     types: [opened, reopened, labeled, synchronize, ready_for_review]
@@ -221,6 +222,7 @@ jobs:
       reviewed: ${{ steps.pull.outputs.reviewed }}
       previous: ${{ steps.pull.outputs.previous }}
       model: ${{ steps.model.outputs.model }}
+      unavailable: ${{ steps.result.outputs.unavailable }}
     env:
       PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
     steps:
@@ -308,6 +310,8 @@ jobs:
       # the runner's files, the git config the action writes its token into).
       - id: claude
         if: steps.newer.outputs.superseded != 'true'
+        # The result classifier below permits only a proved HTTP 429 to skip the review.
+        continue-on-error: true
         uses: anthropics/claude-code-action@925afb53776cf1a2b738c6bdbed37b4d4000ef13 # v1.0.262
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -320,6 +324,14 @@ jobs:
             --allowedTools "Read(./**)"
             --disallowedTools "Bash,Edit,MultiEdit,Write,NotebookEdit,WebFetch,WebSearch,Read(./.git/**),Read(//proc/**),Read(//sys/**),Read(//dev/**),Read(//etc/**),Read(//root/**),Read(//tmp/**),Read(//var/**),Read(//run/**),Read(//opt/**),Read(~/.*),Read(~/.*/**),Read(//home/runner/work/_temp/**),Read(//home/runner/work/_actions/**),Read(//home/runner/runners/**),Read(//home/runner/actions-runner/**)"
             --json-schema '{"type":"object","additionalProperties":false,"required":["verdict","files_reviewed","earlier","findings"],"properties":{"verdict":{"enum":["merge","fix first"]},"files_reviewed":{"type":"integer","minimum":0},"earlier":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["number","status","note"],"properties":{"number":{"type":"integer","minimum":1},"status":{"enum":["fixed","gone"]},"note":{"type":"string","maxLength":200}}}},"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["severity","origin","file","line","problem","fix","why"],"properties":{"severity":{"enum":["high","medium","low"]},"origin":{"enum":["first","open","new","missed"]},"file":{"type":"string","maxLength":200},"line":{"type":"integer","minimum":1},"problem":{"type":"string","maxLength":300},"fix":{"type":"string","maxLength":300},"why":{"type":"string","maxLength":600}}}}}}'
+      - name: Classify the review result
+        id: result
+        if: steps.newer.outputs.superseded != 'true'
+        env:
+          OUTCOME: ${{ steps.claude.outcome }}
+          STRUCTURED: ${{ steps.claude.outputs.structured_output }}
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: bun scripts/second-eye-result.ts
       # The same question once the review is made: a push that landed while Claude read, or while
       # the quiet window of a push before it ran, has its own review, and this one must not land
       # over it.
@@ -350,12 +362,13 @@ jobs:
       - name: Report the run
         if: always() && steps.claude.outputs.execution_file != ''
         env:
+          UNAVAILABLE: ${{ steps.result.outputs.unavailable }}
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
         run: |
           jq -r '[.[] | select(.type == "result")] | last // {}
             | "Turns: \(.num_turns // 0), \((.duration_ms // 0) / 1000 | floor) s",
               (.permission_denials // [] | .[] | "Refused: \(.tool_name) \(.tool_input.file_path // .tool_input.path // .tool_input.pattern // "" | gsub("[\\r\\n]+"; " "))"),
-              (select(.is_error == true) | "::error::\(.result // "no result" | gsub("[\\r\\n]+"; " ")) (\(.terminal_reason // .subtype // "unknown"), HTTP \(.api_error_status // "none"))")' \
+              (select(.is_error == true) | if env.UNAVAILABLE == "true" then "::notice::Automated review unavailable. Skipped for this commit." else "::error::\(.result // "no result" | gsub("[\\r\\n]+"; " ")) (\(.terminal_reason // .subtype // "unknown"), HTTP \(.api_error_status // "none"))" end)' \
             "$EXECUTION_FILE"
       # The model the run's first message names, for the comment; only the characters a model's
       # name has, so nothing else reaches it.
@@ -375,7 +388,7 @@ jobs:
     if: >-
       !cancelled()
       && needs.review.result == 'success'
-      && needs.review.outputs.review != ''
+      && (needs.review.outputs.review != '' || needs.review.outputs.unavailable == 'true')
       && needs.review.outputs.superseded != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -411,6 +424,7 @@ jobs:
           REVIEWED: ${{ needs.review.outputs.reviewed }}
           PREVIOUS: ${{ needs.review.outputs.previous }}
           MODEL: ${{ needs.review.outputs.model }}
+          NOTICE: ${{ needs.review.outputs.unavailable == 'true' && 'unavailable' || '' }}
           REPO: ${{ github.repository }}
           PULL: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
         run: bun scripts/second-eye-comment.ts
@@ -424,6 +438,7 @@ jobs:
       always()
       && needs.mark.outputs.review == 'true'
       && needs.review.outputs.superseded != 'true'
+      && needs.review.outputs.unavailable != 'true'
       && (needs.review.result == 'failure'
         || (needs.review.result == 'success' && needs.review.outputs.review == ''))
     runs-on: ubuntu-latest
@@ -498,6 +513,7 @@ jobs:
           MARK: ${{ needs.mark.result }}
           REVIEW: ${{ needs.review.result }}
           COMMENT: ${{ needs.comment.result }}
+          UNAVAILABLE: ${{ needs.review.outputs.unavailable }}
           SHA: ${{ fromJSON(needs.review.outputs.reviewed || '{}').sha || github.event.pull_request.head.sha }}
           REPO: ${{ github.repository }}
         run: bun scripts/second-eye-gate.ts

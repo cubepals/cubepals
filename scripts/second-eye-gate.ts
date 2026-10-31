@@ -9,7 +9,8 @@
  *
  * A pull request that touches none of the sensitive paths passes at once. One that does fails
  * until v0id-user has asked for the review (the needs-second-eye label, an "@claude review"
- * line, or a run by hand) and it has finished, so it can't merge without that. The review starts
+ * line, or a run by hand) and it has finished. A proved provider HTTP 429 instead skips the
+ * optional review after publishing an availability notice. Other failures still block it. It starts
  * by itself only on a same-repository pull request that v0id-user opened and that touches a
  * sensitive path; anyone else's never spends the subscription unasked.
  *
@@ -73,6 +74,8 @@ export interface Outcome {
   mark: string
   review: string
   comment: string
+  /** Set only by the trusted result classifier after the model returns HTTP 429. */
+  unavailable?: string
 }
 
 /** What the status says, or nothing when this run has nothing to add. */
@@ -80,6 +83,8 @@ export function statusFor(
   outcome: Outcome,
 ): { state: 'success' | 'failure'; description: string } | undefined {
   const reviewed = outcome.review === 'success' && outcome.comment === 'success'
+  if (reviewed && outcome.unavailable === 'true')
+    return { state: 'success', description: 'Automated review unavailable. Skipped for this commit.' }
   if (reviewed) return { state: 'success', description: 'Reviewed by the second eye.' }
   // A comment or a run by hand only ever adds a review; it has nothing to take back.
   if (outcome.event === 'issue_comment' || outcome.event === 'workflow_dispatch') return undefined
@@ -142,6 +147,7 @@ async function writeStatus(repo: string): Promise<void> {
     mark: process.env.MARK ?? '',
     review: process.env.REVIEW ?? '',
     comment: process.env.COMMENT ?? '',
+    unavailable: process.env.UNAVAILABLE ?? '',
   })
   const sha = process.env.SHA ?? ''
   if (!state || !/^[0-9a-f]{40}$/.test(sha)) return
@@ -163,8 +169,10 @@ async function writeStatus(repo: string): Promise<void> {
   })
 }
 
-if (import.meta.main) {
+export async function runSecondEyeGate(): Promise<void> {
   if (process.env.MODE === 'paths') await writePaths(need('REPO'), need('PULL'))
   else if (process.env.MODE === 'status') await writeStatus(need('REPO'))
   else throw new Error(`MODE is ${process.env.MODE}`)
 }
+
+if (import.meta.main) await runSecondEyeGate()

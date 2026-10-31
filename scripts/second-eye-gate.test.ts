@@ -105,6 +105,17 @@ describe('statusFor', () => {
     )
   })
 
+  test('an unavailable review passes only after its notice is published, without claiming review', () => {
+    const unavailable = { ...none, mark: 'success', review: 'success', unavailable: 'true' }
+    const status = statusFor({ ...unavailable, comment: 'success' })
+    expect(status).toEqual({
+      state: 'success',
+      description: 'Automated review unavailable. Skipped for this commit.',
+    })
+    expect(statusFor({ ...unavailable, comment: 'failure' })?.state).toBe('failure')
+    expect(statusFor({ ...unavailable, review: 'failure', comment: 'success' })?.state).toBe('failure')
+  })
+
   test('a review that did not finish, or waits for a draft, fails', () => {
     expect(statusFor({ ...none, mark: 'success', review: 'failure' })?.description).toContain("didn't finish")
     expect(statusFor({ ...none, mark: 'success' })?.description).toContain('ready for review')

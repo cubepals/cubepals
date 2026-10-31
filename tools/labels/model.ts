@@ -75,7 +75,7 @@ export function render(item: Item): string {
 /** The model's labels, or null when there is no key or the model didn't answer in time. */
 export async function ask(item: Item): Promise<Answer | null> {
   if (!process.env.ANTHROPIC_API_KEY) return null
-  const client = new Anthropic({ timeout: 20_000, maxRetries: 1 })
+  const client = new Anthropic({ timeout: 20_000, maxRetries: 0 })
   try {
     const response = await client.messages.parse({
       model: MODEL,
@@ -95,6 +95,10 @@ export async function ask(item: Item): Promise<Answer | null> {
       return null
     return answer
   } catch (error) {
+    if (error instanceof Anthropic.RateLimitError) {
+      console.warn('::notice::Automated labels unavailable. Using rule-based labels.')
+      return null
+    }
     console.warn(
       `::warning::The model didn't answer (${error instanceof Error ? error.name : 'error'}); the rules' labels stand.`,
     )
