@@ -16,6 +16,7 @@ import { qualityOnlyChanges } from './config-impact.mjs'
 import { dependencyOnlyChange } from './dependency-impact.mjs'
 import { classifySource, fileHash, inventory, parseSource } from './inventory.mjs'
 import { dependencyGraph } from './mutation-dependencies.mjs'
+import { appendedCases } from './test-appends.mjs'
 
 const MODULE = /^(?:apps|packages|scripts|tools)\/.*\.(?:[cm]?[jt]s|[jt]sx)$/
 /**
@@ -294,9 +295,23 @@ export function analyzeTestImpact({ root, baseSha, changedFiles, headSha = 'HEAD
   const removedProductionFiles = new Set()
   const reasons = []
   let baseFull = false
-  const changedExistingTests = verifiedChangedFiles.filter((path) => oldEntries.get(path)?.kind === 'test')
-  const removedTests = changedExistingTests.filter((path) => headEntries.get(path)?.kind !== 'test')
+  const existingTestsChanged = verifiedChangedFiles.filter((path) => oldEntries.get(path)?.kind === 'test')
+  const removedTests = existingTestsChanged.filter((path) => headEntries.get(path)?.kind !== 'test')
   if (removedTests.length) reasons.push(`existing tests removed or renamed: ${removedTests.join(', ')}`)
+  // A file that only gained cases is judged as an addition; any deletion withdraws that, as below.
+  const verifiedAppendedTests = new Set()
+  for (const path of existingTestsChanged) {
+    if (removedTests.length || headEntries.get(path)?.kind !== 'test') continue
+    if (previous.get(path)?.mode !== proposed.get(path)?.mode) continue
+    const proof = appendedCases(
+      path,
+      oldContents.get(path).toString('utf8'),
+      current.contents.get(path).toString('utf8'),
+    )
+    if (proof.appended) verifiedAppendedTests.add(path)
+    else reasons.push(`existing test edited, not only extended: ${path} (${proof.reason})`)
+  }
+  const changedExistingTests = existingTestsChanged.filter((path) => !verifiedAppendedTests.has(path))
   for (const path of verifiedChangedFiles) {
     if (oldEntries.get(path)?.kind === 'source') {
       if (headEntries.get(path)?.kind === 'source') baseRequiredSubjects.add(path)
@@ -379,7 +394,10 @@ export function analyzeTestImpact({ root, baseSha, changedFiles, headSha = 'HEAD
     head,
     verifiedChangedFiles,
     verifiedAddedTests: [...verifiedAddedTests].sort(),
-    requiredChangedFiles: verifiedChangedFiles.filter((path) => !verifiedAddedTests.has(path)),
+    verifiedAppendedTests: [...verifiedAppendedTests].sort(),
+    requiredChangedFiles: verifiedChangedFiles.filter(
+      (path) => !verifiedAddedTests.has(path) && !verifiedAppendedTests.has(path),
+    ),
     baseRequiredSubjects: [...baseRequiredSubjects].sort(),
     removedProductionFiles: [...removedProductionFiles].sort(),
     mappedRemovedTests: [...mappedRemovedTests].sort(),
@@ -395,6 +413,7 @@ export function analyzeTestImpact({ root, baseSha, changedFiles, headSha = 'HEAD
   return {
     ...evidence,
     verifiedAddedTests,
+    verifiedAppendedTests,
     baseRequiredSubjects,
     removedProductionFiles,
     mappedRemovedTests,

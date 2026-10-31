@@ -58,7 +58,11 @@ export function selectMutationScope({
       ...(impact.dependencyOnly.eligible ? impact.dependencyOnly.files : []),
     ])
   }
-  const addedTests = impact?.verifiedAddedTests ?? new Set()
+  // A test file that only gained cases is an addition too (test-appends.mjs).
+  const addedTests = new Set([
+    ...(impact?.verifiedAddedTests ?? []),
+    ...(impact?.verifiedAppendedTests ?? []),
+  ])
   const source = new Set(productionFiles)
   const tests = new Set(testFiles)
   const changed = new Set(changedFiles)

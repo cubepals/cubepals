@@ -115,6 +115,32 @@ harmless. Base resolution preserves the existence of committed regular JSON, CSS
 assets without executing them, so static resource imports do not become artificial unknown
 dependencies. Genuine unresolved imports still expand scope.
 
+### Test files that only gained cases
+
+An existing test file whose cases are all unchanged, and which only gained new ones, is judged as
+an addition, like a new test file (`test-appends.mjs`). This holds only when:
+
+- every base case is in the head with the same source, and the new statements are plain
+  `test(...)` or `it(...)` calls placed after every existing case, so they run after them, holding
+  only a literal name, an inline function and an optional numeric timeout, since their arguments
+  run while the file is collected;
+- removing them leaves the base file's tokens and comments, apart from names added to an import
+  the base already had, which no existing code uses;
+- the base has no concurrent cases, no after-hook that asserts, and no `afterAll` hook that calls
+  anything but cleanup methods such as `close` or `stop`, since it runs after the new cases.
+
+Any other edit, such as a changed or removed case, a weakened helper, a new hook, a new skip or a new
+import, leaves the file an edited test, which keeps its base and head dependencies as mutation
+subjects. A deleted test withdraws the treatment, as it does for new files.
+
+### Database skips in new test files
+
+A new test file in the control plane may carry exactly `describe.skipIf(!hasDatabase)`, once, when
+it imports `hasDatabase` and `startHarness` from `apps/control/src/testing/harness.ts` under their
+own names and calls `startHarness`. Every other new skip is still refused. CI always provides
+Postgres, and its JUnit evidence refuses any skipped case except the live Fleet suites, so this
+skip can't run in CI.
+
 ### Dependency-only updates
 
 A dependency update is judged by what it can break. `dependency-impact.mjs` accepts a change as
