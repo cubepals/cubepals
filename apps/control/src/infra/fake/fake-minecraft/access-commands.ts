@@ -126,6 +126,15 @@ export function kick(server: AccessServer, args: string[]): string {
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(target))
     return 'Only players may be affected by this command, but the provided selector includes entities'
   const reason = words.join(' ') || 'Kicked by an operator'
+  if (target === '@a') {
+    const kicked = [...server.online]
+    if (kicked.length === 0) return 'No player was found'
+    for (const [uuid] of kicked) {
+      server.online.delete(uuid)
+      server.kicks.set(uuid, reason)
+    }
+    return kicked.map(([, name]) => `Kicked ${name}: ${reason}`).join('\n')
+  }
   const uuid = [...server.online].find(([, name]) => name.toLowerCase() === target.toLowerCase())?.[0]
   if (uuid === undefined) return 'No player was found'
   const name = server.online.get(uuid)
