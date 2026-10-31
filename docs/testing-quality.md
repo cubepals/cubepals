@@ -121,7 +121,9 @@ An existing test file whose cases are all unchanged, and which only gained new o
 an addition, like a new test file (`test-appends.mjs`). This holds only when:
 
 - every base case is in the head with the same source, and the new statements are plain
-  `test(...)` or `it(...)` calls placed after every existing case, so they run after them;
+  `test(...)` or `it(...)` calls placed after every existing case, so they run after them, holding
+  only a literal name, an inline function and an optional numeric timeout, since their arguments
+  run while the file is collected;
 - removing them leaves the base file's tokens and comments, apart from names added to an import
   the base already had, which no existing code uses;
 - the base has no concurrent cases, no after-hook that asserts, and no `afterAll` hook that calls

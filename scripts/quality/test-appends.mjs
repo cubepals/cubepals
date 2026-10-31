@@ -7,7 +7,8 @@
  * than as an edit of every case it holds. Both revisions are parsed as data, never run.
  *
  * Holds only when: every base case is in the head with identical source; the new statements are
- * plain `test(...)` or `it(...)` calls placed after every existing case, so they run after them;
+ * plain `test(...)` or `it(...)` calls placed after every existing case, so they run after them,
+ * holding only a literal name, an inline function and a numeric timeout, so nothing else runs early;
  * removing them leaves the base file's tokens and comments, except for names added to an import
  * the base already has, which nothing else uses; and the base has no concurrent tests and no
  * after-hook that could assert, so a new case cannot run beside an old one or settle an old assertion.
@@ -113,6 +114,18 @@ function unsafeHook(node, text) {
   return unsafe
 }
 
+/**
+ * A case's arguments run while the file is collected, before any existing case, so a new case may
+ * hold only a literal name, an inline function and an optional numeric timeout.
+ */
+function inert(statement) {
+  const [name, body, timeout, ...rest] = statement.expression.arguments
+  const literalName =
+    name?.type === 'StringLiteral' || (name?.type === 'TemplateLiteral' && name.expressions.length === 0)
+  const inline = ['ArrowFunctionExpression', 'FunctionExpression'].includes(body?.type)
+  return literalName && inline && (timeout === undefined || timeout.type === 'NumericLiteral') && !rest.length
+}
+
 /** Whether the base's tests could run beside a new case, or its after-hooks be settled by one. */
 function unsafeBase(tree, text) {
   let unsafe = false
@@ -159,6 +172,7 @@ export function appendedCases(path, baseText, headText) {
     } else added.push(node)
   }
   if (!added.length) return refuse('no case was added')
+  if (!added.every(inert)) return refuse('a new case evaluates more than a name, a function and a timeout')
   if ([...remaining.values()].some((count) => count > 0))
     return refuse('an existing case changed or was removed')
   if (added.some((node) => node.start < lastExisting)) return refuse('a new case runs before an existing one')

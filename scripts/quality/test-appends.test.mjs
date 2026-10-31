@@ -79,6 +79,20 @@ test('anything beside the new cases keeps the edited-test obligations', () => {
     '\nafterAll(() => {})\n',
   ])
     assert.equal(proof(base + change).appended, false, change)
+  // A new case's arguments run while the file is collected, before every existing case.
+  for (const early of [
+    "test('x', (globalThis.flag = 1, () => {}))",
+    'test(setUp(), () => {})',
+    `test(\`x\${'$'}{setUp()}\`, () => {})`,
+    "test('x', helper)",
+    "test('x', () => {}, setUp())",
+    "test('x', () => {}, 1000, setUp())",
+  ])
+    assert.match(proof(`${base}\n${early}\n`).reason, /evaluates more than/, early)
+  assert.equal(
+    proof(`${base}\ntest(\`ceiling\`, async () => {\n  strict(advance(10), 10)\n}, 5000)\n`).appended,
+    true,
+  )
   // A new module can run code at import; an existing import's new default binding can too.
   assert.match(proof(`import './side-effect'\n${appended}`).reason, /more than new cases changed/)
   assert.match(
