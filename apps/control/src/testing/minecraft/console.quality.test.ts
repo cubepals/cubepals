@@ -8,6 +8,7 @@ import fc from 'fast-check'
 import {
   announce,
   isPlainCommand,
+  kickEveryone,
   normalizeUuid,
   parseOnlinePlayers,
   refusedCommand,
@@ -34,6 +35,13 @@ test('announcements are one JSON console command with text kept as data', () => 
       { text: 'Hello "player"\\path next', color: 'yellow' },
     ],
   })
+})
+
+test("everyone is turned out by the game's own kick, by either name, with the reason on one line", () => {
+  expect(kickEveryone(' \tBack soon\nfolks \r')).toEqual([
+    'minecraft:kick @a Back soon folks',
+    'kick @a Back soon folks',
+  ])
 })
 
 test('UUID normalization preserves every hex digit, is idempotent, and accepts either wire format', () => {

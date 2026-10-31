@@ -51,6 +51,30 @@ function withApproval(guide: Guide, approved: boolean, check: () => void) {
 
 const first = GUIDES[0] as Guide
 
+/**
+ * Each guide's page module, by slug. Written out, not built from the slug, so every page this
+ * test loads is a literal import the test-quality gate can follow.
+ */
+const PAGES: Record<
+  string,
+  () => Promise<{ generateMetadata: () => { alternates?: { canonical?: unknown } | null } }>
+> = {
+  'minecraft-server-for-friends': () => import('./guides/minecraft-server-for-friends/page.tsx'),
+  'play-minecraft-java-with-friends': () => import('./guides/play-minecraft-java-with-friends/page.tsx'),
+  'minecraft-server-cost': () => import('./guides/minecraft-server-cost/page.tsx'),
+  'minecraft-server-that-sleeps': () => import('./guides/minecraft-server-that-sleeps/page.tsx'),
+  'minecraft-server-ram': () => import('./guides/minecraft-server-ram/page.tsx'),
+  'minecraft-server-without-port-forwarding': () =>
+    import('./guides/minecraft-server-without-port-forwarding/page.tsx'),
+  'play-a-modpack-with-friends': () => import('./guides/play-a-modpack-with-friends/page.tsx'),
+  'move-a-minecraft-world-to-a-server': () => import('./guides/move-a-minecraft-world-to-a-server/page.tsx'),
+  'minecraft-server-uk-europe': () => import('./guides/minecraft-server-uk-europe/page.tsx'),
+  'lifesteal-manhunt-skyblock-with-friends': () =>
+    import('./guides/lifesteal-manhunt-skyblock-with-friends/page.tsx'),
+  'minecraft-bedrock-server': () => import('./guides/minecraft-bedrock-server/page.tsx'),
+  'aternos-alternative': () => import('./guides/aternos-alternative/page.tsx'),
+}
+
 describe('guides', () => {
   test('are the plan’s nine how-to guides, the game modes, Bedrock and the one comparison', () => {
     expect(GUIDES.map((guide) => guide.slug)).toEqual([
@@ -75,8 +99,9 @@ describe('guides', () => {
 
   test('each has its page, which production serves once the guide is approved', async () => {
     production()
+    expect(Object.keys(PAGES).sort()).toEqual(GUIDES.map((guide) => guide.slug).sort())
     for (const guide of GUIDES) {
-      const page = await import(`./guides/${guide.slug}/page.tsx`)
+      const page = await (PAGES[guide.slug] as (typeof PAGES)[string])()
       if (guide.approved) expect(page.generateMetadata().alternates?.canonical).toBe(`/guides/${guide.slug}`)
       else expect(() => page.generateMetadata()).toThrow()
     }
