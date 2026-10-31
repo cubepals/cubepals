@@ -51,7 +51,7 @@ const AGENT_PORT = Number(env('AGENT_PORT', '8090'))
 // every edge holds its route, so this is short on purpose: every poll but the first after a
 // change is an ETag 304.
 const POLL_MS = Number(env('ROUTES_POLL_MS', '1000'))
-/** Where a restarting server's hostname goes instead of to the server: this agent's own notice. */
+/** Where a restarting server's hostname goes instead of to the server: a notice that holds its joins. */
 const NOTICE = `127.0.0.1:${env('NOTICE_PORT', '25564')}`
 const RESTARTING = {
   status: env('RESTARTING_MOTD', 'Restarting · back in a moment'),
@@ -361,7 +361,7 @@ interface RouterSession {
 
 async function session(body: RouterSession): Promise<void> {
   visited(body)
-  // Told it is restarting is not a join, and must not keep the server up as one.
+  // Held while it restarts is not a join yet: the waiting room passes it on once it is back.
   if (body.backend === NOTICE) return
   // Every connection, a server list's included, is a chance to notice a server that stopped answering.
   if (body.event === 'connect' && body.backend) void check(body.backend)
@@ -381,7 +381,8 @@ async function session(body: RouterSession): Promise<void> {
 
 /**
  * What mc-router says of a join goes on its visit: who it is, and, sent straight to a running
- * server, that it was handed over then. The waiting room tells of the joins it holds itself.
+ * server, that it was handed over then. The waiting room tells of the joins it holds itself, a
+ * restarting server's among them.
  */
 function visited(body: RouterSession): void {
   const { host, port } = body.client ?? {}
@@ -390,9 +391,8 @@ function visited(body: RouterSession): void {
   const player = { name: body.player.name, ...(body.player.uuid ? { uuid: body.player.uuid } : {}) }
   const at = body.timestamp ? new Date(body.timestamp).toISOString() : new Date().toISOString()
   visits.update(source, { player })
-  if (body.backend === WAITING) return
-  const told = body.backend === NOTICE ? { path: 'refused' as const, leftReason: 'refused:restarting' } : null
-  visits.update(source, told ?? { path: 'direct', handedAt: at })
+  if (body.backend === WAITING || body.backend === NOTICE) return
+  visits.update(source, { path: 'direct', handedAt: at })
   visits.open(source)
 }
 
@@ -416,30 +416,6 @@ Bun.serve({
       return new Response(null, { status: 204 })
     }
     return new Response(null, { status: 404 })
-  },
-})
-
-// ─── The notice ─────────────────────────────────────────────────────────────────────────────
-
-Bun.listen<{ notice: Notice; unwrap: Unwrap }>({
-  hostname: '127.0.0.1',
-  port: Number(NOTICE.split(':')[1]),
-  socket: {
-    open(socket) {
-      socket.data = { notice: new Notice(RESTARTING), unwrap: new Unwrap() }
-      socket.timeout(10)
-    },
-    data(socket, chunk) {
-      const own = socket.data.unwrap.take(chunk)
-      if (own === 'bad') return void socket.end()
-      if (own === null) return
-      const { reply, close } = socket.data.notice.receive(own)
-      for (const bytes of reply) socket.write(bytes)
-      if (close) socket.end()
-    },
-    timeout(socket) {
-      socket.end()
-    },
   },
 })
 
@@ -501,12 +477,12 @@ function sourceOf(header: Uint8Array | null): string | null {
 }
 
 /**
- * Tells a ping at `address` that its server sleeps, and hands a join to the waiting room, with the
- * PROXY header it came with, if any.
+ * Tells a ping at `address` what `told` says of its server (that it sleeps, or restarts), and hands
+ * a join to the waiting room, with the PROXY header it came with, if any.
  */
-function asleepAt(address: string): void {
+function holdingAt(address: string, told: (dialled: string) => NoticeText = asleep): void {
   createServer((client) => {
-    const notice = new Notice((dialled) => exampleAt(dialled, hostnames) ?? asleep(dialled))
+    const notice = new Notice((dialled) => exampleAt(dialled, hostnames) ?? told(dialled))
     const unwrap = new Unwrap()
     client.setTimeout(10_000, () => client.destroy())
     client.on('error', () => client.destroy())
@@ -544,7 +520,7 @@ function asleepAt(address: string): void {
   }).listen(Number(address.split(':')[1]), '127.0.0.1')
 }
 
-asleepAt(SLEEPING)
+holdingAt(SLEEPING)
 
 // ─── The waiting room ────────────────────────────────────────────────────────────────────────
 
@@ -652,8 +628,9 @@ async function nameOf(client: Socket, held: Held): Promise<string | undefined> {
 }
 
 /**
- * Asks for the wake until the server is up, is refused or left asleep, the client leaves, or
- * `deadline` passes.
+ * Asks for the wake until the server is up and answers, is refused or left asleep, the client
+ * leaves, or `deadline` passes. Up but not answering is a restart nobody asked for (a crash): the
+ * join waits for it to answer again.
  */
 async function wakeWhile(
   client: Socket,
@@ -663,7 +640,8 @@ async function wakeWhile(
 ): Promise<WakeResult | null> {
   for (;;) {
     const result = await wakeOnce(hostname, said).catch(() => null)
-    const over = result?.outcome === 'ready' || result?.outcome === 'denied' || result?.outcome === 'asleep'
+    const up = result?.outcome === 'ready' && !unreachable.has(result.destination)
+    const over = up || result?.outcome === 'denied' || result?.outcome === 'asleep'
     if (over || client.destroyed || Date.now() >= deadline) return result
     await Bun.sleep(2_000)
   }
@@ -685,7 +663,12 @@ function whyNot(result: WakeResult | null): keyof typeof TURNED_AWAY {
   return result.outcome === 'restarting' ? 'restarting' : 'starting'
 }
 
-asleepAt(WAITING)
+holdingAt(WAITING)
+
+// A restarting server's route leads here, and so does a running one's that stopped answering: a
+// ping is told it restarts, and a join waits in the waiting room until it is back, as a sleeping
+// server's join does, rather than being turned away to join again.
+holdingAt(NOTICE, () => ({ status: RESTARTING.status, join: null }))
 
 // ─── A play address opened in a browser ─────────────────────────────────────────────────────
 
