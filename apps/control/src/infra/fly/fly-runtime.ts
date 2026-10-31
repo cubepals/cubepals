@@ -108,6 +108,7 @@ import {
   type FlyRef,
   isFlyHandle,
   isFlySnapshot,
+  locationOf,
 } from './handle.ts'
 import { asleepOn, heldTags, META, machineConfig, portsOf, startStep } from './machine-config.ts'
 
@@ -676,16 +677,7 @@ export class FlyRuntime implements MinecraftRuntime {
   }
 
   locate(handle: RuntimeHandle): RuntimeLocation {
-    const ref = decodeHandle(handle)
-    return {
-      names: [
-        { label: 'App', value: ref.app },
-        ...(ref.machineId === null ? [] : [{ label: 'Machine', value: ref.machineId }]),
-        ...(ref.volumeId === null ? [] : [{ label: 'Volume', value: ref.volumeId }]),
-        ...(ref.region === '' ? [] : [{ label: 'Region', value: ref.region }]),
-      ],
-      link: `https://fly.io/apps/${ref.app}/machines`,
-    }
+    return locationOf(handle)
   }
 
   // ─── internals ────────────────────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { z } from 'zod'
-import type { RuntimeHandle, SnapshotHandle } from '../../app/ports/runtime.ts'
+import type { RuntimeHandle, RuntimeLocation, SnapshotHandle } from '../../app/ports/runtime.ts'
 
 /** What a Fly handle names. Nothing outside infra/fly ever reads one. */
 const FlyRef = z.object({
@@ -57,4 +57,17 @@ export function encodeSnapshot(ref: FlySnapshotRef): SnapshotHandle {
 export function decodeSnapshot(snapshot: string): FlySnapshotRef {
   if (!snapshot.startsWith(SNAPSHOT)) throw new Error('This snapshot was not taken by the Fly runtime')
   return FlySnapshotRef.parse(unpack(snapshot.slice(SNAPSHOT.length)))
+}
+
+export function locationOf(handle: RuntimeHandle): RuntimeLocation {
+  const ref = decodeHandle(handle)
+  return {
+    names: [
+      { label: 'App', value: ref.app },
+      ...(ref.machineId === null ? [] : [{ label: 'Machine', value: ref.machineId }]),
+      ...(ref.volumeId === null ? [] : [{ label: 'Volume', value: ref.volumeId }]),
+      ...(ref.region === '' ? [] : [{ label: 'Region', value: ref.region }]),
+    ],
+    link: `https://fly.io/apps/${ref.app}/machines`,
+  }
 }
