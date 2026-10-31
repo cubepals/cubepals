@@ -10,14 +10,7 @@ import { AlertTriangle, Check } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { codeOf, messageOf, useTRPC } from '../../../../../lib/api'
 import { useNow, useSince } from '../../../../../lib/hooks'
-import {
-  busyWord,
-  etaLine,
-  presentProgress,
-  presentStatus,
-  sizeLabel,
-  timeAgo,
-} from '../../../../../lib/present'
+import { etaLine, presentProgress, presentStatus, sizeLabel, timeAgo } from '../../../../../lib/present'
 import { ActionButton, Button, ICON, Modal, Note, ProvisioningPanel, Toggle } from '../../../../../ui'
 import { BootLine } from '../boot-line'
 import { requestId } from '../use-server'
@@ -26,24 +19,14 @@ import { useWake, WakeLog } from '../wake-log'
 
 /**
  * Whether the server takes a configuration change now. A running server restarts into it, a
- * stopped one keeps it for its next start; anything in between is busy, and `busy` is what with,
- * in the words a button wears meanwhile: "Applying your changes", "Waking it up". A failed server
- * isn't busy, and says why where its failure is shown.
+ * stopped one keeps it for its next start; anything in between is busy, and a control waits it
+ * out disabled, in its own words. Only the button whose press started the work says what the
+ * server is doing (`busyFor` in `lib/button-busy.ts`). A failed server isn't busy, and says why
+ * where its failure is shown.
  */
-export function changeable(view: ServerView): { ok: boolean; busy: string | undefined } {
-  if (view.activeOperation !== null) return { ok: false, busy: busyWord(view.activeOperation) }
-  if (view.status === 'running' || view.status === 'stopped') return { ok: true, busy: undefined }
-  return { ok: false, busy: BUSY_STATUS[view.status] }
-}
-
-/** What a server is doing in a status that is on its way somewhere, when no operation says. */
-const BUSY_STATUS: Partial<Record<ServerView['status'], string>> = {
-  provisioning: 'Building your world',
-  starting: 'Waking it up',
-  stopping: 'Putting it to sleep',
-  updating: 'Applying your changes',
-  restoring: 'Bringing the world back',
-  relocating: 'Moving it',
+export function changeable(view: ServerView): { ok: boolean } {
+  if (view.activeOperation !== null) return { ok: false }
+  return { ok: view.status === 'running' || view.status === 'stopped' }
 }
 
 /** What saving a boot change does to this server right now, in one sentence. */

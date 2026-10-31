@@ -293,6 +293,11 @@ export interface OperationView {
   kind: OperationKind
   /** For an `apply`, what the change is; null for any other kind. */
   change: ChangeKind | null
+  /**
+   * For a `restore` of a downloaded or uploaded world, how big that world is, so the wait fits
+   * it; null for a snapshot, and for any other kind.
+   */
+  worldBytes: number | null
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
   step: OperationStep | null
   error: string | null

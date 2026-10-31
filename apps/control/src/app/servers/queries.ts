@@ -51,6 +51,7 @@ import { liftedIpBans, readAccess } from '../access/persistence.ts'
 import { loadControls, loadStanding } from '../accounts/persistence.ts'
 import { playTotal, totalView } from '../accounts/play-total.ts'
 import { type Actor, authorize } from '../actor.ts'
+import { loadBackup } from '../backups/persistence.ts'
 import type { PackCuration } from '../curation/service.ts'
 import { type Shown, shownOf } from '../edge/routed.ts'
 import { cameByView } from '../edge/turned-away.ts'
@@ -555,13 +556,21 @@ export class ServerQueries {
 
   /**
    * An operation as the server's page follows it. An `apply` says what it changes, from what the
-   * server last booted to what it should run, so the page's wait fits the change.
+   * server last booted to what it should run, and a `restore` how big the world it brings back
+   * is, so the page's wait fits the work.
    */
   async #operationView(
     op: OperationRecord,
     server: MinecraftServer,
     applied: { revisionId: string; worldId: string } | null,
   ): Promise<OperationView> {
+    if (op.kind === 'restore') {
+      const backupId = op.input.backupId
+      const chosen = typeof backupId === 'string' ? await loadBackup(this.#db, backupId) : null
+      // A download is fetched from the store, which takes as long as it is big; a snapshot is
+      // the provider's own to bring back.
+      return operationView(op, null, chosen?.tier === 'archive' ? chosen.sizeBytes : null)
+    }
     if (op.kind !== 'apply' || applied === null) return operationView(op, null)
     const ran = await loadChangeFacts(this.#db, applied.revisionId)
     const desired = await loadChangeFacts(this.#db, server.desiredRevisionId)
@@ -679,11 +688,16 @@ export class ServerQueries {
   }
 }
 
-function operationView(op: OperationRecord, change: OperationView['change']): OperationView {
+function operationView(
+  op: OperationRecord,
+  change: OperationView['change'],
+  worldBytes: number | null = null,
+): OperationView {
   return {
     id: op.id,
     kind: op.kind,
     change,
+    worldBytes,
     status: op.status,
     step: (op.step as OperationView['step']) ?? null,
     error: op.error,

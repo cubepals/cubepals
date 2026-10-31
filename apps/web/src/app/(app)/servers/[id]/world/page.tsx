@@ -9,6 +9,7 @@ import { MINUTE_MS } from '@blockly/contracts/durations'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type SubmitEvent, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
+import { busyFor } from '../../../../../lib/button-busy'
 import { useNow } from '../../../../../lib/hooks'
 import { said, useOutcome } from '../../../../../lib/outcome'
 import { levelTypeLabel, whenTaken } from '../../../../../lib/present'
@@ -194,7 +195,7 @@ function FreshStart({ view }: { view: ServerView }) {
       actions={
         <Button
           variant="outline"
-          busy={allowed.busy}
+          busy={busyFor(outcome, view)}
           {...said(outcome, { done: 'Started', failed: 'Didn’t start' })}
           disabled={!allowed.ok || needsRunning}
           onClick={() => {
@@ -271,7 +272,7 @@ function NewWorld({ view }: { view: ServerView }) {
           <Button
             type="submit"
             variant="primary"
-            busy={allowed.busy}
+            busy={busyFor(outcome, view)}
             {...said(outcome, { done: 'Started', failed: 'Didn’t start' })}
             disabled={!name.trim() || !allowed.ok}
           >

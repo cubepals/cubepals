@@ -8,6 +8,7 @@ import type { Loader, PartySize, ServerView, SettingsOptions } from '@blockly/co
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
+import { busyFor } from '../../../../../lib/button-busy'
 import { type Outcome, said, useOutcome } from '../../../../../lib/outcome'
 import { loaderLabel, presentConflict, presentPlan, runsOnPaper } from '../../../../../lib/present'
 import { Button, FormSection, Note, Select, Skeleton } from '../../../../../ui'
@@ -123,7 +124,7 @@ function VersionForm({
           <Button
             type="submit"
             variant="primary"
-            busy={allowed.busy}
+            busy={busyFor(outcome, view)}
             {...said(outcome, { done: 'Changed', failed: 'Didn’t change' })}
             disabled={lines.length === 0 || !allowed.ok}
           >
@@ -262,7 +263,7 @@ function SizeForm({
           <Button
             type="submit"
             variant="primary"
-            busy={allowed.busy}
+            busy={busyFor(outcome, view)}
             {...said(outcome, { done: 'Resized', failed: 'Didn’t resize' })}
             disabled={!dirty || !allowed.ok}
           >

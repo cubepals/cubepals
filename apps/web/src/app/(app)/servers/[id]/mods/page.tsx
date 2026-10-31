@@ -292,7 +292,6 @@ function Installed({
           <Button
             variant="outline"
             icon={<RefreshCw {...ICON} aria-hidden />}
-            busy={allowed.busy}
             disabled={!allowed.ok}
             onClick={() => onChange({ title: `Update ${noun}?`, change: { upgrade: 'all' } })}
           >

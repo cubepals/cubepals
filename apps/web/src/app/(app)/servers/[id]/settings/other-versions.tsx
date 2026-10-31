@@ -15,6 +15,7 @@ import type { OtherVersions, ServerView } from '@blockly/contracts'
 import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTRPC } from '../../../../../lib/api'
+import { busyFor } from '../../../../../lib/button-busy'
 import { type Outcome, useOutcome } from '../../../../../lib/outcome'
 import { FormRow, FormSection, Toggle } from '../../../../../ui'
 import { joinsLine } from './joins-line'
@@ -55,10 +56,12 @@ function OtherVersionsForm({
     }),
   )
   const allowed = changeable(view)
+  // The server's words only for work this switch started; anything else it waits out disabled.
+  const busy = busyFor(outcome, view)
   const line = joinsLine(view)
   const said =
-    allowed.busy !== undefined
-      ? `${allowed.busy}…`
+    busy !== undefined
+      ? `${busy}…`
       : outcome.said === 'done'
         ? `Saved. ${line}`
         : outcome.said === 'failed'

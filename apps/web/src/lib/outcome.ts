@@ -65,6 +65,8 @@ export function useOutcome(view: Seen | undefined) {
   }, [awaited, view, say])
   return {
     said,
+    /** The operation this press started, while the page waits on it; null otherwise (`button-busy.ts`). */
+    awaiting: awaited?.operationId ?? null,
     /**
      * The request went through. `next` is the server as it answered, with the work it started,
      * if any; call it after the page holds `next`, so the wait begins from there.

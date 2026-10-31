@@ -21,6 +21,7 @@ import { DAY_MS, DAY_S, HOUR_S, MINUTE_S } from '@blockly/contracts/durations'
 import { PICK_ANOTHER_NAME } from '@blockly/contracts/names'
 import type { PillStatus, ProvisioningStep } from '../ui'
 import { outOfPlay } from './out-of-play'
+import { restoreSeconds } from './restore-pace'
 
 /**
  * How Blockly words a server's state. The API reports domain facts; the words people read are
@@ -258,7 +259,7 @@ const JOURNEYS: Partial<Record<OperationView['kind'], Journey>> = {
   },
   restore: {
     title: 'Restoring your backup',
-    expectedSeconds: 60,
+    expectedSeconds: (_, operation) => restoreSeconds(operation.worldBytes),
     steps: [
       { label: 'Keeping the world as it is now', covers: ['queued', 'saving'] },
       { label: 'Bringing the backup back', covers: ['storage', 'compute', 'allocating', 'waiting_for_room'] },

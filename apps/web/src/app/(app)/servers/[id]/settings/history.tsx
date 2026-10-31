@@ -9,16 +9,10 @@ import { MINUTE_MS } from '@blockly/contracts/durations'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Fragment, type ReactNode, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
+import { busyFor } from '../../../../../lib/button-busy'
 import { useNow } from '../../../../../lib/hooks'
 import { said, useOutcome } from '../../../../../lib/outcome'
-import {
-  busyWord,
-  loaderLabel,
-  presentChange,
-  revisionTitle,
-  settingLabel,
-  timeAgo,
-} from '../../../../../lib/present'
+import { loaderLabel, presentChange, revisionTitle, settingLabel, timeAgo } from '../../../../../lib/present'
 import { Badge, Button, FormRow, FormSection, Note, Skeleton } from '../../../../../ui'
 import { StyledMessage } from './server-message'
 import { ConfirmChange, planLines, useChanged, whatHappens } from './shared'
@@ -106,7 +100,7 @@ export function History({ view }: { view: ServerView }) {
                 disabled={busy}
                 {...(revision.id === wentBack
                   ? {
-                      busy: busyWord(view.activeOperation),
+                      busy: busyFor(outcome, view),
                       ...said(outcome, { done: 'Went back', failed: 'Didn’t go back' }),
                     }
                   : {})}

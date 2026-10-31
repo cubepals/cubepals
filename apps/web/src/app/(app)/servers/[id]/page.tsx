@@ -11,6 +11,7 @@ import { Moon, Play, RotateCw, Sunrise } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { codeOf, messageOf, useTRPC } from '../../../../lib/api'
+import { busyFor, powerBusy } from '../../../../lib/button-busy'
 import { useNow, useSince } from '../../../../lib/hooks'
 import { outOfPlay } from '../../../../lib/out-of-play'
 import { said, useOutcome } from '../../../../lib/outcome'
@@ -264,8 +265,10 @@ function Actions({ server, wake }: { server: ServerView; wake: Wake }) {
   }
   const busy = server.activeOperation
   // Mid-restart the server is neither running nor stopped, and the button beside it is dimmed:
-  // it keeps the face it had rather than offering to start what is already starting.
+  // it keeps the face it had rather than offering to start what is already starting. So it does
+  // through a restore, a change or a move: it says only its own work, a wake or a sleep.
   const now = running ? 'sleep' : asleep ? 'wake' : busy !== null ? 'sleep' : 'start'
+  const powering = powerBusy(busy)
 
   const resting = restsNow(server)
 
@@ -275,9 +278,9 @@ function Actions({ server, wake }: { server: ServerView; wake: Wake }) {
         <ActionButton
           phases={phases}
           now={now}
-          busy={busy?.kind === 'restart' ? undefined : busyWord(server.activeOperation)}
+          busy={powering}
           said={power.said}
-          disabled={busy?.kind === 'restart'}
+          disabled={busy !== null && powering === undefined}
           {...ctaMark(POWER_PRESS[now])}
         />
         {/* Restart stays while the server is busy, so a restart morphs on the button that was
@@ -470,9 +473,9 @@ function MoreRoom({ server }: { server: ServerView }) {
           <Button
             variant="secondary"
             size="sm"
-            busy={server.activeOperation ? busyWord(server.activeOperation) : undefined}
+            busy={busyFor(roomier, server)}
             {...said(roomier, { done: 'Resized', failed: 'Didn’t resize' })}
-            disabled={resize.isPending}
+            disabled={resize.isPending || server.activeOperation !== null}
             onClick={() =>
               resize.mutate({
                 serverId: server.id,
