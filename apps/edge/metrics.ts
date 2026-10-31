@@ -125,7 +125,7 @@ export type Edition = 'java' | 'bedrock'
 /**
  * A connection's greeting ended: `accepted` once what it was handed to first answered, `refused`
  * by the edge (`address`, `busy`, `wrong_game`), or `failed` (`silent`, `closed`, `bad_greeting`,
- * `greeting_timeout`, `backend`, `left`). Each connection is counted once.
+ * `greeting_timeout`, `backend`, `no_server`, `left`). Each connection is counted once.
  */
 export function connectionEnded(
   edition: Edition,
