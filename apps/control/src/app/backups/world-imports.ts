@@ -19,7 +19,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { BroughtWorld, PeopleChoice, WorldImportView } from '@blockly/contracts'
 import { NAME_MAX_LENGTH } from '@blockly/contracts'
-import { type Db, schema, type Tx, type WorldImportAnswerJson, type WorldPeopleJson } from '@blockly/db'
+import {
+  type BroughtModsJson,
+  type Db,
+  schema,
+  type Tx,
+  type WorldImportAnswerJson,
+  type WorldPeopleJson,
+} from '@blockly/db'
 import type { SeededAccess } from '../../domain/access/access.ts'
 import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
@@ -58,6 +65,7 @@ import {
   worldImportReady,
   worldImportRefused,
 } from './world-import-records.ts'
+import { playedWithOf, type WorldMods } from './world-mods.ts'
 import { accessFrom } from './world-people.ts'
 import {
   type Accounts,
@@ -88,6 +96,7 @@ export class WorldImports {
   readonly #events: EventBus
   readonly #reading: WorldReading
   readonly #forNewServers: Pick<NewWorldImports, 'bring'>
+  readonly #mods: Pick<WorldMods, 'found'>
 
   constructor(
     deps: ReadingDeps & {
@@ -96,6 +105,8 @@ export class WorldImports {
       events: EventBus
       /** Worlds brought while a server is being made, read by the same job. */
       forNewServers: Pick<NewWorldImports, 'bring'>
+      /** The mods a world's upload holds beside it (`world-mods.ts`). */
+      mods: Pick<WorldMods, 'found'>
     },
   ) {
     this.#db = deps.db
@@ -107,6 +118,7 @@ export class WorldImports {
     this.#events = deps.events
     this.#reading = new WorldReading(deps)
     this.#forNewServers = deps.forNewServers
+    this.#mods = deps.mods
   }
 
   /** The upload arrived: it is read on a worker, and `view` says how it went. Asked twice, once. */
@@ -152,7 +164,17 @@ export class WorldImports {
   /** An import as `view` gives it: ready, with the world it brought as its owner knows it. */
   async #seen(record: WorldImportRecord): Promise<WorldImportView> {
     const world = record.status === 'ready' ? await this.#broughtWorld(record) : null
-    return viewOf(record, (ready) => ({ backupId: ready.backupId as string, people: ready.people, world }))
+    const backup =
+      record.status === 'ready' && record.backupId !== null
+        ? await loadBackup(this.#db, record.backupId)
+        : null
+    const playedWith = playedWithOf(backup?.worldFacts ?? null)
+    return viewOf(record, (ready) => ({
+      backupId: ready.backupId as string,
+      people: ready.people,
+      world,
+      playedWith,
+    }))
   }
 
   /**
@@ -278,6 +300,7 @@ export class WorldImports {
       )
       const accounts = await this.#reading.accounts(read, desired.settings.onlineMode, others.reads)
       const people = await this.#reading.people(read, desired.settings.onlineMode)
+      const mods = await this.#mods.found(read, server.ownerId, work)
       await this.#keep({
         record,
         pending,
@@ -289,6 +312,7 @@ export class WorldImports {
         people,
         others,
         serverVersion: desired.gameVersion,
+        mods,
       })
     } finally {
       await archive.close()
@@ -316,6 +340,8 @@ export class WorldImports {
     /** The upload's other worlds, each kept as a backup of its own, and those left out. */
     others: { reads: Read[]; left: string[] }
     serverVersion: string
+    /** The mods the upload held beside it, matched and kept (`world-mods.ts`). */
+    mods: BroughtModsJson | null
   }): Promise<void> {
     const { record, pending, server, read, player, accounts } = input
     const store = requireCapability(this.#caps, 'archives')
@@ -356,6 +382,9 @@ export class WorldImports {
         newer: () => null,
         serverVersion: input.serverVersion,
         others: input.others.reads.map((other) => other.world),
+        // Said where it is played, as the choice it is, from `playedWith` (`WorldImportView`).
+        mods: [],
+        modsKept: input.mods !== null,
       }),
       ...accountNotes(accounts),
       ...peopleNotes(input.people),
@@ -396,6 +425,7 @@ export class WorldImports {
       people: input.people,
       others,
       serverVersion: input.serverVersion,
+      mods: input.mods,
     }).catch(async (error: unknown) => {
       // A retry writes them again under new keys, so the ones written here go with the failure.
       for (const written of [...others.map((other) => other.key), key])
@@ -451,6 +481,7 @@ export class WorldImports {
     /** The upload's other worlds, written as backups of their own. */
     others: KeptWorld[]
     serverVersion: string
+    mods: BroughtModsJson | null
   }): Promise<boolean> {
     const { record, server } = input
     const now = new Date()

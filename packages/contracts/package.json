@@ -22,6 +22,7 @@
     "./names": "./src/names.ts",
     "./seal": "./src/seal.ts",
     "./plain-text": "./src/plain-text.ts",
+    "./server-brands": "./src/server-brands.ts",
     "./proxy-header": "./src/proxy-header.ts"
   },
   "dependencies": {

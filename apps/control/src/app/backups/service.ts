@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { DAY_MS, HOUR_S, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
 import { type Db, schema, type Tx } from '@blockly/db'
 import { entitlementsFor, entitlementsOf, PLAN_KEYS } from '../../domain/account/entitlements.ts'
-import type { RevisionDraft } from '../../domain/revision/revision.ts'
+import type { RevisionDraft, ServerRevision } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { levelNameOf, PROPERTIES_FILE, wantedInWorldArchive } from '../../minecraft/uploads.ts'
 import { compareVersions } from '../../minecraft/versions.ts'
@@ -15,7 +15,9 @@ import { type Actor, authorize, requestedBy } from '../actor.ts'
 import type { ArtifactService } from '../artifacts/service.ts'
 import { type DeploymentCapabilities, requireCapability } from '../capabilities.ts'
 import { AppError, NotFound } from '../errors.ts'
+import type { ModService } from '../mods/service.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
+import type { ModCatalog } from '../ports/catalog.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { FileFormats, PackArchives, WorldArchives } from '../ports/formats.ts'
 import type { JobQueue } from '../ports/jobs.ts'
@@ -57,7 +59,9 @@ import {
   readySnapshots,
   setBackupStatus,
 } from './persistence.ts'
+import { type WithMods, withWorldMods } from './restored-mods.ts'
 import { WorldImports } from './world-imports.ts'
+import { WorldMods } from './world-mods.ts'
 import { MAX_WORLD_BYTES, refusedByName, worldUploadLimit } from './world-reading.ts'
 
 /** Snapshots taken before a change, a restore or a move: the latest few, apart from the owner's own. */
@@ -100,6 +104,7 @@ export class BackupService {
   readonly #formats: FileFormats
   readonly #artifacts: ArtifactService
   readonly #builds: LoaderBuilds
+  readonly #mods: Pick<ModService, 'planOn' | 'ownJars'>
   /** What an archive's owner downloads of it (`downloads.ts`). */
   readonly downloads: WorldDownloads
   /** Worlds their owners upload, brought in as backups (`world-imports.ts`). */
@@ -111,28 +116,35 @@ export class BackupService {
     db: Db
     transitions: ServerTransitions
     events: EventBus
-    runtime: Runtimes
     policy: AccessPolicy
     artifacts: ArtifactService
     official?: OfficialFiles
+    /**
+     * A brought world's own jars kept as its owner's uploads (`mods/own-jars.ts`), and its mods
+     * resolved for the server that restores it (`restored-mods.ts`).
+     */
+    mods: Pick<ModService, 'planOn' | 'ownJars'>
     ports: {
+      runtime: Runtimes
       capabilities: DeploymentCapabilities
       formats: FileFormats
       archives: PackArchives & WorldArchives
       loaderBuilds: LoaderBuilds
       jobs: JobQueue
       profiles: PlayerProfiles
+      catalog: ModCatalog
     }
   }) {
     this.#db = deps.db
     this.#transitions = deps.transitions
     this.#events = deps.events
-    this.#runtime = deps.runtime
+    this.#runtime = deps.ports.runtime
     this.#policy = deps.policy
     this.#caps = deps.ports.capabilities
     this.#formats = deps.ports.formats
     this.#artifacts = deps.artifacts
     this.#builds = deps.ports.loaderBuilds
+    this.#mods = deps.mods
     const { official, ports } = deps
     this.downloads = new WorldDownloads({ db: deps.db, policy: deps.policy, official, ...ports })
     this.newWorlds = new NewWorldImports({ db: deps.db, policy: deps.policy, ...ports })
@@ -141,6 +153,7 @@ export class BackupService {
       policy: deps.policy,
       events: deps.events,
       forNewServers: this.newWorlds,
+      mods: new WorldMods({ ...ports, ownJars: deps.mods.ownJars }),
       ...ports,
     })
   }
@@ -336,15 +349,23 @@ export class BackupService {
    * The world from a backup, as the server's world. With its configuration, the settings and mods
    * from then come back too, as a `restore` revision; without, a world from a newer game version
    * can't be opened, so that is refused. A world brought in from a newer Minecraft moves the
-   * server up to it where its owner chose that (`moveUp`): a step that can't be undone.
+   * server up to it where its owner chose that (`moveUp`): a step that can't be undone. One brought
+   * with its mods moves the server to the loader it was played on, with them, where its owner chose
+   * that (`withMods`, `restored-mods.ts`).
    */
-  restoreBackup(
+  async restoreBackup(
     actor: Actor,
     serverId: string,
     backupId: string,
     requestId: string,
-    options: ChangeOptions & { withConfiguration: boolean; moveUp?: boolean | undefined },
+    options: ChangeOptions & {
+      withConfiguration: boolean
+      moveUp?: boolean | undefined
+      withMods?: boolean | undefined
+    },
   ): Promise<MinecraftServer> {
+    // Resolved before the restore's transaction: it asks the catalog, which mustn't hold the lock.
+    const withMods = options.withMods ? await this.#withMods(actor, serverId, backupId, options.moveUp) : null
     return this.#db.transaction(async (tx) => {
       const server = authorize(actor, await lockServer(tx, serverId))
       const backup = await loadBackup(tx, backupId)
@@ -365,32 +386,12 @@ export class BackupService {
       // An upload brings a world, never a configuration: its own version must open here, or the
       // server moves up to it.
       if (backup.worldFacts !== null) options = { ...options, withConfiguration: false }
-      const upTo = movesUpTo(backup.worldFacts, desired, options.moveUp)
-      const then = await loadRevision(tx, backup.revisionId)
-      if (!options.withConfiguration && compareVersions(then.gameVersion, desired.gameVersion) > 0)
-        throw new AppError(
-          'version_downgrade',
-          `This backup's world ran on Minecraft ${then.gameVersion}, newer than the server has now. Restore it with its settings from then.`,
-        )
-      let revisionId: string | undefined
-      if (upTo !== null) revisionId = await this.#movedUp(tx, actor, server, desired, upTo)
-      if (options.withConfiguration) {
-        const draft: RevisionDraft = {
-          ...draftOf(then),
-          // A backup's settings never change how players are checked: that has its own setting.
-          settings: { ...then.settings, onlineMode: desired.settings.onlineMode },
-          reason: 'restore',
-          basedOnRevisionId: then.id,
-        }
-        // A backup's settings are a configuration like any other: within the plan it runs on now.
-        const standing = await loadStanding(tx, server.ownerId)
-        requireWithinPlan(entitlementsOf(standing), draft)
-        await pinUnpinned(this.#builds, draft)
-        draft.acknowledgedRevoked = await acknowledged(tx, draft, options)
-        const revision = await insertRevision(tx, server.id, draft, requestedBy(actor))
-        await this.#artifacts.pinned(tx, revision.mods, revision.modpack)
-        revisionId = revision.id
-      }
+      const revisionId = await this.#restoredRevision(
+        tx,
+        actor,
+        { server, backup, desired, withMods },
+        options,
+      )
       const moved = await setDesired(tx, server, {
         ...(revisionId ? { revisionId } : {}),
         activeWorldId: backup.worldId,
@@ -409,9 +410,93 @@ export class BackupService {
       await this.#audit(tx, actor, 'server.restore_requested', server.id, {
         backupId,
         withConfiguration: options.withConfiguration,
+        ...(withMods === null ? {} : { withMods: true }),
       })
       return restoring
     })
+  }
+
+  /**
+   * The revision a restore runs, where it brings one: the server moved up to its world's release,
+   * or to the loader and mods the world was played with, or the configuration from then.
+   */
+  async #restoredRevision(
+    tx: Tx,
+    actor: Actor,
+    restore: {
+      server: MinecraftServer
+      backup: BackupRecord
+      desired: ServerRevision
+      withMods: WithMods | null
+    },
+    options: ChangeOptions & { withConfiguration: boolean; moveUp?: boolean | undefined },
+  ): Promise<string | undefined> {
+    const { server, backup, desired, withMods } = restore
+    // With its mods, the server moves to the world's release with them, resolved for it.
+    const upTo = withMods === null ? movesUpTo(backup.worldFacts, desired, options.moveUp) : null
+    const then = await loadRevision(tx, backup.revisionId)
+    if (!options.withConfiguration && compareVersions(then.gameVersion, desired.gameVersion) > 0)
+      throw new AppError(
+        'version_downgrade',
+        `This backup's world ran on Minecraft ${then.gameVersion}, newer than the server has now. Restore it with its settings from then.`,
+      )
+    if (upTo !== null) return this.#movedUp(tx, actor, server, desired, upTo)
+    if (withMods !== null) {
+      if (withMods.basedOn !== desired.id)
+        throw new AppError(
+          'changed_meanwhile',
+          "The server's configuration changed while this was being prepared. Look at it again, then try once more.",
+        )
+      return this.#insertWithin(tx, actor, server, withMods.draft, options)
+    }
+    if (!options.withConfiguration) return undefined
+    const draft: RevisionDraft = {
+      ...draftOf(then),
+      // A backup's settings never change how players are checked: that has its own setting.
+      settings: { ...then.settings, onlineMode: desired.settings.onlineMode },
+      reason: 'restore',
+      basedOnRevisionId: then.id,
+    }
+    // A backup's settings are a configuration like any other: within the plan it runs on now.
+    return this.#insertWithin(tx, actor, server, draft, options)
+  }
+
+  /** A configuration a restore brings, within the plan the server runs on now, pinned and recorded. */
+  async #insertWithin(
+    tx: Tx,
+    actor: Actor,
+    server: MinecraftServer,
+    draft: RevisionDraft,
+    options: ChangeOptions,
+  ): Promise<string> {
+    requireWithinPlan(entitlementsOf(await loadStanding(tx, server.ownerId)), draft)
+    await pinUnpinned(this.#builds, draft)
+    draft.acknowledgedRevoked = await acknowledged(tx, draft, options)
+    const revision = await insertRevision(tx, server.id, draft, requestedBy(actor))
+    await this.#artifacts.pinned(tx, revision.mods, revision.modpack)
+    return revision.id
+  }
+
+  /** The server with the mods a brought world was played with (`restored-mods.ts`), as its owner restores it. */
+  async #withMods(
+    actor: Actor,
+    serverId: string,
+    backupId: string,
+    moveUp: boolean | undefined,
+  ): Promise<WithMods> {
+    const server = authorize(actor, await findServer(this.#db, serverId))
+    const backup = await loadBackup(this.#db, backupId)
+    if (backup === null || backup.serverId !== server.id) throw new NotFound('Backup')
+    const mods = backup.worldFacts?.mods
+    if (backup.worldFacts === null || mods === undefined)
+      throw new AppError('invalid_choice', 'This world came without its mods, so there are none to bring.')
+    const desired = await loadRevision(this.#db, server.desiredRevisionId)
+    return withWorldMods(
+      { mods: this.#mods, builds: this.#builds },
+      desired,
+      { gameVersion: backup.worldFacts.gameVersion, mods },
+      moveUp,
+    )
   }
 
   /** The server moved up to the release a world it restores was last played on (`moved-up.ts`). */

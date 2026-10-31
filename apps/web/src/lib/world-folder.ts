@@ -129,23 +129,31 @@ export function tarOf(files: readonly PickedFile[], now = Date.now()): Blob {
 }
 
 /**
- * A zip's names, from its central directory, read from the end of the file without reading the
- * rest: what `lookAt` says of the files it holds, sizes as they inflate. Null for a file zip.js
- * can't read as a zip; the control plane says what it is.
+ * A zip's files, from its central directory, read from the end of the file without reading the
+ * rest: each one's name, and its size as it inflates. Null for a file zip.js can't read as a zip.
  */
-export async function lookInZip(zip: Blob): Promise<FolderLook | null> {
+async function filesInZip(zip: Blob): Promise<Array<{ path: string; file: { size: number } }> | null> {
   const { BlobReader, ZipReader } = await import('@zip.js/zip.js')
   const reader = new ZipReader(new BlobReader(zip), { useWebWorkers: false })
   try {
     const entries = await reader.getEntries()
-    return lookAt(
-      entries
-        .filter((entry) => !entry.directory)
-        .map((entry) => ({ path: entry.filename, file: { size: entry.uncompressedSize } })),
-    )
+    return entries
+      .filter((entry) => !entry.directory)
+      .map((entry) => ({ path: entry.filename, file: { size: entry.uncompressedSize } }))
   } catch {
     return null
   } finally {
     await reader.close().catch(() => undefined)
   }
+}
+
+/** What `lookAt` says of the files a zip holds; null where it can't be read as one, and the control plane says what it is. */
+export async function lookInZip(zip: Blob): Promise<FolderLook | null> {
+  const files = await filesInZip(zip)
+  return files === null ? null : lookAt(files)
+}
+
+/** The paths of the files a zip holds; null where it can't be read as one. */
+export async function namesInZip(zip: Blob): Promise<string[] | null> {
+  return (await filesInZip(zip))?.map((file) => file.path) ?? null
 }

@@ -17,6 +17,7 @@ import { loadRevisionFields, type RevisionSummary, summariesOf } from '../server
 import { listWorlds } from '../worlds/persistence.ts'
 import { movesWithWorld, newerWorldOf } from './moved-up.ts'
 import { type BackupRecord, listBackups } from './persistence.ts'
+import { playedWithOf } from './world-mods.ts'
 
 /** A failed archive stays in view this long, so its owner learns it didn't happen. */
 const FAILED_SHOWN_MS = 3 * DAY_MS
@@ -83,6 +84,7 @@ export class BackupQueries {
           },
           needsConfiguration: compareVersions(revision.gameVersion, desired.gameVersion) > 0,
           newerWorld: newerWorldOf(backup.worldFacts, desired.gameVersion, movesServer),
+          playedWith: playedWithOf(backup.worldFacts),
         }
       }),
     }

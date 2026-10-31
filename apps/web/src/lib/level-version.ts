@@ -3,36 +3,53 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The Minecraft a world was last played on, and the name it has there, read in the browser before
- * it is sent: its `level.dat`, found in the tarball a picked folder becomes (`world-folder.ts`) or
- * in a zip, and its `Data.Version.Name` and `Data.LevelName`. A tarball is walked header by header and a zip read from its directory,
- * so a world of gigabytes is never read whole. Null where it can't tell: a gzipped tarball, no
- * `level.dat`, or one it can't read. The control plane reads the world again and decides; this only
- * lets the page say early what it will.
+ * What a world says of how it was last played, read in the browser before it is sent: its
+ * `level.dat`, found in the tarball a picked folder becomes (`world-folder.ts`) or in a zip, and its
+ * `Data.Version.Name`, `Data.LevelName` and `Data.ServerBrands`. A tarball is walked header by header and a zip read
+ * from its directory, so a world of gigabytes is never read whole. Null where it can't tell: a
+ * gzipped tarball, no `level.dat`, or one it can't read. The control plane reads the world again and
+ * decides; this only lets the page say early what it will: that the world is from a newer Minecraft,
+ * or that it was played with mods, whose instance the page then asks for so they come too.
  *
  * The reader is written here rather than taken from a library: `level.dat` is gzipped NBT, and the
  * NBT readers on npm (prismarine-nbt, which the control plane uses) need Node's Buffer, while this
- * needs two strings from it.
+ * needs three values from it.
  */
+import { moddedOf } from '@blockly/contracts/server-brands'
 
 const BLOCK = 512
 const decoder = new TextDecoder()
 
-/** What a world's file says of it: the release that last saved it and its name, each null where it can't tell. */
-export async function levelOf(file: Blob): Promise<{ gameVersion: string | null; name: string | null }> {
+/** What a world's `level.dat` says of it. */
+export interface LevelSays {
+  /** The release that last saved it, or null where it names none. */
+  gameVersion: string | null
+  /** The name the world has in Minecraft, or null where it has none. */
+  name: string | null
+  /**
+   * The server types that opened it and add blocks and items of their own (`fabric`, `forge`…), as
+   * the control plane names them (`moddedOf`); empty for a world plain Minecraft opened.
+   */
+  moddedWith: string[]
+}
+
+const UNKNOWN: LevelSays = { gameVersion: null, name: null, moddedWith: [] }
+
+/** What a world's file says of it; nothing known where it can't tell. */
+export async function levelOf(file: Blob): Promise<LevelSays> {
   try {
     const level = (await levelInTar(file)) ?? (await levelInZip(file))
     if (level === null) return UNKNOWN
-    const bytes = new Uint8Array(
-      await new Response(level.stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer(),
+    const said = dataIn(
+      new Uint8Array(
+        await new Response(level.stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer(),
+      ),
     )
-    return { gameVersion: versionIn(bytes), name: nameIn(bytes) }
+    return { gameVersion: said.version, name: said.name, moddedWith: moddedOf(said.brands) }
   } catch {
     return UNKNOWN
   }
 }
-
-const UNKNOWN = { gameVersion: null, name: null }
 
 /** The release in a world's file, or null where it can't tell. */
 export const playedOn = async (file: Blob): Promise<string | null> => (await levelOf(file)).gameVersion
@@ -96,10 +113,6 @@ async function levelInZip(file: Blob): Promise<Blob | null> {
   }
 }
 
-/** Where `Data.Version.Name` is in `level.dat`: a compound in a compound, then a string. */
-const VERSION = ['Data', 'Version', 'Name']
-/** Where the name the world has in Minecraft is: a string in the `Data` compound. */
-const NAME = ['Data', 'LevelName']
 /** The bytes of NBT's fixed-size tags (byte, short, int, long, float, double). */
 const FIXED: Record<number, number> = { 1: 1, 2: 2, 3: 4, 4: 8, 5: 4, 6: 8 }
 /** The width of one element of NBT's arrays (bytes, ints, longs), whose length comes first. */
@@ -159,26 +172,60 @@ function skip(nbt: Cursor, type: number): void {
   } else throw new Error(`NBT tag ${type}`)
 }
 
-/** In a compound `depth` steps along `path`: the string at its end, or null. */
-function seek(nbt: Cursor, path: readonly string[], depth: number): string | null {
+/** In a compound, the string tag `name` holds, passing over the rest; null where it holds none. */
+function stringNamed(nbt: Cursor, name: string): string | null {
+  let found: string | null = null
   for (let tag = nbt.u8(); tag !== 0; tag = nbt.u8()) {
-    if (nbt.string() !== path[depth]) skip(nbt, tag)
-    else if (depth === path.length - 1) return tag === STRING ? nbt.string() : null
-    else return tag === COMPOUND ? seek(nbt, path, depth + 1) : null
+    if (nbt.string() === name && tag === STRING) found = nbt.string()
+    else skip(nbt, tag)
   }
-  return null
+  return found
 }
 
-/** The string at `path` in NBT, following only that path and passing over the rest. */
-function stringAt(bytes: Uint8Array, path: readonly string[]): string | null {
+/** A list's strings, or none where it holds another type. */
+function strings(nbt: Cursor): string[] {
+  const inner = nbt.u8()
+  const found: string[] = []
+  for (let count = nbt.i32(); count > 0; count--)
+    if (inner === STRING) found.push(nbt.string())
+    else skip(nbt, inner)
+  return found
+}
+
+/** What `level.dat` says of how a world was last played. */
+interface DataSays {
+  version: string | null
+  name: string | null
+  brands: string[]
+}
+
+/** In the `Data` compound, its `Version.Name` and its `ServerBrands`, passing over the rest. */
+function readData(nbt: Cursor): DataSays {
+  const said: DataSays = { version: null, name: null, brands: [] }
+  for (let tag = nbt.u8(); tag !== 0; tag = nbt.u8()) {
+    const name = nbt.string()
+    if (name === 'Version' && tag === COMPOUND) said.version = stringNamed(nbt, 'Name')
+    else if (name === 'ServerBrands' && tag === LIST) said.brands = strings(nbt)
+    else if (name === 'LevelName' && tag === STRING) said.name = nbt.string().trim() || null
+    else skip(nbt, tag)
+  }
+  return said
+}
+
+/**
+ * `Data.Version.Name` and `Data.ServerBrands` from NBT, following only `Data` and passing over the
+ * rest: the release that last saved the world, and the server types that have opened it.
+ */
+export function dataIn(bytes: Uint8Array): DataSays {
   const nbt = new Cursor(bytes)
-  if (nbt.u8() !== COMPOUND) return null
+  if (nbt.u8() !== COMPOUND) return { version: null, name: null, brands: [] }
   nbt.string()
-  return seek(nbt, path, 0)
+  for (let tag = nbt.u8(); tag !== 0; tag = nbt.u8()) {
+    if (nbt.string() === 'Data' && tag === COMPOUND) return readData(nbt)
+    skip(nbt, tag)
+  }
+  return { version: null, name: null, brands: [] }
 }
 
-/** `Data.Version.Name` from NBT. */
-export const versionIn = (bytes: Uint8Array): string | null => stringAt(bytes, VERSION)
-
-/** `Data.LevelName` from NBT: the name the world has in Minecraft, null where it has none. */
-const nameIn = (bytes: Uint8Array): string | null => stringAt(bytes, NAME)?.trim() || null
+/** `Data.Version.Name` from NBT: the release that last saved the world. */
+export const versionIn = (bytes: Uint8Array): string | null => dataIn(bytes).version

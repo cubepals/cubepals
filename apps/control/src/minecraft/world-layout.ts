@@ -218,15 +218,29 @@ export function leftOutOf(paths: readonly string[], world: FoundWorld, most = 8)
 }
 
 /**
- * The mods a server folder ran with, beside the world: the jars in its `mods/`. A plugin adds no
+ * The folder a world was played from, ending in a slash: the game's folder whose `saves/` it is in
+ * (a launcher's `.minecraft/`, a Prism instance's `minecraft/`), else the folder it sits in, as a
+ * server's folder holds its world; '' at the root.
+ */
+export function gameFolderOf(world: FoundWorld): string {
+  const base = world.folder === '' ? '' : folderOf(world.folder.slice(0, -1))
+  return playedInGame(world) ? base.slice(0, -'saves/'.length) : base
+}
+
+/** Whether a world sits in a game's `saves/` (a launcher's, an instance's), not as a server's folder holds it. */
+export function playedInGame(world: FoundWorld): boolean {
+  const base = world.folder === '' ? '' : folderOf(world.folder.slice(0, -1))
+  return /(^|\/)saves\/$/.test(base)
+}
+
+/**
+ * The mods a world was played with, beside it: the jars in the `mods/` of the folder it was played
+ * from (`gameFolderOf`), a server's or a game's, by their paths in the upload. A plugin adds no
  * block or item of its own, so a world its plugins ran on is plain Minecraft's.
  */
 export function modsBeside(paths: readonly string[], world: FoundWorld): string[] {
-  const base = world.folder === '' ? '' : folderOf(world.folder.slice(0, -1))
-  return paths
-    .filter((path) => path.startsWith(base))
-    .map((path) => path.slice(base.length))
-    .filter((path) => /^mods\/[^/]+\.jar$/.test(path))
+  const base = gameFolderOf(world)
+  return paths.filter((path) => path.startsWith(base) && /^mods\/[^/]+\.jar$/.test(path.slice(base.length)))
 }
 
 /**

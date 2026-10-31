@@ -343,6 +343,37 @@ export interface UploadedWorldFactsJson {
   hardcore: boolean
   /** The game version that last saved it. */
   gameVersion: string
+  /**
+   * The modded server types its level.dat says opened it (`fabric`…). Absent for a world plain
+   * Minecraft opened, and on rows written before it existed.
+   */
+  moddedWith?: string[]
+  /** The mods its upload held beside it, as they were found; absent where it held none. */
+  mods?: BroughtModsJson
+}
+
+/** A mod a brought world was played with, by what its owner calls it and its file's name. */
+export interface BroughtModJson {
+  name: string
+  fileName: string
+}
+
+/**
+ * The mods a brought world was played with, from the instance or mods folder its upload held
+ * beside it (docs/world-import.md § Mods): restoring it with them moves the server to `loader`
+ * with each of them, resolved as any change of mods is.
+ */
+export interface BroughtModsJson {
+  /** The loader it was played on: its instance's, else its level.dat's, else the one its jars are for. */
+  loader: 'fabric' | 'quilt' | 'forge' | 'neoforge'
+  /** Published on Modrinth: the exact version it was played with. */
+  catalog: Array<BroughtModJson & { projectId: string; versionId: string }>
+  /** Its owner's own jars, kept as their uploads after an upload's checks. */
+  own: Array<BroughtModJson & { uploadId: string }>
+  /** Left out: only players' games run them. */
+  forPlayers: BroughtModJson[]
+  /** Left out for another reason, said in its owner's words. */
+  refused: Array<BroughtModJson & { why: string }>
 }
 
 /** One runtime a placement looked at (docs/runtimes.md): whether it was chosen, and why. */

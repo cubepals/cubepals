@@ -320,6 +320,7 @@ const backups = router({
       withConfiguration: input.withConfiguration,
       acknowledgeRevoked: input.acknowledgeRevoked,
       moveUp: input.moveUp,
+      withMods: input.withMods,
     })
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),

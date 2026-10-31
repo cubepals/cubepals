@@ -54,7 +54,12 @@ export function useSentImport(sending: ImportSending, onStart?: () => void) {
   }
   /** Stops the file going up; nothing is said, since the player asked. */
   const stop = () => stopping.current?.abort()
-  return { progress, importId, failure, send, stop }
+  /** Lets go of the import it became, for the file to be shaped and sent again; what was sent stays where it went. */
+  const reset = () => {
+    setImportId(null)
+    setFailure(null)
+  }
+  return { progress, importId, failure, send, stop, reset }
 }
 
 /**

@@ -9,6 +9,7 @@
  * real servers and games saved: Minecraft 1.20.1 to 26.3, Paper and Fabric (`world-fixtures/`).
  */
 import { oneLine } from '@blockly/contracts/plain-text'
+import { moddedOf } from '@blockly/contracts/server-brands'
 import { record, text } from './plain-data.ts'
 import { LEVEL_TYPES, type LevelType } from './worlds.ts'
 
@@ -35,12 +36,8 @@ export interface WorldFacts {
 const GAME_MODES = ['survival', 'creative', 'adventure', 'spectator'] as const
 const DIFFICULTIES = ['peaceful', 'easy', 'normal', 'hard'] as const
 
-/** Server types that run plain Minecraft's blocks and items, whatever they add besides. */
-const PLAIN_BRANDS = new Set(['vanilla', 'paper', 'spigot', 'craftbukkit', 'bukkit', 'purpur', 'folia'])
-
 /** The server types a world was opened with that add blocks and items of their own, if any. */
-export const moddedBrands = (facts: Pick<WorldFacts, 'brands'>): string[] =>
-  facts.brands.filter((brand) => !PLAIN_BRANDS.has(brand))
+export const moddedBrands = (facts: Pick<WorldFacts, 'brands'>): string[] => moddedOf(facts.brands)
 
 /**
  * A world's facts, or why it can't be brought: a world from before 1.9 names no release. `genSettings`

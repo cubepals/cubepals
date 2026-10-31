@@ -120,6 +120,33 @@ export default async function Guide() {
           height={304}
           alt="The world Cog Valley, Minecraft 26.3, and under it: It was played with Fabric mods. Plain Minecraft would lose their blocks and items, so its server is made from the pack it was played with. Find the pack, or drop its file. A Search modpacks field follows, for packs published on Modrinth."
         />
+        <p>
+          Bringing it to a server you already have, its own mods come with it: those of the instance you
+          played it in. Before anything is sent, the page says the world was played with mods and where your
+          launcher keeps that instance. Choose the instance, or just its mods folder, and they go up with the
+          world in one upload. Choosing the whole instance from the start works too: only the world you pick
+          and its mods are sent, and the rest stays on your computer. Upload without them and the page asks
+          again once the world is read.
+        </p>
+        <Shot
+          src={`${PICTURES}/bring-mods.png`}
+          width={416}
+          height={382}
+          alt="This world was played with Fabric mods. Add the instance you played it in, and they come with it. Without them, the blocks and items they add are gone. Under it, Your launcher is set to Prism Launcher: On Windows, Prism Launcher keeps each instance in its own folder in %APPDATA%\PrismLauncher\instances, with a Copy button, then: Choose the instance you played, or its minecraft\mods folder. An Add the instance button."
+          caption="The instance it was played in, asked for before anything is sent."
+        />
+        <p>
+          Once the world is read, the page names the mods that come with it and those it leaves out, such as
+          Sodium, which only players’ games run. <strong>Play</strong> moves the server to the loader the
+          world was played with, with its mods and what they need, in the same step.
+        </p>
+        <Shot
+          src={`${PICTURES}/play-mods.png`}
+          width={480}
+          height={518}
+          alt="Maple Hollow is ready: the world Maple Hollow, last played on Minecraft 26.3. Under What Cubepals did, its folder on the server. Then: Played with Fabric and 3 mods: Collective, Ore Harvester, Vein Miner. Your server moves to Fabric with them. Left out Sodium: only players’ games run it. Then the server restarts into Maple Hollow, and the world the server has now is kept, to switch back to from Backups. Buttons: Not now, and Play Maple Hollow."
+          caption="Its mods, named, and the one press that plays the world with them."
+        />
       </Part>
 
       <Part id="existing-server" title="Into a server you already have">

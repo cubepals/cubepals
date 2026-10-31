@@ -134,10 +134,6 @@
       "n": 24,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
-    "apps/control/src/app/backups/service.ts › class BackupService › restoreBackup › return this.#db.transaction(async (tx) => {": {
-      "n": 18,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    },
     "apps/control/src/app/curation/catalog-check.ts › function checkCatalogRelease": {
       "n": 22,
       "reason": "Over the threshold when the check began, and not yet looked at."

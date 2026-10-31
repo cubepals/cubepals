@@ -1,0 +1,19 @@
+filename = 'oreharvester-26.3.0-2.1.jar'
+name = 'Ore Harvester'
+side = 'server'
+x-prismlauncher-dependencies = [ { addonId = 'e0M1UDsY', type = 'required' } ]
+x-prismlauncher-loaders = [ 'fabric', 'forge', 'neoforge', 'quilt' ]
+x-prismlauncher-lock-update = false
+x-prismlauncher-mc-versions = [ '26.3' ]
+x-prismlauncher-release-type = 'release'
+x-prismlauncher-version-number = '26.3.0-2.1-fabric+forge+neo'
+
+[download]
+hash = 'ca9028a338333c258456a767816949df4a9e97e25f9815a9db9fef5fdb33b9d51e0344b0a502edf1b7a781345844bd9ce7e8878ed081b3a8b5867fbe43e1c495'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/Xiv4r347/versions/GNL1u56u/oreharvester-26.3.0-2.1.jar'
+
+[update.modrinth]
+mod-id = 'Xiv4r347'
+version = 'GNL1u56u'
