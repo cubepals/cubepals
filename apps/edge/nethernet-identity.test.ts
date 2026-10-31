@@ -6,15 +6,19 @@ import { expect, test } from 'bun:test'
 import { createPrivateKey, createPublicKey, createSign, createVerify } from 'node:crypto'
 import { nethernetIdentity } from './nethernet-identity.ts'
 
-const KEY = Buffer.alloc(16, 7)
+const TOKEN = 'an edge token'
 
-test('the same Floodgate key gives every edge the same identity, and another key another', () => {
-  expect(nethernetIdentity(KEY)).toBe(nethernetIdentity(Buffer.from(KEY)))
-  expect(nethernetIdentity(Buffer.alloc(16, 8))).not.toBe(nethernetIdentity(KEY))
+test('the same edge token gives every edge the same identity, and another token another', () => {
+  expect(nethernetIdentity(TOKEN)).toBe(nethernetIdentity(`${TOKEN}`))
+  expect(nethernetIdentity('another edge token')).not.toBe(nethernetIdentity(TOKEN))
+})
+
+test('there is no identity without a token', () => {
+  expect(() => nethernetIdentity('')).toThrow('EDGE_TOKEN')
 })
 
 test('it is a P-384 private key as PKCS#8 PEM, which signs and verifies', () => {
-  const pem = nethernetIdentity(KEY)
+  const pem = nethernetIdentity(TOKEN)
   expect(pem.startsWith('-----BEGIN PRIVATE KEY-----')).toBe(true)
   const key = createPrivateKey(pem)
   expect(key.asymmetricKeyDetails?.namedCurve).toBe('secp384r1')

@@ -400,7 +400,7 @@ when the value does (a date works), so Terraform re-sends it: Fly returns only a
 |---|---|---|
 | `AUTH_SECRET` | random | Signs everyone out |
 | `REALTIME_TICKET_SECRET` | random | Fails only connections being opened |
-| `EDGE_TOKEN` | random, shared by the control and edge apps | Set both in one apply |
+| `EDGE_TOKEN` | random, shared by the control and edge apps | Set both in one apply. NetherNet's signaling identity is derived from it, so returning Bedrock players confirm the server once more |
 | `FLOODGATE_KEY` | 16 random bytes, base64 (`openssl rand -base64 16`), shared by the control and edge apps | Set both in one apply, then restart the edge and every Paper server: until each holds the new key, Bedrock players are refused there |
 | `RUNTIME_SECRETS_KEY` | random, `version:key` | A version bump, with the old key kept as `RUNTIME_SECRETS_PREVIOUS_KEYS` until nothing runs on it ([below](#rotating-the-runtime-key)) |
 | `AUTH_OAUTH_PROXY_SECRET` | random (staging) | A sign-in in flight fails |

@@ -6,9 +6,11 @@
  * The identity Geyser's NetherNet signaling signs with: a P-384 key whose public half Bedrock
  * clients pin, so a different key makes every returning player confirm the server again. Geyser
  * would make one on its first start, in a folder that goes with the machine; every edge, in every
- * region and after every deploy, must present the same one. So it is derived here from the
- * Floodgate key every edge already holds, and written where Geyser looks for it. Not for anything
- * else the key is used for: what it derives is bound to this use alone.
+ * region and after every deploy, must present the same one. So it is derived here from the edge's
+ * token (EDGE_TOKEN), which every edge already holds and only the edges and the control plane do,
+ * and written where Geyser looks for it. Never from the Floodgate key, which any plugin on a
+ * player's server can read. A new token gives a new identity. What it derives is bound to this use
+ * alone.
  */
 
 import { createECDH, createPrivateKey, hkdfSync } from 'node:crypto'
@@ -24,10 +26,11 @@ const INFO = 'cubepals edge nethernet identity v1'
 
 const base64url = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64url')
 
-/** The identity's private key as PKCS#8 PEM, the same for the same Floodgate key. */
-export function nethernetIdentity(floodgateKey: Uint8Array): string {
+/** The identity's private key as PKCS#8 PEM, the same for the same edge token. */
+export function nethernetIdentity(edgeToken: string): string {
+  if (edgeToken === '') throw new Error('NetherNet’s identity needs the edge’s token (EDGE_TOKEN)')
   // 64 bytes taken modulo n - 1 leave no bias that matters, and the + 1 keeps the scalar off zero.
-  const wide = Buffer.from(hkdfSync('sha384', floodgateKey, Buffer.alloc(0), INFO, 64))
+  const wide = Buffer.from(hkdfSync('sha384', edgeToken, Buffer.alloc(0), INFO, 64))
   const scalar = (BigInt(`0x${wide.toString('hex')}`) % (P384_ORDER - 1n)) + 1n
   const d = Buffer.from(scalar.toString(16).padStart(P384_BYTES * 2, '0'), 'hex')
   const ecdh = createECDH('secp384r1')

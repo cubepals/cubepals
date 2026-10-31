@@ -36,6 +36,8 @@ import { nethernetIdentity } from './nethernet-identity.ts'
 export interface BedrockOptions {
   /** The Floodgate key: base64 of 16 bytes, the same on every Paper server (FLOODGATE_KEY). */
   key: string
+  /** The edge's token (EDGE_TOKEN), which NetherNet's signaling identity is derived from. */
+  edgeToken: string
   /** Where Geyser's jar is, and the folder it may write in. */
   jar: string
   dir: string
@@ -79,6 +81,7 @@ export function bedrockFromEnv(env: NodeJS.ProcessEnv, front: number): BedrockOp
   const number = (name: string, fallback: number) => Number(env[name] ?? fallback)
   return {
     key: env.FLOODGATE_KEY,
+    edgeToken: env.EDGE_TOKEN ?? '',
     jar: env.GEYSER_JAR ?? '/geyser/Geyser-Standalone.jar',
     dir: env.GEYSER_DIR ?? '/tmp/geyser',
     warm: env.GEYSER_WARM ?? '/geyser/warm',
@@ -184,7 +187,7 @@ export function prepareGeyserDir(options: BedrockOptions, place: GeyserPlace): v
   mkdirSync(join(options.dir, 'nethernet'), { recursive: true })
   if (existsSync(options.warm)) cpSync(options.warm, options.dir, { recursive: true })
   writePrivate(join(options.dir, 'key.pem'), key)
-  writePrivate(join(options.dir, 'nethernet', 'identity.pem'), nethernetIdentity(key))
+  writePrivate(join(options.dir, 'nethernet', 'identity.pem'), nethernetIdentity(options.edgeToken))
   writeFileSync(
     join(options.dir, 'config.yml'),
     geyserConfig({
@@ -264,6 +267,7 @@ async function publicAddressOf(name: string | null): Promise<string | null> {
 export function startBedrock(options: BedrockOptions): Bedrock {
   if (Buffer.from(options.key, 'base64').length !== KEY_BYTES)
     throw new Error(`FLOODGATE_KEY must be base64 of ${KEY_BYTES} bytes`)
+  if (options.edgeToken === '') throw new Error('EDGE_TOKEN is needed for NetherNet’s identity')
   if (!options.validateLogin) console.error('[geyser] XBOX SIGN-IN IS OFF: for a test edge only')
 
   let relay: Relay | null = null

@@ -73,7 +73,10 @@ test('its folder gets what was fetched at build, the key and identity for this u
   writeFileSync(join(warm, 'cache', 'client_jar.hash'), 'abc')
   const dir = join(root, 'run')
   const options = {
-    ...(bedrockFromEnv({ FLOODGATE_KEY: KEY, GEYSER_DIR: dir, GEYSER_WARM: warm }, 25570) as BedrockOptions),
+    ...(bedrockFromEnv(
+      { FLOODGATE_KEY: KEY, EDGE_TOKEN: 'edge-token', GEYSER_DIR: dir, GEYSER_WARM: warm },
+      25570,
+    ) as BedrockOptions),
   }
   const place = { address: '172.19.0.2', publicAddress: '198.51.100.7' }
   prepareGeyserDir(options, place)
@@ -81,7 +84,7 @@ test('its folder gets what was fetched at build, the key and identity for this u
   expect(Buffer.from(readFileSync(join(dir, 'key.pem'))).toString('base64')).toBe(KEY)
   expect(statSync(join(dir, 'key.pem')).mode & 0o777).toBe(0o600)
   const identity = join(dir, 'nethernet', 'identity.pem')
-  expect(readFileSync(identity, 'utf8')).toBe(nethernetIdentity(Buffer.from(KEY, 'base64')))
+  expect(readFileSync(identity, 'utf8')).toBe(nethernetIdentity('edge-token'))
   expect(statSync(identity).mode & 0o777).toBe(0o600)
   const config = readFileSync(join(dir, 'config.yml'), 'utf8')
   expect(config).toContain('port: 25570')
